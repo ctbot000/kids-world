@@ -72,6 +72,13 @@ async function openPlayer(url, profile = {}) {
   page.on('pageerror', (error) => pageErrors.push(`${profile.name ?? 'player'}: ${error.message}`));
   // Small pages without studs keep software rendering (CI has no GPU) quick enough.
   await page.setViewport({ width: 720, height: 480 });
+  if (process.env.E2E_NO_MOUSE) {
+    // Like a CI machine with no mouse: the page thinks it is on a touch screen.
+    await page.evaluateOnNewDocument(() => {
+      const real = window.matchMedia.bind(window);
+      window.matchMedia = (q) => (q.includes('any-pointer: fine') ? { matches: false, media: q, addEventListener() {}, removeEventListener() {} } : real(q));
+    });
+  }
   await page.evaluateOnNewDocument((p) => {
     const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0 } };
     localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
@@ -84,7 +91,21 @@ async function openPlayer(url, profile = {}) {
 
 const p2p = (extra = '') => `${base}?p2p=1&signal=${encodeURIComponent(signal)}${extra}`;
 const SLOW = process.env.CI ? 3 : 1;
-const until = (page, fn, arg, timeout = 30000 * SLOW) => page.waitForFunction(fn, { timeout }, arg);
+async function until(page, fn, arg, timeout = 30000 * SLOW) {
+  try {
+    return await page.waitForFunction(fn, { timeout }, arg);
+  } catch (error) {
+    const state = await page
+      .evaluate(() => ({
+        link: window.kidsWorld.session?.link.state,
+        started: window.kidsWorld.session?.started,
+        toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent),
+      }))
+      .catch(() => null);
+    error.message += ` while waiting for ${String(fn).slice(0, 160)}; page: ${JSON.stringify(state)}`;
+    throw error;
+  }
+}
 const inGame = (page) => until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.world, null, 60000 * SLOW);
 
 async function clickButton(page, text, scope = 'body') {
@@ -125,18 +146,35 @@ function spotNear(page, dx, dz) {
   );
 }
 
-// Looks at a cell from above and returns where its top face is on screen.
+// Turns the camera until the top face of a cell is in plain view (islands are
+// random, and a tree crown can be in the way), and returns where it is on screen.
 async function aimAt(page, cell) {
-  return page.evaluate((c) => {
+  const at = await page.evaluate((c) => {
     const kw = window.kidsWorld;
     const r = kw.renderer;
-    r.view.pitch = 1.1;
-    r.view.dist = 9;
-    kw.step(1 / 60, 30);
-    const p = r.project(c.x + 0.5, c.y + 1, c.z + 0.5);
-    const rect = r.canvas.getBoundingClientRect();
-    return { x: rect.left + p.x, y: rect.top + p.y };
+    const g = kw.game;
+    for (let k = 0; k < 16; k++) {
+      r.view.yaw = (k * Math.PI) / 8;
+      r.view.pitch = k < 8 ? 1.1 : 0.8;
+      r.view.dist = 7;
+      kw.step(1 / 60, 40);
+      const p = r.project(c.x + 0.5, c.y + 1, c.z + 0.5);
+      const rect = r.canvas.getBoundingClientRect();
+      const ndc = { x: (p.x / rect.width) * 2 - 1, y: -(p.y / rect.height) * 2 + 1 };
+      const aim = g.aim(ndc);
+      const h = aim?.kind === 'block' ? aim.hit : null;
+      // The top of the cell itself, or a flower or tuft of grass standing on it.
+      const onTop = h && h.x === c.x && h.z === c.z && ((h.y === c.y && h.ny === 1) || (h.y === c.y + 1 && g.world.get(h.x, h.y, h.z) >= 50 && g.world.get(h.x, h.y, h.z) < 70));
+      // ...and nothing on top of it on screen (the hotbar, a button).
+      const clear = document.elementFromPoint(rect.left + p.x, rect.top + p.y) === r.canvas;
+      if (onTop && clear) {
+        return { x: rect.left + p.x, y: rect.top + p.y };
+      }
+    }
+    return null;
   }, cell);
+  assert.ok(at, `cell ${JSON.stringify(cell)} can be seen`);
+  return at;
 }
 
 const blockAt = (page, c) => page.evaluate((c) => window.kidsWorld.game.world.get(c.x, c.y, c.z), c);

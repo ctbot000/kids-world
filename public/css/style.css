@@ -1447,6 +1447,14 @@ kbd {
   }
 }
 
+/* Touch screens held sideways: the hotbar stays between the thumbstick and
+   the jump buttons, scrolling if it has to, so nothing covers anything. */
+@media (min-aspect-ratio: 3/4) {
+  body.touch #bottom {
+    max-width: calc(100vw - 340px);
+  }
+}
+
 /* Tall, narrow screens (phones held upright): tools go in a row along the top. */
 @media (max-aspect-ratio: 3/4) {
   #toolbar {
