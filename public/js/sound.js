@@ -180,6 +180,10 @@ export class Sound {
       case 'ui':
         this.tone(900, { decay: 0.04, gain: 0.08 });
         break;
+      case 'photo':
+        this.noise(0.05, { type: 'highpass', freq: 3000, gain: 0.25 });
+        this.noise(0.08, { at: 0.07, type: 'bandpass', freq: 1800, q: 2, gain: 0.18 });
+        break;
       case 'open':
         this.tone(500, { decay: 0.12, gain: 0.1, slide: 900 });
         break;

@@ -396,6 +396,9 @@ input
     renderer.orbit(-dx * k, dy * k);
   })
   .on('zoom', (f) => renderer.zoom(f))
+  .on('pickBlock', (ndc) => {
+    if (session?.game && !ui.modalOpen) session.game.pickBlock(ndc);
+  })
   .on('key', (code, e) => {
     const g = session?.game;
     if (!g || ui.modalOpen) return false;
@@ -425,6 +428,9 @@ input
         return true;
       case 'KeyH':
         ui.helpDialog();
+        return true;
+      case 'KeyP':
+        ui.takePhoto();
         return true;
       case 'KeyM':
         profile.setting('music', profile.settings.music > 0 ? 0 : 0.5);

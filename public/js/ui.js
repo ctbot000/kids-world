@@ -560,7 +560,8 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💬', 'Talk', ['Say hello with the speech bubble and dance with the smiley.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
-          card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks.']),
+          card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
+          card('👀', 'See through your eyes', ['Zoom all the way in to look around as yourself.']),
         ),
         h('p', { class: 'muted', style: 'margin-top:14px' }, 'Everything stays on this device. Friends only see your made-up name, your animal and the phrases you pick.'),
       );
@@ -602,6 +603,7 @@ export class UI {
     this.renderFriends();
     this.renderIsland();
     $('btn-toybox').onclick = () => this.toyBox();
+    $('btn-photo').onclick = () => this.takePhoto();
     $('btn-settings').onclick = () => this.settingsDialog();
     $('btn-help-hud').onclick = () => this.helpDialog();
     $('btn-stickers-hud').onclick = () => this.stickersDialog();
@@ -1167,6 +1169,33 @@ export class UI {
         ),
       );
     });
+  }
+
+  // Saves a picture of the island (without the buttons) to the device.
+  takePhoto() {
+    const g = this.game;
+    if (!g) return;
+    let url;
+    try {
+      url = g.renderer.photo();
+    } catch {
+      this.toast('🙈', 'The camera did not work this time.', 'warn');
+      return;
+    }
+    const flash = $('flash');
+    flash.hidden = true;
+    void flash.offsetWidth;
+    flash.hidden = false;
+    setTimeout(() => (flash.hidden = true), 520);
+    this.sound.play('photo');
+    const a = document.createElement('a');
+    const name = (g.world?.name ?? 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    a.href = url;
+    a.download = `${name}-photo.png`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    this.toast('📸', 'Click! Your photo is saved.');
   }
 
   // ------------------------------------------------ live parts of the HUD

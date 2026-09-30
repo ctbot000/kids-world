@@ -38,7 +38,9 @@ const LIGHT_GLSL = /* glsl */ `
     float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
     return (m[int(i)] + 0.5) / 16.0;
   }
+  uniform float uNearFade;
   void nearFade(float depth) {
+    if (uNearFade < 0.5) return;
     float keep = smoothstep(0.9, 2.6, depth);
     if (keep < 1.0 && bayer(gl_FragCoord.xy) > keep) discard;
   }
@@ -285,6 +287,7 @@ export class Terrain {
       uFogFar: { value: 150 },
       uTime: { value: 0 },
       uWaterLayer: { value: atlas.layers.get('water') ?? 0 },
+      uNearFade: { value: 1 },
     };
     const make = (vertexShader, fragmentShader, extra = {}) =>
       new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader, fragmentShader, ...extra });
@@ -488,8 +491,9 @@ export class Terrain {
     }
   }
 
-  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time }) {
+  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time, nearFade = true }) {
     const u = this.uniforms;
+    u.uNearFade.value = nearFade ? 1 : 0;
     u.uDaylight.value = daylight;
     u.uSunColor.value.copy(sun);
     u.uAmbient.value.copy(ambient);

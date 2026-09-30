@@ -801,6 +801,21 @@ body.touch.playing #joystick {
   100% { opacity: 0; }
 }
 
+/* The camera flash when you take a photo. */
+#flash {
+  position: fixed;
+  inset: 0;
+  background: white;
+  z-index: 35;
+  pointer-events: none;
+  animation: flash 0.5s ease-out forwards;
+}
+
+@keyframes flash {
+  from { opacity: 0.9; }
+  to { opacity: 0; }
+}
+
 /* ------------------------------------------------ toasts */
 
 #toasts {

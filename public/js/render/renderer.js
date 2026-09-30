@@ -158,9 +158,22 @@ export class Renderer {
     v.pitch = Math.min(1.35, Math.max(-0.35, v.pitch + dpitch));
   }
 
+  // Zooming all the way in looks out through your own eyes.
   zoom(factor) {
     const v = this.view;
-    v.dist = Math.min(18, Math.max(2.2, v.dist * factor));
+    v.dist = Math.min(18, Math.max(0.35, v.dist * factor));
+  }
+
+  // A picture of the island as it is now, without the buttons on top.
+  photo() {
+    const shown = [this.preview.visible, this.outline.visible];
+    this.preview.visible = false;
+    this.outline.visible = false;
+    this.gl.render(this.scene, this.camera);
+    // Read it back in the same task, before the frame is handed to the screen and cleared.
+    const url = this.canvas.toDataURL('image/png');
+    [this.preview.visible, this.outline.visible] = shown;
+    return url;
   }
 
   // Follows the target, pulling in if a hill or a wall is in the way. Leaves
@@ -277,6 +290,8 @@ export class Renderer {
       fogNear: fogFar * 0.45,
       fogFar,
       time: this.time,
+      // Looking through your own eyes, nothing near should dissolve.
+      nearFade: (this.camDist ?? 8) > 1.3,
     });
     this.sky.setWeather(state.weather);
     this.focus.x = state.focus.x;

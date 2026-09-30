@@ -20,6 +20,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 - **Day and night:** a long day and a short, gentle night where lamps glow. There's rain, snow or candy sprinkles, and a rainbow afterwards.
 - **Your character:** be a bunny, cat, bear, puppy, fox, panda, frog, piggy, mouse or koala. Pick your fur, T-shirt and hat. Wave, dance, cheer, clap or giggle, and say things with ready-made phrases and stickers.
 - **24 stickers** to collect, for things like your first brick, petting ten animals or staying up to see the stars.
+- **Photos:** the 📸 button saves a picture of your island, without the buttons.
 - **Sounds and music** are all made in the browser: pops and clicks for building, animal voices, "animal talk" babble when someone speaks, and soft music that changes at night.
 
 ## Made for kids
@@ -37,10 +38,11 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 | Walk | <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or arrows (<kbd>R</kbd> to run) | Thumb on the left side |
 | Jump | <kbd>Space</kbd> (you hop up small steps by yourself) | Jump button |
 | Fly | <kbd>F</kbd>, then <kbd>Space</kbd> up and <kbd>Shift</kbd> down | Wings button |
-| Look around | Drag with the mouse, scroll to zoom | Drag with a finger, pinch to zoom |
+| Look around | Drag with the mouse, scroll to zoom (all the way in to see through your own eyes) | Drag with a finger, pinch to zoom |
 | Use a tool | Click (hold to keep going), right-click to pick up | Tap |
-| Blocks | <kbd>1</kbd>–<kbd>0</kbd>, <kbd>E</kbd> opens the toy box | Tap the hotbar |
+| Blocks | <kbd>1</kbd>–<kbd>0</kbd>, <kbd>E</kbd> opens the toy box, middle-click copies the block you point at | Tap the hotbar |
 | Talk, emotes | <kbd>T</kbd>, <kbd>G</kbd> | 💬 and 😊 buttons |
+| Take a photo | <kbd>P</kbd> | 📸 button |
 | Undo | <kbd>Z</kbd> | ↩️ button |
 
 ## Two ways to play together

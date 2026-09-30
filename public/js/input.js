@@ -162,6 +162,12 @@ export class Input {
       }
     }
     this.pointer = { x, y, inside: true };
+    if (e.button === 1) {
+      // The middle button picks up the kind of block under the pointer.
+      e.preventDefault();
+      this.emit('pickBlock', this.ndc(x, y));
+      return;
+    }
     this.press = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false, button: e.button, type: e.pointerType, at: performance.now() };
     if (e.button === 0) this.emit('hold', true, this.ndc(x, y));
   }

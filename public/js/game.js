@@ -715,6 +715,28 @@ export class Game extends EventTarget {
     }
   }
 
+  // Puts the kind of block under the pointer into your hand (the middle mouse button).
+  pickBlock(ndc) {
+    const aim = this.aim(ndc);
+    if (aim?.kind !== 'block') return null;
+    const id = aim.hit.id;
+    const def = B.block(id);
+    if (!def.category) return null;
+    const hot = [...this.profile.data.hotbar];
+    const already = hot.indexOf(id);
+    if (already >= 0) this.slot = already;
+    else {
+      hot[this.slot] = id;
+      this.profile.update({ hotbar: hot });
+    }
+    this.basketPick = null;
+    if (this.tool !== 'paint') this.setTool('build');
+    this.previewKey = '';
+    this.sound.play('ui');
+    this.emit('tool');
+    return id;
+  }
+
   touchCritter(id) {
     const entry = this.critters.get(id);
     if (!entry) return;
