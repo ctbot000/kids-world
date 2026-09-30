@@ -4,6 +4,9 @@
 // gentle music that changes with the time of day.
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
+// Mixer levels at full volume: effects peak around -10 dB, music sits below them.
+const SFX_GAIN = 2.5;
+const MUSIC_GAIN = 0.6;
 // C major pentatonic, the notes that always sound nice together.
 const PENTA = [0, 2, 4, 7, 9];
 
@@ -26,34 +29,39 @@ export class Sound {
     if (!this.ctx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
-      const ctx = new Ctx();
-      this.ctx = ctx;
-      this.master = ctx.createDynamicsCompressor();
-      this.master.threshold.value = -12;
-      this.master.ratio.value = 4;
-      this.master.connect(ctx.destination);
-      this.sfx = ctx.createGain();
-      this.sfx.gain.value = this.sfxLevel;
-      this.sfx.connect(this.master);
-      this.music = ctx.createGain();
-      this.music.gain.value = this.musicLevel * 0.32;
-      this.music.connect(this.master);
-      this.rain = null;
+      this.setup(new Ctx());
       this.timer = setInterval(() => this.schedule(), 50);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
   }
 
+  // Builds the mixer on a context (an OfflineAudioContext works too, for tests).
+  setup(ctx) {
+    this.ctx = ctx;
+    this.offline = typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext;
+    this.master = ctx.createDynamicsCompressor();
+    this.master.threshold.value = -12;
+    this.master.ratio.value = 4;
+    this.master.connect(ctx.destination);
+    this.sfx = ctx.createGain();
+    this.sfx.gain.value = this.sfxLevel * SFX_GAIN;
+    this.sfx.connect(this.master);
+    this.music = ctx.createGain();
+    this.music.gain.value = this.musicLevel * MUSIC_GAIN;
+    this.music.connect(this.master);
+    this.rain = null;
+  }
+
   get ready() {
-    return this.ctx?.state === 'running';
+    return this.offline || this.ctx?.state === 'running';
   }
 
   setLevels({ sound, music }) {
     if (sound !== undefined) this.sfxLevel = sound;
     if (music !== undefined) this.musicLevel = music;
     if (this.ctx) {
-      this.sfx.gain.setTargetAtTime(this.sfxLevel, this.ctx.currentTime, 0.05);
-      this.music.gain.setTargetAtTime(this.musicLevel * 0.32, this.ctx.currentTime, 0.05);
+      this.sfx.gain.setTargetAtTime(this.sfxLevel * SFX_GAIN, this.ctx.currentTime, 0.05);
+      this.music.gain.setTargetAtTime(this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
     }
   }
 

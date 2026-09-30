@@ -295,7 +295,7 @@ export class Renderer {
     this.hemi.intensity = 1.1 + 0.6 * env.day;
 
     this.terrain.update(state.focus, 6);
-    this.terrain.updateStuds(this.camera.position);
+    this.terrain.updateVisibility(this.camera.position, fogFar);
     this.effects.update(dt);
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;

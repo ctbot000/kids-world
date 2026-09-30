@@ -19,7 +19,15 @@ const sound = new Sound();
 sound.setLevels(profile.settings);
 const atlas = buildAtlas();
 const canvas = document.getElementById('world');
-const renderer = new Renderer(canvas, atlas);
+let renderer;
+try {
+  renderer = new Renderer(canvas, atlas);
+} catch (error) {
+  // Without WebGL 2 there is no island to show; say so kindly and stop.
+  document.getElementById('loading').hidden = false;
+  document.getElementById('loading-text').textContent = 'Kids World needs a browser that can draw 3D pictures (WebGL 2). Try another browser or device.';
+  throw error;
+}
 const input = new Input(canvas, document.getElementById('joystick'));
 const ui = new UI({ profile, sound, atlas, input });
 
@@ -35,9 +43,36 @@ let serverMode = false;
 let session = null;
 const demo = { world: null, avatar: null, t: 0, looking: false };
 
+// Quality steps down by itself on devices that struggle: first fewer pixels,
+// then no studs and a shorter view.
+const perf = { frames: 0, since: performance.now(), level: 0 };
+
 function applySettings() {
   const touch = input.touchMode;
-  renderer.setQuality({ studs: profile.settings.studs, pixelRatio: Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2) });
+  const dpr = window.devicePixelRatio || 1;
+  renderer.setQuality({
+    studs: profile.settings.studs && perf.level < 2,
+    pixelRatio: perf.level >= 1 ? 1 : Math.min(dpr, touch ? 1.5 : 2),
+    far: perf.level >= 2 ? 110 : 150,
+  });
+}
+
+function watchPerformance(now) {
+  if (document.hidden || perf.level >= 2) {
+    perf.frames = 0;
+    perf.since = now;
+    return;
+  }
+  perf.frames++;
+  const secs = (now - perf.since) / 1000;
+  if (secs < 5) return;
+  const fps = perf.frames / secs;
+  perf.frames = 0;
+  perf.since = now;
+  if (fps < 26 && session?.started) {
+    perf.level++;
+    applySettings();
+  }
 }
 applySettings();
 window.addEventListener('resize', () => renderer.resize());
@@ -410,6 +445,7 @@ function frame(now) {
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
   step(dt);
+  watchPerformance(now);
 }
 
 // For automated tests: the running pieces, and a way to step time without frames.

@@ -478,12 +478,13 @@ export class Terrain {
     for (const mesh of chunk.group.children) mesh.geometry.dispose();
   }
 
-  // Studs are only worth drawing close up.
-  updateStuds(focus) {
+  // Chunks lost in the fog are skipped, and studs are only worth drawing close up.
+  updateVisibility(eye, fogFar) {
+    const far = fogFar + CHUNK * 1.5;
     for (const chunk of this.chunks.values()) {
-      if (!chunk.studs) continue;
-      const d = Math.hypot((chunk.cx + 0.5) * CHUNK - focus.x, (chunk.cz + 0.5) * CHUNK - focus.z);
-      chunk.studs.visible = this.studsOn && d < STUD_DISTANCE;
+      const d = Math.hypot((chunk.cx + 0.5) * CHUNK - eye.x, (chunk.cz + 0.5) * CHUNK - eye.z);
+      chunk.group.visible = d < far;
+      if (chunk.studs) chunk.studs.visible = this.studsOn && d < STUD_DISTANCE;
     }
   }
 
