@@ -7,7 +7,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 ![Three friends on an island: a fox saying "Let's build!", a waving bunny and a dancing panda, next to a fountain, a lamp post, a house, a flower garden and a rainbow](docs/screenshot.jpg)
 
 1. Press **Make an island** and pick a kind of island: Sunny, Snowy, Candy or Flat Land.
-2. Tell a friend your six-digit **island code** (it's at the top of the screen). They press **Visit a friend** and type it in. Up to 8 friends can play on one island.
+2. Tell a friend your six-digit **island code** (it's at the top of the screen). They press **Visit a friend** and type it in. Up to 8 players can be on one island together.
 3. Build together. Your island is saved on your device, and **My islands** opens it again later.
 
 ## What you can do
