@@ -191,12 +191,15 @@ export function meshChunk(world, light, visuals, cx, cz) {
         const kind = KIND[id];
         if (kind === K_SOLID) {
           const glow = EMIT[id] > 0;
+          // Grass (or snow, or frosting) with a block on top looks like the dirt under it.
+          const covered = BLOCKS[id].under && OPAQUE[at(x, y + 1, z)];
+          const look = covered ? BLOCKS[id].under : id;
           for (let d = 0; d < 6; d++) {
             const f = FACES[d];
             const nid = at(x + f.n[0], y + f.n[1], z + f.n[2]);
             if (OPAQUE[nid]) continue;
             if (!glow) faceLight(x, y, z, f);
-            quad(opaque, x, y, z, f, faceLayer[id * 3 + f.tile], id, glow ? 'glow' : 'solid');
+            quad(opaque, x, y, z, f, faceLayer[look * 3 + f.tile], look, glow ? 'glow' : 'solid');
           }
           if (BLOCKS[id].studs && at(x, y + 1, z) === AIR) {
             studOffset.push(x + 0.5, y + 1, z + 0.5);

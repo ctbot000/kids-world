@@ -80,6 +80,9 @@ export class Renderer {
     if (w < 2 || h < 2) return;
     this.gl.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // Keep a sensible sideways view on tall, narrow screens.
+    const wide = 2 * Math.atan(Math.tan((62 * Math.PI) / 360) / this.camera.aspect) * (180 / Math.PI);
+    this.camera.fov = Math.min(80, Math.max(58, wide));
     this.camera.updateProjectionMatrix();
   }
 
@@ -172,6 +175,12 @@ export class Renderer {
     }
     v.smooth.lerp(v.target, 1 - Math.exp(-dt * 12));
     const dir = tmpV.set(Math.sin(v.yaw) * Math.cos(v.pitch), Math.sin(v.pitch), Math.cos(v.yaw) * Math.cos(v.pitch));
+    // Shifts the subject sideways on screen (positive: to the right), to make room for a dialog.
+    v.shiftNow = (v.shiftNow ?? 0) + ((v.shift ?? 0) - (v.shiftNow ?? 0)) * Math.min(1, dt * 5);
+    if (Math.abs(v.shiftNow) > 1e-3) {
+      v.smooth.x -= Math.cos(v.yaw) * v.shiftNow;
+      v.smooth.z += Math.sin(v.yaw) * v.shiftNow;
+    }
     let dist = v.dist;
     if (this.world && collide) {
       const hit = raycast(this.world, v.smooth.x, v.smooth.y, v.smooth.z, dir.x, dir.y, dir.z, dist + 0.3, (id) => OPAQUE[id] === 1 && !TREE_PART[id]);
@@ -181,6 +190,10 @@ export class Renderer {
     this.camDist = dist < (this.camDist ?? dist) ? dist : this.camDist + (dist - this.camDist) * Math.min(1, dt * 3);
     this.camera.position.copy(v.smooth).addScaledVector(dir, this.camDist);
     this.camera.lookAt(v.smooth);
+    if (Math.abs(v.shiftNow) > 1e-3) {
+      v.smooth.x += Math.cos(v.yaw) * v.shiftNow;
+      v.smooth.z -= Math.sin(v.yaw) * v.shiftNow;
+    }
     return this.camDist;
   }
 

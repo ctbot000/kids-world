@@ -77,8 +77,10 @@ function demoFrame(dt) {
     v.dist += (3.4 - v.dist) * Math.min(1, dt * 4);
     v.pitch += (0.12 - v.pitch) * Math.min(1, dt * 4);
     v.yaw += dt * 0.12;
+    v.shift = portraitShift();
     if (a) a.root.rotation.y = v.yaw;
   } else {
+    v.shift = 0;
     v.dist += (7.5 - v.dist) * Math.min(1, dt * 2);
     v.pitch += (0.22 - v.pitch) * Math.min(1, dt * 2);
     v.yaw += dt * 0.06;
@@ -89,8 +91,15 @@ function demoFrame(dt) {
     a.update(dt, 0, 0);
     renderer.placeShadow(a.shadow, s.x, s.y, s.z);
   }
-  renderer.updateCamera(dt, { x: s.x, y: s.y - 0.35, z: s.z }, false);
+  // On a tall screen the buttons fill the bottom half, so look a little lower to lift the avatar.
+  const tall = renderer.camera.aspect < 0.8 && !demo.looking;
+  renderer.updateCamera(dt, { x: s.x, y: s.y - (tall ? 1.3 : 0.35), z: s.z }, false);
   renderer.frame(dt, { time: 0.36, weather: 'clear', focus: s });
+}
+
+// Where to put your character while a see-through dialog covers part of the screen.
+function portraitShift() {
+  return window.innerWidth >= 900 ? 1.1 : 0;
 }
 
 // ------------------------------------------------ sessions
@@ -104,6 +113,8 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
   game.token = profile.token(key);
+  renderer.removeAvatar(-1);
+  demo.avatar = null;
   session = { link, game, mode, islandId, key, started: false, dirty: false };
   ui.hideTitle();
   ui.loading(loadingText, () => backToTitle());
@@ -288,9 +299,11 @@ const titleHandlers = {
   },
   lookOpen: () => {
     if (!session) demo.looking = true;
+    else session.game.setPortrait(true, portraitShift());
   },
   lookDone: () => {
     demo.looking = false;
+    session?.game.setPortrait(false);
   },
 };
 
@@ -385,7 +398,6 @@ let last = performance.now();
 function step(dt) {
   const g = session?.game;
   if (g?.world && session.started) {
-    if (g.holding && !g.holding.acted && performance.now() > g.holding.at) g.holding.acted = true;
     g.update(dt, input);
     ui.frame();
   } else if (!session) {

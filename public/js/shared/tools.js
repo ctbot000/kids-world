@@ -250,9 +250,11 @@ export function hillEdit(world, hit, mode, size = 1) {
         for (; k < n; k++) {
           const y = g + 1 + k;
           if (y >= world.H - 1 || !B.isReplaceable(o.get(x, y, z)) || (o.get(x, y, z) !== B.AIR && B.KIND[o.get(x, y, z)] !== B.K_PLANT && o.get(x, y, z) !== B.WATER)) break;
-          o.set(x, y, z, topId);
+          o.set(x, y, z, k === n - 1 ? topId : under);
           touched.push([x, y, z]);
         }
+        // Stopped early under something: the last new block is the top one.
+        if (k > 0 && k < n) o.set(x, g + k, z, topId);
         if (k > 0) {
           o.set(x, g, z, under);
           if (plant && o.get(x, g + k + 1, z) === B.AIR) o.set(x, g + k + 1, z, plant);

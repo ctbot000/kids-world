@@ -30,6 +30,18 @@ const LIGHT_GLSL = /* glsl */ `
   vec3 fogged(vec3 col, float depth) {
     return mix(col, uFogColor, smoothstep(uFogNear, uFogFar, depth));
   }
+  // Blocks right in front of the camera dissolve in a fine pattern, so a
+  // tree crown or a wall behind you never fills the whole screen.
+  float bayer(vec2 p) {
+    vec2 q = mod(floor(p), 4.0);
+    float i = q.x + q.y * 4.0;
+    float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    return (m[int(i)] + 0.5) / 16.0;
+  }
+  void nearFade(float depth) {
+    float keep = smoothstep(0.9, 2.6, depth);
+    if (keep < 1.0 && bayer(gl_FragCoord.xy) > keep) discard;
+  }
 `;
 
 const SOLID_VERT = /* glsl */ `
@@ -66,6 +78,7 @@ const SOLID_FRAG = /* glsl */ `
   varying float vDepth;
   ${LIGHT_GLSL}
   void main() {
+    nearFade(vDepth);
     vec4 tex = texture(atlas, vUvl);
     #ifdef CUTOUT
       if (tex.a < 0.5) discard;
@@ -117,6 +130,7 @@ const ITEM_FRAG = /* glsl */ `
   varying float vDepth;
   ${LIGHT_GLSL}
   void main() {
+    nearFade(vDepth);
     vec4 tex = texture(atlas, vUvl);
     if (tex.a < 0.5) discard;
     vec3 col = tex.rgb * lightOf(vLit.x, vLit.y);
@@ -194,11 +208,45 @@ const STUD_FRAG = /* glsl */ `
   varying float vDepth;
   ${LIGHT_GLSL}
   void main() {
+    nearFade(vDepth);
     vec3 col = decode(vTint) * lightOf(vLit.x, vLit.y) * vShade;
     gl_FragColor = vec4(fogged(col, vDepth), 1.0);
     #include <colorspace_fragment>
   }
 `;
+
+// One stud: a short cylinder with its top, but no bottom (it sits on a block).
+function studShape(segments = 12) {
+  const pos = [];
+  const nor = [];
+  const idx = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const x = Math.sin(a);
+    const z = Math.cos(a);
+    pos.push(x * STUD_RADIUS, 0, z * STUD_RADIUS, x * STUD_RADIUS, STUD_HEIGHT, z * STUD_RADIUS);
+    nor.push(x, 0, z, x, 0, z);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2;
+    idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+  }
+  const centre = pos.length / 3;
+  pos.push(0, STUD_HEIGHT, 0);
+  nor.push(0, 1, 0);
+  const ring = centre + 1;
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    pos.push(Math.sin(a) * STUD_RADIUS, STUD_HEIGHT, Math.cos(a) * STUD_RADIUS);
+    nor.push(0, 1, 0);
+  }
+  for (let i = 0; i < segments; i++) idx.push(centre, ring + i, ring + i + 1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return g;
+}
 
 export class Terrain {
   constructor(scene, atlas) {
@@ -248,9 +296,7 @@ export class Terrain {
       glass: make(SOLID_VERT, SOLID_FRAG, { defines: { GLASS: 1 }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
       studs: make(STUD_VERT, STUD_FRAG),
     };
-    const stud = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, 14, 1, false);
-    stud.translate(0, STUD_HEIGHT / 2, 0);
-    this.studGeometry = stud;
+    this.studGeometry = studShape();
   }
 
   setWorld(world) {

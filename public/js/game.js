@@ -343,6 +343,7 @@ export class Game extends EventTarget {
     }
     applyCells(w, cells);
     this.renderer.terrain.cellsChanged(cells);
+    if (this.me) unstick(w, this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
     this.send(msg);
@@ -747,14 +748,22 @@ export class Game extends EventTarget {
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
-    // Holding the button down keeps building (or picking) as you sweep.
-    if (this.holding && performance.now() - this.holding.at > REPEAT_MS) {
-      this.holding.at = performance.now();
-      const ndc = input.hoverNdc() ?? this.holding.ndc;
-      if (ndc && this.tool !== 'stamp' && this.tool !== 'friends') this.use(ndc);
+    // Holding the button down (after a moment) keeps building or picking as you sweep.
+    const hold = this.holding;
+    if (hold && performance.now() >= hold.at && this.tool !== 'stamp' && this.tool !== 'friends') {
+      hold.at = performance.now() + REPEAT_MS;
+      hold.acted = true;
+      const ndc = input.hoverNdc() ?? hold.ndc;
+      if (ndc) this.use(ndc);
     }
     this.updatePreview(input.hoverNdc());
     const b = this.me.body;
+    if (this.portrait) {
+      const v = this.renderer.view;
+      v.yaw = lerpAngle(v.yaw, this.me.yaw, Math.min(1, dt * 4));
+      v.pitch += (0.12 - v.pitch) * Math.min(1, dt * 4);
+      v.dist += (3.4 - v.dist) * Math.min(1, dt * 4);
+    }
     this.renderer.updateCamera(dt, b);
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z } });
@@ -812,6 +821,18 @@ export class Game extends EventTarget {
       a.root.rotation.y = me.yaw;
       a.update(dt, me.anim, speed);
       this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
+    }
+  }
+
+  // Turns the camera round to look at you from the front (while choosing how you look).
+  setPortrait(on, shift = 0) {
+    const v = this.renderer.view;
+    if (on && !this.portrait) {
+      this.portrait = { yaw: v.yaw, pitch: v.pitch, dist: v.dist };
+      v.shift = shift;
+    } else if (!on && this.portrait) {
+      Object.assign(v, this.portrait, { shift: 0 });
+      this.portrait = null;
     }
   }
 

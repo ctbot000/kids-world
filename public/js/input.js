@@ -20,7 +20,7 @@ export class Input {
     this.pinch = null;
     this.enabled = false;
     this.handlers = {};
-    this.lastTouchAt = 0;
+    this.lastTouchAt = -Infinity;
 
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -65,8 +65,17 @@ export class Input {
     this.pinch = null;
   }
 
+  // Touch screens get thumb controls and no hover previews. A device with a
+  // mouse counts as touch only once a finger has actually been used.
   get touchMode() {
-    return performance.now() - this.lastTouchAt < 60000 || window.matchMedia?.('(pointer: coarse)').matches;
+    if (performance.now() - this.lastTouchAt < 60000) return true;
+    return !(window.matchMedia?.('(any-pointer: fine)').matches ?? true);
+  }
+
+  noteDevice(type) {
+    if (type === 'touch') this.lastTouchAt = performance.now();
+    else if (type === 'mouse') this.lastTouchAt = -Infinity;
+    document.body.classList.toggle('touch', this.touchMode);
   }
 
   // ------------------------------------------------ keys
@@ -128,7 +137,7 @@ export class Input {
   onDown(e) {
     if (!this.enabled) return;
     this.emit('unlock');
-    if (e.pointerType === 'touch') this.lastTouchAt = performance.now();
+    this.noteDevice(e.pointerType);
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
