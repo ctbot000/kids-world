@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#7cc4ff">
+<meta name="description" content="Kids World: build a happy island of toy bricks with your friends, right in the browser.">
+<title>Kids World</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="vendor/peerjs.min.js" defer></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<canvas id="world" aria-label="Your island"></canvas>
+<div id="joystick" hidden><div class="knob"></div></div>
+
+<section id="title" class="screen" hidden>
+  <div class="title-top">
+  <h1 class="logo" aria-label="Kids World"><span>K</span><span>i</span><span>d</span><span>s</span> <span>W</span><span>o</span><span>r</span><span>l</span><span>d</span></h1>
+  <p class="tagline">Build a happy island with your friends!</p>
+  <div class="me-row">
+    <div class="me-name" id="me-name"></div>
+    <button class="chip" id="btn-me" type="button">🎨 Change me</button>
+  </div>
+  </div>
+  <div class="title-bottom">
+  <div class="big-buttons">
+    <button class="big green" id="btn-new" type="button"><span class="emoji">🏝️</span> Make an island</button>
+    <button class="big blue" id="btn-visit" type="button"><span class="emoji">✈️</span> Visit a friend</button>
+    <button class="big yellow" id="btn-mine" type="button"><span class="emoji">📒</span> My islands</button>
+  </div>
+  <div class="small-buttons">
+    <button class="chip" id="btn-stickers" type="button">⭐ Stickers</button>
+    <button class="chip" id="btn-help" type="button">❓ How to play</button>
+    <button class="chip" id="btn-sound" type="button">🔊 Sound</button>
+  </div>
+  </div>
+</section>
+
+<section id="hud" hidden>
+  <div id="overlays" aria-hidden="true"></div>
+  <header id="topbar">
+    <button class="island-badge" id="island-badge" type="button">
+      <span class="island-name" id="island-name"></span>
+      <span class="island-code" id="island-code"></span>
+    </button>
+    <div id="status" class="status"></div>
+    <div id="friends" class="friends" aria-label="Who is here"></div>
+    <div class="top-buttons">
+      <span id="clock" class="clock" title="Time of day"></span>
+      <button class="round" id="btn-stickers-hud" type="button" aria-label="Stickers">⭐</button>
+      <button class="round" id="btn-help-hud" type="button" aria-label="How to play">❓</button>
+      <button class="round" id="btn-settings" type="button" aria-label="Settings">⚙️</button>
+    </div>
+  </header>
+
+  <nav id="toolbar" aria-label="Tools"></nav>
+  <div id="toolopts"></div>
+
+  <div id="bottom">
+    <div id="basket" class="basket" aria-label="Your basket"></div>
+    <div class="hotrow">
+      <div id="hotbar" aria-label="Your blocks"></div>
+      <button class="slot toybox" id="btn-toybox" type="button" title="Toy box"><span class="emoji">🧸</span><span class="label">Toy box</span></button>
+    </div>
+  </div>
+
+  <div id="talk">
+    <button class="round big-round" id="btn-say" type="button" aria-label="Say something">💬</button>
+    <button class="round big-round" id="btn-emote" type="button" aria-label="Emotes">😊</button>
+  </div>
+
+  <div id="touch-buttons">
+    <button class="round touch" id="btn-down" type="button" aria-label="Go down">⬇️</button>
+    <button class="round touch" id="btn-fly" type="button" aria-label="Fly">🪽</button>
+    <button class="round touch jump" id="btn-jump" type="button" aria-label="Jump">⤴️</button>
+  </div>
+
+  <div id="aim-hint" class="aim-hint" hidden></div>
+  <div id="chatlog" class="chatlog" aria-live="polite"></div>
+</section>
+
+<div id="toasts" aria-live="polite"></div>
+
+<div id="modal" class="modal" hidden>
+  <div class="panel" role="dialog" aria-modal="true">
+    <button class="close" id="modal-close" type="button" aria-label="Close">✖</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="loading" class="loading" hidden>
+  <div class="spinner"><span>🧱</span></div>
+  <p id="loading-text">Getting your island ready…</p>
+  <button class="chip" id="loading-cancel" type="button" hidden>Go back</button>
+</div>
+
+<noscript><p class="noscript">Kids World needs JavaScript to play.</p></noscript>
+</body>
+</html>
