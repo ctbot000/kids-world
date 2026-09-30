@@ -814,6 +814,13 @@ export class Game extends EventTarget {
       }
     }
     if (b.y > 40) this.profile.count('highest', Math.floor(b.y), { max: true });
+    // Walking into a wall for a while: maybe stuck in a hole. Offer a way out.
+    const pushing = Math.hypot(move.x, move.y) > 0.5 && b.onGround && !b.flying && speed < 0.3;
+    this.stuckFor = pushing ? (this.stuckFor ?? 0) + dt : 0;
+    if (this.stuckFor > 3 && performance.now() > (this.stuckHintAt ?? 0)) {
+      this.stuckHintAt = performance.now() + 90000;
+      this.emit('toast', { icon: '🪽', text: 'Stuck? Press F or tap the wings to fly!' });
+    }
     const self = this.players.get(this.pid);
     if (self?.avatar) {
       const a = self.avatar;

@@ -661,26 +661,39 @@ body.touch #touch-buttons {
   background: var(--sun);
 }
 
+/* The thumbstick sits in the bottom-left corner on touch screens; touches
+   anywhere else aim and build. */
 #joystick {
   position: fixed;
-  width: 130px;
-  height: 130px;
-  margin: -65px 0 0 -65px;
+  left: calc(max(14px, env(safe-area-inset-left)) + 6px);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
+  width: 124px;
+  height: 124px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.25);
-  border: 4px solid rgba(255, 255, 255, 0.7);
+  border: 4px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 4px 14px rgba(61, 46, 79, 0.18);
   pointer-events: none;
   z-index: 5;
+  display: none;
+}
+
+body.touch.playing #joystick {
+  display: block;
+}
+
+#joystick.active {
+  background: rgba(255, 255, 255, 0.42);
 }
 
 #joystick .knob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 58px;
-  height: 58px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
   transform: translate(-50%, -50%);
 }
@@ -1367,7 +1380,7 @@ kbd {
   }
 }
 
-/* Short screens (phones held sideways): a compact toolbar that starts below the island name. */
+/* Short screens (phones held sideways): tools in a row under the island name. */
 @media (max-height: 560px) {
   :root {
     --tool: 40px;
@@ -1375,11 +1388,12 @@ kbd {
   }
 
   #toolbar {
-    top: calc(max(8px, env(safe-area-inset-top)) + 60px);
+    flex-direction: row;
+    top: calc(max(8px, env(safe-area-inset-top)) + 58px);
     transform: none;
     gap: 4px;
     padding: 5px;
-    border-radius: 18px;
+    border-radius: 16px;
   }
 
   .tool {
@@ -1388,8 +1402,14 @@ kbd {
   }
 
   #toolopts {
-    top: calc(max(8px, env(safe-area-inset-top)) + 60px);
+    top: calc(max(8px, env(safe-area-inset-top)) + 58px + var(--tool) + 20px);
+    left: max(10px, env(safe-area-inset-left));
     transform: none;
+    flex-direction: row;
+  }
+
+  .opt-group {
+    flex-direction: row;
   }
 
   .pill {
@@ -1398,14 +1418,19 @@ kbd {
   }
 
   #talk {
-    top: calc(max(8px, env(safe-area-inset-top)) + 60px);
+    top: calc(max(8px, env(safe-area-inset-top)) + 58px);
     transform: none;
     bottom: auto !important;
     flex-direction: column !important;
   }
 
   body.touch #touch-buttons {
-    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 70px);
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 10px);
+  }
+
+  #joystick {
+    width: 112px;
+    height: 112px;
   }
 
   .big {
@@ -1454,6 +1479,10 @@ kbd {
 
   body.touch #touch-buttons {
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + 84px);
+  }
+
+  #joystick {
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px);
   }
 
   #toasts {

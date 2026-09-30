@@ -160,6 +160,14 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
     if (!session.started) {
       if (state === 'failed') ui.loading(`😕 ${text}`, () => backToTitle());
       else if (state !== 'online') ui.loading(text, () => backToTitle());
+      return;
+    }
+    // A visitor whose friend's island went away: after a little while, ask what to do.
+    clearTimeout(session.goneTimer);
+    if (mode !== 'host' && (state === 'offline' || state === 'reconnecting' || state === 'failed')) {
+      session.goneTimer = setTimeout(() => {
+        if (session?.link === link && link.state !== 'online') ui.islandGone(() => backToTitle());
+      }, state === 'failed' ? 0 : 12000);
     }
   });
   link.addEventListener('code', () => {
@@ -198,6 +206,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
 function endSession(save = true) {
   if (!session) return;
   const s = session;
+  clearTimeout(s.goneTimer);
   if (save) saveIsland();
   session = null;
   s.game.close();

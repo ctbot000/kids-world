@@ -142,10 +142,16 @@ export class Input {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     if (e.pointerType === 'touch') {
-      // The left part of the screen is the thumbstick.
-      if (!this.joy && x < rect.width * 0.38 && y > rect.height * 0.35) {
-        this.startJoystick(e.pointerId, e.clientX, e.clientY);
-        return;
+      // A touch on (or near) the thumbstick moves you.
+      const base = this.joyEl?.getBoundingClientRect();
+      if (!this.joy && base?.width > 0) {
+        const cx = base.left + base.width / 2;
+        const cy = base.top + base.height / 2;
+        if (Math.hypot(e.clientX - cx, e.clientY - cy) < base.width * 0.8) {
+          this.startJoystick(e.pointerId, cx, cy);
+          this.moveJoystick(e.clientX, e.clientY);
+          return;
+        }
       }
       this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.touches.size === 2) {
@@ -230,19 +236,14 @@ export class Input {
 
   // ------------------------------------------------ thumbstick
 
-  startJoystick(id, x, y) {
-    this.joy = { id, cx: x, cy: y, x: 0, y: 0 };
-    if (this.joyEl) {
-      this.joyEl.hidden = false;
-      this.joyEl.style.left = `${x}px`;
-      this.joyEl.style.top = `${y}px`;
-      this.joyEl.firstElementChild.style.transform = 'translate(-50%, -50%)';
-    }
+  startJoystick(id, cx, cy) {
+    this.joy = { id, cx, cy, x: 0, y: 0 };
+    this.joyEl?.classList.add('active');
   }
 
   moveJoystick(x, y) {
     const j = this.joy;
-    const R = 56;
+    const R = 52;
     let dx = x - j.cx;
     let dy = y - j.cy;
     const d = Math.hypot(dx, dy);
@@ -257,6 +258,9 @@ export class Input {
 
   endJoystick() {
     this.joy = null;
-    if (this.joyEl) this.joyEl.hidden = true;
+    if (this.joyEl) {
+      this.joyEl.classList.remove('active');
+      this.joyEl.firstElementChild.style.transform = 'translate(-50%, -50%)';
+    }
   }
 }

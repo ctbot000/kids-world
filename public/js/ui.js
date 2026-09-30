@@ -344,6 +344,37 @@ export class UI {
     });
   }
 
+  // The island a visitor was on has gone quiet (the friend closed it, or the internet dropped).
+  islandGone(goHome) {
+    if (this.modalOpen) return;
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '😴 The island is sleeping'),
+          h('p', {}, 'Your friend’s island is closed right now, or the internet is taking a nap. We will keep trying to get back in.'),
+          h(
+            'div',
+            { class: 'row', style: 'margin-top:14px' },
+            h('button', { class: 'chip', type: 'button', onclick: () => this.closeModal() }, '⏳ Keep waiting'),
+            h(
+              'button',
+              {
+                class: 'chip on',
+                type: 'button',
+                onclick: () => {
+                  this.closeModal();
+                  goHome();
+                },
+              },
+              '🏠 Go home',
+            ),
+          ),
+        );
+      },
+      { narrow: true },
+    );
+  }
+
   confirm(text, yes, fn) {
     this.openModal(
       (root) => {
@@ -560,6 +591,7 @@ export class UI {
     this.gameHandlers = handlers;
     $('title').hidden = true;
     $('hud').hidden = false;
+    document.body.classList.add('playing');
     document.body.classList.toggle('touch', this.input.touchMode);
     this.buildToolbar();
     this.buildHotbar();
@@ -605,6 +637,7 @@ export class UI {
     this.game = null;
     this.input.enabled = false;
     $('hud').hidden = true;
+    document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
     $('chatlog').replaceChildren();
