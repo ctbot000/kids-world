@@ -32,6 +32,9 @@ export function h(tag, props = {}, ...children) {
 
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
+// "a peach", "an apple".
+const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+
 export class UI {
   constructor({ profile, sound, atlas, input }) {
     this.profile = profile;
@@ -555,7 +558,7 @@ export class UI {
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you! Use the bunny tool to invite new friends.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
-          card('💬', 'Talk', ['Say hello with the speech bubble, and dance with the smiley.']),
+          card('💬', 'Talk', ['Say hello with the speech bubble and dance with the smiley.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks.']),
         ),
@@ -822,7 +825,7 @@ export class UI {
     this.buildToolOptions();
     if (g.basketPick) {
       const c = B.COLLECTABLES.find((x) => x.key === key);
-      this.toast(c.sprout ? '🌱' : '✨', c.sprout ? `Tap the ground to plant a ${c.name.toLowerCase()} tree, or tap an animal to give it one!` : `Tap the ground to put down a ${c.name.toLowerCase()}.`);
+      this.toast(c.sprout ? '🌱' : '✨', c.sprout ? `Tap the ground to plant ${withArticle(c.key)} tree, or tap an animal to give it one!` : `Tap the ground to put down ${withArticle(c.name.toLowerCase())}.`);
     }
   }
 
@@ -889,7 +892,7 @@ export class UI {
                     this.pickedCritter = true;
                     g.setTool('friends');
                     this.closeModal();
-                    this.toast(CRITTER_INFO[type].icon, `Tap the ground to invite a ${CRITTER_INFO[type].name.toLowerCase()}! Tap an animal to say bye.`);
+                    this.toast(CRITTER_INFO[type].icon, `Tap the ground to invite ${withArticle(CRITTER_INFO[type].name.toLowerCase())}! Tap an animal to say bye.`);
                   },
                 },
                 h('span', { class: 'emoji' }, CRITTER_INFO[type].icon),

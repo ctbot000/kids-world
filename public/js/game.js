@@ -658,7 +658,7 @@ export class Game extends EventTarget {
       case 'build':
         this.sound.play('place', { kind: B.block(first).sound });
         if (this.basketPick) {
-          p.addToBasket(this.basketPick, -1);
+          this.spendBasket();
           if (B.block(first).grows) p.count('sprouts');
         } else if (B.KIND[first] === B.K_PLANT) {
           p.count('planted', n);
@@ -704,6 +704,17 @@ export class Game extends EventTarget {
     this.renderer.effects.sparkles(cells[0] + 0.5, cells[1] + 0.6, cells[2] + 0.5, 12, ['#ffd84d', '#ffffff', '#ff8fc4']);
   }
 
+  // Uses one of the chosen treasure; when the last one is gone, back to blocks.
+  spendBasket() {
+    const key = this.basketPick;
+    this.profile.addToBasket(key, -1);
+    if ((this.profile.basket[key] ?? 0) <= 0) {
+      this.basketPick = null;
+      this.previewKey = '';
+      this.emit('tool');
+    }
+  }
+
   touchCritter(id) {
     const entry = this.critters.get(id);
     if (!entry) return;
@@ -714,7 +725,7 @@ export class Game extends EventTarget {
     const fruit = this.basketPick && B.FRUITS.some(([k]) => k === this.basketPick) ? this.basketPick : null;
     if (fruit && (this.profile.basket[fruit] ?? 0) > 0) {
       this.send({ t: 'critter', op: 'feed', id, fruit });
-      this.profile.addToBasket(fruit, -1);
+      this.spendBasket();
       this.profile.count('fed');
       this.emit('toast', { icon: '💕', text: `${entry.name || 'Your friend'} loves it! Now they will follow you for a while.` });
     } else {

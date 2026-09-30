@@ -229,6 +229,7 @@ export class HostLink extends Link {
     peer.on('open', () => {
       if (peer !== this.peer) return;
       this.retryDelay = 1000;
+      this.idTakenSince = 0;
       this.everOnline = true;
       this.setStatus('online', 'Friends can visit with the code');
     });
@@ -278,15 +279,20 @@ export class HostLink extends Link {
   onPeerError(peer, error) {
     if (this.closed || peer !== this.peer) return;
     switch (error.type) {
-      case 'unavailable-id':
-        if (!this.fixedCode && !this.everOnline) {
-          // A brand-new world whose random code is taken: pick another.
+      case 'unavailable-id': {
+        // A reopened island keeps its code, but PeerServer holds a dropped
+        // session for up to 90 s; if the code is still taken after that,
+        // someone else has it, and the island takes a new one.
+        this.idTakenSince ||= Date.now();
+        if ((!this.fixedCode && !this.everOnline) || Date.now() - this.idTakenSince > 120000) {
           this.room.code = generateCode();
+          this.idTakenSince = 0;
           this.dispatchEvent(new CustomEvent('code', { detail: this.room.code }));
         } else {
           this.setStatus('id-taken', 'Getting your island ready for visitors…');
         }
         break;
+      }
       case 'browser-incompatible':
         this.fail('This browser cannot have visitors. You can still play alone.');
         break;
