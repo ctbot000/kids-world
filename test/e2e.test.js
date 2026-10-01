@@ -508,34 +508,94 @@ test('full screen from the title, the top bar and Settings; iPhones are shown th
   await phone.browserContext().close();
 });
 
-test('a phone held upright shows the whole island code beside the top buttons', { skip }, async () => {
+test('the whole island code shows beside the top buttons, and a long connection message beside or under them', { skip }, async () => {
   const page = await openPlayer(base, { name: 'Tiny Owl' });
   await makeIsland(page, { online: true });
-  await page.setViewport({ width: 360, height: 640 });
-  const layout = await page.evaluate(() => {
-    const kw = window.kidsWorld;
-    const measure = () => {
-      const code = document.getElementById('island-code');
-      const buttons = [...document.querySelectorAll('#topbar .round')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect());
-      return {
-        code: code.scrollWidth <= code.clientWidth,
-        round: buttons.every((b) => b.width === b.height),
-        onScreen: buttons.every((b) => b.right <= innerWidth),
-        clearOfTools: document.getElementById('topbar').getBoundingClientRect().bottom <= document.getElementById('toolbar').getBoundingClientRect().top,
-      };
-    };
-    // The widest code, and a clock with two emoji: sunrise and rain.
-    document.getElementById('island-code').textContent = 'Code 000 000';
-    kw.game.env.time = 0.28;
-    kw.game.env.weather = 'rain';
-    kw.ui.frame();
-    const calm = measure();
-    // A long connection message squeezes the badge, but the buttons stay put.
-    kw.ui.setStatus('reconnecting', 'Lost the island for a moment. Reconnecting…');
-    return { calm, busy: measure() };
-  });
-  assert.deepEqual(layout.calm, { code: true, round: true, onScreen: true, clearOfTools: true });
-  assert.deepEqual({ ...layout.busy, code: true }, layout.calm);
+  const messages = [
+    ['reconnecting', 'Lost the island for a moment. Reconnecting…'],
+    ['failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.'],
+  ];
+  // Phones held upright or sideways have no room for the message in the top bar; a computer does.
+  for (const [width, height, inTopBar] of [
+    [360, 640, false],
+    [720, 480, false],
+    [1280, 800, true],
+  ]) {
+    await page.setViewport({ width, height });
+    // With one row of tool options, and with the two groups Hills has.
+    for (const [state, text, tool] of ['build', 'hills'].flatMap((tool) => messages.map((m) => [...m, tool]))) {
+      const layout = await page.evaluate(
+        async (state, text, tool) => {
+          const kw = window.kidsWorld;
+          const $ = (id) => document.getElementById(id);
+          const box = (el) => el.getBoundingClientRect();
+          kw.game.setTool(tool);
+          const show = (state, text) => {
+            kw.ui.setStatus(state, text);
+            // The widest code, and a clock with two emoji: sunrise and rain.
+            $('island-code').textContent = 'Code 000 000';
+            kw.game.env.time = 0.28;
+            kw.game.env.weather = 'rain';
+            kw.ui.frame();
+          };
+          const measure = () => {
+            const code = $('island-code');
+            // A fraction of a pixel too little is enough for an ellipsis, and scrollWidth rounds it away.
+            const text = document.createRange();
+            text.selectNodeContents(code);
+            const buttons = [...document.querySelectorAll('#topbar .round')].filter((b) => b.offsetParent).map(box);
+            return {
+              code: text.getBoundingClientRect().width <= box(code).width,
+              badge: box($('island-badge')).width,
+              round: buttons.every((b) => b.width === b.height),
+              onScreen: buttons.every((b) => b.right <= innerWidth),
+              clearOfTools: box($('topbar')).bottom <= box($('toolbar')).top,
+            };
+          };
+          show('online', 'Friends can visit with the code');
+          const calm = measure();
+          show(state, text);
+          const busy = measure();
+          // A toast while the message is up: the toasts make room for it once its size is known.
+          $('toasts').replaceChildren();
+          kw.ui.toast('🌱', 'Tap the ground to plant a tree, or tap an animal to give it one!');
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+          const status = $('status');
+          const s = box(status);
+          const bar = box($('topbar'));
+          const toasts = box($('toasts'));
+          // Everything else on the screen; a toast still sliding in counts where it lands.
+          const covered = [...document.querySelectorAll('#hud button, #toolbar, #toolopts > *, #joystick, .toast')]
+            .map((el) => {
+              if (!el.classList.contains('toast')) return [el, box(el)];
+              const left = toasts.left + el.offsetLeft;
+              const top = toasts.top + el.offsetTop;
+              return [el, { left, top, right: left + el.offsetWidth, bottom: top + el.offsetHeight, width: el.offsetWidth }];
+            })
+            .filter(([, r]) => r.width && r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top)
+            .map(([el]) => el.id || el.className);
+          return {
+            calm,
+            busy,
+            message: {
+              whole: status.scrollWidth <= status.clientWidth && status.scrollHeight <= status.clientHeight,
+              inTopBar: s.top >= bar.top && s.bottom <= bar.bottom,
+              onScreen: s.left >= 0 && s.top >= 0 && s.right <= innerWidth && s.bottom <= innerHeight,
+              covered,
+            },
+          };
+        },
+        state,
+        text,
+        tool,
+      );
+      const where = `${width}×${height}, ${state}, ${tool}`;
+      assert.deepEqual(layout.calm, { ...layout.calm, code: true, round: true, onScreen: true, clearOfTools: true }, where);
+      assert.deepEqual(layout.busy, layout.calm, `${where}: the island's badge and the buttons stay as they were`);
+      assert.deepEqual(layout.message, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
+    }
+  }
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

@@ -84,6 +84,12 @@ export class UI {
     $('btn-fullscreen').onclick = $('btn-fullscreen-hud').onclick = () => this.toggleFullscreen();
     onFullscreenChange(() => this.renderFullscreen());
     this.renderFullscreen();
+    // On narrow screens a connection message has a spot of its own where the
+    // toasts start, and they make room for it (see .status in the stylesheet).
+    new ResizeObserver(() => {
+      const h = $('status').offsetHeight;
+      document.documentElement.style.setProperty('--status-room', h ? `${h + 8}px` : '0px');
+    }).observe($('status'));
   }
 
   // ------------------------------------------------ icons
