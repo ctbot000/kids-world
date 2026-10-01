@@ -129,13 +129,16 @@ export class UI {
 
   // ------------------------------------------------ dialogs
 
-  openModal(build, { narrow = false, onClose = null, seeThrough = false } = {}) {
+  // pose: you are choosing how you look, so on a narrow screen everything
+  // else makes way for you above the dialog.
+  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false } = {}) {
     const body = $('modal-body');
     body.replaceChildren();
     build(body);
     const panel = $('modal').querySelector('.panel');
     panel.classList.toggle('narrow', narrow);
     $('modal').classList.toggle('see-through', seeThrough);
+    document.body.classList.toggle('posing', pose);
     $('modal').hidden = false;
     this.modalClose = onClose;
     this.input.enabled = false;
@@ -147,6 +150,7 @@ export class UI {
   closeModal() {
     if ($('modal').hidden) return;
     $('modal').hidden = true;
+    document.body.classList.remove('posing');
     const fn = this.modalClose;
     this.modalClose = null;
     this.input.enabled = Boolean(this.game);
@@ -540,7 +544,7 @@ export class UI {
           h('button', { class: 'big green', type: 'button', style: 'margin-top:16px', onclick: () => this.closeModal() }, '👍 Done'),
         );
       },
-      { seeThrough: true, onClose: () => this.handlers.lookDone?.() },
+      { seeThrough: true, pose: true, onClose: () => this.handlers.lookDone?.() },
     );
     this.handlers.lookOpen?.();
   }

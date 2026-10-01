@@ -41,7 +41,7 @@ try {
 
 let serverMode = false;
 let session = null;
-const demo = { world: null, avatar: null, t: 0, looking: false };
+const demo = { world: null, avatar: null, t: 0, pose: null };
 
 // Quality steps down by itself on devices that struggle: first fewer pixels,
 // then no studs and a shorter view.
@@ -75,7 +75,11 @@ function watchPerformance(now) {
   }
 }
 applySettings();
-window.addEventListener('resize', () => renderer.resize());
+window.addEventListener('resize', () => {
+  renderer.resize();
+  // Turning the screen round moves the dialog, and you with it.
+  if (demo.pose || session?.game.portrait) lookAtMe(true);
+});
 document.addEventListener('pointerdown', () => sound.unlock(), { capture: true });
 document.addEventListener('keydown', () => sound.unlock(), { capture: true });
 
@@ -107,15 +111,17 @@ function demoFrame(dt) {
   const s = demo.world.spawn;
   const a = demo.avatar;
   const v = renderer.view;
-  if (demo.looking) {
+  if (demo.pose) {
     // Close up, facing the camera, while you choose how you look.
-    v.dist += (3.4 - v.dist) * Math.min(1, dt * 4);
+    v.dist += (demo.pose.dist - v.dist) * Math.min(1, dt * 4);
     v.pitch += (0.12 - v.pitch) * Math.min(1, dt * 4);
     v.yaw += dt * 0.12;
-    v.shift = portraitShift();
+    v.shift = demo.pose.shift;
+    v.lift = demo.pose.lift;
     if (a) a.root.rotation.y = v.yaw;
   } else {
     v.shift = 0;
+    v.lift = 0;
     v.dist += (7.5 - v.dist) * Math.min(1, dt * 2);
     v.pitch += (0.22 - v.pitch) * Math.min(1, dt * 2);
     v.yaw += dt * 0.06;
@@ -127,14 +133,35 @@ function demoFrame(dt) {
     renderer.placeShadow(a.shadow, s.x, s.y, s.z);
   }
   // On a tall screen the buttons fill the bottom half, so look a little lower to lift the avatar.
-  const tall = renderer.camera.aspect < 0.8 && !demo.looking;
+  const tall = renderer.camera.aspect < 0.8 && !demo.pose;
   renderer.updateCamera(dt, { x: s.x, y: s.y - (tall ? 1.3 : 0.35), z: s.z }, false);
   renderer.frame(dt, { time: 0.36, weather: 'clear', focus: s });
 }
 
-// Where to put your character while a see-through dialog covers part of the screen.
-function portraitShift() {
-  return window.innerWidth >= 900 ? 1.1 : 0;
+// Where your character shows while the see-through "Change me" dialog covers
+// part of the screen: beside it on a wide screen, and above it where it is a
+// sheet along the bottom, far enough away to fit. aim: how high above your
+// feet the camera looks.
+function portraitView(aim) {
+  if (window.innerWidth >= 900) return { shift: 1.1, lift: 0, dist: 3.4 };
+  const modal = document.getElementById('modal');
+  const h = window.innerHeight;
+  // The room between the notch and the sheet, in shares of the screen's height.
+  const top = parseFloat(getComputedStyle(modal).paddingTop) / h;
+  const bottom = Math.max(top + 0.2, modal.querySelector('.panel').offsetTop / h);
+  const t = Math.tan((renderer.camera.fov * Math.PI) / 360);
+  // All of you (a bunny's ears are 1.9 up) fills 4/5 of the room...
+  const dist = Math.max(3.4, 1.9 / (0.8 * (bottom - top) * 2 * t));
+  // ...with your middle in the middle of it.
+  const lift = 0.5 + (aim - 0.95) / (2 * dist * t) - (top + bottom) / 2;
+  return { shift: 0, lift, dist };
+}
+
+// Turns the camera to you while you choose how you look, or back (on: false).
+// The title looks at your middle; a game looks 1.25 above your feet.
+function lookAtMe(on) {
+  demo.pose = on && !session ? portraitView(0.9) : null;
+  session?.game.setPortrait(on, on ? portraitView(1.25) : undefined);
 }
 
 // ------------------------------------------------ sessions
@@ -341,14 +368,8 @@ const titleHandlers = {
     if (session?.game) session.game.send({ t: 'look', look: profile.look });
     else showDemoAvatar();
   },
-  lookOpen: () => {
-    if (!session) demo.looking = true;
-    else session.game.setPortrait(true, portraitShift());
-  },
-  lookDone: () => {
-    demo.looking = false;
-    session?.game.setPortrait(false);
-  },
+  lookOpen: () => lookAtMe(true),
+  lookDone: () => lookAtMe(false),
 };
 
 const gameHandlers = {

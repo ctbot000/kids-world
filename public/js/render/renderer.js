@@ -207,6 +207,13 @@ export class Renderer {
       v.smooth.x += Math.cos(v.yaw) * v.shiftNow;
       v.smooth.z -= Math.sin(v.yaw) * v.shiftNow;
     }
+    // Lifts the picture by a share of the screen's height (positive: up), as a
+    // shift lens does: the camera stays put, so the subject keeps its shape
+    // and the ground never comes between them.
+    v.liftNow = (v.liftNow ?? 0) + ((v.lift ?? 0) - (v.liftNow ?? 0)) * Math.min(1, dt * 5);
+    const cam = this.camera;
+    if (Math.abs(v.liftNow) > 1e-3) cam.setViewOffset(cam.aspect, 1, 0, v.liftNow, cam.aspect, 1);
+    else if (cam.view?.enabled) cam.clearViewOffset();
     return this.camDist;
   }
 

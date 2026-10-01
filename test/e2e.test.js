@@ -335,6 +335,91 @@ test('every tool fits across an upright phone, and the row below still lines up 
   await page.browserContext().close();
 });
 
+test('choosing how you look, you can see yourself beside the dialog or above it, on the title and in a game', { skip }, async () => {
+  // A bunny: the ears make it the tallest look there is.
+  const page = await openPlayer(base + '?p2p=1', { name: 'Proud Bunny', look: { animal: 'bunny', fur: 'pink', shirt: 1, hat: 'party' } });
+  // Where all of you is on screen once the camera has turned to you, the dialog, and whether anything else shows.
+  const look = () =>
+    page.evaluate(async () => {
+      const THREE = await import('./vendor/three.module.js');
+      const kw = window.kidsWorld;
+      kw.step(1 / 60, 90);
+      const r = kw.renderer;
+      const avatar = kw.game ? kw.game.players.get(kw.game.pid).avatar : r.avatars.get(-1);
+      const box = new THREE.Box3().setFromObject(avatar.root);
+      const xs = [];
+      const ys = [];
+      for (const x of [box.min.x, box.max.x]) {
+        for (const y of [box.min.y, box.max.y]) {
+          for (const z of [box.min.z, box.max.z]) {
+            const p = r.project(x, y, z);
+            xs.push(Math.round(p.x));
+            ys.push(Math.round(p.y));
+          }
+        }
+      }
+      // Layout boxes: the dialog may still be popping in.
+      const panel = document.querySelector('#modal .panel');
+      const shows = (id) => !document.getElementById(id).hidden && getComputedStyle(document.getElementById(id)).visibility === 'visible';
+      return {
+        me: { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) },
+        panel: { right: panel.offsetLeft + panel.offsetWidth, top: panel.offsetTop },
+        screen: { width: innerWidth, height: innerHeight },
+        others: shows('title') || shows('hud'),
+      };
+    });
+  const onScreen = ({ me, screen }) => me.left >= 0 && me.top >= 0 && me.right <= screen.width && me.bottom <= screen.height;
+  const above = async (where) => {
+    const seen = await look();
+    assert.ok(onScreen(seen) && seen.me.bottom <= seen.panel.top, `${where}: all of you is above the dialog: ${JSON.stringify(seen)}`);
+    assert.equal(seen.others, false, `${where}: the title and the buttons make way`);
+  };
+  const beside = async (where) => {
+    const seen = await look();
+    assert.ok(onScreen(seen) && seen.me.left >= seen.panel.right, `${where}: all of you is beside the dialog: ${JSON.stringify(seen)}`);
+    assert.equal(seen.others, true, `${where}: the title and the buttons stay`);
+  };
+  const done = async (where) => {
+    await clickButton(page, 'Done', '#modal');
+    const after = await page.evaluate(() => {
+      const kw = window.kidsWorld;
+      kw.step(1 / 60, 90);
+      return { lens: kw.renderer.camera.view?.enabled ?? false, lift: kw.renderer.view.lift, posing: document.body.classList.contains('posing'), portrait: kw.game?.portrait ?? null };
+    });
+    assert.deepEqual(after, { lens: false, lift: 0, posing: false, portrait: null }, `${where}: the camera is back`);
+  };
+  // The new size reaches the game with the resize event, before the next frame.
+  const resize = async (width, height) => {
+    await page.setViewport({ width, height });
+    await until(page, () => Math.abs(window.kidsWorld.renderer.camera.aspect - innerWidth / innerHeight) < 1e-6);
+  };
+  const open = async (inGame) => {
+    if (inGame) {
+      await page.click('#btn-settings');
+      await clickButton(page, 'Change me', '#modal');
+    } else {
+      await clickButton(page, 'Change me');
+    }
+  };
+  for (const inGame of [false, true]) {
+    const where = inGame ? 'in a game' : 'on the title';
+    // Open ground, so that nothing pulls the camera in.
+    if (inGame) await makeIsland(page, { online: false, theme: 'Flat Land' });
+    await resize(390, 844);
+    await open(inGame);
+    await above(`${where}, on an upright phone`);
+    await resize(844, 390);
+    await above(`${where}, on a phone turned round meanwhile`);
+    await done(`${where}, on a phone`);
+    await resize(1000, 600);
+    await open(inGame);
+    await beside(`${where}, on a wide screen`);
+    await done(`${where}, on a wide screen`);
+  }
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
   const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');

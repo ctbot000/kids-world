@@ -801,7 +801,7 @@ export class Game extends EventTarget {
       const v = this.renderer.view;
       v.yaw = lerpAngle(v.yaw, this.me.yaw, Math.min(1, dt * 4));
       v.pitch += (0.12 - v.pitch) * Math.min(1, dt * 4);
-      v.dist += (3.4 - v.dist) * Math.min(1, dt * 4);
+      v.dist += (this.pose.dist - v.dist) * Math.min(1, dt * 4);
     }
     this.renderer.updateCamera(dt, b);
     this.selfVisible(this.renderer.camDist > 1.3);
@@ -871,13 +871,15 @@ export class Game extends EventTarget {
   }
 
   // Turns the camera round to look at you from the front (while choosing how you look).
-  setPortrait(on, shift = 0) {
+  // pose: where on the screen you show, and from how far; calling again moves you there.
+  setPortrait(on, pose = { shift: 0, lift: 0, dist: 3.4 }) {
     const v = this.renderer.view;
-    if (on && !this.portrait) {
-      this.portrait = { yaw: v.yaw, pitch: v.pitch, dist: v.dist };
-      v.shift = shift;
-    } else if (!on && this.portrait) {
-      Object.assign(v, this.portrait, { shift: 0 });
+    if (on) {
+      this.portrait ??= { yaw: v.yaw, pitch: v.pitch, dist: v.dist };
+      this.pose = pose;
+      Object.assign(v, { shift: pose.shift, lift: pose.lift });
+    } else if (this.portrait) {
+      Object.assign(v, this.portrait, { shift: 0, lift: 0 });
       this.portrait = null;
     }
   }

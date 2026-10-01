@@ -992,6 +992,14 @@ body.touch.playing #joystick {
   .modal.see-through .panel {
     max-height: 58vh;
   }
+
+  /* Choosing how you look: the camera puts you above the sheet, so the title
+     and the buttons step out of the way. */
+  body.posing #title,
+  body.posing #hud,
+  body.posing #joystick {
+    visibility: hidden;
+  }
 }
 
 .panel {
