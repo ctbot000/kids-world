@@ -12,6 +12,7 @@ import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
 import { HILL_MODES, TOOLS } from './game.js';
+import { MiniMap } from './minimap.js';
 import { STICKERS } from './profile.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +76,8 @@ export class UI {
       this.toast(s.icon, `New sticker: ${s.name}!`, 'sticker');
     });
     profile.addEventListener('basket', () => this.renderBasket());
+    this.minimap = new MiniMap($('minimap').querySelector('canvas'), atlas);
+    $('minimap').addEventListener('click', () => this.mapDialog());
     this.fullMode = fullscreenMode();
     $('btn-fullscreen').prepend(lineIcon('full'));
     $('btn-fullscreen-hud').append(lineIcon('full'));
@@ -579,6 +582,7 @@ export class UI {
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you! Use the bunny tool to invite new friends.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💬', 'Talk', ['Say hello with the speech bubble and dance with the smiley.']),
+          card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('👀', 'See through your eyes', ['Zoom all the way in to look around as yourself.']),
@@ -687,6 +691,8 @@ export class UI {
     this.renderBasket();
     this.renderFriends();
     this.renderIsland();
+    this.minimap.attach(game);
+    this.renderMap();
     $('btn-toybox').onclick = () => this.toyBox();
     $('btn-photo').onclick = () => this.takePhoto();
     $('btn-settings').onclick = () => this.settingsDialog();
@@ -725,6 +731,7 @@ export class UI {
 
   detach() {
     this.game = null;
+    this.minimap.detach();
     this.input.enabled = false;
     $('hud').hidden = true;
     document.body.classList.remove('playing');
@@ -1165,6 +1172,10 @@ export class UI {
           handlers.applySettings();
         }),
         toggle(p.settings.autoJump, '🦘 Hop up steps by myself', null, (on) => p.setting('autoJump', on)),
+        toggle(p.settings.map, '🗺️ Little map', 'Where you, your friends and the animals are.', (on) => {
+          p.setting('map', on);
+          this.renderMap();
+        }),
       );
       const full = this.fullscreenSetting();
       if (full) root.append(full);
@@ -1285,7 +1296,31 @@ export class UI {
     this.toast('📸', 'Click! Your photo is saved.');
   }
 
+  // The big map: the whole island, everyone's names and the animals.
+  mapDialog() {
+    const g = this.game;
+    if (!g?.world) return;
+    this.openModal(
+      (root) => {
+        const canvas = h('canvas', { class: 'big-map', role: 'img', 'aria-label': `Map of ${g.world.name}` });
+        root.append(h('h2', {}, `🗺️ ${g.world.name}`), canvas, h('p', { class: 'muted map-note' }, 'The yellow arrow is you!'));
+        this.minimap.big = canvas;
+      },
+      { onClose: () => (this.minimap.big = null) },
+    );
+    // Now, not a frame later: there is no next frame in a tab that is not being shown.
+    this.minimap.draw();
+  }
+
   // ------------------------------------------------ live parts of the HUD
+
+  // The little map, unless it was switched off in Settings.
+  renderMap() {
+    const off = !this.profile.settings.map;
+    $('minimap').hidden = off;
+    this.minimap.hidden = off;
+    this.minimap.relayout();
+  }
 
   renderIsland() {
     const g = this.game;
@@ -1336,10 +1371,11 @@ export class UI {
     }
   }
 
-  // Name tags and speech bubbles follow everyone around.
-  frame() {
+  // Name tags and speech bubbles follow everyone around; the maps keep up.
+  frame(dt) {
     const g = this.game;
     if (!g?.world) return;
+    this.minimap.frame(dt);
     const r = g.renderer;
     const seen = new Set();
     const me = g.me?.body;

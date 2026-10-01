@@ -35,7 +35,7 @@ const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 
 
 export const DEFAULT_HOTBAR = [GRASS, DIRT, STONE, PLANKS, GLASS, TOY_BRICKS[0], TOY_BRICKS[2], TOY_BRICKS[7], TULIP, LAMP];
 
-export const DEFAULT_SETTINGS = { music: 0.5, sound: 0.8, studs: true, autoJump: true, readAloud: false, quality: 'auto' };
+export const DEFAULT_SETTINGS = { music: 0.5, sound: 0.8, studs: true, autoJump: true, map: true, readAloud: false, quality: 'auto' };
 
 function clean(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};

@@ -449,7 +449,7 @@ function step(dt) {
   const g = session?.game;
   if (g?.world && session.started) {
     g.update(dt, input);
-    ui.frame();
+    ui.frame(dt);
   } else if (!session) {
     demoFrame(dt);
   }

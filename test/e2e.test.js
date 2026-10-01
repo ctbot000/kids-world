@@ -212,6 +212,105 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   await page.browserContext().close();
 });
 
+test('the little map shows the island and what you build; it opens the big map and can be switched off', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Clever Duck' });
+  await makeIsland(page, { online: false });
+  // A pixel of a map canvas, at a fraction of the way across and down.
+  const pixel = (selector, fx, fy) =>
+    page.evaluate(
+      (selector, fx, fy) => {
+        const c = document.querySelector(selector);
+        return c.width ? [...c.getContext('2d').getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data] : null;
+      },
+      selector,
+      fx,
+      fy,
+    );
+  const isSea = (p) => p && p[2] > p[0] + 60 && p[3] === 255;
+  await until(page, () => document.querySelector('#minimap canvas').width > 0);
+  assert.ok(isSea(await pixel('#minimap canvas', 0.02, 0.02)), 'the corner of the little map is sea');
+  // A real pointer reaches it: nothing is on top of it.
+  const center = await page.evaluate(() => {
+    const b = document.getElementById('minimap').getBoundingClientRect();
+    const x = b.left + b.width / 2;
+    const y = b.top + b.height / 2;
+    return { x, y, reachable: document.elementFromPoint(x, y)?.closest('#minimap') !== null };
+  });
+  assert.ok(center.reachable, 'nothing covers the little map');
+
+  // A red brick (slot 6) built with a real click turns its spot on the map red.
+  await page.keyboard.press('Digit6');
+  const cell = await spotNear(page, 3, 1);
+  const at = await aimAt(page, cell);
+  await page.mouse.click(at.x, at.y);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y + 1, c.z) === 30, cell);
+  await until(
+    page,
+    (c) => {
+      const [r, g, b] = window.kidsWorld.ui.minimap.picture.getContext('2d').getImageData(c.x, c.z, 1, 1).data;
+      return r > g + 60 && r > b + 60;
+    },
+    cell,
+  );
+
+  // Clicking the little map opens the big one, drawn at once; Escape closes it.
+  await page.mouse.click(center.x, center.y);
+  await until(page, () => document.querySelector('#modal:not([hidden]) .big-map')?.width > 0);
+  assert.ok(isSea(await pixel('#modal .big-map', 0.01, 0.99)), 'the big map is drawn');
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.ui.minimap.big === null);
+
+  // Settings switches it off, and on again; the choice is kept.
+  await page.click('#btn-settings');
+  const toggle = '#modal .switch[aria-label$="Little map"]';
+  await page.waitForSelector(toggle);
+  await page.click(toggle);
+  await until(page, () => document.getElementById('minimap').hidden && window.kidsWorld.profile.settings.map === false);
+  await page.click(toggle);
+  await until(page, () => !document.getElementById('minimap').hidden && window.kidsWorld.profile.settings.map === true);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('the little map fits beside every other button, on screens of every shape', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
+  await makeIsland(page, { online: false });
+  const screens = [
+    [1280, 800, false],
+    [1000, 600, false],
+    [720, 480, false],
+    [1024, 768, true],
+    [768, 1024, true],
+    [390, 844, true],
+    [360, 740, true],
+    [844, 390, true],
+    [375, 548, true],
+    [568, 320, true],
+  ];
+  for (const [width, height, touch] of screens) {
+    await page.setViewport({ width, height });
+    const seen = await page.evaluate((touch) => {
+      document.body.classList.toggle('touch', touch);
+      const m = document.getElementById('minimap').getBoundingClientRect();
+      const covered = [];
+      for (const el of document.querySelectorAll('#hud button, #hud .island-badge, #toolopts > *, #joystick')) {
+        if (el.closest('#minimap')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width && r.height && r.left < m.right && r.right > m.left && r.top < m.bottom && r.bottom > m.top) covered.push(el.id || el.className);
+      }
+      return { covered, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
+    }, touch);
+    const where = `${width}×${height}${touch ? ' touch' : ''}`;
+    assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
+    assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
+  }
+  // An upright screen this small has no room for it.
+  await page.setViewport({ width: 320, height: 460 });
+  assert.equal(await page.evaluate(() => document.getElementById('minimap').getBoundingClientRect().width), 0);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
   const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');

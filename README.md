@@ -21,6 +21,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 - **Your character:** be a bunny, cat, bear, puppy, fox, panda, frog, piggy, mouse or koala. Pick your fur, T-shirt and hat. Wave, dance, cheer, clap or giggle, and say things with ready-made phrases and stickers.
 - **24 stickers** to collect, for things like your first brick, petting ten animals or staying up to see the stars.
 - **Photos:** the 📸 button saves a picture of your island, without the buttons.
+- **A little map** in the corner shows the island from above: you (the yellow arrow) and the way you are looking, your friends in their T-shirt colours, and the animals. Tap it for a big map with everyone's names. It can be switched off in ⚙️ Settings.
 - **Sounds and music** are all made in the browser: pops and clicks for building, animal voices, "animal talk" babble when someone speaks, and soft music that changes at night.
 
 ## Made for kids
@@ -43,6 +44,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 | Blocks | <kbd>1</kbd>–<kbd>0</kbd>, <kbd>E</kbd> opens the toy box, middle-click copies the block you point at | Tap the hotbar |
 | Talk, emotes | <kbd>T</kbd>, <kbd>G</kbd> | 💬 and 😊 buttons |
 | Take a photo | <kbd>P</kbd> | 📸 button |
+| Big map | Click the little map | Tap the little map |
 | Undo | <kbd>Z</kbd> | ↩️ button |
 | Full screen | Full screen button, at the top or in ⚙️ Settings | The same; on an iPhone, add the game to the Home Screen and open it from there |
 
@@ -90,10 +92,11 @@ npm test
 
 - Engine: world encoding, deterministic island generation, walking, jumping, auto-jump, swimming and flying, aiming, every tool, stamps, sprouts, and the day length.
 - Rendering maths without a GPU: faces wind outward and enclose the block, hidden faces are skipped, corner shadows, sunlight and lamp light, and relighting a region matching lighting everything.
+- The map: the ground seen from above (looking past flowers and fruit), deeper water darker, hill shading, edits repainted with the shadow they throw, the part of a big island it follows, and directions that match the 3D view instead of mirroring it.
 - Room: joining and coming back, names from the word lists only, checked edits, undo, the owner's rules, phrases and stickers only, animals, growing trees and fruit, weather, saving and loading, rate limiting.
 - Server: static files and path traversal, the WebSocket handshake and framing, and islands shared by real WebSocket clients.
 - Full screen: the standard calls, Safari's older prefixed ones, and iPhones, which can only get it from the Home Screen.
-- End to end in headless Chrome: playing alone with real clicks, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
+- End to end in headless Chrome: playing alone with real clicks, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
 
 ## Project layout
 
@@ -103,6 +106,7 @@ public/                 the whole site; no build step
   js/main.js            title screen, sessions, saving, the frame loop
   js/game.js            one visit to an island: you, friends, animals, tools
   js/ui.js              toolbar, hotbar, toy box, dialogs, name tags and bubbles
+  js/minimap.js         the little map in the corner and the big map of the island
   js/input.js           keyboard, mouse, touch thumbstick and buttons
   js/sound.js           sound effects, animal voices and music (Web Audio)
   js/net.js             playing alone / hosting / visiting, and the dedicated server

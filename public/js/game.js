@@ -342,7 +342,7 @@ export class Game extends EventTarget {
       this.pending.set(w.index(x, y, z), seq);
     }
     applyCells(w, cells);
-    this.renderer.terrain.cellsChanged(cells);
+    this.changed(cells);
     if (this.me) unstick(w, this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
@@ -377,7 +377,7 @@ export class Game extends EventTarget {
     }
     if (apply.length) {
       applyCells(w, apply);
-      this.renderer.terrain.cellsChanged(apply);
+      this.changed(apply);
     }
     if (!mine) this.editEffects(msg.kind, msg.cells, false);
     if (this.me) unstick(w, this.me.body);
@@ -400,8 +400,14 @@ export class Game extends EventTarget {
     for (const [k, seq] of this.pending) if (seq === msg.seq) this.pending.delete(k);
     if (fix.length) {
       applyCells(w, fix);
-      this.renderer.terrain.cellsChanged(fix);
+      this.changed(fix);
     }
+  }
+
+  // Blocks of this copy of the world just changed: redraw them, and the map.
+  changed(cells) {
+    this.renderer.terrain.cellsChanged(cells);
+    this.emit('cells', cells);
   }
 
   undo() {

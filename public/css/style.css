@@ -32,6 +32,9 @@
   --font: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Arial Rounded MT Bold', 'Nunito', system-ui, sans-serif;
   --tool: 58px;
   --slot: 56px;
+  --talk: 58px;
+  /* Clear of the talk buttons, which sit halfway down the right side. */
+  --map: clamp(108px, calc(50vh - 142px), 156px);
 }
 
 * {
@@ -667,8 +670,8 @@ body.fullscreen .full-icon .leave {
 }
 
 .big-round {
-  width: 58px;
-  height: 58px;
+  width: var(--talk);
+  height: var(--talk);
   font-size: 1.7rem;
 }
 
@@ -740,6 +743,48 @@ body.touch.playing #joystick {
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
   transform: translate(-50%, -50%);
+}
+
+/* ------------------------------------------------ the little map */
+
+#minimap {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+  right: max(10px, env(safe-area-inset-right));
+  display: block;
+  width: var(--map);
+  height: var(--map);
+  padding: 4px;
+  border-radius: 20px;
+  background: rgba(255, 250, 240, 0.92);
+  box-shadow: var(--shadow);
+  transition: transform 0.08s ease;
+}
+
+#minimap:active {
+  transform: scale(0.96);
+}
+
+#minimap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+}
+
+/* The big map, in a dialog: as big as the screen allows, and square. */
+.big-map {
+  display: block;
+  width: min(100%, calc(88vh - 130px));
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 18px;
+  background: rgb(44, 118, 206);
+}
+
+.panel .map-note {
+  margin-top: 10px;
+  text-align: center;
 }
 
 /* ------------------------------------------------ name tags and speech bubbles */
@@ -1386,6 +1431,7 @@ kbd {
   :root {
     --tool: 48px;
     --slot: 46px;
+    --talk: 50px;
   }
 
   .tool {
@@ -1403,8 +1449,6 @@ kbd {
   }
 
   .big-round {
-    width: 50px;
-    height: 50px;
     font-size: 1.45rem;
   }
 
@@ -1494,6 +1538,7 @@ kbd {
   :root {
     --tool: 40px;
     --slot: 42px;
+    --map: clamp(96px, 28vh, 124px);
   }
 
   #toolbar {
@@ -1531,6 +1576,12 @@ kbd {
     transform: none;
     bottom: auto !important;
     flex-direction: column !important;
+  }
+
+  /* Beside the talk buttons, which fill the right edge from there down to the jump buttons. */
+  #minimap {
+    top: calc(max(8px, env(safe-area-inset-top)) + 58px);
+    right: calc(max(10px, env(safe-area-inset-right)) + var(--talk) + 10px);
   }
 
   body.touch #touch-buttons {
@@ -1594,6 +1645,15 @@ kbd {
     flex-direction: row !important;
   }
 
+  :root {
+    --map: clamp(96px, min(30vw, 100vh - 440px), 156px);
+  }
+
+  #minimap {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + var(--talk) + 12px);
+    right: max(10px, env(safe-area-inset-right));
+  }
+
   body.touch #touch-buttons {
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + 84px);
   }
@@ -1604,6 +1664,13 @@ kbd {
 
   #toasts {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 90px);
+  }
+}
+
+/* An upright screen this short has no room for the map between the buttons. */
+@media (max-aspect-ratio: 3/4) and (max-height: 520px) {
+  #minimap {
+    display: none;
   }
 }
 
