@@ -244,6 +244,38 @@ test('full screen from the title, the top bar and Settings; iPhones are shown th
   await phone.browserContext().close();
 });
 
+test('a phone held upright shows the whole island code beside the top buttons', { skip }, async () => {
+  const page = await openPlayer(base, { name: 'Tiny Owl' });
+  await makeIsland(page, { online: true });
+  await page.setViewport({ width: 360, height: 640 });
+  const layout = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const measure = () => {
+      const code = document.getElementById('island-code');
+      const buttons = [...document.querySelectorAll('#topbar .round')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect());
+      return {
+        code: code.scrollWidth <= code.clientWidth,
+        round: buttons.every((b) => b.width === b.height),
+        onScreen: buttons.every((b) => b.right <= innerWidth),
+        clearOfTools: document.getElementById('topbar').getBoundingClientRect().bottom <= document.getElementById('toolbar').getBoundingClientRect().top,
+      };
+    };
+    // The widest code, and a clock with two emoji: sunrise and rain.
+    document.getElementById('island-code').textContent = 'Code 000 000';
+    kw.game.env.time = 0.28;
+    kw.game.env.weather = 'rain';
+    kw.ui.frame();
+    const calm = measure();
+    // A long connection message squeezes the badge, but the buttons stay put.
+    kw.ui.setStatus('reconnecting', 'Lost the island for a moment. Reconnecting…');
+    return { calm, busy: measure() };
+  });
+  assert.deepEqual(layout.calm, { code: true, round: true, onScreen: true, clearOfTools: true });
+  assert.deepEqual({ ...layout.busy, code: true }, layout.calm);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('two friends peer to peer: visiting, building together, rules and saying goodbye', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
   await makeIsland(host, { online: true });

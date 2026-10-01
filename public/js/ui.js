@@ -1380,7 +1380,7 @@ export class UI {
     const w = g.env.weather;
     const sky = isNight(t) ? '🌙' : t < 0.3 ? '🌅' : t > 0.7 ? '🌇' : '☀️';
     const weather = { cloudy: '☁️', rain: '🌧️', rainbow: '🌈', snow: '❄️', sprinkles: '🍬' }[w] ?? '';
-    const text = `${sky}${weather}`;
-    if ($('clock').textContent !== text) $('clock').textContent = text;
+    const clock = $('clock');
+    if (clock.textContent !== `${sky}${weather}`) clock.replaceChildren(sky, weather ? h('span', { class: 'weather' }, weather) : '');
   }
 }

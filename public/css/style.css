@@ -395,6 +395,9 @@ body.fullscreen .full-icon .leave {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status:empty {
@@ -424,13 +427,20 @@ body.fullscreen .full-icon .leave {
 
 .top-buttons {
   display: flex;
+  flex: none;
   gap: 8px;
   align-items: center;
   margin-left: auto;
 }
 
+/* The buttons and the clock keep their size; the island's name gives way. */
+.top-buttons > * {
+  flex: none;
+}
+
 .clock {
   font-size: 1.6rem;
+  white-space: nowrap;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2));
 }
 
@@ -1441,10 +1451,41 @@ kbd {
   }
 }
 
-/* No room for one more button beside the island's name: full screen is in Settings. */
+/* Narrow phones held upright: the island's name and code need the room,
+   so the top bar packs tighter and full screen is in Settings instead. */
 @media (max-width: 479px) {
   #btn-fullscreen-hud {
     display: none;
+  }
+
+  #topbar {
+    gap: 6px;
+  }
+
+  .island-badge {
+    padding: 6px 10px;
+    border-radius: 16px;
+  }
+
+  .island-name {
+    max-width: none;
+  }
+
+  .top-buttons {
+    gap: 5px;
+  }
+
+  /* The weather sits on the sun or moon instead of beside it. */
+  .clock {
+    position: relative;
+    font-size: 1.35rem;
+  }
+
+  .clock .weather {
+    position: absolute;
+    right: -0.15em;
+    bottom: -0.35em;
+    font-size: 0.62em;
   }
 }
 
