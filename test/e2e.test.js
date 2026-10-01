@@ -311,10 +311,14 @@ test('the little map fits beside every other button, on screens of every shape',
         const r = el.getBoundingClientRect();
         if (r.width && r.height && r.left < m.right && r.right > m.left && r.top < m.bottom && r.bottom > m.top) covered.push(el.id || el.className);
       }
-      return { covered, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
+      const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
+      const want = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talk'));
+      return { covered, talk, want, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
     }, touch);
     const where = `${width}×${height}${touch ? ' touch' : ''}`;
     assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
+    // The map's place beside the talk buttons is worked out from --talk.
+    assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
     assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
   }
   // An upright screen this small has no room for it.

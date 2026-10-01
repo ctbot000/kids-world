@@ -681,7 +681,8 @@ body.fullscreen .full-icon .leave {
   gap: 10px;
 }
 
-.big-round {
+/* Two classes, so it still outranks .round where small screens restyle that. */
+.round.big-round {
   width: var(--talk);
   height: var(--talk);
   font-size: 1.7rem;
@@ -1468,7 +1469,7 @@ kbd {
     font-size: 0.95rem;
   }
 
-  .big-round {
+  .round.big-round {
     font-size: 1.45rem;
   }
 
@@ -1680,9 +1681,9 @@ kbd {
     border-radius: 18px;
   }
 
-  /* It stops short of the talk buttons beside it (on phones they are smaller
-     than --talk), and a group with no room left there wraps onto a second row.
-     The box is wider than its groups, so touches pass through it to the island. */
+  /* It stops 10px short of the talk buttons beside it, and a group with no room
+     left there wraps onto a second row. The box is wider than its groups, so
+     touches pass through it to the island. */
   #toolopts {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px);
     left: max(10px, env(safe-area-inset-left));
