@@ -292,11 +292,13 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(guest, () => window.kidsWorld.game.settings.build === 'host');
   const cell2 = await spotNear(guest, -2, 1);
   const above2 = { ...cell2, y: cell2.y + 1 };
+  // Not always air: a flower or a tuft of grass can stand there, and the block replaces it.
+  const was = await blockAt(host, above2);
   const at2 = await aimAt(guest, cell2);
   await guest.mouse.click(at2.x, at2.y);
   await until(guest, () => document.querySelector('.toast.warn')?.textContent.includes('only builder'));
-  await until(guest, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 0, above2);
-  assert.equal(await blockAt(host, above2), 0);
+  await until(guest, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === c.was, { ...above2, was });
+  assert.equal(await blockAt(host, above2), was);
 
   // Both worlds are identical, block for block.
   const hash = (page) =>
