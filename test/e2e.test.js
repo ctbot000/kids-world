@@ -311,6 +311,30 @@ test('the little map fits beside every other button, on screens of every shape',
   await page.browserContext().close();
 });
 
+test('every tool fits across an upright phone, and the row below still lines up with it', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Neat Hen' });
+  await makeIsland(page, { online: false });
+  for (const [width, height] of [[320, 568], [320, 460], [360, 640], [375, 667], [375, 548], [390, 844], [430, 932]]) {
+    await page.setViewport({ width, height });
+    const seen = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const bar = box('#toolbar');
+      const tools = [...document.querySelectorAll('#toolbar .tool')].map((t) => t.getBoundingClientRect());
+      return {
+        edges: [bar.left, innerWidth - bar.right],
+        smallest: Math.min(...tools.map((t) => Math.min(t.width, t.height))),
+        below: [box('#toolopts').top - bar.bottom, box('#talk').top - bar.bottom],
+      };
+    });
+    const where = `${width}×${height}: ${JSON.stringify(seen)}`;
+    assert.ok(Math.min(...seen.edges) >= 0, `on ${where} the whole row is on screen`);
+    assert.ok(seen.smallest >= 40, `on ${where} the tools are still big enough to tap`);
+    assert.deepEqual(seen.below, [12, 12], `on ${where} the tool's options and the talk buttons sit just below the row`);
+  }
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
   const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');

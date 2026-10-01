@@ -1667,6 +1667,30 @@ kbd {
   }
 }
 
+/* Seven 48px tools are 376px wide: on narrower upright phones they shrink, and
+   close up, to stay 10px from both edges. Short screens already have 40px tools. */
+@media (max-aspect-ratio: 3/4) and (max-width: 379px) and (min-height: 561px) {
+  :root {
+    --tool: 44px;
+  }
+
+  #toolbar {
+    gap: 4px;
+    padding: 5px 4px;
+  }
+}
+
+@media (max-aspect-ratio: 3/4) and (max-width: 359px) {
+  :root {
+    --tool: 40px;
+  }
+
+  #toolbar {
+    gap: 2px;
+    padding: 5px 4px;
+  }
+}
+
 /* An upright screen this short has no room for the map between the buttons. */
 @media (max-aspect-ratio: 3/4) and (max-height: 520px) {
   #minimap {
