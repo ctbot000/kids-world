@@ -1554,6 +1554,15 @@ kbd {
   }
 }
 
+/* The narrowest phones (320 px): the code still needs about 20px more, so the
+   clock goes. It is the only thing in the top bar that is not a button, and the
+   sky shows the time of day and the weather too. */
+@media (max-width: 359px) {
+  .clock {
+    display: none;
+  }
+}
+
 /* Narrow screens have no room for a connection message beside the island's
    name, so it gets a spot of its own: here under the top bar, beside the
    toolbar and clear of the little map. Toasts make room under it

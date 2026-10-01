@@ -590,7 +590,11 @@ test('the whole island code shows beside the top buttons, and a long connection 
     ['failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.'],
   ];
   // Phones held upright or sideways have no room for the message in the top bar; a computer does.
-  for (const [width, height, inTopBar] of [
+  // The shortest upright touch screen has no free spot for it either: there it runs under the
+  // thumbstick, and with Hills picked under the touch buttons too.
+  for (const [width, height, inTopBar, under = []] of [
+    [320, 460, false, ['joystick', 'btn-down', 'btn-jump']],
+    [320, 568, false],
     [360, 640, false],
     [720, 480, false],
     [1280, 800, true],
@@ -667,7 +671,8 @@ test('the whole island code shows beside the top buttons, and a long connection 
       const where = `${width}×${height}, ${state}, ${tool}`;
       assert.deepEqual(layout.calm, { ...layout.calm, code: true, round: true, onScreen: true, clearOfTools: true }, where);
       assert.deepEqual(layout.busy, layout.calm, `${where}: the island's badge and the buttons stay as they were`);
-      assert.deepEqual(layout.message, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
+      const covered = layout.message.covered.filter((el) => !under.includes(el));
+      assert.deepEqual({ ...layout.message, covered }, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
     }
   }
   assert.deepEqual(pageErrors, []);
