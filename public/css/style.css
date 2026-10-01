@@ -187,6 +187,37 @@ button:focus-visible {
   --shade: var(--line);
 }
 
+/* Line icons, for what no emoji shows. */
+.line-icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  vertical-align: -0.22em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.full-icon {
+  color: var(--sky-dark);
+}
+
+/* Corners point out to go full screen, and in to come back. */
+.full-icon .leave,
+body.fullscreen .full-icon .enter {
+  display: none;
+}
+
+body.fullscreen .full-icon .leave {
+  display: inline;
+}
+
+.share-icon {
+  color: #0a84ff;
+}
+
 /* ------------------------------------------------ title */
 
 .screen {
@@ -332,7 +363,7 @@ button:focus-visible {
 .island-badge {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   padding: 6px 16px;
   border-radius: 18px;
   background: var(--paper);
@@ -353,6 +384,9 @@ button:focus-visible {
 .island-code {
   font-size: 0.9rem;
   color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status {
@@ -871,7 +905,8 @@ body.touch.playing #joystick {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 16px;
+  /* Clear of the clock and the notch, which the game draws under on an iPhone's Home Screen. */
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   background: rgba(61, 46, 79, 0.35);
   z-index: 20;
 }
@@ -907,7 +942,7 @@ body.touch.playing #joystick {
 .panel {
   position: relative;
   width: min(760px, 100%);
-  max-height: min(88vh, 900px);
+  max-height: min(88vh, 900px, 100%);
   overflow-y: auto;
   padding: 24px 22px 22px;
   border-radius: 28px;
@@ -1234,6 +1269,17 @@ body.touch.playing #joystick {
   font-size: 1.8rem;
 }
 
+.steps {
+  margin: 10px 0 14px;
+  padding-left: 1.6em;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.steps li {
+  padding: 3px 0;
+}
+
 kbd {
   display: inline-block;
   min-width: 1.6em;
@@ -1392,6 +1438,13 @@ kbd {
     right: 10px;
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + 170px);
     max-width: 60vw;
+  }
+}
+
+/* No room for one more button beside the island's name: full screen is in Settings. */
+@media (max-width: 479px) {
+  #btn-fullscreen-hud {
+    display: none;
   }
 }
 

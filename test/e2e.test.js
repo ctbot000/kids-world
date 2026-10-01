@@ -66,7 +66,8 @@ after(async () => {
   }
 });
 
-async function openPlayer(url, profile = {}) {
+// init: runs in the page before the game does, to pretend to be another kind of browser.
+async function openPlayer(url, profile = {}, init = null) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   page.on('pageerror', (error) => pageErrors.push(`${profile.name ?? 'player'}: ${error.message}`));
@@ -79,6 +80,7 @@ async function openPlayer(url, profile = {}) {
       window.matchMedia = (q) => (q.includes('any-pointer: fine') ? { matches: false, media: q, addEventListener() {}, removeEventListener() {} } : real(q));
     });
   }
+  if (init) await page.evaluateOnNewDocument(init);
   await page.evaluateOnNewDocument((p) => {
     const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0 } };
     localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
@@ -208,6 +210,38 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   await page.keyboard.press('Escape');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
+});
+
+test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
+  const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');
+  await page.bringToFront();
+  await page.click('#btn-fullscreen');
+  await until(page, isFull);
+  assert.equal(await page.$eval('#btn-fullscreen', (b) => b.getAttribute('aria-pressed')), 'true');
+  await page.click('#btn-fullscreen');
+  await until(page, () => !document.fullscreenElement && !document.body.classList.contains('fullscreen'));
+  await makeIsland(page, { online: false });
+  await page.click('#btn-fullscreen-hud');
+  await until(page, isFull);
+  // The switch in Settings shows it is on, and turns it off.
+  await page.click('#btn-settings');
+  await until(page, () => document.querySelector('#modal .fullscreen-switch')?.getAttribute('aria-checked') === 'true');
+  await page.click('#modal .fullscreen-switch');
+  await until(page, () => !document.fullscreenElement && document.querySelector('#modal .fullscreen-switch').getAttribute('aria-checked') === 'false');
+  await page.browserContext().close();
+
+  // Safari on an iPhone cannot make a page full screen: the button explains the Home Screen instead.
+  const phone = await openPlayer(base + '?p2p=1', { name: 'Kind Seal' }, () => {
+    Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });
+    Object.defineProperty(Navigator.prototype, 'standalone', { get: () => false });
+  });
+  await phone.bringToFront();
+  await phone.click('#btn-fullscreen');
+  await until(phone, () => document.getElementById('modal-body').textContent.includes('Add to Home Screen'));
+  assert.equal(await phone.evaluate(() => document.fullscreenElement), null);
+  assert.deepEqual(pageErrors, []);
+  await phone.browserContext().close();
 });
 
 test('two friends peer to peer: visiting, building together, rules and saying goodbye', { skip }, async () => {

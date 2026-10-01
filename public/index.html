@@ -4,9 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#7cc4ff">
+<!-- Opened from the Home Screen, the game fills the whole screen, even on iPhones. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kids World">
 <meta name="description" content="Kids World: build a happy island of toy bricks with your friends, right in the browser.">
 <title>Kids World</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="css/style.css">
 <script src="vendor/peerjs.min.js" defer></script>
 <script type="module" src="js/main.js"></script>
@@ -34,6 +40,7 @@
     <button class="chip" id="btn-stickers" type="button">⭐ Stickers</button>
     <button class="chip" id="btn-help" type="button">❓ How to play</button>
     <button class="chip" id="btn-sound" type="button">🔊 Sound</button>
+    <button class="chip" id="btn-fullscreen" type="button" hidden>Full screen</button>
   </div>
   </div>
 </section>
@@ -53,6 +60,7 @@
       <button class="round" id="btn-stickers-hud" type="button" aria-label="Stickers">⭐</button>
       <button class="round" id="btn-help-hud" type="button" aria-label="How to play">❓</button>
       <button class="round" id="btn-settings" type="button" aria-label="Settings">⚙️</button>
+      <button class="round" id="btn-fullscreen-hud" type="button" aria-label="Full screen" hidden></button>
     </div>
   </header>
 

@@ -44,6 +44,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 | Talk, emotes | <kbd>T</kbd>, <kbd>G</kbd> | 💬 and 😊 buttons |
 | Take a photo | <kbd>P</kbd> | 📸 button |
 | Undo | <kbd>Z</kbd> | ↩️ button |
+| Full screen | Full screen button, at the top or in ⚙️ Settings | The same; on an iPhone, add the game to the Home Screen and open it from there |
 
 ## Two ways to play together
 
@@ -78,7 +79,7 @@ Then open <http://localhost:8747/>. To play with others on your network, `npm st
 
 - `public/js/shared/` is the engine, shared by the browser and the server: blocks, the world and its compact encoding (a whole island is about 50 KB), island generation, stamps, walking and swimming, aiming, the tools, the animals, time and weather, the words kids can use, and the room. It has no DOM dependencies.
 - Changes appear at once for the player who made them and are sent to the host, which checks them (inside the island, a known block, not inside another player, allowed by the island's rules) and passes them to everyone. Undo only changes blocks that nobody has changed since.
-- The renderer builds each 16×16 chunk into meshes: faces with soft corner shadows and smooth light (sunlight and lamp light spread block by block, Minecraft style), instanced studs on top, flowers drawn as crossed pictures that sway, fruit and shells that turn to face you, and animated water. Every texture, icon and character is drawn in code; there are no image files.
+- The renderer builds each 16×16 chunk into meshes: faces with soft corner shadows and smooth light (sunlight and lamp light spread block by block, Minecraft style), instanced studs on top, flowers drawn as crossed pictures that sway, fruit and shells that turn to face you, and animated water. Every texture, icon and character is drawn in code; the only image files are the favicon and the Home Screen icon drawn from it (`npm run icon`).
 - The transport is interchangeable: an in-page loopback (playing alone, and the host's own player), WebRTC data channels (peer to peer, with big messages split into pieces), or WebSocket (dedicated server).
 
 ## Tests
@@ -91,13 +92,14 @@ npm test
 - Rendering maths without a GPU: faces wind outward and enclose the block, hidden faces are skipped, corner shadows, sunlight and lamp light, and relighting a region matching lighting everything.
 - Room: joining and coming back, names from the word lists only, checked edits, undo, the owner's rules, phrases and stickers only, animals, growing trees and fruit, weather, saving and loading, rate limiting.
 - Server: static files and path traversal, the WebSocket handshake and framing, and islands shared by real WebSocket clients.
-- End to end in headless Chrome: playing alone with real clicks, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
+- Full screen: the standard calls, Safari's older prefixed ones, and iPhones, which can only get it from the Home Screen.
+- End to end in headless Chrome: playing alone with real clicks, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
 
 ## Project layout
 
 ```
 public/                 the whole site; no build step
-  index.html, css/, favicon.svg
+  index.html, css/, favicon.svg, apple-touch-icon.png
   js/main.js            title screen, sessions, saving, the frame loop
   js/game.js            one visit to an island: you, friends, animals, tools
   js/ui.js              toolbar, hotbar, toy box, dialogs, name tags and bubbles

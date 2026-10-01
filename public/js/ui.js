@@ -1,6 +1,6 @@
 // Everything on top of the 3D view: the title screen, the toolbar and
 // hotbar, the toy box, talking and emotes, name tags and speech bubbles,
-// settings, stickers and help. Big buttons, pictures first, few words.
+// settings, stickers, help and full screen. Big buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
@@ -10,6 +10,7 @@ import { ANIMALS, EMOTES, FUR_COLORS, HATS, PHRASES, SHIRT_COLORS, STICKERS as S
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
+import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
 import { HILL_MODES, TOOLS } from './game.js';
 import { STICKERS } from './profile.js';
 
@@ -28,6 +29,19 @@ export function h(tag, props = {}, ...children) {
   }
   for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c.nodeType ? c : String(c));
   return el;
+}
+
+// Line icons for what no emoji shows: full screen (corners pointing out, and
+// in once the screen is full) and the Share button.
+const LINE_ICONS = {
+  full: '<svg class="line-icon full-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="enter" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="leave" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>',
+  share: '<svg class="line-icon share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 10H7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1.5M12 3v11M8.5 6.5 12 3l3.5 3.5"/></svg>',
+};
+
+function lineIcon(name) {
+  const t = document.createElement('template');
+  t.innerHTML = LINE_ICONS[name];
+  return t.content.firstElementChild;
 }
 
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
@@ -61,6 +75,12 @@ export class UI {
       this.toast(s.icon, `New sticker: ${s.name}!`, 'sticker');
     });
     profile.addEventListener('basket', () => this.renderBasket());
+    this.fullMode = fullscreenMode();
+    $('btn-fullscreen').prepend(lineIcon('full'));
+    $('btn-fullscreen-hud').append(lineIcon('full'));
+    $('btn-fullscreen').onclick = $('btn-fullscreen-hud').onclick = () => this.toggleFullscreen();
+    onFullscreenChange(() => this.renderFullscreen());
+    this.renderFullscreen();
   }
 
   // ------------------------------------------------ icons
@@ -562,10 +582,75 @@ export class UI {
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('👀', 'See through your eyes', ['Zoom all the way in to look around as yourself.']),
+          this.fullMode === 'toggle' ? card(lineIcon('full'), 'Full screen', ['The ', lineIcon('full'), ' button fills the whole screen with your island. It is in ⚙️ Settings too.']) : null,
+          this.fullMode === 'home-screen' ? card(lineIcon('full'), 'Full screen', ['Add Kids World to the Home Screen and open it from there.']) : null,
         ),
         h('p', { class: 'muted', style: 'margin-top:14px' }, 'Everything stays on this device. Friends only see your made-up name, your animal and the phrases you pick.'),
       );
     });
+  }
+
+  // ------------------------------------------------ full screen
+
+  toggleFullscreen() {
+    if (this.fullMode === 'home-screen') {
+      this.homeScreenDialog();
+      return;
+    }
+    this.sound.play('ui');
+    setFullscreen(!isFullscreen()).catch(() => this.toast('🙈', 'Full screen did not work this time.', 'warn'));
+  }
+
+  renderFullscreen() {
+    const on = isFullscreen();
+    document.body.classList.toggle('fullscreen', on);
+    for (const el of [$('btn-fullscreen'), $('btn-fullscreen-hud')]) {
+      el.hidden = this.fullMode === 'none';
+      if (this.fullMode === 'toggle') el.setAttribute('aria-pressed', String(on));
+    }
+    $('btn-fullscreen').classList.toggle('on', on);
+    for (const sw of document.querySelectorAll('.fullscreen-switch')) {
+      sw.classList.toggle('on', on);
+      sw.setAttribute('aria-checked', String(on));
+    }
+  }
+
+  // The row in Settings, for screens with no room for the button at the top.
+  fullscreenSetting() {
+    if (this.fullMode === 'none') return null;
+    const label = h('b', {}, lineIcon('full'), ' Full screen');
+    if (this.fullMode === 'home-screen') {
+      return h(
+        'div',
+        { class: 'setting' },
+        h('div', {}, label, h('div', { class: 'muted' }, 'Open Kids World from the Home Screen.')),
+        h('button', { class: 'chip', type: 'button', onclick: () => this.homeScreenDialog() }, 'How?'),
+      );
+    }
+    const on = isFullscreen();
+    const sw = h('button', { class: `switch fullscreen-switch${on ? ' on' : ''}`, type: 'button', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Full screen', onclick: () => this.toggleFullscreen() });
+    return h('div', { class: 'setting' }, h('div', {}, label, h('div', { class: 'muted' }, 'Just your island, without the browser around it.')), sw);
+  }
+
+  // Safari on an iPhone cannot fill the screen, but the game opened from the Home Screen does.
+  homeScreenDialog() {
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '📱 Full screen'),
+          h('p', {}, 'Kids World fills the whole screen when you open it from the Home Screen. Ask a grown-up to:'),
+          h(
+            'ol',
+            { class: 'steps' },
+            h('li', {}, 'Tap ', h('b', {}, 'Share'), ' ', lineIcon('share')),
+            h('li', {}, 'Choose ', h('b', {}, 'Add to Home Screen')),
+            h('li', {}, 'Open ', h('b', {}, 'Kids World'), ' from the Home Screen'),
+          ),
+          h('p', { class: 'muted' }, 'The Home Screen game keeps its own islands and stickers. To bring an island along, save it to a file in ⚙️ Settings, then open the file from 📒 My islands.'),
+        );
+      },
+      { narrow: true },
+    );
   }
 
   soundDialog() {
@@ -1081,6 +1166,8 @@ export class UI {
         }),
         toggle(p.settings.autoJump, '🦘 Hop up steps by myself', null, (on) => p.setting('autoJump', on)),
       );
+      const full = this.fullscreenSetting();
+      if (full) root.append(full);
       if (isHost) {
         root.append(h('h3', {}, '🏝️ Island rules'));
         if (handlers.canToggleOnline()) {
