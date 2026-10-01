@@ -1635,11 +1635,21 @@ kbd {
     border-radius: 18px;
   }
 
+  /* It stops short of the talk buttons beside it (on phones they are smaller
+     than --talk), and a group with no room left there wraps onto a second row.
+     The box is wider than its groups, so touches pass through it to the island. */
   #toolopts {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px);
     left: max(10px, env(safe-area-inset-left));
+    right: calc(max(10px, env(safe-area-inset-right)) + 2 * var(--talk) + 20px);
     transform: none;
     flex-direction: row;
+    flex-wrap: wrap;
+    pointer-events: none;
+  }
+
+  #toolopts > * {
+    pointer-events: auto;
   }
 
   .opt-group {

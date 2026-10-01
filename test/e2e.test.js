@@ -420,6 +420,62 @@ test('choosing how you look, you can see yourself beside the dialog or above it,
   await page.browserContext().close();
 });
 
+test("every tool's options stay clear of the buttons and the map beside them, and the island around them still takes a touch", { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Busy Mole' });
+  await makeIsland(page, { online: false });
+  // Hills shows two groups of options, which are too wide for one row beside the talk buttons on a phone held upright.
+  const screens = [
+    [320, 568, true],
+    [320, 460, true],
+    [360, 640, true],
+    [375, 667, true],
+    [375, 548, true],
+    [390, 844, true],
+    [430, 932, true],
+    [768, 1024, true],
+    [844, 390, true],
+    [1280, 800, false],
+  ];
+  for (const [width, height, touch] of screens) {
+    await page.setViewport({ width, height });
+    for (const tool of ['build', 'pick', 'paint', 'hills', 'stamp', 'friends']) {
+      const seen = await page.evaluate(
+        (tool, touch) => {
+          document.body.classList.toggle('touch', touch);
+          window.kidsWorld.game.setTool(tool);
+          const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+          const others = [...document.querySelectorAll('#talk button, #minimap, #joystick')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
+          const pills = [...document.querySelectorAll('#toolopts .pill')];
+          const last = document.getElementById('toolopts').lastElementChild.getBoundingClientRect();
+          return {
+            pills: pills.length,
+            covered: pills.filter((p) => others.some((r) => meets(p.getBoundingClientRect(), r))).map((p) => p.title),
+            // A finger on the middle of each one gets it, and it is all on screen.
+            blocked: pills
+              .filter((p) => {
+                const r = p.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.pill');
+                return hit !== p || r.left < 0 || r.right > innerWidth || r.bottom > innerHeight;
+              })
+              .map((p) => p.title),
+            // Just past them is the island, not the box they sit in.
+            beside: document.elementFromPoint(last.right + 4, last.top + last.height / 2)?.id,
+          };
+        },
+        tool,
+        touch,
+      );
+      const where = `${width}×${height} with ${tool}: ${JSON.stringify(seen)}`;
+      assert.ok(seen.pills > 0, `on ${where} the tool has options`);
+      assert.deepEqual(seen.covered, [], `on ${where} no option is under the talk buttons, the map or the thumbstick`);
+      assert.deepEqual(seen.blocked, [], `on ${where} every option can be tapped`);
+      assert.equal(seen.beside, 'world', `on ${where} a touch beside the options reaches the island`);
+    }
+  }
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
   const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');
