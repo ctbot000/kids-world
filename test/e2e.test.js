@@ -121,6 +121,19 @@ async function clickButton(page, text, scope = 'body') {
   await handle.asElement().click();
 }
 
+// A real click in the middle of something beside a see-through dialog, which
+// must not be under the dialog: that would take the click instead.
+async function clickBeside(page, selector) {
+  const at = await page.$eval(selector, (el) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+    return { x, y, reachable: el.contains(document.elementFromPoint(x, y)) };
+  });
+  assert.ok(at.reachable, `nothing covers ${selector}`);
+  await page.mouse.click(at.x, at.y);
+}
+
 async function makeIsland(page, { online, theme = 'Sunny Island' }) {
   await clickButton(page, 'Make an island');
   await clickButton(page, theme, '#modal');
@@ -472,6 +485,63 @@ test("every tool's options stay clear of the buttons and the map beside them, an
       assert.equal(seen.beside, 'world', `on ${where} a touch beside the options reaches the island`);
     }
   }
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a dialog opened from beside "Change me" takes its place and puts the camera back, on the title and in a game', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Busy Beaver' });
+  // Wide: the title and the buttons stay beside the dialog, where a click reaches them.
+  await page.setViewport({ width: 1280, height: 800 });
+  await until(page, () => Math.abs(window.kidsWorld.renderer.camera.aspect - innerWidth / innerHeight) < 1e-6);
+  // Whether the camera is turned to you: on a wide screen it moves you over beside the dialog.
+  const camera = () =>
+    page.evaluate(() => {
+      const kw = window.kidsWorld;
+      kw.step(1 / 60, 10);
+      return { shift: kw.renderer.view.shift, posing: document.body.classList.contains('posing'), portrait: Boolean(kw.game?.portrait) };
+    });
+  const back = { shift: 0, posing: false, portrait: false };
+  const showing = (heading) => until(page, (heading) => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes(heading), heading);
+
+  // On the title, My islands...
+  await clickButton(page, 'Change me');
+  assert.deepEqual(await camera(), { shift: 1.1, posing: true, portrait: false }, 'on the title, the camera turns to you');
+  await clickBeside(page, '#btn-mine');
+  await showing('My islands');
+  assert.deepEqual(await camera(), back, 'on the title, the camera is back');
+  await page.keyboard.press('Escape');
+
+  // ...in a game (with Change me opened from Settings), How to play from the top bar...
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  const changeMe = async () => {
+    await page.click('#btn-settings');
+    await clickButton(page, 'Change me', '#modal');
+    assert.deepEqual(await camera(), { shift: 1.1, posing: true, portrait: true }, 'in a game, the camera turns to you');
+  };
+  await changeMe();
+  await clickBeside(page, '#btn-help-hud');
+  await showing('How to play');
+  assert.deepEqual(await camera(), back, 'in a game, the camera is back');
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await camera(), back, 'in a game, the camera stays back once How to play is closed');
+
+  // ...and the big map, from the little one: drawn, and let go when it is closed.
+  await changeMe();
+  await clickBeside(page, '#minimap');
+  await until(page, () => document.querySelector('#modal:not([hidden]) .big-map')?.width > 0 && window.kidsWorld.ui.minimap.big === document.querySelector('#modal .big-map'));
+  assert.deepEqual(await camera(), back, 'in a game, the camera is back with the big map');
+  // Opened again over itself, the old big map is let go before the new one is made, so the new one is drawn.
+  const redrawn = await page.evaluate(() => {
+    const ui = window.kidsWorld.ui;
+    const old = ui.minimap.big;
+    ui.mapDialog();
+    const canvas = document.querySelector('#modal .big-map');
+    return canvas !== old && ui.minimap.big === canvas && canvas.width > 0;
+  });
+  assert.ok(redrawn, 'the big map opened again is drawn');
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.ui.minimap.big === null);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

@@ -138,6 +138,12 @@ export class UI {
   // pose: you are choosing how you look, so on a narrow screen everything
   // else makes way for you above the dialog.
   openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false } = {}) {
+    // Opening a dialog over another closes that one first, so what it changed
+    // goes back: the camera that turned to you, the big map being drawn. Before
+    // building, as the new dialog may set the same things up again.
+    const replaced = this.modalClose;
+    this.modalClose = null;
+    replaced?.();
     const body = $('modal-body');
     body.replaceChildren();
     build(body);
