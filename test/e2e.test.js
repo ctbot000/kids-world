@@ -126,6 +126,45 @@ async function basketAndTouch(page, full, touch) {
   await until(page, () => getComputedStyle(document.documentElement).getPropertyValue('--bottom-height') === `${document.getElementById('bottom').offsetHeight}px`);
 }
 
+// Says five things, as many as the chat log keeps, under a name as long as names get, and
+// waits for the lines that do not fit in the log's room to go, a frame later. Returns how many
+// show, whether they are on screen, and what they lie over of the buttons, the tool options,
+// the thumbstick and a connection message.
+async function chatLines(page) {
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const me = kw.game.players.get(kw.game.pid);
+    const name = me.name;
+    me.name = 'Dazzling Hedgehog 2';
+    document.getElementById('chatlog').replaceChildren();
+    for (const text of ['What should we build?', "Let's go swimming!", "Let's be friends!", 'Take a picture!', 'Hi!']) kw.ui.chatLine({ pid: kw.game.pid, text });
+    me.name = name;
+  });
+  await until(page, () => {
+    const log = document.getElementById('chatlog');
+    const top = log.getBoundingClientRect().top;
+    return [...log.children].every((line) => line.getBoundingClientRect().top >= top - 0.5);
+  });
+  return page.evaluate(() => {
+    const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const lines = [...document.querySelectorAll('#chatlog .line')].map((line) => line.getBoundingClientRect());
+    // What shows of each: the basket and the hotbar cut off what they scroll out of sight.
+    const shown = (el) => {
+      const r = el.getBoundingClientRect();
+      const c = el.closest('#basket, #hotbar')?.getBoundingClientRect() ?? r;
+      return { left: Math.max(r.left, c.left), right: Math.min(r.right, c.right), top: Math.max(r.top, c.top), bottom: Math.min(r.bottom, c.bottom) };
+    };
+    const under = [...document.querySelectorAll('#hud button, #toolopts > *, #joystick, #status')]
+      .filter((el) => {
+        const r = shown(el);
+        return r.left < r.right && r.top < r.bottom && lines.some((line) => meets(line, r));
+      })
+      .map((el) => el.id || el.title.split(':')[0] || el.className);
+    document.getElementById('chatlog').replaceChildren();
+    return { shown: lines.length, onScreen: lines.every((r) => r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight), under };
+  });
+}
+
 // Puppeteer aims a click where something is when it looks, and a dialog popping
 // in grows before the press lands, onto whatever is next to it there. This
 // waits until something, and everything it is in, has stopped moving.
@@ -343,6 +382,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // (in one row on the shortest upright screens): upright, the buttons rise above it. On narrow
   // screens held sideways under 400 px tall it keeps to one row too, level with the thumbstick and
   // the jump buttons: the treasures it scrolls out of sight reach under them, but are not drawn there.
+  // Chat lines stand on all that too, between the buttons: on the shortest screens only the
+  // newest fits, and from 600 px tall all five that the chat log keeps.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
@@ -447,6 +488,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
       if (map) assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
       else assert.equal(seen.size, 0, `on ${where} there is no room for the map`);
       assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false, cut: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them; elsewhere it shows whole or spans the screen`);
+      const chat = await chatLines(page);
+      assert.deepEqual(chat.under, [], `on ${where} no chat line lies over a button, the tool options or the thumbstick`);
+      assert.ok(chat.onScreen && chat.shown >= (height >= 600 ? 5 : 1), `on ${where} the newest chat lines show, as many as fit: ${JSON.stringify(chat)}`);
     }
   }
   assert.deepEqual(pageErrors, []);
@@ -731,7 +775,8 @@ test('the whole island code shows beside the top buttons, and a long connection 
   // and the thumbstick towards the message on upright touch screens, and the shortest have the
   // least room for that. Held sideways, the message goes under the tool options on a phone; under
   // 400 px tall the basket keeps to one row below it, and the thumbstick, drawn under the message
-  // there, may reach up into it (at 568×320 even the short one does).
+  // there, may reach up into it (at 568×320 even the short one does). Chat lines keep clear of the
+  // message: on the shortest screens it leaves them little room, or none.
   for (const [width, height, inTopBar, coverable = [], full = false] of [
     [320, 460, false, ['joystick']],
     [320, 460, false, ['joystick'], true],
@@ -834,6 +879,9 @@ test('the whole island code shows beside the top buttons, and a long connection 
       const { under, ...message } = layout.message;
       const covered = message.covered.filter((el) => !(coverable.includes(el) && under.includes(el)));
       assert.deepEqual({ ...message, covered }, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
+      const chat = await chatLines(page);
+      assert.deepEqual(chat.under, [], `${where}: no chat line lies over the message, a button, the tool options or the thumbstick`);
+      assert.ok(chat.onScreen, `${where}: the chat lines are on screen`);
     }
   }
   assert.deepEqual(pageErrors, []);

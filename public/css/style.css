@@ -34,6 +34,7 @@
   --slot: 56px;
   --talk: 58px;
   --touch: 60px;
+  --stick: 124px;
   /* Clear of the talk buttons, which sit halfway down the right side. */
   --map: clamp(108px, calc(50vh - 142px), 156px);
 }
@@ -735,8 +736,8 @@ body.touch #touch-buttons {
   position: fixed;
   left: calc(max(14px, env(safe-area-inset-left)) + 6px);
   bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
-  width: 124px;
-  height: 124px;
+  width: var(--stick);
+  height: var(--stick);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.25);
   border: 4px solid rgba(255, 255, 255, 0.75);
@@ -887,15 +888,24 @@ body.touch.playing #joystick {
   font-weight: 600;
 }
 
+/* Chat lines stand on the hotbar and the basket over it (--bottom-height is
+   the height of both together, kept by the UI), left of the talk buttons and
+   under the little map: the log is the room between them. The newest line is
+   at the bottom, and a line that does not fit whole goes (see chatRoom in the
+   UI), so the oldest go first. Smaller screens give it other room between
+   the buttons; on the shortest there may be none. */
 .chatlog {
   position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 68px + var(--map));
   right: calc(max(10px, env(safe-area-inset-right)) + 70px);
-  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 96px);
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 70px) + 26px);
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   align-items: flex-end;
   gap: 4px;
   max-width: 300px;
+  overflow: hidden;
 }
 
 .chatlog .line {
@@ -1522,9 +1532,11 @@ kbd {
     font-size: 1.6rem;
   }
 
+  /* At the right edge, over the hotbar and the basket, and on computers over
+     the talk buttons, at the right end of the hotbar here. */
   .chatlog {
-    right: 10px;
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 170px);
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + max(var(--bottom-height, 60px), 80px + var(--talk)) + 10px);
     max-width: 60vw;
   }
 }
@@ -1627,6 +1639,7 @@ kbd {
     --tool: 40px;
     --slot: 42px;
     --map: clamp(96px, 28vh, 124px);
+    --stick: 112px;
   }
 
   #toolbar {
@@ -1676,9 +1689,12 @@ kbd {
     bottom: calc(max(8px, env(safe-area-inset-bottom)) + 10px);
   }
 
-  #joystick {
-    width: 112px;
-    height: 112px;
+  /* Under the little map and a row of tool options (46px), and left of the
+     talk buttons beside the map. */
+  .chatlog {
+    top: calc(max(8px, env(safe-area-inset-top)) + 68px + max(var(--map), var(--tool) + 66px));
+    right: calc(max(10px, env(safe-area-inset-right)) + var(--talk) + 10px);
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 56px) + 10px);
   }
 
   .big {
@@ -1706,6 +1722,11 @@ kbd {
 
   #toasts {
     top: max(64px, calc(env(safe-area-inset-top) + 58px));
+  }
+
+  /* Chat lines keep under the message too: --status-room is its height and 8px, kept by the UI. */
+  .chatlog {
+    top: calc(max(8px, env(safe-area-inset-top)) + 68px + max(var(--map), var(--tool) + 66px, var(--tool) + 62px + var(--status-room, 0px)));
   }
 }
 
@@ -1740,6 +1761,13 @@ kbd {
 @media not all and (max-aspect-ratio: 3/4) {
   body.touch #bottom {
     max-width: calc(100vw - 340px);
+  }
+
+  /* Chat lines keep between them too, 10px clear of either. */
+  body.touch .chatlog {
+    left: calc(max(14px, env(safe-area-inset-left)) + 16px + var(--stick));
+    right: calc(max(14px, env(safe-area-inset-right)) + var(--touch) + 98px);
+    margin-left: auto;
   }
 }
 
@@ -1813,13 +1841,34 @@ kbd {
   #toasts {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 90px + var(--status-room, 0px));
   }
+
+  /* Chat lines go on the left, under the tool options and a connection
+     message there, and stand on the hotbar and the basket, or on touch screens
+     on the thumbstick: the right has the little map, with the touch buttons
+     not far under it, and on phones there is little room left between them. */
+  .chatlog {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + var(--talk) + 12px + var(--status-room, 0px));
+    left: max(10px, env(safe-area-inset-left));
+    right: auto;
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 10px);
+    align-items: flex-start;
+  }
+
+  body.touch .chatlog {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 44px + var(--stick));
+  }
 }
 
 /* Upright phones with Hills picked: its two groups of tool options take two
-   rows, so a connection message goes a row further down, and toasts with it. */
+   rows, so a connection message goes a row further down, and toasts and chat
+   lines with it. */
 @media (max-aspect-ratio: 3/4) and (max-width: 479px) {
   #hud:has(> #toolopts > :nth-child(2)) > #topbar > .status {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + var(--talk) + 72px);
+  }
+
+  #hud:has(> #toolopts > :nth-child(2)) > .chatlog {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + var(--talk) + 72px + var(--status-room, 0px));
   }
 
   #hud:has(> #toolopts > :nth-child(2)):has(#status:not(:empty)) ~ #toasts {
@@ -1877,11 +1926,16 @@ kbd {
   }
 }
 
-/* Upright, the touch buttons and the thumbstick stand closer on it. */
+/* Upright, the touch buttons and the thumbstick stand closer on it, and so
+   chat lines on the thumbstick. */
 @media (max-aspect-ratio: 3/4) and (max-height: 639px) {
   body:has(#basket:not(:empty)) #touch-buttons,
   body:has(#basket:not(:empty)) #joystick {
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 10px);
+  }
+
+  body.touch:has(#basket:not(:empty)) .chatlog {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 20px + var(--stick));
   }
 }
 
@@ -1916,9 +1970,15 @@ kbd {
   }
 
   /* Level with the second group, 8px under the first (46px tall), and as
-     wide as the touch buttons below it leave it. */
+     wide as the touch buttons below it leave it. Chat lines go under it, as
+     wide, clear of the second group. */
   #hud:has(> #toolopts > :nth-child(2)) > #topbar > .status {
     top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + 54px);
+    max-width: calc(100% - max(10px, env(safe-area-inset-left)) - max(14px, env(safe-area-inset-right)) - var(--touch) - 10px - 78px - 4px);
+  }
+
+  #hud:has(> #toolopts > :nth-child(2)) > .chatlog {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + 54px + var(--status-room, 0px));
     max-width: calc(100% - max(10px, env(safe-area-inset-left)) - max(14px, env(safe-area-inset-right)) - var(--touch) - 10px - 78px - 4px);
   }
 

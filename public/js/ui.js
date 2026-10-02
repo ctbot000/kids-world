@@ -96,6 +96,19 @@ export class UI {
     new ResizeObserver(() => {
       document.documentElement.style.setProperty('--bottom-height', `${$('bottom').offsetHeight}px`);
     }).observe($('bottom'));
+    // Chat lines keep to the room the stylesheet gives the chat log between
+    // the buttons above and below it, which changes with them: a line that no
+    // longer fits whole goes, and as the newest is at the bottom, the oldest go
+    // first (see .chatlog in the stylesheet). Not a ResizeObserver on the log:
+    // the room changes with --bottom-height and --status-room, after the two
+    // observers above have reported, too late in the frame for it to report
+    // too, and the browser raises a loop error instead.
+    this.chatRoom = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.intersectionRatio < 0.99) e.target.remove();
+      },
+      { root: $('chatlog'), threshold: [0.99, 1] },
+    );
   }
 
   // ------------------------------------------------ icons
@@ -1374,7 +1387,11 @@ export class UI {
     const el = h('div', { class: 'line' }, h('b', {}, `${who}: `), msg.text);
     $('chatlog').append(el);
     while ($('chatlog').children.length > 5) $('chatlog').firstElementChild.remove();
-    setTimeout(() => el.remove(), 8200);
+    this.chatRoom.observe(el);
+    setTimeout(() => {
+      this.chatRoom.unobserve(el);
+      el.remove();
+    }, 8200);
   }
 
   aimHint(aim) {
