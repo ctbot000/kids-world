@@ -313,12 +313,20 @@ test('the little map fits beside every other button, on screens of every shape',
       }
       const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
       const want = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talk'));
-      return { covered, talk, want, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
+      const thumbs = [...document.querySelectorAll('#touch-buttons button')].map((b) => [b.offsetWidth, b.offsetHeight]);
+      const thumb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch'));
+      const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
+      return { covered, talk, want, thumbs, thumb, whole, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
     }, touch);
     const where = `${width}×${height}${touch ? ' touch' : ''}`;
     assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
     // The map's place beside the talk buttons is worked out from --talk.
     assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
+    if (touch) {
+      assert.deepEqual(seen.thumbs, [[seen.thumb, seen.thumb], [seen.thumb, seen.thumb], [78, 78]], `on ${where} go down and fly are --touch across, and jump 78 px`);
+    }
+    // <body> has a touch class too, on touch screens, but it is no touch button.
+    assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
     assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
   }
   // An upright screen this small has no room for it.
