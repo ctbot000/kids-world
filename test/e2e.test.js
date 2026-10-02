@@ -110,6 +110,24 @@ async function until(page, fn, arg, timeout = 30000 * SLOW) {
 }
 const inGame = (page) => until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.world, null, 60000 * SLOW);
 
+// Puppeteer aims a click where something is when it looks, and a dialog popping
+// in grows before the press lands, onto whatever is next to it there. This
+// waits until something, and everything it is in, has stopped moving.
+async function landed(page, element) {
+  // In front first: a page behind another gets no frames, so nothing on it would stop.
+  await page.bringToFront();
+  await page.waitForFunction(
+    (el) => {
+      for (; el; el = el.parentElement) {
+        if (el.getAnimations().some((a) => a.playState !== 'finished' && a.effect.getTiming().iterations !== Infinity)) return false;
+      }
+      return true;
+    },
+    { timeout: 15000 * SLOW },
+    element,
+  );
+}
+
 async function clickButton(page, text, scope = 'body') {
   const handle = await page.waitForFunction(
     (text, scope) => [...document.querySelector(scope).querySelectorAll('button')].find((b) => b.textContent.includes(text) && !b.disabled && b.offsetParent !== null),
@@ -117,13 +135,22 @@ async function clickButton(page, text, scope = 'body') {
     text,
     scope,
   );
-  await page.bringToFront();
+  await landed(page, handle);
   await handle.asElement().click();
+}
+
+// A switch in a dialog, once the dialog has landed.
+async function clickSwitch(page, selector) {
+  const handle = await page.waitForSelector(selector, { timeout: 15000 * SLOW });
+  await landed(page, handle);
+  await handle.click();
 }
 
 // A real click in the middle of something beside a see-through dialog, which
 // must not be under the dialog: that would take the click instead.
 async function clickBeside(page, selector) {
+  // While the dialog pops in it is smaller, and something it will cover looks reachable.
+  await landed(page, await page.$('#modal .panel'));
   const at = await page.$eval(selector, (el) => {
     const r = el.getBoundingClientRect();
     const x = r.left + r.width / 2;
@@ -137,7 +164,7 @@ async function clickBeside(page, selector) {
 async function makeIsland(page, { online, theme = 'Sunny Island' }) {
   await clickButton(page, 'Make an island');
   await clickButton(page, theme, '#modal');
-  if (!online) await page.click('#modal .switch');
+  if (!online) await clickSwitch(page, '#modal .switch');
   await clickButton(page, 'Make it', '#modal');
   await inGame(page);
   if (online) await until(page, () => window.kidsWorld.session.link.state === 'online');
@@ -276,10 +303,9 @@ test('the little map shows the island and what you build; it opens the big map a
   // Settings switches it off, and on again; the choice is kept.
   await page.click('#btn-settings');
   const toggle = '#modal .switch[aria-label$="Little map"]';
-  await page.waitForSelector(toggle);
-  await page.click(toggle);
+  await clickSwitch(page, toggle);
   await until(page, () => document.getElementById('minimap').hidden && window.kidsWorld.profile.settings.map === false);
-  await page.click(toggle);
+  await clickSwitch(page, toggle);
   await until(page, () => !document.getElementById('minimap').hidden && window.kidsWorld.profile.settings.map === true);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
@@ -573,7 +599,7 @@ test('full screen from the title, the top bar and Settings; iPhones are shown th
   // The switch in Settings shows it is on, and turns it off.
   await page.click('#btn-settings');
   await until(page, () => document.querySelector('#modal .fullscreen-switch')?.getAttribute('aria-checked') === 'true');
-  await page.click('#modal .fullscreen-switch');
+  await clickSwitch(page, '#modal .fullscreen-switch');
   await until(page, () => !document.fullscreenElement && document.querySelector('#modal .fullscreen-switch').getAttribute('aria-checked') === 'false');
   await page.browserContext().close();
 
