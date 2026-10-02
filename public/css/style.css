@@ -1509,8 +1509,11 @@ kbd {
     flex-direction: row;
   }
 
+  /* On computers, over the right end of the hotbar, and of the basket over it
+     as that fills up: --bottom-height is the height of both together, kept by
+     the UI. */
   body:not(.touch) #talk {
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 80px);
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + max(80px, var(--bottom-height, 60px) + 10px));
   }
 
   .panel {
@@ -1532,12 +1535,19 @@ kbd {
     font-size: 1.6rem;
   }
 
-  /* At the right edge, over the hotbar and the basket, and on computers over
-     the talk buttons, at the right end of the hotbar here. */
+  /* At the right edge, over the hotbar and the basket, and over the talk
+     buttons' place by the hotbar on computers. */
   .chatlog {
     right: max(10px, env(safe-area-inset-right));
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + max(var(--bottom-height, 60px), 80px + var(--talk)) + 10px);
     max-width: 60vw;
+  }
+
+  /* On computers the talk buttons rise with the basket, and chat lines with
+     them. No more specific than .chatlog (:where counts for nothing), so short
+     and upright screens below still place it as they do. */
+  :where(body:not(.touch)) .chatlog {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + max(80px, var(--bottom-height, 60px) + 10px) + var(--talk) + 10px);
   }
 }
 

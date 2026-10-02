@@ -381,9 +381,11 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // screens, 1133×744 (an iPad mini held sideways) and 1280×700 are too short for it above the
   // thumbstick, and 1000×561 for the talk buttons, halfway down the right side, above the touch buttons.
   // Each screen is seen with an empty basket and with a full one, which wraps over the hotbar
-  // (in one row on the shortest upright screens): upright, the buttons rise above it. On narrow
-  // screens held sideways under 400 px tall it keeps to one row too, level with the thumbstick and
-  // the jump buttons: the treasures it scrolls out of sight reach under them, but are not drawn there.
+  // (in one row on the shortest upright screens): upright, the buttons rise above it, and so do the
+  // talk buttons on computer screens that are narrow but neither short nor upright, like 700×800.
+  // On narrow screens held sideways under 400 px tall it keeps to one row too, level with the
+  // thumbstick and the jump buttons: the treasures it scrolls out of sight reach under them, but
+  // are not drawn there.
   // Chat lines stand on all that too, between the buttons: on the shortest screens only the
   // newest fits, and from 600 px tall all five that the chat log keeps.
   const screens = [
@@ -392,6 +394,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
     [880, 600, false],
     [800, 600, false],
     [720, 480, false],
+    [700, 800, false],
     [1366, 1024, true],
     [1024, 768, true],
     [1133, 744, true],
