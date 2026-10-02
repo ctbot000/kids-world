@@ -103,6 +103,12 @@ npm test
   E2E_NO_MOUSE=1 npm test
   ```
 
+- CI has no GPU either: Chrome draws in software there, on a slow CPU, and a frame can take seconds, so anything the tests wait for that is timed on the wall clock can run out between two frames there and never on a fast computer. On a Mac, keeping Chrome to the efficiency cores comes close to CI:
+
+  ```bash
+  CI=1 E2E_NO_MOUSE=1 taskpolicy -c background npm test
+  ```
+
 ## Project layout
 
 ```

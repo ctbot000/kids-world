@@ -33,6 +33,9 @@ const CRITTER_INTERP_MS = 260;
 const MOVE_SEND_MS = 90;
 const REPEAT_MS = 230;
 const UNDO_KEEP = 40;
+// Game time, not wall-clock time: a frame that comes late cannot use up a
+// speech bubble before it has been drawn.
+const BUBBLE_SECS = 4.5;
 
 const lerpAngle = (a, b, t) => {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -474,7 +477,7 @@ export class Game extends EventTarget {
     if (this.chat.length > 30) this.chat.shift();
     const p = this.players.get(msg.pid);
     if (p) {
-      p.bubble = { text, until: performance.now() + 4500, sticker: !Number.isInteger(msg.p) };
+      p.bubble = { text, left: BUBBLE_SECS, sticker: !Number.isInteger(msg.p) };
       if (Number.isInteger(msg.p)) this.sound.babble(text, msg.pid);
       else this.sound.play('ui');
     }
@@ -918,7 +921,9 @@ export class Game extends EventTarget {
       a.root.rotation.y = s.yaw;
       a.update(dt, s.anim, Math.min(speed, 8));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
-      if (p.bubble && p.bubble.until < now) p.bubble = null;
+    }
+    for (const p of this.players.values()) {
+      if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;
     }
     // Emote effects: hearts, notes and so on above whoever is emoting.
     for (const p of this.players.values()) {
@@ -940,8 +945,6 @@ export class Game extends EventTarget {
       } else if (e.key === 'cheer' || e.key === 'clap') fx.sparkles(pos.x, pos.y + 1.6, pos.z, 2);
       e.next = now + (e.key === 'sleepy' ? 600 : 350);
     }
-    const self = this.players.get(this.pid);
-    if (self?.bubble && self.bubble.until < now) self.bubble = null;
   }
 
   updateCritters(dt) {
