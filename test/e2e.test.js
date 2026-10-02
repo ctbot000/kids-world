@@ -267,7 +267,12 @@ test('the little map shows the island and what you build; it opens the big map a
       fy,
     );
   const isSea = (p) => p && p[2] > p[0] + 60 && p[3] === 255;
-  await until(page, () => document.querySelector('#minimap canvas').width > 0);
+  // A canvas starts out a blank 300 by 150, so having a width says nothing; the
+  // map makes it square when it first draws, on the game's first frame.
+  await until(page, () => {
+    const c = document.querySelector('#minimap canvas');
+    return c.width === c.height;
+  });
   assert.ok(isSea(await pixel('#minimap canvas', 0.02, 0.02)), 'the corner of the little map is sea');
   // A real pointer reaches it: nothing is on top of it.
   const center = await page.evaluate(() => {
@@ -596,7 +601,10 @@ test('a dialog opened from beside "Change me" takes its place and puts the camer
   // ...and the big map, from the little one: drawn, and let go when it is closed.
   await changeMe();
   await clickBeside(page, '#minimap');
-  await until(page, () => document.querySelector('#modal:not([hidden]) .big-map')?.width > 0 && window.kidsWorld.ui.minimap.big === document.querySelector('#modal .big-map'));
+  await until(page, () => {
+    const c = document.querySelector('#modal:not([hidden]) .big-map');
+    return c && c.width === c.height && window.kidsWorld.ui.minimap.big === c;
+  });
   assert.deepEqual(await camera(), back, 'in a game, the camera is back with the big map');
   // Opened again over itself, the old big map is let go before the new one is made, so the new one is drawn.
   const redrawn = await page.evaluate(() => {
@@ -604,7 +612,7 @@ test('a dialog opened from beside "Change me" takes its place and puts the camer
     const old = ui.minimap.big;
     ui.mapDialog();
     const canvas = document.querySelector('#modal .big-map');
-    return canvas !== old && ui.minimap.big === canvas && canvas.width > 0;
+    return canvas !== old && ui.minimap.big === canvas && canvas.width === canvas.height;
   });
   assert.ok(redrawn, 'the big map opened again is drawn');
   await page.keyboard.press('Escape');
