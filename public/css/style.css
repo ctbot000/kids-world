@@ -1675,6 +1675,55 @@ kbd {
   }
 }
 
+/* Narrow touch screens held sideways: the column of smaller tools, 400px
+   tall, reaches the thumbstick below 688px (by 44px at 720x600 and 24px at
+   760x640), so the tools go in the row there too, with their options under
+   them. The row covers the spot beside the column where a connection message
+   goes, so the message goes under the options instead, as on short screens:
+   the toasts stay above it, and chat lines go under it. The little map
+   shrinks to stay 10px clear of the row, which ends 410px from the left,
+   down to 108px at 538px wide. Narrower screens held sideways, from 3:4 to
+   square, keep the column: the row would reach the map there. */
+@media (min-width: 538px) and (max-width: 760px) and (min-height: 561px) and (max-height: 687px) {
+  body.touch {
+    --map: clamp(108px, min(50vh - 142px, 100vw - 430px), 156px);
+  }
+
+  body.touch #toolbar {
+    flex-direction: row;
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+    transform: none;
+  }
+
+  body.touch #toolopts {
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px + var(--tool) + 26px);
+    left: max(10px, env(safe-area-inset-left));
+    transform: none;
+    flex-direction: row;
+  }
+
+  body.touch .opt-group {
+    flex-direction: row;
+  }
+
+  /* 10px under the options, which are 52px tall. */
+  body.touch #topbar > .status {
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px + var(--tool) + 88px);
+    left: max(10px, env(safe-area-inset-left));
+    max-width: calc(100% - max(10px, env(safe-area-inset-left)) - max(10px, env(safe-area-inset-right)) - var(--map) - 10px);
+  }
+
+  body.touch #toasts {
+    top: max(64px, calc(env(safe-area-inset-top) + 58px));
+  }
+
+  /* Under the little map, and under the options or a message, whichever is
+     lower: --status-room is its height and 8px, kept by the UI. */
+  body.touch .chatlog {
+    top: calc(max(10px, env(safe-area-inset-top)) + 68px + max(var(--map), var(--tool) + 78px + var(--status-room, 0px)));
+  }
+}
+
 /* Short screens (phones held sideways): tools in a row under the island name. */
 @media (max-height: 560px) {
   :root {

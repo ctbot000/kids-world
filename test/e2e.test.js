@@ -380,6 +380,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide. On touch
   // screens, 1133×744 (an iPad mini held sideways) and 1280×700 are too short for it above the
   // thumbstick, and 1000×561 for the talk buttons, halfway down the right side, above the touch buttons.
+  // Narrower, 760×640 and 720×600 are too short for the column of smaller tools above the thumbstick,
+  // and at 560×640 the little map shrinks to stay clear of the row they go in instead.
   // Each screen is seen with an empty basket and with a full one, which wraps over the hotbar
   // (in one row on the shortest upright screens): upright, the buttons rise above it, and so do the
   // talk buttons on computer screens that are narrow but neither short nor upright, like 700×800.
@@ -400,6 +402,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
     [1133, 744, true],
     [1280, 700, true],
     [1000, 561, true],
+    [760, 640, true],
+    [720, 600, true],
+    [560, 640, true],
     [768, 1024, true],
     [390, 844, true],
     [360, 740, true],
@@ -630,7 +635,9 @@ test("every tool's options stay clear of the buttons and the map beside them, an
   await makeIsland(page, { online: false });
   // Hills shows two groups of options, which are too wide for one row beside the talk buttons on a phone held upright.
   // Sideways, the options are under the row of tools, and a full basket, between the thumbstick
-  // and the jump buttons, is narrow: at 568×320 it would wrap up into Hills' options.
+  // and the jump buttons, is narrow: at 568×320 it would wrap up into Hills' options. So they are
+  // on narrow touch screens too short for the column of tools above the thumbstick, such as 760×640,
+  // 720×600 and 560×640, beside the little map.
   const screens = [
     [320, 568, true],
     [320, 460, true],
@@ -643,6 +650,9 @@ test("every tool's options stay clear of the buttons and the map beside them, an
     [568, 320, true],
     [640, 360, true],
     [844, 390, true],
+    [760, 640, true],
+    [720, 600, true],
+    [560, 640, true],
     [800, 600, false],
     [1280, 800, false],
   ];
@@ -794,8 +804,10 @@ test('the whole island code shows beside the top buttons, and a long connection 
   // and the thumbstick towards the message on upright touch screens, and the shortest have the
   // least room for that. Held sideways, the message goes under the tool options on a phone; under
   // 400 px tall the basket keeps to one row below it, and the thumbstick, drawn under the message
-  // there, may reach up into it (at 568×320 even the short one does). Chat lines keep clear of the
-  // message: on the shortest screens it leaves them little room, or none.
+  // there, may reach up into it (at 568×320 even the short one does). On narrow touch screens too
+  // short for the column of tools above the thumbstick, such as 760×640, 720×600 and 560×640, it
+  // goes under the options too; without touch it stays beside the column. Chat lines keep clear of
+  // the message: on the shortest screens it leaves them little room, or none.
   for (const [width, height, inTopBar, coverable = [], full = false] of [
     [320, 460, false, ['joystick']],
     [320, 460, false, ['joystick'], true],
@@ -806,6 +818,10 @@ test('the whole island code shows beside the top buttons, and a long connection 
     [568, 320, false, ['joystick'], true],
     [640, 360, false, ['joystick'], true],
     [720, 480, false],
+    [760, 640, false],
+    [720, 600, false],
+    [720, 600, false, [], true],
+    [560, 640, false, [], true],
     [1000, 600, true],
     [1280, 800, true],
   ]) {
