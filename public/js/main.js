@@ -496,8 +496,18 @@ window.kidsWorld = {
   get game() {
     return session?.game ?? null;
   },
+  // Only the last step is drawn. Drawing them all would hand a software GPU
+  // (all a CI machine has) seconds of frames to work through, and nothing new
+  // reaches the screen until it is done: not a speech bubble, not a toast.
   step(seconds = 1 / 60, times = 1) {
-    for (let i = 0; i < times; i++) step(seconds);
+    try {
+      for (let i = 0; i < times; i++) {
+        renderer.drawing = i === times - 1;
+        step(seconds);
+      }
+    } finally {
+      renderer.drawing = true;
+    }
   },
 };
 

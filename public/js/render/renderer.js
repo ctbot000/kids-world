@@ -64,6 +64,8 @@ export class Renderer {
     this.time = 0;
     this.world = null;
     this.selfHidden = false;
+    // False while time is stepped without frames (see main.js): it moves on, nothing is drawn.
+    this.drawing = true;
     this.resize();
   }
 
@@ -321,7 +323,13 @@ export class Renderer {
     this.effects.update(dt);
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;
-    this.gl.render(this.scene, this.camera);
+    if (this.drawing) {
+      this.gl.render(this.scene, this.camera);
+    } else {
+      // All that render() changes besides the picture.
+      this.scene.updateMatrixWorld();
+      this.camera.updateMatrixWorld();
+    }
   }
 
   dispose() {
