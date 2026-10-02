@@ -599,9 +599,9 @@ test('the whole island code shows beside the top buttons, and a long connection 
   ];
   // Phones held upright or sideways have no room for the message in the top bar; a computer does.
   // The shortest upright touch screen has no free spot for it either: there it runs under the
-  // thumbstick, and with Hills picked under the touch buttons too.
+  // thumbstick and the touch buttons.
   for (const [width, height, inTopBar, under = []] of [
-    [320, 460, false, ['joystick', 'btn-down', 'btn-jump']],
+    [320, 460, false, ['joystick', 'btn-down', 'btn-fly', 'btn-jump']],
     [320, 568, false],
     [360, 640, false],
     [720, 480, false],
