@@ -1792,7 +1792,10 @@ kbd {
   }
 }
 
-/* An upright screen this short has no room for the map between the buttons. */
+/* An upright screen this short has no room for the map between the buttons,
+   nor for a connection message between the talk buttons and the thumbstick in
+   the usual type: here it is smaller, so the longest message takes two lines
+   across the screen. */
 @media (max-aspect-ratio: 3/4) and (max-height: 520px) {
   #minimap {
     display: none;
@@ -1800,6 +1803,41 @@ kbd {
 
   #topbar > .status {
     max-width: calc(100% - max(10px, env(safe-area-inset-left)) - max(10px, env(safe-area-inset-right)));
+    font-size: 0.75rem;
+    line-height: 1.25;
+    border-width: 5px 10px;
+  }
+
+  /* Hills' second group of options goes under the talk buttons rather than
+     under the first group, so that a message can go under the first group, a
+     row higher than on taller phones: further down, the thumbstick and the
+     touch buttons leave no room for it. */
+  #toolopts {
+    right: max(10px, env(safe-area-inset-right));
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #toolopts > :nth-child(2) {
+    align-self: flex-end;
+  }
+
+  /* Level with the second group, 8px under the first (46px tall), and as
+     wide as the touch buttons below it leave it. */
+  #hud:has(> #toolopts > :nth-child(2)) > #topbar > .status {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 22px + 54px);
+    max-width: calc(100% - max(10px, env(safe-area-inset-left)) - max(14px, env(safe-area-inset-right)) - var(--touch) - 10px - 78px - 4px);
+  }
+
+  #hud:has(> #toolopts > :nth-child(2)):has(#status:not(:empty)) ~ #toasts {
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px + var(--tool) + 82px + var(--status-room, 0px));
+  }
+
+  /* With Hills, the longest message still reaches the top of the thumbstick's
+     ring. The thumbstick is drawn under the buttons and the message, so the
+     message covers the edge of the ring instead of the ring crossing its words. */
+  #joystick {
+    z-index: auto;
   }
 }
 

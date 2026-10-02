@@ -624,10 +624,10 @@ test('the whole island code shows beside the top buttons, and a long connection 
     ['failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.'],
   ];
   // Phones held upright or sideways have no room for the message in the top bar; a computer does.
-  // The shortest upright touch screen has no free spot for it either: there it runs under the
-  // thumbstick and the touch buttons.
-  for (const [width, height, inTopBar, under = []] of [
-    [320, 460, false, ['joystick', 'btn-down', 'btn-fly', 'btn-jump']],
+  // On the shortest upright touch screen, with Hills picked, the longest message still reaches
+  // the top of the thumbstick's ring: there it may cover the thumbstick, drawn over it.
+  for (const [width, height, inTopBar, coverable = []] of [
+    [320, 460, false, ['joystick']],
     [320, 568, false],
     [360, 640, false],
     [720, 480, false],
@@ -685,8 +685,18 @@ test('the whole island code shows beside the top buttons, and a long connection 
               const top = toasts.top + el.offsetTop;
               return [el, { left, top, right: left + el.offsetWidth, bottom: top + el.offsetHeight, width: el.offsetWidth }];
             })
-            .filter(([, r]) => r.width && r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top)
-            .map(([el]) => el.id || el.className);
+            .filter(([, r]) => r.width && r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top);
+          // Whether it is drawn under the message: both let taps through to the island, so for a
+          // moment they take them, for a hit test in the middle of where they meet.
+          const underMessage = ([el, r]) => {
+            const x = (Math.max(r.left, s.left) + Math.min(r.right, s.right)) / 2;
+            const y = (Math.max(r.top, s.top) + Math.min(r.bottom, s.bottom)) / 2;
+            status.style.pointerEvents = el.style.pointerEvents = 'auto';
+            const hit = document.elementFromPoint(x, y);
+            status.style.pointerEvents = el.style.pointerEvents = '';
+            return status.contains(hit);
+          };
+          const name = ([el]) => el.id || el.className;
           return {
             calm,
             busy,
@@ -694,7 +704,8 @@ test('the whole island code shows beside the top buttons, and a long connection 
               whole: status.scrollWidth <= status.clientWidth && status.scrollHeight <= status.clientHeight,
               inTopBar: s.top >= bar.top && s.bottom <= bar.bottom,
               onScreen: s.left >= 0 && s.top >= 0 && s.right <= innerWidth && s.bottom <= innerHeight,
-              covered,
+              covered: covered.map(name),
+              under: covered.filter(underMessage).map(name),
             },
           };
         },
@@ -705,8 +716,9 @@ test('the whole island code shows beside the top buttons, and a long connection 
       const where = `${width}×${height}, ${state}, ${tool}`;
       assert.deepEqual(layout.calm, { ...layout.calm, code: true, round: true, onScreen: true, clearOfTools: true }, where);
       assert.deepEqual(layout.busy, layout.calm, `${where}: the island's badge and the buttons stay as they were`);
-      const covered = layout.message.covered.filter((el) => !under.includes(el));
-      assert.deepEqual({ ...layout.message, covered }, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
+      const { under, ...message } = layout.message;
+      const covered = message.covered.filter((el) => !(coverable.includes(el) && under.includes(el)));
+      assert.deepEqual({ ...message, covered }, { whole: true, inTopBar, onScreen: true, covered: [] }, `${where}: the whole message, clear of everything`);
     }
   }
   assert.deepEqual(pageErrors, []);
