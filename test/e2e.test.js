@@ -322,9 +322,12 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
   // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
+  // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
+    [880, 600, false],
+    [800, 600, false],
     [720, 480, false],
     [1366, 1024, true],
     [1024, 768, true],
@@ -519,6 +522,7 @@ test("every tool's options stay clear of the buttons and the map beside them, an
     [430, 932, true],
     [768, 1024, true],
     [844, 390, true],
+    [800, 600, false],
     [1280, 800, false],
   ];
   for (const [width, height, touch] of screens) {
@@ -662,12 +666,14 @@ test('the whole island code shows beside the top buttons, and a long connection 
   ];
   // Phones held upright or sideways have no room for the message in the top bar; a computer does.
   // On the shortest upright touch screen, with Hills picked, the longest message still reaches
-  // the top of the thumbstick's ring: there it may cover the thumbstick, drawn over it.
+  // the top of the thumbstick's ring: there it may cover the thumbstick, drawn over it. 1000×600
+  // is too short for the column of tools under the top bar.
   for (const [width, height, inTopBar, coverable = []] of [
     [320, 460, false, ['joystick']],
     [320, 568, false],
     [360, 640, false],
     [720, 480, false],
+    [1000, 600, true],
     [1280, 800, true],
   ]) {
     await page.setViewport({ width, height });

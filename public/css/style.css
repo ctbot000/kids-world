@@ -1595,6 +1595,32 @@ kbd {
   }
 }
 
+/* Screens a little too short for the column of tools, such as a small
+   laptop's: centred, its 470px need 80px clear below it for the hotbar, and
+   so as much again above, 630px in all; any less and it reaches over the
+   hotbar and the island name. Here the tools go in a row under the island
+   name instead, still full size, with their options in a row under them.
+   Narrower screens have smaller tools, which fit the column, and short
+   screens (next) restyle the row. */
+@media (min-width: 761px) and (max-height: 629px) {
+  #toolbar {
+    flex-direction: row;
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+    transform: none;
+  }
+
+  #toolopts {
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px + var(--tool) + 26px);
+    left: max(10px, env(safe-area-inset-left));
+    transform: none;
+    flex-direction: row;
+  }
+
+  .opt-group {
+    flex-direction: row;
+  }
+}
+
 /* Short screens (phones held sideways): tools in a row under the island name. */
 @media (max-height: 560px) {
   :root {
