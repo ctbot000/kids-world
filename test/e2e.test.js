@@ -9,6 +9,7 @@ import { after, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
+import { TREE_PART } from '../public/js/shared/blocks.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -225,53 +226,79 @@ async function makeIsland(page, { online, theme = 'Sunny Island' }) {
   if (online) await until(page, () => window.kidsWorld.session.link.state === 'online');
 }
 
-// A spot on open ground a few steps from where the player stands, and the
-// screen point of the middle of its top face.
-function spotNear(page, dx, dz) {
-  return page.evaluate(
-    (dx, dz) => {
-      const kw = window.kidsWorld;
-      const g = kw.game;
-      const b = g.me.body;
-      const x = Math.floor(b.x) + dx;
-      const z = Math.floor(b.z) + dz;
-      const y = g.world.top(x, z);
-      return { x, y, z };
-    },
-    dx,
-    dz,
-  );
-}
-
-// Turns the camera until the top face of a cell is in plain view (islands are
-// random, and a tree crown can be in the way), and returns where it is on screen.
-async function aimAt(page, cell) {
-  const at = await page.evaluate((c) => {
+// Turns the camera until the top face of one of the cells is in plain view,
+// trying them in turn (islands are random, and a tree crown, a hill or an
+// animal can be in the way), and returns that cell and where it is on screen.
+function inView(page, cells) {
+  return page.evaluate((cells) => {
     const kw = window.kidsWorld;
     const r = kw.renderer;
     const g = kw.game;
-    for (let k = 0; k < 16; k++) {
-      r.view.yaw = (k * Math.PI) / 8;
-      r.view.pitch = k < 8 ? 1.1 : 0.8;
-      r.view.dist = 7;
-      kw.step(1 / 60, 40);
-      const p = r.project(c.x + 0.5, c.y + 1, c.z + 0.5);
-      const rect = r.canvas.getBoundingClientRect();
-      const ndc = { x: (p.x / rect.width) * 2 - 1, y: -(p.y / rect.height) * 2 + 1 };
-      const aim = g.aim(ndc);
-      const h = aim?.kind === 'block' ? aim.hit : null;
-      // The top of the cell itself, or a flower or tuft of grass standing on it.
-      const onTop = h && h.x === c.x && h.z === c.z && ((h.y === c.y && h.ny === 1) || (h.y === c.y + 1 && g.world.get(h.x, h.y, h.z) >= 50 && g.world.get(h.x, h.y, h.z) < 70));
-      // ...and nothing on top of it on screen (the hotbar, a button).
-      const clear = document.elementFromPoint(rect.left + p.x, rect.top + p.y) === r.canvas;
-      if (onTop && clear) {
-        return { x: rect.left + p.x, y: rect.top + p.y };
+    for (const c of cells) {
+      for (let k = 0; k < 16; k++) {
+        r.view.yaw = (k * Math.PI) / 8;
+        r.view.pitch = k < 8 ? 1.1 : 0.8;
+        r.view.dist = 7;
+        kw.step(1 / 60, 40);
+        const p = r.project(c.x + 0.5, c.y + 1, c.z + 0.5);
+        const rect = r.canvas.getBoundingClientRect();
+        const ndc = { x: (p.x / rect.width) * 2 - 1, y: -(p.y / rect.height) * 2 + 1 };
+        const aim = g.aim(ndc);
+        const h = aim?.kind === 'block' ? aim.hit : null;
+        // The top of the cell itself, or a flower or tuft of grass standing on it.
+        const onTop = h && h.x === c.x && h.z === c.z && ((h.y === c.y && h.ny === 1) || (h.y === c.y + 1 && g.world.get(h.x, h.y, h.z) >= 50 && g.world.get(h.x, h.y, h.z) < 70));
+        // ...and nothing on top of it on screen (the hotbar, a button).
+        const clear = document.elementFromPoint(rect.left + p.x, rect.top + p.y) === r.canvas;
+        if (onTop && clear) {
+          return { cell: c, at: { x: rect.left + p.x, y: rect.top + p.y } };
+        }
       }
     }
     return null;
-  }, cell);
-  assert.ok(at, `cell ${JSON.stringify(cell)} can be seen`);
-  return at;
+  }, cells);
+}
+
+// A spot on open ground a few steps from where the player stands, and the
+// screen point of the middle of its top face: the column nearest (dx, dz)
+// that can be seen and is dry land with nothing on it but air, a flower or a
+// tuft of grass. A column's highest block is not always that: world.top()
+// looks through water and stops at leaves, so where a walk ends beside a pond
+// or a tree it can be a pond's floor, whose top the water hides, or a treetop
+// as high as the camera. A failure names the island's seed, to replay it.
+async function spotNear(page, dx, dz) {
+  const { seed, cells } = await page.evaluate(
+    (dx, dz, tree) => {
+      const g = window.kidsWorld.game;
+      const b = g.me.body;
+      const px = Math.floor(b.x);
+      const pz = Math.floor(b.z);
+      const open = [];
+      for (let x = px + dx - 3; x <= px + dx + 3; x++) {
+        for (let z = pz + dz - 3; z <= pz + dz + 3; z++) {
+          // Not right beside us: a block there could go into us.
+          if (Math.abs(x - px) <= 1 && Math.abs(z - pz) <= 1) continue;
+          const y = g.world.top(x, z);
+          const on = g.world.get(x, y + 1, z);
+          if (y > 0 && !tree[g.world.get(x, y, z)] && (on === 0 || (on >= 50 && on < 70))) open.push({ x, y, z });
+        }
+      }
+      const off = (c) => Math.hypot(c.x - px - dx, c.z - pz - dz);
+      return { seed: g.world.seed, cells: open.sort((a, b) => off(a) - off(b)) };
+    },
+    dx,
+    dz,
+    [...TREE_PART],
+  );
+  const seen = await inView(page, cells);
+  assert.ok(seen, `one of ${cells.length} spots of open ground near ${dx}, ${dz} can be seen, on island seed ${seed}`);
+  return seen;
+}
+
+// Where the top face of a cell is on screen, once the camera has turned to see it.
+async function aimAt(page, cell) {
+  const seen = await inView(page, [cell]);
+  assert.ok(seen, `cell ${JSON.stringify(cell)} can be seen`);
+  return seen.at;
 }
 
 const blockAt = (page, c) => page.evaluate((c) => window.kidsWorld.game.world.get(c.x, c.y, c.z), c);
@@ -280,17 +307,16 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda', fur: 'white', shirt: 1, hat: 'crown' } });
   await makeIsland(page, { online: false });
   assert.equal(await page.$eval('#island-code', (el) => el.textContent), 'Playing alone');
-  const cell = await spotNear(page, 3, 0);
+  const { cell, at } = await spotNear(page, 3, 0);
   const above = { ...cell, y: cell.y + 1 };
   // The first hotbar slot is grass.
-  let at = await aimAt(page, cell);
   await page.mouse.click(at.x, at.y);
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) !== 0, above);
   const placed = await blockAt(page, above);
   assert.equal(placed, 2, 'a grass block went down on top');
   // Right-click picks it back up.
-  at = await aimAt(page, above);
-  await page.mouse.click(at.x, at.y, { button: 'right' });
+  const atBlock = await aimAt(page, above);
+  await page.mouse.click(atBlock.x, atBlock.y, { button: 'right' });
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 0, above);
   // Undo puts it back.
   await page.keyboard.press('KeyZ');
@@ -340,8 +366,7 @@ test('the little map shows the island and what you build; it opens the big map a
 
   // A red brick (slot 6) built with a real click turns its spot on the map red.
   await page.keyboard.press('Digit6');
-  const cell = await spotNear(page, 3, 1);
-  const at = await aimAt(page, cell);
+  const { cell, at } = await spotNear(page, 3, 1);
   await page.mouse.click(at.x, at.y);
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y + 1, c.z) === 30, cell);
   await until(
@@ -941,9 +966,8 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   assert.equal(await guest.evaluate(() => window.kidsWorld.game.world.name), await host.evaluate(() => window.kidsWorld.game.world.name));
 
   // The guest builds; the host sees it.
-  const cell = await spotNear(guest, 2, 2);
+  const { cell, at } = await spotNear(guest, 2, 2);
   const above = { ...cell, y: cell.y + 1 };
-  const at = await aimAt(guest, cell);
   await guest.mouse.click(at.x, at.y);
   await until(host, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
 
@@ -969,11 +993,10 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   // The host makes building owner-only: the guest's next block is refused and taken back.
   await host.evaluate(() => window.kidsWorld.game.send({ t: 'host', cmd: 'settings', settings: { build: 'host' } }));
   await until(guest, () => window.kidsWorld.game.settings.build === 'host');
-  const cell2 = await spotNear(guest, -2, 1);
+  const { cell: cell2, at: at2 } = await spotNear(guest, -2, 1);
   const above2 = { ...cell2, y: cell2.y + 1 };
   // Not always air: a flower or a tuft of grass can stand there, and the block replaces it.
   const was = await blockAt(host, above2);
-  const at2 = await aimAt(guest, cell2);
   await guest.mouse.click(at2.x, at2.y);
   await until(guest, () => document.querySelector('.toast.warn')?.textContent.includes('only builder'));
   await until(guest, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === c.was, { ...above2, was });
@@ -1008,9 +1031,8 @@ test('the dedicated server hosts islands for friends to share', { skip }, async 
   await clickButton(b, 'go!', '#modal');
   await inGame(b);
   assert.equal(await b.evaluate(() => window.kidsWorld.game.world.theme), 'candy');
-  const cell = await spotNear(a, 1, 3);
+  const { cell, at } = await spotNear(a, 1, 3);
   const above = { ...cell, y: cell.y + 1 };
-  const at = await aimAt(a, cell);
   await a.mouse.click(at.x, at.y);
   await until(b, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
   assert.deepEqual(pageErrors, []);
@@ -1028,9 +1050,8 @@ test('an island you made is saved and can be opened again', { skip }, async () =
   await page.waitForFunction(() => window.kidsWorld?.ui, { timeout: 60000 * SLOW });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   const name = await page.evaluate(() => window.kidsWorld.game.world.name);
-  const cell = await spotNear(page, 2, -2);
+  const { cell, at } = await spotNear(page, 2, -2);
   const above = { ...cell, y: cell.y + 1 };
-  const at = await aimAt(page, cell);
   await page.mouse.click(at.x, at.y);
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
   // Leaving saves it; reloading the page and opening it brings the block back.
