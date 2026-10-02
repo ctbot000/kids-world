@@ -13,10 +13,10 @@
 // States: connecting, online, offline (solo), reconnecting, id-taken, failed.
 
 import { generateCode, peerIdFor } from './shared/codes.js';
+import { Reassembler, sendText } from './shared/framing.js';
 import { Room } from './shared/room.js';
 import { ticker } from './ticker.js';
 
-const CHUNK = 16000;
 const PING_MS = 4000;
 const SILENCE_MS = 16000;
 const CONNECT_TIMEOUT_MS = 20000;
@@ -26,64 +26,6 @@ const MAX_RETRY_MS = 10000;
 const RECONNECT_CONFIRM_MS = 5000;
 // PeerServer holds undeliverable messages for 5 s before reporting them, once each.
 const ECHO_WINDOW_MS = 4000;
-
-// ---------------------------------------------------------------- framing
-
-// Data channels cap message size, so long texts travel in pieces. Pieces never
-// split a surrogate pair, which would not survive UTF-8 encoding.
-export function splitText(text, size = CHUNK) {
-  const parts = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(text.length, start + size);
-    const code = text.charCodeAt(end - 1);
-    if (end < text.length && code >= 0xd800 && code <= 0xdbff) end--;
-    parts.push(text.slice(start, end));
-    start = end;
-  }
-  return parts;
-}
-
-let pieceSeq = 0;
-
-export function sendText(conn, text) {
-  if (text.length <= CHUNK) {
-    conn.send(text);
-    return;
-  }
-  const parts = splitText(text);
-  const id = (++pieceSeq).toString(36);
-  parts.forEach((part, k) => conn.send(`~${id}:${k}:${parts.length}:${part}`));
-}
-
-export class Reassembler {
-  constructor() {
-    this.pending = new Map();
-  }
-
-  // Returns the whole text once every piece has arrived, else null.
-  accept(data) {
-    if (data[0] !== '~') return data;
-    const m = /^~([0-9a-z]+):(\d+):(\d+):/.exec(data);
-    if (!m) return null;
-    const [head, id, k, total] = m;
-    const n = Number(total);
-    if (n < 1 || n > 4096) return null;
-    let entry = this.pending.get(id);
-    if (!entry) {
-      entry = { parts: new Array(n), count: 0 };
-      this.pending.set(id, entry);
-      if (this.pending.size > 16) this.pending.delete(this.pending.keys().next().value);
-    }
-    const index = Number(k);
-    if (index >= n || entry.parts[index] !== undefined) return null;
-    entry.parts[index] = data.slice(head.length);
-    entry.count++;
-    if (entry.count < n) return null;
-    this.pending.delete(id);
-    return entry.parts.join('');
-  }
-}
 
 function parse(text) {
   try {

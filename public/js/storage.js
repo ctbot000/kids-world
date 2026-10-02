@@ -1,8 +1,9 @@
 // What this browser remembers: who you are (name, look, settings, basket,
-// stickers) and the islands you made. Everything lives in localStorage and
-// never leaves the device. Storage can be full or switched off, so every
-// read and write is guarded, and a copy is kept in memory so the session
-// never contradicts itself when a write is refused.
+// stickers) and the islands you made. Everything lives in localStorage; the
+// keeper (keeper.js) gets a copy of your islands and of you, unless that is
+// switched off. Storage can be full or switched off, so every read and write
+// is guarded, and a copy is kept in memory so the session never contradicts
+// itself when a write is refused.
 
 const PREFIX = 'kidsworld.';
 const memory = new Map();

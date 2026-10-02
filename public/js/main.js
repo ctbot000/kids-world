@@ -5,6 +5,7 @@ import { buildAtlas } from './render/atlas.js';
 import { Renderer } from './render/renderer.js';
 import { Game } from './game.js';
 import { Input } from './input.js';
+import { KeeperClient } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { Profile } from './profile.js';
 import { Sound } from './sound.js';
@@ -30,6 +31,11 @@ try {
 }
 const input = new Input(canvas, document.getElementById('joystick'));
 const ui = new UI({ profile, sound, atlas, input });
+// Copies of your islands and of you go to the keeper whenever it is online.
+const keeper = new KeeperClient({ profile });
+keeper.addEventListener('status', () => ui.renderKeeper());
+keeper.addEventListener('kept', () => ui.renderKeeper());
+for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
 
 let peerOptions = {};
 let signalError = '';
@@ -262,6 +268,7 @@ function saveIsland() {
     session.warnedFull = true;
     ui.toast('💾', 'This browser is out of room to save islands. Use ⚙️ → Save island to a file.', 'warn');
   }
+  keeper.nudge();
 }
 setInterval(() => {
   if (session?.dirty) saveIsland();
@@ -383,6 +390,7 @@ const gameHandlers = {
   },
   canSave: () => session?.mode === 'host',
   saveFile: () => downloadIsland(),
+  keeper,
   applySettings: () => applySettings(),
   leave: () => backToTitle(),
 };
@@ -490,6 +498,7 @@ window.kidsWorld = {
   renderer,
   ui,
   input,
+  keeper,
   get session() {
     return session;
   },
@@ -526,6 +535,7 @@ async function boot() {
   const code = normalizeCode(params.get('code'));
   if (isValidCode(code)) ui.visitDialog(code);
   requestAnimationFrame(frame);
+  keeper.start();
 }
 
 boot();

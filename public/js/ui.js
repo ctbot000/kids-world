@@ -17,6 +17,16 @@ import { STICKERS } from './profile.js';
 
 const $ = (id) => document.getElementById(id);
 
+// "just now", "5 minutes ago", "on 10/3/2026".
+function ago(t) {
+  const minutes = Math.round((Date.now() - t) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return minutes === 1 ? 'a minute ago' : `${minutes} minutes ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return hours === 1 ? 'an hour ago' : `${hours} hours ago`;
+  return `on ${new Date(t).toLocaleDateString()}`;
+}
+
 // A tiny element builder: h('button', { class: 'chip', onclick }, 'Hi').
 export function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -655,6 +665,22 @@ export class UI {
     }
   }
 
+  // What the keeper is up to, in a few words, for the Safe copies row in Settings.
+  keeperText() {
+    const k = this.gameHandlers?.keeper;
+    if (!k?.config) return '';
+    if (k.state === 'off') return 'Off. Your islands stay on this device only.';
+    if (k.sending) return 'Copying to the island keeper…';
+    const last = k.lastKept ? `Last copy ${ago(k.lastKept)}.` : '';
+    if (k.state === 'away') return `The island keeper is asleep. Copies go when it wakes up. ${last}`.trim();
+    if (k.state === 'refused') return 'Copies are paused for now.';
+    return last || 'When the island keeper is on, it keeps a copy of your islands, your look and your stickers.';
+  }
+
+  renderKeeper() {
+    for (const el of document.querySelectorAll('.keeper-status')) el.textContent = this.keeperText();
+  }
+
   // The row in Settings, for screens with no room for the button at the top.
   fullscreenSetting() {
     if (this.fullMode === 'none') return null;
@@ -1213,6 +1239,15 @@ export class UI {
           this.renderMap();
         }),
       );
+      if (handlers.keeper?.config) {
+        root.append(
+          toggle(p.settings.keeper !== false, '💾 Safe copies', h('span', { class: 'keeper-status' }, this.keeperText()), (on) => {
+            p.setting('keeper', on);
+            handlers.keeper.setEnabled(on);
+            this.renderKeeper();
+          }),
+        );
+      }
       const full = this.fullscreenSetting();
       if (full) root.append(full);
       if (isHost) {

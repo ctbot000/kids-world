@@ -8,7 +8,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 
 1. Press **Make an island** and pick a kind of island: Sunny, Snowy, Candy or Flat Land.
 2. Tell a friend your six-digit **island code** (it's at the top of the screen). They press **Visit a friend** and type it in. Up to 8 players can be on one island together.
-3. Build together. Your island is saved on your device, and **My islands** opens it again later.
+3. Build together. Your island is saved on your device, and **My islands** opens it again later. While the [island keeper](#the-island-keeper) is online, it keeps a copy too.
 
 ## What you can do
 
@@ -29,7 +29,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 - **Nobody types anything.** Names are made from friendly words ("Sunny Otter"), and talking uses ready-made phrases and stickers. The island's host checks every name and message against those lists, so a changed copy of the game can't slip other words in either.
 - **Island codes are six digits**, easy to read out and type, and they never spell a word.
 - **The island's owner decides:** friends can be allowed to build or not, the island can be closed to new visitors, and anyone can be sent home. Undo takes back mistakes.
-- **No accounts, ads or tracking.** Your character, stickers and islands are kept in this browser only.
+- **No accounts, ads or tracking.** Your character, stickers and islands are kept in this browser, with a copy at the [island keeper](#the-island-keeper) whenever it's online. ⚙️ Settings → **Safe copies** turns the copies off.
 - **Gentle by design:** there are no monsters, no falling damage and no way to get hurt. You float in water and can fly anywhere.
 
 ## Controls
@@ -54,7 +54,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 
 To use your own signaling server, run a [PeerServer](https://github.com/peers/peerjs-server) (`npx peer --port 9000`) and open the game with `?signal=http://localhost:9000/`. Invite links carry the setting along.
 
-**Dedicated server.** `npm start` serves the game and hosts islands itself over WebSocket, so nobody's browser has to stay open. The page notices the server and switches to it automatically. It uses only Node's built-ins (the WebSocket protocol is implemented in [`server/websocket.js`](server/websocket.js)), so it runs anywhere Node 22+ runs. Islands with nobody on them are kept for two hours.
+**Dedicated server.** `npm start` serves the game and hosts islands itself over WebSocket, so nobody's browser has to stay open. The page notices the server and switches to it automatically. It uses only Node's built-ins (the WebSocket protocol is implemented in [`server/websocket.js`](server/websocket.js)), so it runs anywhere Node 22+ runs. Islands with nobody on them are kept for two hours. Once it is set up, the same command also runs the [island keeper](#the-island-keeper).
 
 ```bash
 npm install
@@ -65,6 +65,23 @@ npm start
 ```
 
 Then open <http://localhost:8747/>. To play with others on your network, `npm start -- --host 0.0.0.0` prints the addresses to share; `PORT` and `HOST` work too. Add `?p2p=1` to use peer-to-peer play even when the server is there.
+
+## The island keeper
+
+A computer of your own can keep a copy of every player's islands and of who they are, so nothing is lost when a browser is cleared or a tablet is replaced. Players keep using the hosted page: whenever the keeper is online, their browsers send it what changed since last time, peer to peer, the way friends visit an island. While it is away, the copies wait in each browser for next time.
+
+To make your computer the keeper, once:
+
+```bash
+npm run keeper-setup
+```
+
+This creates the keeper's peer id and key pair in `~/.kids-world` (or the folder in `--data` or `KIDS_WORLD_DATA`), and writes the public half to `public/keeper.json`, which is how pages find the keeper. Commit and deploy that file. From then on `npm start` puts the keeper online for as long as it runs, and <http://localhost:8747/admin/> shows what it has kept: each player with their stickers and basket, and their islands drawn from above, with a download of any day's copy and deletes. A downloaded island opens in the game with **My islands → 📂 Open an island file**. The admin pages answer only the computer they run on.
+
+- **Reaching it.** The keeper joins the PeerJS signaling service under the peer id in `keeper.json`, and answers data connections with [node-datachannel](https://github.com/murat-dogan/node-datachannel) (WebRTC for Node, with ready-built binaries for macOS, Linux and Windows). It needs no open ports, no tunnel and no account anywhere.
+- **Trusting it.** Anyone can take that peer id while the keeper is away, so a page sends nothing until the keeper has signed the page's fresh random number with the private key whose public half is in `keeper.json`. The data channel is encrypted end to end, as every WebRTC channel is.
+- **What it keeps.** Each island's latest copy, and one copy a day for the last 30 days it was played; each player's name, look, basket, what they've done and their stickers. Never the tokens that let players back into islands, nor their settings. A browser files its copies under a hash of a secret only it knows, so nobody can overwrite anyone else's. It stops taking copies at 2 GB.
+- **Its key.** The private key is in `~/.kids-world/keeper.json`: keep that file private, and back it up with the copies. `npm run keeper-setup -- --new` makes a new one; pages then send nothing until the new `keeper.json` is deployed.
 
 ## How it works
 
@@ -95,8 +112,9 @@ npm test
 - The map: the ground seen from above (looking past flowers and fruit), deeper water darker, hill shading, edits repainted with the shadow they throw, the part of a big island it follows, and directions that match the 3D view instead of mirroring it.
 - Room: joining and coming back, names from the word lists only, checked edits, undo, the owner's rules, phrases and stickers only, animals, growing trees and fruit, weather, saving and loading, rate limiting.
 - Server: static files and path traversal, the WebSocket handshake and framing, and islands shared by real WebSocket clients.
+- Keeper: islands filed by device with one copy a day, profiles without tokens, what it refuses (other games' files, damaged islands, too much), its signatures, and admin pages only the computer itself can use.
 - Full screen: the standard calls, Safari's older prefixed ones, and iPhones, which can only get it from the Home Screen.
-- End to end in headless Chrome: playing alone with real clicks, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
+- End to end in headless Chrome: playing alone with real clicks, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, an island saved and opened again after a reload, a page sending copies to a keeper peer to peer (and nothing to an impostor under its peer id), and the keeper's admin page. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
 - CI has no mouse, so there the game is in touch mode, with the thumbstick and the touch buttons on screen; on a computer with a mouse it is not. To run the end-to-end tests the way CI does, which matters for anything that moves the buttons:
 
   ```bash
@@ -121,10 +139,13 @@ public/                 the whole site; no build step
   js/input.js           keyboard, mouse, touch thumbstick and buttons
   js/sound.js           sound effects, animal voices and music (Web Audio)
   js/net.js             playing alone / hosting / visiting, and the dedicated server
+  js/keeper.js          sending copies to the island keeper
+  keeper.json           where the island keeper is, and its public key (npm run keeper-setup)
   js/render/            three.js: textures, chunk meshes, sky, characters, animals, effects
   js/shared/            the engine (see above)
   vendor/               three.js, PeerJS and the Fredoka font (npm run vendor)
 server/                 the dedicated server and its WebSocket implementation
+  keeper.js, admin.js   the island keeper, its store, and its admin pages (admin/)
 test/                   node:test suites
 ```
 
@@ -133,6 +154,7 @@ test/                   node:test suites
 ## Privacy
 
 - No accounts, analytics or cookies. Your character, settings, basket, stickers and islands are kept in your browser's `localStorage`.
+- While the [island keeper](#the-island-keeper) is online, it gets a copy of your islands, and of your name, look, basket, what you've done and your stickers; never your settings or tokens. Whoever runs the keeper can see and download those copies. ⚙️ Settings → **Safe copies** turns this off for your browser.
 - In peer-to-peer play the signaling server sees peer ids and connection setup data (which include IP addresses), never the game. Anyone with an island's code can visit it while it's open, unless the owner closes it to new visitors.
 
 ## License

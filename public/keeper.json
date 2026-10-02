@@ -1,0 +1,9 @@
+{
+  "peer": "kids-world-keeper-f295c4e7cf8d835f",
+  "key": {
+    "kty": "EC",
+    "x": "MPDZj0oy79kPtvPty7CTtwb2MSI7-yek1x--1xK6eyM",
+    "y": "XQq-Cq1CNvN65AOOYQgVLBTXubXKGOKVmaQDYLRCDsQ",
+    "crv": "P-256"
+  }
+}

@@ -1,5 +1,6 @@
 // You: your name and look, your settings, your basket of treasures, and the
-// stickers you have earned. Kept on this device only.
+// stickers you have earned. Kept on this device, and copied to the keeper
+// (see keeper.js) unless that is switched off.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -35,7 +36,7 @@ const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 
 
 export const DEFAULT_HOTBAR = [GRASS, DIRT, STONE, PLANKS, GLASS, TOY_BRICKS[0], TOY_BRICKS[2], TOY_BRICKS[7], TULIP, LAMP];
 
-export const DEFAULT_SETTINGS = { music: 0.5, sound: 0.8, studs: true, autoJump: true, map: true, readAloud: false, quality: 'auto' };
+export const DEFAULT_SETTINGS = { music: 0.5, sound: 0.8, studs: true, autoJump: true, map: true, readAloud: false, quality: 'auto', keeper: true };
 
 function clean(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};

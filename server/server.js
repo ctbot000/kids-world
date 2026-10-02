@@ -1,9 +1,12 @@
 // Dedicated server: serves the game from public/ and hosts islands over
 // WebSocket, so nobody's browser has to stay open as the host. Node
-// built-ins only. Usage:
+// built-ins only; the keeper's WebRTC module is loaded only when it starts.
+// Started from the command line, it is also the keeper (see keeper.js) once
+// that is set up, with its admin pages at /admin/. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
+//   npm start -- --data ~/kw-copies  # where the keeper keeps copies (or KIDS_WORLD_DATA)
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -14,6 +17,8 @@ import { parseArgs } from 'node:util';
 import { generateCode, isValidCode, normalizeCode } from '../public/js/shared/codes.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { THEMES } from '../public/js/shared/worldgen.js';
+import { adminHandler } from './admin.js';
+import { DEFAULT_DATA_DIR, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
 import { acceptUpgrade } from './websocket.js';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -43,6 +48,10 @@ export function createGameServer({
   maxConnections = 1600,
   // How long an island with nobody on it is kept, so friends can come back.
   idleMs = 2 * 60 * 60 * 1000,
+  // What pages get at /keeper.json: the keeper this server runs, or none.
+  keeperConfig = null,
+  // The admin pages' handler, from adminHandler().
+  admin = null,
 } = {}) {
   const base = resolve(root);
   const rooms = new Map();
@@ -50,15 +59,25 @@ export function createGameServer({
   const peers = new Set();
 
   async function serveFile(req, res) {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      return;
-    }
     let pathname;
     try {
       pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     } catch {
       res.writeHead(400).end('Bad request');
+      return;
+    }
+    if (admin && (await admin(req, res, pathname))) return;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      return;
+    }
+    // Pages find the keeper here. This server answers for itself, never with
+    // public/keeper.json, so a test run or someone else's server never sends
+    // copies to the keeper that file names.
+    if (pathname === '/keeper.json') {
+      const body = keeperConfig ? JSON.stringify(keeperConfig) : null;
+      if (body) res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
+      else res.writeHead(404, { 'Content-Type': TYPES['.txt'], 'Cache-Control': 'no-store' }).end('No keeper here');
       return;
     }
     if (pathname === '/api/info') {
@@ -231,22 +250,57 @@ function lanAddresses() {
     .map((net) => net.address);
 }
 
+// The keeper, if this computer holds the key that public/keeper.json names.
+// Returns { keeper, config } or null.
+async function startKeeper(store) {
+  const identity = await loadIdentity(store.dir);
+  const config = await readPublicConfig(PUBLIC_CONFIG);
+  if (!identity) {
+    console.log('Keeper: not set up on this computer. Run `npm run keeper-setup` to make it the keeper.');
+    return null;
+  }
+  if (!sameKeeper(config, identity)) {
+    console.log(`Keeper: public/keeper.json names another keeper than the one in ${store.dir}.`);
+    console.log('  Run `npm run keeper-setup` to write this one into it, then commit and deploy it.');
+    return null;
+  }
+  const keeper = new Keeper({ store, identity, signal: config.signal ?? null });
+  keeper.on('state', (state, detail) => console.log(`Keeper: ${state}${detail ? ` (${detail})` : ''}`));
+  keeper.on('kept', (e) => console.log(`Keeper: kept ${e.what === 'island' ? `the island "${e.island}"` : 'a profile'}${e.player ? ` from ${e.player}` : ''}`));
+  try {
+    await keeper.start();
+  } catch (error) {
+    console.log(`Keeper: could not start: ${error.message}`);
+    return null;
+  }
+  return { keeper, config };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { values } = parseArgs({
     options: {
       port: { type: 'string', default: process.env.PORT ?? '8747' },
       host: { type: 'string', default: process.env.HOST ?? 'localhost' },
+      data: { type: 'string', default: process.env.KIDS_WORLD_DATA ?? DEFAULT_DATA_DIR },
     },
   });
   const port = Number(values.port);
-  const server = createGameServer();
+  const store = await new KeeperStore(values.data).open();
+  const { keeper, config } = (await startKeeper(store)) ?? {};
+  const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper }) });
   server.listen(port, values.host, () => {
     console.log(`Kids World is running at http://localhost:${port}/`);
     if (values.host === '0.0.0.0' || values.host === '::') {
       for (const address of lanAddresses()) console.log(`  on your network: http://${address}:${port}/`);
     }
+    if (keeper) console.log(`Keeper: copies are kept in ${store.dir}; see them at http://localhost:${port}/admin/`);
   });
-  const stop = () => server.shutdown().then(() => process.exit(0));
+  const stop = async () => {
+    await keeper?.stop();
+    await server.shutdown();
+    keeper?.rtc?.cleanup?.();
+    process.exit(0);
+  };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }

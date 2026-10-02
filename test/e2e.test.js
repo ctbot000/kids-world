@@ -5,11 +5,18 @@
 // without Chrome these tests are skipped.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
 import { TREE_PART } from '../public/js/shared/blocks.js';
+import { Room } from '../public/js/shared/room.js';
+import { World } from '../public/js/shared/world.js';
+import { adminHandler } from '../server/admin.js';
+import { createIdentity, Keeper, KeeperStore, publicConfig } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -1067,4 +1074,117 @@ test('an island you made is saved and can be opened again', { skip }, async () =
   assert.equal(await blockAt(page, above), 2);
   assert.deepEqual(pageErrors, []);
   await context.close();
+});
+
+// ---------------------------------------------------------------- the keeper
+
+// Polls something on this side (the keeper's store) until it holds.
+async function eventually(fn, timeout = 30000 * SLOW) {
+  const end = Date.now() + timeout;
+  while (!(await fn())) {
+    if (Date.now() > end) throw new Error(`timed out waiting for ${String(fn).slice(0, 160)}`);
+    await delay(200);
+  }
+}
+
+// A keeper in this process, online through the local PeerServer.
+async function keeperOnline(identity, dir) {
+  const store = await new KeeperStore(dir).open();
+  const keeper = new Keeper({ store, identity, signal, iceServers: [], log: () => {} });
+  await keeper.start();
+  await eventually(() => keeper.state === 'online');
+  return keeper;
+}
+
+test('the keeper keeps copies of your islands and of you, sent peer to peer; an impostor gets nothing', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(join(dir, 'real'));
+  let keeper = await keeperOnline(identity, join(dir, 'real'));
+  // The pages of this server are told about the keeper; the other tests' pages are not.
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' });
+  try {
+    // A new island is saved at once, and a copy goes to the keeper, with you.
+    await makeIsland(page, { online: false, theme: 'Flat Land' });
+    const device = KeeperStore.deviceId(await page.evaluate(() => window.kidsWorld.keeper.data.device));
+    const kept = async () => (await keeper.store.devices()).find((d) => d.id === device);
+    await eventually(async () => (await kept())?.islands.length === 1 && Boolean((await kept()).profile));
+    assert.equal((await kept()).profile.name, 'Sunny Otter');
+    assert.equal((await kept()).islands[0].name, await page.evaluate(() => window.kidsWorld.game.world.name));
+
+    // What you build is in a copy within a save or two.
+    const { cell, at } = await spotNear(page, 2, 2);
+    const above = { ...cell, y: cell.y + 1 };
+    await page.mouse.click(at.x, at.y);
+    await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
+    const keptBlock = async () => {
+      const save = JSON.parse(await readFile(await keeper.store.islandFile(device, (await kept()).islands[0].id), 'utf8'));
+      return World.decode(save.meta, save.blocks).get(above.x, above.y, above.z);
+    };
+    await eventually(async () => (await keptBlock()) === 2, 60000 * SLOW);
+    await page.click('#btn-settings');
+    await until(page, () => document.querySelector('#modal .keeper-status')?.textContent.startsWith('Last copy'));
+    await page.keyboard.press('Escape');
+
+    // The keeper goes away and someone else takes its peer id: they are sent nothing.
+    await keeper.stop();
+    const other = await createIdentity(join(dir, 'other'));
+    const impostor = await keeperOnline({ ...other, peer: identity.peer }, join(dir, 'other'));
+    // A new hat: one the random look you started with is not wearing already.
+    const hat = await page.evaluate(() => {
+      const { profile } = window.kidsWorld;
+      const hat = profile.look.hat === 'crown' ? 'cap' : 'crown';
+      profile.update({ look: { ...profile.look, hat } });
+      return hat;
+    });
+    await until(page, () => window.kidsWorld.keeper.state === 'refused');
+    assert.deepEqual(await impostor.store.devices(), []);
+    await impostor.stop();
+
+    // The real keeper is back: the next time the game is opened, the change that waited goes to it.
+    keeper = await keeperOnline(identity, join(dir, 'real'));
+    const again = await page.browserContext().newPage();
+    again.on('pageerror', (error) => pageErrors.push(`again: ${error.message}`));
+    await again.goto(page.url());
+    await eventually(async () => (await kept())?.profile.look.hat === hat);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('the admin page shows each player and their islands, drawn from above, and deletes them', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const store = await new KeeperStore(dir).open();
+  const key = 'e5'.repeat(16);
+  const room = new Room({ code: '482753', theme: 'snowy', seed: 3 });
+  await store.keepIsland(key, '0123456789ab', room.exportSave());
+  await store.keepProfile(key, { name: 'Brave Fox', look: { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' }, stickers: { 'first-block': 1 } });
+  const games = createGameServer({ log: () => {}, admin: adminHandler({ store }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  page.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+  page.on('dialog', (dialog) => dialog.accept());
+  try {
+    await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
+    await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
+    assert.equal(await page.$eval('.island h4', (el) => el.textContent), `❄️ ${room.world.name}`);
+    // The island from above: one pixel per column.
+    await until(page, () => document.querySelector('img.map')?.naturalWidth === 128);
+    const href = await page.$eval('.island a.button', (a) => a.getAttribute('href'));
+    assert.match(href, /^\/admin\/api\/devices\/[0-9a-f]{20}\/islands\/0123456789ab\?day=\d{4}-\d{2}-\d{2}&download$/);
+    await page.click('.island button.danger');
+    await until(page, () => !document.querySelector('.island'));
+    assert.deepEqual((await store.devices())[0].islands, []);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
