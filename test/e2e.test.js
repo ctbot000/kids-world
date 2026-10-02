@@ -110,6 +110,22 @@ async function until(page, fn, arg, timeout = 30000 * SLOW) {
 }
 const inGame = (page) => until(page, () => window.kidsWorld.session?.started && window.kidsWorld.game?.world, null, 60000 * SLOW);
 
+// Fills the basket with every kind of treasure, or empties it, and switches the touch controls
+// on or off. Upright, those stand on the hotbar and the basket, at a height that a
+// ResizeObserver keeps, a frame later: this waits for it, which a new screen size needs too.
+async function basketAndTouch(page, full, touch) {
+  await page.evaluate(
+    (full, touch) => {
+      document.body.classList.toggle('touch', touch);
+      const profile = window.kidsWorld.profile;
+      for (const key of Object.keys(profile.basket)) profile.addToBasket(key, full ? 999 : -999);
+    },
+    full,
+    touch,
+  );
+  await until(page, () => getComputedStyle(document.documentElement).getPropertyValue('--bottom-height') === `${document.getElementById('bottom').offsetHeight}px`);
+}
+
 // Puppeteer aims a click where something is when it looks, and a dialog popping
 // in grows before the press lands, onto whatever is next to it there. This
 // waits until something, and everything it is in, has stopped moving.
@@ -323,6 +339,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
   // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide.
+  // Each screen is seen with an empty basket and with a full one, which wraps over the hotbar
+  // (in one row on the shortest upright screens): upright, the buttons rise above it.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
@@ -342,58 +360,87 @@ test('the little map and the hotbar fit beside every other button, on screens of
   ];
   for (const [width, height, touch, map = true] of screens) {
     await page.setViewport({ width, height });
-    const seen = await page.evaluate((touch) => {
-      document.body.classList.toggle('touch', touch);
-      const m = document.getElementById('minimap').getBoundingClientRect();
-      const covered = [];
-      for (const el of document.querySelectorAll('#hud button, #hud .island-badge, #toolopts > *, #joystick')) {
-        if (el.closest('#minimap')) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width && r.height && r.left < m.right && r.right > m.left && r.top < m.bottom && r.bottom > m.top) covered.push(el.id || el.className);
+    for (const full of [false, true]) {
+      await basketAndTouch(page, full, touch);
+      const seen = await page.evaluate((touch) => {
+        const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        const m = document.getElementById('minimap').getBoundingClientRect();
+        const covered = [];
+        for (const el of document.querySelectorAll('#hud button, #hud .island-badge, #toolopts > *, #joystick')) {
+          if (el.closest('#minimap')) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width && r.height && meets(r, m)) covered.push(el.id || el.className);
+        }
+        // Every kind of treasure shows in the basket, and nothing lies over any of them.
+        const pills = [...document.querySelectorAll('#basket button')];
+        const kinds = Object.keys(window.kidsWorld.profile.basket).length;
+        const treasures = [];
+        for (const el of document.querySelectorAll('#hud button, #joystick')) {
+          if (el.closest('#basket')) continue;
+          const r = el.getBoundingClientRect();
+          for (const pill of pills) {
+            if (r.width && meets(r, pill.getBoundingClientRect())) treasures.push(`${el.id || el.className} on ${pill.title.split(':')[0]}`);
+          }
+        }
+        const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
+        const want = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talk'));
+        const thumbs = [...document.querySelectorAll('#touch-buttons button')].map((b) => [b.offsetWidth, b.offsetHeight]);
+        const thumb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch'));
+        const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
+        // The hotbar makes room for the thumbstick and the jump buttons only where they are level
+        // with it, as on screens held sideways, and there it stays clear of them. Without them it
+        // is as wide as it gets: it shows whole, or it spans the screen to 10 px from either edge.
+        const row = () => document.querySelector('#bottom .hotrow').getBoundingClientRect();
+        document.body.classList.remove('touch');
+        const free = row().width;
+        document.body.classList.toggle('touch', touch);
+        const hot = row();
+        const level = [...document.querySelectorAll('#hud button, #joystick')]
+          .filter((el) => !el.closest('#bottom'))
+          .map((el) => [el.id || el.className, el.getBoundingClientRect()])
+          .filter(([, r]) => r.width && r.top < hot.bottom && r.bottom > hot.top);
+        const bar = document.getElementById('hotbar');
+        const scrolls = bar.scrollWidth > bar.clientWidth;
+        const edges = [hot.left, innerWidth - hot.right].map(Math.round);
+        const hotbar = {
+          width: Math.round(hot.width),
+          level: level.map(([name]) => name),
+          clear: level.every(([, r]) => r.right <= hot.left || r.left >= hot.right),
+          squeezed: !level.length && hot.width < free - 0.5,
+          scrolls,
+          edges,
+          cut: !level.length && scrolls && Math.max(...edges) > 10,
+        };
+        return {
+          covered,
+          pills: pills.length,
+          kinds,
+          treasures,
+          talk,
+          want,
+          thumbs,
+          thumb,
+          whole,
+          hotbar,
+          size: m.width,
+          inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight,
+        };
+      }, touch);
+      const where = `${width}×${height}${touch ? ' touch' : ''}${full ? ' with a full basket' : ''}`;
+      assert.equal(seen.pills, full ? seen.kinds : 0, `on ${where} the basket shows every kind of treasure in it`);
+      assert.deepEqual(seen.treasures, [], `on ${where} neither a button nor the thumbstick covers a treasure in the basket`);
+      assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
+      // The map's place beside the talk buttons is worked out from --talk.
+      assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
+      if (touch) {
+        assert.deepEqual(seen.thumbs, [[seen.thumb, seen.thumb], [seen.thumb, seen.thumb], [78, 78]], `on ${where} go down and fly are --touch across, and jump 78 px`);
       }
-      const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
-      const want = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talk'));
-      const thumbs = [...document.querySelectorAll('#touch-buttons button')].map((b) => [b.offsetWidth, b.offsetHeight]);
-      const thumb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch'));
-      const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
-      // The hotbar makes room for the thumbstick and the jump buttons only where they are level
-      // with it, as on screens held sideways, and there it stays clear of them. Without them it
-      // is as wide as it gets: it shows whole, or it spans the screen to 10 px from either edge.
-      const row = () => document.querySelector('#bottom .hotrow').getBoundingClientRect();
-      document.body.classList.remove('touch');
-      const free = row().width;
-      document.body.classList.toggle('touch', touch);
-      const hot = row();
-      const level = [...document.querySelectorAll('#hud button, #joystick')]
-        .filter((el) => !el.closest('#bottom'))
-        .map((el) => [el.id || el.className, el.getBoundingClientRect()])
-        .filter(([, r]) => r.width && r.top < hot.bottom && r.bottom > hot.top);
-      const bar = document.getElementById('hotbar');
-      const scrolls = bar.scrollWidth > bar.clientWidth;
-      const edges = [hot.left, innerWidth - hot.right].map(Math.round);
-      const hotbar = {
-        width: Math.round(hot.width),
-        level: level.map(([name]) => name),
-        clear: level.every(([, r]) => r.right <= hot.left || r.left >= hot.right),
-        squeezed: !level.length && hot.width < free - 0.5,
-        scrolls,
-        edges,
-        cut: !level.length && scrolls && Math.max(...edges) > 10,
-      };
-      return { covered, talk, want, thumbs, thumb, whole, hotbar, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
-    }, touch);
-    const where = `${width}×${height}${touch ? ' touch' : ''}`;
-    assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
-    // The map's place beside the talk buttons is worked out from --talk.
-    assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
-    if (touch) {
-      assert.deepEqual(seen.thumbs, [[seen.thumb, seen.thumb], [seen.thumb, seen.thumb], [78, 78]], `on ${where} go down and fly are --touch across, and jump 78 px`);
+      // <body> has a touch class too, on touch screens, but it is no touch button.
+      assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
+      if (map) assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
+      else assert.equal(seen.size, 0, `on ${where} there is no room for the map`);
+      assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false, cut: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them; elsewhere it shows whole or spans the screen`);
     }
-    // <body> has a touch class too, on touch screens, but it is no touch button.
-    assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
-    if (map) assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
-    else assert.equal(seen.size, 0, `on ${where} there is no room for the map`);
-    assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false, cut: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them; elsewhere it shows whole or spans the screen`);
   }
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
@@ -527,38 +574,40 @@ test("every tool's options stay clear of the buttons and the map beside them, an
   ];
   for (const [width, height, touch] of screens) {
     await page.setViewport({ width, height });
-    for (const tool of ['build', 'pick', 'paint', 'hills', 'stamp', 'friends']) {
-      const seen = await page.evaluate(
-        (tool, touch) => {
-          document.body.classList.toggle('touch', touch);
-          window.kidsWorld.game.setTool(tool);
-          const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          const others = [...document.querySelectorAll('#talk button, #minimap, #joystick')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
-          const pills = [...document.querySelectorAll('#toolopts .pill')];
-          const last = document.getElementById('toolopts').lastElementChild.getBoundingClientRect();
-          return {
-            pills: pills.length,
-            covered: pills.filter((p) => others.some((r) => meets(p.getBoundingClientRect(), r))).map((p) => p.title),
-            // A finger on the middle of each one gets it, and it is all on screen.
-            blocked: pills
-              .filter((p) => {
-                const r = p.getBoundingClientRect();
-                const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.pill');
-                return hit !== p || r.left < 0 || r.right > innerWidth || r.bottom > innerHeight;
-              })
-              .map((p) => p.title),
-            // Just past them is the island, not the box they sit in.
-            beside: document.elementFromPoint(last.right + 4, last.top + last.height / 2)?.id,
-          };
-        },
-        tool,
-        touch,
-      );
-      const where = `${width}×${height} with ${tool}: ${JSON.stringify(seen)}`;
-      assert.ok(seen.pills > 0, `on ${where} the tool has options`);
-      assert.deepEqual(seen.covered, [], `on ${where} no option is under the talk buttons, the map or the thumbstick`);
-      assert.deepEqual(seen.blocked, [], `on ${where} every option can be tapped`);
-      assert.equal(seen.beside, 'world', `on ${where} a touch beside the options reaches the island`);
+    // A full basket lifts the touch buttons and the thumbstick on upright screens, towards the options.
+    for (const full of [false, true]) {
+      await basketAndTouch(page, full, touch);
+      for (const tool of ['build', 'pick', 'paint', 'hills', 'stamp', 'friends']) {
+        const seen = await page.evaluate(
+          (tool) => {
+            window.kidsWorld.game.setTool(tool);
+            const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            const others = [...document.querySelectorAll('#talk button, #minimap, #touch-buttons button, #joystick')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
+            const pills = [...document.querySelectorAll('#toolopts .pill')];
+            const last = document.getElementById('toolopts').lastElementChild.getBoundingClientRect();
+            return {
+              pills: pills.length,
+              covered: pills.filter((p) => others.some((r) => meets(p.getBoundingClientRect(), r))).map((p) => p.title),
+              // A finger on the middle of each one gets it, and it is all on screen.
+              blocked: pills
+                .filter((p) => {
+                  const r = p.getBoundingClientRect();
+                  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.pill');
+                  return hit !== p || r.left < 0 || r.right > innerWidth || r.bottom > innerHeight;
+                })
+                .map((p) => p.title),
+              // Just past them is the island, not the box they sit in.
+              beside: document.elementFromPoint(last.right + 4, last.top + last.height / 2)?.id,
+            };
+          },
+          tool,
+        );
+        const where = `${width}×${height} with ${tool}${full ? ' and a full basket' : ''}: ${JSON.stringify(seen)}`;
+        assert.ok(seen.pills > 0, `on ${where} the tool has options`);
+        assert.deepEqual(seen.covered, [], `on ${where} no option is under the talk buttons, the map, the touch buttons or the thumbstick`);
+        assert.deepEqual(seen.blocked, [], `on ${where} every option can be tapped`);
+        assert.equal(seen.beside, 'world', `on ${where} a touch beside the options reaches the island`);
+      }
     }
   }
   assert.deepEqual(pageErrors, []);
@@ -667,9 +716,13 @@ test('the whole island code shows beside the top buttons, and a long connection 
   // Phones held upright or sideways have no room for the message in the top bar; a computer does.
   // On the shortest upright touch screen, with Hills picked, the longest message still reaches
   // the top of the thumbstick's ring: there it may cover the thumbstick, drawn over it. 1000×600
-  // is too short for the column of tools under the top bar.
-  for (const [width, height, inTopBar, coverable = []] of [
+  // is too short for the column of tools under the top bar. A full basket lifts the touch buttons
+  // and the thumbstick towards the message on upright touch screens, and the shortest have the
+  // least room for that.
+  for (const [width, height, inTopBar, coverable = [], full = false] of [
     [320, 460, false, ['joystick']],
+    [320, 460, false, ['joystick'], true],
+    [375, 500, false, [], true],
     [320, 568, false],
     [360, 640, false],
     [720, 480, false],
@@ -680,11 +733,12 @@ test('the whole island code shows beside the top buttons, and a long connection 
     // With one row of tool options, and with the two groups Hills has.
     for (const [state, text, tool] of ['build', 'hills'].flatMap((tool) => messages.map((m) => [...m, tool]))) {
       const layout = await page.evaluate(
-        async (state, text, tool) => {
+        async (state, text, tool, full) => {
           const kw = window.kidsWorld;
           const $ = (id) => document.getElementById(id);
           const box = (el) => el.getBoundingClientRect();
           kw.game.setTool(tool);
+          for (const key of Object.keys(kw.profile.basket)) kw.profile.addToBasket(key, full ? 999 : -999);
           const show = (state, text) => {
             kw.ui.setStatus(state, text);
             // The widest code, and a clock with two emoji: sunrise and rain.
@@ -755,8 +809,9 @@ test('the whole island code shows beside the top buttons, and a long connection 
         state,
         text,
         tool,
+        full,
       );
-      const where = `${width}×${height}, ${state}, ${tool}`;
+      const where = `${width}×${height}, ${state}, ${tool}${full ? ', a full basket' : ''}`;
       assert.deepEqual(layout.calm, { ...layout.calm, code: true, round: true, onScreen: true, clearOfTools: true }, where);
       assert.deepEqual(layout.busy, layout.calm, `${where}: the island's badge and the buttons stay as they were`);
       const { under, ...message } = layout.message;

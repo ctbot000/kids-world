@@ -90,6 +90,12 @@ export class UI {
       const h = $('status').offsetHeight;
       document.documentElement.style.setProperty('--status-room', h ? `${h + 8}px` : '0px');
     }).observe($('status'));
+    // On upright touch screens the touch buttons and the thumbstick stand on
+    // the hotbar and the basket over it, which grows a row at a time as it
+    // fills (see #touch-buttons in the stylesheet).
+    new ResizeObserver(() => {
+      document.documentElement.style.setProperty('--bottom-height', `${$('bottom').offsetHeight}px`);
+    }).observe($('bottom'));
   }
 
   // ------------------------------------------------ icons

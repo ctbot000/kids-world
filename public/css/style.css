@@ -1771,12 +1771,14 @@ kbd {
     right: max(10px, env(safe-area-inset-right));
   }
 
+  /* Above the hotbar and the basket over it, however many rows that wraps
+     to: --bottom-height is the height of both together, kept by the UI. */
   body.touch #touch-buttons {
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 84px);
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 24px);
   }
 
   #joystick {
-    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px);
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 34px);
   }
 
   /* A connection message: under the tool options, beside the little map. */
@@ -1824,6 +1826,33 @@ kbd {
   #toolbar {
     gap: 2px;
     padding: 5px 4px;
+  }
+}
+
+/* Upright screens under 640px tall have no room for the basket to grow: a
+   second row of treasures would push the touch buttons and the thumbstick
+   into the little map, Hills' options or a connection message. Here it keeps
+   to one row, scrolling sideways like the hotbar under it, and they stand
+   closer on it. Its padding keeps the pills' shadows inside it, where scrolling
+   would cut them off, and its margins take that room back. */
+@media (max-aspect-ratio: 3/4) and (max-height: 639px) {
+  .basket {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    max-width: calc(100% + 12px);
+    padding: 4px 6px 8px;
+    margin: -4px -6px -8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .basket button {
+    flex: none;
+  }
+
+  body:has(#basket:not(:empty)) #touch-buttons,
+  body:has(#basket:not(:empty)) #joystick {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 10px);
   }
 }
 
