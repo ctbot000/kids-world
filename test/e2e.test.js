@@ -311,9 +311,11 @@ test('the little map shows the island and what you build; it opens the big map a
   await page.browserContext().close();
 });
 
-test('the little map fits beside every other button, on screens of every shape', { skip }, async () => {
+test('the little map and the hotbar fit beside every other button, on screens of every shape', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
   await makeIsland(page, { online: false });
+  // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
+  // buttons above the hotbar. The shortest upright screens have no room for the map.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
@@ -324,9 +326,11 @@ test('the little map fits beside every other button, on screens of every shape',
     [360, 740, true],
     [844, 390, true],
     [375, 548, true],
+    [375, 500, true, false],
+    [320, 460, true, false],
     [568, 320, true],
   ];
-  for (const [width, height, touch] of screens) {
+  for (const [width, height, touch, map = true] of screens) {
     await page.setViewport({ width, height });
     const seen = await page.evaluate((touch) => {
       document.body.classList.toggle('touch', touch);
@@ -342,7 +346,25 @@ test('the little map fits beside every other button, on screens of every shape',
       const thumbs = [...document.querySelectorAll('#touch-buttons button')].map((b) => [b.offsetWidth, b.offsetHeight]);
       const thumb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch'));
       const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
-      return { covered, talk, want, thumbs, thumb, whole, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
+      // The hotbar makes room for the thumbstick and the jump buttons only where they are level
+      // with it, as on screens held sideways, and there it stays clear of them. Without them it
+      // is as wide as it gets.
+      const row = () => document.querySelector('#bottom .hotrow').getBoundingClientRect();
+      document.body.classList.remove('touch');
+      const free = row().width;
+      document.body.classList.toggle('touch', touch);
+      const hot = row();
+      const level = [...document.querySelectorAll('#hud button, #joystick')]
+        .filter((el) => !el.closest('#bottom'))
+        .map((el) => [el.id || el.className, el.getBoundingClientRect()])
+        .filter(([, r]) => r.width && r.top < hot.bottom && r.bottom > hot.top);
+      const hotbar = {
+        width: Math.round(hot.width),
+        level: level.map(([name]) => name),
+        clear: level.every(([, r]) => r.right <= hot.left || r.left >= hot.right),
+        squeezed: !level.length && hot.width < free - 0.5,
+      };
+      return { covered, talk, want, thumbs, thumb, whole, hotbar, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
     }, touch);
     const where = `${width}×${height}${touch ? ' touch' : ''}`;
     assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
@@ -353,11 +375,10 @@ test('the little map fits beside every other button, on screens of every shape',
     }
     // <body> has a touch class too, on touch screens, but it is no touch button.
     assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
-    assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
+    if (map) assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
+    else assert.equal(seen.size, 0, `on ${where} there is no room for the map`);
+    assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them`);
   }
-  // An upright screen this small has no room for it.
-  await page.setViewport({ width: 320, height: 460 });
-  assert.equal(await page.evaluate(() => document.getElementById('minimap').getBoundingClientRect().width), 0);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

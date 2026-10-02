@@ -1680,14 +1680,19 @@ kbd {
 }
 
 /* Touch screens held sideways: the hotbar stays between the thumbstick and
-   the jump buttons, scrolling if it has to, so nothing covers anything. */
-@media (min-aspect-ratio: 3/4) {
+   the jump buttons, scrolling if it has to, so nothing covers anything.
+   Sideways is anything not upright: (min-aspect-ratio: 3/4) would also match
+   exactly 3:4, like 375x500 and most iPads held upright, where the buttons
+   are above the hotbar. (aspect-ratio > 3/4) would do, but Safari before
+   16.4, as on iPads stuck on iPadOS 15, never matches it. */
+@media not all and (max-aspect-ratio: 3/4) {
   body.touch #bottom {
     max-width: calc(100vw - 340px);
   }
 }
 
-/* Tall, narrow screens (phones held upright): tools go in a row along the top. */
+/* Tall, narrow screens (phones held upright, and iPads, most of them exactly
+   3:4 that way): tools go in a row along the top. */
 @media (max-aspect-ratio: 3/4) {
   #toolbar {
     flex-direction: row;
