@@ -563,6 +563,10 @@ body.fullscreen .full-icon .leave {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  /* A width of its own: shrinking to fit, it would only get the half of the
+     screen right of left: 50%, and cut off the last slot on screens under
+     twice its width. */
+  width: max-content;
   max-width: calc(100vw - 20px);
 }
 

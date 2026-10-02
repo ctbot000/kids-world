@@ -315,11 +315,13 @@ test('the little map and the hotbar fit beside every other button, on screens of
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
   await makeIsland(page, { online: false });
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
-  // buttons above the hotbar. The shortest upright screens have no room for the map.
+  // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
+  // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
     [720, 480, false],
+    [1366, 1024, true],
     [1024, 768, true],
     [768, 1024, true],
     [390, 844, true],
@@ -348,7 +350,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
       const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
       // The hotbar makes room for the thumbstick and the jump buttons only where they are level
       // with it, as on screens held sideways, and there it stays clear of them. Without them it
-      // is as wide as it gets.
+      // is as wide as it gets: it shows whole, or it spans the screen to 10 px from either edge.
       const row = () => document.querySelector('#bottom .hotrow').getBoundingClientRect();
       document.body.classList.remove('touch');
       const free = row().width;
@@ -358,11 +360,17 @@ test('the little map and the hotbar fit beside every other button, on screens of
         .filter((el) => !el.closest('#bottom'))
         .map((el) => [el.id || el.className, el.getBoundingClientRect()])
         .filter(([, r]) => r.width && r.top < hot.bottom && r.bottom > hot.top);
+      const bar = document.getElementById('hotbar');
+      const scrolls = bar.scrollWidth > bar.clientWidth;
+      const edges = [hot.left, innerWidth - hot.right].map(Math.round);
       const hotbar = {
         width: Math.round(hot.width),
         level: level.map(([name]) => name),
         clear: level.every(([, r]) => r.right <= hot.left || r.left >= hot.right),
         squeezed: !level.length && hot.width < free - 0.5,
+        scrolls,
+        edges,
+        cut: !level.length && scrolls && Math.max(...edges) > 10,
       };
       return { covered, talk, want, thumbs, thumb, whole, hotbar, size: m.width, inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight };
     }, touch);
@@ -377,7 +385,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
     assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
     if (map) assert.ok(seen.inside && seen.size >= 90, `on ${where} the whole map is on screen: ${JSON.stringify(seen)}`);
     else assert.equal(seen.size, 0, `on ${where} there is no room for the map`);
-    assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them`);
+    assert.deepEqual(seen.hotbar, { ...seen.hotbar, clear: true, squeezed: false, cut: false }, `on ${where} the hotbar is narrower only beside buttons level with it, and clear of them; elsewhere it shows whole or spans the screen`);
   }
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
