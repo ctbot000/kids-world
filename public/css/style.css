@@ -1709,6 +1709,28 @@ kbd {
   }
 }
 
+/* Narrow and held sideways, under 400px tall: the thumbstick can reach up
+   into the message, at 568x320 even the short one. It is drawn under the
+   buttons and the message, so the message covers the top of its ring instead
+   of the ring crossing its words, as on the shortest upright screens. */
+@media (max-width: 760px) and (max-height: 399px) {
+  #joystick {
+    z-index: auto;
+  }
+}
+
+/* Under 340px tall, between the tool options and the basket (in one row here,
+   see below) there is no room for the longest message in two lines of the
+   usual type: at 568x320 it would reach 7px into the basket. Here it is
+   smaller, and clear of it. */
+@media (max-width: 760px) and (max-height: 339px) {
+  #topbar > .status {
+    font-size: 0.75rem;
+    line-height: 1.25;
+    border-width: 5px 10px;
+  }
+}
+
 /* Touch screens held sideways: the hotbar stays between the thumbstick and
    the jump buttons, scrolling if it has to, so nothing covers anything.
    Sideways is anything not upright: (min-aspect-ratio: 3/4) would also match
@@ -1831,11 +1853,15 @@ kbd {
 
 /* Upright screens under 640px tall have no room for the basket to grow: a
    second row of treasures would push the touch buttons and the thumbstick
-   into the little map, Hills' options or a connection message. Here it keeps
-   to one row, scrolling sideways like the hotbar under it, and they stand
-   closer on it. Its padding keeps the pills' shadows inside it, where scrolling
-   would cut them off, and its margins take that room back. */
-@media (max-aspect-ratio: 3/4) and (max-height: 639px) {
+   into the little map, Hills' options or a connection message. Nor do narrow
+   screens held sideways under 400px tall: between the thumbstick and the jump
+   buttons a full basket wraps into two rows, three at 568px wide, and grows
+   into a message under the tool options, or into the options themselves;
+   from 400px they fit under the longest message. Here it keeps to one row,
+   scrolling sideways like the hotbar under it. Its padding keeps the pills'
+   shadows inside it, where scrolling would cut them off, and its margins
+   take that room back. */
+@media (max-aspect-ratio: 3/4) and (max-height: 639px), (max-width: 760px) and (max-height: 399px) {
   .basket {
     flex-wrap: nowrap;
     justify-content: flex-start;
@@ -1849,7 +1875,10 @@ kbd {
   .basket button {
     flex: none;
   }
+}
 
+/* Upright, the touch buttons and the thumbstick stand closer on it. */
+@media (max-aspect-ratio: 3/4) and (max-height: 639px) {
   body:has(#basket:not(:empty)) #touch-buttons,
   body:has(#basket:not(:empty)) #joystick {
     bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--bottom-height, 60px) + 10px);

@@ -340,7 +340,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
   // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide.
   // Each screen is seen with an empty basket and with a full one, which wraps over the hotbar
-  // (in one row on the shortest upright screens): upright, the buttons rise above it.
+  // (in one row on the shortest upright screens): upright, the buttons rise above it. On narrow
+  // screens held sideways under 400 px tall it keeps to one row too, level with the thumbstick and
+  // the jump buttons: the treasures it scrolls out of sight reach under them, but are not drawn there.
   const screens = [
     [1280, 800, false],
     [1000, 600, false],
@@ -357,6 +359,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
     [375, 500, true, false],
     [320, 460, true, false],
     [568, 320, true],
+    [640, 360, true],
   ];
   for (const [width, height, touch, map = true] of screens) {
     await page.setViewport({ width, height });
@@ -371,15 +374,19 @@ test('the little map and the hotbar fit beside every other button, on screens of
           const r = el.getBoundingClientRect();
           if (r.width && r.height && meets(r, m)) covered.push(el.id || el.className);
         }
-        // Every kind of treasure shows in the basket, and nothing lies over any of them.
+        // Every kind of treasure shows in the basket, and nothing lies over any of them, where they
+        // show: a basket that scrolls cuts off what is out of sight at its edges.
         const pills = [...document.querySelectorAll('#basket button')];
         const kinds = Object.keys(window.kidsWorld.profile.basket).length;
+        const basket = document.getElementById('basket').getBoundingClientRect();
+        const shown = (r) => ({ left: Math.max(r.left, basket.left), right: Math.min(r.right, basket.right), top: Math.max(r.top, basket.top), bottom: Math.min(r.bottom, basket.bottom) });
         const treasures = [];
         for (const el of document.querySelectorAll('#hud button, #joystick')) {
           if (el.closest('#basket')) continue;
           const r = el.getBoundingClientRect();
           for (const pill of pills) {
-            if (r.width && meets(r, pill.getBoundingClientRect())) treasures.push(`${el.id || el.className} on ${pill.title.split(':')[0]}`);
+            const p = shown(pill.getBoundingClientRect());
+            if (r.width && p.left < p.right && p.top < p.bottom && meets(r, p)) treasures.push(`${el.id || el.className} on ${pill.title.split(':')[0]}`);
           }
         }
         const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
@@ -559,6 +566,8 @@ test("every tool's options stay clear of the buttons and the map beside them, an
   const page = await openPlayer(base + '?p2p=1', { name: 'Busy Mole' });
   await makeIsland(page, { online: false });
   // Hills shows two groups of options, which are too wide for one row beside the talk buttons on a phone held upright.
+  // Sideways, the options are under the row of tools, and a full basket, between the thumbstick
+  // and the jump buttons, is narrow: at 568×320 it would wrap up into Hills' options.
   const screens = [
     [320, 568, true],
     [320, 460, true],
@@ -568,6 +577,8 @@ test("every tool's options stay clear of the buttons and the map beside them, an
     [390, 844, true],
     [430, 932, true],
     [768, 1024, true],
+    [568, 320, true],
+    [640, 360, true],
     [844, 390, true],
     [800, 600, false],
     [1280, 800, false],
@@ -582,7 +593,7 @@ test("every tool's options stay clear of the buttons and the map beside them, an
           (tool) => {
             window.kidsWorld.game.setTool(tool);
             const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-            const others = [...document.querySelectorAll('#talk button, #minimap, #touch-buttons button, #joystick')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
+            const others = [...document.querySelectorAll('#talk button, #minimap, #touch-buttons button, #joystick, #basket')].map((el) => el.getBoundingClientRect()).filter((r) => r.width);
             const pills = [...document.querySelectorAll('#toolopts .pill')];
             const last = document.getElementById('toolopts').lastElementChild.getBoundingClientRect();
             return {
@@ -604,7 +615,7 @@ test("every tool's options stay clear of the buttons and the map beside them, an
         );
         const where = `${width}×${height} with ${tool}${full ? ' and a full basket' : ''}: ${JSON.stringify(seen)}`;
         assert.ok(seen.pills > 0, `on ${where} the tool has options`);
-        assert.deepEqual(seen.covered, [], `on ${where} no option is under the talk buttons, the map, the touch buttons or the thumbstick`);
+        assert.deepEqual(seen.covered, [], `on ${where} no option is under the talk buttons, the map, the touch buttons, the thumbstick or the basket`);
         assert.deepEqual(seen.blocked, [], `on ${where} every option can be tapped`);
         assert.equal(seen.beside, 'world', `on ${where} a touch beside the options reaches the island`);
       }
@@ -718,13 +729,18 @@ test('the whole island code shows beside the top buttons, and a long connection 
   // the top of the thumbstick's ring: there it may cover the thumbstick, drawn over it. 1000×600
   // is too short for the column of tools under the top bar. A full basket lifts the touch buttons
   // and the thumbstick towards the message on upright touch screens, and the shortest have the
-  // least room for that.
+  // least room for that. Held sideways, the message goes under the tool options on a phone; under
+  // 400 px tall the basket keeps to one row below it, and the thumbstick, drawn under the message
+  // there, may reach up into it (at 568×320 even the short one does).
   for (const [width, height, inTopBar, coverable = [], full = false] of [
     [320, 460, false, ['joystick']],
     [320, 460, false, ['joystick'], true],
     [375, 500, false, [], true],
     [320, 568, false],
     [360, 640, false],
+    [568, 320, false, ['joystick']],
+    [568, 320, false, ['joystick'], true],
+    [640, 360, false, ['joystick'], true],
     [720, 480, false],
     [1000, 600, true],
     [1280, 800, true],
@@ -793,7 +809,8 @@ test('the whole island code shows beside the top buttons, and a long connection 
             status.style.pointerEvents = el.style.pointerEvents = '';
             return status.contains(hit);
           };
-          const name = ([el]) => el.id || el.className;
+          // A treasure in the basket goes by its name.
+          const name = ([el]) => el.id || el.className || el.title.split(':')[0];
           return {
             calm,
             busy,
