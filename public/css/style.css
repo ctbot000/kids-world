@@ -1631,6 +1631,38 @@ kbd {
   .opt-group {
     flex-direction: row;
   }
+
+  /* Halfway down the right side, the talk buttons reach into the touch
+     buttons' box below 606px (by 22.5px at 1000x561), and the box takes the
+     touches on the bottom of the emotes button. The touch buttons go down
+     into the corner instead, as on short screens: the hotbar held sideways
+     already stops short of them there. */
+  body.touch #touch-buttons {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 10px);
+  }
+}
+
+/* Touch screens a little taller still: the thumbstick in the bottom-left
+   corner reaches up into the bottom of the column below 758px (by 7px at
+   1133x744, an iPad mini held sideways, and 29px at 1280x700), so the tools go
+   in the row there too. */
+@media (min-width: 761px) and (min-height: 630px) and (max-height: 757px) {
+  body.touch #toolbar {
+    flex-direction: row;
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px);
+    transform: none;
+  }
+
+  body.touch #toolopts {
+    top: calc(max(10px, env(safe-area-inset-top)) + 58px + var(--tool) + 26px);
+    left: max(10px, env(safe-area-inset-left));
+    transform: none;
+    flex-direction: row;
+  }
+
+  body.touch .opt-group {
+    flex-direction: row;
+  }
 }
 
 /* Short screens (phones held sideways): tools in a row under the island name. */

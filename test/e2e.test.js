@@ -377,7 +377,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
   // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
-  // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide.
+  // 800×600 and 880×600 are too short for the column of tools beside a hotbar that wide. On touch
+  // screens, 1133×744 (an iPad mini held sideways) and 1280×700 are too short for it above the
+  // thumbstick, and 1000×561 for the talk buttons, halfway down the right side, above the touch buttons.
   // Each screen is seen with an empty basket and with a full one, which wraps over the hotbar
   // (in one row on the shortest upright screens): upright, the buttons rise above it. On narrow
   // screens held sideways under 400 px tall it keeps to one row too, level with the thumbstick and
@@ -392,6 +394,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
     [720, 480, false],
     [1366, 1024, true],
     [1024, 768, true],
+    [1133, 744, true],
+    [1280, 700, true],
+    [1000, 561, true],
     [768, 1024, true],
     [390, 844, true],
     [360, 740, true],
@@ -414,6 +419,15 @@ test('the little map and the hotbar fit beside every other button, on screens of
           if (el.closest('#minimap')) continue;
           const r = el.getBoundingClientRect();
           if (r.width && r.height && meets(r, m)) covered.push(el.id || el.className);
+        }
+        // The tools, the talk buttons, the touch buttons and the thumbstick keep clear of each other.
+        // Each of the first three takes a touch anywhere in its box, gaps included, so where two boxes
+        // meet, the one later in the page takes the other's touches; the thumbstick's ring is drawn
+        // over them, and a thumb on it there gets the box under it instead.
+        const boxes = ['toolbar', 'talk', 'touch-buttons', 'joystick'].map((id) => [id, document.getElementById(id).getBoundingClientRect()]).filter(([, r]) => r.width);
+        const crowded = [];
+        for (const [i, [a, ra]] of boxes.entries()) {
+          for (const [b, rb] of boxes.slice(i + 1)) if (meets(ra, rb)) crowded.push(`${a} and ${b}`);
         }
         // Every kind of treasure shows in the basket, and nothing lies over any of them, where they
         // show: a basket that scrolls cuts off what is out of sight at its edges.
@@ -461,6 +475,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
         };
         return {
           covered,
+          crowded,
           pills: pills.length,
           kinds,
           treasures,
@@ -478,6 +493,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
       assert.equal(seen.pills, full ? seen.kinds : 0, `on ${where} the basket shows every kind of treasure in it`);
       assert.deepEqual(seen.treasures, [], `on ${where} neither a button nor the thumbstick covers a treasure in the basket`);
       assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
+      assert.deepEqual(seen.crowded, [], `on ${where} the tools, the talk buttons, the touch buttons and the thumbstick are clear of each other`);
       // The map's place beside the talk buttons is worked out from --talk.
       assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
       if (touch) {
