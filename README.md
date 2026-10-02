@@ -97,6 +97,11 @@ npm test
 - Server: static files and path traversal, the WebSocket handshake and framing, and islands shared by real WebSocket clients.
 - Full screen: the standard calls, Safari's older prefixed ones, and iPhones, which can only get it from the Home Screen.
 - End to end in headless Chrome: playing alone with real clicks, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, and an island saved and opened again after a reload. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
+- CI has no mouse, so there the game is in touch mode, with the thumbstick and the touch buttons on screen; on a computer with a mouse it is not. To run the end-to-end tests the way CI does, which matters for anything that moves the buttons:
+
+  ```bash
+  E2E_NO_MOUSE=1 npm test
+  ```
 
 ## Project layout
 
