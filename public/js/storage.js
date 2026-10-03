@@ -82,27 +82,29 @@ export function loadFor(player, key, fallback) {
 
 // ---------------------------------------------------------------- logins
 
-// Who is logged in on this device: { player, token }, or null for the guest.
+// Who is logged in on this device: { player, token, username }, or null for
+// the guest. (Logins from before usernames have none here until the keeper
+// says it.)
 export function loadWho() {
   const who = read(`${PREFIX}who`, null);
-  return typeof who?.player === 'string' && typeof who.token === 'string' ? who : null;
+  return typeof who?.player === 'string' && typeof who.token === 'string' ? { ...who, username: typeof who.username === 'string' ? who.username : '' } : null;
 }
 
 export function saveWho(who) {
-  if (who) write(`${PREFIX}who`, { player: who.player, token: who.token });
+  if (who) write(`${PREFIX}who`, { player: who.player, token: who.token, username: who.username ?? '' });
   else erase(`${PREFIX}who`);
 }
 
 // The players who have logged in on this device, to pick from next time:
-// [{ player, name, look }], the latest first.
+// [{ player, username, name, look }], the latest first.
 export function knownPlayers() {
   const list = read(`${PREFIX}players`, []);
-  return Array.isArray(list) ? list.filter((p) => typeof p?.player === 'string' && typeof p.name === 'string') : [];
+  return Array.isArray(list) ? list.filter((p) => typeof p?.player === 'string' && (typeof p.username === 'string' || typeof p.name === 'string')) : [];
 }
 
-export function notePlayer({ player, name, look }) {
+export function notePlayer({ player, username, name, look }) {
   const list = knownPlayers().filter((p) => p.player !== player);
-  list.unshift({ player, name, look });
+  list.unshift({ player, username: username ?? '', name, look });
   write(`${PREFIX}players`, list.slice(0, 8));
 }
 

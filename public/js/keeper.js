@@ -32,7 +32,8 @@ const RESYNC_MS = 2 * 60000;
 
 // Why the keeper could not do something you asked: asleep (not online),
 // refused (someone else has its id), gone (your login was removed), none (no
-// keeper), or what it said: wrong (password), wait, weak (password), bad, full.
+// keeper), or what it said: wrong (username or password), wait, weak
+// (password), username (not one), taken (username), bad, full.
 export class KeeperProblem extends Error {
   constructor(code, text = '', extra = {}) {
     super(text || code);
@@ -49,7 +50,7 @@ function ownerToken(save) {
 }
 
 export class KeeperClient extends EventTarget {
-  // login: { player, token } when logged in on this device.
+  // login: { player, token, username? } when logged in on this device.
   constructor({ profile, login = null, configUrl = 'keeper.json' }) {
     super();
     this.profile = profile;
@@ -277,16 +278,16 @@ export class KeeperClient extends EventTarget {
     });
   }
 
-  // Logs in as the player with this name and password. Resolves with
-  // { player, token, profile }.
-  logIn(name, password) {
-    return this.request({ t: 'login', name, password }, { halt: true });
+  // Logs in with this username and password. Resolves with { player, token,
+  // username, profile }.
+  logIn(username, password) {
+    return this.request({ t: 'login', username, password }, { halt: true });
   }
 
-  // Makes a login for you, or, logged in, gives it a new password. Resolves
-  // with { player, token? }.
-  async makeLogin(password) {
-    const reply = await this.request({ t: 'make-login', password, profile: keptProfile(this.profile.data) }, { halt: !this.login });
+  // Makes a login for you with this username, or, logged in, gives yours a
+  // new password (no username then). Resolves with { player, token?, username }.
+  async makeLogin(password, username = null) {
+    const reply = await this.request({ t: 'make-login', password, ...(username === null ? {} : { username }), profile: keptProfile(this.profile.data) }, { halt: !this.login });
     this.needsPassword = false;
     return reply;
   }
@@ -472,6 +473,10 @@ export class KeeperClient extends EventTarget {
       }
       clearTimeout(this.timer);
       this.timer = 0;
+      if (this.login && typeof msg.username === 'string' && msg.username !== this.login.username) {
+        this.login = { ...this.login, username: msg.username };
+        this.emit('username');
+      }
       if (msg.needsPassword && !this.needsPassword) {
         this.needsPassword = true;
         this.emit('needs-password');

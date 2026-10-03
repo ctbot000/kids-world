@@ -1,5 +1,6 @@
-// Logins at the keeper: making one with a name and a password, logging
-// another device in with them, the wait after wrong passwords, a player's
+// Logins at the keeper: making one with a username and a password, logging
+// another device in with them, usernames of any kind (one per login, in any
+// case or width), the wait after wrong passwords, a player's
 // islands and profile coming back to each of their devices, a device's copies
 // from before it logged in becoming the player's, logins made with secret
 // pictures (before passwords) getting one, the protocol (driven without
@@ -12,7 +13,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
-import { addProgress, KEEPER_VERSION, mergeProfiles, passwordProblem, planSync, verifySignature, KEY_ALGORITHM } from '../public/js/shared/keeper.js';
+import { addProgress, KEEPER_VERSION, mergeProfiles, passwordProblem, planSync, usernameKey, usernameProblem, verifySignature, KEY_ALGORITHM } from '../public/js/shared/keeper.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -47,79 +48,125 @@ function clock() {
 
 const refused = (promise, code) => assert.rejects(promise, (e) => e instanceof KeepError && e.code === code);
 
-test('a login is made with your name and a password, and logs your other devices in', async () => {
+test('a login is made with a username and a password, and logs your other devices in', async () => {
   const store = await new KeeperStore(await tempDir()).open();
   const tablet = KeeperStore.deviceId(TABLET);
-  // A login goes by your name, so the keeper has to know it first.
-  await refused(store.makeLogin(tablet, PASSWORD), 'bad');
-  const made = await store.makeLogin(tablet, PASSWORD, { name: 'Sunny Otter', look: { animal: 'fox' }, stickers: { 'first-block': 5 } });
+  // No username (nor, from a page from before usernames, a made-up name): no login.
+  await refused(store.makeLogin(tablet, PASSWORD), 'username');
+  const profile = { name: 'Sunny Otter', look: { animal: 'fox' }, stickers: { 'first-block': 5 } };
+  const made = await store.makeLogin(tablet, PASSWORD, profile, { username: '  Otter   Fan 7 ' });
   assert.equal(made.player, tablet, 'the folder the tablet sent its copies to is the player now');
   assert.match(made.token, /^[0-9a-f]{32}$/);
-  assert.equal(made.name, 'Sunny Otter');
-  // Too short, or just the name, is no password.
+  assert.equal(made.username, 'Otter Fan 7', 'as typed, the spaces tidied');
+  // Too short, or just the username, is no password.
   await refused(store.makeLogin(tablet, 'abc12'), 'weak');
-  await refused(store.makeLogin(tablet, 'sunny-otter'), 'weak');
+  await refused(store.makeLogin(tablet, 'otter_fan_7'), 'weak');
   await refused(store.makeLogin(tablet, ['rocket']), 'bad');
 
-  // The phone logs in with the name and the password, and gets a token of its own.
-  const phone = await store.login('Sunny Otter', PASSWORD);
+  // The phone logs in with the username, in any case, and the password, and gets a token of its own.
+  const phone = await store.login('OTTER FAN 7', PASSWORD);
   assert.equal(phone.player, tablet);
+  assert.equal(phone.username, 'Otter Fan 7');
   assert.notEqual(phone.token, made.token);
-  assert.equal(phone.profile.name, 'Sunny Otter');
+  assert.equal(phone.profile.name, 'Sunny Otter', 'in games, still the made-up name');
   assert.equal(phone.profile.stickers['first-block'], 5);
-  // On an island, a second Sunny Otter is "Sunny Otter 2": the login is the same.
-  assert.equal((await store.login('Sunny Otter 2', PASSWORD)).player, tablet);
   assert.equal(await store.checkSession(tablet, phone.token), true);
   assert.equal(await store.checkSession(tablet, made.token), true);
 
-  // A wrong password, and a name with no login, get the same answer.
-  await refused(store.login('Sunny Otter', OTHER_PASSWORD), 'wrong');
-  await refused(store.login('Happy Panda', PASSWORD), 'wrong');
-  await refused(store.login('Not A Name', PASSWORD), 'wrong');
+  // A wrong password, and a username with no login, get the same answer.
+  await refused(store.login('Otter Fan 7', OTHER_PASSWORD), 'wrong');
+  await refused(store.login('Sunny Otter', PASSWORD), 'wrong');
+  await refused(store.login('', PASSWORD), 'wrong');
 
   // Neither the password nor the tokens are kept as they are, and the admin pages see neither.
   const kept = await readFile(join(store.dir, 'devices', tablet, 'login.json'), 'utf8');
   for (const secret of [PASSWORD, made.token, phone.token]) assert.ok(!kept.includes(secret), `${secret} is not in login.json`);
   const [device] = await store.devices();
-  assert.deepEqual(Object.keys(device.login).sort(), ['changed', 'devices', 'made', 'password']);
+  assert.deepEqual(Object.keys(device.login).sort(), ['changed', 'devices', 'made', 'password', 'username']);
+  assert.equal(device.login.username, 'Otter Fan 7');
   assert.equal(device.login.password, true);
-  assert.equal(device.login.devices, 3, 'the tablet, the phone, and the login as Sunny Otter 2');
+  assert.equal(device.login.devices, 2);
 
   // Logging out forgets that device's token only.
   assert.equal(await store.logout(tablet, phone.token), true);
   assert.equal(await store.checkSession(tablet, phone.token), false);
   assert.equal(await store.checkSession(tablet, made.token), true);
 
-  // A new password: the old one stops working, the devices logged in stay so.
+  // A new password: the old one stops working, the username and the devices logged in stay.
   await store.makeLogin(tablet, OTHER_PASSWORD, null, { session: false });
-  await refused(store.login('Sunny Otter', PASSWORD), 'wrong');
-  assert.equal((await store.login('Sunny Otter', OTHER_PASSWORD)).player, tablet);
+  await refused(store.login('Otter Fan 7', PASSWORD), 'wrong');
+  assert.equal((await store.login('otter fan 7', OTHER_PASSWORD)).player, tablet);
   assert.equal(await store.checkSession(tablet, made.token), true);
 
   // Removed (from the admin pages), every device is logged out.
   assert.equal(await store.removeLogin(tablet), true);
   assert.equal(await store.checkSession(tablet, made.token), false);
-  await refused(store.login('Sunny Otter', OTHER_PASSWORD), 'wrong');
+  await refused(store.login('Otter Fan 7', OTHER_PASSWORD), 'wrong');
   assert.equal((await store.devices())[0].login, null);
 });
 
-test('wrong passwords make that name wait, and players who share a name each have their own login', async () => {
+test('a username can be any letters, numbers and signs, once: in any case or width it is taken', async () => {
+  const store = await new KeeperStore(await tempDir()).open();
+  const tablet = KeeperStore.deviceId(TABLET);
+  const sister = KeeperStore.deviceId(SISTER);
+  await store.makeLogin(tablet, PASSWORD, { name: 'Happy Panda' }, { username: '민지 the Bunny 🐰' });
+  assert.equal((await store.login('민지  THE bunny 🐰', PASSWORD)).player, tablet);
+  // The same made-up name is fine; the same username, in any case or width, is not.
+  await refused(store.makeLogin(sister, OTHER_PASSWORD, { name: 'Happy Panda' }, { username: '민지 The Bunny 🐰' }), 'taken');
+  await store.makeLogin(sister, OTHER_PASSWORD, { name: 'Happy Panda' }, { username: 'ＨＡＮＡ' });
+  await refused(store.makeLogin(KeeperStore.deviceId(PHONE), PASSWORD, { name: 'Brave Fox' }, { username: 'hana' }), 'taken');
+  assert.equal((await store.login('Hana', OTHER_PASSWORD)).player, sister);
+  // Too short, too long, or with something invisible in it that could make two look alike.
+  assert.equal(usernameProblem('j'), 'short');
+  assert.equal(usernameProblem('x'.repeat(33)), 'long');
+  assert.equal(usernameProblem('han​a'), 'odd');
+  assert.equal(usernameProblem('🐰🐰'), '');
+  assert.equal(usernameKey('  Ｍinji   KIM '), 'minji kim');
+  await refused(store.makeLogin(KeeperStore.deviceId(PHONE), PASSWORD, { name: 'Brave Fox' }, { username: 'han​a' }), 'username');
+});
+
+test('wrong passwords make that username wait, for a while and for it only', async () => {
   const time = clock();
   const store = await new KeeperStore(await tempDir(), { now: time.now }).open();
   const tablet = KeeperStore.deviceId(TABLET);
-  const sister = KeeperStore.deviceId(SISTER);
-  await store.makeLogin(tablet, PASSWORD, { name: 'Happy Panda' });
-  await store.makeLogin(sister, OTHER_PASSWORD, { name: 'Happy Panda' });
-  assert.equal((await store.login('Happy Panda', PASSWORD)).player, tablet);
-  assert.equal((await store.login('Happy Panda', OTHER_PASSWORD)).player, sister);
-
-  for (let i = 0; i < 5; i++) await refused(store.login('Happy Panda', 'moonmoonmoon'), 'wrong');
-  // Now even the right password waits, for that name only.
-  await assert.rejects(store.login('Happy Panda', PASSWORD), (e) => e.code === 'wait' && e.extra.wait > 0 && e.extra.wait <= 10 * 60000);
-  await store.makeLogin(KeeperStore.deviceId(PHONE), PASSWORD, { name: 'Brave Fox' });
-  assert.equal((await store.login('Brave Fox', PASSWORD)).player, KeeperStore.deviceId(PHONE));
+  await store.makeLogin(tablet, PASSWORD, { name: 'Happy Panda' }, { username: 'panda' });
+  for (let i = 0; i < 5; i++) await refused(store.login('Panda', 'moonmoonmoon'), 'wrong');
+  // Now even the right password waits, for that username only (in any case).
+  await assert.rejects(store.login('PANDA', PASSWORD), (e) => e.code === 'wait' && e.extra.wait > 0 && e.extra.wait <= 10 * 60000);
+  await store.makeLogin(KeeperStore.deviceId(PHONE), PASSWORD, { name: 'Brave Fox' }, { username: 'fox' });
+  assert.equal((await store.login('fox', PASSWORD)).player, KeeperStore.deviceId(PHONE));
   time.advance(10 * 60000 + 1);
-  assert.equal((await store.login('Happy Panda', PASSWORD)).player, tablet);
+  assert.equal((await store.login('panda', PASSWORD)).player, tablet);
+});
+
+test('logins from before usernames get their made-up name as one, and two of one name keep it both', async () => {
+  const dir = await tempDir();
+  const store = await new KeeperStore(dir).open();
+  const tablet = KeeperStore.deviceId(TABLET);
+  const sister = KeeperStore.deviceId(SISTER);
+  // Made as they were: by the made-up name, which two players may share.
+  for (const [device, password] of [
+    [tablet, PASSWORD],
+    [sister, OTHER_PASSWORD],
+  ]) {
+    await store.makeLogin(device, password, { name: 'Happy Panda' }, { username: `x${device}` });
+    const file = join(dir, 'devices', device, 'login.json');
+    const { username, ...old } = JSON.parse(await readFile(file, 'utf8'));
+    assert.ok(username);
+    await store.write(file, JSON.stringify(old));
+  }
+  const opened = await new KeeperStore(dir).open();
+  assert.deepEqual(
+    (await opened.devices()).map((d) => d.login.username),
+    ['Happy Panda', 'Happy Panda'],
+  );
+  // Told apart by the password, as before.
+  assert.equal((await opened.login('Happy Panda', PASSWORD)).player, tablet);
+  assert.equal((await opened.login('happy panda', OTHER_PASSWORD)).player, sister);
+  // A new login cannot have it; each of the two can still get a new password.
+  await refused(opened.makeLogin(KeeperStore.deviceId(PHONE), PASSWORD, { name: 'Brave Fox' }, { username: 'Happy Panda' }), 'taken');
+  await opened.makeLogin(sister, 'a-new-password', null, { session: false });
+  assert.equal((await opened.login('Happy Panda', 'a-new-password')).player, sister);
 });
 
 test('a password is the same however a keyboard spells its letters, and has to be more than the name', async () => {
@@ -269,9 +316,10 @@ test('the protocol: no secret before the keeper has signed, then logging in, bri
   assert.equal((await tablet.say({ t: 'island', id: ISLAND, save: island(B.GLASS) })).t, 'kept');
   // Not logged in, it can send, but not take anything back.
   assert.equal((await tablet.say({ t: 'list' })).code, 'bad');
-  const made = await tablet.say({ t: 'make-login', password: PASSWORD, profile: { name: 'Sunny Otter', look: { animal: 'fox' } } });
+  const made = await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter', look: { animal: 'fox' } } });
   assert.equal(made.t, 'login');
   assert.equal(made.player, KeeperStore.deviceId(TABLET));
+  assert.equal(made.username, 'Otter Fan');
   assert.match(made.token, /^[0-9a-f]{32}$/);
 
   // The phone, played on before as Happy Panda, with an island of its own.
@@ -281,9 +329,10 @@ test('the protocol: no secret before the keeper has signed, then logging in, bri
   await phone.say({ t: 'profile', profile: { name: 'Happy Panda', stickers: { swimmer: 7 }, stats: { swims: 3 } } });
   await phone.say({ t: 'island', id: 'ffffffffffff', save: island(B.PLANKS) });
   // A wrong password, then the right one; then it has the tablet's island.
-  assert.equal((await phone.say({ t: 'login', name: 'Sunny Otter', password: OTHER_PASSWORD })).code, 'wrong');
-  const login = await phone.say({ t: 'login', name: 'Sunny Otter', password: PASSWORD });
+  assert.equal((await phone.say({ t: 'login', username: 'otter fan', password: OTHER_PASSWORD })).code, 'wrong');
+  const login = await phone.say({ t: 'login', username: 'otter fan', password: PASSWORD });
   assert.equal(login.player, made.player);
+  assert.equal(login.username, 'Otter Fan');
   assert.equal(login.profile.name, 'Sunny Otter');
   const list = await phone.say({ t: 'list' });
   assert.deepEqual(
@@ -309,11 +358,18 @@ test('the protocol: no secret before the keeper has signed, then logging in, bri
   assert.equal(World.decode(save.meta, save.blocks).get(10, 30, 10), B.STONE);
   assert.deepEqual(await phone.say({ t: 'logout' }), { t: 'kept', what: 'logout' });
   // A page still open from before passwords is told to reload, and that is not a wrong try.
-  const old = await phone.say({ t: 'login', name: 'Sunny Otter', secret: ['moon', 'moon', 'star', 'dog'] });
+  const wrongBefore = store.wrong.length;
+  const old = await phone.say({ t: 'login', name: 'Otter Fan', secret: ['moon', 'moon', 'star', 'dog'] });
   assert.equal(old.code, 'old');
   assert.match(old.text, /Reload/);
-  assert.equal(store.tries.has('Sunny Otter'), false);
+  assert.equal(store.wrong.length, wrongBefore);
   assert.equal((await phone.say({ t: 'list' })).code, 'bad', 'logged out');
+  // A page from before usernames sends what it calls the name.
+  const older = await page(keeper);
+  await older.say({ t: 'hello', v: KEEPER_VERSION, nonce: '5c'.repeat(16) });
+  await older.say({ t: 'me', device: PHONE });
+  assert.equal((await older.say({ t: 'login', name: 'Otter Fan', password: PASSWORD })).player, made.player);
+  await older.say({ t: 'logout' });
 
   // Next time, the phone comes back with its token: gone now, it is told so.
   const again = await page(keeper);
@@ -322,7 +378,7 @@ test('the protocol: no secret before the keeper has signed, then logging in, bri
   // The tablet's token still works.
   const back = await page(keeper);
   await back.say({ t: 'hello', v: KEEPER_VERSION, nonce: '07'.repeat(16) });
-  assert.deepEqual(await back.say({ t: 'me', device: TABLET, login: { player: made.player, token: made.token } }), { t: 'me', player: made.player });
+  assert.deepEqual(await back.say({ t: 'me', device: TABLET, login: { player: made.player, token: made.token } }), { t: 'me', player: made.player, username: 'Otter Fan' });
 
   // Anything but a hello first, or anything but who it is next, and the page is dropped.
   const rude = await page(keeper);
@@ -365,12 +421,13 @@ test('a login made with secret pictures, before passwords, gets one from a devic
 
   const tablet = await page(keeper);
   await tablet.say({ t: 'hello', v: KEEPER_VERSION, nonce: '3a'.repeat(16) });
-  assert.deepEqual(await tablet.say({ t: 'me', device: TABLET, login: { player, token } }), { t: 'me', player, needsPassword: true });
-  assert.deepEqual(await tablet.say({ t: 'make-login', password: PASSWORD }), { t: 'login', player });
+  assert.deepEqual(await tablet.say({ t: 'me', device: TABLET, login: { player, token } }), { t: 'me', player, username: '', needsPassword: true });
+  // From before usernames too: the made-up name becomes it.
+  assert.deepEqual(await tablet.say({ t: 'make-login', password: PASSWORD }), { t: 'login', player, username: 'Sunny Otter' });
   assert.equal((await store.login('Sunny Otter', PASSWORD)).player, player);
   const again = await page(keeper);
   await again.say({ t: 'hello', v: KEEPER_VERSION, nonce: '4b'.repeat(16) });
-  assert.deepEqual(await again.say({ t: 'me', device: TABLET, login: { player, token } }), { t: 'me', player }, 'still logged in, with a password now');
+  assert.deepEqual(await again.say({ t: 'me', device: TABLET, login: { player, token } }), { t: 'me', player, username: 'Sunny Otter' }, 'still logged in, with a password now');
 });
 
 test('the admin pages give a player a new password, take their login away, or move a gone device’s copies into it', async () => {
@@ -386,8 +443,17 @@ test('the admin pages give a player a new password, take their login away, or mo
     assert.equal((await fetch(url, { method: 'PUT', headers, body: JSON.stringify({ password: 'nope' }) })).status, 400);
     assert.equal((await fetch(url, { method: 'PUT', headers, body: JSON.stringify({ password: OTHER_PASSWORD }) })).status, 200);
     assert.equal((await store.login('Sunny Otter', OTHER_PASSWORD)).player, device);
+    // A login for a player with none: a username too, not one taken.
+    const other = KeeperStore.deviceId(PHONE);
+    await store.keepProfileIn(other, { name: 'Brave Fox' });
+    const otherUrl = `http://127.0.0.1:${server.address().port}/admin/api/devices/${other}/login`;
+    const taken = await fetch(otherUrl, { method: 'PUT', headers, body: JSON.stringify({ username: 'SUNNY OTTER', password: PASSWORD }) });
+    assert.equal(taken.status, 400);
+    assert.match((await taken.json()).error, /has that username/);
+    assert.equal((await fetch(otherUrl, { method: 'PUT', headers, body: JSON.stringify({ username: 'fox kid', password: PASSWORD }) })).status, 200);
+    assert.equal((await store.login('Fox Kid', PASSWORD)).player, other);
     const state = await (await fetch(`http://127.0.0.1:${server.address().port}/admin/api/state`)).json();
-    assert.equal(state.devices[0].login.devices, 2);
+    assert.equal(state.devices.find((d) => d.id === device).login.devices, 2);
     assert.ok(!JSON.stringify(state).includes('hash'), 'never the hashes');
 
     // The copies of an old tablet, which never logged in, into the login.

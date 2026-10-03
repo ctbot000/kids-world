@@ -7,8 +7,8 @@ import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
-import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from './shared/keeper.js';
-import { ANIMALS, EMOTES, FUR_COLORS, HATS, NAME_ANIMALS, NAME_WORDS, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
+import { ANIMALS, EMOTES, FUR_COLORS, HATS, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
@@ -66,7 +66,14 @@ const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
 const PASSWORD_HELP = {
   short: `Make your password at least ${PASSWORD_MIN} letters or numbers long.`,
   long: `That password is very long! At most ${PASSWORD_MAX} letters or numbers, please.`,
-  name: 'Pick a password that is not your name.',
+  name: 'Pick a password that is not your username.',
+};
+
+// What is wrong with a username, in a few words (see usernameProblem).
+const USERNAME_HELP = {
+  short: `Make your username at least ${USERNAME_MIN} letters long.`,
+  long: `That username is very long! At most ${USERNAME_MAX} letters, please.`,
+  odd: 'Use only letters, numbers and signs you can see.',
 };
 
 // "3 islands, 12 stickers and 5 treasures", leaving out what there is none of.
@@ -84,9 +91,13 @@ function things({ islands, stickers, treasures }) {
 function loginTrouble(error) {
   switch (error?.code) {
     case 'wrong':
-      return ['🙈', 'That name and password do not go together. Try again!'];
+      return ['🙈', 'That username and password do not go together. Try again!'];
     case 'weak':
       return ['🙈', PASSWORD_HELP[error.problem] ?? error.message];
+    case 'username':
+      return ['🙈', USERNAME_HELP[error.problem] ?? error.message];
+    case 'taken':
+      return ['🙈', 'Someone has that username already. Try another one!'];
     case 'wait': {
       const minutes = Math.max(1, Math.ceil((error.wait ?? 600000) / 60000));
       return ['⏳', `That was a lot of tries! Wait ${minutes === 1 ? 'a minute' : `${minutes} minutes`}, then try again.`];
@@ -728,6 +739,14 @@ export class UI {
 
   // ------------------------------------------------ logins
 
+  // A box for your username.
+  usernameBox(value = '') {
+    const input = h('input', { type: 'text', class: 'text-input', autocomplete: 'username', autocapitalize: 'none', maxLength: USERNAME_MAX * 3, value, 'aria-label': 'Username' });
+    input.spellcheck = false;
+    input.setAttribute('autocorrect', 'off');
+    return { el: h('label', { class: 'password-box' }, h('span', {}, 'Username'), h('span', { class: 'row' }, input)), input };
+  }
+
   // A password box, with 👁️ to see what you typed.
   passwordBox(label, autocomplete) {
     const input = h('input', { type: 'password', class: 'text-input', autocomplete, autocapitalize: 'off', maxLength: PASSWORD_MAX * 2, 'aria-label': label });
@@ -761,13 +780,11 @@ export class UI {
     return h('input', { type: 'text', class: 'visually-hidden', autocomplete: 'username', value: name, readOnly: true, tabIndex: -1, 'aria-hidden': 'true' });
   }
 
-  // Logging in: who you are (one of the players who logged in on this device
-  // before, or your name a word at a time), then your password. Then, if
-  // this device's guest has things, whether they are yours to bring along.
+  // Logging in: your username (or one of the players who logged in on this
+  // device before) and your password. Then, if this device's guest has
+  // things, whether they are yours to bring along.
   loginDialog() {
     const login = this.handlers.login;
-    let first = '';
-    let second = '';
     let asking = false;
     this.openModal(
       (root) => {
@@ -778,29 +795,10 @@ export class UI {
           h('span', { class: 'muted' }, 'No login yet?'),
           h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '✨ Make my login'),
         );
-        const words = (list, pick) =>
-          h(
-            'div',
-            { class: 'word-grid' },
-            ...[...list].sort().map((word) =>
-              h(
-                'button',
-                {
-                  class: 'chip word',
-                  type: 'button',
-                  onclick: () => {
-                    this.sound.play('ui');
-                    pick(word);
-                    draw();
-                  },
-                },
-                word,
-              ),
-            ),
-          );
         // Logged in: what this device's guest has comes along, if it is yours.
-        const welcome = (name, reply) => {
+        const welcome = (reply) => {
           const guest = login.guest();
+          const name = reply.profile?.name || reply.username;
           const note = this.loginNote();
           const answer = async (adopt) => {
             for (const b of buttons) b.disabled = true;
@@ -831,78 +829,60 @@ export class UI {
             h('div', { class: 'login-answers' }, ...buttons),
           );
         };
-        const draw = () => {
-          const name = [first, second].filter(Boolean).join(' ');
-          const again = h(
-            'button',
-            {
-              class: 'chip',
-              type: 'button',
-              onclick: () => {
-                first = second = '';
-                this.sound.play('ui');
-                draw();
-              },
-            },
-            '✏️ Start again',
-          );
-          const nameRow = h('div', { class: 'row' }, h('div', { class: 'name-box' }, name ? `${name}${second ? '' : ' …'}` : '…'), first ? again : null);
-          if (!second) {
-            const known = first ? [] : login.known();
-            body.replaceChildren(
-              ...(known.length
-                ? [
-                    h('h3', {}, 'Played here before'),
-                    h(
-                      'div',
-                      { class: 'row known-players' },
-                      ...known.map((k) =>
-                        h(
-                          'button',
-                          {
-                            class: 'chip',
-                            type: 'button',
-                            onclick: () => {
-                              [first, second] = k.name.split(' ');
-                              this.sound.play('ui');
-                              draw();
-                            },
-                          },
-                          h('span', { class: 'emoji' }, ANIMALS.find((a) => a.key === k.look?.animal)?.icon ?? '🙂'),
-                          k.name,
-                        ),
-                      ),
-                    ),
-                  ]
-                : []),
-              h('h3', {}, 'Who are you?'),
-              nameRow,
-              h('p', { class: 'muted' }, first ? 'Now the second word of your name:' : 'Tap the first word of your name:'),
-              first ? words(NAME_ANIMALS, (w) => (second = w)) : words(NAME_WORDS, (w) => (first = w)),
-            );
+        const note = this.loginNote();
+        const user = this.usernameBox();
+        const box = this.passwordBox('Password', 'current-password');
+        const known = login.known();
+        const go = async () => {
+          if (asking) return;
+          if (!user.input.value.trim()) {
+            note.say('🙈', 'Type your username first.', 'warn');
+            user.input.focus();
             return;
           }
-          const note = this.loginNote();
-          const box = this.passwordBox('Your password', 'current-password');
-          const go = async () => {
-            if (asking) return;
-            if (!box.input.value) {
-              note.say('🙈', 'Type your password first.', 'warn');
-              box.input.focus();
-              return;
-            }
-            asking = true;
-            note.say('🔎', 'Asking the island keeper…');
-            try {
-              welcome(name, await login.logIn(name, box.input.value));
-            } catch (error) {
-              asking = false;
-              note.say(...loginTrouble(error), 'warn');
-              this.sound.play('no');
-              box.input.select();
-            }
-          };
-          const form = h(
+          if (!box.input.value) {
+            note.say('🙈', 'Type your password first.', 'warn');
+            box.input.focus();
+            return;
+          }
+          asking = true;
+          note.say('🔎', 'Asking the island keeper…');
+          try {
+            welcome(await login.logIn(user.input.value, box.input.value));
+          } catch (error) {
+            asking = false;
+            note.say(...loginTrouble(error), 'warn');
+            this.sound.play('no');
+            box.input.select();
+          }
+        };
+        body.append(
+          ...(known.length
+            ? [
+                h('h3', {}, 'Played here before'),
+                h(
+                  'div',
+                  { class: 'row known-players' },
+                  ...known.map((k) =>
+                    h(
+                      'button',
+                      {
+                        class: 'chip',
+                        type: 'button',
+                        onclick: () => {
+                          user.input.value = k.username || k.name;
+                          this.sound.play('ui');
+                          box.input.focus();
+                        },
+                      },
+                      h('span', { class: 'emoji' }, ANIMALS.find((a) => a.key === k.look?.animal)?.icon ?? '🙂'),
+                      k.username || k.name,
+                    ),
+                  ),
+                ),
+              ]
+            : []),
+          h(
             'form',
             {
               class: 'login-form',
@@ -911,24 +891,23 @@ export class UI {
                 go();
               },
             },
-            UI.username(name),
+            user.el,
             box.el,
             note,
             h('button', { class: 'big green', type: 'submit' }, '🔑 Log in'),
-          );
-          body.replaceChildren(h('h3', {}, 'Who are you?'), nameRow, form);
-          setTimeout(() => box.input.focus(), 60);
-        };
-        draw();
+          ),
+        );
         root.append(h('h2', {}, '🔑 Log in'), h('p', {}, 'Play as yourself, with your look, stickers and islands from your other devices.'), body, foot);
+        setTimeout(() => user.input.focus(), 60);
       },
       { narrow: true },
     );
   }
 
-  // Making a login, or a new password for yours: the password twice, to be
-  // sure. Made as the guest, the page plays as the new login once this
-  // closes. why: what to say first, when the keeper asked for a password.
+  // Making a login, a username and a password (twice, to be sure), or a new
+  // password for yours. Made as the guest, the page plays as the new login
+  // once this closes. why: what to say first, when the keeper asked for a
+  // password.
   makeLoginDialog({ why = '' } = {}) {
     const login = this.handlers.login;
     const loggedIn = Boolean(login.who());
@@ -938,12 +917,20 @@ export class UI {
     this.openModal(
       (root) => {
         const note = this.loginNote();
+        const user = loggedIn ? null : this.usernameBox();
         const box = this.passwordBox(loggedIn ? 'New password' : 'Password', 'new-password');
         const again = this.passwordBox('The same password again', 'new-password');
         const button = h('button', { class: 'big green', type: 'submit' }, loggedIn ? '🔒 Save my password' : '✨ Make my login');
+        const username = () => (user ? user.input.value : login.username());
         const go = async () => {
           if (asking) return;
-          const problem = passwordProblem(box.input.value, name);
+          const odd = user ? usernameProblem(user.input.value) : '';
+          if (odd) {
+            note.say('🙈', USERNAME_HELP[odd], 'warn');
+            user.input.focus();
+            return;
+          }
+          const problem = passwordProblem(box.input.value, username());
           if (problem) {
             note.say('🙈', PASSWORD_HELP[problem], 'warn');
             box.input.focus();
@@ -957,23 +944,25 @@ export class UI {
           asking = true;
           button.disabled = true;
           note.say('🔎', 'Asking the island keeper…');
+          let reply;
           try {
-            await login.make(box.input.value);
+            reply = await login.make(box.input.value, user ? user.input.value : null);
           } catch (error) {
             asking = false;
             button.disabled = false;
             note.say(...loginTrouble(error), 'warn');
             this.sound.play('no');
+            if (error.code === 'taken' || error.code === 'username') user?.input.select();
             return;
           }
           made = true;
           this.sound.play('sticker');
           form.replaceChildren(
             note,
-            h('p', { class: 'muted' }, 'Ask a grown-up to help you remember it.'),
+            h('p', { class: 'muted' }, 'Ask a grown-up to help you remember them.'),
             h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, '👍 Got it'),
           );
-          note.say('🎉', loggedIn ? 'Your new password is ready!' : `Your login is ready! Log in on any device with your name, ${name}, and your password.`, 'good');
+          note.say('🎉', loggedIn ? 'Your new password is ready!' : `Your login is ready! Log in on any device with your username, ${reply.username}, and your password.`, 'good');
         };
         const form = h(
           'form',
@@ -984,7 +973,7 @@ export class UI {
               go();
             },
           },
-          UI.username(name),
+          user ? user.el : UI.username(login.username()),
           box.el,
           again.el,
           note,
@@ -999,14 +988,20 @@ export class UI {
               'p',
               {},
               loggedIn
-                ? `Pick a new password for ${name}.`
-                : `You will log in with your name, ${name}, and a password. Pick one you will remember, and tell nobody but a grown-up.`,
+                ? `Pick a new password for ${login.username() || name}.`
+                : `Pick a username and a password you will remember, and tell nobody but a grown-up. Friends never see them: in games you are still ${name}.`,
             ),
-            h('p', { class: 'muted' }, `At least ${PASSWORD_MIN} letters or numbers, and not your name.${loggedIn ? '' : ' To log in with another name, change it in 🎨 Change me first.'}`),
+            h(
+              'p',
+              { class: 'muted' },
+              loggedIn
+                ? `At least ${PASSWORD_MIN} letters or numbers, and not your username.`
+                : `A username has ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or signs; a password at least ${PASSWORD_MIN}, and not the username.`,
+            ),
             form,
           ].filter(Boolean),
         );
-        setTimeout(() => box.input.focus(), 60);
+        setTimeout(() => (user ?? box).input.focus(), 60);
       },
       {
         narrow: true,
@@ -1042,7 +1037,11 @@ export class UI {
           ...[
             h('h2', {}, '🔑 My login'),
             needsPassword ? h('p', { class: 'login-note warn' }, '🔑 Your login needs a password now, instead of secret pictures.') : null,
-            h('p', {}, `You are logged in as ${this.profile.name}. Your look, stickers and islands are the same on every device you log in on with your name and password.`),
+            h(
+              'p',
+              {},
+              `You are logged in as ${login.username() || this.profile.name}${login.username() ? `, and in games you are ${this.profile.name}` : ''}. Your look, stickers and islands are the same on every device you log in on.`,
+            ),
             h('p', { class: 'muted keeper-status' }, this.keeperText()),
             h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: `chip${needsPassword ? ' on' : ''}`, type: 'button', onclick: () => this.makeLoginDialog() }, '🔒 New password'), out),
             h('p', { class: 'muted', style: 'margin-top:12px' }, 'Log out when you are done on a device other people use too. Your islands stay safe with the island keeper.'),
@@ -1665,7 +1664,7 @@ export class UI {
       );
       if (handlers.keeper?.config && handlers.login?.who()) {
         // Logged in, copies always go: that is what the login is for.
-        root.append(h('div', { class: 'setting' }, h('div', {}, h('b', {}, `🔑 Logged in as ${p.name}`), h('div', { class: 'muted keeper-status' }, this.keeperText()))));
+        root.append(h('div', { class: 'setting' }, h('div', {}, h('b', {}, `🔑 Logged in as ${handlers.login.username() || p.name}`), h('div', { class: 'muted keeper-status' }, this.keeperText()))));
       } else if (handlers.keeper?.config) {
         root.append(
           toggle(p.settings.keeper !== false, '💾 Safe copies', h('span', { class: 'keeper-status' }, this.keeperText()), (on) => {

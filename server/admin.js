@@ -8,6 +8,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { KeepError } from './keeper.js';
 
 const ADMIN_DIR = fileURLToPath(new URL('./admin/', import.meta.url));
 const PAGES = {
@@ -94,7 +95,7 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         try {
           json(res, 200, { ok: true, islands: await store.adoptDevice(move[1], body?.to) });
         } catch (error) {
-          json(res, error.code === 'bad' ? 400 : 500, { error: error.message });
+          json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
         }
       }
       return true;
@@ -103,13 +104,14 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
     if (login) {
       const [, device] = login;
       if (req.method === 'PUT') {
-        // A new password (a login, if there was none); the devices logged in stay so.
+        // A new password, or a login with a username, if there was none; the devices logged in stay so.
         const body = await readJson(req);
         try {
-          await store.makeLogin(device, body?.password, null, { session: false });
+          const username = typeof body?.username === 'string' ? body.username : null;
+          await store.makeLogin(device, body?.password, null, { session: false, username });
           json(res, 200, { ok: true });
         } catch (error) {
-          json(res, error.code === 'bad' || error.code === 'weak' ? 400 : 500, { error: error.message });
+          json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
         }
       } else if (req.method === 'DELETE') {
         // Every device logged in to it is logged out.

@@ -269,8 +269,8 @@ async function startKeeper(store) {
   const said = {
     island: (e, who) => `kept the island "${e.island}"${who ? ` from ${who}` : ''}`,
     profile: (e, who) => `kept a profile${who ? ` from ${who}` : ''}`,
-    login: (e, who) => `logged ${who || 'a player'} in on a device`,
-    'made-login': (e, who) => `made a login for ${who || 'a player'}`,
+    login: (e, who) => `logged ${e.username || who || 'a player'} in on a device`,
+    'made-login': (e, who) => `made the login ${e.username || ''} for ${who || 'a player'}`,
     'new-password': (e, who) => `gave ${who || 'a player'} a new password`,
     adopt: (e, who) => `moved ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what a device did'} from before into ${who || 'a player'}'s login`,
   };

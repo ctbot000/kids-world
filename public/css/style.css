@@ -1491,19 +1491,6 @@ kbd {
   white-space: nowrap;
 }
 
-/* A name, a word at a time. */
-.word-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.word-grid .chip {
-  padding: 7px 12px;
-  font-size: 0.95rem;
-}
-
 .known-players .emoji {
   font-size: 1.3rem;
 }

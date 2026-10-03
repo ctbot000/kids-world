@@ -8,7 +8,7 @@ import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
 import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
-import { passwordProblem } from '/js/shared/keeper.js';
+import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
 import { ANIMALS } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
@@ -95,15 +95,17 @@ async function remove(path, question) {
 // While a password is being typed, the page is not redrawn under it.
 let editing = 0;
 
-const PASSWORD_WORDS = { short: 'At least 6 characters.', long: 'At most 64 characters.', name: 'Not the player’s name.' };
+const PASSWORD_WORDS = { short: 'A password needs at least 6 characters.', long: 'At most 64 characters.', name: 'Not the username.' };
+const USERNAME_WORDS = { short: 'A username needs at least 2 characters.', long: 'At most 32 characters.', odd: 'Only characters you can see.' };
 
-// A new password for a player, typed here to be told to them; done() once
-// saved or cancelled.
+// A new password for a player, typed here to be told to them, or for one
+// with no login yet, a username too; done() once saved or cancelled.
 function passwordForm(device, done) {
   editing++;
   const name = device.profile?.name ?? '';
-  const input = h('input', { type: 'text', autocomplete: 'off', 'aria-label': `New password for ${name || 'the player'}` });
-  input.spellcheck = false;
+  const username = device.login ? null : h('input', { type: 'text', autocomplete: 'off', placeholder: 'Username', 'aria-label': `Username for ${name || 'the player'}` });
+  const input = h('input', { type: 'text', autocomplete: 'off', placeholder: 'Password', 'aria-label': `New password for ${name || 'the player'}` });
+  for (const box of [username, input]) if (box) box.spellcheck = false;
   const note = h('span', { class: 'muted', 'aria-live': 'polite' });
   const close = () => {
     editing--;
@@ -111,7 +113,12 @@ function passwordForm(device, done) {
   };
   const save = async (e) => {
     e.preventDefault();
-    const problem = passwordProblem(input.value, name);
+    const odd = username ? usernameProblem(username.value) : '';
+    if (odd) {
+      note.textContent = USERNAME_WORDS[odd];
+      return;
+    }
+    const problem = passwordProblem(input.value, username ? username.value : device.login.username);
     if (problem) {
       note.textContent = PASSWORD_WORDS[problem];
       return;
@@ -119,7 +126,7 @@ function passwordForm(device, done) {
     const res = await api(`devices/${device.id}/login`, {
       method: 'PUT',
       headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: input.value }),
+      body: JSON.stringify({ password: input.value, ...(username ? { username: username.value } : {}) }),
     });
     if (!res.ok) {
       note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
@@ -128,35 +135,44 @@ function passwordForm(device, done) {
     close();
     refresh(true);
   };
-  setTimeout(() => input.focus(), 0);
+  setTimeout(() => (username ?? input).focus(), 0);
   return h(
     'form',
     { class: 'picker', onsubmit: save },
-    h('div', { class: 'muted' }, `Type a new password, then tell ${name || 'the player'} what it is. Devices logged in as them stay so.`),
-    h('div', { class: 'actions' }, input, h('button', { type: 'submit' }, 'Save'), h('button', { type: 'button', onclick: close }, 'Cancel'), note),
+    h(
+      'div',
+      { class: 'muted' },
+      username
+        ? `Type a username and a password for ${name || 'the player'}, then tell them what they are.`
+        : `Type a new password, then tell ${name || 'the player'} what it is. Devices logged in as them stay so.`,
+    ),
+    h('div', { class: 'actions' }, username, input, h('button', { type: 'submit' }, 'Save'), h('button', { type: 'button', onclick: close }, 'Cancel'), note),
   );
 }
 
-// A player's login: whether they have one, on how many devices, and whether
-// it still needs a password (one made with secret pictures, before
-// passwords); a new password for one who forgot theirs, or none. A device
-// with no login can have its copies moved into a player's login instead,
-// say once a tablet is replaced and its player logs in on the new one.
+// A player's login: its username, on how many devices it is, and whether it
+// still needs a password (one made with secret pictures, before passwords);
+// a new password for one who forgot theirs, or none. A device with no login
+// can have its copies moved into a player's login instead, say once a
+// tablet is replaced and its player logs in on the new one.
 function loginRow(device, players) {
   const login = device.login;
   const name = device.profile?.name || 'this player';
   const slot = h('div');
   const type = () => slot.replaceChildren(passwordForm(device, () => slot.replaceChildren()));
-  const into = h('select', { 'aria-label': `Player to move ${name}'s copies to` }, ...players.map((p) => h('option', { value: p.id }, p.profile?.name || p.id)));
+  const into = h('select', { 'aria-label': `Player to move ${name}'s copies to` }, ...players.map((p) => h('option', { value: p.id }, `${p.login.username || p.profile?.name || p.id}${p.profile?.name ? ` (${p.profile.name})` : ''}`)));
   const move = async () => {
     const to = players.find((p) => p.id === into.value);
     const what = plural(device.islands.length, 'island', 'islands');
-    if (!to || !confirm(`Move ${name}'s ${what} and stickers into ${to.profile?.name ?? 'that player'}'s login? These copies then show up on every device logged in as them, and ${name} goes from this list.`)) return;
+    const whose = to?.login.username || to?.profile?.name || 'that player';
+    if (!to || !confirm(`Move ${name}'s ${what} and stickers into ${whose}'s login? These copies then show up on every device logged in as them, and ${name} goes from this list.`)) return;
     const res = await api(`devices/${device.id}/move`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.id }) });
     if (!res.ok) alert(`That could not be moved: ${(await res.json().catch(() => null))?.error ?? 'is the keeper still running?'}`);
     refresh(true);
   };
-  const words = login ? `🔑 Logs in on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'}` : '🔑 No login';
+  const words = login
+    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'}`
+    : '🔑 No login';
   return h(
     'div',
     { class: 'login' },
@@ -164,8 +180,7 @@ function loginRow(device, players) {
       'div',
       { class: 'login-line' },
       h('span', {}, words),
-      // A login goes by the player's name, so there is none to make without one.
-      device.profile?.name ? h('button', { type: 'button', onclick: type }, login ? (login.password ? 'New password' : 'Set a password') : 'Make a login') : null,
+      h('button', { type: 'button', onclick: type }, login ? (login.password ? 'New password' : 'Set a password') : 'Make a login'),
       login
         ? h(
             'button',
@@ -228,8 +243,8 @@ function renderSummary(state) {
 const DID = {
   island: (e) => ` sent “${e.island}”`,
   profile: () => ' sent their profile',
-  login: () => ' logged in on a device',
-  'made-login': () => ' made a login',
+  login: (e) => ` logged in on a device${e.username ? ` as ${e.username}` : ''}`,
+  'made-login': (e) => ` made a login${e.username ? `, ${e.username}` : ''}`,
   'new-password': () => ' picked a new password',
   adopt: (e) => ` brought ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what they did'} from before into their login`,
 };

@@ -1277,14 +1277,14 @@ test('the keeper keeps copies of your islands and of you, sent peer to peer; an 
   }
 });
 
-// Types into the password boxes of the dialog, in order, once it has landed.
-async function typePasswords(page, ...passwords) {
+// Types into the dialog's boxes (username, password, the password again), in order, once it has landed.
+async function typeInto(page, ...values) {
   await page.waitForSelector('#modal .password-box input', { timeout: 15000 * SLOW });
   const boxes = await page.$$('#modal .password-box input');
-  for (const [i, password] of passwords.entries()) {
+  for (const [i, value] of values.entries()) {
     await landed(page, boxes[i]);
     await boxes[i].evaluate((el) => (el.value = ''));
-    await boxes[i].type(password);
+    await boxes[i].type(value);
   }
 }
 
@@ -1308,6 +1308,7 @@ test('a login made on one device logs in another: what each made comes along, th
   const look = { animal: 'fox', fur: 'orange', shirt: 3, hat: 'crown' };
   const tablet = await openPlayer(url, { name: 'Sunny Otter', look });
   const phone = await openPlayer(url, { name: 'Happy Panda', look: { animal: 'panda', fur: 'white', shirt: 5, hat: 'cap' } });
+  const username = 'Otter Fan 7';
   const password = 'rocket-apple7';
   const leave = async (page) => {
     await page.click('#btn-settings');
@@ -1315,20 +1316,21 @@ test('a login made on one device logs in another: what each made comes along, th
     await until(page, () => !document.getElementById('title').hidden);
   };
   try {
-    // The tablet makes an island, then a login: a password, typed twice.
+    // The tablet makes an island, then a login: a username, and a password typed twice.
     await makeIsland(tablet, { online: false, theme: 'Flat Land' });
     const name = await tablet.evaluate(() => window.kidsWorld.game.world.name);
     await leave(tablet);
     await clickButton(tablet, 'Log in');
     await clickButton(tablet, 'Make my login', '#modal');
-    await typePasswords(tablet, password, 'rocket-apple8');
+    await typeInto(tablet, username, password, 'rocket-apple8');
     await clickButton(tablet, 'Make my login', '#modal');
     await until(tablet, () => document.querySelector('#modal .login-note')?.textContent.includes('not the same'));
-    await typePasswords(tablet, password, password);
+    await typeInto(tablet, username, password, password);
     await clickButton(tablet, 'Make my login', '#modal');
     await until(tablet, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
     await reloadsAfter(tablet, () => clickButton(tablet, 'Got it', '#modal'));
     await until(tablet, () => document.getElementById('btn-login').textContent.includes('My login'));
+    assert.equal(await tablet.evaluate(() => window.kidsWorld.keeper.login.username), username);
     const player = await tablet.evaluate(() => window.kidsWorld.keeper.login.player);
     assert.equal(player, KeeperStore.deviceId(await tablet.evaluate(() => window.kidsWorld.keeper.data.device)), 'the tablet’s copies are the player’s');
 
@@ -1339,19 +1341,18 @@ test('a login made on one device logs in another: what each made comes along, th
     const guestDevice = KeeperStore.deviceId(await phone.evaluate(() => window.kidsWorld.keeper.data.device));
     await eventually(async () => (await keeper.store.devices()).some((d) => d.id === guestDevice && d.islands.length === 1));
 
-    // It logs in with the name, a word at a time, and the password (a wrong one first).
+    // It logs in with the username, in any case, and the password (a wrong one first).
     await clickButton(phone, 'Log in');
-    await clickButton(phone, 'Sunny', '#modal .word-grid');
-    await clickButton(phone, 'Otter', '#modal .word-grid');
-    await typePasswords(phone, 'not-my-password');
+    await typeInto(phone, username, 'not-my-password');
     await phone.keyboard.press('Enter');
     await until(phone, () => document.querySelector('#modal .login-note')?.textContent.includes('do not go together'));
-    await typePasswords(phone, password);
+    await typeInto(phone, username.toUpperCase(), password);
     await phone.keyboard.press('Enter');
     // Happy Panda's island was Sunny Otter's: it comes along.
     await until(phone, () => document.querySelector('#modal')?.textContent.includes('Are they yours?'));
     await reloadsAfter(phone, () => clickButton(phone, 'Yes, they are mine', '#modal'));
-    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), 'Hi, Sunny Otter!');
+    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), 'Hi, Sunny Otter!', 'in games, the made-up name');
+    assert.equal(await phone.evaluate(() => window.kidsWorld.keeper.login.username), username);
     assert.deepEqual(await phone.evaluate(() => window.kidsWorld.profile.look), look);
     const kept = async () => (await keeper.store.list(player)).islands.map((i) => i.name).sort();
     assert.deepEqual(await kept(), [name, own].sort(), 'the keeper moved the phone’s copies into the login');
@@ -1420,7 +1421,7 @@ test('the admin page shows each player, their login and their islands, drawn fro
     await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
     await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
     assert.equal(await page.$eval('.island h4', (el) => el.textContent), `❄️ ${room.world.name}`);
-    assert.match(await page.$eval('.login-line', (el) => el.textContent), /Logs in on 1 device/);
+    assert.match(await page.$eval('.login-line', (el) => el.textContent), /Logs in as Brave Fox on 1 device/);
     // The island from above: one pixel per column.
     await until(page, () => document.querySelector('img.map')?.naturalWidth === 128);
     const href = await page.$eval('.island a.button', (a) => a.getAttribute('href'));

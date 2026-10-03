@@ -1,8 +1,9 @@
 // The keeper: a computer that keeps a copy of every player's islands and of
 // who they are, sent by their browsers peer to peer whenever it is online. A
-// player can also make a login there, their name and a password, and log in
+// player can also make a login there, a username and a password, and log in
 // with it on any other device to play as themselves: the same look,
-// stickers, basket and islands everywhere.
+// stickers, basket and islands everywhere. The username is theirs alone:
+// other players only ever see the made-up name from the word lists.
 // This is what the page and the keeper (server/keeper.js) agree on: the
 // messages, how the keeper proves it is the real one, and the limits.
 //
@@ -15,13 +16,15 @@
 //   page → keeper   { t: 'island', id, save }  or  { t: 'profile', profile }
 //   keeper → page   { t: 'kept', what, id?, savedAt? }  or  { t: 'error', code, text }
 // Logins:
-//   { t: 'login', name, password }          → { t: 'login', player, token, profile }
-//   { t: 'make-login', password, profile }  → { t: 'login', player, token? }  (a new password, once logged in)
+//   { t: 'login', username, password }                → { t: 'login', player, token, username, profile }
+//   { t: 'make-login', username, password, profile }  → { t: 'login', player, token?, username }
+//                                                       (a new password, once logged in, without a username)
 //   { t: 'adopt', player, token }           → { t: 'kept', what: 'adopt', islands }
 //                                             (this device's copies from before become the player's)
 //   { t: 'logout' }                         → { t: 'kept', what: 'logout' }
-// The 'me' answer says needsPassword for a login made with secret pictures,
-// which logins had before passwords: a device logged in to one sets one.
+// The 'me' answer says the login's username, and needsPassword for a login
+// made with secret pictures, before passwords: a device logged in to one
+// sets one. Pages from before usernames sent the made-up name as `name`.
 // A logged-in page also brings back what its other devices sent:
 //   { t: 'list' }                         → { t: 'list', profile, islands, forgotten }
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
@@ -132,21 +135,42 @@ export const PASSWORD_MIN = 6;
 export const PASSWORD_MAX = 64;
 export const cleanPassword = (v) => (typeof v === 'string' ? v.normalize('NFC') : '');
 
-// What is wrong with a new password, for this name: 'short', 'long',
-// 'name', or '' when nothing is.
-export function passwordProblem(password, name = '') {
+// What is wrong with a new password, for this username: 'short', 'long',
+// 'name' (it is the username), or '' when nothing is.
+export function passwordProblem(password, username = '') {
   const p = cleanPassword(password);
   const length = [...p].length;
   if (length < PASSWORD_MIN) return 'short';
   if (length > PASSWORD_MAX) return 'long';
-  const squash = (text) => text.toLowerCase().replace(/[\s_-]+/g, '');
-  if (name && squash(p) === squash(name)) return 'name';
+  const squash = (text) => usernameKey(text).replace(/[\s_-]+/g, '');
+  if (username && squash(p) === squash(username)) return 'name';
   return '';
 }
 
-// A login's name: the player's own, without the number an island adds when
-// two players there have the same one.
+// A made-up name without the number an island adds when two players there
+// have the same one. Logins from before usernames went by it.
 export const loginName = (name) => (isValidName(name) ? name.replace(/ [2-9]$/, '') : '');
+
+// A username: any letters, numbers, signs and spaces, USERNAME_MIN to
+// USERNAME_MAX of them, as typed (in NFC, trimmed, spaces inside made one).
+export const USERNAME_MIN = 2;
+export const USERNAME_MAX = 32;
+export const cleanUsername = (v) => (typeof v === 'string' ? v.normalize('NFC').trim().replace(/\s+/gu, ' ') : '');
+
+// The same username however it was typed: in any case, and with letters
+// of every width ("ＳＵＮＮＹ" is "sunny").
+export const usernameKey = (v) => cleanUsername(v).normalize('NFKC').toLowerCase();
+
+// What is wrong with a username: 'short', 'long', 'odd' (something
+// invisible in it, which could make two look the same), or '' for nothing.
+export function usernameProblem(v) {
+  const u = cleanUsername(v);
+  const length = [...u].length;
+  if (length < USERNAME_MIN) return 'short';
+  if (length > USERNAME_MAX) return 'long';
+  if (/\p{C}/u.test(u)) return 'odd';
+  return '';
+}
 
 // One player's profile from two devices, put together: the name, look and
 // basket from whichever changed them last, every sticker either has earned

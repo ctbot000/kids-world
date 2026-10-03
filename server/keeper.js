@@ -7,14 +7,14 @@
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
 //   <data>/devices/<device>/device.json             when the device was seen, its profile
-//   <data>/devices/<device>/login.json              its login, if it made one: the password's
-//                                                   hash, and the logged-in devices' tokens' hashes
+//   <data>/devices/<device>/login.json              its login, if it made one: the username, the
+//                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
 //   <data>/devices/<device>/islands/<id>/<day>.json the island as it was at the end of that day
 //
 // <device> is a hash of the secret device key, so a page can only ever add
 // to its own copies. A login turns that folder into a player: other devices
-// that log in with its name and password get a token that files their copies
+// that log in with its username and password get a token that files their copies
 // there too, and brings its islands back to them; a device's copies from
 // before it logged in can join them (adoptDevice). WebRTC comes from
 // node-datachannel, loaded only when the keeper goes online.
@@ -44,8 +44,12 @@ import {
   MAX_TEXT,
   OLDEST_VERSION,
   cleanPassword,
+  cleanUsername,
   PASSWORD_MAX,
   passwordProblem,
+  USERNAME_MAX,
+  usernameKey,
+  usernameProblem,
   randomHex,
   SIGN_ALGORITHM,
   toBase64Url,
@@ -171,7 +175,12 @@ const hashPassword = (password, salt) =>
 const PASSWORD_WORDS = {
   short: 'That password is too short.',
   long: 'That password is too long.',
-  name: 'Pick a password that is not your name.',
+  name: 'Pick a password that is not your username.',
+};
+const USERNAME_WORDS = {
+  short: 'That username is too short.',
+  long: 'That username is too long.',
+  odd: 'That username has something invisible in it.',
 };
 // Tokens are kept as hashes too, so a copy of the folder lets nobody in.
 const hashToken = (token) => createHash('sha256').update(`kids-world session ${token}`).digest('hex');
@@ -205,10 +214,36 @@ export class KeeperStore {
     this.checking = Promise.resolve();
   }
 
-  // Counts what is kept already. Folders are made when the first copy arrives.
+  // Counts what is kept already, and gives logins from before usernames one.
+  // Folders are made when the first copy arrives.
   async open() {
     this.bytes = await folderSize(join(this.dir, 'devices'));
+    await this.nameOldLogins();
     return this;
+  }
+
+  // Logins from before usernames went by the player's made-up name: it
+  // becomes their username, as it was then. Two players of one name keep it
+  // both, told apart by their passwords as before.
+  async nameOldLogins() {
+    for (const device of await readdir(join(this.dir, 'devices')).catch(() => [])) {
+      if (!isDeviceId(device)) continue;
+      const login = await this.readLogin(device);
+      if (!login || login.username) continue;
+      const name = loginName((await readJson(this.path(device, 'device.json')))?.profile?.name);
+      if (name) await this.write(this.path(device, 'login.json'), JSON.stringify({ ...login, username: name }));
+    }
+  }
+
+  // Every login, with its folder: [{ device, login }].
+  async logins() {
+    const out = [];
+    for (const device of await readdir(join(this.dir, 'devices')).catch(() => [])) {
+      if (!isDeviceId(device)) continue;
+      const login = await this.readLogin(device);
+      if (login) out.push({ device, login });
+    }
+    return out;
   }
 
   static deviceId(key) {
@@ -342,33 +377,45 @@ export class KeeperStore {
   }
 
   // Makes a login for a device's folder, or gives it a new password.
-  // profile: who the player is, kept first, as a login goes by their name.
-  // Returns { player, token, name }; the token is for the device that made
-  // it, unless session is false (a new password from a device already in, or
-  // from the admin pages). A login from before passwords (made with secret
-  // pictures) becomes a password login this way, its devices still in.
-  makeLogin(device, password, profile = null, { session = true } = {}) {
+  // username: the login's, which no other login may have (in any case or
+  // width); for a login that has one already, it stays when left out. A page
+  // from before usernames leaves it out, and its made-up name is taken.
+  // profile: who the player is, kept first. Returns { player, token,
+  // username }; the token is for the device that made it, unless session is
+  // false (a new password from a device already in, or from the admin
+  // pages). A login from before passwords (made with secret pictures)
+  // becomes a password login this way, its devices still in.
+  makeLogin(device, password, profile = null, { session = true, username = null } = {}) {
     if (!isDeviceId(device) || typeof password !== 'string') return Promise.reject(new KeepError('bad', 'That is not a password.'));
     return this.serial(async () => {
       if (profile) await this.storeProfile(device, keptProfile(profile));
       const record = await readJson(this.path(device, 'device.json'));
-      const name = loginName(record?.profile?.name);
-      if (!name) throw new KeepError('bad', 'The keeper needs to know your name first.');
-      const problem = passwordProblem(password, name);
-      if (problem) throw new KeepError('weak', PASSWORD_WORDS[problem], { problem });
       const old = await this.readLogin(device);
+      const wanted = cleanUsername(username ?? old?.username ?? loginName(record?.profile?.name));
+      const problem = usernameProblem(wanted);
+      if (problem) throw new KeepError('username', USERNAME_WORDS[problem], { problem });
+      // A new username, or a changed one, must be no other login's. One kept
+      // as it was stays, even shared by two logins from before usernames.
+      const key = usernameKey(wanted);
+      const changed = !old || usernameKey(old.username) !== key;
+      if (changed && (await this.logins()).some((other) => other.device !== device && usernameKey(other.login.username) === key)) {
+        throw new KeepError('taken', 'Someone has that username already.');
+      }
+      const weak = passwordProblem(password, wanted);
+      if (weak) throw new KeepError('weak', PASSWORD_WORDS[weak], { problem: weak });
       const salt = randomBytes(16).toString('hex');
       const hash = (await hashPassword(password, salt)).toString('hex');
       const now = this.now();
-      const login = { kind: 'password', salt, hash, made: old?.made ?? now, changed: now, sessions: old?.sessions ?? {} };
+      const login = { kind: 'password', username: wanted, salt, hash, made: old?.made ?? now, changed: now, sessions: old?.sessions ?? {} };
       const token = session ? randomHex(16) : null;
       if (token) KeeperStore.addSession(login, token, now);
+      if (!(await stat(this.path(device)).catch(() => null))) await mkdir(this.path(device), { recursive: true, mode: 0o700 });
       await this.write(this.path(device, 'login.json'), JSON.stringify(login));
-      return { player: device, token, name };
+      return { player: device, token, username: wanted };
     });
   }
 
-  // How long logins with this name wait before another try, in ms.
+  // How long logins with this username wait before another try, in ms.
   waitFor(name) {
     const now = this.now();
     this.wrong = this.wrong.filter((t) => now - t < HOUR_MS);
@@ -388,42 +435,39 @@ export class KeeperStore {
     }
   }
 
-  // Logs a device in: finds the player of this name whose password this is,
-  // and gives the device a token for them. Returns { player, token, profile }.
-  // A wrong password and a name with no login get the same answer, so nobody
-  // learns which names have one; after a few, that name waits. A login from
-  // before passwords has none to match: a device still logged in to it, or
-  // the admin pages, give it one.
-  login(name, password) {
-    const run = this.checking.then(() => this.checkLogin(name, password));
+  // Logs a device in: finds the login with this username whose password
+  // this is, and gives the device a token for it. Returns { player, token,
+  // username, profile }. A wrong password and a username with no login get
+  // the same answer; after a few, that username waits. A login from before
+  // passwords has none to match: a device still logged in to it, or the
+  // admin pages, give it one.
+  login(username, password) {
+    const run = this.checking.then(() => this.checkLogin(username, password));
     this.checking = run.catch(() => {});
     return run;
   }
 
-  async checkLogin(name, password) {
-    const who = loginName(name);
+  async checkLogin(username, password) {
+    const who = usernameKey(username);
     const wait = who ? this.waitFor(who) : 0;
     if (wait > 0) throw new KeepError('wait', 'Too many tries. Wait a little, then try again.', { wait });
     const wrong = () => new KeepError('wrong', 'That is not the right password.');
-    if (!who || typeof password !== 'string' || [...cleanPassword(password)].length > PASSWORD_MAX) throw wrong();
+    const tooLong = (text, max) => [...text].length > max;
+    if (!who || tooLong(who, USERNAME_MAX * 2) || typeof password !== 'string' || tooLong(cleanPassword(password), PASSWORD_MAX)) throw wrong();
     const found = [];
-    const root = join(this.dir, 'devices');
-    for (const device of await readdir(root).catch(() => [])) {
-      if (!isDeviceId(device)) continue;
-      const login = await this.readLogin(device);
-      if (login?.kind !== 'password') continue;
-      const record = await readJson(join(root, device, 'device.json'));
-      if (loginName(record?.profile?.name) !== who) continue;
+    for (const { device, login } of await this.logins()) {
+      if (login.kind !== 'password' || usernameKey(login.username) !== who) continue;
       const hash = await hashPassword(password, login.salt);
       const kept = Buffer.from(login.hash, 'hex');
-      if (kept.length === hash.length && timingSafeEqual(hash, kept)) found.push({ device, seen: record.lastSeen ?? 0 });
+      const record = await readJson(this.path(device, 'device.json'));
+      if (kept.length === hash.length && timingSafeEqual(hash, kept)) found.push({ device, seen: record?.lastSeen ?? 0, username: login.username });
     }
     if (!found.length) {
       this.wrongTry(who);
       throw wrong();
     }
     this.tries.delete(who);
-    // Two players of one name with the same pictures: the one seen last.
+    // Two logins of one name from before usernames, with one password: the one seen last.
     const { device } = found.sort((a, b) => b.seen - a.seen)[0];
     return this.serial(async () => {
       const login = await this.readLogin(device);
@@ -432,7 +476,7 @@ export class KeeperStore {
       KeeperStore.addSession(login, token, this.now());
       await this.write(this.path(device, 'login.json'), JSON.stringify(login));
       const record = await readJson(this.path(device, 'device.json'));
-      return { player: device, token, profile: record?.profile ?? null };
+      return { player: device, token, username: login.username, profile: record?.profile ?? null };
     });
   }
 
@@ -585,7 +629,9 @@ export class KeeperStore {
         profileAt: info.profileAt ?? 0,
         // Never the hashes: when it was made, on how many devices it is, and
         // whether it has a password yet (one from before passwords has not).
-        login: login ? { made: login.made ?? 0, changed: login.changed ?? 0, devices: Object.keys(login.sessions).length, password: login.kind === 'password' } : null,
+        login: login
+          ? { username: login.username ?? '', made: login.made ?? 0, changed: login.changed ?? 0, devices: Object.keys(login.sessions).length, password: login.kind === 'password' }
+          : null,
         islands,
       });
     }
@@ -993,8 +1039,9 @@ export class Keeper extends EventEmitter {
       const { player, token } = msg.login && typeof msg.login === 'object' ? msg.login : {};
       const ok = Boolean(player) && (await this.store.checkSession(player, token));
       this.from(conn, msg.device, ok ? player : null, ok ? token : null);
-      const needsPassword = ok && (await this.store.readLogin(player))?.kind !== 'password';
-      this.reply(conn, { t: 'me', ...(ok ? { player } : {}), ...(needsPassword ? { needsPassword } : {}) });
+      const login = ok ? await this.store.readLogin(player) : null;
+      const needsPassword = ok && login?.kind !== 'password';
+      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}) });
       return;
     }
     const mine = (what) => {
@@ -1019,18 +1066,21 @@ export class Keeper extends EventEmitter {
         break;
       }
       case 'login': {
-        const { player, token, profile } = await this.store.login(msg.name, msg.password);
+        // Pages from before usernames send the made-up name.
+        const { player, token, username, profile } = await this.store.login(msg.username ?? msg.name, msg.password);
         this.from(conn, conn.device, player, token);
-        this.reply(conn, { t: 'login', player, token, profile });
-        this.note({ device: player, what: 'login', player: profile?.name ?? '' });
+        this.reply(conn, { t: 'login', player, token, username, profile });
+        this.note({ device: player, what: 'login', player: profile?.name ?? '', username });
         break;
       }
       case 'make-login': {
         // A new password for the player it is logged in to, or a login for this device's folder.
-        const { player, token, name } = await this.store.makeLogin(conn.folder, msg.password, conn.player ? null : msg.profile, { session: !conn.player });
-        if (token) this.from(conn, conn.device, player, token);
-        this.reply(conn, { t: 'login', player, ...(token ? { token } : {}) });
-        this.note({ device: player, what: token ? 'made-login' : 'new-password', player: name });
+        const username = conn.player || typeof msg.username !== 'string' ? null : msg.username;
+        const made = await this.store.makeLogin(conn.folder, msg.password, conn.player ? null : msg.profile, { session: !conn.player, username });
+        if (made.token) this.from(conn, conn.device, made.player, made.token);
+        this.reply(conn, { t: 'login', player: made.player, username: made.username, ...(made.token ? { token: made.token } : {}) });
+        const record = await this.store.list(made.player);
+        this.note({ device: made.player, what: made.token ? 'made-login' : 'new-password', player: record.profile?.name ?? '', username: made.username });
         break;
       }
       case 'adopt': {
