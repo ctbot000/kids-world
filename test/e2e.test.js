@@ -1077,6 +1077,14 @@ test('the whole island code shows beside the top buttons, and a long connection 
 
 test('two friends peer to peer: visiting, building together, rules and saying goodbye', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  // A name of the host's own, typed in Change me.
+  await clickButton(host, 'Change me');
+  const nameBox = await host.waitForSelector('#modal .name-input');
+  await landed(host, nameBox);
+  await nameBox.evaluate((el) => (el.value = ''));
+  await nameBox.type('민지 the Builder');
+  await clickButton(host, 'Done', '#modal');
+  assert.equal(await host.$eval('#me-name', (el) => el.textContent), 'Hi, 민지 the Builder!');
   await makeIsland(host, { online: true });
   const code = await host.evaluate(() => window.kidsWorld.game.code);
   assert.match(code, /^\d{6}$/);
@@ -1091,6 +1099,7 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(host, () => window.kidsWorld.game.players.size === 2);
   await until(guest, () => window.kidsWorld.game.players.size === 2);
   assert.equal(await guest.evaluate(() => window.kidsWorld.game.world.name), await host.evaluate(() => window.kidsWorld.game.world.name));
+  assert.ok(await guest.evaluate(() => [...window.kidsWorld.game.players.values()].some((p) => p.name === '민지 the Builder')), 'the guest sees the host’s own name');
 
   // The guest builds; the host sees it.
   const { cell, at } = await spotNear(guest, 2, 2);
@@ -1331,8 +1340,11 @@ test('a login made on one device logs in another: what each made comes along, th
     await reloadsAfter(tablet, () => clickButton(tablet, 'Got it', '#modal'));
     await until(tablet, () => document.getElementById('btn-login').textContent.includes('My login'));
     assert.equal(await tablet.evaluate(() => window.kidsWorld.keeper.login.username), username);
+    // The username is the name in games now, as the box under it said.
+    assert.equal(await tablet.$eval('#me-name', (el) => el.textContent), `Hi, ${username}!`);
     const player = await tablet.evaluate(() => window.kidsWorld.keeper.login.player);
     assert.equal(player, KeeperStore.deviceId(await tablet.evaluate(() => window.kidsWorld.keeper.data.device)), 'the tablet’s copies are the player’s');
+    await eventually(async () => (await keeper.store.list(player)).profile?.name === username);
 
     // The phone was played on before, as Happy Panda, who made an island there too.
     await makeIsland(phone, { online: false, theme: 'Flat Land' });
@@ -1351,7 +1363,7 @@ test('a login made on one device logs in another: what each made comes along, th
     // Happy Panda's island was Sunny Otter's: it comes along.
     await until(phone, () => document.querySelector('#modal')?.textContent.includes('Are they yours?'));
     await reloadsAfter(phone, () => clickButton(phone, 'Yes, they are mine', '#modal'));
-    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), 'Hi, Sunny Otter!', 'in games, the made-up name');
+    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), `Hi, ${username}!`);
     assert.equal(await phone.evaluate(() => window.kidsWorld.keeper.login.username), username);
     assert.deepEqual(await phone.evaluate(() => window.kidsWorld.profile.look), look);
     const kept = async () => (await keeper.store.list(player)).islands.map((i) => i.name).sort();

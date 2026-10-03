@@ -37,7 +37,7 @@
 // in the hello, before that check; the keeper still answers them.
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
-import { cleanLook, isValidName } from './words.js';
+import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
 export const KEEPER_VERSION = 2;
 export const OLDEST_VERSION = 1;
@@ -147,9 +147,10 @@ export function passwordProblem(password, username = '') {
   return '';
 }
 
-// A made-up name without the number an island adds when two players there
-// have the same one. Logins from before usernames went by it.
-export const loginName = (name) => (isValidName(name) ? name.replace(/ [2-9]$/, '') : '');
+// A player's name as a username, for logins from before usernames, which
+// went by the name rolled from the word lists (without the number an island
+// adds when two players there have the same one).
+export const loginName = (name) => (isMadeUpName(name) ? name.replace(/ [2-9]$/, '') : isValidName(name) ? name : '');
 
 // A username: any letters, numbers, signs and spaces, USERNAME_MIN to
 // USERNAME_MAX of them, as typed (in NFC, trimmed, spaces inside made one).

@@ -103,8 +103,9 @@ test('a profile is kept without the tokens that let a player back into islands, 
   assert.equal(device.profile.basket.bogus, undefined);
   assert.equal(device.profile.tokens, undefined);
   assert.equal(device.profile.settings, undefined);
-  // Only names made from the word lists.
-  assert.equal(keptProfile({ name: 'Hello there' }).name, '');
+  // Any name, but not one with something invisible in it.
+  assert.equal(keptProfile({ name: 'Hello there' }).name, 'Hello there');
+  assert.equal(keptProfile({ name: 'Hel\u200blo' }).name, '');
 });
 
 test('deleting an island or a whole device frees its bytes', async () => {

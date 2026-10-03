@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { MAX_CRITTERS, NEEDS_WATER, unpackCritter } from '../public/js/shared/critters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { isValidName, PHRASES } from '../public/js/shared/words.js';
+import { isMadeUpName, PHRASES } from '../public/js/shared/words.js';
 
 function clock(start = 1_000_000) {
   const c = { t: start };
@@ -58,14 +58,17 @@ test('joining sends the whole island, and everyone hears about newcomers', () =>
   assert.equal(b.last('welcome').players.length, 2);
 });
 
-test('names that are not made from the word lists are replaced', () => {
-  const { room } = makeRoom();
-  const c = join(room, { name: 'Some Rude Words' });
-  const name = c.last('welcome').players[0].name;
-  assert.notEqual(name, 'Some Rude Words');
-  assert.ok(isValidName(name), name);
-  const d = join(room, { name: 'Happy Panda<script>' });
-  assert.ok(isValidName(d.last('welcome').players.find((p) => p.id === 2).name));
+test('a name is taken as typed, tidied, but an empty, invisible or endless one is replaced', () => {
+  // Each on an island of its own: an island holds only so many players.
+  const named = (name) => {
+    const c = join(makeRoom().room, { name });
+    return c.last('welcome').players.find((p) => p.id === c.last('welcome').you).name;
+  };
+  assert.equal(named('Some Rude Words'), 'Some Rude Words');
+  assert.equal(named('  민지   Kim '), '민지 Kim');
+  assert.equal(named('Agent 7'), 'Agent 7', 'a number of its own stays');
+  assert.equal(named('<b>Bold</b>'), '<b>Bold</b>', 'shown as text, never as markup');
+  for (const name of ['', '   ', 'in\u200bvisible', 'x'.repeat(33), 42]) assert.ok(isMadeUpName(named(name)), JSON.stringify(name));
 });
 
 test('a different protocol is turned away', () => {

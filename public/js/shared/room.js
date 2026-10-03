@@ -15,7 +15,7 @@ import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
-import { cleanLook, EMOTE_KEYS, isValidIslandName, isValidName, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+import { cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
 export const MAX_PLAYERS = 8;
@@ -276,7 +276,10 @@ export class Room {
       }
     }
     const look = cleanLook(msg.look, this.random);
-    const wanted = isValidName(msg.name) ? msg.name.replace(/ [2-9]$/, '') : randomName(this.random);
+    // Any name as typed, tidied, but not an empty, invisible or overlong one.
+    // (Two players of one name here get a number from uniqueName.)
+    const typed = cleanName(msg.name);
+    const wanted = isValidName(typed) && [...typed].length <= NAME_MAX ? typed : randomName(this.random);
     if (p) {
       // Coming back: whoever was using this player in another tab is replaced.
       for (const [other, oc] of this.clients) {

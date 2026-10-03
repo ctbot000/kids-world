@@ -1,7 +1,6 @@
-// Every word a player can show to another player comes from these lists:
-// names are made of a friendly word and an animal, and talking is done with
-// ready-made phrases and stickers. Nobody can type something unkind, because
-// nobody types at all. The host checks everything it receives against them.
+// Words for players: names (typed freely, or rolled from a friendly word and
+// an animal), and the ready-made phrases and stickers talking is done with,
+// which the host checks everything it receives against.
 import { TOY_BRICKS } from './blocks.js';
 
 export const NAME_WORDS = [
@@ -23,11 +22,23 @@ export function randomName(random = Math.random) {
   return `${pick(NAME_WORDS, random)} ${pick(NAME_ANIMALS, random)}`;
 }
 
-// "Sunny Otter", or "Sunny Otter 2" when two players rolled the same name.
-export function isValidName(name) {
+// A name rolled from the lists: "Sunny Otter", or "Sunny Otter 2" when two
+// players on an island rolled the same one.
+export function isMadeUpName(name) {
   if (typeof name !== 'string') return false;
   const m = /^([A-Z][a-z]+) ([A-Z][a-z]+)(?: ([2-9]))?$/.exec(name);
   return Boolean(m && NAME_WORDS.includes(m[1]) && NAME_ANIMALS.includes(m[2]));
+}
+
+// A player's name: anything typed, up to NAME_MAX letters, numbers, signs
+// and spaces, as typed (in NFC, trimmed, spaces inside made one), with
+// nothing invisible in it. An island adds " 2" when two players there have
+// the same one, so two more are allowed.
+export const NAME_MAX = 32;
+export const cleanName = (v) => (typeof v === 'string' ? v.normalize('NFC').trim().replace(/\s+/gu, ' ') : '');
+
+export function isValidName(name) {
+  return typeof name === 'string' && name !== '' && name === cleanName(name) && [...name].length <= NAME_MAX + 2 && !/\p{C}/u.test(name);
 }
 
 export const ISLAND_WORDS = {

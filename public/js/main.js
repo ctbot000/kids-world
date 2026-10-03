@@ -493,11 +493,12 @@ const loginHandlers = {
     if (adopt) await keeper.adopt(reply.player, reply.token);
     playAs(reply, { adopt });
   },
-  // Logged in: a new password. As the guest: a login with this username,
-  // after which the page reloads as the player once the dialog saying so is
-  // closed.
-  make: async (password, username = null) => {
+  // Logged in: a new password. As the guest: a login with this username
+  // (asName: as your name in games too), after which the page reloads as the
+  // player once the dialog saying so is closed.
+  make: async (password, username = null, { asName = false } = {}) => {
     const reply = await keeper.makeLogin(password, who ? null : username);
+    if (!who && asName && reply.username !== profile.name) profile.update({ name: reply.username });
     if (!who) becamePlayer(reply);
     return reply;
   },

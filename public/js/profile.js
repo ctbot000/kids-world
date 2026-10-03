@@ -52,7 +52,7 @@ function clean(raw) {
   for (const k of STAT_KEYS) stats[k] = Number.isFinite(p.stats?.[k]) ? p.stats[k] : 0;
   const hotbar = Array.isArray(p.hotbar) && p.hotbar.length === DEFAULT_HOTBAR.length && p.hotbar.every(Number.isInteger) ? p.hotbar : [...DEFAULT_HOTBAR];
   return {
-    name: isValidName(p.name) ? p.name.replace(/ [2-9]$/, '') : randomName(),
+    name: isValidName(p.name) ? p.name : randomName(),
     look: p.look ? cleanLook(p.look) : randomLook(),
     settings,
     basket,
