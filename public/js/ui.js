@@ -1,12 +1,14 @@
 // Everything on top of the 3D view: the title screen, the toolbar and
 // hotbar, the toy box, talking and emotes, name tags and speech bubbles,
-// settings, stickers, help and full screen. Big buttons, pictures first, few words.
+// settings, stickers, help, logging in and full screen. Big buttons, pictures
+// first, few words.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
-import { ANIMALS, EMOTES, FUR_COLORS, HATS, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { SECRET_LENGTH, SECRET_PICTURES } from './shared/keeper.js';
+import { ANIMALS, EMOTES, FUR_COLORS, HATS, NAME_ANIMALS, NAME_WORDS, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
@@ -59,6 +61,29 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // "a peach", "an apple".
 const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+
+// What to tell you when the keeper could not log you in, or make your login
+// (the codes of KeeperProblem), as [icon, words].
+function loginTrouble(error) {
+  switch (error?.code) {
+    case 'wrong':
+      return ['🙈', 'Those are not the right pictures. Try again!'];
+    case 'wait': {
+      const minutes = Math.max(1, Math.ceil((error.wait ?? 600000) / 60000));
+      return ['⏳', `That was a lot of tries! Wait ${minutes === 1 ? 'a minute' : `${minutes} minutes`}, then try again.`];
+    }
+    case 'asleep':
+      return ['😴', 'The island keeper is asleep right now. Try again when it is awake!'];
+    case 'refused':
+      return ['🙈', 'The island keeper cannot be reached right now. Try again later.'];
+    case 'gone':
+      return ['🔑', 'Your login was taken away at the island keeper.'];
+    case 'room':
+      return ['💾', 'This browser is out of room. Ask a grown-up for help.'];
+    default:
+      return ['😕', error?.message && error.message !== error.code ? `The island keeper said: ${error.message}` : 'That did not work. Try again later.'];
+  }
+}
 
 export class UI {
   constructor({ profile, sound, atlas, input }) {
@@ -211,11 +236,13 @@ export class UI {
     this.handlers = handlers;
     $('title').hidden = false;
     $('hud').hidden = true;
-    $('me-name').textContent = `Hi, ${this.profile.name}!`;
+    this.renderMe();
+    this.renderLogin();
     $('btn-new').onclick = () => this.newIslandDialog();
     $('btn-visit').onclick = () => this.visitDialog();
     $('btn-mine').onclick = () => this.myIslandsDialog();
     $('btn-me').onclick = () => this.meDialog();
+    $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = () => this.stickersDialog();
     $('btn-help').onclick = () => this.helpDialog();
     $('btn-sound').onclick = () => this.soundDialog();
@@ -223,6 +250,20 @@ export class UI {
 
   hideTitle() {
     $('title').hidden = true;
+  }
+
+  renderMe() {
+    $('me-name').textContent = `Hi, ${this.profile.name}!`;
+  }
+
+  // The 🔑 by your name: there when there is a keeper to log in at, and
+  // always while logged in, so a device without one can still log out.
+  renderLogin() {
+    const login = this.handlers?.login;
+    const chip = $('btn-login');
+    chip.hidden = !login?.available() && !login?.who();
+    chip.textContent = login?.who() ? '🔑 My login' : '🔑 Log in';
+    chip.classList.toggle('on', Boolean(login?.who()));
   }
 
   newIslandDialog() {
@@ -357,9 +398,45 @@ export class UI {
   }
 
   myIslandsDialog() {
+    // Logged in, anything new from your other devices shows up as it comes.
+    this.handlers.login?.keeper.resync();
     this.openModal((root) => {
-      const list = this.handlers.islands();
-      const items = list.length
+      this.islandList = h('div', { class: 'island-list' });
+      this.islandNote = h('p', { class: 'muted island-sync' });
+      const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
+      file.addEventListener('change', async () => {
+        const f = file.files?.[0];
+        if (!f) return;
+        try {
+          const save = JSON.parse(await f.text());
+          this.closeModal();
+          this.handlers.openFile(save);
+        } catch {
+          this.toast('😕', 'That file is not an island.', 'warn');
+        }
+      });
+      root.append(
+        h('h2', {}, '📒 My islands'),
+        this.islandNote,
+        this.islandList,
+        h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'chip', type: 'button', onclick: () => file.click() }, '📂 Open an island file'), file),
+      );
+    });
+    this.renderIslandList();
+  }
+
+  // The islands in My islands, while it is open: again when some come back
+  // from the keeper.
+  renderIslandList() {
+    const el = this.islandList;
+    if (!el?.isConnected) return;
+    const keeper = this.handlers.login?.keeper;
+    const syncing = Boolean(keeper?.login) && (keeper.state === 'connecting' || keeper.syncing);
+    this.islandNote.textContent = syncing ? '🔄 Looking for islands from your other devices…' : '';
+    this.islandNote.hidden = !syncing;
+    const list = this.handlers.islands();
+    el.replaceChildren(
+      ...(list.length
         ? list.map((it) =>
             h(
               'div',
@@ -395,25 +472,8 @@ export class UI {
               ),
             ),
           )
-        : [h('p', { class: 'muted' }, 'No islands yet. Make one and it will wait for you here!')];
-      const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
-      file.addEventListener('change', async () => {
-        const f = file.files?.[0];
-        if (!f) return;
-        try {
-          const save = JSON.parse(await f.text());
-          this.closeModal();
-          this.handlers.openFile(save);
-        } catch {
-          this.toast('😕', 'That file is not an island.', 'warn');
-        }
-      });
-      root.append(
-        h('h2', {}, '📒 My islands'),
-        h('div', { class: 'island-list' }, ...items),
-        h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'chip', type: 'button', onclick: () => file.click() }, '📂 Open an island file'), file),
-      );
-    });
+        : [h('p', { class: 'muted' }, 'No islands yet. Make one and it will wait for you here!')]),
+    );
   }
 
   // The island a visitor was on has gone quiet (the friend closed it, or the internet dropped).
@@ -636,9 +696,310 @@ export class UI {
           this.fullMode === 'toggle' ? card(lineIcon('full'), 'Full screen', ['The ', lineIcon('full'), ' button fills the whole screen with your island. It is in ⚙️ Settings too.']) : null,
           this.fullMode === 'home-screen' ? card(lineIcon('full'), 'Full screen', ['Add Kids World to the Home Screen and open it from there.']) : null,
         ),
-        h('p', { class: 'muted', style: 'margin-top:14px' }, 'Everything stays on this device. Friends only see your made-up name, your animal and the phrases you pick.'),
+        h(
+          'p',
+          { class: 'muted', style: 'margin-top:14px' },
+          this.handlers?.login?.available()
+            ? 'Your things stay on this device, and the island keeper keeps a copy. Log in with 🔑 to have them on your other devices too. Friends only see your made-up name, your animal and the phrases you pick.'
+            : 'Everything stays on this device. Friends only see your made-up name, your animal and the phrases you pick.',
+        ),
       );
     });
+  }
+
+  // ------------------------------------------------ logins
+
+  // Four secret pictures, tapped in order: the slots above fill up as you go
+  // (with the pictures themselves when show is on, as you choose new ones;
+  // else with dots), and ⬅ takes the last one back. done(secret) at four.
+  picturePad(done, { show = false } = {}) {
+    const picked = [];
+    const slots = h('div', { class: 'secret-slots', 'aria-label': 'Pictures tapped' });
+    const draw = () =>
+      slots.replaceChildren(
+        ...Array.from({ length: SECRET_LENGTH }, (_, i) => {
+          const pic = SECRET_PICTURES.find((p) => p.key === picked[i]);
+          return h('span', { class: `secret-slot${pic ? ' on' : ''}`, 'aria-label': pic ? (show ? pic.name : 'tapped') : 'not yet' }, pic && show ? pic.icon : '');
+        }),
+      );
+    const pad = h(
+      'div',
+      { class: 'picture-pad' },
+      ...SECRET_PICTURES.map((p) =>
+        h(
+          'button',
+          {
+            class: 'choice picture',
+            type: 'button',
+            'aria-label': p.name,
+            onclick: () => {
+              if (picked.length >= SECRET_LENGTH) return;
+              picked.push(p.key);
+              this.sound.play('ui');
+              draw();
+              if (picked.length === SECRET_LENGTH) done([...picked]);
+            },
+          },
+          h('span', { class: 'emoji' }, p.icon),
+        ),
+      ),
+    );
+    const back = h(
+      'button',
+      {
+        class: 'chip',
+        type: 'button',
+        onclick: () => {
+          picked.pop();
+          this.sound.play('ui');
+          draw();
+        },
+      },
+      '⬅ Oops',
+    );
+    draw();
+    return {
+      el: h('div', { class: 'secret' }, slots, pad, h('div', { class: 'row secret-row' }, back)),
+      clear: () => {
+        picked.length = 0;
+        draw();
+      },
+    };
+  }
+
+  // A line over the pictures saying how logging in is going, scrolled to
+  // where it can be read on a short screen.
+  loginNote() {
+    const note = h('p', { class: 'login-note', 'aria-live': 'polite' });
+    note.say = (icon, text, kind = '') => {
+      note.className = `login-note${kind ? ` ${kind}` : ''}`;
+      note.textContent = icon ? `${icon} ${text}` : '';
+      if (icon && note.isConnected) note.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    return note;
+  }
+
+  // Logging in: who you are (one of the players who logged in on this device
+  // before, or your name a word at a time), then your four secret pictures.
+  loginDialog() {
+    const login = this.handlers.login;
+    let first = '';
+    let second = '';
+    let asking = false;
+    this.openModal(
+      (root) => {
+        const body = h('div');
+        const note = this.loginNote();
+        const words = (list, pick) =>
+          h(
+            'div',
+            { class: 'word-grid' },
+            ...[...list].sort().map((word) =>
+              h(
+                'button',
+                {
+                  class: 'chip word',
+                  type: 'button',
+                  onclick: () => {
+                    this.sound.play('ui');
+                    pick(word);
+                    draw();
+                  },
+                },
+                word,
+              ),
+            ),
+          );
+        const draw = () => {
+          const name = [first, second].filter(Boolean).join(' ');
+          const again = h(
+            'button',
+            {
+              class: 'chip',
+              type: 'button',
+              onclick: () => {
+                first = second = '';
+                note.say('');
+                this.sound.play('ui');
+                draw();
+              },
+            },
+            '✏️ Start again',
+          );
+          const nameRow = h('div', { class: 'row' }, h('div', { class: 'name-box' }, name ? `${name}${second ? '' : ' …'}` : '…'), first ? again : null);
+          if (!second) {
+            const known = first ? [] : login.known();
+            body.replaceChildren(
+              ...(known.length
+                ? [
+                    h('h3', {}, 'Played here before'),
+                    h(
+                      'div',
+                      { class: 'row known-players' },
+                      ...known.map((k) =>
+                        h(
+                          'button',
+                          {
+                            class: 'chip',
+                            type: 'button',
+                            onclick: () => {
+                              [first, second] = k.name.split(' ');
+                              this.sound.play('ui');
+                              draw();
+                            },
+                          },
+                          h('span', { class: 'emoji' }, ANIMALS.find((a) => a.key === k.look?.animal)?.icon ?? '🙂'),
+                          k.name,
+                        ),
+                      ),
+                    ),
+                  ]
+                : []),
+              h('h3', {}, 'Who are you?'),
+              nameRow,
+              h('p', { class: 'muted' }, first ? 'Now the second word of your name:' : 'Tap the first word of your name:'),
+              first ? words(NAME_ANIMALS, (w) => (second = w)) : words(NAME_WORDS, (w) => (first = w)),
+            );
+            return;
+          }
+          const pad = this.picturePad(async (secret) => {
+            if (asking) return;
+            asking = true;
+            note.say('🔎', 'Asking the island keeper…');
+            try {
+              await login.logIn(name, secret);
+              note.say('🎉', `Hi, ${name}!`, 'good');
+            } catch (error) {
+              asking = false;
+              note.say(...loginTrouble(error), 'warn');
+              this.sound.play('no');
+              pad.clear();
+            }
+          });
+          body.replaceChildren(h('h3', {}, 'Who are you?'), nameRow, h('h3', {}, 'Your secret pictures'), note, pad.el);
+        };
+        draw();
+        root.append(
+          h('h2', {}, '🔑 Log in'),
+          h('p', {}, 'Play as yourself, with your look, stickers and islands from your other devices.'),
+          body,
+          h(
+            'div',
+            { class: 'login-foot' },
+            h('span', { class: 'muted' }, 'No login yet?'),
+            h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '✨ Make my login'),
+          ),
+        );
+      },
+      { narrow: true },
+    );
+  }
+
+  // Making a login, or new secret pictures for yours: four pictures, then the
+  // same four again, to be sure. Made as the guest, the page plays as the new
+  // login once this closes.
+  makeLoginDialog() {
+    const login = this.handlers.login;
+    const loggedIn = Boolean(login.who());
+    const name = this.profile.name;
+    let made = false;
+    this.openModal(
+      (root) => {
+        const body = h('div');
+        const note = this.loginNote();
+        let first = null;
+        const ask = () => {
+          const pad = this.picturePad(
+            (secret) => {
+              if (!first) {
+                first = secret;
+                note.say('👀', 'Now tap the same four again, to be sure.');
+                ask();
+              } else if (first.join() !== secret.join()) {
+                first = null;
+                this.sound.play('no');
+                note.say('🙈', 'Those were not the same. Let’s start again!', 'warn');
+                ask();
+              } else make(secret);
+            },
+            { show: true },
+          );
+          body.replaceChildren(h('h3', {}, first ? 'The same four again' : 'Pick four secret pictures'), note, pad.el);
+        };
+        const make = async (secret) => {
+          body.replaceChildren(note, h('div', { class: 'secret-shown', 'aria-label': 'Your secret pictures' }, ...secret.map((k) => SECRET_PICTURES.find((p) => p.key === k).icon)));
+          note.say('🔎', 'Asking the island keeper…');
+          try {
+            await login.make(secret);
+          } catch (error) {
+            first = null;
+            note.say(...loginTrouble(error), 'warn');
+            this.sound.play('no');
+            ask();
+            return;
+          }
+          made = true;
+          this.sound.play('sticker');
+          note.say('🎉', loggedIn ? 'Your new pictures are ready!' : `Your login is ready! Log in on any device with your name, ${name}, and these pictures.`, 'good');
+          body.append(
+            h('p', { class: 'muted' }, 'Ask a grown-up to help you remember them.'),
+            h('button', { class: 'big green', type: 'button', style: 'margin-top:12px', onclick: () => this.closeModal() }, '👍 Got it'),
+          );
+        };
+        ask();
+        root.append(
+          h('h2', {}, loggedIn ? '🖼️ New secret pictures' : '✨ Make my login'),
+          h(
+            'p',
+            {},
+            loggedIn
+              ? `Pick four new secret pictures for ${name}.`
+              : `You will log in with your name, ${name}, and four secret pictures. Pick ones you will remember, and tell nobody but a grown-up.`,
+          ),
+          loggedIn ? null : h('p', { class: 'muted' }, 'To log in with another name, change it in 🎨 Change me first.'),
+          body,
+        );
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          if (made && !loggedIn) login.made();
+        },
+      },
+    );
+  }
+
+  // Logged in: who you are, how your copies are doing, new pictures, and
+  // logging out.
+  myLoginDialog() {
+    const login = this.handlers.login;
+    this.openModal(
+      (root) => {
+        const note = this.loginNote();
+        const out = h(
+          'button',
+          {
+            class: 'chip',
+            type: 'button',
+            onclick: async () => {
+              out.disabled = true;
+              note.say('👋', 'Logging out…');
+              await login.logOut();
+            },
+          },
+          '🚪 Log out',
+        );
+        root.append(
+          h('h2', {}, '🔑 My login'),
+          h('p', {}, `You are logged in as ${this.profile.name}. Your look, stickers and islands are the same on every device you log in on with your name and your secret pictures.`),
+          h('p', { class: 'muted keeper-status' }, this.keeperText()),
+          h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '🖼️ New secret pictures'), out),
+          h('p', { class: 'muted', style: 'margin-top:12px' }, 'Log out when you are done on a device other people use too. Your islands stay safe with the island keeper.'),
+          note,
+        );
+      },
+      { narrow: true },
+    );
   }
 
   // ------------------------------------------------ full screen
@@ -666,20 +1027,24 @@ export class UI {
     }
   }
 
-  // What the keeper is up to, in a few words, for the Safe copies row in Settings.
+  // What the keeper is up to, in a few words, for the Safe copies row in
+  // Settings and for My login.
   keeperText() {
-    const k = this.gameHandlers?.keeper;
+    const k = this.gameHandlers?.keeper ?? this.handlers?.login?.keeper;
     if (!k?.config) return '';
     if (k.state === 'off') return 'Off. Your islands stay on this device only.';
+    if (k.syncing) return 'Bringing back what your other devices sent…';
     if (k.sending) return 'Copying to the island keeper…';
     const last = k.lastKept ? `Last copy ${ago(k.lastKept)}.` : '';
     if (k.state === 'away') return `The island keeper is asleep. Copies go when it wakes up. ${last}`.trim();
     if (k.state === 'refused') return 'Copies are paused for now.';
+    if (k.login) return last || 'The island keeper keeps your islands for all your devices.';
     return last || 'When the island keeper is on, it keeps a copy of your islands, your look and your stickers.';
   }
 
   renderKeeper() {
     for (const el of document.querySelectorAll('.keeper-status')) el.textContent = this.keeperText();
+    this.renderIslandList();
   }
 
   // The row in Settings, for screens with no room for the button at the top.
@@ -713,7 +1078,13 @@ export class UI {
             h('li', {}, 'Choose ', h('b', {}, 'Add to Home Screen')),
             h('li', {}, 'Open ', h('b', {}, 'Kids World'), ' from the Home Screen'),
           ),
-          h('p', { class: 'muted' }, 'The Home Screen game keeps its own islands and stickers. To bring an island along, save it to a file in ⚙️ Settings, then open the file from 📒 My islands.'),
+          h(
+            'p',
+            { class: 'muted' },
+            this.handlers?.login?.available()
+              ? 'The Home Screen game keeps its own islands and stickers. To bring yours along, log in there with 🔑 Log in, or save an island to a file in ⚙️ Settings and open the file from 📒 My islands.'
+              : 'The Home Screen game keeps its own islands and stickers. To bring an island along, save it to a file in ⚙️ Settings, then open the file from 📒 My islands.',
+          ),
         );
       },
       { narrow: true },
@@ -1240,7 +1611,10 @@ export class UI {
           this.renderMap();
         }),
       );
-      if (handlers.keeper?.config) {
+      if (handlers.keeper?.config && handlers.login?.who()) {
+        // Logged in, copies always go: that is what the login is for.
+        root.append(h('div', { class: 'setting' }, h('div', {}, h('b', {}, `🔑 Logged in as ${p.name}`), h('div', { class: 'muted keeper-status' }, this.keeperText()))));
+      } else if (handlers.keeper?.config) {
         root.append(
           toggle(p.settings.keeper !== false, '💾 Safe copies', h('span', { class: 'keeper-status' }, this.keeperText()), (on) => {
             p.setting('keeper', on);

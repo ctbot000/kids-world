@@ -1,11 +1,11 @@
 // Starts everything: the title screen with its little demo island, making,
-// visiting and reopening islands, saving the islands you host, and the
-// frame loop.
+// visiting and reopening islands, saving the islands you host, logging in and
+// out, and the frame loop.
 import { buildAtlas } from './render/atlas.js';
 import { Renderer } from './render/renderer.js';
 import { Game } from './game.js';
 import { Input } from './input.js';
-import { KeeperClient } from './keeper.js';
+import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { Profile } from './profile.js';
 import { Sound } from './sound.js';
@@ -15,6 +15,10 @@ import { isValidCode, normalizeCode } from './shared/codes.js';
 import { generate } from './shared/worldgen.js';
 
 const params = new URLSearchParams(location.search);
+// Who is playing: the player logged in on this device, with their own things
+// here, or the guest. Logging in or out reloads the page as the other.
+const who = storage.loadWho();
+storage.useSpace(who?.player ?? null);
 const profile = new Profile();
 const sound = new Sound();
 sound.setLevels(profile.settings);
@@ -31,11 +35,25 @@ try {
 }
 const input = new Input(canvas, document.getElementById('joystick'));
 const ui = new UI({ profile, sound, atlas, input });
-// Copies of your islands and of you go to the keeper whenever it is online.
-const keeper = new KeeperClient({ profile });
+// Copies of your islands and of you go to the keeper whenever it is online,
+// and logged in, what your other devices sent comes back.
+const keeper = new KeeperClient({ profile, login: who });
 keeper.addEventListener('status', () => ui.renderKeeper());
 keeper.addEventListener('kept', () => ui.renderKeeper());
+keeper.addEventListener('config', () => ui.renderLogin());
+keeper.addEventListener('islands', () => ui.renderIslandList());
+keeper.addEventListener('synced', () => ui.renderKeeper());
+keeper.addEventListener('gone', () => loginGone());
 for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
+if (who) {
+  const note = () => storage.notePlayer({ player: who.player, name: profile.name, look: profile.look });
+  note();
+  profile.addEventListener('change', () => {
+    note();
+    if (!session && demo.world) showDemoAvatar();
+    ui.renderMe();
+  });
+}
 
 let peerOptions = {};
 let signalError = '';
@@ -250,6 +268,10 @@ function endSession(save = true) {
 
 function backToTitle() {
   endSession();
+  if (reloadAtTitle) {
+    reloadAs(reloadAtTitle);
+    return;
+  }
   ui.hideLoading();
   if (demo.world) {
     renderer.setWorld(demo.world);
@@ -361,12 +383,102 @@ function downloadIsland() {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+// ------------------------------------------------ logging in and out
+
+// What the page says once it has reloaded as someone else.
+const GREETINGS = {
+  login: ['🔑', (name) => `Hi, ${name}! You are logged in. Your islands are on their way from the island keeper.`],
+  made: ['🔑', (name) => `Your login is ready, ${name}! Log in on your other devices with your name and secret pictures.`],
+  logout: ['👋', () => 'Logged out. See you soon!'],
+  gone: ['🔑', () => 'Your login was taken away at the island keeper, so you are playing as a guest now.'],
+};
+let reloadAtTitle = '';
+
+function reloadAs(greeting) {
+  try {
+    sessionStorage.setItem('kidsworld.greeting', greeting);
+  } catch {
+    // no greeting, then
+  }
+  location.reload();
+}
+
+function greet() {
+  let greeting = '';
+  try {
+    greeting = sessionStorage.getItem('kidsworld.greeting') ?? '';
+    sessionStorage.removeItem('kidsworld.greeting');
+  } catch {
+    return;
+  }
+  const [icon, text] = GREETINGS[greeting] ?? [];
+  if (icon) setTimeout(() => ui.toast(icon, text(profile.name)), 400);
+}
+
+// Logged in somewhere else: this device plays as them from now on, with
+// their own things here if they played here before, else what the keeper
+// has of them (keeping this device's settings).
+function playAs({ player, token, profile: kept }) {
+  if (kept && !storage.loadFor(player, 'profile', null)) {
+    const d = profile.data;
+    storage.saveFor(player, 'profile', { ...kept, settings: d.settings, hotbar: d.hotbar, seenHelp: d.seenHelp });
+  }
+  storage.saveWho({ player, token });
+  storage.notePlayer({ player, name: kept?.name ?? '', look: kept?.look ?? null });
+  reloadAs('login');
+}
+
+// The guest made a login: their things here become the player's.
+function becamePlayer({ player, token }) {
+  profile.store();
+  keeper.store();
+  if (!storage.moveGuestTo(player)) throw new KeeperProblem('room');
+  storage.useSpace(player);
+  storage.saveWho({ player, token });
+  storage.notePlayer({ player, name: profile.name, look: profile.look });
+}
+
+// The keeper says the login this page used is gone (taken away in its
+// admin pages): this device plays as the guest again, as soon as it can.
+function loginGone() {
+  storage.saveWho(null);
+  if (who) storage.forgetPlayer(who.player);
+  if (session) reloadAtTitle = 'gone';
+  else reloadAs('gone');
+}
+
+const loginHandlers = {
+  available: () => Boolean(keeper.config),
+  who: () => who,
+  // Players who logged in on this device before, to pick from.
+  known: () => storage.knownPlayers().filter((p) => p.player !== who?.player && p.name),
+  logIn: async (name, secret) => playAs(await keeper.logIn(name, secret)),
+  // Logged in: new secret pictures. As the guest: a login, after which the
+  // page reloads as the player once the dialog saying so is closed.
+  make: async (secret) => {
+    const reply = await keeper.makeLogin(secret);
+    if (!who) becamePlayer(reply);
+    return reply;
+  },
+  made: () => reloadAs('made'),
+  logOut: async () => {
+    await keeper.logOut();
+    storage.saveWho(null);
+    reloadAs('logout');
+  },
+  keeper,
+};
+
 const titleHandlers = {
   make: (opts) => makeIsland(opts),
   visit: (code) => visitIsland(code),
   islands: () => storage.listIslands(),
   open: (id) => openIsland(id),
-  forget: (id) => storage.forgetIsland(id),
+  forget: (id) => {
+    storage.forgetIsland(id);
+    keeper.forget(id);
+  },
+  login: loginHandlers,
   openFile: (save) => {
     const id = storage.newIslandId();
     openIsland(id, save);
@@ -391,6 +503,7 @@ const gameHandlers = {
   canSave: () => session?.mode === 'host',
   saveFile: () => downloadIsland(),
   keeper,
+  login: loginHandlers,
   applySettings: () => applySettings(),
   leave: () => backToTitle(),
 };
@@ -532,6 +645,7 @@ async function boot() {
   }
   startDemo();
   ui.showTitle(titleHandlers);
+  greet();
   const code = normalizeCode(params.get('code'));
   if (isValidCode(code)) ui.visitDialog(code);
   requestAnimationFrame(frame);

@@ -1,19 +1,23 @@
 // The keeper: keeps a copy of every player's islands and profile, sent by
-// their browsers peer to peer whenever this computer is online. It joins the
-// PeerJS signaling service under the fixed peer id in public/keeper.json,
-// answers the data connections pages open to it, proves who it is by signing
-// each page's nonce, and files what arrives on disk. The protocol is in
-// public/js/shared/keeper.js.
+// their browsers peer to peer whenever this computer is online, and their
+// logins. It joins the PeerJS signaling service under the fixed peer id in
+// public/keeper.json, answers the data connections pages open to it, proves
+// who it is by signing each page's nonce, and files what arrives on disk. The
+// protocol is in public/js/shared/keeper.js.
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
 //   <data>/devices/<device>/device.json             when the device was seen, its profile
+//   <data>/devices/<device>/login.json              its login, if it made one: the secret
+//                                                   pictures' hash, and the logged-in devices
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
 //   <data>/devices/<device>/islands/<id>/<day>.json the island as it was at the end of that day
 //
 // <device> is a hash of the secret device key, so a page can only ever add
-// to its own copies. WebRTC comes from node-datachannel, loaded only when the
-// keeper goes online.
-import { createHash, webcrypto } from 'node:crypto';
+// to its own copies. A login turns that folder into a player: other devices
+// that log in with its name and secret pictures get a token that files their
+// copies there too, and brings its islands back to them. WebRTC comes from
+// node-datachannel, loaded only when the keeper goes online.
+import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -27,12 +31,17 @@ import {
   isIslandId,
   isNonce,
   isPeerId,
+  isPlayerId,
   isPublicKey,
+  isSecret,
+  isToken,
   keptProfile,
   KEEPER_VERSION,
   KEY_ALGORITHM,
+  loginName,
   MAX_PARTS,
   MAX_TEXT,
+  OLDEST_VERSION,
   randomHex,
   SIGN_ALGORITHM,
   toBase64Url,
@@ -53,11 +62,12 @@ export const ICE_SERVERS = [
   { hostname: 'us-0.turn.peerjs.com', port: 3478, username: 'peerjs', password: 'peerjsp', relayType: 'TurnUdp' },
 ];
 
-// A refusal the page is told about: { code, text }.
+// A refusal the page is told about: { code, text, ...extra }.
 export class KeepError extends Error {
-  constructor(code, text) {
+  constructor(code, text, extra = {}) {
     super(text);
     this.code = code;
+    this.extra = extra;
   }
 }
 
@@ -148,6 +158,23 @@ async function folderSize(dir) {
   return total;
 }
 
+// A secret's hash. Four pictures of sixteen are few enough to try them all
+// with the hash in hand, so what keeps a login safe is that only the keeper
+// has it, and that it lets nobody try many times (see KeeperStore.login).
+const hashSecret = (secret, salt) =>
+  new Promise((done, fail) => scrypt(secret.join(' '), salt, 32, { N: 16384, r: 8, p: 1 }, (error, key) => (error ? fail(error) : done(key))));
+// Tokens are kept as hashes too, so a copy of the folder lets nobody in.
+const hashToken = (token) => createHash('sha256').update(`kids-world session ${token}`).digest('hex');
+
+// After this many wrong tries for one name, logins with that name wait a while;
+// after this many in an hour for any names, all logins do.
+const NAME_TRIES = 5;
+const NAME_WAIT_MS = 10 * 60000;
+const HOUR_TRIES = 200;
+const HOUR_MS = 3600000;
+// The devices one login can be on at once; the one unused longest is logged out.
+const MAX_SESSIONS = 20;
+
 export class KeeperStore {
   constructor(dir, { maxBytes = 2 * GB, keepDays = 30, maxIslands = 200, now = () => Date.now(), dayOf = localDay } = {}) {
     this.dir = dir;
@@ -158,7 +185,14 @@ export class KeeperStore {
     this.dayOf = dayOf;
     this.bytes = 0;
     // Writes go one at a time, so two copies of one island never interleave.
+    // Whatever runs in the queue must not wait for the queue itself.
     this.queue = Promise.resolve();
+    // Wrong pictures lately: per login name, and when, for every name.
+    this.tries = new Map();
+    this.wrong = [];
+    // Logins are checked one at a time: each check is a slow hash per player
+    // of that name, and the counts of wrong tries hold only if none overlap.
+    this.checking = Promise.resolve();
   }
 
   // Counts what is kept already. Folders are made when the first copy arrives.
@@ -169,6 +203,11 @@ export class KeeperStore {
 
   static deviceId(key) {
     return createHash('sha256').update(`kids-world device ${key}`).digest('hex').slice(0, 20);
+  }
+
+  // Inside a device's folder. Callers check the id first.
+  path(device, ...rest) {
+    return join(this.dir, 'devices', device, ...rest);
   }
 
   serial(fn) {
@@ -197,7 +236,7 @@ export class KeeperStore {
   }
 
   async seen(device, changes) {
-    const file = join(this.dir, 'devices', device, 'device.json');
+    const file = this.path(device, 'device.json');
     const now = this.now();
     const old = (await readJson(file)) ?? { id: device, firstSeen: now };
     const record = { ...old, ...changes, id: device, lastSeen: now };
@@ -205,8 +244,18 @@ export class KeeperStore {
     return record;
   }
 
+  // ------------------------------------------------ copies
+
+  // From a page that is not logged in: filed under its device key.
   keepIsland(key, id, save) {
-    if (!isDeviceKey(key) || !isIslandId(id)) return Promise.reject(new KeepError('bad', 'That is not an island this keeper knows how to keep.'));
+    if (!isDeviceKey(key)) return Promise.reject(new KeepError('bad', 'That is not an island this keeper knows how to keep.'));
+    return this.keepIslandIn(KeeperStore.deviceId(key), id, save);
+  }
+
+  // newerOnly: for a player's folder, which several devices send to, where a
+  // copy older than the one kept already is not kept over it ({ stale }).
+  keepIslandIn(device, id, save, { newerOnly = false } = {}) {
+    if (!isDeviceId(device) || !isIslandId(id)) return Promise.reject(new KeepError('bad', 'That is not an island this keeper knows how to keep.'));
     if (!save || typeof save !== 'object' || save.app !== 'kids-world' || save.kind !== 'island') {
       return Promise.reject(new KeepError('bad', 'That is not a Kids World island.'));
     }
@@ -219,24 +268,30 @@ export class KeeperStore {
     const text = JSON.stringify(save);
     if (text.length > MAX_TEXT) return Promise.reject(new KeepError('bad', 'That island is too big to keep.'));
     return this.serial(async () => {
-      const device = KeeperStore.deviceId(key);
-      const islands = join(this.dir, 'devices', device, 'islands');
+      const islands = this.path(device, 'islands');
       const folder = join(islands, id);
       const known = await stat(folder).catch(() => null);
       if (!known) {
         const count = (await readdir(islands).catch(() => [])).length;
         if (count >= this.maxIslands) throw new KeepError('full', 'The keeper has no room for more islands from this device.');
       }
-      this.room(text.length);
-      await mkdir(folder, { recursive: true, mode: 0o700 });
+      const old = known ? await readJson(join(folder, 'info.json')) : null;
       const now = this.now();
       const savedAt = Number.isFinite(save.savedAt) ? save.savedAt : now;
+      if (newerOnly && old && old.savedAt > savedAt) {
+        const record = await this.seen(device, {});
+        return { device, savedAt: old.savedAt, name: old.name, player: record.profile?.name ?? '', stale: true };
+      }
+      this.room(text.length);
+      await mkdir(folder, { recursive: true, mode: 0o700 });
       await this.write(join(folder, `${this.dayOf(now)}.json`), text);
-      const info = { id, name: world.name, theme: world.theme, code: isValidCode(save.code) ? save.code : '', savedAt, keptAt: now, bytes: text.length };
+      // Said goodbye to on one device and changed on another since, it is back.
+      const forgotten = old?.forgotten >= savedAt ? { forgotten: old.forgotten } : {};
+      const info = { id, name: world.name, theme: world.theme, code: isValidCode(save.code) ? save.code : '', savedAt, keptAt: now, bytes: text.length, ...forgotten };
       await this.write(join(folder, 'info.json'), JSON.stringify(info));
       // One copy a day, for the last keepDays days that had one.
       const days = (await readdir(folder)).filter((f) => isDay(f.slice(0, -5)) && f.endsWith('.json')).sort();
-      for (const old of days.slice(0, Math.max(0, days.length - this.keepDays))) await this.remove(join(folder, old));
+      for (const day of days.slice(0, Math.max(0, days.length - this.keepDays))) await this.remove(join(folder, day));
       const record = await this.seen(device, {});
       return { device, savedAt, name: world.name, player: record.profile?.name ?? '' };
     });
@@ -244,15 +299,210 @@ export class KeeperStore {
 
   keepProfile(key, raw) {
     if (!isDeviceKey(key)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    return this.keepProfileIn(KeeperStore.deviceId(key), raw);
+  }
+
+  keepProfileIn(device, raw) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
     const profile = keptProfile(raw);
+    return this.serial(() => this.storeProfile(device, profile));
+  }
+
+  async storeProfile(device, profile) {
+    this.room(JSON.stringify(profile).length);
+    await mkdir(this.path(device), { recursive: true, mode: 0o700 });
+    await this.seen(device, { profile, profileAt: this.now() });
+    return { device, player: profile.name };
+  }
+
+  // ------------------------------------------------ logins
+
+  async readLogin(device) {
+    const login = await readJson(this.path(device, 'login.json'));
+    if (typeof login?.salt !== 'string' || typeof login.hash !== 'string') return null;
+    return { ...login, sessions: login.sessions && typeof login.sessions === 'object' ? login.sessions : {} };
+  }
+
+  // A new session for a device that logged in; the one unused longest goes
+  // when there are too many.
+  static addSession(login, token, now) {
+    login.sessions[hashToken(token)] = { at: now, seen: now };
+    const old = Object.entries(login.sessions).sort((a, b) => (b[1].seen ?? 0) - (a[1].seen ?? 0));
+    for (const [hash] of old.slice(MAX_SESSIONS)) delete login.sessions[hash];
+  }
+
+  // Makes a login for a device's folder, or gives it new secret pictures.
+  // profile: who the player is, kept first, as a login goes by their name.
+  // Returns { player, token, name }; the token is for the device that made
+  // it, unless session is false (new pictures from a device already in, or
+  // from the admin pages).
+  makeLogin(device, secret, profile = null, { session = true } = {}) {
+    if (!isDeviceId(device) || !isSecret(secret)) return Promise.reject(new KeepError('bad', 'Those are not secret pictures.'));
     return this.serial(async () => {
-      const device = KeeperStore.deviceId(key);
-      this.room(JSON.stringify(profile).length);
-      await mkdir(join(this.dir, 'devices', device), { recursive: true, mode: 0o700 });
-      await this.seen(device, { profile, profileAt: this.now() });
-      return { device, player: profile.name };
+      if (profile) await this.storeProfile(device, keptProfile(profile));
+      const record = await readJson(this.path(device, 'device.json'));
+      const name = loginName(record?.profile?.name);
+      if (!name) throw new KeepError('bad', 'The keeper needs to know your name first.');
+      const old = await this.readLogin(device);
+      const salt = randomBytes(16).toString('hex');
+      const hash = (await hashSecret(secret, salt)).toString('hex');
+      const now = this.now();
+      const login = { salt, hash, made: old?.made ?? now, changed: now, sessions: old?.sessions ?? {} };
+      const token = session ? randomHex(16) : null;
+      if (token) KeeperStore.addSession(login, token, now);
+      await this.write(this.path(device, 'login.json'), JSON.stringify(login));
+      return { player: device, token, name };
     });
   }
+
+  // How long logins with this name wait before another try, in ms.
+  waitFor(name) {
+    const now = this.now();
+    this.wrong = this.wrong.filter((t) => now - t < HOUR_MS);
+    const t = this.tries.get(name);
+    const mine = t && t.count >= NAME_TRIES ? t.last + NAME_WAIT_MS : 0;
+    const all = this.wrong.length >= HOUR_TRIES ? this.wrong[0] + HOUR_MS : 0;
+    return Math.max(0, mine - now, all - now);
+  }
+
+  wrongTry(name) {
+    const now = this.now();
+    const t = this.tries.get(name);
+    this.tries.set(name, { count: t && now - t.last < NAME_WAIT_MS ? t.count + 1 : 1, last: now });
+    this.wrong.push(now);
+    if (this.tries.size > 2000) {
+      for (const [key, value] of this.tries) if (now - value.last >= NAME_WAIT_MS) this.tries.delete(key);
+    }
+  }
+
+  // Logs a device in: finds the player of this name whose secret pictures
+  // these are, and gives the device a token for them. Returns { player, token,
+  // profile }. Wrong pictures and a name with no login get the same answer,
+  // so nobody learns which names have one; after a few, that name waits.
+  login(name, secret) {
+    const run = this.checking.then(() => this.checkLogin(name, secret));
+    this.checking = run.catch(() => {});
+    return run;
+  }
+
+  async checkLogin(name, secret) {
+    const who = loginName(name);
+    const wait = who ? this.waitFor(who) : 0;
+    if (wait > 0) throw new KeepError('wait', 'Too many tries. Wait a little, then try again.', { wait });
+    if (!who || !isSecret(secret)) throw new KeepError('wrong', 'Those are not the right pictures.');
+    const found = [];
+    const root = join(this.dir, 'devices');
+    for (const device of await readdir(root).catch(() => [])) {
+      if (!isDeviceId(device)) continue;
+      const login = await this.readLogin(device);
+      if (!login) continue;
+      const record = await readJson(join(root, device, 'device.json'));
+      if (loginName(record?.profile?.name) !== who) continue;
+      const hash = await hashSecret(secret, login.salt);
+      const kept = Buffer.from(login.hash, 'hex');
+      if (kept.length === hash.length && timingSafeEqual(hash, kept)) found.push({ device, seen: record.lastSeen ?? 0 });
+    }
+    if (!found.length) {
+      this.wrongTry(who);
+      throw new KeepError('wrong', 'Those are not the right pictures.');
+    }
+    this.tries.delete(who);
+    // Two players of one name with the same pictures: the one seen last.
+    const { device } = found.sort((a, b) => b.seen - a.seen)[0];
+    return this.serial(async () => {
+      const login = await this.readLogin(device);
+      if (!login) throw new KeepError('wrong', 'Those are not the right pictures.');
+      const token = randomHex(16);
+      KeeperStore.addSession(login, token, this.now());
+      await this.write(this.path(device, 'login.json'), JSON.stringify(login));
+      const record = await readJson(this.path(device, 'device.json'));
+      return { player: device, token, profile: record?.profile ?? null };
+    });
+  }
+
+  // Whether a device that logged in still is: its token is one this player
+  // gave out, and nobody removed the login since.
+  checkSession(device, token) {
+    if (!isPlayerId(device) || !isToken(token)) return Promise.resolve(false);
+    return this.serial(async () => {
+      const login = await this.readLogin(device);
+      const session = login?.sessions[hashToken(token)];
+      if (!session) return false;
+      // When it was last used, at most once an hour.
+      if (this.now() - (session.seen ?? 0) > HOUR_MS) {
+        session.seen = this.now();
+        await this.write(this.path(device, 'login.json'), JSON.stringify(login));
+      }
+      return true;
+    });
+  }
+
+  logout(device, token) {
+    if (!isPlayerId(device) || !isToken(token)) return Promise.resolve(false);
+    return this.serial(async () => {
+      const login = await this.readLogin(device);
+      if (!login?.sessions[hashToken(token)]) return false;
+      delete login.sessions[hashToken(token)];
+      await this.write(this.path(device, 'login.json'), JSON.stringify(login));
+      return true;
+    });
+  }
+
+  // From the admin pages: every device logged in to it is logged out.
+  removeLogin(device) {
+    if (!isDeviceId(device)) return Promise.resolve(false);
+    return this.serial(async () => {
+      const file = this.path(device, 'login.json');
+      if (!(await stat(file).catch(() => null))) return false;
+      await this.remove(file);
+      return true;
+    });
+  }
+
+  // ------------------------------------------------ for a logged-in page
+
+  // The player's profile and islands, so each of their devices can fetch
+  // what it lacks, and the islands they said goodbye to, so it drops those.
+  async list(device) {
+    if (!isDeviceId(device)) return { profile: null, islands: [], forgotten: [] };
+    const record = await readJson(this.path(device, 'device.json'));
+    const islands = [];
+    const forgotten = [];
+    for (const id of await readdir(this.path(device, 'islands')).catch(() => [])) {
+      if (!isIslandId(id)) continue;
+      const info = await readJson(this.path(device, 'islands', id, 'info.json'));
+      if (!info) continue;
+      if (info.forgotten) forgotten.push({ id, at: info.forgotten });
+      else islands.push({ id, name: info.name, theme: info.theme, code: info.code, savedAt: info.savedAt });
+    }
+    return { profile: record?.profile ?? null, islands, forgotten };
+  }
+
+  // The latest copy of one of the player's islands, as kept (JSON text).
+  async islandText(device, id) {
+    const info = await this.islandInfo(device, id);
+    if (!info || info.forgotten) return null;
+    const file = await this.islandFile(device, id);
+    return file ? readFile(file, 'utf8').catch(() => null) : null;
+  }
+
+  // The player said goodbye to an island on one of their devices, at `at`:
+  // the others drop it too, unless it was changed later. Its copies stay
+  // here, for the admin pages.
+  forgetIsland(device, id, at = this.now()) {
+    if (!isDeviceId(device) || !isIslandId(id)) return Promise.resolve(false);
+    return this.serial(async () => {
+      const file = this.path(device, 'islands', id, 'info.json');
+      const info = await readJson(file);
+      if (!info) return false;
+      // Later than every copy kept, even from a device whose clock is ahead.
+      const when = Math.max(Number.isFinite(at) ? Math.min(at, this.now() + HOUR_MS) : this.now(), info.savedAt ?? 0);
+      await this.write(file, JSON.stringify({ ...info, forgotten: Math.max(when, info.forgotten ?? 0) }));
+      return true;
+    });
+  }
+
+  // ------------------------------------------------ for the admin pages
 
   async devices() {
     const root = join(this.dir, 'devices');
@@ -260,6 +510,7 @@ export class KeeperStore {
     for (const device of await readdir(root).catch(() => [])) {
       if (!isDeviceId(device)) continue;
       const info = (await readJson(join(root, device, 'device.json'))) ?? { id: device };
+      const login = await this.readLogin(device);
       const islands = [];
       for (const id of await readdir(join(root, device, 'islands')).catch(() => [])) {
         if (!isIslandId(id)) continue;
@@ -274,20 +525,29 @@ export class KeeperStore {
         islands.push({ ...island, days });
       }
       islands.sort((a, b) => b.keptAt - a.keptAt);
-      out.push({ id: device, firstSeen: info.firstSeen ?? 0, lastSeen: info.lastSeen ?? 0, profile: info.profile ?? null, profileAt: info.profileAt ?? 0, islands });
+      out.push({
+        id: device,
+        firstSeen: info.firstSeen ?? 0,
+        lastSeen: info.lastSeen ?? 0,
+        profile: info.profile ?? null,
+        profileAt: info.profileAt ?? 0,
+        // Never the hashes: when it was made, and on how many devices it is.
+        login: login ? { made: login.made ?? 0, changed: login.changed ?? 0, devices: Object.keys(login.sessions).length } : null,
+        islands,
+      });
     }
     return out.sort((a, b) => b.lastSeen - a.lastSeen);
   }
 
   async islandInfo(device, id) {
     if (!isDeviceId(device) || !isIslandId(id)) return null;
-    return readJson(join(this.dir, 'devices', device, 'islands', id, 'info.json'));
+    return readJson(this.path(device, 'islands', id, 'info.json'));
   }
 
   // The island as it was at the end of `day`, or its latest copy. Null if there is none.
   async islandFile(device, id, day = null) {
     if (!isDeviceId(device) || !isIslandId(id) || (day !== null && !isDay(day))) return null;
-    const folder = join(this.dir, 'devices', device, 'islands', id);
+    const folder = this.path(device, 'islands', id);
     const days = (await readdir(folder).catch(() => [])).map((f) => f.slice(0, -5)).filter(isDay).sort();
     const pick = day ?? days.at(-1);
     return pick && days.includes(pick) ? join(folder, `${pick}.json`) : null;
@@ -296,7 +556,7 @@ export class KeeperStore {
   deleteIsland(device, id) {
     if (!isDeviceId(device) || !isIslandId(id)) return Promise.resolve(false);
     return this.serial(async () => {
-      const folder = join(this.dir, 'devices', device, 'islands', id);
+      const folder = this.path(device, 'islands', id);
       if (!(await stat(folder).catch(() => null))) return false;
       await this.remove(folder);
       return true;
@@ -306,7 +566,7 @@ export class KeeperStore {
   deleteDevice(device) {
     if (!isDeviceId(device)) return Promise.resolve(false);
     return this.serial(async () => {
-      const folder = join(this.dir, 'devices', device);
+      const folder = this.path(device);
       if (!(await stat(folder).catch(() => null))) return false;
       await this.remove(folder);
       return true;
@@ -497,8 +757,14 @@ export class Keeper extends EventEmitter {
     this.signaling = null;
   }
 
+  // The private key, to sign with. start() does this first; tests that talk
+  // to receive() directly, without WebRTC, call only this.
+  async loadKey() {
+    this.privateKey ??= await webcrypto.subtle.importKey('jwk', this.identity.privateKey, KEY_ALGORITHM, false, ['sign']);
+  }
+
   async start() {
-    this.privateKey = await webcrypto.subtle.importKey('jwk', this.identity.privateKey, KEY_ALGORITHM, false, ['sign']);
+    await this.loadKey();
     const rtc = await import('node-datachannel');
     this.rtc = rtc.default ?? rtc;
     this.signaling = new Signaling({ id: this.identity.peer, server: this.server });
@@ -548,9 +814,15 @@ export class Keeper extends EventEmitter {
     }
   }
 
+  // A page's connection: who it is once it says so (see from()), and its limits.
+  connection(fields) {
+    const now = this.now();
+    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, ...fields };
+  }
+
   answer(peer, id, sdp) {
     const pc = new this.rtc.PeerConnection(id, { iceServers: this.iceServers });
-    const conn = { id, peer, pc, dc: null, hello: false, device: null, pieces: new Reassembler(MAX_PARTS, 2), started: this.now(), lastSeen: this.now(), tokens: 20, busy: false, closed: false };
+    const conn = this.connection({ id, peer, pc });
     this.conns.set(id, conn);
     pc.onLocalDescription((text, type) => this.signaling.send({ type: 'ANSWER', dst: peer, payload: { sdp: { type, sdp: text }, type: 'data', connectionId: id } }));
     pc.onLocalCandidate((candidate, mid) => this.signaling.send({ type: 'CANDIDATE', dst: peer, payload: { candidate: { candidate, sdpMid: mid, sdpMLineIndex: 0 }, type: 'data', connectionId: id } }));
@@ -576,9 +848,13 @@ export class Keeper extends EventEmitter {
   }
 
   reply(conn, msg) {
+    this.replyText(conn, JSON.stringify(msg));
+  }
+
+  replyText(conn, text) {
     if (conn.closed || !conn.dc?.isOpen()) return;
     try {
-      sendText({ send: (text) => conn.dc.sendMessage(text) }, JSON.stringify(msg));
+      sendText({ send: (piece) => conn.dc.sendMessage(piece) }, text);
     } catch {
       this.drop(conn);
     }
@@ -605,18 +881,7 @@ export class Keeper extends EventEmitter {
     }
     if (!msg || typeof msg !== 'object') return;
     if (!conn.hello) {
-      if (msg.t !== 'hello' || !isNonce(msg.nonce) || !isDeviceKey(msg.device)) {
-        this.drop(conn);
-        return;
-      }
-      if (msg.v !== KEEPER_VERSION) {
-        this.reply(conn, { t: 'error', code: 'version', text: 'This keeper speaks a different version.' });
-        return;
-      }
-      conn.hello = true;
-      conn.device = msg.device;
-      const sig = await webcrypto.subtle.sign(SIGN_ALGORITHM, this.privateKey, challenge(this.identity.peer, msg.nonce));
-      this.reply(conn, { t: 'hello', v: KEEPER_VERSION, sig: toBase64Url(sig) });
+      await this.hello(conn, msg);
       return;
     }
     if (conn.busy) {
@@ -625,25 +890,115 @@ export class Keeper extends EventEmitter {
     }
     conn.busy = true;
     try {
-      if (msg.t === 'island') {
-        const { device, savedAt, name, player } = await this.store.keepIsland(conn.device, msg.id, msg.save);
-        this.reply(conn, { t: 'kept', what: 'island', id: msg.id, savedAt });
-        this.note({ device, what: 'island', id: msg.id, island: name, player });
-      } else if (msg.t === 'profile') {
-        const { device, player } = await this.store.keepProfile(conn.device, msg.profile);
-        this.reply(conn, { t: 'kept', what: 'profile' });
-        this.note({ device, what: 'profile', player });
-      } else if (msg.t === 'bye') {
-        this.drop(conn);
-      }
+      await this.handle(conn, msg);
     } catch (error) {
-      if (error instanceof KeepError) this.reply(conn, { t: 'error', code: error.code, text: error.message });
+      if (error instanceof KeepError) this.reply(conn, { t: 'error', code: error.code, text: error.message, ...error.extra });
       else {
         this.log(error);
-        this.reply(conn, { t: 'error', code: 'oops', text: 'The keeper could not keep that.' });
+        this.reply(conn, { t: 'error', code: 'oops', text: 'The keeper could not do that.' });
       }
     } finally {
       conn.busy = false;
+    }
+  }
+
+  // The page's hello: it gets a signature over its nonce. A page of version 1
+  // said who it is right here; one of version 2 says so once it has checked
+  // the signature (see 'me').
+  async hello(conn, msg) {
+    const v = msg.v === OLDEST_VERSION ? OLDEST_VERSION : KEEPER_VERSION;
+    if (msg.t !== 'hello' || !isNonce(msg.nonce) || (v === OLDEST_VERSION && !isDeviceKey(msg.device))) {
+      this.drop(conn);
+      return;
+    }
+    if (msg.v !== v) {
+      this.reply(conn, { t: 'error', code: 'version', text: 'This keeper speaks a different version.' });
+      return;
+    }
+    conn.hello = true;
+    if (v === OLDEST_VERSION) this.from(conn, msg.device);
+    const sig = await webcrypto.subtle.sign(SIGN_ALGORITHM, this.privateKey, challenge(this.identity.peer, msg.nonce, v));
+    this.reply(conn, { t: 'hello', v, sig: toBase64Url(sig) });
+  }
+
+  // Where this connection's copies go: its device's folder, or the folder of
+  // the player it is logged in to (with the token that let it in).
+  from(conn, device, player = null, token = null) {
+    conn.device = device;
+    conn.player = player;
+    conn.token = token;
+    conn.folder = player ?? KeeperStore.deviceId(device);
+  }
+
+  async handle(conn, msg) {
+    if (!conn.folder) {
+      // Who the page is, now that it knows who the keeper is.
+      if (msg.t !== 'me' || !isDeviceKey(msg.device)) {
+        this.drop(conn);
+        return;
+      }
+      const { player, token } = msg.login && typeof msg.login === 'object' ? msg.login : {};
+      const ok = Boolean(player) && (await this.store.checkSession(player, token));
+      this.from(conn, msg.device, ok ? player : null, ok ? token : null);
+      this.reply(conn, { t: 'me', ...(ok ? { player } : {}) });
+      return;
+    }
+    const mine = (what) => {
+      if (!conn.player) throw new KeepError('bad', `Log in to ${what}.`);
+      return conn.player;
+    };
+    switch (msg.t) {
+      case 'island': {
+        const { device, savedAt, name, player, stale } = await this.store.keepIslandIn(conn.folder, msg.id, msg.save, { newerOnly: Boolean(conn.player) });
+        this.reply(conn, { t: 'kept', what: 'island', id: msg.id, savedAt, ...(stale ? { stale } : {}) });
+        if (!stale) this.note({ device, what: 'island', id: msg.id, island: name, player });
+        break;
+      }
+      case 'profile': {
+        const { device, player } = await this.store.keepProfileIn(conn.folder, msg.profile);
+        this.reply(conn, { t: 'kept', what: 'profile' });
+        this.note({ device, what: 'profile', player });
+        break;
+      }
+      case 'login': {
+        const { player, token, profile } = await this.store.login(msg.name, msg.secret);
+        this.from(conn, conn.device, player, token);
+        this.reply(conn, { t: 'login', player, token, profile });
+        this.note({ device: player, what: 'login', player: profile?.name ?? '' });
+        break;
+      }
+      case 'make-login': {
+        // New pictures for the player it is logged in to, or a login for this device's folder.
+        const { player, token, name } = await this.store.makeLogin(conn.folder, msg.secret, conn.player ? null : msg.profile, { session: !conn.player });
+        if (token) this.from(conn, conn.device, player, token);
+        this.reply(conn, { t: 'login', player, ...(token ? { token } : {}) });
+        this.note({ device: player, what: token ? 'made-login' : 'new-pictures', player: name });
+        break;
+      }
+      case 'logout':
+        if (conn.player) await this.store.logout(conn.player, conn.token);
+        this.from(conn, conn.device);
+        this.reply(conn, { t: 'kept', what: 'logout' });
+        break;
+      case 'list':
+        this.reply(conn, { t: 'list', ...(await this.store.list(mine('see your islands'))) });
+        break;
+      case 'fetch': {
+        const text = isIslandId(msg.id) ? await this.store.islandText(mine('fetch islands'), msg.id) : null;
+        if (!text) throw new KeepError('missing', 'The keeper has no such island.');
+        // The copy as kept, without reading it back into objects.
+        this.replyText(conn, `{"t":"island","id":${JSON.stringify(msg.id)},"save":${text}}`);
+        break;
+      }
+      case 'forget':
+        await this.store.forgetIsland(mine('say goodbye to islands'), msg.id, msg.at);
+        this.reply(conn, { t: 'kept', what: 'forget', id: msg.id });
+        break;
+      case 'bye':
+        this.drop(conn);
+        break;
+      default:
+        throw new KeepError('bad', 'The keeper does not know that message.');
     }
   }
 

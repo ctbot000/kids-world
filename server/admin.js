@@ -1,7 +1,9 @@
 // The keeper's admin pages, at /admin/: what it has kept and from whom, with
-// downloads of any day's copy and deletes. Only for this computer: requests
-// from other machines, or under any other host name (a DNS rebinding page),
-// are refused, and changes need a header no other site's page can send.
+// downloads of any day's copy and deletes, and players' logins: new secret
+// pictures for a player who forgot theirs, or no login at all. Only for this
+// computer: requests from other machines, or under any other host name (a DNS
+// rebinding page), are refused, and changes need a header no other site's
+// page can send.
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +21,22 @@ const isLocal = (req) => LOOPBACK.has(req.socket.remoteAddress) && LOCAL_NAMES.h
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
+}
+
+// A small JSON body, or null.
+async function readJson(req, limit = 4096) {
+  const parts = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) return null;
+    parts.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(parts).toString('utf8'));
+  } catch {
+    return null;
+  }
 }
 
 async function sendFile(req, res, file, type, extra = {}) {
@@ -64,6 +82,25 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         keepDays: store.keepDays,
         devices: await store.devices(),
       });
+      return true;
+    }
+    const login = /^\/admin\/api\/devices\/([^/]+)\/login$/.exec(pathname);
+    if (login) {
+      const [, device] = login;
+      if (req.method === 'PUT') {
+        // New secret pictures (a login, if there was none); the devices logged in stay so.
+        const body = await readJson(req);
+        try {
+          await store.makeLogin(device, body?.secret, null, { session: false });
+          json(res, 200, { ok: true });
+        } catch (error) {
+          json(res, error.code === 'bad' ? 400 : 500, { error: error.message });
+        }
+      } else if (req.method === 'DELETE') {
+        // Every device logged in to it is logged out.
+        const ok = await store.removeLogin(device);
+        json(res, ok ? 200 : 404, { ok });
+      } else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
       return true;
     }
     const m = /^\/admin\/api\/devices\/([^/]+)(?:\/islands\/([^/]+))?$/.exec(pathname);

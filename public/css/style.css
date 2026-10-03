@@ -1424,6 +1424,114 @@ kbd {
   font-weight: 600;
 }
 
+/* ------------------------------------------------ logins */
+
+/* Secret pictures: four slots that fill as you tap, over a 4×4 pad. */
+.secret-slots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.secret-slot {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 3px dashed var(--line);
+  background: white;
+  font-size: 1.7rem;
+}
+
+.secret-slot.on {
+  border-style: solid;
+  border-color: var(--sun-dark);
+  background: #fff3b0;
+}
+
+/* Tapped, but kept secret: a dot. */
+.secret-slot.on:empty::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.picture-pad {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.choice.picture {
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 0;
+}
+
+.choice.picture .emoji {
+  font-size: 2.1rem;
+}
+
+.secret-row {
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.secret-shown {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0;
+  font-size: 2.8rem;
+}
+
+/* A name, a word at a time. */
+.word-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.word-grid .chip {
+  padding: 7px 12px;
+  font-size: 0.95rem;
+}
+
+.known-players .emoji {
+  font-size: 1.3rem;
+}
+
+.login-note {
+  min-height: 1.4em;
+  font-weight: 600;
+}
+
+.login-note.warn {
+  color: var(--pink-dark);
+}
+
+.login-note.good {
+  color: var(--grass-dark);
+}
+
+.login-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 2px dashed var(--line);
+}
+
 /* ------------------------------------------------ loading */
 
 .loading {

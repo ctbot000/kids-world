@@ -1,22 +1,39 @@
 // The keeper: a computer that keeps a copy of every player's islands and of
-// who they are, sent by their browsers peer to peer whenever it is online.
+// who they are, sent by their browsers peer to peer whenever it is online. A
+// player can also make a login there, their name and four secret pictures,
+// and log in with it on any other device to play as themselves: the same
+// look, stickers, basket and islands everywhere.
 // This is what the page and the keeper (server/keeper.js) agree on: the
 // messages, how the keeper proves it is the real one, and the limits.
 //
-//   page → keeper   { t: 'hello', v, nonce, device }
+//   page → keeper   { t: 'hello', v, nonce }
 //   keeper → page   { t: 'hello', v, sig }           sig: the challenge, signed
+// Only then does the page say who it is, which takes a secret:
+//   page → keeper   { t: 'me', device, login? }      login: { player, token }
+//   keeper → page   { t: 'me', player? }             player: the login, unless it is gone
+// Then one message at a time, each answered before the next:
 //   page → keeper   { t: 'island', id, save }  or  { t: 'profile', profile }
 //   keeper → page   { t: 'kept', what, id?, savedAt? }  or  { t: 'error', code, text }
+// Logins:
+//   { t: 'login', name, secret }          → { t: 'login', player, token, profile }
+//   { t: 'make-login', secret, profile }  → { t: 'login', player, token? }  (new pictures, once logged in)
+//   { t: 'logout' }                       → { t: 'kept', what: 'logout' }
+// A logged-in page also brings back what its other devices sent:
+//   { t: 'list' }                         → { t: 'list', profile, islands, forgotten }
+//   { t: 'fetch', id }                    → { t: 'island', id, save }
+//   { t: 'forget', id }                   → { t: 'kept', what: 'forget', id }
 //
 // Anyone can register a peer id while the keeper is away, so the page sends
-// nothing until the keeper has signed the page's fresh nonce with the key
-// whose public half is in keeper.json. The data channel itself is encrypted
-// end to end, as every WebRTC channel is.
+// nothing but its nonce until the keeper has signed it with the key whose
+// public half is in keeper.json. The data channel itself is encrypted end to
+// end, as every WebRTC channel is. Pages of version 1 sent their device key
+// in the hello, before that check; the keeper still answers them.
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
 import { cleanLook, isValidName } from './words.js';
 
-export const KEEPER_VERSION = 1;
+export const KEEPER_VERSION = 2;
+export const OLDEST_VERSION = 1;
 
 // The longest message: an island, as JSON. A busy island is a few hundred KB.
 export const MAX_TEXT = 4 * 1024 * 1024;
@@ -26,9 +43,13 @@ export const SIGN_ALGORITHM = { name: 'ECDSA', hash: 'SHA-256' };
 export const KEY_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' };
 
 // The device key is a secret only that browser knows; the keeper files
-// copies under a hash of it, so nobody else can overwrite them.
+// copies under a hash of it, so nobody else can overwrite them. A login's
+// player id is the folder its copies are filed in, and its token is the
+// secret one logged-in device holds.
 export const isDeviceKey = (v) => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
 export const isNonce = isDeviceKey;
+export const isToken = isDeviceKey;
+export const isPlayerId = (v) => typeof v === 'string' && /^[0-9a-f]{20}$/.test(v);
 export const isIslandId = (v) => typeof v === 'string' && /^[0-9a-f]{12}$/.test(v);
 // What PeerServer accepts as an id.
 export const isPeerId = (v) => typeof v === 'string' && v.length <= 64 && /^[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*$/.test(v);
@@ -39,8 +60,8 @@ export function isPublicKey(jwk) {
 
 // What the keeper signs: its own peer id and the page's nonce, so a
 // signature is good for one keeper and one conversation only.
-export function challenge(peer, nonce) {
-  return new TextEncoder().encode(`kids-world keeper ${KEEPER_VERSION}\n${peer}\n${nonce}`);
+export function challenge(peer, nonce, v = KEEPER_VERSION) {
+  return new TextEncoder().encode(`kids-world keeper ${v}\n${peer}\n${nonce}`);
 }
 
 export function randomHex(bytes) {
@@ -70,8 +91,9 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
 }
 
 // What is kept of a profile: your name and look, your basket, what you have
-// done and the stickers it earned. Never your tokens, which let you back into
-// islands as yourself, nor your settings. The page sends exactly this.
+// done and the stickers it earned, and when your name, look or basket last
+// changed. Never your tokens, which let you back into islands as yourself,
+// nor your settings. The page sends exactly this.
 export function keptProfile(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const numbers = (source, pattern, max) => {
@@ -93,5 +115,72 @@ export function keptProfile(raw) {
     basket,
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, 64),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, 64),
+    changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
+}
+
+// ---------------------------------------------------------------- logins
+
+// A login's password: four of these, in order, tapped rather than typed.
+export const SECRET_PICTURES = [
+  { key: 'apple', icon: '🍎', name: 'Apple' },
+  { key: 'dog', icon: '🐶', name: 'Dog' },
+  { key: 'star', icon: '⭐', name: 'Star' },
+  { key: 'rocket', icon: '🚀', name: 'Rocket' },
+  { key: 'rainbow', icon: '🌈', name: 'Rainbow' },
+  { key: 'ice-cream', icon: '🍦', name: 'Ice cream' },
+  { key: 'fish', icon: '🐟', name: 'Fish' },
+  { key: 'sunflower', icon: '🌻', name: 'Sunflower' },
+  { key: 'car', icon: '🚗', name: 'Car' },
+  { key: 'balloon', icon: '🎈', name: 'Balloon' },
+  { key: 'butterfly', icon: '🦋', name: 'Butterfly' },
+  { key: 'pizza', icon: '🍕', name: 'Pizza' },
+  { key: 'ball', icon: '⚽', name: 'Ball' },
+  { key: 'turtle', icon: '🐢', name: 'Turtle' },
+  { key: 'moon', icon: '🌙', name: 'Moon' },
+  { key: 'present', icon: '🎁', name: 'Present' },
+];
+export const SECRET_LENGTH = 4;
+const PICTURE_KEYS = new Set(SECRET_PICTURES.map((s) => s.key));
+
+export const isSecret = (v) => Array.isArray(v) && v.length === SECRET_LENGTH && v.every((k) => PICTURE_KEYS.has(k));
+
+// A login's name: the player's own, without the number an island adds when
+// two players there have the same one.
+export const loginName = (name) => (isValidName(name) ? name.replace(/ [2-9]$/, '') : '');
+
+// One player's profile from two devices, put together: the name, look and
+// basket from whichever changed them last, every sticker either has earned
+// (dated the earlier day), and the most either has done of everything.
+export function mergeProfiles(mine, theirs) {
+  const a = keptProfile(mine);
+  const b = keptProfile(theirs);
+  const newer = b.name && (b.changedAt > a.changedAt || !a.name) ? b : a;
+  const stickers = { ...a.stickers };
+  for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
+  const stats = { ...a.stats };
+  for (const [key, n] of Object.entries(b.stats)) stats[key] = Math.max(stats[key] ?? 0, n);
+  return { name: newer.name, look: newer.look, basket: newer.basket, changedAt: newer.changedAt, stats, stickers };
+}
+
+// What a logged-in page does with the keeper's list of the player's islands:
+// fetch the ones the keeper has a newer copy of (of the newest `max`, which
+// is all a browser keeps), and drop the ones another device said goodbye to
+// since this page last changed them. Islands newer here go up as usual.
+//   mine: [{ id, savedAt }]   theirs: [{ id, savedAt }]   forgotten: [{ id, at }]
+export function planSync(mine, theirs, forgotten = [], max = 12) {
+  const here = new Map(mine.map((i) => [i.id, i.savedAt ?? 0]));
+  const gone = new Map(forgotten.map((f) => [f.id, f.at ?? 0]));
+  const drop = [...here].filter(([id, savedAt]) => gone.has(id) && savedAt <= gone.get(id)).map(([id]) => id);
+  const newest = new Map();
+  for (const [id, savedAt] of here) if (!drop.includes(id)) newest.set(id, savedAt);
+  for (const i of theirs) if (!gone.has(i.id) && (i.savedAt ?? 0) > (newest.get(i.id) ?? -1)) newest.set(i.id, i.savedAt ?? 0);
+  const keep = new Set(
+    [...newest]
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, max)
+      .map(([id]) => id),
+  );
+  const fetch = theirs.filter((i) => keep.has(i.id) && !gone.has(i.id) && (i.savedAt ?? 0) > (here.get(i.id) ?? -1)).map((i) => i.id);
+  return { fetch, drop };
 }

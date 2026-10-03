@@ -1,7 +1,9 @@
 // You: your name and look, your settings, your basket of treasures, and the
 // stickers you have earned. Kept on this device, and copied to the keeper
-// (see keeper.js) unless that is switched off.
+// (see keeper.js) unless that is switched off. Logged in, you are the same on
+// every device: what another one sent the keeper is merged in here.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
+import { mergeProfiles } from './shared/keeper.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
 
@@ -60,6 +62,9 @@ function clean(raw) {
     hotbar,
     seenHelp: p.seenHelp === true,
     made: p.made === true,
+    // When your name, look or basket last changed: 0 for a profile nobody has
+    // touched yet, which loses to any other when two are merged.
+    changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
 }
 
@@ -88,8 +93,23 @@ export class Profile extends EventTarget {
 
   update(changes) {
     Object.assign(this.data, changes);
+    if ('name' in changes || 'look' in changes) this.data.changedAt = Date.now();
     this.store();
     this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  // You, as another device of yours left you with the keeper (see
+  // mergeProfiles). Returns whether anything here changed.
+  merge(kept) {
+    if (!kept || typeof kept !== 'object') return false;
+    const merged = mergeProfiles(this.data, kept);
+    const before = JSON.stringify(this.data);
+    Object.assign(this.data, merged);
+    if (JSON.stringify(this.data) === before) return false;
+    this.store();
+    this.dispatchEvent(new CustomEvent('change'));
+    this.dispatchEvent(new CustomEvent('basket'));
+    return true;
   }
 
   setting(key, value) {
@@ -101,6 +121,7 @@ export class Profile extends EventTarget {
   addToBasket(key, n = 1) {
     if (!(key in this.data.basket)) return;
     this.data.basket[key] = Math.max(0, Math.min(999, this.data.basket[key] + n));
+    this.data.changedAt = Date.now();
     this.store();
     this.dispatchEvent(new CustomEvent('basket'));
   }

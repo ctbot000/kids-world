@@ -270,6 +270,51 @@ select:hover {
   color: var(--danger);
 }
 
+.login {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.login-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.picker {
+  margin-top: 10px;
+  padding: 12px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(8, 44px);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pad button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 24px;
+}
+
+.slots {
+  min-width: 8em;
+  font-size: 22px;
+  letter-spacing: 2px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .empty {
   padding: 24px;
   border: 2px dashed var(--line);
@@ -281,6 +326,10 @@ select:hover {
 @media (max-width: 480px) {
   .who {
     flex-wrap: wrap;
+  }
+
+  .pad {
+    grid-template-columns: repeat(4, 44px);
   }
 
   .island {

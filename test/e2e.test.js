@@ -1277,13 +1277,114 @@ test('the keeper keeps copies of your islands and of you, sent peer to peer; an 
   }
 });
 
-test('the admin page shows each player and their islands, drawn from above, and deletes them', { skip }, async () => {
+// Taps secret pictures in the login dialog, in order, once it has landed.
+async function tapPictures(page, names) {
+  for (const name of names) {
+    const button = await page.waitForSelector(`#modal .picture-pad button[aria-label="${name}"]`, { timeout: 15000 * SLOW });
+    await landed(page, button);
+    await button.click();
+  }
+}
+
+// Does something that reloads the page as someone else, and waits for the game to be back.
+async function reloadsAfter(page, fn) {
+  const reloaded = page.waitForNavigation({ timeout: 60000 * SLOW });
+  await fn();
+  await reloaded;
+  await page.waitForFunction(() => window.kidsWorld?.ui, { timeout: 60000 * SLOW });
+}
+
+test('a login made on one device logs in another: the same you and islands both ways, until logging out', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const look = { animal: 'fox', fur: 'orange', shirt: 3, hat: 'crown' };
+  const tablet = await openPlayer(url, { name: 'Sunny Otter', look });
+  const phone = await openPlayer(url, { name: 'Happy Panda', look: { animal: 'panda', fur: 'white', shirt: 5, hat: 'cap' } });
+  const secret = ['Rocket', 'Apple', 'Moon', 'Apple'];
+  try {
+    // The tablet makes an island, then a login: four pictures, and the same four again.
+    await makeIsland(tablet, { online: false, theme: 'Flat Land' });
+    const name = await tablet.evaluate(() => window.kidsWorld.game.world.name);
+    await tablet.click('#btn-settings');
+    await clickButton(tablet, 'Leave island', '#modal');
+    await clickButton(tablet, 'Log in');
+    await clickButton(tablet, 'Make my login', '#modal');
+    await tapPictures(tablet, secret);
+    await until(tablet, () => document.querySelector('#modal .login-note')?.textContent.includes('same four again'));
+    await tapPictures(tablet, secret);
+    await until(tablet, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(tablet, () => clickButton(tablet, 'Got it', '#modal'));
+    await until(tablet, () => document.getElementById('btn-login').textContent.includes('My login'));
+    const player = await tablet.evaluate(() => window.kidsWorld.keeper.login.player);
+    assert.equal(player, KeeperStore.deviceId(await tablet.evaluate(() => window.kidsWorld.keeper.data.device)), 'the tablet’s copies are the player’s');
+
+    // The phone logs in with the name, a word at a time, and the pictures (wrong ones first).
+    await clickButton(phone, 'Log in');
+    await clickButton(phone, 'Sunny', '#modal .word-grid');
+    await clickButton(phone, 'Otter', '#modal .word-grid');
+    await tapPictures(phone, ['Dog', 'Dog', 'Star', 'Fish']);
+    await until(phone, () => document.querySelector('#modal .login-note')?.textContent.includes('not the right pictures'));
+    await reloadsAfter(phone, () => tapPictures(phone, secret));
+    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), 'Hi, Sunny Otter!');
+    assert.deepEqual(await phone.evaluate(() => window.kidsWorld.profile.look), look);
+
+    // The tablet's island comes to the phone, which opens it as its owner and builds on it.
+    await clickButton(phone, 'My islands');
+    await until(phone, (n) => [...document.querySelectorAll('#modal .island-item b')].some((b) => b.textContent === n), name);
+    await clickButton(phone, 'Play', '#modal');
+    await inGame(phone);
+    assert.equal(await phone.evaluate(() => window.kidsWorld.game.pid === window.kidsWorld.game.host), true, 'the owner');
+    const { cell, at } = await spotNear(phone, 2, -2);
+    const above = { ...cell, y: cell.y + 1 };
+    await phone.mouse.click(at.x, at.y);
+    await until(phone, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
+    await phone.click('#btn-settings');
+    await clickButton(phone, 'Leave island', '#modal');
+    const id = await phone.evaluate(() => window.kidsWorld.ui.handlers.islands()[0].id);
+    const keptBlock = async () => {
+      const text = await keeper.store.islandText(player, id);
+      const save = text && JSON.parse(text);
+      return save ? World.decode(save.meta, save.blocks).get(above.x, above.y, above.z) : 0;
+    };
+    await eventually(async () => (await keptBlock()) === 2);
+
+    // Back on the tablet, the phone's brick is there.
+    await reloadsAfter(tablet, () => tablet.reload());
+    await clickButton(tablet, 'My islands');
+    await until(tablet, (n) => [...document.querySelectorAll('#modal .island-item b')].some((b) => b.textContent === n), name);
+    await until(tablet, (id) => window.kidsWorld.keeper.data.sent[id] > 0 && !window.kidsWorld.keeper.syncing && window.kidsWorld.keeper.listed, id);
+    await clickButton(tablet, 'Play', '#modal');
+    await inGame(tablet);
+    assert.equal(await blockAt(tablet, above), 2);
+
+    // The phone logs out: the guest it was, and only the tablet is logged in.
+    await clickButton(phone, 'My login');
+    await reloadsAfter(phone, () => clickButton(phone, 'Log out', '#modal'));
+    assert.equal(await phone.$eval('#me-name', (el) => el.textContent), 'Hi, Happy Panda!');
+    await until(phone, () => document.getElementById('btn-login').textContent.includes('Log in'));
+    assert.equal((await keeper.store.devices()).find((d) => d.id === player).login.devices, 1);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await tablet.browserContext().close();
+    await phone.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('the admin page shows each player, their login and their islands, drawn from above, and deletes them', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const store = await new KeeperStore(dir).open();
   const key = 'e5'.repeat(16);
   const room = new Room({ code: '482753', theme: 'snowy', seed: 3 });
   await store.keepIsland(key, '0123456789ab', room.exportSave());
   await store.keepProfile(key, { name: 'Brave Fox', look: { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' }, stickers: { 'first-block': 1 } });
+  await store.makeLogin(KeeperStore.deviceId(key), ['moon', 'moon', 'star', 'dog']);
   const games = createGameServer({ log: () => {}, admin: adminHandler({ store }) });
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
   const context = await browser.createBrowserContext();
@@ -1294,6 +1395,7 @@ test('the admin page shows each player and their islands, drawn from above, and 
     await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
     await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
     assert.equal(await page.$eval('.island h4', (el) => el.textContent), `❄️ ${room.world.name}`);
+    assert.match(await page.$eval('.login-line', (el) => el.textContent), /Logs in on 1 device/);
     // The island from above: one pixel per column.
     await until(page, () => document.querySelector('img.map')?.naturalWidth === 128);
     const href = await page.$eval('.island a.button', (a) => a.getAttribute('href'));

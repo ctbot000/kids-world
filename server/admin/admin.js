@@ -1,11 +1,13 @@
 // The keeper's admin page: who has sent copies, their islands seen from above
-// (drawn with the game's own map code), and downloads or deletes. It reads
-// /admin/api/state every few seconds.
+// (drawn with the game's own map code), and downloads or deletes, and their
+// logins: new secret pictures for a player who forgot theirs, or none at all.
+// It reads /admin/api/state every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
 import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
+import { SECRET_LENGTH, SECRET_PICTURES } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
 import { ANIMALS } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
@@ -89,6 +91,107 @@ async function remove(path, question) {
   refresh(true);
 }
 
+// While new secret pictures are being picked, the page is not redrawn under them.
+let picking = 0;
+
+// Picking four secret pictures for a player, in order; done() once saved or cancelled.
+function picturePicker(device, done) {
+  picking++;
+  const picked = [];
+  const icon = (key) => SECRET_PICTURES.find((p) => p.key === key).icon;
+  const slots = h('span', { class: 'slots', 'aria-live': 'polite' });
+  const save = h('button', { type: 'button', disabled: true }, 'Save');
+  const draw = () => {
+    slots.textContent = Array.from({ length: SECRET_LENGTH }, (_, i) => (picked[i] ? icon(picked[i]) : '·')).join(' ');
+    save.disabled = picked.length !== SECRET_LENGTH;
+  };
+  const close = () => {
+    picking--;
+    done();
+  };
+  save.addEventListener('click', async () => {
+    const res = await api(`devices/${device.id}/login`, {
+      method: 'PUT',
+      headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: picked }),
+    });
+    if (!res.ok) alert(`Those pictures could not be saved: ${(await res.json().catch(() => null))?.error ?? 'is the keeper still running?'}`);
+    close();
+    refresh(true);
+  });
+  draw();
+  return h(
+    'div',
+    { class: 'picker' },
+    h('div', { class: 'muted' }, `Tap four pictures in order, then tell ${device.profile?.name ?? 'the player'} what they are.`),
+    h(
+      'div',
+      { class: 'pad' },
+      ...SECRET_PICTURES.map((p) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            title: p.name,
+            'aria-label': p.name,
+            onclick: () => {
+              if (picked.length < SECRET_LENGTH) picked.push(p.key);
+              draw();
+            },
+          },
+          p.icon,
+        ),
+      ),
+    ),
+    h(
+      'div',
+      { class: 'actions' },
+      slots,
+      h(
+        'button',
+        {
+          type: 'button',
+          onclick: () => {
+            picked.pop();
+            draw();
+          },
+        },
+        'Back',
+      ),
+      save,
+      h('button', { type: 'button', onclick: close }, 'Cancel'),
+    ),
+  );
+}
+
+// A player's login: whether they have one and on how many devices, new
+// pictures for one who forgot theirs, or none.
+function loginRow(device) {
+  const login = device.login;
+  const name = device.profile?.name || 'this player';
+  const slot = h('div');
+  const pick = () => slot.replaceChildren(picturePicker(device, () => slot.replaceChildren()));
+  return h(
+    'div',
+    { class: 'login' },
+    h(
+      'div',
+      { class: 'login-line' },
+      h('span', {}, login ? `🔑 Logs in on ${plural(login.devices, 'device', 'devices')}` : '🔑 No login'),
+      // A login goes by the player's name, so there is none to make without one.
+      device.profile?.name ? h('button', { type: 'button', onclick: pick }, login ? 'New secret pictures' : 'Make a login') : null,
+      login
+        ? h(
+            'button',
+            { class: 'danger', type: 'button', onclick: () => remove(`devices/${device.id}/login`, `Remove ${name}'s login? Every device logged in as ${name} is logged out.`) },
+            'Remove login',
+          )
+        : null,
+    ),
+    slot,
+  );
+}
+
 // ---------------------------------------------------------------- drawing
 
 function renderStatus(state) {
@@ -135,13 +238,19 @@ function renderSummary(state) {
   );
 }
 
+const DID = {
+  island: (e) => ` sent “${e.island}”`,
+  profile: () => ' sent their profile',
+  login: () => ' logged in on a device',
+  'made-login': () => ' made a login',
+  'new-pictures': () => ' picked new secret pictures',
+};
+
 function renderRecent(state) {
   const recent = state.keeper?.recent ?? [];
   $('recent-section').hidden = recent.length === 0;
   $('recent').replaceChildren(
-    ...recent.slice(0, 8).map((e) =>
-      h('li', {}, h('time', {}, time.format(e.at)), ' ', h('b', {}, e.player || 'A player'), e.what === 'island' ? ` sent “${e.island}”` : ' sent their profile'),
-    ),
+    ...recent.slice(0, 8).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', h('b', {}, e.player || 'A player'), (DID[e.what] ?? DID.profile)(e))),
   );
 }
 
@@ -168,6 +277,7 @@ function islandCard(device, island) {
       h('h4', {}, `${theme?.icon ?? '🏝️'} ${island.name}`),
       h('div', { class: 'muted' }, [theme?.name, island.code ? `code ${prettyCode(island.code)}` : null].filter(Boolean).join(' · ')),
       h('div', { class: 'muted' }, `Saved ${ago(island.savedAt)} · ${size(island.bytes)} · ${plural(island.days.length, 'copy', 'copies')}`),
+      island.forgotten ? h('div', { class: 'muted' }, `🗑️ Said goodbye to ${ago(island.forgotten)}, on one of their devices`) : null,
       h(
         'div',
         { class: 'actions' },
@@ -208,6 +318,7 @@ function deviceCard(device) {
           h('span', {}, `🧱 ${plural(p.stats?.placed ?? 0, 'block', 'blocks')} built`),
         )
       : null,
+    loginRow(device),
     device.islands.length ? h('div', { class: 'islands' }, ...device.islands.map((i) => islandCard(device, i))) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
   );
 }
@@ -221,7 +332,7 @@ function render(state) {
   renderSummary(state);
   renderRecent(state);
   const key = JSON.stringify(state.devices);
-  if (key === shown && Date.now() - drawnAt < REDRAW_MS) return;
+  if (picking || (key === shown && Date.now() - drawnAt < REDRAW_MS)) return;
   shown = key;
   drawnAt = Date.now();
   $('devices').replaceChildren(

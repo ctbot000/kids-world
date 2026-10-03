@@ -266,7 +266,14 @@ async function startKeeper(store) {
   }
   const keeper = new Keeper({ store, identity, signal: config.signal ?? null });
   keeper.on('state', (state, detail) => console.log(`Keeper: ${state}${detail ? ` (${detail})` : ''}`));
-  keeper.on('kept', (e) => console.log(`Keeper: kept ${e.what === 'island' ? `the island "${e.island}"` : 'a profile'}${e.player ? ` from ${e.player}` : ''}`));
+  const said = {
+    island: (e, who) => `kept the island "${e.island}"${who ? ` from ${who}` : ''}`,
+    profile: (e, who) => `kept a profile${who ? ` from ${who}` : ''}`,
+    login: (e, who) => `logged ${who || 'a player'} in on a device`,
+    'made-login': (e, who) => `made a login for ${who || 'a player'}`,
+    'new-pictures': (e, who) => `gave ${who || 'a player'} new secret pictures`,
+  };
+  keeper.on('kept', (e) => console.log(`Keeper: ${(said[e.what] ?? said.profile)(e, e.player)}`));
   try {
     await keeper.start();
   } catch (error) {
