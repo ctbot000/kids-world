@@ -7,7 +7,7 @@
 // what is on your right on screen is on the right of your view on the map.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO } from './shared/critters.js';
-import { ANIMALS } from './shared/words.js';
+import { lookIcon } from './shared/words.js';
 import { shirtColor } from './render/avatar.js';
 
 // The most blocks across each map shows; a bigger island scrolls to keep you in view.
@@ -293,7 +293,7 @@ export class MiniMap {
       ctx.stroke();
     }
 
-    // Friends: a dot in their T-shirt colour, and on the big map their animal and name too.
+    // Friends: a dot in their T-shirt colour, and on the big map their animal (or kid) and name too.
     for (const p of g.players.values()) {
       if (p.me || !p.avatar) continue;
       const pos = p.avatar.root.position;
@@ -314,7 +314,7 @@ export class MiniMap {
       ctx.stroke();
       if (big) {
         ctx.font = `${Math.round(11 * u)}px ${FONT}`;
-        ctx.fillText(ANIMALS.find((a) => a.key === p.look?.animal)?.icon ?? '🙂', x, y + 0.5 * u);
+        ctx.fillText(lookIcon(p.look), x, y + 0.5 * u);
         label(ctx, p.name, x, y + r + 9 * u, u);
       }
     }

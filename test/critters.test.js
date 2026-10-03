@@ -187,6 +187,11 @@ test('fed a fruit, a flying friend flies along with you, and sits on your head w
   me.hat = 'none';
   step(40);
   assert.deepEqual([bird.x, bird.y, bird.z], [me.x, me.y + headTop('none'), me.z]);
+  // On a kid's bun, a little higher.
+  me.hair = 'bun';
+  step(5);
+  assert.deepEqual([bird.x, bird.y, bird.z], [me.x, me.y + headTop('none', 'bun'), me.z], 'on top of the bun');
+  assert.ok(headTop('none', 'bun') > headTop('none'));
   // After a minute it goes back to its own life, somewhere to sit.
   step(450);
   assert.equal(bird.follow, 0);

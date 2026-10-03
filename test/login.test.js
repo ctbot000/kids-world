@@ -247,10 +247,10 @@ test('two devices of one player: what to fetch, what to drop, and whose look win
   assert.deepEqual(planSync([], many, [], 12).fetch.sort(), many.slice(3).map((i) => i.id).sort());
 
   const tablet = { name: 'Sunny Otter', look: { animal: 'fox', fur: 'orange', shirt: 3, hat: 'crown' }, basket: { apple: 3 }, changedAt: 100, stats: { placed: 40, steps: 10 }, stickers: { 'first-block': 50 } };
-  const phone = { name: 'Brave Otter', look: { animal: 'cat', fur: 'gray', shirt: 5, hat: 'cap' }, basket: { apple: 1 }, changedAt: 200, stats: { placed: 5, steps: 90 }, stickers: { 'first-block': 70, swimmer: 80 } };
+  const phone = { name: 'Brave Otter', look: { animal: 'kid', fur: 'gray', shirt: 5, hat: 'cap', skin: 'brown', hair: 'curly', hairColor: 'blue' }, basket: { apple: 1 }, changedAt: 200, stats: { placed: 5, steps: 90 }, stickers: { 'first-block': 70, swimmer: 80 } };
   const merged = mergeProfiles(tablet, phone);
   assert.equal(merged.name, 'Brave Otter', 'the name, look and basket changed last');
-  assert.equal(merged.look.animal, 'cat');
+  assert.deepEqual(merged.look, phone.look, "a kid's skin and hair too");
   assert.equal(merged.basket.apple, 1);
   assert.deepEqual(merged.stats, { placed: 40, steps: 90 }, 'the most of everything done');
   assert.deepEqual(merged.stickers, { 'first-block': 50, swimmer: 80 }, 'every sticker, from the day it was first earned');

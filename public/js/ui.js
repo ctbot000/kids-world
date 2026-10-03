@@ -8,11 +8,12 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanName, EMOTES, FUR_COLORS, HATS, isValidName, langOf, NAME_MAX, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
+import { hairIcon } from './hair-icons.js';
 import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
 import { STICKERS } from './profile.js';
@@ -566,8 +567,9 @@ export class UI {
     );
   }
 
-  // Changing how you look: animal, fur, t-shirt, hat, and your display name,
-  // the name friends see: typed, rolled, or, logged in, your username.
+  // Changing how you look: a kid (skin and hair) or an animal (fur), t-shirt,
+  // hat, and your display name, the name friends see: typed, rolled, or,
+  // logged in, your username.
   meDialog() {
     const p = this.profile;
     const look = { ...p.look };
@@ -608,9 +610,24 @@ export class UI {
           });
         }
         const animals = h('div', { class: 'grid' });
-        const fur = h('div', { class: 'swatches' });
+        // An animal's fur, or a kid's skin and hair.
+        const parts = h('div', { class: 'look-parts' });
         const shirts = h('div', { class: 'swatches' });
         const hats = h('div', { class: 'grid' });
+        const choose = (change) => {
+          change();
+          this.sound.play('ui');
+          apply();
+          draw();
+        };
+        const swatches = (colors, chosen, set) =>
+          h(
+            'div',
+            { class: 'swatches' },
+            ...Object.entries(colors).map(([key, color]) =>
+              h('button', { class: `swatch${key === chosen ? ' on' : ''}`, type: 'button', style: `background:${color}`, 'aria-label': key, onclick: () => choose(() => set(key)) }),
+            ),
+          );
         const draw = () => {
           animals.replaceChildren(
             ...ANIMALS.map((a) =>
@@ -619,35 +636,37 @@ export class UI {
                 {
                   class: `choice${a.key === look.animal ? ' on' : ''}`,
                   type: 'button',
-                  onclick: () => {
-                    look.animal = a.key;
-                    look.fur = a.fur;
-                    this.sound.play('ui');
-                    apply();
-                    draw();
-                  },
+                  // A kid keeps the skin and hair last chosen; an animal comes in its own fur.
+                  onclick: () => choose(() => Object.assign(look, a.key === KID ? cleanLook({ ...look, animal: KID }) : { animal: a.key, fur: a.fur })),
                 },
-                h('span', { class: 'emoji' }, a.icon),
+                h('span', { class: 'emoji' }, a.key === look.animal ? lookIcon(look) : a.icon),
                 a.name,
               ),
             ),
           );
-          fur.replaceChildren(
-            ...Object.entries(FUR_COLORS).map(([key, color]) =>
-              h('button', {
-                class: `swatch${key === look.fur ? ' on' : ''}`,
-                type: 'button',
-                style: `background:${color}`,
-                'aria-label': key,
-                onclick: () => {
-                  look.fur = key;
-                  this.sound.play('ui');
-                  apply();
-                  draw();
-                },
-              }),
-            ),
-          );
+          if (look.animal === KID) {
+            parts.replaceChildren(
+              h('h3', {}, 'Skin'),
+              swatches(SKIN_TONES, look.skin, (key) => (look.skin = key)),
+              h('h3', {}, 'Hair'),
+              h(
+                'div',
+                { class: 'grid' },
+                ...HAIRS.map((style) =>
+                  h(
+                    'button',
+                    { class: `choice${style.key === look.hair ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.hair = style.key)) },
+                    hairIcon(style.key, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor]),
+                    style.name,
+                  ),
+                ),
+              ),
+              h('h3', {}, 'Hair colour'),
+              swatches(HAIR_COLORS, look.hairColor, (key) => (look.hairColor = key)),
+            );
+          } else {
+            parts.replaceChildren(h('h3', {}, 'Fur colour'), swatches(FUR_COLORS, look.fur, (key) => (look.fur = key)));
+          }
           shirts.replaceChildren(
             ...SHIRT_COLORS.map((i) =>
               h('button', {
@@ -697,8 +716,7 @@ export class UI {
           same ? h('label', { class: 'check-row same-row' }, same, h('span', {}, `Same as my username, ${username}`)) : '',
           h('h3', {}, 'I am a…'),
           animals,
-          h('h3', {}, 'Fur colour'),
-          fur,
+          parts,
           h('h3', {}, 'T-shirt'),
           shirts,
           h('h3', {}, 'Hat'),
@@ -760,8 +778,8 @@ export class UI {
           'p',
           { class: 'muted', style: 'margin-top:14px' },
           this.handlers?.login?.available()
-            ? 'Your things stay on this device, and the island keeper keeps a copy. Log in with 🔑 to have them on your other devices too. Friends see your name, your animal and the phrases you pick.'
-            : 'Everything stays on this device. Friends see your name, your animal and the phrases you pick.',
+            ? 'Your things stay on this device, and the island keeper keeps a copy. Log in with 🔑 to have them on your other devices too. Friends see your name, how you look and the phrases you pick.'
+            : 'Everything stays on this device. Friends see your name, how you look and the phrases you pick.',
         ),
       );
     });
@@ -905,7 +923,7 @@ export class UI {
                           box.input.focus();
                         },
                       },
-                      h('span', { class: 'emoji' }, ANIMALS.find((a) => a.key === k.look?.animal)?.icon ?? '🙂'),
+                      h('span', { class: 'emoji' }, lookIcon(k.look)),
                       k.username || k.name,
                     ),
                   ),
@@ -1803,7 +1821,7 @@ export class UI {
             h(
               'div',
               { class: 'player-row' },
-              h('span', { class: 'friend', style: `--c:${shirtColor(q.look.shirt)}` }, ANIMALS.find((a) => a.key === q.look.animal)?.icon ?? '🙂'),
+              h('span', { class: 'friend', style: `--c:${shirtColor(q.look.shirt)}` }, lookIcon(q.look)),
               h('span', { class: 'who' }, q.name, q.id === g.host ? ' 🏝️' : ''),
               isHost
                 ? h(
@@ -1918,7 +1936,7 @@ export class UI {
     if (!g) return;
     $('friends').replaceChildren(
       ...[...g.players.values()].map((p) =>
-        h('span', { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}`, title: p.name }, ANIMALS.find((a) => a.key === p.look.animal)?.icon ?? '🙂'),
+        h('span', { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}`, title: p.name }, lookIcon(p.look)),
       ),
     );
   }

@@ -1108,6 +1108,11 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await renameBox.evaluate((el) => (el.value = ''));
   await renameBox.type('Captain 민지');
   await until(guest, () => [...window.kidsWorld.game.players.values()].some((p) => p.name === 'Captain 민지'));
+  // And a kid now, with pink pigtails: the guest sees them swing.
+  await clickButton(host, 'Kid', '#modal');
+  await clickButton(host, 'Pigtails', '#modal');
+  await clickSwitch(host, '#modal .swatch[aria-label="pink"]');
+  await until(guest, () => [...window.kidsWorld.game.players.values()].some((p) => !p.me && p.look.animal === 'kid' && p.look.hairColor === 'pink' && p.avatar.sway.length === 2));
   await clickButton(host, 'Done', '#modal');
 
   // The guest types something; the host hears it, in a bubble and in the chat.

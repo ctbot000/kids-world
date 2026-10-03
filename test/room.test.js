@@ -89,6 +89,20 @@ test('a new display name comes with a look while on the island, and stays told a
   assert.equal(room.exportSave().players.find((p) => p.id === 2).name, 'Captain', 'and the island keeps it');
 });
 
+test("a kid's skin and hair come along, tidied, and an animal has none", () => {
+  const { room } = makeRoom();
+  const a = join(room);
+  const kid = { animal: 'kid', fur: 'tan', shirt: 3, hat: 'cap', skin: 'deep', hair: 'bun', hairColor: 'pink' };
+  const b = join(room, { name: 'Minji', look: kid });
+  assert.deepEqual(a.last('joined').player.look, kid);
+  // Anything unknown is as a kid starts out.
+  room.receive(b, { t: 'look', look: { ...kid, skin: 'green', hair: 'mohawk', hairColor: '#ff0000' } });
+  assert.deepEqual(a.last('look').look, { ...kid, skin: 'golden', hair: 'short', hairColor: 'brown' });
+  // An animal has fur instead.
+  room.receive(b, { t: 'look', look: { ...kid, animal: 'cat', fur: 'orange' } });
+  assert.deepEqual(a.last('look').look, { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' });
+});
+
 test('a different protocol is turned away', () => {
   const { room } = makeRoom();
   const c = conn();

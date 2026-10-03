@@ -1141,7 +1141,8 @@ body.touch.playing #joystick {
   line-height: 1.1;
 }
 
-.choice img {
+.choice img,
+.choice .hair-icon {
   width: 46px;
   height: 46px;
   object-fit: contain;

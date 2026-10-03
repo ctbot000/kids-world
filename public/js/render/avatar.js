@@ -1,10 +1,10 @@
-// The players: round-headed little animals in a t-shirt, with a hat if they
-// like. Built from simple shapes and animated by hand — walking, jumping,
-// swimming, flying, and the emotes (wave, dance, cheer...).
+// The players: round-headed little animals, or kids, in a t-shirt, with a hat
+// if they like. Built from simple shapes and animated by hand — walking,
+// jumping, swimming, flying, and the emotes (wave, dance, cheer...).
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
-import { FUR_COLORS } from '../shared/words.js';
-import { capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { FUR_COLORS, HAIR_COLORS, KID, SKIN_TONES } from '../shared/words.js';
+import { capsule, cone, cylinder, geo, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const HEAD_R = 0.34;
 const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
@@ -239,10 +239,190 @@ function tail(root, animal, fur) {
   return t;
 }
 
-function hat(head, kind, shirt) {
+// ------------------------------------------------ kids
+
+// Hats that sit over the top of the head, where a bun or spikes would poke through.
+const CROWN_HATS = ['cap', 'beanie', 'straw', 'party'];
+const TIE = '#ff6f9f';
+const UP = new THREE.Vector3(0, 1, 0);
+
+// A piece of a shell k times the size of the head. Around the head, phi 0 is
+// the left side, π/2 the face, π the right side and 3π/2 the back; theta goes
+// down from the top. tilt leans it back, to reach lower behind than in front.
+function shell(k, { phi = 0, phiLength = Math.PI * 2, theta = 0, thetaLength = Math.PI, tilt = 0 } = {}) {
+  return geo(`shell${k}|${phi}|${phiLength}|${theta}|${thetaLength}|${tilt}`, () => new THREE.SphereGeometry(HEAD_R * k, 28, 16, phi, phiLength, theta, thetaLength).rotateX(-tilt));
+}
+
+// A point on the head k times its size, `up` from the top and `turn` round
+// from the face (to its left), and which way is out there.
+function onHead(up, turn, k = 1) {
+  const p = new THREE.Vector3(Math.sin(up) * Math.sin(turn) * HR[0] * k, Math.cos(up) * HR[1] * k, Math.sin(up) * Math.cos(turn) * HR[2] * k);
+  const out = new THREE.Vector3(p.x / HR[0] ** 2, p.y / HR[1] ** 2, p.z / HR[2] ** 2).normalize();
+  return { p, out };
+}
+
+// Copies of one shape, each placed by a matrix, as one shape: one draw for all.
+function merged(key, shape, matrices) {
+  return geo(key, () => {
+    const pos = shape.attributes.position;
+    const nrm = shape.attributes.normal;
+    const n = pos.count;
+    const positions = new Float32Array(n * 3 * matrices.length);
+    const normals = new Float32Array(n * 3 * matrices.length);
+    const indices = [];
+    const v = new THREE.Vector3();
+    const normalMatrix = new THREE.Matrix3();
+    matrices.forEach((m, k) => {
+      normalMatrix.getNormalMatrix(m);
+      for (let i = 0; i < n; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m).toArray(positions, (k * n + i) * 3);
+        v.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize().toArray(normals, (k * n + i) * 3);
+      }
+      for (const j of shape.index.array) indices.push(j + k * n);
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    g.setIndex(indices);
+    return g;
+  });
+}
+
+// ears: false where hair covers them.
+function kidFace(head, skin, ears = true) {
+  if (ears) for (const side of [-1, 1]) head.add(mesh(sphere(), toon(skin), side * HR[0] * 0.97, -0.03, -0.02, 0.05, 0.075, 0.06));
+  const p = onFace(0, -0.04, 0);
+  head.add(mesh(sphere(), toon(darken(skin, 0.12)), p.x, p.y, p.z, 0.032, 0.024, 0.022));
+  smile(head, 0.045, -0.11);
+  const e = eyes(head, 'big');
+  blush(head);
+  return e;
+}
+
+// A kid's hair. Returns the bunches and tails that swing as you move.
+function hair(head, style, color, hatKind) {
+  const g = new THREE.Group();
+  const shellMat = toon(color, { side: THREE.DoubleSide });
+  const mat = toon(color);
+  const covered = CROWN_HATS.includes(hatKind);
+  const sway = [];
+  const add = (m) => {
+    g.add(m);
+    return m;
+  };
+  const cover = (k, opts) => add(mesh(shell(k, opts), shellMat, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
+  // The top and the back, clear of the forehead.
+  const cap = () => cover(1.07, { thetaLength: 1.59, tilt: 0.6 });
+  // A lock of hair lying flat over the forehead, rolled round in place.
+  const lock = (fx, fy, sx, sy, roll = 0) => {
+    const p = onFace(fx, fy, 0.014);
+    const m = mesh(sphere(1, 14, 10), mat, p.x, p.y, p.z, sx, sy, 0.045);
+    m.lookAt(p.clone().multiplyScalar(2));
+    m.rotateZ(roll);
+    return add(m);
+  };
+  const swept = () => {
+    lock(-0.16, 0.18, 0.1, 0.07, 0.55);
+    lock(-0.04, 0.155, 0.11, 0.075, 0.35);
+    lock(0.09, 0.165, 0.1, 0.065, 0.15);
+  };
+  // Something sticking out of the head along the way out, sunk in a little.
+  const outward = (m, up, turn, k, sink) => {
+    const { p, out } = onHead(up, turn, k);
+    m.quaternion.setFromUnitVectors(UP, out);
+    m.position.copy(p).addScaledVector(out, sink);
+    return add(m);
+  };
+  // A bunch of hair hanging from a tie, which swings: side 0 behind, -1 or 1 beside.
+  const bunch = (x, y, z, side, size) => {
+    const b = new THREE.Group();
+    b.position.set(x, y, z);
+    b.add(mesh(sphere(1, 12, 8), toon(TIE), 0, 0, 0, 0.045));
+    b.add(mesh(sphere(1, 16, 12), mat, 0, -0.15 * size, 0, 0.085 * size, 0.17 * size, 0.08 * size));
+    b.add(mesh(sphere(1, 12, 8), mat, 0, -0.3 * size, 0, 0.05 * size, 0.07 * size, 0.05 * size));
+    b.userData = { side, rest: side ? side * 0.45 : 0.4 };
+    if (side) b.rotation.z = b.userData.rest;
+    else b.rotation.x = b.userData.rest;
+    sway.push(b);
+    return add(b);
+  };
+  switch (style) {
+    case 'spiky':
+      cap();
+      swept();
+      if (!covered) {
+        for (const [up, turn, len] of [[0.2, 0, 0.17], [0.55, 0.6, 0.15], [0.55, -0.6, 0.15], [0.75, 1.6, 0.13], [0.75, -1.6, 0.13], [0.8, 2.5, 0.14], [0.8, -2.5, 0.14], [0.85, Math.PI, 0.15]]) {
+          outward(mesh(cone(0.075, len, 10), mat), up, turn, 1.04, len / 2 - 0.02);
+        }
+      }
+      break;
+    case 'curly': {
+      cover(1.05, { thetaLength: 1.75, tilt: 0.62 });
+      // Curls all over, round the face: spread evenly, then kept to where hair grows.
+      const pole = new THREE.Vector3(0, Math.cos(0.68), -Math.sin(0.68));
+      const curls = [];
+      const n = 70;
+      for (let i = 0; i < n; i++) {
+        const y = 1 - (2 * (i + 0.5)) / n;
+        const r = Math.sqrt(1 - y * y);
+        const a = i * 2.39996;
+        const d = new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a));
+        if (d.dot(pole) < -0.02) continue;
+        const size = 0.085 + (i % 3) * 0.008;
+        curls.push(new THREE.Matrix4().makeScale(size, size, size).setPosition(d.x * HR[0] * 1.1, d.y * HR[1] * 1.1, d.z * HR[2] * 1.1));
+      }
+      add(mesh(merged('curls', sphere(1, 12, 9), curls), mat));
+      break;
+    }
+    case 'bob':
+    case 'long': {
+      cap();
+      // Down the sides and the back, round the face.
+      cover(1.1, { phi: Math.PI / 2 + 0.85, phiLength: Math.PI * 2 - 1.7, theta: 0.9, thetaLength: style === 'bob' ? 1.25 : 1.45 });
+      for (const fx of [-0.18, -0.06, 0.06, 0.18]) lock(fx, 0.16, 0.08, 0.075);
+      if (style === 'long') {
+        // On down the back, past the shoulders, with rounded edges.
+        const fall = new THREE.Group();
+        fall.scale.x = HEAD.sx;
+        fall.add(mesh(geo('hair-fall', () => new THREE.CylinderGeometry(0.266, 0.3, 0.3, 20, 1, true, Math.PI - 1.2, 2.4)), shellMat, 0, -0.4, 0));
+        fall.add(mesh(geo('hair-end', () => new THREE.TorusGeometry(0.27, 0.05, 8, 20, 2.4).rotateX(Math.PI / 2).rotateY(Math.PI / 2 + 1.2)), mat, 0, -0.55, 0));
+        for (const side of [-1, 1]) fall.add(mesh(capsule(0.05, 0.28), mat, side * Math.sin(1.2) * 0.25, -0.41, -Math.cos(1.2) * 0.25));
+        add(fall);
+      }
+      break;
+    }
+    case 'ponytail':
+      cap();
+      swept();
+      bunch(0, 0.22, -0.33, 0, 1.3);
+      break;
+    case 'pigtails':
+      cap();
+      for (const fx of [-0.15, 0, 0.15]) lock(fx, 0.16, 0.085, 0.07);
+      for (const side of [-1, 1]) bunch(side * 0.36, 0.1, -0.08, side, 1);
+      break;
+    case 'bun':
+      cap();
+      swept();
+      if (!covered) {
+        add(mesh(sphere(1, 16, 12), mat, 0, 0.36, -0.12, 0.14, 0.13, 0.14));
+        add(mesh(torus(0.1, 0.022), toon(TIE), 0, 0.29, -0.1).rotateX(Math.PI / 2 + 0.35));
+      }
+      break;
+    default:
+      cap();
+      swept();
+      break;
+  }
+  head.add(g);
+  return sway;
+}
+
+// lift: how much higher than on an animal's head it sits (on a kid's hair).
+function hat(head, kind, shirt, lift = 0) {
   const top = HR[1];
   const g = new THREE.Group();
-  g.position.set(0, top * 0.72, 0);
+  g.position.set(0, top * 0.72 + lift, 0);
   const add = (...ms) => ms.forEach((m) => g.add(m));
   switch (kind) {
     case 'cap': {
@@ -353,7 +533,9 @@ export class Avatar {
     if (same) return;
     this.look = { ...look };
     if (this.body) this.root.remove(this.body);
-    const fur = FUR_COLORS[look.fur] ?? FUR_COLORS.white;
+    const kid = look.animal === KID;
+    // A kid's skin is where an animal's fur is: face, neck and hands.
+    const fur = kid ? (SKIN_TONES[look.skin] ?? SKIN_TONES.golden) : (FUR_COLORS[look.fur] ?? FUR_COLORS.white);
     const shirt = shirtColor(look.shirt);
     const body = new THREE.Group();
     this.body = body;
@@ -390,9 +572,15 @@ export class Avatar {
     this.head.add(skull);
     this.skull = skull;
     skull.add(mesh(sphere(HEAD_R, 28, 20), toon(fur), 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
-    ears(skull, look.animal, fur);
-    this.eyes = face(skull, look.animal, fur);
-    this.hat = hat(skull, look.hat, shirt);
+    if (kid) {
+      this.eyes = kidFace(skull, fur, look.hair !== 'bob' && look.hair !== 'long');
+      this.sway = hair(skull, look.hair, HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown, look.hat);
+    } else {
+      ears(skull, look.animal, fur);
+      this.eyes = face(skull, look.animal, fur);
+      this.sway = [];
+    }
+    this.hat = hat(skull, look.hat, shirt, kid ? (look.hair === 'curly' ? 0.07 : 0.025) : 0);
     this.tail = tail(this.torso, look.animal, fur);
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = false;
@@ -519,6 +707,13 @@ export class Avatar {
     this.torso.rotation.x = lean;
     this.head.rotation.set(headNod, 0, headTilt);
     if (this.tail) this.tail.rotation.y = Math.sin(t * (moving ? 10 : 3)) * 0.3;
+    // A ponytail swings to and fro, pigtails from side to side; more on the move.
+    for (const b of this.sway) {
+      const { side, rest } = b.userData;
+      const swing = Math.sin(t * (moving ? 9 : 2.2) + side) * (moving ? 0.2 : 0.05);
+      if (side) b.rotation.z = rest + swing * side;
+      else b.rotation.x = rest + swing;
+    }
     // Blink now and then.
     if (this.eyes) {
       this.blinkAt -= dt;

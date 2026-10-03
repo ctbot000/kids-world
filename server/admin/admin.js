@@ -10,7 +10,7 @@ import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
 import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
-import { ANIMALS } from '/js/shared/words.js';
+import { lookIcon } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
 const REFRESH_MS = 5000;
@@ -294,7 +294,6 @@ function islandCard(device, island) {
 
 function deviceCard(device, players) {
   const p = device.profile;
-  const animal = ANIMALS.find((a) => a.key === p?.look?.animal);
   const stickers = STICKERS.filter((s) => p?.stickers?.[s.key]);
   const treasures = Object.values(p?.basket ?? {}).reduce((a, b) => a + b, 0);
   const name = p?.name || 'A player';
@@ -304,7 +303,7 @@ function deviceCard(device, players) {
     h(
       'header',
       { class: 'who' },
-      h('span', { class: 'avatar', style: `--c:${p ? shirtColor(p.look.shirt) : '#d8cfe0'}`, 'aria-hidden': 'true' }, animal?.icon ?? '🙂'),
+      h('span', { class: 'avatar', style: `--c:${p ? shirtColor(p.look.shirt) : '#d8cfe0'}`, 'aria-hidden': 'true' }, lookIcon(p?.look)),
       h('div', { class: 'name' }, h('h3', {}, name), h('div', { class: 'muted' }, `Last seen ${ago(device.lastSeen)} · first seen ${at.format(device.firstSeen)}`)),
       h(
         'button',

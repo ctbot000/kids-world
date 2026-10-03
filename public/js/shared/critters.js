@@ -53,9 +53,18 @@ const HAPPY_MS = 2200;
 export const FLOWERS = new Set([B.TULIP, B.DAISY, B.BLUEBELL, B.COSMOS, B.SUNFLOWER, B.LOLLIPOP, B.GUMDROP]);
 
 // How high above someone's feet a flying friend sits on their head: on top of
-// the skull (render/avatar.js puts it at 1.41), or on the hat.
+// the skull (render/avatar.js puts it at 1.41), or on the hat. A kid's hair
+// (hair: its style; '' for an animal) is a little higher and lifts the hat
+// with it, more for curls; spikes and a bun stick up out of it, unless a hat
+// that covers the top of the head is over them.
 const HEAD_TOP = { cap: 1.6, party: 1.76, crown: 1.42, beanie: 1.7, sprout: 1.66, straw: 1.52, headphones: 1.6 };
-export const headTop = (hat) => HEAD_TOP[hat] ?? 1.41;
+const HAIR_TOP = { spiky: 1.51, curly: 1.53, bun: 1.57 };
+const OVER_HAIR = ['cap', 'beanie', 'straw', 'party'];
+export function headTop(hat, hair = '') {
+  const top = HEAD_TOP[hat] ?? 1.41;
+  if (!hair) return top;
+  return Math.max(top + (hair === 'curly' ? 0.07 : 0.025), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
+}
 
 // How a friend following you flies round you: how far out, and how high.
 const ORBIT = { bird: [1.15, 1.9], owl: [1.3, 2], bee: [0.75, 1.55], butterfly: [0.8, 1.6], seagull: [2.2, 2.9] };
@@ -373,7 +382,7 @@ export class CritterSim {
     return c;
   }
 
-  // players: Map of pid -> { x, y, z, yaw, anim, flying, hat } for who is here.
+  // players: Map of pid -> { x, y, z, yaw, anim, flying, hat, hair } for who is here.
   step(world, dt, now, players, night = false) {
     for (const c of this.list) this.stepOne(world, c, dt, now, players, night);
   }
@@ -820,7 +829,7 @@ export class CritterSim {
     c.lz = leader.z;
     c.still = !leader.anim && !leader.flying && moved < 0.03 ? c.still + dt : 0;
     if (c.still > 1 && !this.list.some((o) => o !== c && o.follow === c.follow && o.id < c.id && CRITTER_INFO[o.type].flies)) {
-      const top = leader.y + headTop(leader.hat);
+      const top = leader.y + headTop(leader.hat, leader.hair);
       if (c.onHead !== c.follow) {
         c.mode = 'fly';
         c.state = 'fly';

@@ -101,7 +101,11 @@ export const EMOTE_KEYS = EMOTES.map((e) => e.key);
 
 // ---------------------------------------------------------------- looks
 
+// Who you can be: a kid, or one of the little animals. A kid has skin and
+// hair (skin, hair, hairColor in the look) where an animal has fur.
+export const KID = 'kid';
 export const ANIMALS = [
+  { key: KID, name: 'Kid', icon: '🧒', fur: 'tan' },
   { key: 'bunny', name: 'Bunny', icon: '🐰', fur: 'white' },
   { key: 'cat', name: 'Cat', icon: '🐱', fur: 'orange' },
   { key: 'bear', name: 'Bear', icon: '🐻', fur: 'brown' },
@@ -141,18 +145,75 @@ export const HATS = [
   { key: 'headphones', name: 'Headphones', icon: '🎧' },
 ];
 
-export function randomLook(random = Math.random) {
+// A kid's skin, lightest to darkest, and the emoji skin tone for each.
+export const SKIN_TONES = {
+  fair: '#ffe2cf',
+  light: '#f7cfae',
+  golden: '#e9b98d',
+  tan: '#d29c6c',
+  brown: '#a66d47',
+  deep: '#73492f',
+};
+const SKIN_EMOJI = { fair: '\u{1F3FB}', light: '\u{1F3FB}', golden: '\u{1F3FC}', tan: '\u{1F3FD}', brown: '\u{1F3FE}', deep: '\u{1F3FF}' };
+export const HAIRS = [
+  { key: 'short', name: 'Short' },
+  { key: 'spiky', name: 'Spiky' },
+  { key: 'curly', name: 'Curly' },
+  { key: 'bob', name: 'Bob' },
+  { key: 'long', name: 'Long' },
+  { key: 'ponytail', name: 'Ponytail' },
+  { key: 'pigtails', name: 'Pigtails' },
+  { key: 'bun', name: 'Bun' },
+];
+export const HAIR_COLORS = {
+  black: '#2f2b35',
+  brown: '#6a4330',
+  chestnut: '#9c5f37',
+  blonde: '#f1cd6b',
+  ginger: '#dc7a3c',
+  silver: '#d9dbe4',
+  pink: '#f59cc2',
+  purple: '#a98ae8',
+  blue: '#6cb2ee',
+  green: '#7bd19f',
+};
+// What a kid is when nothing (or nothing that makes sense) says otherwise.
+const KID_LOOK = { skin: 'golden', hair: 'short', hairColor: 'brown' };
+
+// What friends see of you in a list: your animal, or a kid with your skin.
+export function lookIcon(look) {
+  if (look?.animal === KID) return `🧒${SKIN_EMOJI[look.skin] ?? ''}`;
+  return ANIMALS.find((a) => a.key === look?.animal)?.icon ?? '🙂';
+}
+
+// An animal (or a kid), a T-shirt and a hat: three draws, whatever comes up.
+function someLook(random) {
   const animal = pick(ANIMALS, random);
   return { animal: animal.key, fur: animal.fur, shirt: pick(SHIRT_COLORS, random), hat: pick(HATS, random).key };
 }
 
+export function randomLook(random = Math.random) {
+  const look = someLook(random);
+  if (look.animal !== KID) return look;
+  return { ...look, skin: pick(Object.keys(SKIN_TONES), random), hair: pick(HAIRS, random).key, hairColor: pick(Object.keys(HAIR_COLORS), random) };
+}
+
+// A look as it may be shown: anything unknown in it replaced. A kid's skin
+// and hair are kept only for a kid.
 export function cleanLook(look, random = Math.random) {
-  const fallback = randomLook(random);
+  const fallback = someLook(random);
   const animal = ANIMALS.some((a) => a.key === look?.animal) ? look.animal : fallback.animal;
-  return {
+  const clean = {
     animal,
     fur: Object.hasOwn(FUR_COLORS, look?.fur) ? look.fur : ANIMALS.find((a) => a.key === animal).fur,
     shirt: SHIRT_COLORS.includes(look?.shirt) ? look.shirt : fallback.shirt,
     hat: HATS.some((h) => h.key === look?.hat) ? look.hat : 'none',
+  };
+  if (animal !== KID) return clean;
+  return {
+    ...clean,
+    skin: Object.hasOwn(SKIN_TONES, look?.skin) ? look.skin : KID_LOOK.skin,
+    hair: HAIRS.some((h) => h.key === look?.hair) ? look.hair : KID_LOOK.hair,
+    hairColor: Object.hasOwn(HAIR_COLORS, look?.hairColor) ? look.hairColor : KID_LOOK.hairColor,
   };
 }

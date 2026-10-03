@@ -15,7 +15,7 @@ import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
-import { cleanChat, cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+import { cleanChat, cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
 
@@ -576,7 +576,9 @@ export class Room {
     }
 
     const where = new Map();
-    for (const p of this.players.values()) if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat });
+    for (const p of this.players.values()) {
+      if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: p.look?.animal === KID ? p.look.hair : '' });
+    }
     this.critters.step(this.world, dt, now, where, isNight(env.time));
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
