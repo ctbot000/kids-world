@@ -65,12 +65,12 @@ export function isValidIslandName(name) {
 
 // Typed talk: up to CHAT_MAX letters, numbers, signs, emoji and spaces, as
 // typed but tidied (in NFC, any run of spaces or new lines one space), with
-// nothing invisible kept but the joiners some emoji are made of. '' for
-// nothing, or for too much.
+// nothing invisible kept but what emoji are made of: the joiners of 👨‍👩‍👧,
+// and the tags of flags such as Scotland's. '' for nothing, or for too much.
 export const CHAT_MAX = 120;
 export function cleanChat(raw) {
   if (typeof raw !== 'string') return '';
-  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(/(?!\u200d)\p{C}/gu, '').trim();
+  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(/(?![\u200d\u{e0020}-\u{e007f}])\p{C}/gu, '').trim();
   return text && [...text].length <= CHAT_MAX ? text : '';
 }
 

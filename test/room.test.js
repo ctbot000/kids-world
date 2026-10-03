@@ -196,8 +196,9 @@ test('phrases, stickers and anything typed can be said: tidied, and never empty,
   assert.equal(b.last('say').p, 0);
   assert.equal(PHRASES[b.last('say').p], 'Hi!');
   // Typed: spaces and new lines made one space, and nothing invisible but an emoji's joiners.
-  room.receive(a, { t: 'say', text: '  안녕,\n  friends! 👨\u200d👩\u200d👧\u202e ' });
-  assert.equal(b.last('say').text, '안녕, friends! 👨\u200d👩\u200d👧');
+  const scotland = '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}';
+  room.receive(a, { t: 'say', text: `  안녕,\n  friends! 👨\u200d👩\u200d👧\u202e ${scotland} ` });
+  assert.equal(b.last('say').text, `안녕, friends! 👨\u200d👩\u200d👧 ${scotland}`);
   assert.equal(b.last('say').name, 'Happy Panda');
   const before = b.all('say').length;
   room.receive(a, { t: 'say', p: 999 });
