@@ -466,13 +466,22 @@ test('the little map shows the island and what you build; it opens the big map a
       fy,
     );
   const isSea = (p) => p && p[2] > p[0] + 60 && p[3] === 255;
+  // The whole island fits on either map, so their corners are open sea; but a
+  // dolphin's dot or the whale's picture can be anywhere out there. This is a
+  // corner with no animal near it, as fractions of the way across and down.
+  const seaCorner = (inset) =>
+    page.evaluate((inset) => {
+      const g = window.kidsWorld.game;
+      const clear = ([fx, fy]) => [...g.critters.values()].every((c) => Math.hypot(c.model.group.position.x - fx * g.world.W, c.model.group.position.z - fy * g.world.D) > 8);
+      return [[inset, inset], [1 - inset, inset], [inset, 1 - inset], [1 - inset, 1 - inset]].find(clear);
+    }, inset);
   // A canvas starts out a blank 300 by 150, so having a width says nothing; the
   // map makes it square when it first draws, on the game's first frame.
   await until(page, () => {
     const c = document.querySelector('#minimap canvas');
     return c.width === c.height;
   });
-  assert.ok(isSea(await pixel('#minimap canvas', 0.02, 0.02)), 'the corner of the little map is sea');
+  assert.ok(isSea(await pixel('#minimap canvas', ...(await seaCorner(0.02)))), 'the corners of the little map are sea');
   // A real pointer reaches it: nothing is on top of it.
   const center = await page.evaluate(() => {
     const b = document.getElementById('minimap').getBoundingClientRect();
@@ -499,7 +508,7 @@ test('the little map shows the island and what you build; it opens the big map a
   // Clicking the little map opens the big one, drawn at once; Escape closes it.
   await page.mouse.click(center.x, center.y);
   await until(page, () => document.querySelector('#modal:not([hidden]) .big-map')?.width > 0);
-  assert.ok(isSea(await pixel('#modal .big-map', 0.01, 0.99)), 'the big map is drawn');
+  assert.ok(isSea(await pixel('#modal .big-map', ...(await seaCorner(0.01)))), 'the big map is drawn');
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.ui.minimap.big === null);
 
