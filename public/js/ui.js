@@ -625,7 +625,7 @@ export class UI {
           card('🖌️', 'Paint', ['Choose the brush, pick a colour below, and tap blocks to paint them.']),
           card('⛰️', 'Hills', ['Raise, dig or flatten the land. Big sizes make big hills!']),
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
-          card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you! Use the bunny tool to invite new friends.']),
+          card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💬', 'Talk', ['Say hello with the speech bubble and dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),

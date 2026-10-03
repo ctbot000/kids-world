@@ -116,7 +116,7 @@ export class Renderer {
 
   addCritter(id, type) {
     this.removeCritter(id);
-    const m = new CritterModel(type, id);
+    const m = new CritterModel(type, id, this.world?.theme);
     this.entities.add(m.group, m.shadow);
     this.critters.set(id, m);
     return m;
@@ -232,7 +232,7 @@ export class Renderer {
     for (const [id, m] of this.critters) {
       const c = m.group.position;
       const cy = c.y + m.height * 0.5;
-      const r = m.type === 'sheep' ? 0.5 : 0.38;
+      const r = m.pick;
       const ox = c.x - ray.origin.x;
       const oy = cy - ray.origin.y;
       const oz = c.z - ray.origin.z;

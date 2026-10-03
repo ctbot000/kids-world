@@ -1,7 +1,8 @@
 // Every sound is made on the spot with Web Audio: soft pops and clicks for
-// building, boings and splashes, animal voices, a chime when a friend
-// arrives, little "animal talk" babble when someone says something, and
-// gentle music that changes with the time of day.
+// building, boings and splashes, animal voices (birdsong, hoots and buzzing
+// among them), a chime when a friend arrives, little "animal talk" babble
+// when someone says something, and gentle music that changes with the time
+// of day.
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 // Mixer levels at full volume: effects peak around -10 dB, music sits below them.
@@ -233,6 +234,30 @@ export class Sound {
         break;
       case 'butterfly':
         for (let i = 0; i < 3; i++) this.tone(NOTE(96 + PENTA[i]), { at: i * 0.05, decay: 0.12, gain: 0.04 });
+        break;
+      case 'bird': {
+        // A little song of quick whistles, never quite the same twice.
+        const notes = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < notes; i++) {
+          const f = 2300 + Math.random() * 1500;
+          this.tone(f, { at: i * 0.11, decay: 0.07, gain: 0.05, slide: f * (Math.random() < 0.5 ? 1.35 : 0.75), slideTime: 0.06 });
+        }
+        break;
+      }
+      case 'owl':
+        // Hoo... hoo-hoo.
+        [0, 0.45, 0.62].forEach((at, i) => this.tone(i ? 390 : 420, { at, attack: 0.04, decay: i === 2 ? 0.45 : 0.25, gain: 0.09, slide: i ? 360 : 400, vibrato: 4 }));
+        break;
+      case 'bee':
+        this.tone(190 * r(), { type: 'sawtooth', attack: 0.06, decay: 0.55, gain: 0.025, vibrato: 14, slide: 215 * r() });
+        this.tone(380 * r(), { type: 'triangle', attack: 0.06, decay: 0.5, gain: 0.015, vibrato: 20 });
+        break;
+      case 'seagull':
+        // Kee-ow, kee-ow!
+        for (let i = 0, n = Math.random() < 0.5 ? 2 : 3; i < n; i++) {
+          this.tone(1500 * r(), { at: i * 0.32, type: 'triangle', decay: 0.22, gain: 0.07, slide: 900, slideTime: 0.2, vibrato: 30 });
+          this.tone(3000 * r(), { at: i * 0.32, decay: 0.12, gain: 0.015, slide: 1800 });
+        }
         break;
       case 'emote':
         this.emote(opts.emote);

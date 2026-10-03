@@ -12,7 +12,7 @@ import { after, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { TREE_PART } from '../public/js/shared/blocks.js';
+import { TREE_PART, TULIP } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -336,6 +336,78 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   await page.click('#btn-toybox');
   await until(page, () => document.querySelectorAll('#modal .choice img').length >= 16 && [...document.querySelectorAll('#modal .choice img')].every((i) => i.src.startsWith('data:image')));
   await page.keyboard.press('Escape');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a bird invited from the toy box is petted with a click, and once fed it sits on your head', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Gentle Bear', look: { animal: 'bear', fur: 'brown', shirt: 2, hat: 'none' } });
+  await makeIsland(page, { online: false });
+  // Choosing a bird in the toy box makes the Animals tool invite birds.
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Animals', '#modal');
+  await clickButton(page, 'Bird', '#modal');
+  await until(page, () => window.kidsWorld.game.tool === 'friends' && window.kidsWorld.game.critterType === 'bird');
+  const birds = () => page.evaluate(() => [...window.kidsWorld.game.critters.values()].filter((c) => c.type === 'bird').map((c) => c.id));
+  const before = await birds();
+  const { cell, at } = await spotNear(page, 3, 0);
+  await page.mouse.click(at.x, at.y);
+  await until(page, (n) => [...window.kidsWorld.game.critters.values()].filter((c) => c.type === 'bird').length > n, before.length);
+  const id = (await birds()).find((b) => !before.includes(b));
+  // Birds flit about: this one is asked to sit still where it came in, to be
+  // clicked, in a tulip there. A flower is see-through: it must not take the click.
+  await page.evaluate(
+    (id, cell, tulip) => {
+      const kw = window.kidsWorld;
+      kw.game.edit('build', [cell.x, cell.y + 1, cell.z, tulip], { undoable: false });
+      Object.assign(kw.session.link.room.critters.get(id), { x: cell.x + 0.5, y: cell.y + 1, z: cell.z + 0.5, mode: 'perch', perch: '', state: 'idle', timer: 1e9 });
+    },
+    id,
+    cell,
+    TULIP,
+  );
+  await until(
+    page,
+    ({ id, cell, tulip }) => {
+      const g = window.kidsWorld.game;
+      const p = g.critters.get(id)?.model.group.position;
+      return p && Math.hypot(p.x - cell.x - 0.5, p.y - cell.y - 1, p.z - cell.z - 0.5) < 0.01 && g.world.get(cell.x, cell.y + 1, cell.z) === tulip;
+    },
+    { id, cell, tulip: TULIP },
+  );
+  const clickBird = async () => {
+    const at = await page.evaluate((id) => {
+      const kw = window.kidsWorld;
+      const m = kw.game.critters.get(id).model;
+      const p = m.group.position;
+      const r = kw.renderer.canvas.getBoundingClientRect();
+      const s = kw.renderer.project(p.x, p.y + m.height / 2, p.z);
+      return { x: r.left + s.x, y: r.top + s.y };
+    }, id);
+    await page.mouse.click(at.x, at.y);
+  };
+  await page.click('#toolbar button[title="Build"]');
+  await clickBird();
+  await until(page, () => window.kidsWorld.profile.data.stats.petted === 1);
+  // Given a fruit, it follows you, and sits on your head while you stand still.
+  await page.evaluate(() => {
+    window.kidsWorld.profile.addToBasket('apple', 1);
+    window.kidsWorld.ui.pickBasket('apple');
+  });
+  await clickBird();
+  await until(page, () => window.kidsWorld.profile.data.stats.fed === 1);
+  await until(page, () => window.kidsWorld.profile.data.stickers['bird-buddy']);
+  // The sticker comes as it lands; then it settles right on top of the head.
+  await until(
+    page,
+    (id) => {
+      const g = window.kidsWorld.game;
+      const p = g.critters.get(id).model.group.position;
+      const b = g.me.body;
+      return Math.hypot(p.x - b.x, p.z - b.z) < 0.01 && Math.abs(p.y - b.y - 1.41) < 0.01;
+    },
+    id,
+  );
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

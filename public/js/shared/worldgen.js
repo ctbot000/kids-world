@@ -1,7 +1,8 @@
 // Makes a new island from a seed: hills and a mountain, beaches, a pond,
 // trees (some of them fruit trees of the island's own fruit), flowers,
-// seashells, and a spot for everyone to arrive at.
+// seashells, animal friends, and a spot for everyone to arrive at.
 import * as B from './blocks.js';
+import { placeFlyers } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -269,7 +270,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
     return null;
   };
   const onLand = (x, z) => isLand(x, z) || (world.get(x, hi(x, z), z) === pal.top && B.KIND[world.get(x, hi(x, z) + 1, z)] === B.K_PLANT);
-  const counts = theme === 'snowy' ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 } : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 6 };
+  const counts = theme === 'snowy' ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 } : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 4 };
   for (const [type, n] of Object.entries(counts)) {
     for (let i = 0; i < n; i++) {
       let s;
@@ -282,6 +283,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
       if (s) critters.push({ type, ...s });
     }
   }
+  critters.push(...placeFlyers(world, rng));
 
   return { world, critters, fruit };
 }

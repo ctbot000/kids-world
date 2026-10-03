@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { MAX_CRITTERS } from '../public/js/shared/critters.js';
+import { MAX_CRITTERS, unpackCritter } from '../public/js/shared/critters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { isValidName, PHRASES } from '../public/js/shared/words.js';
 
@@ -218,6 +218,40 @@ test('animals can be petted, fed, invited and said goodbye to', () => {
   }
   assert.notEqual(room.critters.list.map((c) => `${c.x},${c.z}`).join('|'), before);
   assert.ok(a.last('c').c.length === MAX_CRITTERS);
+});
+
+test('flying friends can be invited, and come in over the water rather than under it', () => {
+  const { room } = makeRoom();
+  const a = join(room);
+  const w = room.world;
+  const s = w.spawn;
+  for (const type of ['bird', 'owl', 'bee', 'seagull', 'butterfly']) {
+    room.receive(a, { t: 'critter', op: 'invite', type, x: s.x, y: s.y, z: s.z });
+    const c = room.critters.get(a.last('cadd').critter.id);
+    assert.equal(c.type, type);
+    assert.equal(c.y, s.y, `a ${type} lands where it was asked to`);
+    assert.equal(unpackCritter(a.last('cadd').s).type, type, 'and goes over the wire as itself');
+  }
+  // Out at sea, with the floor far below the water.
+  let sea = null;
+  for (let x = 1; x < w.W && !sea; x++) if (w.get(x, w.sea, 1) === B.WATER && w.top(x, 1) < w.sea - 1) sea = { x: x + 0.5, z: 1.5 };
+  room.receive(a, { t: 'critter', op: 'invite', type: 'bird', x: sea.x, y: w.top(Math.floor(sea.x), 1) + 1, z: sea.z });
+  const bird = room.critters.get(a.last('cadd').critter.id);
+  assert.equal(bird.y, w.sea + 1, 'on top of the water');
+});
+
+test('an island from before the flying friends gets some, once', () => {
+  const { room, time } = makeRoom();
+  const save = JSON.parse(JSON.stringify(room.exportSave()));
+  assert.equal(save.v, 2);
+  const flyers = (r) => r.critters.list.filter((c) => ['bird', 'owl', 'bee', 'seagull'].includes(c.type)).length;
+  const before = { ...save, v: 1, critters: save.critters.filter((c) => !['bird', 'owl', 'bee', 'seagull'].includes(c.type)) };
+  const old = new Room({ code: '123456', save: before, now: time.now });
+  assert.equal(flyers(old), 9, 'three birds, an owl, three bees and two seagulls move in');
+  const again = new Room({ code: '123456', save: JSON.parse(JSON.stringify(old.exportSave())), now: time.now });
+  assert.equal(flyers(again), 9, 'and only the once');
+  const none = new Room({ code: '123456', save: { ...save, critters: before.critters }, now: time.now });
+  assert.equal(flyers(none), 0, 'an island whose flying friends were all sent home stays that way');
 });
 
 test('sprouts grow into trees and picked fruit grows back', () => {

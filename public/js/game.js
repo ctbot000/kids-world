@@ -81,6 +81,8 @@ export class Game extends EventTarget {
     this.wasInWater = false;
     this.seenNight = false;
     this.seenRainbow = false;
+    // The flying friend that sat on your head, once one has.
+    this.perchedOn = 0;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -541,7 +543,10 @@ export class Game extends EventTarget {
     const maxDist = REACH + this.renderer.camDist;
     const hit = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, maxDist, stopAt);
     const critter = this.renderer.pickCritter(ray, maxDist);
-    if (critter && (!hit || critter.dist < hit.dist)) {
+    // Flowers and grass are see-through: one in front of an animal, or the
+    // one it stands in (a bee at a flower is inside its cell), does not hide it.
+    const seeThrough = hit && B.KIND[hit.id] === B.K_PLANT ? 1.5 : 0;
+    if (critter && (!hit || critter.dist < hit.dist + seeThrough)) {
       const m = this.critters.get(critter.id)?.model.group.position;
       if (m && Math.hypot(m.x - eye.x, m.y - eye.y, m.z - eye.z) <= REACH) return { kind: 'critter', id: critter.id };
     }
@@ -959,19 +964,34 @@ export class Game extends EventTarget {
       m.group.rotation.y = s.yaw;
       const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       const state = s.state ?? 'idle';
-      m.update(dt, state, moving);
+      const ground = this.renderer.groundUnder(s.x, s.y, s.z);
+      m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
-      m.shadow.visible = m.shadow.visible && c.type !== 'butterfly';
-      if (state === 'sleep' && c.type !== 'butterfly' && now > (c.zzzAt ?? 0)) {
+      m.shadow.visible = m.shadow.visible && !m.tiny;
+      if (state === 'sleep' && !m.tiny && now > (c.zzzAt ?? 0)) {
         c.zzzAt = now + 1400 + Math.random() * 800;
         if (this.near(s.x, s.y, s.z, 30)) this.renderer.effects.zzz(s.x, s.y + m.height, s.z);
       }
-      // Now and then an animal says hello, if you are near.
-      if (!night && now > c.voiceAt && this.near(s.x, s.y, s.z, 9)) {
-        c.voiceAt = now + 9000 + Math.random() * 14000;
+      // Now and then an animal says hello, if you are near (and it is awake:
+      // owls only at night). Seagulls call from high up, now and then.
+      const info = CRITTER_INFO[c.type];
+      const gull = c.type === 'seagull';
+      if (state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, gull ? 24 : 9)) {
+        c.voiceAt = now + (9000 + Math.random() * 14000) * (gull ? 2 : 1);
         if (c.type !== 'butterfly') this.sound.play(c.type);
       }
+      this.onYourHead(c, s, state);
     }
+  }
+
+  // A flying friend sitting on your head is worth a sticker.
+  onYourHead(c, s, state) {
+    const b = this.me?.body;
+    if (this.perchedOn || !b || state !== 'idle' || !CRITTER_INFO[c.type]?.flies) return;
+    if (Math.hypot(s.x - b.x, s.z - b.z) > 0.2 || s.y - b.y < 1.2 || s.y - b.y > 2) return;
+    this.perchedOn = c.id;
+    this.profile.count('perched');
+    this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
   }
 
   // Things worth a sticker that just happen: night skies and rainbows.

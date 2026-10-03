@@ -15,11 +15,11 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 - **Build** with 16 colours of toy bricks, plus grass, sand, snow, wood, glass, lamps, star blocks, cookies, candy canes, flowers and more. There are over 50 blocks and plants in the toy box.
 - **Tools:** Build, Pick up, Paint and Hills (raise, dig or flatten the land), each in three sizes, and Undo.
 - **Stamps** put down a whole build in one tap: a cozy house, a castle tower, a rainbow, a fountain, a sail boat, a snowman, a flower garden and more.
-- **Animal friends:** bunnies hop, chicks peck, sheep graze, ducks paddle and butterflies flutter. Pet them for hearts. Give one a fruit and it follows you around. With the Animals tool you can invite new friends to move in.
+- **Animal friends:** bunnies hop, chicks peck, sheep graze and ducks paddle. Up in the air, birds flit between the treetops, the roofs and the grass, owls sleep in a tree all day and come out at night, bees go from flower to flower, seagulls circle high over the beach and butterflies flutter. Pet them for hearts. Give one a fruit and it follows you around, and a flying friend sits on your head when you stand still. With the Animals tool you can invite new friends to move in.
 - **Treasures:** pick fruit from the trees (every island has its own fruit), find seashells on the beach, and catch star pieces after a shooting star. Plant a fruit and it grows into a tree; sprouts grow into trees too.
 - **Day and night:** a long day and a short, gentle night where lamps glow. There's rain, snow or candy sprinkles, and a rainbow afterwards.
 - **Your character:** be a bunny, cat, bear, puppy, fox, panda, frog, piggy, mouse or koala. Pick your fur, T-shirt and hat. Wave, dance, cheer, clap or giggle, and say things with ready-made phrases and stickers.
-- **24 stickers** to collect, for things like your first brick, petting ten animals or staying up to see the stars.
+- **25 stickers** to collect, for things like your first brick, petting ten animals, a bird sitting on your head or staying up to see the stars.
 - **Photos:** the 📸 button saves a picture of your island, without the buttons.
 - **A little map** in the corner shows the island from above: you (the yellow arrow) and the way you are looking, your friends in their T-shirt colours, and the animals. Tap it for a big map with everyone's names. It can be switched off in ⚙️ Settings.
 - **Sounds and music** are all made in the browser: pops and clicks for building, animal voices, "animal talk" babble when someone speaks, and soft music that changes at night.
@@ -108,13 +108,14 @@ npm test
 ```
 
 - Engine: world encoding, deterministic island generation, walking, jumping, auto-jump, swimming and flying, aiming, every tool, stamps, sprouts, and the day length.
+- Flying animals: where they start out; twenty minutes of flight on every kind of island without flying into a hill, a tree or a house; owls up at night and the others by day; bees at the flowers; seagulls up high; staying in when they are in a house; and a fed one following you onto your head.
 - Rendering maths without a GPU: faces wind outward and enclose the block, hidden faces are skipped, corner shadows, sunlight and lamp light, and relighting a region matching lighting everything.
 - The map: the ground seen from above (looking past flowers and fruit), deeper water darker, hill shading, edits repainted with the shadow they throw, the part of a big island it follows, and directions that match the 3D view instead of mirroring it.
-- Room: joining and coming back, names from the word lists only, checked edits, undo, the owner's rules, phrases and stickers only, animals, growing trees and fruit, weather, saving and loading, rate limiting.
+- Room: joining and coming back, names from the word lists only, checked edits, undo, the owner's rules, phrases and stickers only, animals (flying ones invited over water come in above it), growing trees and fruit, weather, saving and loading (an island from before the flying animals gets some, once), rate limiting.
 - Server: static files and path traversal, the WebSocket handshake and framing, and islands shared by real WebSocket clients.
 - Keeper: islands filed by device with one copy a day, profiles without tokens, what it refuses (other games' files, damaged islands, too much), its signatures, and admin pages only the computer itself can use.
 - Full screen: the standard calls, Safari's older prefixed ones, and iPhones, which can only get it from the Home Screen.
-- End to end in headless Chrome: playing alone with real clicks, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, an island saved and opened again after a reload, a page sending copies to a keeper peer to peer (and nothing to an impostor under its peer id), and the keeper's admin page. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
+- End to end in headless Chrome: playing alone with real clicks, a bird invited from the toy box, petted with a click and fed until it sits on your head, the little map (a brick you build shows on it, the big map, the switch in Settings) and where it fits on screens of every shape, full screen and the iPhone guide to the Home Screen, two friends peer to peer through a local PeerServer, two friends on the dedicated server, an island saved and opened again after a reload, a page sending copies to a keeper peer to peer (and nothing to an impostor under its peer id), and the keeper's admin page. Set `CHROME_PATH` if Chrome is not installed in a standard location; without Chrome these are skipped.
 - CI has no mouse, so there the game is in touch mode, with the thumbstick and the touch buttons on screen; on a computer with a mouse it is not. To run the end-to-end tests the way CI does, which matters for anything that moves the buttons:
 
   ```bash

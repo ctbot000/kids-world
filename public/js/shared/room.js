@@ -8,7 +8,7 @@
 // tick() about ten times a second.
 
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, MAX_CRITTERS, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, MAX_CRITTERS, placeFlyers, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -447,7 +447,9 @@ export class Room {
         const w = this.world;
         const x = Math.min(w.W - 0.5, Math.max(0.5, msg.x));
         const z = Math.min(w.D - 0.5, Math.max(0.5, msg.z));
-        const y = msg.type === 'butterfly' ? Math.min(w.H, msg.y + 1) : (standHeight(w, x, z, msg.y) ?? msg.y);
+        let y = standHeight(w, x, z, msg.y) ?? msg.y;
+        // Flying friends come in above any water, and fly off from there.
+        if (CRITTER_INFO[msg.type].flies) while (y < w.H && w.get(Math.floor(x), Math.floor(y), Math.floor(z)) === B.WATER) y++;
         const c = this.critters.add(msg.type, x, y, z);
         if (c) this.broadcast({ t: 'cadd', critter: { id: c.id, type: c.type, name: c.name }, s: this.critters.pack().find((r) => r[0] === c.id), by: p.id });
         this.changed();
@@ -542,7 +544,7 @@ export class Room {
     }
 
     const where = new Map();
-    for (const p of this.players.values()) if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2] });
+    for (const p of this.players.values()) if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat });
     this.critters.step(this.world, dt, now, where, isNight(env.time));
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
@@ -655,7 +657,8 @@ export class Room {
     return {
       app: 'kids-world',
       kind: 'island',
-      v: 1,
+      // 2: made since birds, owls, bees and seagulls came to the islands.
+      v: 2,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -681,6 +684,8 @@ export class Room {
       const w = this.world;
       this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name);
     }
+    // An island from before the flying friends came gets some, once.
+    if (!(Number(save.v) >= 2)) for (const f of placeFlyers(this.world, new Rng(seed ^ 0x2545f491))) this.critters.add(f.type, f.x, f.y, f.z);
     this.settings = cleanSettings(save.settings);
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
