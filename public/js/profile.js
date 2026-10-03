@@ -26,6 +26,8 @@ export const STICKERS = [
   { key: 'bird-buddy', icon: '🐦', name: 'Bird Buddy', text: 'Have a flying friend sit on your head', test: (s) => s.perched >= 1 },
   { key: 'whale-watcher', icon: '🐳', name: 'Whale Watcher', text: 'See a whale blow water', test: (s) => s.spouts >= 1 },
   { key: 'belly-slide', icon: '🐧', name: 'Belly Slide', text: 'See a penguin slide on its tummy', test: (s) => s.slides >= 1 },
+  { key: 'giddy-up', icon: '🏇', name: 'Giddy-Up!', text: 'Ride a big animal', test: (s) => s.rides >= 1 },
+  { key: 'sea-rider', icon: '🌊', name: 'Sea Rider', text: 'Ride a dolphin or the whale', test: (s) => s.searides >= 1 },
   { key: 'chatty', icon: '💬', name: 'Chatty', text: 'Say 10 things to friends', test: (s) => s.said >= 10 },
   { key: 'dancer', icon: '💃', name: 'Dancer', text: 'Dance 5 times', test: (s) => s.danced >= 5 },
   { key: 'visitor', icon: '✈️', name: 'Visitor', text: "Visit a friend's island", test: (s) => s.visits >= 1 },
@@ -37,7 +39,7 @@ export const STICKERS = [
   { key: 'explorer', icon: '🧭', name: 'Explorer', text: 'Walk 1,000 steps', test: (s) => s.steps >= 1000 },
 ];
 
-const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps'];
+const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps'];
 
 export const DEFAULT_HOTBAR = [GRASS, DIRT, STONE, PLANKS, GLASS, TOY_BRICKS[0], TOY_BRICKS[2], TOY_BRICKS[7], TULIP, LAMP];
 

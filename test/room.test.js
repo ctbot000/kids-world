@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { MAX_CRITTERS, NEEDS_WATER, unpackCritter } from '../public/js/shared/critters.js';
+import { BIG, CRITTER_INFO, MAX_CRITTERS, NEEDS_WATER, needsRoom, riderAt, unpackCritter } from '../public/js/shared/critters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { isMadeUpName, PHRASES } from '../public/js/shared/words.js';
 
@@ -317,7 +317,7 @@ test('sea creatures are invited at the water, and a whale only where the sea is 
 test('an island from before the flying friends or the sea creatures gets them, once', () => {
   const { room, time } = makeRoom();
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 4);
+  assert.equal(save.v, 5);
   const FLYERS = ['bird', 'owl', 'bee', 'seagull'];
   const SEA = ['fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
   const count = (r, types) => r.critters.list.filter((c) => types.includes(c.type)).length;
@@ -337,6 +337,109 @@ test('an island from before the flying friends or the sea creatures gets them, o
   assert.equal(count(again, SEA), 13);
   // An island whose animals were all sent home stays that way.
   assert.equal(count(load({ ...save, critters: without([...FLYERS, ...SEA]) }), [...FLYERS, ...SEA]), 0);
+});
+
+test('a big animal is ridden by one player at a time, goes where they go, and stays where they get off', () => {
+  const { room, time } = makeRoom();
+  const a = join(room);
+  const b = join(room, { name: 'Brave Fox' });
+  const pony = room.critters.list.find((c) => c.type === 'pony');
+  const near = (conn, c) => room.receive(conn, { t: 'm', s: [c.x + 1, c.y, c.z, 0, 0, 0] });
+  // Too far away to climb on.
+  room.receive(a, { t: 'critter', op: 'ride', id: pony.id });
+  assert.equal(pony.rider, 0);
+  near(a, pony);
+  room.receive(a, { t: 'critter', op: 'ride', id: pony.id });
+  assert.equal(pony.rider, 1);
+  assert.deepEqual(b.last('ride'), { t: 'ride', id: pony.id, pid: 1 });
+  // Up on its back at once.
+  const seat = riderAt('pony', pony);
+  assert.deepEqual(room.players.get(1).s.slice(0, 3), [seat.x, seat.y, seat.z].map((v) => +v.toFixed(2)));
+  // Nobody else gets on, nor sends it home.
+  near(b, pony);
+  room.receive(b, { t: 'critter', op: 'ride', id: pony.id });
+  assert.equal(pony.rider, 1);
+  assert.match(b.last('notice').text, /already riding/);
+  room.receive(b, { t: 'critter', op: 'bye', id: pony.id });
+  assert.ok(room.critters.get(pony.id), 'still here');
+  assert.match(b.last('notice').text, /Wait until they get off/);
+  // It goes where its rider says they are.
+  room.receive(a, { t: 'm', s: [40.5, 30, 41.5, 1.5, 6, 0] });
+  time.advance(100);
+  room.tick();
+  assert.ok(Math.abs(pony.x - 40.5) < 1e-6 && Math.abs(pony.z - 41.5) < 1e-6 && Math.abs(pony.y - (30 - CRITTER_INFO.pony.ride.seat + 0.25)) < 1e-6);
+  assert.equal(pony.yaw, 1.5);
+  const [row] = b.last('c').c.filter((r) => r[0] === pony.id);
+  assert.equal(unpackCritter(row).x, 40.5, 'and everyone is told');
+  // Only a whale or an elephant has a trick for the host to pass on.
+  room.receive(a, { t: 'critter', op: 'trick' });
+  assert.equal(b.all('cfx').length, 0);
+  // Getting off: it stays right there, and anyone can get on.
+  room.receive(a, { t: 'm', s: [42.5, 30, 41.5, 1.5, 6, 0] });
+  room.receive(a, { t: 'critter', op: 'off' });
+  assert.equal(pony.rider, 0);
+  assert.equal(pony.x, 42.5, 'where its rider last was');
+  assert.deepEqual(b.last('ride'), { t: 'ride', id: pony.id, pid: 0 });
+  near(b, pony);
+  room.receive(b, { t: 'critter', op: 'ride', id: pony.id });
+  assert.equal(pony.rider, 2);
+  // Going home gets you off too, and the welcome says who rides what.
+  room.receive(b, { t: 'leave' });
+  assert.equal(pony.rider, 0);
+  assert.equal(a.last('ride').pid, 0);
+  const elephant = room.critters.list.find((c) => c.type === 'elephant');
+  near(a, elephant);
+  room.receive(a, { t: 'critter', op: 'ride', id: elephant.id });
+  room.receive(a, { t: 'critter', op: 'trick' });
+  assert.equal(a.last('cfx').fx, 'spray');
+  const c = join(room, { name: 'Calm Otter' });
+  assert.equal(c.last('welcome').critters.find((d) => d.id === elephant.id).rider, 1);
+  // Riding one gets you off another; small animals cannot be ridden.
+  near(a, pony);
+  room.receive(a, { t: 'critter', op: 'ride', id: pony.id });
+  assert.equal(elephant.rider, 0);
+  assert.equal(pony.rider, 1);
+  const bunny = room.critters.list.find((x) => x.type === 'bunny');
+  near(a, bunny);
+  room.receive(a, { t: 'critter', op: 'ride', id: bunny.id });
+  assert.equal(bunny.rider, 0);
+});
+
+test('a big animal is invited where there is room for it', () => {
+  const { room } = makeRoom();
+  const a = join(room);
+  const s = room.world.spawn;
+  room.receive(a, { t: 'critter', op: 'invite', type: 'elephant', x: s.x, y: s.y, z: s.z });
+  const el = room.critters.get(a.last('cadd').critter.id);
+  assert.equal(el.type, 'elephant');
+  // In a big, low hut, two blocks high: not there.
+  const w = room.world;
+  const hx = 8;
+  const hz = 8;
+  const floor = 30;
+  for (let x = hx - 6; x <= hx + 6; x++) {
+    for (let z = hz - 6; z <= hz + 6; z++) {
+      for (let y = floor - 1; y <= floor + 2; y++) w.set(x, y, z, Math.abs(x - hx) === 6 || Math.abs(z - hz) === 6 || y === floor - 1 || y === floor + 2 ? B.PLANKS : B.AIR);
+    }
+  }
+  const n = a.all('cadd').length;
+  room.receive(a, { t: 'critter', op: 'invite', type: 'giraffe', x: hx + 0.5, y: floor, z: hz + 0.5 });
+  assert.equal(a.all('cadd').length, n);
+  assert.equal(a.last('notice').text, needsRoom('giraffe'));
+  assert.equal(needsRoom('elephant'), 'There is no room for an elephant here. Try somewhere more open!');
+  assert.equal(needsRoom('unicorn'), 'There is no room for a unicorn here. Try somewhere more open!');
+});
+
+test('an island from before the big animals gets them, once', () => {
+  for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
+    const { room, time } = makeRoom({ theme });
+    const save = JSON.parse(JSON.stringify(room.exportSave()));
+    const count = (r) => r.critters.list.filter((c) => BIG.includes(c.type)).length;
+    const load = (sv) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(sv)), now: time.now });
+    const old = load({ ...save, v: 4, critters: save.critters.filter((c) => !BIG.includes(c.type)) });
+    assert.equal(count(old), { sunny: 6, snowy: 5, candy: 4, flat: 4 }[theme], theme);
+    assert.equal(count(load(old.exportSave())), count(old), `${theme}: only the once`);
+  }
 });
 
 test('a snowy island from before the penguins and seals gets them, once, and other islands none', () => {

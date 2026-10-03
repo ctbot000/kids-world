@@ -1,6 +1,6 @@
 // Every sound is made on the spot with Web Audio: soft pops and clicks for
-// building, boings and splashes, animal voices (birdsong, hoots, buzzing and
-// whale song among them), a chime when a friend arrives, little "animal
+// building, boings and splashes, animal voices (birdsong, hoots, buzzing,
+// whale song, neighs, moos and an elephant's trumpet among them), hoofbeats, a chime when a friend arrives, little "animal
 // talk" babble when someone says something, and gentle music that changes
 // with the time of day.
 
@@ -67,6 +67,14 @@ export class Sound {
   }
 
   // ------------------------------------------------ building blocks
+
+  // Neigh-eh-eh-eh, high for a unicorn (pitch).
+  neigh(pitch = 1) {
+    const r = () => 0.95 + Math.random() * 0.1;
+    this.tone(950 * pitch * r(), { type: 'sawtooth', attack: 0.04, decay: 0.75, gain: 0.035, slide: 520 * pitch, slideTime: 0.7, vibrato: 90 });
+    this.tone(1900 * pitch * r(), { type: 'triangle', attack: 0.04, decay: 0.6, gain: 0.015, slide: 1000 * pitch, slideTime: 0.6, vibrato: 120 });
+    this.noise(0.15, { at: 0.75, type: 'lowpass', freq: 800, gain: 0.08 });
+  }
 
   tone(freq, { type = 'sine', at = 0, attack = 0.005, decay = 0.2, gain = 0.3, slide = null, slideTime = null, dest = null, vibrato = 0 } = {}) {
     const ctx = this.ctx;
@@ -287,6 +295,44 @@ export class Sound {
       case 'spout':
         // Pfoosh!
         this.noise(0.9, { type: 'bandpass', freq: 1200, sweep: 500, q: 0.6, gain: 0.22, attack: 0.05 });
+        break;
+      case 'pony':
+        this.neigh(1);
+        break;
+      case 'unicorn':
+        this.neigh(1.25);
+        // ...and a sparkle.
+        for (let i = 0; i < 4; i++) this.tone(NOTE(88 + PENTA[(i * 2) % 5]), { at: 0.5 + i * 0.07, decay: 0.25, gain: 0.04 });
+        break;
+      case 'reindeer':
+        // A snort, and the bell on its collar.
+        this.noise(0.18, { type: 'lowpass', freq: 700, gain: 0.12 });
+        for (let i = 0; i < 3; i++) this.tone(2350 * r(), { at: 0.15 + i * 0.09, decay: 0.3, gain: 0.03 });
+        break;
+      case 'cow':
+        // Moooo.
+        this.tone(150 * r(), { type: 'sawtooth', attack: 0.12, decay: 0.85, gain: 0.05, slide: 118, slideTime: 0.8, vibrato: 2 });
+        this.tone(300 * r(), { type: 'triangle', attack: 0.12, decay: 0.7, gain: 0.03, slide: 236, slideTime: 0.7 });
+        break;
+      case 'elephant':
+      case 'trumpet':
+        // A trumpet, high and wobbly.
+        this.tone(520 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.7, gain: 0.06, slide: 760, slideTime: 0.25, vibrato: 30 });
+        this.tone(1040 * r(), { type: 'square', attack: 0.05, decay: 0.55, gain: 0.015, slide: 1500, slideTime: 0.25, vibrato: 30 });
+        break;
+      case 'giraffe':
+        // A soft hum.
+        this.tone(105 * r(), { type: 'triangle', attack: 0.2, decay: 0.7, gain: 0.08, vibrato: 3 });
+        break;
+      case 'polarbear':
+        // A gentle rumble.
+        this.tone(170 * r(), { type: 'sawtooth', attack: 0.08, decay: 0.55, gain: 0.04, slide: 120, vibrato: 18 });
+        this.noise(0.4, { type: 'lowpass', freq: 400, gain: 0.08, attack: 0.05 });
+        break;
+      case 'hoof':
+        // Clip-clop, or big soft paws (big).
+        this.noise(0.05, { type: 'bandpass', freq: opts.big ? 300 : 1400 * r(), q: opts.big ? 1 : 3, gain: opts.big ? 0.14 : 0.1 });
+        this.tone(opts.big ? 70 : 220 * r(), { decay: 0.06, gain: opts.big ? 0.1 : 0.04 });
         break;
       case 'seagull':
         // Kee-ow, kee-ow!

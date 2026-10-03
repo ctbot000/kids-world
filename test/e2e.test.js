@@ -451,6 +451,60 @@ test('a fish under the water is petted with a click through it, not built on', {
   await page.browserContext().close();
 });
 
+test('a pony beside you is got on with the Ride button, ridden about, and got off with Q', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox', look: { animal: 'fox', fur: 'orange', shirt: 4, hat: 'none' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // The island's own big animals away, and a pony two steps from you that
+  // stays put until someone gets on.
+  const id = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const { BIG, roomFor } = await import('/js/shared/critters.js');
+    for (const c of [...room.critters.list]) if (BIG.includes(c.type)) room.critters.remove(c.id);
+    const b = kw.game.me.body;
+    const at = roomFor(room.world, 'pony', b.x + 2, b.y, b.z, 1);
+    const c = room.critters.add('pony', at.x, at.y, at.z);
+    Object.assign(c, { timer: 1e9, yaw: 0 });
+    kw.renderer.view.yaw = Math.PI / 2;
+    return c.id;
+  });
+  await until(page, (id) => window.kidsWorld.game.rideTarget === id && !document.getElementById('ride').hidden, id);
+  assert.match(await page.$eval('#ride', (el) => el.textContent), /Ride/);
+  // The camera settled, so that the button stays where it is to be pressed.
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  await page.click('#ride');
+  await until(page, (id) => window.kidsWorld.game.riding?.id === id && window.kidsWorld.session.link.room.critters.get(id).rider === window.kidsWorld.game.pid, id);
+  await until(page, () => document.getElementById('ride').textContent.includes('Get off'));
+  // Ridden about: it goes where you go, there and on the island.
+  const from = await page.evaluate((id) => ({ ...window.kidsWorld.session.link.room.critters.get(id) }), id);
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 90));
+  await page.keyboard.up('KeyW');
+  await until(
+    page,
+    ({ id, from }) => {
+      const kw = window.kidsWorld;
+      const c = kw.session.link.room.critters.get(id);
+      const r = kw.game.riding.body;
+      return Math.hypot(c.x - from.x, c.z - from.z) > 3 && Math.hypot(c.x - r.x, c.z - r.z) < 0.05;
+    },
+    { id, from },
+  );
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['giddy-up']), 'a sticker for it');
+  // Q: off, beside it, and it stays there.
+  await page.keyboard.press('KeyQ');
+  await until(page, (id) => !window.kidsWorld.game.riding && window.kidsWorld.session.link.room.critters.get(id).rider === 0, id);
+  const off = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const c = kw.session.link.room.critters.get(id);
+    const b = kw.game.me.body;
+    return Math.hypot(c.x - b.x, c.z - b.z);
+  }, id);
+  assert.ok(off > 0.7 && off < 2, `beside it, ${off.toFixed(2)} away`);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('the little map shows the island and what you build; it opens the big map and can be switched off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Clever Duck' });
   await makeIsland(page, { online: false });

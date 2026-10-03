@@ -877,6 +877,35 @@ body.touch.playing #joystick {
   to { transform: scale(1); opacity: 1; }
 }
 
+/* Ride, over the big animal beside you (and Get off, over your own head
+   while you ride), following it about the way name tags do: a big target for
+   small fingers. */
+.ride-button {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 18px;
+  border: 3px solid white;
+  border-radius: 999px;
+  background: var(--sun);
+  box-shadow:
+    0 4px 0 var(--sun-dark),
+    0 3px 10px rgba(61, 46, 79, 0.25);
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.ride-button kbd {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: var(--sun-dark);
+}
+
 .critter-tag .name {
   background: rgba(255, 243, 176, 0.92);
 }

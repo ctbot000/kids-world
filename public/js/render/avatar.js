@@ -14,7 +14,7 @@ const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
 
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6 };
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -516,6 +516,8 @@ export class Avatar {
     this.time = 0;
     this.anim = ANIM.idle;
     this.speed = 0;
+    // On an animal: how far round it the legs reach (see shared/critters.js).
+    this.ride = null;
     this.setLook(look);
     // A soft round shadow under the feet.
     const shadow = new THREE.Mesh(
@@ -592,12 +594,14 @@ export class Avatar {
     this.emoteAt = this.time;
   }
 
-  // anim: one of ANIM; speed: ground speed (for the walk cycle).
+  // anim: one of ANIM; speed: ground speed (for the walk cycle, and the
+  // bounce in the saddle).
   update(dt, anim, speed) {
     this.time += dt;
     const t = this.time;
     this.anim = anim;
     const moving = anim === ANIM.walk || anim === ANIM.run;
+    const riding = anim === ANIM.ride;
     this.phase += dt * (moving ? 3.2 + speed * 1.6 : 0);
     const s = Math.sin(this.phase);
     const [legL, legR] = this.legs;
@@ -635,6 +639,15 @@ export class Avatar {
       lean = 0.25;
       bob = Math.sin(t * 2.5) * 0.06;
       legSwing = 0.15;
+    } else if (riding) {
+      // Astride an animal, hands forward on the reins (or its neck), going
+      // up and down with it, more the faster it goes.
+      const k = Math.min(1, speed / 8);
+      this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
+      bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06);
+      lean = 0.1 + k * 0.15;
+      armFwdL = armFwdR = -0.8 - Math.sin(this.phase) * 0.12 * k;
+      armRaiseL = armRaiseR = 0.22;
     } else {
       bob = Math.sin(t * 2) * 0.008;
       armRaiseL = armRaiseR = 0.18 + Math.sin(t * 2) * 0.03;
@@ -697,8 +710,17 @@ export class Avatar {
       }
     }
 
-    legL.rotation.x = legSwing;
-    legR.rotation.x = -legSwing;
+    // Riding, the legs reach round the animal's sides and a little forward;
+    // on a wide back, out in front.
+    const spread = riding ? (this.ride?.spread ?? 0.85) : 0;
+    const reach = riding ? (this.ride?.reach ?? 0.35) : 0;
+    legL.rotation.set(riding ? -reach : legSwing, 0, -spread);
+    legR.rotation.set(riding ? -reach : -legSwing, 0, spread);
+    if (riding) {
+      // Nor do emotes turn them round or lift them out of the saddle.
+      spin = 0;
+      hop = 0;
+    }
     // The arms hang from mirrored shoulders, so each side opens outward with its own sign.
     armL.rotation.set(armSwing + armFwdL, 0, -(armRaiseL ?? 0.18));
     armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR ?? 0.18);

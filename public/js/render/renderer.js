@@ -226,10 +226,12 @@ export class Renderer {
     return { origin, dir };
   }
 
-  // The nearest animal the ray passes through, if any, and how far along.
-  pickCritter(ray, maxDist) {
+  // The nearest animal the ray passes through, if any, and how far along
+  // (but never the one numbered skip).
+  pickCritter(ray, maxDist, skip = 0) {
     let best = null;
     for (const [id, m] of this.critters) {
+      if (id === skip) continue;
       const c = m.group.position;
       const cy = c.y + m.center;
       const r = m.pick;

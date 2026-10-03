@@ -61,7 +61,8 @@ function lineIcon(name) {
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // "a peach", "an apple".
-const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+// "an elephant", "a unicorn".
+const withArticle = (word) => `${/^(?!uni)[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
 
 // What is wrong with a new password, in a few words (see passwordProblem).
 const PASSWORD_HELP = {
@@ -765,6 +766,7 @@ export class UI {
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
+          card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
@@ -1269,7 +1271,15 @@ export class UI {
     };
     hold($('btn-jump'), 'jumpHeld');
     hold($('btn-down'), 'downHeld');
+    $('btn-down').addEventListener('pointerdown', () => game.pressDown());
     $('btn-fly').onclick = () => game.toggleFly();
+    // Never keeping the focus, where Space (to jump) would press it again.
+    $('ride').onmousedown = (e) => e.preventDefault();
+    $('ride').onclick = () => {
+      $('ride').blur();
+      this.sound.unlock();
+      game.toggleRide();
+    };
     const on = (type, fn) => game.addEventListener(type, fn);
     on('players', () => this.renderFriends());
     on('settings', () => this.renderIsland());
@@ -1292,6 +1302,7 @@ export class UI {
     this.minimap.detach();
     this.input.enabled = false;
     $('hud').hidden = true;
+    $('ride').hidden = true;
     document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
@@ -1970,6 +1981,40 @@ export class UI {
     }
   }
 
+  // Ride, beside the big animal next to you, and Get off, beside you while
+  // you ride (or near the top, seeing through your own eyes): kept on the
+  // screen, clear of the top bar, the toasts and the hotbar.
+  rideButton(g, r) {
+    const el = $('ride');
+    const c = g.critters.get(g.riding?.id ?? g.rideTarget);
+    const at = g.riding ? g.players.get(g.pid)?.avatar?.root.position : c?.model.group.position;
+    if (!c || !at || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const info = CRITTER_INFO[c.type];
+    const touch = this.input.touchMode;
+    const label = g.riding ? '👋 Get off' : `${info.icon} Ride`;
+    const key = `${label}|${touch}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
+      el.setAttribute('aria-label', g.riding ? 'Get off' : `Ride ${c.name || info.name}`);
+    }
+    const scr = r.project(at.x, at.y + (g.riding ? 1 : c.model.center), at.z);
+    if (!scr.visible && !g.riding) {
+      el.hidden = true;
+      return;
+    }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 150;
+    const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
+    const y = scr.visible ? scr.y + 24 : 220;
+    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
   // Name tags and speech bubbles follow everyone around; the maps keep up.
   frame(dt) {
     const g = this.game;
@@ -2010,6 +2055,7 @@ export class UI {
         this.tags.delete(pid);
       }
     }
+    this.rideButton(g, r);
     // The clock: sun, moon and weather.
     const t = g.env.time;
     const w = g.env.weather;

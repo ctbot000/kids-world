@@ -611,6 +611,15 @@ input
       case 'KeyF':
         g.toggleFly();
         return true;
+      case 'KeyQ':
+        g.toggleRide();
+        return true;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+      case 'KeyC':
+        // Down, as ever, and off an animal on land.
+        g.pressDown();
+        return false;
       case 'KeyZ':
         g.undo();
         return true;

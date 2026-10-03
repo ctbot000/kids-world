@@ -115,12 +115,12 @@ function sweep(world, b, axis, delta) {
   return false;
 }
 
-// Could the body stand one block higher here — a ledge it can hop onto?
-function canStepUp(world, b, dx, dz) {
+// Could the body stand lift blocks higher here — a ledge it can hop onto?
+function canStepUp(world, b, dx, dz, lift = 1) {
   const r = b.radius;
   const x = b.x + Math.sign(dx) * 0.35;
   const z = b.z + Math.sign(dz) * 0.35;
-  const y = Math.floor(b.y + EPS) + 1;
+  const y = Math.floor(b.y + EPS) + lift;
   const blocked = overlapsSolid(world, x - r, b.y + 0.05, z - r, x + r, b.y + 1, z + r);
   const free = !overlapsSolid(world, x - r, y, z - r, x + r, y + b.height, z + r);
   const headroom = !overlapsSolid(world, b.x - r, b.y + b.height, b.z - r, b.x + r, y + b.height, b.z + r);
@@ -145,23 +145,28 @@ export function unstick(world, b) {
 const approach = (v, target, rate) => (v < target ? Math.min(target, v + rate) : Math.max(target, v - rate));
 
 // input: { mx, mz } a wish direction in the world (length up to 1), jump,
-// down (sink or descend), run. options: { autoJump }.
+// down (sink or descend), run. options: { autoJump, move }: move has speeds
+// and a jump of its own to use instead of a player's (MOVE), for a big animal
+// and for one with a rider on (riding.js).
 export function stepBody(world, b, input, dt, options = {}) {
   const autoJump = options.autoJump !== false;
+  const move = options.move ? { ...MOVE, ...options.move } : MOVE;
   let remaining = Math.min(dt, 0.25);
   const events = { jumped: false, landed: 0, splashed: false, bumped: false };
   while (remaining > 1e-6) {
     const h = Math.min(remaining, 1 / 90);
     remaining -= h;
-    stepOnce(world, b, input, h, autoJump, events);
+    stepOnce(world, b, input, h, autoJump, events, move);
   }
   return events;
 }
 
-function stepOnce(world, b, input, dt, autoJump, events) {
+// In the water a body floats with the height float (over its feet) at the
+// top: a player's head, or a big animal's back with its rider on it.
+function stepOnce(world, b, input, dt, autoJump, events, move) {
   const wasInWater = b.inWater;
   b.inWater = world.get(Math.floor(b.x), Math.floor(b.y + 0.5), Math.floor(b.z)) === WATER;
-  b.headInWater = world.get(Math.floor(b.x), Math.floor(b.y + b.height - 0.2), Math.floor(b.z)) === WATER;
+  b.headInWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.float ?? b.height - 0.2)), Math.floor(b.z)) === WATER;
   if (b.inWater && !wasInWater && b.vy < -4) events.splashed = true;
 
   let mx = input.mx || 0;
@@ -171,8 +176,8 @@ function stepOnce(world, b, input, dt, autoJump, events) {
     mx /= len;
     mz /= len;
   }
-  const speed = b.flying ? MOVE.fly : b.inWater ? MOVE.swim : input.run ? MOVE.run : MOVE.walk;
-  const accel = (b.flying || b.onGround || b.inWater ? MOVE.groundAccel : MOVE.airAccel) * dt;
+  const speed = b.flying ? move.fly : b.inWater ? move.swim : input.run ? move.run : move.walk;
+  const accel = (b.flying || b.onGround || b.inWater ? move.groundAccel : move.airAccel) * dt;
   b.vx = approach(b.vx, mx * speed, accel);
   b.vz = approach(b.vz, mz * speed, accel);
 
@@ -181,17 +186,22 @@ function stepOnce(world, b, input, dt, autoJump, events) {
     b.vy = approach(b.vy, target, 40 * dt);
   } else if (b.inWater) {
     if (input.jump) {
-      // Swim up; at the surface, a kick is enough to climb out onto a ledge.
-      b.vy = b.headInWater ? Math.min(4, b.vy + 22 * dt) : Math.max(b.vy, len > 0.1 && canStepUp(world, b, b.vx, b.vz) ? MOVE.jump * 0.85 : 3);
+      // Swim up; at the surface, a kick is enough to climb out onto a ledge,
+      // as high as a block over the water.
+      const out = len > 0.1 && !b.headInWater;
+      if (b.headInWater) b.vy = Math.min(4, b.vy + 22 * dt);
+      else if (out && canStepUp(world, b, b.vx, b.vz)) b.vy = Math.max(b.vy, move.jump * 0.85);
+      else if (out && canStepUp(world, b, b.vx, b.vz, 2)) b.vy = Math.max(b.vy, Math.sqrt(2 * move.gravity * (Math.floor(b.y + EPS) + 2.25 - b.y)));
+      else b.vy = Math.max(b.vy, 3);
     } else if (input.down) {
       b.vy = approach(b.vy, -4, 20 * dt);
     } else {
       b.vy = approach(b.vy, b.headInWater ? 1.6 : -1.2, 9 * dt); // float up gently
     }
   } else {
-    b.vy = Math.max(-MOVE.maxFall, b.vy - MOVE.gravity * dt);
+    b.vy = Math.max(-move.maxFall, b.vy - move.gravity * dt);
     if (input.jump && b.onGround) {
-      b.vy = MOVE.jump;
+      b.vy = move.jump;
       b.onGround = false;
       events.jumped = true;
     }
@@ -218,7 +228,7 @@ function stepOnce(world, b, input, dt, autoJump, events) {
   if (hitX || hitZ) {
     events.bumped = true;
     if (autoJump && !b.flying && b.onGround && len > 0.1 && canStepUp(world, b, hitX ? mx : 0, hitZ ? mz : 0)) {
-      b.vy = MOVE.jump;
+      b.vy = move.jump;
       b.onGround = false;
       events.jumped = true;
     }

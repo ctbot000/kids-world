@@ -1,9 +1,10 @@
 // The animal friends as little models: bunnies that hop, chicks that peck,
 // fluffy sheep, ducks that paddle about, butterflies that flutter, birds,
-// owls, bees and seagulls; and in the sea, schools of fish, dolphins, a whale,
-// turtles, crabs and octopuses.
+// owls, bees and seagulls; in the sea, schools of fish, dolphins, a whale,
+// turtles, crabs and octopuses; and big ones to ride: ponies, cows, an
+// elephant, a giraffe, reindeer, polar bears and unicorns.
 import * as THREE from '../../vendor/three.module.js';
-import { capsule, cone, cylinder, mesh, onSurface, sphere, toon } from './toon.js';
+import { capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
@@ -664,7 +665,426 @@ function seal() {
   return { group: g, body, pivot, head, eyes, flippers, tail, ball, height: 0.42, shadow: 0.32, pick: 0.45 };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal };
+// ------------------------------------------------ big animals
+
+// The big animals share a rig, facing +z: a body that bobs, a pivot at the
+// middle of the body that pitches (galloping, rearing, jumping) with four
+// legs hung from it, a neck that bends down to graze with the head on the
+// end of it, a tail, and a saddle that shows while someone rides. Their feet
+// are at the origin, where the sim puts them.
+
+function bigRig(y) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  pivot.position.y = y;
+  body.add(pivot);
+  return { g, body, pivot };
+}
+
+// Four legs, each turning about its hip (hip: how far under the pivot): the
+// front ones at z = front, the back ones at z = back, x out to either side.
+function fourLegs(pivot, { x, front, back, hip, len, r, color, hoof = null, knees = false, paw = null }) {
+  const shin = hoof ? len - 0.06 : len;
+  return [
+    [-1, front],
+    [1, front],
+    [-1, back],
+    [1, back],
+  ].map(([side, z]) => {
+    const leg = new THREE.Group();
+    leg.position.set(side * x, hip, z);
+    leg.userData = { side, front: z > 0 };
+    leg.add(mesh(cylinder(r * 0.85, r, shin, 10), toon(color), 0, -shin / 2, 0));
+    if (hoof) leg.add(mesh(cylinder(r * 0.95, r * 1.08, 0.07, 10), toon(hoof), 0, -len + 0.035, 0));
+    if (knees) leg.add(mesh(sphere(1, 10, 8), toon(color), 0, -len * 0.5, 0, r * 1.3));
+    if (paw) leg.add(mesh(sphere(), toon(paw), 0, -len + 0.04, 0.03, r * 1.15, 0.06, r * 1.35));
+    pivot.add(leg);
+    return leg;
+  });
+}
+
+// A saddle on the back (top: the top of the back over the pivot), coloured
+// as its rider's T-shirt: so its own material. A big animal's is a thick
+// blanket with a golden cushion on it.
+function saddle(pivot, top, rx, rz, z = 0, blanket = false) {
+  const pad = toon('#ff6f6f').clone();
+  const s = new THREE.Group();
+  s.position.set(0, top, z);
+  s.add(mesh(sphere(), pad, 0, blanket ? -0.03 : -0.012, 0, rx, blanket ? 0.09 : 0.05, rz));
+  s.add(mesh(sphere(), toon(blanket ? '#ffcf3f' : '#8a5634'), 0, blanket ? 0.03 : 0.012, -0.02, rx * 0.55, 0.035, rz * 0.55));
+  s.visible = false;
+  pivot.add(s);
+  return { saddle: s, pad };
+}
+
+// Eyes on either side of a long head, in a group of their own at the height
+// of the eyes, so that closing them only squashes them.
+function sideEyes(head, x, y, z, size) {
+  const eyes = new THREE.Group();
+  eyes.position.set(0, y, z);
+  for (const side of [-1, 1]) {
+    eyes.add(mesh(sphere(1, 12, 10), toon(BLACK), side * x, 0, 0, size * 0.75, size, size));
+    eyes.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), side * (x + size * 0.45), size * 0.4, size * 0.4, size * 0.32));
+  }
+  head.add(eyes);
+  return eyes;
+}
+
+// A patch of colour lying on an ellipsoid (radii R, centred on the parent's
+// origin), where the way (dx, dy, dz) from its middle comes out.
+function patch(parent, color, R, [dx, dy, dz], w, h) {
+  const k = 1 / Math.hypot(dx / R[0], dy / R[1], dz / R[2]);
+  const p = new THREE.Vector3(dx * k, dy * k, dz * k);
+  const m = alongSurface(mesh(sphere(1, 12, 8), toon(color), 0, 0, 0, w, h, 0.03), ...R, p);
+  m.position.copy(p);
+  parent.add(m);
+  return m;
+}
+
+const PONIES = [
+  { coat: '#b8814f', mane: '#5c3a24', nose: '#4a3326' }, // bay
+  { coat: '#f1ece4', mane: '#b9ada0', nose: '#d4c4b4' }, // grey
+  { coat: '#d9a85f', mane: '#fbeed3', nose: '#a87a42' }, // palomino
+  { coat: '#4a4245', mane: '#211d1f', nose: '#2c2729' }, // black
+  { coat: '#a85a32', mane: '#ecd2a8', nose: '#6e3a1f' }, // chestnut
+];
+const RAINBOW = ['#ff9ec7', '#ffc48a', '#fff08a', '#9be7a8', '#8fd3ff', '#c7a4ff'];
+const RED_NOSE = '#ff3b3b';
+
+// A pony, and its cousins the unicorn (white, with a rainbow mane and tail
+// and a golden horn) and the reindeer (antlers, a pale ruff, and a bell; now
+// and then a shiny red nose).
+function pony(id, kind = 'pony') {
+  const unicorn = kind === 'unicorn';
+  const deer = kind === 'reindeer';
+  const k = unicorn
+    ? { coat: '#fff7fb', mane: RAINBOW[0], nose: '#ffd9ea', hoof: '#f2b6d6' }
+    : deer
+      ? { coat: '#9c6b48', mane: '#ecdfca', nose: '#7b5236', tip: id % 4 === 1 ? RED_NOSE : '#2b2226', hoof: '#3b2f2a' }
+      : { ...PONIES[id % PONIES.length], hoof: '#3a3030' };
+  const { g, body, pivot } = bigRig(0.82);
+  const coat = toon(k.coat);
+  const mane = (i) => toon(unicorn ? RAINBOW[i % RAINBOW.length] : k.mane);
+  const R = [0.3, 0.27, 0.58];
+  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), coat, 0, 0.01, 0.3, 0.27, 0.27, 0.28));
+  pivot.add(mesh(sphere(), coat, 0, 0.02, -0.3, 0.29, 0.26, 0.28));
+  if (deer) {
+    // A pale chest and rump.
+    pivot.add(mesh(sphere(), toon(k.mane), 0, -0.04, 0.44, 0.2, 0.2, 0.13));
+    pivot.add(mesh(sphere(), toon(k.mane), 0, 0.03, -0.53, 0.17, 0.17, 0.1));
+  }
+  const legs = fourLegs(pivot, { x: 0.17, front: 0.36, back: -0.36, hip: -0.18, len: 0.64, r: 0.075, color: k.coat, hoof: k.hoof });
+
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.14, 0.42);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.6;
+  neck.add(n);
+  n.add(mesh(capsule(0.13, 0.28), coat, 0, 0.2, 0));
+  // The mane, down the back of the neck; a reindeer's ruff, under it.
+  for (let i = 0; i < 6; i++) {
+    const t = 0.04 + i * 0.07;
+    if (deer) n.add(mesh(sphere(1, 10, 8), mane(i), 0, t - 0.04, 0.1, 0.1, 0.09, 0.07));
+    else n.add(mesh(sphere(1, 10, 8), mane(i), 0, t, -0.1, 0.055, 0.075, 0.07));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.44, 0.02);
+  head.rotation.x = -0.15;
+  n.add(head);
+  head.add(mesh(sphere(), coat, 0, 0, 0.05, 0.13, 0.145, 0.21));
+  head.add(mesh(sphere(), toon(k.nose), 0, -0.04, 0.22, 0.105, 0.095, 0.105));
+  if (k.tip) head.add(mesh(sphere(), toon(k.tip, { emissive: k.tip === RED_NOSE ? 0.6 : 0 }), 0, -0.015, 0.315, 0.05, 0.04, 0.035));
+  else for (const side of [-1, 1]) head.add(mesh(sphere(1, 8, 6), toon('#3a2a2a'), side * 0.045, -0.01, 0.32, 0.018, 0.024, 0.012));
+  const eyes = sideEyes(head, 0.115, 0.06, 0.07, 0.032);
+  for (const side of [-1, 1]) {
+    const ear = mesh(cone(0.045, 0.13, 8), coat, side * 0.07, 0.16, -0.06);
+    ear.rotation.z = -side * 0.3;
+    head.add(ear);
+  }
+  // A forelock, between the ears.
+  head.add(mesh(sphere(1, 10, 8), mane(2), 0, 0.13, 0.03, 0.07, 0.05, 0.08));
+  if (unicorn) {
+    const horn = new THREE.Group();
+    horn.position.set(0, 0.17, 0.1);
+    horn.rotation.x = 0.55;
+    horn.add(mesh(cone(0.04, 0.3, 12), toon('#ffd34f', { emissive: 0.25 }), 0, 0.15, 0));
+    for (let i = 0; i < 3; i++) horn.add(mesh(torus(0.033 - i * 0.009, 0.007), toon('#ffe9a6', { emissive: 0.3 }), 0, 0.05 + i * 0.07, 0).rotateX(Math.PI / 2 - 0.25));
+    head.add(horn);
+  }
+  if (deer) {
+    // Antlers: a beam up and out from each side of the head, with tines.
+    const bone = toon('#e3cfa8');
+    for (const side of [-1, 1]) {
+      const a = new THREE.Group();
+      a.position.set(side * 0.06, 0.15, -0.04);
+      a.rotation.set(-0.35, 0, -side * 0.45);
+      a.add(mesh(cylinder(0.018, 0.026, 0.36, 6), bone, 0, 0.18, 0));
+      for (const [y, lean, len] of [
+        [0.12, 0.9, 0.13],
+        [0.24, 0.8, 0.12],
+        [0.34, -0.5, 0.1],
+      ]) {
+        a.add(mesh(cylinder(0.012, 0.016, len, 6), bone, 0, y + len * 0.4, len * 0.35).rotateX(lean));
+      }
+      head.add(a);
+    }
+    // A red collar, with a bell under the chin.
+    neck.add(mesh(torus(0.15, 0.025), toon('#e8413c'), 0, 0.05, 0.03).rotateX(Math.PI / 2 - 0.5));
+    neck.add(mesh(sphere(), toon('#ffcf3f', { emissive: 0.2 }), 0, -0.08, 0.14, 0.045));
+  }
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.12, -0.58);
+  pivot.add(tail);
+  if (unicorn) {
+    RAINBOW.forEach((color, i) => tail.add(mesh(sphere(1, 10, 8), toon(color), (i - 2.5) * 0.025, -0.2 - (i % 2) * 0.03, -0.1, 0.035, 0.28, 0.05).rotateX(0.35)));
+  } else if (deer) {
+    tail.add(mesh(sphere(1, 10, 8), toon('#fbf6ee'), 0, -0.02, -0.04, 0.07, 0.09, 0.06));
+  } else {
+    tail.add(mesh(sphere(1, 10, 8), mane(0), 0, -0.22, -0.09, 0.075, 0.3, 0.08).rotateX(0.35));
+  }
+  const s = saddle(pivot, R[1], 0.3, 0.27);
+  return {
+    group: g,
+    body,
+    pivot,
+    neck,
+    head,
+    eyes,
+    tail,
+    legs,
+    ...s,
+    height: deer ? 1.95 : unicorn ? 1.75 : 1.62,
+    shadow: 0.55,
+    pick: 0.75,
+    center: 0.95,
+    seen: 110,
+    gait: { len: 0.64, run: 4.5, happy: 'rear', graze: 0.95 },
+  };
+}
+
+function unicorn(id) {
+  const u = pony(id, 'unicorn');
+  // A little bigger than a pony.
+  u.body.scale.setScalar(1.07);
+  return u;
+}
+
+const reindeer = (id) => pony(id, 'reindeer');
+
+function cow(id) {
+  const { g, body, pivot } = bigRig(0.8);
+  const white = toon('#fbfbf7');
+  const dark = id % 3 === 1 ? '#8a5a3c' : '#3a3438';
+  const R = [0.34, 0.31, 0.6];
+  pivot.add(mesh(sphere(), white, 0, 0, 0, ...R));
+  // Patches on its sides and back.
+  for (const [dx, dy, dz, w, h] of [
+    [1, 0.3, 0.3, 0.17, 0.13],
+    [1, -0.1, -0.45, 0.14, 0.12],
+    [-1, 0.2, -0.1, 0.19, 0.14],
+    [-1, -0.2, 0.55, 0.12, 0.1],
+    [0.2, 1, -0.6, 0.15, 0.12],
+  ]) {
+    patch(pivot, dark, R, [dx, dy, dz], w, h);
+  }
+  // Its udder.
+  pivot.add(mesh(sphere(), toon('#ffb8c8'), 0, -0.29, -0.3, 0.11, 0.07, 0.1));
+  const legs = fourLegs(pivot, { x: 0.2, front: 0.38, back: -0.38, hip: -0.16, len: 0.64, r: 0.08, color: '#fbfbf7', hoof: '#4a4045' });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.1, 0.5);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.95;
+  neck.add(n);
+  n.add(mesh(capsule(0.15, 0.12), white, 0, 0.1, 0));
+  const head = new THREE.Group();
+  head.position.set(0, 0.26, 0.02);
+  head.rotation.x = -0.75;
+  n.add(head);
+  head.add(mesh(sphere(), white, 0, 0, 0.04, 0.16, 0.16, 0.19));
+  head.add(mesh(sphere(), toon(dark), 0.06, 0.07, 0.08, 0.08, 0.07, 0.06));
+  head.add(mesh(sphere(), toon('#ffc4cf'), 0, -0.06, 0.19, 0.14, 0.1, 0.1));
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(1, 8, 6), toon('#b8606f'), side * 0.05, -0.05, 0.285, 0.022, 0.026, 0.012));
+    const horn = mesh(cone(0.03, 0.12, 8), toon('#f3e6c4'), side * 0.11, 0.16, -0.02);
+    horn.rotation.z = -side * 0.9;
+    head.add(horn);
+    const ear = mesh(sphere(), white, side * 0.19, 0.08, -0.05, 0.08, 0.035, 0.05);
+    ear.rotation.z = side * 0.3;
+    head.add(ear);
+  }
+  const eyes = sideEyes(head, 0.12, 0.06, 0.1, 0.03);
+  // A bell on a red strap.
+  neck.add(mesh(torus(0.16, 0.024), toon('#e8413c'), 0, 0.02, 0.06).rotateX(Math.PI / 2 - 0.9));
+  neck.add(mesh(cylinder(0.045, 0.06, 0.09, 10), toon('#ffcf3f', { emissive: 0.2 }), 0, -0.13, 0.17));
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.16, -0.6);
+  pivot.add(tail);
+  tail.add(mesh(cylinder(0.015, 0.015, 0.4, 6), white, 0, -0.2, -0.02));
+  tail.add(mesh(sphere(1, 8, 6), toon(dark), 0, -0.42, -0.02, 0.05, 0.08, 0.05));
+  const s = saddle(pivot, R[1], 0.33, 0.28);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.45, shadow: 0.6, pick: 0.75, center: 0.85, seen: 110, gait: { len: 0.64, run: 3.5, happy: 'hop', graze: 0.7 } };
+}
+
+function elephant(id) {
+  const { g, body, pivot } = bigRig(1.1);
+  const GREY = id % 2 ? '#a7aeb9' : '#9aa3b0';
+  const grey = toon(GREY);
+  const R = [0.6, 0.55, 0.85];
+  pivot.add(mesh(sphere(), grey, 0, 0, 0, ...R));
+  const legs = fourLegs(pivot, { x: 0.32, front: 0.46, back: -0.46, hip: -0.46, len: 0.64, r: 0.17, color: GREY });
+  // Toenails.
+  for (const leg of legs) for (const x of [-0.08, 0, 0.08]) leg.add(mesh(sphere(1, 8, 6), toon('#f4efe6'), x, -0.6, 0.14, 0.035, 0.03, 0.02));
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.18, 0.72);
+  pivot.add(neck);
+  const head = new THREE.Group();
+  head.position.set(0, 0.06, 0.2);
+  neck.add(head);
+  head.add(mesh(sphere(), grey, 0, 0, 0, 0.4, 0.42, 0.38));
+  const eyes = sideEyes(head, 0.25, 0.08, 0.26, 0.035);
+  // Big ears that flap, pink inside.
+  const ears = [-1, 1].map((side) => {
+    const e = new THREE.Group();
+    e.position.set(side * 0.33, 0.05, -0.05);
+    e.rotation.y = side * 0.35;
+    e.add(mesh(sphere(), grey, side * 0.2, 0, 0, 0.26, 0.34, 0.035));
+    e.add(mesh(sphere(), toon('#f5b3c3'), side * 0.21, 0, 0.022, 0.19, 0.26, 0.02));
+    e.userData.side = side;
+    head.add(e);
+    return e;
+  });
+  // Tusks.
+  for (const side of [-1, 1]) {
+    const t = mesh(cone(0.04, 0.22, 8), toon('#fbf6ec'), side * 0.17, -0.22, 0.3);
+    t.rotation.set(1.9, 0, -side * 0.25);
+    head.add(t);
+  }
+  // A trunk of five pieces, each hung from the one before, to curl.
+  const trunk = [];
+  let parent = head;
+  for (let i = 0; i < 5; i++) {
+    const seg = new THREE.Group();
+    seg.position.set(0, i ? -0.15 : -0.12, i ? 0 : 0.33);
+    const r = 0.12 - i * 0.016;
+    seg.add(mesh(cylinder(r * 0.88, r, 0.17, 12), grey, 0, -0.075, 0));
+    parent.add(seg);
+    trunk.push(seg);
+    parent = seg;
+  }
+  // Where the water comes out.
+  const tip = new THREE.Group();
+  tip.position.y = -0.16;
+  parent.add(tip);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.1, -0.84);
+  pivot.add(tail);
+  tail.add(mesh(cylinder(0.02, 0.02, 0.45, 6), grey, 0, -0.22, 0));
+  tail.add(mesh(sphere(1, 8, 6), toon('#4a4450'), 0, -0.46, 0, 0.04, 0.07, 0.04));
+  // Its saddle is a big bright blanket.
+  const s = saddle(pivot, R[1], 0.52, 0.5, -0.08, true);
+  return { group: g, body, pivot, neck, head, eyes, ears, trunk, tip, tail, legs, ...s, height: 2.05, shadow: 0.9, pick: 1.1, center: 1.1, seen: 140, gait: { len: 0.64, run: 3.2, happy: 'trunk', graze: 0.15 } };
+}
+
+function giraffe(id) {
+  const { g, body, pivot } = bigRig(1.32);
+  const coat = toon('#f3cf6b');
+  const spot = id % 2 ? '#c8783a' : '#b86a30';
+  const R = [0.28, 0.3, 0.5];
+  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
+  for (const [dx, dy, dz, w, h] of [
+    [1, 0.2, 0.2, 0.09, 0.08],
+    [1, -0.2, -0.3, 0.08, 0.08],
+    [1, 0.3, -0.6, 0.07, 0.06],
+    [1, -0.25, 0.6, 0.07, 0.06],
+    [-1, 0.25, -0.1, 0.09, 0.08],
+    [-1, -0.2, 0.35, 0.08, 0.07],
+    [-1, 0.1, -0.65, 0.07, 0.07],
+    [0.2, 1, 0.4, 0.08, 0.07],
+    [-0.3, 1, -0.3, 0.08, 0.07],
+    [0.5, 1, -0.05, 0.06, 0.05],
+  ]) {
+    patch(pivot, spot, R, [dx, dy, dz], w, h);
+  }
+  const legs = fourLegs(pivot, { x: 0.15, front: 0.3, back: -0.32, hip: -0.27, len: 1.05, r: 0.062, color: '#f3cf6b', hoof: '#5a4030', knees: true });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.16, 0.36);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.32;
+  neck.add(n);
+  n.add(mesh(cylinder(0.075, 0.12, 1.1, 12), coat, 0, 0.55, 0));
+  // Spots up the neck, and a short brown mane down the back of it.
+  for (let i = 0; i < 6; i++) {
+    const y = 0.12 + i * 0.17;
+    const r = 0.12 - (0.045 * y) / 1.1;
+    const a = (i % 2 ? 1 : -1) * 0.9 + (i % 3) * 0.3;
+    const m = mesh(sphere(1, 10, 8), toon(spot), Math.sin(a) * r, y, Math.cos(a) * r, 0.055, 0.05, 0.02);
+    m.quaternion.setFromUnitVectors(Z, new THREE.Vector3(Math.sin(a), 0, Math.cos(a)));
+    n.add(m);
+    n.add(mesh(sphere(1, 8, 6), toon('#8a5a32'), 0, y, -r - 0.005, 0.03, 0.08, 0.035));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 1.12, 0.02);
+  head.rotation.x = 0.13;
+  n.add(head);
+  head.add(mesh(sphere(), coat, 0, 0, 0.05, 0.11, 0.12, 0.2));
+  head.add(mesh(sphere(), toon('#e7b95a'), 0, -0.03, 0.2, 0.085, 0.08, 0.08));
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(1, 8, 6), toon('#5a3a2a'), side * 0.035, -0.02, 0.275, 0.015, 0.02, 0.01));
+    // Two little horns with knobs on top (ossicones), and ears.
+    head.add(mesh(cylinder(0.018, 0.022, 0.13, 8), coat, side * 0.045, 0.16, -0.04));
+    head.add(mesh(sphere(1, 8, 6), toon('#5a3a2a'), side * 0.045, 0.23, -0.04, 0.03));
+    const ear = mesh(cone(0.035, 0.12, 8), coat, side * 0.11, 0.08, -0.06);
+    ear.rotation.z = -side * 1.1;
+    head.add(ear);
+  }
+  const eyes = sideEyes(head, 0.1, 0.05, 0.06, 0.03);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.12, -0.5);
+  pivot.add(tail);
+  tail.add(mesh(cylinder(0.015, 0.015, 0.45, 6), coat, 0, -0.22, -0.02));
+  tail.add(mesh(sphere(1, 8, 6), toon('#4a3020'), 0, -0.46, -0.02, 0.04, 0.08, 0.04));
+  const s = saddle(pivot, R[1], 0.27, 0.25, -0.14);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 2.9, shadow: 0.55, pick: 0.85, center: 1.35, seen: 160, gait: { len: 1.05, run: 4, happy: 'sway', graze: -0.25 } };
+}
+
+function polarbear(id) {
+  const { g, body, pivot } = bigRig(0.68);
+  const fur = toon(id % 2 ? '#f8f5ec' : '#f4efe2');
+  const R = [0.38, 0.33, 0.6];
+  pivot.add(mesh(sphere(), fur, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), fur, 0, 0.03, -0.3, 0.36, 0.33, 0.32));
+  pivot.add(mesh(sphere(), fur, 0, 0.02, 0.28, 0.34, 0.32, 0.32));
+  const legs = fourLegs(pivot, { x: 0.22, front: 0.36, back: -0.36, hip: -0.24, len: 0.44, r: 0.12, color: '#f6f2e8', paw: '#efe8d8' });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.06, 0.5);
+  pivot.add(neck);
+  const head = new THREE.Group();
+  head.position.set(0, 0, 0.2);
+  neck.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.21, 0.19, 0.22));
+  head.add(mesh(sphere(), toon('#ece4d2'), 0, -0.05, 0.19, 0.12, 0.1, 0.13));
+  head.add(mesh(sphere(), toon(BLACK), 0, -0.01, 0.315, 0.05, 0.035, 0.03));
+  head.add(mesh(sphere(1, 8, 6), toon('#4a4450'), 0, -0.1, 0.27, 0.035, 0.012, 0.02));
+  const eyes = sideEyes(head, 0.1, 0.07, 0.15, 0.026);
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(), fur, side * 0.14, 0.15, -0.03, 0.065, 0.065, 0.035));
+    head.add(mesh(sphere(), toon('#e6ddd0'), side * 0.14, 0.15, -0.012, 0.035, 0.035, 0.02));
+  }
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.06, -0.6);
+  pivot.add(tail);
+  tail.add(mesh(sphere(1, 8, 6), fur, 0, 0, -0.02, 0.07));
+  const s = saddle(pivot, R[1], 0.36, 0.3, -0.04);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
+}
+
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -687,6 +1107,12 @@ export class CritterModel {
     this.turn = 0;
     this.lastY = null;
     this.lastYaw = 0;
+    // How its head sits when it is doing nothing in particular.
+    this.headRest = this.head.rotation.x;
+    // Big animals: where they are in their stride, and how long the elephant
+    // still holds its trunk up to spray.
+    this.phase = 0;
+    this.trick = 0;
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(parts.shadow || (type === 'sheep' ? 0.36 : 0.22), 16),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }),
@@ -704,9 +1130,14 @@ export class CritterModel {
     const b = this.body;
     b.position.y = 0;
     b.rotation.set(0, 0, 0);
-    this.head.rotation.set(0, 0, 0);
+    this.head.rotation.set(this.headRest, 0, 0);
     if (this.eyes) this.eyes.scale.y = 1;
     this.track(dt);
+    if (this.gait) {
+      this.trot(dt, state, moving);
+      if (state === 'sleep') this.eyes.scale.y = 0.12;
+      return;
+    }
     switch (this.type) {
       case 'bunny':
         if (state === 'hop' || (moving && state !== 'sleep')) {
@@ -781,8 +1212,87 @@ export class CritterModel {
     }
     if (state === 'sleep' && this.eyes) {
       this.eyes.scale.y = 0.12;
-      this.head.rotation.x = 0.25;
+      this.head.rotation.x = this.headRest + 0.25;
     }
+  }
+
+  // The big animals: walking with each leg in step with the one across from
+  // it, galloping (front legs, then back), jumping, swimming, grazing, lying
+  // down asleep, and happy, each in its own way. The elephant's trunk sways,
+  // curls up to its mouth, comes up to spray, and up out of the water.
+  trot(dt, state, moving) {
+    const t = this.time;
+    const g = this.gait;
+    const air = state === 'jump';
+    const lie = state === 'sleep';
+    const swim = state === 'swim';
+    const gallop = !swim && !air && !lie && (state === 'run' || this.hs > g.run);
+    const walk = !swim && !air && !lie && !gallop && (state === 'walk' || moving);
+    const swing = gallop ? 0.8 : swim ? 0.55 : walk ? 0.42 : 0;
+    this.phase += dt * (gallop ? 5 + this.hs * 1.1 : swim ? 5 : walk ? 3 + this.hs * 2.2 : 0);
+    const p = this.phase;
+    let pitch = 0;
+    let bob = 0;
+    let neck = state === 'eat' ? g.graze + Math.sin(t * 5) * 0.04 : swim ? -0.25 : 0;
+    for (const leg of this.legs) {
+      const { side, front } = leg.userData;
+      let a = 0;
+      // Folded under it lying down; tucked up in the air.
+      if (lie) a = front ? 1.45 : -1.45;
+      else if (air) a = front ? -1 : 0.65;
+      else if (gallop) a = Math.sin(p + (front ? 0 : Math.PI * 0.85) + (side > 0 ? 0.35 : 0)) * swing;
+      else a = Math.sin(p + (front ? 0 : Math.PI) + (side > 0 ? Math.PI : 0)) * swing;
+      leg.rotation.set(a, 0, 0);
+    }
+    if (gallop) {
+      pitch = Math.sin(p) * 0.08;
+      bob = Math.abs(Math.cos(p)) * 0.07;
+    } else if (walk) {
+      bob = Math.abs(Math.sin(p)) * 0.025;
+    } else if (air) {
+      pitch = clamp(-this.vy * 0.05, -0.35, 0.35);
+    } else if (lie) {
+      bob = -g.len * 0.82;
+      neck = 0.3;
+    }
+    let sway = 0;
+    if (state === 'happy') {
+      if (g.happy === 'rear') {
+        // Up on its back legs, pawing the air.
+        pitch = -0.55;
+        bob = 0.18;
+        for (const leg of this.legs) leg.rotation.x = leg.userData.front ? -1 + Math.sin(t * 12 + leg.userData.side) * 0.35 : 0.55;
+        neck = -0.35;
+      } else if (g.happy === 'sway') {
+        sway = Math.sin(t * 4) * 0.25;
+        bob = Math.abs(Math.sin(t * 8)) * 0.06;
+      } else {
+        bob = Math.abs(Math.sin(t * 8)) * 0.14;
+      }
+    }
+    this.pivot.rotation.set(pitch, 0, 0);
+    this.body.position.y = bob;
+    this.neck.rotation.set(neck, state === 'idle' ? Math.sin(t * 0.5 + this.id) * 0.35 : 0, sway);
+    this.tail.rotation.set(gallop || state === 'happy' ? 0.6 : 0.1, 0, lie ? 0 : Math.sin(t * (gallop ? 9 : 1.6) + this.id) * 0.25);
+    if (this.ears) {
+      const flap = state === 'happy' ? 0.5 + Math.sin(t * 9) * 0.4 : Math.max(0, Math.sin(t * 1.3 + this.id)) * 0.5;
+      for (const e of this.ears) e.rotation.y = e.userData.side * (0.35 + flap);
+    }
+    if (this.trunk) {
+      this.trick = Math.max(0, this.trick - dt);
+      // Up and forward to spray, or out of the water; curled in to eat.
+      const up = this.trick > 0 || state === 'happy' || swim;
+      const curl = up ? -0.5 : state === 'eat' ? 0.55 : 0.1;
+      this.trunk.forEach((seg, i) => seg.rotation.set(curl + (up ? 0 : Math.sin(t * 1.2 + i * 0.6) * 0.05), 0, i ? Math.sin(t * 0.9 + i) * 0.06 : 0));
+    }
+  }
+
+  // Someone riding it shows its saddle, in the colour of their T-shirt;
+  // nobody (null) hides it.
+  setRider(color) {
+    if (!this.saddle) return;
+    this.saddle.visible = Boolean(color);
+    if (color) this.pad.color.set(color);
   }
 
   // Climbing or diving, and how fast it is turning, from where the group has
@@ -1033,5 +1543,6 @@ export class CritterModel {
     this.shadow.geometry.dispose();
     this.shadow.material.dispose();
     if (this.type === 'octopus') this.skin.dispose();
+    this.pad?.dispose();
   }
 }

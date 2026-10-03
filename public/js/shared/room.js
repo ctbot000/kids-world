@@ -8,7 +8,7 @@
 // tick() about ten times a second.
 
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, MAX_CRITTERS, nearestWater, NEEDS_WATER, placeFlyers, placePolar, placeSea, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, MAX_CRITTERS, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, riderAt, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -181,6 +181,7 @@ export class Room {
   leave(pid) {
     const p = this.players.get(pid);
     if (!p || this.connected(pid)) return;
+    this.unride(pid);
     p.online = false;
     this.broadcast({ t: 'left', pid });
     if (this.host === pid) this.passHost();
@@ -476,10 +477,12 @@ export class Room {
         let at = { x, y: standHeight(w, x, z, msg.y) ?? msg.y, z };
         // Flying friends come in above any water, and fly off from there.
         if (CRITTER_INFO[msg.type].flies) while (at.y < w.H && w.get(Math.floor(x), Math.floor(at.y), Math.floor(z)) === B.WATER) at.y++;
-        // Swimmers come in at the nearest water they can live in.
+        // Swimmers come in at the nearest water they can live in, and big
+        // animals at the nearest spot with room for them.
         if (CRITTER_INFO[msg.type].sea === 'water') at = nearestWater(w, msg.type, x, z);
+        if (CRITTER_INFO[msg.type].big) at = roomFor(w, msg.type, x, at.y, z);
         if (!at) {
-          this.notice(conn, NEEDS_WATER[msg.type], 'info');
+          this.notice(conn, CRITTER_INFO[msg.type].big ? needsRoom(msg.type) : NEEDS_WATER[msg.type], 'info');
           return;
         }
         const c = this.critters.add(msg.type, at.x, at.y, at.z);
@@ -488,13 +491,57 @@ export class Room {
         break;
       }
       case 'bye': {
+        const riding = this.critters.get(msg.id);
+        if (riding?.rider) {
+          this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
+          return;
+        }
         const c = this.critters.remove(msg.id);
         if (c) this.broadcast({ t: 'cdel', id: c.id, by: p.id });
         this.changed();
         break;
       }
+      case 'ride': {
+        const c = this.critters.get(msg.id);
+        const r = c && CRITTER_INFO[c.type].ride;
+        if (!r || c.rider === p.id) return;
+        if (c.rider) {
+          this.notice(conn, `Someone is already riding ${c.name}!`, 'info');
+          return;
+        }
+        // Close enough to climb on (with some room for being a little behind).
+        if (Math.hypot(c.x - p.s[0], c.z - p.s[2]) > r.radius + 4 || Math.abs(c.y - p.s[1]) > 5) return;
+        this.unride(p.id);
+        this.critters.ride(c.id, p.id);
+        // Up on its back at once, until they say where they are.
+        const at = riderAt(c.type, c);
+        p.s = [+at.x.toFixed(2), +at.y.toFixed(2), +at.z.toFixed(2), +c.yaw.toFixed(2), p.s[4], p.s[5]];
+        this.broadcast({ t: 'ride', id: c.id, pid: p.id });
+        break;
+      }
+      case 'off':
+        this.unride(p.id);
+        break;
+      case 'trick': {
+        // A spout from the whale, or a spray from the elephant's trunk.
+        const c = this.critters.list.find((o) => o.rider === p.id);
+        const trick = c && CRITTER_INFO[c.type].ride.trick;
+        if (trick === 'spout' || trick === 'spray') this.broadcast({ t: 'cfx', id: c.id, fx: trick, by: p.id });
+        break;
+      }
       default:
         break;
+    }
+  }
+
+  // Whatever pid is riding stays where they got off it.
+  unride(pid) {
+    const p = this.players.get(pid);
+    for (const c of this.critters.list) {
+      if (c.rider !== pid) continue;
+      if (p) Object.assign(c, mountUnder(c.type, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3] }));
+      this.critters.letGo(c);
+      this.broadcast({ t: 'ride', id: c.id, pid: 0 });
     }
   }
 
@@ -531,6 +578,7 @@ export class Room {
           oc.pid = 0;
           other.close?.();
         }
+        this.unride(target.id);
         this.kicked.add(target.id);
         for (const [token, owner] of this.tokens) if (owner === target.id) this.tokens.delete(token);
         target.online = false;
@@ -692,8 +740,9 @@ export class Room {
       app: 'kids-world',
       kind: 'island',
       // 2: made since birds, owls, bees and seagulls came to the islands;
-      // 3: since the sea creatures did; 4: since penguins and seals did.
-      v: 4,
+      // 3: since the sea creatures did; 4: since penguins and seals did; 5:
+      // since the big animals did.
+      v: 5,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -724,6 +773,7 @@ export class Room {
     if (v < 2) for (const f of placeFlyers(this.world, new Rng(seed ^ 0x2545f491))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
+    if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
     this.settings = cleanSettings(save.settings);
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };

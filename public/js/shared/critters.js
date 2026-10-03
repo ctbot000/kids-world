@@ -11,11 +11,17 @@
 // whale that blows water up out of its blowhole, an octopus on the sea floor,
 // and turtles and crabs between the water and the beach. On snowy islands,
 // penguins and seals live on the shore and dive into the sea.
+//
+// And some are big enough to ride: ponies, cows, an elephant and a giraffe,
+// reindeer and polar bears on snowy islands, and unicorns on candy ones. They
+// get about the way players do (physics.js), and someone riding one moves it
+// themselves (riding.js); the dolphins and the whale take riders too.
 import * as B from './blocks.js';
+import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -35,16 +41,38 @@ export const CRITTER_INFO = {
   // dives: goes under to swim about, too; climb: how high a step it can
   // take, up out of the water.
   fish: { name: 'Fish', icon: '🐠', speed: 2.2, swims: true, flies: false, sea: 'water', names: ['Finn', 'Splish', 'Glimmer', 'Wiggles', 'Guppy', 'Shimmer', 'Zigzag', 'Minnow', 'Sprinkle', 'Flash'] },
-  dolphin: { name: 'Dolphin', icon: '🐬', speed: 4.5, swims: true, flies: false, sea: 'water', names: ['Echo', 'Bubbly', 'Leapy', 'Squeaky', 'Twirl', 'Zoom', 'Ripple', 'Surfy', 'Glider', 'Smiley'] },
-  whale: { name: 'Whale', icon: '🐳', speed: 1.6, swims: true, flies: false, sea: 'water', names: ['Big Blue', 'Humphrey', 'Tiny', 'Rumble', 'Spouty', 'Waverly', 'Jumbo', 'Misty', 'Ocean', 'Puddles'] },
+  // ride: how they take a rider (see under the list).
+  dolphin: { name: 'Dolphin', icon: '🐬', speed: 4.5, swims: true, flies: false, sea: 'water', ride: { seat: 0.24, z: 0.05, spread: 0.55, radius: 0.45, sea: true, swim: 6, run: 9, float: 0.15, dive: 1.4, trick: 'leap' }, names: ['Echo', 'Bubbly', 'Leapy', 'Squeaky', 'Twirl', 'Zoom', 'Ripple', 'Surfy', 'Glider', 'Smiley'] },
+  whale: { name: 'Whale', icon: '🐳', speed: 1.6, swims: true, flies: false, sea: 'water', ride: { seat: 0.56, z: -0.05, spread: 0.45, reach: 1.25, radius: 0.9, sea: true, swim: 3.5, run: 5, float: 0.26, dive: 1.2, trick: 'spout' }, names: ['Big Blue', 'Humphrey', 'Tiny', 'Rumble', 'Spouty', 'Waverly', 'Jumbo', 'Misty', 'Ocean', 'Puddles'] },
   turtle: { name: 'Turtle', icon: '🐢', speed: 0.8, swims: true, flies: false, sea: 'beach', ground: SANDY, range: [1.5, 5], names: ['Sheldon', 'Myrtle', 'Slowpoke', 'Pickle', 'Mossy', 'Tank', 'Bean', 'Kelp', 'Lagoon', 'Olive'] },
   crab: { name: 'Crab', icon: '🦀', speed: 1.3, swims: false, flies: false, sea: 'beach', ground: SANDY, home: 8, wades: true, sideways: true, range: [0.8, 2.5], names: ['Pinchy', 'Snappy', 'Clawdia', 'Sidney', 'Scuttle', 'Nipper', 'Clicky', 'Rusty', 'Tickles', 'Sideways'] },
   octopus: { name: 'Octopus', icon: '🐙', speed: 1.5, swims: true, flies: false, sea: 'water', names: ['Inky', 'Squiggle', 'Octavia', 'Wiggly', 'Noodle', 'Swirly', 'Bloop', 'Doodle', 'Hugs', 'Jelly'] },
   penguin: { name: 'Penguin', icon: '🐧', speed: 1.2, swims: true, flies: false, sea: 'shore', ground: ICY, home: 10, range: [1, 4], dives: true, climb: 1.3, swimSpeed: 3.6, slides: true, names: ['Tuxedo', 'Snowdrop', 'Frosty', 'Icicle', 'Wobble', 'Slider', 'Popsicle', 'Chilly', 'Sprinkles', 'Igloo'] },
   seal: { name: 'Seal', icon: '🦭', speed: 0.6, swims: true, flies: false, sea: 'shore', ground: ICY, home: 6, range: [0.8, 3], dives: true, climb: 1.3, swimSpeed: 3, names: ['Whiskers', 'Barkley', 'Sealia', 'Flappy', 'Clapper', 'Seabiscuit', 'Muffin', 'Lolly', 'Dumpling', 'Slippy'] },
+  // Big animals (big), to ride. gallops: runs about now and then by itself;
+  // paddles: goes into the water for a swim now and then.
+  pony: { name: 'Pony', icon: '🐴', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 10 }, names: ['Buttercup', 'Thunder', 'Daisy', 'Pepper', 'Maple', 'Toffee', 'Sparky', 'Gallop', 'Apple', 'Ginger'] },
+  cow: { name: 'Cow', icon: '🐄', speed: 0.9, swims: true, flies: false, big: true, ride: { seat: 1.15, radius: 0.45, height: 2.35, float: 0.8, spread: 0.95, walk: 4, run: 6.5, swim: 3, jump: 8 }, names: ['Moomoo', 'Bessie', 'Clarabelle', 'Patches', 'Milkshake', 'Buttons', 'Dottie', 'Mabel', 'Marigold', 'Cocoa'] },
+  elephant: { name: 'Elephant', icon: '🐘', speed: 0.9, swims: true, flies: false, big: true, paddles: true, ride: { seat: 1.72, z: -0.08, radius: 0.72, height: 2.9, float: 1.25, spread: 0.45, reach: 1.2, walk: 3.8, run: 6, swim: 3, jump: 7.6, trick: 'spray' }, names: ['Peanut', 'Ellie', 'Trunky', 'Rosie', 'Stomper', 'Squirt', 'Mumbo', 'Lulu', 'Gumbo', 'Hazelnut'] },
+  giraffe: { name: 'Giraffe', icon: '🦒', speed: 1.2, swims: true, flies: false, big: true, ride: { seat: 1.66, z: -0.14, radius: 0.42, height: 2.95, float: 1.3, spread: 0.85, walk: 5, run: 8.5, swim: 2.5, jump: 8 }, names: ['Stretch', 'Spots', 'Tallulah', 'Skyler', 'Treetop', 'Zuri', 'Gigi', 'Lofty', 'Twiga', 'Polka'] },
+  reindeer: { name: 'Reindeer', icon: '🦌', speed: 1.4, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 11 }, names: ['Dasher', 'Dancer', 'Prancer', 'Comet', 'Cupid', 'Blitzen', 'Jingle', 'Holly', 'Snowflake', 'Aurora'] },
+  polarbear: { name: 'Polar Bear', icon: '🐻‍❄️', speed: 1, swims: true, flies: false, big: true, paddles: true, ground: ICY, home: 10, ride: { seat: 1.05, radius: 0.46, height: 2.25, float: 0.75, spread: 1, walk: 4.5, run: 7.5, swim: 5, jump: 8.5 }, names: ['Nanook', 'Iceberg', 'Blizzard', 'Mitten', 'Snowdrift', 'Polo', 'Nuka', 'Glacier', 'Puffball', 'Yeti'] },
+  unicorn: { name: 'Unicorn', icon: '🦄', speed: 1.6, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.21, radius: 0.44, height: 2.4, float: 0.85, spread: 0.85, walk: 6, run: 10.5, swim: 3.5, jump: 11.5 }, names: ['Stardust', 'Moonbeam', 'Candyfloss', 'Celeste', 'Dreamy', 'Sugarplum', 'Pixie', 'Starlight', 'Wish', 'Lullaby'] },
 };
+// Riding (ride, above): where the rider sits (seat: the top of its back, over
+// its feet, or over its middle for a dolphin or the whale; z: how far that is
+// in front of its middle), how far round it and forward the rider's legs
+// reach (spread, reach: on a wide back they sit with their legs out in front),
+// the box it and its rider fill (radius, height: see physics.js), the height
+// over its feet that floats at the top of the water, and how fast it walks,
+// runs, swims and jumps with a rider on (speed is how fast it ambles about
+// by itself). A dolphin or the whale keeps to the top of the sea (float: how
+// far under it its middle is) or dives (dive: how far down). trick: what the
+// jump button does instead of jumping: a leap, a spout, or a spray from the
+// trunk.
+export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run'];
 export const MAX_CRITTERS = 64;
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
@@ -64,6 +92,25 @@ export function headTop(hat, hair = '') {
   const top = HEAD_TOP[hat] ?? 1.41;
   if (!hair) return top;
   return Math.max(top + (hair === 'curly' ? 0.07 : 0.025), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
+}
+
+// How high a rider's hips are over their feet, as render/avatar.js draws
+// them, less a little for sinking into the saddle.
+const HIPS = 0.25;
+
+// Where someone riding an animal at (x, y, z, yaw) is: their feet, as
+// everybody's are, with their hips on its back.
+export function riderAt(type, m) {
+  const r = CRITTER_INFO[type].ride;
+  const z = r.z ?? 0;
+  return { x: m.x + Math.sin(m.yaw) * z, y: m.y + r.seat - HIPS, z: m.z + Math.cos(m.yaw) * z, yaw: m.yaw };
+}
+
+// ...and the other way round: where the animal is, under its rider.
+export function mountUnder(type, p) {
+  const r = CRITTER_INFO[type].ride;
+  const z = r.z ?? 0;
+  return { x: p.x - Math.sin(p.yaw) * z, y: p.y - r.seat + HIPS, z: p.z - Math.cos(p.yaw) * z, yaw: p.yaw };
 }
 
 // How a friend following you flies round you: how far out, and how high.
@@ -144,6 +191,30 @@ function waterFor(world, x, z, need) {
     if (!v || v.top - v.floor < need.deep - 1) return null;
   }
   return w;
+}
+
+// Whether a swimmer of this kind can be in the water at (x, z).
+export function swimmable(world, type, x, z) {
+  return Boolean(waterFor(world, x, z, WATERS[type]));
+}
+
+// A leap out of the water, from (x, z) on ahead the way yaw faces: if there
+// is room in the air for one, and water for this kind to come down into, the
+// arc's start, way, length, height and time; otherwise null.
+export function leapFrom(world, type, x, z, yaw, [len, h, T] = [5.5, 2, 1.35]) {
+  const w = waterColumn(world, x, z);
+  if (!w) return null;
+  const fx = Math.sin(yaw);
+  const fz = Math.cos(yaw);
+  const land = waterFor(world, x + fx * len, z + fz * len, WATERS[type]);
+  if (!land || land.top !== w.top) return null;
+  const y = w.top + SURFACE - 0.35;
+  for (let i = 1; i < 12; i++) {
+    const k = i / 12;
+    const id = world.get(FL(x + fx * len * k), FL(y + 4 * h * k * (1 - k)), FL(z + fz * len * k));
+    if (id !== B.AIR && id !== B.WATER) return null;
+  }
+  return { t: 0, T, x, y, z, fx, fz, len, h };
 }
 
 // The nearest spot to (x, z), within r, where a swimmer of this kind can
@@ -305,6 +376,67 @@ export function placePolar(world, rng, counts = polarCounts(world.theme)) {
   return out;
 }
 
+// How many big animals an island starts with: ponies, cows, an elephant and a
+// giraffe; reindeer and polar bears in the snow; unicorns on candy islands.
+export function bigCounts(theme) {
+  if (theme === 'snowy') return { reindeer: 3, polarbear: 2 };
+  if (theme === 'candy') return { unicorn: 3, pony: 1 };
+  if (theme === 'flat') return { pony: 2, cow: 2 };
+  return { pony: 2, cow: 2, elephant: 1, giraffe: 1 };
+}
+
+// Whether a big animal, with a rider on, fits standing at (x, y, z).
+export function fits(world, type, x, y, z) {
+  const r = CRITTER_INFO[type].ride;
+  const b = { x, y, z, radius: r.radius, height: r.height };
+  return !bodyOverlapsSolid(world, b) && bodyOverlapsSolid(world, { ...b, y: y - 0.05, height: 0.05 });
+}
+
+// Where they start out: out in the open on dry land, with room about them,
+// away from where everyone comes in; polar bears on the cold shore.
+export function placeBig(world, rng, counts = bigCounts(world.theme)) {
+  const out = [];
+  const spawn = world.spawn;
+  for (const [type, n] of Object.entries(counts)) {
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < 800; tries++) {
+        const p = perchAt(world, rng.int(3, world.W - 4) + 0.5, rng.int(3, world.D - 4) + 0.5);
+        if (!p || (type === 'polarbear' ? !onShore(world, p) : p.kind !== 'ground' || p.ground === B.SAND || p.y <= world.sea + 1)) continue;
+        if (Math.hypot(p.x - spawn.x, p.z - spawn.z) < 10 || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 3)) continue;
+        if (!fits(world, type, p.x, p.y, p.z)) continue;
+        out.push({ type, x: p.x, y: p.y, z: p.z });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// The nearest spot to (x, z), within r and near the height y, where a big
+// animal fits standing: { x, y, z }, or null.
+export function roomFor(world, type, x, y, z, r = 4) {
+  const cx = FL(x);
+  const cz = FL(z);
+  let best = null;
+  for (let ring = 0; ring <= r && !(best && ring > best.d); ring++) {
+    for (let dx = -ring; dx <= ring; dx++) {
+      for (let dz = -ring; dz <= ring; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+        const d = Math.hypot(dx, dz);
+        if (best && d >= best.d) continue;
+        const px = cx + dx + 0.5;
+        const pz = cz + dz + 0.5;
+        const py = standHeight(world, px, pz, y);
+        if (py !== null && fits(world, type, px, py, pz)) best = { x: px, y: py, z: pz, d };
+      }
+    }
+  }
+  return best && { x: best.x, y: best.y, z: best.z };
+}
+
+// ("an elephant", "a unicorn")
+export const needsRoom = (type) => `There is no room for ${/^(?!uni)[aeiou]/i.test(CRITTER_INFO[type].name) ? 'an' : 'a'} ${CRITTER_INFO[type].name.toLowerCase()} here. Try somewhere more open!`;
+
 // Where a small animal standing near (x, y, z) would have its feet, or null.
 export function standHeight(world, x, z, y) {
   const cx = Math.floor(x);
@@ -320,6 +452,9 @@ export function standHeight(world, x, z, y) {
 export class CritterSim {
   constructor(seed = 1) {
     this.rng = new Rng(seed);
+    // The big animals' own dice: how many of them there are changes nothing
+    // about what the others do.
+    this.bigRng = new Rng((seed ^ 0x2c1b3c6d) >>> 0 || 1);
     this.list = [];
     this.nextId = 1;
   }
@@ -327,16 +462,17 @@ export class CritterSim {
   add(type, x, y, z, name = null) {
     if (!CRITTER_INFO[type] || this.list.length >= MAX_CRITTERS) return null;
     const info = CRITTER_INFO[type];
+    const rng = info.big ? this.bigRng : this.rng;
     const c = {
       id: this.nextId++,
       type,
-      name: name && info.names.includes(name) ? name : this.rng.pick(info.names),
+      name: name && info.names.includes(name) ? name : rng.pick(info.names),
       x,
       y,
       z,
-      yaw: this.rng.next() * Math.PI * 2,
+      yaw: rng.next() * Math.PI * 2,
       state: 'idle',
-      timer: this.rng.range(0.5, 3),
+      timer: rng.range(0.5, 3),
       tx: x,
       tz: z,
       ty: y,
@@ -350,6 +486,8 @@ export class CritterSim {
       perch: '',
       onHead: 0,
       still: 0,
+      // Who is riding it (a big animal, a dolphin or the whale).
+      rider: 0,
     };
     this.list.push(c);
     return c;
@@ -389,6 +527,20 @@ export class CritterSim {
 
   stepOne(world, c, dt, now, players, night) {
     const info = CRITTER_INFO[c.type];
+    if (c.rider) {
+      const rider = players.get(c.rider);
+      if (rider) {
+        this.carry(world, c, rider, dt);
+        return;
+      }
+      this.letGo(c);
+    }
+    if (c.follow && (c.followUntil < now || !players.has(c.follow))) c.follow = 0;
+    const leader = c.follow ? players.get(c.follow) : null;
+    if (info.big) {
+      this.stepBig(world, c, dt, now, leader, night);
+      return;
+    }
     // Anyone who got built into a wall pops out on top. (A flying friend on
     // its way somewhere keeps clear by itself.)
     if ((!info.flies || c.mode === 'perch') && B.SOLID[world.get(Math.floor(c.x), Math.floor(c.y + 0.2), Math.floor(c.z))]) {
@@ -399,8 +551,6 @@ export class CritterSim {
       c.state = 'happy';
       return;
     }
-    if (c.follow && (c.followUntil < now || !players.has(c.follow))) c.follow = 0;
-    const leader = c.follow ? players.get(c.follow) : null;
 
     if (info.flies) {
       this.stepFlyer(world, c, dt, leader, night);
@@ -573,6 +723,243 @@ export class CritterSim {
       c.y = g;
       c.vy = 0;
     }
+  }
+
+  // ------------------------------------------------ riding
+
+  // Someone gets on: from now on it goes where they take it.
+  ride(id, pid) {
+    const c = this.get(id);
+    if (!c || !CRITTER_INFO[c.type].ride) return null;
+    Object.assign(c, { rider: pid, follow: 0, happyUntil: 0, leap: null, dive: null, body: null });
+    return c;
+  }
+
+  // Ridden: right under its rider (who says where they are: see riding.js),
+  // walking, running or swimming as they go.
+  carry(world, c, p, dt) {
+    const r = CRITTER_INFO[c.type].ride;
+    const at = mountUnder(c.type, p);
+    const speed = Math.hypot(at.x - c.x, at.z - c.z) / Math.max(dt, 1e-3);
+    Object.assign(c, { x: at.x, y: at.y, z: at.z, yaw: at.yaw });
+    const wet = r.sea || world.get(FL(c.x), FL(c.y + 0.5), FL(c.z)) === B.WATER;
+    c.state = wet ? 'swim' : speed > r.walk * 1.15 ? 'run' : speed > 0.5 ? 'walk' : 'idle';
+  }
+
+  // Its rider got off, or went home: it stays where they left it a moment,
+  // and makes that its home.
+  letGo(c) {
+    Object.assign(c, { rider: 0, body: null, timer: 3, state: CRITTER_INFO[c.type].sea === 'water' ? 'swim' : 'idle', mode: 'rest', tx: c.x, ty: c.y, tz: c.z, home: { x: c.x, z: c.z } });
+  }
+
+  // ------------------------------------------------ big animals
+
+  // The box a big animal gets about in, as big as it is with a rider on (so
+  // it never goes where it could not be ridden), moved the way a player is
+  // (physics.js): bumping into walls and trees, hopping up steps, swimming.
+  bodyOf(world, c) {
+    if (!c.body) {
+      const r = CRITTER_INFO[c.type].ride;
+      c.body = Object.assign(makeBody(c.x, c.y, c.z), { radius: r.radius, height: r.height, float: r.float });
+    }
+    // Anything built where it is lifts it out on top.
+    if (bodyOverlapsSolid(world, c.body)) unstick(world, c.body);
+    return c.body;
+  }
+
+  // Ponies, cows, the elephant and the giraffe, reindeer, polar bears and
+  // unicorns: grazing, ambling about (a gallop now and then, for some), a
+  // swim, asleep at night; and along with you, once fed a fruit.
+  stepBig(world, c, dt, now, leader, night) {
+    const info = CRITTER_INFO[c.type];
+    const r = info.ride;
+    const b = this.bodyOf(world, c);
+    // Ambling by itself; keeping up, along with someone.
+    let move = { walk: info.speed, run: r.run * 0.7, swim: r.swim * 0.6, jump: r.jump };
+    let go = false;
+    let face = null;
+    if (c.happyUntil > now) {
+      c.state = 'happy';
+    } else if (leader) {
+      // A little way off from them, and running to catch up.
+      const d = Math.hypot(leader.x - b.x, leader.z - b.z);
+      c.timer = 0;
+      if (d > r.radius + 2) {
+        c.tx = leader.x;
+        c.tz = leader.z;
+        c.state = d > 7 ? 'run' : 'walk';
+        move = { walk: r.walk * 0.85, run: r.run * 0.8, swim: r.swim * 0.8, jump: r.jump };
+        go = true;
+      } else {
+        c.state = 'idle';
+        face = Math.atan2(leader.x - b.x, leader.z - b.z);
+      }
+    } else if (night && !b.inWater) {
+      c.state = 'sleep';
+    } else {
+      c.timer -= dt;
+      if (c.timer <= 0 || (b.inWater && c.state !== 'swim')) this.decideBig(world, c, b, night);
+      go = c.state === 'walk' || c.state === 'run' || c.state === 'swim';
+    }
+    let mx = 0;
+    let mz = 0;
+    if (go) {
+      const dx = c.tx - b.x;
+      const dz = c.tz - b.z;
+      if (Math.hypot(dx, dz) > 0.4) {
+        // Round to face the way, then on: never off sideways, nor over the
+        // edge of anything it could not climb back up.
+        const off = wrap(Math.atan2(dx, dz) - c.yaw);
+        c.yaw = wrap(c.yaw + clamp(off, -3.5 * dt, 3.5 * dt));
+        const k = this.edgeAhead(world, c, b) ? 0 : Math.max(0, Math.cos(off));
+        mx = Math.sin(c.yaw) * k;
+        mz = Math.cos(c.yaw) * k;
+        if (!k && Math.abs(off) < 0.5) c.stuck = (c.stuck ?? 0) + dt;
+      } else if (!leader) {
+        c.timer = 0;
+      }
+    } else if (face !== null) {
+      c.yaw = wrap(c.yaw + clamp(wrap(face - c.yaw), -3.5 * dt, 3.5 * dt));
+    }
+    const x0 = b.x;
+    const z0 = b.z;
+    // Swimming into the bank, it kicks to climb out.
+    const climb = b.inWater && (c.stuck ?? 0) > 0.2;
+    stepBody(world, b, { mx, mz, run: c.state === 'run', jump: climb }, dt, { move });
+    // Pushing at something it cannot get past, or held up at an edge: it
+    // thinks again.
+    const pushing = Math.hypot(mx, mz) > 0.5 && Math.hypot(b.x - x0, b.z - z0) < move.walk * dt * 0.2;
+    if (pushing) c.stuck = (c.stuck ?? 0) + dt;
+    else if (mx || mz) c.stuck = 0;
+    if (c.stuck > 1 && !leader) {
+      c.stuck = 0;
+      c.timer = 0;
+      c.state = 'idle';
+    }
+    c.x = b.x;
+    c.y = b.y;
+    c.z = b.z;
+    if (b.inWater && c.state !== 'happy') c.state = 'swim';
+    else if (c.state === 'swim') c.state = 'walk';
+  }
+
+  // Just ahead of a big animal: a drop of more than a block, or water for
+  // one that does not like a swim.
+  edgeAhead(world, c, b) {
+    const info = CRITTER_INFO[c.type];
+    if (b.inWater) return false;
+    const k = info.ride.radius + 0.3;
+    const x = b.x + Math.sin(c.yaw) * k;
+    const z = b.z + Math.cos(c.yaw) * k;
+    const w = waterColumn(world, x, z);
+    if (w && w.top + 2 >= FL(b.y + 1e-4)) return !info.paddles;
+    const y = standHeight(world, x, z, b.y);
+    return y === null || y < b.y - 1.2;
+  }
+
+  decideBig(world, c, b, night) {
+    const info = CRITTER_INFO[c.type];
+    if (b.inWater) {
+      // Back to dry land, or on through the water for one that likes a swim.
+      if (night || !info.paddles || this.bigRng.chance(0.6)) this.pickShore(world, c, b);
+      else this.pickBig(world, c, false);
+      c.state = 'swim';
+      c.timer = this.bigRng.range(5, 9);
+    } else if (c.state === 'walk' || c.state === 'run' || c.state === 'swim') {
+      c.state = this.bigRng.chance(0.55) ? 'eat' : 'idle';
+      c.timer = this.bigRng.range(2.5, 6);
+    } else {
+      this.pickBig(world, c, !info.paddles);
+      c.state = info.gallops && this.bigRng.chance(0.3) ? 'run' : 'walk';
+      c.timer = this.bigRng.range(5, 9);
+    }
+  }
+
+  // Somewhere to go: near home, on dry land (and into the water now and then,
+  // for one that likes a swim), on the ground it likes.
+  pickBig(world, c, dry) {
+    const info = CRITTER_INFO[c.type];
+    const b = c.body;
+    for (let tries = 0; tries < 20; tries++) {
+      const a = this.bigRng.next() * Math.PI * 2;
+      const r = this.bigRng.range(3, 9);
+      const pull = Math.hypot(c.home.x - b.x, c.home.z - b.z) > (info.home ?? 14) ? 0.7 : 0;
+      const tx = clamp(b.x + Math.cos(a) * r * (1 - pull) + (c.home.x - b.x) * pull * 0.5, 1, world.W - 1);
+      const tz = clamp(b.z + Math.sin(a) * r * (1 - pull) + (c.home.z - b.z) * pull * 0.5, 1, world.D - 1);
+      const w = waterColumn(world, tx, tz);
+      const wet = Boolean(w) && w.top + 2 >= FL(b.y + 1e-4);
+      const y = wet ? w.top : standHeight(world, tx, tz, b.y + 1);
+      if (y === null || (wet && (dry || this.bigRng.chance(0.7)))) continue;
+      if (info.ground && !wet && !info.ground.has(world.get(FL(tx), y - 1, FL(tz))) && tries < 19) continue;
+      if (!this.clearWay(world, c, b, tx, tz)) continue;
+      c.tx = tx;
+      c.tz = tz;
+      return;
+    }
+    c.tx = b.x;
+    c.tz = b.z;
+  }
+
+  // Out of the water: the nearest dry land it can swim straight to and
+  // climb out onto, a little way in from the edge; or anywhere about, if
+  // there is none within reach.
+  pickShore(world, c, b) {
+    const cx = FL(b.x);
+    const cz = FL(b.z);
+    let best = null;
+    for (let ring = 1; ring <= 24 && !(best && ring > best.d + 1); ring++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        for (let dz = -ring; dz <= ring; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+          const d = Math.hypot(dx, dz);
+          if (best && d >= best.d) continue;
+          const x = cx + dx + 0.5;
+          const z = cz + dz + 0.5;
+          if (waterColumn(world, x, z)) continue;
+          // A step in from the edge, so it is all the way out.
+          const k = (d + 1) / d;
+          const tx = b.x + (x - b.x) * k;
+          const tz = b.z + (z - b.z) * k;
+          if (!waterColumn(world, tx, tz) && this.clearWay(world, c, b, tx, tz)) best = { x: tx, z: tz, d };
+        }
+      }
+    }
+    if (best) {
+      c.tx = best.x;
+      c.tz = best.z;
+    } else {
+      this.pickBig(world, c, false);
+    }
+  }
+
+  // Whether a big animal can go straight from where it is to (tx, tz): with
+  // room for it all the way, never up or down more than a block at a step
+  // (or up a bank one block over the water, out of it), and through water
+  // only if it likes a swim or is in it already.
+  clearWay(world, c, b, tx, tz) {
+    const swims = CRITTER_INFO[c.type].paddles || b.inWater;
+    const n = Math.ceil(Math.hypot(tx - b.x, tz - b.z) / 0.5);
+    let y = b.inWater ? null : FL(b.y + 1e-4);
+    let high = b.inWater ? (waterColumn(world, b.x, b.z)?.top ?? FL(b.y)) + 2 : y + 1;
+    for (let i = 1; i <= n; i++) {
+      const x = b.x + ((tx - b.x) * i) / n;
+      const z = b.z + ((tz - b.z) * i) / n;
+      const w = waterColumn(world, x, z);
+      if (w && w.top + 2 >= (y ?? high - 1)) {
+        // Water, as deep as it likes: swimming.
+        if (!swims) return false;
+        y = null;
+        high = w.top + 2;
+        continue;
+      }
+      let ny = standHeight(world, x, z, y ?? high - 1);
+      if (ny === null || ny > high || (y !== null && ny < y - 1)) return false;
+      // Its box reaching up a step beside, it hops up onto it.
+      if (!fits(world, c.type, x, ny, z) && !(ny + 1 <= high && fits(world, c.type, x, ++ny, z))) return false;
+      y = ny;
+      high = ny + 1;
+    }
+    return true;
   }
 
   // ------------------------------------------------ flying friends
@@ -1116,20 +1503,12 @@ export class CritterSim {
 
   // Out of the water in an arc ahead, if there is room in the air for one and
   // water deep enough for it to come down into. True if it has leapt.
-  tryLeap(world, c, [len, h, T] = [5.5, 2, 1.35]) {
+  tryLeap(world, c, shape) {
     const w = waterColumn(world, c.x, c.z);
     if (!w || c.y < w.top + SURFACE - 1.1) return false;
-    const fx = Math.sin(c.yaw);
-    const fz = Math.cos(c.yaw);
-    const land = waterFor(world, c.x + fx * len, c.z + fz * len, WATERS[c.type]);
-    if (!land || land.top !== w.top) return false;
-    const y = w.top + SURFACE - 0.35;
-    for (let i = 1; i < 12; i++) {
-      const k = i / 12;
-      const id = world.get(FL(c.x + fx * len * k), FL(y + 4 * h * k * (1 - k)), FL(c.z + fz * len * k));
-      if (id !== B.AIR && id !== B.WATER) return false;
-    }
-    c.leap = { t: 0, T, x: c.x, y, z: c.z, fx, fz, len, h };
+    const leap = leapFrom(world, c.type, c.x, c.z, c.yaw, shape);
+    if (!leap) return false;
+    c.leap = leap;
     c.state = 'jump';
     return true;
   }
@@ -1409,7 +1788,7 @@ export class CritterSim {
   }
 
   describe() {
-    return this.list.map((c) => ({ id: c.id, type: c.type, name: c.name }));
+    return this.list.map((c) => ({ id: c.id, type: c.type, name: c.name, rider: c.rider ?? 0 }));
   }
 
   save() {

@@ -3,16 +3,17 @@
 // tools, and everything said and done. Talks to the island through a link
 // (see net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { CRITTER_INFO, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
+import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { applyCells, buildEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
 import { PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
-import { ANIM } from './render/avatar.js';
+import { ANIM, shirtColor } from './render/avatar.js';
 
 export const TOOLS = [
   { key: 'build', name: 'Build', icon: '🧱', key1: 'B' },
@@ -83,6 +84,10 @@ export class Game extends EventTarget {
     this.seenRainbow = false;
     // The flying friend that sat on your head, once one has.
     this.perchedOn = 0;
+    // The animal you are riding (see shared/riding.js), and the one close
+    // enough to get on.
+    this.riding = null;
+    this.rideTarget = 0;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -121,6 +126,8 @@ export class Game extends EventTarget {
           p.look = msg.look;
           if (typeof msg.name === 'string' && msg.name) p.name = msg.name;
           p.avatar?.setLook(msg.look);
+          // The saddle under them changes colour with their T-shirt.
+          for (const c of this.critters.values()) if (c.rider === msg.pid) c.model.setRider(shirtColor(msg.look.shirt));
           this.emit('players');
         }
         break;
@@ -157,6 +164,9 @@ export class Game extends EventTarget {
       case 'cfx':
         this.critterFx(msg);
         break;
+      case 'ride':
+        this.rideNews(msg);
+        break;
       case 'env':
         this.setEnv(msg);
         break;
@@ -191,6 +201,7 @@ export class Game extends EventTarget {
     this.world = World.decode(msg.meta, msg.blocks);
     this.renderer.setWorld(this.world);
     this.renderer.terrain.buildAll();
+    this.riding = null;
     this.pending.clear();
     this.undoStack = [];
     for (const pid of [...this.players.keys()]) this.removePlayer(pid, false, true);
@@ -203,7 +214,7 @@ export class Game extends EventTarget {
     const names = new Map(msg.critters.map((c) => [c.id, c]));
     for (const row of msg.pack) {
       const c = unpackCritter(row);
-      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '' });
+      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0 });
     }
     this.setEnv(msg.env);
     this.renderer.view.yaw = Math.PI * 0.9;
@@ -277,8 +288,9 @@ export class Game extends EventTarget {
 
   addCritter(c) {
     const model = this.renderer.addCritter(c.id, c.type);
-    const entry = { id: c.id, type: c.type, name: c.name, snaps: [{ t: performance.now(), x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state }], model, last: null, voiceAt: 0 };
+    const entry = { id: c.id, type: c.type, name: c.name, snaps: [{ t: performance.now(), x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state }], model, last: null, voiceAt: 0, rider: 0 };
     this.critters.set(c.id, entry);
+    if (c.rider) this.rideNews({ id: c.id, pid: c.rider });
     return entry;
   }
 
@@ -316,6 +328,7 @@ export class Game extends EventTarget {
   critterRemoved(msg) {
     const entry = this.critters.get(msg.id);
     if (!entry) return;
+    if (this.riding?.id === msg.id) this.dismount();
     const p = entry.model.group.position;
     this.renderer.effects.sparkles(p.x, p.y + 0.4, p.z, 16);
     this.renderer.effects.hearts(p.x, p.y + 0.6, p.z, 2);
@@ -327,11 +340,244 @@ export class Game extends EventTarget {
     const entry = this.critters.get(msg.id);
     if (!entry) return;
     const p = entry.model.group.position;
+    // A whale ridden blows water, and an elephant sprays it from its trunk.
+    if (msg.fx === 'spout') {
+      entry.spoutUntil = performance.now() + 2400;
+      return;
+    }
+    if (msg.fx === 'spray') {
+      entry.sprayUntil = performance.now() + 1500;
+      entry.model.trick = 1.6;
+      if (this.near(p.x, p.y, p.z, 30)) this.sound.play('trumpet');
+      return;
+    }
     this.renderer.effects.hearts(p.x, p.y + entry.model.height, p.z, msg.fx === 'yum' ? 5 : 3);
     if (this.near(p.x, p.y, p.z, 20)) {
       this.sound.play(entry.type);
       if (msg.fx === 'yum') this.sound.play('yum');
     }
+  }
+
+  // ------------------------------------------------ riding
+
+  // Someone got on an animal, or off it (pid 0).
+  rideNews(msg) {
+    const entry = this.critters.get(msg.id);
+    if (!entry) return;
+    const was = entry.rider;
+    entry.rider = msg.pid;
+    if (was && was !== msg.pid) {
+      // Its last rider, still drawn on its back for a moment after.
+      entry.lastRider = was;
+      entry.leftAt = performance.now();
+    }
+    const look = this.players.get(msg.pid)?.look;
+    entry.model.setRider(msg.pid && look ? shirtColor(look.shirt) : null);
+    if (msg.pid === this.pid && this.riding?.id !== entry.id) this.mount(entry);
+    else if (was === this.pid && msg.pid !== this.pid && this.riding?.id === entry.id) this.dismount();
+    this.emit('ride');
+  }
+
+  // The big animal you could get on: the nearest one beside you that nobody
+  // is riding.
+  findRideable() {
+    if (this.riding || !this.me) return 0;
+    const b = this.me.body;
+    let best = 0;
+    let near = Infinity;
+    for (const c of this.critters.values()) {
+      const r = CRITTER_INFO[c.type]?.ride;
+      if (!r || c.rider || !c.model.group.visible) continue;
+      const p = c.model.group.position;
+      const d = Math.hypot(p.x - b.x, p.z - b.z) - r.radius;
+      const up = b.y - p.y;
+      if (d < 2 && d < near && up > -1.6 && up < (r.sea ? 1.4 : r.seat + 0.6)) {
+        best = c.id;
+        near = d;
+      }
+    }
+    return best;
+  }
+
+  // Q, or the Ride button: on the animal beside you, or off the one you are on.
+  toggleRide() {
+    if (this.riding) {
+      this.getOff();
+      return;
+    }
+    const id = this.rideTarget;
+    if (!id) {
+      this.emit('notice', { text: 'Walk up to a big animal to ride it!', level: 'info' });
+      this.sound.play('no');
+      return;
+    }
+    this.send({ t: 'critter', op: 'ride', id });
+  }
+
+  // Up on its back (the island said yes): from now on you move it, and the
+  // island puts it under you.
+  mount(entry) {
+    const m = entry.model.group;
+    const ride = startRide(this.world, entry.type, { x: m.position.x, y: m.position.y, z: m.position.z, yaw: m.rotation.y });
+    if (!ride) {
+      this.send({ t: 'critter', op: 'off' });
+      this.emit('notice', { text: `There is no room to ride ${entry.name || 'it'} here. Lead them somewhere more open!`, level: 'info' });
+      return;
+    }
+    const b = this.me.body;
+    ride.id = entry.id;
+    // A little hop up onto its back.
+    ride.hop = { t: 0, x: b.x, y: b.y, z: b.z };
+    this.riding = ride;
+    b.flying = false;
+    this.emit('fly', false);
+    this.sound.play('jump');
+    this.sound.play(entry.type);
+    const info = CRITTER_INFO[entry.type];
+    const how = this.touch ? 'Tap 👋 Get off to get down.' : 'Press Q to get off.';
+    const trick = { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ?? 'Jump to jump!';
+    this.emit('toast', { icon: info.icon, text: `You are riding ${entry.name || `the ${info.name.toLowerCase()}`}! ${trick} ${how}` });
+    this.profile.count('rides');
+    if (ride.r.sea) this.profile.count('searides');
+    this.emit('ride');
+  }
+
+  // Getting off, at once: the island is told where you left it.
+  getOff() {
+    const ride = this.riding;
+    // Not in the middle of a leap.
+    if (!ride || ride.leap) return;
+    this.sendMove(true);
+    this.send({ t: 'critter', op: 'off' });
+    this.dismount();
+  }
+
+  // Down beside it (or, if it went away, off where it was), and on foot again.
+  dismount() {
+    const ride = this.riding;
+    if (!ride) return;
+    this.riding = null;
+    const at = getOffAt(this.world, ride);
+    const b = this.me.body;
+    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false, flying: false });
+    unstick(this.world, b);
+    const entry = this.critters.get(ride.id);
+    if (entry) {
+      // It stays where it was left, until the island says where it goes next.
+      const r = ride.body;
+      entry.snaps = [{ t: performance.now(), x: r.x, y: r.y, z: r.z, yaw: ride.yaw, state: 'idle' }];
+      entry.model.setRider(null);
+    }
+    this.sound.play('land');
+    this.emit('ride');
+  }
+
+  // Your animal, moved as you steer it, and you on its back.
+  moveRide(dt, input) {
+    const ride = this.riding;
+    const me = this.me;
+    const move = input.readMove();
+    const yaw = this.renderer.view.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    // Down (Shift, or ⬇️) dives at sea (and gets off on land: see pressDown).
+    const ev = stepRide(this.world, ride, { mx: fx * move.y + -fz * move.x, mz: fz * move.y + fx * move.x, jump: input.jump, down: input.down, run: input.run }, dt);
+    const r = ride.body;
+    const seat = riderAt(ride.type, { x: r.x, y: r.y, z: r.z, yaw: ride.yaw });
+    const b = me.body;
+    Object.assign(b, { x: seat.x, y: seat.y, z: seat.z, vx: r.vx, vy: r.vy, vz: r.vz, onGround: r.onGround, inWater: false });
+    const speed = Math.hypot(r.vx, r.vz);
+    me.yaw = ride.yaw;
+    me.speed = speed;
+    me.anim = ANIM.ride;
+    const fxs = this.renderer.effects;
+    const entry = this.critters.get(ride.id);
+    if (ev.jumped) {
+      this.sound.play('jump');
+      if (Math.random() < 0.4) this.sound.play(ride.type);
+    }
+    if (ev.landed > 7) {
+      this.sound.play('land');
+      fxs.dust(r.x, r.y, r.z);
+    }
+    if (ev.leapt || ev.splashed) {
+      const top = this.surfaceAt(r.x, r.z);
+      if (top !== null) fxs.splash(r.x, top, r.z);
+      this.sound.play('splash');
+    }
+    if (ev.trick) {
+      const now = performance.now();
+      if (now > (ride.trickAt ?? 0)) {
+        ride.trickAt = now + 2600;
+        this.send({ t: 'critter', op: 'trick' });
+      }
+    }
+    // Hoofbeats, or big soft paws.
+    if (r.onGround && speed > 0.5) {
+      this.stepAcc += speed * dt;
+      if (this.stepAcc > (speed > ride.r.walk * 1.1 ? 1.6 : 1)) {
+        this.stepAcc = 0;
+        this.sound.play('hoof', { big: ride.type === 'elephant' || ride.type === 'polarbear' });
+        this.profile.count('steps');
+      }
+    }
+    // A unicorn leaves sparkles where it goes.
+    if (ride.type === 'unicorn' && speed > 1 && Math.random() < dt * 14) fxs.sparkles(r.x - Math.sin(ride.yaw) * 0.6, r.y + 0.7, r.z - Math.cos(ride.yaw) * 0.6, 2, ['#ff9ec7', '#fff08a', '#8fd3ff', '#c7a4ff']);
+    if (b.y > 40) this.profile.count('highest', Math.floor(b.y), { max: true });
+    const self = this.players.get(this.pid);
+    if (self?.avatar) {
+      const a = self.avatar;
+      let { x, y, z } = seat;
+      if (ride.hop) {
+        // Hopping up from where you stood.
+        const h = ride.hop;
+        h.t += dt;
+        const k = Math.min(1, h.t / 0.3);
+        x = h.x + (x - h.x) * k;
+        y = h.y + (y - h.y) * k + Math.sin(Math.PI * k) * 0.5;
+        z = h.z + (z - h.z) * k;
+        if (k >= 1) ride.hop = null;
+      }
+      a.root.position.set(x, y, z);
+      a.root.rotation.y = ride.yaw;
+      a.ride = ride.r;
+      a.update(dt, ANIM.ride, speed);
+      a.shadow.visible = false;
+    }
+    if (entry) entry.model.setRider(shirtColor(this.profile.look.shirt));
+  }
+
+  // Shift or ⬇️ pressed: off the animal you are riding on land (at sea, it
+  // dives, as long as it is held).
+  pressDown() {
+    if (this.riding && !this.riding.r.sea) this.getOff();
+  }
+
+  // Where an animal with someone on it is drawn: under you, as you move it;
+  // under a friend, from where they are drawn. Null when it is on its own.
+  mountPose(c) {
+    if (this.riding?.id === c.id) {
+      const r = this.riding.body;
+      return { x: r.x, y: r.y, z: r.z, yaw: this.riding.yaw, state: c.spoutUntil > performance.now() ? 'spout' : rideState(this.riding) };
+    }
+    const recent = c.lastRider && performance.now() - c.leftAt < 600 ? c.lastRider : 0;
+    const p = this.players.get(c.rider || recent);
+    if (!p || p.me || !p.avatar || !p.seated) return null;
+    const a = p.avatar.root;
+    const at = mountUnder(c.type, { x: a.position.x, y: a.position.y, z: a.position.z, yaw: a.rotation.y });
+    return { ...at, state: this.ridden(c, at) };
+  }
+
+  // How an animal a friend is riding moves, from how it is drawn going.
+  ridden(c, at) {
+    const r = CRITTER_INFO[c.type].ride;
+    if (c.spoutUntil > performance.now()) return 'spout';
+    if (r.sea) return at.y > (this.surfaceAt(at.x, at.z) ?? Infinity) ? 'jump' : 'swim';
+    if (this.world.get(Math.floor(at.x), Math.floor(at.y + 0.5), Math.floor(at.z)) === B.WATER) return 'swim';
+    const ground = this.renderer.groundUnder(at.x, at.y, at.z);
+    if (ground !== null && at.y - ground > 0.35) return 'jump';
+    const hs = c.model.hs;
+    return hs > r.walk * 1.1 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
   }
 
   // ------------------------------------------------ edits
@@ -349,7 +595,7 @@ export class Game extends EventTarget {
     }
     applyCells(w, cells);
     this.changed(cells);
-    if (this.me) unstick(w, this.me.body);
+    if (this.me) unstick(w, this.riding?.body ?? this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
     this.send(msg);
@@ -386,7 +632,7 @@ export class Game extends EventTarget {
       this.changed(apply);
     }
     if (!mine) this.editEffects(msg.kind, msg.cells, false);
-    if (this.me) unstick(w, this.me.body);
+    if (this.me) unstick(w, this.riding?.body ?? this.me.body);
   }
 
   ack(msg) {
@@ -547,7 +793,8 @@ export class Game extends EventTarget {
     const eye = { x: this.me.body.x, y: this.me.body.y + BODY.eye, z: this.me.body.z };
     const maxDist = REACH + this.renderer.camDist;
     const hit = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, maxDist, stopAt);
-    const critter = this.renderer.pickCritter(ray, maxDist);
+    // Not the animal you are riding, which is in the middle of the picture.
+    const critter = this.renderer.pickCritter(ray, maxDist, this.riding?.id);
     // Flowers and grass are see-through: one in front of an animal, or the
     // one it stands in (a bee at a flower is inside its cell), does not hide
     // it; nor does the water hide what swims in it.
@@ -570,8 +817,9 @@ export class Game extends EventTarget {
       case 'build': {
         const id = this.selectedBlock();
         if (this.basketPick && (this.profile.basket[this.basketPick] ?? 0) <= 0) return { kind: 'build', cells: [], collected: [], mode: 'add', empty: true };
-        const body = { ...this.me.body, radius: BODY.radius + 0.02 };
-        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : this.size, [body]), mode: 'add' };
+        const bodies = [{ ...this.me.body, radius: BODY.radius + 0.02, height: BODY.height }];
+        if (this.riding) bodies.push({ ...this.riding.body, radius: this.riding.body.radius + 0.02 });
+        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : this.size, bodies), mode: 'add' };
       }
       case 'pick':
         return { kind: 'pick', ...pickEdit(w, hit, this.size), mode: 'remove' };
@@ -797,7 +1045,10 @@ export class Game extends EventTarget {
     if (!this.world || !this.me) return;
     const env = this.env;
     env.time = advanceTime(env.time, dt, env.mode);
-    this.moveMe(dt, input);
+    this.touch = input.touchMode;
+    if (this.riding) this.moveRide(dt, input);
+    else this.moveMe(dt, input);
+    this.rideTarget = this.findRideable();
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
@@ -901,19 +1152,27 @@ export class Game extends EventTarget {
   toggleFly() {
     const b = this.me?.body;
     if (!b) return;
+    // Off the animal you are riding, and up into the air.
+    if (this.riding) {
+      this.getOff();
+      if (this.riding) return;
+      b.flying = false;
+    }
     b.flying = !b.flying;
     if (b.flying) b.vy = 4;
     this.sound.play(b.flying ? 'jump' : 'land');
     this.emit('fly', b.flying);
   }
 
-  sendMove() {
+  // force: now, however soon after the last time (to get off an animal
+  // right where you are).
+  sendMove(force = false) {
     const now = performance.now();
-    if (now - this.lastMoveSent < MOVE_SEND_MS) return;
+    if (!force && now - this.lastMoveSent < MOVE_SEND_MS) return;
     const b = this.me.body;
     const s = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2), +this.me.yaw.toFixed(2), this.me.anim, b.flying ? 1 : 0];
     const key = s.join(',');
-    if (key === this.lastState && now - this.lastMoveSent < 1000) return;
+    if (!force && key === this.lastState && now - this.lastMoveSent < 1000) return;
     this.lastState = key;
     this.lastMoveSent = now;
     this.send({ t: 'm', s });
@@ -930,8 +1189,13 @@ export class Game extends EventTarget {
       const speed = Math.hypot(s.x - prev.x, s.z - prev.z) / Math.max(dt, 1e-3);
       a.root.position.set(s.x, s.y, s.z);
       a.root.rotation.y = s.yaw;
-      a.update(dt, s.anim, Math.min(speed, 8));
+      // On an animal: sitting astride it, with no shadow of their own.
+      p.seated = s.anim === ANIM.ride;
+      const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id) : null;
+      a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
+      a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
+      if (p.seated) a.shadow.visible = false;
     }
     for (const p of this.players.values()) {
       if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;
@@ -963,7 +1227,7 @@ export class Game extends EventTarget {
     const night = isNight(this.env.time);
     const cam = this.renderer.camera.position;
     for (const c of this.critters.values()) {
-      const s = this.interpolate(c.snaps, CRITTER_INTERP_MS);
+      const s = this.mountPose(c) ?? this.interpolate(c.snaps, CRITTER_INTERP_MS);
       if (!s) continue;
       const m = c.model;
       const prev = m.group.position.clone();
@@ -981,6 +1245,7 @@ export class Game extends EventTarget {
       } else {
         m.shadow.visible = false;
       }
+      if (c.sprayUntil > now) this.spray(c, now);
       if (state === 'sleep' && !m.tiny && now > (c.zzzAt ?? 0)) {
         c.zzzAt = now + 1400 + Math.random() * 800;
         if (this.near(s.x, s.y, s.z, 30)) this.renderer.effects.zzz(s.x, s.y + m.height, s.z);
@@ -989,7 +1254,7 @@ export class Game extends EventTarget {
       // owls only at night). Seagulls and the whale are heard from further
       // off, and less often.
       const info = CRITTER_INFO[c.type];
-      const far = { seagull: 24, whale: 34, dolphin: 18 }[c.type] ?? 9;
+      const far = { seagull: 24, whale: 34, dolphin: 18 }[c.type] ?? (info?.big ? 14 : 9);
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
       if (state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
@@ -1026,7 +1291,7 @@ export class Game extends EventTarget {
       if (jumping !== Boolean(c.jumping) && top !== null && this.near(s.x, s.y, s.z, 30)) fx.splash(s.x + Math.sin(s.yaw) * (jumping ? 0.1 : 0.9), top, s.z + Math.cos(s.yaw) * (jumping ? 0.1 : 0.9));
       c.jumping = jumping;
     } else if (c.type === 'whale') {
-      const spouting = state === 'spout';
+      const spouting = state === 'spout' || c.spoutUntil > now;
       if (spouting && !c.spouting && this.near(s.x, s.y, s.z, 50)) {
         this.sound.play('spout');
         this.profile.count('spouts');
@@ -1041,6 +1306,19 @@ export class Game extends EventTarget {
           fx.add('drop', x, s.y + 0.55, z, { vx: (Math.random() - 0.5) * 1.2, vy: 5 + Math.random() * 1.8, vz: (Math.random() - 0.5) * 1.2, size: 0.17, life: 1.1, gravity: 8, color: '#e9f7ff' });
         }
       }
+    }
+  }
+
+  // Water spraying up and out of the elephant's trunk.
+  spray(c, now) {
+    if (now < (c.sprayAt ?? 0) || !this.near(c.model.group.position.x, c.model.group.position.y, c.model.group.position.z, 60)) return;
+    c.sprayAt = now + 40;
+    const tip = c.model.tip?.getWorldPosition(c.model.group.position.clone());
+    if (!tip) return;
+    const yaw = c.model.group.rotation.y;
+    for (let i = 0; i < 3; i++) {
+      const f = 2.2 + Math.random() * 1.2;
+      this.renderer.effects.add('drop', tip.x, tip.y, tip.z, { vx: Math.sin(yaw) * f + (Math.random() - 0.5) * 0.8, vy: 4.5 + Math.random() * 1.5, vz: Math.cos(yaw) * f + (Math.random() - 0.5) * 0.8, size: 0.15, life: 1, gravity: 9, color: '#e9f7ff' });
     }
   }
 
