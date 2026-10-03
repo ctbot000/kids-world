@@ -7,7 +7,7 @@ import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
-import { SECRET_LENGTH, SECRET_PICTURES } from './shared/keeper.js';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from './shared/keeper.js';
 import { ANIMALS, EMOTES, FUR_COLORS, HATS, NAME_ANIMALS, NAME_WORDS, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
@@ -62,12 +62,31 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 // "a peach", "an apple".
 const withArticle = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
 
+// What is wrong with a new password, in a few words (see passwordProblem).
+const PASSWORD_HELP = {
+  short: `Make your password at least ${PASSWORD_MIN} letters or numbers long.`,
+  long: `That password is very long! At most ${PASSWORD_MAX} letters or numbers, please.`,
+  name: 'Pick a password that is not your name.',
+};
+
+// "3 islands, 12 stickers and 5 treasures", leaving out what there is none of.
+function things({ islands, stickers, treasures }) {
+  const parts = [
+    islands ? `${islands} ${islands === 1 ? 'island' : 'islands'}` : '',
+    stickers ? `${stickers} ${stickers === 1 ? 'sticker' : 'stickers'}` : '',
+    treasures ? `${treasures} ${treasures === 1 ? 'treasure' : 'treasures'}` : '',
+  ].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? '';
+}
+
 // What to tell you when the keeper could not log you in, or make your login
 // (the codes of KeeperProblem), as [icon, words].
 function loginTrouble(error) {
   switch (error?.code) {
     case 'wrong':
-      return ['🙈', 'Those are not the right pictures. Try again!'];
+      return ['🙈', 'That name and password do not go together. Try again!'];
+    case 'weak':
+      return ['🙈', PASSWORD_HELP[error.problem] ?? error.message];
     case 'wait': {
       const minutes = Math.max(1, Math.ceil((error.wait ?? 600000) / 60000));
       return ['⏳', `That was a lot of tries! Wait ${minutes === 1 ? 'a minute' : `${minutes} minutes`}, then try again.`];
@@ -709,66 +728,24 @@ export class UI {
 
   // ------------------------------------------------ logins
 
-  // Four secret pictures, tapped in order: the slots above fill up as you go
-  // (with the pictures themselves when show is on, as you choose new ones;
-  // else with dots), and ⬅ takes the last one back. done(secret) at four.
-  picturePad(done, { show = false } = {}) {
-    const picked = [];
-    const slots = h('div', { class: 'secret-slots', 'aria-label': 'Pictures tapped' });
-    const draw = () =>
-      slots.replaceChildren(
-        ...Array.from({ length: SECRET_LENGTH }, (_, i) => {
-          const pic = SECRET_PICTURES.find((p) => p.key === picked[i]);
-          return h('span', { class: `secret-slot${pic ? ' on' : ''}`, 'aria-label': pic ? (show ? pic.name : 'tapped') : 'not yet' }, pic && show ? pic.icon : '');
-        }),
-      );
-    const pad = h(
-      'div',
-      { class: 'picture-pad' },
-      ...SECRET_PICTURES.map((p) =>
-        h(
-          'button',
-          {
-            class: 'choice picture',
-            type: 'button',
-            'aria-label': p.name,
-            onclick: () => {
-              if (picked.length >= SECRET_LENGTH) return;
-              picked.push(p.key);
-              this.sound.play('ui');
-              draw();
-              if (picked.length === SECRET_LENGTH) done([...picked]);
-            },
-          },
-          h('span', { class: 'emoji' }, p.icon),
-        ),
-      ),
-    );
-    const back = h(
-      'button',
-      {
-        class: 'chip',
-        type: 'button',
-        onclick: () => {
-          picked.pop();
-          this.sound.play('ui');
-          draw();
-        },
-      },
-      '⬅ Oops',
-    );
-    draw();
-    return {
-      el: h('div', { class: 'secret' }, slots, pad, h('div', { class: 'row secret-row' }, back)),
-      clear: () => {
-        picked.length = 0;
-        draw();
-      },
-    };
+  // A password box, with 👁️ to see what you typed.
+  passwordBox(label, autocomplete) {
+    const input = h('input', { type: 'password', class: 'text-input', autocomplete, autocapitalize: 'off', maxLength: PASSWORD_MAX * 2, 'aria-label': label });
+    input.spellcheck = false;
+    input.setAttribute('autocorrect', 'off');
+    const eye = h('button', { class: 'chip eye', type: 'button', 'aria-label': 'Show the password', 'aria-pressed': 'false' }, '👁️');
+    eye.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eye.textContent = show ? '🙈' : '👁️';
+      eye.setAttribute('aria-pressed', String(show));
+      input.focus();
+    });
+    return { el: h('label', { class: 'password-box' }, h('span', {}, label), h('span', { class: 'row' }, input, eye)), input };
   }
 
-  // A line over the pictures saying how logging in is going, scrolled to
-  // where it can be read on a short screen.
+  // A line saying how logging in is going, scrolled to where it can be read
+  // on a short screen.
   loginNote() {
     const note = h('p', { class: 'login-note', 'aria-live': 'polite' });
     note.say = (icon, text, kind = '') => {
@@ -779,8 +756,14 @@ export class UI {
     return note;
   }
 
+  // For a password manager: whose password it is.
+  static username(name) {
+    return h('input', { type: 'text', class: 'visually-hidden', autocomplete: 'username', value: name, readOnly: true, tabIndex: -1, 'aria-hidden': 'true' });
+  }
+
   // Logging in: who you are (one of the players who logged in on this device
-  // before, or your name a word at a time), then your four secret pictures.
+  // before, or your name a word at a time), then your password. Then, if
+  // this device's guest has things, whether they are yours to bring along.
   loginDialog() {
     const login = this.handlers.login;
     let first = '';
@@ -789,7 +772,12 @@ export class UI {
     this.openModal(
       (root) => {
         const body = h('div');
-        const note = this.loginNote();
+        const foot = h(
+          'div',
+          { class: 'login-foot' },
+          h('span', { class: 'muted' }, 'No login yet?'),
+          h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '✨ Make my login'),
+        );
         const words = (list, pick) =>
           h(
             'div',
@@ -810,6 +798,39 @@ export class UI {
               ),
             ),
           );
+        // Logged in: what this device's guest has comes along, if it is yours.
+        const welcome = (name, reply) => {
+          const guest = login.guest();
+          const note = this.loginNote();
+          const answer = async (adopt) => {
+            for (const b of buttons) b.disabled = true;
+            note.say(adopt ? '🧳' : '🎉', adopt ? 'Bringing them along…' : `Hi, ${name}!`);
+            try {
+              await login.enter(reply, adopt);
+            } catch (error) {
+              for (const b of buttons) b.disabled = false;
+              note.say(...loginTrouble(error), 'warn');
+              this.sound.play('no');
+            }
+          };
+          const buttons = [
+            h('button', { class: 'big green', type: 'button', onclick: () => answer(true) }, '✅ Yes, they are mine'),
+            h('button', { class: 'chip', type: 'button', onclick: () => answer(false) }, '🙅 No, leave them here'),
+          ];
+          if (!guest) {
+            body.replaceChildren(note);
+            answer(false);
+            return;
+          }
+          foot.hidden = true;
+          body.replaceChildren(
+            h('h3', {}, `🎉 Hi, ${name}!`),
+            h('p', {}, `This device also has ${things(guest)} from playing here as ${guest.name}. Are they yours?`),
+            h('p', { class: 'muted' }, 'If they are, they come along to your login, on all your devices.'),
+            note,
+            h('div', { class: 'login-answers' }, ...buttons),
+          );
+        };
         const draw = () => {
           const name = [first, second].filter(Boolean).join(' ');
           const again = h(
@@ -819,7 +840,6 @@ export class UI {
               type: 'button',
               onclick: () => {
                 first = second = '';
-                note.say('');
                 this.sound.play('ui');
                 draw();
               },
@@ -862,103 +882,131 @@ export class UI {
             );
             return;
           }
-          const pad = this.picturePad(async (secret) => {
+          const note = this.loginNote();
+          const box = this.passwordBox('Your password', 'current-password');
+          const go = async () => {
             if (asking) return;
+            if (!box.input.value) {
+              note.say('🙈', 'Type your password first.', 'warn');
+              box.input.focus();
+              return;
+            }
             asking = true;
             note.say('🔎', 'Asking the island keeper…');
             try {
-              await login.logIn(name, secret);
-              note.say('🎉', `Hi, ${name}!`, 'good');
+              welcome(name, await login.logIn(name, box.input.value));
             } catch (error) {
               asking = false;
               note.say(...loginTrouble(error), 'warn');
               this.sound.play('no');
-              pad.clear();
+              box.input.select();
             }
-          });
-          body.replaceChildren(h('h3', {}, 'Who are you?'), nameRow, h('h3', {}, 'Your secret pictures'), note, pad.el);
+          };
+          const form = h(
+            'form',
+            {
+              class: 'login-form',
+              onsubmit: (e) => {
+                e.preventDefault();
+                go();
+              },
+            },
+            UI.username(name),
+            box.el,
+            note,
+            h('button', { class: 'big green', type: 'submit' }, '🔑 Log in'),
+          );
+          body.replaceChildren(h('h3', {}, 'Who are you?'), nameRow, form);
+          setTimeout(() => box.input.focus(), 60);
         };
         draw();
-        root.append(
-          h('h2', {}, '🔑 Log in'),
-          h('p', {}, 'Play as yourself, with your look, stickers and islands from your other devices.'),
-          body,
-          h(
-            'div',
-            { class: 'login-foot' },
-            h('span', { class: 'muted' }, 'No login yet?'),
-            h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '✨ Make my login'),
-          ),
-        );
+        root.append(h('h2', {}, '🔑 Log in'), h('p', {}, 'Play as yourself, with your look, stickers and islands from your other devices.'), body, foot);
       },
       { narrow: true },
     );
   }
 
-  // Making a login, or new secret pictures for yours: four pictures, then the
-  // same four again, to be sure. Made as the guest, the page plays as the new
-  // login once this closes.
-  makeLoginDialog() {
+  // Making a login, or a new password for yours: the password twice, to be
+  // sure. Made as the guest, the page plays as the new login once this
+  // closes. why: what to say first, when the keeper asked for a password.
+  makeLoginDialog({ why = '' } = {}) {
     const login = this.handlers.login;
     const loggedIn = Boolean(login.who());
     const name = this.profile.name;
     let made = false;
+    let asking = false;
     this.openModal(
       (root) => {
-        const body = h('div');
         const note = this.loginNote();
-        let first = null;
-        const ask = () => {
-          const pad = this.picturePad(
-            (secret) => {
-              if (!first) {
-                first = secret;
-                note.say('👀', 'Now tap the same four again, to be sure.');
-                ask();
-              } else if (first.join() !== secret.join()) {
-                first = null;
-                this.sound.play('no');
-                note.say('🙈', 'Those were not the same. Let’s start again!', 'warn');
-                ask();
-              } else make(secret);
-            },
-            { show: true },
-          );
-          body.replaceChildren(h('h3', {}, first ? 'The same four again' : 'Pick four secret pictures'), note, pad.el);
-        };
-        const make = async (secret) => {
-          body.replaceChildren(note, h('div', { class: 'secret-shown', 'aria-label': 'Your secret pictures' }, ...secret.map((k) => SECRET_PICTURES.find((p) => p.key === k).icon)));
+        const box = this.passwordBox(loggedIn ? 'New password' : 'Password', 'new-password');
+        const again = this.passwordBox('The same password again', 'new-password');
+        const button = h('button', { class: 'big green', type: 'submit' }, loggedIn ? '🔒 Save my password' : '✨ Make my login');
+        const go = async () => {
+          if (asking) return;
+          const problem = passwordProblem(box.input.value, name);
+          if (problem) {
+            note.say('🙈', PASSWORD_HELP[problem], 'warn');
+            box.input.focus();
+            return;
+          }
+          if (box.input.value !== again.input.value) {
+            note.say('🙈', 'The two passwords are not the same. Try again!', 'warn');
+            again.input.select();
+            return;
+          }
+          asking = true;
+          button.disabled = true;
           note.say('🔎', 'Asking the island keeper…');
           try {
-            await login.make(secret);
+            await login.make(box.input.value);
           } catch (error) {
-            first = null;
+            asking = false;
+            button.disabled = false;
             note.say(...loginTrouble(error), 'warn');
             this.sound.play('no');
-            ask();
             return;
           }
           made = true;
           this.sound.play('sticker');
-          note.say('🎉', loggedIn ? 'Your new pictures are ready!' : `Your login is ready! Log in on any device with your name, ${name}, and these pictures.`, 'good');
-          body.append(
-            h('p', { class: 'muted' }, 'Ask a grown-up to help you remember them.'),
-            h('button', { class: 'big green', type: 'button', style: 'margin-top:12px', onclick: () => this.closeModal() }, '👍 Got it'),
+          form.replaceChildren(
+            note,
+            h('p', { class: 'muted' }, 'Ask a grown-up to help you remember it.'),
+            h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, '👍 Got it'),
           );
+          note.say('🎉', loggedIn ? 'Your new password is ready!' : `Your login is ready! Log in on any device with your name, ${name}, and your password.`, 'good');
         };
-        ask();
-        root.append(
-          h('h2', {}, loggedIn ? '🖼️ New secret pictures' : '✨ Make my login'),
-          h(
-            'p',
-            {},
-            loggedIn
-              ? `Pick four new secret pictures for ${name}.`
-              : `You will log in with your name, ${name}, and four secret pictures. Pick ones you will remember, and tell nobody but a grown-up.`,
-          ),
-          loggedIn ? null : h('p', { class: 'muted' }, 'To log in with another name, change it in 🎨 Change me first.'),
-          body,
+        const form = h(
+          'form',
+          {
+            class: 'login-form',
+            onsubmit: (e) => {
+              e.preventDefault();
+              go();
+            },
+          },
+          UI.username(name),
+          box.el,
+          again.el,
+          note,
+          button,
         );
+        // Not append(null), which would show "null".
+        root.append(
+          ...[
+            h('h2', {}, loggedIn ? '🔒 New password' : '✨ Make my login'),
+            why ? h('p', { class: 'login-note warn' }, `🔑 ${why}`) : null,
+            h(
+              'p',
+              {},
+              loggedIn
+                ? `Pick a new password for ${name}.`
+                : `You will log in with your name, ${name}, and a password. Pick one you will remember, and tell nobody but a grown-up.`,
+            ),
+            h('p', { class: 'muted' }, `At least ${PASSWORD_MIN} letters or numbers, and not your name.${loggedIn ? '' : ' To log in with another name, change it in 🎨 Change me first.'}`),
+            form,
+          ].filter(Boolean),
+        );
+        setTimeout(() => box.input.focus(), 60);
       },
       {
         narrow: true,
@@ -969,10 +1017,11 @@ export class UI {
     );
   }
 
-  // Logged in: who you are, how your copies are doing, new pictures, and
+  // Logged in: who you are, how your copies are doing, a new password, and
   // logging out.
   myLoginDialog() {
     const login = this.handlers.login;
+    const needsPassword = login.keeper.needsPassword;
     this.openModal(
       (root) => {
         const note = this.loginNote();
@@ -990,12 +1039,15 @@ export class UI {
           '🚪 Log out',
         );
         root.append(
-          h('h2', {}, '🔑 My login'),
-          h('p', {}, `You are logged in as ${this.profile.name}. Your look, stickers and islands are the same on every device you log in on with your name and your secret pictures.`),
-          h('p', { class: 'muted keeper-status' }, this.keeperText()),
-          h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.makeLoginDialog() }, '🖼️ New secret pictures'), out),
-          h('p', { class: 'muted', style: 'margin-top:12px' }, 'Log out when you are done on a device other people use too. Your islands stay safe with the island keeper.'),
-          note,
+          ...[
+            h('h2', {}, '🔑 My login'),
+            needsPassword ? h('p', { class: 'login-note warn' }, '🔑 Your login needs a password now, instead of secret pictures.') : null,
+            h('p', {}, `You are logged in as ${this.profile.name}. Your look, stickers and islands are the same on every device you log in on with your name and password.`),
+            h('p', { class: 'muted keeper-status' }, this.keeperText()),
+            h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: `chip${needsPassword ? ' on' : ''}`, type: 'button', onclick: () => this.makeLoginDialog() }, '🔒 New password'), out),
+            h('p', { class: 'muted', style: 'margin-top:12px' }, 'Log out when you are done on a device other people use too. Your islands stay safe with the island keeper.'),
+            note,
+          ].filter(Boolean),
         );
       },
       { narrow: true },

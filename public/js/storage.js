@@ -138,6 +138,54 @@ export function moveGuestTo(player) {
   return true;
 }
 
+// The guest's islands become a player's, when the player logging in says they
+// made them: each moves into the player's space, with the note of which copy
+// the keeper has (it moved those copies too). Returns false, with whatever
+// moved put back, if the browser refused.
+export function moveGuestIslandsTo(player) {
+  const to = PREFIX + spaceOf(player);
+  const guest = read(`${PREFIX}islands`, []);
+  const theirs = Array.isArray(guest) ? guest.filter((i) => typeof i?.id === 'string') : [];
+  const mine = read(`${to}islands`, []);
+  const moved = [];
+  const undo = () => {
+    for (const id of moved) {
+      write(`${PREFIX}island.${id}`, read(`${to}island.${id}`, null));
+      erase(`${to}island.${id}`);
+    }
+  };
+  for (const item of theirs) {
+    const save = read(`${PREFIX}island.${item.id}`, null);
+    if (!save) continue;
+    if (!write(`${to}island.${item.id}`, save)) {
+      undo();
+      return false;
+    }
+    erase(`${PREFIX}island.${item.id}`);
+    moved.push(item.id);
+  }
+  const byId = new Map([...(Array.isArray(mine) ? mine : []), ...theirs.filter((i) => moved.includes(i.id))].map((i) => [i.id, i]));
+  const list = [...byId.values()].sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
+  const sent = read(`${PREFIX}keeper`, null)?.sent ?? {};
+  const record = read(`${to}keeper`, {}) ?? {};
+  const ok = write(`${to}islands`, list) && write(`${to}keeper`, { ...record, sent: { ...record.sent, ...Object.fromEntries(moved.filter((id) => id in sent).map((id) => [id, sent[id]])) } });
+  if (!ok) {
+    undo();
+    return false;
+  }
+  erase(`${PREFIX}islands`);
+  return true;
+}
+
+// The guest starts afresh, keeping only how this device is set up: their
+// things went with the player who logged in.
+export function resetGuest() {
+  const old = read(`${PREFIX}profile`, null);
+  erase(`${PREFIX}keeper`);
+  erase(`${PREFIX}islands`);
+  write(`${PREFIX}profile`, { settings: old?.settings, hotbar: old?.hotbar, seenHelp: old?.seenHelp === true });
+}
+
 // ---------------------------------------------------------------- islands
 
 export const MAX_ISLANDS = 12;

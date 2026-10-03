@@ -7,15 +7,16 @@
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
 //   <data>/devices/<device>/device.json             when the device was seen, its profile
-//   <data>/devices/<device>/login.json              its login, if it made one: the secret
-//                                                   pictures' hash, and the logged-in devices
+//   <data>/devices/<device>/login.json              its login, if it made one: the password's
+//                                                   hash, and the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
 //   <data>/devices/<device>/islands/<id>/<day>.json the island as it was at the end of that day
 //
 // <device> is a hash of the secret device key, so a page can only ever add
 // to its own copies. A login turns that folder into a player: other devices
-// that log in with its name and secret pictures get a token that files their
-// copies there too, and brings its islands back to them. WebRTC comes from
+// that log in with its name and password get a token that files their copies
+// there too, and brings its islands back to them; a device's copies from
+// before it logged in can join them (adoptDevice). WebRTC comes from
 // node-datachannel, loaded only when the keeper goes online.
 import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -33,15 +34,18 @@ import {
   isPeerId,
   isPlayerId,
   isPublicKey,
-  isSecret,
   isToken,
   keptProfile,
   KEEPER_VERSION,
   KEY_ALGORITHM,
   loginName,
+  mergeProfiles,
   MAX_PARTS,
   MAX_TEXT,
   OLDEST_VERSION,
+  cleanPassword,
+  PASSWORD_MAX,
+  passwordProblem,
   randomHex,
   SIGN_ALGORITHM,
   toBase64Url,
@@ -158,11 +162,17 @@ async function folderSize(dir) {
   return total;
 }
 
-// A secret's hash. Four pictures of sixteen are few enough to try them all
-// with the hash in hand, so what keeps a login safe is that only the keeper
-// has it, and that it lets nobody try many times (see KeeperStore.login).
-const hashSecret = (secret, salt) =>
-  new Promise((done, fail) => scrypt(secret.join(' '), salt, 32, { N: 16384, r: 8, p: 1 }, (error, key) => (error ? fail(error) : done(key))));
+// A password's hash, slow to make, so that a copy of the folder does not
+// give the passwords away easily. What keeps a short one safe is that only
+// the keeper has the hash, and that it lets nobody try many times (see
+// KeeperStore.login).
+const hashPassword = (password, salt) =>
+  new Promise((done, fail) => scrypt(cleanPassword(password), salt, 32, { N: 16384, r: 8, p: 1 }, (error, key) => (error ? fail(error) : done(key))));
+const PASSWORD_WORDS = {
+  short: 'That password is too short.',
+  long: 'That password is too long.',
+  name: 'Pick a password that is not your name.',
+};
 // Tokens are kept as hashes too, so a copy of the folder lets nobody in.
 const hashToken = (token) => createHash('sha256').update(`kids-world session ${token}`).digest('hex');
 
@@ -331,23 +341,26 @@ export class KeeperStore {
     for (const [hash] of old.slice(MAX_SESSIONS)) delete login.sessions[hash];
   }
 
-  // Makes a login for a device's folder, or gives it new secret pictures.
+  // Makes a login for a device's folder, or gives it a new password.
   // profile: who the player is, kept first, as a login goes by their name.
   // Returns { player, token, name }; the token is for the device that made
-  // it, unless session is false (new pictures from a device already in, or
-  // from the admin pages).
-  makeLogin(device, secret, profile = null, { session = true } = {}) {
-    if (!isDeviceId(device) || !isSecret(secret)) return Promise.reject(new KeepError('bad', 'Those are not secret pictures.'));
+  // it, unless session is false (a new password from a device already in, or
+  // from the admin pages). A login from before passwords (made with secret
+  // pictures) becomes a password login this way, its devices still in.
+  makeLogin(device, password, profile = null, { session = true } = {}) {
+    if (!isDeviceId(device) || typeof password !== 'string') return Promise.reject(new KeepError('bad', 'That is not a password.'));
     return this.serial(async () => {
       if (profile) await this.storeProfile(device, keptProfile(profile));
       const record = await readJson(this.path(device, 'device.json'));
       const name = loginName(record?.profile?.name);
       if (!name) throw new KeepError('bad', 'The keeper needs to know your name first.');
+      const problem = passwordProblem(password, name);
+      if (problem) throw new KeepError('weak', PASSWORD_WORDS[problem], { problem });
       const old = await this.readLogin(device);
       const salt = randomBytes(16).toString('hex');
-      const hash = (await hashSecret(secret, salt)).toString('hex');
+      const hash = (await hashPassword(password, salt)).toString('hex');
       const now = this.now();
-      const login = { salt, hash, made: old?.made ?? now, changed: now, sessions: old?.sessions ?? {} };
+      const login = { kind: 'password', salt, hash, made: old?.made ?? now, changed: now, sessions: old?.sessions ?? {} };
       const token = session ? randomHex(16) : null;
       if (token) KeeperStore.addSession(login, token, now);
       await this.write(this.path(device, 'login.json'), JSON.stringify(login));
@@ -375,43 +388,46 @@ export class KeeperStore {
     }
   }
 
-  // Logs a device in: finds the player of this name whose secret pictures
-  // these are, and gives the device a token for them. Returns { player, token,
-  // profile }. Wrong pictures and a name with no login get the same answer,
-  // so nobody learns which names have one; after a few, that name waits.
-  login(name, secret) {
-    const run = this.checking.then(() => this.checkLogin(name, secret));
+  // Logs a device in: finds the player of this name whose password this is,
+  // and gives the device a token for them. Returns { player, token, profile }.
+  // A wrong password and a name with no login get the same answer, so nobody
+  // learns which names have one; after a few, that name waits. A login from
+  // before passwords has none to match: a device still logged in to it, or
+  // the admin pages, give it one.
+  login(name, password) {
+    const run = this.checking.then(() => this.checkLogin(name, password));
     this.checking = run.catch(() => {});
     return run;
   }
 
-  async checkLogin(name, secret) {
+  async checkLogin(name, password) {
     const who = loginName(name);
     const wait = who ? this.waitFor(who) : 0;
     if (wait > 0) throw new KeepError('wait', 'Too many tries. Wait a little, then try again.', { wait });
-    if (!who || !isSecret(secret)) throw new KeepError('wrong', 'Those are not the right pictures.');
+    const wrong = () => new KeepError('wrong', 'That is not the right password.');
+    if (!who || typeof password !== 'string' || [...cleanPassword(password)].length > PASSWORD_MAX) throw wrong();
     const found = [];
     const root = join(this.dir, 'devices');
     for (const device of await readdir(root).catch(() => [])) {
       if (!isDeviceId(device)) continue;
       const login = await this.readLogin(device);
-      if (!login) continue;
+      if (login?.kind !== 'password') continue;
       const record = await readJson(join(root, device, 'device.json'));
       if (loginName(record?.profile?.name) !== who) continue;
-      const hash = await hashSecret(secret, login.salt);
+      const hash = await hashPassword(password, login.salt);
       const kept = Buffer.from(login.hash, 'hex');
       if (kept.length === hash.length && timingSafeEqual(hash, kept)) found.push({ device, seen: record.lastSeen ?? 0 });
     }
     if (!found.length) {
       this.wrongTry(who);
-      throw new KeepError('wrong', 'Those are not the right pictures.');
+      throw wrong();
     }
     this.tries.delete(who);
     // Two players of one name with the same pictures: the one seen last.
     const { device } = found.sort((a, b) => b.seen - a.seen)[0];
     return this.serial(async () => {
       const login = await this.readLogin(device);
-      if (!login) throw new KeepError('wrong', 'Those are not the right pictures.');
+      if (!login) throw wrong();
       const token = randomHex(16);
       KeeperStore.addSession(login, token, this.now());
       await this.write(this.path(device, 'login.json'), JSON.stringify(login));
@@ -456,6 +472,42 @@ export class KeeperStore {
       if (!(await stat(file).catch(() => null))) return false;
       await this.remove(file);
       return true;
+    });
+  }
+
+  // A device's copies from before it logged in (or from a device that is
+  // gone, from the admin pages) become a player's: its islands move into the
+  // player's folder, where the newer copy of an island both have stays; its
+  // stickers and what it did join the player's profile (the most of each);
+  // and its folder goes. Returns how many islands moved.
+  adoptDevice(device, player) {
+    if (!isDeviceId(device) || !isPlayerId(player) || device === player) return Promise.reject(new KeepError('bad', 'That cannot be moved there.'));
+    return this.serial(async () => {
+      if (!(await this.readLogin(player))) throw new KeepError('bad', 'That player has no login.');
+      if (await this.readLogin(device)) throw new KeepError('bad', 'Those copies are a player with a login of their own.');
+      if (!(await stat(this.path(device)).catch(() => null))) return 0;
+      await mkdir(this.path(player, 'islands'), { recursive: true, mode: 0o700 });
+      let moved = 0;
+      for (const id of await readdir(this.path(device, 'islands')).catch(() => [])) {
+        if (!isIslandId(id)) continue;
+        const from = this.path(device, 'islands', id);
+        const to = this.path(player, 'islands', id);
+        const kept = await readJson(join(to, 'info.json'));
+        if (kept) {
+          if (((await readJson(join(from, 'info.json')))?.savedAt ?? 0) <= (kept.savedAt ?? 0)) continue;
+          await this.remove(to);
+        }
+        await rename(from, to);
+        moved++;
+      }
+      const theirs = (await readJson(this.path(device, 'device.json')))?.profile;
+      const record = await readJson(this.path(player, 'device.json'));
+      if (theirs && record?.profile) {
+        // The player's name, look and basket; everyone's stickers.
+        await this.seen(player, { profile: mergeProfiles(record.profile, { ...theirs, changedAt: 0 }), profileAt: this.now() });
+      }
+      await this.remove(this.path(device));
+      return moved;
     });
   }
 
@@ -531,8 +583,9 @@ export class KeeperStore {
         lastSeen: info.lastSeen ?? 0,
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
-        // Never the hashes: when it was made, and on how many devices it is.
-        login: login ? { made: login.made ?? 0, changed: login.changed ?? 0, devices: Object.keys(login.sessions).length } : null,
+        // Never the hashes: when it was made, on how many devices it is, and
+        // whether it has a password yet (one from before passwords has not).
+        login: login ? { made: login.made ?? 0, changed: login.changed ?? 0, devices: Object.keys(login.sessions).length, password: login.kind === 'password' } : null,
         islands,
       });
     }
@@ -940,13 +993,18 @@ export class Keeper extends EventEmitter {
       const { player, token } = msg.login && typeof msg.login === 'object' ? msg.login : {};
       const ok = Boolean(player) && (await this.store.checkSession(player, token));
       this.from(conn, msg.device, ok ? player : null, ok ? token : null);
-      this.reply(conn, { t: 'me', ...(ok ? { player } : {}) });
+      const needsPassword = ok && (await this.store.readLogin(player))?.kind !== 'password';
+      this.reply(conn, { t: 'me', ...(ok ? { player } : {}), ...(needsPassword ? { needsPassword } : {}) });
       return;
     }
     const mine = (what) => {
       if (!conn.player) throw new KeepError('bad', `Log in to ${what}.`);
       return conn.player;
     };
+    // A page still open from when logins had secret pictures.
+    if ((msg.t === 'login' || msg.t === 'make-login') && msg.secret !== undefined && msg.password === undefined) {
+      throw new KeepError('old', 'Reload the page: logins take a password now.');
+    }
     switch (msg.t) {
       case 'island': {
         const { device, savedAt, name, player, stale } = await this.store.keepIslandIn(conn.folder, msg.id, msg.save, { newerOnly: Boolean(conn.player) });
@@ -961,18 +1019,29 @@ export class Keeper extends EventEmitter {
         break;
       }
       case 'login': {
-        const { player, token, profile } = await this.store.login(msg.name, msg.secret);
+        const { player, token, profile } = await this.store.login(msg.name, msg.password);
         this.from(conn, conn.device, player, token);
         this.reply(conn, { t: 'login', player, token, profile });
         this.note({ device: player, what: 'login', player: profile?.name ?? '' });
         break;
       }
       case 'make-login': {
-        // New pictures for the player it is logged in to, or a login for this device's folder.
-        const { player, token, name } = await this.store.makeLogin(conn.folder, msg.secret, conn.player ? null : msg.profile, { session: !conn.player });
+        // A new password for the player it is logged in to, or a login for this device's folder.
+        const { player, token, name } = await this.store.makeLogin(conn.folder, msg.password, conn.player ? null : msg.profile, { session: !conn.player });
         if (token) this.from(conn, conn.device, player, token);
         this.reply(conn, { t: 'login', player, ...(token ? { token } : {}) });
-        this.note({ device: player, what: token ? 'made-login' : 'new-pictures', player: name });
+        this.note({ device: player, what: token ? 'made-login' : 'new-password', player: name });
+        break;
+      }
+      case 'adopt': {
+        // What this device sent before it logged in, for the player it logged
+        // in as: the device's key (in 'me') and the player's token prove both.
+        if (!(await this.store.checkSession(msg.player, msg.token))) throw new KeepError('gone', 'That login is gone.');
+        const device = KeeperStore.deviceId(conn.device);
+        const islands = device === msg.player ? 0 : await this.store.adoptDevice(device, msg.player);
+        this.reply(conn, { t: 'kept', what: 'adopt', islands });
+        const record = await this.store.list(msg.player);
+        this.note({ device: msg.player, what: 'adopt', islands, player: record.profile?.name ?? '' });
         break;
       }
       case 'logout':

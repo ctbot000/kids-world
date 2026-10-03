@@ -1426,69 +1426,69 @@ kbd {
 
 /* ------------------------------------------------ logins */
 
-/* Secret pictures: four slots that fill as you tap, over a 4×4 pad. */
-.secret-slots {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin: 4px 0 12px;
+.login-form {
+  margin-top: 6px;
 }
 
-.secret-slot {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
+.password-box {
+  display: block;
+  margin: 12px 0;
+}
+
+.password-box > span:first-child {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.password-box .row {
+  flex-wrap: nowrap;
+}
+
+/* 16px or more, or an iPhone zooms in on the box. */
+.text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
   border-radius: 14px;
-  border: 3px dashed var(--line);
+  border: 3px solid var(--line);
   background: white;
-  font-size: 1.7rem;
+  font: inherit;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
 }
 
-.secret-slot.on {
-  border-style: solid;
-  border-color: var(--sun-dark);
-  background: #fff3b0;
+.text-input:focus {
+  outline: none;
+  border-color: var(--sky);
 }
 
-/* Tapped, but kept secret: a dot. */
-.secret-slot.on:empty::after {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--ink);
+.chip.eye {
+  flex: none;
+  padding: 10px 12px;
 }
 
-.picture-pad {
+.login-answers {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  max-width: 320px;
-  margin: 0 auto;
-}
-
-.choice.picture {
-  min-height: 0;
-  aspect-ratio: 1;
-  padding: 0;
-}
-
-.choice.picture .emoji {
-  font-size: 2.1rem;
-}
-
-.secret-row {
-  justify-content: center;
+  gap: 10px;
   margin-top: 12px;
 }
 
-.secret-shown {
-  display: flex;
+.login-answers .chip {
   justify-content: center;
-  gap: 12px;
-  margin: 8px 0;
-  font-size: 2.8rem;
+}
+
+/* There for password managers, not to be seen. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* A name, a word at a time. */

@@ -289,25 +289,19 @@ select:hover {
   border-radius: 16px;
 }
 
-.pad {
-  display: grid;
-  grid-template-columns: repeat(8, 44px);
+.picker input {
+  min-width: 12em;
+  padding: 5px 12px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  font: 500 15px var(--font);
+  color: var(--ink);
+}
+
+.move {
+  display: inline-flex;
   gap: 6px;
-  margin-top: 8px;
-}
-
-.pad button {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 12px;
-  font-size: 24px;
-}
-
-.slots {
-  min-width: 8em;
-  font-size: 22px;
-  letter-spacing: 2px;
+  margin-left: auto;
 }
 
 button:disabled {
@@ -328,9 +322,6 @@ button:disabled {
     flex-wrap: wrap;
   }
 
-  .pad {
-    grid-template-columns: repeat(4, 44px);
-  }
 
   .island {
     flex-direction: column;

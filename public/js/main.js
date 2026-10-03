@@ -12,6 +12,7 @@ import { Sound } from './sound.js';
 import * as storage from './storage.js';
 import { UI } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
+import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { generate } from './shared/worldgen.js';
 
 const params = new URLSearchParams(location.search);
@@ -44,6 +45,10 @@ keeper.addEventListener('config', () => ui.renderLogin());
 keeper.addEventListener('islands', () => ui.renderIslandList());
 keeper.addEventListener('synced', () => ui.renderKeeper());
 keeper.addEventListener('gone', () => loginGone());
+keeper.addEventListener('needs-password', () => {
+  if (!session && !ui.modalOpen) ui.makeLoginDialog({ why: 'Logins have passwords now, instead of secret pictures. Pick one for yours!' });
+  else ui.toast('🔑', 'Your login needs a password now: pick one in 🔑 My login on the title screen.');
+});
 for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
 if (who) {
   const note = () => storage.notePlayer({ player: who.player, name: profile.name, look: profile.look });
@@ -388,6 +393,7 @@ function downloadIsland() {
 // What the page says once it has reloaded as someone else.
 const GREETINGS = {
   login: ['🔑', (name) => `Hi, ${name}! You are logged in. Your islands are on their way from the island keeper.`],
+  adopted: ['🧳', (name) => `Hi, ${name}! What you made on this device is yours now, on all your devices.`],
   made: ['🔑', (name) => `Your login is ready, ${name}! Log in on your other devices with your name and secret pictures.`],
   logout: ['👋', () => 'Logged out. See you soon!'],
   gone: ['🔑', () => 'Your login was taken away at the island keeper, so you are playing as a guest now.'],
@@ -417,15 +423,23 @@ function greet() {
 
 // Logged in somewhere else: this device plays as them from now on, with
 // their own things here if they played here before, else what the keeper
-// has of them (keeping this device's settings).
-function playAs({ player, token, profile: kept }) {
-  if (kept && !storage.loadFor(player, 'profile', null)) {
-    const d = profile.data;
-    storage.saveFor(player, 'profile', { ...kept, settings: d.settings, hotbar: d.hotbar, seenHelp: d.seenHelp });
+// has of them (keeping this device's settings). adopt: the guest's things
+// here are theirs, and come along (the keeper has moved its copies of them
+// already); the guest starts afresh.
+function playAs({ player, token, profile: kept }, { adopt = false } = {}) {
+  const d = profile.data;
+  const here = storage.loadFor(player, 'profile', null);
+  let mine = here ?? (kept ? { ...kept, settings: d.settings, hotbar: d.hotbar, seenHelp: d.seenHelp } : null);
+  if (adopt) profile.freeze();
+  if (adopt && storage.moveGuestIslandsTo(player)) {
+    const base = here && kept ? { ...here, ...mergeProfiles(here, kept) } : (mine ?? {});
+    mine = { ...base, ...addProgress(base, d), changedAt: Date.now(), tokens: { ...d.tokens, ...base.tokens } };
+    storage.resetGuest();
   }
+  if (mine && mine !== here) storage.saveFor(player, 'profile', mine);
   storage.saveWho({ player, token });
-  storage.notePlayer({ player, name: kept?.name ?? '', look: kept?.look ?? null });
-  reloadAs('login');
+  storage.notePlayer({ player, name: mine?.name ?? kept?.name ?? '', look: mine?.look ?? kept?.look ?? null });
+  reloadAs(adopt ? 'adopted' : 'login');
 }
 
 // The guest made a login: their things here become the player's.
@@ -452,11 +466,30 @@ const loginHandlers = {
   who: () => who,
   // Players who logged in on this device before, to pick from.
   known: () => storage.knownPlayers().filter((p) => p.player !== who?.player && p.name),
-  logIn: async (name, secret) => playAs(await keeper.logIn(name, secret)),
-  // Logged in: new secret pictures. As the guest: a login, after which the
-  // page reloads as the player once the dialog saying so is closed.
-  make: async (secret) => {
-    const reply = await keeper.makeLogin(secret);
+  // What the guest has on this device, for a player logging in to bring
+  // along if it is theirs: { name, islands, stickers, treasures }, or null.
+  guest: () => {
+    if (who) return null;
+    const d = profile.data;
+    const things = {
+      name: profile.name,
+      islands: storage.listIslands().length,
+      stickers: Object.keys(d.stickers).length,
+      treasures: Object.values(d.basket).reduce((a, b) => a + b, 0),
+    };
+    return things.islands || things.stickers || things.treasures ? things : null;
+  },
+  // Resolves with the keeper's answer, for enter() once you say whether the
+  // guest's things here are yours.
+  logIn: (name, password) => keeper.logIn(name, password),
+  enter: async (reply, adopt) => {
+    if (adopt) await keeper.adopt(reply.player, reply.token);
+    playAs(reply, { adopt });
+  },
+  // Logged in: a new password. As the guest: a login, after which the page
+  // reloads as the player once the dialog saying so is closed.
+  make: async (password) => {
+    const reply = await keeper.makeLogin(password);
     if (!who) becamePlayer(reply);
     return reply;
   },

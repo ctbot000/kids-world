@@ -1,7 +1,8 @@
 // The keeper's admin pages, at /admin/: what it has kept and from whom, with
-// downloads of any day's copy and deletes, and players' logins: new secret
-// pictures for a player who forgot theirs, or no login at all. Only for this
-// computer: requests from other machines, or under any other host name (a DNS
+// downloads of any day's copy and deletes, and players' logins: a new
+// password for a player who forgot theirs, no login at all, or the copies of
+// a device that is gone moved into a player's login. Only for this computer:
+// requests from other machines, or under any other host name (a DNS
 // rebinding page), are refused, and changes need a header no other site's
 // page can send.
 import { createReadStream } from 'node:fs';
@@ -84,17 +85,31 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
       });
       return true;
     }
+    const move = /^\/admin\/api\/devices\/([^/]+)\/move$/.exec(pathname);
+    if (move) {
+      // A device's copies (one that is gone, say) into a player's login.
+      if (req.method !== 'POST') res.writeHead(405, { Allow: 'POST' }).end();
+      else {
+        const body = await readJson(req);
+        try {
+          json(res, 200, { ok: true, islands: await store.adoptDevice(move[1], body?.to) });
+        } catch (error) {
+          json(res, error.code === 'bad' ? 400 : 500, { error: error.message });
+        }
+      }
+      return true;
+    }
     const login = /^\/admin\/api\/devices\/([^/]+)\/login$/.exec(pathname);
     if (login) {
       const [, device] = login;
       if (req.method === 'PUT') {
-        // New secret pictures (a login, if there was none); the devices logged in stay so.
+        // A new password (a login, if there was none); the devices logged in stay so.
         const body = await readJson(req);
         try {
-          await store.makeLogin(device, body?.secret, null, { session: false });
+          await store.makeLogin(device, body?.password, null, { session: false });
           json(res, 200, { ok: true });
         } catch (error) {
-          json(res, error.code === 'bad' ? 400 : 500, { error: error.message });
+          json(res, error.code === 'bad' || error.code === 'weak' ? 400 : 500, { error: error.message });
         }
       } else if (req.method === 'DELETE') {
         // Every device logged in to it is logged out.

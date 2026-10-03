@@ -32,7 +32,7 @@ const RESYNC_MS = 2 * 60000;
 
 // Why the keeper could not do something you asked: asleep (not online),
 // refused (someone else has its id), gone (your login was removed), none (no
-// keeper), or what it said: wrong (pictures), wait, bad, full.
+// keeper), or what it said: wrong (password), wait, weak (password), bad, full.
 export class KeeperProblem extends Error {
   constructor(code, text = '', extra = {}) {
     super(text || code);
@@ -68,8 +68,11 @@ export class KeeperClient extends EventTarget {
     this.profileSentAt = 0;
     // What you asked for (logging in, out...), sent before any copy.
     this.requests = [];
-    // Logged in: whether this connection brought back what the keeper has yet.
+    // Logged in: whether this connection brought back what the keeper has yet,
+    // and whether the login still needs a password (it was made with secret
+    // pictures, before passwords).
     this.listed = false;
+    this.needsPassword = false;
     this.toFetch = [];
     this.syncedAt = 0;
     const saved = load('keeper', null);
@@ -274,16 +277,25 @@ export class KeeperClient extends EventTarget {
     });
   }
 
-  // Logs in as the player with this name and these secret pictures.
-  // Resolves with { player, token, profile }.
-  logIn(name, secret) {
-    return this.request({ t: 'login', name, secret }, { halt: true });
+  // Logs in as the player with this name and password. Resolves with
+  // { player, token, profile }.
+  logIn(name, password) {
+    return this.request({ t: 'login', name, password }, { halt: true });
   }
 
-  // Makes a login for you, or, logged in, gives it new pictures. Resolves
+  // Makes a login for you, or, logged in, gives it a new password. Resolves
   // with { player, token? }.
-  makeLogin(secret) {
-    return this.request({ t: 'make-login', secret, profile: keptProfile(this.profile.data) }, { halt: !this.login });
+  async makeLogin(password) {
+    const reply = await this.request({ t: 'make-login', password, profile: keptProfile(this.profile.data) }, { halt: !this.login });
+    this.needsPassword = false;
+    return reply;
+  }
+
+  // What this device sent the keeper before it logged in as that player
+  // becomes theirs there too (see KeeperStore.adoptDevice): this page's
+  // device key and the player's token prove both. Resolves with { islands }.
+  adopt(player, token) {
+    return this.request({ t: 'adopt', player, token }, { halt: true });
   }
 
   // Tells the keeper this device is logged out, if it can be reached soon,
@@ -460,6 +472,10 @@ export class KeeperClient extends EventTarget {
       }
       clearTimeout(this.timer);
       this.timer = 0;
+      if (msg.needsPassword && !this.needsPassword) {
+        this.needsPassword = true;
+        this.emit('needs-password');
+      }
       this.setState('ready');
       this.flush();
       return;

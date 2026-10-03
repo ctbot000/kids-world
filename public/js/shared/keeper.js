@@ -1,8 +1,8 @@
 // The keeper: a computer that keeps a copy of every player's islands and of
 // who they are, sent by their browsers peer to peer whenever it is online. A
-// player can also make a login there, their name and four secret pictures,
-// and log in with it on any other device to play as themselves: the same
-// look, stickers, basket and islands everywhere.
+// player can also make a login there, their name and a password, and log in
+// with it on any other device to play as themselves: the same look,
+// stickers, basket and islands everywhere.
 // This is what the page and the keeper (server/keeper.js) agree on: the
 // messages, how the keeper proves it is the real one, and the limits.
 //
@@ -15,9 +15,13 @@
 //   page → keeper   { t: 'island', id, save }  or  { t: 'profile', profile }
 //   keeper → page   { t: 'kept', what, id?, savedAt? }  or  { t: 'error', code, text }
 // Logins:
-//   { t: 'login', name, secret }          → { t: 'login', player, token, profile }
-//   { t: 'make-login', secret, profile }  → { t: 'login', player, token? }  (new pictures, once logged in)
-//   { t: 'logout' }                       → { t: 'kept', what: 'logout' }
+//   { t: 'login', name, password }          → { t: 'login', player, token, profile }
+//   { t: 'make-login', password, profile }  → { t: 'login', player, token? }  (a new password, once logged in)
+//   { t: 'adopt', player, token }           → { t: 'kept', what: 'adopt', islands }
+//                                             (this device's copies from before become the player's)
+//   { t: 'logout' }                         → { t: 'kept', what: 'logout' }
+// The 'me' answer says needsPassword for a login made with secret pictures,
+// which logins had before passwords: a device logged in to one sets one.
 // A logged-in page also brings back what its other devices sent:
 //   { t: 'list' }                         → { t: 'list', profile, islands, forgotten }
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
@@ -121,29 +125,24 @@ export function keptProfile(raw) {
 
 // ---------------------------------------------------------------- logins
 
-// A login's password: four of these, in order, tapped rather than typed.
-export const SECRET_PICTURES = [
-  { key: 'apple', icon: '🍎', name: 'Apple' },
-  { key: 'dog', icon: '🐶', name: 'Dog' },
-  { key: 'star', icon: '⭐', name: 'Star' },
-  { key: 'rocket', icon: '🚀', name: 'Rocket' },
-  { key: 'rainbow', icon: '🌈', name: 'Rainbow' },
-  { key: 'ice-cream', icon: '🍦', name: 'Ice cream' },
-  { key: 'fish', icon: '🐟', name: 'Fish' },
-  { key: 'sunflower', icon: '🌻', name: 'Sunflower' },
-  { key: 'car', icon: '🚗', name: 'Car' },
-  { key: 'balloon', icon: '🎈', name: 'Balloon' },
-  { key: 'butterfly', icon: '🦋', name: 'Butterfly' },
-  { key: 'pizza', icon: '🍕', name: 'Pizza' },
-  { key: 'ball', icon: '⚽', name: 'Ball' },
-  { key: 'turtle', icon: '🐢', name: 'Turtle' },
-  { key: 'moon', icon: '🌙', name: 'Moon' },
-  { key: 'present', icon: '🎁', name: 'Present' },
-];
-export const SECRET_LENGTH = 4;
-const PICTURE_KEYS = new Set(SECRET_PICTURES.map((s) => s.key));
+// A login's password: typed, never shown to anyone, PASSWORD_MIN to
+// PASSWORD_MAX characters, and not just the name. Compared in Unicode NFC, so
+// the same letters from any keyboard are the same password.
+export const PASSWORD_MIN = 6;
+export const PASSWORD_MAX = 64;
+export const cleanPassword = (v) => (typeof v === 'string' ? v.normalize('NFC') : '');
 
-export const isSecret = (v) => Array.isArray(v) && v.length === SECRET_LENGTH && v.every((k) => PICTURE_KEYS.has(k));
+// What is wrong with a new password, for this name: 'short', 'long',
+// 'name', or '' when nothing is.
+export function passwordProblem(password, name = '') {
+  const p = cleanPassword(password);
+  const length = [...p].length;
+  if (length < PASSWORD_MIN) return 'short';
+  if (length > PASSWORD_MAX) return 'long';
+  const squash = (text) => text.toLowerCase().replace(/[\s_-]+/g, '');
+  if (name && squash(p) === squash(name)) return 'name';
+  return '';
+}
 
 // A login's name: the player's own, without the number an island adds when
 // two players there have the same one.
@@ -161,6 +160,22 @@ export function mergeProfiles(mine, theirs) {
   const stats = { ...a.stats };
   for (const [key, n] of Object.entries(b.stats)) stats[key] = Math.max(stats[key] ?? 0, n);
   return { name: newer.name, look: newer.look, basket: newer.basket, changedAt: newer.changedAt, stats, stickers };
+}
+
+// What you did as the guest on a device, added to the player you logged in
+// as there, once, when you say it was you: every sticker either has earned
+// (dated the earlier day), and the two baskets and what each has done added
+// up (the highest you flew is the higher of the two).
+export function addProgress(player, guest) {
+  const a = keptProfile(player);
+  const b = keptProfile(guest);
+  const stickers = { ...a.stickers };
+  for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
+  const stats = { ...a.stats };
+  for (const [key, n] of Object.entries(b.stats)) stats[key] = key === 'highest' ? Math.max(stats[key] ?? 0, n) : (stats[key] ?? 0) + n;
+  const basket = {};
+  for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
+  return { stickers, stats, basket };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:

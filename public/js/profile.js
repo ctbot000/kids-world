@@ -157,6 +157,13 @@ export class Profile extends EventTarget {
 
   store() {
     clearTimeout(this.timer);
-    save('profile', this.data);
+    if (!this.frozen) save('profile', this.data);
+  }
+
+  // Writes no more: the page is about to reload as a player these things
+  // went to, and must not write them back here.
+  freeze() {
+    this.store();
+    this.frozen = true;
   }
 }

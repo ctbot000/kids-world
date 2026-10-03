@@ -1,13 +1,14 @@
 // The keeper's admin page: who has sent copies, their islands seen from above
 // (drawn with the game's own map code), and downloads or deletes, and their
-// logins: new secret pictures for a player who forgot theirs, or none at all.
-// It reads /admin/api/state every few seconds.
+// logins: a new password for a player who forgot theirs, none at all, or the
+// copies of a device that is gone moved into a player's login. It reads
+// /admin/api/state every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
 import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
-import { SECRET_LENGTH, SECRET_PICTURES } from '/js/shared/keeper.js';
+import { passwordProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
 import { ANIMALS } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
@@ -91,95 +92,80 @@ async function remove(path, question) {
   refresh(true);
 }
 
-// While new secret pictures are being picked, the page is not redrawn under them.
-let picking = 0;
+// While a password is being typed, the page is not redrawn under it.
+let editing = 0;
 
-// Picking four secret pictures for a player, in order; done() once saved or cancelled.
-function picturePicker(device, done) {
-  picking++;
-  const picked = [];
-  const icon = (key) => SECRET_PICTURES.find((p) => p.key === key).icon;
-  const slots = h('span', { class: 'slots', 'aria-live': 'polite' });
-  const save = h('button', { type: 'button', disabled: true }, 'Save');
-  const draw = () => {
-    slots.textContent = Array.from({ length: SECRET_LENGTH }, (_, i) => (picked[i] ? icon(picked[i]) : '·')).join(' ');
-    save.disabled = picked.length !== SECRET_LENGTH;
-  };
+const PASSWORD_WORDS = { short: 'At least 6 characters.', long: 'At most 64 characters.', name: 'Not the player’s name.' };
+
+// A new password for a player, typed here to be told to them; done() once
+// saved or cancelled.
+function passwordForm(device, done) {
+  editing++;
+  const name = device.profile?.name ?? '';
+  const input = h('input', { type: 'text', autocomplete: 'off', 'aria-label': `New password for ${name || 'the player'}` });
+  input.spellcheck = false;
+  const note = h('span', { class: 'muted', 'aria-live': 'polite' });
   const close = () => {
-    picking--;
+    editing--;
     done();
   };
-  save.addEventListener('click', async () => {
+  const save = async (e) => {
+    e.preventDefault();
+    const problem = passwordProblem(input.value, name);
+    if (problem) {
+      note.textContent = PASSWORD_WORDS[problem];
+      return;
+    }
     const res = await api(`devices/${device.id}/login`, {
       method: 'PUT',
       headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: picked }),
+      body: JSON.stringify({ password: input.value }),
     });
-    if (!res.ok) alert(`Those pictures could not be saved: ${(await res.json().catch(() => null))?.error ?? 'is the keeper still running?'}`);
+    if (!res.ok) {
+      note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
+      return;
+    }
     close();
     refresh(true);
-  });
-  draw();
+  };
+  setTimeout(() => input.focus(), 0);
   return h(
-    'div',
-    { class: 'picker' },
-    h('div', { class: 'muted' }, `Tap four pictures in order, then tell ${device.profile?.name ?? 'the player'} what they are.`),
-    h(
-      'div',
-      { class: 'pad' },
-      ...SECRET_PICTURES.map((p) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            title: p.name,
-            'aria-label': p.name,
-            onclick: () => {
-              if (picked.length < SECRET_LENGTH) picked.push(p.key);
-              draw();
-            },
-          },
-          p.icon,
-        ),
-      ),
-    ),
-    h(
-      'div',
-      { class: 'actions' },
-      slots,
-      h(
-        'button',
-        {
-          type: 'button',
-          onclick: () => {
-            picked.pop();
-            draw();
-          },
-        },
-        'Back',
-      ),
-      save,
-      h('button', { type: 'button', onclick: close }, 'Cancel'),
-    ),
+    'form',
+    { class: 'picker', onsubmit: save },
+    h('div', { class: 'muted' }, `Type a new password, then tell ${name || 'the player'} what it is. Devices logged in as them stay so.`),
+    h('div', { class: 'actions' }, input, h('button', { type: 'submit' }, 'Save'), h('button', { type: 'button', onclick: close }, 'Cancel'), note),
   );
 }
 
-// A player's login: whether they have one and on how many devices, new
-// pictures for one who forgot theirs, or none.
-function loginRow(device) {
+// A player's login: whether they have one, on how many devices, and whether
+// it still needs a password (one made with secret pictures, before
+// passwords); a new password for one who forgot theirs, or none. A device
+// with no login can have its copies moved into a player's login instead,
+// say once a tablet is replaced and its player logs in on the new one.
+function loginRow(device, players) {
   const login = device.login;
   const name = device.profile?.name || 'this player';
   const slot = h('div');
-  const pick = () => slot.replaceChildren(picturePicker(device, () => slot.replaceChildren()));
+  const type = () => slot.replaceChildren(passwordForm(device, () => slot.replaceChildren()));
+  const into = h('select', { 'aria-label': `Player to move ${name}'s copies to` }, ...players.map((p) => h('option', { value: p.id }, p.profile?.name || p.id)));
+  const move = async () => {
+    const to = players.find((p) => p.id === into.value);
+    const what = plural(device.islands.length, 'island', 'islands');
+    if (!to || !confirm(`Move ${name}'s ${what} and stickers into ${to.profile?.name ?? 'that player'}'s login? These copies then show up on every device logged in as them, and ${name} goes from this list.`)) return;
+    const res = await api(`devices/${device.id}/move`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.id }) });
+    if (!res.ok) alert(`That could not be moved: ${(await res.json().catch(() => null))?.error ?? 'is the keeper still running?'}`);
+    refresh(true);
+  };
+  const words = login ? `🔑 Logs in on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'}` : '🔑 No login';
   return h(
     'div',
     { class: 'login' },
     h(
       'div',
       { class: 'login-line' },
-      h('span', {}, login ? `🔑 Logs in on ${plural(login.devices, 'device', 'devices')}` : '🔑 No login'),
+      h('span', {}, words),
       // A login goes by the player's name, so there is none to make without one.
-      device.profile?.name ? h('button', { type: 'button', onclick: pick }, login ? 'New secret pictures' : 'Make a login') : null,
+      device.profile?.name ? h('button', { type: 'button', onclick: type }, login ? (login.password ? 'New password' : 'Set a password') : 'Make a login') : null,
       login
         ? h(
             'button',
@@ -187,6 +173,7 @@ function loginRow(device) {
             'Remove login',
           )
         : null,
+      !login && players.length ? h('span', { class: 'move' }, into, h('button', { type: 'button', onclick: move }, 'Move into this login')) : null,
     ),
     slot,
   );
@@ -243,7 +230,8 @@ const DID = {
   profile: () => ' sent their profile',
   login: () => ' logged in on a device',
   'made-login': () => ' made a login',
-  'new-pictures': () => ' picked new secret pictures',
+  'new-password': () => ' picked a new password',
+  adopt: (e) => ` brought ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what they did'} from before into their login`,
 };
 
 function renderRecent(state) {
@@ -289,7 +277,7 @@ function islandCard(device, island) {
   );
 }
 
-function deviceCard(device) {
+function deviceCard(device, players) {
   const p = device.profile;
   const animal = ANIMALS.find((a) => a.key === p?.look?.animal);
   const stickers = STICKERS.filter((s) => p?.stickers?.[s.key]);
@@ -318,7 +306,7 @@ function deviceCard(device) {
           h('span', {}, `🧱 ${plural(p.stats?.placed ?? 0, 'block', 'blocks')} built`),
         )
       : null,
-    loginRow(device),
+    loginRow(device, players.filter((p) => p.id !== device.id)),
     device.islands.length ? h('div', { class: 'islands' }, ...device.islands.map((i) => islandCard(device, i))) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
   );
 }
@@ -332,12 +320,12 @@ function render(state) {
   renderSummary(state);
   renderRecent(state);
   const key = JSON.stringify(state.devices);
-  if (picking || (key === shown && Date.now() - drawnAt < REDRAW_MS)) return;
+  if (editing || (key === shown && Date.now() - drawnAt < REDRAW_MS)) return;
   shown = key;
   drawnAt = Date.now();
   $('devices').replaceChildren(
     ...(state.devices.length
-      ? state.devices.map(deviceCard)
+      ? state.devices.map((d) => deviceCard(d, state.devices.filter((p) => p.login)))
       : [h('p', { class: 'empty' }, 'Nothing kept yet. When someone plays while the keeper is online, their islands show up here.')]),
   );
 }
