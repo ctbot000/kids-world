@@ -386,7 +386,9 @@ function downloadIsland() {
   const blob = new Blob([JSON.stringify(snap)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${(snap.meta?.name ?? 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.kidsworld.json`;
+  // Named after the island, in letters and numbers of any language.
+  const base = (snap.meta?.name ?? '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase();
+  a.download = `${base || 'island'}.kidsworld.json`;
   document.body.append(a);
   a.click();
   a.remove();

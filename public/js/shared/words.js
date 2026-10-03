@@ -55,12 +55,17 @@ export function randomIslandName(theme = 'sunny', random = Math.random) {
   return `${pick(words, random)} ${place}`;
 }
 
-export function isValidIslandName(name) {
-  if (typeof name !== 'string') return false;
-  const m = /^([A-Z][a-z]+) ([A-Z][a-z]+)$/.exec(name);
-  if (!m) return false;
-  const words = Object.values(ISLAND_WORDS).flat();
-  return words.includes(m[1]) && [...ISLAND_PLACES, 'Fields', 'Plains'].includes(m[2]);
+// Invisible characters, all but what emoji are made of (see cleanChat).
+const INVISIBLE = /(?![\u200d\u{e0020}-\u{e007f}])\p{C}/gu;
+
+// An island's name: anything typed, up to ISLAND_NAME_MAX letters, numbers,
+// signs, emoji and spaces, tidied as typed talk is. '' for nothing to see, or
+// for too much.
+export const ISLAND_NAME_MAX = 32;
+export function cleanIslandName(raw) {
+  if (typeof raw !== 'string') return '';
+  const name = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(INVISIBLE, '').replace(/ {2,}/g, ' ').trim();
+  return /[\p{L}\p{N}\p{P}\p{S}]/u.test(name) && [...name].length <= ISLAND_NAME_MAX ? name : '';
 }
 
 // Typed talk: up to CHAT_MAX letters, numbers, signs, emoji and spaces, as
@@ -70,7 +75,7 @@ export function isValidIslandName(name) {
 export const CHAT_MAX = 120;
 export function cleanChat(raw) {
   if (typeof raw !== 'string') return '';
-  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(/(?![\u200d\u{e0020}-\u{e007f}])\p{C}/gu, '').trim();
+  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(INVISIBLE, '').trim();
   return text && [...text].length <= CHAT_MAX ? text : '';
 }
 

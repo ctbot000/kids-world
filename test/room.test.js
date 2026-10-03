@@ -71,6 +71,24 @@ test('a name is taken as typed, tidied, but an empty, invisible or endless one i
   for (const name of ['', '   ', 'in\u200bvisible', 'x'.repeat(33), 42]) assert.ok(isMadeUpName(named(name)), JSON.stringify(name));
 });
 
+test("an island's name is taken as typed, tidied, but one with nothing to see or too long is rolled", () => {
+  const [zwj, zwsp, rlo] = [0x200d, 0x200b, 0x202e].map((c) => String.fromCharCode(c));
+  const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467);
+  const named = (name) => makeRoom({ name }).room.world.name;
+  assert.equal(named('민지네 섬'), '민지네 섬');
+  assert.equal(named('  The   Best\nIsland 🏝️ '), 'The Best Island 🏝️');
+  assert.equal(named(`Our ${family} home`), `Our ${family} home`, 'emoji keep their joiners');
+  assert.equal(named(`in${zwsp}visible ${rlo}island`), 'invisible island', 'nothing invisible is kept');
+  assert.equal(named('<b>Bold</b>'), '<b>Bold</b>', 'shown as text, never as markup');
+  assert.equal(named('x'.repeat(32)), 'x'.repeat(32));
+  for (const name of ['', '   ', zwsp, zwj + zwj, 'x'.repeat(33), 42]) assert.match(named(name), /^[A-Z][a-z]+ [A-Z][a-z]+$/, JSON.stringify(name));
+  const save = makeRoom({ name: '민지네 섬' }).room.exportSave();
+  const opened = (name) => new Room({ save: { ...save, meta: { ...save.meta, name } } }).world.name;
+  assert.equal(opened('민지네 섬'), '민지네 섬', 'a saved island keeps it');
+  assert.equal(opened(`Old${zwsp} Cove`), 'Old Cove', 'and an opened one is tidied');
+  assert.equal(opened(zwsp), 'My Island');
+});
+
 test('a new display name comes with a look while on the island, and stays told apart', () => {
   const { room } = makeRoom();
   const a = join(room, { name: 'Minji' });

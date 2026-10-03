@@ -15,7 +15,7 @@ import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
-import { cleanChat, cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
 
@@ -98,7 +98,7 @@ export class Room {
       this.loadSave(save);
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
-      const islandName = isValidIslandName(name) ? name : randomIslandName(theme, random);
+      const islandName = cleanIslandName(name) || randomIslandName(theme, random);
       const made = generate({ seed: s, theme, name: islandName });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);

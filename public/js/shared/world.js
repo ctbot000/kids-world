@@ -2,6 +2,7 @@
 // stored column by column (y runs fastest), which keeps a column's blocks
 // together and makes the run-length encoding of a whole island tiny.
 import { AIR, MAGIC_FLOOR, SOLID, isKnown } from './blocks.js';
+import { cleanIslandName } from './words.js';
 
 export const CHUNK = 16;
 
@@ -97,7 +98,7 @@ export function normalizeMeta(meta) {
     sea,
     theme: ['sunny', 'snowy', 'candy', 'flat'].includes(meta?.theme) ? meta.theme : 'sunny',
     seed: Number.isInteger(meta?.seed) ? meta.seed >>> 0 : 1,
-    name: typeof meta?.name === 'string' ? meta.name.slice(0, 40) : 'My Island',
+    name: cleanIslandName(meta?.name) || 'My Island',
     spawn: {
       x: finite(spawn?.x, 0.5, W - 0.5, W / 2),
       y: finite(spawn?.y, 1, H, sea + 4),

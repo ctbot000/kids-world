@@ -8,7 +8,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
@@ -298,12 +298,27 @@ export class UI {
     chip.classList.toggle('on', Boolean(login?.who()));
   }
 
+  // The island's name: any typed, or one rolled for its kind (shown grey
+  // while the box is empty). While what is typed is no name, the last one stays.
   newIslandDialog() {
     let theme = 'sunny';
-    let name = randomIslandName(theme);
+    let rolled = randomIslandName(theme);
+    let own = '';
     let online = true;
     this.openModal((root) => {
-      const nameBox = h('div', { class: 'name-box' }, name);
+      const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: rolled, placeholder: rolled, maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
+      nameBox.spellcheck = false;
+      nameBox.addEventListener('input', () => (own = nameBox.value.trim() ? cleanIslandName(nameBox.value) || own : ''));
+      nameBox.addEventListener('change', () => {
+        if (nameBox.value.trim()) nameBox.value = own || rolled;
+      });
+      // 🎲 drops a typed name; a kind of island picked keeps it.
+      const roll = (anew) => {
+        rolled = randomIslandName(theme);
+        nameBox.placeholder = rolled;
+        if (anew) own = '';
+        if (!own && (anew || nameBox.value.trim())) nameBox.value = rolled;
+      };
       const grid = h('div', { class: 'grid wide' });
       const draw = () => {
         grid.replaceChildren(
@@ -315,8 +330,7 @@ export class UI {
                 type: 'button',
                 onclick: () => {
                   theme = t.key;
-                  name = randomIslandName(theme);
-                  nameBox.textContent = name;
+                  roll(false);
                   this.sound.play('ui');
                   draw();
                 },
@@ -343,7 +357,7 @@ export class UI {
         h('h3', {}, 'Its name'),
         h(
           'div',
-          { class: 'row' },
+          { class: 'row name-row' },
           nameBox,
           h(
             'button',
@@ -351,8 +365,7 @@ export class UI {
               class: 'chip',
               type: 'button',
               onclick: () => {
-                name = randomIslandName(theme);
-                nameBox.textContent = name;
+                roll(true);
                 this.sound.play('ui');
               },
             },
@@ -368,7 +381,7 @@ export class UI {
             style: 'margin-top:14px',
             onclick: () => {
               this.closeModal();
-              this.handlers.make({ theme, name, online });
+              this.handlers.make({ theme, name: own || rolled, online });
             },
           },
           '✨ Make it!',
@@ -474,7 +487,7 @@ export class UI {
               'div',
               { class: 'island-item' },
               h('span', { class: 'emoji' }, THEME_ICON[it.theme] ?? '🏝️'),
-              h('div', { class: 'info' }, h('b', {}, it.name), h('span', { class: 'muted' }, `Played ${new Date(it.savedAt).toLocaleDateString()}`)),
+              h('div', { class: 'info' }, h('b', { lang: langOf(it.name) || undefined }, it.name), h('span', { class: 'muted' }, `Played ${new Date(it.savedAt).toLocaleDateString()}`)),
               h(
                 'button',
                 {
