@@ -1478,6 +1478,14 @@ kbd {
   flex-wrap: nowrap;
 }
 
+.panel h3.name-label {
+  margin-top: 4px;
+}
+
+.same-row {
+  margin: 10px 0 0;
+}
+
 .name-input {
   font-size: 1.3rem;
   font-weight: 700;

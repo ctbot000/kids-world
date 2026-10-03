@@ -18,6 +18,14 @@ import { generate } from './worldgen.js';
 import { cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
+
+// A player's name as sent: any name as typed, tidied, or '' for an empty,
+// invisible or overlong one. (Two players of one name on an island get a
+// number from uniqueName.)
+function nameOf(raw) {
+  const name = cleanName(raw);
+  return isValidName(name) && [...name].length <= NAME_MAX ? name : '';
+}
 export const MAX_PLAYERS = 8;
 export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature'];
 
@@ -229,11 +237,15 @@ export class Room {
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
         break;
-      case 'look':
+      case 'look': {
+        // A new look, and a new name with it when one comes (🎨 Change me while here).
         p.look = cleanLook(msg.look, this.random);
-        this.broadcast({ t: 'look', pid, look: p.look });
+        const name = nameOf(msg.name);
+        if (name) p.name = this.uniqueName(name, p.id);
+        this.broadcast({ t: 'look', pid, look: p.look, name: p.name });
         this.changed();
         break;
+      }
       case 'critter':
         this.critterOp(conn, p, msg);
         break;
@@ -276,10 +288,7 @@ export class Room {
       }
     }
     const look = cleanLook(msg.look, this.random);
-    // Any name as typed, tidied, but not an empty, invisible or overlong one.
-    // (Two players of one name here get a number from uniqueName.)
-    const typed = cleanName(msg.name);
-    const wanted = isValidName(typed) && [...typed].length <= NAME_MAX ? typed : randomName(this.random);
+    const wanted = nameOf(msg.name) || randomName(this.random);
     if (p) {
       // Coming back: whoever was using this player in another tab is replaced.
       for (const [other, oc] of this.clients) {

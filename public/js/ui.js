@@ -566,20 +566,24 @@ export class UI {
     );
   }
 
-  // Changing how you look: animal, fur, t-shirt, hat, and your name, typed or rolled.
+  // Changing how you look: animal, fur, t-shirt, hat, and your display name,
+  // the name friends see: typed, rolled, or, logged in, your username.
   meDialog() {
     const p = this.profile;
     const look = { ...p.look };
     let name = p.name;
+    const username = this.handlers.login?.username() ?? '';
+    let same = null;
     const apply = () => {
       p.update({ look: { ...look }, name });
       this.handlers.lookChanged?.();
       $('me-name').textContent = `Hi, ${name}!`;
+      if (same) same.checked = name === username;
     };
     this.openModal(
       (root) => {
         // Any name; while what is typed is no name (nothing yet), the last one stays.
-        const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: name, maxLength: NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Your name' });
+        const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: name, maxLength: NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Display name' });
         nameBox.spellcheck = false;
         nameBox.addEventListener('input', () => {
           const typed = cleanName(nameBox.value);
@@ -588,6 +592,21 @@ export class UI {
           apply();
         });
         nameBox.addEventListener('change', () => (nameBox.value = name));
+        // Logged in: the display name can be the username, and stays it while this is on.
+        if (username) {
+          same = h('input', { type: 'checkbox', checked: name === username });
+          same.addEventListener('change', () => {
+            if (!same.checked) {
+              nameBox.focus();
+              nameBox.select();
+              return;
+            }
+            name = username;
+            nameBox.value = name;
+            this.sound.play('ui');
+            apply();
+          });
+        }
         const animals = h('div', { class: 'grid' });
         const fur = h('div', { class: 'swatches' });
         const shirts = h('div', { class: 'swatches' });
@@ -668,12 +687,14 @@ export class UI {
         draw();
         root.append(
           h('h2', {}, '🎨 Change me'),
+          h('h3', { class: 'name-label' }, 'Display name ', h('span', { class: 'muted' }, '(what friends see)')),
           h('div', { class: 'row name-row' }, nameBox, h('button', { class: 'chip', type: 'button', onclick: () => {
             name = randomName();
             nameBox.value = name;
             this.sound.play('ui');
             apply();
           } }, '🎲 New name')),
+          same ? h('label', { class: 'check-row same-row' }, same, h('span', {}, `Same as my username, ${username}`)) : '',
           h('h3', {}, 'I am a…'),
           animals,
           h('h3', {}, 'Fur colour'),
@@ -929,7 +950,7 @@ export class UI {
         // The username starts as your name, and is your name in games unless you say otherwise.
         const user = loggedIn ? null : this.usernameBox(name);
         const asName = loggedIn ? null : h('input', { type: 'checkbox', checked: true });
-        const asNameRow = asName ? h('label', { class: 'check-row' }, asName, h('span', {}, 'Use it as my name in games too')) : null;
+        const asNameRow = asName ? h('label', { class: 'check-row' }, asName, h('span', {}, 'Use it as my display name too')) : null;
         const box = this.passwordBox(loggedIn ? 'New password' : 'Password', 'new-password');
         const again = this.passwordBox('The same password again', 'new-password');
         const button = h('button', { class: 'big green', type: 'submit' }, loggedIn ? '🔒 Save my password' : '✨ Make my login');
@@ -1046,6 +1067,23 @@ export class UI {
           },
           '🚪 Log out',
         );
+        const username = login.username();
+        const differs = Boolean(username) && username !== this.profile.name;
+        const align = h(
+          'button',
+          {
+            class: 'chip',
+            type: 'button',
+            onclick: () => {
+              this.profile.update({ name: username });
+              this.handlers.lookChanged?.();
+              this.renderMe();
+              this.sound.play('ui');
+              this.myLoginDialog();
+            },
+          },
+          '🪪 Use my username instead',
+        );
         root.append(
           ...[
             h('h2', {}, '🔑 My login'),
@@ -1053,8 +1091,12 @@ export class UI {
             h(
               'p',
               {},
-              `You are logged in as ${login.username() || this.profile.name}${login.username() && login.username() !== this.profile.name ? `, and in games you are ${this.profile.name}` : ''}. Your look, stickers and islands are the same on every device you log in on.`,
+              username ? `Your username is ${username}. ` : '',
+              differs ? `Friends see your display name, ${this.profile.name}.` : username ? 'It is your display name too, the name friends see.' : '',
+              ' Your look, stickers and islands are the same on every device you log in on.',
             ),
+            differs ? h('div', { class: 'row' }, align) : null,
+            h('p', { class: 'muted' }, 'Change your display name, and how you look, in 🎨 Change me.'),
             h('p', { class: 'muted keeper-status' }, this.keeperText()),
             h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: `chip${needsPassword ? ' on' : ''}`, type: 'button', onclick: () => this.makeLoginDialog() }, '🔒 New password'), out),
             h('p', { class: 'muted', style: 'margin-top:12px' }, 'Log out when you are done on a device other people use too. Your islands stay safe with the island keeper.'),

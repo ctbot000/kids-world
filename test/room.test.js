@@ -71,6 +71,24 @@ test('a name is taken as typed, tidied, but an empty, invisible or endless one i
   for (const name of ['', '   ', 'in\u200bvisible', 'x'.repeat(33), 42]) assert.ok(isMadeUpName(named(name)), JSON.stringify(name));
 });
 
+test('a new display name comes with a look while on the island, and stays told apart', () => {
+  const { room } = makeRoom();
+  const a = join(room, { name: 'Minji' });
+  const b = join(room, { name: 'Brave Fox' });
+  const renamed = (c) => c.last('look').name;
+  b.inbox.length = 0;
+  room.receive(b, { t: 'look', look: { animal: 'fox', fur: 'orange', shirt: 3, hat: 'cap' }, name: '  Minji ' });
+  assert.equal(renamed(a), 'Minji 2', 'a second Minji on the island gets a number');
+  assert.equal(renamed(b), 'Minji 2');
+  room.receive(b, { t: 'look', look: { animal: 'fox' }, name: 'in\u200bvisible' });
+  assert.equal(renamed(a), 'Minji 2', 'an invisible one is not taken');
+  room.receive(b, { t: 'look', look: { animal: 'cat' } });
+  assert.equal(renamed(a), 'Minji 2', 'a look alone keeps the name');
+  room.receive(b, { t: 'look', look: { animal: 'cat' }, name: 'Captain' });
+  assert.equal(renamed(a), 'Captain');
+  assert.equal(room.exportSave().players.find((p) => p.id === 2).name, 'Captain', 'and the island keeps it');
+});
+
 test('a different protocol is turned away', () => {
   const { room } = makeRoom();
   const c = conn();

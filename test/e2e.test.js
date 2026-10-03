@@ -1100,6 +1100,15 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(guest, () => window.kidsWorld.game.players.size === 2);
   assert.equal(await guest.evaluate(() => window.kidsWorld.game.world.name), await host.evaluate(() => window.kidsWorld.game.world.name));
   assert.ok(await guest.evaluate(() => [...window.kidsWorld.game.players.values()].some((p) => p.name === '민지 the Builder')), 'the guest sees the host’s own name');
+  // A new display name while there: the guest sees it as soon as the host stops typing.
+  await host.click('#btn-settings');
+  await clickButton(host, 'Change me', '#modal');
+  const renameBox = await host.waitForSelector('#modal .name-input');
+  await landed(host, renameBox);
+  await renameBox.evaluate((el) => (el.value = ''));
+  await renameBox.type('Captain 민지');
+  await until(guest, () => [...window.kidsWorld.game.players.values()].some((p) => p.name === 'Captain 민지'));
+  await clickButton(host, 'Done', '#modal');
 
   // The guest builds; the host sees it.
   const { cell, at } = await spotNear(guest, 2, 2);
@@ -1398,6 +1407,22 @@ test('a login made on one device logs in another: what each made comes along, th
     await tablet.evaluate((n) => [...document.querySelectorAll('#modal .island-item')].find((it) => it.querySelector('b').textContent === n).querySelector('.chip.on').click(), name);
     await inGame(tablet);
     assert.equal(await blockAt(tablet, above), 2);
+
+    // The display name is the username until another is picked, and the username again in one tap.
+    await leave(tablet);
+    await clickButton(tablet, 'Change me');
+    assert.equal(await tablet.$eval('#modal .same-row input', (el) => el.checked), true);
+    const nameBox = await tablet.waitForSelector('#modal .name-input');
+    await landed(tablet, nameBox);
+    await nameBox.evaluate((el) => (el.value = ''));
+    await nameBox.type('Captain Otter');
+    await until(tablet, () => !document.querySelector('#modal .same-row input').checked);
+    await clickButton(tablet, 'Done', '#modal');
+    assert.equal(await tablet.$eval('#me-name', (el) => el.textContent), 'Hi, Captain Otter!');
+    await clickButton(tablet, 'My login');
+    await clickButton(tablet, 'Use my username instead', '#modal');
+    await until(tablet, (u) => document.getElementById('me-name').textContent === `Hi, ${u}!`, username);
+    await tablet.keyboard.press('Escape');
 
     // The phone logs out: the guest starts afresh, and only the tablet is logged in.
     await clickButton(phone, 'My login');

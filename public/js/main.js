@@ -404,6 +404,7 @@ const GREETINGS = {
   gone: ['🔑', () => 'Your login was taken away at the island keeper, so you are playing as a guest now.'],
 };
 let reloadAtTitle = '';
+let lookTimer = 0;
 
 function reloadAs(greeting) {
   try {
@@ -525,8 +526,11 @@ const titleHandlers = {
     const id = storage.newIslandId();
     openIsland(id, save);
   },
+  // In a game, friends see the new look, and the new display name, once
+  // you stop typing it for a moment.
   lookChanged: () => {
-    if (session?.game) session.game.send({ t: 'look', look: profile.look });
+    clearTimeout(lookTimer);
+    if (session?.game) lookTimer = setTimeout(() => session?.game.send({ t: 'look', look: profile.look, name: profile.name }), 400);
     else showDemoAvatar();
   },
   lookOpen: () => lookAtMe(true),

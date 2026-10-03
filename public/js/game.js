@@ -119,6 +119,7 @@ export class Game extends EventTarget {
         const p = this.players.get(msg.pid);
         if (p) {
           p.look = msg.look;
+          if (typeof msg.name === 'string' && msg.name) p.name = msg.name;
           p.avatar?.setLook(msg.look);
           this.emit('players');
         }
