@@ -8,7 +8,7 @@
 // tick() about ten times a second.
 
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, MAX_CRITTERS, nearestWater, NEEDS_WATER, placeFlyers, placeSea, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, MAX_CRITTERS, nearestWater, NEEDS_WATER, placeFlyers, placePolar, placeSea, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -664,8 +664,8 @@ export class Room {
       app: 'kids-world',
       kind: 'island',
       // 2: made since birds, owls, bees and seagulls came to the islands;
-      // 3: since the sea creatures did.
-      v: 3,
+      // 3: since the sea creatures did; 4: since penguins and seals did.
+      v: 4,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -695,6 +695,7 @@ export class Room {
     const v = Number(save.v) || 1;
     if (v < 2) for (const f of placeFlyers(this.world, new Rng(seed ^ 0x2545f491))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
+    if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     this.settings = cleanSettings(save.settings);
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };

@@ -267,7 +267,7 @@ test('sea creatures are invited at the water, and a whale only where the sea is 
 test('an island from before the flying friends or the sea creatures gets them, once', () => {
   const { room, time } = makeRoom();
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 3);
+  assert.equal(save.v, 4);
   const FLYERS = ['bird', 'owl', 'bee', 'seagull'];
   const SEA = ['fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
   const count = (r, types) => r.critters.list.filter((c) => types.includes(c.type)).length;
@@ -287,6 +287,19 @@ test('an island from before the flying friends or the sea creatures gets them, o
   assert.equal(count(again, SEA), 13);
   // An island whose animals were all sent home stays that way.
   assert.equal(count(load({ ...save, critters: without([...FLYERS, ...SEA]) }), [...FLYERS, ...SEA]), 0);
+});
+
+test('a snowy island from before the penguins and seals gets them, once, and other islands none', () => {
+  const POLAR = ['penguin', 'seal'];
+  const count = (r) => r.critters.list.filter((c) => POLAR.includes(c.type)).length;
+  for (const theme of ['snowy', 'sunny']) {
+    const { room, time } = makeRoom({ theme });
+    const save = JSON.parse(JSON.stringify(room.exportSave()));
+    const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: time.now });
+    const old = load({ ...save, v: 3, critters: save.critters.filter((c) => !POLAR.includes(c.type)) });
+    assert.equal(count(old), theme === 'snowy' ? 8 : 0, `${theme}: five penguins and three seals move in, on snowy islands`);
+    assert.equal(count(load(old.exportSave())), count(old), `${theme}: only the once`);
+  }
 });
 
 test('sprouts grow into trees and picked fruit grows back', () => {

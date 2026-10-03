@@ -580,7 +580,91 @@ function octopus(id) {
   return { group: g, body, head, eyes, tentacles, skin, color, height: 0.58, shadow: 0.25, pick: 0.4 };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus };
+// Penguins and seals, on the shore of a snowy island and in the sea by it.
+
+function penguin() {
+  const back = toon('#2f3440');
+  const white = toon('#fbfbf8');
+  const orange = toon('#ffa53a');
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  // Turning about its middle: upright, or flat out on its tummy.
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.3;
+  body.add(pivot);
+  pivot.add(mesh(sphere(), back, 0, 0, -0.01, 0.17, 0.26, 0.15));
+  pivot.add(mesh(sphere(), white, 0, -0.03, 0.065, 0.13, 0.21, 0.1));
+  const head = new THREE.Group();
+  head.position.set(0, 0.25, 0.01);
+  pivot.add(head);
+  head.add(mesh(sphere(), back, 0, 0, 0, 0.12));
+  const face = onSurface(0.12, 0.12, 0.12, 0, -0.01, -0.012);
+  head.add(alongSurface(mesh(sphere(), white, face.x, face.y, face.z, 0.085, 0.07, 0.03), 0.12, 0.12, 0.12, face));
+  const eyes = eyesOn(head, 0.12, 0.12, 0.12, 0.045, 0.02, 0.018);
+  head.add(mesh(cone(0.03, 0.08, 8), orange, 0, -0.025, 0.14).rotateX(Math.PI / 2));
+  for (const side of [-1, 1]) {
+    const p = onSurface(0.12, 0.12, 0.12, side * 0.07, -0.04, 0.002);
+    head.add(alongSurface(mesh(sphere(), toon('#ff9fb8'), p.x, p.y, p.z, 0.022, 0.016, 0.006), 0.12, 0.12, 0.12, p));
+  }
+  // Flippers hang from its shoulders; one angle (times the side) lifts both out.
+  const flippers = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.15, 0.08, 0);
+    f.userData.side = side;
+    f.add(mesh(sphere(), back, side * 0.02, -0.12, 0, 0.035, 0.14, 0.07));
+    pivot.add(f);
+    return f;
+  });
+  const feet = [-1, 1].map((side) => {
+    const f = mesh(sphere(), orange, side * 0.065, 0.015, 0.06, 0.05, 0.018, 0.075);
+    body.add(f);
+    return f;
+  });
+  return { group: g, body, pivot, head, eyes, flippers, feet, height: 0.62, shadow: 0.22, pick: 0.42 };
+}
+
+function seal() {
+  const grey = toon('#9aa6b2');
+  const pale = toon('#dde2e8');
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.17;
+  body.add(pivot);
+  pivot.add(mesh(sphere(), grey, 0, 0, -0.05, 0.2, 0.17, 0.4));
+  pivot.add(mesh(sphere(), pale, 0, -0.07, 0.02, 0.16, 0.1, 0.32));
+  const head = new THREE.Group();
+  head.position.set(0, 0.14, 0.33);
+  pivot.add(head);
+  head.add(mesh(sphere(), grey, 0, 0, 0, 0.14, 0.13, 0.14));
+  head.add(mesh(sphere(), pale, 0, -0.035, 0.12, 0.075, 0.055, 0.06));
+  head.add(mesh(sphere(1, 8, 6), toon(BLACK), 0, -0.005, 0.175, 0.022, 0.016, 0.014));
+  const eyes = eyesOn(head, 0.14, 0.13, 0.14, 0.055, 0.035, 0.03);
+  // A ball to play with, on its nose.
+  const ball = new THREE.Group();
+  ball.position.set(0, 0.2, 0.1);
+  ball.add(mesh(sphere(), toon('#ff5a5a'), 0, 0, 0, 0.085));
+  ball.add(mesh(sphere(), toon(WHITE), 0, 0, 0, 0.087, 0.03, 0.087));
+  ball.visible = false;
+  head.add(ball);
+  const flippers = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.16, -0.08, 0.15);
+    f.userData.side = side;
+    f.add(mesh(sphere(), grey, side * 0.07, 0, 0, 0.09, 0.02, 0.05));
+    pivot.add(f);
+    return f;
+  });
+  const tail = new THREE.Group();
+  tail.position.set(0, -0.03, -0.42);
+  pivot.add(tail);
+  for (const side of [-1, 1]) tail.add(mesh(sphere(), grey, side * 0.05, 0, -0.07, 0.07, 0.02, 0.1).rotateY(side * 0.4));
+  return { group: g, body, pivot, head, eyes, flippers, tail, ball, height: 0.42, shadow: 0.32, pick: 0.45 };
+}
+
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -681,6 +765,12 @@ export class CritterModel {
         break;
       case 'octopus':
         this.wiggle(state);
+        break;
+      case 'penguin':
+        this.waddle(state, moving);
+        break;
+      case 'seal':
+        this.flop(state, moving);
         break;
       default:
         break;
@@ -862,6 +952,79 @@ export class CritterModel {
     if (state === 'happy') this.skin.color.setHSL((t * 0.4) % 1, 0.75, 0.66);
     else this.skin.color.set(this.color);
     if (!jet && state !== 'sleep') this.head.position.y = 0.38 + Math.sin(t * 2) * 0.015;
+  }
+
+  // A penguin waddles side to side on land, lies flat out on its tummy to
+  // slide and to swim under water ("flying" with its flippers), and sits low
+  // in the water afloat.
+  waddle(state, moving) {
+    const t = this.time;
+    const flat = state === 'slide' || state === 'dive' || state === 'jump';
+    let pitch = 0;
+    let roll = 0;
+    let lift = 0.15;
+    if (state === 'jump') pitch = clamp(Math.PI / 2 - Math.atan2(this.vy, Math.max(this.hs, 0.5)), 0.3, 2.6);
+    else if (flat) pitch = 1.45;
+    if (state === 'walk' || (moving && !flat && state !== 'swim')) {
+      roll = Math.sin(t * 9) * 0.14;
+      this.body.position.y = Math.abs(Math.sin(t * 9)) * 0.03;
+      lift = 0.3;
+    }
+    if (state === 'slide') {
+      // On its tummy: down to the ground, flippers out to the sides.
+      this.body.position.y = -0.14;
+      lift = 1.3;
+    } else if (state === 'dive' || state === 'jump') {
+      lift = 0.9 + Math.sin(t * 12) * 0.6;
+    } else if (state === 'swim') {
+      this.body.position.y = -0.3 + Math.sin(t * 2) * 0.02;
+      lift = 0.4 + Math.sin(t * 5) * 0.3;
+    } else if (state === 'happy') {
+      lift = 0.8 + Math.sin(t * 16) * 0.6;
+    }
+    this.pivot.rotation.set(pitch, 0, roll);
+    for (const f of this.flippers) f.rotation.set(0, 0, f.userData.side * lift);
+    for (const [i, f] of this.feet.entries()) {
+      f.visible = !flat;
+      f.position.y = 0.015 + (state === 'walk' ? Math.max(0, Math.sin(t * 9 + i * Math.PI)) * 0.03 : 0);
+    }
+    if (state === 'eat') {
+      // Tidying its feathers.
+      this.head.rotation.set(0.35 + Math.sin(t * 6) * 0.1, 0.9, 0);
+    } else if (state === 'idle') {
+      this.head.rotation.y = Math.sin(t * 0.8 + this.id) * 0.6;
+    }
+  }
+
+  // A seal lies about on the shore, looking round and waving its tail; it
+  // humps itself along, claps its flippers when it is happy, plays with a
+  // ball on its nose, floats with just its head out, and swims with its tail.
+  flop(state, moving) {
+    const t = this.time;
+    this.ball.visible = state === 'eat';
+    this.pivot.rotation.set(0, 0, 0);
+    this.tail.rotation.set(Math.sin(t * 1.5) * 0.2, 0, 0);
+    let clap = 0.15;
+    if (state === 'walk' || (moving && state !== 'swim' && state !== 'dive')) {
+      this.pivot.rotation.x = Math.sin(t * 6) * 0.15;
+      this.body.position.y = Math.abs(Math.sin(t * 6)) * 0.05;
+    } else if (state === 'happy') {
+      clap = 0.2 + Math.abs(Math.sin(t * 10)) * 1;
+      this.head.rotation.x = -0.35;
+    } else if (state === 'eat') {
+      this.ball.position.y = 0.2 + Math.abs(Math.sin(t * 4)) * 0.15;
+      this.head.rotation.x = -0.45 + Math.sin(t * 4) * 0.1;
+    } else if (state === 'swim') {
+      this.body.position.y = -0.28 + Math.sin(t * 2) * 0.02;
+      this.head.rotation.x = -0.35;
+    } else if (state === 'dive') {
+      this.tail.rotation.set(0, Math.sin(t * 6) * 0.45, 0);
+      clap = -0.3;
+    } else if (state === 'idle') {
+      this.head.rotation.y = Math.sin(t * 0.6 + this.id) * 0.5;
+      this.head.rotation.x = -0.15;
+    }
+    for (const f of this.flippers) f.rotation.set(0, f.userData.side * clap, 0);
   }
 
   dispose() {

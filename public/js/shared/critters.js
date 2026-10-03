@@ -9,12 +9,17 @@
 //
 // Others live in the sea: schools of fish, dolphins that leap out of it, a
 // whale that blows water up out of its blowhole, an octopus on the sea floor,
-// and turtles and crabs between the water and the beach.
+// and turtles and crabs between the water and the beach. On snowy islands,
+// penguins and seals live on the shore and dive into the sea.
 import * as B from './blocks.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal'];
+// The sand of the beach and the sea floor, where crabs and turtles keep; and
+// the cold shore of a snowy island, where penguins and seals do.
+const SANDY = new Set([B.SAND, B.PEBBLES]);
+const ICY = new Set([B.SNOW, B.ICE, B.SAND, B.PEBBLES, B.STONE]);
 export const CRITTER_INFO = {
   bunny: { name: 'Bunny', icon: '🐰', speed: 2.4, swims: false, flies: false, names: ['Bun-Bun', 'Hoppy', 'Clover', 'Cotton', 'Nibbles', 'Snowball', 'Button', 'Biscuit', 'Mochi', 'Pudding'] },
   chick: { name: 'Chick', icon: '🐤', speed: 1.5, swims: false, flies: false, names: ['Peep', 'Sunny', 'Pip', 'Chirpy', 'Lemon', 'Buttercup', 'Goldie', 'Sprout', 'Honey', 'Popcorn'] },
@@ -25,16 +30,21 @@ export const CRITTER_INFO = {
   owl: { name: 'Owl', icon: '🦉', speed: 3.2, swims: false, flies: true, nocturnal: true, names: ['Hootie', 'Ollie', 'Luna', 'Starry', 'Moony', 'Professor', 'Twig', 'Nutmeg', 'Hazel', 'Pinecone'] },
   bee: { name: 'Bee', icon: '🐝', speed: 2.2, swims: false, flies: true, names: ['Buzzy', 'Bumble', 'Stripes', 'Nectar', 'Pollen', 'Fuzzy', 'Bizzy', 'Jellybean', 'Dot', 'Zippy'] },
   seagull: { name: 'Seagull', icon: '🕊️', speed: 5, swims: true, flies: true, names: ['Gully', 'Skipper', 'Captain', 'Sandy', 'Sailor', 'Coral', 'Splashy', 'Windy', 'Shelly', 'Marina'] },
-  // sea: 'water' never leaves it; 'beach' walks the sand and the sea floor (or floats, with swims).
+  // sea: 'water' never leaves it; 'beach' and 'shore' walk the ground (the
+  // sand, the cold shore) and float on the water, or wade along its bottom.
+  // dives: goes under to swim about, too; climb: how high a step it can
+  // take, up out of the water.
   fish: { name: 'Fish', icon: '🐠', speed: 2.2, swims: true, flies: false, sea: 'water', names: ['Finn', 'Splish', 'Glimmer', 'Wiggles', 'Guppy', 'Shimmer', 'Zigzag', 'Minnow', 'Sprinkle', 'Flash'] },
   dolphin: { name: 'Dolphin', icon: '🐬', speed: 4.5, swims: true, flies: false, sea: 'water', names: ['Echo', 'Bubbly', 'Leapy', 'Squeaky', 'Twirl', 'Zoom', 'Ripple', 'Surfy', 'Glider', 'Smiley'] },
   whale: { name: 'Whale', icon: '🐳', speed: 1.6, swims: true, flies: false, sea: 'water', names: ['Big Blue', 'Humphrey', 'Tiny', 'Rumble', 'Spouty', 'Waverly', 'Jumbo', 'Misty', 'Ocean', 'Puddles'] },
-  turtle: { name: 'Turtle', icon: '🐢', speed: 0.8, swims: true, flies: false, sea: 'beach', range: [1.5, 5], names: ['Sheldon', 'Myrtle', 'Slowpoke', 'Pickle', 'Mossy', 'Tank', 'Bean', 'Kelp', 'Lagoon', 'Olive'] },
-  crab: { name: 'Crab', icon: '🦀', speed: 1.3, swims: false, flies: false, sea: 'beach', wades: true, sideways: true, range: [0.8, 2.5], names: ['Pinchy', 'Snappy', 'Clawdia', 'Sidney', 'Scuttle', 'Nipper', 'Clicky', 'Rusty', 'Tickles', 'Sideways'] },
+  turtle: { name: 'Turtle', icon: '🐢', speed: 0.8, swims: true, flies: false, sea: 'beach', ground: SANDY, range: [1.5, 5], names: ['Sheldon', 'Myrtle', 'Slowpoke', 'Pickle', 'Mossy', 'Tank', 'Bean', 'Kelp', 'Lagoon', 'Olive'] },
+  crab: { name: 'Crab', icon: '🦀', speed: 1.3, swims: false, flies: false, sea: 'beach', ground: SANDY, home: 8, wades: true, sideways: true, range: [0.8, 2.5], names: ['Pinchy', 'Snappy', 'Clawdia', 'Sidney', 'Scuttle', 'Nipper', 'Clicky', 'Rusty', 'Tickles', 'Sideways'] },
   octopus: { name: 'Octopus', icon: '🐙', speed: 1.5, swims: true, flies: false, sea: 'water', names: ['Inky', 'Squiggle', 'Octavia', 'Wiggly', 'Noodle', 'Swirly', 'Bloop', 'Doodle', 'Hugs', 'Jelly'] },
+  penguin: { name: 'Penguin', icon: '🐧', speed: 1.2, swims: true, flies: false, sea: 'shore', ground: ICY, home: 10, range: [1, 4], dives: true, climb: 1.3, swimSpeed: 3.6, slides: true, names: ['Tuxedo', 'Snowdrop', 'Frosty', 'Icicle', 'Wobble', 'Slider', 'Popsicle', 'Chilly', 'Sprinkles', 'Igloo'] },
+  seal: { name: 'Seal', icon: '🦭', speed: 0.6, swims: true, flies: false, sea: 'shore', ground: ICY, home: 6, range: [0.8, 3], dives: true, climb: 1.3, swimSpeed: 3, names: ['Whiskers', 'Barkley', 'Sealia', 'Flappy', 'Clapper', 'Seabiscuit', 'Muffin', 'Lolly', 'Dumpling', 'Slippy'] },
 };
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive'];
 export const MAX_CRITTERS = 64;
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
@@ -60,8 +70,6 @@ const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 
 // The water's surface, as it is drawn: 7/8 of the way up its top cell (render/mesher.js).
 export const SURFACE = 0.875;
-// The sand of the beach and the sea floor, where crabs and turtles keep.
-const SANDY = new Set([B.SAND, B.PEBBLES]);
 // The water each swimmer needs: how many cells deep, whether it has to be the
 // sea (not a pond), and how far either side it must be water too.
 const WATERS = {
@@ -69,6 +77,8 @@ const WATERS = {
   octopus: { deep: 2 },
   dolphin: { deep: 3, sea: true, wide: 1 },
   whale: { deep: 4, sea: true, wide: 2 },
+  penguin: { deep: 2 },
+  seal: { deep: 2 },
 };
 // Where in the water each one swims, from a column of it: [lowest, highest].
 const BANDS = {
@@ -76,7 +86,12 @@ const BANDS = {
   octopus: (w) => [w.floor + 1.02, w.top + SURFACE - 0.5],
   dolphin: (w) => [w.top + SURFACE - 1, w.top + SURFACE - 0.3],
   whale: (w) => [w.top + SURFACE - 0.3, w.top + SURFACE - 0.22],
+  // Penguins and seals keep within a few blocks of the top.
+  penguin: (w) => [Math.max(w.floor + 1.3, w.top + SURFACE - 3.5), w.top + SURFACE - 0.6],
+  seal: (w) => [Math.max(w.floor + 1.3, w.top + SURFACE - 3.5), w.top + SURFACE - 0.6],
 };
+// A penguin's leap out of the water on its way: [how far, how high, how long].
+const PENGUIN_LEAP = [2.6, 0.9, 0.75];
 // What to say when a swimmer is invited where there is no water for it.
 export const NEEDS_WATER = {
   fish: 'Fish need water: tap a pond or the sea!',
@@ -246,6 +261,41 @@ export function placeSea(world, rng, counts = seaCounts(world.theme)) {
   return out;
 }
 
+// How many penguins and seals an island starts with: only snowy ones have them.
+export function polarCounts(theme) {
+  return theme === 'snowy' ? { penguin: 5, seal: 3 } : {};
+}
+
+// Somewhere on the cold shore: icy ground a step or so up from the sea, with
+// the sea right there, to dive into and climb back out of.
+function onShore(world, p) {
+  if (!p || p.kind !== 'ground' || !ICY.has(p.ground) || p.y > world.sea + 2) return false;
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (waterColumn(world, p.x + dx, p.z + dz)?.top === world.sea) return true;
+  return false;
+}
+
+// Where they start out: the penguins together, as a little colony, and the
+// seals here and there along the shore.
+export function placePolar(world, rng, counts = polarCounts(world.theme)) {
+  const out = [];
+  const random = () => perchAt(world, rng.int(2, world.W - 3) + 0.5, rng.int(2, world.D - 3) + 0.5);
+  for (const [type, n] of Object.entries(counts)) {
+    let colony = null;
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < 800; tries++) {
+        // Beside the others, or, with no room left there, a new group of them.
+        const near = type === 'penguin' && colony && tries < 300;
+        const p = near ? perchAt(world, colony.x + rng.int(-3, 3), colony.z + rng.int(-3, 3)) : random();
+        if (!onShore(world, p) || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 0.5)) continue;
+        if (!near) colony = p;
+        out.push({ type, x: p.x, y: p.y, z: p.z });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 // Where a small animal standing near (x, y, z) would have its feet, or null.
 export function standHeight(world, x, z, y) {
   const cx = Math.floor(x);
@@ -351,9 +401,25 @@ export class CritterSim {
       this.stepSwimmer(world, c, dt, leader, night);
       return;
     }
+    // Penguins and seals under the water, until they come back up.
+    if (c.dive) {
+      if (!leader) {
+        this.underwater(world, c, dt, night);
+        return;
+      }
+      this.endDive(c);
+    }
 
     if (night && !leader) {
-      c.state = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER && info.swims ? 'swim' : 'sleep';
+      const afloat = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER;
+      // Penguins and seals come ashore to sleep.
+      if (afloat && info.dives) {
+        if (world.get(Math.floor(c.tx), standHeight(world, c.tx, c.tz, c.y) ?? 0, Math.floor(c.tz)) === B.WATER || Math.hypot(c.tx - c.x, c.tz - c.z) < 0.15) this.pickTarget(world, c, true);
+        this.walk(world, c, dt, info, null);
+        c.state = 'swim';
+        return;
+      }
+      c.state = afloat && info.swims ? 'swim' : 'sleep';
       this.fall(world, c, dt);
       return;
     }
@@ -371,39 +437,58 @@ export class CritterSim {
         c.yaw = Math.atan2(leader.x - c.x, leader.z - c.z);
       }
     } else if (c.timer <= 0) {
-      if (c.state === 'walk' || c.state === 'hop' || c.state === 'swim') {
+      if (info.dives && world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER) {
+        // In the water, a penguin or a seal goes under for a swim, or, back
+        // up from one, swims ashore.
+        if (!c.surfaced && this.rng.chance(0.6) && this.startDive(world, c)) return;
+        c.surfaced = false;
+        this.pickTarget(world, c, true);
+        c.state = 'swim';
+        c.timer = this.rng.range(4, 8);
+      } else if (c.state === 'walk' || c.state === 'hop' || c.state === 'swim' || c.state === 'slide') {
         c.state = this.rng.chance(0.4) ? 'eat' : 'idle';
         c.timer = this.rng.range(1.5, 4);
       } else {
         this.pickTarget(world, c);
         c.state = c.type === 'bunny' ? 'hop' : 'walk';
+        // A penguin on snow or ice now and then goes on its tummy instead.
+        const under = world.get(Math.floor(c.tx), (standHeight(world, c.tx, c.tz, c.y) ?? 0) - 1, Math.floor(c.tz));
+        if (info.slides && (under === B.SNOW || under === B.ICE) && this.rng.chance(0.6)) c.state = 'slide';
         c.timer = this.rng.range(3, 6);
       }
     }
 
-    if (c.state === 'walk' || c.state === 'hop' || c.state === 'swim') this.walk(world, c, dt, info, leader);
+    if (c.state === 'walk' || c.state === 'hop' || c.state === 'swim' || c.state === 'slide') this.walk(world, c, dt, info, leader);
     else this.fall(world, c, dt);
+    // Afloat, a penguin or a seal is swimming whatever it was doing.
+    if (info.dives && c.state !== 'happy' && world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER) c.state = 'swim';
   }
 
-  pickTarget(world, c) {
+  // dry: only somewhere out of the water.
+  pickTarget(world, c, dry = false) {
     const info = CRITTER_INFO[c.type];
+    const afloat = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER;
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rng.next() * Math.PI * 2;
       const r = this.rng.range(...(info.range ?? [2, 7]));
-      // Stay near home, loosely (a crab closer).
-      const pull = Math.hypot(c.home.x - c.x, c.home.z - c.z) > (info.wades ? 8 : 16) ? 0.7 : 0;
+      // Stay near home, loosely (a crab or a seal closer).
+      const pull = Math.hypot(c.home.x - c.x, c.home.z - c.z) > (info.home ?? 16) ? 0.7 : 0;
       const tx = c.x + Math.cos(a) * r * (1 - pull) + (c.home.x - c.x) * pull * 0.5;
       const tz = c.z + Math.sin(a) * r * (1 - pull) + (c.home.z - c.z) * pull * 0.5;
       const y = standHeight(world, tx, tz, c.y);
       if (y === null) continue;
       const wet = world.get(Math.floor(tx), y, Math.floor(tz)) === B.WATER;
       if (wet && !info.swims && !info.wades) continue;
+      // Penguins and seals are mostly ashore: into the water now and then,
+      // and soon back out of it.
+      if (info.dives && wet && (dry || this.rng.chance(afloat ? 0.7 : 0.8))) continue;
       if (c.type === 'duck' && !wet && this.rng.chance(0.6)) continue;
       // Crabs wade only into the edge of the water, and not often.
       if (info.wades && wet && (this.rng.chance(0.75) || !this.shallow(world, tx, tz))) continue;
-      // Crabs and turtles keep to the sand, the sea and its floor (but for a
-      // last try, so one far from any never gets stuck).
-      if (info.sea === 'beach' && !wet && !SANDY.has(world.get(Math.floor(tx), y - 1, Math.floor(tz))) && tries < 7) continue;
+      // Out of the water, crabs and turtles keep to the sand, and penguins
+      // and seals to the cold shore (but for a last try, so one far from any
+      // never gets stuck).
+      if (info.ground && !wet && !info.ground.has(world.get(Math.floor(tx), y - 1, Math.floor(tz))) && tries < 7) continue;
       c.tx = tx;
       c.tz = tz;
       return;
@@ -421,7 +506,7 @@ export class CritterSim {
       this.fall(world, c, dt);
       return;
     }
-    const speed = info.speed * (leader ? 1.6 : 1);
+    const speed = info.speed * (leader ? 1.6 : 1) * (c.state === 'slide' ? 2.4 : 1);
     const step = Math.min(d, speed * dt);
     const nx = c.x + (dx / d) * step;
     const nz = c.z + (dz / d) * step;
@@ -430,7 +515,7 @@ export class CritterSim {
     const ny = standHeight(world, nx, nz, c.y);
     const inWater = ny !== null && world.get(Math.floor(nx), ny, Math.floor(nz)) === B.WATER;
     const deep = inWater && info.wades && !this.shallow(world, nx, nz);
-    if (ny === null || ny - c.y > 1.05 || c.y - ny > 3 || (inWater && !info.swims && !info.wades) || deep) {
+    if (ny === null || ny - c.y > (info.climb ?? 1.05) || c.y - ny > 3 || (inWater && !info.swims && !info.wades) || deep) {
       // Blocked: think again.
       c.timer = 0;
       c.state = 'idle';
@@ -1020,25 +1105,24 @@ export class CritterSim {
     }
   }
 
-  // Out of the sea in an arc ahead, if there is room in the air for one and
-  // deep sea to come down into.
-  tryLeap(world, c) {
+  // Out of the water in an arc ahead, if there is room in the air for one and
+  // water deep enough for it to come down into. True if it has leapt.
+  tryLeap(world, c, [len, h, T] = [5.5, 2, 1.35]) {
     const w = waterColumn(world, c.x, c.z);
-    if (!w || c.y < w.top + SURFACE - 1.1) return;
+    if (!w || c.y < w.top + SURFACE - 1.1) return false;
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
-    const len = 5.5;
-    const h = 2;
-    const land = waterFor(world, c.x + fx * len, c.z + fz * len, WATERS.dolphin);
-    if (!land || land.top !== w.top) return;
+    const land = waterFor(world, c.x + fx * len, c.z + fz * len, WATERS[c.type]);
+    if (!land || land.top !== w.top) return false;
     const y = w.top + SURFACE - 0.35;
     for (let i = 1; i < 12; i++) {
       const k = i / 12;
       const id = world.get(FL(c.x + fx * len * k), FL(y + 4 * h * k * (1 - k)), FL(c.z + fz * len * k));
-      if (id !== B.AIR && id !== B.WATER) return;
+      if (id !== B.AIR && id !== B.WATER) return false;
     }
-    c.leap = { t: 0, T: 1.35, x: c.x, y, z: c.z, fx, fz, len, h };
+    c.leap = { t: 0, T, x: c.x, y, z: c.z, fx, fz, len, h };
     c.state = 'jump';
+    return true;
   }
 
   leap(c, dt) {
@@ -1052,7 +1136,63 @@ export class CritterSim {
     if (k < 1) return;
     c.leap = null;
     c.state = 'swim';
-    c.mode = 'rest';
+    if (!c.dive) c.mode = 'rest';
+  }
+
+  // A penguin or a seal afloat goes under, for a few stretches through the
+  // water. True if it has.
+  startDive(world, c) {
+    const w = waterColumn(world, c.x, c.z);
+    if (!w || world.get(FL(c.x), FL(c.y), FL(c.z)) !== B.WATER || w.top - w.floor < WATERS[c.type].deep) return false;
+    const p = this.swimSpot(world, c, 1, 4, CRITTER_INFO[c.type].home, c.type, BANDS[c.type]);
+    if (!p) return false;
+    c.dive = { legs: this.rng.int(1, 3) };
+    this.swimFor(c, p);
+    c.state = 'dive';
+    return true;
+  }
+
+  // Under the water, from one spot to the next (a penguin leaping out on the
+  // way now and then); then up to the top, to float again.
+  underwater(world, c, dt, night) {
+    if (c.leap) {
+      this.leap(c, dt);
+      if (!c.leap) c.state = 'dive';
+      return;
+    }
+    c.state = 'dive';
+    if (world.get(FL(c.x), FL(c.y), FL(c.z)) !== B.WATER) {
+      this.endDive(c);
+      return;
+    }
+    if (!this.swimTo(world, c, dt, CRITTER_INFO[c.type].swimSpeed * (night ? 0.5 : 1))) return;
+    if (c.dive.legs > 0 && !night) {
+      c.dive.legs--;
+      if (c.type === 'penguin' && this.rng.chance(0.35) && this.tryLeap(world, c, PENGUIN_LEAP)) return;
+      const p = this.swimSpot(world, c, 1.5, 5, CRITTER_INFO[c.type].home, c.type, BANDS[c.type]);
+      if (p) {
+        this.swimFor(c, p);
+        return;
+      }
+    }
+    const w = waterColumn(world, c.x, c.z);
+    const afloat = w ? w.top + 0.75 : c.y;
+    if (Math.abs(c.y - afloat) > 0.03) {
+      c.dive.legs = 0;
+      c.tx = c.x;
+      c.ty = afloat;
+      c.tz = c.z;
+      return;
+    }
+    this.endDive(c);
+  }
+
+  endDive(c) {
+    c.dive = null;
+    c.leap = null;
+    c.state = 'swim';
+    c.surfaced = true;
+    c.timer = this.rng.range(0.5, 2);
   }
 
   // The whale: slowly round the deep sea, mostly at the top with its back

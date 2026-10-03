@@ -276,6 +276,14 @@ export class Sound {
       case 'octopus':
         this.tone(650 * r(), { decay: 0.16, gain: 0.08, slide: 220, slideTime: 0.14 });
         break;
+      case 'penguin':
+        // Aah, aah!
+        for (let i = 0; i < 2; i++) this.tone(620 * r(), { at: i * 0.2, type: 'sawtooth', decay: 0.13, gain: 0.05, slide: 480, vibrato: 25 });
+        break;
+      case 'seal':
+        // Arf! Arf!
+        for (let i = 0; i < 2 + (Math.random() < 0.5 ? 1 : 0); i++) this.tone(360 * r(), { at: i * 0.22, type: 'sawtooth', decay: 0.12, gain: 0.07, slide: 230 });
+        break;
       case 'spout':
         // Pfoosh!
         this.noise(0.9, { type: 'bandpass', freq: 1200, sweep: 500, q: 0.6, gain: 0.22, attack: 0.05 });

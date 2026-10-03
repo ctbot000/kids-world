@@ -995,11 +995,19 @@ export class Game extends EventTarget {
     }
   }
 
-  // A splash where a dolphin, or a fish, leaves the water or goes back in;
-  // and the whale's spout, which is worth a sticker.
+  // A splash where a dolphin, a penguin or a fish leaves the water or goes
+  // back in, or a penguin or a seal dives; a penguin sliding on its tummy and
+  // the whale's spout, which are each worth a sticker.
   seaSights(c, s, state, now) {
     const fx = this.renderer.effects;
-    if (c.type === 'dolphin') {
+    const was = c.was;
+    c.was = state;
+    if ((c.type === 'penguin' || c.type === 'seal') && state === 'dive' && was === 'swim') {
+      const top = this.surfaceAt(s.x, s.z);
+      if (top !== null && this.near(s.x, s.y, s.z, 30)) fx.splash(s.x, top, s.z);
+    }
+    if (c.type === 'penguin' && state === 'slide' && was !== 'slide' && this.near(s.x, s.y, s.z, 25)) this.profile.count('slides');
+    if (c.type === 'dolphin' || c.type === 'penguin') {
       const top = this.surfaceAt(s.x, s.z);
       const out = top !== null && s.y > top;
       if (top !== null && c.out !== undefined && out !== c.out && this.near(s.x, s.y, s.z, 40)) {

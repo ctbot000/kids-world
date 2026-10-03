@@ -1,6 +1,7 @@
 // The sea creatures: where they start out, never leaving the water (nor the
 // edge of it, for crabs), dolphins leaping and the whale spouting, following
-// you as far as the water goes, and every animal's model in every state.
+// you as far as the water goes; penguins and seals on snowy islands, ashore
+// and in the sea; and every animal's model in every state.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CritterModel } from '../public/js/render/critter-models.js';
@@ -182,6 +183,77 @@ test('a swimmer is invited at the nearest water it can live in', () => {
   assert.deepEqual(nearestWater(w, 'fish', 20.5, 13.5), { x: 17.5, y: (2 + 1.25 + 5 + SURFACE - 0.3) / 2, z: 13.5 }, 'the near edge of the pool');
   assert.equal(nearestWater(w, 'whale', 13.5, 13.5), null, 'a pool is no place for a whale');
   assert.equal(nearestWater(w, 'fish', 40.5, 40.5), null, 'nor is dry land for a fish');
+});
+
+test('snowy islands have a little colony of penguins and some seals on the shore; others have neither', () => {
+  for (const seed of [4242, 1, 77]) {
+    const { world, critters } = island('snowy', seed);
+    const penguins = critters.filter((c) => c.type === 'penguin');
+    const seals = critters.filter((c) => c.type === 'seal');
+    assert.equal(penguins.length, 5, `snowy ${seed}: penguins`);
+    assert.equal(seals.length, 3, `snowy ${seed}: seals`);
+    for (const p of penguins) assert.ok(penguins.some((q) => q !== p && Math.hypot(q.x - p.x, q.z - p.z) <= 4.5), `snowy ${seed}: a penguin with the others`);
+    for (const c of [...penguins, ...seals]) {
+      const p = perchAt(world, c.x, c.z);
+      assert.equal(c.y, p.y, `a ${c.type} stands on the ground`);
+      let sea = false;
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) sea ||= waterColumn(world, c.x + dx, c.z + dz)?.top === world.sea;
+      assert.ok(sea, `snowy ${seed}: a ${c.type} by the sea`);
+    }
+  }
+  for (const theme of ['sunny', 'candy', 'flat']) {
+    assert.equal(island(theme, 4242).critters.filter((c) => c.type === 'penguin' || c.type === 'seal').length, 0, theme);
+  }
+});
+
+test('penguins and seals go from the shore into the sea and back, dive under it, and never get into a block', () => {
+  for (const seed of [4242, 1, 77]) {
+    const { world, sim } = island('snowy', seed);
+    const tally = { penguin: { land: 0, sea: 0, steps: 0, dives: 0, slides: 0, leaps: 0 }, seal: { land: 0, sea: 0, steps: 0, dives: 0, slides: 0, leaps: 0 } };
+    run(world, sim, 10, (c, night, t) => {
+      if (c.type !== 'penguin' && c.type !== 'seal') return;
+      const k = tally[c.type];
+      const where = `snowy ${seed}: a ${c.type} at ${c.x.toFixed(2)},${c.y.toFixed(2)},${c.z.toFixed(2)} after ${t.toFixed(1)}s`;
+      const here = world.get(FL(c.x), FL(c.y), FL(c.z));
+      assert.ok(!B.SOLID[here] && !B.SOLID[world.get(FL(c.x), FL(c.y + 0.2), FL(c.z))], `${where} is inside a block`);
+      if (c.state === 'dive') assert.equal(here, B.WATER, `${where} dives out of the water`);
+      const w = waterColumn(world, c.x, c.z);
+      if (w && c.y < w.top + 0.5) assert.ok(['dive', 'jump', 'happy'].includes(c.state), `${where} is under water, ${c.state}`);
+      if (!night) {
+        k.steps++;
+        if (here === B.WATER) k.sea++;
+        else k.land++;
+      }
+      if (c.state !== c.was) {
+        if (c.state === 'dive') k.dives++;
+        if (c.state === 'slide') k.slides++;
+        if (c.state === 'jump') k.leaps++;
+      }
+      c.was = c.state;
+    });
+    for (const [type, k] of Object.entries(tally)) {
+      assert.ok(k.land / k.steps > 0.15 && k.sea / k.steps > 0.15, `snowy ${seed}: ${type}s ashore ${(k.land / k.steps).toFixed(2)} and at sea ${(k.sea / k.steps).toFixed(2)} of the day`);
+      assert.ok(k.dives > 5, `snowy ${seed}: ${type}s dive (${k.dives})`);
+    }
+    assert.ok(tally.penguin.slides > 0, `snowy ${seed}: penguins slide on their tummies`);
+    assert.ok(tally.penguin.leaps > 0, `snowy ${seed}: penguins leap out of the water`);
+  }
+});
+
+test('at night penguins and seals come ashore to sleep', () => {
+  const { world, sim } = island('snowy', 4242);
+  let asleep = 0;
+  let steps = 0;
+  run(world, sim, 10, (c, night, t) => {
+    // A minute after dusk, for them to get out of the water.
+    if ((c.type !== 'penguin' && c.type !== 'seal') || !night || t % 600 < 540) return;
+    steps++;
+    if (c.state === 'sleep') {
+      asleep++;
+      assert.notEqual(world.get(FL(c.x), FL(c.y), FL(c.z)), B.WATER, 'asleep on dry land');
+    }
+  });
+  assert.ok(asleep / steps > 0.6, `asleep ${(asleep / steps).toFixed(2)} of the night`);
 });
 
 test('every animal can be drawn in every state', () => {
