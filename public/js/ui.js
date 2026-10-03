@@ -8,7 +8,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
-import { ANIMALS, cleanName, EMOTES, FUR_COLORS, HATS, isValidName, NAME_MAX, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanName, EMOTES, FUR_COLORS, HATS, isValidName, langOf, NAME_MAX, PHRASES, SHIRT_COLORS, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
@@ -748,7 +748,7 @@ export class UI {
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
-          card('💬', 'Talk', ['Say hello with the speech bubble and dance with the smiley.']),
+          card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
@@ -1567,12 +1567,35 @@ export class UI {
     });
   }
 
+  // Talking: type anything, or tap a phrase or a sticker.
   sayDialog() {
     const g = this.game;
     this.openModal(
       (root) => {
+        const box = h('input', { type: 'text', class: 'text-input', maxLength: CHAT_MAX, autocomplete: 'off', enterKeyHint: 'send', placeholder: 'Type something…', 'aria-label': 'Type something to say' });
+        const send = () => {
+          const text = cleanChat(box.value);
+          if (!text) {
+            box.focus();
+            return;
+          }
+          g.say({ t: 'say', text });
+          this.closeModal();
+        };
         root.append(
           h('h2', {}, '💬 Say something'),
+          h(
+            'form',
+            {
+              class: 'row say-row',
+              onsubmit: (e) => {
+                e.preventDefault();
+                send();
+              },
+            },
+            box,
+            h('button', { class: 'chip on', type: 'submit' }, '📨 Send'),
+          ),
           h(
             'div',
             { class: 'phrases' },
@@ -1610,6 +1633,8 @@ export class UI {
             ),
           ),
         );
+        // With a keyboard, straight to typing; on a touch screen, the phrases first.
+        if (!this.input.touchMode) setTimeout(() => box.focus(), 60);
       },
       { seeThrough: true },
     );
@@ -1901,7 +1926,7 @@ export class UI {
   chatLine(msg) {
     const g = this.game;
     const who = g?.players.get(msg.pid)?.name ?? 'Someone';
-    const el = h('div', { class: 'line' }, h('b', {}, `${who}: `), msg.text);
+    const el = h('div', { class: 'line', lang: langOf(msg.text) || undefined }, h('b', {}, `${who}: `), msg.text);
     $('chatlog').append(el);
     while ($('chatlog').children.length > 5) $('chatlog').firstElementChild.remove();
     this.chatRoom.observe(el);
@@ -1955,7 +1980,7 @@ export class UI {
         tag.dataset.key = key;
         tag.style.setProperty('--c', shirtColor(p.look.shirt));
         tag.replaceChildren(
-          p.bubble ? h('div', { class: `bubble${p.bubble.sticker ? ' sticker' : ''}` }, p.bubble.text) : '',
+          p.bubble ? h('div', { class: `bubble${p.bubble.sticker ? ' sticker' : ''}`, lang: langOf(p.bubble.text) || undefined }, p.bubble.text) : '',
           showName ? h('div', { class: 'name' }, p.name, p.id === g.host ? ' 🏝️' : '') : '',
         );
       }

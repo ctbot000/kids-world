@@ -188,20 +188,34 @@ test('the owner can make building owner-only, lock the island and send someone h
   assert.notEqual(back.last('welcome')?.you, 2, 'the old token is gone');
 });
 
-test('only phrases and stickers from the lists can be said', () => {
-  const { room } = makeRoom();
+test('phrases, stickers and anything typed can be said: tidied, and never empty, endless or too fast', () => {
+  const { room, time } = makeRoom();
   const a = join(room);
   const b = join(room, { name: 'Brave Otter' });
   room.receive(a, { t: 'say', p: 0 });
   assert.equal(b.last('say').p, 0);
   assert.equal(PHRASES[b.last('say').p], 'Hi!');
+  // Typed: spaces and new lines made one space, and nothing invisible but an emoji's joiners.
+  room.receive(a, { t: 'say', text: '  안녕,\n  friends! 👨\u200d👩\u200d👧\u202e ' });
+  assert.equal(b.last('say').text, '안녕, friends! 👨\u200d👩\u200d👧');
+  assert.equal(b.last('say').name, 'Happy Panda');
   const before = b.all('say').length;
   room.receive(a, { t: 'say', p: 999 });
-  room.receive(a, { t: 'say', text: 'anything at all' });
   room.receive(a, { t: 'say', e: -1 });
+  room.receive(a, { t: 'say', text: ' \u200b ' });
+  room.receive(a, { t: 'say', text: 'x'.repeat(121) });
   assert.equal(b.all('say').length, before);
   room.receive(a, { t: 'say', e: 3 });
   assert.equal(b.last('say').e, 3);
+  // A few at once, then about one a second.
+  for (let i = 0; i < 4; i++) room.receive(a, { t: 'say', text: `again ${i}` });
+  assert.equal(b.last('say').text, 'again 1');
+  assert.equal(a.last('notice')?.text, 'Whoa, slow down a little!');
+  time.advance(1000);
+  room.receive(a, { t: 'say', text: 'later' });
+  assert.equal(b.last('say').text, 'later');
+  // Whoever comes later hears what was said.
+  assert.ok(join(room, { name: 'Lucky Bunny' }).last('welcome').chat.some((m) => m.text === 'later'));
   room.receive(a, { t: 'emote', e: 'dance' });
   assert.equal(b.last('emote').e, 'dance');
   room.receive(a, { t: 'emote', e: 'something-else' });

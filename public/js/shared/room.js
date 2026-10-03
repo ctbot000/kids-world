@@ -15,7 +15,7 @@ import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
-import { cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+import { cleanChat, cleanLook, cleanName, EMOTE_KEYS, isValidIslandName, isValidName, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
 
@@ -42,6 +42,9 @@ const STAR_MS = 25000;
 const MAX_SHELLS = 16;
 const MAX_STARS = 6;
 const CHAT_KEEP = 30;
+// Talking: a few at once, then about one a second.
+const TALK_BURST = 5;
+const TALK_PER_SEC = 1;
 const KEEP_PLAYERS = 64;
 
 export function randomToken() {
@@ -150,7 +153,7 @@ export class Room {
   // ------------------------------------------------ connections
 
   attach(conn) {
-    this.clients.set(conn, { pid: 0, token: '', budget: RATE_BURST, cells: CELL_BURST, at: this.now() });
+    this.clients.set(conn, { pid: 0, token: '', budget: RATE_BURST, cells: CELL_BURST, talk: TALK_BURST, at: this.now(), talkAt: this.now() });
   }
 
   detach(conn) {
@@ -232,7 +235,7 @@ export class Room {
         this.edit(conn, c, p, msg);
         break;
       case 'say':
-        this.say(p, msg);
+        this.say(conn, c, p, msg);
         break;
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
@@ -424,12 +427,23 @@ export class Room {
     return out;
   }
 
-  say(p, msg) {
+  // A phrase (p), a sticker (e), or something typed (text), tidied.
+  say(conn, c, p, msg) {
     let entry = null;
+    const text = cleanChat(msg.text);
     if (Number.isInteger(msg.p) && msg.p >= 0 && msg.p < PHRASES.length) entry = { pid: p.id, name: p.name, p: msg.p };
     else if (Number.isInteger(msg.e) && msg.e >= 0 && msg.e < STICKERS.length) entry = { pid: p.id, name: p.name, e: msg.e };
+    else if (text) entry = { pid: p.id, name: p.name, text };
     if (!entry) return;
-    entry.ts = this.now();
+    const now = this.now();
+    c.talk = Math.min(TALK_BURST, c.talk + ((now - c.talkAt) / 1000) * TALK_PER_SEC);
+    c.talkAt = now;
+    if (c.talk < 1) {
+      this.notice(conn, 'Whoa, slow down a little!');
+      return;
+    }
+    c.talk -= 1;
+    entry.ts = now;
     this.chat.push(entry);
     if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
     this.broadcast({ t: 'say', ...entry });

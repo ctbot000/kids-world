@@ -845,6 +845,7 @@ body.touch.playing #joystick {
 .bubble {
   position: relative;
   max-width: 220px;
+  overflow-wrap: anywhere;
   padding: 8px 14px;
   border-radius: 18px;
   background: white;
@@ -911,12 +912,33 @@ body.touch.playing #joystick {
   overflow: hidden;
 }
 
+/* Three lines at most, the rest is in the speech bubble. The space inside is
+   a transparent border, not padding, which the clipped lines would show
+   through under the ellipsis. */
 .chatlog .line {
-  padding: 4px 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  border: solid transparent;
+  border-width: 4px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.85);
   font-size: 0.9rem;
   animation: fade-out 8s forwards;
+}
+
+/* Korean wraps at spaces, as English does, not between any two syllables. */
+.bubble:lang(ko),
+.chatlog .line:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.say-row {
+  flex-wrap: nowrap;
+  margin-bottom: 14px;
 }
 
 @keyframes fade-out {

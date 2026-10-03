@@ -1,6 +1,6 @@
 // Words for players: names (typed freely, or rolled from a friendly word and
-// an animal), and the ready-made phrases and stickers talking is done with,
-// which the host checks everything it receives against.
+// an animal), and talking: typed, or ready-made phrases and stickers. The
+// host tidies and checks everything it receives.
 import { TOY_BRICKS } from './blocks.js';
 
 export const NAME_WORDS = [
@@ -62,6 +62,20 @@ export function isValidIslandName(name) {
   const words = Object.values(ISLAND_WORDS).flat();
   return words.includes(m[1]) && [...ISLAND_PLACES, 'Fields', 'Plains'].includes(m[2]);
 }
+
+// Typed talk: up to CHAT_MAX letters, numbers, signs, emoji and spaces, as
+// typed but tidied (in NFC, any run of spaces or new lines one space), with
+// nothing invisible kept but the joiners some emoji are made of. '' for
+// nothing, or for too much.
+export const CHAT_MAX = 120;
+export function cleanChat(raw) {
+  if (typeof raw !== 'string') return '';
+  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').replace(/(?!\u200d)\p{C}/gu, '').trim();
+  return text && [...text].length <= CHAT_MAX ? text : '';
+}
+
+// Hangul in it: wrapped at spaces rather than between any two syllables (see .bubble:lang(ko)).
+export const langOf = (text) => (/\p{Script=Hangul}/u.test(text) ? 'ko' : '');
 
 // Things to say. The index is what travels over the network.
 export const PHRASES = [

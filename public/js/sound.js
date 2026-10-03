@@ -384,11 +384,12 @@ export class Sound {
   // "Animal talk": a little burst of pitched syllables for a phrase.
   babble(text, voice = 0) {
     if (!this.ready) return;
-    const letters = text.replace(/[^a-z]/gi, '');
+    // Letters of any alphabet: a Hangul syllable, a kana or an A each count once.
+    const letters = [...text].filter((ch) => /[\p{L}\p{N}]/u.test(ch));
     const count = Math.min(14, Math.max(2, Math.round(letters.length / 2)));
     const base = 380 + (voice % 7) * 38;
     for (let i = 0; i < count; i++) {
-      const c = letters.charCodeAt((i * 2) % Math.max(1, letters.length)) || 97;
+      const c = letters[(i * 2) % Math.max(1, letters.length)]?.codePointAt(0) ?? 97;
       const f = base * (1 + ((c % 7) - 3) * 0.06) * (text.endsWith('?') && i === count - 1 ? 1.3 : 1);
       this.tone(f, { at: i * 0.075, decay: 0.06, gain: 0.07, type: 'triangle' });
       this.tone(f * 2.01, { at: i * 0.075, decay: 0.04, gain: 0.02 });

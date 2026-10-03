@@ -1110,6 +1110,17 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(guest, () => [...window.kidsWorld.game.players.values()].some((p) => p.name === 'Captain 민지'));
   await clickButton(host, 'Done', '#modal');
 
+  // The guest types something; the host hears it, in a bubble and in the chat.
+  const words = '안녕! Let’s build a castle 🏰';
+  await guest.click('#btn-say');
+  const sayBox = await guest.waitForSelector('#modal .say-row input');
+  await landed(guest, sayBox);
+  await sayBox.click();
+  await sayBox.type(words);
+  await guest.keyboard.press('Enter');
+  await until(host, (w) => [...window.kidsWorld.game.players.values()].some((p) => p.bubble?.text === w), words);
+  await until(host, (w) => [...document.querySelectorAll('#chatlog .line')].some((l) => l.textContent.endsWith(w) && l.lang === 'ko'), words);
+
   // The guest builds; the host sees it.
   const { cell, at } = await spotNear(guest, 2, 2);
   const above = { ...cell, y: cell.y + 1 };

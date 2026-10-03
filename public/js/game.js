@@ -473,16 +473,20 @@ export class Game extends EventTarget {
     this.profile.count('said');
   }
 
+  // Something said: typed (text), a phrase (p) or a sticker (e). A long one
+  // stays up a little longer, to be read.
   said(msg) {
-    const text = Number.isInteger(msg.p) ? PHRASES[msg.p] : STICKER_EMOJI[msg.e];
+    const typed = typeof msg.text === 'string' ? msg.text : '';
+    const text = typed || (Number.isInteger(msg.p) ? PHRASES[msg.p] : STICKER_EMOJI[msg.e]);
     if (!text) return;
     this.chat.push(msg);
     if (this.chat.length > 30) this.chat.shift();
     const p = this.players.get(msg.pid);
     if (p) {
-      p.bubble = { text, left: BUBBLE_SECS, sticker: !Number.isInteger(msg.p) };
-      if (Number.isInteger(msg.p)) this.sound.babble(text, msg.pid);
-      else this.sound.play('ui');
+      const sticker = !typed && !Number.isInteger(msg.p);
+      p.bubble = { text, left: BUBBLE_SECS + Math.min(6, [...typed].length / 20), sticker };
+      if (sticker) this.sound.play('ui');
+      else this.sound.babble(text, msg.pid);
     }
     this.emit('chat', { ...msg, text });
   }
