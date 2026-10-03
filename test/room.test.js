@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { MAX_CRITTERS, unpackCritter } from '../public/js/shared/critters.js';
+import { MAX_CRITTERS, NEEDS_WATER, unpackCritter } from '../public/js/shared/critters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { isValidName, PHRASES } from '../public/js/shared/words.js';
 
@@ -240,18 +240,53 @@ test('flying friends can be invited, and come in over the water rather than unde
   assert.equal(bird.y, w.sea + 1, 'on top of the water');
 });
 
-test('an island from before the flying friends gets some, once', () => {
+test('sea creatures are invited at the water, and a whale only where the sea is deep', () => {
+  const { room } = makeRoom();
+  const a = join(room);
+  const w = room.world;
+  const s = w.spawn;
+  // Out at sea, far from the beach.
+  let sea = null;
+  for (let x = 2; x < w.W && !sea; x++) if (w.get(x, w.sea, 2) === B.WATER && w.top(x, 2) < w.sea - 5) sea = { x: x + 0.5, z: 2.5 };
+  for (const type of ['fish', 'dolphin', 'whale', 'octopus']) {
+    room.receive(a, { t: 'critter', op: 'invite', type, x: sea.x, y: w.sea + 1, z: sea.z });
+    const c = room.critters.get(a.last('cadd').critter.id);
+    assert.equal(c.type, type);
+    assert.equal(w.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)), B.WATER, `a ${type} comes in in the water`);
+  }
+  // Crabs and turtles walk the land too.
+  room.receive(a, { t: 'critter', op: 'invite', type: 'crab', x: s.x, y: s.y, z: s.z });
+  assert.equal(a.last('cadd').critter.type, 'crab');
+  // On land far from the sea, there is no water for a whale.
+  const added = a.all('cadd').length;
+  room.receive(a, { t: 'critter', op: 'invite', type: 'whale', x: s.x, y: s.y, z: s.z });
+  assert.equal(a.all('cadd').length, added, 'no whale on land');
+  assert.equal(a.last('notice').text, NEEDS_WATER.whale);
+});
+
+test('an island from before the flying friends or the sea creatures gets them, once', () => {
   const { room, time } = makeRoom();
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 2);
-  const flyers = (r) => r.critters.list.filter((c) => ['bird', 'owl', 'bee', 'seagull'].includes(c.type)).length;
-  const before = { ...save, v: 1, critters: save.critters.filter((c) => !['bird', 'owl', 'bee', 'seagull'].includes(c.type)) };
-  const old = new Room({ code: '123456', save: before, now: time.now });
-  assert.equal(flyers(old), 9, 'three birds, an owl, three bees and two seagulls move in');
-  const again = new Room({ code: '123456', save: JSON.parse(JSON.stringify(old.exportSave())), now: time.now });
-  assert.equal(flyers(again), 9, 'and only the once');
-  const none = new Room({ code: '123456', save: { ...save, critters: before.critters }, now: time.now });
-  assert.equal(flyers(none), 0, 'an island whose flying friends were all sent home stays that way');
+  assert.equal(save.v, 3);
+  const FLYERS = ['bird', 'owl', 'bee', 'seagull'];
+  const SEA = ['fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
+  const count = (r, types) => r.critters.list.filter((c) => types.includes(c.type)).length;
+  const without = (types) => save.critters.filter((c) => !types.includes(c.type));
+  const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: time.now });
+  // Saved before either came: both move in.
+  const v1 = load({ ...save, v: 1, critters: without([...FLYERS, ...SEA]) });
+  assert.equal(count(v1, FLYERS), 9, 'three birds, an owl, three bees and two seagulls');
+  assert.equal(count(v1, SEA), 13, 'four schools of fish, two dolphins, a whale, two turtles, three crabs and an octopus');
+  // Saved after the flying friends came: just the sea creatures.
+  const v2 = load({ ...save, v: 2, critters: without(SEA) });
+  assert.equal(count(v2, FLYERS), count(room, FLYERS));
+  assert.equal(count(v2, SEA), 13);
+  // Only the once.
+  const again = load(v1.exportSave());
+  assert.equal(count(again, FLYERS), 9);
+  assert.equal(count(again, SEA), 13);
+  // An island whose animals were all sent home stays that way.
+  assert.equal(count(load({ ...save, critters: without([...FLYERS, ...SEA]) }), [...FLYERS, ...SEA]), 0);
 });
 
 test('sprouts grow into trees and picked fruit grows back', () => {

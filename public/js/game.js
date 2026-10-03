@@ -3,7 +3,7 @@
 // tools, and everything said and done. Talks to the island through a link
 // (see net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { CRITTER_INFO, unpackCritter } from './shared/critters.js';
+import { CRITTER_INFO, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
@@ -544,8 +544,9 @@ export class Game extends EventTarget {
     const hit = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, maxDist, stopAt);
     const critter = this.renderer.pickCritter(ray, maxDist);
     // Flowers and grass are see-through: one in front of an animal, or the
-    // one it stands in (a bee at a flower is inside its cell), does not hide it.
-    const seeThrough = hit && B.KIND[hit.id] === B.K_PLANT ? 1.5 : 0;
+    // one it stands in (a bee at a flower is inside its cell), does not hide
+    // it; nor does the water hide what swims in it.
+    const seeThrough = !hit ? 0 : B.KIND[hit.id] === B.K_PLANT ? 1.5 : B.KIND[hit.id] === B.K_WATER ? 8 : 0;
     if (critter && (!hit || critter.dist < hit.dist + seeThrough)) {
       const m = this.critters.get(critter.id)?.model.group.position;
       if (m && Math.hypot(m.x - eye.x, m.y - eye.y, m.z - eye.z) <= REACH) return { kind: 'critter', id: critter.id };
@@ -955,6 +956,7 @@ export class Game extends EventTarget {
   updateCritters(dt) {
     const now = performance.now();
     const night = isNight(this.env.time);
+    const cam = this.renderer.camera.position;
     for (const c of this.critters.values()) {
       const s = this.interpolate(c.snaps, CRITTER_INTERP_MS);
       if (!s) continue;
@@ -962,26 +964,77 @@ export class Game extends EventTarget {
       const prev = m.group.position.clone();
       m.group.position.set(s.x, s.y, s.z);
       m.group.rotation.y = s.yaw;
-      const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       const state = s.state ?? 'idle';
-      const ground = this.renderer.groundUnder(s.x, s.y, s.z);
-      m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
-      this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
-      m.shadow.visible = m.shadow.visible && !m.tiny;
+      // Far enough off, an animal is too small to see, and is not drawn.
+      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      if (m.group.visible) {
+        const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
+        const ground = this.renderer.groundUnder(s.x, s.y, s.z);
+        m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
+        this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
+        m.shadow.visible = m.shadow.visible && m.hasShadow;
+      } else {
+        m.shadow.visible = false;
+      }
       if (state === 'sleep' && !m.tiny && now > (c.zzzAt ?? 0)) {
         c.zzzAt = now + 1400 + Math.random() * 800;
         if (this.near(s.x, s.y, s.z, 30)) this.renderer.effects.zzz(s.x, s.y + m.height, s.z);
       }
       // Now and then an animal says hello, if you are near (and it is awake:
-      // owls only at night). Seagulls call from high up, now and then.
+      // owls only at night). Seagulls and the whale are heard from further
+      // off, and less often.
       const info = CRITTER_INFO[c.type];
-      const gull = c.type === 'seagull';
-      if (state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, gull ? 24 : 9)) {
-        c.voiceAt = now + (9000 + Math.random() * 14000) * (gull ? 2 : 1);
+      const far = { seagull: 24, whale: 34, dolphin: 18 }[c.type] ?? 9;
+      const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
+      if (state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
+        c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
         if (c.type !== 'butterfly') this.sound.play(c.type);
       }
       this.onYourHead(c, s, state);
+      this.seaSights(c, s, state, now);
     }
+  }
+
+  // A splash where a dolphin, or a fish, leaves the water or goes back in;
+  // and the whale's spout, which is worth a sticker.
+  seaSights(c, s, state, now) {
+    const fx = this.renderer.effects;
+    if (c.type === 'dolphin') {
+      const top = this.surfaceAt(s.x, s.z);
+      const out = top !== null && s.y > top;
+      if (top !== null && c.out !== undefined && out !== c.out && this.near(s.x, s.y, s.z, 40)) {
+        fx.splash(s.x, top, s.z);
+        if (this.near(s.x, s.y, s.z, 20)) this.sound.play('splash');
+      }
+      c.out = out;
+    } else if (c.type === 'fish') {
+      const jumping = state === 'jump';
+      const top = this.surfaceAt(s.x, s.z);
+      if (jumping !== Boolean(c.jumping) && top !== null && this.near(s.x, s.y, s.z, 30)) fx.splash(s.x + Math.sin(s.yaw) * (jumping ? 0.1 : 0.9), top, s.z + Math.cos(s.yaw) * (jumping ? 0.1 : 0.9));
+      c.jumping = jumping;
+    } else if (c.type === 'whale') {
+      const spouting = state === 'spout';
+      if (spouting && !c.spouting && this.near(s.x, s.y, s.z, 50)) {
+        this.sound.play('spout');
+        this.profile.count('spouts');
+      }
+      c.spouting = spouting;
+      if (spouting && now >= (c.spoutAt ?? 0) && this.near(s.x, s.y, s.z, 120)) {
+        c.spoutAt = now + 50;
+        // Up out of the blowhole, on top towards the front.
+        const x = s.x + Math.sin(s.yaw) * 0.55;
+        const z = s.z + Math.cos(s.yaw) * 0.55;
+        for (let i = 0; i < 3; i++) {
+          fx.add('drop', x, s.y + 0.55, z, { vx: (Math.random() - 0.5) * 1.2, vy: 5 + Math.random() * 1.8, vz: (Math.random() - 0.5) * 1.2, size: 0.17, life: 1.1, gravity: 8, color: '#e9f7ff' });
+        }
+      }
+    }
+  }
+
+  // The height of the water's surface over (x, z), or null where there is none.
+  surfaceAt(x, z) {
+    const w = waterColumn(this.world, x, z);
+    return w ? w.top + SURFACE : null;
   }
 
   // A flying friend sitting on your head is worth a sticker.

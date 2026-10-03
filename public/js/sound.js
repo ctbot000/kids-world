@@ -1,8 +1,8 @@
 // Every sound is made on the spot with Web Audio: soft pops and clicks for
-// building, boings and splashes, animal voices (birdsong, hoots and buzzing
-// among them), a chime when a friend arrives, little "animal talk" babble
-// when someone says something, and gentle music that changes with the time
-// of day.
+// building, boings and splashes, animal voices (birdsong, hoots, buzzing and
+// whale song among them), a chime when a friend arrives, little "animal
+// talk" babble when someone says something, and gentle music that changes
+// with the time of day.
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 // Mixer levels at full volume: effects peak around -10 dB, music sits below them.
@@ -251,6 +251,34 @@ export class Sound {
       case 'bee':
         this.tone(190 * r(), { type: 'sawtooth', attack: 0.06, decay: 0.55, gain: 0.025, vibrato: 14, slide: 215 * r() });
         this.tone(380 * r(), { type: 'triangle', attack: 0.06, decay: 0.5, gain: 0.015, vibrato: 20 });
+        break;
+      case 'fish':
+        // Blub, blub.
+        for (let i = 0; i < 2; i++) this.tone(500 * r(), { at: i * 0.12, decay: 0.08, gain: 0.06, slide: 900, slideTime: 0.06 });
+        break;
+      case 'dolphin':
+        // Clicks, and a whistle.
+        for (let i = 0; i < 4; i++) this.noise(0.012, { at: i * 0.045, type: 'highpass', freq: 3500, gain: 0.12 });
+        this.tone(1800 * r(), { at: 0.22, decay: 0.3, gain: 0.05, slide: 2900, slideTime: 0.25, vibrato: 60 });
+        break;
+      case 'whale':
+        // A long, low song.
+        this.tone(170 * r(), { attack: 0.3, decay: 1.4, gain: 0.12, slide: 120, slideTime: 1.2, vibrato: 3 });
+        this.tone(250 * r(), { at: 0.9, attack: 0.3, decay: 1.2, gain: 0.08, slide: 330, slideTime: 1, vibrato: 4 });
+        break;
+      case 'turtle':
+        this.tone(220 * r(), { decay: 0.18, gain: 0.07, type: 'triangle', slide: 180 });
+        break;
+      case 'crab':
+        // Snip, snip.
+        for (let i = 0; i < 2; i++) this.noise(0.03, { at: i * 0.14, type: 'bandpass', freq: 2600, q: 4, gain: 0.18 });
+        break;
+      case 'octopus':
+        this.tone(650 * r(), { decay: 0.16, gain: 0.08, slide: 220, slideTime: 0.14 });
+        break;
+      case 'spout':
+        // Pfoosh!
+        this.noise(0.9, { type: 'bandpass', freq: 1200, sweep: 500, q: 0.6, gain: 0.22, attack: 0.05 });
         break;
       case 'seagull':
         // Kee-ow, kee-ow!

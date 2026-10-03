@@ -6,11 +6,15 @@
 // to flower, seagulls circle high over the shore, and butterflies flutter
 // about. A flying friend given a fruit flies along with you, and sits on your
 // head whenever you stand still.
+//
+// Others live in the sea: schools of fish, dolphins that leap out of it, a
+// whale that blows water up out of its blowhole, an octopus on the sea floor,
+// and turtles and crabs between the water and the beach.
 import * as B from './blocks.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
 export const CRITTER_INFO = {
   bunny: { name: 'Bunny', icon: '🐰', speed: 2.4, swims: false, flies: false, names: ['Bun-Bun', 'Hoppy', 'Clover', 'Cotton', 'Nibbles', 'Snowball', 'Button', 'Biscuit', 'Mochi', 'Pudding'] },
   chick: { name: 'Chick', icon: '🐤', speed: 1.5, swims: false, flies: false, names: ['Peep', 'Sunny', 'Pip', 'Chirpy', 'Lemon', 'Buttercup', 'Goldie', 'Sprout', 'Honey', 'Popcorn'] },
@@ -21,9 +25,17 @@ export const CRITTER_INFO = {
   owl: { name: 'Owl', icon: '🦉', speed: 3.2, swims: false, flies: true, nocturnal: true, names: ['Hootie', 'Ollie', 'Luna', 'Starry', 'Moony', 'Professor', 'Twig', 'Nutmeg', 'Hazel', 'Pinecone'] },
   bee: { name: 'Bee', icon: '🐝', speed: 2.2, swims: false, flies: true, names: ['Buzzy', 'Bumble', 'Stripes', 'Nectar', 'Pollen', 'Fuzzy', 'Bizzy', 'Jellybean', 'Dot', 'Zippy'] },
   seagull: { name: 'Seagull', icon: '🕊️', speed: 5, swims: true, flies: true, names: ['Gully', 'Skipper', 'Captain', 'Sandy', 'Sailor', 'Coral', 'Splashy', 'Windy', 'Shelly', 'Marina'] },
+  // sea: 'water' never leaves it; 'beach' walks the sand and the sea floor (or floats, with swims).
+  fish: { name: 'Fish', icon: '🐠', speed: 2.2, swims: true, flies: false, sea: 'water', names: ['Finn', 'Splish', 'Glimmer', 'Wiggles', 'Guppy', 'Shimmer', 'Zigzag', 'Minnow', 'Sprinkle', 'Flash'] },
+  dolphin: { name: 'Dolphin', icon: '🐬', speed: 4.5, swims: true, flies: false, sea: 'water', names: ['Echo', 'Bubbly', 'Leapy', 'Squeaky', 'Twirl', 'Zoom', 'Ripple', 'Surfy', 'Glider', 'Smiley'] },
+  whale: { name: 'Whale', icon: '🐳', speed: 1.6, swims: true, flies: false, sea: 'water', names: ['Big Blue', 'Humphrey', 'Tiny', 'Rumble', 'Spouty', 'Waverly', 'Jumbo', 'Misty', 'Ocean', 'Puddles'] },
+  turtle: { name: 'Turtle', icon: '🐢', speed: 0.8, swims: true, flies: false, sea: 'beach', range: [1.5, 5], names: ['Sheldon', 'Myrtle', 'Slowpoke', 'Pickle', 'Mossy', 'Tank', 'Bean', 'Kelp', 'Lagoon', 'Olive'] },
+  crab: { name: 'Crab', icon: '🦀', speed: 1.3, swims: false, flies: false, sea: 'beach', wades: true, sideways: true, range: [0.8, 2.5], names: ['Pinchy', 'Snappy', 'Clawdia', 'Sidney', 'Scuttle', 'Nipper', 'Clicky', 'Rusty', 'Tickles', 'Sideways'] },
+  octopus: { name: 'Octopus', icon: '🐙', speed: 1.5, swims: true, flies: false, sea: 'water', names: ['Inky', 'Squiggle', 'Octavia', 'Wiggly', 'Noodle', 'Swirly', 'Bloop', 'Doodle', 'Hugs', 'Jelly'] },
 };
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep'];
-export const MAX_CRITTERS = 48;
+// New states go on the end too.
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout'];
+export const MAX_CRITTERS = 64;
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
 
@@ -46,6 +58,33 @@ const FL = Math.floor;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 
+// The water's surface, as it is drawn: 7/8 of the way up its top cell (render/mesher.js).
+export const SURFACE = 0.875;
+// The sand of the beach and the sea floor, where crabs and turtles keep.
+const SANDY = new Set([B.SAND, B.PEBBLES]);
+// The water each swimmer needs: how many cells deep, whether it has to be the
+// sea (not a pond), and how far either side it must be water too.
+const WATERS = {
+  fish: { deep: 1 },
+  octopus: { deep: 2 },
+  dolphin: { deep: 3, sea: true, wide: 1 },
+  whale: { deep: 4, sea: true, wide: 2 },
+};
+// Where in the water each one swims, from a column of it: [lowest, highest].
+const BANDS = {
+  fish: (w) => [w.floor + 1.25, w.top + SURFACE - 0.3],
+  octopus: (w) => [w.floor + 1.02, w.top + SURFACE - 0.5],
+  dolphin: (w) => [w.top + SURFACE - 1, w.top + SURFACE - 0.3],
+  whale: (w) => [w.top + SURFACE - 0.3, w.top + SURFACE - 0.22],
+};
+// What to say when a swimmer is invited where there is no water for it.
+export const NEEDS_WATER = {
+  fish: 'Fish need water: tap a pond or the sea!',
+  octopus: 'An octopus needs deeper water: tap the sea!',
+  dolphin: 'Dolphins need the open sea: tap the water past the beach!',
+  whale: 'A whale needs the deep sea, far out from the beach!',
+};
+
 // The first thing under the open sky in a column: the ground, a roof, a
 // treetop or water. -1 off the island.
 export function skyline(world, x, z) {
@@ -57,6 +96,53 @@ export function skyline(world, x, z) {
     if (B.SOLID[id] || id === B.WATER) return y;
   }
   return -1;
+}
+
+// The water at the top of a column: its highest water cell (top) and the
+// block under its lowest one (floor), or null where the column does not open
+// onto water.
+export function waterColumn(world, x, z) {
+  const s = skyline(world, x, z);
+  const cx = FL(x);
+  const cz = FL(z);
+  if (s < 0 || world.get(cx, s, cz) !== B.WATER) return null;
+  let y = s;
+  while (y > 0 && world.get(cx, y - 1, cz) === B.WATER) y--;
+  return { top: s, floor: y - 1 };
+}
+
+// The water column at (x, z) if a swimmer that needs this can be there.
+function waterFor(world, x, z, need) {
+  const w = waterColumn(world, x, z);
+  if (!w || w.top - w.floor < need.deep || (need.sea && w.top !== world.sea)) return null;
+  for (const [ox, oz] of need.wide ? [[need.wide, 0], [-need.wide, 0], [0, need.wide], [0, -need.wide]] : []) {
+    const v = waterColumn(world, x + ox, z + oz);
+    if (!v || v.top - v.floor < need.deep - 1) return null;
+  }
+  return w;
+}
+
+// The nearest spot to (x, z), within r, where a swimmer of this kind can
+// live: { x, y, z }, or null. It looks in squares further and further out,
+// until they are further out than the nearest one found.
+export function nearestWater(world, type, x, z, r = 12) {
+  const cx = FL(x);
+  const cz = FL(z);
+  let best = null;
+  for (let ring = 0; ring <= r && !(best && ring > best.d); ring++) {
+    for (let dx = -ring; dx <= ring; dx++) {
+      for (let dz = -ring; dz <= ring; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+        const d = Math.hypot(dx, dz);
+        if (best && d >= best.d) continue;
+        const w = waterFor(world, cx + dx + 0.5, cz + dz + 0.5, WATERS[type]);
+        if (!w) continue;
+        const [lo, hi] = BANDS[type](w);
+        best = { x: cx + dx + 0.5, y: (lo + hi) / 2, z: cz + dz + 0.5, d };
+      }
+    }
+  }
+  return best && { x: best.x, y: best.y, z: best.z };
 }
 
 // Where a flying friend would sit at the top of a column: { x, y, z, kind,
@@ -115,6 +201,46 @@ export function placeFlyers(world, rng, counts = flyerCounts(world.theme)) {
       let p = null;
       for (const test of places[type] ?? []) if ((p = find(test))) break;
       if (p) out.push({ type, x: p.x, y: p.y, z: p.z });
+    }
+  }
+  return out;
+}
+
+// How many sea creatures an island starts with: no turtles in the snow.
+export function seaCounts(theme) {
+  if (theme === 'snowy') return { fish: 3, dolphin: 2, whale: 1, crab: 2, octopus: 1 };
+  // Flat Land's sea is a narrow moat, with no beach.
+  if (theme === 'flat') return { fish: 3, turtle: 1, octopus: 1 };
+  return { fish: 4, dolphin: 2, whale: 1, turtle: 2, crab: 3, octopus: 1 };
+}
+
+// Where they start out: fish and the octopus in the shallows (or a pond),
+// dolphins and the whale out at sea, crabs and turtles on the beach.
+export function placeSea(world, rng, counts = seaCounts(world.theme)) {
+  const out = [];
+  for (const [type, n] of Object.entries(counts)) {
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < 800; tries++) {
+        const x = rng.int(2, world.W - 3) + 0.5;
+        const z = rng.int(2, world.D - 3) + 0.5;
+        let y = null;
+        if (CRITTER_INFO[type].sea === 'beach') {
+          const p = perchAt(world, x, z);
+          const w = waterColumn(world, x, z);
+          if (p && isShore(world, p)) y = p.y;
+          // With no beach to be found (Flat Land's sea has none), the shallows will do.
+          else if (tries >= 400 && w && w.top - w.floor <= 3 && SANDY.has(world.get(FL(x), w.floor, FL(z)))) y = type === 'crab' ? w.floor + 1 : w.top + 0.75;
+        } else {
+          const w = waterFor(world, x, z, WATERS[type]);
+          if (w && (type === 'dolphin' || type === 'whale' || w.top - w.floor <= 5)) {
+            const [lo, hi] = BANDS[type](w);
+            y = (lo + hi) / 2;
+          }
+        }
+        if (y === null) continue;
+        out.push({ type, x, y, z });
+        break;
+      }
     }
   }
   return out;
@@ -221,9 +347,13 @@ export class CritterSim {
       this.stepFlyer(world, c, dt, leader, night);
       return;
     }
+    if (info.sea === 'water') {
+      this.stepSwimmer(world, c, dt, leader, night);
+      return;
+    }
 
     if (night && !leader) {
-      c.state = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER ? 'swim' : 'sleep';
+      c.state = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER && info.swims ? 'swim' : 'sleep';
       this.fall(world, c, dt);
       return;
     }
@@ -259,16 +389,21 @@ export class CritterSim {
     const info = CRITTER_INFO[c.type];
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rng.next() * Math.PI * 2;
-      const r = this.rng.range(2, 7);
-      // Stay near home, loosely.
-      const pull = Math.hypot(c.home.x - c.x, c.home.z - c.z) > 16 ? 0.7 : 0;
+      const r = this.rng.range(...(info.range ?? [2, 7]));
+      // Stay near home, loosely (a crab closer).
+      const pull = Math.hypot(c.home.x - c.x, c.home.z - c.z) > (info.wades ? 8 : 16) ? 0.7 : 0;
       const tx = c.x + Math.cos(a) * r * (1 - pull) + (c.home.x - c.x) * pull * 0.5;
       const tz = c.z + Math.sin(a) * r * (1 - pull) + (c.home.z - c.z) * pull * 0.5;
       const y = standHeight(world, tx, tz, c.y);
       if (y === null) continue;
       const wet = world.get(Math.floor(tx), y, Math.floor(tz)) === B.WATER;
-      if (wet && !info.swims) continue;
+      if (wet && !info.swims && !info.wades) continue;
       if (c.type === 'duck' && !wet && this.rng.chance(0.6)) continue;
+      // Crabs wade only into the edge of the water, and not often.
+      if (info.wades && wet && (this.rng.chance(0.75) || !this.shallow(world, tx, tz))) continue;
+      // Crabs and turtles keep to the sand, the sea and its floor (but for a
+      // last try, so one far from any never gets stuck).
+      if (info.sea === 'beach' && !wet && !SANDY.has(world.get(Math.floor(tx), y - 1, Math.floor(tz))) && tries < 7) continue;
       c.tx = tx;
       c.tz = tz;
       return;
@@ -290,10 +425,12 @@ export class CritterSim {
     const step = Math.min(d, speed * dt);
     const nx = c.x + (dx / d) * step;
     const nz = c.z + (dz / d) * step;
-    c.yaw = Math.atan2(dx, dz);
+    // A crab faces one way and walks off to its side.
+    c.yaw = Math.atan2(dx, dz) + (info.sideways ? Math.PI / 2 : 0);
     const ny = standHeight(world, nx, nz, c.y);
     const inWater = ny !== null && world.get(Math.floor(nx), ny, Math.floor(nz)) === B.WATER;
-    if (ny === null || ny - c.y > 1.05 || c.y - ny > 3 || (inWater && !info.swims)) {
+    const deep = inWater && info.wades && !this.shallow(world, nx, nz);
+    if (ny === null || ny - c.y > 1.05 || c.y - ny > 3 || (inWater && !info.swims && !info.wades) || deep) {
       // Blocked: think again.
       c.timer = 0;
       c.state = 'idle';
@@ -301,8 +438,8 @@ export class CritterSim {
     }
     c.x = nx;
     c.z = nz;
-    if (inWater) {
-      // Swimmers float at the water's surface.
+    if (inWater && info.swims) {
+      // Swimmers float at the water's surface; waders walk along the bottom.
       let top = ny;
       while (world.get(Math.floor(nx), top + 1, Math.floor(nz)) === B.WATER) top++;
       c.y = top + 0.75;
@@ -317,6 +454,12 @@ export class CritterSim {
     } else {
       this.fall(world, c, dt, ny);
     }
+  }
+
+  // Water one block deep, at the very edge of it: as far in as a crab goes.
+  shallow(world, x, z) {
+    const w = waterColumn(world, x, z);
+    return Boolean(w) && w.top - w.floor <= 1;
   }
 
   fall(world, c, dt, ground = null) {
@@ -806,6 +949,301 @@ export class CritterSim {
     const here = world.get(x, FL(c.y), z);
     if (here === B.WATER) return CRITTER_INFO[c.type].swims;
     return B.KIND[here] === B.K_PLANT && (c.type === 'bee' || c.type === 'butterfly');
+  }
+
+  // ------------------------------------------------ sea creatures
+
+  // Fish, dolphins, the whale and octopuses, which never leave the water.
+  // (Crabs and turtles walk the beach like the land animals: see pickTarget
+  // and walk.)
+  stepSwimmer(world, c, dt, leader, night) {
+    if (c.leap) {
+      this.leap(c, dt);
+      return;
+    }
+    if (world.get(FL(c.x), FL(c.y), FL(c.z)) !== B.WATER) {
+      this.backToWater(world, c);
+      return;
+    }
+    if (leader) {
+      this.swimAfter(world, c, dt, leader);
+      return;
+    }
+    if (c.followed) {
+      c.followed = false;
+      c.mode = 'rest';
+      c.timer = 0;
+    }
+    if (c.state === 'happy') c.state = 'swim';
+    if (c.type === 'dolphin') this.dolphin(world, c, dt, night);
+    else if (c.type === 'whale') this.whale(world, c, dt, night);
+    else if (c.type === 'octopus') this.octopus(world, c, dt, night);
+    else this.fish(world, c, dt, night);
+  }
+
+  // A school of fish: a dart through the water, a rest, another dart, and
+  // now and then one of them jumps out (the picture shows which). Down near
+  // the bottom, and slow, at night.
+  fish(world, c, dt, night) {
+    c.timer -= dt;
+    if (c.mode === 'swim') {
+      if (this.swimTo(world, c, dt, CRITTER_INFO.fish.speed * (night ? 0.3 : 1))) {
+        c.mode = 'rest';
+        c.timer = night ? this.rng.range(4, 9) : this.rng.range(0.4, 2);
+      }
+    } else if (c.timer <= 0) {
+      const w = waterColumn(world, c.x, c.z);
+      if (!night && c.state !== 'jump' && w && c.y > w.top + SURFACE - 1.3 && this.rng.chance(0.25)) {
+        c.state = 'jump';
+        c.timer = 1;
+        return;
+      }
+      const p = this.swimSpot(world, c, 1.5, 5, 10, 'fish', night ? (v) => [v.floor + 1.1, v.floor + 1.4] : BANDS.fish);
+      if (p) this.swimFor(c, p);
+      else c.timer = 1;
+    }
+    c.state = night ? 'sleep' : c.state === 'jump' && c.timer > 0 ? 'jump' : 'swim';
+  }
+
+  // Dolphins: round and about near the top of the sea, leaping out now and then.
+  dolphin(world, c, dt, night) {
+    c.timer -= dt;
+    c.state = night ? 'sleep' : 'swim';
+    if (c.mode !== 'swim' || this.cruise(world, c, dt, CRITTER_INFO.dolphin.speed * (night ? 0.25 : 1), 1.6, 'dolphin', 0.9)) {
+      const p = this.swimSpot(world, c, 5, 14, 16, 'dolphin', BANDS.dolphin);
+      if (p) this.swimFor(c, p);
+      else this.swimFor(c, { x: c.home.x, y: c.y, z: c.home.z });
+    }
+    if (!night && c.timer <= 0) {
+      c.timer = this.rng.range(4, 10);
+      this.tryLeap(world, c);
+    }
+  }
+
+  // Out of the sea in an arc ahead, if there is room in the air for one and
+  // deep sea to come down into.
+  tryLeap(world, c) {
+    const w = waterColumn(world, c.x, c.z);
+    if (!w || c.y < w.top + SURFACE - 1.1) return;
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const len = 5.5;
+    const h = 2;
+    const land = waterFor(world, c.x + fx * len, c.z + fz * len, WATERS.dolphin);
+    if (!land || land.top !== w.top) return;
+    const y = w.top + SURFACE - 0.35;
+    for (let i = 1; i < 12; i++) {
+      const k = i / 12;
+      const id = world.get(FL(c.x + fx * len * k), FL(y + 4 * h * k * (1 - k)), FL(c.z + fz * len * k));
+      if (id !== B.AIR && id !== B.WATER) return;
+    }
+    c.leap = { t: 0, T: 1.35, x: c.x, y, z: c.z, fx, fz, len, h };
+    c.state = 'jump';
+  }
+
+  leap(c, dt) {
+    const j = c.leap;
+    j.t += dt;
+    const k = Math.min(1, j.t / j.T);
+    c.x = j.x + j.fx * j.len * k;
+    c.z = j.z + j.fz * j.len * k;
+    c.y = j.y + 4 * j.h * k * (1 - k);
+    c.state = 'jump';
+    if (k < 1) return;
+    c.leap = null;
+    c.state = 'swim';
+    c.mode = 'rest';
+  }
+
+  // The whale: slowly round the deep sea, mostly at the top with its back
+  // out, now and then a little way down; at the top it stops now and then to
+  // blow water up out of its blowhole.
+  whale(world, c, dt, night) {
+    if (c.state === 'spout') {
+      c.timer -= dt;
+      if (c.timer > 0) return;
+      c.blow = this.rng.range(8, 16);
+    }
+    c.state = night ? 'sleep' : 'swim';
+    c.blow = (c.blow ?? this.rng.range(2, 6)) - dt;
+    const w = waterColumn(world, c.x, c.z);
+    if (!night && c.blow <= 0 && w && c.y > w.top + SURFACE - 0.5) {
+      c.state = 'spout';
+      c.timer = 2.4;
+      return;
+    }
+    if (c.mode !== 'swim' || this.cruise(world, c, dt, CRITTER_INFO.whale.speed * (night ? 0.3 : 1), 0.5, 'whale', 1.8)) {
+      const down = !night && this.rng.chance(0.25);
+      const p = this.swimSpot(world, c, 8, 18, 20, 'whale', down ? (v) => [v.top + SURFACE - 2.4, v.top + SURFACE - 1.8] : BANDS.whale, 30);
+      if (p) this.swimFor(c, p);
+      else this.swimFor(c, { x: c.home.x, y: c.y, z: c.home.z });
+    }
+  }
+
+  // An octopus: sitting on the sea floor, a little crawl along it, and now and
+  // then a jet up off the bottom and a slow sink back down.
+  octopus(world, c, dt, night) {
+    c.timer -= dt;
+    if (c.mode === 'swim' || c.mode === 'crawl' || c.mode === 'sink') {
+      if (this.swimTo(world, c, dt, c.mode === 'swim' ? 2.6 : c.mode === 'crawl' ? 0.5 : 0.8)) {
+        const w = waterColumn(world, c.x, c.z);
+        if (c.mode === 'swim' && w) {
+          this.swimFor(c, { x: c.x, y: w.floor + 1.02, z: c.z });
+          c.mode = 'sink';
+        } else {
+          c.mode = 'rest';
+          c.timer = this.rng.range(2, 6);
+        }
+      }
+      c.state = c.mode === 'crawl' ? 'walk' : 'swim';
+      return;
+    }
+    c.state = night ? 'sleep' : 'idle';
+    if (night || c.timer > 0) return;
+    const jet = this.rng.chance(0.3);
+    const p = jet
+      ? this.swimSpot(world, c, 1.5, 3.5, 8, 'octopus', (v) => [v.floor + 1.8, Math.min(v.floor + 3.2, v.top + SURFACE - 0.5)])
+      : this.swimSpot(world, c, 0.6, 2, 8, 'octopus', (v) => [v.floor + 1.02, v.floor + 1.02]);
+    if (!p) {
+      c.timer = 1;
+      return;
+    }
+    this.swimFor(c, p);
+    c.mode = jet ? 'swim' : 'crawl';
+  }
+
+  swimFor(c, p) {
+    c.tx = p.x;
+    c.ty = p.y;
+    c.tz = p.z;
+    c.mode = 'swim';
+    c.stuck = 0;
+  }
+
+  // Straight to (tx, ty, tz) through the water, easing in at the end. True
+  // once there, or when the way is no longer water.
+  swimTo(world, c, dt, speed) {
+    const dx = c.tx - c.x;
+    const dy = c.ty - c.y;
+    const dz = c.tz - c.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 0.03) return true;
+    const step = Math.min(d, speed * dt * (d < 0.8 ? 0.4 + d * 0.75 : 1));
+    const nx = c.x + (dx / d) * step;
+    const ny = c.y + (dy / d) * step;
+    const nz = c.z + (dz / d) * step;
+    if (world.get(FL(nx), FL(ny), FL(nz)) !== B.WATER) return true;
+    if (Math.hypot(dx, dz) > 0.05) c.yaw = Math.atan2(dx, dz);
+    c.x = nx;
+    c.y = ny;
+    c.z = nz;
+    return false;
+  }
+
+  // Steadily round towards (tx, tz), turning no faster than turn and slowing
+  // down to come round, and easing to the height ty. Never into water too
+  // shallow or narrow for it, here or reach ahead: there it turns where it is,
+  // and gives up after a while. True once there, or given up.
+  cruise(world, c, dt, speed, turn, type, reach) {
+    const dx = c.tx - c.x;
+    const dz = c.tz - c.z;
+    if (Math.hypot(dx, dz) < 1.2) return true;
+    const off = wrap(Math.atan2(dx, dz) - c.yaw);
+    c.yaw = wrap(c.yaw + clamp(off, -turn * dt, turn * dt));
+    const go = speed * Math.max(0.15, Math.cos(off)) * dt;
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const nx = c.x + fx * go;
+    const nz = c.z + fz * go;
+    const ny = c.y + clamp(c.ty - c.y, -speed * 0.4 * dt, speed * 0.4 * dt);
+    const need = WATERS[type];
+    if (world.get(FL(nx), FL(ny), FL(nz)) === B.WATER && waterFor(world, nx, nz, need) && waterFor(world, nx + fx * reach, nz + fz * reach, { deep: need.deep - 1 })) {
+      c.x = nx;
+      c.y = ny;
+      c.z = nz;
+      c.stuck = 0;
+      return false;
+    }
+    c.stuck = (c.stuck ?? 0) + dt;
+    return c.stuck > 2;
+  }
+
+  // A spot in the water a little way off (drifting back towards home when far
+  // from it) where this kind can be, at a height in band, with water all the
+  // way there in a straight line.
+  swimSpot(world, c, min, max, homeRange, type, band, tries = 20) {
+    const need = WATERS[type];
+    // Somewhere about, at random; failing that (in a narrow channel, say),
+    // on ahead, or off to one side, or back the way it came.
+    const turns = [0, 0.6, -0.6, 1.2, -1.2, Math.PI];
+    for (let i = 0; i < tries + turns.length * 2; i++) {
+      const j = i - tries;
+      const a = c.yaw + turns[Math.floor(j / 2)];
+      const r = j % 2 ? min : (min + max) / 2;
+      const s = j < 0 ? this.around(c, min, max, homeRange) : { x: c.x + Math.sin(a) * r, z: c.z + Math.cos(a) * r };
+      const w = waterFor(world, s.x, s.z, need);
+      if (!w) continue;
+      const [lo, hi] = band(w);
+      if (hi < lo) continue;
+      const y = lo + (hi - lo) * this.rng.next();
+      if (this.clearSwim(world, c, s.x, y, s.z, need) && !this.taken(c, s.x, y, s.z)) return { x: s.x, y, z: s.z };
+    }
+    return null;
+  }
+
+  clearSwim(world, c, x, y, z, need) {
+    const n = Math.ceil(Math.hypot(x - c.x, y - c.y, z - c.z) / 0.3);
+    for (let i = 1; i <= n; i++) {
+      const k = i / n;
+      const px = c.x + (x - c.x) * k;
+      const pz = c.z + (z - c.z) * k;
+      if (world.get(FL(px), FL(c.y + (y - c.y) * k), FL(pz)) !== B.WATER) return false;
+      if (need.deep > 1 && !waterFor(world, px, pz, need)) return false;
+    }
+    return true;
+  }
+
+  // Fed a fruit, a sea creature comes along with you as far as the water
+  // goes: beside you while you swim, and waiting at the water's edge while
+  // you are ashore.
+  swimAfter(world, c, dt, leader) {
+    c.followed = true;
+    c.state = 'swim';
+    c.orbit = (c.orbit ?? c.id * 2.4) + dt * 0.8;
+    const r = c.type === 'whale' ? 4 : c.type === 'dolphin' ? 2 : 1.1;
+    const gx = leader.x + Math.cos(c.orbit) * r;
+    const gz = leader.z + Math.sin(c.orbit) * r;
+    const d = Math.hypot(gx - c.x, gz - c.z);
+    const need = WATERS[c.type];
+    let best = null;
+    for (let i = 1, n = Math.ceil(d / 0.3); i <= n; i++) {
+      const px = c.x + ((gx - c.x) * i) / n;
+      const pz = c.z + ((gz - c.z) * i) / n;
+      const w = waterFor(world, px, pz, need);
+      if (!w) break;
+      const [lo, hi] = BANDS[c.type](w);
+      const py = clamp(leader.y + 0.6, lo, hi);
+      if (world.get(FL(px), FL(py), FL(pz)) !== B.WATER) break;
+      best = { x: px, y: py, z: pz };
+    }
+    if (!best) return;
+    this.swimFor(c, best);
+    const speed = Math.min(7, CRITTER_INFO[c.type].speed + d * 1.2);
+    if (c.type === 'whale' || c.type === 'dolphin') this.cruise(world, c, dt, speed, c.type === 'whale' ? 0.9 : 2.4, c.type, c.type === 'whale' ? 1.8 : 0.9);
+    else this.swimTo(world, c, dt, speed);
+  }
+
+  // Out of the water (it was taken away, or built over): back into the
+  // nearest water it can live in, or home if there is none close.
+  backToWater(world, c) {
+    c.leap = null;
+    const p = nearestWater(world, c.type, c.x, c.z, 8) ?? nearestWater(world, c.type, c.home.x, c.home.z, 24);
+    if (!p) return;
+    c.x = p.x;
+    c.y = p.y;
+    c.z = p.z;
+    c.mode = 'rest';
+    c.timer = 0;
   }
 
   // Compact numbers for the wire: [id, type, x, y, z, yaw, state] in hundredths.

@@ -231,7 +231,7 @@ export class Renderer {
     let best = null;
     for (const [id, m] of this.critters) {
       const c = m.group.position;
-      const cy = c.y + m.height * 0.5;
+      const cy = c.y + m.center;
       const r = m.pick;
       const ox = c.x - ray.origin.x;
       const oy = cy - ray.origin.y;

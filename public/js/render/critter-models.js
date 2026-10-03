@@ -1,6 +1,7 @@
 // The animal friends as little models: bunnies that hop, chicks that peck,
 // fluffy sheep, ducks that paddle about, butterflies that flutter, birds,
-// owls, bees and seagulls.
+// owls, bees and seagulls; and in the sea, schools of fish, dolphins, a whale,
+// turtles, crabs and octopuses.
 import * as THREE from '../../vendor/three.module.js';
 import { capsule, cone, cylinder, mesh, onSurface, sphere, toon } from './toon.js';
 
@@ -344,7 +345,242 @@ function seagull() {
   return { group: g, body, pivot, head, eyes, tail, wings, folded, legs, height: 0.38, shadow: 0.24, pick: 0.45, flapRate: 9 };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull };
+// The sea creatures. The swimmers' models are centred on their middle (center
+// 0), where the sim puts them; crabs, turtles and octopuses stand on things.
+
+const FISH = [
+  { body: '#ff8a3d', stripe: '#ffffff', fin: '#ff6a1f' }, // clownfish
+  { body: '#3d8bff', stripe: '#ffd23f', fin: '#ffd23f' }, // blue tang
+  { body: '#ffd23f', stripe: '#fff3b0', fin: '#ffb020' }, // yellow tang
+  { body: '#c77dff', stripe: '#ffe066', fin: '#9b4dff' }, // royal gramma
+  { body: '#5fd38d', stripe: '#e8fff0', fin: '#2fae66' },
+];
+
+// A little school of three, swimming together.
+function fish(id) {
+  const k = FISH[id % FISH.length];
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const fishes = [
+    [0, 0, 0.12, 1],
+    [-0.22, 0.07, -0.1, 0.85],
+    [0.21, -0.06, -0.14, 0.9],
+  ].map(([x, y, z, size]) => {
+    const f = new THREE.Group();
+    f.position.set(x, y, z);
+    f.scale.setScalar(size);
+    f.userData.home = f.position.clone();
+    f.add(mesh(sphere(), toon(k.body), 0, 0, 0, 0.045, 0.075, 0.12));
+    f.add(mesh(sphere(), toon(k.stripe), 0, 0, 0.02, 0.048, 0.078, 0.025));
+    const tail = new THREE.Group();
+    tail.position.z = -0.1;
+    tail.add(mesh(cone(0.07, 0.1, 4), toon(k.fin), 0, 0, -0.05, 0.3, 1, 1).rotateX(Math.PI / 2));
+    f.add(tail);
+    f.userData.tail = tail;
+    // Fish have their eyes on their sides.
+    for (const side of [-1, 1]) f.add(mesh(sphere(1, 8, 6), toon(BLACK), side * 0.038, 0.02, 0.07, 0.014));
+    body.add(f);
+    return f;
+  });
+  return { group: g, body, head: body, eyes: null, fishes, height: 0.2, center: 0, shadow: 0, tiny: true, pick: 0.45, seen: 40 };
+}
+
+function dolphin() {
+  const skin = toon('#7aa6d6');
+  const pale = toon('#e3eef8');
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  body.add(pivot);
+  pivot.add(mesh(sphere(), skin, 0, 0, 0, 0.2, 0.22, 0.62));
+  pivot.add(mesh(sphere(), pale, 0, -0.07, 0.08, 0.16, 0.14, 0.5));
+  const head = new THREE.Group();
+  head.position.set(0, 0.04, 0.5);
+  pivot.add(head);
+  head.add(mesh(sphere(), skin, 0, 0, 0, 0.15, 0.15, 0.17));
+  head.add(mesh(cone(0.06, 0.2, 10), pale, 0, -0.07, 0.2).rotateX(Math.PI / 2));
+  const eyes = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const e = onSurface(0.15, 0.15, 0.17, side * 0.1, 0.03, 0.003);
+    eyes.add(mesh(sphere(1, 10, 8), toon(BLACK), e.x, e.y, e.z, 0.024));
+    eyes.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), e.x + side * 0.004, e.y + 0.012, e.z + 0.01, 0.008));
+  }
+  head.add(eyes);
+  pivot.add(mesh(cone(0.09, 0.22, 4), skin, 0, 0.27, -0.08, 0.35, 1, 1).rotateX(-0.55));
+  for (const side of [-1, 1]) pivot.add(mesh(sphere(), skin, side * 0.2, -0.1, 0.2, 0.12, 0.02, 0.06).rotateY(-side * 0.5).rotateZ(side * 0.4));
+  const tail = new THREE.Group();
+  tail.position.z = -0.5;
+  pivot.add(tail);
+  tail.add(mesh(sphere(), skin, 0, 0, -0.15, 0.1, 0.11, 0.25));
+  tail.add(mesh(sphere(), skin, 0, 0, -0.38, 0.26, 0.025, 0.09));
+  return { group: g, body, pivot, head, eyes, tail, height: 0.45, center: 0, shadow: 0, pick: 0.6, seen: 90 };
+}
+
+function whale() {
+  const skin = toon('#4d7fc4');
+  const pale = toon('#dce8f5');
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  body.add(pivot);
+  const R = [0.62, 0.55, 1.45];
+  pivot.add(mesh(sphere(), skin, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), pale, 0, -0.2, 0.25, 0.5, 0.38, 1.2));
+  // Its blowhole, on top towards the front.
+  pivot.add(mesh(sphere(), toon('#2d4f7c'), 0, 0.535, 0.55, 0.08, 0.02, 0.05));
+  const head = new THREE.Group();
+  pivot.add(head);
+  const eyes = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const e = onSurface(...R, side * 0.45, -0.06, 0.004);
+    const eye = alongSurface(new THREE.Group(), ...R, e);
+    eye.position.copy(e);
+    eye.add(mesh(sphere(1, 10, 8), toon(BLACK), 0, 0, 0, 0.055, 0.065, 0.03));
+    eye.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), 0.012, 0.025, 0.025, 0.018));
+    eyes.add(eye);
+  }
+  head.add(eyes);
+  for (const side of [-1, 1]) pivot.add(mesh(sphere(), skin, side * 0.62, -0.28, 0.35, 0.32, 0.04, 0.14).rotateY(-side * 0.6).rotateZ(side * 0.35));
+  const tail = new THREE.Group();
+  tail.position.z = -1.25;
+  pivot.add(tail);
+  tail.add(mesh(sphere(), skin, 0, 0.02, -0.35, 0.26, 0.24, 0.6));
+  for (const side of [-1, 1]) tail.add(mesh(sphere(), skin, side * 0.36, 0.02, -0.92, 0.42, 0.045, 0.2).rotateY(side * 0.45));
+  return { group: g, body, pivot, head, eyes, tail, height: 1.1, center: 0, shadow: 0, pick: 1.2, seen: 160 };
+}
+
+function turtle() {
+  const SKIN = '#a8d672';
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.14;
+  body.add(pivot);
+  const SHELL = [0.27, 0.13, 0.32];
+  pivot.add(mesh(sphere(), toon('#3f8f57'), 0, 0.03, 0, ...SHELL));
+  pivot.add(mesh(sphere(), toon('#f2e6b0'), 0, -0.02, 0, 0.24, 0.05, 0.29));
+  // Paler plates on top of its shell.
+  for (const [x, z] of [[0, 0], [-0.13, 0.09], [0.13, 0.09], [-0.13, -0.1], [0.13, -0.1]]) {
+    const top = new THREE.Vector3(x, SHELL[1] * Math.sqrt(Math.max(0, 1 - (x / SHELL[0]) ** 2 - (z / SHELL[2]) ** 2)), z);
+    const plate = mesh(sphere(), toon('#6fbf7a'), top.x, top.y + 0.03, top.z, 0.07, 0.07, 0.012);
+    plate.quaternion.setFromUnitVectors(Z, new THREE.Vector3(top.x / SHELL[0] ** 2, top.y / SHELL[1] ** 2, top.z / SHELL[2] ** 2).normalize());
+    pivot.add(plate);
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.04, 0.38);
+  pivot.add(head);
+  head.add(mesh(sphere(), toon(SKIN), 0, 0, 0, 0.085, 0.08, 0.1));
+  const eyes = eyesOn(head, 0.085, 0.08, 0.1, 0.045, 0.02, 0.016);
+  // Flippers: front ones bigger. Each hangs from its own side, reaching out.
+  const flippers = [
+    [1, 0.22, 0.15, 0.14],
+    [-1, 0.22, 0.15, 0.14],
+    [1, 0.18, -0.2, 0.08],
+    [-1, 0.18, -0.2, 0.08],
+  ].map(([side, x, z, len]) => {
+    const f = new THREE.Group();
+    f.position.set(side * x, -0.03, z);
+    f.userData.side = side;
+    f.userData.front = z > 0;
+    f.add(mesh(sphere(), toon(SKIN), side * len * 0.8, 0, 0.02, len, 0.022, len * 0.45));
+    pivot.add(f);
+    return f;
+  });
+  pivot.add(mesh(cone(0.03, 0.08, 6), toon(SKIN), 0, -0.02, -0.34).rotateX(-Math.PI / 2));
+  return { group: g, body, pivot, head, eyes, flippers, height: 0.32, shadow: 0.3, pick: 0.45 };
+}
+
+const CRABS = ['#ff6b4a', '#ff8a3d', '#e8504f'];
+
+// A crab faces +z, and walks off to its sides.
+function crab(id) {
+  const shell = toon(CRABS[id % CRABS.length]);
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.1;
+  body.add(pivot);
+  pivot.add(mesh(sphere(), shell, 0, 0, 0, 0.17, 0.08, 0.13));
+  // Eyes on stalks.
+  const head = new THREE.Group();
+  head.position.set(0, 0.05, 0.08);
+  pivot.add(head);
+  const eyes = new THREE.Group();
+  for (const side of [-1, 1]) {
+    head.add(mesh(cylinder(0.011, 0.011, 0.09, 6), shell, side * 0.05, 0.045, 0));
+    eyes.add(mesh(sphere(1, 10, 8), toon(BLACK), side * 0.05, 0.1, 0, 0.026));
+    eyes.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), side * 0.057, 0.112, 0.02, 0.008));
+  }
+  head.add(eyes);
+  // Claws: an arm, a lower jaw, and an upper jaw that snaps.
+  const claws = [-1, 1].map((side) => {
+    const c = new THREE.Group();
+    c.position.set(side * 0.13, 0, 0.08);
+    c.rotation.y = side * 0.45;
+    c.userData.side = side;
+    c.add(mesh(cylinder(0.022, 0.022, 0.1, 8), shell, 0, 0, 0.05).rotateX(Math.PI / 2));
+    c.add(mesh(sphere(), shell, 0, -0.005, 0.13, 0.045, 0.028, 0.06));
+    const jaw = new THREE.Group();
+    jaw.position.set(0, 0.012, 0.09);
+    jaw.add(mesh(sphere(), shell, 0, 0.012, 0.045, 0.038, 0.022, 0.055));
+    c.add(jaw);
+    c.userData.jaw = jaw;
+    pivot.add(c);
+    return c;
+  });
+  const legs = [];
+  for (const side of [-1, 1]) {
+    for (const z of [0.06, -0.01, -0.08]) {
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.15, 0, z);
+      leg.rotation.z = -side * 1.05;
+      leg.userData.side = side;
+      leg.add(mesh(cylinder(0.008, 0.013, 0.14, 6), shell, 0, -0.07, 0));
+      pivot.add(leg);
+      legs.push(leg);
+    }
+  }
+  return { group: g, body, pivot, head, eyes, claws, legs, height: 0.25, shadow: 0.2, pick: 0.35, seen: 40 };
+}
+
+const OCTOPUS = ['#ff7eb6', '#b07cff', '#ff9a4d', '#ff6b6b'];
+
+function octopus(id) {
+  const color = OCTOPUS[id % OCTOPUS.length];
+  // Its own material, to change colour when it is happy.
+  const skin = toon(color).clone();
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const head = new THREE.Group();
+  head.position.y = 0.38;
+  body.add(head);
+  head.add(mesh(sphere(), skin, 0, 0, 0, 0.17, 0.2, 0.17));
+  const eyes = eyesOn(head, 0.17, 0.2, 0.17, 0.065, -0.06, 0.034);
+  const tentacles = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const t = new THREE.Group();
+    t.position.set(Math.sin(a) * 0.1, 0.22, Math.cos(a) * 0.1);
+    t.rotation.y = a;
+    const arm = new THREE.Group();
+    arm.add(mesh(cone(0.065, 0.4, 8), skin, 0, -0.2, 0).rotateX(Math.PI));
+    // A curl at the end.
+    arm.add(mesh(sphere(1, 8, 6), skin, 0, -0.39, 0.025, 0.024));
+    t.add(arm);
+    t.userData.arm = arm;
+    body.add(t);
+    tentacles.push(t);
+  }
+  return { group: g, body, head, eyes, tentacles, skin, color, height: 0.58, shadow: 0.25, pick: 0.4 };
+}
+
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -356,6 +592,12 @@ export class CritterModel {
     this.hopPhase = 0;
     this.tiny = parts.tiny ?? false;
     this.pick = parts.pick ?? (type === 'sheep' ? 0.5 : 0.38);
+    // Where to aim at it, above its origin; and how far off it is still drawn.
+    this.center = parts.center ?? this.height * 0.5;
+    this.seen = parts.seen ?? (type === 'seagull' ? 100 : 60);
+    this.hasShadow = parts.shadow !== 0;
+    this.hs = 0;
+    this.jumpAt = -1;
     // How it is moving, worked out from where it is put each frame.
     this.vy = 0;
     this.turn = 0;
@@ -424,6 +666,22 @@ export class CritterModel {
       case 'bee':
         this.buzz(state);
         break;
+      case 'fish':
+        this.school(state);
+        break;
+      case 'dolphin':
+      case 'whale':
+        this.swimmer(state);
+        break;
+      case 'turtle':
+        this.paddle(state, moving);
+        break;
+      case 'crab':
+        this.scuttle(state, moving);
+        break;
+      case 'octopus':
+        this.wiggle(state);
+        break;
       default:
         break;
     }
@@ -440,14 +698,17 @@ export class CritterModel {
   // Climbing or diving, and how fast it is turning, from where the group has
   // been put since last time.
   track(dt) {
-    const y = this.group.position.y;
+    const { x, y, z } = this.group.position;
     const yaw = this.group.rotation.y;
     if (this.lastY !== null && dt > 0) {
       const k = Math.min(1, dt * 6);
       this.vy += ((y - this.lastY) / dt - this.vy) * k;
+      this.hs += (Math.hypot(x - this.lastX, z - this.lastZ) / dt - this.hs) * k;
       this.turn += (wrap(yaw - this.lastYaw) / dt - this.turn) * k;
     }
+    this.lastX = x;
     this.lastY = y;
+    this.lastZ = z;
     this.lastYaw = yaw;
   }
 
@@ -516,10 +777,98 @@ export class CritterModel {
     if (!sitting) this.body.position.y = Math.sin(t * 5.3) * 0.03;
   }
 
+  // Three fish, tails going, keeping together; one of them leaps out of the
+  // water when the school is jumping.
+  school(state) {
+    const t = this.time;
+    if (state === 'jump' && this.jumpAt < 0) this.jumpAt = t;
+    if (state !== 'jump') this.jumpAt = -1;
+    const slow = state === 'sleep' ? 0.3 : 1;
+    this.fishes.forEach((f, i) => {
+      const home = f.userData.home;
+      f.position.set(home.x + Math.sin(t * 1.3 + i * 2) * 0.03, home.y + Math.sin(t * 2 * slow + i) * 0.03, home.z);
+      f.rotation.set(0, Math.sin(t * 14 * slow + i + 1) * 0.12, 0);
+      f.userData.tail.rotation.y = Math.sin(t * 14 * slow + i) * 0.5;
+      if (i === 0 && this.jumpAt >= 0) {
+        const k = Math.min(1, t - this.jumpAt);
+        f.position.y = home.y + Math.sin(Math.PI * k) * 1.5;
+        f.position.z = home.z + k * 0.8;
+        f.rotation.x = -Math.cos(Math.PI * k) * 1.1;
+      }
+    });
+  }
+
+  // Dolphins and the whale: up-and-down strokes of the tail, the nose
+  // following the way it is going (up out of the water, down into it).
+  swimmer(state) {
+    const t = this.time;
+    const whale = this.type === 'whale';
+    const pitch = state === 'sleep' ? 0 : clamp(-Math.atan2(this.vy, Math.max(this.hs, 0.5)), -1.1, 1.1);
+    this.pivot.rotation.set(pitch, 0, clamp(-this.turn * 0.25, -0.35, 0.35));
+    const beat = state === 'jump' ? 0.1 : state === 'sleep' ? 0.08 : 0.32;
+    this.tail.rotation.x = Math.sin(t * (whale ? 1.6 : 8)) * beat;
+    this.body.position.y = Math.sin(t * (whale ? 0.7 : 2)) * (whale ? 0.05 : 0.02);
+  }
+
+  // A turtle rows with its flippers in the water, and steps with them, one
+  // corner after another, on land. Asleep, it pulls its head in.
+  paddle(state, moving) {
+    const t = this.time;
+    const swim = state === 'swim';
+    for (const f of this.flippers) {
+      const { side, front } = f.userData;
+      if (swim) {
+        // Both front flippers together, like wings; the back ones steer.
+        f.rotation.set(0, 0, side * (front ? Math.sin(t * 3) * 0.5 : 0.1));
+      } else {
+        const step = moving ? Math.sin(t * 6 + (side * (front ? 1 : -1) > 0 ? 0 : Math.PI)) * 0.45 : 0;
+        f.rotation.set(0, step * side, -side * 0.15);
+      }
+    }
+    this.head.position.z = state === 'sleep' ? 0.3 : 0.38;
+    if (state === 'eat') this.head.rotation.x = Math.max(0, Math.sin(t * 5)) * 0.5;
+    if (swim) this.body.position.y = Math.sin(t * 1.5) * 0.02;
+  }
+
+  // A crab: legs going when it walks, claws snapping, eyes up on their
+  // stalks; claws up in the air when it is happy, and down when it digs.
+  scuttle(state, moving) {
+    const t = this.time;
+    this.legs.forEach((leg, i) => {
+      leg.rotation.x = moving || state === 'walk' ? Math.sin(t * 16 + i * 2.1) * 0.4 : 0;
+    });
+    if (moving) this.body.position.y = Math.abs(Math.sin(t * 16)) * 0.012;
+    for (const c of this.claws) {
+      const { side, jaw } = c.userData;
+      let lift = 0;
+      if (state === 'happy') lift = -1.1 + Math.sin(t * 8 + side) * 0.3;
+      else if (state === 'eat') lift = Math.max(0, Math.sin(t * 4 + (side > 0 ? 0 : Math.PI))) * 0.7;
+      c.rotation.set(lift, side * 0.45, 0);
+      jaw.rotation.x = state === 'sleep' ? 0 : -Math.max(0, Math.sin(t * (state === 'happy' ? 12 : 5) + side)) * 0.6;
+    }
+    this.head.rotation.z = state === 'sleep' ? 0 : Math.sin(t * 2.3) * 0.1;
+    if (state === 'sleep') this.body.position.y = -0.04;
+  }
+
+  // An octopus's eight arms wave, trail behind when it jets along, and lie
+  // still when it sleeps. Happy, it changes colour.
+  wiggle(state) {
+    const t = this.time;
+    const jet = state === 'swim';
+    this.tentacles.forEach((arm, i) => {
+      const tilt = state === 'sleep' ? 1.35 : jet ? 0.3 : 1.12;
+      arm.userData.arm.rotation.x = tilt + (state === 'sleep' ? 0 : Math.sin(t * (jet ? 7 : 3) + i * 0.9) * 0.22);
+    });
+    if (state === 'happy') this.skin.color.setHSL((t * 0.4) % 1, 0.75, 0.66);
+    else this.skin.color.set(this.color);
+    if (!jet && state !== 'sleep') this.head.position.y = 0.38 + Math.sin(t * 2) * 0.015;
+  }
+
   dispose() {
     this.group.removeFromParent();
     this.shadow.removeFromParent();
     this.shadow.geometry.dispose();
     this.shadow.material.dispose();
+    if (this.type === 'octopus') this.skin.dispose();
   }
 }

@@ -12,7 +12,7 @@ import { after, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { TREE_PART, TULIP } from '../public/js/shared/blocks.js';
+import { TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -408,6 +408,45 @@ test('a bird invited from the toy box is petted with a click, and once fed it si
     },
     id,
   );
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a fish under the water is petted with a click through it, not built on', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Calm Otter', look: { animal: 'cat', fur: 'grey', shirt: 5, hat: 'none' } });
+  await makeIsland(page, { online: false });
+  const { cell } = await spotNear(page, 3, 0);
+  // A puddle there, and a fish in it, told to stay put.
+  const id = await page.evaluate(
+    (cell, water) => {
+      const kw = window.kidsWorld;
+      kw.game.edit('build', [cell.x, cell.y + 1, cell.z, water], { undoable: false });
+      const c = kw.session.link.room.critters.add('fish', cell.x + 0.5, cell.y + 1.45, cell.z + 0.5);
+      Object.assign(c, { mode: 'rest', timer: 1e9 });
+      return c.id;
+    },
+    cell,
+    WATER,
+  );
+  await until(
+    page,
+    ({ id, cell, water }) => {
+      const g = window.kidsWorld.game;
+      const p = g.critters.get(id)?.model.group.position;
+      return p && Math.hypot(p.x - cell.x - 0.5, p.y - cell.y - 1.45, p.z - cell.z - 0.5) < 0.01 && g.world.get(cell.x, cell.y + 1, cell.z) === water;
+    },
+    { id, cell, water: WATER },
+  );
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const p = kw.game.critters.get(id).model.group.position;
+    const r = kw.renderer.canvas.getBoundingClientRect();
+    const s = kw.renderer.project(p.x, p.y, p.z);
+    return { x: r.left + s.x, y: r.top + s.y };
+  }, id);
+  await page.mouse.click(at.x, at.y);
+  await until(page, () => window.kidsWorld.profile.data.stats.petted === 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.placed), 0, 'nothing was built on the water');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

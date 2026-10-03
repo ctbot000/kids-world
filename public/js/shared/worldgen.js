@@ -2,7 +2,7 @@
 // trees (some of them fruit trees of the island's own fruit), flowers,
 // seashells, animal friends, and a spot for everyone to arrive at.
 import * as B from './blocks.js';
-import { placeFlyers } from './critters.js';
+import { placeFlyers, placeSea } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -283,7 +283,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
       if (s) critters.push({ type, ...s });
     }
   }
-  critters.push(...placeFlyers(world, rng));
+  critters.push(...placeFlyers(world, rng), ...placeSea(world, rng));
 
   return { world, critters, fruit };
 }
