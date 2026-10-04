@@ -57,7 +57,11 @@ export class Game extends EventTarget {
     this.host = 0;
     this.code = '';
     this.token = '';
-    this.settings = { build: 'everyone', locked: false, day: 'cycle' };
+    this.settings = { build: 'everyone', locked: false, day: 'cycle', passcode: false };
+    // The island's passcode, known while you are its owner ('' for none),
+    // and the one you typed to come in as a new visitor.
+    this.passcode = '';
+    this.typedPasscode = '';
     this.players = new Map();
     this.critters = new Map();
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
@@ -97,7 +101,7 @@ export class Game extends EventTarget {
 
   joinMessage() {
     const p = this.profile;
-    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.look, token: this.token };
+    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.look, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}) };
   }
 
   send(msg) {
@@ -181,8 +185,12 @@ export class Game extends EventTarget {
         this.emit('notice', { text: msg.text, level: msg.level ?? 'warn' });
         if (msg.level !== 'info') this.sound.play('no');
         break;
+      case 'passcode':
+        this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
+        this.emit('settings');
+        break;
       case 'error':
-        this.emit('fatal', { code: msg.code, text: msg.text });
+        this.emit('fatal', { code: msg.code, text: msg.text, wrong: msg.wrong === true, wait: msg.wait === true });
         break;
       default:
         break;
@@ -196,6 +204,7 @@ export class Game extends EventTarget {
     this.code = msg.code;
     this.token = msg.token;
     this.settings = msg.settings;
+    this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
     this.chat = msg.chat ?? [];
     const keep = again && this.me ? { x: this.me.body.x, y: this.me.body.y, z: this.me.body.z } : null;
     this.world = World.decode(msg.meta, msg.blocks);

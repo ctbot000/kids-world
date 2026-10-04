@@ -11,12 +11,17 @@
 // watching it, the page hears of every change, and logged in, what you have
 // done goes along every few seconds, so the others see you climb.
 //
+// Hosting an island that is open to visitors, it puts it on the keeper's
+// list of open islands, and keeps the connection open for as long as it is
+// there; and it brings that list to any page that asks.
+//
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
 
 import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
+import { cleanListing } from './shared/listing.js';
 import { isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
 const FIRST_TRY_MS = 3000;
@@ -34,6 +39,9 @@ const STATS_EVERY_MS = 5000;
 // Watching the ranking, it is asked for again this often, which also keeps
 // the connection from looking idle at the keeper.
 const WATCH_AGAIN_MS = 90000;
+// An open island is told to the keeper again this often, which also keeps
+// the connection from looking idle there.
+const LIST_AGAIN_MS = 60000;
 // Logged in, coming back to the game after this long asks the keeper for news.
 const RESYNC_MS = 2 * 60000;
 
@@ -91,6 +99,12 @@ export class KeeperClient extends EventTarget {
     this.rankingLive = false;
     this.watchTimer = 0;
     this.countTimer = 0;
+    // The island this page hosts, on the list of open islands (see
+    // shared/listing.js), or null; and what this connection told the keeper
+    // of it, as JSON ('' for nothing).
+    this.listing = null;
+    this.listingSent = '';
+    this.listTimer = 0;
     const saved = load('keeper', null);
     this.data = {
       device: isDeviceKey(saved?.device) ? saved.device : randomHex(16),
@@ -210,6 +224,12 @@ export class KeeperClient extends EventTarget {
   next() {
     // Watching the ranking: asked for on each new connection, and again now and then.
     if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply) };
+    // Your open island, as it is now, or that it is not open any more. (A
+    // keeper running older code says it does not know this, once.)
+    const listing = this.listing ? JSON.stringify(this.listing) : '';
+    if (listing !== this.listingSent) {
+      return { msg: this.listing ? { t: 'open-island', island: this.listing } : { t: 'close-island' }, answer: () => (this.listingSent = listing) };
+    }
     if (!this.enabled) return null;
     if (this.login) {
       if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
@@ -355,6 +375,34 @@ export class KeeperClient extends EventTarget {
     if (this.rankingLive && this.watching) this.emit('ranking', reply);
   }
 
+  // Puts the island this page hosts on the list of open islands (a listing,
+  // see shared/listing.js), or takes it off (null), whether or not copies go.
+  // While it is on it, the connection stays open, and comes back if it breaks.
+  setListing(island) {
+    if (!this.config || this.state === 'gone') return;
+    if (JSON.stringify(island) === JSON.stringify(this.listing)) return;
+    this.listing = island;
+    clearInterval(this.listTimer);
+    this.listTimer = 0;
+    if (island) {
+      this.listTimer = setInterval(() => {
+        if (this.state !== 'ready') return;
+        this.listingSent = '';
+        this.flush();
+      }, LIST_AGAIN_MS);
+    }
+    if (this.state === 'ready') this.flush();
+    else if (island && !this.peer && !this.timer && this.state !== 'refused' && !this.halted) this.schedule(0);
+  }
+
+  // The list of open islands, from the keeper. Resolves with the listings;
+  // rejects with a KeeperProblem when the keeper could not be asked, or
+  // does not know the list yet (bad).
+  async openIslands() {
+    const reply = await this.request({ t: 'islands' });
+    return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
+  }
+
   // You did something the game counts. Logged in, it goes to the keeper
   // within a few seconds, for the ranking.
   counted() {
@@ -473,6 +521,7 @@ export class KeeperClient extends EventTarget {
     this.listed = false;
     this.watched = false;
     this.rankingLive = false;
+    this.listingSent = '';
     this.toFetch = [];
     const peer = new Peer(this.peerOptions);
     this.peer = peer;
@@ -593,8 +642,9 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.idleTimer);
     const item = this.requests.shift() ?? this.next();
     if (!item) {
-      // Watching the ranking, the connection stays open for its news.
-      if (this.watching) return;
+      // Watching the ranking, the connection stays open for its news; with
+      // an island on the list, to keep it there.
+      if (this.watching || this.listing) return;
       this.idleTimer = setTimeout(() => {
         this.send({ t: 'bye' });
         this.hangUp();
@@ -624,8 +674,9 @@ export class KeeperClient extends EventTarget {
     if (!this.peer && this.state !== 'connecting' && this.state !== 'ready') return;
     this.hangUp();
     // Copies are off: only something you asked for called the keeper, and
-    // that has failed now. (Watching the ranking, it is tried again.)
-    if (!this.enabled && !this.watching) {
+    // that has failed now. (Watching the ranking, or with an island on the
+    // list, it is tried again.)
+    if (!this.enabled && !this.watching && !this.listing) {
       this.setState('off');
       return;
     }
@@ -639,6 +690,8 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.replyTimer);
     clearTimeout(this.idleTimer);
     this.timer = 0;
+    // The keeper takes the island off its list as the connection goes.
+    this.listingSent = '';
     const asked = [...(this.waiting?.reject ? [this.waiting] : []), ...this.requests];
     this.waiting = null;
     this.requests = [];

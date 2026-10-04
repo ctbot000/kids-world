@@ -17,7 +17,9 @@
 // to its own copies. A login turns that folder into a player: other devices
 // that log in with its username and password get a token that files their copies
 // there too, and brings its islands back to them; a device's copies from
-// before it logged in can join them (adoptDevice). WebRTC comes from
+// before it logged in can join them (adoptDevice). It also keeps the list of
+// open islands, in memory only: each from a host's page, for as long as that
+// page stays connected (see shared/listing.js). WebRTC comes from
 // node-datachannel, loaded only when the keeper goes online.
 import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -55,6 +57,7 @@ import {
   SIGN_ALGORITHM,
   toBase64Url,
 } from '../public/js/shared/keeper.js';
+import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { rankBoards } from '../public/js/shared/ranking.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -887,7 +890,8 @@ class Signaling extends EventEmitter {
 
 // ---------------------------------------------------------------- the keeper
 
-const MAX_CONNECTIONS = 32;
+// Hosts of open islands keep theirs open, to stay on the list of open islands.
+const MAX_CONNECTIONS = 64;
 const CONNECT_TIMEOUT_MS = 30000;
 const IDLE_MS = 3 * 60000;
 const RECENT = 40;
@@ -950,6 +954,7 @@ export class Keeper extends EventEmitter {
       detail: this.signaling?.detail ?? '',
       since: this.state === 'online' ? this.since : 0,
       connections: [...this.conns.values()].filter((c) => c.hello).length,
+      islands: this.openIslands().length,
       recent: this.recent,
     };
   }
@@ -978,7 +983,7 @@ export class Keeper extends EventEmitter {
   // A page's connection: who it is once it says so (see from()), and its limits.
   connection(fields) {
     const now = this.now();
-    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', ...fields };
+    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', island: null, ...fields };
   }
 
   answer(peer, id, sdp) {
@@ -1192,6 +1197,23 @@ export class Keeper extends EventEmitter {
         this.reply(conn, { t: 'kept', what: 'ranked', on });
         break;
       }
+      case 'open-island': {
+        // On the list of open islands for as long as this connection lasts.
+        // One island a connection; the newest word about a code wins.
+        const island = cleanListing(msg.island);
+        if (!island) throw new KeepError('bad', 'That is not an island to list.');
+        for (const other of this.conns.values()) if (other !== conn && other.island?.code === island.code) other.island = null;
+        conn.island = island;
+        this.reply(conn, { t: 'kept', what: 'open-island', code: island.code });
+        break;
+      }
+      case 'close-island':
+        conn.island = null;
+        this.reply(conn, { t: 'kept', what: 'close-island' });
+        break;
+      case 'islands':
+        this.reply(conn, { t: 'islands', islands: this.openIslands() });
+        break;
       case 'bye':
         this.drop(conn);
         break;
@@ -1199,6 +1221,11 @@ export class Keeper extends EventEmitter {
         this.unknown(msg.t);
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
+  }
+
+  // The list of open islands: those whose hosts' pages are connected and said so.
+  openIslands() {
+    return sortListings([...this.conns.values()].filter((c) => c.island && !c.closed).map((c) => c.island));
   }
 
   // The ranking, as an answer, or as news for a page watching it: news only

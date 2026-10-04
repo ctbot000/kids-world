@@ -1682,3 +1682,77 @@ test('the admin page shows each player, their login and their islands, drawn fro
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('an island open to friends is on everyone’s list of open islands, through the keeper; one with a passcode asks new visitors for it', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const host = await openPlayer(url, { name: 'Sunny Otter' });
+  const guest = await openPlayer(url, { name: 'Brave Fox' });
+  const listed = (page) => page.evaluate(() => [...document.querySelectorAll('#modal .open-islands .island-item')].map((el) => [el.querySelector('b').textContent, el.querySelector('button').textContent]));
+  // Types four numbers into the passcode dialog, and goes.
+  const typePasscode = async (page, passcode) => {
+    const box = await page.waitForSelector('#modal .code-input input');
+    await landed(page, box);
+    await box.click();
+    await page.keyboard.type(passcode);
+    await clickButton(page, 'go!', '#modal');
+  };
+  try {
+    // Nothing open yet.
+    await clickButton(guest, 'Visit a friend');
+    await until(guest, () => document.querySelector('#modal .open-note')?.textContent.startsWith('No islands are open'));
+
+    // An island open to friends shows up by itself, and anyone can come in.
+    await makeIsland(host, { online: true, theme: 'Candy Island', name: '토끼 Bay' });
+    await until(guest, () => [...document.querySelectorAll('#modal .open-islands b')].some((b) => b.textContent === '토끼 Bay' && b.lang === 'ko'));
+    assert.deepEqual(await listed(guest), [['토끼 Bay', '🛶 Visit']]);
+    assert.equal(await guest.$eval('#modal .open-islands .muted', (el) => el.textContent), 'Cozy · 1 of 8 playing');
+
+    // Its owner gives it a passcode: the list says so, and a new visitor is asked for it.
+    await host.click('#btn-settings');
+    await clickSwitch(host, '#modal .passcode-setting .switch');
+    const passcode = await host.evaluate(() => window.kidsWorld.game.passcode);
+    assert.match(passcode, /^\d{4}$/);
+    assert.equal(await host.$eval('#modal .passcode-setting b.passcode', (el) => el.textContent), passcode);
+    await host.keyboard.press('Escape');
+    await until(guest, () => [...document.querySelectorAll('#modal .open-islands .island-item')].some((el) => el.textContent.includes('🔒 Passcode')));
+    await clickButton(guest, '🔒 Visit', '#modal');
+    const wrong = passcode === '0000' ? '1111' : '0000';
+    await typePasscode(guest, wrong);
+    // Not right: asked again.
+    await until(guest, () => document.querySelector('#modal .wrong-passcode'));
+    assert.equal(await guest.evaluate(() => window.kidsWorld.session), null);
+    await typePasscode(guest, passcode);
+    await inGame(guest);
+    await until(host, () => window.kidsWorld.game.players.size === 2);
+    assert.equal(await guest.evaluate(() => window.kidsWorld.game.passcode), '', 'only the owner knows it');
+    assert.equal(await guest.evaluate(() => window.kidsWorld.game.settings.passcode), true);
+
+    // Once in, a friend comes back without it.
+    await guest.evaluate(() => window.kidsWorld.ui.gameHandlers.leave());
+    await until(guest, () => !window.kidsWorld.session);
+    await clickButton(guest, 'Visit a friend');
+    await until(guest, () => [...document.querySelectorAll('#modal .open-islands button')].some((b) => b.textContent === '🛶 Visit'));
+    await clickButton(guest, '🛶 Visit', '#modal .open-islands');
+    await inGame(guest);
+    await until(host, () => window.kidsWorld.game.players.size === 2);
+
+    // Closed to friends: off the list, for everyone.
+    await guest.evaluate(() => window.kidsWorld.ui.gameHandlers.leave());
+    await host.evaluate(() => window.kidsWorld.ui.gameHandlers.setOnline(false));
+    await clickButton(guest, 'Visit a friend');
+    await until(guest, () => document.querySelector('#modal .open-note')?.textContent.startsWith('No islands are open'));
+    assert.equal(keeper.openIslands().length, 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await host.browserContext().close();
+    await guest.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

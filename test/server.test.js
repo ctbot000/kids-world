@@ -305,3 +305,41 @@ test('a malformed handshake gets a 400', async () => {
   assert.match(data.toString(), /400 Bad Request/);
   socket.destroy();
 });
+
+test('the open islands are listed, those with a passcode marked, and only the right passcode lets a new visitor in', async () => {
+  const a = await create('Happy Panda', { name: 'Bunny Bay', size: 'big' });
+  const b = await create('Brave Otter', { name: 'Candy Cove', theme: 'candy' });
+  const c = await create('Clever Fox', { name: 'Shut Shore' });
+  b.send({ t: 'host', cmd: 'passcode', passcode: '4821' });
+  assert.equal((await b.next((m) => m.t === 'passcode')).passcode, '4821');
+  c.send({ t: 'host', cmd: 'settings', settings: { locked: true } });
+  await c.next((m) => m.t === 'settings');
+  const listed = async () => (await (await get('/api/islands')).json()).islands.filter((i) => [a.code, b.code, c.code].includes(i.code));
+  assert.deepEqual(
+    (await listed()).map((i) => [i.name, i.theme, i.size, i.players, i.passcode]).sort(),
+    [
+      ['Bunny Bay', 'sunny', 'big', 1, false],
+      ['Candy Cove', 'candy', 'small', 1, true],
+    ],
+  );
+
+  const stranger = await join(b.code, 'Sleepy Owl');
+  assert.equal(stranger.first.code, 'passcode');
+  await stranger.close();
+  const wrong = await join(b.code, 'Sleepy Owl', { passcode: '1111' });
+  assert.equal(wrong.first.wrong, true);
+  await wrong.close();
+  const friend = await join(b.code, 'Sleepy Owl', { passcode: '4821' });
+  assert.equal(friend.first.t, 'welcome');
+  assert.equal(friend.first.settings.passcode, true);
+  assert.equal(friend.first.passcode, undefined, 'only the owner hears it');
+  assert.equal((await listed()).find((i) => i.code === b.code).players, 2);
+
+  // Nobody on an island: off the list (it is kept a while, for them to come back).
+  await a.close();
+  await new Promise((done) => setTimeout(done, 200));
+  assert.equal((await listed()).some((i) => i.code === a.code), false);
+  await friend.close();
+  await b.close();
+  await c.close();
+});

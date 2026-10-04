@@ -11,6 +11,7 @@ import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
+import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
@@ -431,53 +432,155 @@ export class UI {
     });
   }
 
+  // count boxes of one digit each, like an island code: typing moves on to
+  // the next, Backspace back, and a pasted number fills them all. done():
+  // Enter in any of them. Returns { row, boxes, value() }.
+  digitBoxes(count, prefill, done, label = 'Digit') {
+    const boxes = [];
+    const row = h('div', { class: 'code-input' });
+    for (let i = 0; i < count; i++) {
+      const box = h('input', { inputmode: 'numeric', maxlength: 1, pattern: '[0-9]*', autocomplete: 'off', 'aria-label': `${label} ${i + 1}` });
+      box.value = prefill[i] ?? '';
+      box.addEventListener('input', () => {
+        const digits = box.value.replace(/\D/g, '');
+        if (digits.length > 1) {
+          // Pasted a whole code.
+          digits
+            .slice(0, count - i)
+            .split('')
+            .forEach((d, k) => (boxes[i + k].value = d));
+          boxes[Math.min(count - 1, i + digits.length)].focus();
+          return;
+        }
+        box.value = digits;
+        if (digits && i < count - 1) boxes[i + 1].focus();
+      });
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && i > 0) boxes[i - 1].focus();
+        if (e.key === 'Enter') done();
+      });
+      boxes.push(box);
+      row.append(box);
+    }
+    return { row, boxes, value: () => boxes.map((b) => b.value).join('') };
+  }
+
+  // Type a code, or pick an island from the list of open islands, which
+  // keeps up with them while the dialog is open.
   visitDialog(prefill = '') {
     this.openModal(
       (root) => {
-        const boxes = [];
         const go = () => {
-          const code = boxes.map((b) => b.value).join('');
+          const code = digits.value();
           if (code.length !== 6) {
             this.sound.play('no');
-            boxes.find((b) => !b.value)?.focus();
+            digits.boxes.find((b) => !b.value)?.focus();
             return;
           }
           this.closeModal();
           this.handlers.visit(code);
         };
-        const row = h('div', { class: 'code-input' });
-        for (let i = 0; i < 6; i++) {
-          const box = h('input', { inputmode: 'numeric', maxlength: 1, pattern: '[0-9]*', autocomplete: 'off', 'aria-label': `Digit ${i + 1}` });
-          box.value = prefill[i] ?? '';
-          box.addEventListener('input', () => {
-            const digits = box.value.replace(/\D/g, '');
-            if (digits.length > 1) {
-              // Pasted a whole code.
-              digits
-                .slice(0, 6 - i)
-                .split('')
-                .forEach((d, k) => (boxes[i + k].value = d));
-              boxes[Math.min(5, i + digits.length)].focus();
-              return;
-            }
-            box.value = digits;
-            if (digits && i < 5) boxes[i + 1].focus();
-          });
-          box.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' && !box.value && i > 0) boxes[i - 1].focus();
-            if (e.key === 'Enter') go();
-          });
-          boxes.push(box);
-          row.append(box);
-        }
+        const digits = this.digitBoxes(6, prefill, go);
         root.append(
           h('h2', {}, '✈️ Visit a friend'),
           h('p', {}, 'Type the island code your friend gives you.'),
-          row,
+          digits.row,
           h('button', { class: 'big blue', type: 'button', onclick: go }, '🛶 Let’s go!'),
           h('p', { class: 'muted', style: 'margin-top:12px' }, 'Your friend finds the code at the top of their screen.'),
         );
-        setTimeout(() => boxes[prefill.length >= 6 ? 5 : prefill.length]?.focus(), 50);
+        if (this.handlers.listAvailable?.()) root.append(this.openIslandList());
+        setTimeout(() => digits.boxes[prefill.length >= 6 ? 5 : prefill.length]?.focus(), 50);
+      },
+      { narrow: true },
+    );
+  }
+
+  // 🌍 Islands open now: anyone's island that friends can visit, the busiest
+  // first, asked for again every few seconds while it is on screen.
+  openIslandList() {
+    const note = h('p', { class: 'muted open-note' }, '🔄 Looking for islands…');
+    const list = h('div', { class: 'island-list open-islands' });
+    const section = h('div', { class: 'open-section' }, h('h3', {}, '🌍 Islands open now'), note, list);
+    const locked = (it) => it.passcode && !this.handlers.visitedBefore(it.code);
+    const visit = (it) => {
+      if (locked(it)) {
+        this.passcodeDialog({ name: it.name }, (typed) => this.handlers.visit(it.code, typed));
+        return;
+      }
+      this.closeModal();
+      this.handlers.visit(it.code);
+    };
+    const draw = (islands) => {
+      note.hidden = islands.length > 0;
+      note.textContent = 'No islands are open right now. Make one, and it shows up here for everyone!';
+      list.replaceChildren(
+        ...islands.map((it) => {
+          const full = it.players >= it.max;
+          const size = SIZES.find((s) => s.key === it.size)?.name ?? '';
+          const who = it.players === 0 ? 'Nobody there right now' : `${it.players} of ${it.max} playing`;
+          return h(
+            'div',
+            { class: 'island-item' },
+            h('span', { class: 'emoji' }, THEME_ICON[it.theme] ?? '🏝️'),
+            h('div', { class: 'info' }, h('b', { lang: langOf(it.name) || undefined }, it.name), h('span', { class: 'muted' }, [size, who, it.passcode ? '🔒 Passcode' : ''].filter(Boolean).join(' · '))),
+            h(
+              'button',
+              { class: `chip${full ? '' : ' on'}`, type: 'button', disabled: full, 'aria-label': `Visit ${it.name}`, onclick: () => visit(it) },
+              full ? 'Full' : locked(it) ? '🔒 Visit' : '🛶 Visit',
+            ),
+          );
+        }),
+      );
+    };
+    let started = false;
+    // Again in a few seconds, or in half a minute when it could not be found.
+    const ask = async () => {
+      if (started && !list.isConnected) return;
+      started = true;
+      let again = 5000;
+      try {
+        const islands = await this.handlers.openIslands();
+        if (list.isConnected) draw(islands);
+      } catch (error) {
+        again = 30000;
+        if (!list.isConnected) return;
+        list.replaceChildren();
+        note.hidden = false;
+        if (error?.code === 'bad') note.textContent = '🛠️ The island keeper needs an update before it can show open islands. Ask a grown-up to update it!';
+        else if (error?.code === 'asleep' || error?.code === 'refused') note.textContent = '😴 The island keeper is asleep, so there is no list right now. You can still visit with a code!';
+        else note.textContent = '😕 The list could not be found right now. You can still visit with a code!';
+      }
+      if (list.isConnected) setTimeout(ask, again);
+    };
+    // Once it is in the dialog.
+    setTimeout(ask, 0);
+    return section;
+  }
+
+  // An island with a passcode: four numbers its owner tells you. go(passcode).
+  // wrong: the one typed last time was not right. name: the island's.
+  passcodeDialog({ wrong = false, name = '' } = {}, go) {
+    this.openModal(
+      (root) => {
+        const done = () => {
+          const passcode = digits.value();
+          if (passcode.length !== PASSCODE_LENGTH) {
+            this.sound.play('no');
+            digits.boxes.find((b) => !b.value)?.focus();
+            return;
+          }
+          this.closeModal();
+          go(passcode);
+        };
+        const digits = this.digitBoxes(PASSCODE_LENGTH, '', done, 'Passcode number');
+        root.append(
+          h('h2', {}, '🔒 Passcode'),
+          wrong ? h('p', { class: 'wrong-passcode' }, '🙈 That passcode is not right. Try again!') : null,
+          h('p', {}, h('span', { lang: langOf(name) || undefined }, name || 'This island'), ` has a passcode. Type the ${PASSCODE_LENGTH} numbers the island owner tells you.`),
+          digits.row,
+          h('button', { class: 'big blue', type: 'button', onclick: done }, '🛶 Let’s go!'),
+        );
+        setTimeout(() => digits.boxes[0]?.focus(), 50);
       },
       { narrow: true },
     );
@@ -1912,10 +2015,71 @@ export class UI {
         } else {
           root.append(h('p', {}, 'You are playing alone on this island. Open it to friends in ⚙️ Settings.'));
         }
+        if (g.pid === g.host && g.passcode) {
+          root.append(h('p', { class: 'passcode-line' }, '🔒 Passcode ', h('b', { class: 'passcode' }, g.passcode), ': new friends type it to come in.'));
+        } else if (g.settings.passcode) {
+          root.append(h('p', { class: 'muted' }, '🔒 This island has a passcode.'));
+        }
         root.append(h('p', { class: 'muted', style: 'margin-top:12px' }, `${g.players.size} ${g.players.size === 1 ? 'player' : 'players'} here now.`));
       },
       { narrow: true },
     );
+  }
+
+  // The island's passcode, for its owner: off, anyone can come in; on, new
+  // visitors type its four numbers (🎲 rolls new ones). Friends who came in
+  // before come back without it.
+  passcodeSetting() {
+    const g = this.game;
+    const handlers = this.gameHandlers;
+    const el = h('div', { class: 'passcode-setting' });
+    const draw = () => {
+      const on = Boolean(g.passcode);
+      const sw = h('button', { class: `switch${on ? ' on' : ''}`, type: 'button', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Passcode' });
+      sw.onclick = () => {
+        this.sound.play('ui');
+        set(on ? '' : randomPasscode());
+      };
+      const detail = on
+        ? h('div', { class: 'muted' }, 'New visitors type ', h('b', { class: 'passcode' }, g.passcode), ' to come in.')
+        : h('div', { class: 'muted' }, `Anyone can come in. Turn on so new visitors need ${PASSCODE_LENGTH} numbers.`);
+      el.replaceChildren(h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🔒 Passcode'), detail), sw));
+      if (!on) return;
+      const box = h('input', { type: 'text', class: 'text-input passcode-input', inputmode: 'numeric', maxLength: PASSCODE_LENGTH, value: g.passcode, autocomplete: 'off', 'aria-label': 'Change the passcode' });
+      box.addEventListener('input', () => (box.value = box.value.replace(/\D/g, '').slice(0, PASSCODE_LENGTH)));
+      box.addEventListener('change', () => {
+        if (box.value.length === PASSCODE_LENGTH) {
+          if (box.value !== g.passcode) set(box.value);
+          return;
+        }
+        this.sound.play('no');
+        this.toast('🙈', `A passcode has ${PASSCODE_LENGTH} numbers.`, 'warn');
+        box.value = g.passcode;
+      });
+      box.addEventListener('keydown', (e) => e.key === 'Enter' && box.blur());
+      const roll = h(
+        'button',
+        {
+          class: 'chip',
+          type: 'button',
+          onclick: () => {
+            this.sound.play('ui');
+            set(randomPasscode());
+          },
+        },
+        '🎲 New numbers',
+      );
+      el.append(h('div', { class: 'row passcode-row' }, box, roll));
+    };
+    // Shown at once; the island tells everyone it has one, and its owner the numbers.
+    const set = (passcode) => {
+      handlers.setPasscode(passcode);
+      g.passcode = passcode;
+      g.settings = { ...g.settings, passcode: passcode !== '' };
+      draw();
+    };
+    draw();
+    return el;
   }
 
   settingsDialog() {
@@ -1971,7 +2135,8 @@ export class UI {
           toggle(g.settings.build === 'everyone', '🧱 Friends can build', 'Turn off so only you can change the island.', (on) =>
             g.send({ t: 'host', cmd: 'settings', settings: { build: on ? 'everyone' : 'host' } }),
           ),
-          toggle(g.settings.locked, '🔒 No new visitors', 'Friends already here can stay.', (on) => g.send({ t: 'host', cmd: 'settings', settings: { locked: on } })),
+          toggle(g.settings.locked, '🚪 No new visitors', 'Friends already here can stay.', (on) => g.send({ t: 'host', cmd: 'settings', settings: { locked: on } })),
+          this.passcodeSetting(),
         );
         const dayRow = h('div', { class: 'row' });
         const days = [

@@ -201,7 +201,7 @@ test('the owner can make building owner-only, lock the island and send someone h
   assert.ok(b.last('notice'));
   room.receive(a, { t: 'host', cmd: 'settings', settings: { build: 'host', locked: true, day: 'night' } });
   assert.deepEqual(room.settings, { build: 'host', locked: true, day: 'night' });
-  assert.deepEqual(b.last('settings').settings, room.settings);
+  assert.deepEqual(b.last('settings').settings, { ...room.settings, passcode: false });
   const w = room.world;
   const x = Math.floor(w.spawn.x) - 1;
   const z = Math.floor(w.spawn.z);

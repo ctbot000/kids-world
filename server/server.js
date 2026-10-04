@@ -15,6 +15,7 @@ import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { generateCode, isValidCode, normalizeCode } from '../public/js/shared/codes.js';
+import { sortListings } from '../public/js/shared/listing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
@@ -82,6 +83,14 @@ export function createGameServer({
     }
     if (pathname === '/api/info') {
       const body = JSON.stringify({ app: 'kids-world', mode: 'server', protocol: PROTOCOL, islands: rooms.size });
+      res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
+      return;
+    }
+    // The list of open islands here (see shared/listing.js): those with
+    // someone on them, and not closed to new visitors.
+    if (pathname === '/api/islands') {
+      const open = [...rooms.values()].map((entry) => (entry.room.online > 0 ? entry.room.listing() : null)).filter(Boolean);
+      const body = JSON.stringify({ islands: sortListings(open) });
       res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
       return;
     }

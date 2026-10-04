@@ -1375,6 +1375,38 @@ body.touch.playing #joystick {
   word-break: keep-all;
 }
 
+/* The islands open now, under the code in Visit a friend. */
+.open-section {
+  margin-top: 18px;
+  padding-top: 6px;
+  border-top: 3px dashed var(--line);
+}
+
+.island-item .chip:disabled {
+  opacity: 0.55;
+}
+
+.wrong-passcode {
+  color: var(--pink-dark);
+  font-weight: 700;
+}
+
+.passcode {
+  letter-spacing: 3px;
+}
+
+.passcode-row {
+  flex-wrap: nowrap;
+  margin: -4px 0 8px;
+}
+
+.passcode-input {
+  flex: 0 0 auto;
+  width: 7.5em;
+  text-align: center;
+  letter-spacing: 6px;
+}
+
 .sticker-card {
   display: flex;
   flex-direction: column;

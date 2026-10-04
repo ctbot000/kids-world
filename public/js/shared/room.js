@@ -14,7 +14,8 @@ import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
-import { generate } from './worldgen.js';
+import { generate, SIZES } from './worldgen.js';
+import { isPasscode, normalizePasscode } from './listing.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
@@ -46,6 +47,10 @@ const CHAT_KEEP = 30;
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
 const KEEP_PLAYERS = 64;
+// Wrong passcodes, for the whole island (anyone can try from anywhere): a
+// few at once, then one every ten seconds, so four numbers take days to guess.
+const GUESS_BURST = 5;
+const GUESS_EVERY_MS = 10000;
 
 export function randomToken() {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
@@ -87,7 +92,10 @@ export class Room {
     this.encoded = null;
     this.onUpdate = null;
     this.closed = false;
+    // The owner's passcode, which new visitors type to come in, or ''.
+    this.passcode = '';
     const t = now();
+    this.guesses = { left: GUESS_BURST, at: t };
     this.lastTick = t;
     this.critterSentAt = 0;
     this.envSentAt = t;
@@ -194,6 +202,7 @@ export class Room {
     if (!next) return;
     this.host = next.id;
     this.broadcast({ t: 'host', pid: next.id });
+    this.tellHost();
   }
 
   // ------------------------------------------------ messages
@@ -291,6 +300,7 @@ export class Room {
         this.sendTo(conn, { t: 'error', code: 'full', text: `This island already has ${MAX_PLAYERS} friends on it. Try again later!` });
         return;
       }
+      if (this.passcode && this.players.size > 0 && !this.passcodeFits(conn, msg.passcode)) return;
     }
     const look = cleanLook(msg.look, this.random);
     const wanted = nameOf(msg.name) || randomName(this.random);
@@ -325,6 +335,28 @@ export class Room {
     this.changed();
   }
 
+  // Whether a new visitor typed the island's passcode; if not, they are told
+  // why they cannot come in.
+  passcodeFits(conn, raw) {
+    const typed = normalizePasscode(raw);
+    if (!typed) {
+      this.sendTo(conn, { t: 'error', code: 'passcode', text: 'This island has a passcode. Ask the island owner for it!' });
+      return false;
+    }
+    const now = this.now();
+    const g = this.guesses;
+    g.left = Math.min(GUESS_BURST, g.left + (now - g.at) / GUESS_EVERY_MS);
+    g.at = now;
+    if (g.left < 1) {
+      this.sendTo(conn, { t: 'error', code: 'passcode', wait: true, text: 'Lots of wrong passcodes were tried here. Wait a minute, then try again.' });
+      return false;
+    }
+    if (typed === this.passcode) return true;
+    g.left -= 1;
+    this.sendTo(conn, { t: 'error', code: 'passcode', wrong: true, text: 'That passcode is not right. Ask the island owner for it!' });
+    return false;
+  }
+
   uniqueName(name, self) {
     const taken = new Set([...this.players.values()].filter((q) => q.online && q.id !== self).map((q) => q.name));
     if (!taken.has(name)) return name;
@@ -354,7 +386,9 @@ export class Room {
       you: c.pid,
       token: c.token,
       host: this.host,
-      settings: this.settings,
+      settings: this.publicSettings(),
+      // Only the owner hears the passcode itself.
+      ...(c.pid === this.host ? { passcode: this.passcode } : {}),
       meta: this.world.meta(),
       blocks: this.encodedBlocks(),
       players: this.onlinePlayers().map((p) => this.describePlayer(p)),
@@ -561,7 +595,7 @@ export class Room {
       case 'settings': {
         const before = this.settings.day;
         this.settings = cleanSettings(msg.settings, this.settings);
-        this.broadcast({ t: 'settings', settings: this.settings });
+        this.broadcast({ t: 'settings', settings: this.publicSettings() });
         if (before !== this.settings.day) {
           this.env.time = advanceTime(this.env.time, 0, this.settings.day);
           if (this.settings.day === 'cycle' && before !== 'cycle') this.env.time = 0.3;
@@ -592,11 +626,49 @@ export class Room {
         if (!target?.online) return;
         this.host = target.id;
         this.broadcast({ t: 'host', pid: target.id });
+        this.tellHost();
+        break;
+      }
+      case 'passcode': {
+        // Four numbers, or '' for none: anyone can come in again.
+        const passcode = msg.passcode === '' ? '' : normalizePasscode(msg.passcode);
+        if (msg.passcode !== '' && !passcode) return;
+        this.passcode = passcode;
+        this.broadcast({ t: 'settings', settings: this.publicSettings() });
+        this.tellHost();
+        this.changed();
         break;
       }
       default:
         break;
     }
+  }
+
+  // The island's rules as everyone hears them: whether it has a passcode, never the passcode.
+  publicSettings() {
+    return { ...this.settings, passcode: this.passcode !== '' };
+  }
+
+  // The owner, whoever that is now, hears the passcode.
+  tellHost() {
+    const text = JSON.stringify({ t: 'passcode', passcode: this.passcode });
+    for (const [conn, c] of this.clients) if (c.pid && c.pid === this.host) this.safeSend(conn, text);
+  }
+
+  // The island on the list of open islands (see listing.js), or null while
+  // it is closed to new visitors.
+  listing() {
+    if (this.settings.locked) return null;
+    const w = this.world;
+    return {
+      code: this.code,
+      name: w.name,
+      theme: w.theme,
+      size: SIZES.find((s) => s.side === w.W)?.key ?? SIZES[0].key,
+      players: this.online,
+      max: MAX_PLAYERS,
+      passcode: this.passcode !== '',
+    };
   }
 
   // ------------------------------------------------ time
@@ -751,6 +823,7 @@ export class Room {
       critters: this.critters.save(),
       env: { time: +this.env.time.toFixed(4), weather: this.env.weather },
       settings: this.settings,
+      passcode: this.passcode,
       host: this.host,
       nextPid: this.nextPid,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look })),
@@ -777,6 +850,7 @@ export class Room {
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
     this.settings = cleanSettings(save.settings);
+    this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
     if (Array.isArray(save.players)) {

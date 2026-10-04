@@ -12,6 +12,7 @@ import { Sound } from './sound.js';
 import * as storage from './storage.js';
 import { UI } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
+import { cleanListing } from './shared/listing.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { generate } from './shared/worldgen.js';
 
@@ -206,10 +207,13 @@ function tokenKey(kind, id) {
 }
 
 // first(game): the message that opens the connection (a join, or making an island on the server).
-function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage() }) {
+// visit: the code of a friend's island you are visiting, and passcode: the
+// one you typed for it.
+function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '' }) {
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
   game.token = profile.token(key);
+  game.typedPasscode = passcode;
   renderer.removeAvatar(-1);
   demo.avatar = null;
   session = { link, game, mode, islandId, key, started: false, dirty: false };
@@ -256,12 +260,18 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   });
   game.addEventListener('fatal', (e) => {
     if (session?.game !== game) return;
-    const { text } = e.detail;
+    const { code, text, wrong, wait } = e.detail;
     backToTitle();
-    ui.toast('🙈', text, 'warn');
+    // An island with a passcode: type it, and off you go again.
+    if (code === 'passcode' && visit && !wait) {
+      ui.passcodeDialog({ wrong }, (typed) => visitIsland(visit, typed));
+      return;
+    }
+    ui.toast(wait ? '⏳' : '🙈', text, 'warn');
   });
   if (mode === 'host') link.room.onUpdate = () => session && (session.dirty = true);
   link.start(() => first(game));
+  updateListing();
   return session;
 }
 
@@ -271,6 +281,7 @@ function endSession(save = true) {
   clearTimeout(s.goneTimer);
   if (save) saveIsland();
   session = null;
+  updateListing();
   s.game.close();
   s.link.close();
   ui.detach();
@@ -306,6 +317,16 @@ function saveIsland() {
 setInterval(() => {
   if (session?.dirty) saveIsland();
 }, 15000);
+
+// The island you host peer to peer is on the keeper's list of open islands
+// while friends can visit it: how many are on it, whether it has a passcode
+// and so on, as they change. (On the dedicated server, the server lists it.)
+function updateListing() {
+  const link = session?.mode === 'host' ? session.link : null;
+  const open = link && session.started && link.online && link.state === 'online';
+  keeper.setListing(open ? link.room.listing() : null);
+}
+setInterval(updateListing, 3000);
 window.addEventListener('pagehide', () => saveIsland());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveIsland();
@@ -346,7 +367,8 @@ function openIsland(id, save = null) {
   startSession({ link, mode: 'host', islandId: id, key: tokenKey('island', id), loadingText: 'Opening your island…' });
 }
 
-function visitIsland(raw) {
+// passcode: the one you typed for an island that has one.
+function visitIsland(raw, passcode = '') {
   const code = normalizeCode(raw);
   if (!isValidCode(code)) {
     ui.toast('🙈', 'An island code has 6 numbers.', 'warn');
@@ -354,7 +376,7 @@ function visitIsland(raw) {
   }
   if (serverMode) {
     const link = new WsLink({ url: wsUrl() });
-    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText: 'Flying to your friend’s island…', first: (game) => ({ ...game.joinMessage(), code }) });
+    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText: 'Flying to your friend’s island…', first: (game) => ({ ...game.joinMessage(), code }), visit: code, passcode });
     return;
   }
   if (signalError) {
@@ -362,7 +384,23 @@ function visitIsland(raw) {
     return;
   }
   const link = new GuestLink({ code, peerOptions });
-  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…' });
+  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…', visit: code, passcode });
+}
+
+// Whether you have been on this island before, and so come back without its passcode.
+function visitedBefore(code) {
+  return Boolean(profile.token(tokenKey(serverMode ? 'server' : 'visit', code)));
+}
+
+// The list of open islands: the dedicated server's own, or peer to peer,
+// the keeper's. Resolves with the listings; rejects with a KeeperProblem
+// (none: there is no keeper to ask).
+async function openIslands() {
+  if (!serverMode) return keeper.openIslands();
+  const res = await fetch('api/islands', { cache: 'no-store' });
+  if (!res.ok) throw new KeeperProblem('bad');
+  const reply = await res.json();
+  return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
 }
 
 function wsUrl() {
@@ -517,7 +555,11 @@ const loginHandlers = {
 
 const titleHandlers = {
   make: (opts) => makeIsland(opts),
-  visit: (code) => visitIsland(code),
+  visit: (code, passcode = '') => visitIsland(code, passcode),
+  // The list of open islands is there with the dedicated server, or a keeper.
+  listAvailable: () => serverMode || Boolean(keeper.config),
+  openIslands,
+  visitedBefore,
   islands: () => storage.listIslands(),
   open: (id) => openIsland(id),
   forget: (id) => {
@@ -548,7 +590,10 @@ const gameHandlers = {
   setOnline: (on) => {
     session?.link.setOnline(on);
     ui.renderIsland();
+    updateListing();
   },
+  // A passcode for the island ('' for none), as its owner.
+  setPasscode: (passcode) => session?.game.send({ t: 'host', cmd: 'passcode', passcode }),
   canSave: () => session?.mode === 'host',
   saveFile: () => downloadIsland(),
   keeper,

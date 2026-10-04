@@ -39,6 +39,12 @@
 // ranking looks different to it, until it says 'unwatch' (pages tell this
 // news from answers by its t):
 //   keeper → page   { t: 'ranking-news', players, boards, shown? }
+// The list of open islands (see listing.js), for any page. A host's page
+// lists its island while it is open to visitors, and stays connected
+// meanwhile: the island leaves the list when the page goes.
+//   { t: 'open-island', island }          → { t: 'kept', what: 'open-island', code }
+//   { t: 'close-island' }                 → { t: 'kept', what: 'close-island' }
+//   { t: 'islands' }                      → { t: 'islands', islands }
 //
 // Anyone can register a peer id while the keeper is away, so the page sends
 // nothing but its nonce until the keeper has signed it with the key whose
