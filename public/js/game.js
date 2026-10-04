@@ -1,10 +1,11 @@
 // One visit to an island, from this player's side: the copy of the world,
-// you walking about, your friends and the animals moving smoothly, the
-// tools, and everything said and done. Talks to the island through a link
+// you walking about, your friends, the animals and any monsters moving
+// smoothly, your hearts, the tools, and everything said and done. Talks to the island through a link
 // (see net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
+import { MAX_HEARTS, MONSTER_BODY, unpackMonster } from './shared/monsters.js';
 import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -57,7 +58,7 @@ export class Game extends EventTarget {
     this.host = 0;
     this.code = '';
     this.token = '';
-    this.settings = { build: 'everyone', locked: false, day: 'cycle', passcode: false };
+    this.settings = { build: 'everyone', locked: false, day: 'cycle', monsters: false, passcode: false };
     // The island's passcode, known while you are its owner ('' for none),
     // and the one you typed to come in as a new visitor.
     this.passcode = '';
@@ -66,6 +67,9 @@ export class Game extends EventTarget {
     this.invitePass = '';
     this.players = new Map();
     this.critters = new Map();
+    // Monsters (shared/monsters.js), while the island has them, and your hearts.
+    this.monsters = new Map();
+    this.hearts = MAX_HEARTS;
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
     this.chat = [];
     this.me = null;
@@ -190,6 +194,18 @@ export class Game extends EventTarget {
       case 'ride':
         this.rideNews(msg);
         break;
+      case 'mon':
+        this.monsterStates(msg.m);
+        break;
+      case 'bump':
+        this.bumped(msg);
+        break;
+      case 'hearts':
+        this.setHearts(msg.hearts);
+        break;
+      case 'pop':
+        this.popped(msg);
+        break;
       case 'env':
         this.setEnv(msg);
         break;
@@ -247,6 +263,9 @@ export class Game extends EventTarget {
       const c = unpackCritter(row);
       if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0 });
     }
+    for (const id of [...this.monsters.keys()]) this.dropMonster(id);
+    this.monsterStates(msg.monsters ?? []);
+    this.setHearts(msg.hearts ?? MAX_HEARTS);
     this.setEnv(msg.env);
     this.renderer.view.yaw = Math.PI * 0.9;
     this.emit('welcome', { again });
@@ -386,6 +405,153 @@ export class Game extends EventTarget {
     if (this.near(p.x, p.y, p.z, 20)) {
       this.sound.play(entry.type);
       if (msg.fx === 'yum') this.sound.play('yum');
+    }
+  }
+
+  // ------------------------------------------------ monsters
+
+  monsterStates(rows) {
+    if (!Array.isArray(rows)) return;
+    const now = performance.now();
+    const seen = new Set();
+    for (const row of rows) {
+      const m = unpackMonster(row);
+      if (!m) continue;
+      seen.add(m.id);
+      let entry = this.monsters.get(m.id);
+      if (!entry) {
+        entry = { id: m.id, snaps: [], model: this.renderer.addMonster(m.id), grumbleAt: now + Math.random() * 4000 };
+        this.monsters.set(m.id, entry);
+        if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
+      }
+      entry.snaps.push({ t: now, x: m.x, y: m.y, z: m.z, yaw: m.yaw, state: m.state });
+      if (entry.snaps.length > 8) entry.snaps.shift();
+    }
+    // Gone (monsters turned off, or wandered off): a puff where each was.
+    for (const [id, entry] of [...this.monsters]) {
+      if (seen.has(id)) continue;
+      const p = entry.model.group.position;
+      if (this.near(p.x, p.y, p.z, 40)) this.renderer.effects.sparkles(p.x, p.y + 0.4, p.z, 8, ['#ffffff', '#d9c8ff']);
+      this.dropMonster(id);
+    }
+  }
+
+  dropMonster(id) {
+    this.renderer.removeMonster(id);
+    this.monsters.delete(id);
+  }
+
+  setHearts(n) {
+    if (!Number.isInteger(n)) return;
+    this.hearts = Math.max(0, Math.min(MAX_HEARTS, n));
+    this.emit('hearts', this.hearts);
+  }
+
+  // A monster bumped into someone: you are knocked back (or sent home, out of
+  // hearts), and a friend gets a little burst of stars.
+  bumped(msg) {
+    const entry = this.monsters.get(msg.id);
+    if (entry) entry.model.squash = 0.3;
+    if (msg.pid !== this.pid) {
+      const p = this.players.get(msg.pid)?.avatar?.root.position;
+      if (p && this.near(p.x, p.y, p.z, 30)) {
+        this.renderer.effects.bang(p.x, p.y + 1.7, p.z);
+        this.sound.play('bump');
+      }
+      return;
+    }
+    this.setHearts(msg.hearts);
+    this.sound.play('bump');
+    const b = this.me?.body;
+    if (!b) return;
+    this.renderer.effects.bang(b.x, b.y + 1.7, b.z);
+    if (msg.home) {
+      // Out of hearts: back to the start of the island with all of them.
+      if (this.riding) this.dismount();
+      const spawn = this.world.spawn;
+      Object.assign(b, { x: spawn.x, y: spawn.y, z: spawn.z, vx: 0, vy: 0, vz: 0, flying: false });
+      unstick(this.world, b);
+      this.renderer.view.ready = false;
+      this.renderer.effects.sparkles(b.x, b.y + 1, b.z, 20);
+      this.sendMove(true);
+      this.emit('toast', { icon: '💖', text: 'Out of hearts! Back to the start of the island, where no monster goes.' });
+      return;
+    }
+    // Knocked back, away from it, and up a little.
+    const dx = b.x - (Number(msg.x) || b.x);
+    const dz = b.z - (Number(msg.z) || b.z);
+    const d = Math.hypot(dx, dz);
+    const dir = d > 0.01 ? [dx / d, dz / d] : [-Math.sin(this.me.yaw), -Math.cos(this.me.yaw)];
+    b.vx = dir[0] * 9;
+    b.vz = dir[1] * 9;
+    b.vy = Math.max(b.vy, 6);
+    b.onGround = false;
+    this.flashUntil = performance.now() + 1600;
+  }
+
+  // A monster popped: tapped or jumped on.
+  popped(msg) {
+    const entry = this.monsters.get(msg.id);
+    const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
+    const fx = this.renderer.effects;
+    if ([p.x, p.y, p.z].every(Number.isFinite) && this.near(p.x, p.y, p.z, 40)) {
+      fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
+      fx.dust(p.x, p.y, p.z);
+      this.sound.play('splat');
+    }
+    this.dropMonster(msg.id);
+    if (msg.by === this.pid) {
+      const first = !this.profile.data.stats.popped;
+      this.profile.count('popped');
+      if (first) this.emit('toast', { icon: '👾', text: 'Pop! Tap a monster or jump on it to pop it.' });
+    }
+  }
+
+  // Tapping a monster (any tool will do).
+  bop(id) {
+    this.send({ t: 'bop', id });
+  }
+
+  // Landing on a monster pops it, and bounces you up.
+  stomp() {
+    const b = this.me.body;
+    if (b.vy >= -0.5 || b.onGround || b.inWater) return;
+    for (const entry of this.monsters.values()) {
+      if (entry.stomped) continue;
+      const m = entry.model.group.position;
+      if (Math.hypot(m.x - b.x, m.z - b.z) > MONSTER_BODY.radius + BODY.radius) continue;
+      const up = b.y - m.y;
+      if (up < MONSTER_BODY.height * 0.5 || up > MONSTER_BODY.height + 0.5) continue;
+      entry.stomped = true;
+      this.bop(entry.id);
+      b.vy = 9;
+      this.sound.play('jump');
+      return;
+    }
+  }
+
+  updateMonsters(dt) {
+    const now = performance.now();
+    const night = isNight(this.env.time);
+    const cam = this.renderer.camera.position;
+    for (const entry of this.monsters.values()) {
+      const s = this.interpolate(entry.snaps, CRITTER_INTERP_MS);
+      if (!s) continue;
+      const m = entry.model;
+      m.group.position.set(s.x, s.y, s.z);
+      m.group.rotation.y = s.yaw;
+      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      if (!m.group.visible) {
+        m.shadow.visible = false;
+        continue;
+      }
+      const ground = this.renderer.groundUnder(s.x, s.y, s.z);
+      m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night);
+      this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
+      if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, 10)) {
+        entry.grumbleAt = now + 3500 + Math.random() * 4000;
+        this.sound.play('grumble');
+      }
     }
   }
 
@@ -824,6 +990,12 @@ export class Game extends EventTarget {
     const eye = { x: this.me.body.x, y: this.me.body.y + BODY.eye, z: this.me.body.z };
     const maxDist = REACH + this.renderer.camDist;
     const hit = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, maxDist, stopAt);
+    // A monster, before anything behind it (but a flower in front does not hide it).
+    const monster = this.renderer.pickMonster(ray, maxDist);
+    if (monster && (!hit || monster.dist < hit.dist + (B.KIND[hit.id] === B.K_PLANT ? 1.5 : 0))) {
+      const m = this.monsters.get(monster.id)?.model.group.position;
+      if (m && Math.hypot(m.x - eye.x, m.y + 0.4 - eye.y, m.z - eye.z) <= REACH + 1) return { kind: 'monster', id: monster.id };
+    }
     // Not the animal you are riding, which is in the middle of the picture.
     const critter = this.renderer.pickCritter(ray, maxDist, this.riding?.id);
     // Flowers and grass are see-through: one in front of an animal, or the
@@ -917,6 +1089,10 @@ export class Game extends EventTarget {
     }
     if (aim.kind === 'critter') {
       this.touchCritter(aim.id);
+      return;
+    }
+    if (aim.kind === 'monster') {
+      this.bop(aim.id);
       return;
     }
     const tool = this.tool;
@@ -1083,6 +1259,7 @@ export class Game extends EventTarget {
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
+    this.updateMonsters(dt);
     // Holding the button down (after a moment) keeps building or picking as you sweep.
     const hold = this.holding;
     if (hold && performance.now() >= hold.at && this.tool !== 'stamp' && this.tool !== 'friends') {
@@ -1105,9 +1282,13 @@ export class Game extends EventTarget {
     this.observe();
   }
 
+  // Hidden while you look through your own eyes, and blinking for a moment
+  // after a monster bumps into you.
   selfVisible(on) {
     const a = this.players.get(this.pid)?.avatar;
-    if (a) a.root.visible = on;
+    const now = performance.now();
+    const blink = now < (this.flashUntil ?? 0) && Math.floor(now / 90) % 2 === 1;
+    if (a) a.root.visible = on && !blink;
   }
 
   moveMe(dt, input) {
@@ -1123,6 +1304,7 @@ export class Game extends EventTarget {
     const mz = fz * move.y + fx * move.x;
     const wasGround = b.onGround;
     const events = stepBody(w, b, { mx, mz, jump: input.jump, down: input.down, run: input.run }, dt, { autoJump: this.profile.settings.autoJump });
+    if (this.monsters.size) this.stomp();
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;
@@ -1388,8 +1570,10 @@ export class Game extends EventTarget {
     this.link.removeEventListener('message', this.onMessage);
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
+    for (const id of [...this.monsters.keys()]) this.renderer.removeMonster(id);
     this.players.clear();
     this.critters.clear();
+    this.monsters.clear();
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
   }

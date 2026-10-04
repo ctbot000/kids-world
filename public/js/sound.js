@@ -223,6 +223,20 @@ export class Sound {
         this.tone(220, { decay: 0.08, gain: 0.12, type: 'triangle' });
         this.tone(185, { at: 0.1, decay: 0.12, gain: 0.12, type: 'triangle' });
         break;
+      // Monsters: bumped (a soft boing), popped (a squelch and a sparkle),
+      // and a grumble now and then.
+      case 'bump':
+        this.tone(180 * r(), { decay: 0.3, gain: 0.25, type: 'triangle', slide: 90, slideTime: 0.25, vibrato: 18 });
+        this.noise(0.08, { type: 'lowpass', freq: 600, gain: 0.15 });
+        break;
+      case 'splat':
+        this.noise(0.12, { type: 'bandpass', freq: 700, sweep: 2400, q: 1.5, gain: 0.25 });
+        this.tone(420 * r(), { decay: 0.1, gain: 0.2, slide: 1100, slideTime: 0.08 });
+        this.tone(NOTE(91), { at: 0.1, decay: 0.3, gain: 0.08, type: 'triangle' });
+        break;
+      case 'grumble':
+        this.tone(110 * r(), { decay: 0.35, gain: 0.12, type: 'sawtooth', slide: 85, vibrato: 12 });
+        break;
       case 'bye':
         this.noise(0.3, { type: 'bandpass', freq: 1500, sweep: 400, gain: 0.15 });
         this.tone(NOTE(84), { at: 0.1, decay: 0.3, gain: 0.08 });

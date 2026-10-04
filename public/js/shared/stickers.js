@@ -31,6 +31,7 @@ export const STICKERS = [
   { key: 'night-owl', icon: '🦉', name: 'Night Owl', text: 'Stay up to see the stars', test: (s) => s.nights >= 1 },
   { key: 'rainbow', icon: '🌈', name: 'Rainbow Watcher', text: 'See a rainbow', test: (s) => s.rainbows >= 1 },
   { key: 'explorer', icon: '🧭', name: 'Explorer', text: 'Walk 1,000 steps', test: (s) => s.steps >= 1000 },
+  { key: 'monster-popper', icon: '👾', name: 'Monster Popper', text: 'Pop 10 monsters', test: (s) => s.popped >= 10 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];

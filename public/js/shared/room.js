@@ -1,6 +1,7 @@
 // A hosted island: the world and everything around it — who is here, their
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
-// into trees, fruit growing back, and what the island's owner allows.
+// into trees, fruit growing back, what the island's owner allows, and the
+// monsters when the owner lets them in (with everyone's hearts).
 //
 // Transport-agnostic. The host environment (the Node server, a host's
 // browser, or solo play) attaches connection objects with send(text) and
@@ -16,6 +17,7 @@ import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
+import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS } from './monsters.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
@@ -62,7 +64,7 @@ export function randomToken() {
 }
 
 export function defaultSettings() {
-  return { build: 'everyone', locked: false, day: 'cycle' };
+  return { build: 'everyone', locked: false, day: 'cycle', monsters: false };
 }
 
 function cleanSettings(raw, base = defaultSettings()) {
@@ -70,6 +72,7 @@ function cleanSettings(raw, base = defaultSettings()) {
     build: raw?.build === 'host' || raw?.build === 'everyone' ? raw.build : base.build,
     locked: typeof raw?.locked === 'boolean' ? raw.locked : base.locked,
     day: DAY_MODES.includes(raw?.day) ? raw.day : base.day,
+    monsters: typeof raw?.monsters === 'boolean' ? raw.monsters : base.monsters,
   };
 }
 
@@ -122,6 +125,9 @@ export class Room {
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
     }
+    // Never saved: an island opened again starts without any.
+    this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
+    this.monstersSent = false;
     this.hookWorld();
   }
 
@@ -269,6 +275,9 @@ export class Room {
       case 'critter':
         this.critterOp(conn, p, msg);
         break;
+      case 'bop':
+        this.bop(p, msg);
+        break;
       case 'host':
         this.hostCommand(conn, p, msg);
         break;
@@ -324,10 +333,11 @@ export class Room {
       }
       p.online = true;
       p.look = look;
+      p.hearts = MAX_HEARTS;
       p.name = this.uniqueName(wanted, p.id);
     } else {
       const spawn = this.world.spawn;
-      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0] };
+      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], hearts: MAX_HEARTS };
       this.players.set(p.id, p);
       this.prunePlayers();
     }
@@ -423,6 +433,8 @@ export class Room {
       players: this.onlinePlayers().map((p) => this.describePlayer(p)),
       critters: this.critters.describe(),
       pack: this.critters.pack(),
+      monsters: this.monsters.pack(),
+      hearts: this.players.get(c.pid)?.hearts ?? MAX_HEARTS,
       env: this.envMessage(),
       chat: this.chat,
     });
@@ -625,6 +637,7 @@ export class Room {
         const before = this.settings.day;
         this.settings = cleanSettings(msg.settings, this.settings);
         this.broadcast({ t: 'settings', settings: this.publicSettings() });
+        if (!this.settings.monsters) this.noMonsters();
         if (before !== this.settings.day) {
           this.env.time = advanceTime(this.env.time, 0, this.settings.day);
           if (this.settings.day === 'cycle' && before !== 'cycle') this.env.time = 0.3;
@@ -730,13 +743,79 @@ export class Room {
       if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: p.look?.animal === KID ? p.look.hair : '' });
     }
     this.critters.step(this.world, dt, now, where, isNight(env.time));
+    if (this.settings.monsters) this.stepMonsters(dt, now, where);
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
       this.broadcast({ t: 'c', c: this.critters.pack() });
+      // Monsters too, while there are any, and once more when the last goes.
+      const any = this.monsters.list.length > 0;
+      if (any || this.monstersSent) this.broadcast({ t: 'mon', m: this.monsters.pack() });
+      this.monstersSent = any;
     }
 
     this.grow(now);
     this.nature(now);
+  }
+
+  // ------------------------------------------------ monsters
+
+  stepMonsters(dt, now, where) {
+    const riding = new Set(this.critters.list.map((c) => c.rider).filter(Boolean));
+    const people = [];
+    for (const [id, w] of where) {
+      const p = this.players.get(id);
+      people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0 });
+    }
+    for (const { monster, pid } of this.monsters.step(this.world, dt, now, people, isNight(this.env.time))) {
+      const p = this.players.get(pid);
+      p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS);
+      p.bumpAt = now;
+      p.healAt = now;
+      p.safeUntil = now + SAFE_MS;
+      const home = p.hearts === 0;
+      if (home) {
+        // Back to the start of the island, safe, with every heart again.
+        p.hearts = MAX_HEARTS;
+        const spawn = this.world.spawn;
+        p.s = [spawn.x, spawn.y, spawn.z, p.s[3], 0, 0];
+      }
+      const b = monster.body;
+      this.broadcast({ t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), hearts: p.hearts, home });
+    }
+    // Hearts come back while nothing bumps you.
+    for (const p of this.players.values()) {
+      if (!p.online || (p.hearts ?? MAX_HEARTS) >= MAX_HEARTS) continue;
+      const hearts = heartsBack(p.hearts, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
+      if (hearts === p.hearts) continue;
+      p.hearts = hearts;
+      p.healAt = now;
+      this.sendToPid(p.id, { t: 'hearts', hearts });
+    }
+  }
+
+  // Tapping a monster, or jumping on it: pop!
+  bop(p, msg) {
+    if (!this.settings.monsters || !Number.isInteger(msg.id)) return;
+    const m = this.monsters.canBop(msg.id, { x: p.s[0], y: p.s[1], z: p.s[2] });
+    if (!m) return;
+    this.monsters.remove(m.id);
+    const b = m.body;
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+  }
+
+  // Monsters turned off: every one goes, and everyone has all their hearts.
+  noMonsters() {
+    this.monsters.clear();
+    for (const p of this.players.values()) {
+      if ((p.hearts ?? MAX_HEARTS) === MAX_HEARTS) continue;
+      p.hearts = MAX_HEARTS;
+      if (p.online) this.sendToPid(p.id, { t: 'hearts', hearts: MAX_HEARTS });
+    }
+  }
+
+  sendToPid(pid, msg) {
+    const text = JSON.stringify(msg);
+    for (const [conn, c] of this.clients) if (c.pid === pid) this.safeSend(conn, text);
   }
 
   grow(now) {

@@ -12,6 +12,7 @@ import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
+import { MAX_HEARTS } from './shared/monsters.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
@@ -61,6 +62,9 @@ function lineIcon(name) {
 }
 
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
+
+// What the island rule for monsters means (shared/monsters.js).
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Tap one or jump on it to pop it!';
 
 // "a peach", "an apple".
 // "an elephant", "a unicorn".
@@ -340,6 +344,7 @@ export class UI {
     let rolled = randomIslandName(theme);
     let own = '';
     let online = true;
+    let monsters = false;
     this.openModal((root) => {
       const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: rolled, placeholder: rolled, maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
       nameBox.spellcheck = false;
@@ -409,6 +414,13 @@ export class UI {
         sw.setAttribute('aria-checked', String(online));
         this.sound.play('ui');
       };
+      const monsterSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Monsters', role: 'switch', 'aria-checked': 'false' });
+      monsterSw.onclick = () => {
+        monsters = !monsters;
+        monsterSw.classList.toggle('on', monsters);
+        monsterSw.setAttribute('aria-checked', String(monsters));
+        this.sound.play('ui');
+      };
       root.append(
         h('h2', {}, '🏝️ Make an island'),
         h('h3', {}, 'What kind of island?'),
@@ -434,6 +446,7 @@ export class UI {
           ),
         ),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, 'Friends can visit'), h('div', { class: 'muted' }, 'Friends join with your island code. Turn off to play alone.')), sw),
+        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
         h(
           'button',
           {
@@ -442,7 +455,7 @@ export class UI {
             style: 'margin-top:14px',
             onclick: () => {
               this.closeModal();
-              this.handlers.make({ theme, size, name: own || rolled, online });
+              this.handlers.make({ theme, size, name: own || rolled, online, settings: monsters ? { monsters: true } : null });
             },
           },
           '✨ Make it!',
@@ -1707,6 +1720,7 @@ export class UI {
     this.renderBasket();
     this.renderFriends();
     this.renderIsland();
+    this.renderHearts();
     this.minimap.attach(game);
     this.renderMap();
     $('btn-toybox').onclick = () => this.toyBox();
@@ -1738,7 +1752,11 @@ export class UI {
     };
     const on = (type, fn) => game.addEventListener(type, fn);
     on('players', () => this.renderFriends());
-    on('settings', () => this.renderIsland());
+    on('settings', () => {
+      this.renderIsland();
+      this.renderHearts();
+    });
+    on('hearts', () => this.renderHearts());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -2317,6 +2335,7 @@ export class UI {
           ),
           toggle(g.settings.locked, '🚪 No new visitors', 'Friends already here can stay.', (on) => g.send({ t: 'host', cmd: 'settings', settings: { locked: on } })),
           this.passcodeSetting(),
+          toggle(Boolean(g.settings.monsters), '👾 Monsters', MONSTERS_ABOUT, (on) => g.send({ t: 'host', cmd: 'settings', settings: { monsters: on } })),
         );
         const dayRow = h('div', { class: 'row' });
         const days = [
@@ -2457,6 +2476,27 @@ export class UI {
     $('island-code').textContent = this.gameHandlers?.canInvite() ? `Code ${prettyCode(g.code)}` : 'Playing alone';
   }
 
+  // Your hearts, shown while the island has monsters; a shake when one goes.
+  renderHearts() {
+    const el = $('hearts');
+    const g = this.game;
+    const shown = Boolean(g?.settings.monsters);
+    el.hidden = !shown;
+    if (!shown) {
+      this.heartsShown = MAX_HEARTS;
+      return;
+    }
+    const n = g.hearts;
+    el.setAttribute('aria-label', `${n} of ${MAX_HEARTS} hearts`);
+    el.replaceChildren(...Array.from({ length: MAX_HEARTS }, (_, i) => h('span', { class: i < n ? '' : 'lost' }, '❤️')));
+    if (n < (this.heartsShown ?? MAX_HEARTS)) {
+      el.classList.remove('hurt');
+      void el.offsetWidth;
+      el.classList.add('hurt');
+    }
+    this.heartsShown = n;
+  }
+
   setStatus(state, text) {
     const el = $('status');
     const icon = { online: '🟢', offline: '', connecting: '🟡', reconnecting: '🟡', 'id-taken': '🟡', failed: '🔴' }[state] ?? '';
@@ -2495,6 +2535,9 @@ export class UI {
       const info = CRITTER_INFO[c?.type];
       el.textContent = c ? `${info.icon} ${c.name || info.name}${g.tool === 'friends' ? ' — tap to say bye' : ' — tap to pet'}` : '';
       el.hidden = !c;
+    } else if (aim?.kind === 'monster') {
+      el.textContent = '👾 Monster — tap to pop it!';
+      el.hidden = false;
     } else if (aim?.kind === 'far') {
       el.textContent = 'Too far away — walk closer!';
       el.hidden = false;

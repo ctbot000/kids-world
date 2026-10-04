@@ -513,6 +513,64 @@ test('a pony beside you is got on with the Ride button, ridden about, and got of
   await page.browserContext().close();
 });
 
+test('monsters, turned on in Make an island: hearts on screen, one popped with a click, one taking a heart, and all gone when turned off', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  assert.equal(await page.evaluate(() => window.kidsWorld.session.link.room.settings.monsters), true);
+  await until(page, () => !document.getElementById('hearts').hidden && document.querySelectorAll('#hearts span:not(.lost)').length === 5);
+  // A monster a few steps in front of you, held still (giggling never bumps),
+  // and none other coming out.
+  const id = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    const b = kw.game.me.body;
+    // Out of the safe place round the start, where monsters never go.
+    Object.assign(b, { x: b.x + 14, vx: 0, vz: 0 });
+    const m = room.monsters.add(room.world, b.x, b.y, b.z - 3);
+    m.giggle = Infinity;
+    kw.renderer.view.yaw = 0;
+    kw.renderer.view.pitch = 0.35;
+    return m.id;
+  });
+  await until(page, (id) => window.kidsWorld.game.monsters.has(id), id);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const p = kw.game.monsters.get(id).model.group.position;
+    const s = kw.renderer.project(p.x, p.y + 0.4, p.z);
+    const r = kw.renderer.canvas.getBoundingClientRect();
+    return { x: r.left + s.x, y: r.top + s.y };
+  }, id);
+  await page.mouse.click(at.x, at.y);
+  await until(page, (id) => !window.kidsWorld.session.link.room.monsters.get(id) && !window.kidsWorld.game.monsters.has(id), id);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popped), 1);
+  // One right beside you takes a heart, and knocks you back.
+  const from = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    kw.session.link.room.monsters.add(kw.session.link.room.world, b.x, b.y, b.z - 0.5);
+    return { x: b.x, z: b.z };
+  });
+  await until(page, () => window.kidsWorld.game.hearts === 4 && document.querySelectorAll('#hearts .lost').length === 1);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  const pushed = await page.evaluate((from) => Math.hypot(window.kidsWorld.game.me.body.x - from.x, window.kidsWorld.game.me.body.z - from.z), from);
+  assert.ok(pushed > 0.8, `knocked back ${pushed.toFixed(2)}`);
+  // Off in Settings: no monsters, no hearts.
+  await page.click('#btn-settings');
+  await clickSwitch(page, '#modal .switch[aria-label="👾 Monsters"]');
+  await until(page, () => document.getElementById('hearts').hidden && window.kidsWorld.game.monsters.size === 0 && !window.kidsWorld.session.link.room.settings.monsters);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.hearts), 5);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('the little map shows the island and what you build; it opens the big map and can be switched off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Clever Duck' });
   await makeIsland(page, { online: false });

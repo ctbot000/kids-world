@@ -1,4 +1,4 @@
-// Puts the island on screen: the terrain, the sky, players and animals, the
+// Puts the island on screen: the terrain, the sky, players, animals and monsters, the
 // preview of what a tool is about to do, and a camera that follows you
 // around (and never ends up inside a hill).
 import * as THREE from '../../vendor/three.module.js';
@@ -7,6 +7,7 @@ import { raycast } from '../shared/raycast.js';
 import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
+import { MonsterModel } from './monster-model.js';
 import { environment, Sky } from './sky.js';
 import { Terrain } from './terrain.js';
 
@@ -41,6 +42,7 @@ export class Renderer {
     this.scene.add(this.entities);
     this.avatars = new Map();
     this.critters = new Map();
+    this.monsters = new Map();
 
     // What a tool is about to do: see-through blocks, or outlines for removal.
     const box = new THREE.BoxGeometry(1.02, 1.02, 1.02);
@@ -127,6 +129,21 @@ export class Renderer {
     if (!m) return;
     m.dispose();
     this.critters.delete(id);
+  }
+
+  addMonster(id) {
+    this.removeMonster(id);
+    const m = new MonsterModel(this.world?.theme);
+    this.entities.add(m.group, m.shadow);
+    this.monsters.set(id, m);
+    return m;
+  }
+
+  removeMonster(id) {
+    const m = this.monsters.get(id);
+    if (!m) return;
+    m.dispose();
+    this.monsters.delete(id);
   }
 
   // Where the ground is under something, for its round shadow.
@@ -229,8 +246,17 @@ export class Renderer {
   // The nearest animal the ray passes through, if any, and how far along
   // (but never the one numbered skip).
   pickCritter(ray, maxDist, skip = 0) {
+    return this.pickFrom(this.critters, ray, maxDist, skip);
+  }
+
+  // ...and the nearest monster.
+  pickMonster(ray, maxDist) {
+    return this.pickFrom(this.monsters, ray, maxDist);
+  }
+
+  pickFrom(models, ray, maxDist, skip = 0) {
     let best = null;
-    for (const [id, m] of this.critters) {
+    for (const [id, m] of models) {
       if (id === skip) continue;
       const c = m.group.position;
       const cy = c.y + m.center;
