@@ -584,10 +584,18 @@ export class CritterSim {
 
     if (night && !leader) {
       const afloat = world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER;
-      // Penguins and seals come ashore to sleep.
+      // Penguins and seals come ashore to sleep: across the water to the
+      // nearest place they can climb out, a stretch at a time.
       if (afloat && info.dives) {
-        if (world.get(Math.floor(c.tx), standHeight(world, c.tx, c.tz, c.y) ?? 0, Math.floor(c.tz)) === B.WATER || Math.hypot(c.tx - c.x, c.tz - c.z) < 0.15) this.pickTarget(world, c, true);
+        const onTheWay = c.ashore && c.ashore.x === c.tx && c.ashore.z === c.tz;
+        if (!onTheWay || Math.hypot(c.tx - c.x, c.tz - c.z) < 0.15) {
+          c.ashore = this.wayAshore(world, c);
+          if (c.ashore) [c.tx, c.tz] = [c.ashore.x, c.ashore.z];
+          else this.pickTarget(world, c, true);
+        }
         this.walk(world, c, dt, info, null);
+        // Blocked: another way next time.
+        if (c.state === 'idle') c.ashore = null;
         c.state = 'swim';
         return;
       }
@@ -669,6 +677,55 @@ export class CritterSim {
     c.tz = c.z;
   }
 
+  // Afloat, the way to the nearest ground a penguin or a seal can climb out
+  // onto, round the land rather than over it (however far out a dive has
+  // left it): as far along that way as it can swim straight. Null with no
+  // such ground within reach.
+  wayAshore(world, c, reach = 32) {
+    const info = CRITTER_INFO[c.type];
+    const level = FL(c.y);
+    const [x0, z0] = [FL(c.x), FL(c.z)];
+    const wet = (x, z) => world.get(x, level, z) === B.WATER;
+    const landing = (x, z) => {
+      const y = standHeight(world, x + 0.5, z + 0.5, c.y);
+      return y !== null && world.get(x, y, z) !== B.WATER && y - c.y <= (info.climb ?? 1.05) && c.y - y <= 3;
+    };
+    const size = 2 * reach + 1;
+    const seen = new Uint8Array(size * size);
+    const at = (x, z) => (x - x0 + reach) * size + (z - z0 + reach);
+    // Out over the water a square at a time, each with the one it came from.
+    const queue = [[x0, z0, -1]];
+    seen[at(x0, z0)] = 1;
+    for (let i = 0; i < queue.length; i++) {
+      const [x, z] = queue[i];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const [nx, nz] = [x + dx, z + dz];
+        if (Math.abs(nx - x0) > reach || Math.abs(nz - z0) > reach || nx < 0 || nz < 0 || nx >= world.W || nz >= world.D || seen[at(nx, nz)]) continue;
+        seen[at(nx, nz)] = 1;
+        if (wet(nx, nz)) {
+          queue.push([nx, nz, i]);
+          continue;
+        }
+        if (!landing(nx, nz)) continue;
+        const way = [[nx, nz]];
+        for (let j = i; j > 0; j = queue[j][2]) way.push(queue[j]);
+        // The farthest square along the way it can swim to in a straight line.
+        for (const [wx, wz] of way) {
+          const [tx, tz] = [wx + 0.5, wz + 0.5];
+          const n = Math.ceil(Math.hypot(tx - c.x, tz - c.z) / 0.1);
+          let clear = true;
+          for (let k = 1; k <= n && clear; k++) {
+            const [px, pz] = [FL(c.x + ((tx - c.x) * k) / n), FL(c.z + ((tz - c.z) * k) / n)];
+            clear = wet(px, pz) || (px === nx && pz === nz);
+          }
+          if (clear) return { x: tx, z: tz };
+        }
+        return { x: way[way.length - 1][0] + 0.5, z: way[way.length - 1][1] + 0.5 };
+      }
+    }
+    return null;
+  }
+
   walk(world, c, dt, info, leader) {
     const dx = c.tx - c.x;
     const dz = c.tz - c.z;
@@ -684,10 +741,13 @@ export class CritterSim {
     const nz = c.z + (dz / d) * step;
     // A crab faces one way and walks off to its side.
     c.yaw = Math.atan2(dx, dz) + (info.sideways ? Math.PI / 2 : 0);
-    const ny = standHeight(world, nx, nz, c.y);
+    // Afloat, a swimmer paddles on along the top of the water however deep
+    // it gets underneath.
+    const paddle = info.swims && world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER && world.get(Math.floor(nx), Math.floor(c.y), Math.floor(nz)) === B.WATER;
+    const ny = paddle ? Math.floor(c.y) : standHeight(world, nx, nz, c.y);
     const inWater = ny !== null && world.get(Math.floor(nx), ny, Math.floor(nz)) === B.WATER;
     const deep = inWater && info.wades && !this.shallow(world, nx, nz);
-    if (ny === null || ny - c.y > (info.climb ?? 1.05) || c.y - ny > 3 || (inWater && !info.swims && !info.wades) || deep) {
+    if (!paddle && (ny === null || ny - c.y > (info.climb ?? 1.05) || c.y - ny > 3 || (inWater && !info.swims && !info.wades) || deep)) {
       // Blocked: think again.
       c.timer = 0;
       c.state = 'idle';

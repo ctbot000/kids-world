@@ -232,8 +232,9 @@ test('penguins and seals go from the shore into the sea and back, dive under it,
       }
       c.was = c.state;
     });
+    // Mostly ashore, but out at sea for a good part of the day too.
     for (const [type, k] of Object.entries(tally)) {
-      assert.ok(k.land / k.steps > 0.15 && k.sea / k.steps > 0.15, `snowy ${seed}: ${type}s ashore ${(k.land / k.steps).toFixed(2)} and at sea ${(k.sea / k.steps).toFixed(2)} of the day`);
+      assert.ok(k.land / k.steps > 0.15 && k.sea / k.steps > 0.1, `snowy ${seed}: ${type}s ashore ${(k.land / k.steps).toFixed(2)} and at sea ${(k.sea / k.steps).toFixed(2)} of the day`);
       assert.ok(k.dives > 5, `snowy ${seed}: ${type}s dive (${k.dives})`);
     }
     assert.ok(tally.penguin.slides > 0, `snowy ${seed}: penguins slide on their tummies`);
@@ -241,22 +242,26 @@ test('penguins and seals go from the shore into the sea and back, dive under it,
   }
 });
 
-test('at night penguins and seals come ashore to sleep', () => {
-  // Some islands keep a few swimming all night (4242 has since its mine was
-  // dug); this one does not.
-  const { world, sim } = island('snowy', 1);
-  let asleep = 0;
-  let steps = 0;
-  run(world, sim, 10, (c, night, t) => {
-    // A minute after dusk, for them to get out of the water.
-    if ((c.type !== 'penguin' && c.type !== 'seal') || !night || t % 600 < 540) return;
-    steps++;
-    if (c.state === 'sleep') {
-      asleep++;
-      assert.notEqual(world.get(FL(c.x), FL(c.y), FL(c.z)), B.WATER, 'asleep on dry land');
-    }
-  });
-  assert.ok(asleep / steps > 0.6, `asleep ${(asleep / steps).toFixed(2)} of the night`);
+test('at night penguins and seals come ashore to sleep, on any snowy island', () => {
+  // However far out a dive has left them, and wherever the shore is low
+  // enough to climb out.
+  for (let i = 0; i < 16; i++) {
+    const seed = i * 37 + 3;
+    const { world, sim } = island('snowy', seed);
+    let asleep = 0;
+    let steps = 0;
+    const awake = new Map();
+    run(world, sim, 10, (c, night, t) => {
+      // A minute after dusk, for them to get out of the water.
+      if ((c.type !== 'penguin' && c.type !== 'seal') || !night || t % 600 < 540) return;
+      steps++;
+      if (c.state === 'sleep') {
+        asleep++;
+        assert.notEqual(world.get(FL(c.x), FL(c.y), FL(c.z)), B.WATER, `snowy ${seed}: asleep on dry land`);
+      } else awake.set(c.id, `a ${c.type} ${c.state} at ${c.x.toFixed(1)},${c.z.toFixed(1)}`);
+    });
+    assert.ok(asleep / steps > 0.95, `snowy ${seed}: asleep ${(asleep / steps).toFixed(2)} of the night (${[...awake.values()].join('; ')})`);
+  }
 });
 
 test('every animal can be drawn in every state', () => {
