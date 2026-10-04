@@ -907,6 +907,8 @@ export class Keeper extends EventEmitter {
     this.log = log;
     this.conns = new Map();
     this.recent = [];
+    // Kinds of message pages sent that this keeper does not know (see unknown()).
+    this.unknownKinds = new Set();
     this.since = 0;
     this.rtc = null;
     this.signaling = null;
@@ -1194,6 +1196,7 @@ export class Keeper extends EventEmitter {
         this.drop(conn);
         break;
       default:
+        this.unknown(msg.t);
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
   }
@@ -1223,6 +1226,16 @@ export class Keeper extends EventEmitter {
     if (!watching.length) return;
     const players = await this.store.players();
     for (const conn of watching) if (!conn.closed) this.sendRanking(conn, KeeperStore.rankingOf(players, conn.player), true);
+  }
+
+  // A page asked for something this keeper does not know: most likely the
+  // game was updated and this keeper was not (it runs the code of the folder
+  // it was started from). Says so where whoever runs it looks, once for each
+  // kind of message.
+  unknown(t) {
+    if (typeof t !== 'string' || !/^[a-z-]{1,24}$/.test(t) || this.unknownKinds.has(t) || this.unknownKinds.size >= 20) return;
+    this.unknownKinds.add(t);
+    this.log(`keeper: a page asked for "${t}", which this keeper does not know: the game is newer than it. Update it with git pull, then restart npm start.`);
   }
 
   note(event) {

@@ -339,3 +339,24 @@ test('a page watching the ranking hears of every change it would see, a moment l
   assert.equal(news().length, 4);
   await keeper.stop();
 });
+
+test('a keeper older than the page says so in its terminal, once for each thing it does not know', async () => {
+  const dir = await tempDir();
+  const store = await new KeeperStore(dir).open();
+  const said = [];
+  const keeper = new Keeper({ store, identity: await createIdentity(dir), log: (line) => said.push(line) });
+  await keeper.loadKey();
+  const newer = await page(keeper);
+  await newer.say({ t: 'hello', v: KEEPER_VERSION, nonce: '33'.repeat(16) });
+  await newer.say({ t: 'me', device: GUEST });
+  for (let i = 0; i < 3; i++) assert.equal((await newer.say({ t: 'leaderboard' })).code, 'bad');
+  assert.equal((await newer.say({ t: 'trophies' })).code, 'bad');
+  assert.equal(said.length, 2);
+  assert.match(said[0], /"leaderboard".*git pull, then restart npm start/);
+  assert.match(said[1], /"trophies"/);
+  // Nothing for what is not a kind of message at all.
+  await newer.say({ t: 'Not A Kind\n' });
+  await newer.say({ x: 1 });
+  assert.equal(said.length, 2);
+  await keeper.stop();
+});

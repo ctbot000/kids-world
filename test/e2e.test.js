@@ -16,7 +16,7 @@ import { TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { createIdentity, Keeper, KeeperStore, publicConfig } from '../server/keeper.js';
+import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -1590,6 +1590,41 @@ test('the ranking shows the players with a login to anyone, live: you marked onc
   } finally {
     await page.browserContext().close();
     await friend?.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a keeper running code from before the ranking: the page says it needs an update, never live, and the keeper says so in its terminal', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const said = [];
+  keeper.log = (line) => said.push(String(line));
+  // As one started from a folder not yet updated: it knows none of the ranking's messages.
+  const handle = keeper.handle.bind(keeper);
+  keeper.handle = async (conn, msg) => {
+    if (conn.folder && ['ranking', 'unwatch', 'ranked'].includes(msg.t)) {
+      keeper.unknown(msg.t);
+      throw new KeepError('bad', 'The keeper does not know that message.');
+    }
+    return handle(conn, msg);
+  };
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' });
+  try {
+    await clickButton(page, 'Ranking');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('needs an update'));
+    // Asked once, not again and again, and never shown as live.
+    await delay(1500);
+    assert.equal(await page.$eval('#modal .live', (el) => el.hidden), true);
+    assert.equal(await page.$$eval('#modal .rank-row', (rows) => rows.length), 0);
+    assert.deepEqual(said, ['keeper: a page asked for "ranking", which this keeper does not know: the game is newer than it. Update it with git pull, then restart npm start.']);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });

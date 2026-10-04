@@ -120,8 +120,8 @@ function loginTrouble(error) {
 
 // What to tell you when the keeper could not show the ranking, as [icon, words].
 function rankingTrouble(error) {
-  // A keeper from before the ranking.
-  if (error?.code === 'bad') return ['🛠️', 'The island keeper has no ranking yet. Try again another day!'];
+  // A keeper running code from before the ranking: it says so in its terminal too.
+  if (error?.code === 'bad') return ['🛠️', 'The island keeper needs an update before it can show the ranking. Ask a grown-up to update it!'];
   if (error?.code === 'asleep') return ['😴', 'The island keeper is asleep right now. The ranking is there when it is awake!'];
   return loginTrouble(error);
 }
@@ -794,7 +794,7 @@ export class UI {
         const live = h('span', { class: 'live', hidden: true, title: 'Changes show up here as they happen' }, 'Live');
         const about = h('p', { class: 'muted rank-about' }, aboutText, live);
         const foot = h('div', { class: 'ranking-foot' });
-        const isLive = () => keeper.watching && keeper.watched && keeper.state === 'ready';
+        const isLive = () => keeper.watching && keeper.rankingLive && keeper.state === 'ready';
         // The scores last drawn on the board last drawn, by name: one that changed pops.
         let drawn = { key: '', scores: new Map() };
         const row = (e, changed) =>

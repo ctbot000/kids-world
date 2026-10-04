@@ -83,10 +83,12 @@ export class KeeperClient extends EventTarget {
     this.needsPassword = false;
     this.toFetch = [];
     this.syncedAt = 0;
-    // Watching the ranking (while it is on screen), and whether this
-    // connection asked to yet.
+    // Watching the ranking (while it is on screen), whether this connection
+    // asked to yet, and whether the keeper answered with it, so that its
+    // news can come (one running older code does not know it).
     this.watching = false;
     this.watched = false;
+    this.rankingLive = false;
     this.watchTimer = 0;
     this.countTimer = 0;
     const saved = load('keeper', null);
@@ -207,7 +209,7 @@ export class KeeperClient extends EventTarget {
   // not have yet. Each comes with what to do with the keeper's answer.
   next() {
     // Watching the ranking: asked for on each new connection, and again now and then.
-    if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply, true) };
+    if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply) };
     if (!this.enabled) return null;
     if (this.login) {
       if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
@@ -338,16 +340,19 @@ export class KeeperClient extends EventTarget {
     if (!this.watching) return;
     this.watching = false;
     clearInterval(this.watchTimer);
-    if (this.state === 'ready' && this.watched) this.request({ t: 'unwatch' }).catch(() => {});
+    if (this.state === 'ready' && this.rankingLive) this.request({ t: 'unwatch' }).catch(() => {});
     this.watched = false;
+    this.rankingLive = false;
     this.flush();
   }
 
-  // The ranking, answered or as news. done: this connection asked to watch
-  // it, whatever the answer (so a keeper that cannot is not asked again at once).
-  watchedAs(reply, done = false) {
-    if (done || reply.t === 'ranking') this.watched = true;
-    if (reply.t === 'ranking' && this.watching) this.emit('ranking', reply);
+  // The keeper's answer to watching the ranking, or its news. Asked on this
+  // connection either way (a keeper that said no is not asked again at
+  // once); live only if the keeper knows the ranking.
+  watchedAs(reply) {
+    this.watched = true;
+    this.rankingLive = reply.t === 'ranking';
+    if (this.rankingLive && this.watching) this.emit('ranking', reply);
   }
 
   // You did something the game counts. Logged in, it goes to the keeper
@@ -467,6 +472,7 @@ export class KeeperClient extends EventTarget {
     this.setState('connecting');
     this.listed = false;
     this.watched = false;
+    this.rankingLive = false;
     this.toFetch = [];
     const peer = new Peer(this.peerOptions);
     this.peer = peer;
