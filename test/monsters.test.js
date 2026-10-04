@@ -7,7 +7,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { HEART_BACK_MS, heartsBack, MAX_HEARTS, MAX_MONSTERS, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { HEART_BACK_MS, heartsBack, MAX_HEARTS, MAX_MONSTERS, MonsterSim, SAFE_RADIUS, TAP_REACH, unpackMonster } from '../public/js/shared/monsters.js';
+import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -154,6 +155,13 @@ test('jumping on a monster or tapping it pops it, but only from near enough', ()
   assert.equal(room.monsters.get(m.id), null, 'popped');
   assert.equal(b.last('pop').id, m.id);
   assert.equal(b.last('pop').by, 1);
+  // A tap from as far as the page lets you (TAP_REACH from your eyes to its
+  // middle) counts, even with the monster a step further on at the island.
+  const side = Math.sqrt(TAP_REACH ** 2 - (BODY.eye - 0.4) ** 2);
+  const far = room.monsters.add(room.world, spawn.x + 20 + side + 1, 11, spawn.z);
+  room.receive(a, { t: 'm', s: [spawn.x + 20, 11, spawn.z, 0, 0, 0] });
+  room.receive(a, { t: 'bop', id: far.id });
+  assert.equal(room.monsters.get(far.id), null, 'popped from as far as a tap reaches');
   // With monsters off, nothing to pop.
   const n = room.monsters.add(room.world, spawn.x + 28, 11, spawn.z);
   room.settings.monsters = false;

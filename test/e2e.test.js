@@ -8,11 +8,11 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, test } from 'node:test';
+import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
+import { LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -62,6 +62,15 @@ before(async () => {
   args.push(...(process.platform === 'darwin' && !process.env.CI ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']));
   if (process.env.CI) args.push('--no-sandbox');
   browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args });
+});
+
+// Whatever a test leaves open is closed after it. A test that fails before it
+// closes its pages would otherwise leave an island drawing in software for the
+// rest of the run, and every test after it takes about three times as long.
+afterEach(async () => {
+  for (const context of browser?.browserContexts() ?? []) {
+    if (context !== browser.defaultBrowserContext()) await context.close().catch(() => {});
+  }
 });
 
 after(async () => {
@@ -513,7 +522,7 @@ test('a pony beside you is got on with the Ride button, ridden about, and got of
   await page.browserContext().close();
 });
 
-test('monsters, turned on in Make an island: hearts on screen, one popped with a click, one taking a heart, and all gone when turned off', { skip }, async () => {
+test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
@@ -523,31 +532,77 @@ test('monsters, turned on in Make an island: hearts on screen, one popped with a
   await inGame(page);
   assert.equal(await page.evaluate(() => window.kidsWorld.session.link.room.settings.monsters), true);
   await until(page, () => !document.getElementById('hearts').hidden && document.querySelectorAll('#hearts span:not(.lost)').length === 5);
-  // A monster a few steps in front of you, held still (giggling never bumps),
-  // and none other coming out.
-  const id = await page.evaluate(() => {
-    const kw = window.kidsWorld;
-    const room = kw.session.link.room;
+  // Cells changed on the island, as the island changes them (as grass grows),
+  // and once they have reached the game.
+  const change = async (cells) => {
+    await page.evaluate((cells) => {
+      const room = window.kidsWorld.session.link.room;
+      for (let i = 0; i < cells.length; i += 4) room.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+      room.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    }, cells);
+    await until(page, (cells) => cells.every((v, i) => i % 4 !== 3 || window.kidsWorld.game.world.get(cells[i - 3], cells[i - 2], cells[i - 1]) === v), cells);
+  };
+  // A clearing out of the safe place round the start (on a random island a
+  // tree, a flower or a tuft of grass can be anywhere), with you in it and a
+  // monster three steps in front of you, held still (giggling never bumps),
+  // and none other coming out. On flat land the ground is under the start.
+  const spot = await page.evaluate(() => {
+    const room = window.kidsWorld.session.link.room;
+    const w = room.world;
     room.monsters.clear();
     room.monsters.spawnAt = Infinity;
-    const b = kw.game.me.body;
-    // Out of the safe place round the start, where monsters never go.
-    Object.assign(b, { x: b.x + 14, vx: 0, vz: 0 });
-    const m = room.monsters.add(room.world, b.x, b.y, b.z - 3);
-    m.giggle = Infinity;
-    kw.renderer.view.yaw = 0;
-    kw.renderer.view.pitch = 0.35;
-    return m.id;
+    const x = Math.floor(w.spawn.x) + 14;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    const cells = [];
+    for (let cx = x - 4; cx <= x + 4; cx++) {
+      for (let cz = z - 6; cz <= z + 12; cz++) {
+        for (let cy = y; cy < y + 12; cy++) if (w.get(cx, cy, cz) !== 0) cells.push(cx, cy, cz, 0);
+      }
+    }
+    return { x, y, z, cells };
   });
-  await until(page, (id) => window.kidsWorld.game.monsters.has(id), id);
-  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
-  const at = await page.evaluate((id) => {
+  const { x, y, z } = spot;
+  await change(spot.cells);
+  const id = await page.evaluate(({ x, y, z }) => {
     const kw = window.kidsWorld;
-    const p = kw.game.monsters.get(id).model.group.position;
-    const s = kw.renderer.project(p.x, p.y + 0.4, p.z);
-    const r = kw.renderer.canvas.getBoundingClientRect();
-    return { x: r.left + s.x, y: r.top + s.y };
+    const room = kw.session.link.room;
+    Object.assign(kw.game.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    const m = room.monsters.add(room.world, x + 0.5, y, z - 2.5);
+    m.giggle = Infinity;
+    Object.assign(kw.renderer.view, { yaw: 0, pitch: 0.35, dist: 7 });
+    return m.id;
+  }, spot);
+  await until(page, (id) => window.kidsWorld.game.monsters.has(id), id);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 120));
+  // The camera slipped into a tree crown (leaves where it is), and tufts of
+  // grass stand in front of the monster: a tap at it goes through both, as
+  // the leaves are drawn see-through and grass never hides a monster.
+  const camera = await page.evaluate(() => window.kidsWorld.renderer.camera.position.toArray().map(Math.floor));
+  await change([...camera, LEAVES, x, y, z - 2, TALL_GRASS, x, y, z - 1, TALL_GRASS]);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 10));
+  const at = await page.evaluate(async (id) => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const r = kw.renderer;
+    const { raycast } = await import('/js/shared/raycast.js');
+    const p = g.monsters.get(id).model.group.position;
+    const s = r.project(p.x, p.y + 0.4, p.z);
+    const rect = r.canvas.getBoundingClientRect();
+    const ndc = kw.input.ndc(s.x, s.y);
+    const ray = r.ray(ndc.x, ndc.y);
+    // Everything the tap passes on its way to the monster.
+    const passed = [];
+    const o = ray.origin;
+    raycast(g.world, o.x, o.y, o.z, ray.dir.x, ray.dir.y, ray.dir.z, o.distanceTo(p), (block, bx, by, bz, start, dist) => {
+      if (block) passed.push({ block, dist });
+      return false;
+    });
+    return { x: rect.left + s.x, y: rect.top + s.y, passed, aim: g.aim(ndc) };
   }, id);
+  assert.equal(at.passed[0]?.dist, 0, 'the camera is in the leaves');
+  assert.ok(at.passed.some((c) => c.block === TALL_GRASS), `the grass is in the way: ${JSON.stringify(at.passed)}`);
+  assert.deepEqual(at.aim, { kind: 'monster', id });
   await page.mouse.click(at.x, at.y);
   await until(page, (id) => !window.kidsWorld.session.link.room.monsters.get(id) && !window.kidsWorld.game.monsters.has(id), id);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popped), 1);

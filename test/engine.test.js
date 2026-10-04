@@ -202,6 +202,19 @@ test('a ray finds the first block and the face it came through', () => {
   const side = raycast(w, 10.5, 6.5, 10.5, 1, 0, 0, 20, solid);
   assert.deepEqual([side.x, side.y, side.z, side.nx], [14, 6, 10, -1]);
   assert.equal(raycast(w, 10.5, 12, 10.5, 0, 1, 0, 20, solid), null);
+  // Each block comes with how far along the ray it starts, so a caller can
+  // look through what is near: past the stone 3.5 away, to the one behind it.
+  w.set(17, 6, 10, B.STONE);
+  const offered = [];
+  const past = raycast(w, 10.5, 6.5, 10.5, 1, 0, 0, 20, (id, x, y, z, start, dist) => {
+    if (id) offered.push([x, dist]);
+    return solid(id) && dist > 4;
+  });
+  assert.deepEqual(offered, [
+    [14, 3.5],
+    [17, 6.5],
+  ]);
+  assert.deepEqual([past.x, past.dist], [17, 6.5]);
   // Diagonal: agrees with stepping along the ray finely.
   for (let i = 0; i < 50; i++) {
     const dx = Math.cos(i) * 0.7;

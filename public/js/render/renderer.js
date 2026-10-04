@@ -9,9 +9,11 @@ import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
 import { environment, Sky } from './sky.js';
-import { Terrain } from './terrain.js';
+import { NEAR_FADE, Terrain } from './terrain.js';
 
 const MAX_PREVIEW = 2500;
+// Nearer than this along the view, more than half of a block is dissolved.
+const SEE_THROUGH = (NEAR_FADE[0] + NEAR_FADE[1]) / 2;
 const tmpV = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const tmpC = new THREE.Color();
@@ -236,6 +238,21 @@ export class Renderer {
     return this.camDist;
   }
 
+  // Whether blocks right in front of the camera dissolve (render/terrain.js):
+  // always, but looking through your own eyes.
+  get nearFade() {
+    return (this.camDist ?? 8) > 1.3;
+  }
+
+  // Whether what a ray from the camera meets dist along it is drawn mostly
+  // see-through, being right in front of the camera: a tree crown the camera
+  // slipped into, say. A tap goes through it, as the eye does.
+  seeThrough(dist, dir) {
+    if (!this.nearFade) return false;
+    const ahead = this.camera.getWorldDirection(tmpV);
+    return dist * (dir.x * ahead.x + dir.y * ahead.y + dir.z * ahead.z) < SEE_THROUGH;
+  }
+
   // The ray from the camera through a point on the screen (-1..1 each way).
   ray(ndcX, ndcY) {
     const origin = this.camera.position.clone();
@@ -328,7 +345,7 @@ export class Renderer {
       fogFar,
       time: this.time,
       // Looking through your own eyes, nothing near should dissolve.
-      nearFade: (this.camDist ?? 8) > 1.3,
+      nearFade: this.nearFade,
     });
     this.sky.setWeather(state.weather);
     this.focus.x = state.focus.x;

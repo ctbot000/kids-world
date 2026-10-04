@@ -10,6 +10,10 @@ import { TILE } from './atlas.js';
 const STUD_RADIUS = 0.25;
 const STUD_HEIGHT = 0.13;
 const STUD_DISTANCE = 56;
+// Blocks right in front of the camera dissolve: from none of a surface at the
+// first distance (along the view) to all of it at the second. Half is gone
+// halfway between, and a tap goes through from there in (see Renderer.seeThrough).
+export const NEAR_FADE = [0.9, 2.6];
 
 const LIGHT_GLSL = /* glsl */ `
   uniform float uDaylight;
@@ -41,7 +45,7 @@ const LIGHT_GLSL = /* glsl */ `
   uniform float uNearFade;
   void nearFade(float depth) {
     if (uNearFade < 0.5) return;
-    float keep = smoothstep(0.9, 2.6, depth);
+    float keep = smoothstep(${NEAR_FADE[0].toFixed(2)}, ${NEAR_FADE[1].toFixed(2)}, depth);
     if (keep < 1.0 && bayer(gl_FragCoord.xy) > keep) discard;
   }
 `;

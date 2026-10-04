@@ -5,7 +5,7 @@
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
-import { MAX_HEARTS, MONSTER_BODY, unpackMonster } from './shared/monsters.js';
+import { MAX_HEARTS, MONSTER_BODY, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -973,14 +973,17 @@ export class Game extends EventTarget {
     return this.profile.data.hotbar[this.slot] ?? B.GRASS;
   }
 
-  // Everything the pointer could mean: an animal, a block, or nothing.
+  // Everything the pointer could mean: a monster, an animal, a block, or
+  // nothing. What is drawn see-through right in front of the camera, such as a
+  // tree crown it slipped into, is looked through.
   aim(ndc) {
     if (!this.world || !this.me) return null;
-    const ray = this.renderer.ray(ndc.x, ndc.y);
+    const r = this.renderer;
+    const ray = r.ray(ndc.x, ndc.y);
     const tool = this.tool;
     const w = this.world;
-    const stopAt = (id, x, y, z, start) => {
-      if (id === B.AIR) return false;
+    const stopAt = (id, x, y, z, start, dist) => {
+      if (id === B.AIR || r.seeThrough(dist, ray.dir)) return false;
       const kind = B.KIND[id];
       if (kind === B.K_WATER) return (tool === 'build' || tool === 'stamp' || tool === 'friends') && start !== B.WATER && !this.basketPick;
       if (kind === B.K_ITEM) return true;
@@ -988,16 +991,18 @@ export class Game extends EventTarget {
       return true;
     };
     const eye = { x: this.me.body.x, y: this.me.body.y + BODY.eye, z: this.me.body.z };
-    const maxDist = REACH + this.renderer.camDist;
+    const maxDist = REACH + r.camDist;
     const hit = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, maxDist, stopAt);
-    // A monster, before anything behind it (but a flower in front does not hide it).
-    const monster = this.renderer.pickMonster(ray, maxDist);
-    if (monster && (!hit || monster.dist < hit.dist + (B.KIND[hit.id] === B.K_PLANT ? 1.5 : 0))) {
+    // A monster, unless a solid block is in the way: flowers and grass never
+    // hide one (it hops about in them), nor does the ground just under it.
+    const monster = r.pickMonster(ray, maxDist);
+    if (monster) {
+      const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, monster.dist - MONSTER_BODY.radius, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
       const m = this.monsters.get(monster.id)?.model.group.position;
-      if (m && Math.hypot(m.x - eye.x, m.y + 0.4 - eye.y, m.z - eye.z) <= REACH + 1) return { kind: 'monster', id: monster.id };
+      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + 0.4 - eye.y, m.z - eye.z) <= TAP_REACH ? { kind: 'monster', id: monster.id } : { kind: 'far' };
     }
     // Not the animal you are riding, which is in the middle of the picture.
-    const critter = this.renderer.pickCritter(ray, maxDist, this.riding?.id);
+    const critter = r.pickCritter(ray, maxDist, this.riding?.id);
     // Flowers and grass are see-through: one in front of an animal, or the
     // one it stands in (a bee at a flower is inside its cell), does not hide
     // it; nor does the water hide what swims in it.

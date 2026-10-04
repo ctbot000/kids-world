@@ -47,9 +47,11 @@ export const MONSTER_BODY = { radius: 0.42, height: 0.8 };
 // to giggle after.
 const BUMP_REACH = MONSTER_BODY.radius + 0.38;
 const GIGGLE_MS = 1400;
-// Tapping one: as far as a tool reaches, with a little to spare for one
-// moving away (the host checks; see game.js for the tap).
-export const BOP_REACH = 7.5;
+// Tapping one: from this far (from your eyes; nearer than a tool reaches, so
+// you have to go up to one), and the host lets a little more through, as a
+// monster on the move is a little further on there than on your screen.
+export const TAP_REACH = 7.5;
+export const BOP_REACH = TAP_REACH + 1.5;
 
 // New states go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle'];

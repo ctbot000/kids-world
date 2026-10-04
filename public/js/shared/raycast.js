@@ -1,5 +1,7 @@
 // Walks a ray through the grid one cell at a time (Amanatides & Woo), so the
 // first block it meets is found exactly, along with the face it entered by.
+// stopAt(id, x, y, z, startId, dist) says which block ends it: dist is how
+// far along the ray it enters that cell (0 for the one it starts in).
 
 export function raycast(world, ox, oy, oz, dx, dy, dz, maxDist, stopAt) {
   const len = Math.hypot(dx, dy, dz);
@@ -25,7 +27,7 @@ export function raycast(world, ox, oy, oz, dx, dy, dz, maxDist, stopAt) {
   let t = 0;
   const first = world.get(x, y, z);
   const startId = first;
-  if (stopAt(first, x, y, z, startId)) return { x, y, z, nx: 0, ny: 0, nz: 0, dist: 0, id: first };
+  if (stopAt(first, x, y, z, startId, 0)) return { x, y, z, nx: 0, ny: 0, nz: 0, dist: 0, id: first };
   while (t <= maxDist) {
     if (tMaxX < tMaxY && tMaxX < tMaxZ) {
       x += stepX;
@@ -53,7 +55,7 @@ export function raycast(world, ox, oy, oz, dx, dy, dz, maxDist, stopAt) {
     // Leaving the world sideways or downward ends the search; above it, keep going.
     if (x < -1 || z < -1 || x > world.W || z > world.D || y < -1) break;
     const id = world.get(x, y, z);
-    if (stopAt(id, x, y, z, startId)) return { x, y, z, nx, ny, nz, dist: t, id };
+    if (stopAt(id, x, y, z, startId, t)) return { x, y, z, nx, ny, nz, dist: t, id };
   }
   return null;
 }
