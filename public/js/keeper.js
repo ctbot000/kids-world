@@ -7,7 +7,7 @@
 //
 // It also logs you in and out there. Logged in, it brings back what your
 // other devices sent, too: your look, stickers and basket, merged with yours
-// here, and newer copies of your islands.
+// here, and newer copies of your islands. And it asks for the ranking.
 //
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
@@ -183,7 +183,7 @@ export class KeeperClient extends EventTarget {
     this.timer = setTimeout(() => {
       this.timer = 0;
       if (this.requests.length || (this.enabled && this.pending())) this.connect();
-      else if (this.state !== 'off') this.setState('idle');
+      else if (this.state !== 'off') this.setState(this.enabled ? 'idle' : 'off');
     }, ms);
   }
 
@@ -297,6 +297,17 @@ export class KeeperClient extends EventTarget {
   // device key and the player's token prove both. Resolves with { islands }.
   adopt(player, token) {
     return this.request({ t: 'adopt', player, token }, { halt: true });
+  }
+
+  // The ranking of the players with a login (see shared/ranking.js), asked
+  // for whether or not copies go. Resolves with { players, boards, shown? }.
+  ranking() {
+    return this.request({ t: 'ranking' });
+  }
+
+  // Logged in: you join the ranking, or leave it, on all your devices.
+  setRanked(on) {
+    return this.request({ t: 'ranked', on });
   }
 
   // Tells the keeper this device is logged out, if it can be reached soon,
@@ -540,6 +551,12 @@ export class KeeperClient extends EventTarget {
   away() {
     if (!this.peer && this.state !== 'connecting' && this.state !== 'ready') return;
     this.hangUp();
+    // Copies are off: only something you asked for (the ranking, say) called
+    // the keeper, and that has failed now.
+    if (!this.enabled) {
+      this.setState('off');
+      return;
+    }
     this.setState('away');
     this.schedule(RETRY_MS[Math.min(this.failures++, RETRY_MS.length - 1)]);
   }

@@ -1,11 +1,12 @@
 // Everything on top of the 3D view: the title screen, the toolbar and
 // hotbar, the toy box, talking and emotes, name tags and speech bubbles,
-// settings, stickers, help, logging in and full screen. Big buttons, pictures
-// first, few words.
+// settings, stickers, the ranking, help, logging in and full screen. Big
+// buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
+import { BOARDS } from './shared/ranking.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -116,6 +117,16 @@ function loginTrouble(error) {
       return ['😕', error?.message && error.message !== error.code ? `The island keeper said: ${error.message}` : 'That did not work. Try again later.'];
   }
 }
+
+// What to tell you when the keeper could not show the ranking, as [icon, words].
+function rankingTrouble(error) {
+  // A keeper from before the ranking.
+  if (error?.code === 'bad') return ['🛠️', 'The island keeper has no ranking yet. Try again another day!'];
+  if (error?.code === 'asleep') return ['😴', 'The island keeper is asleep right now. The ranking is there when it is awake!'];
+  return loginTrouble(error);
+}
+
+const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 export class UI {
   constructor({ profile, sound, atlas, input }) {
@@ -276,6 +287,7 @@ export class UI {
     $('btn-me').onclick = () => this.meDialog();
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = () => this.stickersDialog();
+    $('btn-ranking').onclick = () => this.rankingDialog();
     $('btn-help').onclick = () => this.helpDialog();
     $('btn-sound').onclick = () => this.soundDialog();
   }
@@ -289,13 +301,15 @@ export class UI {
   }
 
   // The 🔑 by your name: there when there is a keeper to log in at, and
-  // always while logged in, so a device without one can still log out.
+  // always while logged in, so a device without one can still log out. The
+  // 🏆 Ranking, kept by the keeper too, is there with one.
   renderLogin() {
     const login = this.handlers?.login;
     const chip = $('btn-login');
     chip.hidden = !login?.available() && !login?.who();
     chip.textContent = login?.who() ? '🔑 My login' : '🔑 Log in';
     chip.classList.toggle('on', Boolean(login?.who()));
+    $('btn-ranking').hidden = !login?.available();
   }
 
   // The island's name: any typed, or one rolled for its kind (shown grey
@@ -747,8 +761,9 @@ export class UI {
     const got = this.profile.data.stickers;
     this.openModal((root) => {
       const count = STICKERS.filter((s) => got[s.key]).length;
+      const ranking = this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
       root.append(
-        h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -757,6 +772,103 @@ export class UI {
           ),
         ),
       );
+    });
+  }
+
+  // The ranking of the players with a login, from the island keeper: a tab
+  // for each board, its top players and your own place. Logged in, you can
+  // leave it, or join it again; as the guest, logging in puts you in it.
+  rankingDialog() {
+    const keeper = this.handlers?.login?.keeper;
+    if (!keeper) return;
+    let current = BOARDS.some((b) => b.key === this.lastBoard) ? this.lastBoard : BOARDS[0].key;
+    this.openModal((root) => {
+      const tabRow = h('div', { class: 'tabs ranking-tabs' });
+      const note = this.loginNote();
+      const list = h('ol', { class: 'ranking' });
+      const about = h('p', { class: 'muted' });
+      const foot = h('div', { class: 'ranking-foot' });
+      const row = (e) =>
+        h(
+          'li',
+          { class: `rank-row${e.you ? ' you' : ''}` },
+          h('span', { class: 'place', 'aria-label': `Number ${e.rank}` }, MEDALS[e.rank] ?? String(e.rank)),
+          h('span', { class: 'avatar', style: `--c:${shirtColor(e.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(e.look)),
+          h('b', { class: 'who', lang: langOf(e.name) || undefined }, e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
+          h('span', { class: 'score' }, Number(e.score).toLocaleString()),
+        );
+      // Made once, so a tap on one is never lost to the keeper's answer redrawing them.
+      const tabs = BOARDS.map((b) =>
+        h(
+          'button',
+          {
+            class: 'chip',
+            type: 'button',
+            onclick: () => {
+              current = b.key;
+              this.sound.play('ui');
+              draw();
+            },
+          },
+          h('span', { class: 'emoji' }, b.icon),
+          h('span', {}, b.name),
+        ),
+      );
+      tabRow.append(...tabs);
+      const draw = () => {
+        this.lastBoard = current;
+        BOARDS.forEach((b, i) => tabs[i].classList.toggle('on', b.key === current));
+        const board = BOARDS.find((b) => b.key === current);
+        const reply = this.ranking;
+        const shown = reply?.boards?.find((b) => b.key === current);
+        about.textContent = board.text;
+        if (!shown) {
+          list.replaceChildren();
+          return;
+        }
+        const top = Array.isArray(shown.top) ? shown.top : [];
+        const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.look, you: true } : null;
+        if (!top.length) list.replaceChildren(h('li', { class: 'rank-empty muted' }, `Nobody yet. ${board.hint} to be the first!`));
+        else list.replaceChildren(...top.map(row), you ? h('li', { class: 'rank-gap', 'aria-hidden': 'true' }, '⋯') : '', you ? row(you) : '');
+        const mine = keeper.login && reply.shown !== false && !shown.you && top.length ? h('p', { class: 'muted' }, `${board.hint} to be on this board too!`) : '';
+        const players = reply.players ? ` ${reply.players} ${reply.players === 1 ? 'player is' : 'players are'} in it now.` : '';
+        if (keeper.login) {
+          const box = h('input', { type: 'checkbox', checked: reply.shown !== false });
+          box.addEventListener('change', async () => {
+            box.disabled = true;
+            note.say('🔎', 'Asking the island keeper…');
+            try {
+              await keeper.setRanked(box.checked);
+              this.sound.play('ui');
+              await ask();
+            } catch (error) {
+              box.checked = !box.checked;
+              box.disabled = false;
+              note.say(...rankingTrouble(error), 'warn');
+            }
+          });
+          foot.replaceChildren(
+            mine,
+            h('label', { class: 'check-row' }, box, h('span', {}, 'Show me in the ranking')),
+            h('p', { class: 'muted' }, reply.shown === false ? 'You are not in the ranking: nobody sees your name here.' : `Everyone sees your display name, ${this.profile.name}, and how you look.${players}`),
+          );
+        } else {
+          foot.replaceChildren(h('p', { class: 'muted' }, `Players with a login are in the ranking.${players} Log in with 🔑 on the title screen to be in it too!`));
+        }
+      };
+      const ask = async () => {
+        note.say('🔎', 'Asking the island keeper…');
+        try {
+          this.ranking = await keeper.ranking();
+          note.say('', '');
+        } catch (error) {
+          note.say(...rankingTrouble(error), 'warn');
+        }
+        if (list.isConnected) draw();
+      };
+      root.append(h('h2', {}, '🏆 Ranking'), tabRow, about, h('div', { class: 'rank-note' }, note), list, foot);
+      draw();
+      ask();
     });
   }
 

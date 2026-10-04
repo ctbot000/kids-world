@@ -29,6 +29,11 @@
 //   { t: 'list' }                         → { t: 'list', profile, islands, forgotten }
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
 //   { t: 'forget', id }                   → { t: 'kept', what: 'forget', id }
+// The ranking of the players with a login (see ranking.js), for any page:
+//   { t: 'ranking' }                      → { t: 'ranking', players, boards, shown? }
+//                                           (shown: logged in, whether you are in it)
+//   { t: 'ranked', on }                   → { t: 'kept', what: 'ranked', on }
+//                                           (logged in: in the ranking, or left out)
 //
 // Anyone can register a peer id while the keeper is away, so the page sends
 // nothing but its nonce until the keeper has signed it with the key whose

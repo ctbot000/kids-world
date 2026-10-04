@@ -1,10 +1,10 @@
 // The keeper's admin pages, at /admin/: what it has kept and from whom, with
 // downloads of any day's copy and deletes, and players' logins: a new
 // password for a player who forgot theirs, no login at all, or the copies of
-// a device that is gone moved into a player's login. Only for this computer:
-// requests from other machines, or under any other host name (a DNS
-// rebinding page), are refused, and changes need a header no other site's
-// page can send.
+// a device that is gone moved into a player's login, and a player taken out
+// of the ranking, or put back. Only for this computer: requests from other
+// machines, or under any other host name (a DNS rebinding page), are
+// refused, and changes need a header no other site's page can send.
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +97,17 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         } catch (error) {
           json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
         }
+      }
+      return true;
+    }
+    const ranked = /^\/admin\/api\/devices\/([^/]+)\/ranked$/.exec(pathname);
+    if (ranked) {
+      // A player out of the ranking (a name that should not be there, say), or back in.
+      if (req.method !== 'PUT') res.writeHead(405, { Allow: 'PUT' }).end();
+      else {
+        const body = await readJson(req);
+        const ok = await store.setRanked(ranked[1], body?.on !== false);
+        json(res, ok ? 200 : 404, { ok });
       }
       return true;
     }

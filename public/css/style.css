@@ -1396,6 +1396,128 @@ body.touch.playing #joystick {
   font-size: 0.9rem;
 }
 
+/* A dialog's title with a button beside it, clear of the close button. */
+.dialog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 44px 14px 0;
+}
+
+.panel .dialog-head h2 {
+  margin: 0;
+}
+
+.ranking {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+.rank-row.you {
+  background: #fff3b0;
+  box-shadow:
+    0 0 0 3px var(--sun),
+    0 3px 0 var(--sun-dark);
+}
+
+.rank-row .place {
+  flex: none;
+  width: 2.2rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.rank-row .avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--c);
+  font-size: 1.5rem;
+}
+
+.rank-row .who {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+
+.rank-row .who:lang(ko) {
+  word-break: keep-all;
+}
+
+.rank-row .score {
+  flex: none;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-gap {
+  text-align: center;
+  color: var(--ink-soft);
+  line-height: 0.6;
+}
+
+.rank-empty {
+  padding: 8px 4px;
+}
+
+.ranking-foot {
+  margin-top: 14px;
+}
+
+.ranking-foot .check-row {
+  margin: 8px 0 2px;
+}
+
+/* Says something only while asking the keeper, or when it could not answer. */
+.rank-note .login-note:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+/* On a phone, the five boards in one row, each a picture over its name. */
+@media (max-width: 479px) {
+  .ranking-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+
+  .ranking-tabs .chip {
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 6px 2px;
+    border-radius: 16px;
+    font-size: 0.72rem;
+    line-height: 1.15;
+  }
+
+  .ranking-tabs .chip .emoji {
+    font-size: 1.3rem;
+  }
+}
+
 .help-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

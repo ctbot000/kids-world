@@ -1520,6 +1520,64 @@ test('a login made on one device logs in another: what each made comes along, th
   }
 });
 
+test('the ranking shows the players with a login to anyone, marks you once logged in, and lets you leave it and come back', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const password = 'rocket-apple7';
+  await keeper.store.makeLogin(
+    KeeperStore.deviceId('c3'.repeat(16)),
+    password,
+    { name: 'Minji', look: { animal: 'bunny', shirt: 2 }, stats: { placed: 120 }, stickers: { 'first-block': 5, builder: 6 } },
+    { username: 'minji kim' },
+  );
+  await keeper.store.makeLogin(KeeperStore.deviceId('e5'.repeat(16)), 'dogs and stars', { name: 'Brave Fox', stats: { placed: 30 } }, { username: 'fox' });
+  const page = await openPlayer(url, { name: 'Sunny Otter' });
+  const names = () => page.evaluate(() => [...document.querySelectorAll('#modal .rank-row .who')].map((b) => b.firstChild.textContent));
+  try {
+    // A guest sees it from the title screen, and is told how to be in it.
+    await clickButton(page, 'Ranking');
+    await clickButton(page, 'Builders', '#modal');
+    await until(page, () => document.querySelectorAll('#modal .rank-row').length === 2);
+    assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
+    assert.match(await page.$eval('#modal .ranking-foot', (el) => el.textContent), /Players with a login are in the ranking/);
+    assert.equal(await page.$('#modal .ranking-foot input'), null);
+    await page.keyboard.press('Escape');
+
+    // Minji logs in there, and finds herself on the board, from her stickers too.
+    await clickButton(page, 'Log in');
+    await typeInto(page, 'Minji Kim', password);
+    await reloadsAfter(page, () => page.keyboard.press('Enter'));
+    await clickButton(page, 'Stickers');
+    await clickButton(page, 'Ranking', '#modal');
+    await until(page, () => document.querySelector('#modal .rank-row.you'));
+    assert.deepEqual(await names(), ['Minji'], 'Brave Fox has no stickers');
+    assert.equal(await page.$eval('#modal .ranking-foot input', (el) => el.checked), true);
+
+    // She leaves it: nobody sees her there now, on any board.
+    await clickSwitch(page, '#modal .ranking-foot input');
+    await until(page, () => document.querySelector('#modal .ranking-foot')?.textContent.includes('You are not in the ranking'));
+    assert.deepEqual(await names(), []);
+    assert.equal((await keeper.store.ranking()).players, 1);
+    await clickButton(page, 'Builders', '#modal');
+    assert.deepEqual(await names(), ['Brave Fox']);
+    // And comes back.
+    await clickSwitch(page, '#modal .ranking-foot input');
+    await until(page, () => document.querySelector('#modal .rank-row.you'));
+    assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
+    assert.equal(await page.$eval('#modal .rank-row.you .place', (el) => el.textContent), '🥇');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('the admin page shows each player, their login and their islands, drawn from above, deletes them, and moves a device’s copies into a login', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const store = await new KeeperStore(dir).open();

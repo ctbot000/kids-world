@@ -1,8 +1,8 @@
 // The keeper's admin page: who has sent copies, their islands seen from above
 // (drawn with the game's own map code), and downloads or deletes, and their
-// logins: a new password for a player who forgot theirs, none at all, or the
-// copies of a device that is gone moved into a player's login. It reads
-// /admin/api/state every few seconds.
+// logins: a new password for a player who forgot theirs, none at all, the
+// copies of a device that is gone moved into a player's login, or a player
+// taken out of the ranking. It reads /admin/api/state every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
@@ -150,9 +150,10 @@ function passwordForm(device, done) {
   );
 }
 
-// A player's login: its username, on how many devices it is, and whether it
-// still needs a password (one made with secret pictures, before passwords);
-// a new password for one who forgot theirs, or none. A device with no login
+// A player's login: its username, on how many devices it is, whether it
+// still needs a password (one made with secret pictures, before passwords)
+// and whether they are in the ranking; a new password for one who forgot
+// theirs, none, or out of the ranking (or back in). A device with no login
 // can have its copies moved into a player's login instead, say once a
 // tablet is replaced and its player logs in on the new one.
 function loginRow(device, players) {
@@ -170,8 +171,13 @@ function loginRow(device, players) {
     if (!res.ok) alert(`That could not be moved: ${(await res.json().catch(() => null))?.error ?? 'is the keeper still running?'}`);
     refresh(true);
   };
+  const rank = async () => {
+    const res = await api(`devices/${device.id}/ranked`, { method: 'PUT', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ on: !device.ranked }) });
+    if (!res.ok) alert('That did not work. Is the keeper still running?');
+    refresh(true);
+  };
   const words = login
-    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'}`
+    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'} · ${device.ranked ? '🏆 in the ranking' : 'left out of the ranking'}`
     : '🔑 No login';
   return h(
     'div',
@@ -181,6 +187,7 @@ function loginRow(device, players) {
       { class: 'login-line' },
       h('span', {}, words),
       h('button', { type: 'button', onclick: type }, login ? (login.password ? 'New password' : 'Set a password') : 'Make a login'),
+      login ? h('button', { type: 'button', onclick: rank }, device.ranked ? 'Take out of the ranking' : 'Put back in the ranking') : null,
       login
         ? h(
             'button',

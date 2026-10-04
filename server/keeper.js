@@ -6,7 +6,8 @@
 // protocol is in public/js/shared/keeper.js.
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
-//   <data>/devices/<device>/device.json             when the device was seen, its profile
+//   <data>/devices/<device>/device.json             when the device was seen, its profile, and
+//                                                   for a login, whether it left the ranking
 //   <data>/devices/<device>/login.json              its login, if it made one: the username, the
 //                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
@@ -54,6 +55,7 @@ import {
   SIGN_ALGORITHM,
   toBase64Url,
 } from '../public/js/shared/keeper.js';
+import { rankBoards } from '../public/js/shared/ranking.js';
 import { World } from '../public/js/shared/world.js';
 
 export const DEFAULT_DATA_DIR = join(homedir(), '.kids-world');
@@ -598,6 +600,37 @@ export class KeeperStore {
     });
   }
 
+  // ------------------------------------------------ the ranking
+
+  // Every board of the ranking (see rankBoards): the players with a login,
+  // but for those who left it. me: the player asking, if logged in, who
+  // also learns whether they are in it ({ shown }).
+  async ranking(me = null) {
+    const players = [];
+    let shown = true;
+    for (const { device } of await this.logins()) {
+      const record = await readJson(this.path(device, 'device.json'));
+      if (device === me) shown = record?.ranked !== false;
+      if (record?.profile && record.ranked !== false) players.push({ id: device, profile: keptProfile(record.profile) });
+    }
+    return { ...rankBoards(players, me), ...(isPlayerId(me) ? { shown } : {}) };
+  }
+
+  // A player with a login joins the ranking, or leaves it: by their own
+  // choice, or a grown-up's on the admin pages. Returns whether there is
+  // such a player.
+  setRanked(device, on) {
+    if (!isDeviceId(device)) return Promise.resolve(false);
+    return this.serial(async () => {
+      if (!(await this.readLogin(device))) return false;
+      const file = this.path(device, 'device.json');
+      const record = (await readJson(file)) ?? { id: device };
+      delete record.ranked;
+      await this.write(file, JSON.stringify(on ? record : { ...record, ranked: false }));
+      return true;
+    });
+  }
+
   // ------------------------------------------------ for the admin pages
 
   async devices() {
@@ -627,6 +660,7 @@ export class KeeperStore {
         lastSeen: info.lastSeen ?? 0,
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
+        ranked: info.ranked !== false,
         // Never the hashes: when it was made, on how many devices it is, and
         // whether it has a password yet (one from before passwords has not).
         login: login
@@ -1113,6 +1147,15 @@ export class Keeper extends EventEmitter {
         await this.store.forgetIsland(mine('say goodbye to islands'), msg.id, msg.at);
         this.reply(conn, { t: 'kept', what: 'forget', id: msg.id });
         break;
+      case 'ranking':
+        this.reply(conn, { t: 'ranking', ...(await this.store.ranking(conn.player)) });
+        break;
+      case 'ranked': {
+        const on = msg.on !== false;
+        await this.store.setRanked(mine('be in the ranking'), on);
+        this.reply(conn, { t: 'kept', what: 'ranked', on });
+        break;
+      }
       case 'bye':
         this.drop(conn);
         break;
