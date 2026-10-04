@@ -1,19 +1,17 @@
-// Dedicated server: serves the game from public/ and hosts islands over
-// WebSocket (the ws library), so nobody's browser has to stay open as the
-// host. The keeper's WebRTC module is loaded only when it starts.
+// Dedicated server: serves the game from public/ (with serve-static) and hosts
+// islands over WebSocket (with ws), so nobody's browser has to stay open as
+// the host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
 //   npm start -- --data ~/kw-copies  # where the keeper keeps copies (or KIDS_WORLD_DATA)
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer, STATUS_CODES } from 'node:http';
 import { networkInterfaces } from 'node:os';
-import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import serveStatic from 'serve-static';
 import { generateCode, isValidCode, normalizeCode } from '../public/js/shared/codes.js';
 import { sortListings } from '../public/js/shared/listing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
@@ -24,20 +22,8 @@ import { WebSocketServer } from 'ws';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
-const TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.webmanifest': 'application/manifest+json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8',
-  '.woff2': 'font/woff2',
-};
+const JSON_TYPE = 'application/json; charset=utf-8';
+const TEXT_TYPE = 'text/plain; charset=utf-8';
 
 const HEARTBEAT_MS = 20000;
 const TICK_MS = 100;
@@ -56,7 +42,16 @@ export function createGameServer({
   // The admin pages' handler, from adminHandler().
   admin = null,
 } = {}) {
-  const base = resolve(root);
+  // The files in public/, never cached, so a restart serves new code at once.
+  // Paths that climb out of it get 403; dotfiles, like missing files, 404.
+  const serve = serveStatic(root, {
+    fallthrough: false,
+    cacheControl: false,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  });
   const rooms = new Map();
   const sockets = new Set();
   // Its `clients` are the open connections.
@@ -80,13 +75,13 @@ export function createGameServer({
     // copies to the keeper that file names.
     if (pathname === '/keeper.json') {
       const body = keeperConfig ? JSON.stringify(keeperConfig) : null;
-      if (body) res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
-      else res.writeHead(404, { 'Content-Type': TYPES['.txt'], 'Cache-Control': 'no-store' }).end('No keeper here');
+      if (body) res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(body);
+      else res.writeHead(404, { 'Content-Type': TEXT_TYPE, 'Cache-Control': 'no-store' }).end('No keeper here');
       return;
     }
     if (pathname === '/api/info') {
       const body = JSON.stringify({ app: 'kids-world', mode: 'server', protocol: PROTOCOL, islands: rooms.size });
-      res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
+      res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(body);
       return;
     }
     // The list of open islands here (see shared/listing.js): those with
@@ -94,36 +89,17 @@ export function createGameServer({
     if (pathname === '/api/islands') {
       const open = [...rooms.values()].map((entry) => (entry.room.online > 0 ? entry.room.listing() : null)).filter(Boolean);
       const body = JSON.stringify({ islands: sortListings(open) });
-      res.writeHead(200, { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }).end(body);
+      res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(body);
       return;
     }
-    let file = resolve(base, `.${pathname}`);
-    if (file !== base && !file.startsWith(base + sep)) {
-      res.writeHead(403).end('Forbidden');
-      return;
-    }
-    let info = await stat(file).catch(() => null);
-    if (info?.isDirectory()) {
-      file = join(file, 'index.html');
-      info = await stat(file).catch(() => null);
-    }
-    if (!info?.isFile()) {
-      res.writeHead(404, { 'Content-Type': TYPES['.txt'], 'Cache-Control': 'no-store' }).end('Not found');
-      return;
-    }
-    res.writeHead(200, {
-      'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
-      'Content-Length': info.size,
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
+    // Answered by serve-static, or here with the status it gives up with.
+    serve(req, res, (error) => {
+      const status = error?.statusCode ?? 404;
+      if (status >= 500) log(error);
+      if (res.headersSent) res.destroy();
+      else if (status >= 500) res.writeHead(500).end('Internal error');
+      else res.writeHead(status, { 'Content-Type': TEXT_TYPE, 'Cache-Control': 'no-store' }).end(STATUS_CODES[status]);
     });
-    if (req.method === 'HEAD') {
-      res.end();
-      return;
-    }
-    createReadStream(file)
-      .on('error', () => res.destroy())
-      .pipe(res);
   }
 
   const server = createServer((req, res) => {

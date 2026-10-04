@@ -67,7 +67,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 
 To use your own signaling server, run a [PeerServer](https://github.com/peers/peerjs-server) (`npx peer --port 9000`) and open the game with `?signal=http://localhost:9000/`. Invite links carry the setting along.
 
-**Dedicated server.** `npm start` serves the game and hosts islands itself over WebSocket, so nobody's browser has to stay open. The page notices the server and switches to it automatically. It speaks WebSocket with [ws](https://github.com/websockets/ws) and runs anywhere Node 22+ runs. Islands with nobody on them are kept for two hours. Once it is set up, the same command also runs the [island keeper](#the-island-keeper).
+**Dedicated server.** `npm start` serves the game and hosts islands itself over WebSocket, so nobody's browser has to stay open. The page notices the server and switches to it automatically. It serves the game's files with [serve-static](https://github.com/expressjs/serve-static), speaks WebSocket with [ws](https://github.com/websockets/ws), and runs anywhere Node 22+ runs. Islands with nobody on them are kept for two hours. Once it is set up, the same command also runs the [island keeper](#the-island-keeper).
 
 ```bash
 npm install

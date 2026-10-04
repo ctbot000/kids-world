@@ -123,12 +123,14 @@ test('serves the game and its info endpoint, and nothing outside public/', async
   assert.equal(js.status, 200);
   assert.match(js.headers.get('content-type'), /javascript/);
   assert.equal(js.headers.get('cache-control'), 'no-store');
+  assert.equal(js.headers.get('x-content-type-options'), 'nosniff');
   const font = await get('/vendor/fonts/fredoka-latin-700-normal.woff2');
   assert.equal(font.headers.get('content-type'), 'font/woff2');
   assert.equal((await get('/nope.js')).status, 404);
   assert.equal(await statusOf('/%2e%2e%2fpackage.json'), 403);
   assert.equal(await statusOf('/..%2f..%2fpackage.json'), 403);
-  assert.equal(await statusOf('/js/../../package.json'), 404);
+  assert.equal(await statusOf('/js/../../package.json'), 403);
+  assert.equal(await statusOf('/js/../index.html'), 200, 'dot segments that stay inside are fine');
 });
 
 test('two friends make and visit an island and build together', async () => {

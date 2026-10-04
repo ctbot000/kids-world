@@ -166,7 +166,8 @@ test('/keeper.json names the keeper this server runs, and none by default', asyn
 });
 
 test('the admin pages list, download and delete copies, for this computer only', async () => {
-  const store = await new KeeperStore(await tempDir()).open();
+  // In a dot-folder, as the real one is (~/.kids-world): downloads still work.
+  const store = await new KeeperStore(join(await tempDir(), '.kids-world')).open();
   await store.keepIsland(KEY, ISLAND, island(B.GLASS));
   await store.keepProfile(KEY, { name: 'Sunny Otter' });
   const admin = adminHandler({ store });

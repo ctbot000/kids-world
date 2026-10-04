@@ -5,16 +5,16 @@
 // of the ranking, or put back. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import send from 'send';
 import { KeepError } from './keeper.js';
 
 const ADMIN_DIR = fileURLToPath(new URL('./admin/', import.meta.url));
 const PAGES = {
-  '/admin/': ['index.html', 'text/html; charset=utf-8'],
-  '/admin/admin.js': ['admin.js', 'text/javascript; charset=utf-8'],
-  '/admin/admin.css': ['admin.css', 'text/css; charset=utf-8'],
+  '/admin/': 'index.html',
+  '/admin/admin.js': 'admin.js',
+  '/admin/admin.css': 'admin.css',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -41,15 +41,20 @@ async function readJson(req, limit = 4096) {
   }
 }
 
-async function sendFile(req, res, file, type, extra = {}) {
-  const info = await stat(file).catch(() => null);
-  if (!info?.isFile()) {
-    json(res, 404, { error: 'Not found' });
-    return;
-  }
-  res.writeHead(200, { 'Content-Type': type, 'Content-Length': info.size, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extra });
-  if (req.method === 'HEAD') res.end();
-  else createReadStream(file).on('error', () => res.destroy()).pipe(res);
+// A file, never cached, with any extra headers (a download's file name).
+// Its folder is send's root: as a path, ~/.kids-world would be a dotfile.
+function sendFile(req, res, file, extra = {}) {
+  send(req, `/${encodeURIComponent(basename(file))}`, { root: dirname(file), cacheControl: false })
+    .on('headers', (res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      for (const [name, value] of Object.entries(extra)) res.setHeader(name, value);
+    })
+    .on('error', (error) => {
+      if (res.headersSent) res.destroy();
+      else json(res, error.statusCode === 404 ? 404 : 500, { error: error.statusCode === 404 ? 'Not found' : error.message });
+    })
+    .pipe(res);
 }
 
 // Returns a handler: (req, res, pathname) => true when it answered.
@@ -67,7 +72,7 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
     const page = PAGES[pathname];
     if (page) {
       if (req.method !== 'GET' && req.method !== 'HEAD') res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      else await sendFile(req, res, ADMIN_DIR + page[0], page[1]);
+      else sendFile(req, res, join(ADMIN_DIR, page));
       return true;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-kids-world-admin'] !== '1') {
@@ -150,7 +155,7 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         const day = file.slice(-15, -5);
         extra['Content-Disposition'] = `attachment; filename="${name}-${day}.kidsworld.json"`;
       }
-      await sendFile(req, res, file, 'application/json; charset=utf-8', extra);
+      sendFile(req, res, file, extra);
       return true;
     }
     if (req.method === 'DELETE') {

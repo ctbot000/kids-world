@@ -29,6 +29,8 @@
   },
   "dependencies": {
     "node-datachannel": "^0.33.4",
+    "send": "^1.2.1",
+    "serve-static": "^2.2.1",
     "ws": "^8.22.0"
   }
 }
