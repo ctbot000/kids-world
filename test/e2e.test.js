@@ -557,6 +557,51 @@ test('a pony beside you is got on with the Ride button, ridden about, and got of
   await page.browserContext().close();
 });
 
+test('a digger beside you is driven with the Drive button: it digs a tunnel through stone and a ruby into the basket, and Q gets you out', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A digger two steps from you, facing a wall of stone with a ruby in it.
+  const { id, ruby } = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const B = await import('/js/shared/blocks.js');
+    const { BIG, roomFor, VEHICLES } = await import('/js/shared/critters.js');
+    for (const c of [...room.critters.list]) if (BIG.includes(c.type) || VEHICLES.includes(c.type)) room.critters.remove(c.id);
+    const b = kw.game.me.body;
+    const at = roomFor(room.world, 'digger', b.x + 2, b.y, b.z, 1);
+    const c = room.critters.add('digger', at.x, at.y, at.z, null, Math.PI / 2);
+    const [x0, y0, z0] = [Math.floor(at.x) + 3, Math.floor(at.y), Math.floor(at.z)];
+    for (let x = x0; x < x0 + 5; x++) for (let y = y0; y < y0 + 3; y++) for (let z = z0 - 1; z <= z0 + 1; z++) room.natureCell([x, y, z], B.STONE);
+    const ruby = { x: x0 + 2, y: y0 + 1, z: z0 };
+    room.natureCell([ruby.x, ruby.y, ruby.z], B.GEM_ROCKS[0]);
+    kw.renderer.view.yaw = -Math.PI / 2;
+    return { id: c.id, ruby };
+  });
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 80, ruby);
+  await until(page, (id) => window.kidsWorld.game.rideTarget === id && !document.getElementById('ride').hidden, id);
+  assert.match(await page.$eval('#ride', (el) => el.textContent), /🚜 Drive/);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  await page.click('#ride');
+  await until(page, (id) => window.kidsWorld.game.riding?.id === id && window.kidsWorld.session.link.room.critters.get(id).rider === window.kidsWorld.game.pid, id);
+  await until(page, () => document.getElementById('ride').textContent.includes('Get out') && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('You are driving')));
+  // On into the stone: a tunnel, and the ruby in the basket.
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 240));
+  await page.keyboard.up('KeyW');
+  await until(page, (c) => window.kidsWorld.session.link.room.world.get(c.x, c.y, c.z) === 0 && window.kidsWorld.profile.basket.ruby === 1, ruby);
+  const done = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    return { x: kw.game.riding.body.x, drilled: kw.profile.data.stats.drilled, sticker: Boolean(kw.profile.data.stickers.driver) };
+  });
+  assert.ok(done.x > ruby.x - 1, `the digger went in after it, to ${done.x.toFixed(2)}`);
+  assert.ok(done.drilled >= 27, `${done.drilled} blocks dug`);
+  assert.ok(done.sticker, 'a sticker for driving');
+  await page.keyboard.press('KeyQ');
+  await until(page, (id) => !window.kidsWorld.game.riding && window.kidsWorld.session.link.room.critters.get(id).rider === 0, id);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');

@@ -16,12 +16,17 @@
 // reindeer and polar bears on snowy islands, and unicorns on candy ones. They
 // get about the way players do (physics.js), and someone riding one moves it
 // themselves (riding.js); the dolphins and the whale take riders too.
+//
+// Vehicles (vehicle) live here too, as friends that never go anywhere by
+// themselves: a car, a boat, a digger that tunnels through the ground and
+// a mine cart that rolls along rails. They park where they were left, and
+// someone driving one moves it the way a rider moves an animal.
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -58,6 +63,14 @@ export const CRITTER_INFO = {
   reindeer: { name: 'Reindeer', icon: '🦌', speed: 1.4, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 11 }, names: ['Dasher', 'Dancer', 'Prancer', 'Comet', 'Cupid', 'Blitzen', 'Jingle', 'Holly', 'Snowflake', 'Aurora'] },
   polarbear: { name: 'Polar Bear', icon: '🐻‍❄️', speed: 1, swims: true, flies: false, big: true, paddles: true, ground: ICY, home: 10, ride: { seat: 1.05, radius: 0.46, height: 2.25, float: 0.75, spread: 1, walk: 4.5, run: 7.5, swim: 5, jump: 8.5 }, names: ['Nanook', 'Iceberg', 'Blizzard', 'Mitten', 'Snowdrift', 'Polo', 'Nuka', 'Glacier', 'Puffball', 'Yeti'] },
   unicorn: { name: 'Unicorn', icon: '🦄', speed: 1.6, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.21, radius: 0.44, height: 2.4, float: 0.85, spread: 0.85, walk: 6, run: 10.5, swim: 3.5, jump: 11.5 }, names: ['Stardust', 'Moonbeam', 'Candyfloss', 'Celeste', 'Dreamy', 'Sugarplum', 'Pixie', 'Starlight', 'Wish', 'Lullaby'] },
+  // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
+  // honk instead of jumping; the digger digs through the ground it drives
+  // into (ride.drill); the mine cart rolls along rails (ride.rails: its
+  // speeds on them) and only creeps along off them.
+  car: { name: 'Car', icon: '🚗', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.5, z: -0.12, radius: 0.55, height: 1.75, float: 0.55, spread: 0.12, reach: 1.35, walk: 7, run: 12, swim: 2, jump: 8, trick: 'honk' }, names: ['Beep-Beep', 'Zoomy', 'Vroom', 'Cherry', 'Bumper', 'Speedy', 'Pip', 'Rosie', 'Turbo', 'Sunny'] },
+  boat: { name: 'Boat', icon: '🚤', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.3, z: -0.15, radius: 0.6, sea: true, swim: 6.5, run: 10, float: 0, dive: 0, spread: 0.12, reach: 1.35, trick: 'honk' }, names: ['Splashy', 'Bubbles', 'Captain', 'Wave Rider', 'Skipper', 'Puddle Jumper', 'Bobby', 'Sea Breeze', 'Toot-Toot', 'Marina'] },
+  digger: { name: 'Digger', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { drill: true, seat: 0.92, z: -0.22, radius: 0.6, height: 2.15, float: 0.75, spread: 0.15, reach: 1.3, walk: 3.5, run: 5, swim: 1.8, jump: 8.5 }, names: ['Rumbles', 'Scoop', 'Chomper', 'Drilly', 'Dusty', 'Rocky', 'Tunnel', 'Diggs', 'Muddy', 'Crunch'] },
+  minecart: { name: 'Mine Cart', icon: '🚃', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.32, radius: 0.42, height: 1.6, float: 0.5, spread: 0.12, reach: 1.35, walk: 1.8, run: 2.6, swim: 1.5, jump: 7.6, trick: 'honk', rails: { speed: 7, run: 11 } }, names: ['Clickety', 'Rattle', 'Nugget', 'Rusty', 'Clank', 'Rolly', 'Coal', 'Jingle', 'Choo-Choo', 'Pebble'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -71,6 +84,9 @@ export const CRITTER_INFO = {
 // jump button does instead of jumping: a leap, a spout, or a spray from the
 // trunk.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
+export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
+// The animals, without the vehicles.
+export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle);
 // New states go on the end too.
 export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run'];
 export const MAX_CRITTERS = 64;
@@ -146,6 +162,7 @@ const WATERS = {
   whale: { deep: 4, sea: true, wide: 2 },
   penguin: { deep: 2 },
   seal: { deep: 2 },
+  boat: { deep: 1 },
 };
 // Where in the water each one swims, from a column of it: [lowest, highest].
 const BANDS = {
@@ -156,6 +173,8 @@ const BANDS = {
   // Penguins and seals keep within a few blocks of the top.
   penguin: (w) => [Math.max(w.floor + 1.3, w.top + SURFACE - 3.5), w.top + SURFACE - 0.6],
   seal: (w) => [Math.max(w.floor + 1.3, w.top + SURFACE - 3.5), w.top + SURFACE - 0.6],
+  // A boat's bottom at the top of the water.
+  boat: (w) => [w.top + SURFACE, w.top + SURFACE],
 };
 // A penguin's leap out of the water on its way: [how far, how high, how long].
 const PENGUIN_LEAP = [2.6, 0.9, 0.75];
@@ -165,6 +184,7 @@ export const NEEDS_WATER = {
   octopus: 'An octopus needs deeper water: tap the sea!',
   dolphin: 'Dolphins need the open sea: tap the water past the beach!',
   whale: 'A whale needs the deep sea, far out from the beach!',
+  boat: 'A boat needs water: tap a pond or the sea!',
 };
 
 // The first thing under the open sky in a column: the ground, a roof, a
@@ -460,22 +480,79 @@ export function standHeight(world, x, z, y) {
   return null;
 }
 
+// Rails: whether a mine cart at (x, y, z) is on them (sitting on a rail, or
+// on the way up or down a slope of them).
+export function onRails(world, x, y, z) {
+  const cx = FL(x);
+  const cz = FL(z);
+  const cy = FL(y + 0.05);
+  return world.get(cx, cy, cz) === B.RAIL || world.get(cx, cy - 1, cz) === B.RAIL;
+}
+
+// Where an island's vehicles start out: a car out in the open a little way
+// from where everyone comes in, a boat on the water by the shore nearest to
+// it, and a digger by the way into the first mine (or, with no mines, near
+// the car); and a mine cart on the rails just inside each mine's doorway.
+// mines: as worldgen.js digs them, each with where its cart and its digger go.
+export function placeVehicles(world, rng, mines = []) {
+  const out = [];
+  const spawn = world.spawn;
+  const taken = (x, z, d) => out.some((o) => Math.hypot(o.x - x, o.z - z) < d);
+  const open = (type, near) => {
+    for (let tries = 0; tries < spots(world, 600); tries++) {
+      const a = rng.next() * Math.PI * 2;
+      const d = rng.range(near[0], near[1]);
+      const p = perchAt(world, spawn.x + Math.cos(a) * d, spawn.z + Math.sin(a) * d);
+      if (!p || p.kind !== 'ground' || p.y <= world.sea + 1 || taken(p.x, p.z, 3) || !fits(world, type, p.x, p.y, p.z)) continue;
+      return { type, x: p.x, y: p.y, z: p.z, yaw: Math.atan2(spawn.x - p.x, spawn.z - p.z) };
+    }
+    return null;
+  };
+  const car = open('car', [5, 14]) ?? open('car', [5, 40]);
+  if (car) out.push(car);
+  // The boat: the water by the shore nearest to where everyone comes in.
+  let boat = null;
+  for (let tries = 0; tries < spots(world, 1500); tries++) {
+    const x = rng.int(2, world.W - 3) + 0.5;
+    const z = rng.int(2, world.D - 3) + 0.5;
+    const w = waterFor(world, x, z, WATERS.boat);
+    if (!w || w.top !== world.sea) continue;
+    let shore = null;
+    for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) if (!waterColumn(world, x + dx, z + dz) && skyline(world, x + dx, z + dz) >= 0) shore = [dx, dz];
+    if (!shore) continue;
+    const d = Math.hypot(x - spawn.x, z - spawn.z);
+    if (!boat || d < boat.d) boat = { type: 'boat', x, y: w.top + SURFACE, z, yaw: Math.atan2(-shore[0], -shore[1]), d };
+  }
+  if (boat) {
+    delete boat.d;
+    out.push(boat);
+  }
+  const mine = mines.find((m) => m.digger);
+  const spot = mine && roomFor(world, 'digger', mine.digger.x, mine.digger.y, mine.digger.z, 3);
+  const digger = spot && !taken(spot.x, spot.z, 2) ? { type: 'digger', ...spot, yaw: mine.digger.yaw } : open('digger', [6, 20]) ?? open('digger', [6, 40]);
+  if (digger) out.push(digger);
+  for (const m of mines) if (m.cart) out.push({ type: 'minecart', ...m.cart });
+  return out;
+}
+
 export class CritterSim {
   constructor(seed = 1) {
     this.rng = new Rng(seed);
     // The big animals' own dice: how many of them there are changes nothing
     // about what the others do.
     this.bigRng = new Rng((seed ^ 0x2c1b3c6d) >>> 0 || 1);
+    // ...and the vehicles theirs.
+    this.vehicleRng = new Rng((seed ^ 0x68e31da4) >>> 0 || 1);
     this.list = [];
     this.nextId = 1;
     // A bigger island has room for more (see maxCritters).
     this.max = MAX_CRITTERS;
   }
 
-  add(type, x, y, z, name = null) {
+  add(type, x, y, z, name = null, yaw = null) {
     if (!CRITTER_INFO[type] || this.list.length >= this.max) return null;
     const info = CRITTER_INFO[type];
-    const rng = info.big ? this.bigRng : this.rng;
+    const rng = info.vehicle ? this.vehicleRng : info.big ? this.bigRng : this.rng;
     const c = {
       id: this.nextId++,
       type,
@@ -483,7 +560,7 @@ export class CritterSim {
       x,
       y,
       z,
-      yaw: rng.next() * Math.PI * 2,
+      yaw: Number.isFinite(yaw) ? yaw : rng.next() * Math.PI * 2,
       state: 'idle',
       timer: rng.range(0.5, 3),
       tx: x,
@@ -527,7 +604,8 @@ export class CritterSim {
 
   feed(id, pid, player, now) {
     const c = this.pet(id, player, now);
-    if (!c) return null;
+    // A vehicle has no use for fruit.
+    if (!c || CRITTER_INFO[c.type].vehicle) return c;
     c.follow = pid;
     c.followUntil = now + FOLLOW_MS;
     return c;
@@ -547,6 +625,10 @@ export class CritterSim {
         return;
       }
       this.letGo(c);
+    }
+    if (info.vehicle) {
+      this.stepVehicle(world, c, dt, now);
+      return;
     }
     if (c.follow && (c.followUntil < now || !players.has(c.follow))) c.follow = 0;
     const leader = c.follow ? players.get(c.follow) : null;
@@ -822,7 +904,39 @@ export class CritterSim {
   // Its rider got off, or went home: it stays where they left it a moment,
   // and makes that its home.
   letGo(c) {
-    Object.assign(c, { rider: 0, body: null, timer: 3, state: CRITTER_INFO[c.type].sea === 'water' ? 'swim' : 'idle', mode: 'rest', tx: c.x, ty: c.y, tz: c.z, home: { x: c.x, z: c.z } });
+    const info = CRITTER_INFO[c.type];
+    Object.assign(c, { rider: 0, body: null, timer: 3, state: info.sea === 'water' && !info.vehicle ? 'swim' : 'idle', mode: 'rest', tx: c.x, ty: c.y, tz: c.z, home: { x: c.x, z: c.z } });
+  }
+
+  // ------------------------------------------------ vehicles
+
+  // Parked: where it was left, until someone drives it. A boat floats at the
+  // top of its water (and, with that water gone, goes to the nearest there
+  // is); a car or a digger stands on the ground, falling onto it if what was
+  // under it went; a mine cart on rails stays on them, even on a slope.
+  // Honked at (petted), it honks back for a moment.
+  stepVehicle(world, c, dt, now) {
+    c.state = c.happyUntil > now ? 'happy' : 'idle';
+    if (CRITTER_INFO[c.type].vehicle === 'sea') {
+      const w = waterColumn(world, c.x, c.z);
+      if (w) {
+        c.y = w.top + SURFACE;
+        return;
+      }
+      const at = nearestWater(world, c.type, c.x, c.z);
+      if (at) Object.assign(c, { x: at.x, y: at.y, z: at.z });
+      else this.fall(world, c, dt);
+      return;
+    }
+    if (c.type === 'minecart' && onRails(world, c.x, c.y, c.z)) {
+      c.body = null;
+      return;
+    }
+    const b = this.bodyOf(world, c);
+    stepBody(world, b, { mx: 0, mz: 0 }, dt, { move: CRITTER_INFO[c.type].ride, autoJump: false });
+    c.x = b.x;
+    c.y = b.y;
+    c.z = b.z;
   }
 
   // ------------------------------------------------ big animals
@@ -1865,7 +1979,7 @@ export class CritterSim {
   }
 
   save() {
-    return this.list.map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }));
+    return this.list.map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), yaw: +c.yaw.toFixed(2) }));
   }
 }
 

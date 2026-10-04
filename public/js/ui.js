@@ -3,7 +3,7 @@
 // settings, stickers, the ranking, help, logging in and full screen. Big
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
-import { CRITTER_INFO, CRITTER_TYPES } from './shared/critters.js';
+import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
@@ -1236,6 +1236,7 @@ export class UI {
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
+          card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
@@ -1888,7 +1889,8 @@ export class UI {
       groups.push(h('div', { class: 'opt-group' }, h('button', { class: 'pill', type: 'button', title: 'Choose a stamp', onclick: () => this.toyBox('stamps') }, s?.icon ?? '🏠')));
     }
     if (g.tool === 'friends') {
-      groups.push(h('div', { class: 'opt-group' }, h('button', { class: 'pill', type: 'button', title: 'Choose an animal', onclick: () => this.toyBox('animals') }, CRITTER_INFO[g.critterType].icon)));
+      const vehicle = Boolean(CRITTER_INFO[g.critterType].vehicle);
+      groups.push(h('div', { class: 'opt-group' }, h('button', { class: 'pill', type: 'button', title: vehicle ? 'Choose a vehicle' : 'Choose an animal', onclick: () => this.toyBox(vehicle ? 'vehicles' : 'animals') }, CRITTER_INFO[g.critterType].icon)));
     }
     opts.replaceChildren(...groups);
   }
@@ -1971,7 +1973,7 @@ export class UI {
   toyBox(tab = null) {
     const g = this.game;
     let current = tab ?? this.lastTab ?? 'bricks';
-    const tabs = [...B.CATEGORIES, { key: 'stamps', name: 'Stamps', icon: '🏠' }, { key: 'animals', name: 'Animals', icon: '🐰' }];
+    const tabs = [...B.CATEGORIES, { key: 'stamps', name: 'Stamps', icon: '🏠' }, { key: 'animals', name: 'Animals', icon: '🐰' }, { key: 'vehicles', name: 'Vehicles', icon: '🚗' }];
     this.openModal((root) => {
       const tabRow = h('div', { class: 'tabs' });
       const grid = h('div', { class: 'grid' });
@@ -2017,9 +2019,10 @@ export class UI {
               ),
             ),
           );
-        } else if (current === 'animals') {
+        } else if (current === 'animals' || current === 'vehicles') {
+          const vehicles = current === 'vehicles';
           grid.replaceChildren(
-            ...CRITTER_TYPES.map((type) =>
+            ...(vehicles ? VEHICLES : ANIMAL_TYPES).map((type) =>
               h(
                 'button',
                 {
@@ -2030,7 +2033,8 @@ export class UI {
                     this.pickedCritter = true;
                     g.setTool('friends');
                     this.closeModal();
-                    this.toast(CRITTER_INFO[type].icon, `Tap the ground to invite ${withArticle(CRITTER_INFO[type].name.toLowerCase())}! Tap an animal to say bye.`);
+                    const what = withArticle(CRITTER_INFO[type].name.toLowerCase());
+                    this.toast(CRITTER_INFO[type].icon, vehicles ? `Tap the ground to bring ${what}! Tap a vehicle to send it away.` : `Tap the ground to invite ${what}! Tap an animal to say bye.`);
                   },
                 },
                 h('span', { class: 'emoji' }, CRITTER_INFO[type].icon),
@@ -2534,7 +2538,7 @@ export class UI {
     if (aim?.kind === 'critter') {
       const c = g.critters.get(aim.id);
       const info = CRITTER_INFO[c?.type];
-      el.textContent = c ? `${info.icon} ${c.name || info.name}${g.tool === 'friends' ? ' — tap to say bye' : ' — tap to pet'}` : '';
+      el.textContent = c ? `${info.icon} ${c.name || info.name}${g.tool === 'friends' ? ' — tap to say bye' : info.vehicle ? ' — tap to honk' : ' — tap to pet'}` : '';
       el.hidden = !c;
     } else if (aim?.kind === 'monster') {
       el.textContent = '👾 Monster — tap to pop it!';
@@ -2560,12 +2564,12 @@ export class UI {
     }
     const info = CRITTER_INFO[c.type];
     const touch = this.input.touchMode;
-    const label = g.riding ? '👋 Get off' : `${info.icon} Ride`;
+    const label = g.riding ? (info.vehicle ? '👋 Get out' : '👋 Get off') : `${info.icon} ${info.vehicle ? 'Drive' : 'Ride'}`;
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', g.riding ? 'Get off' : `Ride ${c.name || info.name}`);
+      el.setAttribute('aria-label', g.riding ? label.slice(3) : `${info.vehicle ? 'Drive' : 'Ride'} ${c.name || info.name}`);
     }
     const scr = r.project(at.x, at.y + (g.riding ? 1 : c.model.center), at.z);
     if (!scr.visible && !g.riding) {

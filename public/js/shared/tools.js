@@ -187,6 +187,23 @@ export function pickEdit(world, hit, size = 1) {
   return { cells: o.cells(), collected };
 }
 
+// The digger's drill (riding.js) taking out cells [[x, y, z], ...]: as
+// picking them up, with jewels out of gem rocks going in the basket.
+export function drillEdit(world, cells) {
+  const o = new Overlay(world);
+  const collected = [];
+  const holes = [];
+  for (const [x, y, z] of cells) {
+    const id = o.get(x, y, z);
+    if (!B.TERRAIN[id] || !o.set(x, y, z, B.AIR)) continue;
+    holes.push([x, y, z]);
+    if (B.block(id).collect) collected.push(id);
+  }
+  flood(o, holes);
+  for (const id of settle(o, holes)) if (B.block(id).collect) collected.push(id);
+  return { cells: o.cells(), collected };
+}
+
 export function paintEdit(world, hit, id, size = 1) {
   const o = new Overlay(world);
   if (!B.block(id).cube || id === B.WATER) return { cells: [], collected: [] };

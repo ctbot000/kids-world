@@ -2,9 +2,11 @@
 // fluffy sheep, ducks that paddle about, butterflies that flutter, birds,
 // owls, bees and seagulls; in the sea, schools of fish, dolphins, a whale,
 // turtles, crabs and octopuses; and big ones to ride: ponies, cows, an
-// elephant, a giraffe, reindeer, polar bears and unicorns.
+// elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
+// which live with them, are in vehicle-models.js.
 import * as THREE from '../../vendor/three.module.js';
 import { capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
@@ -1084,7 +1086,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, ...VEHICLE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1133,6 +1135,10 @@ export class CritterModel {
     this.head.rotation.set(this.headRest, 0, 0);
     if (this.eyes) this.eyes.scale.y = 1;
     this.track(dt);
+    if (this.vehicle) {
+      drive(this, dt, state, moving);
+      return;
+    }
     if (this.gait) {
       this.trot(dt, state, moving);
       if (state === 'sleep') this.eyes.scale.y = 0.12;
@@ -1290,6 +1296,11 @@ export class CritterModel {
   // Someone riding it shows its saddle, in the colour of their T-shirt;
   // nobody (null) hides it.
   setRider(color) {
+    // A vehicle's seat is always there, in its own colour with nobody in it.
+    if (this.vehicle) {
+      this.pad.color.set(color ?? this.padColor);
+      return;
+    }
     if (!this.saddle) return;
     this.saddle.visible = Boolean(color);
     if (color) this.pad.color.set(color);
@@ -1544,5 +1555,6 @@ export class CritterModel {
     this.shadow.material.dispose();
     if (this.type === 'octopus') this.skin.dispose();
     this.pad?.dispose();
+    for (const m of this.owned ?? []) m.dispose();
   }
 }

@@ -67,6 +67,11 @@ export const GLASS = def(15, 'glass', { name: 'Window Glass', kind: 'glass', cat
 export const LAMP = def(16, 'lamp', { name: 'Lamp', category: 'building', tiles: 'lamp', light: 15, sound: 'glass' });
 export const STAR_BLOCK = def(17, 'star-block', { name: 'Star Block', category: 'building', tiles: 'star-block', light: 13, sound: 'glass' });
 export const HAY = def(26, 'hay', { name: 'Hay Bale', category: 'building', tiles: { top: 'hay-top', side: 'hay-side' }, sound: 'grass' });
+// Rails lie flat on the ground, like a plant growing on it, for a mine cart
+// to roll along: straight, round a corner, or up a step to the next rail
+// (render/mesher.js works out which from the rails beside it, and draws a
+// corner with the side tile). Every mine has a line of them.
+export const RAIL = def(90, 'rail', { name: 'Rails', kind: 'plant', category: 'building', tiles: { top: 'rail', side: 'rail-curve' }, sound: 'stone' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });

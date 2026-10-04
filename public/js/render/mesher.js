@@ -3,7 +3,15 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+import { AIR, KIND, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+
+// The four ways along the ground, as shared/riding.js numbers them.
+const RAIL_DIRS = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
 import { hash3 } from '../shared/rng.js';
 import { CHUNK } from '../shared/world.js';
 
@@ -228,6 +236,8 @@ export function meshChunk(world, light, visuals, cx, cz) {
             const flat = [skyAt(x + f.n[0], y + f.n[1], z + f.n[2]), lampAt(x + f.n[0], y + f.n[1], z + f.n[2])];
             quad(glass, x, y, z, f, faceLayer[id * 3 + f.tile], id, 'glass', flat);
           }
+        } else if (id === RAIL) {
+          rail(plants, x, y, z);
         } else if (kind === K_PLANT) {
           plant(plants, x, y, z, id);
         } else if (kind === K_ITEM) {
@@ -267,6 +277,56 @@ export function meshChunk(world, light, visuals, cx, cz) {
       part.verts += 4;
       part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
     }
+  }
+
+  // Rails lie flat, joined to the rails beside them: straight on between
+  // two across from each other, round a corner between two that are not,
+  // and up a slope to a rail a step up (the cart's way along them is in
+  // shared/riding.js). The texture's way down the tile (v) is laid along
+  // `along`, and its way across (u) along `side`.
+  function rail(part, x, y, z) {
+    const ways = [];
+    let up = -1;
+    for (let d = 0; d < 4; d++) {
+      const [dx, dz] = RAIL_DIRS[d];
+      if (at(x + dx, y + 1, z + dz) === RAIL) {
+        if (up < 0) up = d;
+        ways.push(d);
+      } else if (at(x + dx, y, z + dz) === RAIL || at(x + dx, y - 1, z + dz) === RAIL) ways.push(d);
+    }
+    const has = (d) => ways.includes(d);
+    let along = 1;
+    let side = 0;
+    let layer = faceLayer[RAIL * 3];
+    if (up >= 0) along = up;
+    else if (has(0) && has(2)) along = 0;
+    else if (has(1) && has(3)) along = 1;
+    else if (ways.length >= 2) {
+      // A corner: from the way of one to the way of the other.
+      along = ways[0];
+      side = ways.find((d) => d % 2 !== along % 2);
+      layer = faceLayer[RAIL * 3 + 1];
+    } else if (ways.length === 1) along = ways[0] % 2;
+    if (layer === faceLayer[RAIL * 3]) side = (along + 1) % 4;
+    const [ax, az] = RAIL_DIRS[along];
+    const [sx, sz] = RAIL_DIRS[side];
+    const sky = skyAt(x, y, z) * 17;
+    const lamp = lampAt(x, y, z) * 17;
+    const v0 = part.verts;
+    for (const [px, pz] of [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ]) {
+      const k = (px - 0.5) * ax + (pz - 0.5) * az;
+      part.pos.push(x + px, y + 0.03 + (up >= 0 ? k + 0.5 : 0), z + pz);
+      part.uvl.push((px - 0.5) * sx + (pz - 0.5) * sz + 0.5, k + 0.5, layer);
+      part.col.push(255, 255, 255);
+      part.lit.push(sky, lamp, 255, 0);
+    }
+    part.verts += 4;
+    part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
   }
 
   function item(part, x, y, z, id) {

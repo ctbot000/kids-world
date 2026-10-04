@@ -11,7 +11,7 @@ import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
-import { applyCells, buildEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
+import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
 import { PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor } from './render/avatar.js';
@@ -370,8 +370,9 @@ export class Game extends EventTarget {
     const entry = this.addCritter({ ...c, name: msg.critter.name });
     this.renderer.effects.sparkles(c.x, c.y + 0.4, c.z, 14);
     if (msg.by === this.pid) {
+      const info = CRITTER_INFO[entry.type];
       this.sound.play(entry.type);
-      this.emit('toast', { icon: CRITTER_INFO[entry.type].icon, text: `${msg.critter.name} the ${CRITTER_INFO[entry.type].name.toLowerCase()} moved in!` });
+      this.emit('toast', { icon: info.icon, text: `${msg.critter.name} the ${info.name.toLowerCase()} ${info.vehicle ? 'is here! Walk up to it to drive it.' : 'moved in!'}` });
     }
   }
 
@@ -399,6 +400,12 @@ export class Game extends EventTarget {
       entry.sprayUntil = performance.now() + 1500;
       entry.model.trick = 1.6;
       if (this.near(p.x, p.y, p.z, 30)) this.sound.play('trumpet');
+      return;
+    }
+    // A vehicle honked, or tapped (it honks then too): its lights flash.
+    if (CRITTER_INFO[entry.type].vehicle) {
+      entry.model.trick = 0.7;
+      if (this.near(p.x, p.y, p.z, 30)) this.sound.play('honk', { type: entry.type });
       return;
     }
     this.renderer.effects.hearts(p.x, p.y + entry.model.height, p.z, msg.fx === 'yum' ? 5 : 3);
@@ -604,7 +611,7 @@ export class Game extends EventTarget {
     }
     const id = this.rideTarget;
     if (!id) {
-      this.emit('notice', { text: 'Walk up to a big animal to ride it!', level: 'info' });
+      this.emit('notice', { text: 'Walk up to a big animal or a vehicle to ride it!', level: 'info' });
       this.sound.play('no');
       return;
     }
@@ -631,11 +638,23 @@ export class Game extends EventTarget {
     this.sound.play('jump');
     this.sound.play(entry.type);
     const info = CRITTER_INFO[entry.type];
-    const how = this.touch ? 'Tap 👋 Get off to get down.' : 'Press Q to get off.';
-    const trick = { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ?? 'Jump to jump!';
-    this.emit('toast', { icon: info.icon, text: `You are riding ${entry.name || `the ${info.name.toLowerCase()}`}! ${trick} ${how}` });
-    this.profile.count('rides');
-    if (ride.r.sea) this.profile.count('searides');
+    const name = entry.name || `the ${info.name.toLowerCase()}`;
+    if (info.vehicle) {
+      const how = this.touch ? 'Tap 👋 Get out to get out.' : 'Press Q to get out.';
+      const what = {
+        digger: `Drive into a hill to dig a tunnel! Hold jump to dig up, or ${this.touch ? '⬇️' : 'Shift'} to dig down.`,
+        minecart: 'Push to roll along the rails! Jump to ring the bell.',
+      }[entry.type] ?? 'Jump to honk!';
+      this.emit('toast', { icon: info.icon, text: `You are driving ${name}! ${what} ${how}` });
+      this.profile.count('drives');
+    } else {
+      const how = this.touch ? 'Tap 👋 Get off to get down.' : 'Press Q to get off.';
+      const trick = { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ?? 'Jump to jump!';
+      this.emit('toast', { icon: info.icon, text: `You are riding ${name}! ${trick} ${how}` });
+      this.profile.count('rides');
+      if (ride.r.sea) this.profile.count('searides');
+    }
+    this.railed = 0;
     this.emit('ride');
   }
 
@@ -705,12 +724,43 @@ export class Game extends EventTarget {
     if (ev.trick) {
       const now = performance.now();
       if (now > (ride.trickAt ?? 0)) {
-        ride.trickAt = now + 2600;
+        // A honk can come again sooner than a spout or a spray.
+        ride.trickAt = now + (ride.r.trick === 'honk' ? 700 : 2600);
         this.send({ t: 'critter', op: 'trick' });
       }
     }
-    // Hoofbeats, or big soft paws.
-    if (r.onGround && speed > 0.5) {
+    if (ev.dig) this.drill(ev.dig);
+    // Along the rails: clickety-clack over each rail, a clunk at the end of the line.
+    if (ev.rolled) {
+      this.railed += ev.rolled;
+      this.stepAcc += ev.rolled;
+      if (this.stepAcc > 1) {
+        this.stepAcc = 0;
+        this.sound.play('clack', { speed });
+      }
+      if (this.railed >= 1) {
+        this.profile.count('railed', Math.floor(this.railed));
+        this.railed %= 1;
+      }
+    }
+    if (ev.bumped) this.sound.play('bump');
+    const vehicle = CRITTER_INFO[ride.type].vehicle;
+    if (vehicle) {
+      // An engine's hum, a little higher the faster it goes.
+      if (!ride.rail && speed > 0.5 && ride.type !== 'minecart') {
+        this.stepAcc += speed * dt;
+        if (this.stepAcc > 1.4) {
+          this.stepAcc = 0;
+          this.sound.play('motor', { type: ride.type, speed });
+          if (r.onGround || ride.r.sea) this.profile.count('steps');
+        }
+      }
+      if (ride.r.sea && speed > 2 && Math.random() < dt * 10) {
+        const top = this.surfaceAt(r.x, r.z);
+        if (top !== null) fxs.splash(r.x - Math.sin(ride.yaw) * 0.8, top, r.z - Math.cos(ride.yaw) * 0.8);
+      }
+    } else if (r.onGround && speed > 0.5) {
+      // Hoofbeats, or big soft paws.
       this.stepAcc += speed * dt;
       if (this.stepAcc > (speed > ride.r.walk * 1.1 ? 1.6 : 1)) {
         this.stepAcc = 0;
@@ -745,9 +795,32 @@ export class Game extends EventTarget {
   }
 
   // Shift or ⬇️ pressed: off the animal you are riding on land (at sea, it
-  // dives, as long as it is held).
+  // dives, as long as it is held; the digger digs down, and a mine cart on
+  // its rails rolls on).
   pressDown() {
-    if (this.riding && !this.riding.r.sea) this.getOff();
+    if (this.riding && !this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
+  }
+
+  // The digger's drill taking out the ground in front of it, with any jewels
+  // in it going in your basket (and, those dug out, for keeps).
+  drill(dig) {
+    // Only the owner builds on this island right now: the drill stays still.
+    if (this.settings.build === 'host' && this.pid !== this.host) {
+      if (!this.riding.toldNoDig) this.emit('notice', { text: 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
+      this.riding.toldNoDig = true;
+      return;
+    }
+    const plan = drillEdit(this.world, dig);
+    const cells = plan.cells;
+    if (!this.edit('pick', cells, { undoable: !plan.collected.length })) return;
+    this.previewKey = '';
+    this.editEffects('pick', cells, true);
+    for (let i = 0; i < cells.length; i += 8) this.renderer.effects.dust(cells[i] + 0.5, cells[i + 1], cells[i + 2] + 0.5);
+    this.sound.play('dig');
+    let dug = 0;
+    for (let i = 3; i < cells.length; i += 4) if (cells[i] === B.AIR || cells[i] === B.WATER) dug++;
+    this.profile.count('drilled', dug);
+    if (plan.collected.length) this.collect(plan.collected, cells);
   }
 
   // Where an animal with someone on it is drawn: under you, as you move it;
@@ -1238,6 +1311,11 @@ export class Game extends EventTarget {
       this.send({ t: 'critter', op: 'bye', id });
       return;
     }
+    // A vehicle is only honked at, whatever is in your hand.
+    if (CRITTER_INFO[entry.type].vehicle) {
+      this.send({ t: 'critter', op: 'pet', id });
+      return;
+    }
     const fruit = this.basketPick && B.FRUITS.some(([k]) => k === this.basketPick) ? this.basketPick : null;
     if (fruit && (this.profile.basket[fruit] ?? 0) > 0) {
       this.send({ t: 'critter', op: 'feed', id, fruit });
@@ -1488,7 +1566,7 @@ export class Game extends EventTarget {
       const info = CRITTER_INFO[c.type];
       const far = { seagull: 24, whale: 34, dolphin: 18 }[c.type] ?? (info?.big ? 14 : 9);
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
-      if (state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
+      if (!info?.vehicle && state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
         if (c.type !== 'butterfly') this.sound.play(c.type);
       }

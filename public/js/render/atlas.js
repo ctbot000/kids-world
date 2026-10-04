@@ -866,6 +866,54 @@ for (const [key, , , color] of GEMS) {
   };
 }
 
+// Rails, seen from above: two steel rails on wooden sleepers, running down
+// the tile; and round a corner, from the middle of its bottom edge to the
+// middle of its right one (render/mesher.js turns them to fit).
+function railBits(ctx, ties, rails) {
+  ctx.lineCap = 'round';
+  for (const [x0, y0, x1, y1] of ties) {
+    ctx.strokeStyle = '#7a5032';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.strokeStyle = '#a5714a';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+  for (const path of rails) {
+    ctx.strokeStyle = '#5b5f68';
+    ctx.lineWidth = 6;
+    path();
+    ctx.stroke();
+    ctx.strokeStyle = '#d7dde3';
+    ctx.lineWidth = 2.5;
+    path();
+    ctx.stroke();
+  }
+}
+PAINT.rail = (ctx) => {
+  const ties = [8, 24, 40, 56].map((y) => [8, y, 56, y]);
+  const rail = (x) => () => {
+    ctx.beginPath();
+    ctx.moveTo(x, -2);
+    ctx.lineTo(x, TILE + 2);
+  };
+  railBits(ctx, ties, [rail(18), rail(46)]);
+};
+PAINT['rail-curve'] = (ctx) => {
+  const ties = [0.12, 0.5, 0.88].map((k) => {
+    const a = Math.PI + (k * Math.PI) / 2;
+    return [64 + Math.cos(a) * 8, 64 + Math.sin(a) * 8, 64 + Math.cos(a) * 56, 64 + Math.sin(a) * 56];
+  });
+  const arc = (r) => () => {
+    ctx.beginPath();
+    ctx.arc(64, 64, r, Math.PI, Math.PI * 1.5);
+  };
+  railBits(ctx, ties, [arc(18), arc(46)]);
+};
+
 // Which painting each block face uses; blocks with studs get the version
 // with a bump painted on top ("name+stud").
 function tileNameFor(def, face) {

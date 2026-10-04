@@ -360,6 +360,42 @@ export class Sound {
           this.tone(3000 * r(), { at: i * 0.32, decay: 0.12, gain: 0.015, slide: 1800 });
         }
         break;
+      // Vehicles: each starts up with its own sound, and honks its own way
+      // (type): the car beep-beeps, the boat toots, the mine cart rings its
+      // bell, and the digger goes vrrrm.
+      case 'car':
+      case 'boat':
+      case 'digger':
+      case 'minecart':
+        this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
+        this.play('honk', { type: name });
+        break;
+      case 'honk':
+        if (opts.type === 'boat') {
+          this.tone(NOTE(55), { type: 'square', attack: 0.04, decay: 0.7, gain: 0.05, vibrato: 3 });
+          this.tone(NOTE(62), { type: 'triangle', attack: 0.04, decay: 0.7, gain: 0.06 });
+        } else if (opts.type === 'minecart') {
+          for (let i = 0; i < 2; i++) this.tone(2100 * r(), { at: i * 0.16, decay: 0.45, gain: 0.05 });
+        } else if (opts.type === 'digger') {
+          this.noise(0.5, { type: 'bandpass', freq: 900, sweep: 1600, q: 2, gain: 0.12, attack: 0.03 });
+          this.tone(90 * r(), { type: 'sawtooth', attack: 0.04, decay: 0.5, gain: 0.05, slide: 130, vibrato: 25 });
+        } else {
+          for (let i = 0; i < 2; i++) {
+            this.tone(NOTE(71), { at: i * 0.17, type: 'square', attack: 0.01, decay: 0.12, gain: 0.04 });
+            this.tone(NOTE(75), { at: i * 0.17, type: 'triangle', attack: 0.01, decay: 0.12, gain: 0.06 });
+          }
+        }
+        break;
+      case 'motor':
+        // A puttering engine, higher the faster it goes; the digger grinds.
+        this.tone((opts.type === 'digger' ? 55 : 80) + (opts.speed ?? 0) * 6, { type: 'sawtooth', attack: 0.02, decay: 0.18, gain: 0.025, vibrato: 20 });
+        this.noise(0.12, { type: 'lowpass', freq: opts.type === 'boat' ? 900 : 400, gain: 0.05 });
+        break;
+      case 'clack':
+        // Clickety-clack over the joins of the rails.
+        this.noise(0.04, { type: 'bandpass', freq: 2000 * r(), q: 5, gain: 0.12 });
+        this.noise(0.04, { at: 0.07, type: 'bandpass', freq: 1700 * r(), q: 5, gain: 0.1 });
+        break;
       case 'emote':
         this.emote(opts.emote);
         break;

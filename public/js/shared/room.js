@@ -9,7 +9,7 @@
 // tick() about ten times a second.
 
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, riderAt, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -120,7 +120,7 @@ export class Room {
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
-      for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z);
+      for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z, null, c.yaw);
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
@@ -538,7 +538,8 @@ export class Room {
       case 'feed': {
         if (!B.FRUITS.some(([key]) => key === msg.fruit)) return;
         const c = this.critters.feed(msg.id, p.id, who, now);
-        if (c) this.broadcast({ t: 'cfx', id: c.id, fx: 'yum', by: p.id, fruit: msg.fruit });
+        // A vehicle is only honked at.
+        if (c) this.broadcast({ t: 'cfx', id: c.id, fx: CRITTER_INFO[c.type].vehicle ? 'pet' : 'yum', by: p.id, fruit: msg.fruit });
         break;
       }
       case 'invite': {
@@ -553,15 +554,18 @@ export class Room {
         let at = { x, y: standHeight(w, x, z, msg.y) ?? msg.y, z };
         // Flying friends come in above any water, and fly off from there.
         if (CRITTER_INFO[msg.type].flies) while (at.y < w.H && w.get(Math.floor(x), Math.floor(at.y), Math.floor(z)) === B.WATER) at.y++;
-        // Swimmers come in at the nearest water they can live in, and big
-        // animals at the nearest spot with room for them.
-        if (CRITTER_INFO[msg.type].sea === 'water') at = nearestWater(w, msg.type, x, z);
-        if (CRITTER_INFO[msg.type].big) at = roomFor(w, msg.type, x, at.y, z);
+        // Swimmers (and boats) come in at the nearest water they can live
+        // in, and big animals and vehicles at the nearest spot with room for
+        // them, facing the one who asked for them.
+        const info = CRITTER_INFO[msg.type];
+        const roomy = info.big || info.vehicle === 'land';
+        if (info.sea === 'water') at = nearestWater(w, msg.type, x, z);
+        if (roomy) at = roomFor(w, msg.type, x, at.y, z);
         if (!at) {
-          this.notice(conn, CRITTER_INFO[msg.type].big ? needsRoom(msg.type) : NEEDS_WATER[msg.type], 'info');
+          this.notice(conn, roomy ? needsRoom(msg.type) : NEEDS_WATER[msg.type], 'info');
           return;
         }
-        const c = this.critters.add(msg.type, at.x, at.y, at.z);
+        const c = this.critters.add(msg.type, at.x, at.y, at.z, null, info.vehicle ? Math.atan2(p.s[0] - at.x, p.s[2] - at.z) : null);
         if (c) this.broadcast({ t: 'cadd', critter: { id: c.id, type: c.type, name: c.name }, s: this.critters.pack().find((r) => r[0] === c.id), by: p.id });
         this.changed();
         break;
@@ -599,10 +603,10 @@ export class Room {
         this.unride(p.id);
         break;
       case 'trick': {
-        // A spout from the whale, or a spray from the elephant's trunk.
+        // A spout from the whale, a spray from the elephant's trunk, or a honk.
         const c = this.critters.list.find((o) => o.rider === p.id);
         const trick = c && CRITTER_INFO[c.type].ride.trick;
-        if (trick === 'spout' || trick === 'spray') this.broadcast({ t: 'cfx', id: c.id, fx: trick, by: p.id });
+        if (trick === 'spout' || trick === 'spray' || trick === 'honk') this.broadcast({ t: 'cfx', id: c.id, fx: trick, by: p.id });
         break;
       }
       default:
@@ -922,8 +926,9 @@ export class Room {
       kind: 'island',
       // 2: made since birds, owls, bees and seagulls came to the islands;
       // 3: since the sea creatures did; 4: since penguins and seals did; 5:
-      // since the big animals did; 6: since jewels were hidden in the rock.
-      v: 6,
+      // since the big animals did; 6: since jewels were hidden in the rock;
+      // 7: since the vehicles came.
+      v: 7,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -949,7 +954,7 @@ export class Room {
     for (const c of Array.isArray(save.critters) ? save.critters.slice(0, this.critters.max) : []) {
       if (!CRITTER_INFO[c?.type] || ![c.x, c.y, c.z].every(finite)) continue;
       const w = this.world;
-      this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name);
+      this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name, finite(c.yaw) ? c.yaw : null);
     }
     // Animals that came to the islands since this one was saved move in, once.
     const v = Number(save.v) || 1;
@@ -957,6 +962,9 @@ export class Room {
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
+    // And vehicles: a car, a boat and a digger (the mines of an island from
+    // before them have no rails, nor a mine cart).
+    if (v < 7) for (const f of placeVehicles(this.world, new Rng(seed ^ 0x4cf5ad43))) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     // Jewels too, deep in the rock where nothing anyone built can be.
     if (v < 6) hideGems(this.world, new Rng(seed ^ 0x2c1b3c6d), { open: false });
     this.settings = cleanSettings(save.settings);

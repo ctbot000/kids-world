@@ -150,7 +150,7 @@ test('digging a gem rock out, with any tool, puts its jewel in the basket and ne
 test('an island from before jewels gets them, once, deep in the rock, changing nothing anyone can see', () => {
   const room = new Room({ code: '123456', theme: 'sunny', seed: 4242, now: () => 1000 });
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 6);
+  assert.equal(save.v, 7);
   // The same island without any: as if made before there were jewels.
   const old = World.decode(save.meta, save.blocks);
   for (const [x, y, z] of gemRocks(old)) old.set(x, y, z, B.STONE);

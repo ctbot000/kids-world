@@ -3,7 +3,7 @@
 // seashells, jewels in the rock and a mine into each mountain, animal
 // friends, and a spot for everyone to arrive at.
 import * as B from './blocks.js';
-import { placeBig, placeFlyers, placePolar, placeSea, scaleCounts } from './critters.js';
+import { placeBig, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -318,6 +318,10 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   if (mines.length) clearWays(world, mines, trees, critters);
   hideGems(world, new Rng(seed ^ 0x2c1b3c6d));
 
+  // ---------------------------------------------------------------- vehicles
+  // Last of all, from their own randomness too.
+  critters.push(...placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines));
+
   return { world, critters, fruit, mines };
 }
 
@@ -387,8 +391,10 @@ export function hideGems(world, rng, { open = true } = {}) {
 // A mine into each mountain: a path cut up into its side from the foot, a
 // wooden doorway where the rock closes over it, a tunnel three wide lit by
 // lamps with jewels in its walls, and a little cave at the end with a
-// diamond in it. Mountains too low or too near the sea get none. Returns
-// each mine, with the cells of its way in, to keep trees and rocks out.
+// diamond in it; rails along the middle from the foot to the end, with a
+// mine cart on them at the doorway. Mountains too low or too near the sea
+// get none. Returns each mine, with the cells of its way in, to keep trees
+// and rocks out, and where its mine cart and a digger beside the way go.
 function digMines(world, heights, mountains, pal, rng, spawn) {
   const { W, D, sea } = world;
   const hi = (x, z) => (x < 0 || z < 0 || x >= W || z >= D ? 0 : heights[x * D + z]);
@@ -466,6 +472,12 @@ function digMine(world, hi, m, dx, dz, pal, rng, mines, spawn) {
     const [x, z] = at(end + 3, 0);
     world.set(x, g + 5, z, B.LAMP);
   }
+  // Rails down the middle, from the foot to the end (and into the cave).
+  const last = cave ? end + 4 : end;
+  for (let i = 0; i <= last; i++) {
+    const [x, z] = at(i, 0);
+    world.set(x, g + 1, z, B.RAIL);
+  }
   // A wooden doorway where the rock closes over.
   for (const p of [-2, 2]) {
     const [x, z] = at(door, p);
@@ -481,7 +493,10 @@ function digMine(world, hi, m, dx, dz, pal, rng, mines, spawn) {
     way.push({ x, z });
   }
   const [x, z] = at(door, 0);
-  return { x, z, y: g + 1, way };
+  // Its mine cart in the doorway, and a digger beside the way in, both facing in.
+  const into = Math.atan2(ax, az);
+  const [dx2, dz2] = at(-3, 2);
+  return { x, z, y: g + 1, way, cart: { x: x + 0.5, y: g + 1, z: z + 0.5, yaw: into }, digger: { x: dx2 + 0.5, y: hi(dx2, dz2) + 1, z: dz2 + 0.5, yaw: into } };
 }
 
 // Trees in the way into a mine come down, and anything left with nothing
