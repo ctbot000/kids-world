@@ -62,6 +62,8 @@ export class Game extends EventTarget {
     // and the one you typed to come in as a new visitor.
     this.passcode = '';
     this.typedPasscode = '';
+    // The pass an invitation came with, which lets you in without the passcode.
+    this.invitePass = '';
     this.players = new Map();
     this.critters = new Map();
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
@@ -101,7 +103,24 @@ export class Game extends EventTarget {
 
   joinMessage() {
     const p = this.profile;
-    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.look, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}) };
+    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.look, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
+  }
+
+  // As the owner of an island with a passcode: a pass for a friend you
+  // invite, so they come in without it (see Room.givePass). Resolves with
+  // it, or '' when the island gave none in a few seconds.
+  askPass() {
+    return new Promise((done) => {
+      const got = (e) => finish(e.detail);
+      const finish = (pass) => {
+        clearTimeout(timer);
+        this.removeEventListener('pass', got);
+        done(pass);
+      };
+      const timer = setTimeout(() => finish(''), 4000);
+      this.addEventListener('pass', got);
+      this.send({ t: 'pass' });
+    });
   }
 
   send(msg) {
@@ -188,6 +207,9 @@ export class Game extends EventTarget {
       case 'passcode':
         this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
         this.emit('settings');
+        break;
+      case 'pass':
+        if (typeof msg.pass === 'string') this.emit('pass', msg.pass);
         break;
       case 'error':
         this.emit('fatal', { code: msg.code, text: msg.text, wrong: msg.wrong === true, wait: msg.wait === true });

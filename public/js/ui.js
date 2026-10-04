@@ -127,6 +127,23 @@ function rankingTrouble(error) {
   return loginTrouble(error);
 }
 
+// What to tell you when the keeper could not show the players, as [icon, words].
+function playersTrouble(error) {
+  if (error?.code === 'bad') return ['🛠️', 'The island keeper needs an update before it can show the players. Ask a grown-up to update it!'];
+  if (error?.code === 'asleep') return ['😴', 'The island keeper is asleep right now. The players are here when it is awake!'];
+  return loginTrouble(error);
+}
+
+// What to tell you when an invitation could not go, as [icon, words].
+function inviteTrouble(error, name) {
+  if (error?.code === 'away') return ['😴', `${name} is not playing right now.`];
+  if (error?.code === 'wait') return ['⏳', 'Wait a little before inviting again.'];
+  return playersTrouble(error);
+}
+
+// An invitation can go to the same player again this long after the last.
+const INVITE_AGAIN_MS = 15000;
+
 const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 export class UI {
@@ -289,6 +306,7 @@ export class UI {
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = () => this.stickersDialog();
     $('btn-ranking').onclick = () => this.rankingDialog();
+    $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
     $('btn-sound').onclick = () => this.soundDialog();
   }
@@ -303,7 +321,7 @@ export class UI {
 
   // The 🔑 by your name: there when there is a keeper to log in at, and
   // always while logged in, so a device without one can still log out. The
-  // 🏆 Ranking, kept by the keeper too, is there with one.
+  // 🏆 Ranking and 👫 Players, kept by the keeper too, are there with one.
   renderLogin() {
     const login = this.handlers?.login;
     const chip = $('btn-login');
@@ -311,6 +329,7 @@ export class UI {
     chip.textContent = login?.who() ? '🔑 My login' : '🔑 Log in';
     chip.classList.toggle('on', Boolean(login?.who()));
     $('btn-ranking').hidden = !login?.available();
+    $('btn-players').hidden = !login?.available();
   }
 
   // The island's name: any typed, or one rolled for its kind (shown grey
@@ -1025,6 +1044,163 @@ export class UI {
         },
       },
     );
+  }
+
+  // 👫 Players: everyone else with a login, who is playing now first, from
+  // the island keeper, asked for again every few seconds while it is open.
+  // On an island friends can visit, 💌 Invite asks one who is playing now to
+  // come. Logged in, you can leave the list; nobody can invite you then.
+  playersDialog() {
+    const keeper = this.handlers?.login?.keeper;
+    if (!keeper) return;
+    this.invitedAt ??= new Map();
+    this.openModal(
+      (root) => {
+        const g = this.game;
+        const note = this.loginNote();
+        const about = h('p', { class: 'muted' });
+        const list = h('div', { class: 'island-list players' });
+        const foot = h('div', { class: 'ranking-foot' });
+        root.append(h('h2', {}, '👫 Players'), about, h('div', { class: 'rank-note' }, note), list, foot);
+        if (!keeper.login) {
+          about.textContent = 'Players with a login are here, and they can invite each other to their islands. Log in with 🔑 on the title screen to see them!';
+          return;
+        }
+        // On an island friends can visit (and not closed to new ones), you can invite.
+        const canInvite = Boolean(g && this.gameHandlers?.canInvite());
+        const inviting = canInvite && !g.settings.locked;
+        if (!g) about.textContent = 'Everyone with a login. On your island, invite the ones playing now from the island card at the top!';
+        else if (!canInvite) about.textContent = 'You are playing alone on this island. Open it to friends in ⚙️ Settings to invite players.';
+        else if (g.settings.locked) about.textContent = 'This island is closed to new visitors. Open it in ⚙️ Settings to invite players.';
+        else {
+          const passcode = g.settings.passcode && g.pid !== g.host ? ' This island has a passcode: they need it from the island owner too.' : '';
+          about.textContent = `Invite a player who is playing now to ${g.world?.name ?? 'this island'}.${passcode}`;
+        }
+        let reply = null;
+        const invite = async (p, button) => {
+          button.disabled = true;
+          button.textContent = '💌 …';
+          try {
+            await this.gameHandlers.invitePlayer(p.id);
+            this.invitedAt.set(p.id, Date.now());
+            this.sound.play('ui');
+            note.say('', '');
+            this.toast('💌', `You invited ${p.name}!`);
+            setTimeout(() => list.isConnected && draw(), INVITE_AGAIN_MS + 100);
+          } catch (error) {
+            this.sound.play('no');
+            note.say(...inviteTrouble(error, p.name), 'warn');
+          }
+          if (list.isConnected) draw();
+        };
+        const row = (p) => {
+          const sent = Date.now() - (this.invitedAt.get(p.id) ?? 0) < INVITE_AGAIN_MS;
+          const button =
+            inviting && p.online
+              ? h(
+                  'button',
+                  { class: `chip${sent ? '' : ' on'}`, type: 'button', disabled: sent, 'aria-label': `Invite ${p.name}`, onclick: (e) => invite(p, e.currentTarget) },
+                  sent ? '✅ Invited' : '💌 Invite',
+                )
+              : null;
+          return h(
+            'div',
+            { class: `island-item player-item${p.online ? ' online' : ''}` },
+            h('span', { class: 'avatar', style: `--c:${shirtColor(p.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(p.look)),
+            h('div', { class: 'info' }, h('b', { lang: langOf(p.name) || undefined }, p.name), h('span', { class: 'muted' }, p.online ? '🟢 Playing now' : 'Not playing right now')),
+            button,
+          );
+        };
+        const draw = () => {
+          if (!reply) return;
+          const playing = reply.players.filter((p) => p.online).length;
+          list.replaceChildren(...(reply.players.length ? reply.players.map(row) : [h('p', { class: 'muted' }, 'No other players with a login yet.')]));
+          const box = h('input', { type: 'checkbox', checked: reply.shown });
+          box.addEventListener('change', async () => {
+            box.disabled = true;
+            note.say('🔎', 'Asking the island keeper…');
+            try {
+              await keeper.setFindable(box.checked);
+              reply.shown = box.checked;
+              this.sound.play('ui');
+              note.say('', '');
+            } catch (error) {
+              box.checked = !box.checked;
+              note.say(...playersTrouble(error), 'warn');
+            }
+            if (list.isConnected) draw();
+          });
+          const count = reply.players.length ? `${reply.players.length} ${reply.players.length === 1 ? 'player' : 'players'}, ${playing} playing now. ` : '';
+          foot.replaceChildren(
+            h('label', { class: 'check-row' }, box, h('span', {}, 'Other players can find me and invite me')),
+            h(
+              'p',
+              { class: 'muted' },
+              count,
+              reply.shown ? `They see your display name, ${this.profile.name}, how you look, and whether you are playing now.` : 'You are not on the list: nobody sees you here or can invite you.',
+            ),
+          );
+        };
+        let started = false;
+        // Again in a few seconds, or in half a minute when it could not be found.
+        const ask = async () => {
+          if (started && !list.isConnected) return;
+          started = true;
+          let again = 5000;
+          try {
+            reply = await keeper.players();
+            if (!list.isConnected) return;
+            if (note.textContent.startsWith('🔎')) note.say('', '');
+            draw();
+          } catch (error) {
+            again = 30000;
+            if (list.isConnected) note.say(...playersTrouble(error), 'warn');
+          }
+          if (list.isConnected) setTimeout(ask, again);
+        };
+        note.say('🔎', 'Asking the island keeper…');
+        setTimeout(ask, 0);
+      },
+      { narrow: true },
+    );
+  }
+
+  // Someone invited you to their island: who, and where, with 🛶 Let’s go!
+  // and Not now. It goes by itself after a minute, or when the same player
+  // invites you again.
+  invitation({ from, island }, go) {
+    const box = $('invitations');
+    const id = String(from.id ?? '');
+    for (const el of [...box.children]) if (el.dataset.from === id) el.remove();
+    const answer = (yes) => {
+      card.remove();
+      this.sound.play('ui');
+      if (yes) go();
+    };
+    const card = h(
+      'div',
+      { class: 'invitation', role: 'alertdialog', 'aria-label': `Invitation from ${from.name}` },
+      h('span', { class: 'avatar', style: `--c:${shirtColor(from.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(from.look)),
+      h(
+        'p',
+        { class: 'words' },
+        h('b', { lang: langOf(from.name) || undefined }, from.name),
+        ' invites you to ',
+        h('b', { lang: langOf(island.name) || undefined }, `${THEME_ICON[island.theme] ?? '🏝️'} ${island.name}`),
+        '!',
+      ),
+      h(
+        'div',
+        { class: 'row' },
+        h('button', { class: 'chip on', type: 'button', onclick: () => answer(true) }, '🛶 Let’s go!'),
+        h('button', { class: 'chip', type: 'button', onclick: () => answer(false) }, 'Not now'),
+      ),
+    );
+    card.dataset.from = id;
+    box.append(card);
+    while (box.children.length > 3) box.firstElementChild.remove();
+    this.sound.play('sticker');
+    setTimeout(() => card.remove(), 60000);
   }
 
   helpDialog() {
@@ -2021,6 +2197,10 @@ export class UI {
           root.append(h('p', { class: 'muted' }, '🔒 This island has a passcode.'));
         }
         root.append(h('p', { class: 'muted', style: 'margin-top:12px' }, `${g.players.size} ${g.players.size === 1 ? 'player' : 'players'} here now.`));
+        // Players with a login, to invite one who is playing now.
+        if (this.handlers?.login?.available()) {
+          root.append(h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.playersDialog() }, '👫 Invite a player')));
+        }
       },
       { narrow: true },
     );

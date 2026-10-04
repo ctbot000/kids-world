@@ -1756,3 +1756,82 @@ test('an island open to friends is on everyone’s list of open islands, through
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('a logged-in player sees the other players and who is playing now, and invites one to an island with a passcode, who comes in without it', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const password = 'rocket-apple7';
+  await keeper.store.makeLogin(KeeperStore.deviceId('a1'.repeat(16)), password, { name: 'Sunny Otter', look: { animal: 'cat', shirt: 4 } }, { username: 'otter' });
+  await keeper.store.makeLogin(KeeperStore.deviceId('c3'.repeat(16)), password, { name: 'Minji', look: { animal: 'bunny', shirt: 2 } }, { username: 'minji' });
+  await keeper.store.makeLogin(KeeperStore.deviceId('e5'.repeat(16)), password, { name: 'Brave Fox' }, { username: 'fox' });
+  const host = await openPlayer(url, { name: 'Guest One' });
+  const friend = await openPlayer(url, { name: 'Guest Two' });
+  const logIn = async (page, username) => {
+    await clickButton(page, 'Log in');
+    await typeInto(page, username, password);
+    await reloadsAfter(page, () => page.keyboard.press('Enter'));
+    await until(page, () => window.kidsWorld.keeper.listed && !window.kidsWorld.keeper.syncing);
+  };
+  const players = (page) => page.evaluate(() => [...document.querySelectorAll('#modal .player-item')].map((el) => [el.querySelector('b').textContent, el.querySelector('.muted').textContent, el.querySelector('button')?.textContent ?? '']));
+  try {
+    // A guest is told to log in to see them.
+    await clickButton(friend, 'Players');
+    await until(friend, () => document.querySelector('#modal')?.textContent.includes('Log in with 🔑'));
+    await friend.keyboard.press('Escape');
+
+    // Both log in. Minji sees everyone else, Sunny Otter playing now.
+    await logIn(friend, 'minji');
+    await logIn(host, 'otter');
+    await eventually(() => keeper.onlinePlayers().size === 2);
+    await clickButton(friend, 'Players');
+    await until(friend, () => document.querySelectorAll('#modal .player-item').length === 2);
+    assert.deepEqual(await players(friend), [
+      ['Sunny Otter', '🟢 Playing now', ''],
+      ['Brave Fox', 'Not playing right now', ''],
+    ]);
+    assert.equal(await friend.$eval('#modal .ranking-foot input', (el) => el.checked), true);
+    await friend.keyboard.press('Escape');
+
+    // Sunny Otter makes an island with a passcode, and invites Minji from its island card.
+    await makeIsland(host, { online: true, theme: 'Candy Island', name: 'Candy Cove' });
+    await host.click('#btn-settings');
+    await clickSwitch(host, '#modal .passcode-setting .switch');
+    await host.keyboard.press('Escape');
+    await host.click('#island-badge');
+    await clickButton(host, 'Invite a player', '#modal');
+    await until(host, () => document.querySelectorAll('#modal .player-item').length === 2);
+    assert.deepEqual(await players(host), [
+      ['Minji', '🟢 Playing now', '💌 Invite'],
+      ['Brave Fox', 'Not playing right now', ''],
+    ]);
+    await clickButton(host, '💌 Invite', '#modal');
+    await until(host, () => document.querySelector('#modal .player-item button')?.textContent === '✅ Invited');
+
+    // Minji is asked, by name and island, and goes: no passcode asked for.
+    await until(friend, () => document.querySelector('#invitations .invitation'));
+    assert.equal(await friend.$eval('#invitations .invitation .words', (el) => el.textContent), 'Sunny Otter invites you to 🍭 Candy Cove!');
+    await clickButton(friend, 'Let’s go!', '#invitations');
+    await inGame(friend);
+    assert.equal(await friend.evaluate(() => window.kidsWorld.game.world.name), 'Candy Cove');
+    await until(host, () => window.kidsWorld.game.players.size === 2);
+    assert.equal(await friend.$('#invitations .invitation'), null);
+
+    // Minji leaves the list: nobody sees her there, or can invite her.
+    await friend.evaluate(() => window.kidsWorld.ui.playersDialog());
+    await until(friend, () => document.querySelector('#modal .ranking-foot input'));
+    await clickSwitch(friend, '#modal .ranking-foot input');
+    await until(friend, () => document.querySelector('#modal .ranking-foot')?.textContent.includes('You are not on the list'));
+    await until(host, () => [...document.querySelectorAll('#modal .player-item b')].map((b) => b.textContent).join() === 'Brave Fox');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await host.browserContext().close();
+    await friend.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

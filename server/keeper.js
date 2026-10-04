@@ -8,6 +8,7 @@
 //   <data>/keeper.json                              the keeper's id and key pair (private)
 //   <data>/devices/<device>/device.json             when the device was seen, its profile, and
 //                                                   for a login, whether it left the ranking
+//                                                   and the players list
 //   <data>/devices/<device>/login.json              its login, if it made one: the username, the
 //                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
@@ -19,7 +20,9 @@
 // there too, and brings its islands back to them; a device's copies from
 // before it logged in can join them (adoptDevice). It also keeps the list of
 // open islands, in memory only: each from a host's page, for as long as that
-// page stays connected (see shared/listing.js). WebRTC comes from
+// page stays connected (see shared/listing.js), and, in memory too, which
+// players are playing right now, to invite to an island (see
+// shared/friends.js). WebRTC comes from
 // node-datachannel, loaded only when the keeper goes online.
 import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -57,6 +60,7 @@ import {
   SIGN_ALGORITHM,
   toBase64Url,
 } from '../public/js/shared/keeper.js';
+import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { rankBoards } from '../public/js/shared/ranking.js';
 import { World } from '../public/js/shared/world.js';
@@ -623,12 +627,13 @@ export class KeeperStore extends EventEmitter {
   }
 
   // Every player with a login, their profile, and whether they are in the
-  // ranking: [{ id, profile, ranked }]. Read once for everyone watching it.
+  // ranking and on the players list: [{ id, profile, ranked, findable }].
+  // Read once for everyone watching the ranking.
   async players() {
     const players = [];
     for (const { device } of await this.logins()) {
       const record = await readJson(this.path(device, 'device.json'));
-      players.push({ id: device, profile: record?.profile ? keptProfile(record.profile) : null, ranked: record?.ranked !== false });
+      players.push({ id: device, profile: record?.profile ? keptProfile(record.profile) : null, ranked: record?.ranked !== false, findable: record?.findable !== false });
     }
     return players;
   }
@@ -642,13 +647,25 @@ export class KeeperStore extends EventEmitter {
   // choice, or a grown-up's on the admin pages. Returns whether there is
   // such a player.
   setRanked(device, on) {
+    return this.setChoice(device, 'ranked', on);
+  }
+
+  // A player with a login goes on the players list, where others can invite
+  // them to their islands, or leaves it. Returns whether there is such a player.
+  setFindable(device, on) {
+    return this.setChoice(device, 'findable', on);
+  }
+
+  // A choice of a player with a login, kept with them (so it holds on all
+  // their devices): off is written down, on is the way it starts.
+  setChoice(device, key, on) {
     if (!isDeviceId(device)) return Promise.resolve(false);
     return this.serial(async () => {
       if (!(await this.readLogin(device))) return false;
       const file = this.path(device, 'device.json');
       const record = (await readJson(file)) ?? { id: device };
-      delete record.ranked;
-      await this.write(file, JSON.stringify(on ? record : { ...record, ranked: false }));
+      delete record[key];
+      await this.write(file, JSON.stringify(on ? record : { ...record, [key]: false }));
       return true;
     });
   }
@@ -683,6 +700,7 @@ export class KeeperStore extends EventEmitter {
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
         ranked: info.ranked !== false,
+        findable: info.findable !== false,
         // Never the hashes: when it was made, on how many devices it is, and
         // whether it has a password yet (one from before passwords has not).
         login: login
@@ -890,14 +908,23 @@ class Signaling extends EventEmitter {
 
 // ---------------------------------------------------------------- the keeper
 
-// Hosts of open islands keep theirs open, to stay on the list of open islands.
-const MAX_CONNECTIONS = 64;
+// Hosts of open islands keep theirs open, to stay on the list of open
+// islands, and so does every page of a player with a login while it is on
+// screen, to be invited.
+const MAX_CONNECTIONS = 128;
 const CONNECT_TIMEOUT_MS = 30000;
 const IDLE_MS = 3 * 60000;
 const RECENT = 40;
 // Changes to the ranking that come together go to the pages watching it
 // together, this long after the first.
 const RANKING_NEWS_MS = 1000;
+// Invitations: one to the same player every so often, and a few a minute.
+const INVITE_AGAIN_MS = 15000;
+const INVITES_PER_MINUTE = 10;
+
+// A player's id on the players list: not the folder their copies are filed
+// in, which is half of what lets a device in as them.
+export const friendId = (player) => createHash('sha256').update(`kids-world friend ${player}`).digest('hex').slice(0, 20);
 
 export class Keeper extends EventEmitter {
   // identity: from loadIdentity(). signal: a PeerServer URL, or null for the PeerJS cloud.
@@ -918,6 +945,8 @@ export class Keeper extends EventEmitter {
     this.signaling = null;
     this.newsTimer = null;
     this.rankingNewsMs = rankingNewsMs;
+    // Who invited whom when, for the limits on invitations.
+    this.invited = new Map();
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -955,6 +984,7 @@ export class Keeper extends EventEmitter {
       since: this.state === 'online' ? this.since : 0,
       connections: [...this.conns.values()].filter((c) => c.hello).length,
       islands: this.openIslands().length,
+      online: this.onlinePlayers().size,
       recent: this.recent,
     };
   }
@@ -983,7 +1013,7 @@ export class Keeper extends EventEmitter {
   // A page's connection: who it is once it says so (see from()), and its limits.
   connection(fields) {
     const now = this.now();
-    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', island: null, ...fields };
+    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', island: null, online: false, ...fields };
   }
 
   answer(peer, id, sdp) {
@@ -1214,6 +1244,26 @@ export class Keeper extends EventEmitter {
       case 'islands':
         this.reply(conn, { t: 'islands', islands: this.openIslands() });
         break;
+      case 'online':
+        // A logged-in page on screen: playing right now, for as long as
+        // this connection lasts, so others can invite them.
+        mine('be on the players list');
+        conn.online = msg.on !== false;
+        this.reply(conn, { t: 'kept', what: 'online', on: conn.online });
+        break;
+      case 'players':
+        this.reply(conn, { t: 'players', ...(await this.playersFor(mine('see the players'))) });
+        break;
+      case 'findable': {
+        const on = msg.on !== false;
+        await this.store.setFindable(mine('be on the players list'), on);
+        this.reply(conn, { t: 'kept', what: 'findable', on });
+        break;
+      }
+      case 'invite':
+        await this.invite(conn, mine('invite players'), msg);
+        this.reply(conn, { t: 'kept', what: 'invite', to: msg.to });
+        break;
       case 'bye':
         this.drop(conn);
         break;
@@ -1221,6 +1271,47 @@ export class Keeper extends EventEmitter {
         this.unknown(msg.t);
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
+  }
+
+  // The players with a login who are playing right now: their pages are
+  // connected and on screen.
+  onlinePlayers() {
+    return new Set([...this.conns.values()].filter((c) => c.online && c.player && !c.closed).map((c) => c.player));
+  }
+
+  // The players list, for this player: everyone else with a login who is on
+  // it, who is playing now first, and whether this player is on it.
+  //   → { players: [{ id, name, look, online }], shown }
+  async playersFor(me) {
+    const all = await this.store.players();
+    const online = this.onlinePlayers();
+    const players = all
+      .filter((p) => p.id !== me && p.findable && p.profile?.name)
+      .map((p) => ({ id: friendId(p.id), name: p.profile.name, look: p.profile.look, online: online.has(p.id) }));
+    return { players: sortPlayers(players), shown: all.find((p) => p.id === me)?.findable ?? true };
+  }
+
+  // An invitation from player `me` to their island, for the pages of the
+  // player it is for that are open right now. It says who it is from by
+  // what the keeper has of them, never by what the page claims.
+  async invite(conn, me, msg) {
+    const island = cleanInvite(msg.island);
+    if (!island || !isFriendId(msg.to)) throw new KeepError('bad', 'That is not an invitation.');
+    const now = this.now();
+    const sent = (this.invited.get(me) ?? []).filter((s) => now - s.at < 60000);
+    if (sent.length >= INVITES_PER_MINUTE || sent.some((s) => s.to === msg.to && now - s.at < INVITE_AGAIN_MS)) {
+      throw new KeepError('wait', 'Wait a little before inviting again.');
+    }
+    const all = await this.store.players();
+    const them = all.find((p) => p.findable && p.id !== me && friendId(p.id) === msg.to);
+    const pages = them ? [...this.conns.values()].filter((c) => c.online && c.player === them.id && !c.closed) : [];
+    if (!pages.length) throw new KeepError('away', 'They are not playing right now.');
+    const from = all.find((p) => p.id === me)?.profile;
+    if (!from?.name) throw new KeepError('bad', 'Pick a display name first.');
+    sent.push({ to: msg.to, at: now });
+    this.invited.set(me, sent);
+    for (const page of pages) this.reply(page, { t: 'invite-news', from: { id: friendId(me), name: from.name, look: from.look }, island });
+    this.note({ device: me, what: 'invite', player: from.name, to: them.profile?.name ?? '', island: island.name });
   }
 
   // The list of open islands: those whose hosts' pages are connected and said so.
@@ -1273,6 +1364,7 @@ export class Keeper extends EventEmitter {
 
   sweep() {
     const now = this.now();
+    for (const [me, sent] of this.invited) if (!sent.some((x) => now - x.at < 60000)) this.invited.delete(me);
     for (const conn of [...this.conns.values()]) {
       if ((!conn.dc?.isOpen() && now - conn.started > CONNECT_TIMEOUT_MS) || now - conn.lastSeen > IDLE_MS) this.drop(conn);
     }

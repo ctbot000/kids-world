@@ -45,6 +45,16 @@
 //   { t: 'open-island', island }          → { t: 'kept', what: 'open-island', code }
 //   { t: 'close-island' }                 → { t: 'kept', what: 'close-island' }
 //   { t: 'islands' }                      → { t: 'islands', islands }
+// Players and invitations (see friends.js), logged in. A page on screen says
+// its player is playing now, and stays connected meanwhile; others see so on
+// the players list, and can invite them to an island, which comes unasked:
+//   { t: 'online', on }                   → { t: 'kept', what: 'online', on }
+//   { t: 'players' }                      → { t: 'players', players, shown }
+//   { t: 'findable', on }                 → { t: 'kept', what: 'findable', on }
+//                                           (on the players list, or left off)
+//   { t: 'invite', to, island }           → { t: 'kept', what: 'invite', to }
+//                                           (or error away: not playing now)
+//   keeper → page   { t: 'invite-news', from: { id, name, look }, island }
 //
 // Anyone can register a peer id while the keeper is away, so the page sends
 // nothing but its nonce until the keeper has signed it with the key whose

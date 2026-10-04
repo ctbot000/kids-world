@@ -51,6 +51,10 @@ const KEEP_PLAYERS = 64;
 // few at once, then one every ten seconds, so four numbers take days to guess.
 const GUESS_BURST = 5;
 const GUESS_EVERY_MS = 10000;
+// Passes the owner gives with invitations: each lets one new visitor in
+// without the passcode, within this long.
+const PASS_MS = 30 * 60000;
+const MAX_PASSES = 16;
 
 export function randomToken() {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
@@ -94,6 +98,8 @@ export class Room {
     this.closed = false;
     // The owner's passcode, which new visitors type to come in, or ''.
     this.passcode = '';
+    // Invitations' passes, and until when each is good (see givePass).
+    this.passes = new Map();
     const t = now();
     this.guesses = { left: GUESS_BURST, at: t };
     this.lastTick = t;
@@ -266,6 +272,9 @@ export class Room {
       case 'host':
         this.hostCommand(conn, p, msg);
         break;
+      case 'pass':
+        this.givePass(conn, c);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -300,7 +309,7 @@ export class Room {
         this.sendTo(conn, { t: 'error', code: 'full', text: `This island already has ${MAX_PLAYERS} friends on it. Try again later!` });
         return;
       }
-      if (this.passcode && this.players.size > 0 && !this.passcodeFits(conn, msg.passcode)) return;
+      if (this.passcode && this.players.size > 0 && !this.passFits(msg.pass) && !this.passcodeFits(conn, msg.passcode)) return;
     }
     const look = cleanLook(msg.look, this.random);
     const wanted = nameOf(msg.name) || randomName(this.random);
@@ -355,6 +364,26 @@ export class Room {
     g.left -= 1;
     this.sendTo(conn, { t: 'error', code: 'passcode', wrong: true, text: 'That passcode is not right. Ask the island owner for it!' });
     return false;
+  }
+
+  // An invitation's pass, used up as it lets its friend in.
+  passFits(pass) {
+    if (typeof pass !== 'string' || !((this.passes.get(pass) ?? 0) > this.now())) return false;
+    this.passes.delete(pass);
+    return true;
+  }
+
+  // A pass for a friend the owner invites to an island with a passcode, so
+  // they come in without it. Only the owner gets one, as only they know the
+  // passcode, and nobody but the friend they invited sees it.
+  givePass(conn, c) {
+    if (c.pid !== this.host) return;
+    const now = this.now();
+    for (const [pass, until] of this.passes) if (until <= now) this.passes.delete(pass);
+    while (this.passes.size >= MAX_PASSES) this.passes.delete(this.passes.keys().next().value);
+    const pass = randomToken();
+    this.passes.set(pass, now + PASS_MS);
+    this.sendTo(conn, { t: 'pass', pass });
   }
 
   uniqueName(name, self) {

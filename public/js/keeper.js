@@ -15,12 +15,18 @@
 // list of open islands, and keeps the connection open for as long as it is
 // there; and it brings that list to any page that asks.
 //
+// Logged in and on screen, the page stays connected too, so the keeper knows
+// you are playing now: other players see so on the players list, and can
+// invite you to their islands, which comes as an 'invite' event. It brings
+// that list, and sends your invitations (see shared/friends.js).
+//
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
 
 import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
+import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
 import { isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
@@ -42,6 +48,9 @@ const WATCH_AGAIN_MS = 90000;
 // An open island is told to the keeper again this often, which also keeps
 // the connection from looking idle there.
 const LIST_AGAIN_MS = 60000;
+// Playing now is told to the keeper again this often, which also keeps the
+// connection from looking idle there.
+const ONLINE_AGAIN_MS = 60000;
 // Logged in, coming back to the game after this long asks the keeper for news.
 const RESYNC_MS = 2 * 60000;
 
@@ -105,6 +114,11 @@ export class KeeperClient extends EventTarget {
     this.listing = null;
     this.listingSent = '';
     this.listTimer = 0;
+    // Logged in: whether you are playing now (the page is on screen), and
+    // what this connection told the keeper of it (null for nothing).
+    this.present = false;
+    this.presentSent = null;
+    this.presentTimer = 0;
     const saved = load('keeper', null);
     this.data = {
       device: isDeviceKey(saved?.device) ? saved.device : randomHex(16),
@@ -226,6 +240,12 @@ export class KeeperClient extends EventTarget {
     if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply) };
     // Your open island, as it is now, or that it is not open any more. (A
     // keeper running older code says it does not know this, once.)
+    // Logged in: whether you are playing now. (A keeper running older code
+    // says it does not know this, once.)
+    if (this.login && (this.present ? this.presentSent !== true : this.presentSent === true)) {
+      const on = this.present;
+      return { msg: { t: 'online', on }, answer: () => (this.presentSent = on) };
+    }
     const listing = this.listing ? JSON.stringify(this.listing) : '';
     if (listing !== this.listingSent) {
       return { msg: this.listing ? { t: 'open-island', island: this.listing } : { t: 'close-island' }, answer: () => (this.listingSent = listing) };
@@ -395,6 +415,49 @@ export class KeeperClient extends EventTarget {
     else if (island && !this.peer && !this.timer && this.state !== 'refused' && !this.halted) this.schedule(0);
   }
 
+  // Logged in: you are playing now (on), as the page is on screen, or not.
+  // While you are, the connection stays open, and comes back if it breaks,
+  // so others see you on the players list and can invite you.
+  setPresent(on) {
+    on = Boolean(on && this.login);
+    if (on === this.present) return;
+    this.present = on;
+    clearInterval(this.presentTimer);
+    this.presentTimer = 0;
+    if (on) {
+      this.presentTimer = setInterval(() => {
+        if (this.state !== 'ready') return;
+        this.presentSent = null;
+        this.flush();
+      }, ONLINE_AGAIN_MS);
+    }
+    if (!this.config || this.state === 'gone') return;
+    if (this.state === 'ready') this.flush();
+    else if (on && !this.peer && !this.timer && this.state !== 'refused' && !this.halted) this.schedule(0);
+  }
+
+  // Logged in: the players list (see shared/friends.js). Resolves with
+  // { players: [{ id, name, look, online }], shown }; rejects with a
+  // KeeperProblem when the keeper could not be asked, or does not know the
+  // list yet (bad).
+  async players() {
+    const reply = await this.request({ t: 'players' });
+    const players = (Array.isArray(reply.players) ? reply.players : []).filter((p) => isFriendId(p?.id) && typeof p.name === 'string' && p.name);
+    return { players: players.map((p) => ({ id: p.id, name: p.name, look: p.look, online: p.online === true })), shown: reply.shown !== false };
+  }
+
+  // Logged in: you go on the players list, or leave it, on all your devices.
+  setFindable(on) {
+    return this.request({ t: 'findable', on });
+  }
+
+  // Logged in: invites the player with this id (from players()) to an island
+  // (see cleanInvite). Rejects with a KeeperProblem: away when they are not
+  // playing now, wait after too many.
+  invite(to, island) {
+    return this.request({ t: 'invite', to, island });
+  }
+
   // The list of open islands, from the keeper. Resolves with the listings;
   // rejects with a KeeperProblem when the keeper could not be asked, or
   // does not know the list yet (bad).
@@ -522,6 +585,7 @@ export class KeeperClient extends EventTarget {
     this.watched = false;
     this.rankingLive = false;
     this.listingSent = '';
+    this.presentSent = null;
     this.toFetch = [];
     const peer = new Peer(this.peerOptions);
     this.peer = peer;
@@ -615,6 +679,14 @@ export class KeeperClient extends EventTarget {
       if (this.state === 'ready') this.watchedAs({ ...msg, t: 'ranking' });
       return;
     }
+    // An invitation, from a player the keeper knows: { from: { id, name, look }, island }.
+    if (msg.t === 'invite-news') {
+      const island = cleanInvite(msg.island);
+      if (this.state === 'ready' && this.present && island && typeof msg.from?.name === 'string' && msg.from.name) {
+        this.emit('invite', { from: { id: msg.from.id, name: msg.from.name, look: msg.from.look }, island });
+      }
+      return;
+    }
     if (this.state !== 'ready' || !this.waiting) return;
     const item = this.waiting;
     clearTimeout(this.replyTimer);
@@ -643,8 +715,8 @@ export class KeeperClient extends EventTarget {
     const item = this.requests.shift() ?? this.next();
     if (!item) {
       // Watching the ranking, the connection stays open for its news; with
-      // an island on the list, to keep it there.
-      if (this.watching || this.listing) return;
+      // an island on the list, to keep it there; playing now, to be invited.
+      if (this.watching || this.listing || (this.login && this.present)) return;
       this.idleTimer = setTimeout(() => {
         this.send({ t: 'bye' });
         this.hangUp();
@@ -676,7 +748,7 @@ export class KeeperClient extends EventTarget {
     // Copies are off: only something you asked for called the keeper, and
     // that has failed now. (Watching the ranking, or with an island on the
     // list, it is tried again.)
-    if (!this.enabled && !this.watching && !this.listing) {
+    if (!this.enabled && !this.watching && !this.listing && !this.present) {
       this.setState('off');
       return;
     }
@@ -690,8 +762,10 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.replyTimer);
     clearTimeout(this.idleTimer);
     this.timer = 0;
-    // The keeper takes the island off its list as the connection goes.
+    // The keeper takes the island off its list as the connection goes, and
+    // you off the players playing now.
     this.listingSent = '';
+    this.presentSent = null;
     const asked = [...(this.waiting?.reject ? [this.waiting] : []), ...this.requests];
     this.waiting = null;
     this.requests = [];

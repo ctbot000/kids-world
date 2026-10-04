@@ -14,7 +14,7 @@ import { UI } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
 import { cleanListing } from './shared/listing.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
-import { generate } from './shared/worldgen.js';
+import { generate, SIZES } from './shared/worldgen.js';
 
 const params = new URLSearchParams(location.search);
 // Who is playing: the player logged in on this device, with their own things
@@ -50,6 +50,8 @@ keeper.addEventListener('needs-password', () => {
   if (!session && !ui.modalOpen) ui.makeLoginDialog({ why: 'Logins have passwords now, instead of secret pictures. Pick one for yours!' });
   else ui.toast('🔑', 'Your login needs a password now: pick one in 🔑 My login on the title screen.');
 });
+// An invitation to a friend's island, while you are playing (see invited()).
+keeper.addEventListener('invite', (e) => invited(e.detail));
 for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
 profile.addEventListener('count', () => keeper.counted());
 if (who) {
@@ -209,11 +211,13 @@ function tokenKey(kind, id) {
 // first(game): the message that opens the connection (a join, or making an island on the server).
 // visit: the code of a friend's island you are visiting, and passcode: the
 // one you typed for it.
-function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '' }) {
+// pass: from an invitation to it, which lets you in without its passcode.
+function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '', pass = '' }) {
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
   game.token = profile.token(key);
   game.typedPasscode = passcode;
+  game.invitePass = pass;
   renderer.removeAvatar(-1);
   demo.avatar = null;
   session = { link, game, mode, islandId, key, started: false, dirty: false };
@@ -367,8 +371,9 @@ function openIsland(id, save = null) {
   startSession({ link, mode: 'host', islandId: id, key: tokenKey('island', id), loadingText: 'Opening your island…' });
 }
 
-// passcode: the one you typed for an island that has one.
-function visitIsland(raw, passcode = '') {
+// passcode: the one you typed for an island that has one. pass: from an
+// invitation, which lets you in without it.
+function visitIsland(raw, passcode = '', pass = '') {
   const code = normalizeCode(raw);
   if (!isValidCode(code)) {
     ui.toast('🙈', 'An island code has 6 numbers.', 'warn');
@@ -376,7 +381,7 @@ function visitIsland(raw, passcode = '') {
   }
   if (serverMode) {
     const link = new WsLink({ url: wsUrl() });
-    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText: 'Flying to your friend’s island…', first: (game) => ({ ...game.joinMessage(), code }), visit: code, passcode });
+    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText: 'Flying to your friend’s island…', first: (game) => ({ ...game.joinMessage(), code }), visit: code, passcode, pass });
     return;
   }
   if (signalError) {
@@ -384,7 +389,7 @@ function visitIsland(raw, passcode = '') {
     return;
   }
   const link = new GuestLink({ code, peerOptions });
-  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…', visit: code, passcode });
+  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…', visit: code, passcode, pass });
 }
 
 // Whether you have been on this island before, and so come back without its passcode.
@@ -402,6 +407,46 @@ async function openIslands() {
   const reply = await res.json();
   return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
 }
+
+// ------------------------------------------------ inviting players
+
+// Inviting a player from the players list to the island you are on: its
+// code, name and kind, and as its owner, a pass that lets them in without
+// its passcode. Rejects with a KeeperProblem (see KeeperClient.invite).
+async function invitePlayer(id) {
+  const g = session?.game;
+  if (!g?.code || !g.world) throw new KeeperProblem('bad');
+  const island = {
+    code: g.code,
+    name: g.world.name,
+    theme: g.world.theme,
+    size: SIZES.find((s) => s.side === g.world.W)?.key ?? SIZES[0].key,
+    server: serverMode,
+  };
+  if (g.settings.passcode && g.pid === g.host) {
+    const pass = await g.askPass();
+    if (pass) island.pass = pass;
+  }
+  return keeper.invite(id, island);
+}
+
+// Someone invited you to their island: a card says who and where, unless you
+// are there already, or it is on a dedicated server and you are playing peer
+// to peer (or the other way round), where its code means nothing.
+function invited({ from, island }) {
+  if (island.server !== serverMode || (session?.game.code === island.code && session.started)) return;
+  ui.invitation({ from, island }, () => {
+    // Off the island you are on first, saving it if it is yours.
+    if (session) backToTitle();
+    visitIsland(island.code, '', island.pass ?? '');
+  });
+}
+
+// Logged in, you are playing now while the page is on screen.
+function present() {
+  keeper.setPresent(Boolean(who) && !document.hidden);
+}
+document.addEventListener('visibilitychange', present);
 
 function wsUrl() {
   const u = new URL('ws', location.href);
@@ -585,6 +630,7 @@ const titleHandlers = {
 const gameHandlers = {
   canInvite: () => session && (session.mode !== 'host' || session.link.online),
   inviteLink,
+  invitePlayer,
   canToggleOnline: () => session?.mode === 'host' && !signalError,
   isOnline: () => session?.link.online ?? false,
   setOnline: (on) => {
@@ -752,6 +798,7 @@ async function boot() {
   const code = normalizeCode(params.get('code'));
   if (isValidCode(code)) ui.visitDialog(code);
   requestAnimationFrame(frame);
+  present();
   keeper.start();
 }
 

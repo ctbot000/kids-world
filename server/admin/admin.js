@@ -177,7 +177,7 @@ function loginRow(device, players) {
     refresh(true);
   };
   const words = login
-    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'} · ${device.ranked ? '🏆 in the ranking' : 'left out of the ranking'}`
+    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'} · ${device.ranked ? '🏆 in the ranking' : 'left out of the ranking'}${device.findable === false ? ' · off the players list' : ''}`
     : '🔑 No login';
   return h(
     'div',
@@ -254,6 +254,7 @@ const DID = {
   'made-login': (e) => ` made a login${e.username ? `, ${e.username}` : ''}`,
   'new-password': () => ' picked a new password',
   adopt: (e) => ` brought ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what they did'} from before into their login`,
+  invite: (e) => ` invited ${e.to || 'a player'} to “${e.island}”`,
 };
 
 function renderRecent(state) {
