@@ -1520,7 +1520,7 @@ test('a login made on one device logs in another: what each made comes along, th
   }
 });
 
-test('the ranking shows the players with a login to anyone, marks you once logged in, and lets you leave it and come back', { skip }, async () => {
+test('the ranking shows the players with a login to anyone, live: you marked once logged in, leaving it and coming back, and a friend climbing as they build', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
   const keeper = await keeperOnline(identity, dir);
@@ -1536,6 +1536,7 @@ test('the ranking shows the players with a login to anyone, marks you once logge
   );
   await keeper.store.makeLogin(KeeperStore.deviceId('e5'.repeat(16)), 'dogs and stars', { name: 'Brave Fox', stats: { placed: 30 } }, { username: 'fox' });
   const page = await openPlayer(url, { name: 'Sunny Otter' });
+  let friend = null;
   const names = () => page.evaluate(() => [...document.querySelectorAll('#modal .rank-row .who')].map((b) => b.firstChild.textContent));
   try {
     // A guest sees it from the title screen, and is told how to be in it.
@@ -1569,9 +1570,26 @@ test('the ranking shows the players with a login to anyone, marks you once logge
     await until(page, () => document.querySelector('#modal .rank-row.you'));
     assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
     assert.equal(await page.$eval('#modal .rank-row.you .place', (el) => el.textContent), '🥇');
+    assert.equal(await page.$eval('#modal .live', (el) => !el.hidden), true, 'live');
+
+    // Brave Fox logs in on another device and builds: Minji's open ranking shows him climb past her.
+    friend = await openPlayer(url, { name: 'Lucky Bunny' });
+    await clickButton(friend, 'Log in');
+    await typeInto(friend, 'fox', 'dogs and stars');
+    await reloadsAfter(friend, () => friend.keyboard.press('Enter'));
+    await until(friend, () => window.kidsWorld.keeper.listed && !window.kidsWorld.keeper.syncing);
+    await friend.evaluate(() => window.kidsWorld.profile.count('placed', 200));
+    await until(page, () => document.querySelector('#modal .rank-row .who')?.firstChild.textContent === 'Brave Fox');
+    assert.deepEqual(await names(), ['Brave Fox', 'Minji']);
+    assert.equal(await page.$eval('#modal .rank-row .score', (el) => el.textContent), '230');
+    assert.equal(await page.$eval('#modal .rank-row.you .place', (el) => el.textContent), '🥈');
+    // Closed, it stops watching, and the connection goes quiet as before.
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => window.kidsWorld.keeper.watching), false);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
+    await friend?.browserContext().close();
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });

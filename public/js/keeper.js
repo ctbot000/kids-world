@@ -7,7 +7,9 @@
 //
 // It also logs you in and out there. Logged in, it brings back what your
 // other devices sent, too: your look, stickers and basket, merged with yours
-// here, and newer copies of your islands. And it asks for the ranking.
+// here, and newer copies of your islands. And it shows the ranking, live:
+// watching it, the page hears of every change, and logged in, what you have
+// done goes along every few seconds, so the others see you climb.
 //
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
@@ -25,8 +27,13 @@ const CONNECT_TIMEOUT_MS = 25000;
 const REPLY_TIMEOUT_MS = 60000;
 const IDLE_MS = 60000;
 // What you have done changes with every step: when nothing else about you
-// changed, a copy every few minutes is plenty.
+// changed, a copy every few minutes is plenty. Logged in, you are in the
+// ranking, which others watch live: every few seconds.
 const PROFILE_EVERY_MS = 3 * 60000;
+const STATS_EVERY_MS = 5000;
+// Watching the ranking, it is asked for again this often, which also keeps
+// the connection from looking idle at the keeper.
+const WATCH_AGAIN_MS = 90000;
 // Logged in, coming back to the game after this long asks the keeper for news.
 const RESYNC_MS = 2 * 60000;
 
@@ -76,6 +83,12 @@ export class KeeperClient extends EventTarget {
     this.needsPassword = false;
     this.toFetch = [];
     this.syncedAt = 0;
+    // Watching the ranking (while it is on screen), and whether this
+    // connection asked to yet.
+    this.watching = false;
+    this.watched = false;
+    this.watchTimer = 0;
+    this.countTimer = 0;
     const saved = load('keeper', null);
     this.data = {
       device: isDeviceKey(saved?.device) ? saved.device : randomHex(16),
@@ -182,7 +195,7 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = 0;
-      if (this.requests.length || (this.enabled && this.pending())) this.connect();
+      if (this.pending()) this.connect();
       else if (this.state !== 'off') this.setState(this.enabled ? 'idle' : 'off');
     }, ms);
   }
@@ -193,6 +206,8 @@ export class KeeperClient extends EventTarget {
   // what you have done), else the most recently saved island the keeper does
   // not have yet. Each comes with what to do with the keeper's answer.
   next() {
+    // Watching the ranking: asked for on each new connection, and again now and then.
+    if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply, true) };
     if (!this.enabled) return null;
     if (this.login) {
       if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
@@ -206,7 +221,7 @@ export class KeeperClient extends EventTarget {
     if (profile !== this.data.profile) {
       const before = this.data.profile ? JSON.parse(this.data.profile) : {};
       const onlyStats = JSON.stringify({ ...kept, stats: 0 }) === JSON.stringify({ ...before, stats: 0 });
-      if (!onlyStats || Date.now() - this.profileSentAt >= PROFILE_EVERY_MS) {
+      if (!onlyStats || Date.now() - this.profileSentAt >= (this.login ? STATS_EVERY_MS : PROFILE_EVERY_MS)) {
         return this.copy({ t: 'profile', profile: kept }, () => (this.data.profile = profile));
       }
     }
@@ -254,8 +269,9 @@ export class KeeperClient extends EventTarget {
   // Asks the keeper something, connecting for it even if copies are off.
   // Resolves with its answer; rejects with a KeeperProblem when it said no or
   // could not be reached. halt: hang up as soon as it answers, before any
-  // copy goes, as the page reloads as someone else next.
-  request(msg, { halt = false } = {}) {
+  // copy goes, as the page reloads as someone else next. answered: called
+  // with the answer as it arrives, before anything else is sent.
+  request(msg, { halt = false, answered = null } = {}) {
     if (!this.config) return Promise.reject(new KeeperProblem('none'));
     if (this.state === 'gone') return Promise.reject(new KeeperProblem('gone'));
     this.halted = false;
@@ -264,6 +280,7 @@ export class KeeperClient extends EventTarget {
         msg,
         reject,
         answer: (reply) => {
+          answered?.(reply);
           if (halt && reply.t !== 'error') this.halt();
           if (reply.t === 'error') reject(new KeeperProblem(reply.code, reply.text, { wait: reply.wait }));
           else resolve(reply);
@@ -299,10 +316,51 @@ export class KeeperClient extends EventTarget {
     return this.request({ t: 'adopt', player, token }, { halt: true });
   }
 
-  // The ranking of the players with a login (see shared/ranking.js), asked
-  // for whether or not copies go. Resolves with { players, boards, shown? }.
-  ranking() {
-    return this.request({ t: 'ranking' });
+  // Watches the ranking of the players with a login (see shared/ranking.js)
+  // while it is on screen, whether or not copies go: it comes now, and again
+  // whenever it changes, as 'ranking' events with { players, boards, shown? },
+  // until unwatchRanking(). The connection stays open meanwhile, and comes
+  // back if it breaks. Resolves with the first answer; rejects with a
+  // KeeperProblem if the keeper could not be asked (it is asked again when
+  // it can be).
+  watchRanking() {
+    this.watching = true;
+    clearInterval(this.watchTimer);
+    this.watchTimer = setInterval(() => {
+      if (this.state !== 'ready') return;
+      this.watched = false;
+      this.flush();
+    }, WATCH_AGAIN_MS);
+    return this.request({ t: 'ranking', watch: true }, { answered: (reply) => this.watchedAs(reply) });
+  }
+
+  unwatchRanking() {
+    if (!this.watching) return;
+    this.watching = false;
+    clearInterval(this.watchTimer);
+    if (this.state === 'ready' && this.watched) this.request({ t: 'unwatch' }).catch(() => {});
+    this.watched = false;
+    this.flush();
+  }
+
+  // The ranking, answered or as news. done: this connection asked to watch
+  // it, whatever the answer (so a keeper that cannot is not asked again at once).
+  watchedAs(reply, done = false) {
+    if (done || reply.t === 'ranking') this.watched = true;
+    if (reply.t === 'ranking' && this.watching) this.emit('ranking', reply);
+  }
+
+  // You did something the game counts. Logged in, it goes to the keeper
+  // within a few seconds, for the ranking.
+  counted() {
+    if (!this.login || this.countTimer) return;
+    this.countTimer = setTimeout(
+      () => {
+        this.countTimer = 0;
+        this.nudge();
+      },
+      Math.max(0, this.profileSentAt + STATS_EVERY_MS - Date.now()),
+    );
   }
 
   // Logged in: you join the ranking, or leave it, on all your devices.
@@ -408,6 +466,7 @@ export class KeeperClient extends EventTarget {
     if (this.peer || !this.config || this.state === 'gone' || this.halted) return;
     this.setState('connecting');
     this.listed = false;
+    this.watched = false;
     this.toFetch = [];
     const peer = new Peer(this.peerOptions);
     this.peer = peer;
@@ -496,6 +555,11 @@ export class KeeperClient extends EventTarget {
       this.flush();
       return;
     }
+    // News of the ranking, unasked: never the answer to what is waiting.
+    if (msg.t === 'ranking-news') {
+      if (this.state === 'ready') this.watchedAs({ ...msg, t: 'ranking' });
+      return;
+    }
     if (this.state !== 'ready' || !this.waiting) return;
     const item = this.waiting;
     clearTimeout(this.replyTimer);
@@ -523,6 +587,8 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.idleTimer);
     const item = this.requests.shift() ?? this.next();
     if (!item) {
+      // Watching the ranking, the connection stays open for its news.
+      if (this.watching) return;
       this.idleTimer = setTimeout(() => {
         this.send({ t: 'bye' });
         this.hangUp();
@@ -551,9 +617,9 @@ export class KeeperClient extends EventTarget {
   away() {
     if (!this.peer && this.state !== 'connecting' && this.state !== 'ready') return;
     this.hangUp();
-    // Copies are off: only something you asked for (the ranking, say) called
-    // the keeper, and that has failed now.
-    if (!this.enabled) {
+    // Copies are off: only something you asked for called the keeper, and
+    // that has failed now. (Watching the ranking, it is tried again.)
+    if (!this.enabled && !this.watching) {
       this.setState('off');
       return;
     }

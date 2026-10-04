@@ -30,10 +30,15 @@
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
 //   { t: 'forget', id }                   → { t: 'kept', what: 'forget', id }
 // The ranking of the players with a login (see ranking.js), for any page:
-//   { t: 'ranking' }                      → { t: 'ranking', players, boards, shown? }
+//   { t: 'ranking', watch? }              → { t: 'ranking', players, boards, shown? }
 //                                           (shown: logged in, whether you are in it)
+//   { t: 'unwatch' }                      → { t: 'kept', what: 'unwatch' }
 //   { t: 'ranked', on }                   → { t: 'kept', what: 'ranked', on }
 //                                           (logged in: in the ranking, or left out)
+// A page that asked with watch: true also hears, unasked, whenever the
+// ranking looks different to it, until it says 'unwatch' (pages tell this
+// news from answers by its t):
+//   keeper → page   { t: 'ranking-news', players, boards, shown? }
 //
 // Anyone can register a peer id while the keeper is away, so the page sends
 // nothing but its nonce until the keeper has signed it with the key whose

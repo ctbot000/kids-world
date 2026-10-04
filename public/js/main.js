@@ -50,6 +50,7 @@ keeper.addEventListener('needs-password', () => {
   else ui.toast('🔑', 'Your login needs a password now: pick one in 🔑 My login on the title screen.');
 });
 for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
+profile.addEventListener('count', () => keeper.counted());
 if (who) {
   const note = () => storage.notePlayer({ player: who.player, username: keeper.login.username, name: profile.name, look: profile.look });
   note();

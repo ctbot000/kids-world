@@ -97,7 +97,8 @@ export class Profile extends EventTarget {
     this.dispatchEvent(new CustomEvent('basket'));
   }
 
-  // Counts something you did, and hands out any sticker it earned.
+  // Counts something you did, and hands out any sticker it earned. Says
+  // 'count', for the ranking.
   count(stat, n = 1, { max = false } = {}) {
     const s = this.data.stats;
     if (!(stat in s)) return;
@@ -108,6 +109,7 @@ export class Profile extends EventTarget {
       this.dispatchEvent(new CustomEvent('sticker', { detail: sticker }));
     }
     this.storeSoon();
+    this.dispatchEvent(new CustomEvent('count'));
   }
 
   token(key) {

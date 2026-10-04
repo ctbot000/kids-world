@@ -196,8 +196,11 @@ const HOUR_MS = 3600000;
 // The devices one login can be on at once; the one unused longest is logged out.
 const MAX_SESSIONS = 20;
 
-export class KeeperStore {
+// Says 'change' whenever a player's profile or login changes, or something
+// is deleted: what the ranking is made of (see Keeper.rankingChanged).
+export class KeeperStore extends EventEmitter {
   constructor(dir, { maxBytes = 2 * GB, keepDays = 30, maxIslands = 200, now = () => Date.now(), dayOf = localDay } = {}) {
+    super();
     this.dir = dir;
     this.maxBytes = maxBytes;
     this.keepDays = keepDays;
@@ -270,12 +273,14 @@ export class KeeperStore {
     await writeFile(tmp, text);
     await rename(tmp, file);
     this.bytes += Buffer.byteLength(text) - before;
+    if (/(?:device|login)\.json$/.test(file)) this.emit('change');
   }
 
   async remove(path) {
     const size = (await stat(path).catch(() => null))?.isDirectory() ? await folderSize(path) : await sizeOf(path);
     await rm(path, { recursive: true, force: true });
     this.bytes = Math.max(0, this.bytes - size);
+    this.emit('change');
   }
 
   room(extra) {
@@ -355,11 +360,16 @@ export class KeeperStore {
     return this.serial(() => this.storeProfile(device, profile));
   }
 
+  // Returns { device, player, onlyStats }: onlyStats when nothing changed
+  // but what they have done, as it does every few seconds while a player
+  // with a login plays (for the ranking).
   async storeProfile(device, profile) {
     this.room(JSON.stringify(profile).length);
     await mkdir(this.path(device), { recursive: true, mode: 0o700 });
+    const old = (await readJson(this.path(device, 'device.json')))?.profile;
     await this.seen(device, { profile, profileAt: this.now() });
-    return { device, player: profile.name };
+    const onlyStats = Boolean(old) && JSON.stringify({ ...keptProfile(old), stats: 0 }) === JSON.stringify({ ...profile, stats: 0 });
+    return { device, player: profile.name, onlyStats };
   }
 
   // ------------------------------------------------ logins
@@ -606,14 +616,23 @@ export class KeeperStore {
   // but for those who left it. me: the player asking, if logged in, who
   // also learns whether they are in it ({ shown }).
   async ranking(me = null) {
+    return KeeperStore.rankingOf(await this.players(), me);
+  }
+
+  // Every player with a login, their profile, and whether they are in the
+  // ranking: [{ id, profile, ranked }]. Read once for everyone watching it.
+  async players() {
     const players = [];
-    let shown = true;
     for (const { device } of await this.logins()) {
       const record = await readJson(this.path(device, 'device.json'));
-      if (device === me) shown = record?.ranked !== false;
-      if (record?.profile && record.ranked !== false) players.push({ id: device, profile: keptProfile(record.profile) });
+      players.push({ id: device, profile: record?.profile ? keptProfile(record.profile) : null, ranked: record?.ranked !== false });
     }
-    return { ...rankBoards(players, me), ...(isPlayerId(me) ? { shown } : {}) };
+    return players;
+  }
+
+  static rankingOf(players, me = null) {
+    const shown = players.find((p) => p.id === me)?.ranked ?? true;
+    return { ...rankBoards(players.filter((p) => p.profile && p.ranked), me), ...(isPlayerId(me) ? { shown } : {}) };
   }
 
   // A player with a login joins the ranking, or leaves it: by their own
@@ -872,10 +891,13 @@ const MAX_CONNECTIONS = 32;
 const CONNECT_TIMEOUT_MS = 30000;
 const IDLE_MS = 3 * 60000;
 const RECENT = 40;
+// Changes to the ranking that come together go to the pages watching it
+// together, this long after the first.
+const RANKING_NEWS_MS = 1000;
 
 export class Keeper extends EventEmitter {
   // identity: from loadIdentity(). signal: a PeerServer URL, or null for the PeerJS cloud.
-  constructor({ store, identity, signal = null, iceServers = ICE_SERVERS, now = () => Date.now(), log = (...args) => console.error(...args) }) {
+  constructor({ store, identity, signal = null, iceServers = ICE_SERVERS, now = () => Date.now(), log = (...args) => console.error(...args), rankingNewsMs = RANKING_NEWS_MS }) {
     super();
     this.store = store;
     this.identity = identity;
@@ -888,6 +910,10 @@ export class Keeper extends EventEmitter {
     this.since = 0;
     this.rtc = null;
     this.signaling = null;
+    this.newsTimer = null;
+    this.rankingNewsMs = rankingNewsMs;
+    this.storeChanged = () => this.rankingChanged();
+    store.on('change', this.storeChanged);
   }
 
   // The private key, to sign with. start() does this first; tests that talk
@@ -950,7 +976,7 @@ export class Keeper extends EventEmitter {
   // A page's connection: who it is once it says so (see from()), and its limits.
   connection(fields) {
     const now = this.now();
-    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, ...fields };
+    return { dc: null, hello: false, device: null, player: null, token: null, folder: null, pieces: new Reassembler(MAX_PARTS, 2), started: now, lastSeen: now, tokens: 20, busy: false, closed: false, watching: false, rankingSent: '', ...fields };
   }
 
   answer(peer, id, sdp) {
@@ -1094,9 +1120,10 @@ export class Keeper extends EventEmitter {
         break;
       }
       case 'profile': {
-        const { device, player } = await this.store.keepProfileIn(conn.folder, msg.profile);
+        const { device, player, onlyStats } = await this.store.keepProfileIn(conn.folder, msg.profile);
         this.reply(conn, { t: 'kept', what: 'profile' });
-        this.note({ device, what: 'profile', player });
+        // Not every few seconds while a player with a login plays.
+        if (!onlyStats) this.note({ device, what: 'profile', player });
         break;
       }
       case 'login': {
@@ -1148,7 +1175,14 @@ export class Keeper extends EventEmitter {
         this.reply(conn, { t: 'kept', what: 'forget', id: msg.id });
         break;
       case 'ranking':
-        this.reply(conn, { t: 'ranking', ...(await this.store.ranking(conn.player)) });
+        // watch: and news of every change from now on (see rankingChanged),
+        // until 'unwatch' or the page goes.
+        if (msg.watch === true) conn.watching = true;
+        this.sendRanking(conn, await this.store.ranking(conn.player));
+        break;
+      case 'unwatch':
+        conn.watching = false;
+        this.reply(conn, { t: 'kept', what: 'unwatch' });
         break;
       case 'ranked': {
         const on = msg.on !== false;
@@ -1162,6 +1196,33 @@ export class Keeper extends EventEmitter {
       default:
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
+  }
+
+  // The ranking, as an answer, or as news for a page watching it: news only
+  // when it looks different to that page from what it was sent last.
+  sendRanking(conn, ranking, news = false) {
+    const text = JSON.stringify(ranking);
+    if (news && text === conn.rankingSent) return;
+    conn.rankingSent = text;
+    this.reply(conn, { t: news ? 'ranking-news' : 'ranking', ...ranking });
+  }
+
+  // Something the ranking is made of changed (the store said so): once the
+  // changes that come with it are in too, every page watching it hears.
+  rankingChanged() {
+    if (this.newsTimer || ![...this.conns.values()].some((c) => c.watching)) return;
+    this.newsTimer = setTimeout(() => {
+      this.newsTimer = null;
+      this.sendRankingNews().catch((error) => this.log(error));
+    }, this.rankingNewsMs);
+    this.newsTimer.unref?.();
+  }
+
+  async sendRankingNews() {
+    const watching = [...this.conns.values()].filter((c) => c.watching);
+    if (!watching.length) return;
+    const players = await this.store.players();
+    for (const conn of watching) if (!conn.closed) this.sendRanking(conn, KeeperStore.rankingOf(players, conn.player), true);
   }
 
   note(event) {
@@ -1198,6 +1259,8 @@ export class Keeper extends EventEmitter {
 
   async stop() {
     clearInterval(this.sweeper);
+    clearTimeout(this.newsTimer);
+    this.store.off('change', this.storeChanged);
     this.signaling?.stop();
     for (const conn of [...this.conns.values()]) this.drop(conn);
     await new Promise((done) => setImmediate(done));

@@ -775,101 +775,126 @@ export class UI {
     });
   }
 
-  // The ranking of the players with a login, from the island keeper: a tab
-  // for each board, its top players and your own place. Logged in, you can
-  // leave it, or join it again; as the guest, logging in puts you in it.
+  // The ranking of the players with a login, from the island keeper, live:
+  // a tab for each board, its top players and your own place, redrawn as
+  // the keeper tells of changes (a score that changed pops). Logged in, you
+  // can leave it, or join it again; as the guest, logging in puts you in it.
   rankingDialog() {
     const keeper = this.handlers?.login?.keeper;
     if (!keeper) return;
     let current = BOARDS.some((b) => b.key === this.lastBoard) ? this.lastBoard : BOARDS[0].key;
-    this.openModal((root) => {
-      const tabRow = h('div', { class: 'tabs ranking-tabs' });
-      const note = this.loginNote();
-      const list = h('ol', { class: 'ranking' });
-      const about = h('p', { class: 'muted' });
-      const foot = h('div', { class: 'ranking-foot' });
-      const row = (e) =>
-        h(
-          'li',
-          { class: `rank-row${e.you ? ' you' : ''}` },
-          h('span', { class: 'place', 'aria-label': `Number ${e.rank}` }, MEDALS[e.rank] ?? String(e.rank)),
-          h('span', { class: 'avatar', style: `--c:${shirtColor(e.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(e.look)),
-          h('b', { class: 'who', lang: langOf(e.name) || undefined }, e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
-          h('span', { class: 'score' }, Number(e.score).toLocaleString()),
-        );
-      // Made once, so a tap on one is never lost to the keeper's answer redrawing them.
-      const tabs = BOARDS.map((b) =>
-        h(
-          'button',
-          {
-            class: 'chip',
-            type: 'button',
-            onclick: () => {
-              current = b.key;
-              this.sound.play('ui');
-              draw();
-            },
-          },
-          h('span', { class: 'emoji' }, b.icon),
-          h('span', {}, b.name),
-        ),
-      );
-      tabRow.append(...tabs);
-      const draw = () => {
-        this.lastBoard = current;
-        BOARDS.forEach((b, i) => tabs[i].classList.toggle('on', b.key === current));
-        const board = BOARDS.find((b) => b.key === current);
-        const reply = this.ranking;
-        const shown = reply?.boards?.find((b) => b.key === current);
-        about.textContent = board.text;
-        if (!shown) {
-          list.replaceChildren();
-          return;
-        }
-        const top = Array.isArray(shown.top) ? shown.top : [];
-        const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.look, you: true } : null;
-        if (!top.length) list.replaceChildren(h('li', { class: 'rank-empty muted' }, `Nobody yet. ${board.hint} to be the first!`));
-        else list.replaceChildren(...top.map(row), you ? h('li', { class: 'rank-gap', 'aria-hidden': 'true' }, '⋯') : '', you ? row(you) : '');
-        const mine = keeper.login && reply.shown !== false && !shown.you && top.length ? h('p', { class: 'muted' }, `${board.hint} to be on this board too!`) : '';
-        const players = reply.players ? ` ${reply.players} ${reply.players === 1 ? 'player is' : 'players are'} in it now.` : '';
-        if (keeper.login) {
-          const box = h('input', { type: 'checkbox', checked: reply.shown !== false });
-          box.addEventListener('change', async () => {
-            box.disabled = true;
-            note.say('🔎', 'Asking the island keeper…');
-            try {
-              await keeper.setRanked(box.checked);
-              this.sound.play('ui');
-              await ask();
-            } catch (error) {
-              box.checked = !box.checked;
-              box.disabled = false;
-              note.say(...rankingTrouble(error), 'warn');
-            }
-          });
-          foot.replaceChildren(
-            mine,
-            h('label', { class: 'check-row' }, box, h('span', {}, 'Show me in the ranking')),
-            h('p', { class: 'muted' }, reply.shown === false ? 'You are not in the ranking: nobody sees your name here.' : `Everyone sees your display name, ${this.profile.name}, and how you look.${players}`),
+    let onNews = null;
+    let onStatus = null;
+    this.openModal(
+      (root) => {
+        const tabRow = h('div', { class: 'tabs ranking-tabs' });
+        const note = this.loginNote();
+        const list = h('ol', { class: 'ranking' });
+        const aboutText = h('span');
+        const live = h('span', { class: 'live', hidden: true, title: 'Changes show up here as they happen' }, 'Live');
+        const about = h('p', { class: 'muted rank-about' }, aboutText, live);
+        const foot = h('div', { class: 'ranking-foot' });
+        const isLive = () => keeper.watching && keeper.watched && keeper.state === 'ready';
+        // The scores last drawn on the board last drawn, by name: one that changed pops.
+        let drawn = { key: '', scores: new Map() };
+        const row = (e, changed) =>
+          h(
+            'li',
+            { class: `rank-row${e.you ? ' you' : ''}` },
+            h('span', { class: 'place', 'aria-label': `Number ${e.rank}` }, MEDALS[e.rank] ?? String(e.rank)),
+            h('span', { class: 'avatar', style: `--c:${shirtColor(e.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(e.look)),
+            h('b', { class: 'who', lang: langOf(e.name) || undefined }, e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
+            h('span', { class: `score${changed ? ' bump' : ''}` }, Number(e.score).toLocaleString()),
           );
-        } else {
-          foot.replaceChildren(h('p', { class: 'muted' }, `Players with a login are in the ranking.${players} Log in with 🔑 on the title screen to be in it too!`));
-        }
-      };
-      const ask = async () => {
-        note.say('🔎', 'Asking the island keeper…');
-        try {
-          this.ranking = await keeper.ranking();
+        // Made once, so a tap on one is never lost to the keeper's news redrawing them.
+        const tabs = BOARDS.map((b) =>
+          h(
+            'button',
+            {
+              class: 'chip',
+              type: 'button',
+              onclick: () => {
+                current = b.key;
+                this.sound.play('ui');
+                draw();
+              },
+            },
+            h('span', { class: 'emoji' }, b.icon),
+            h('span', {}, b.name),
+          ),
+        );
+        tabRow.append(...tabs);
+        const draw = () => {
+          this.lastBoard = current;
+          BOARDS.forEach((b, i) => tabs[i].classList.toggle('on', b.key === current));
+          const board = BOARDS.find((b) => b.key === current);
+          const reply = this.ranking;
+          const shown = reply?.boards?.find((b) => b.key === current);
+          aboutText.textContent = board.text;
+          live.hidden = !isLive();
+          if (!shown) {
+            list.replaceChildren();
+            return;
+          }
+          const top = Array.isArray(shown.top) ? shown.top : [];
+          const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.look, you: true } : null;
+          const before = drawn.key === current ? drawn.scores : null;
+          const changed = (e) => Boolean(before) && before.get(e.name) !== e.score;
+          drawn = { key: current, scores: new Map([...top, ...(you ? [you] : [])].map((e) => [e.name, e.score])) };
+          if (!top.length) list.replaceChildren(h('li', { class: 'rank-empty muted' }, `Nobody yet. ${board.hint} to be the first!`));
+          else list.replaceChildren(...top.map((e) => row(e, changed(e))), you ? h('li', { class: 'rank-gap', 'aria-hidden': 'true' }, '⋯') : '', you ? row(you, changed(you)) : '');
+          const mine = keeper.login && reply.shown !== false && !shown.you && top.length ? h('p', { class: 'muted' }, `${board.hint} to be on this board too!`) : '';
+          const players = reply.players ? ` ${reply.players} ${reply.players === 1 ? 'player is' : 'players are'} in it now.` : '';
+          if (keeper.login) {
+            const box = h('input', { type: 'checkbox', checked: reply.shown !== false });
+            box.addEventListener('change', async () => {
+              box.disabled = true;
+              note.say('🔎', 'Asking the island keeper…');
+              try {
+                // The keeper's news of it redraws all this.
+                await keeper.setRanked(box.checked);
+                this.sound.play('ui');
+                note.say('', '');
+              } catch (error) {
+                box.checked = !box.checked;
+                box.disabled = false;
+                note.say(...rankingTrouble(error), 'warn');
+              }
+            });
+            foot.replaceChildren(
+              mine,
+              h('label', { class: 'check-row' }, box, h('span', {}, 'Show me in the ranking')),
+              h('p', { class: 'muted' }, reply.shown === false ? 'You are not in the ranking: nobody sees your name here.' : `Everyone sees your display name, ${this.profile.name}, and how you look.${players}`),
+            );
+          } else {
+            foot.replaceChildren(h('p', { class: 'muted' }, `Players with a login are in the ranking.${players} Log in with 🔑 on the title screen to be in it too!`));
+          }
+        };
+        onNews = (e) => {
+          this.ranking = e.detail;
           note.say('', '');
-        } catch (error) {
-          note.say(...rankingTrouble(error), 'warn');
-        }
-        if (list.isConnected) draw();
-      };
-      root.append(h('h2', {}, '🏆 Ranking'), tabRow, about, h('div', { class: 'rank-note' }, note), list, foot);
-      draw();
-      ask();
-    });
+          if (list.isConnected) draw();
+        };
+        onStatus = () => {
+          if (list.isConnected) live.hidden = !isLive();
+        };
+        keeper.addEventListener('ranking', onNews);
+        keeper.addEventListener('status', onStatus);
+        root.append(h('h2', {}, '🏆 Ranking'), tabRow, about, h('div', { class: 'rank-note' }, note), list, foot);
+        draw();
+        note.say('🔎', 'Asking the island keeper…');
+        keeper.watchRanking().catch((error) => {
+          if (list.isConnected) note.say(...rankingTrouble(error), 'warn');
+        });
+      },
+      {
+        onClose: () => {
+          keeper.removeEventListener('ranking', onNews);
+          keeper.removeEventListener('status', onStatus);
+          keeper.unwatchRanking();
+        },
+      },
+    );
   }
 
   helpDialog() {

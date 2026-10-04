@@ -1,12 +1,14 @@
 // The ranking: the boards (places shared on a tie, made-up stickers and
 // silly counts not counted, your own place below the top), the keeper ranking
 // only players with a login who have not left it, the protocol (driven
-// without WebRTC) and the admin pages taking a player out of it.
+// without WebRTC) with its news for pages watching it live, and the admin
+// pages taking a player out of it.
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION, keptProfile } from '../public/js/shared/keeper.js';
 import { BOARDS, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
@@ -171,6 +173,7 @@ async function page(keeper) {
   keeper.conns.set(conn.id, conn);
   return {
     conn,
+    replies,
     async say(msg) {
       const parts = [];
       sendText({ send: (part) => parts.push(part) }, JSON.stringify(msg));
@@ -260,4 +263,79 @@ test('the admin pages take a player out of the ranking, and put them back', asyn
   } finally {
     await server.shutdown();
   }
+});
+
+async function until(fn, timeout = 5000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const value = fn();
+    if (value) return value;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${String(fn)}`);
+    await delay(10);
+  }
+}
+
+test('a page watching the ranking hears of every change it would see, a moment later, until it stops', async () => {
+  const dir = await tempDir();
+  const store = await new KeeperStore(dir).open();
+  const keeper = new Keeper({ store, identity: await createIdentity(dir), log: () => {}, rankingNewsMs: 200 });
+  await keeper.loadKey();
+  const sister = KeeperStore.deviceId(SISTER);
+  await store.makeLogin(sister, PASSWORD, { name: 'Minji', look: { animal: 'bunny' }, stats: { placed: 10 } }, { username: 'minji' });
+
+  // A guest watches.
+  const watcher = await page(keeper);
+  await watcher.say({ t: 'hello', v: KEEPER_VERSION, nonce: '11'.repeat(16) });
+  await watcher.say({ t: 'me', device: GUEST });
+  const first = await watcher.say({ t: 'ranking', watch: true });
+  assert.equal(first.t, 'ranking');
+  assert.equal(watcher.conn.watching, true);
+  const news = () => watcher.replies.filter((r) => r.t === 'ranking-news');
+  const builders = (r) => board(r, 'builders').top.map((e) => [e.name, e.score]);
+
+  // Minji plays on her tablet: what she has done goes along, and the watcher hears of it.
+  const tablet = await page(keeper);
+  await tablet.say({ t: 'hello', v: KEEPER_VERSION, nonce: '22'.repeat(16) });
+  await tablet.say({ t: 'me', device: TABLET });
+  const login = await tablet.say({ t: 'login', username: 'minji', password: PASSWORD });
+  const playing = { ...login.profile, stats: { placed: 50 } };
+  assert.deepEqual(await tablet.say({ t: 'profile', profile: playing }), { t: 'kept', what: 'profile' });
+  await until(() => news().length === 1);
+  assert.deepEqual(builders(news()[0]), [['Minji', 50]]);
+  // Only what she did changed: news for the ranking, nothing for the admin pages.
+  assert.ok(!keeper.recent.some((e) => e.what === 'profile'));
+  // Many changes at once are one piece of news.
+  await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 60 } } });
+  await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 70 } } });
+  await until(() => news().length === 2);
+  await delay(400);
+  assert.equal(news().length, 2);
+  assert.deepEqual(builders(news()[1]), [['Minji', 70]]);
+
+  // What the ranking does not show is no news: a guest's profile, or a count no board counts.
+  await store.keepProfileIn(KeeperStore.deviceId(PHONE), { name: 'Brave Fox', look: { animal: 'fox' }, stats: { placed: 999 } });
+  await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 70, danced: 4 } } });
+  await delay(400);
+  assert.equal(news().length, 2);
+  // A new login is: Brave Fox goes first.
+  await store.makeLogin(KeeperStore.deviceId(PHONE), 'dogs and stars', null, { username: 'fox' });
+  await until(() => news().length === 3);
+  assert.deepEqual(builders(news()[2]), [
+    ['Brave Fox', 999],
+    ['Minji', 70],
+  ]);
+  // So is leaving it, to the one who left, too: watching, the tablet hears that it is out.
+  await tablet.say({ t: 'ranking', watch: true });
+  await tablet.say({ t: 'ranked', on: false });
+  await until(() => news().length === 4 && tablet.replies.some((r) => r.t === 'ranking-news'));
+  assert.deepEqual(builders(news()[3]), [['Brave Fox', 999]]);
+  assert.equal(tablet.replies.findLast((r) => r.t === 'ranking-news').shown, false);
+
+  // Stopped watching: no more news.
+  assert.deepEqual(await watcher.say({ t: 'unwatch' }), { t: 'kept', what: 'unwatch' });
+  await tablet.say({ t: 'ranked', on: true });
+  await until(() => tablet.replies.filter((r) => r.t === 'ranking-news').length === 2);
+  await delay(400);
+  assert.equal(news().length, 4);
+  await keeper.stop();
 });
