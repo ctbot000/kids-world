@@ -176,6 +176,20 @@ test('a friend who drops can come back with their token', async () => {
   await a.close();
 });
 
+test('an island is made in the size asked for, and a cozy one for a size there is not', async () => {
+  const huge = await create('Happy Panda', { size: 'huge' });
+  assert.equal(huge.world.W, 256);
+  assert.equal(huge.world.D, 256);
+  const b = await join(huge.code, 'Brave Otter');
+  assert.equal(b.world.W, 256, 'a friend gets the whole huge island');
+  assert.deepEqual(b.world.blocks, huge.world.blocks);
+  const odd = await create('Clever Fox', { size: 'galactic' });
+  assert.equal(odd.world.W, 128);
+  await huge.close();
+  await b.close();
+  await odd.close();
+});
+
 test('the owner role passes on when the owner leaves', async () => {
   const a = await create('Happy Panda');
   const b = await join(a.code, 'Brave Otter');

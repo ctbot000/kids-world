@@ -549,6 +549,29 @@ test('an island saves and loads with its blocks, animals, friends and owner', ()
   assert.throws(() => new Room({ save: { app: 'something-else' } }));
 });
 
+test('a bigger island has room for more animals, and keeps its size and its animals when saved', () => {
+  for (const [size, side, max] of [
+    ['big', 192, 96],
+    ['huge', 256, 128],
+  ]) {
+    const { room, time } = makeRoom({ size });
+    assert.equal(room.world.W, side);
+    assert.equal(room.world.D, side);
+    const a = join(room);
+    assert.equal(a.last('welcome').meta.W, side);
+    const s = room.world.spawn;
+    for (let i = 0; i < max + 5; i++) {
+      time.advance(50);
+      room.receive(a, { t: 'critter', op: 'invite', type: 'bunny', x: s.x, y: s.y, z: s.z });
+    }
+    assert.equal(room.critters.list.length, max, `${size}: ${max} animals at most`);
+    const copy = new Room({ code: '123456', save: JSON.parse(JSON.stringify(room.exportSave())), now: time.now });
+    assert.equal(copy.world.W, side);
+    assert.deepEqual(copy.world.blocks, room.world.blocks);
+    assert.equal(copy.critters.list.length, max, `${size}: every animal comes back`);
+  }
+});
+
 test('a flood of messages is rate limited', () => {
   const { room } = makeRoom();
   const a = join(room);

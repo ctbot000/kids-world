@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { generateCode, isValidCode, normalizeCode } from '../public/js/shared/codes.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { THEMES } from '../public/js/shared/worldgen.js';
+import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
 import { DEFAULT_DATA_DIR, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
 import { acceptUpgrade } from './websocket.js';
@@ -179,7 +179,7 @@ export function createGameServer({
         try {
           room = msg.save
             ? new Room({ code, save: msg.save, log })
-            : new Room({ code, theme: THEMES.some((t) => t.key === msg.theme) ? msg.theme : 'sunny', name: msg.name, settings: msg.settings, log });
+            : new Room({ code, theme: THEMES.some((t) => t.key === msg.theme) ? msg.theme : 'sunny', size: SIZES.some((s) => s.key === msg.size) ? msg.size : 'small', name: msg.name, settings: msg.settings, log });
         } catch (error) {
           reply({ t: 'error', code: 'load', text: `That island could not be opened: ${error.message}` });
           ws.close(1000);

@@ -8,7 +8,7 @@
 // tick() about ten times a second.
 
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, MAX_CRITTERS, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, riderAt, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, riderAt, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -67,8 +67,8 @@ function cleanSettings(raw, base = defaultSettings()) {
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 
 export class Room {
-  // Either { theme, name, seed } for a brand-new island, or { save }.
-  constructor({ code = '', theme = 'sunny', name = '', seed = 0, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  // Either { theme, size, name, seed } for a brand-new island, or { save }.
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
@@ -99,9 +99,10 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, name: islandName });
+      const made = generate({ seed: s, theme, size, name: islandName });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
+      this.critters.max = maxCritters(this.world);
       for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z);
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
@@ -467,7 +468,7 @@ export class Room {
       }
       case 'invite': {
         if (!CRITTER_INFO[msg.type] || ![msg.x, msg.y, msg.z].every(finite)) return;
-        if (this.critters.list.length >= MAX_CRITTERS) {
+        if (this.critters.list.length >= this.critters.max) {
           this.notice(conn, 'The island is full of animal friends already!', 'info');
           return;
         }
@@ -763,7 +764,8 @@ export class Room {
     const seed = this.world.seed;
     this.rng = new Rng(seed ^ 0x27d4eb2d ^ (Number(save.savedAt) | 0));
     this.critters = new CritterSim(seed ^ 0x5bd1e995 ^ (Number(save.savedAt) | 0));
-    for (const c of Array.isArray(save.critters) ? save.critters.slice(0, MAX_CRITTERS) : []) {
+    this.critters.max = maxCritters(this.world);
+    for (const c of Array.isArray(save.critters) ? save.critters.slice(0, this.critters.max) : []) {
       if (!CRITTER_INFO[c?.type] || ![c.x, c.y, c.z].every(finite)) continue;
       const w = this.world;
       this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name);

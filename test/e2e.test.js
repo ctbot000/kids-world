@@ -224,7 +224,7 @@ async function clickBeside(page, selector) {
   await page.mouse.click(at.x, at.y);
 }
 
-async function makeIsland(page, { online, theme = 'Sunny Island', name = '' }) {
+async function makeIsland(page, { online, theme = 'Sunny Island', size = '', name = '' }) {
   await clickButton(page, 'Make an island');
   // A name typed before the kind of island is picked stays.
   if (name) {
@@ -234,6 +234,7 @@ async function makeIsland(page, { online, theme = 'Sunny Island', name = '' }) {
     await box.type(name);
   }
   await clickButton(page, theme, '#modal');
+  if (size) await clickButton(page, size, '#modal');
   if (!online) await clickSwitch(page, '#modal .switch');
   await clickButton(page, 'Make it', '#modal');
   await inGame(page);
@@ -1262,7 +1263,7 @@ test('the dedicated server hosts islands for friends to share', { skip }, async 
   await b.browserContext().close();
 });
 
-test('an island you made is saved, under the name you typed, and can be opened again', { skip }, async () => {
+test('an island you made is saved, under the name you typed and in the size you picked, and can be opened again', { skip }, async () => {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   page.on('pageerror', (error) => pageErrors.push(`saver: ${error.message}`));
@@ -1270,8 +1271,9 @@ test('an island you made is saved, under the name you typed, and can be opened a
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(base + '?p2p=1');
   await page.waitForFunction(() => window.kidsWorld?.ui, { timeout: 60000 * SLOW });
-  await makeIsland(page, { online: false, theme: 'Flat Land', name: '  민지네   블록 섬 🧱' });
+  await makeIsland(page, { online: false, theme: 'Flat Land', size: 'Huge', name: '  민지네   블록 섬 🧱' });
   const name = '민지네 블록 섬 🧱';
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.world.W), 256, 'a huge island');
   assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), name, 'as typed, tidied');
   assert.equal(await page.$eval('#island-name', (el) => el.textContent), `🟩 ${name}`);
   const { cell, at } = await spotNear(page, 2, -2);
@@ -1290,6 +1292,7 @@ test('an island you made is saved, under the name you typed, and can be opened a
   await clickButton(page, 'Play', '#modal');
   await inGame(page);
   assert.equal(await blockAt(page, above), 2);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.world.W), 256, 'still huge');
   assert.deepEqual(pageErrors, []);
   await context.close();
 });

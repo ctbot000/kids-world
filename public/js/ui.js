@@ -10,7 +10,7 @@ import { BOARDS } from './shared/ranking.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
-import { THEMES } from './shared/worldgen.js';
+import { SIZES, THEMES } from './shared/worldgen.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
@@ -316,6 +316,7 @@ export class UI {
   // while the box is empty). While what is typed is no name, the last one stays.
   newIslandDialog() {
     let theme = 'sunny';
+    let size = SIZES[0].key;
     let rolled = randomIslandName(theme);
     let own = '';
     let online = true;
@@ -357,6 +358,30 @@ export class UI {
         );
       };
       draw();
+      const sizes = h('div', { class: 'grid sizes' });
+      const drawSizes = () => {
+        sizes.replaceChildren(
+          ...SIZES.map((s) =>
+            h(
+              'button',
+              {
+                class: `choice${s.key === size ? ' on' : ''}`,
+                type: 'button',
+                'aria-pressed': String(s.key === size),
+                onclick: () => {
+                  size = s.key;
+                  this.sound.play('ui');
+                  drawSizes();
+                },
+              },
+              h('span', { class: 'emoji' }, s.icon),
+              h('b', {}, s.name),
+              h('small', {}, s.blurb),
+            ),
+          ),
+        );
+      };
+      drawSizes();
       const sw = h('button', { class: 'switch on', type: 'button', 'aria-label': 'Friends can visit', role: 'switch', 'aria-checked': 'true' });
       sw.onclick = () => {
         online = !online;
@@ -368,6 +393,8 @@ export class UI {
         h('h2', {}, '🏝️ Make an island'),
         h('h3', {}, 'What kind of island?'),
         grid,
+        h('h3', {}, 'How big?'),
+        sizes,
         h('h3', {}, 'Its name'),
         h(
           'div',
@@ -395,7 +422,7 @@ export class UI {
             style: 'margin-top:14px',
             onclick: () => {
               this.closeModal();
-              this.handlers.make({ theme, name: own || rolled, online });
+              this.handlers.make({ theme, size, name: own || rolled, online });
             },
           },
           '✨ Make it!',

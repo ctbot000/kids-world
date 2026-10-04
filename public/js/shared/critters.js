@@ -74,6 +74,17 @@ export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 // New states go on the end too.
 export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run'];
 export const MAX_CRITTERS = 64;
+
+// How many more animals a bigger island has than a cozy one (128 blocks
+// across), side to side: a big one half as many again, a huge one twice.
+const roomier = (world) => Math.max(1, Math.max(world.W, world.D) / 128);
+export const maxCritters = (world) => Math.round(MAX_CRITTERS * roomier(world));
+// How many random spots to try in looking for somewhere: more on a bigger island, by area.
+const spots = (world, n) => Math.round(n * roomier(world) ** 2);
+export function scaleCounts(counts, world) {
+  const k = roomier(world);
+  return Object.fromEntries(Object.entries(counts).map(([type, n]) => [type, Math.round(n * k)]));
+}
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
 
@@ -276,7 +287,7 @@ const isShore = (world, p) => p.kind === 'ground' && p.ground === B.SAND && p.y 
 
 // Where they start out: birds and owls up in the trees, bees at the flowers,
 // seagulls on the beach or out on the water.
-export function placeFlyers(world, rng, counts = flyerCounts(world.theme)) {
+export function placeFlyers(world, rng, counts = scaleCounts(flyerCounts(world.theme), world)) {
   const places = {
     bird: [(p) => p.kind === 'tree', (p) => p.kind !== 'water'],
     owl: [(p) => p.kind === 'tree', (p) => p.kind !== 'water'],
@@ -284,7 +295,7 @@ export function placeFlyers(world, rng, counts = flyerCounts(world.theme)) {
     seagull: [(p) => isShore(world, p), (p) => p.kind === 'water'],
   };
   const find = (test) => {
-    for (let tries = 0; tries < 800; tries++) {
+    for (let tries = 0; tries < spots(world, 800); tries++) {
       const p = perchAt(world, rng.int(2, world.W - 3) + 0.5, rng.int(2, world.D - 3) + 0.5);
       if (p && test(p)) return p;
     }
@@ -311,11 +322,11 @@ export function seaCounts(theme) {
 
 // Where they start out: fish and the octopus in the shallows (or a pond),
 // dolphins and the whale out at sea, crabs and turtles on the beach.
-export function placeSea(world, rng, counts = seaCounts(world.theme)) {
+export function placeSea(world, rng, counts = scaleCounts(seaCounts(world.theme), world)) {
   const out = [];
   for (const [type, n] of Object.entries(counts)) {
     for (let i = 0; i < n; i++) {
-      for (let tries = 0; tries < 800; tries++) {
+      for (let tries = 0; tries < spots(world, 800); tries++) {
         const x = rng.int(2, world.W - 3) + 0.5;
         const z = rng.int(2, world.D - 3) + 0.5;
         let y = null;
@@ -324,7 +335,7 @@ export function placeSea(world, rng, counts = seaCounts(world.theme)) {
           const w = waterColumn(world, x, z);
           if (p && isShore(world, p)) y = p.y;
           // With no beach to be found (Flat Land's sea has none), the shallows will do.
-          else if (tries >= 400 && w && w.top - w.floor <= 3 && SANDY.has(world.get(FL(x), w.floor, FL(z)))) y = type === 'crab' ? w.floor + 1 : w.top + 0.75;
+          else if (tries >= spots(world, 400) && w && w.top - w.floor <= 3 && SANDY.has(world.get(FL(x), w.floor, FL(z)))) y = type === 'crab' ? w.floor + 1 : w.top + 0.75;
         } else {
           const w = waterFor(world, x, z, WATERS[type]);
           if (w && (type === 'dolphin' || type === 'whale' || w.top - w.floor <= 5)) {
@@ -356,13 +367,13 @@ function onShore(world, p) {
 
 // Where they start out: the penguins together, as a little colony, and the
 // seals here and there along the shore.
-export function placePolar(world, rng, counts = polarCounts(world.theme)) {
+export function placePolar(world, rng, counts = scaleCounts(polarCounts(world.theme), world)) {
   const out = [];
   const random = () => perchAt(world, rng.int(2, world.W - 3) + 0.5, rng.int(2, world.D - 3) + 0.5);
   for (const [type, n] of Object.entries(counts)) {
     let colony = null;
     for (let i = 0; i < n; i++) {
-      for (let tries = 0; tries < 800; tries++) {
+      for (let tries = 0; tries < spots(world, 800); tries++) {
         // Beside the others, or, with no room left there, a new group of them.
         const near = type === 'penguin' && colony && tries < 300;
         const p = near ? perchAt(world, colony.x + rng.int(-3, 3), colony.z + rng.int(-3, 3)) : random();
@@ -394,12 +405,12 @@ export function fits(world, type, x, y, z) {
 
 // Where they start out: out in the open on dry land, with room about them,
 // away from where everyone comes in; polar bears on the cold shore.
-export function placeBig(world, rng, counts = bigCounts(world.theme)) {
+export function placeBig(world, rng, counts = scaleCounts(bigCounts(world.theme), world)) {
   const out = [];
   const spawn = world.spawn;
   for (const [type, n] of Object.entries(counts)) {
     for (let i = 0; i < n; i++) {
-      for (let tries = 0; tries < 800; tries++) {
+      for (let tries = 0; tries < spots(world, 800); tries++) {
         const p = perchAt(world, rng.int(3, world.W - 4) + 0.5, rng.int(3, world.D - 4) + 0.5);
         if (!p || (type === 'polarbear' ? !onShore(world, p) : p.kind !== 'ground' || p.ground === B.SAND || p.y <= world.sea + 1)) continue;
         if (Math.hypot(p.x - spawn.x, p.z - spawn.z) < 10 || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 3)) continue;
@@ -457,10 +468,12 @@ export class CritterSim {
     this.bigRng = new Rng((seed ^ 0x2c1b3c6d) >>> 0 || 1);
     this.list = [];
     this.nextId = 1;
+    // A bigger island has room for more (see maxCritters).
+    this.max = MAX_CRITTERS;
   }
 
   add(type, x, y, z, name = null) {
-    if (!CRITTER_INFO[type] || this.list.length >= MAX_CRITTERS) return null;
+    if (!CRITTER_INFO[type] || this.list.length >= this.max) return null;
     const info = CRITTER_INFO[type];
     const rng = info.big ? this.bigRng : this.rng;
     const c = {

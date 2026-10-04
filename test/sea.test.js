@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { CRITTER_INFO, CRITTER_TYPES, CritterSim, nearestWater, perchAt, seaCounts, STATES, SURFACE, waterColumn } from '../public/js/shared/critters.js';
+import { CRITTER_INFO, CRITTER_TYPES, CritterSim, nearestWater, perchAt, polarCounts, scaleCounts, seaCounts, STATES, SURFACE, waterColumn } from '../public/js/shared/critters.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
@@ -46,10 +46,11 @@ function meadowWithPool() {
   return w;
 }
 
-test('sea creatures start out in the water, out at sea, and on the beach', () => {
-  for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
-    const { world, critters } = island(theme, 4242);
-    for (const [type, n] of Object.entries(seaCounts(theme))) assert.equal(critters.filter((c) => c.type === type).length, n, `${theme} ${type}`);
+test('sea creatures start out in the water, out at sea, and on the beach, on islands of every size', () => {
+  for (const [theme, size] of [...['sunny', 'snowy', 'candy', 'flat'].map((t) => [t, 'small']), ['sunny', 'big'], ['snowy', 'huge'], ['flat', 'huge']]) {
+    const { world, critters } = generate({ seed: 4242, theme, size });
+    const counts = { ...scaleCounts(seaCounts(theme), world), ...scaleCounts(polarCounts(theme), world) };
+    for (const [type, n] of Object.entries(counts)) assert.equal(critters.filter((c) => c.type === type).length, n, `${theme} ${size} ${type}`);
     for (const c of critters.filter((c) => SEA.includes(c.type))) {
       const w = waterColumn(world, c.x, c.z);
       if (c.type === 'crab' || c.type === 'turtle') {

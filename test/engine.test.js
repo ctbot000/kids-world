@@ -3,13 +3,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
+import { maxCritters } from '../public/js/shared/critters.js';
 import { advanceTime, daylight, isDaytime } from '../public/js/shared/env.js';
 import { BODY, bodyOverlapsSolid, makeBody, stepBody, unstick } from '../public/js/shared/physics.js';
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, buildEdit, growEdit, hillEdit, paintEdit, pickEdit, stampEdit, validCells } from '../public/js/shared/tools.js';
 import { decodeBlocks, encodeBlocks, World } from '../public/js/shared/world.js';
-import { generate } from '../public/js/shared/worldgen.js';
+import { generate, sizeSide } from '../public/js/shared/worldgen.js';
 
 // A small flat test world: magic floor, stone up to y=4, grass at y=5.
 function flatWorld({ W = 32, H = 24, D = 32, ground = 5, sea = 3 } = {}) {
@@ -49,11 +50,13 @@ test('the world encodes and decodes exactly', () => {
   assert.equal(decodeBlocks(encodeBlocks(odd, 8, 8, 8), 8, 8, 8)[5], B.AIR);
 });
 
-test('generation is deterministic and makes a sensible island', () => {
-  for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
-    const a = generate({ seed: 4242, theme });
-    const b = generate({ seed: 4242, theme });
-    assert.deepEqual(a.world.blocks, b.world.blocks, `${theme} is deterministic`);
+test('generation is deterministic and makes a sensible island, of every size', () => {
+  for (const [size, theme] of [...['sunny', 'snowy', 'candy', 'flat'].map((t) => ['small', t]), ['big', 'snowy'], ['huge', 'sunny'], ['huge', 'flat']]) {
+    const a = generate({ seed: 4242, theme, size });
+    const b = generate({ seed: 4242, theme, size });
+    assert.equal(a.world.W, sizeSide(size), `${size} ${theme} is ${sizeSide(size)} across`);
+    assert.equal(a.world.D, sizeSide(size), `${size} ${theme} is ${sizeSide(size)} deep`);
+    assert.deepEqual(a.world.blocks, b.world.blocks, `${size} ${theme} is deterministic`);
     const w = a.world;
     const s = w.spawn;
     // You arrive standing on solid ground with room to stand.
@@ -77,6 +80,45 @@ test('generation is deterministic and makes a sensible island', () => {
   const sunny = generate({ seed: 5, theme: 'sunny' });
   const fruitCount = sunny.world.blocks.reduce((n, id) => n + (id === sunny.fruit ? 1 : 0), 0);
   assert.ok(fruitCount >= 6, `the island has its own fruit (${fruitCount})`);
+});
+
+test('a bigger island has more land, mountains, trees and animals, and room for more animals', () => {
+  const count = (size, theme) => {
+    const { world, critters } = generate({ seed: 77, theme, size });
+    let land = 0;
+    let peaks = 0;
+    let trunks = 0;
+    for (let x = 0; x < world.W; x++) {
+      for (let z = 0; z < world.D; z++) {
+        const y = world.top(x, z);
+        if (y > world.sea) land++;
+        // A peak: the highest point of the ground for 12 blocks about.
+        if (y > world.sea + 12 && x % 3 === 0 && z % 3 === 0) {
+          let top = true;
+          for (let dx = -12; dx <= 12 && top; dx += 3) for (let dz = -12; dz <= 12 && top; dz += 3) if ((dx || dz) && world.top(x + dx, z + dz) > y) top = false;
+          if (top) peaks++;
+        }
+        for (let y = 1; y < world.H; y++) if (B.TREE_PART[world.get(x, y, z)] && !B.TREE_PART[world.get(x, y - 1, z)] && B.isSolid(world.get(x, y - 1, z))) trunks++;
+      }
+    }
+    return { land, peaks, trunks, critters: critters.length, room: maxCritters(world) - critters.length };
+  };
+  for (const theme of ['sunny', 'snowy']) {
+    const cozy = count('small', theme);
+    for (const [size, area] of [
+      ['big', 2.25],
+      ['huge', 4],
+    ]) {
+      const n = count(size, theme);
+      assert.ok(n.land > cozy.land * area * 0.75, `${size} ${theme}: ${n.land} blocks of land, against ${cozy.land}`);
+      assert.ok(n.trunks > cozy.trunks * area * 0.75, `${size} ${theme}: ${n.trunks} trees, against ${cozy.trunks}`);
+      assert.ok(n.peaks > cozy.peaks, `${size} ${theme}: ${n.peaks} mountains, against ${cozy.peaks}`);
+      assert.ok(n.critters > cozy.critters * Math.sqrt(area) * 0.9, `${size} ${theme}: ${n.critters} animals, against ${cozy.critters}`);
+      assert.ok(n.room >= cozy.room, `${size} ${theme}: room for ${n.room} more animals, against ${cozy.room}`);
+    }
+  }
+  // Anything else is a cozy island.
+  assert.equal(generate({ seed: 1, size: 'enormous' }).world.W, 128);
 });
 
 test('a body stands on the ground, walks, bumps into walls and jumps', () => {

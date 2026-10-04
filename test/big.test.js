@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { BIG, bigCounts, CRITTER_INFO, CRITTER_TYPES, CritterSim, fits, mountUnder, nearestWater, riderAt, SURFACE, swimmable, waterColumn } from '../public/js/shared/critters.js';
+import { BIG, bigCounts, scaleCounts, CRITTER_INFO, CRITTER_TYPES, CritterSim, fits, mountUnder, nearestWater, riderAt, SURFACE, swimmable, waterColumn } from '../public/js/shared/critters.js';
 import { BODY, bodyOverlapsSolid, makeBody, stepBody } from '../public/js/shared/physics.js';
 import { getOffAt, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { World } from '../public/js/shared/world.js';
@@ -68,12 +68,17 @@ const go = (world, r, input, seconds) => {
 
 test('big animals start out in the open on dry land, with room for a rider, away from where you come in', () => {
   for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
-    for (const seed of [4242, 7]) {
-      const { world, critters } = generate({ seed, theme });
+    for (const [seed, size] of [
+      [4242, 'small'],
+      [7, 'small'],
+      [7, 'big'],
+      [4242, 'huge'],
+    ]) {
+      const { world, critters } = generate({ seed, theme, size });
       const big = critters.filter((c) => BIG.includes(c.type));
       const counts = {};
       for (const c of big) counts[c.type] = (counts[c.type] ?? 0) + 1;
-      assert.deepEqual(counts, bigCounts(theme), `${theme} ${seed}`);
+      assert.deepEqual(counts, scaleCounts(bigCounts(theme), world), `${theme} ${seed} ${size}`);
       for (const c of big) {
         assert.ok(fits(world, c.type, c.x, c.y, c.z), `${theme} ${seed}: a ${c.type} has room for itself and a rider`);
         assert.ok(Math.hypot(c.x - world.spawn.x, c.z - world.spawn.z) >= 10, `${theme} ${seed}: a ${c.type} away from where you come in`);

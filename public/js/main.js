@@ -311,7 +311,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveIsland();
 });
 
-function makeIsland({ theme, name, online }) {
+function makeIsland({ theme, size, name, online }) {
   if (serverMode && online) {
     const link = new WsLink({ url: wsUrl() });
     // The first message makes the island; reconnecting later is an ordinary visit.
@@ -320,12 +320,12 @@ function makeIsland({ theme, name, online }) {
       mode: 'server',
       key: tokenKey('server', 'new'),
       loadingText: 'Making your island…',
-      first: (game) => (game.code ? { ...game.joinMessage(), code: game.code } : { ...game.joinMessage(), t: 'create', theme, name }),
+      first: (game) => (game.code ? { ...game.joinMessage(), code: game.code } : { ...game.joinMessage(), t: 'create', theme, size, name }),
     });
     return;
   }
   const islandId = storage.newIslandId();
-  const link = new HostLink({ island: { theme, name }, online: online && !signalError, peerOptions });
+  const link = new HostLink({ island: { theme, size, name }, online: online && !signalError, peerOptions });
   startSession({ link, mode: 'host', islandId, key: tokenKey('island', islandId), loadingText: 'Making your island…' });
   if (online && signalError) ui.toast('🙈', signalError, 'warn');
 }

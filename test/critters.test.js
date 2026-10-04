@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { CRITTER_INFO, CritterSim, FLOWERS, headTop, perchAt, skyline } from '../public/js/shared/critters.js';
+import { CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, perchAt, scaleCounts, skyline } from '../public/js/shared/critters.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
@@ -50,14 +50,19 @@ function sitting(world, c) {
   return (here === B.WATER && CRITTER_INFO[c.type].swims) || (B.KIND[here] === B.K_PLANT && (c.type === 'bee' || c.type === 'butterfly'));
 }
 
-test('flying friends start out in the trees, at the flowers and by the sea', () => {
-  for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
-    const { world, critters } = generate({ seed: 4242, theme });
+test('flying friends start out in the trees, at the flowers and by the sea, on islands of every size', () => {
+  for (const [theme, size] of [...['sunny', 'snowy', 'candy', 'flat'].map((t) => [t, 'small']), ['candy', 'big'], ['sunny', 'huge'], ['snowy', 'huge']]) {
+    const { world, critters } = generate({ seed: 4242, theme, size });
     const of = (type) => critters.filter((c) => c.type === type);
-    assert.equal(of('bird').length, 3, `${theme} birds`);
-    assert.equal(of('owl').length, theme === 'snowy' ? 2 : 1, `${theme} owls`);
-    assert.equal(of('bee').length, theme === 'snowy' ? 0 : 3, `${theme} bees`);
-    assert.equal(of('seagull').length, 2, `${theme} seagulls`);
+    const twice = size === 'huge' ? 2 : size === 'big' ? 1.5 : 1;
+    assert.deepEqual(scaleCounts(flyerCounts(theme), world), Object.fromEntries(Object.entries(flyerCounts(theme)).map(([type, n]) => [type, Math.round(n * twice)])));
+    for (const [type, n] of Object.entries(scaleCounts(flyerCounts(theme), world))) assert.equal(of(type).length, n, `${theme} ${size} ${type}`);
+    if (size === 'small') {
+      assert.equal(of('bird').length, 3, `${theme} birds`);
+      assert.equal(of('owl').length, theme === 'snowy' ? 2 : 1, `${theme} owls`);
+      assert.equal(of('bee').length, theme === 'snowy' ? 0 : 3, `${theme} bees`);
+      assert.equal(of('seagull').length, 2, `${theme} seagulls`);
+    }
     for (const c of [...of('bird'), ...of('owl')]) {
       const p = perchAt(world, c.x, c.z);
       assert.equal(c.y, p.y, `${theme}: a ${c.type} sits right on top of things`);

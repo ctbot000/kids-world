@@ -2,7 +2,7 @@
 // trees (some of them fruit trees of the island's own fruit), flowers,
 // seashells, animal friends, and a spot for everyone to arrive at.
 import * as B from './blocks.js';
-import { placeBig, placeFlyers, placePolar, placeSea } from './critters.js';
+import { placeBig, placeFlyers, placePolar, placeSea, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -14,6 +14,15 @@ export const THEMES = [
   { key: 'candy', name: 'Candy Island', icon: '🍭', blurb: 'Frosting hills and lollipop trees' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
+
+// How big an island is, side to side in blocks. A bigger one has more of
+// everything: mountains, ponds, trees, flowers, shells and animals.
+export const SIZES = [
+  { key: 'small', name: 'Cozy', icon: '🏡', side: 128, blurb: 'Everything close by' },
+  { key: 'big', name: 'Big', icon: '🏞️', side: 192, blurb: 'Twice the room, and two mountains' },
+  { key: 'huge', name: 'Huge', icon: '🗺️', side: 256, blurb: 'Four times the room, to explore' },
+];
+export const sizeSide = (key) => (SIZES.find((s) => s.key === key) ?? SIZES[0]).side;
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -31,8 +40,11 @@ function palette(theme) {
   }
 }
 
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 128, H = 64, D = 128, sea = 20 } = {}) {
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20 } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
+  // How much more there is of everything than on a cozy island: by area, and side to side.
+  const area = (W * D) / (128 * 128);
+  const more = (n) => Math.round(n * area);
   const rng = new Rng(seed);
   const pal = palette(theme);
   const heights = new Int16Array(W * D);
@@ -46,6 +58,17 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
   const mHeight = theme === 'snowy' ? 24 : 18;
+  // A bigger island has more mountains, spread about the first one.
+  const mountains = [{ x: mx, z: mz, height: mHeight }];
+  const wantMountains = Math.round(Math.sqrt(area) * 2) - 1;
+  for (let tries = 0; tries < 100 && mountains.length < wantMountains; tries++) {
+    const a = rng.next() * Math.PI * 2;
+    const r = rng.range(0.1, 0.32) * W;
+    const m = { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, height: mHeight * rng.range(0.7, 1) };
+    if (Math.hypot(m.x - cx, m.z - cz) < 16 || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
+    mountains.push(m);
+  }
+  const nearMountain = (x, z, r) => mountains.some((m) => Math.hypot(x - m.x, z - m.z) < r);
   for (let x = 0; x < W; x++) {
     for (let z = 0; z < D; z++) {
       let h;
@@ -58,8 +81,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
         const d = Math.hypot(nx, nz) + fbm(seed + 11, x / 36, z / 36, 3) * 0.2;
         const mask = 1 - smoothstep(0.52, 0.86, d);
         const hills = fbm(seed + 23, x / 30, z / 30, 4);
-        const md = Math.hypot(x - mx, z - mz) / 19;
-        const mountain = Math.max(0, 1 - md) ** 1.7 * mHeight * (0.85 + 0.3 * fbm(seed + 37, x / 9, z / 9, 2));
+        let peak = 0;
+        for (const m of mountains) peak = Math.max(peak, Math.max(0, 1 - Math.hypot(x - m.x, z - m.z) / 19) ** 1.7 * m.height);
+        const mountain = peak * (0.85 + 0.3 * fbm(seed + 37, x / 9, z / 9, 2));
         const land = sea + 2 + (2.5 + hills * 3.5) + mountain;
         const floor = sea - 4 - (1 - mask) * 6 + fbm(seed + 41, x / 14, z / 14, 2) * 1.5;
         h = floor + (land - floor) * smoothstep(0.02, 0.4, mask);
@@ -73,14 +97,14 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
   // ---------------------------------------------------------------- ponds
   const ponds = [];
   if (theme !== 'flat') {
-    const want = rng.int(1, 2);
-    for (let tries = 0; tries < 200 && ponds.length < want; tries++) {
+    const want = rng.int(1, 2) + more(1) - 1;
+    for (let tries = 0; tries < more(200) && ponds.length < want; tries++) {
       const px = rng.int(24, W - 25);
       const pz = rng.int(24, D - 25);
       const r = rng.range(3.2, 4.8);
       const h0 = hi(px, pz);
       if (h0 < sea + 2 || h0 > sea + 6) continue;
-      if (Math.hypot(px - mx, pz - mz) < 22 || Math.hypot(px - cx, pz - cz) < 8) continue;
+      if (nearMountain(px, pz, 22) || Math.hypot(px - cx, pz - cz) < 8) continue;
       if (ponds.some((p) => Math.hypot(p.x - px, p.z - pz) < p.r + r + 8)) continue;
       ponds.push({ x: px, z: pz, r, level: h0 - 1 });
     }
@@ -178,8 +202,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
     }
   };
   const treeFits = (x, z, spacing) => isLand(x, z) && !nearSpawn(x, z, 8) && trees.every((t) => Math.hypot(t.x - x, t.z - z) >= spacing);
-  const treeCount = theme === 'flat' ? 8 : 70;
-  for (let tries = 0; tries < 3000 && trees.length < treeCount; tries++) {
+  const treeCount = more(theme === 'flat' ? 8 : 70);
+  for (let tries = 0; tries < more(3000) && trees.length < treeCount; tries++) {
     const x = rng.int(3, W - 4);
     const z = rng.int(3, D - 4);
     const forest = fbm(seed + 53, x / 22, z / 22, 2);
@@ -211,7 +235,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
   }
 
   // ---------------------------------------------------------------- flowers and grass
-  const clusters = theme === 'flat' ? 14 : 34;
+  const clusters = more(theme === 'flat' ? 14 : 34);
   for (let i = 0; i < clusters; i++) {
     const x0 = rng.int(4, W - 5);
     const z0 = rng.int(4, D - 5);
@@ -235,7 +259,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
 
   // ---------------------------------------------------------------- rocks and shells
   if (theme !== 'flat') {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < more(10); i++) {
       const x = rng.int(4, W - 5);
       const z = rng.int(4, D - 5);
       if (!isLand(x, z) || nearSpawn(x, z, 6)) continue;
@@ -250,7 +274,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
     }
   }
   let shells = 0;
-  for (let tries = 0; tries < 4000 && shells < 14; tries++) {
+  for (let tries = 0; tries < more(4000) && shells < more(14); tries++) {
     const x = rng.int(1, W - 2);
     const z = rng.int(1, D - 2);
     const h = hi(x, z);
@@ -270,7 +294,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', W = 12
     return null;
   };
   const onLand = (x, z) => isLand(x, z) || (world.get(x, hi(x, z), z) === pal.top && B.KIND[world.get(x, hi(x, z) + 1, z)] === B.K_PLANT);
-  const counts = theme === 'snowy' ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 } : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 4 };
+  const counts = scaleCounts(theme === 'snowy' ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 } : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 4 }, world);
   for (const [type, n] of Object.entries(counts)) {
     for (let i = 0; i < n; i++) {
       let s;

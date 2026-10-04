@@ -1152,6 +1152,10 @@ body.touch.playing #joystick {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
 
+.grid.sizes {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .choice {
   display: flex;
   flex-direction: column;
