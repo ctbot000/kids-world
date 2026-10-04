@@ -1,7 +1,7 @@
 // Keyboard, mouse and touch. One finger or button does everything a small
-// child needs: tap to use the tool, drag to look around. On touch screens a
-// thumbstick appears wherever the left thumb lands, and there are big
-// buttons for jumping and flying.
+// child needs: tap to use the tool, drag to look around; two fingers pinch
+// to zoom, and nothing else. On touch screens a thumbstick appears wherever
+// the left thumb lands, and there are big buttons for jumping and flying.
 
 const DRAG_PX = 9;
 
@@ -59,7 +59,7 @@ export class Input {
     this.keys.clear();
     this.jumpHeld = false;
     this.downHeld = false;
-    this.press = null;
+    this.endPress();
     this.touches.clear();
     this.endJoystick();
     this.pinch = null;
@@ -154,10 +154,11 @@ export class Input {
         }
       }
       this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (this.touches.size === 2) {
-        const [a, b] = [...this.touches.values()];
-        this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) };
-        if (this.press) this.press.moved = true;
+      if (this.touches.size >= 2) {
+        // A second finger makes it a pinch, which only zooms: what the first
+        // one started is over, holding to keep building included.
+        this.endPress();
+        this.pinch = { d: this.spread() };
         return;
       }
     }
@@ -181,8 +182,7 @@ export class Input {
     if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
       this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pinch && this.touches.size >= 2) {
-        const [a, b] = [...this.touches.values()];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const d = this.spread();
         if (d > 10 && this.pinch.d > 10) this.emit('zoom', this.pinch.d / d);
         this.pinch.d = d;
         return;
@@ -214,9 +214,14 @@ export class Input {
       this.endJoystick();
       return;
     }
-    if (e.pointerType === 'touch') {
-      this.touches.delete(e.pointerId);
-      if (this.touches.size < 2) this.pinch = null;
+    if (e.pointerType === 'touch' && this.touches.delete(e.pointerId) && this.pinch) {
+      if (this.touches.size >= 2) this.pinch.d = this.spread();
+      else {
+        // The finger left down turns the camera from where it is now, and never taps.
+        this.pinch = null;
+        for (const [id, t] of this.touches) this.press = { id, x: t.x, y: t.y, lx: t.x, ly: t.y, moved: true, button: 0, type: 'touch', at: performance.now() };
+      }
+      return;
     }
     // The gesture belongs to where it started, not to what is under the release.
     const p = this.press;
@@ -228,6 +233,19 @@ export class Input {
     const x = p.x - rect.left;
     const y = p.y - rect.top;
     this.emit('tap', this.ndc(x, y), p.button, p.type);
+  }
+
+  // Ends a press without a tap, and tells the game the button is up.
+  endPress() {
+    if (!this.press) return;
+    this.press = null;
+    this.emit('hold', false);
+  }
+
+  // How far apart the two fingers of a pinch are.
+  spread() {
+    const [a, b] = this.touches.values();
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   ndc(x, y) {
