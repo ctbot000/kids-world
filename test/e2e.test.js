@@ -385,20 +385,24 @@ test('a pinch only zooms, never builds, a third finger down included; the finger
     await two.move(at.x + 30 + i * 2, at.y);
     await delay(30);
   }
-  const pinched = await view();
-  assert.equal(pinched.uses, 0, 'the tool was not used while pinching');
-  assert.ok(pinched.dist < before.dist * 0.75, `zoomed in, from ${before.dist.toFixed(2)} to ${pinched.dist.toFixed(2)}`);
+  // The fingers end three times as far apart as they started, and the camera three times as
+  // close. Moves reach the page with the next frame, which can be well after the last one is sent.
+  const zoomed = before.dist / 3;
+  await until(page, (d) => Math.abs(window.kidsWorld.renderer.view.dist - d) < 1e-9, zoomed);
+  assert.equal((await view()).uses, 0, 'the tool was not used while pinching');
   // The third finger and then the second come up; the first, left down, turns the camera as far
   // as it moves from now on, not as far as it went during the pinch.
   await three.end();
   await two.end();
+  await until(page, () => window.kidsWorld.input.touches.size === 1);
   const left = await view();
-  assert.equal(left.dist, pinched.dist, 'a finger lifted from a pinch does not zoom');
+  assert.ok(Math.abs(left.dist - zoomed) < 1e-9, `a finger lifted from a pinch does not zoom, ${left.dist} after ${zoomed}`);
   for (let i = 1; i <= 5; i++) {
     await one.move(at.x - 90 + i * 2, at.y);
     await delay(30);
   }
   await one.end();
+  await until(page, () => window.kidsWorld.input.touches.size === 0);
   const turned = (await view()).yaw - left.yaw;
   assert.ok(Math.abs(turned + 10 * 0.009) < 0.005, `the camera turned as a 10 px drag does, by ${turned.toFixed(3)}`);
   await delay(500);
@@ -409,10 +413,12 @@ test('a pinch only zooms, never builds, a third finger down included; the finger
   const held = await fingers.touchStart(spot.x, spot.y);
   await until(page, () => window.uses >= 2);
   await held.end();
-  assert.equal(await blockAt(page, above), 2, 'held still, it built grass');
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, above);
   // Held down while the page loses focus, it stops then, and does not start again.
   const blurred = await fingers.touchStart(spot.x, spot.y);
+  await until(page, () => window.kidsWorld.game.holding);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.holding), null, 'losing focus lets go of the tool');
   await blurred.end();
   const stopped = (await view()).uses;
   await delay(1000);
