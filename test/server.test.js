@@ -1,6 +1,6 @@
-// The dedicated server: static files (and nothing outside public/), the
-// WebSocket handshake and framing, and islands shared by real WebSocket
-// clients.
+// The dedicated server: static files (and nothing outside public/), what it
+// accepts over WebSocket (ws does the protocol itself), and islands shared by
+// real WebSocket clients.
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { request } from 'node:http';
@@ -284,26 +284,40 @@ test('frames sent in the same packet as the handshake are not lost', async () =>
   socket.destroy();
 });
 
-test('fragmented messages are reassembled, unmasked frames are rejected', async () => {
+// Opens a connection and returns the code of the close frame the server
+// answers `frame` with.
+async function closeCodeFor(frame) {
   const socket = await rawSocket();
   socket.write(handshake());
   await readAll(socket, (d) => d.includes('\r\n\r\n'));
-  const text = JSON.stringify({ t: 'ping' });
-  socket.write(maskedFrame(text.slice(0, 4), { fin: false }));
-  socket.write(maskedFrame(text.slice(4), { fin: true, opcode: 0 }));
-  await readAll(socket, (d) => d.includes('pong'));
-  socket.write(maskedFrame(text, { mask: false }));
+  socket.write(frame);
   const closing = await readAll(socket, (d) => d.length >= 4 && d[0] === 0x88);
-  assert.equal(closing.readUInt16BE(2), 1002);
   socket.destroy();
+  return closing.readUInt16BE(2);
+}
+
+test('binary messages, and messages over 4 MB, close the connection', async () => {
+  assert.equal(await closeCodeFor(maskedFrame('{"t":"ping"}', { opcode: 2 })), 1003);
+  // Only the header of a 5 MB message: it is refused before the rest is sent.
+  const header = Buffer.from([0x81, 0x80 | 127, 0, 0, 0, 0, 0, 0x50, 0, 0]);
+  assert.equal(await closeCodeFor(Buffer.concat([header, randomBytes(4)])), 1009);
+  // And the server is still there for everyone else.
+  const a = await create('Happy Panda');
+  await a.close();
 });
 
-test('a malformed handshake gets a 400', async () => {
-  const socket = await rawSocket();
-  socket.write(handshake().replace('Sec-WebSocket-Version: 13', 'Sec-WebSocket-Version: 8'));
-  const data = await readAll(socket, (d) => d.includes('\r\n\r\n'));
-  assert.match(data.toString(), /400 Bad Request/);
-  socket.destroy();
+test('a malformed handshake gets a 400, and anywhere but /ws a 404', async () => {
+  const answer = async (request) => {
+    const socket = await rawSocket();
+    socket.write(request);
+    const data = await readAll(socket, (d) => d.includes('\r\n\r\n'));
+    socket.destroy();
+    return data.toString().split('\r\n')[0];
+  };
+  assert.match(await answer(handshake().replace(/Sec-WebSocket-Key: .*\r\n/, '')), /400 Bad Request/);
+  assert.match(await answer(handshake().replace('GET /ws', 'GET /nope')), /404 Not Found/);
+  // A path URL cannot parse used to throw in the upgrade handler and end the process.
+  assert.match(await answer(handshake().replace('GET /ws', 'GET //[')), /404 Not Found/);
 });
 
 test('the open islands are listed, those with a passcode marked, and only the right passcode lets a new visitor in', async () => {

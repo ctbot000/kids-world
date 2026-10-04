@@ -1,6 +1,6 @@
 // Dedicated server: serves the game from public/ and hosts islands over
-// WebSocket, so nobody's browser has to stay open as the host. Node
-// built-ins only; the keeper's WebRTC module is loaded only when it starts.
+// WebSocket (the ws library), so nobody's browser has to stay open as the
+// host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/. Usage:
 //   npm start                        # http://localhost:8747/
@@ -20,7 +20,7 @@ import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
 import { DEFAULT_DATA_DIR, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
-import { acceptUpgrade } from './websocket.js';
+import { WebSocketServer } from 'ws';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 
@@ -41,6 +41,8 @@ const TYPES = {
 
 const HEARTBEAT_MS = 20000;
 const TICK_MS = 100;
+// A bigger message closes the connection (1009); a whole island is far smaller.
+const MAX_MESSAGE = 4 * 1024 * 1024;
 
 export function createGameServer({
   root = PUBLIC_DIR,
@@ -57,7 +59,8 @@ export function createGameServer({
   const base = resolve(root);
   const rooms = new Map();
   const sockets = new Set();
-  const peers = new Set();
+  // Its `clients` are the open connections.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
   async function serveFile(req, res) {
     let pathname;
@@ -137,13 +140,14 @@ export function createGameServer({
   });
 
   server.on('upgrade', (req, socket, head) => {
-    const path = new URL(req.url, 'http://localhost').pathname;
-    if (!path.endsWith('/ws') || peers.size >= maxConnections) {
+    // A path URL cannot parse (`//[`) would throw here and end the process.
+    const path = URL.parse(req.url, 'http://localhost')?.pathname ?? '';
+    if (!path.endsWith('/ws') || wss.clients.size >= maxConnections) {
       socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       return;
     }
-    const ws = acceptUpgrade(req, socket, head);
-    if (ws) accept(ws);
+    // ws answers a malformed handshake itself, and keeps the frames in `head`.
+    wss.handleUpgrade(req, socket, head, accept);
   });
 
   function uniqueCode() {
@@ -154,17 +158,26 @@ export function createGameServer({
   }
 
   function accept(ws) {
-    peers.add(ws);
+    ws.isAlive = true;
+    ws.on('pong', () => (ws.isAlive = true));
+    // A bad frame (unmasked, too big, not UTF-8) closes the connection, and ws
+    // reports it here too; with no listener, it would end the process.
+    ws.on('error', () => {});
     let entry = null;
     const conn = {
       send: (text) => ws.send(text),
       close: () => ws.close(1000),
     };
     const reply = (msg) => ws.send(JSON.stringify(msg));
-    ws.on('message', (text) => {
+    ws.on('message', (data, isBinary) => {
+      ws.isAlive = true;
+      if (isBinary) {
+        ws.close(1003, 'Binary messages are not supported');
+        return;
+      }
       let msg;
       try {
-        msg = JSON.parse(text);
+        msg = JSON.parse(data.toString());
       } catch {
         return;
       }
@@ -210,10 +223,7 @@ export function createGameServer({
       entry.room.attach(conn);
       entry.room.receive(conn, { ...msg, t: 'join' });
     });
-    ws.on('close', () => {
-      peers.delete(ws);
-      entry?.room.detach(conn);
-    });
+    ws.on('close', () => entry?.room.detach(conn));
   }
 
   let beat = 0;
@@ -232,9 +242,13 @@ export function createGameServer({
       }
     }
     if (++beat % Math.round(HEARTBEAT_MS / TICK_MS) === 0) {
-      for (const ws of peers) {
-        if (!ws.alive) ws.terminate();
-        else ws.ping();
+      for (const ws of wss.clients) {
+        if (!ws.isAlive) {
+          ws.terminate();
+        } else {
+          ws.isAlive = false;
+          ws.ping();
+        }
       }
     }
   }, TICK_MS);
