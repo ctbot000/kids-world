@@ -7,7 +7,7 @@
 //   glass  a see-through cube you can stand on
 //   water  see-through, and you swim in it
 //   plant  drawn as crossed pictures, stands on a solid block
-//   item   a little collectable (fruit, shells, star pieces), drawn facing you
+//   item   a little collectable (fruit, shells, star pieces, jewels), drawn facing you
 
 export const AIR = 0;
 
@@ -130,11 +130,28 @@ export const FRUIT_SPROUTS = FRUITS.map(([key, name], i) =>
 export const SHELL = def(75, 'shell', { name: 'Seashell', kind: 'item', tiles: 'shell', collect: 'shell', sound: 'plant' });
 export const STAR_PIECE = def(76, 'star-piece', { name: 'Star Piece', kind: 'item', tiles: 'star-piece', collect: 'star', light: 10, sound: 'glass' });
 
+// ---------------------------------------------------------------- jewels
+// Jewels sit in gem rocks, deep in the stone of the island and in the walls
+// of the mines. Tapping a gem rock digs its jewel out into your basket; a
+// jewel from the basket can be put down as a little sparkling jewel, and
+// picked up again. A gem rock is natural ground, not something to build with.
+export const GEMS = [
+  ['ruby', 'Ruby', 'Rubies', '#e8344e'],
+  ['sapphire', 'Sapphire', 'Sapphires', '#2f6fe4'],
+  ['emerald', 'Emerald', 'Emeralds', '#22b45a'],
+  ['amethyst', 'Amethyst', 'Amethysts', '#9b4fe0'],
+  ['diamond', 'Diamond', 'Diamonds', '#bff3ff'],
+];
+export const GEM_ROCKS = GEMS.map(([key, name], i) => def(80 + i, `${key}-rock`, { name: `${name} Rock`, tiles: `${key}-rock`, sound: 'stone', collect: key }));
+export const GEM_ITEMS = GEMS.map(([key, name], i) => def(85 + i, key, { name, kind: 'item', tiles: key, collect: key, light: 6, sound: 'glass' }));
+export const DIAMOND_ROCK = GEM_ROCKS[4];
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),
   { key: 'shell', name: 'Seashell', plural: 'Seashells', item: SHELL, sprout: 0 },
   { key: 'star', name: 'Star Piece', plural: 'Star Pieces', item: STAR_PIECE, sprout: 0 },
+  ...GEMS.map(([key, name, plural], i) => ({ key, name, plural, item: GEM_ITEMS[i], sprout: 0 })),
 ];
 
 export const BLOCKS = defs;
@@ -157,7 +174,12 @@ for (const d of defs) {
 }
 // Natural ground, which the hills tool shapes.
 export const TERRAIN = new Uint8Array(256);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, ...GEM_ROCKS]) TERRAIN[id] = 1;
+// Gem rocks, which a tap digs a jewel out of.
+export const GEM_ROCK = new Uint8Array(256);
+for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
+// Jewels, dug or put down, and gem rocks: what counts as finding a jewel.
+export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(256);
 for (const id of [7, 8, 9, 24, 25]) TREE_PART[id] = 1;

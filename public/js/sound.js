@@ -182,6 +182,11 @@ export class Sound {
         for (let i = 0; i < 3; i++) this.noise(0.05, { at: i * 0.1, type: 'bandpass', freq: 1800, q: 3, gain: 0.12 });
         this.tone(NOTE(84), { at: 0.35, decay: 0.3, gain: 0.1 });
         break;
+      case 'dig':
+        this.noise(0.07, { type: 'bandpass', freq: 2600, q: 4, gain: 0.22 });
+        this.tone(NOTE(96), { decay: 0.1, gain: 0.07, type: 'triangle' });
+        this.noise(0.12, { at: 0.04, type: 'lowpass', freq: 700, gain: 0.12 });
+        break;
       case 'collect':
         this.tone(NOTE(88), { decay: 0.12, gain: 0.14, type: 'triangle' });
         this.tone(NOTE(93), { at: 0.07, decay: 0.3, gain: 0.14, type: 'triangle' });

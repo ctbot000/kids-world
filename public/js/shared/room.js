@@ -15,7 +15,7 @@ import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
-import { generate, SIZES } from './worldgen.js';
+import { generate, hideGems, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS } from './monsters.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -922,8 +922,8 @@ export class Room {
       kind: 'island',
       // 2: made since birds, owls, bees and seagulls came to the islands;
       // 3: since the sea creatures did; 4: since penguins and seals did; 5:
-      // since the big animals did.
-      v: 5,
+      // since the big animals did; 6: since jewels were hidden in the rock.
+      v: 6,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -957,6 +957,8 @@ export class Room {
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
+    // Jewels too, deep in the rock where nothing anyone built can be.
+    if (v < 6) hideGems(this.world, new Rng(seed ^ 0x2c1b3c6d), { open: false });
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;

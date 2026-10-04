@@ -196,7 +196,7 @@ export function paintEdit(world, hit, id, size = 1) {
     const y = hit.y + dy;
     const z = hit.z + dz;
     const here = o.get(x, y, z);
-    if (!B.SOLID[here] || here === B.MAGIC_FLOOR || here === id) continue;
+    if (!B.SOLID[here] || here === B.MAGIC_FLOOR || B.GEM_ROCK[here] || here === id) continue;
     if (size > 1) {
       // A big brush paints the surface, not the blocks buried behind it.
       const fx = x + hit.nx;
@@ -239,7 +239,8 @@ export function hillEdit(world, hit, mode, size = 1) {
       if (x < 0 || z < 0 || x >= world.W || z >= world.D) continue;
       const g = groundAt(o, x, z, mode === 'flat' ? world.H - 1 : Math.max(hit.y + 6, level));
       if (g < 1) continue;
-      const topId = o.get(x, g, z);
+      // A gem rock on top is stone round its jewel: the land grows as stone.
+      const topId = B.GEM_ROCK[o.get(x, g, z)] ? B.STONE : o.get(x, g, z);
       const under = B.underOf(topId);
       const above = o.get(x, g + 1, z);
       const plant = B.KIND[above] === B.K_PLANT || B.KIND[above] === B.K_ITEM ? above : 0;
@@ -293,9 +294,21 @@ export function hillEdit(world, hit, mode, size = 1) {
     }
   }
   flood(o, holes);
-  const gone = settle(o, [...touched, ...holes]);
+  settle(o, [...touched, ...holes]);
   const cells = o.cells();
-  return { cells: cells.length / 4 > MAX_EDIT_CELLS ? cells.slice(0, MAX_EDIT_CELLS * 4) : cells, collected: gone.filter((g) => B.block(g).collect) };
+  const kept = cells.length / 4 > MAX_EDIT_CELLS ? cells.slice(0, MAX_EDIT_CELLS * 4) : cells;
+  return { cells: kept, collected: collectedBy(world, kept) };
+}
+
+// Treasures an edit takes away: jewels dug out of the land and fruit or
+// shells it sweeps off, which go in the basket.
+function collectedBy(world, cells) {
+  const out = [];
+  for (let i = 0; i < cells.length; i += 4) {
+    const was = world.get(cells[i], cells[i + 1], cells[i + 2]);
+    if (B.block(was).collect && cells[i + 3] !== was) out.push(was);
+  }
+  return out;
 }
 
 export function stampOrigin(hit) {
@@ -311,8 +324,9 @@ export function stampEdit(world, hit, key, facing) {
   for (const [x, y, z, id] of placeTemplate(stamp.cells, ox, oy, oz, facing)) {
     if (o.set(x, y, z, id)) touched.push([x, y, z]);
   }
-  const gone = settle(o, touched);
-  return { cells: o.cells(), collected: gone.filter((g) => B.block(g).collect) };
+  settle(o, touched);
+  const cells = o.cells();
+  return { cells, collected: collectedBy(world, cells) };
 }
 
 // A sprout grown into its tree. Returns [] when the sprout is gone.

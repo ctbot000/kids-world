@@ -20,7 +20,7 @@ export const BOARDS = [
   { key: 'stickers', icon: '⭐', name: 'Stickers', text: 'Most stickers', hint: 'Earn a sticker', score: (p) => STICKERS.filter((s) => p.stickers[s.key]).length },
   { key: 'builders', icon: '🧱', name: 'Builders', text: 'Most blocks put down', hint: 'Put a block down', score: (p) => count(p.stats.placed) },
   { key: 'animals', icon: '🐰', name: 'Animals', text: 'Most animals petted', hint: 'Pet an animal', score: (p) => count(p.stats.petted) },
-  { key: 'treasures', icon: '🍎', name: 'Treasures', text: 'Most fruit, seashells and star pieces found', hint: 'Pick a fruit', score: (p) => count(count(p.stats.fruit) + count(p.stats.shells) + count(p.stats.stars)) },
+  { key: 'treasures', icon: '🍎', name: 'Treasures', text: 'Most fruit, seashells, star pieces and jewels found', hint: 'Pick a fruit', score: (p) => count(count(p.stats.fruit) + count(p.stats.shells) + count(p.stats.stars) + count(p.stats.gems)) },
   { key: 'explorers', icon: '🧭', name: 'Explorers', text: 'Most steps walked', hint: 'Go for a walk', score: (p) => count(p.stats.steps) },
 ];
 

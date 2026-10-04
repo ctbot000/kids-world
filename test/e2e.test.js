@@ -357,6 +357,41 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   await page.browserContext().close();
 });
 
+test('a gem rock is dug out with a click into the basket, for keeps; a jewel from the basket is put down and picked up again', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false });
+  const { cell } = await spotNear(page, 3, 0);
+  // A ruby rock where the ground was, put there by the island itself.
+  await page.evaluate(async (c) => {
+    const B = await import('/js/shared/blocks.js');
+    window.kidsWorld.session.link.room.natureCell([c.x, c.y, c.z], B.GEM_ROCKS[0]);
+  }, cell);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 80, cell);
+  const at = await aimAt(page, cell);
+  // Any tool digs it: this is the Build tool.
+  await page.mouse.click(at.x, at.y);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 0, cell);
+  await until(page, () => window.kidsWorld.profile.basket.ruby === 1 && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('You found a Ruby!')));
+  // Undo does not put it back to be found again.
+  await page.keyboard.press('KeyZ');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await blockAt(page, cell), 0, 'the ruby rock stays dug out');
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.basket.ruby), 1);
+  // The ruby from the basket goes down on the ground, as a little jewel...
+  const ground = await spotNear(page, 0, 3);
+  const above = { ...ground.cell, y: ground.cell.y + 1 };
+  await page.click('#basket button');
+  await page.mouse.click(ground.at.x, ground.at.y);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 85, above);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.basket.ruby), 0);
+  // ...and a tap there picks it up again.
+  await page.mouse.click(ground.at.x, ground.at.y);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 0, above);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.basket.ruby), 1);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a bird invited from the toy box is petted with a click, and once fed it sits on your head', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Gentle Bear', look: { animal: 'bear', fur: 'brown', shirt: 2, hat: 'none' } });
   await makeIsland(page, { online: false });

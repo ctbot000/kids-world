@@ -14,6 +14,8 @@ export const STICKERS = [
   { key: 'fruit-picker', icon: '🍎', name: 'Fruit Picker', text: 'Collect 10 fruit', test: (s) => s.fruit >= 10 },
   { key: 'beachcomber', icon: '🐚', name: 'Beachcomber', text: 'Find 5 seashells', test: (s) => s.shells >= 5 },
   { key: 'star-catcher', icon: '⭐', name: 'Star Catcher', text: 'Catch a star piece', test: (s) => s.stars >= 1 },
+  { key: 'gem-miner', icon: '⛏️', name: 'Gem Miner', text: 'Dig up 10 jewels', test: (s) => s.gems >= 10 },
+  { key: 'diamond', icon: '💎', name: 'Diamond Finder', text: 'Find a diamond', test: (s) => s.diamonds >= 1 },
   { key: 'animal-friend', icon: '🐰', name: 'Animal Friend', text: 'Pet 10 animals', test: (s) => s.petted >= 10 },
   { key: 'snack-time', icon: '🍑', name: 'Snack Time', text: 'Feed an animal some fruit', test: (s) => s.fed >= 1 },
   { key: 'welcome', icon: '🐣', name: 'Welcome Party', text: 'Invite an animal friend', test: (s) => s.invited >= 1 },
@@ -34,4 +36,4 @@ export const STICKERS = [
   { key: 'monster-popper', icon: '👾', name: 'Monster Popper', text: 'Pop 10 monsters', test: (s) => s.popped >= 10 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];

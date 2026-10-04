@@ -1020,7 +1020,8 @@ export class Game extends EventTarget {
   plan(hit) {
     const w = this.world;
     const facing = facingFromYaw(this.renderer.view.yaw);
-    if (B.KIND[hit.id] === B.K_ITEM) return { kind: 'collect', ...pickEdit(w, hit, 1), mode: 'remove' };
+    // Treasures, and gem rocks to dig a jewel out of, whatever the tool.
+    if (B.KIND[hit.id] === B.K_ITEM || B.GEM_ROCK[hit.id]) return { kind: 'collect', ...pickEdit(w, hit, 1), mode: 'remove' };
     switch (this.tool) {
       case 'build': {
         const id = this.selectedBlock();
@@ -1128,7 +1129,8 @@ export class Game extends EventTarget {
       return;
     }
     const kind = plan.kind === 'collect' ? 'pick' : plan.kind;
-    if (!this.edit(kind, cells)) return;
+    // Undo would put a treasure back to be found again: finding is for keeps.
+    if (!this.edit(kind, cells, { undoable: plan.kind !== 'collect' })) return;
     this.previewKey = '';
     this.editEffects(kind, cells, true);
     const p = this.profile;
@@ -1147,7 +1149,7 @@ export class Game extends EventTarget {
         break;
       case 'pick':
       case 'collect':
-        this.sound.play('pop');
+        this.sound.play(B.GEM_ROCK[plan.collected?.[0]] ? 'dig' : 'pop');
         p.count('picked', n);
         break;
       case 'paint':
@@ -1171,6 +1173,8 @@ export class Game extends EventTarget {
 
   collect(ids, cells) {
     const p = this.profile;
+    const colors = ['#ffd84d', '#ffffff', '#ff8fc4'];
+    const dug = [];
     for (const id of ids) {
       const key = B.block(id).collect;
       if (!key) continue;
@@ -1178,10 +1182,20 @@ export class Game extends EventTarget {
       if (B.FRUIT_ITEMS.includes(id)) p.count('fruit');
       else if (id === B.SHELL) p.count('shells');
       else if (id === B.STAR_PIECE) p.count('stars');
+      else if (B.isJewel(id)) {
+        p.count('gems');
+        if (key === 'diamond') p.count('diamonds');
+        const gem = B.GEMS.find(([k]) => k === key);
+        if (gem) colors.unshift(gem[3], gem[3]);
+        if (B.GEM_ROCK[id]) dug.push(gem);
+      }
       this.emit('collected', { key, id });
     }
+    // Dug out of the rock: say which jewel it was.
+    if (dug.length === 1) this.emit('toast', { icon: '💎', text: `You found ${/^[aeiou]/i.test(dug[0][1]) ? 'an' : 'a'} ${dug[0][1]}!` });
+    else if (dug.length > 1) this.emit('toast', { icon: '💎', text: `You found ${dug.length} jewels!` });
     this.sound.play('collect');
-    this.renderer.effects.sparkles(cells[0] + 0.5, cells[1] + 0.6, cells[2] + 0.5, 12, ['#ffd84d', '#ffffff', '#ff8fc4']);
+    this.renderer.effects.sparkles(cells[0] + 0.5, cells[1] + 0.6, cells[2] + 0.5, dug.length ? 24 : 12, colors);
   }
 
   // Uses one of the chosen treasure; when the last one is gone, back to blocks.

@@ -3,7 +3,7 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+import { AIR, KIND, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
 import { hash3 } from '../shared/rng.js';
 import { CHUNK } from '../shared/world.js';
 
@@ -272,10 +272,12 @@ export function meshChunk(world, light, visuals, cx, cz) {
   function item(part, x, y, z, id) {
     const layer = faceLayer[id * 3];
     const fruit = FRUIT_ITEMS.includes(id);
-    const size = fruit ? 0.72 : id === SHELL ? 0.55 : 0.75;
+    const jewel = GEM_ITEMS.includes(id);
+    const size = fruit ? 0.72 : id === SHELL || jewel ? 0.55 : 0.75;
     const cy = fruit ? y + 0.55 : id === STAR_PIECE ? y + 0.45 : y + 0.28;
     const sky = Math.max(skyAt(x, y, z), 4) * 17;
-    const lamp = (id === STAR_PIECE ? 15 : lampAt(x, y, z)) * 17;
+    // Star pieces and jewels shine, even in the dark.
+    const lamp = (EMIT[id] ? 15 : lampAt(x, y, z)) * 17;
     const v0 = part.verts;
     for (const [u, v] of CORNERS) {
       part.pos.push(x + 0.5, cy, z + 0.5);

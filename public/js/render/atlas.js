@@ -1,7 +1,7 @@
 // Every block face, flower and fruit is painted here with Canvas 2D when the
 // game starts — no image files. Tiles go into one texture array (one layer
 // per tile), and the same paintings make the icons in the toy box.
-import { BLOCKS, KIND, K_ITEM, K_PLANT } from '../shared/blocks.js';
+import { BLOCKS, GEMS, KIND, K_ITEM, K_PLANT } from '../shared/blocks.js';
 
 export const TILE = 64;
 
@@ -791,6 +791,80 @@ const PAINT = {
     ctx.fill();
   },
 };
+
+// A cut jewel, pointing down: a flat top, a row of facets, and a point.
+function jewel(ctx, cx, cy, r, color) {
+  const top = cy - r * 0.55;
+  const girdle = cy - r * 0.1;
+  const tip = cy + r;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.55, top);
+  ctx.lineTo(cx + r * 0.55, top);
+  ctx.lineTo(cx + r, girdle);
+  ctx.lineTo(cx, tip);
+  ctx.lineTo(cx - r, girdle);
+  ctx.closePath();
+  ctx.fill();
+  outline(ctx, shade(color, -0.55), Math.max(1.5, r / 9));
+  // Facets: lighter on the crown, darker towards the point.
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.55, top);
+  ctx.lineTo(cx + r * 0.55, top);
+  ctx.lineTo(cx + r * 0.3, girdle);
+  ctx.lineTo(cx - r * 0.3, girdle);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.beginPath();
+  ctx.moveTo(cx + r * 0.3, girdle);
+  ctx.lineTo(cx + r, girdle);
+  ctx.lineTo(cx, tip);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = Math.max(1, r / 14);
+  ctx.beginPath();
+  ctx.moveTo(cx - r, girdle);
+  ctx.lineTo(cx + r, girdle);
+  ctx.moveTo(cx - r * 0.3, girdle);
+  ctx.lineTo(cx, tip);
+  ctx.lineTo(cx + r * 0.3, girdle);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  star(ctx, cx - r * 0.25, top + r * 0.2, r * 0.22, r * 0.07, 4);
+  ctx.fill();
+}
+
+// Gem rocks: stone with crystals of their jewel growing out of it; and the
+// jewel itself, glowing a little.
+for (const [key, , , color] of GEMS) {
+  PAINT[`${key}-rock`] = (ctx) => {
+    PAINT.stone(ctx);
+    const r = speckleRandom(key.length * 977 + key.charCodeAt(0));
+    for (const [x, y, size] of [
+      [18, 20, 11],
+      [45, 17, 8],
+      [40, 44, 12],
+      [14, 48, 7],
+    ]) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((r() - 0.5) * 0.9);
+      jewel(ctx, 0, 0, size, color);
+      ctx.restore();
+    }
+  };
+  PAINT[key] = (ctx) => {
+    const g = ctx.createRadialGradient(32, 34, 2, 32, 34, 30);
+    g.addColorStop(0, 'rgba(255,255,255,0.75)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    jewel(ctx, 32, 30, 22, color);
+  };
+}
 
 // Which painting each block face uses; blocks with studs get the version
 // with a bump painted on top ("name+stud").
