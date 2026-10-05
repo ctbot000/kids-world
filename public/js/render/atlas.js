@@ -470,6 +470,55 @@ const PAINT = {
     bevel(ctx, 0.8);
   },
 
+  'elevator-top'(ctx) {
+    fill(ctx, '#fcd535');
+    ctx.fillStyle = '#7d8794';
+    ctx.fillRect(6, 6, TILE - 12, TILE - 12);
+    ctx.fillStyle = '#aab3bf';
+    ctx.fillRect(10, 10, TILE - 20, TILE - 20);
+    // An up arrow over a down arrow.
+    ctx.fillStyle = '#2f9e44';
+    ctx.beginPath();
+    ctx.moveTo(32, 12);
+    ctx.lineTo(46, 30);
+    ctx.lineTo(18, 30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e8453c';
+    ctx.beginPath();
+    ctx.moveTo(32, 52);
+    ctx.lineTo(46, 34);
+    ctx.lineTo(18, 34);
+    ctx.closePath();
+    ctx.fill();
+    bevel(ctx, 0.8);
+  },
+  elevator(ctx) {
+    fill(ctx, '#aab3bf');
+    // Yellow-and-black warning stripes top and bottom.
+    for (const y of [0, TILE - 12]) {
+      ctx.fillStyle = '#fcd535';
+      ctx.fillRect(0, y, TILE, 12);
+      ctx.fillStyle = '#2b2d33';
+      for (let x = -12; x < TILE; x += 16) {
+        ctx.beginPath();
+        ctx.moveTo(x, y + 12);
+        ctx.lineTo(x + 8, y);
+        ctx.lineTo(x + 16, y);
+        ctx.lineTo(x + 8, y + 12);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // Sliding doors.
+    ctx.fillStyle = '#c9d0d9';
+    ctx.fillRect(10, 16, 21, 32);
+    ctx.fillRect(33, 16, 21, 32);
+    ctx.fillStyle = '#7d8794';
+    ctx.fillRect(31, 16, 2, 32);
+    bevel(ctx, 0.6);
+  },
+
   // ------------------------------------------------ plants (transparent)
   tulip(ctx) {
     stem(ctx, 32, 62, 32, 26);

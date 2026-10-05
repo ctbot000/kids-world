@@ -6,6 +6,7 @@ import * as B from './shared/blocks.js';
 import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { MAX_HEARTS, MONSTER_BODY, TAP_REACH, unpackMonster } from './shared/monsters.js';
+import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -1379,6 +1380,36 @@ export class Game extends EventTarget {
     this.observe();
   }
 
+  // On an elevator pad, jump goes up to the next pad above and down goes to
+  // the one below.
+  boardLift(input) {
+    const b = this.me.body;
+    if (b.flying || (!input.jump && !input.down)) return false;
+    const lift = startLift(this.world, b, input.jump ? 1 : -1);
+    if (!lift) return false;
+    this.lift = lift;
+    this.sound.play('lift', { up: lift.dir > 0 });
+    this.profile.count('lifts');
+    return true;
+  }
+
+  // Carries you along the ride you are on, and the events a step has.
+  rideLift(dt) {
+    const b = this.me.body;
+    const lift = this.lift;
+    if (b.flying || Math.hypot(b.x - lift.x, b.z - lift.z) > 1.5) {
+      this.lift = null;
+      return { jumped: false, landed: 0, splashed: false, bumped: false };
+    }
+    if (stepLift(b, lift, dt)) {
+      this.lift = null;
+      this.liftLatch = true;
+      unstick(this.world, b);
+      this.sound.play('ding');
+    }
+    return { jumped: false, landed: 0, splashed: false, bumped: false };
+  }
+
   // Hidden while you look through your own eyes, and blinking for a moment
   // after a monster bumps into you.
   selfVisible(on) {
@@ -1400,8 +1431,14 @@ export class Game extends EventTarget {
     const mx = fx * move.y + -fz * move.x;
     const mz = fz * move.y + fx * move.x;
     const wasGround = b.onGround;
-    const events = stepBody(w, b, { mx, mz, jump: input.jump, down: input.down, run: input.run }, dt, { autoJump: this.profile.settings.autoJump });
+    // Jump still held on getting off a lift does not also hop.
+    if (!input.jump) this.liftLatch = false;
+    const events = this.lift ? this.rideLift(dt) : this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: input.jump && !this.liftLatch, down: input.down, run: input.run }, dt, { autoJump: this.profile.settings.autoJump });
     if (this.monsters.size) this.stomp();
+    if (!this.toldLift && !this.lift && padUnder(w, b)) {
+      this.toldLift = true;
+      this.emit('toast', { icon: '🛗', text: `An elevator! ${this.touch ? 'Jump' : 'Press Space'} to go up, ${this.touch ? '⬇️' : 'Shift'} to go down.` });
+    }
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;

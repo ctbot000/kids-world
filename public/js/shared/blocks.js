@@ -71,6 +71,9 @@ export const HAY = def(26, 'hay', { name: 'Hay Bale', category: 'building', tile
 // to roll along: straight, round a corner, or up a step to the next rail
 // (render/mesher.js works out which from the rails beside it, and draws a
 // corner with the side tile). Every mine has a line of them.
+// An elevator pad: stand on it and jump to glide up to the next pad above in
+// the same column, or go down to the one below (shared/elevator.js).
+export const ELEVATOR = def(91, 'elevator', { name: 'Elevator', category: 'building', tiles: { top: 'elevator-top', side: 'elevator' }, sound: 'stone' });
 export const RAIL = def(90, 'rail', { name: 'Rails', kind: 'plant', category: 'building', tiles: { top: 'rail', side: 'rail-curve' }, sound: 'stone' });
 
 // ---------------------------------------------------------------- candy

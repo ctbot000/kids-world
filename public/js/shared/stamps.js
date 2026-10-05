@@ -338,6 +338,27 @@ function boat() {
   return c.list();
 }
 
+// A glass shaft with an elevator pad at the bottom and another on a deck at
+// the top: jump on the lower one to ride up.
+function elevatorTower() {
+  const c = new Cells();
+  for (let x = -1; x <= 1; x++) {
+    for (let z = 0; z <= 2; z++) {
+      if (x === 0 && z === 1) continue;
+      if (!(x === 0 && z === 0)) c.put(x, 0, z, B.PLANKS);
+      for (let y = 1; y <= 5; y++) if (!(x === 0 && z === 0 && y <= 2)) c.put(x, y, z, B.GLASS);
+    }
+  }
+  c.put(0, 0, 1, B.ELEVATOR);
+  c.box(-2, 6, -1, 2, 6, 3, B.PLANKS);
+  c.put(0, 6, 1, B.ELEVATOR);
+  c.put(-2, 7, -1, B.LAMP);
+  c.put(2, 7, -1, B.LAMP);
+  c.put(-2, 7, 3, B.LAMP);
+  c.put(2, 7, 3, B.LAMP);
+  return c.list();
+}
+
 function lampPost() {
   const c = new Cells();
   c.put(0, 0, 0, CHARCOAL);
@@ -398,6 +419,7 @@ export const STAMPS = [
   { key: 'big-tree', name: 'Big Tree', icon: '🌳', cells: bigTree() },
   { key: 'pine', name: 'Pine Tree', icon: '🌲', cells: pine() },
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
+  { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
   { key: 'bridge', name: 'Bridge', icon: '🌉', cells: bridge() },
   { key: 'rainbow', name: 'Rainbow', icon: '🌈', cells: rainbow() },
   { key: 'heart', name: 'Big Heart', icon: '💖', cells: heart() },

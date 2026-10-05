@@ -139,6 +139,17 @@ export class Sound {
         this.noise(0.04, { type: 'highpass', freq: 2500, gain: 0.08 });
         break;
       }
+      case 'lift': {
+        // Whirr up (or down) to the next floor.
+        const up = opts.up !== false;
+        this.tone(up ? 180 : 330, { type: 'triangle', decay: 0.6, gain: 0.06, slide: up ? 330 : 180 });
+        this.noise(0.5, { freq: 500, gain: 0.04 });
+        break;
+      }
+      case 'ding':
+        this.tone(1320, { decay: 0.5, gain: 0.12 });
+        this.tone(1760, { at: 0.12, decay: 0.6, gain: 0.1 });
+        break;
       case 'pop':
         this.tone(320 * r(), { decay: 0.12, gain: 0.3, slide: 760, slideTime: 0.09 });
         this.tone(900 * r(), { at: 0.04, decay: 0.06, gain: 0.08 });

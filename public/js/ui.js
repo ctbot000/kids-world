@@ -1237,6 +1237,7 @@ export class UI {
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
+          card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),

@@ -672,6 +672,40 @@ test('a digger beside you is driven with the Drive button: it digs a tunnel thro
   await page.browserContext().close();
 });
 
+test('on an elevator pad, Space rides up to the pad above and Shift back down, with a hint and a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Two pads in a column a few steps away, and you standing on the lower one.
+  const pad = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const x = Math.floor(b.x) + 3;
+    const z = Math.floor(b.z);
+    const y = room.world.top(x, z) + 1;
+    room.natureCell([x, y, z], 91);
+    room.natureCell([x, y + 7, z], 91);
+    return { x, y, z };
+  });
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y + 7, c.z) === 91, pad);
+  await page.evaluate((c) => Object.assign(window.kidsWorld.game.me.body, { x: c.x + 0.5, y: c.y + 1, z: c.z + 0.5, vx: 0, vy: 0, vz: 0 }), pad);
+  const low = pad.y + 1;
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('An elevator!')));
+  await page.keyboard.down('Space');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
+  await page.keyboard.up('Space');
+  const up = await page.evaluate(() => ({ y: window.kidsWorld.game.me.body.y, sticker: Boolean(window.kidsWorld.profile.data.stickers['going-up']) }));
+  assert.equal(up.y, low + 7, 'on the pad above');
+  assert.ok(up.sticker, 'a sticker for the ride');
+  await page.keyboard.down('ShiftLeft');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
+  await page.keyboard.up('ShiftLeft');
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.me.body.y), low, 'back on the pad below');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
