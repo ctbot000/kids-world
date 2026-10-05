@@ -143,6 +143,14 @@ async function basketAndTouch(page, full, touch) {
   await until(page, () => getComputedStyle(document.documentElement).getPropertyValue('--bottom-height') === `${document.getElementById('bottom').offsetHeight}px`);
 }
 
+// The Ride button follows the animal or vehicle beside you about the screen, over whatever is
+// there, so it is not a button that stays put. The layout checks are of the ones that do, and
+// they do without it: a pony or a cow wandering up to a player standing still, as one does on
+// about one island in twenty-five within forty seconds, would put it among them.
+function hideRideButton(page) {
+  return page.addStyleTag({ content: '#ride { display: none !important; }' });
+}
+
 // Says five things, as many as the chat log keeps, under a name as long as names get, and
 // waits for the lines that do not fit in the log's room to go, a frame later. Returns how many
 // show, whether they are on screen, and what they lie over of the buttons, the tool options,
@@ -374,10 +382,24 @@ test('a pinch only zooms, never builds, a third finger down included; the finger
   const before = await view();
   // Two fingers on the spot, a moment apart, spread out for well over the time a finger held
   // still takes to start building; on the way a third (a palm, a friend's hand) comes down and stays.
+  // Under software rendering the page gets the second finger hundreds of milliseconds after the
+  // first, not 40, near the 420 ms a finger held still takes to start building and now and then
+  // past it. That is no pinch's fault, so the first finger's hold is put off until the second is
+  // down, and it is the second finger that has to end it.
+  await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    window.putOffHold = () => {
+      if (g.holding) g.holding.at += 60000;
+    };
+    addEventListener('pointerdown', window.putOffHold);
+  });
   const fingers = page.touchscreen;
   const one = await fingers.touchStart(at.x - 30, at.y);
   await delay(40);
   const two = await fingers.touchStart(at.x + 30, at.y);
+  await until(page, () => window.kidsWorld.input.touches.size === 2);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.holding), null, 'the second finger ended the first one\'s hold');
+  await page.evaluate(() => removeEventListener('pointerdown', window.putOffHold));
   let three;
   for (let i = 1; i <= 30; i++) {
     if (i === 10) three = await fingers.touchStart(at.x, at.y + 50);
@@ -885,6 +907,7 @@ test('the little map shows the island and what you build; it opens the big map a
 test('the little map and the hotbar fit beside every other button, on screens of every shape', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
   await makeIsland(page, { online: false });
+  await hideRideButton(page);
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
   // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
@@ -1304,6 +1327,7 @@ test('full screen from the title, the top bar and Settings; iPhones are shown th
 test('the whole island code shows beside the top buttons, and a long connection message beside or under them', { skip }, async () => {
   const page = await openPlayer(base, { name: 'Tiny Owl' });
   await makeIsland(page, { online: true });
+  await hideRideButton(page);
   const messages = [
     ['reconnecting', 'Lost the island for a moment. Reconnecting…'],
     ['failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.'],
