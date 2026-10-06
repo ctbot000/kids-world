@@ -792,6 +792,52 @@ test('on a trampoline, Space held bounces you higher and higher and a press of S
   await page.browserContext().close();
 });
 
+test('coming down from a height thumps and puffs up dust every time, however high it was', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Dropped from heights a little apart, a frame a sixtieth of a second: a
+  // fall ends just over the ground (which counts as on it) at the end of a
+  // frame as often as not.
+  const drops = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const b = g.me.body;
+    const { sound } = g;
+    const fx = g.renderer.effects;
+    kw.step(1 / 60, 30);
+    const ground = b.y;
+    const heard = [];
+    const play = sound.play;
+    const dust = fx.dust;
+    sound.play = function (name, ...rest) {
+      heard.push(name);
+      return play.call(this, name, ...rest);
+    };
+    fx.dust = function (...args) {
+      heard.push('dust');
+      return dust.apply(this, args);
+    };
+    const drops = [];
+    try {
+      for (let i = 0; i < 24; i++) {
+        const h = 1.1 + i * 0.3;
+        Object.assign(b, { y: ground + h, vx: 0, vy: 0, vz: 0, onGround: false });
+        heard.length = 0;
+        kw.step(1 / 60, 90);
+        drops.push({ h: h.toFixed(1), thumps: heard.filter((n) => n === 'land').length, puffs: heard.filter((n) => n === 'dust').length, down: b.y === ground });
+      }
+    } finally {
+      sound.play = play;
+      fx.dust = dust;
+    }
+    return drops;
+  });
+  const odd = drops.filter((d) => d.thumps !== 1 || d.puffs !== 1 || !d.down);
+  assert.deepEqual(odd, [], `of ${drops.length} drops`);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');

@@ -1436,7 +1436,6 @@ export class Game extends EventTarget {
     const fz = -Math.cos(yaw);
     const mx = fx * move.y + -fz * move.x;
     const mz = fz * move.y + fx * move.x;
-    const wasGround = b.onGround;
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
     const events = this.lift ? this.rideLift(dt) : this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: input.jump && !this.liftLatch, down: input.down || this.landNext, run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true });
@@ -1463,7 +1462,9 @@ export class Game extends EventTarget {
     } else if (events.jumped) {
       this.sound.play('jump');
     }
-    if (events.landed > 7 && !wasGround) {
+    // Not on whether you were on the ground before this frame: just over it
+    // counts as on it, and a fall can end there a frame before it lands.
+    if (events.landed > 7) {
       this.sound.play('land');
       fxs.dust(b.x, b.y, b.z);
     }

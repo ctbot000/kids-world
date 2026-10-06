@@ -267,12 +267,18 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
       bounced(events, b);
     } else {
       if (b.vy < 0) {
-        if (!b.onGround) events.landed = Math.max(events.landed, -fallSpeed);
+        // A landing: coming down faster than one step of gravity (all a
+        // body standing still gets), on the ground already or not: just
+        // over it counts as on it (below).
+        if (-fallSpeed > move.gravity * dt) events.landed = Math.max(events.landed, -fallSpeed);
         b.onGround = true;
       }
       b.vy = 0;
     }
   } else if (b.vy !== 0 || !b.onGround) {
+    // Just over the ground counts as on it, so a jump pressed a moment
+    // before touching down still jumps. A body coming down is often here a
+    // step before it lands.
     b.onGround = b.vy <= 0 && overlapsSolid(world, b.x - b.radius, b.y - 0.05, b.z - b.radius, b.x + b.radius, b.y, b.z + b.radius);
   }
   if (b.flying && b.onGround && !input.jump) {

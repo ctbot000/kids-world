@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { maxCritters } from '../public/js/shared/critters.js';
 import { advanceTime, daylight, isDaytime } from '../public/js/shared/env.js';
-import { BODY, bodyOverlapsSolid, makeBody, stepBody, unstick } from '../public/js/shared/physics.js';
+import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody, unstick } from '../public/js/shared/physics.js';
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, buildEdit, growEdit, hillEdit, paintEdit, pickEdit, stampEdit, validCells } from '../public/js/shared/tools.js';
@@ -168,6 +168,36 @@ test('a big time step never tunnels through the floor', () => {
   assert.ok(b.y >= 6);
   for (let i = 0; i < 10; i++) stepBody(w, b, {}, 0.25);
   assert.equal(b.y, 6);
+});
+
+// Just over the ground counts as on it, so a fall often ends a step there
+// before it lands: that must still be a landing (the thump and the puff of
+// dust), from any height and at any frame rate.
+test('a fall lands once, as hard as it fell, from any height; standing still never lands', () => {
+  const w = flatWorld();
+  for (const fps of [30, 60, 144]) {
+    for (let i = 0; i < 200; i++) {
+      const h = 0.2 + (i / 199) * 8.2;
+      const b = makeBody(10.5, 6 + h, 10.5);
+      const landings = [];
+      for (let t = 0; t < 2 * fps; t++) {
+        const { landed } = stepBody(w, b, {}, 1 / fps);
+        if (landed) landings.push(landed);
+      }
+      const speed = Math.sqrt(2 * MOVE.gravity * h);
+      assert.equal(landings.length, 1, `${fps} fps, dropped from ${h}: landed ${landings.join(', ') || 'never'}`);
+      // Within a step of gravity (a 90th of a second) of the speed it fell at.
+      assert.ok(Math.abs(landings[0] - speed) < MOVE.gravity / 90, `${fps} fps, dropped from ${h}: landed at ${landings[0]}, not ${speed}`);
+      assert.equal(b.y, 6);
+    }
+  }
+  // Standing, and walking about, on the ground.
+  const b = makeBody(10.5, 6, 10.5);
+  for (let t = 0; t < 240; t++) {
+    const input = t < 60 ? {} : { mx: Math.cos(t / 20), mz: Math.sin(t / 20) };
+    assert.equal(stepBody(w, b, input, t % 2 ? 1 / 60 : 1 / 144).landed, 0, `frame ${t}`);
+  }
+  assert.ok(b.onGround && b.y === 6);
 });
 
 test('someone built into a wall is lifted out', () => {

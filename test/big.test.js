@@ -10,7 +10,7 @@ import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
 import { BIG, bigCounts, scaleCounts, CRITTER_INFO, CRITTER_TYPES, CritterSim, fits, mountUnder, nearestWater, riderAt, SURFACE, swimmable, waterColumn } from '../public/js/shared/critters.js';
-import { BODY, bodyOverlapsSolid, makeBody, stepBody } from '../public/js/shared/physics.js';
+import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { getOffAt, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
@@ -202,6 +202,23 @@ test("the elephant sprays water instead of jumping, and still climbs a step and 
   assert.equal(r.body.y, 6, 'its feet stayed on the ground');
   go(w, r, { mx: 1, mz: 0 }, 4);
   assert.equal(r.body.y, 7, 'up the step');
+});
+
+test('a ridden animal dropped from any height lands once, as hard as it fell', () => {
+  const w = meadow();
+  for (const type of ['pony', 'elephant']) {
+    for (let i = 0; i < 100; i++) {
+      const h = 0.2 + (i / 99) * 8.2;
+      const r = ride(w, type, 10.5, 6 + h, 20.5);
+      const landings = go(w, r, {}, 2)
+        .map((ev) => ev.landed)
+        .filter(Boolean);
+      const speed = Math.sqrt(2 * MOVE.gravity * h);
+      assert.equal(landings.length, 1, `${type} dropped from ${h}: landed ${landings.join(', ') || 'never'}`);
+      assert.ok(Math.abs(landings[0] - speed) < MOVE.gravity / 90, `${type} dropped from ${h}: landed at ${landings[0]}, not ${speed}`);
+      assert.equal(r.body.y, 6);
+    }
+  }
 });
 
 test('swimmers climb out of the water onto a bank a block over it, and no higher', () => {
