@@ -150,6 +150,14 @@ export class Sound {
         this.tone(1320, { decay: 0.5, gain: 0.12 });
         this.tone(1760, { at: 0.12, decay: 0.6, gain: 0.1 });
         break;
+      case 'boing': {
+        // Off a trampoline: a springy boing, higher the higher you go.
+        const k = Math.min(1, (opts.speed ?? 12) / 21);
+        const f = (140 + 120 * k) * r();
+        this.tone(f, { type: 'triangle', decay: 0.34, gain: 0.18, slide: f * 2.6, slideTime: 0.2, vibrato: 14 + 10 * k });
+        this.tone(f * 0.5, { decay: 0.1, gain: 0.12, slide: f * 0.8 });
+        break;
+      }
       case 'pop':
         this.tone(320 * r(), { decay: 0.12, gain: 0.3, slide: 760, slideTime: 0.09 });
         this.tone(900 * r(), { at: 0.04, decay: 0.06, gain: 0.08 });

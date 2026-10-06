@@ -359,6 +359,27 @@ function elevatorTower() {
   return c.list();
 }
 
+// A bouncy castle: a floor of trampolines inside soft walls, with a turret
+// at each corner and the way in at the front.
+function bouncyCastle() {
+  const c = new Cells();
+  for (let x = -3; x <= 3; x++) {
+    for (let z = 0; z <= 6; z++) {
+      const wall = x === -3 || x === 3 || z === 0 || z === 6;
+      if (!wall || (z === 0 && Math.abs(x) <= 1)) {
+        c.put(x, 0, z, B.TRAMPOLINE);
+        for (let y = 1; y <= 4; y++) c.put(x, y, z, B.AIR);
+        continue;
+      }
+      const turret = Math.abs(x) === 3 && (z === 0 || z === 6);
+      const h = turret ? 4 : 2;
+      for (let y = 0; y <= h; y++) c.put(x, y, z, turret ? BLUE : RED);
+      if (turret || (x + z) % 2 === 0) c.put(x, h + 1, z, YELLOW);
+    }
+  }
+  return c.list();
+}
+
 function lampPost() {
   const c = new Cells();
   c.put(0, 0, 0, CHARCOAL);
@@ -420,6 +441,7 @@ export const STAMPS = [
   { key: 'pine', name: 'Pine Tree', icon: '🌲', cells: pine() },
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
+  { key: 'bouncy-castle', name: 'Bouncy Castle', icon: '🤸', cells: bouncyCastle() },
   { key: 'bridge', name: 'Bridge', icon: '🌉', cells: bridge() },
   { key: 'rainbow', name: 'Rainbow', icon: '🌈', cells: rainbow() },
   { key: 'heart', name: 'Big Heart', icon: '💖', cells: heart() },

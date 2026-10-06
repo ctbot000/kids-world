@@ -67,13 +67,16 @@ export const GLASS = def(15, 'glass', { name: 'Window Glass', kind: 'glass', cat
 export const LAMP = def(16, 'lamp', { name: 'Lamp', category: 'building', tiles: 'lamp', light: 15, sound: 'glass' });
 export const STAR_BLOCK = def(17, 'star-block', { name: 'Star Block', category: 'building', tiles: 'star-block', light: 13, sound: 'glass' });
 export const HAY = def(26, 'hay', { name: 'Hay Bale', category: 'building', tiles: { top: 'hay-top', side: 'hay-side' }, sound: 'grass' });
+// An elevator pad: stand on it and jump to glide up to the next pad above in
+// the same column, or go down to the one below (shared/elevator.js).
+export const ELEVATOR = def(91, 'elevator', { name: 'Elevator', category: 'building', tiles: { top: 'elevator-top', side: 'elevator' }, sound: 'stone' });
+// A trampoline: land on it and you bounce back up, higher and higher while
+// jump is held (shared/physics.js).
+export const TRAMPOLINE = def(92, 'trampoline', { name: 'Trampoline', category: 'building', tiles: { top: 'trampoline-top', side: 'trampoline' }, sound: 'soft' });
 // Rails lie flat on the ground, like a plant growing on it, for a mine cart
 // to roll along: straight, round a corner, or up a step to the next rail
 // (render/mesher.js works out which from the rails beside it, and draws a
 // corner with the side tile). Every mine has a line of them.
-// An elevator pad: stand on it and jump to glide up to the next pad above in
-// the same column, or go down to the one below (shared/elevator.js).
-export const ELEVATOR = def(91, 'elevator', { name: 'Elevator', category: 'building', tiles: { top: 'elevator-top', side: 'elevator' }, sound: 'stone' });
 export const RAIL = def(90, 'rail', { name: 'Rails', kind: 'plant', category: 'building', tiles: { top: 'rail', side: 'rail-curve' }, sound: 'stone' });
 
 // ---------------------------------------------------------------- candy

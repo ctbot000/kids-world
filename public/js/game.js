@@ -7,7 +7,7 @@ import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn 
 import { advanceTime, isNight } from './shared/env.js';
 import { MAX_HEARTS, MONSTER_BODY, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
-import { BODY, makeBody, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, makeBody, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
@@ -797,9 +797,15 @@ export class Game extends EventTarget {
 
   // Shift or ⬇️ pressed: off the animal you are riding on land (at sea, it
   // dives, as long as it is held; the digger digs down, and a mine cart on
-  // its rails rolls on).
+  // its rails rolls on). On foot in the air, it lands you at the next bounce
+  // on a trampoline, held down then or not.
   pressDown() {
-    if (this.riding && !this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
+    if (this.riding) {
+      if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
+      return;
+    }
+    const b = this.me?.body;
+    if (b && !b.flying && !b.inWater && !(b.onGround && b.vy === 0)) this.landNext = true;
   }
 
   // The digger's drill taking out the ground in front of it, with any jewels
@@ -1433,18 +1439,30 @@ export class Game extends EventTarget {
     const wasGround = b.onGround;
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
-    const events = this.lift ? this.rideLift(dt) : this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: input.jump && !this.liftLatch, down: input.down, run: input.run }, dt, { autoJump: this.profile.settings.autoJump });
+    const events = this.lift ? this.rideLift(dt) : this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: input.jump && !this.liftLatch, down: input.down || this.landNext, run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true });
+    // Down pressed while bouncing lasts until you stand on something.
+    if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
     if (this.monsters.size) this.stomp();
     if (!this.toldLift && !this.lift && padUnder(w, b)) {
       this.toldLift = true;
       this.emit('toast', { icon: '🛗', text: `An elevator! ${this.touch ? 'Jump' : 'Press Space'} to go up, ${this.touch ? '⬇️' : 'Shift'} to go down.` });
+    }
+    if (!this.toldBounce && (events.bounced || (b.onGround && onTrampoline(w, b)))) {
+      this.toldBounce = true;
+      this.emit('toast', { icon: '🤸', text: `A trampoline! Hold ${this.touch ? 'jump' : 'Space'} to bounce higher and higher, ${this.touch ? '⬇️' : 'Shift'} to stop.` });
     }
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;
     me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
-    if (events.jumped) this.sound.play('jump');
+    if (events.bounced) {
+      this.sound.play('boing', { speed: events.bounced });
+      fxs.boing(b.x, events.bouncedAt, b.z, events.bounced >= BOUNCE.max);
+      this.profile.count('bounces');
+    } else if (events.jumped) {
+      this.sound.play('jump');
+    }
     if (events.landed > 7 && !wasGround) {
       this.sound.play('land');
       fxs.dust(b.x, b.y, b.z);

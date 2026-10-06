@@ -1,6 +1,6 @@
-// Walking, jumping, swimming and flying through a world of blocks. A body is
-// an upright box: (x, z) its centre, y its feet.
-import { SOLID, WATER } from './blocks.js';
+// Walking, jumping, swimming, flying and bouncing on trampolines through a
+// world of blocks. A body is an upright box: (x, z) its centre, y its feet.
+import { SOLID, TRAMPOLINE, WATER } from './blocks.js';
 
 export const BODY = { radius: 0.3, height: 1.5, eye: 1.3 };
 
@@ -14,6 +14,19 @@ export const MOVE = {
   groundAccel: 45,
   airAccel: 16,
   maxFall: 30,
+};
+
+// Landing on a trampoline bounces a body back up with some of the speed it
+// came down with (keep), so the bounces die away by themselves, and stop
+// once slower than stop. With jump held it goes up faster each time (push),
+// as high as max; down held lands it, as on anything. A jump off one goes
+// higher than off the ground.
+export const BOUNCE = {
+  jump: 12.5, // about 3 blocks high
+  keep: 0.75,
+  push: 2.5,
+  max: 21, // about 8.5 blocks high
+  stop: 3.5,
 };
 
 const EPS = 1e-4;
@@ -142,28 +155,60 @@ export function unstick(world, b) {
   return false;
 }
 
+// Whether the body stands on a trampoline: the block under its middle, or,
+// with nothing there, one under its edge holding it up.
+export function onTrampoline(world, b) {
+  const y = Math.floor(b.y - 0.05);
+  const mid = world.get(Math.floor(b.x), y, Math.floor(b.z));
+  if (SOLID[mid]) return mid === TRAMPOLINE;
+  const r = b.radius;
+  for (const x of [Math.floor(b.x - r), Math.floor(b.x + r - EPS)]) {
+    for (const z of [Math.floor(b.z - r), Math.floor(b.z + r - EPS)]) if (world.get(x, y, z) === TRAMPOLINE) return true;
+  }
+  return false;
+}
+
+// How fast a body landing on a trampoline at speed goes back up (0: it
+// stays down).
+export function bounceSpeed(speed, input) {
+  if (input.down) return 0;
+  if (input.jump) return Math.min(BOUNCE.max, Math.max(BOUNCE.jump, speed + BOUNCE.push));
+  const up = Math.min(BOUNCE.max, speed * BOUNCE.keep);
+  return up < BOUNCE.stop ? 0 : up;
+}
+
+// Notes the fastest bounce of a step, and where the feet were for it.
+function bounced(events, b) {
+  if (b.vy < events.bounced) return;
+  events.bounced = b.vy;
+  events.bouncedAt = b.y;
+}
+
 const approach = (v, target, rate) => (v < target ? Math.min(target, v + rate) : Math.max(target, v - rate));
 
 // input: { mx, mz } a wish direction in the world (length up to 1), jump,
-// down (sink or descend), run. options: { autoJump, move }: move has speeds
-// and a jump of its own to use instead of a player's (MOVE), for a big animal
-// and for one with a rider on (riding.js).
+// down (sink or descend), run. options: { autoJump, move, bounce }: move has
+// speeds and a jump of its own to use instead of a player's (MOVE), for a
+// big animal and for one with a rider on (riding.js); bounce, for a player
+// on foot, bounces on trampolines (events.bounced is how fast it went up,
+// and bouncedAt the height of its feet then).
 export function stepBody(world, b, input, dt, options = {}) {
   const autoJump = options.autoJump !== false;
   const move = options.move ? { ...MOVE, ...options.move } : MOVE;
+  const bounce = options.bounce === true;
   let remaining = Math.min(dt, 0.25);
-  const events = { jumped: false, landed: 0, splashed: false, bumped: false };
+  const events = { jumped: false, landed: 0, splashed: false, bumped: false, bounced: 0, bouncedAt: 0 };
   while (remaining > 1e-6) {
     const h = Math.min(remaining, 1 / 90);
     remaining -= h;
-    stepOnce(world, b, input, h, autoJump, events, move);
+    stepOnce(world, b, input, h, autoJump, events, move, bounce);
   }
   return events;
 }
 
 // In the water a body floats with the height float (over its feet) at the
 // top: a player's head, or a big animal's back with its rider on it.
-function stepOnce(world, b, input, dt, autoJump, events, move) {
+function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
   const wasInWater = b.inWater;
   b.inWater = world.get(Math.floor(b.x), Math.floor(b.y + 0.5), Math.floor(b.z)) === WATER;
   b.headInWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.float ?? b.height - 0.2)), Math.floor(b.z)) === WATER;
@@ -201,20 +246,32 @@ function stepOnce(world, b, input, dt, autoJump, events, move) {
   } else {
     b.vy = Math.max(-move.maxFall, b.vy - move.gravity * dt);
     if (input.jump && b.onGround) {
-      b.vy = move.jump;
+      // Off a trampoline: as fast as it bounces you, from a stand or (just
+      // over it, and so on the ground already) still coming down onto it.
+      const up = bounce && onTrampoline(world, b) ? bounceSpeed(Math.max(0, -b.vy), input) : 0;
+      b.vy = up || move.jump;
       b.onGround = false;
       events.jumped = true;
+      if (up) bounced(events, b);
     }
   }
 
   const fallSpeed = b.vy;
   const hitY = sweep(world, b, 1, b.vy * dt);
   if (hitY) {
-    if (b.vy < 0) {
-      if (!b.onGround) events.landed = Math.max(events.landed, -fallSpeed);
-      b.onGround = true;
+    // Coming down onto a trampoline: back up. Standing on one comes down
+    // too slowly to bounce (and on anything else, it is not looked for).
+    const up = bounce && fallSpeed < 0 && !b.flying && !b.inWater ? bounceSpeed(-fallSpeed, input) : 0;
+    if (up && onTrampoline(world, b)) {
+      b.vy = up;
+      bounced(events, b);
+    } else {
+      if (b.vy < 0) {
+        if (!b.onGround) events.landed = Math.max(events.landed, -fallSpeed);
+        b.onGround = true;
+      }
+      b.vy = 0;
     }
-    b.vy = 0;
   } else if (b.vy !== 0 || !b.onGround) {
     b.onGround = b.vy <= 0 && overlapsSolid(world, b.x - b.radius, b.y - 0.05, b.z - b.radius, b.x + b.radius, b.y, b.z + b.radius);
   }

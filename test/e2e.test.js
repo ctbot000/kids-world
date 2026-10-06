@@ -728,6 +728,70 @@ test('on an elevator pad, Space rides up to the pad above and Shift back down, w
   await page.browserContext().close();
 });
 
+test('on a trampoline, Space held bounces you higher and higher and a press of Shift stops you, with a hint and a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A trampoline a few steps away, and you standing on it.
+  const pad = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const x = Math.floor(b.x) + 3;
+    const z = Math.floor(b.z);
+    const y = room.world.top(x, z) + 1;
+    room.natureCell([x, y, z], 92);
+    return { x, y, z };
+  });
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 92, pad);
+  await page.evaluate((c) => Object.assign(window.kidsWorld.game.me.body, { x: c.x + 0.5, y: c.y + 1, z: c.z + 0.5, vx: 0, vy: 0, vz: 0 }), pad);
+  const mat = pad.y + 1;
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A trampoline!')));
+  // A bounce or two short of the sticker, then up and up with Space held for
+  // ten seconds, seen every quarter of a second (each step draws a frame,
+  // slow on a software GPU).
+  await page.evaluate(() => (window.kidsWorld.profile.data.stats.bounces = 17));
+  await page.keyboard.down('Space');
+  const tops = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      kw.step(1 / 60, 15);
+      seen.push(kw.game.me.body.y);
+    }
+    return seen;
+  });
+  await page.keyboard.up('Space');
+  const high = Math.max(...tops) - mat;
+  assert.ok(high > 7 && high < 9, `bounced ${high} high`);
+  assert.ok(Math.max(...tops.slice(0, 4)) - mat < 4, 'not that high in the first second');
+  assert.ok(await page.evaluate(() => Boolean(window.kidsWorld.profile.data.stickers.boing)), 'a sticker for bouncing');
+  // Shift pressed on the way up (and let go at once): down on the trampoline
+  // at the next bounce, and staying there.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    for (let i = 0; i < 60 && kw.game.me.body.vy < 3; i++) kw.step(1 / 60, 3);
+  });
+  await page.keyboard.press('ShiftLeft');
+  const end = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    let down = -1;
+    let upAgain = false;
+    for (let i = 0; i < 30; i++) {
+      kw.step(1 / 60, 8);
+      if (down < 0 && b.onGround && b.vy === 0) down = i * 8;
+      else if (down >= 0 && !b.onGround) upAgain = true;
+    }
+    return { down, upAgain, y: b.y, ground: b.onGround };
+  });
+  // Bouncing by itself, it would take seconds more to stop.
+  assert.ok(end.down >= 0 && end.down < 110, `down after ${end.down} frames`);
+  assert.deepEqual({ upAgain: end.upAgain, y: end.y, ground: end.ground }, { upAgain: false, y: mat, ground: true });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');

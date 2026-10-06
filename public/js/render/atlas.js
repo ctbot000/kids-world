@@ -519,6 +519,65 @@ const PAINT = {
     bevel(ctx, 0.6);
   },
 
+  // A black mat in a padded blue rim, with a star to bounce on.
+  'trampoline-top'(ctx) {
+    fill(ctx, '#3a8ee8');
+    ctx.fillStyle = '#2a6fc4';
+    ctx.fillRect(8, 8, TILE - 16, TILE - 16);
+    ctx.fillStyle = '#272b38';
+    ctx.fillRect(10, 10, TILE - 20, TILE - 20);
+    const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 24);
+    g.addColorStop(0, 'rgba(255,255,255,0.16)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(10, 10, TILE - 20, TILE - 20);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(32, 32, 15, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fcd535';
+    star(ctx, 32, 33, 8, 3.5);
+    ctx.fill();
+    bevel(ctx, 0.7);
+  },
+  // The padded rim, the springs under it, the frame, and a skirt down to the
+  // ground.
+  trampoline(ctx) {
+    fill(ctx, '#2f7ad6');
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let x = 4; x < TILE; x += 8) ctx.fillRect(x, 34, 2, TILE - 34);
+    ctx.fillStyle = '#3b3f4a';
+    ctx.fillRect(0, 13, TILE, 13);
+    ctx.strokeStyle = '#d5dbe3';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    for (let x = 6; x < TILE; x += 10.4) {
+      ctx.beginPath();
+      ctx.moveTo(x, 13);
+      for (let k = 1; k <= 5; k++) ctx.lineTo(x + (k % 2 ? 2.5 : -2.5), 13 + k * 2.2);
+      ctx.lineTo(x, 26);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#3a8ee8';
+    ctx.fillRect(0, 0, TILE, 13);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(0, 3, TILE, 2);
+    ctx.fillStyle = '#6b7383';
+    ctx.fillRect(0, 26, TILE, 5);
+    ctx.fillStyle = '#9aa3b2';
+    ctx.fillRect(0, 26, TILE, 1.5);
+    // A yellow scalloped trim along the top of the skirt.
+    ctx.fillStyle = '#fcd535';
+    ctx.fillRect(0, 31, TILE, 3);
+    for (let x = 4; x < TILE; x += 8) {
+      ctx.beginPath();
+      ctx.arc(x, 34, 4, 0, Math.PI);
+      ctx.fill();
+    }
+    bevel(ctx, 0.6);
+  },
+
   // ------------------------------------------------ plants (transparent)
   tulip(ctx) {
     stem(ctx, 32, 62, 32, 26);

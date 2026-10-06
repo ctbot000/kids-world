@@ -260,6 +260,20 @@ export class Effects {
     }
   }
 
+  // Off a trampoline: a ring of puffs round the feet, and stars from a bounce
+  // as high as it goes.
+  boing(x, y, z, top = false) {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      this.add('puff', x + Math.cos(a) * 0.3, y + 0.05, z + Math.sin(a) * 0.3, { vx: Math.cos(a) * 2.2, vz: Math.sin(a) * 2.2, vy: 0.3, size: 0.26, life: 0.4, grow: 0.7, drag: 3, color: '#ffffff' });
+    }
+    if (!top) return;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      this.add('star', x, y + 0.3, z, { vx: Math.cos(a) * 1.6, vz: Math.sin(a) * 1.6, vy: 2.5, size: 0.24, life: 0.8, gravity: 4, color: ['#ffd84d', '#ff8fc4', '#7cc4ff', '#7fe08c', '#ffffff'][i] });
+    }
+  }
+
   dust(x, y, z) {
     for (let i = 0; i < 3; i++) {
       this.add('puff', x + (Math.random() - 0.5) * 0.4, y + 0.05, z + (Math.random() - 0.5) * 0.4, { vy: 0.4, size: 0.25, life: 0.4, grow: 0.8, color: '#ffffff' });
