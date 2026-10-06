@@ -293,6 +293,10 @@ export class MiniMap {
       ctx.stroke();
     }
 
+    // An adventure island's camps: the monsters' purple flag on each, the
+    // island's sky-blue one once it is free, and a crown on King Grumble's castle.
+    for (const c of g.adventure?.camps.values() ?? []) campMark(ctx, X(c.x), Y(c.z), c, (big ? 1.5 : 1) * u);
+
     // Friends: a dot in their T-shirt colour, and on the big map their animal (or kid) and name too.
     for (const p of g.players.values()) {
       if (p.me || !p.avatar) continue;
@@ -359,6 +363,55 @@ function arrow(ctx, x, y, angle, size, u) {
   ctx.lineWidth = 1.6 * u;
   ctx.strokeStyle = INK;
   ctx.stroke();
+  ctx.restore();
+}
+
+// A camp on the map: a little flag on a pole standing at (x, y), purple for
+// the monsters' and sky blue once it is free; the castle with a gold crown
+// over its flag. `u` is the marker size unit.
+function campMark(ctx, x, y, camp, u) {
+  const free = camp.freed;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = 'round';
+  // The pole.
+  ctx.beginPath();
+  ctx.moveTo(0, 2 * u);
+  ctx.lineTo(0, -9 * u);
+  ctx.lineWidth = 3.4 * u;
+  ctx.strokeStyle = 'white';
+  ctx.stroke();
+  ctx.lineWidth = 1.4 * u;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  // The flag.
+  ctx.beginPath();
+  ctx.moveTo(0.6 * u, -9 * u);
+  ctx.lineTo(8 * u, -6.3 * u);
+  ctx.lineTo(0.6 * u, -3.6 * u);
+  ctx.closePath();
+  ctx.fillStyle = free ? '#5cc3f2' : '#7b4fd0';
+  ctx.fill();
+  ctx.lineWidth = 1.2 * u;
+  ctx.strokeStyle = 'white';
+  ctx.stroke();
+  if (camp.kind === 'castle') {
+    // A crown over it.
+    ctx.beginPath();
+    ctx.moveTo(-4 * u, -11 * u);
+    ctx.lineTo(-4 * u, -15 * u);
+    ctx.lineTo(-2 * u, -13 * u);
+    ctx.lineTo(0, -16 * u);
+    ctx.lineTo(2 * u, -13 * u);
+    ctx.lineTo(4 * u, -15 * u);
+    ctx.lineTo(4 * u, -11 * u);
+    ctx.closePath();
+    ctx.fillStyle = '#ffcc33';
+    ctx.fill();
+    ctx.lineWidth = 1 * u;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

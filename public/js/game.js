@@ -1,11 +1,13 @@
 // One visit to an island, from this player's side: the copy of the world,
 // you walking about, your friends, the animals and any monsters moving
-// smoothly, your hearts, the tools, and everything said and done. Talks to the island through a link
-// (see net.js) and draws through the renderer.
+// smoothly, your hearts, an adventure island's camps and flags, the tools,
+// and everything said and done. Talks to the island through a link (see
+// net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
-import { MAX_HEARTS, MONSTER_BODY, TAP_REACH, unpackMonster } from './shared/monsters.js';
+import { HELP_REACH } from './shared/adventure.js';
+import { bodyOf, MAX_HEARTS, MONSTER_BODY, STOMP, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { BODY, BOUNCE, makeBody, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
@@ -94,6 +96,13 @@ export class Game extends EventTarget {
     this.wasInWater = false;
     this.seenNight = false;
     this.seenRainbow = false;
+    // An adventure island's camps and King Grumble (shared/adventure.js), as
+    // the island tells of them (null on any other island); whether you sit
+    // dizzy there, out of hearts, until a friend helps you up; and the
+    // fireworks when it is all free.
+    this.adventure = null;
+    this.dizzy = false;
+    this.fireworks = [];
     // The flying friend that sat on your head, once one has.
     this.perchedOn = 0;
     // The animal you are riding (see shared/riding.js), and the one close
@@ -208,6 +217,30 @@ export class Game extends EventTarget {
       case 'pop':
         this.popped(msg);
         break;
+      case 'adv':
+        this.adventureNews(msg);
+        break;
+      case 'freed':
+        this.campFreed(msg);
+        break;
+      case 'shield':
+        this.shieldDown();
+        break;
+      case 'kinghit':
+        this.kingHit(msg);
+        break;
+      case 'stomp':
+        this.stomped(msg);
+        break;
+      case 'won':
+        this.islandWon(msg);
+        break;
+      case 'helped':
+        this.helped(msg);
+        break;
+      case 'home':
+        this.cameHome(msg);
+        break;
       case 'env':
         this.setEnv(msg);
         break;
@@ -268,6 +301,8 @@ export class Game extends EventTarget {
     for (const id of [...this.monsters.keys()]) this.dropMonster(id);
     this.monsterStates(msg.monsters ?? []);
     this.setHearts(msg.hearts ?? MAX_HEARTS);
+    this.dizzy = false;
+    this.setAdventure(msg.adventure ?? null);
     this.setEnv(msg.env);
     this.renderer.view.yaw = Math.PI * 0.9;
     this.emit('welcome', { again });
@@ -287,7 +322,7 @@ export class Game extends EventTarget {
     }
     const old = this.players.get(p.id);
     if (old?.avatar) this.renderer.removeAvatar(p.id);
-    const player = { id: p.id, name: p.name, look: p.look, snaps: [], avatar: this.renderer.addAvatar(p.id, p.look, p.name), anim: 0, bubble: null };
+    const player = { id: p.id, name: p.name, look: p.look, snaps: [], avatar: this.renderer.addAvatar(p.id, p.look, p.name), anim: 0, bubble: null, dizzy: p.dizzy === true };
     this.players.set(p.id, player);
     if (p.s) this.remoteMove(p.id, p.s, true);
     this.emit('players');
@@ -429,7 +464,7 @@ export class Game extends EventTarget {
       seen.add(m.id);
       let entry = this.monsters.get(m.id);
       if (!entry) {
-        entry = { id: m.id, snaps: [], model: this.renderer.addMonster(m.id), grumbleAt: now + Math.random() * 4000 };
+        entry = { id: m.id, kind: m.kind, snaps: [], model: this.renderer.addMonster(m.id, m.kind), grumbleAt: now + Math.random() * 4000 };
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
       }
@@ -456,17 +491,21 @@ export class Game extends EventTarget {
     this.emit('hearts', this.hearts);
   }
 
-  // A monster bumped into someone: you are knocked back (or sent home, out of
-  // hearts), and a friend gets a little burst of stars.
+  // A monster bumped into someone: you are knocked back (further by King
+  // Grumble), or out of hearts sent home, or on an adventure island left
+  // sitting dizzy for a friend to help up; a friend gets a little burst of stars.
   bumped(msg) {
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.3;
     if (msg.pid !== this.pid) {
-      const p = this.players.get(msg.pid)?.avatar?.root.position;
-      if (p && this.near(p.x, p.y, p.z, 30)) {
-        this.renderer.effects.bang(p.x, p.y + 1.7, p.z);
+      const p = this.players.get(msg.pid);
+      if (p) p.dizzy = msg.dizzy === true;
+      const at = p?.avatar?.root.position;
+      if (at && this.near(at.x, at.y, at.z, 30)) {
+        this.renderer.effects.bang(at.x, at.y + 1.7, at.z);
         this.sound.play('bump');
       }
+      if (msg.dizzy && p) this.emit('toast', { icon: '💫', text: `${p.name} is out of hearts! Go and tap them to help them up.` });
       return;
     }
     this.setHearts(msg.hearts);
@@ -475,15 +514,7 @@ export class Game extends EventTarget {
     if (!b) return;
     this.renderer.effects.bang(b.x, b.y + 1.7, b.z);
     if (msg.home) {
-      // Out of hearts: back to the start of the island with all of them.
-      if (this.riding) this.dismount();
-      const spawn = this.world.spawn;
-      Object.assign(b, { x: spawn.x, y: spawn.y, z: spawn.z, vx: 0, vy: 0, vz: 0, flying: false });
-      unstick(this.world, b);
-      this.renderer.view.ready = false;
-      this.renderer.effects.sparkles(b.x, b.y + 1, b.z, 20);
-      this.sendMove(true);
-      this.emit('toast', { icon: '💖', text: 'Out of hearts! Back to the start of the island, where no monster goes.' });
+      this.goHome(msg.at, this.adventure ? 'Out of hearts! Back to the nearest safe place, where no monster goes.' : 'Out of hearts! Back to the start of the island, where no monster goes.');
       return;
     }
     // Knocked back, away from it, and up a little.
@@ -491,11 +522,39 @@ export class Game extends EventTarget {
     const dz = b.z - (Number(msg.z) || b.z);
     const d = Math.hypot(dx, dz);
     const dir = d > 0.01 ? [dx / d, dz / d] : [-Math.sin(this.me.yaw), -Math.cos(this.me.yaw)];
-    b.vx = dir[0] * 9;
-    b.vz = dir[1] * 9;
-    b.vy = Math.max(b.vy, 6);
+    const push = msg.big ? 13 : 9;
+    b.vx = dir[0] * push;
+    b.vz = dir[1] * push;
+    b.vy = Math.max(b.vy, msg.big ? 7 : 6);
     b.onGround = false;
     this.flashUntil = performance.now() + 1600;
+    if (msg.dizzy) {
+      // Out of hearts, with friends about: sit tight for one to come.
+      this.dizzy = true;
+      if (this.riding) this.dismount();
+      b.flying = false;
+      this.emit('fly', false);
+      this.sound.play('dizzy');
+      this.emit('toast', { icon: '💫', text: 'Out of hearts! Sit tight: a friend can tap you to help you up.' });
+      this.emit('dizzy', true);
+    }
+  }
+
+  // Back to a safe place (at, as [x, y, z]; or the start of the island), and
+  // on your feet with all your hearts.
+  goHome(at, text) {
+    if (this.riding) this.dismount();
+    const b = this.me.body;
+    const spawn = this.world.spawn;
+    const [x, y, z] = Array.isArray(at) && at.length === 3 && at.every(Number.isFinite) ? at : [spawn.x, spawn.y, spawn.z];
+    Object.assign(b, { x, y, z, vx: 0, vy: 0, vz: 0, flying: false });
+    unstick(this.world, b);
+    this.dizzy = false;
+    this.emit('dizzy', false);
+    this.renderer.view.ready = false;
+    this.renderer.effects.sparkles(b.x, b.y + 1, b.z, 20);
+    this.sendMove(true);
+    this.emit('toast', { icon: '💖', text });
   }
 
   // A monster popped: tapped or jumped on.
@@ -503,16 +562,21 @@ export class Game extends EventTarget {
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
-    if ([p.x, p.y, p.z].every(Number.isFinite) && this.near(p.x, p.y, p.z, 40)) {
+    if ([p.x, p.y, p.z].every(Number.isFinite) && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40)) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
+      // King Grumble goes with a much bigger pop.
+      if (entry?.kind === 'king') {
+        fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
+        fx.firework(p.x, p.y + 2, p.z);
+      }
       this.sound.play('splat');
     }
     this.dropMonster(msg.id);
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
-      if (first) this.emit('toast', { icon: '👾', text: 'Pop! Tap a monster or jump on it to pop it.' });
+      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Tap a monster or jump on it to pop it.' });
     }
   }
 
@@ -525,13 +589,16 @@ export class Game extends EventTarget {
   stomp() {
     const b = this.me.body;
     if (b.vy >= -0.5 || b.onGround || b.inWater) return;
+    const now = performance.now();
     for (const entry of this.monsters.values()) {
-      if (entry.stomped) continue;
+      // King Grumble can be landed on again and again.
+      if (entry.stomped && now < entry.stomped) continue;
       const m = entry.model.group.position;
-      if (Math.hypot(m.x - b.x, m.z - b.z) > MONSTER_BODY.radius + BODY.radius) continue;
+      const size = bodyOf(entry.kind);
+      if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
       const up = b.y - m.y;
-      if (up < MONSTER_BODY.height * 0.5 || up > MONSTER_BODY.height + 0.5) continue;
-      entry.stomped = true;
+      if (up < size.height * 0.5 || up > size.height + 0.5) continue;
+      entry.stomped = entry.kind === 'king' ? now + 500 : Infinity;
       this.bop(entry.id);
       b.vy = 9;
       this.sound.play('jump');
@@ -555,12 +622,208 @@ export class Game extends EventTarget {
         continue;
       }
       const ground = this.renderer.groundUnder(s.x, s.y, s.z);
-      m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night);
-      this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
-      if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, 10)) {
+      m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
+      this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
+      const king = entry.kind === 'king';
+      if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, king ? 24 : 10)) {
         entry.grumbleAt = now + 3500 + Math.random() * 4000;
-        this.sound.play('grumble');
+        this.sound.play('grumble', { big: king });
       }
+    }
+  }
+
+  // ------------------------------------------------ an adventure island
+
+  // The camps as the island tells of them as you arrive, each with its flag pole.
+  setAdventure(a) {
+    this.renderer.clearFlags();
+    this.adventure = null;
+    if (a && Array.isArray(a.camps) && a.camps.length) {
+      const camps = new Map();
+      for (const c of a.camps) {
+        if (!Number.isInteger(c?.id) || ![c.x, c.y, c.z, c.r].every(Number.isFinite)) continue;
+        const kind = c.kind === 'castle' ? 'castle' : 'camp';
+        camps.set(c.id, { id: c.id, kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true, progress: Number(c.progress) || 0, friends: 0, guarded: false, flag: this.renderer.addFlag(c.id, kind) });
+      }
+      this.adventure = { camps, won: a.won === true, king: null, shield: true };
+      this.adventureNews(a);
+    }
+    this.emit('adventure');
+  }
+
+  // How far up each flag is, how many friends are by it and whether its
+  // monsters guard it, and King Grumble's hearts, a few times a second.
+  adventureNews(msg) {
+    const adv = this.adventure;
+    if (!adv) return;
+    const seen = new Set();
+    for (const row of Array.isArray(msg.c) ? msg.c : []) {
+      const c = adv.camps.get(row?.[0]);
+      if (!c || c.freed) continue;
+      seen.add(c.id);
+      c.progress = Math.max(0, Math.min(1, (Number(row[1]) || 0) / 100));
+      c.friends = row[2] | 0;
+      c.guarded = row[3] === 1;
+    }
+    for (const c of adv.camps.values()) {
+      if (seen.has(c.id)) continue;
+      c.friends = 0;
+      c.guarded = false;
+    }
+    adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1] } : null;
+    adv.shield = msg.shield !== false && !adv.won;
+    this.emit('adventure');
+  }
+
+  campFreed(msg) {
+    const adv = this.adventure;
+    const c = adv?.camps.get(msg.id);
+    if (!c) return;
+    Object.assign(c, { freed: true, progress: 1, friends: 0, guarded: false });
+    const left = [...adv.camps.values()].filter((o) => o.kind === 'camp' && !o.freed).length;
+    if (this.near(c.x, c.y, c.z, 60)) {
+      this.sound.play('fanfare');
+      this.renderer.effects.sparkles(c.x, c.y + (c.flag?.top ?? 4), c.z, 30, ['#ffd84d', '#ffffff', '#5cc3f2', '#7fe08c']);
+    }
+    const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
+    if (mine) this.profile.count('freed');
+    const more = left ? ` ${left === 1 ? 'One more camp' : `${left} more camps`} to free!` : '';
+    this.emit('toast', { icon: '🚩', text: mine ? `You freed Camp ${c.id}! It is a safe place now.${more}` : `Camp ${c.id} is free!${more}` });
+    this.emit('adventure');
+  }
+
+  // Every camp free: King Grumble's bubble popped.
+  shieldDown() {
+    const adv = this.adventure;
+    if (!adv?.shield) return;
+    adv.shield = false;
+    for (const e of this.monsters.values()) {
+      const p = e.model.group.position;
+      if (e.kind === 'king' && this.near(p.x, p.y, p.z, 60)) this.renderer.effects.sparkles(p.x, p.y + 1.2, p.z, 30, ['#cdeeff', '#ffffff', '#ffd84d']);
+    }
+    this.sound.play('shield');
+    this.emit('toast', { icon: '🫧', text: 'Every camp is free! King Grumble’s bubble popped. Off to his castle, and pop him!' });
+    this.emit('adventure');
+  }
+
+  // King Grumble bopped: a heart off him, or a boing off his bubble.
+  kingHit(msg) {
+    const entry = this.monsters.get(msg.id);
+    const p = entry?.model.group.position;
+    if (msg.shielded) {
+      entry?.model.bubbleBounce?.();
+      if (p && this.near(p.x, p.y, p.z, 30)) this.sound.play('bubble');
+      if (msg.by === this.pid && performance.now() > (this.toldBubble ?? 0)) {
+        this.toldBubble = performance.now() + 8000;
+        this.emit('toast', { icon: '🫧', text: 'King Grumble is safe in his bubble until every camp is free!' });
+      }
+      return;
+    }
+    if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max };
+    if (entry) entry.model.squash = 0.45;
+    if (p && this.near(p.x, p.y, p.z, 40)) {
+      this.renderer.effects.sparkles(p.x, p.y + 1.4, p.z, 14, ['#ffd84d', '#ffffff', '#ff8fc4']);
+      this.renderer.effects.bang(p.x, p.y + 2.3, p.z);
+      this.sound.play('ouch');
+    }
+    this.emit('adventure');
+  }
+
+  // King Grumble landing from a stomp: a ring rushing out over the ground,
+  // dust, a thump, and the ground shaking under anyone near.
+  stomped(msg) {
+    if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.me) return;
+    const d = Math.hypot(this.me.body.x - msg.x, this.me.body.z - msg.z);
+    if (d > 60) return;
+    this.renderer.shockwave(msg.x, msg.y, msg.z, STOMP.reach);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      this.renderer.effects.dust(msg.x + Math.cos(a) * 1.4, msg.y, msg.z + Math.sin(a) * 1.4);
+    }
+    this.sound.play('stomp', { near: Math.max(0.2, 1 - d / 60) });
+    if (d < 14) this.renderer.shake(0.3 * (1 - d / 14));
+  }
+
+  // The whole island free: fireworks, a fanfare, and for everyone who was
+  // there, a sticker and a diamond.
+  islandWon(msg) {
+    const adv = this.adventure;
+    if (adv) {
+      Object.assign(adv, { won: true, shield: false, king: null });
+      for (const c of adv.camps.values()) Object.assign(c, { freed: true, progress: 1, friends: 0, guarded: false });
+    }
+    const b = this.me?.body;
+    const [x, y, z] = [msg.x, msg.y, msg.z].every(Number.isFinite) ? [msg.x, msg.y, msg.z] : [b?.x ?? 0, b?.y ?? 0, b?.z ?? 0];
+    const now = performance.now();
+    for (let i = 0; i < 10; i++) this.fireworks.push({ at: now + 300 + i * 380, x: x + (Math.random() - 0.5) * 16, y: y + 11 + Math.random() * 6, z: z + (Math.random() - 0.5) * 16 });
+    this.sound.play('victory');
+    const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
+    if (mine) {
+      this.profile.count('kings');
+      this.profile.addToBasket('diamond', 1);
+    }
+    if (this.dizzy) {
+      this.dizzy = false;
+      this.emit('dizzy', false);
+    }
+    const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
+    const what = hero ? `${hero} popped King Grumble!` : 'Every camp is free!';
+    this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    this.emit('adventure');
+  }
+
+  // A friend helped someone up (by 0: the island did, being freed).
+  helped(msg) {
+    const p = this.players.get(msg.pid);
+    if (p) p.dizzy = false;
+    const at = p?.avatar?.root.position;
+    if (at && this.near(at.x, at.y, at.z, 30)) this.renderer.effects.hearts(at.x, at.y + 1.6, at.z, 5);
+    const helper = msg.by ? this.players.get(msg.by) : null;
+    if (msg.pid === this.pid) {
+      this.dizzy = false;
+      this.emit('dizzy', false);
+      this.setHearts(msg.hearts);
+      this.sound.play('helpup');
+      this.emit('toast', { icon: '🤝', text: helper ? `${helper.name} helped you up!` : 'Up you get!' });
+    } else if (msg.by === this.pid) {
+      this.profile.count('helped');
+      this.sound.play('helpup');
+      this.emit('toast', { icon: '🤝', text: `You helped ${p?.name ?? 'your friend'} up!` });
+    }
+  }
+
+  // Dizzy too long, with no friend coming: back to the nearest safe place.
+  cameHome(msg) {
+    const p = this.players.get(msg.pid);
+    if (p) p.dizzy = false;
+    if (msg.pid !== this.pid || !this.me) return;
+    this.setHearts(msg.hearts);
+    this.goHome(msg.at, 'Back you go to the nearest safe place, with all your hearts.');
+  }
+
+  // Each frame: the flags where their camps are, fireworks going off, and
+  // stars going round the head of anyone dizzy.
+  updateAdventure(dt) {
+    const adv = this.adventure;
+    const now = performance.now();
+    if (adv) {
+      for (const c of adv.camps.values()) {
+        if (!c.flag) continue;
+        const top = this.world.top(Math.floor(c.x), Math.floor(c.z));
+        c.flag.group.position.set(c.x, top >= 0 ? top + 1 : c.y, c.z);
+        c.flag.update(dt, c.progress, c.freed);
+      }
+    }
+    while (this.fireworks.length && this.fireworks[0].at <= now) {
+      const f = this.fireworks.shift();
+      this.renderer.effects.firework(f.x, f.y, f.z);
+      if (this.near(f.x, f.y, f.z, 90)) this.sound.play('pop');
+    }
+    const t = now / 1000;
+    for (const p of this.players.values()) {
+      if (!(p.me ? this.dizzy : p.dizzy) || !p.avatar) continue;
+      const a = p.avatar.root.position;
+      if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + 1.35, a.z, t);
     }
   }
 
@@ -607,6 +870,7 @@ export class Game extends EventTarget {
 
   // Q, or the Ride button: on the animal beside you, or off the one you are on.
   toggleRide() {
+    if (this.dizzy) return;
     if (this.riding) {
       this.getOff();
       return;
@@ -801,6 +1065,7 @@ export class Game extends EventTarget {
   // its rails rolls on). On foot in the air, it lands you at the next bounce
   // on a trampoline, held down then or not.
   pressDown() {
+    if (this.dizzy) return;
     if (this.riding) {
       if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
       return;
@@ -1078,9 +1343,21 @@ export class Game extends EventTarget {
     // hide one (it hops about in them), nor does the ground just under it.
     const monster = r.pickMonster(ray, maxDist);
     if (monster) {
-      const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, monster.dist - MONSTER_BODY.radius, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
-      const m = this.monsters.get(monster.id)?.model.group.position;
-      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + 0.4 - eye.y, m.z - eye.z) <= TAP_REACH ? { kind: 'monster', id: monster.id } : { kind: 'far' };
+      const entry = this.monsters.get(monster.id);
+      // King Grumble, bigger, can be tapped from as much further.
+      const size = bodyOf(entry?.kind);
+      const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, monster.dist - size.radius, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
+      const m = entry?.model.group.position;
+      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + size.height / 2 - eye.y, m.z - eye.z) <= TAP_REACH + size.radius - MONSTER_BODY.radius ? { kind: 'monster', id: monster.id } : { kind: 'far' };
+    }
+    // A friend sitting dizzy, to help up from beside them, unless a solid
+    // block is in the way: the flowers of a camp just freed never hide one.
+    const dizzy = [...this.players.values()].filter((p) => p.dizzy && !p.me).map((p) => p.id);
+    const friend = dizzy.length ? r.pickAvatar(ray, maxDist, dizzy) : null;
+    if (friend) {
+      const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, friend.dist - 0.4, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
+      const a = this.players.get(friend.id)?.avatar?.root.position;
+      if (a && !wall) return Math.hypot(a.x - this.me.body.x, a.y - this.me.body.y, a.z - this.me.body.z) <= HELP_REACH ? { kind: 'friend', pid: friend.id } : { kind: 'far' };
     }
     // Not the animal you are riding, which is in the middle of the picture.
     const critter = r.pickCritter(ray, maxDist, this.riding?.id);
@@ -1167,6 +1444,11 @@ export class Game extends EventTarget {
   // A tap or click at a point on the screen.
   use(ndc, secondary = false) {
     if (!this.world || !this.me) return;
+    // Sitting dizzy, you wait for a friend.
+    if (this.dizzy) {
+      this.sound.play('no');
+      return;
+    }
     const aim = this.aim(ndc);
     if (!aim) return;
     if (aim.kind === 'far') {
@@ -1180,6 +1462,10 @@ export class Game extends EventTarget {
     }
     if (aim.kind === 'monster') {
       this.bop(aim.id);
+      return;
+    }
+    if (aim.kind === 'friend') {
+      this.send({ t: 'help', pid: aim.pid });
       return;
     }
     const tool = this.tool;
@@ -1365,6 +1651,7 @@ export class Game extends EventTarget {
     this.updatePlayers(dt);
     this.updateCritters(dt);
     this.updateMonsters(dt);
+    this.updateAdventure(dt);
     // Holding the button down (after a moment) keeps building or picking as you sweep.
     const hold = this.holding;
     if (hold && performance.now() >= hold.at && this.tool !== 'stamp' && this.tool !== 'friends') {
@@ -1430,7 +1717,9 @@ export class Game extends EventTarget {
     const me = this.me;
     const b = me.body;
     const w = this.world;
-    const move = input.readMove();
+    // Sitting dizzy, you go nowhere.
+    const still = this.dizzy;
+    const move = still ? { x: 0, y: 0 } : input.readMove();
     const yaw = this.renderer.view.yaw;
     // Forward is away from the camera.
     const fx = -Math.sin(yaw);
@@ -1439,7 +1728,7 @@ export class Game extends EventTarget {
     const mz = fz * move.y + fx * move.x;
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
-    const events = this.lift ? this.rideLift(dt) : this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: input.jump && !this.liftLatch, down: input.down || this.landNext, run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true });
+    const events = this.lift ? this.rideLift(dt) : !still && this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: !still && input.jump && !this.liftLatch, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true });
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
     if (this.monsters.size) this.stomp();
@@ -1454,7 +1743,7 @@ export class Game extends EventTarget {
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;
-    me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
+    me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
     if (events.bounced) {
       this.sound.play('boing', { speed: events.bounced });
@@ -1518,7 +1807,7 @@ export class Game extends EventTarget {
 
   toggleFly() {
     const b = this.me?.body;
-    if (!b) return;
+    if (!b || this.dizzy) return;
     // Off the animal you are riding, and up into the air.
     if (this.riding) {
       this.getOff();
@@ -1741,6 +2030,7 @@ export class Game extends EventTarget {
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
     for (const id of [...this.monsters.keys()]) this.renderer.removeMonster(id);
+    this.renderer.clearFlags();
     this.players.clear();
     this.critters.clear();
     this.monsters.clear();

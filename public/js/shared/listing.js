@@ -7,8 +7,10 @@
 // Peer to peer, a host's page tells the island keeper about its island while
 // it is open (see shared/keeper.js); on the dedicated server, the server
 // lists its own (GET api/islands). Either way the list is made of these:
-//   { code, name, theme, size, players, max, passcode }
-// passcode: whether the island has one (never the passcode itself).
+//   { code, name, theme, size, players, max, passcode, adventure }
+// passcode: whether the island has one (never the passcode itself);
+// adventure, only on an adventure island: { camps, freed, won }, how many
+// monster camps it has and how many are free, and whether all of it is.
 
 import { isValidCode } from './codes.js';
 import { SIZES, THEMES } from './worldgen.js';
@@ -40,6 +42,8 @@ export function cleanListing(raw) {
   if (!name) return null;
   const count = (v, lo, hi) => (Number.isInteger(v) ? Math.min(hi, Math.max(lo, v)) : lo);
   const max = count(raw.max, 1, 64);
+  const adventure = raw.adventure && typeof raw.adventure === 'object' ? raw.adventure : null;
+  const camps = adventure ? count(adventure.camps, 0, 32) : 0;
   return {
     code: raw.code,
     name,
@@ -48,6 +52,7 @@ export function cleanListing(raw) {
     players: count(raw.players, 0, max),
     max,
     passcode: raw.passcode === true,
+    ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true } } : {}),
   };
 }
 

@@ -274,6 +274,28 @@ export class Effects {
     }
   }
 
+  // A firework: a burst of stars in every colour, high over a freed island.
+  firework(x, y, z) {
+    const colors = ['#ff5f8f', '#ffd84d', '#7cc4ff', '#7fe08c', '#c78cff', '#ffffff', '#ff9a3d'];
+    const base = Math.floor(Math.random() * colors.length);
+    for (let i = 0; i < 36; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const up = Math.random() * 2 - 1;
+      const s = 4 + Math.random() * 3;
+      const flat = Math.sqrt(1 - up * up);
+      this.add(i % 3 ? 'star' : 'sparkle', x, y, z, { vx: Math.cos(a) * flat * s, vy: up * s, vz: Math.sin(a) * flat * s, size: 0.35 + Math.random() * 0.2, life: 1.3 + Math.random() * 0.5, gravity: 3, drag: 1.2, color: colors[(base + (i % 2) * 2) % colors.length] });
+    }
+  }
+
+  // Little stars going round and round over the head of someone dizzy (one
+  // step of it: called every frame).
+  dizzy(x, y, z, t) {
+    for (let k = 0; k < 3; k++) {
+      const a = t * 5 + (k / 3) * Math.PI * 2;
+      this.add('star', x + Math.cos(a) * 0.38, y + Math.sin(t * 3 + k) * 0.05, z + Math.sin(a) * 0.38, { size: 0.16, life: 0.07, color: k === 1 ? '#ffffff' : '#ffd84d' });
+    }
+  }
+
   dust(x, y, z) {
     for (let i = 0; i < 3; i++) {
       this.add('puff', x + (Math.random() - 0.5) * 0.4, y + 0.05, z + (Math.random() - 0.5) * 0.4, { vy: 0.4, size: 0.25, life: 0.4, grow: 0.8, color: '#ffffff' });

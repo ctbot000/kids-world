@@ -1,7 +1,9 @@
 // Makes a new island from a seed: hills and a mountain, beaches, a pond,
 // trees (some of them fruit trees of the island's own fruit), flowers,
 // seashells, jewels in the rock and a mine into each mountain, animal
-// friends, and a spot for everyone to arrive at.
+// friends, and a spot for everyone to arrive at; on an adventure island, the
+// grumpy monsters' camps and King Grumble's castle too.
+import { buildCamps } from './adventure.js';
 import * as B from './blocks.js';
 import { placeBig, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
@@ -30,7 +32,8 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-function palette(theme) {
+// The island's own ground, flowers and grass, by its kind.
+export function palette(theme) {
   switch (theme) {
     case 'snowy':
       return { top: B.SNOW, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
@@ -41,7 +44,8 @@ function palette(theme) {
   }
 }
 
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20 } = {}) {
+// adventure: with monster camps all over it, to free (see adventure.js).
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);
@@ -319,10 +323,20 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   hideGems(world, new Rng(seed ^ 0x2c1b3c6d));
 
   // ---------------------------------------------------------------- vehicles
-  // Last of all, from their own randomness too.
+  // Last, from their own randomness too.
   critters.push(...placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines));
 
-  return { world, critters, fruit, mines };
+  // ---------------------------------------------------------------- adventure
+  // Last of all, from randomness of its own, on top of the island as it
+  // would be without: the monsters' camps, and King Grumble's castle.
+  let camps = [];
+  if (adventure) {
+    const made = buildCamps(world, new Rng(seed ^ 0x6a09e667), { pal, trees, critters, mines });
+    camps = made.camps;
+    critters.splice(0, critters.length, ...made.critters);
+  }
+
+  return { world, critters, fruit, mines, camps };
 }
 
 // ---------------------------------------------------------------- jewels

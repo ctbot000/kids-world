@@ -261,7 +261,44 @@ export class Sound {
         this.tone(NOTE(91), { at: 0.1, decay: 0.3, gain: 0.08, type: 'triangle' });
         break;
       case 'grumble':
-        this.tone(110 * r(), { decay: 0.35, gain: 0.12, type: 'sawtooth', slide: 85, vibrato: 12 });
+        // King Grumble's is a deeper one.
+        this.tone((opts.big ? 62 : 110) * r(), { decay: opts.big ? 0.6 : 0.35, gain: opts.big ? 0.16 : 0.12, type: 'sawtooth', slide: opts.big ? 48 : 85, vibrato: 12 });
+        break;
+      // An adventure island: a camp freed (a fanfare), the whole island
+      // freed (a longer one), King Grumble's bubble popping, his stomp
+      // landing, a bop on him, sitting dizzy, and a friend helping you up.
+      case 'fanfare':
+        [67, 72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.12, decay: i === 3 ? 0.9 : 0.16, gain: 0.14, type: 'triangle' }));
+        this.tone(NOTE(84), { at: 0.48, decay: 0.9, gain: 0.06 });
+        this.noise(0.7, { at: 0.36, type: 'highpass', freq: 6500, gain: 0.05 });
+        break;
+      case 'victory':
+        [60, 64, 67, 72, 67, 72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.13 + (i > 4 ? 0.15 : 0), decay: i === 8 ? 1.4 : 0.2, gain: 0.13, type: 'triangle' }));
+        [72, 76, 79].forEach((n) => this.tone(NOTE(n), { at: 1.35, decay: 1.6, gain: 0.05 }));
+        this.noise(1.2, { at: 1.2, type: 'highpass', freq: 6000, gain: 0.06 });
+        break;
+      case 'bubble':
+        this.tone(320 * r(), { decay: 0.18, gain: 0.12, slide: 900, slideTime: 0.12 });
+        this.tone(NOTE(88), { at: 0.08, decay: 0.25, gain: 0.05, type: 'triangle' });
+        break;
+      case 'shield':
+        this.noise(0.25, { type: 'bandpass', freq: 2500, sweep: 6000, gain: 0.18 });
+        this.tone(500, { decay: 0.15, gain: 0.15, slide: 1600, slideTime: 0.1 });
+        [79, 84, 88, 91].forEach((n, i) => this.tone(NOTE(n), { at: 0.2 + i * 0.07, decay: 0.3, gain: 0.06, type: 'triangle' }));
+        break;
+      case 'stomp':
+        this.tone(78 * r(), { decay: 0.5, gain: (opts.near ?? 1) * 0.35, slide: 38, slideTime: 0.4 });
+        this.noise(0.35, { type: 'lowpass', freq: 380, gain: (opts.near ?? 1) * 0.3 });
+        break;
+      case 'ouch':
+        this.tone(150 * r(), { decay: 0.35, gain: 0.25, type: 'triangle', slide: 70, slideTime: 0.3, vibrato: 25 });
+        this.noise(0.12, { type: 'bandpass', freq: 600, sweep: 1500, gain: 0.18 });
+        break;
+      case 'dizzy':
+        [76, 74, 72, 71, 69].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.11, decay: 0.2, gain: 0.09, type: 'sine', vibrato: 15 }));
+        break;
+      case 'helpup':
+        [72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.08, decay: 0.25, gain: 0.12, type: 'triangle' }));
         break;
       case 'bye':
         this.noise(0.3, { type: 'bandpass', freq: 1500, sweep: 400, gain: 0.15 });

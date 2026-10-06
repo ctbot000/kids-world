@@ -178,6 +178,19 @@ const PAINT = {
     wavyBand(ctx, '#7ccb57', 16, 3);
     speckles(ctx, 12, ['#8fd865'], 6, [1, 2]);
   },
+  // The monsters' gloomy ground (shared/adventure.js): dull purple with
+  // darker blotches and a few grey wisps.
+  'gloom-top'(ctx) {
+    fill(ctx, '#6a5487');
+    blobs(ctx, 13, 'rgba(60,40,85,0.45)', 10, 3, 7);
+    speckles(ctx, 14, ['#7d6699', '#5a4575', '#8e85a0'], 46, [1.2, 2.6]);
+    bevel(ctx, 0.7);
+  },
+  'gloom-side'(ctx) {
+    PAINT.dirt(ctx);
+    wavyBand(ctx, '#6a5487', 16, 7);
+    speckles(ctx, 15, ['#7d6699'], 6, [1, 2]);
+  },
   dirt(ctx) {
     fill(ctx, '#a0714a');
     speckles(ctx, 21, ['#8b603c', '#b3845a', '#936741'], 40, [1.5, 3.5]);

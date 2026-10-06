@@ -668,6 +668,14 @@ body.fullscreen .full-icon .leave {
   opacity: 0.35;
 }
 
+/* On an adventure island, how many camps are free. */
+.hearts .camps {
+  margin-left: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .hearts.hurt {
   animation: hearts-hurt 0.45s;
 }
@@ -946,6 +954,47 @@ body.touch.playing #joystick {
 
 .critter-tag .name {
   background: rgba(255, 243, 176, 0.92);
+}
+
+/* Over an adventure island's camps, how their flags are going, and over King
+   Grumble, his hearts: a little card with a bar, following them about as the
+   name tags do. */
+.adv-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 10px 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(61, 46, 79, 0.22);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.adv-tag .bar {
+  width: 96px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(61, 46, 79, 0.15);
+  overflow: hidden;
+}
+
+.adv-tag .bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #5cc3f2;
+  transition: width 0.2s;
+}
+
+.adv-tag .bar.king span {
+  background: #ff5f8f;
 }
 
 .aim-hint {
@@ -1394,6 +1443,34 @@ body.touch.playing #joystick {
   text-align: center;
   margin: 10px 0;
   color: var(--sky-dark);
+}
+
+/* An adventure island's camps, in its card: one row each, the free ones in
+   the island's colours. */
+.adventure-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.adventure-list .camp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(123, 79, 208, 0.12);
+  font-weight: 700;
+}
+
+.adventure-list .camp.free {
+  background: rgba(92, 195, 242, 0.18);
+}
+
+.adventure-list .camp .muted {
+  margin-left: auto;
+  font-weight: 600;
 }
 
 .setting {

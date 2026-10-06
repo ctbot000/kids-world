@@ -1,13 +1,15 @@
 // A hosted island: the world and everything around it — who is here, their
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
-// into trees, fruit growing back, what the island's owner allows, and the
-// monsters when the owner lets them in (with everyone's hearts).
+// into trees, fruit growing back, what the island's owner allows, the
+// monsters when the owner lets them in (with everyone's hearts), and on an
+// adventure island its camps to free (see adventure.js).
 //
 // Transport-agnostic. The host environment (the Node server, a host's
 // browser, or solo play) attaches connection objects with send(text) and
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
+import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
@@ -15,9 +17,9 @@ import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
-import { generate, hideGems, SIZES } from './worldgen.js';
+import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS } from './monsters.js';
+import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
@@ -57,6 +59,11 @@ const GUESS_EVERY_MS = 10000;
 // without the passcode, within this long.
 const PASS_MS = 30 * 60000;
 const MAX_PASSES = 16;
+// King Grumble's stomp: who it knocks over is worked out this long after he
+// lands, so that a jump only just reaching the host still counts; anyone
+// in the air within this long of then is missed.
+const STOMP_SETTLE_MS = 250;
+const AIR_GRACE_MS = 500;
 
 export function randomToken() {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
@@ -79,8 +86,8 @@ function cleanSettings(raw, base = defaultSettings()) {
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 
 export class Room {
-  // Either { theme, size, name, seed } for a brand-new island, or { save }.
-  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  // Either { theme, size, name, seed, adventure } for a brand-new island, or { save }.
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
@@ -110,13 +117,18 @@ export class Room {
     this.envSentAt = t;
     this.shellAt = t + SHELL_MS;
     this.starAt = t + STAR_MS;
+    // The camps to free, on an adventure island (adventure.js), and King
+    // Grumble's landings still to work out (see stepMonsters).
+    this.adventure = null;
+    this.advSent = '';
+    this.stomps = [];
 
     if (save) {
       this.loadSave(save);
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, size, name: islandName });
+      const made = generate({ seed: s, theme, size, name: islandName, adventure });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -124,6 +136,7 @@ export class Room {
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
+      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps }, s ^ 0x510e527f);
     }
     // Never saved: an island opened again starts without any.
     this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
@@ -284,6 +297,9 @@ export class Room {
       case 'pass':
         this.givePass(conn, c);
         break;
+      case 'help':
+        this.help(p, msg);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -334,6 +350,7 @@ export class Room {
       p.online = true;
       p.look = look;
       p.hearts = MAX_HEARTS;
+      p.dizzyUntil = 0;
       p.name = this.uniqueName(wanted, p.id);
     } else {
       const spawn = this.world.spawn;
@@ -414,7 +431,7 @@ export class Room {
   }
 
   describePlayer(p) {
-    return { id: p.id, name: p.name, look: p.look, s: p.s };
+    return { id: p.id, name: p.name, look: p.look, s: p.s, ...((p.dizzyUntil ?? 0) > this.now() ? { dizzy: true } : {}) };
   }
 
   sendWelcome(conn, c) {
@@ -437,6 +454,7 @@ export class Room {
       hearts: this.players.get(c.pid)?.hearts ?? MAX_HEARTS,
       env: this.envMessage(),
       chat: this.chat,
+      adventure: this.adventure?.describe() ?? null,
     });
   }
 
@@ -448,6 +466,11 @@ export class Room {
     const z = Math.min(w.D, Math.max(0, s[2]));
     const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(15, s[4] | 0)), s[5] & 0xff];
     p.s = state;
+    // Up in the air (or flying, or swimming), for King Grumble's stomp to miss.
+    if (this.adventure) {
+      const ground = w.groundBelow(Math.floor(x), Math.floor(y + 0.05), Math.floor(z)) + 1;
+      if (state[5] & 1 || y - ground > 0.3) p.airAt = this.now();
+    }
     this.broadcast({ t: 'm', p: p.id, s: state }, conn);
   }
 
@@ -714,6 +737,8 @@ export class Room {
       players: this.online,
       max: MAX_PLAYERS,
       passcode: this.passcode !== '',
+      // An adventure island: how many camps it has, how many are free, and whether all of it is.
+      ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
     };
   }
 
@@ -747,7 +772,7 @@ export class Room {
       if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: p.look?.animal === KID ? p.look.hair : '' });
     }
     this.critters.step(this.world, dt, now, where, isNight(env.time));
-    if (this.settings.monsters) this.stepMonsters(dt, now, where);
+    if (this.settings.monsters || this.adventure?.active) this.stepMonsters(dt, now, where);
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
       this.broadcast({ t: 'c', c: this.critters.pack() });
@@ -755,6 +780,15 @@ export class Room {
       const any = this.monsters.list.length > 0;
       if (any || this.monstersSent) this.broadcast({ t: 'mon', m: this.monsters.pack() });
       this.monstersSent = any;
+      // The flags going up, and King Grumble's hearts, as they change.
+      if (this.adventure) {
+        const pack = this.adventure.pack();
+        const text = JSON.stringify(pack);
+        if (text !== this.advSent) {
+          this.advSent = text;
+          this.broadcast({ t: 'adv', ...pack });
+        }
+      }
     }
 
     this.grow(now);
@@ -768,27 +802,35 @@ export class Room {
     const people = [];
     for (const [id, w] of where) {
       const p = this.players.get(id);
-      people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0 });
+      people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now });
     }
-    for (const { monster, pid } of this.monsters.step(this.world, dt, now, people, isNight(this.env.time))) {
-      const p = this.players.get(pid);
-      p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS);
-      p.bumpAt = now;
-      p.healAt = now;
-      p.safeUntil = now + SAFE_MS;
-      const home = p.hearts === 0;
-      if (home) {
-        // Back to the start of the island, safe, with every heart again.
-        p.hearts = MAX_HEARTS;
-        const spawn = this.world.spawn;
-        p.s = [spawn.x, spawn.y, spawn.z, p.s[3], 0, 0];
+    const adv = this.adventure;
+    if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
+    const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
+    for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
+    for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
+    // King Grumble landing: a thump everyone sees, and a moment later, whoever
+    // was on the ground near him then is knocked over.
+    for (const s of this.monsters.takeStomps()) {
+      this.broadcast({ t: 'stomp', id: s.monster.id, x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2) });
+      this.stomps.push({ ...s, at: now + STOMP_SETTLE_MS });
+    }
+    for (const s of [...this.stomps]) {
+      if (s.at > now) continue;
+      this.stomps.splice(this.stomps.indexOf(s), 1);
+      for (const p of this.players.values()) {
+        if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
+        if (Math.hypot(p.s[0] - s.x, p.s[2] - s.z) > STOMP.reach || Math.abs(p.s[1] - s.y) > 2) continue;
+        if (now - (p.airAt ?? -Infinity) <= AIR_GRACE_MS) continue;
+        this.hurt(p.id, s.monster, now, true);
       }
-      const b = monster.body;
-      this.broadcast({ t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), hearts: p.hearts, home });
     }
-    // Hearts come back while nothing bumps you.
     for (const p of this.players.values()) {
-      if (!p.online || (p.hearts ?? MAX_HEARTS) >= MAX_HEARTS) continue;
+      if (!p.online) continue;
+      // Dizzy for too long, with no friend to help: back to the nearest safe place.
+      if (p.dizzyUntil && now >= p.dizzyUntil) this.sendHome(p, now);
+      // Hearts come back while nothing bumps you.
+      if ((p.hearts ?? MAX_HEARTS) >= MAX_HEARTS || p.dizzyUntil) continue;
       const hearts = heartsBack(p.hearts, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
       if (hearts === p.hearts) continue;
       p.hearts = hearts;
@@ -797,19 +839,169 @@ export class Room {
     }
   }
 
-  // Tapping a monster, or jumping on it: pop!
+  // A monster bumped into someone (stomp: King Grumble's landing knocked
+  // them over): a heart gone. With none left, they sit dizzy where they are
+  // on an adventure island while a friend there could come and help them up;
+  // otherwise back they go to the nearest safe place, with every heart again.
+  hurt(pid, monster, now, stomp = false) {
+    const p = this.players.get(pid);
+    if (!p) return;
+    p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS);
+    p.bumpAt = now;
+    p.healAt = now;
+    p.safeUntil = now + SAFE_MS;
+    const b = monster.body;
+    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), hearts: p.hearts, home: false };
+    if (monster.kind === 'king') msg.big = true;
+    if (stomp) msg.stomp = true;
+    if (p.hearts === 0) {
+      if (this.adventure && this.helperFor(pid, now)) {
+        p.dizzyUntil = now + DIZZY_MS;
+        msg.dizzy = true;
+      } else {
+        const at = this.goHome(p, now);
+        Object.assign(msg, { home: true, hearts: MAX_HEARTS, at });
+      }
+    }
+    this.broadcast(msg);
+  }
+
+  // Whether anyone else on the island could help someone up (nobody dizzy too).
+  helperFor(pid, now) {
+    for (const q of this.players.values()) if (q.online && q.id !== pid && !((q.dizzyUntil ?? 0) > now)) return true;
+    return false;
+  }
+
+  // Back to the nearest safe place (the start, or a camp freed), safe, with
+  // every heart again. Returns where, as [x, y, z].
+  goHome(p, now) {
+    const at = this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
+    p.hearts = MAX_HEARTS;
+    p.dizzyUntil = 0;
+    p.healAt = now;
+    p.safeUntil = now + SAFE_MS;
+    p.s = [at.x, at.y, at.z, p.s[3], 0, 0];
+    return [at.x, at.y, at.z];
+  }
+
+  sendHome(p, now) {
+    const at = this.goHome(p, now);
+    this.broadcast({ t: 'home', pid: p.id, at, hearts: MAX_HEARTS });
+  }
+
+  // A friend tapping someone sitting dizzy, from beside them: up they get,
+  // with a few hearts.
+  help(p, msg) {
+    const now = this.now();
+    const q = this.players.get(msg.pid);
+    if (!q?.online || q === p || !((q.dizzyUntil ?? 0) > now) || (p.dizzyUntil ?? 0) > now) return;
+    if (Math.hypot(q.s[0] - p.s[0], q.s[1] - p.s[1], q.s[2] - p.s[2]) > HELP_REACH + 1.5) return;
+    Object.assign(q, { dizzyUntil: 0, hearts: HELP_HEARTS, bumpAt: now, healAt: now, safeUntil: now + SAFE_MS * 2 });
+    this.broadcast({ t: 'helped', pid: q.id, by: p.id, hearts: q.hearts });
+  }
+
+  // Tapping a monster, or jumping on it: pop! (King Grumble takes a lot of that.)
   bop(p, msg) {
-    if (!this.settings.monsters || !Number.isInteger(msg.id)) return;
-    const m = this.monsters.canBop(msg.id, { x: p.s[0], y: p.s[1], z: p.s[2] });
-    if (!m) return;
+    if (!Number.isInteger(msg.id)) return;
+    const now = this.now();
+    const m = this.monsters.get(msg.id);
+    if (!m || (!m.camp && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
+    if (!this.monsters.canBop(m.id, { x: p.s[0], y: p.s[1], z: p.s[2] })) return;
+    if (m.kind === 'king') {
+      this.bopKing(p, m, now);
+      return;
+    }
     this.monsters.remove(m.id);
     const b = m.body;
     this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    if (m.camp) this.adventure?.guardGone(m, now);
   }
 
-  // Monsters turned off: every one goes, and everyone has all their hearts.
+  // A bop for King Grumble: nothing in his bubble, otherwise a heart (and a
+  // hop back); with none left he goes pop, and the whole island is free.
+  bopKing(p, m, now) {
+    const hit = this.adventure?.hitKing(p.id, now);
+    if (!hit || hit.wait) return;
+    if (hit.shielded) {
+      this.broadcast({ t: 'kinghit', id: m.id, by: p.id, shielded: true });
+      return;
+    }
+    const b = m.body;
+    const dx = b.x - p.s[0];
+    const dz = b.z - p.s[2];
+    const d = Math.hypot(dx, dz) || 1;
+    Object.assign(b, { vx: (dx / d) * 5, vz: (dz / d) * 5, vy: 5, onGround: false });
+    this.broadcast({ t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max });
+    if (hit.beaten) this.winAdventure(p, m);
+  }
+
+  // A camp of an adventure island freed: its monsters go pop, its gloomy
+  // ground turns back into the island's own, and everyone hears (and, with
+  // the last camp, that King Grumble's bubble popped).
+  campFreed(news) {
+    const c = news.camp;
+    for (const m of news.gone) {
+      const b = m.body;
+      this.broadcast({ t: 'pop', id: m.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    }
+    this.ungloom(c);
+    this.broadcast({ t: 'freed', id: c.id, by: news.by, x: c.x, y: c.y, z: c.z });
+    if (news.shieldDown) this.broadcast({ t: 'shield', up: false });
+    if (news.won) {
+      this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), x: c.x, y: c.y, z: c.z });
+      this.allWell();
+    }
+    this.changed();
+  }
+
+  // The gloomy ground round a camp back to the island's own, with flowers.
+  ungloom(c) {
+    const cells = freeCells(this.world, c, palette(this.world.theme), this.adventure.rng);
+    if (!cells.length) return;
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+  }
+
+  // King Grumble popped: every camp's monster goes, his castle is free, and
+  // so is the island, for everyone on it.
+  winAdventure(p, king) {
+    const adv = this.adventure;
+    for (const m of adv.win(this.monsters)) {
+      const b = m.body;
+      this.broadcast({ t: 'pop', id: m.id, by: m === king ? p.id : 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    }
+    const castle = adv.castle;
+    if (castle) this.ungloom(castle);
+    const b = king.body;
+    this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), hero: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    this.allWell();
+    this.changed();
+  }
+
+  // The island free: anyone dizzy gets up, and with no monsters roaming, nothing
+  // can bump anyone now, so everyone has all their hearts.
+  allWell() {
+    const now = this.now();
+    for (const p of this.players.values()) {
+      if ((p.dizzyUntil ?? 0) > now) {
+        p.dizzyUntil = 0;
+        p.hearts = this.settings.monsters ? HELP_HEARTS : MAX_HEARTS;
+        if (p.online) this.broadcast({ t: 'helped', pid: p.id, by: 0, hearts: p.hearts });
+        continue;
+      }
+      p.dizzyUntil = 0;
+      if (this.settings.monsters || (p.hearts ?? MAX_HEARTS) === MAX_HEARTS) continue;
+      p.hearts = MAX_HEARTS;
+      if (p.online) this.sendToPid(p.id, { t: 'hearts', hearts: MAX_HEARTS });
+    }
+  }
+
+  // Monsters turned off: every one roaming about goes (those of an adventure
+  // island's camps stay), and, unless those are about, everyone has all their
+  // hearts.
   noMonsters() {
-    this.monsters.clear();
+    this.monsters.clearRoaming();
+    if (this.adventure?.active) return;
     for (const p of this.players.values()) {
       if ((p.hearts ?? MAX_HEARTS) === MAX_HEARTS) continue;
       p.hearts = MAX_HEARTS;
@@ -941,6 +1133,7 @@ export class Room {
       nextPid: this.nextPid,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look })),
       tokens: [...this.tokens],
+      ...(this.adventure ? { adventure: this.adventure.save() } : {}),
     };
   }
 
@@ -969,6 +1162,7 @@ export class Room {
     if (v < 6) hideGems(this.world, new Rng(seed ^ 0x2c1b3c6d), { open: false });
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
+    this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
     if (Array.isArray(save.players)) {

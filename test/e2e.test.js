@@ -2318,3 +2318,194 @@ test('a logged-in player sees the other players and who is playing now, and invi
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('an adventure island with a friend: a camp’s monster popped with a click, its flag raised together, and a dizzy friend helped up with a click', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Brave Fox' });
+  await clickButton(host, 'Make an island');
+  await clickButton(host, 'Flat Land', '#modal');
+  await clickSwitch(host, '#modal .switch[aria-label="Adventure"]');
+  await clickButton(host, 'Make it', '#modal');
+  await inGame(host);
+  await until(host, () => window.kidsWorld.session.link.state === 'online');
+  // Its camps and King Grumble's castle, their flags, and how many are free beside your hearts.
+  const camps = await host.evaluate(() => window.kidsWorld.session.link.room.adventure.camps.map(({ id, kind, x, y, z, r }) => ({ id, kind, x, y, z, r })));
+  assert.deepEqual(
+    camps.map((c) => c.kind),
+    ['camp', 'camp', 'camp', 'castle'],
+  );
+  await until(host, () => window.kidsWorld.renderer.flags.size === 4 && !document.getElementById('hearts').hidden && document.querySelector('#hearts .camps')?.textContent === '🚩 0/3');
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Happy Panda' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(guest, () => window.kidsWorld.game.adventure?.camps.size === 4 && window.kidsWorld.renderer.flags.size === 4);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // Each player standing somewhere in camp 1, still, looking along yaw, with the camera close
+  // behind them, inside the camp: never pulled in by its fence, which would put what is in
+  // front of them down under the hotbar.
+  const [c] = camps;
+  // Where a point is on the host's screen, whether anything is over it there, and what a tap
+  // there means.
+  const target = (p) =>
+    host.evaluate((p) => {
+      const kw = window.kidsWorld;
+      const s = kw.renderer.project(p.x, p.y, p.z);
+      const rect = kw.renderer.canvas.getBoundingClientRect();
+      const x = rect.left + s.x;
+      const y = rect.top + s.y;
+      const el = document.elementFromPoint(x, y);
+      const b = kw.game.me.body;
+      const cam = kw.renderer.camera.position;
+      return { x, y, clear: el === kw.renderer.canvas, over: el && `${el.tagName}#${el.id}.${el.className} in ${el.parentElement?.id}`, at: p, me: [b.x, b.y, b.z], camera: [cam.x, cam.y, cam.z], aim: kw.game.aim(kw.input.ndc(s.x, s.y)) };
+    }, p);
+  const stand = (page, dx, dz, yaw = 0) =>
+    page.evaluate(
+      (c, dx, dz, yaw) => {
+        const kw = window.kidsWorld;
+        Object.assign(kw.game.me.body, { x: c.x + dx, y: c.y, z: c.z + dz, vx: 0, vy: 0, vz: 0, flying: false });
+        Object.assign(kw.renderer.view, { yaw, pitch: 0.25, dist: 4 });
+        kw.game.sendMove(true);
+      },
+      c,
+      dx,
+      dz,
+      yaw,
+    );
+  // Nothing inside camp 1 to get in the way of a click (a hay bale can be anywhere): all of
+  // it cleared, as the island changes it, but its fence and the flag's floor.
+  const cleared = await host.evaluate((c) => {
+    const room = window.kidsWorld.session.link.room;
+    const w = room.world;
+    const cx = Math.floor(c.x);
+    const cz = Math.floor(c.z);
+    const cells = [];
+    for (let x = cx - c.r; x <= cx + c.r; x++) {
+      for (let z = cz - c.r; z <= cz + c.r; z++) {
+        if (Math.hypot(x + 0.5 - c.x, z + 0.5 - c.z) > c.r - 1) continue;
+        for (let y = c.y; y < c.y + 6; y++) if (w.get(x, y, z) !== 0 && !(y === c.y && Math.max(Math.abs(x - cx), Math.abs(z - cz)) <= 1)) cells.push(x, y, z, 0);
+      }
+    }
+    for (let i = 0; i < cells.length; i += 4) w.set(cells[i], cells[i + 1], cells[i + 2], 0);
+    room.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    return cells;
+  }, c);
+  for (const page of [host, guest]) await until(page, (cells) => cells.every((v, i) => i % 4 !== 3 || window.kidsWorld.game.world.get(cells[i - 3], cells[i - 2], cells[i - 1]) === 0), cleared);
+  // Near it, its monsters come out; all but one go, and that one is held still in front of the host.
+  await stand(host, 2.5, c.r + 6);
+  await stand(guest, -2.5, c.r + 6);
+  await until(host, (id) => window.kidsWorld.session.link.room.monsters.list.filter((m) => m.camp === id).length === 3, c.id);
+  // (Before the host goes in: one of them chasing the host would knock them about the camp.)
+  const id = await host.evaluate((c) => {
+    const room = window.kidsWorld.session.link.room;
+    const [m, ...rest] = room.monsters.list.filter((o) => o.camp === c.id);
+    for (const o of rest) room.monsters.remove(o.id);
+    // None coming back while this runs, however slowly (a popped one would in 20 seconds).
+    room.adventure.campById(c.id).back = [Infinity, Infinity, Infinity];
+    Object.assign(m.body, { x: c.x + 2.5, y: c.y, z: c.z - 2, vx: 0, vy: 0, vz: 0 });
+    m.giggle = Infinity;
+    return m.id;
+  }, c);
+  await stand(host, 2.5, 0.5);
+  // Drawn where the island has it (a moved monster is drawn sliding there, a little behind), with the camera settled.
+  await until(
+    host,
+    (id) => {
+      const kw = window.kidsWorld;
+      const m = kw.session.link.room.monsters.get(id);
+      const at = kw.game.monsters.get(id)?.model.group.position;
+      return at && Math.hypot(at.x - m.body.x, at.y - m.body.y, at.z - m.body.z) < 0.05;
+    },
+    id,
+  );
+  await host.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  const held = await host.evaluate((id) => window.kidsWorld.game.monsters.get(id).model.group.position.toArray(), id);
+  const at = await target({ x: held[0], y: held[1] + 0.4, z: held[2] });
+  assert.deepEqual(at.aim, { kind: 'monster', id }, `the monster, under the tap: ${JSON.stringify(at)}`);
+  assert.ok(at.clear, `nothing over the monster on screen: ${JSON.stringify(at)}`);
+  await host.mouse.click(at.x, at.y);
+  try {
+    await until(host, (id) => !window.kidsWorld.session.link.room.monsters.get(id), id);
+  } catch (error) {
+    // What was under the click then, and where the monster and the host were, at the island and on the page.
+    const now = await host.evaluate(
+      (id, at) => {
+        const kw = window.kidsWorld;
+        const room = kw.session.link.room;
+        const m = room.monsters.get(id);
+        const el = document.elementFromPoint(at.x, at.y);
+        const rect = kw.renderer.canvas.getBoundingClientRect();
+        return {
+          under: el ? `${el.tagName}#${el.id}.${el.className}` : null,
+          aim: kw.game.aim(kw.input.ndc(at.x - rect.left, at.y - rect.top)),
+          monster: m && [m.body.x, m.body.y, m.body.z, m.giggle],
+          host: room.players.get(kw.game.pid).s,
+          dizzy: kw.game.dizzy,
+          holding: kw.game.holding,
+          seed: room.world.seed,
+        };
+      },
+      id,
+      at,
+    );
+    error.message += `; then: ${JSON.stringify(now)}`;
+    throw error;
+  }
+  // Both by the flag: up it goes, and the camp is free, for both of them.
+  await stand(guest, -2.5, 0);
+  try {
+    await until(host, (id) => window.kidsWorld.game.adventure.camps.get(id).freed, c.id, 30000 * SLOW);
+  } catch (error) {
+    // How the camp was doing, and where everyone stood, at the island; and its seed, to replay it.
+    const at = await host.evaluate((id) => {
+      const room = window.kidsWorld.session.link.room;
+      const camp = room.adventure.campById(id);
+      const near = (x, z) => [...Array(7)].map((_, dy) => room.world.get(Math.floor(x), Math.floor(camp.y) - 1 + dy, Math.floor(z))).join(',');
+      return {
+        seed: room.world.seed,
+        camp: { x: camp.x, y: camp.y, z: camp.z, progress: camp.progress, holders: camp.holders, guarded: camp.guarded, awake: camp.awake, back: camp.back },
+        monsters: room.monsters.list.map((m) => [m.camp, m.kind, +m.body.x.toFixed(2), +m.body.y.toFixed(2), +m.body.z.toFixed(2)]),
+        players: [...room.players.values()].map((p) => [p.id, p.online, p.s, near(p.s[0], p.s[2])]),
+      };
+    }, c.id);
+    error.message += `; at the island: ${JSON.stringify(at)}`;
+    throw error;
+  }
+  await until(guest, (id) => window.kidsWorld.game.adventure.camps.get(id).freed && window.kidsWorld.profile.data.stats.freed === 1, c.id);
+  assert.equal(await host.evaluate(() => window.kidsWorld.profile.data.stats.freed), 1);
+  await until(host, () => document.querySelector('#hearts .camps')?.textContent === '🚩 1/3');
+  // The guest out of hearts, knocked back towards the middle of the camp to sit dizzy there,
+  // and the host, beside them, taps them to help them up (through the flowers of the camp freed).
+  await stand(guest, 2.5, 0);
+  const guestPid = await guest.evaluate(() => window.kidsWorld.game.pid);
+  await host.evaluate((pid) => {
+    const room = window.kidsWorld.session.link.room;
+    const p = room.players.get(pid);
+    p.hearts = 1;
+    p.safeUntil = 0;
+    room.hurt(pid, { id: 0, kind: 'blob', body: { x: p.s[0], z: p.s[2] + 1 } }, room.now());
+  }, guestPid);
+  await until(guest, () => window.kidsWorld.game.dizzy && window.kidsWorld.game.hearts === 0 && window.kidsWorld.game.me.body.onGround);
+  await until(host, (pid) => window.kidsWorld.game.players.get(pid)?.dizzy, guestPid);
+  const sat = await guest.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, y: window.kidsWorld.game.me.body.y, z: window.kidsWorld.game.me.body.z }));
+  await stand(host, sat.x - c.x, sat.z - c.z + 2.5);
+  // Drawn sitting where they are on the host's screen too.
+  await until(
+    host,
+    ({ pid, sat }) => {
+      const at = window.kidsWorld.game.players.get(pid)?.avatar.root.position;
+      return at && Math.hypot(at.x - sat.x, at.y - sat.y, at.z - sat.z) < 0.05;
+    },
+    { pid: guestPid, sat },
+  );
+  await host.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  const sitting = await host.evaluate((pid) => window.kidsWorld.game.players.get(pid).avatar.root.position.toArray(), guestPid);
+  const friend = await target({ x: sitting[0], y: sitting[1] + 0.6, z: sitting[2] });
+  assert.deepEqual(friend.aim, { kind: 'friend', pid: guestPid }, `the friend, under the tap: ${JSON.stringify(friend)}`);
+  assert.ok(friend.clear, `nothing over the friend on screen: ${JSON.stringify(friend)}`);
+  await host.mouse.click(friend.x, friend.y);
+  await until(guest, () => !window.kidsWorld.game.dizzy && window.kidsWorld.game.hearts === 3);
+  await until(host, () => window.kidsWorld.profile.data.stats.helped === 1);
+  assert.deepEqual(pageErrors, []);
+  await host.browserContext().close();
+  await guest.browserContext().close();
+});

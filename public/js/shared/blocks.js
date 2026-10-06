@@ -58,6 +58,11 @@ export const WATER = def(10, 'water', { name: 'Water', kind: 'water', category: 
 export const ICE = def(11, 'ice', { name: 'Ice', category: 'nature', tiles: 'ice', sound: 'glass' });
 export const CLOUD = def(18, 'cloud', { name: 'Cloud', category: 'nature', tiles: 'cloud', sound: 'soft' });
 export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', category: 'nature', tiles: { top: 'snow', side: 'snowy-leaves', bottom: 'pine-leaves' }, sound: 'snow' });
+// The grumpy monsters' ground, round their camps on an adventure island
+// (shared/adventure.js): dark and gloomy until the camp is freed, when it
+// turns back into the island's own grass, snow or frosting. Natural ground,
+// not something to build with.
+export const GLOOM = def(27, 'gloom', { name: 'Gloomy Ground', tiles: { top: 'gloom-top', side: 'gloom-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
 
 // ---------------------------------------------------------------- building
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });
@@ -199,7 +204,7 @@ for (const d of defs) {
 }
 // Natural ground, which the hills tool shapes.
 export const TERRAIN = new Uint8Array(256);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, ...GEM_ROCKS]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, ...GEM_ROCKS]) TERRAIN[id] = 1;
 // Gem rocks, which a tap digs a jewel out of.
 export const GEM_ROCK = new Uint8Array(256);
 for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;

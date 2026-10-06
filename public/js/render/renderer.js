@@ -1,10 +1,13 @@
-// Puts the island on screen: the terrain, the sky, players, animals and monsters, the
-// preview of what a tool is about to do, and a camera that follows you
-// around (and never ends up inside a hill).
+// Puts the island on screen: the terrain, the sky, players, animals and monsters,
+// an adventure island's flags (and the stomps of King Grumble), the preview
+// of what a tool is about to do, and a camera that follows you around (and
+// never ends up inside a hill).
 import * as THREE from '../../vendor/three.module.js';
 import { OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
+import { STOMP } from '../shared/monsters.js';
 import { raycast } from '../shared/raycast.js';
 import { MAX_EDIT_CELLS } from '../shared/tools.js';
+import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
@@ -47,6 +50,9 @@ export class Renderer {
     this.avatars = new Map();
     this.critters = new Map();
     this.monsters = new Map();
+    // An adventure island's flags, by camp, and stomps rushing out over the ground.
+    this.flags = new Map();
+    this.shockwaves = [];
 
     // What a tool is about to do: see-through blocks, or outlines for removal.
     const box = new THREE.BoxGeometry(1.02, 1.02, 1.02);
@@ -135,9 +141,10 @@ export class Renderer {
     this.critters.delete(id);
   }
 
-  addMonster(id) {
+  // kind: 'blob', or 'king' for King Grumble.
+  addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = new MonsterModel(this.world?.theme);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : new MonsterModel(this.world?.theme);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
@@ -148,6 +155,34 @@ export class Renderer {
     if (!m) return;
     m.dispose();
     this.monsters.delete(id);
+  }
+
+  // A camp's flag pole (see adventure-models.js), by the camp's id.
+  addFlag(id, kind) {
+    this.removeFlag(id);
+    const f = new FlagModel(kind);
+    this.entities.add(f.group);
+    this.flags.set(id, f);
+    return f;
+  }
+
+  removeFlag(id) {
+    this.flags.get(id)?.dispose();
+    this.flags.delete(id);
+  }
+
+  clearFlags() {
+    for (const id of [...this.flags.keys()]) this.removeFlag(id);
+  }
+
+  // Shakes the camera for a moment, by about this much.
+  shake(amount) {
+    this.shaking = Math.max(this.shaking ?? 0, amount);
+  }
+
+  // King Grumble landing: a ring rushing out over the ground, as far as his stomp reaches.
+  shockwave(x, y, z, reach = STOMP.reach) {
+    this.shockwaves.push(new Shockwave(this.scene, x, y, z, reach));
   }
 
   // Where the ground is under something, for its round shadow.
@@ -225,6 +260,14 @@ export class Renderer {
     // Snap in at once (never show the inside of a wall), ease back out.
     this.camDist = dist < (this.camDist ?? dist) ? dist : this.camDist + (dist - this.camDist) * Math.min(1, dt * 3);
     this.camera.position.copy(v.smooth).addScaledVector(dir, this.camDist);
+    // The ground shaking (King Grumble landing near you), dying away.
+    if (this.shaking > 0) {
+      const k = this.shaking;
+      this.camera.position.x += (Math.random() - 0.5) * k;
+      this.camera.position.y += (Math.random() - 0.5) * k;
+      this.camera.position.z += (Math.random() - 0.5) * k;
+      this.shaking = Math.max(0, k - dt * 1.2);
+    }
     this.camera.lookAt(v.smooth);
     if (Math.abs(v.shiftNow) > 1e-3) {
       v.smooth.x += Math.cos(v.yaw) * v.shiftNow;
@@ -271,6 +314,16 @@ export class Renderer {
   // ...and the nearest monster.
   pickMonster(ray, maxDist) {
     return this.pickFrom(this.monsters, ray, maxDist);
+  }
+
+  // ...and the nearest of the players numbered in pids (a dizzy friend to help up).
+  pickAvatar(ray, maxDist, pids) {
+    const wanted = new Map();
+    for (const pid of pids) {
+      const a = this.avatars.get(pid);
+      if (a) wanted.set(pid, { group: a.root, center: 0.6, pick: 0.7 });
+    }
+    return this.pickFrom(wanted, ray, maxDist);
   }
 
   pickFrom(models, ray, maxDist, skip = 0) {
@@ -368,6 +421,7 @@ export class Renderer {
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);
     this.effects.update(dt);
+    this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;
     if (this.drawing) {

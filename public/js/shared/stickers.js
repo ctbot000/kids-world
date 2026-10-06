@@ -40,6 +40,9 @@ export const STICKERS = [
   { key: 'going-up', icon: '🛗', name: 'Going Up!', text: 'Ride an elevator', test: (s) => s.lifts >= 1 },
   { key: 'boing', icon: '🦘', name: 'Boing Boing!', text: 'Bounce 20 times on a trampoline', test: (s) => s.bounces >= 20 },
   { key: 'camp-out', icon: '⛺', name: 'Camp Out', text: 'Be in a tent at night', test: (s) => s.campouts >= 1 },
+  { key: 'flag-raiser', icon: '🚩', name: 'Flag Raiser', text: 'Free a monster camp on an adventure island', test: (s) => s.freed >= 1 },
+  { key: 'helping-hand', icon: '🤝', name: 'Helping Hand', text: 'Help a dizzy friend up', test: (s) => s.helped >= 1 },
+  { key: 'island-hero', icon: '👑', name: 'Island Hero', text: 'Pop King Grumble and free a whole adventure island', test: (s) => s.kings >= 1 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];

@@ -14,7 +14,8 @@ const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
 
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6 };
+// dizzy: sitting on the ground, out of hearts on an adventure island, until a friend helps you up.
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7 };
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -639,6 +640,14 @@ export class Avatar {
       lean = 0.25;
       bob = Math.sin(t * 2.5) * 0.06;
       legSwing = 0.15;
+    } else if (anim === ANIM.dizzy) {
+      // Sat down with a bump, head going round and round.
+      bob = -0.24;
+      lean = -0.12;
+      armRaiseL = armRaiseR = 0.55;
+      armFwdL = armFwdR = -0.35;
+      headTilt = Math.sin(t * 5) * 0.28;
+      headNod = 0.12 + Math.cos(t * 5) * 0.1;
     } else if (riding) {
       // Astride an animal, hands forward on the reins (or its neck), going
       // up and down with it, more the faster it goes.
@@ -716,6 +725,13 @@ export class Avatar {
     const reach = riding ? (this.ride?.reach ?? 0.35) : 0;
     legL.rotation.set(riding ? -reach : legSwing, 0, -spread);
     legR.rotation.set(riding ? -reach : -legSwing, 0, spread);
+    if (anim === ANIM.dizzy) {
+      // Legs out in front, sitting.
+      legL.rotation.set(-1.4, 0, -0.18);
+      legR.rotation.set(-1.4, 0, 0.18);
+      spin = 0;
+      hop = 0;
+    }
     if (riding) {
       // Nor do emotes turn them round or lift them out of the saddle.
       spin = 0;

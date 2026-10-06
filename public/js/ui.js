@@ -65,6 +65,8 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // What the island rule for monsters means (shared/monsters.js).
 const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Tap one or jump on it to pop it!';
+// What an adventure island is (shared/adventure.js).
+const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 
 // "a peach", "an apple".
 // "an elephant", "a unicorn".
@@ -159,6 +161,8 @@ export class UI {
     this.icons = new Map();
     this.game = null;
     this.tags = new Map();
+    // Over an adventure island's camps and King Grumble (see adventureTags).
+    this.advTags = new Map();
     this.modalClose = null;
     $('modal-close').addEventListener('click', () => this.closeModal());
     $('modal').addEventListener('pointerdown', (e) => {
@@ -345,6 +349,7 @@ export class UI {
     let own = '';
     let online = true;
     let monsters = false;
+    let adventure = false;
     this.openModal((root) => {
       const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: rolled, placeholder: rolled, maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
       nameBox.spellcheck = false;
@@ -421,6 +426,13 @@ export class UI {
         monsterSw.setAttribute('aria-checked', String(monsters));
         this.sound.play('ui');
       };
+      const adventureSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Adventure', role: 'switch', 'aria-checked': 'false' });
+      adventureSw.onclick = () => {
+        adventure = !adventure;
+        adventureSw.classList.toggle('on', adventure);
+        adventureSw.setAttribute('aria-checked', String(adventure));
+        this.sound.play('ui');
+      };
       root.append(
         h('h2', {}, '🏝️ Make an island'),
         h('h3', {}, 'What kind of island?'),
@@ -446,6 +458,7 @@ export class UI {
           ),
         ),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, 'Friends can visit'), h('div', { class: 'muted' }, 'Friends join with your island code. Turn off to play alone.')), sw),
+        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '⚔️ Adventure'), h('div', { class: 'muted' }, ADVENTURE_ABOUT)), adventureSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
         h(
           'button',
@@ -455,7 +468,7 @@ export class UI {
             style: 'margin-top:14px',
             onclick: () => {
               this.closeModal();
-              this.handlers.make({ theme, size, name: own || rolled, online, settings: monsters ? { monsters: true } : null });
+              this.handlers.make({ theme, size, name: own || rolled, online, adventure, settings: monsters ? { monsters: true } : null });
             },
           },
           '✨ Make it!',
@@ -550,11 +563,12 @@ export class UI {
           const full = it.players >= it.max;
           const size = SIZES.find((s) => s.key === it.size)?.name ?? '';
           const who = it.players === 0 ? 'Nobody there right now' : `${it.players} of ${it.max} playing`;
+          const adv = it.adventure ? (it.adventure.won ? '🏆 Freed' : `⚔️ ${it.adventure.freed} of ${it.adventure.camps} camps free`) : '';
           return h(
             'div',
             { class: 'island-item' },
             h('span', { class: 'emoji' }, THEME_ICON[it.theme] ?? '🏝️'),
-            h('div', { class: 'info' }, h('b', { lang: langOf(it.name) || undefined }, it.name), h('span', { class: 'muted' }, [size, who, it.passcode ? '🔒 Passcode' : ''].filter(Boolean).join(' · '))),
+            h('div', { class: 'info' }, h('b', { lang: langOf(it.name) || undefined }, it.name), h('span', { class: 'muted' }, [adv, size, who, it.passcode ? '🔒 Passcode' : ''].filter(Boolean).join(' · '))),
             h(
               'button',
               { class: `chip${full ? '' : ' on'}`, type: 'button', disabled: full, 'aria-label': `Visit ${it.name}`, onclick: () => visit(it) },
@@ -1239,6 +1253,7 @@ export class UI {
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
+          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
@@ -1762,6 +1777,7 @@ export class UI {
       this.renderHearts();
     });
     on('hearts', () => this.renderHearts());
+    on('adventure', () => this.renderHearts());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -1785,6 +1801,8 @@ export class UI {
     document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
+    for (const el of this.advTags.values()) el.remove();
+    this.advTags.clear();
     $('chatlog').replaceChildren();
     this.closeModal();
   }
@@ -2222,6 +2240,23 @@ export class UI {
         } else if (g.settings.passcode) {
           root.append(h('p', { class: 'muted' }, '🔒 This island has a passcode.'));
         }
+        const adv = g.adventure;
+        if (adv) {
+          const camps = [...adv.camps.values()];
+          const castle = camps.find((c) => c.kind === 'castle');
+          root.append(
+            h('h3', {}, adv.won ? '🏆 This island is free!' : '⚔️ Adventure'),
+            h(
+              'div',
+              { class: 'adventure-list' },
+              ...camps
+                .filter((c) => c.kind === 'camp')
+                .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` Camp ${c.id}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
+              castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, '👑', ' King Grumble', h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in his bubble 🫧' : 'ready to pop!')) : '',
+            ),
+            adv.won ? '' : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
+          );
+        }
         root.append(h('p', { class: 'muted', style: 'margin-top:12px' }, `${g.players.size} ${g.players.size === 1 ? 'player' : 'players'} here now.`));
         // Players with a login, to invite one who is playing now.
         if (this.handlers?.login?.available()) {
@@ -2484,19 +2519,26 @@ export class UI {
     $('island-code').textContent = this.gameHandlers?.canInvite() ? `Code ${prettyCode(g.code)}` : 'Playing alone';
   }
 
-  // Your hearts, shown while the island has monsters; a shake when one goes.
+  // Your hearts, shown while the island has monsters (or camps to free); a
+  // shake when one goes. On an adventure island, how many camps are free too.
   renderHearts() {
     const el = $('hearts');
     const g = this.game;
-    const shown = Boolean(g?.settings.monsters);
+    const adv = g?.adventure;
+    const shown = Boolean(g?.settings.monsters) || Boolean(adv && !adv.won);
     el.hidden = !shown;
     if (!shown) {
       this.heartsShown = MAX_HEARTS;
       return;
     }
     const n = g.hearts;
-    el.setAttribute('aria-label', `${n} of ${MAX_HEARTS} hearts`);
-    el.replaceChildren(...Array.from({ length: MAX_HEARTS }, (_, i) => h('span', { class: i < n ? '' : 'lost' }, '❤️')));
+    const camps = adv ? [...adv.camps.values()].filter((c) => c.kind === 'camp') : [];
+    const freed = camps.filter((c) => c.freed).length;
+    el.setAttribute('aria-label', `${n} of ${MAX_HEARTS} hearts${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
+    el.replaceChildren(
+      ...Array.from({ length: MAX_HEARTS }, (_, i) => h('span', { class: i < n ? '' : 'lost' }, '❤️')),
+      adv ? h('span', { class: 'camps' }, `🚩 ${freed}/${camps.length}`) : '',
+    );
     if (n < (this.heartsShown ?? MAX_HEARTS)) {
       el.classList.remove('hurt');
       void el.offsetWidth;
@@ -2544,7 +2586,11 @@ export class UI {
       el.textContent = c ? `${info.icon} ${c.name || info.name}${g.tool === 'friends' ? ' — tap to say bye' : info.vehicle ? ' — tap to honk' : ' — tap to pet'}` : '';
       el.hidden = !c;
     } else if (aim?.kind === 'monster') {
-      el.textContent = '👾 Monster — tap to pop it!';
+      const king = g.monsters.get(aim.id)?.kind === 'king';
+      el.textContent = !king ? '👾 Monster — tap to pop it!' : g.adventure?.shield ? '🫧 King Grumble is in his bubble' : '👑 King Grumble — tap to bop him!';
+      el.hidden = false;
+    } else if (aim?.kind === 'friend') {
+      el.textContent = `🤝 ${g.players.get(aim.pid)?.name ?? 'A friend'} is dizzy — tap to help them up!`;
       el.hidden = false;
     } else if (aim?.kind === 'far') {
       el.textContent = 'Too far away — walk closer!';
@@ -2588,6 +2634,59 @@ export class UI {
     el.hidden = false;
   }
 
+  // On an adventure island: over each camp near you, how its flag is going
+  // (or what to do there), and over King Grumble, his hearts (or his bubble).
+  adventureTags(g, r) {
+    const seen = new Set();
+    const adv = g.adventure;
+    const me = g.me?.body;
+    const tag = (key, x, y, z, state, build) => {
+      const scr = r.project(x, y, z);
+      if (!scr.visible) return;
+      seen.add(key);
+      let el = this.advTags.get(key);
+      if (!el) {
+        el = h('div', { class: 'adv-tag' });
+        this.advTags.set(key, el);
+        $('overlays').append(el);
+      }
+      if (el.dataset.key !== state) {
+        el.dataset.key = state;
+        el.replaceChildren(...build());
+      }
+      el.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
+    };
+    const bar = (share, kind) => h('div', { class: `bar ${kind}` }, h('span', { style: `width:${Math.round(share * 100)}%` }));
+    if (adv && me && !adv.won) {
+      for (const c of adv.camps.values()) {
+        if (c.freed || !c.flag) continue;
+        const far = Math.hypot(c.x - me.x, c.z - me.z);
+        if (far > 40) continue;
+        const p = c.flag.group.position;
+        const pct = Math.floor(c.progress * 100);
+        let label;
+        if (c.kind === 'castle') label = adv.shield ? '🫧 Free every camp first!' : '👑 Pop King Grumble!';
+        else if (c.friends && c.guarded) label = '👾 Pop the monsters first!';
+        else if (c.friends) label = `🚩 ${pct}%${c.friends > 1 ? ` · ${c.friends} friends` : ''}`;
+        else if (far < c.r + 3) label = '🚩 Stand by the flag!';
+        else label = `🚩 Camp ${c.id}`;
+        // Over the heads of friends standing by it.
+        tag(`camp-${c.id}`, p.x, p.y + 2.8, p.z, `${label}|${pct}`, () => [h('div', { class: 'label' }, label), c.kind === 'camp' && pct > 0 ? bar(c.progress, 'flag') : '']);
+      }
+      const king = [...g.monsters.values()].find((e) => e.kind === 'king');
+      const p = king?.model.group.position;
+      if (p && adv.king && Math.hypot(p.x - me.x, p.z - me.z) < 45) {
+        const { hearts, max } = adv.king;
+        tag('king', p.x, p.y + 2.9, p.z, `${hearts}|${max}|${adv.shield}`, () => [h('div', { class: 'label' }, adv.shield ? '👑 King Grumble 🫧' : '👑 King Grumble'), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
+      }
+    }
+    for (const [key, el] of this.advTags) {
+      if (seen.has(key)) continue;
+      el.remove();
+      this.advTags.delete(key);
+    }
+  }
+
   // Name tags and speech bubbles follow everyone around; the maps keep up.
   frame(dt) {
     const g = this.game;
@@ -2629,6 +2728,7 @@ export class UI {
       }
     }
     this.rideButton(g, r);
+    this.adventureTags(g, r);
     // The clock: sun, moon and weather.
     const t = g.env.time;
     const w = g.env.weather;

@@ -177,7 +177,7 @@ export function createGameServer({
         try {
           room = msg.save
             ? new Room({ code, save: msg.save, log })
-            : new Room({ code, theme: THEMES.some((t) => t.key === msg.theme) ? msg.theme : 'sunny', size: SIZES.some((s) => s.key === msg.size) ? msg.size : 'small', name: msg.name, settings: msg.settings, log });
+            : new Room({ code, theme: THEMES.some((t) => t.key === msg.theme) ? msg.theme : 'sunny', size: SIZES.some((s) => s.key === msg.size) ? msg.size : 'small', name: msg.name, adventure: msg.adventure === true, settings: msg.settings, log });
         } catch (error) {
           reply({ t: 'error', code: 'load', text: `That island could not be opened: ${error.message}` });
           ws.close(1000);
