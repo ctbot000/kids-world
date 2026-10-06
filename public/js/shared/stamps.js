@@ -6,6 +6,7 @@ import * as B from './blocks.js';
 import { Rng } from './rng.js';
 
 const [RED, ORANGE, YELLOW, LIME, GREEN, TEAL, SKY, BLUE, PURPLE, LAVENDER, PINK, WHITE, GRAY, CHARCOAL, BROWN, TAN] = B.TOY_BRICKS;
+const [RED_CLOTH, ORANGE_CLOTH, YELLOW_CLOTH, GREEN_CLOTH, BLUE_CLOTH, PURPLE_CLOTH, PINK_CLOTH, WHITE_CLOTH] = B.CLOTHS;
 
 class Cells {
   constructor() {
@@ -380,6 +381,140 @@ function bouncyCastle() {
   return c.list();
 }
 
+// A huge round circus tent, a big top: red and white stripes from a star on
+// its pole down to its scalloped edge, a striped porch at the way in, and
+// inside, a ring of trampolines round the pole with stars all round it,
+// benches in rows behind, and lamps under the roof.
+function circusTent() {
+  const c = new Cells();
+  const R = 10; // The wall's radius,
+  const cz = R + 4; // round a middle this far in.
+  const WALL = 5; // The roof starts this high up...
+  const PEAK = 16; // ...and goes up to here.
+  const d = (x, z) => Math.hypot(x, z - cz);
+  const inside = (x, z) => d(x, z) <= R + 0.5;
+  const rim = (x, z) => inside(x, z) && (!inside(x + 1, z) || !inside(x - 1, z) || !inside(x, z + 1) || !inside(x, z - 1));
+  const eave = (x, z) => !inside(x, z) && (inside(x + 1, z) || inside(x - 1, z) || inside(x, z + 1) || inside(x, z - 1));
+  // Stripes round from the middle, with a red one over the way in.
+  const stripe = (x, z) => {
+    const s = Math.floor(((Math.atan2(x, z - cz) + Math.PI) / (Math.PI * 2)) * 16 + 0.5) % 16;
+    return s % 2 === 0 ? RED_CLOTH : WHITE_CLOTH;
+  };
+  // The roof sags between the pole and the wall, as cloth does.
+  const roofAt = (x, z) => (rim(x, z) ? WALL : WALL + Math.round((PEAK - WALL) * (1 - Math.min(1, d(x, z) / (R + 0.5))) ** 1.5));
+  const front = (x, z) => z < cz && Math.abs(x) <= 2;
+  for (let x = -R - 1; x <= R + 1; x++) {
+    for (let z = cz - R - 1; z <= cz + R + 1; z++) {
+      const r = d(x, z);
+      if (eave(x, z)) {
+        // The roof's edge sticks out over the wall, with a scalloped trim.
+        c.put(x, WALL, z, stripe(x, z));
+        if ((x + z) % 2 === 0) c.put(x, WALL - 1, z, YELLOW_CLOTH);
+        continue;
+      }
+      if (!inside(x, z)) continue;
+      // The roof, closed down to where its neighbours' roofs are.
+      const top = roofAt(x, z);
+      const below = Math.min(...[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([ax, az]) => (inside(x + ax, z + az) ? roofAt(x + ax, z + az) : WALL)));
+      const low = rim(x, z) ? 0 : Math.max(WALL, Math.min(top, below + 1));
+      for (let y = low; y <= top; y++) c.put(x, y, z, r < 1.5 ? YELLOW_CLOTH : stripe(x, z));
+      for (let y = 0; y < low; y++) c.put(x, y, z, B.AIR);
+      // Sawdust on the floor, and the ring: a floor of trampolines.
+      c.put(x, -1, z, r < 4.5 && r >= 0.5 ? B.TRAMPOLINE : B.SAND);
+      if (rim(x, z)) {
+        // The way in.
+        if (front(x, z)) for (let y = 0; y <= 3; y++) c.put(x, y, z, B.AIR);
+        continue;
+      }
+      if (r >= 4.5 && r < 5.5) {
+        // Round the ring, with stars that light it up, and a way into it.
+        if (!(z < cz && Math.abs(x) <= 1)) c.put(x, 0, z, Math.floor(((Math.atan2(x, z - cz) + Math.PI) / (Math.PI * 2)) * 24) % 3 === 0 ? B.STAR_BLOCK : RED);
+      } else if (r >= 6.5 && r < 9.5 && !front(x, z)) {
+        // Benches in rows, each a step higher than the one in front.
+        const row = Math.floor(r - 6.5);
+        for (let y = 0; y < row; y++) c.put(x, y, z, B.PLANKS);
+        c.put(x, row, z, [RED, YELLOW, BLUE][row]);
+      }
+    }
+  }
+  // Lamps hanging under the roof, all the way round.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const x = Math.round(Math.sin(a) * 6.5);
+    const z = cz + Math.round(Math.cos(a) * 6.5);
+    let y = WALL;
+    while (y < PEAK && c.get(x, y, z) === B.AIR) y++;
+    c.put(x, y - 1, z, B.LAMP);
+  }
+  // The pole, striped like a candy cane, with a lamp halfway up and a star
+  // and a flag on top.
+  for (let y = 0; y <= PEAK + 2; y++) if (c.get(0, y, cz) === B.AIR || y > PEAK - 2) c.put(0, y, cz, y === 8 ? B.LAMP : B.CANDY_CANE);
+  c.put(0, PEAK + 3, cz, B.STAR_BLOCK);
+  for (const [x, y] of [[1, PEAK + 2], [2, PEAK + 2], [1, PEAK + 1]]) c.put(x, y, cz, RED_CLOTH);
+  // A striped porch at the way in, on candy-cane poles, and the door's
+  // flaps tied back beside it.
+  for (let x = -3; x <= 3; x++) {
+    const top = Math.abs(x) <= 1 ? 6 : 5;
+    for (let z = 0; z < cz - R; z++) {
+      c.put(x, top, z, Math.abs(x) % 2 === 0 ? RED_CLOTH : WHITE_CLOTH);
+      for (let y = 0; y < top; y++) c.put(x, y, z, Math.abs(x) === 3 && z === 0 ? B.CANDY_CANE : B.AIR);
+    }
+    if (Math.abs(x) % 2 === 0) c.put(x, top - 1, 0, YELLOW_CLOTH);
+  }
+  for (const x of [-3, 3]) for (let y = 0; y <= 3; y++) c.put(x, y, cz - R - 1, YELLOW_CLOTH);
+  return c.list();
+}
+
+// A huge camping tent with room for everyone: a porch at the way in, a
+// sleeping bag for each of eight friends on the groundsheet, and lanterns
+// hanging from the ridge.
+function campingTent() {
+  const c = new Cells();
+  const W = 7; // Half its width at the bottom, and the height of its ridge.
+  const LONG = 18; // From the front of the porch to the back.
+  const DOOR = 2; // The front wall, behind the porch.
+  // The way in: wide at the bottom, like a tent's door.
+  const doorway = (x, y) => y <= 3 && Math.abs(x) <= (y === 0 ? 2 : y === 3 ? 0 : 1);
+  for (let z = 0; z <= LONG; z++) {
+    for (let y = 0; y <= W; y++) {
+      const side = W - y;
+      for (let x = -side; x <= side; x++) {
+        const edge = Math.abs(x) === side;
+        if (edge) c.put(x, y, z, y === W ? YELLOW_CLOTH : ORANGE_CLOTH);
+        else if (z === DOOR || z === LONG) c.put(x, y, z, z === DOOR && doorway(x, y) ? B.AIR : YELLOW_CLOTH);
+        else c.put(x, y, z, B.AIR);
+      }
+    }
+    // The groundsheet.
+    if (z > DOOR && z < LONG) for (let x = -W + 1; x <= W - 1; x++) c.put(x, -1, z, BLUE_CLOTH);
+  }
+  // The door's flaps, tied back either side, and a window at the back.
+  for (const x of [-3, 3]) for (let y = 0; y <= 2; y++) c.put(x, y, DOOR - 1, ORANGE_CLOTH);
+  c.put(0, 4, DOOR - 1, ORANGE_CLOTH);
+  c.put(0, 3, LONG, B.GLASS);
+  c.put(0, 4, LONG, B.GLASS);
+  // The ridge pole sticks out at both ends, with a flag at the front.
+  c.put(0, W, -1, B.WOOD);
+  c.put(0, W, LONG + 1, B.WOOD);
+  c.put(0, W + 1, -1, B.WOOD);
+  c.put(0, W + 2, -1, B.WOOD);
+  c.put(1, W + 2, -1, RED_CLOTH);
+  // Sleeping bags along both sides, heads to the wall, each with a pillow.
+  const bags = [RED_CLOTH, PURPLE_CLOTH, GREEN_CLOTH, PINK_CLOTH, ORANGE_CLOTH, YELLOW_CLOTH, RED_CLOTH, PURPLE_CLOTH];
+  for (let i = 0; i < 8; i++) {
+    const s = i < 4 ? -1 : 1;
+    const z = DOOR + 2 + (i % 4) * 4;
+    for (const dz of [0, 1]) {
+      c.put(s * (W - 1), -1, z + dz, WHITE_CLOTH);
+      for (let k = 2; k <= 4; k++) c.put(s * (W - k), -1, z + dz, bags[i]);
+    }
+  }
+  // Lanterns from the ridge, and on the floor between the sleeping bags.
+  for (const z of [DOOR + 3, DOOR + 8, DOOR + 13]) c.put(0, W - 1, z, B.LAMP);
+  for (const s of [-1, 1]) for (const z of [DOOR + 4, DOOR + 8, DOOR + 12]) c.put(s * (W - 1), 0, z, B.LAMP);
+  return c.list();
+}
+
 function lampPost() {
   const c = new Cells();
   c.put(0, 0, 0, CHARCOAL);
@@ -442,6 +577,8 @@ export const STAMPS = [
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
   { key: 'bouncy-castle', name: 'Bouncy Castle', icon: '🤸', cells: bouncyCastle() },
+  { key: 'circus-tent', name: 'Circus Tent', icon: '🎪', cells: circusTent() },
+  { key: 'camping-tent', name: 'Camping Tent', icon: '⛺', cells: campingTent() },
   { key: 'bridge', name: 'Bridge', icon: '🌉', cells: bridge() },
   { key: 'rainbow', name: 'Rainbow', icon: '🌈', cells: rainbow() },
   { key: 'heart', name: 'Big Heart', icon: '💖', cells: heart() },

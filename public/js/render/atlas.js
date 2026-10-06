@@ -578,6 +578,30 @@ const PAINT = {
     bevel(ctx, 0.6);
   },
 
+  // Tent cloth, tinted per block like the toy bricks: a fine weave, soft
+  // folds, and a stitched seam down each side of the panel.
+  cloth(ctx) {
+    fill(ctx, '#f4f2ed');
+    ctx.fillStyle = 'rgba(0,0,0,0.035)';
+    for (let i = 1; i < TILE; i += 3) {
+      ctx.fillRect(0, i, TILE, 1);
+      ctx.fillRect(i, 0, 1, TILE);
+    }
+    const g = ctx.createLinearGradient(0, 0, TILE, 0);
+    for (const [at, a] of [[0, 0], [0.22, 0.07], [0.42, 0], [0.62, 0.05], [0.82, 0], [1, 0]]) g.addColorStop(at, `rgba(0,0,0,${a})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(TILE * 0.47, 0, 4, TILE);
+    for (const x of [4, TILE - 6]) {
+      ctx.fillStyle = 'rgba(0,0,0,0.13)';
+      ctx.fillRect(x - 2, 0, 1.5, TILE);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for (let y = 2; y < TILE; y += 7) ctx.fillRect(x, y, 1.5, 4);
+    }
+    bevel(ctx, 0.3);
+  },
+
   // ------------------------------------------------ plants (transparent)
   tulip(ctx) {
     stem(ctx, 32, 62, 32, 26);

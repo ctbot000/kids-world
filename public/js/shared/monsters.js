@@ -5,8 +5,8 @@
 // again. Tap one, or jump on it, and it goes pop.
 //
 // Nobody gets hurt: hearts come back by themselves, the start of the island
-// is a safe place no monster goes into, and they cannot swim, reach someone
-// riding an animal or catch anyone who runs.
+// and every tent are safe places no monster goes into, and they cannot swim,
+// reach someone riding an animal or catch anyone who runs.
 //
 // The host moves them (Room.tick); everyone sees them a few times a second,
 // as they see the animals. They are never saved: turning monsters off, or
@@ -14,6 +14,7 @@
 import * as B from './blocks.js';
 import { makeBody, stepBody } from './physics.js';
 import { Rng } from './rng.js';
+import { underTent } from './tents.js';
 
 export const MAX_HEARTS = 5;
 // A heart back this long after the last bump, and every this long after that.
@@ -59,8 +60,8 @@ export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle'];
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 
-// Somewhere a monster can stand: on the ground (not a tree, not in the
-// water), with room above it.
+// Somewhere a monster can stand: on the ground (not a tree or a tent, not in
+// the water), with room above it.
 function groundAt(world, x, z) {
   const cx = FL(x);
   const cz = FL(z);
@@ -68,9 +69,16 @@ function groundAt(world, x, z) {
   const y = world.top(cx, cz);
   if (y < 1 || y >= world.H - 2) return null;
   const under = world.get(cx, y, cz);
-  if (!B.SOLID[under] || B.TREE_PART[under]) return null;
+  if (!B.SOLID[under] || B.TREE_PART[under] || B.CLOTH[under]) return null;
   if (B.SOLID[world.get(cx, y + 1, cz)] || B.SOLID[world.get(cx, y + 2, cz)] || world.get(cx, y + 1, cz) === B.WATER) return null;
   return y + 1;
+}
+
+// Whether any of a monster standing at (x, y, z) would be in a tent: its
+// corners, not just its middle, which could cut a tent's corner on the way.
+function tentAt(world, x, y, z) {
+  const r = MONSTER_BODY.radius;
+  return underTent(world, x - r, y, z - r) || underTent(world, x + r, y, z - r) || underTent(world, x - r, y, z + r) || underTent(world, x + r, y, z + r);
 }
 
 // Whether the column at (x, z) is water a monster would fall into.
@@ -155,6 +163,12 @@ export class MonsterSim {
     }
     const bumps = [];
     const spawn = world.spawn;
+    // Who is in a tent, where nothing can get at them.
+    const inTent = new Map();
+    const sheltered = (p) => {
+      if (!inTent.has(p)) inTent.set(p, underTent(world, p.x, p.y, p.z));
+      return inTent.get(p);
+    };
     for (const m of [...this.list]) {
       const b = m.body;
       // Lonely, far from everyone: off it goes.
@@ -164,15 +178,15 @@ export class MonsterSim {
         this.remove(m.id);
         continue;
       }
-      // Whom it is after: the nearest it can get at (not someone riding or
-      // flying high), until they get away.
+      // Whom it is after: the nearest it can get at (not someone riding,
+      // flying high or in a tent), until they get away.
       let target = people.find((p) => p.id === m.target) ?? null;
-      if (target && (target.riding || Math.hypot(target.x - b.x, target.z - b.z) > GIVE_UP)) target = null;
+      if (target && (target.riding || Math.hypot(target.x - b.x, target.z - b.z) > GIVE_UP || sheltered(target))) target = null;
       if (!target) {
         let best = NOTICE;
         for (const p of people) {
           const d = Math.hypot(p.x - b.x, p.z - b.z);
-          if (d < best && !p.riding && p.y - b.y < 4) {
+          if (d < best && !p.riding && p.y - b.y < 4 && !sheltered(p)) {
             best = d;
             target = p;
           }
@@ -212,7 +226,7 @@ export class MonsterSim {
         m.state = m.wander ? 'hop' : 'idle';
       }
       // Never into the safe place round the start (round its edge instead),
-      // nor into the water.
+      // nor into the water or a tent.
       if (mx || mz) {
         const inside = (x, z) => Math.hypot(x - spawn.x, z - spawn.z) < SAFE_RADIUS && Math.hypot(x - spawn.x, z - spawn.z) < Math.hypot(b.x - spawn.x, b.z - spawn.z);
         if (inside(b.x + mx * 0.9, b.z + mz * 0.9)) {
@@ -223,7 +237,9 @@ export class MonsterSim {
           mx = (side * -rz) / r;
           mz = (side * rx) / r;
         }
-        if (inside(b.x + mx * 0.9, b.z + mz * 0.9) || wet(world, b.x + mx * 0.9, b.y, b.z + mz * 0.9)) {
+        const ax = b.x + mx * 0.9;
+        const az = b.z + mz * 0.9;
+        if (inside(ax, az) || wet(world, ax, b.y, az) || (tentAt(world, ax, b.y, az) && !underTent(world, b.x, b.y, b.z))) {
           mx = 0;
           mz = 0;
           m.wander = null;
@@ -244,7 +260,7 @@ export class MonsterSim {
       if (now >= m.giggle) {
         for (const p of people) {
           if (p.riding || now < (p.safeUntil ?? 0)) continue;
-          if (Math.hypot(p.x - b.x, p.z - b.z) > BUMP_REACH) continue;
+          if (Math.hypot(p.x - b.x, p.z - b.z) > BUMP_REACH || sheltered(p)) continue;
           // Their feet over its top: they are jumping on it, not bumped (see bop).
           if (p.y > b.y + MONSTER_BODY.height - 0.25 || p.y + 1.5 < b.y) continue;
           bumps.push({ monster: m, pid: p.id });

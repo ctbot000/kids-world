@@ -133,10 +133,12 @@ export class Sound {
     const r = () => 0.94 + Math.random() * 0.12;
     switch (name) {
       case 'place': {
-        const base = { brick: 760, wood: 430, stone: 320, glass: 1250, soft: 380, grass: 300, dirt: 260, sand: 340, snow: 420, leaves: 520, candy: 880, water: 300, plant: 900 }[opts.kind] ?? 600;
+        const base = { brick: 760, wood: 430, stone: 320, glass: 1250, soft: 380, cloth: 330, grass: 300, dirt: 260, sand: 340, snow: 420, leaves: 520, candy: 880, water: 300, plant: 900 }[opts.kind] ?? 600;
         this.tone(base * r(), { decay: 0.09, gain: 0.35, slide: base * 0.8 });
         this.tone(base * 2 * r(), { decay: 0.05, gain: 0.08 });
         this.noise(0.04, { type: 'highpass', freq: 2500, gain: 0.08 });
+        // Cloth flaps as it goes down.
+        if (opts.kind === 'cloth') this.noise(0.16, { type: 'bandpass', freq: 900, sweep: 300, q: 0.9, gain: 0.12 });
         break;
       }
       case 'lift': {

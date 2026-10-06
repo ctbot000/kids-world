@@ -4,6 +4,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
 import { raycast } from '../shared/raycast.js';
+import { MAX_EDIT_CELLS } from '../shared/tools.js';
 import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
@@ -11,7 +12,8 @@ import { MonsterModel } from './monster-model.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 
-const MAX_PREVIEW = 2500;
+// All of the biggest edit there can be, a huge tent on a hillside say.
+const MAX_PREVIEW = MAX_EDIT_CELLS;
 // Nearer than this along the view, more than half of a block is dissolved.
 const SEE_THROUGH = (NEAR_FADE[0] + NEAR_FADE[1]) / 2;
 const tmpV = new THREE.Vector3();

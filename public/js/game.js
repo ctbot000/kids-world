@@ -12,6 +12,7 @@ import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
+import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
 import { PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -1704,12 +1705,28 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
   }
 
-  // Things worth a sticker that just happen: night skies and rainbows.
+  // Things worth a sticker that just happen: night skies, rainbows, and a
+  // night in a tent.
   observe() {
     const night = isNight(this.env.time);
     if (night && !this.seenNight) {
       this.seenNight = true;
       this.profile.count('nights');
+    }
+    const b = this.me.body;
+    const inTent = underTent(this.world, b.x, b.y, b.z);
+    if (inTent && !night && !this.toldTent) {
+      this.toldTent = true;
+      this.emit('toast', { icon: '⛺', text: 'A tent! Come in here at night for a camp out.' });
+    }
+    // Once a night: in a tent, that is a camp out.
+    if (!night) this.campedOut = false;
+    else if (inTent && !this.campedOut) {
+      this.campedOut = true;
+      this.toldTent = true;
+      this.profile.count('campouts');
+      this.emit('toast', { icon: '⛺', text: 'A camp out! Snug as a bug in a tent.' });
+      this.renderer.effects.sparkles(b.x, b.y + 1.8, b.z, 12, ['#ffd84d', '#ffffff', '#c3a9f2']);
     }
     if (this.env.weather === 'rainbow' && !this.seenRainbow) {
       this.seenRainbow = true;

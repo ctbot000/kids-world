@@ -78,6 +78,20 @@ export const TRAMPOLINE = def(92, 'trampoline', { name: 'Trampoline', category: 
 // (render/mesher.js works out which from the rails beside it, and draws a
 // corner with the side tile). Every mine has a line of them.
 export const RAIL = def(90, 'rail', { name: 'Rails', kind: 'plant', category: 'building', tiles: { top: 'rail', side: 'rail-curve' }, sound: 'stone' });
+// Tent cloth: soft, with no studs, in the bright colours of a circus. The
+// huge tent stamps are made of it, and anywhere under it is in a tent
+// (shared/tents.js).
+export const CLOTH_COLORS = [
+  ['red', 'Red', '#e8453c'],
+  ['orange', 'Orange', '#f59331'],
+  ['yellow', 'Yellow', '#fcd535'],
+  ['green', 'Green', '#35a852'],
+  ['blue', 'Blue', '#3a73d8'],
+  ['purple', 'Purple', '#8c5bd6'],
+  ['pink', 'Pink', '#f47fb8'],
+  ['white', 'White', '#f7f5ef'],
+];
+export const CLOTHS = CLOTH_COLORS.map(([key, name, color], i) => def(93 + i, `cloth-${key}`, { name: `${name} Tent Cloth`, category: 'building', color, tiles: 'cloth', sound: 'cloth' }));
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });
@@ -194,6 +208,9 @@ export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(256);
 for (const id of [7, 8, 9, 24, 25]) TREE_PART[id] = 1;
+// Tent cloth, what makes a tent.
+export const CLOTH = new Uint8Array(256);
+for (const id of CLOTHS) CLOTH[id] = 1;
 
 export const K_AIR = 0;
 export const K_SOLID = 1;

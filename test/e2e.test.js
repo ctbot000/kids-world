@@ -12,7 +12,7 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
+import { CANDY_CANE, CLOTH, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -788,6 +788,58 @@ test('on a trampoline, Space held bounces you higher and higher and a press of S
   // Bouncing by itself, it would take seconds more to stop.
   assert.ok(end.down >= 0 && end.down < 110, `down after ${end.down} frames`);
   assert.deepEqual({ upAgain: end.upAgain, y: end.y, ground: end.ground }, { upAgain: false, y: mat, ground: true });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a huge circus tent put down from the toy box with a click is walked into through its way in, with a hint, and a night in it is a camp out, with a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Stamps', '#modal');
+  await clickButton(page, 'Circus Tent', '#modal');
+  await until(page, () => window.kidsWorld.game.tool === 'stamp' && window.kidsWorld.game.stamp === 'circus-tent');
+  const { cell, at } = await spotNear(page, 4, 0);
+  await page.mouse.click(at.x, at.y);
+  // The tent goes away from the camera, its way in where the click was: from
+  // there, where its middle is and which way is in.
+  const tent = await page.evaluate(async (c) => {
+    const { FACING, facingFromYaw } = await import('/js/shared/stamps.js');
+    const { f } = FACING[facingFromYaw(window.kidsWorld.renderer.view.yaw)];
+    return { x: c.x + 0.5, y: c.y + 1, z: c.z + 0.5, f, mid: { x: c.x + 0.5 + f[0] * 14, z: c.z + 0.5 + f[1] * 14 } };
+  }, cell);
+  // Its pole, at the bottom.
+  await until(page, ({ t, pole }) => window.kidsWorld.game.world.get(Math.floor(t.mid.x), t.y, Math.floor(t.mid.z)) === pole, { t: tent, pole: CANDY_CANE });
+  const cloth = await page.evaluate((cloth) => window.kidsWorld.game.world.blocks.filter((id) => cloth[id]).length, [...CLOTH]);
+  assert.ok(cloth > 600, `${cloth} blocks of tent cloth`);
+  // In front of its porch, walking straight in, past the way in and the benches to the ring.
+  await page.evaluate((t) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: t.x, y: t.y, z: t.z, vx: 0, vy: 0, vz: 0 });
+    kw.renderer.view.yaw = Math.atan2(-t.f[0], -t.f[1]);
+    kw.step(1 / 60, 5);
+  }, tent);
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
+  await page.keyboard.up('KeyW');
+  const inside = await page.evaluate((t) => {
+    const b = window.kidsWorld.game.me.body;
+    return { from: Math.hypot(b.x - t.mid.x, b.z - t.mid.z), on: b.y - t.y, past: (b.x - t.x) * t.f[0] + (b.z - t.z) * t.f[1] };
+  }, tent);
+  assert.ok(inside.past > 6 && inside.from < 9 && Math.abs(inside.on) < 0.01, `walked in: ${JSON.stringify(inside)}`);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A tent!')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.campouts), 0, 'no camp out by day');
+  // Night falls: a camp out, once.
+  await page.evaluate(() => {
+    const room = window.kidsWorld.session.link.room;
+    room.settings.day = 'night';
+    room.env.time = 0;
+    room.broadcast(room.envMessage());
+  });
+  await until(page, () => window.kidsWorld.profile.data.stickers['camp-out']);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A camp out!')));
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.campouts), 1, 'once a night');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

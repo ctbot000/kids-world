@@ -39,6 +39,7 @@ export const STICKERS = [
   { key: 'mine-train', icon: '🚃', name: 'Mine Train', text: 'Roll 100 blocks along the rails in a mine cart', test: (s) => s.railed >= 100 },
   { key: 'going-up', icon: '🛗', name: 'Going Up!', text: 'Ride an elevator', test: (s) => s.lifts >= 1 },
   { key: 'boing', icon: '🦘', name: 'Boing Boing!', text: 'Bounce 20 times on a trampoline', test: (s) => s.bounces >= 20 },
+  { key: 'camp-out', icon: '⛺', name: 'Camp Out', text: 'Be in a tent at night', test: (s) => s.campouts >= 1 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
