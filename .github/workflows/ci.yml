@@ -27,6 +27,13 @@ jobs:
       - run: npm test
         env:
           CHROME_PATH: /usr/bin/google-chrome
+      # Packs public/ for the deploy job. It is uploaded here, a job ahead of
+      # deploy-pages, because GitHub can take a moment to list a new artifact:
+      # looked up 0.3 s after an upload in the same job, it once was not found.
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: public
 
   # Publishes public/ to GitHub Pages, only from main and only after the tests pass.
   deploy:
@@ -41,10 +48,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: public
       - id: deployment
         uses: actions/deploy-pages@v5
