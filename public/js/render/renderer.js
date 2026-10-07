@@ -1,4 +1,4 @@
-// Puts the island on screen: the terrain, the sky, players, animals and monsters,
+// Puts the island on screen: the terrain, the sky, players and their pets, animals and monsters,
 // an adventure island's flags (and the stomps of King Grumble), the preview
 // of what a tool is about to do, and a camera that follows you around (and
 // never ends up inside a hill).
@@ -12,6 +12,7 @@ import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
+import { PetModel, petSeat } from './pet-models.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 
@@ -49,6 +50,8 @@ export class Renderer {
     this.scene.add(this.entities);
     this.avatars = new Map();
     this.critters = new Map();
+    // Everyone's pets, by their owner.
+    this.pets = new Map();
     this.monsters = new Map();
     // An adventure island's flags, by camp, and stomps rushing out over the ground.
     this.flags = new Map();
@@ -139,6 +142,28 @@ export class Renderer {
     if (!m) return;
     m.dispose();
     this.critters.delete(id);
+  }
+
+  // A player's pet ({ kind, coat }), in a collar of this colour.
+  addPet(pid, pet, collar) {
+    this.removePet(pid);
+    const m = new PetModel(pet, collar);
+    this.entities.add(m.group, m.shadow);
+    this.pets.set(pid, m);
+    return m;
+  }
+
+  removePet(pid) {
+    const m = this.pets.get(pid);
+    if (!m) return;
+    m.dispose();
+    this.pets.delete(pid);
+  }
+
+  // Where a pet riding along sits on the animal or in the vehicle (a critter
+  // model) its owner rides: { x, y, z, yaw }.
+  petSeat(mount) {
+    return petSeat(mount);
   }
 
   // kind: 'blob', or 'king' for King Grumble.
@@ -309,6 +334,11 @@ export class Renderer {
   // (but never the one numbered skip).
   pickCritter(ray, maxDist, skip = 0) {
     return this.pickFrom(this.critters, ray, maxDist, skip);
+  }
+
+  // ...and the nearest pet, by its owner (but never skip's).
+  pickPet(ray, maxDist, skip = null) {
+    return this.pickFrom(this.pets, ray, maxDist, skip);
   }
 
   // ...and the nearest monster.

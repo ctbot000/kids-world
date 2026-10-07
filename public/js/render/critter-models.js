@@ -23,7 +23,7 @@ function alongSurface(part, rx, ry, rz, p) {
 // A pair of wings, each hung from its own shoulder and reaching out to its own
 // side, so that one positive angle (rotation.z times the side) raises both
 // tips. A mirrored copy would turn the other way.
-function wingPair(parent, { x, y, z = 0, length, width, thick = 0.016, color, tip = null, material = null }) {
+export function wingPair(parent, { x, y, z = 0, length, width, thick = 0.016, color, tip = null, material = null }) {
   return [-1, 1].map((side) => {
     const w = new THREE.Group();
     w.position.set(side * x, y, z);
@@ -35,7 +35,7 @@ function wingPair(parent, { x, y, z = 0, length, width, thick = 0.016, color, ti
   });
 }
 
-function eyesOn(group, rx, ry, rz, spread, y, size = 0.03) {
+export function eyesOn(group, rx, ry, rz, spread, y, size = 0.03) {
   const eyes = new THREE.Group();
   for (const side of [-1, 1]) {
     const p = onSurface(rx, ry, rz, side * spread, y, 0.004);

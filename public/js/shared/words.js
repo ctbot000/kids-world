@@ -204,21 +204,64 @@ export function randomLook(random = Math.random) {
 }
 
 // A look as it may be shown: anything unknown in it replaced. A kid's skin
-// and hair are kept only for a kid.
+// and hair are kept only for a kid; a pet only when there is one.
 export function cleanLook(look, random = Math.random) {
   const fallback = someLook(random);
   const animal = ANIMALS.some((a) => a.key === look?.animal) ? look.animal : fallback.animal;
-  const clean = {
+  let clean = {
     animal,
     fur: Object.hasOwn(FUR_COLORS, look?.fur) ? look.fur : ANIMALS.find((a) => a.key === animal).fur,
     shirt: SHIRT_COLORS.includes(look?.shirt) ? look.shirt : fallback.shirt,
     hat: HATS.some((h) => h.key === look?.hat) ? look.hat : 'none',
   };
-  if (animal !== KID) return clean;
+  if (animal === KID) {
+    clean = {
+      ...clean,
+      skin: Object.hasOwn(SKIN_TONES, look?.skin) ? look.skin : KID_LOOK.skin,
+      hair: HAIRS.some((h) => h.key === look?.hair) ? look.hair : KID_LOOK.hair,
+      hairColor: Object.hasOwn(HAIR_COLORS, look?.hairColor) ? look.hairColor : KID_LOOK.hairColor,
+    };
+  }
+  const pet = cleanPet(look?.pet);
+  return pet ? { ...clean, pet } : clean;
+}
+
+// ---------------------------------------------------------------- pets
+
+// A pet of your own, which goes everywhere you go (see pets.js): its kind,
+// its coat and its name are part of your look, as look.pet (none without
+// one), so friends see it and a login brings it along. The first coat and
+// the first name are a kind's own, for one that came without them. A
+// parrot and a baby dragon fly; the others walk, hop and swim.
+export const PETS = [
+  { key: 'puppy', name: 'Puppy', icon: '🐶', coats: ['tan', 'brown', 'cream', 'white', 'gray', 'charcoal'], names: ['Biscuit', 'Buddy', 'Waffles', 'Peanut', 'Coco', 'Bingo', 'Rolo', 'Noodle', 'Scout', 'Teddy'] },
+  { key: 'kitten', name: 'Kitten', icon: '🐱', coats: ['orange', 'gray', 'white', 'charcoal', 'cream', 'brown'], names: ['Whiskers', 'Mittens', 'Luna', 'Tiger', 'Pumpkin', 'Socks', 'Muffin', 'Pebbles', 'Ginger', 'Mochi'] },
+  { key: 'bunny', name: 'Bunny', icon: '🐰', coats: ['white', 'cream', 'brown', 'gray', 'charcoal', 'pink'], names: ['Thumper', 'Clover', 'Snowball', 'Cocoa', 'Nibbles', 'Honey', 'Pip', 'Marshmallow', 'Hopscotch', 'Daisy'] },
+  { key: 'hamster', name: 'Hamster', icon: '🐹', coats: ['tan', 'orange', 'cream', 'white', 'gray', 'brown'], names: ['Nugget', 'Squeaky', 'Cheeks', 'Fuzzy', 'Acorn', 'Toffee', 'Crumbs', 'Popcorn', 'Sesame', 'Hazel'] },
+  { key: 'piglet', name: 'Piglet', icon: '🐷', coats: ['pink', 'cream', 'brown', 'charcoal'], names: ['Truffle', 'Rosie', 'Snuffles', 'Bubblegum', 'Poppy', 'Dumpling', 'Petunia', 'Button', 'Oinky', 'Sprout'] },
+  { key: 'duckling', name: 'Duckling', icon: '🐥', coats: ['yellow', 'cream', 'white', 'brown'], names: ['Puddles', 'Waddles', 'Quackers', 'Sunny', 'Dandelion', 'Pipsqueak', 'Ducky', 'Splash', 'Lemon', 'Bubbles'] },
+  { key: 'parrot', name: 'Parrot', icon: '🦜', flies: true, coats: ['green', 'blue', 'red', 'yellow'], names: ['Polly', 'Kiwi', 'Mango', 'Rio', 'Captain', 'Pepper', 'Echo', 'Tango', 'Skye', 'Chatter'] },
+  { key: 'dragon', name: 'Baby Dragon', icon: '🐲', flies: true, coats: ['green', 'lavender', 'sky', 'pink', 'orange', 'red'], names: ['Sparky', 'Ember', 'Puff', 'Blaze', 'Smudge', 'Toasty', 'Cinder', 'Twinkle', 'Ziggy', 'Scales'] },
+];
+export const PET_COATS = { ...FUR_COLORS, green: '#5cc96b', blue: '#4f9ff0', red: '#ef5b5b' };
+
+export const petKind = (key) => PETS.find((p) => p.key === key) ?? null;
+
+// A pet as it may be shown: { kind, coat, name }, or null for none. Any name,
+// as a player's (up to NAME_MAX, nothing invisible); a coat its kind comes in.
+export function cleanPet(raw) {
+  const kind = petKind(raw?.kind);
+  if (!kind) return null;
+  const name = cleanName(raw.name);
   return {
-    ...clean,
-    skin: Object.hasOwn(SKIN_TONES, look?.skin) ? look.skin : KID_LOOK.skin,
-    hair: HAIRS.some((h) => h.key === look?.hair) ? look.hair : KID_LOOK.hair,
-    hairColor: Object.hasOwn(HAIR_COLORS, look?.hairColor) ? look.hairColor : KID_LOOK.hairColor,
+    kind: kind.key,
+    coat: kind.coats.includes(raw.coat) ? raw.coat : kind.coats[0],
+    name: isValidName(name) && [...name].length <= NAME_MAX ? name : kind.names[0],
   };
+}
+
+// A name for a pet of this kind, other than the one it has now (but).
+export function randomPetName(kind, random = Math.random, but = '') {
+  const names = (petKind(kind) ?? PETS[0]).names.filter((n) => n !== but);
+  return pick(names, random);
 }

@@ -531,7 +531,9 @@ export class Avatar {
     this.shadow = shadow;
   }
 
-  setLook(look) {
+  setLook(full) {
+    // A pet goes along beside you (render/pet-models.js), not on you.
+    const { pet: _, ...look } = full;
     const same = this.look && JSON.stringify(this.look) === JSON.stringify(look);
     if (same) return;
     this.look = { ...look };

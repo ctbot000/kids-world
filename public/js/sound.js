@@ -314,6 +314,46 @@ export class Sound {
       case 'sheep':
         this.baa();
         break;
+      // Pets (see pets.js); a bunny says what the island's bunnies do.
+      case 'puppy':
+        // Woof! Woof!
+        for (let i = 0; i < 2; i++) {
+          this.tone(520 * r(), { at: i * 0.2, type: 'sawtooth', attack: 0.01, decay: 0.11, gain: 0.05, slide: 330, slideTime: 0.1 });
+          this.noise(0.08, { at: i * 0.2, type: 'bandpass', freq: 900, q: 1.5, gain: 0.08 });
+        }
+        break;
+      case 'kitten':
+        // Mew-ow.
+        this.tone(780 * r(), { type: 'triangle', attack: 0.06, decay: 0.42, gain: 0.07, slide: 1150, slideTime: 0.18, vibrato: 25 });
+        this.tone(1150 * r(), { at: 0.2, type: 'sine', attack: 0.02, decay: 0.25, gain: 0.04, slide: 700, slideTime: 0.25 });
+        break;
+      case 'hamster':
+        // Squeak, squeak, squeak.
+        for (let i = 0; i < 3; i++) this.tone(2700 * r(), { at: i * 0.09, decay: 0.05, gain: 0.05, slide: 3300, slideTime: 0.04 });
+        break;
+      case 'piglet':
+        // Oink, oink.
+        for (let i = 0; i < 2; i++) {
+          this.tone(210 * r(), { at: i * 0.24, type: 'sawtooth', attack: 0.02, decay: 0.14, gain: 0.05, slide: 150, vibrato: 30 });
+          this.noise(0.12, { at: i * 0.24, type: 'lowpass', freq: 600, gain: 0.07 });
+        }
+        break;
+      case 'duckling':
+        // Peep-peep, high and small.
+        for (let i = 0; i < 2; i++) this.tone(2600 * r(), { at: i * 0.12, decay: 0.06, gain: 0.06, slide: 3100, slideTime: 0.05 });
+        break;
+      case 'parrot':
+        // Hel-lo! (a squawk that goes up and down)
+        this.tone(900 * r(), { type: 'square', attack: 0.02, decay: 0.16, gain: 0.03, slide: 1400, slideTime: 0.12, vibrato: 40 });
+        this.tone(1300 * r(), { at: 0.18, type: 'square', attack: 0.02, decay: 0.2, gain: 0.03, slide: 800, slideTime: 0.18, vibrato: 40 });
+        this.noise(0.08, { type: 'bandpass', freq: 2200, q: 2, gain: 0.05 });
+        break;
+      case 'dragon':
+        // A tiny roar, and a puff of sparkles.
+        this.tone(260 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.4, gain: 0.05, slide: 520, slideTime: 0.25, vibrato: 35 });
+        this.noise(0.35, { type: 'bandpass', freq: 700, sweep: 1600, q: 0.8, gain: 0.08, attack: 0.03 });
+        for (let i = 0; i < 3; i++) this.tone(NOTE(86 + PENTA[i]), { at: 0.32 + i * 0.06, decay: 0.2, gain: 0.03 });
+        break;
       case 'duck':
         for (let i = 0; i < 2; i++) this.quack(i * 0.18);
         break;

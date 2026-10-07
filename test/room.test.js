@@ -121,6 +121,36 @@ test("a kid's skin and hair come along, tidied, and an animal has none", () => {
   assert.deepEqual(a.last('look').look, { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' });
 });
 
+test("a pet comes along in its owner's look, and petting it or giving it a fruit is passed on to everyone", () => {
+  const { room } = makeRoom();
+  const look = { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', pet: { kind: 'puppy', coat: 'brown', name: '  Biscuit ' } };
+  const a = join(room, { name: 'Minji', look });
+  const b = join(room, { name: 'Jun' });
+  assert.deepEqual(b.last('welcome').players.find((p) => p.name === 'Minji').look.pet, { kind: 'puppy', coat: 'brown', name: 'Biscuit' }, 'tidied');
+  // Jun pets Minji's puppy, then gives it an apple: everyone sees it, Minji too.
+  room.receive(b, { t: 'pet', op: 'pet', pid: 1 });
+  room.receive(b, { t: 'pet', op: 'feed', pid: 1, fruit: 'apple' });
+  for (const c of [a, b]) assert.deepEqual(c.all('pfx'), [{ t: 'pfx', pid: 1, by: 2, fx: 'pet' }, { t: 'pfx', pid: 1, by: 2, fx: 'yum', fruit: 'apple' }]);
+  // Nothing for a fruit there is not, a player without a pet, nor one who went home.
+  room.receive(a, { t: 'pet', op: 'feed', pid: 1, fruit: 'brick' });
+  room.receive(a, { t: 'pet', op: 'pet', pid: 2 });
+  room.receive(a, { t: 'pet', op: 'pet', pid: 7 });
+  room.receive(a, { t: 'pet', op: 'hug', pid: 1 });
+  assert.equal(a.all('pfx').length, 2);
+  // A new pet with a new look, and none at all.
+  room.receive(a, { t: 'look', look: { ...look, pet: { kind: 'dragon', coat: 'pink', name: 'Ember' } } });
+  assert.deepEqual(b.last('look').look.pet, { kind: 'dragon', coat: 'pink', name: 'Ember' });
+  room.receive(a, { t: 'look', look: { ...look, pet: null } });
+  assert.equal(b.last('look').look.pet, undefined);
+  room.receive(b, { t: 'pet', op: 'pet', pid: 1 });
+  assert.equal(a.all('pfx').length, 2, 'no pet to pet');
+  b.close();
+  room.detach(b);
+  room.receive(a, { t: 'look', look });
+  room.receive(a, { t: 'pet', op: 'pet', pid: 2 });
+  assert.equal(a.all('pfx').length, 2);
+});
+
 test('a different protocol is turned away', () => {
   const { room } = makeRoom();
   const c = conn();

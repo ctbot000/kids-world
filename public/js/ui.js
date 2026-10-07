@@ -9,7 +9,7 @@ import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PHRASES, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { MAX_HEARTS } from './shared/monsters.js';
@@ -311,6 +311,7 @@ export class UI {
     $('btn-visit').onclick = () => this.visitDialog();
     $('btn-mine').onclick = () => this.myIslandsDialog();
     $('btn-me').onclick = () => this.meDialog();
+    $('btn-pet').onclick = () => this.petDialog();
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = () => this.stickersDialog();
     $('btn-ranking').onclick = () => this.rankingDialog();
@@ -933,6 +934,94 @@ export class UI {
     this.handlers.lookOpen?.();
   }
 
+  // Your pet: which kind (or none), its coat and its name. It comes along to
+  // every island you go to, and sits in front of you, to be seen, while you
+  // choose.
+  petDialog() {
+    const p = this.profile;
+    let pet = p.look.pet ? { ...p.look.pet } : null;
+    const apply = () => {
+      const { pet: _, ...look } = p.look;
+      p.update({ look: pet ? { ...look, pet: { ...pet } } : look });
+      this.handlers.lookChanged?.();
+    };
+    this.openModal(
+      (root) => {
+        const kinds = h('div', { class: 'grid' });
+        const coats = h('div', { class: 'swatches' });
+        // Any name; while what is typed is no name (nothing yet), the last one stays.
+        const nameBox = h('input', { type: 'text', class: 'text-input name-input', maxLength: NAME_MAX * 2, autocomplete: 'off', 'aria-label': "Your pet's name" });
+        nameBox.spellcheck = false;
+        nameBox.addEventListener('input', () => {
+          const typed = cleanName(nameBox.value);
+          if (!pet || !isValidName(typed) || [...typed].length > NAME_MAX || typed === pet.name) return;
+          pet.name = typed;
+          apply();
+        });
+        nameBox.addEventListener('change', () => (nameBox.value = pet?.name ?? ''));
+        const roll = h('button', { class: 'chip', type: 'button', onclick: () => {
+          if (!pet) return;
+          pet.name = randomPetName(pet.kind, Math.random, pet.name);
+          nameBox.value = pet.name;
+          this.sound.play('ui');
+          apply();
+        } }, '🎲 New name');
+        const details = h('div', { class: 'pet-details' });
+        const choose = (key) => {
+          if (key && key !== pet?.kind) {
+            const kind = petKind(key);
+            // A name of its own kind's for a new kind, unless you typed one.
+            const typed = pet && !petKind(pet.kind).names.includes(pet.name);
+            pet = { kind: key, coat: kind.coats.includes(pet?.coat) ? pet.coat : kind.coats[0], name: typed ? pet.name : randomPetName(key) };
+            this.profile.count('adopted', 1, { max: true });
+            this.sound.play(key);
+          } else if (!key) {
+            pet = null;
+            this.sound.play('ui');
+          }
+          apply();
+          draw();
+        };
+        const draw = () => {
+          kinds.replaceChildren(
+            ...PETS.map((k) => h('button', { class: `choice${k.key === pet?.kind ? ' on' : ''}`, type: 'button', onclick: () => choose(k.key) }, h('span', { class: 'emoji' }, k.icon), k.name)),
+            h('button', { class: `choice${pet ? '' : ' on'}`, type: 'button', onclick: () => choose(null) }, h('span', { class: 'emoji' }, '🚫'), 'No pet'),
+          );
+          details.hidden = !pet;
+          if (!pet) return;
+          nameBox.value = pet.name;
+          coats.replaceChildren(
+            ...petKind(pet.kind).coats.map((key) =>
+              h('button', {
+                class: `swatch${key === pet.coat ? ' on' : ''}`,
+                type: 'button',
+                style: `background:${PET_COATS[key]}`,
+                'aria-label': key,
+                onclick: () => {
+                  pet.coat = key;
+                  this.sound.play('ui');
+                  apply();
+                  draw();
+                },
+              }),
+            ),
+          );
+        };
+        details.append(h('h3', {}, 'Colour'), coats, h('h3', { class: 'name-label' }, 'Name'), h('div', { class: 'row name-row' }, nameBox, roll));
+        draw();
+        root.append(
+          h('h2', {}, '🐾 My pet'),
+          h('p', { class: 'muted' }, 'Your pet comes along to every island, and friends see it too.'),
+          kinds,
+          details,
+          h('button', { class: 'big green', type: 'button', style: 'margin-top:16px', onclick: () => this.closeModal() }, '👍 Done'),
+        );
+      },
+      { seeThrough: true, pose: true, onClose: () => this.handlers.lookDone?.() },
+    );
+    this.handlers.lookOpen?.();
+  }
+
   stickersDialog() {
     const got = this.profile.data.stickers;
     this.openModal((root) => {
@@ -1248,6 +1337,7 @@ export class UI {
           card('⛰️', 'Hills', ['Raise, dig or flatten the land. Big sizes make big hills!']),
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
+          card('🐶', 'Your pet', ['Pick a puppy, a kitten, a parrot, a baby dragon or another pet in 🐾 My pet. It comes along to every island! Tap it to pet it, and wave or dance: it does tricks too.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
@@ -2442,6 +2532,7 @@ export class UI {
           { class: 'row', style: 'margin-top:18px' },
           handlers.canSave() ? h('button', { class: 'chip', type: 'button', onclick: () => handlers.saveFile() }, '💾 Save island to a file') : null,
           h('button', { class: 'chip', type: 'button', onclick: () => this.meDialog() }, '🎨 Change me'),
+          h('button', { class: 'chip', type: 'button', onclick: () => this.petDialog() }, '🐾 My pet'),
           h(
             'button',
             {
@@ -2585,6 +2676,12 @@ export class UI {
       const info = CRITTER_INFO[c?.type];
       el.textContent = c ? `${info.icon} ${c.name || info.name}${g.tool === 'friends' ? ' — tap to say bye' : info.vehicle ? ' — tap to honk' : ' — tap to pet'}` : '';
       el.hidden = !c;
+    } else if (aim?.kind === 'pet') {
+      const pet = g.pets.get(aim.pid);
+      const kind = petKind(pet?.kind);
+      const owner = aim.pid === g.pid ? '' : g.players.get(aim.pid)?.name;
+      el.textContent = pet && kind ? `${kind.icon} ${pet.name}${owner ? ` (${owner}'s ${kind.name.toLowerCase()})` : ''} — tap to pet` : '';
+      el.hidden = !pet || !kind;
     } else if (aim?.kind === 'monster') {
       const king = g.monsters.get(aim.id)?.kind === 'king';
       el.textContent = !king ? '👾 Monster — tap to pop it!' : g.adventure?.shield ? '🫧 King Grumble is in his bubble' : '👑 King Grumble — tap to bop him!';

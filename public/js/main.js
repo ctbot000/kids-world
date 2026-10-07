@@ -2,6 +2,7 @@
 // visiting and reopening islands, saving the islands you host, logging in and
 // out, and the frame loop.
 import { buildAtlas } from './render/atlas.js';
+import { shirtColor } from './render/avatar.js';
 import { Renderer } from './render/renderer.js';
 import { Game } from './game.js';
 import { Input } from './input.js';
@@ -13,7 +14,10 @@ import * as storage from './storage.js';
 import { UI } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
 import { cleanListing } from './shared/listing.js';
+import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
+import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
+import { KID } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
 const params = new URLSearchParams(location.search);
@@ -79,7 +83,7 @@ try {
 
 let serverMode = false;
 let session = null;
-const demo = { world: null, avatar: null, t: 0, pose: null };
+const demo = { world: null, avatar: null, pet: null, t: 0, pose: null };
 
 // Quality steps down by itself on devices that struggle: first fewer pixels,
 // then no studs and a shorter view.
@@ -141,6 +145,30 @@ function showDemoAvatar() {
   a.root.position.set(s.x, s.y, s.z);
   a.playEmote('wave');
   demo.avatar = a;
+  showDemoPet();
+}
+
+// Your pet, sitting at your feet on the title for a picture with you.
+function showDemoPet() {
+  const pet = profile.look.pet;
+  const have = demo.pet;
+  if (have && pet && have.kind === pet.kind && have.coat === pet.coat) {
+    have.model.setCollar(shirtColor(profile.look.shirt));
+    return;
+  }
+  renderer.removePet(-1);
+  demo.pet = null;
+  if (!pet || !demo.world) return;
+  const sim = makePet(pet.kind, demo.world.spawn.x, demo.world.spawn.y, demo.world.spawn.z, { seed: 7 });
+  placePet(demo.world, sim, demoOwner());
+  demo.pet = { kind: pet.kind, coat: pet.coat, sim, model: renderer.addPet(-1, pet, shirtColor(profile.look.shirt)) };
+}
+
+// You on the title, standing still and facing the camera, as your pet sees you.
+function demoOwner() {
+  const s = demo.world.spawn;
+  const look = profile.look;
+  return { x: s.x, y: s.y, z: s.z, yaw: renderer.view.yaw, speed: 0, moving: false, flying: false, swimming: false, riding: '', head: headTop(look.hat, look.animal === KID ? look.hair : ''), headTaken: false, pose: true };
 }
 
 function demoFrame(dt) {
@@ -169,6 +197,14 @@ function demoFrame(dt) {
   if (a) {
     a.update(dt, 0, 0);
     renderer.placeShadow(a.shadow, s.x, s.y, s.z);
+  }
+  if (demo.pet) {
+    const { sim, model } = demo.pet;
+    stepPet(demo.world, sim, demoOwner(), dt);
+    model.group.position.set(sim.x, sim.y, sim.z);
+    model.group.rotation.y = sim.yaw;
+    model.update(dt, petPose(sim));
+    renderer.placeShadow(model.shadow, sim.x, sim.y, sim.z);
   }
   // On a tall screen the buttons fill the bottom half, so look a little lower to lift the avatar.
   const tall = renderer.camera.aspect < 0.8 && !demo.pose;
@@ -219,7 +255,9 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   game.typedPasscode = passcode;
   game.invitePass = pass;
   renderer.removeAvatar(-1);
+  renderer.removePet(-1);
   demo.avatar = null;
+  demo.pet = null;
   session = { link, game, mode, islandId, key, started: false, dirty: false };
   ui.hideTitle();
   ui.loading(loadingText, () => backToTitle());

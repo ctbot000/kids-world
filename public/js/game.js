@@ -4,11 +4,12 @@
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { CRITTER_INFO, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { bodyOf, MAX_HEARTS, MONSTER_BODY, STOMP, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
+import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, makeBody, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -17,7 +18,7 @@ import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
-import { PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
+import { KID, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor } from './render/avatar.js';
 
 export const TOOLS = [
@@ -71,6 +72,8 @@ export class Game extends EventTarget {
     this.invitePass = '';
     this.players = new Map();
     this.critters = new Map();
+    // Everyone's pets (shared/pets.js), by their owner: each page moves them all.
+    this.pets = new Map();
     // Monsters (shared/monsters.js), while the island has them, and your hearts.
     this.monsters = new Map();
     this.hearts = MAX_HEARTS;
@@ -112,6 +115,9 @@ export class Game extends EventTarget {
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
+    // A new pet (or none) chosen while here: at your side at once.
+    this.onProfile = () => this.syncPet(this.pid);
+    profile.addEventListener('change', this.onProfile);
   }
 
   // ------------------------------------------------ talking to the island
@@ -166,6 +172,7 @@ export class Game extends EventTarget {
           p.avatar?.setLook(msg.look);
           // The saddle under them changes colour with their T-shirt.
           for (const c of this.critters.values()) if (c.rider === msg.pid) c.model.setRider(shirtColor(msg.look.shirt));
+          if (msg.pid !== this.pid) this.syncPet(msg.pid);
           this.emit('players');
         }
         break;
@@ -204,6 +211,10 @@ export class Game extends EventTarget {
         break;
       case 'ride':
         this.rideNews(msg);
+        break;
+      case 'pfx':
+        // Your own taps showed at once (see touchPet).
+        if (msg.by !== this.pid) this.petFx(msg);
         break;
       case 'mon':
         this.monsterStates(msg.m);
@@ -317,6 +328,7 @@ export class Game extends EventTarget {
       this.players.set(p.id, { id: p.id, name: p.name, look: p.look, me: true });
       const a = this.renderer.addAvatar(p.id, p.look, p.name);
       this.players.get(p.id).avatar = a;
+      this.syncPet(p.id, { quiet: true });
       this.emit('players');
       return;
     }
@@ -324,7 +336,12 @@ export class Game extends EventTarget {
     if (old?.avatar) this.renderer.removeAvatar(p.id);
     const player = { id: p.id, name: p.name, look: p.look, snaps: [], avatar: this.renderer.addAvatar(p.id, p.look, p.name), anim: 0, bubble: null, dizzy: p.dizzy === true };
     this.players.set(p.id, player);
-    if (p.s) this.remoteMove(p.id, p.s, true);
+    if (p.s) {
+      this.remoteMove(p.id, p.s, true);
+      player.avatar.root.position.set(p.s[0], p.s[1], p.s[2]);
+      player.avatar.root.rotation.y = p.s[3];
+    }
+    this.syncPet(p.id, { quiet: !announce });
     this.emit('players');
     if (announce) {
       this.sound.play('join');
@@ -337,6 +354,7 @@ export class Game extends EventTarget {
     const p = this.players.get(pid);
     if (!p) return;
     this.renderer.removeAvatar(pid);
+    this.dropPet(pid);
     this.players.delete(pid);
     this.emit('players');
     if (!quiet && pid !== this.pid) {
@@ -450,6 +468,207 @@ export class Game extends EventTarget {
       this.sound.play(entry.type);
       if (msg.fx === 'yum') this.sound.play('yum');
     }
+  }
+
+  // ------------------------------------------------ pets
+
+  // A player's pet as their look has it now: brought along (popping in
+  // beside them unless quiet), changed, or gone. Yours is as your profile
+  // has it, at once, even before the island hears of it.
+  syncPet(pid, { quiet = false } = {}) {
+    const p = this.players.get(pid);
+    const look = pid === this.pid ? this.profile.look : p?.look;
+    const want = p && look?.pet ? look.pet : null;
+    const have = this.pets.get(pid);
+    if (have && want && have.kind === want.kind && have.coat === want.coat) {
+      have.name = want.name;
+      have.model.setCollar(shirtColor(look.shirt));
+      return;
+    }
+    const was = have ? { x: have.sim.x, y: have.sim.y, z: have.sim.z, yaw: have.sim.yaw, mode: have.sim.mode } : null;
+    if (have) this.dropPet(pid);
+    const owner = want && this.world ? this.petOwner(pid) : null;
+    if (!owner) return;
+    const sim = makePet(want.kind, owner.x, owner.y, owner.z, { yaw: owner.yaw, seed: (pid * 2654435761) >>> 0 || 1 });
+    // A new kind where the old one was; otherwise in beside its owner.
+    if (was && !petKind(want.kind)?.flies === !petKind(have.kind)?.flies && was.mode !== 'ride') {
+      Object.assign(sim.body, { x: was.x, y: was.y, z: was.z });
+      Object.assign(sim, { x: was.x, y: was.y, z: was.z, yaw: was.yaw });
+      sim.last = { x: owner.x, y: owner.y, z: owner.z };
+    } else {
+      placePet(this.world, sim, owner);
+    }
+    const model = this.renderer.addPet(pid, want, shirtColor(look.shirt));
+    model.group.position.set(sim.x, sim.y, sim.z);
+    model.group.rotation.y = sim.yaw;
+    this.pets.set(pid, { pid, kind: want.kind, coat: want.coat, name: want.name, sim, model, voiceAt: performance.now() + 4000 + Math.random() * 8000, zzzAt: 0 });
+    if (!quiet) {
+      this.renderer.effects.sparkles(sim.x, sim.y + 0.3, sim.z, 14);
+      if (this.near(sim.x, sim.y, sim.z, 20)) this.sound.play(want.kind);
+    }
+  }
+
+  dropPet(pid) {
+    this.renderer.removePet(pid);
+    this.pets.delete(pid);
+  }
+
+  // A pet's owner as this page sees them, for it to follow (see stepPet):
+  // you as you are, or a friend where they are drawn. Null if not here.
+  petOwner(pid) {
+    const p = this.players.get(pid);
+    if (!p || !this.me) return null;
+    const look = p.me ? this.profile.look : p.look;
+    const head = headTop(look?.hat, look?.animal === KID ? look.hair : '');
+    if (p.me) {
+      const b = this.me.body;
+      const speed = this.me.speed;
+      return {
+        x: b.x,
+        y: b.y,
+        z: b.z,
+        yaw: this.me.yaw,
+        speed,
+        moving: speed > 0.5 || (!b.onGround && !b.inWater && !b.flying && !this.riding),
+        flying: b.flying,
+        swimming: b.inWater && !this.riding,
+        riding: this.riding?.type ?? '',
+        head,
+        headTaken: this.headTaken(b.x, b.y + head, b.z),
+        pose: Boolean(this.portrait),
+      };
+    }
+    const a = p.avatar?.root;
+    if (!a) return null;
+    const s = p.snaps[p.snaps.length - 1];
+    const anim = s?.anim ?? ANIM.idle;
+    const last = p.petLast ?? { x: a.position.x, z: a.position.z, speed: 0 };
+    const now = performance.now();
+    const dt = Math.max(1e-3, (now - (last.at ?? now)) / 1000);
+    const speed = last.at ? last.speed + (Math.hypot(a.position.x - last.x, a.position.z - last.z) / dt - last.speed) * Math.min(1, dt * 8) : 0;
+    p.petLast = { x: a.position.x, z: a.position.z, speed, at: now };
+    const mount = anim === ANIM.ride ? [...this.critters.values()].find((c) => c.rider === pid) : null;
+    return {
+      x: a.position.x,
+      y: a.position.y,
+      z: a.position.z,
+      yaw: a.rotation.y,
+      speed,
+      moving: speed > 0.5 || anim === ANIM.air || anim === ANIM.walk || anim === ANIM.run,
+      flying: anim === ANIM.fly,
+      swimming: anim === ANIM.swim,
+      riding: mount?.type ?? '',
+      head,
+      headTaken: this.headTaken(a.position.x, a.position.y + head, a.position.z),
+      pose: false,
+    };
+  }
+
+  // Whether a flying friend (an animal) sits on a head at the top (x, y, z).
+  headTaken(x, y, z) {
+    for (const c of this.critters.values()) {
+      if (!CRITTER_INFO[c.type]?.flies) continue;
+      const m = c.model.group.position;
+      if (Math.hypot(m.x - x, m.z - z) < 0.3 && Math.abs(m.y - y) < 0.35) return true;
+    }
+    return false;
+  }
+
+  // Every pet, after its owner, as this page sees them; riding along with
+  // them on whatever they ride.
+  updatePets(dt) {
+    const night = isNight(this.env.time);
+    const cam = this.renderer.camera.position;
+    const now = performance.now();
+    const fx = this.renderer.effects;
+    for (const pet of this.pets.values()) {
+      const owner = this.petOwner(pet.pid);
+      if (!owner) continue;
+      const sim = pet.sim;
+      const ev = stepPet(this.world, sim, owner, dt, { night });
+      const m = pet.model;
+      const seat = sim.mode === 'ride' ? this.petMount(pet.pid) : null;
+      if (ev.boarded) pet.hop = { t: 0, x: m.group.position.x, y: m.group.position.y, z: m.group.position.z };
+      let at = seat ?? { x: sim.x, y: sim.y, z: sim.z, yaw: sim.yaw };
+      if (pet.hop && seat) {
+        // A little hop up from where it stood.
+        const h = pet.hop;
+        h.t += dt;
+        const k = Math.min(1, h.t / 0.35);
+        at = { ...at, x: h.x + (at.x - h.x) * k, y: h.y + (at.y - h.y) * k + Math.sin(Math.PI * k) * 0.6, z: h.z + (at.z - h.z) * k };
+        if (k >= 1) pet.hop = null;
+      }
+      m.group.position.set(at.x, at.y, at.z);
+      m.group.rotation.y = at.yaw;
+      // Far off, too small to see; and looking through your own eyes, a
+      // parrot on your head would sit on them.
+      m.group.visible = Math.hypot(at.x - cam.x, at.y - cam.y, at.z - cam.z) < m.seen && !(pet.pid === this.pid && sim.mode === 'perch' && this.renderer.camDist <= 1.3);
+      if (m.group.visible) {
+        m.update(dt, petPose(sim));
+        this.renderer.placeShadow(m.shadow, at.x, at.y, at.z, 1);
+        if (seat) m.shadow.visible = false;
+      } else {
+        m.shadow.visible = false;
+      }
+      if (ev.popped && ev.popped !== 'pose') {
+        fx.sparkles(sim.x, sim.y + 0.3, sim.z, 10);
+        if (this.near(sim.x, sim.y, sim.z, 16)) this.sound.play('pop');
+      }
+      if (ev.splashed && this.near(sim.x, sim.y, sim.z, 20)) fx.splash(sim.x, sim.y + 0.3, sim.z);
+      const pose = petPose(sim);
+      if (pose === 'sleep' && now > pet.zzzAt && this.near(at.x, at.y, at.z, 30)) {
+        pet.zzzAt = now + 1600 + Math.random() * 800;
+        fx.zzz(at.x, at.y + m.height, at.z);
+      }
+      // Now and then it says something, awake and near you.
+      if (pose !== 'sleep' && now > pet.voiceAt && this.near(at.x, at.y, at.z, 10)) {
+        pet.voiceAt = now + 20000 + Math.random() * 25000;
+        this.sound.play(pet.kind);
+      }
+    }
+  }
+
+  // Where a pet riding along with its owner sits (on the animal or in the
+  // vehicle they ride), or null when it is nowhere to be seen.
+  petMount(pid) {
+    const entry = pid === this.pid && this.riding ? this.critters.get(this.riding.id) : [...this.critters.values()].find((c) => c.rider === pid || (c.lastRider === pid && performance.now() - c.leftAt < 600));
+    return entry ? this.renderer.petSeat(entry.model) : null;
+  }
+
+  // Petting a pet (anyone's), or giving it a fruit you are holding: it shows
+  // here at once, and everyone else sees it too.
+  touchPet(pid) {
+    const pet = this.pets.get(pid);
+    if (!pet) return;
+    const fruit = this.basketPick && B.FRUITS.some(([k]) => k === this.basketPick) ? this.basketPick : null;
+    if (fruit && (this.profile.basket[fruit] ?? 0) > 0) {
+      this.send({ t: 'pet', op: 'feed', pid, fruit });
+      this.spendBasket();
+      this.profile.count('fed');
+      this.petFx({ pid, by: this.pid, fx: 'yum', fruit });
+    } else {
+      this.send({ t: 'pet', op: 'pet', pid });
+      this.petFx({ pid, by: this.pid, fx: 'pet' });
+    }
+    this.profile.count('petted');
+    if (pid !== this.pid) this.profile.count('petpals');
+  }
+
+  // Someone petted a pet (fx: pet) or gave it a fruit (yum): it is happy, or
+  // munches it.
+  petFx(msg) {
+    const pet = this.pets.get(msg.pid);
+    if (!pet) return;
+    const sim = pet.sim;
+    if (sim.mode !== 'ride') startTrick(sim, msg.fx === 'yum' ? 'eat' : 'happy');
+    const p = pet.model.group.position;
+    this.renderer.effects.hearts(p.x, p.y + pet.model.height, p.z, msg.fx === 'yum' ? 5 : 3);
+    if (this.near(p.x, p.y, p.z, 20)) {
+      this.sound.play(pet.kind);
+      if (msg.fx === 'yum') this.sound.play('yum');
+    }
+    const by = this.players.get(msg.by);
+    if (msg.pid === this.pid && msg.by !== this.pid && by) this.emit('toast', { icon: petKind(pet.kind)?.icon ?? '🐾', text: msg.fx === 'yum' ? `${by.name} gave ${pet.name} a treat!` : `${by.name} petted ${pet.name}!` });
   }
 
   // ------------------------------------------------ monsters
@@ -1292,6 +1511,13 @@ export class Game extends EventTarget {
     p.emoteFx = { key, until: performance.now() + 2200, next: 0 };
     const pos = p.avatar.root.position;
     if (this.near(pos.x, pos.y, pos.z, 24)) this.sound.play('emote', { emote: key });
+    // Their pet joins in, with a trick of its own.
+    const pet = this.pets.get(pid);
+    if (pet && EMOTE_TRICKS[key] && pet.sim.mode !== 'ride') {
+      startTrick(pet.sim, EMOTE_TRICKS[key]);
+      if (key === 'hearts') this.renderer.effects.hearts(pet.sim.x, pet.sim.y + pet.model.height, pet.sim.z, 2);
+      if (pid === this.pid) this.profile.count('tricks');
+    }
   }
 
   // ------------------------------------------------ time and weather
@@ -1359,15 +1585,20 @@ export class Game extends EventTarget {
       const a = this.players.get(friend.id)?.avatar?.root.position;
       if (a && !wall) return Math.hypot(a.x - this.me.body.x, a.y - this.me.body.y, a.z - this.me.body.z) <= HELP_REACH ? { kind: 'friend', pid: friend.id } : { kind: 'far' };
     }
-    // Not the animal you are riding, which is in the middle of the picture.
+    // Not the animal you are riding, which is in the middle of the picture,
+    // nor your pet riding along with you or sitting on your head.
     const critter = r.pickCritter(ray, maxDist, this.riding?.id);
+    const mode = this.pets.get(this.pid)?.sim.mode;
+    const pet = r.pickPet(ray, maxDist, mode === 'ride' || mode === 'perch' ? this.pid : null);
     // Flowers and grass are see-through: one in front of an animal, or the
     // one it stands in (a bee at a flower is inside its cell), does not hide
     // it; nor does the water hide what swims in it.
     const seeThrough = !hit ? 0 : B.KIND[hit.id] === B.K_PLANT ? 1.5 : B.KIND[hit.id] === B.K_WATER ? 8 : 0;
-    if (critter && (!hit || critter.dist < hit.dist + seeThrough)) {
-      const m = this.critters.get(critter.id)?.model.group.position;
-      if (m && Math.hypot(m.x - eye.x, m.y - eye.y, m.z - eye.z) <= REACH) return { kind: 'critter', id: critter.id };
+    // The nearer of the two, an animal or a pet.
+    const friends = [critter && { aim: { kind: 'critter', id: critter.id }, dist: critter.dist, at: this.critters.get(critter.id)?.model.group.position }, pet && { aim: { kind: 'pet', pid: pet.id }, dist: pet.dist, at: this.pets.get(pet.id)?.model.group.position }];
+    for (const f of friends.filter(Boolean).sort((a, b) => a.dist - b.dist)) {
+      if (hit && f.dist >= hit.dist + seeThrough) continue;
+      if (f.at && Math.hypot(f.at.x - eye.x, f.at.y - eye.y, f.at.z - eye.z) <= REACH) return f.aim;
     }
     if (!hit) return null;
     if (Math.hypot(hit.x + 0.5 - eye.x, hit.y + 0.5 - eye.y, hit.z + 0.5 - eye.z) > REACH) return { kind: 'far' };
@@ -1458,6 +1689,10 @@ export class Game extends EventTarget {
     }
     if (aim.kind === 'critter') {
       this.touchCritter(aim.id);
+      return;
+    }
+    if (aim.kind === 'pet') {
+      this.touchPet(aim.pid);
       return;
     }
     if (aim.kind === 'monster') {
@@ -1650,6 +1885,7 @@ export class Game extends EventTarget {
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
+    this.updatePets(dt);
     this.updateMonsters(dt);
     this.updateAdventure(dt);
     // Holding the button down (after a moment) keeps building or picking as you sweep.
@@ -2027,6 +2263,8 @@ export class Game extends EventTarget {
   close() {
     this.closed = true;
     this.link.removeEventListener('message', this.onMessage);
+    this.profile.removeEventListener('change', this.onProfile);
+    for (const pid of [...this.pets.keys()]) this.dropPet(pid);
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
     for (const id of [...this.monsters.keys()]) this.renderer.removeMonster(id);

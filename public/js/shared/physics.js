@@ -207,10 +207,12 @@ export function stepBody(world, b, input, dt, options = {}) {
 }
 
 // In the water a body floats with the height float (over its feet) at the
-// top: a player's head, or a big animal's back with its rider on it.
+// top: a player's head, or a big animal's back with its rider on it. It is
+// in the water once that is wade deep (half a block; less for a pet, whose
+// float is lower than that).
 function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
   const wasInWater = b.inWater;
-  b.inWater = world.get(Math.floor(b.x), Math.floor(b.y + 0.5), Math.floor(b.z)) === WATER;
+  b.inWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.wade ?? 0.5)), Math.floor(b.z)) === WATER;
   b.headInWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.float ?? b.height - 0.2)), Math.floor(b.z)) === WATER;
   if (b.inWater && !wasInWater && b.vy < -4) events.splashed = true;
 

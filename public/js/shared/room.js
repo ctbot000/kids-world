@@ -288,6 +288,9 @@ export class Room {
       case 'critter':
         this.critterOp(conn, p, msg);
         break;
+      case 'pet':
+        this.petOp(p, msg);
+        break;
       case 'bop':
         this.bop(p, msg);
         break;
@@ -635,6 +638,16 @@ export class Room {
       default:
         break;
     }
+  }
+
+  // Someone petting a player's pet, or giving it a fruit, for everyone to
+  // see. Pets are no island's: every page moves them itself (pets.js), so
+  // this is all the island hears of them.
+  petOp(p, msg) {
+    const owner = this.players.get(msg.pid);
+    if (!owner?.online || !owner.look?.pet) return;
+    if (msg.op === 'feed' && B.FRUITS.some(([key]) => key === msg.fruit)) this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'yum', fruit: msg.fruit });
+    else if (msg.op === 'pet') this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'pet' });
   }
 
   // Whatever pid is riding stays where they got off it.

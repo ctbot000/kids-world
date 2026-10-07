@@ -1620,6 +1620,105 @@ test('the whole island code shows beside the top buttons, and a long connection 
   await page.browserContext().close();
 });
 
+// Turns the camera until a tap on a player's pet (pid) would pet it, and
+// returns where to tap; null if no view of it does.
+function petOnScreen(page, pid) {
+  return page.evaluate((pid) => {
+    const kw = window.kidsWorld;
+    const r = kw.renderer;
+    const g = kw.game;
+    for (let k = 0; k < 24; k++) {
+      r.view.yaw = (k * Math.PI) / 6;
+      r.view.pitch = k < 12 ? 0.5 : 0.85;
+      r.view.dist = 4;
+      kw.step(1 / 60, 30);
+      const m = r.pets.get(pid);
+      if (!m) return null;
+      const p = m.group.position;
+      const s = r.project(p.x, p.y + m.center, p.z);
+      const rect = r.canvas.getBoundingClientRect();
+      const aim = g.aim({ x: (s.x / rect.width) * 2 - 1, y: -(s.y / rect.height) * 2 + 1 });
+      const clear = document.elementFromPoint(rect.left + s.x, rect.top + s.y) === r.canvas;
+      if (s.visible && clear && aim?.kind === 'pet' && aim.pid === pid) return { x: rect.left + s.x, y: rect.top + s.y };
+    }
+    return null;
+  }, pid);
+}
+
+test('a pet picked in My pet comes along: it follows you and sits by you, is petted with a click, joins in when you wave, and a friend sees it and pets it too', { skip }, async () => {
+  const a = await openPlayer(base, { name: 'Kind Owl', look: { animal: 'bear', fur: 'brown', shirt: 2, hat: 'none' } });
+  // On the title, My pet: a brown puppy, named, which sits at your feet there.
+  await clickButton(a, 'My pet');
+  await clickButton(a, 'Puppy', '#modal');
+  await clickSwitch(a, '#modal .swatch[aria-label="brown"]');
+  const box = await a.waitForSelector('#modal .name-input');
+  await landed(a, box);
+  await box.evaluate((el) => (el.value = ''));
+  await box.type('Biscuit 🐾');
+  await until(a, () => window.kidsWorld.profile.data.stickers['best-friends']);
+  await clickButton(a, 'Done', '#modal');
+  assert.deepEqual(await a.evaluate(() => window.kidsWorld.profile.look.pet), { kind: 'puppy', coat: 'brown', name: 'Biscuit 🐾' });
+  await until(a, () => window.kidsWorld.renderer.pets.get(-1)?.kind === 'puppy');
+
+  // On an island it comes along, follows you about, and sits by you when you stop.
+  await makeIsland(a, { online: true, theme: 'Flat Land' });
+  const pid = await a.evaluate(() => window.kidsWorld.game.pid);
+  await until(a, (pid) => window.kidsWorld.game.pets.get(pid)?.kind === 'puppy', pid);
+  const start = await a.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, z: window.kidsWorld.game.me.body.z }));
+  await a.evaluate(() => {
+    const kw = window.kidsWorld;
+    kw.renderer.view.yaw = 0;
+    kw.input.keys.add('KeyW');
+    kw.step(1 / 60, 90);
+    kw.input.keys.delete('KeyW');
+  });
+  const walked = await a.evaluate((start) => {
+    const g = window.kidsWorld.game;
+    const pet = g.pets.get(g.pid).sim;
+    return { far: Math.hypot(g.me.body.x - start.x, g.me.body.z - start.z), behind: Math.hypot(pet.x - g.me.body.x, pet.z - g.me.body.z) };
+  }, start);
+  assert.ok(walked.far > 4 && walked.behind < 4, `it keeps up as you walk: ${JSON.stringify(walked)}`);
+  await a.evaluate(() => window.kidsWorld.step(1 / 60, 240));
+  const sitting = await a.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const pet = g.pets.get(g.pid).sim;
+    return { state: pet.state, by: Math.hypot(pet.x - g.me.body.x, pet.z - g.me.body.z) };
+  });
+  assert.ok(sitting.state === 'sit' && sitting.by < 1.6, `then sits beside you: ${JSON.stringify(sitting)}`);
+
+  // A click on it pets it (with hearts and a happy wiggle), and a wave makes it beg.
+  const at = await petOnScreen(a, pid);
+  assert.ok(at, 'your puppy can be seen to be tapped');
+  await a.mouse.click(at.x, at.y);
+  await until(a, () => window.kidsWorld.profile.data.stats.petted === 1);
+  assert.equal(await a.evaluate(() => window.kidsWorld.game.pets.get(window.kidsWorld.game.pid).sim.trick), 'happy');
+  await a.evaluate(() => window.kidsWorld.ui.emoteDialog());
+  await clickButton(a, 'Wave', '#modal');
+  await until(a, () => window.kidsWorld.game.pets.get(window.kidsWorld.game.pid).sim.trick === 'beg');
+  assert.equal(await a.evaluate(() => window.kidsWorld.profile.data.stats.tricks), 1);
+
+  // A friend comes: they see Biscuit beside Kind Owl, walk over and pet it, and Kind Owl hears of it.
+  const code = await a.evaluate(() => window.kidsWorld.game.code);
+  const b = await openPlayer(`${base}?code=${code}`, { name: 'Merry Seal' });
+  await clickButton(b, 'go!', '#modal');
+  await inGame(b);
+  await until(b, (pid) => window.kidsWorld.game.pets.get(pid)?.name === 'Biscuit 🐾', pid);
+  await b.evaluate((pid) => {
+    const g = window.kidsWorld.game;
+    const pet = g.pets.get(pid).sim;
+    Object.assign(g.me.body, { x: pet.x + 2, y: pet.y + 0.5, z: pet.z, vx: 0, vy: 0, vz: 0 });
+    window.kidsWorld.step(1 / 60, 30);
+  }, pid);
+  const there = await petOnScreen(b, pid);
+  assert.ok(there, "the friend's puppy can be seen to be tapped");
+  await b.mouse.click(there.x, there.y);
+  await until(b, () => window.kidsWorld.profile.data.stickers['pet-pal']);
+  await until(a, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Merry Seal petted Biscuit 🐾!')));
+  assert.deepEqual(pageErrors, []);
+  await a.browserContext().close();
+  await b.browserContext().close();
+});
+
 test('two friends peer to peer: visiting, building together, rules and saying goodbye', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
   // A name of the host's own, typed in Change me.

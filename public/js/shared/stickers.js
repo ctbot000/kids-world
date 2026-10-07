@@ -20,6 +20,9 @@ export const STICKERS = [
   { key: 'snack-time', icon: '🍑', name: 'Snack Time', text: 'Feed an animal some fruit', test: (s) => s.fed >= 1 },
   { key: 'welcome', icon: '🐣', name: 'Welcome Party', text: 'Invite an animal friend', test: (s) => s.invited >= 1 },
   { key: 'bird-buddy', icon: '🐦', name: 'Bird Buddy', text: 'Have a flying friend sit on your head', test: (s) => s.perched >= 1 },
+  { key: 'best-friends', icon: '🐶', name: 'Best Friends', text: 'Get a pet of your own', test: (s) => s.adopted >= 1 },
+  { key: 'clever-pet', icon: '🎪', name: 'Clever Pet', text: 'See your pet do 10 tricks', test: (s) => s.tricks >= 10 },
+  { key: 'pet-pal', icon: '💞', name: 'Pet Pal', text: "Pet a friend's pet", test: (s) => s.petpals >= 1 },
   { key: 'whale-watcher', icon: '🐳', name: 'Whale Watcher', text: 'See a whale blow water', test: (s) => s.spouts >= 1 },
   { key: 'belly-slide', icon: '🐧', name: 'Belly Slide', text: 'See a penguin slide on its tummy', test: (s) => s.slides >= 1 },
   { key: 'giddy-up', icon: '🏇', name: 'Giddy-Up!', text: 'Ride a big animal', test: (s) => s.rides >= 1 },
@@ -45,4 +48,4 @@ export const STICKERS = [
   { key: 'island-hero', icon: '👑', name: 'Island Hero', text: 'Pop King Grumble and free a whole adventure island', test: (s) => s.kings >= 1 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped'];
