@@ -12,9 +12,12 @@
 //   flowers, its monsters go, and it is a safe place, where anyone out of
 //   hearts comes back.
 // - With every camp free, King Grumble's bubble pops. Big and slow, he
-//   stomps the ground (jump, and it misses you) and calls little monsters
-//   to help him. Each friend can bop him about once a second, so the more of
-//   you there are, the sooner he goes pop, and the whole island is free.
+//   stomps the ground (jump, and it misses you), and sits dazed after,
+//   when a bop counts three times. He calls little monsters to help him,
+//   and the fewer hearts he has, the quicker he is and the more often he
+//   stomps. Left alone, he gets hearts back. Each friend can bop him about
+//   once a second, so the more of you there are, the sooner he goes pop,
+//   and the whole island is free.
 // - Out of hearts with a friend on the island, you sit dizzy for a while,
 //   until a friend comes and taps you to help you up (or you go back to the
 //   nearest safe place).
@@ -23,7 +26,7 @@
 // host runs the rest (AdventureSim, from room.js), as it runs the monsters.
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
-import { campDistance, SAFE_RADIUS } from './monsters.js';
+import { campDistance, DAZED_HIT, SAFE_RADIUS } from './monsters.js';
 import { hash2, Rng } from './rng.js';
 
 // A camp's fence goes round this far from its flag; King Grumble's castle
@@ -44,9 +47,12 @@ export const GUARD_BACK_MS = 20000;
 // How many monsters keep a camp: more with more friends on the island.
 export const guardsFor = (players) => Math.min(5, 1 + Math.max(1, players));
 // King Grumble's hearts, more with more friends on the island; each friend
-// can bop him once in this long.
-export const kingHearts = (players) => 10 + 4 * Math.min(8, Math.max(1, players));
+// can bop him once in this long. Nobody bopping him for KING_HEAL_MS, he
+// gets a heart back, and another every KING_HEAL_EVERY after.
+export const kingHearts = (players) => 12 + 6 * Math.min(8, Math.max(1, players));
 export const KING_HIT_MS = 800;
+export const KING_HEAL_MS = 8000;
+const KING_HEAL_EVERY = 2000;
 // Out of hearts with a friend about: dizzy this long, unless a friend this
 // near taps you, which gets you up with this many hearts.
 export const DIZZY_MS = 10000;
@@ -340,7 +346,7 @@ export function freeCells(world, camp, pal, rng) {
 
 // ---------------------------------------------------------------- playing them
 
-const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map() });
+const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 });
 
 export class AdventureSim {
   // camps: as buildCamps makes them (and saves keep them), with whether
@@ -422,7 +428,7 @@ export class AdventureSim {
         if (now - c.quiet >= SLEEP_MS) this.sleep(c, monsters);
       }
       if (!c.awake) continue;
-      if (c.kind === 'castle') this.stepCastle(world, c, people, monsters);
+      if (c.kind === 'castle') this.stepCastle(world, c, now, monsters);
       else this.stepCamp(world, c, dt, now, people, monsters, want, news);
     }
     return news;
@@ -513,8 +519,9 @@ export class AdventureSim {
 
   // King Grumble's yard: in his bubble he is no trouble; out of it, he calls
   // two little monsters to help him when he is down to two thirds of his
-  // hearts, and two more at a third.
-  stepCastle(world, c, people, monsters) {
+  // hearts, and two more at a third, getting crosser each time; and left
+  // alone a while, he gets his hearts back one by one.
+  stepCastle(world, c, now, monsters) {
     const k = this.king;
     let king = monsters.get(k.id);
     // Gone by himself (into water someone poured in): back in his yard, as he was.
@@ -525,7 +532,12 @@ export class AdventureSim {
     }
     king.passive = this.shielded;
     if (king.passive) return;
+    if (k.hearts < k.max && now - Math.max(k.hitAt, k.healAt) >= (k.healAt > k.hitAt ? KING_HEAL_EVERY : KING_HEAL_MS)) {
+      k.hearts++;
+      k.healAt = now;
+    }
     const due = k.hearts <= k.max / 3 ? 2 : k.hearts <= (k.max * 2) / 3 ? 1 : 0;
+    king.rage = due;
     while (k.minions < due) {
       k.minions++;
       for (const side of [-1, 1]) {
@@ -546,17 +558,19 @@ export class AdventureSim {
     c.back.push(now + GUARD_BACK_MS);
   }
 
-  // A friend bopping King Grumble: nothing gets through his bubble, and each
-  // friend can bop him once a moment. Returns { shielded }, { wait }, or
-  // { hit, hearts, max, beaten }.
-  hitKing(pid, now) {
+  // A friend bopping King Grumble: nothing gets through his bubble, each
+  // friend can bop him once a moment, and while he sits dazed a bop takes
+  // DAZED_HIT hearts. Returns { shielded }, { wait }, or
+  // { hit, hearts, max, beaten, dazed }.
+  hitKing(pid, now, dazed = false) {
     if (this.shielded) return { shielded: true };
     const k = this.king;
     if (!k.id || k.hearts <= 0) return { wait: true };
     if (now - (k.hits.get(pid) ?? -Infinity) < KING_HIT_MS) return { wait: true };
     k.hits.set(pid, now);
-    k.hearts -= 1;
-    return { hit: true, hearts: k.hearts, max: k.max, beaten: k.hearts <= 0 };
+    k.hearts = Math.max(0, k.hearts - (dazed ? DAZED_HIT : 1));
+    k.hitAt = now;
+    return { hit: true, hearts: k.hearts, max: k.max, beaten: k.hearts <= 0, dazed };
   }
 
   // King Grumble popped: the whole island is free. Every monster of every

@@ -288,11 +288,12 @@ export class Effects {
   }
 
   // Little stars going round and round over the head of someone dizzy (one
-  // step of it: called every frame).
-  dizzy(x, y, z, t) {
+  // step of it: called every frame), r round (bigger for King Grumble).
+  dizzy(x, y, z, t, r = 0.38) {
+    const size = 0.16 * Math.max(1, r / 0.38) ** 0.5;
     for (let k = 0; k < 3; k++) {
       const a = t * 5 + (k / 3) * Math.PI * 2;
-      this.add('star', x + Math.cos(a) * 0.38, y + Math.sin(t * 3 + k) * 0.05, z + Math.sin(a) * 0.38, { size: 0.16, life: 0.07, color: k === 1 ? '#ffffff' : '#ffd84d' });
+      this.add('star', x + Math.cos(a) * r, y + Math.sin(t * 3 + k) * 0.05, z + Math.sin(a) * r, { size, life: 0.07, color: k === 1 ? '#ffffff' : '#ffd84d' });
     }
   }
 

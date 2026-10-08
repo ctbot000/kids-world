@@ -10,12 +10,13 @@
 // and all of it kept when saved, and on the list of open islands.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, HELP_HEARTS, KING_HIT_MS, kingHearts, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
+import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, HELP_HEARTS, KING_HEAL_MS, KING_HIT_MS, kingHearts, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
 import * as B from '../public/js/shared/blocks.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing } from '../public/js/shared/listing.js';
-import { campDistance, MAX_HEARTS, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { campDistance, DAZE_MS, DAZED_HIT, MAX_HEARTS, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import { World } from '../public/js/shared/world.js';
 import { generate, SIZES, THEMES } from '../public/js/shared/worldgen.js';
 
 function clock(start = 1_000_000) {
@@ -477,6 +478,81 @@ test('King Grumble’s stomp knocks over whoever is on the ground near him as he
   assert.equal(a.all('bump').filter((m) => m.pid === b.pid).length, 0, 'the one in the air missed');
   assert.ok(Math.hypot(a.last('stomp').x - king.body.x, a.last('stomp').z - king.body.z) < 1, 'where he came down');
   assert.ok(STOMP.reach > 4);
+});
+
+test('King Grumble sits dazed after a stomp, bumping nobody, and a bop then takes three hearts; he is never knocked back', () => {
+  const { room, time, who, king } = atTheCastle({ friends: 1 });
+  const [a] = who;
+  const k = room.adventure.king;
+  const x0 = king.body.x;
+  room.receive(a, { t: 'm', s: [king.body.x + 2, king.body.y, king.body.z, 0, 0, 0] });
+  room.receive(a, { t: 'bop', id: king.id });
+  assert.equal(k.hearts, k.max - 1, 'one heart when he is not dazed');
+  assert.ok(Math.abs(king.body.vx) < 0.5 && Math.abs(king.body.x - x0) < 0.5, 'not knocked back');
+  // Wait for his stomp, jumping each time it comes, out of his reach.
+  let t = 0;
+  for (; t < 30000 && king.state !== 'dazed'; t += 100) {
+    time.t += 100;
+    room.receive(a, { t: 'm', s: [king.body.x + 7, king.body.y + 1.2, king.body.z, 0, 3, 0] });
+    room.tick();
+  }
+  assert.equal(king.state, 'dazed', 'dazed after his stomp');
+  const before = k.hearts;
+  // Right up against him while he is dazed: no bump.
+  room.receive(a, { t: 'm', s: [king.body.x + 1, king.body.y, king.body.z, 0, 0, 0] });
+  const bumps = a.all('bump').length;
+  time.t += 100;
+  room.tick();
+  assert.equal(a.all('bump').length, bumps, 'no bump while dazed');
+  time.t += KING_HIT_MS;
+  room.receive(a, { t: 'bop', id: king.id });
+  assert.equal(k.hearts, before - DAZED_HIT);
+  assert.equal(a.last('kinghit').dazed, true);
+  // After a while, he is up again.
+  for (let i = 0; i < DAZE_MS / 100 + 2; i++) {
+    time.t += 100;
+    room.receive(a, { t: 'm', s: [king.body.x + 12, king.body.y, king.body.z, 0, 0, 0] });
+    room.tick();
+  }
+  assert.notEqual(king.state, 'dazed');
+});
+
+test('King Grumble left alone gets his hearts back, and the fewer he has, the more often he stomps', () => {
+  const { room, time, who, king } = atTheCastle({ friends: 1 });
+  const [a] = who;
+  const k = room.adventure.king;
+  k.hearts = Math.floor(k.max / 3);
+  k.hitAt = time.t;
+  room.tick();
+  assert.equal(king.rage, 2, 'very cross at a third');
+  // Left alone, far from him: nothing for a while, then a heart every two seconds.
+  const low = k.hearts;
+  play(room, time, KING_HEAL_MS - 200, [a, king.body.x + 40, king.body.z]);
+  assert.equal(k.hearts, low);
+  play(room, time, 4500, [a, king.body.x + 40, king.body.z]);
+  assert.equal(k.hearts, low + 3);
+  // How cross: chasing someone on flat ground for 40 seconds.
+  const chase = (rage) => {
+    const sim = new MonsterSim(4);
+    const w = new World({ W: 96, H: 32, D: 96, sea: 4, theme: 'flat', spawn: { x: 48.5, y: 11, z: 48.5 } });
+    for (let x = 0; x < 96; x++) for (let z = 0; z < 96; z++) for (let y = 0; y <= 10; y++) w.set(x, y, z, y === 10 ? B.GRASS : B.DIRT);
+    const m = sim.add(w, 20.5, 11, 48.5, { kind: 'king' });
+    m.rage = rage;
+    let now = 1000;
+    let stomps = 0;
+    // Someone just ahead of him all the time, never bumped.
+    const p = { id: 1, x: 23.5, y: 11, z: 48.5 };
+    m.target = 1;
+    for (let t = 0; t < 40000; t += 50) {
+      now += 50;
+      p.x = m.body.x + 3;
+      sim.step(w, 0.05, now, [{ ...p, safeUntil: Infinity }], false, { roam: false, havens: [] });
+      stomps += sim.takeStomps().length;
+    }
+    return stomps;
+  };
+  const [calm, cross, crossest] = [0, 1, 2].map(chase);
+  assert.ok(calm < cross && cross < crossest, `stomps in 40 seconds: ${calm}, ${cross}, ${crossest}`);
 });
 
 test('turning monsters off leaves the camps’ monsters be; an adventure is kept when saved, and shows on the list of open islands', () => {

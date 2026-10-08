@@ -932,6 +932,15 @@ export class Game extends EventTarget {
       m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
       const king = entry.kind === 'king';
+      // King Grumble dazed from a stomp: stars round his crown, and the first
+      // time you see it near, how to make the most of it.
+      if (king && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
+        this.renderer.effects.dizzy(s.x, s.y + 2.2, s.z, now / 1000, 0.75);
+        if (!this.toldDazed && this.near(s.x, s.y, s.z, 20)) {
+          this.toldDazed = true;
+          this.emit('toast', { icon: '💫', text: 'King Grumble is dazed after his stomp! Bop him now: every bop counts three times.' });
+        }
+      }
       if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, king ? 24 : 10)) {
         entry.grumbleAt = now + 3500 + Math.random() * 4000;
         this.sound.play('grumble', { big: king });
@@ -1027,9 +1036,9 @@ export class Game extends EventTarget {
       return;
     }
     if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max };
-    if (entry) entry.model.squash = 0.45;
+    if (entry) entry.model.squash = msg.dazed ? 0.6 : 0.45;
     if (p && this.near(p.x, p.y, p.z, 40)) {
-      this.renderer.effects.sparkles(p.x, p.y + 1.4, p.z, 14, ['#ffd84d', '#ffffff', '#ff8fc4']);
+      this.renderer.effects.sparkles(p.x, p.y + 1.4, p.z, msg.dazed ? 36 : 14, ['#ffd84d', '#ffffff', '#ff8fc4']);
       this.renderer.effects.bang(p.x, p.y + 2.3, p.z);
       this.sound.play('ouch');
     }

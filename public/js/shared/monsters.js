@@ -60,12 +60,19 @@ export const MONSTER_BODY = { radius: 0.42, height: 0.8 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
-const KING_MOVE = { walk: 1.8, run: 3, jump: 9 };
+// The crosser he gets (rage: 0, 1 at two thirds of his hearts, 2 at a
+// third), the quicker: at the last as quick as you walk, never as you run.
+const KING_MOVES = [3, 3.8, 4.6].map((run) => ({ walk: 1.8, run, jump: 9 }));
 // His stomp: now and then, near whoever he is after, he crouches (long
 // enough to see it coming, with a ring on the ground as far as it reaches),
 // jumps straight up and lands with a thump that knocks over anyone on the
-// ground that near. Anyone in the air then is missed.
+// ground that near. Anyone in the air then is missed. Down from one, he sits
+// dazed a moment: he bumps nobody, and a bop then takes DAZED_HIT hearts.
+// The crosser he gets, the sooner the next (every, by rage, from landing).
 export const STOMP = { every: 6500, windup: 900, reach: 6, jump: 10.5 };
+const STOMP_EVERY = [6500, 4500, 3200];
+export const DAZE_MS = 2200;
+export const DAZED_HIT = 3;
 // Bumping: how close (between middles, side to side) and how long it stops
 // to giggle after.
 const BUMP_PAD = 0.38;
@@ -94,7 +101,7 @@ const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };
 const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
-export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp'];
+export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
 export const MONSTER_KINDS = ['blob', 'king'];
 
 export const bodyOf = (kind) => (kind === 'king' ? KING_BODY : MONSTER_BODY);
@@ -313,7 +320,10 @@ export class MonsterSim {
       let mx = 0;
       let mz = 0;
       let jump = false;
-      if (now < m.giggle) {
+      const every = STOMP_EVERY[m.rage ?? 0] ?? STOMP.every;
+      if (now < (m.dazed ?? 0)) {
+        m.state = 'dazed';
+      } else if (now < m.giggle) {
         m.state = 'giggle';
       } else if (m.windup || m.slam) {
         // Crouched for a stomp, then up he goes, straight up, so he comes
@@ -340,7 +350,7 @@ export class MonsterSim {
         }
         m.state = 'chase';
         if (m.kind === 'king' && b.onGround && !m.slam) {
-          if (!m.stompAt) m.stompAt = now + STOMP.every * 0.6;
+          if (!m.stompAt) m.stompAt = now + every * 0.6;
           else if (now >= m.stompAt && d < STOMP.reach + 2) {
             m.stompAt = 0;
             m.windup = now + STOMP.windup;
@@ -410,13 +420,14 @@ export class MonsterSim {
       }
       // It gets about in hops.
       if ((mx || mz) && b.onGround) jump = true;
-      const move = m.kind === 'king' ? KING_MOVE : now < m.cross ? CROSS_MOVE : MOVE;
+      const move = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? CROSS_MOVE : MOVE;
       const events = stepBody(world, b, { mx, mz, jump, run: m.state === 'chase' }, dt, { autoJump: true, move });
       if (events.bumped && m.state === 'hop') m.rest = 0;
       // Down from a stomp: the thump (see takeStomps), and a while till the next.
       if (m.slam && b.onGround) {
         m.slam = false;
-        m.stompAt = now + STOMP.every;
+        m.stompAt = now + every;
+        m.dazed = now + DAZE_MS;
         this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z });
       }
       // Stuck at a wall while chasing: off to one side for a moment.
@@ -426,7 +437,7 @@ export class MonsterSim {
       }
       if (mx || mz) m.yaw = Math.atan2(mx, mz);
       // Bumping into someone: they are knocked back, and it giggles a moment.
-      if (now >= m.giggle && !m.passive) {
+      if (now >= m.giggle && now >= (m.dazed ?? 0) && !m.passive) {
         for (const p of people) {
           if (p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
           if (Math.hypot(p.x - b.x, p.z - b.z) > b.radius + BUMP_PAD || sheltered(p)) continue;

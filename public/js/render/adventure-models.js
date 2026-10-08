@@ -217,6 +217,12 @@ export class KingModel extends MonsterModel {
       this.body.scale.y *= 0.72;
       this.body.rotation.z = Math.sin(t * 30) * 0.05;
     }
+    // Dazed from a stomp: sagging, swaying slowly, mouth hanging open.
+    if (state === 'dazed') {
+      this.body.scale.y *= 0.88;
+      this.body.rotation.z = Math.sin(t * 3) * 0.12;
+      this.mouth.scale.y = 0.07;
+    }
     this.crown.rotation.z = Math.sin(t * 3) * 0.06;
   }
 

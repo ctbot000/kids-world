@@ -982,21 +982,19 @@ export class Room {
     if (m.camp) this.adventure?.guardGone(m, now);
   }
 
-  // A bop for King Grumble: nothing in his bubble, otherwise a heart (and a
-  // hop back); with none left he goes pop, and the whole island is free.
+  // A bop for King Grumble: nothing in his bubble, otherwise a heart (three
+  // while he sits dazed from a stomp; he is too big to knock back); with none
+  // left he goes pop, and the whole island is free.
   bopKing(p, m, now) {
-    const hit = this.adventure?.hitKing(p.id, now);
+    const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0));
     if (!hit || hit.wait) return;
     if (hit.shielded) {
       this.broadcast({ t: 'kinghit', id: m.id, by: p.id, shielded: true });
       return;
     }
-    const b = m.body;
-    const dx = b.x - p.s[0];
-    const dz = b.z - p.s[2];
-    const d = Math.hypot(dx, dz) || 1;
-    Object.assign(b, { vx: (dx / d) * 5, vz: (dz / d) * 5, vy: 5, onGround: false });
-    this.broadcast({ t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max });
+    const msg = { t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max };
+    if (hit.dazed) msg.dazed = true;
+    this.broadcast(msg);
     if (hit.beaten) this.winAdventure(p, m);
   }
 
