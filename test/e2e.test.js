@@ -973,9 +973,10 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
   assert.equal(at.passed[0]?.dist, 0, 'the camera is in the leaves');
   assert.ok(at.passed.some((c) => c.block === TALL_GRASS), `the grass is in the way: ${JSON.stringify(at.passed)}`);
   assert.deepEqual(at.aim, { kind: 'monster', id });
-  // A click at it bops nothing: it says how bopping works.
+  // A click at it bops nothing: it says how bopping works (with 👊 on a touch screen, as a CI
+  // machine with no mouse is).
   await page.mouse.click(at.x, at.y);
-  await until(page, () => document.body.textContent.includes('press X to bop it'));
+  await until(page, () => document.body.textContent.includes(`press ${window.kidsWorld.game.touch ? '👊' : 'X'} to bop it`));
   // X, facing it from three steps off, is a swing at nothing: it is out of reach.
   await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
   await page.keyboard.press('KeyX');
@@ -1014,12 +1015,16 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
     { id: full, ...spot },
   );
   await until(page, ({ id, z }) => Math.abs(window.kidsWorld.game.monsters.get(id).model.group.position.z - (z - 2.5)) < 0.05, { id: full, z: spot.z });
-  await page.evaluate(() => document.body.classList.add('touch'));
+  const wasTouch = await page.evaluate(() => {
+    const was = document.body.classList.contains('touch');
+    document.body.classList.add('touch');
+    return was;
+  });
   await until(page, () => !document.getElementById('btn-attack').hidden && document.getElementById('btn-attack').offsetWidth > 0);
   await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
   await page.click('#btn-attack');
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 1, full);
-  await page.evaluate(() => document.body.classList.remove('touch'));
+  await page.evaluate((wasTouch) => document.body.classList.toggle('touch', wasTouch), wasTouch);
   await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
   // One right beside you takes a heart, and knocks you back.
   const from = await page.evaluate(() => {
@@ -2575,7 +2580,7 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   assert.ok(at.clear, `nothing over the monster on screen: ${JSON.stringify(at)}`);
   // A click at it only says how to bop it; up close, facing it, X pops it.
   await host.mouse.click(at.x, at.y);
-  await until(host, () => document.body.textContent.includes('press X to bop it'));
+  await until(host, () => document.body.textContent.includes(`press ${window.kidsWorld.game.touch ? '👊' : 'X'} to bop it`));
   assert.ok(await host.evaluate((id) => window.kidsWorld.session.link.room.monsters.get(id), id), 'a click pops nothing');
   await stand(host, 2.5, -0.8);
   await host.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
