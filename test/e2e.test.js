@@ -890,7 +890,7 @@ test('coming down from a height thumps and puffs up dust every time, however hig
   await page.browserContext().close();
 });
 
-test('monsters, turned on in Make an island: hearts on screen, one popped with a click through leaves and grass, one taking a heart, and all gone when turned off', { skip }, async () => {
+test('monsters, turned on in Make an island: hearts on screen, one on its last heart popped with a click through leaves and grass, one with all its hearts only bonked, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
@@ -937,7 +937,9 @@ test('monsters, turned on in Make an island: hearts on screen, one popped with a
     const room = kw.session.link.room;
     Object.assign(kw.game.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
     const m = room.monsters.add(room.world, x + 0.5, y, z - 2.5);
+    // Held still, and down to its last heart: one tap pops it.
     m.giggle = Infinity;
+    m.hearts = 1;
     Object.assign(kw.renderer.view, { yaw: 0, pitch: 0.35, dist: 7 });
     return m.id;
   }, spot);
@@ -974,6 +976,25 @@ test('monsters, turned on in Make an island: hearts on screen, one popped with a
   await page.mouse.click(at.x, at.y);
   await until(page, (id) => !window.kidsWorld.session.link.room.monsters.get(id) && !window.kidsWorld.game.monsters.has(id), id);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popped), 1);
+  // One with all its hearts: a tap takes one, and says how many more it takes.
+  const full = await page.evaluate(({ x, y, z }) => {
+    const room = window.kidsWorld.session.link.room;
+    const m = room.monsters.add(room.world, x + 0.5, y, z - 2.5);
+    m.giggle = Infinity;
+    return m.id;
+  }, spot);
+  await until(page, (id) => window.kidsWorld.game.monsters.has(id), full);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  const tap = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const p = kw.game.monsters.get(id).model.group.position;
+    const s = kw.renderer.project(p.x, p.y + 0.4, p.z);
+    const rect = kw.renderer.canvas.getBoundingClientRect();
+    return { x: rect.left + s.x, y: rect.top + s.y };
+  }, full);
+  await page.mouse.click(tap.x, tap.y);
+  await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2 && document.body.textContent.includes('2 more taps'), full);
+  await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
   // One right beside you takes a heart, and knocks you back.
   const from = await page.evaluate(() => {
     const kw = window.kidsWorld;
@@ -2501,7 +2522,9 @@ test('an adventure island with a friend: a camp’s monster popped with a click,
     // None coming back while this runs, however slowly (a popped one would in 20 seconds).
     room.adventure.campById(c.id).back = [Infinity, Infinity, Infinity];
     Object.assign(m.body, { x: c.x + 2.5, y: c.y, z: c.z - 2, vx: 0, vy: 0, vz: 0 });
+    // Down to its last heart: one tap pops it.
     m.giggle = Infinity;
+    m.hearts = 1;
     return m.id;
   }, c);
   await stand(host, 2.5, 0.5);

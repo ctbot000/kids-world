@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { HEART_BACK_MS, heartsBack, MAX_HEARTS, MAX_MONSTERS, MonsterSim, SAFE_RADIUS, TAP_REACH, unpackMonster } from '../public/js/shared/monsters.js';
+import { BLOB_HEARTS, HEART_BACK_MS, heartsBack, HIT_MS, MAX_HEARTS, MAX_MONSTERS, MonsterSim, SAFE_RADIUS, TAP_REACH, unpackMonster } from '../public/js/shared/monsters.js';
 import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -140,33 +140,92 @@ test('hearts come back while nothing bumps you', () => {
   assert.deepEqual(a.all('hearts').map((m) => m.hearts), [3, 4, 5]);
 });
 
-test('jumping on a monster or tapping it pops it, but only from near enough', () => {
-  const { room } = meadowRoom();
+test('jumping on a monster pops it at once; tapping it takes three taps, from close up, and it knocks it back and makes it cross', () => {
+  const { room, time } = meadowRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
   room.monsters.spawnAt = Infinity;
   const spawn = room.world.spawn;
+  const tap = (m, on = false) => {
+    time.t += HIT_MS;
+    room.receive(a, on ? { t: 'bop', id: m.id, on: true } : { t: 'bop', id: m.id });
+  };
+  // Landing on one: pop, but only with your feet over it.
   const m = room.monsters.add(room.world, spawn.x + 30, 11, spawn.z);
-  room.receive(a, { t: 'm', s: [spawn.x, 11, spawn.z, 0, 0, 0] });
-  room.receive(a, { t: 'bop', id: m.id });
-  assert.ok(room.monsters.get(m.id), 'too far');
-  room.receive(a, { t: 'm', s: [spawn.x + 27, 11, spawn.z, 0, 0, 0] });
-  room.receive(a, { t: 'bop', id: m.id });
-  assert.equal(room.monsters.get(m.id), null, 'popped');
+  room.receive(a, { t: 'm', s: [spawn.x + 30.2, 11.1, spawn.z, 0, 0, 0] });
+  tap(m, true);
+  assert.ok(room.monsters.get(m.id), 'beside it, not on it');
+  room.receive(a, { t: 'm', s: [spawn.x + 30.2, 11.6, spawn.z, 0, 0, 0] });
+  tap(m, true);
+  assert.equal(room.monsters.get(m.id), null, 'landed on');
   assert.equal(b.last('pop').id, m.id);
   assert.equal(b.last('pop').by, 1);
+  // Far off, nothing; from close up, a heart off it each tap, never two in a moment.
+  const n = room.monsters.add(room.world, spawn.x + 30, 11, spawn.z);
+  room.receive(a, { t: 'm', s: [spawn.x + 20, 11, spawn.z, 0, 0, 0] });
+  tap(n);
+  assert.equal(n.hearts, BLOB_HEARTS, 'too far');
+  room.receive(a, { t: 'm', s: [spawn.x + 28, 11, spawn.z, 0, 0, 0] });
+  tap(n);
+  room.receive(a, { t: 'bop', id: n.id });
+  assert.equal(n.hearts, BLOB_HEARTS - 1);
+  assert.deepEqual(b.last('mhit'), { t: 'mhit', id: n.id, by: 1, hearts: BLOB_HEARTS - 1 });
+  // Knocked back, away from you, and after you now.
+  assert.ok(n.body.vx > 5, `pushed ${n.body.vx}`);
+  assert.equal(n.target, 1);
+  // Left alone a while, all its hearts are back.
+  standFor(room, time, a, spawn.x + 20, spawn.z, 6000);
+  const left = room.monsters.get(n.id);
+  assert.ok(left);
+  assert.equal(left.hearts, BLOB_HEARTS);
+  // Tapped over and over: pop with the last heart.
+  Object.assign(left.body, { x: spawn.x + 30, y: 11, z: spawn.z, vx: 0, vy: 0, vz: 0 });
+  room.receive(a, { t: 'm', s: [spawn.x + 28, 11, spawn.z, 0, 0, 0] });
+  for (let i = 0; i < BLOB_HEARTS; i++) {
+    Object.assign(left.body, { x: spawn.x + 30, y: 11, z: spawn.z });
+    tap(left);
+  }
+  assert.equal(room.monsters.get(n.id), null, 'popped');
+  assert.equal(b.last('pop').id, n.id);
   // A tap from as far as the page lets you (TAP_REACH from your eyes to its
   // middle) counts, even with the monster a step further on at the island.
   const side = Math.sqrt(TAP_REACH ** 2 - (BODY.eye - 0.4) ** 2);
   const far = room.monsters.add(room.world, spawn.x + 20 + side + 1, 11, spawn.z);
   room.receive(a, { t: 'm', s: [spawn.x + 20, 11, spawn.z, 0, 0, 0] });
-  room.receive(a, { t: 'bop', id: far.id });
-  assert.equal(room.monsters.get(far.id), null, 'popped from as far as a tap reaches');
+  tap(far);
+  assert.equal(far.hearts, BLOB_HEARTS - 1, 'tapped from as far as a tap reaches');
   // With monsters off, nothing to pop.
-  const n = room.monsters.add(room.world, spawn.x + 28, 11, spawn.z);
+  const o = room.monsters.add(room.world, spawn.x + 28, 11, spawn.z);
   room.settings.monsters = false;
-  room.receive(a, { t: 'bop', id: n.id });
-  assert.ok(room.monsters.get(n.id));
+  room.receive(a, { t: 'm', s: [spawn.x + 28.2, 11.6, spawn.z, 0, 0, 0] });
+  tap(o, true);
+  assert.ok(room.monsters.get(o.id));
+});
+
+test('a monster tapped comes straight back at you, quicker than you walk, but never catches you running', () => {
+  const sim = new MonsterSim(5);
+  const w = meadow(128);
+  // You at x 40, tapping one two steps behind you (west), then walking or
+  // running east, or standing still.
+  const chase = (speed, cross = true) => {
+    sim.clear();
+    const m = sim.add(w, 38.5, 11, 64.5);
+    let now = 1000;
+    const p = { id: 1, x: 40.5, y: 11, z: 64.5 };
+    if (cross) sim.hit(m, 1, p, now);
+    else m.target = 1;
+    for (let t = 0; t < 5000; t += 50) {
+      now += 50;
+      p.x += speed * 0.05;
+      if (sim.step(w, 0.05, now, [p], false, { roam: false, havens: [] }).length) return t;
+    }
+    return null;
+  };
+  const back = chase(0);
+  assert.ok(back !== null && back < 1500, `back and bumping you in ${back} ms`);
+  assert.ok(chase(4.6) !== null, 'caught walking');
+  assert.equal(chase(4.6, false), null, 'one not tapped never catches you walking');
+  assert.equal(chase(7), null, 'never caught running');
 });
 
 test('monsters never go into the water or the safe place round the start', () => {

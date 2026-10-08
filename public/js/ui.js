@@ -65,7 +65,7 @@ function lineIcon(name) {
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // What the island rule for monsters means (shared/monsters.js).
-const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Tap one or jump on it to pop it!';
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or tap it three times from close up!';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 

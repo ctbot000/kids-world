@@ -244,6 +244,9 @@ export class Game extends EventTarget {
       case 'kinghit':
         this.kingHit(msg);
         break;
+      case 'mhit':
+        this.monsterHit(msg);
+        break;
       case 'stomp':
         this.stomped(msg);
         break;
@@ -862,13 +865,31 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
-      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Tap a monster or jump on it to pop it.' });
+      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or tap it from close up until it pops.' });
     }
   }
 
-  // Tapping a monster (any tool will do).
-  bop(id) {
-    this.send({ t: 'bop', id });
+  // A monster tapped, with hearts left: it squashes and hops back, and
+  // whoever tapped it hears how many more taps it takes.
+  monsterHit(msg) {
+    const entry = this.monsters.get(msg.id);
+    if (entry) entry.model.squash = 0.4;
+    const p = entry?.model.group.position;
+    if (p && this.near(p.x, p.y, p.z, 30)) {
+      this.renderer.effects.sparkles(p.x, p.y + 0.6, p.z, 6, ['#ffffff', '#d9c8ff']);
+      this.renderer.effects.bang(p.x, p.y + 1, p.z);
+      this.sound.play('bump');
+    }
+    if (msg.by === this.pid && performance.now() > (this.toldHit ?? 0)) {
+      this.toldHit = performance.now() + 20000;
+      const n = msg.hearts | 0;
+      this.emit('toast', { icon: '👾', text: `Bonk! ${n === 1 ? 'One more tap' : `${n} more taps`} and it pops. Watch out, it’s cross now! Jumping on it pops it at once.` });
+    }
+  }
+
+  // Tapping a monster (any tool will do), or landing on it (on).
+  bop(id, on = false) {
+    this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
   }
 
   // Landing on a monster pops it, and bounces you up.
@@ -885,7 +906,7 @@ export class Game extends EventTarget {
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
       entry.stomped = entry.kind === 'king' ? now + 500 : Infinity;
-      this.bop(entry.id);
+      this.bop(entry.id, true);
       b.vy = 9;
       this.sound.play('jump');
       return;

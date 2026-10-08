@@ -61,11 +61,11 @@ function play(room, time, ms, ...where) {
   }
 }
 
-// Pops every monster of a camp, each from right beside it.
+// Pops every monster of a camp, each by landing on it.
 function popAll(room, c, who) {
   for (const m of guards(room, c)) {
-    room.receive(who, { t: 'm', s: [m.body.x + 1, m.body.y, m.body.z, 0, 0, 0] });
-    room.receive(who, { t: 'bop', id: m.id });
+    room.receive(who, { t: 'm', s: [m.body.x, m.body.y + m.body.height, m.body.z, 0, 0, 0] });
+    room.receive(who, { t: 'bop', id: m.id, on: true });
   }
 }
 

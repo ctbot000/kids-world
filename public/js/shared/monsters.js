@@ -2,7 +2,9 @@
 // Grumpy little jelly blobs hop out of the bushes, more of them at night,
 // and come after whoever is near. One that bumps into you knocks you back
 // and takes a heart; with no hearts left you pop back home with them all
-// again. Tap one, or jump on it, and it goes pop.
+// again. Jump on one and it goes pop. Tapping one works too, but only from
+// close up, and it takes a few taps: each one knocks it back a little, and
+// it comes straight back at you, crosser and quicker than before.
 //
 // On an adventure island (adventure.js) monsters also keep to their camps,
 // whether the rule is on or not: guards that chase whoever comes into their
@@ -68,12 +70,28 @@ export const STOMP = { every: 6500, windup: 900, reach: 6, jump: 10.5 };
 // to giggle after.
 const BUMP_PAD = 0.38;
 const GIGGLE_MS = 1400;
-// Tapping one: from this far (from your eyes; nearer than a tool reaches, so
-// you have to go up to one), and the host lets a little more through, as a
+// Tapping one: from this far (from your eyes; only a few steps, so you have
+// to go right up to one), and the host lets a little more through, as a
 // monster on the move is a little further on there than on your screen. A
 // bigger one can be tapped from as much further as it is bigger.
-export const TAP_REACH = 7.5;
+export const TAP_REACH = 4;
 export const BOP_REACH = TAP_REACH + 1.5;
+// A blob's hearts: one comes off with each tap (each friend can tap it once
+// in HIT_MS), and with none left it goes pop. Left alone this long, it has
+// them all again.
+export const BLOB_HEARTS = 3;
+export const HIT_MS = 400;
+const HEAL_MS = 5000;
+// A tap knocks it back this fast, and up a little; then for a while it comes
+// after whoever tapped it this fast: quicker than you walk, slower than you run.
+const HIT_PUSH = 7;
+const CROSS_MS = 5000;
+const CROSS_RUN = 6.5;
+const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };
+// Landing on one: your feet this far above its middle at least, and this
+// close side to side (a little more than touching, as you have moved on a
+// little by the time the host hears of it).
+const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp'];
@@ -161,7 +179,7 @@ export class MonsterSim {
     body.radius = size.radius;
     body.height = size.height;
     const rng = camp ? this.campRng : this.rng;
-    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts: BLOB_HEARTS, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
     this.list.push(m);
     return m;
   }
@@ -285,6 +303,11 @@ export class MonsterSim {
         }
       }
       m.target = target?.id ?? 0;
+      // Left alone a while: all its hearts back.
+      if (m.hitAt && now - m.hitAt >= HEAL_MS) {
+        m.hearts = BLOB_HEARTS;
+        m.hitAt = 0;
+      }
       // King Grumble's stomp only ever counts down while he is after someone.
       if (!target) m.stompAt = 0;
       let mx = 0;
@@ -387,7 +410,8 @@ export class MonsterSim {
       }
       // It gets about in hops.
       if ((mx || mz) && b.onGround) jump = true;
-      const events = stepBody(world, b, { mx, mz, jump, run: m.state === 'chase' }, dt, { autoJump: true, move: m.kind === 'king' ? KING_MOVE : MOVE });
+      const move = m.kind === 'king' ? KING_MOVE : now < m.cross ? CROSS_MOVE : MOVE;
+      const events = stepBody(world, b, { mx, mz, jump, run: m.state === 'chase' }, dt, { autoJump: true, move });
       if (events.bumped && m.state === 'hop') m.rest = 0;
       // Down from a stomp: the thump (see takeStomps), and a while till the next.
       if (m.slam && b.onGround) {
@@ -419,8 +443,39 @@ export class MonsterSim {
     return bumps;
   }
 
+  // Whether someone with their feet at p is landing on the one numbered id.
+  landsOn(id, p) {
+    const m = this.get(id);
+    if (!m) return null;
+    const b = m.body;
+    const up = p.y - b.y;
+    if (up < b.height * 0.4 || up > b.height + 1.2) return null;
+    return Math.hypot(p.x - b.x, p.z - b.z) <= b.radius + LAND_PAD ? m : null;
+  }
+
+  // A tap on a blob, by the player pid standing at p: a heart off it, a hop
+  // back away from them, and it comes after them, crosser and quicker, for a
+  // while. Returns { wait } (they tapped it a moment ago), or the hearts it
+  // has left (0: it goes pop).
+  hit(m, pid, p, now) {
+    if (now - (m.hits.get(pid) ?? -Infinity) < HIT_MS) return { wait: true };
+    m.hits.set(pid, now);
+    m.hearts = Math.max(0, m.hearts - 1);
+    m.hitAt = now;
+    if (!m.hearts) return { hearts: 0 };
+    const b = m.body;
+    const dx = b.x - p.x;
+    const dz = b.z - p.z;
+    const d = Math.hypot(dx, dz) || 1;
+    Object.assign(b, { vx: (dx / d) * HIT_PUSH, vz: (dz / d) * HIT_PUSH, vy: 4, onGround: false });
+    m.yaw = Math.atan2(-dx, -dz);
+    m.cross = now + CROSS_MS;
+    if (!m.passive) m.target = pid;
+    return { hearts: m.hearts };
+  }
+
   // Whether someone at p can bop the one numbered id: by tapping it from as
-  // far as a tool reaches, or by landing on it.
+  // far as a tap reaches, or by landing on it.
   canBop(id, p) {
     const m = this.get(id);
     if (!m) return null;

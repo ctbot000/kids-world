@@ -954,16 +954,27 @@ export class Room {
     this.broadcast({ t: 'helped', pid: q.id, by: p.id, hearts: q.hearts });
   }
 
-  // Tapping a monster, or jumping on it: pop! (King Grumble takes a lot of that.)
+  // Jumping on a monster (msg.on): pop! Tapping one: a heart off it, and pop
+  // with the last. (King Grumble takes a lot of either.)
   bop(p, msg) {
     if (!Number.isInteger(msg.id)) return;
     const now = this.now();
     const m = this.monsters.get(msg.id);
     if (!m || (!m.camp && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
-    if (!this.monsters.canBop(m.id, { x: p.s[0], y: p.s[1], z: p.s[2] })) return;
+    const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
+    const landed = msg.on === true && this.monsters.landsOn(m.id, at);
+    if (!landed && !this.monsters.canBop(m.id, at)) return;
     if (m.kind === 'king') {
       this.bopKing(p, m, now);
       return;
+    }
+    if (!landed) {
+      const hit = this.monsters.hit(m, p.id, at, now);
+      if (hit.wait) return;
+      if (hit.hearts) {
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+        return;
+      }
     }
     this.monsters.remove(m.id);
     const b = m.body;
