@@ -2,7 +2,8 @@
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
 // into trees, fruit growing back, what the island's owner allows, the
 // monsters when the owner lets them in (with everyone's hearts), and on an
-// adventure island its camps to free (see adventure.js).
+// adventure island its camps to free (see adventure.js), and on a tower
+// defense island the waves of monsters and the towers (see defense.js).
 //
 // Transport-agnostic. The host environment (the Node server, a host's
 // browser, or solo play) attaches connection objects with send(text) and
@@ -10,6 +11,7 @@
 // tick() about ten times a second.
 
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
+import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
@@ -41,6 +43,8 @@ const RATE_PER_SEC = 90;
 const CELL_BURST = 16000;
 const CELLS_PER_SEC = 4000;
 const CRITTER_MS = 200;
+// Landing on a monster marching on a tower defense island takes this many of its hearts.
+const LAND_POWER = 3;
 const ENV_MS = 5000;
 const GROW_MS = [45000, 80000];
 const REGROW_MS = [120000, 200000];
@@ -88,8 +92,8 @@ function cleanSettings(raw, base = defaultSettings()) {
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 
 export class Room {
-  // Either { theme, size, name, seed, adventure } for a brand-new island, or { save }.
-  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  // Either { theme, size, name, seed, adventure, defense } for a brand-new island, or { save }.
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
@@ -124,6 +128,9 @@ export class Room {
     this.adventure = null;
     this.advSent = '';
     this.stomps = [];
+    // The road, the towers and the waves, on a tower defense island (defense.js).
+    this.defense = null;
+    this.defSent = '';
     // The owner's song (song.js), in its pieces as they came, or null. Never
     // saved: it is the owner's page that keeps it and plays it again.
     this.song = null;
@@ -133,7 +140,7 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, size, name: islandName, adventure });
+      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -142,6 +149,7 @@ export class Room {
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
       if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps }, s ^ 0x510e527f);
+      if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
     this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
@@ -325,6 +333,9 @@ export class Room {
       case 'help':
         this.help(p, msg);
         break;
+      case 'defend':
+        this.defendOp(conn, p, msg);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -481,6 +492,7 @@ export class Room {
       env: this.envMessage(),
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
+      defense: this.defense?.describe(this.monsters) ?? null,
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
     });
   }
@@ -516,6 +528,16 @@ export class Room {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
       this.notice(conn, refused ? 'The island owner is the only builder right now.' : 'Whoa, slow down a little!');
       return;
+    }
+    // A tower defense island's road, its pads and its towers stay as they are.
+    if (this.defense) {
+      let road = false;
+      for (let i = 0; i < cells.length && !road; i += 4) road = this.defense.protects(cells[i], cells[i + 1], cells[i + 2]);
+      if (road) {
+        this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
+        this.notice(conn, 'The monsters’ road, the tower pads and the Star Stone stay just as they are.');
+        return;
+      }
     }
     c.cells -= n;
     const others = this.onlinePlayers().filter((q) => q.id !== p.id);
@@ -794,6 +816,8 @@ export class Room {
       passcode: this.passcode !== '',
       // An adventure island: how many camps it has, how many are free, and whether all of it is.
       ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
+      // A tower defense island: the wave it is on, of how many, and whether every one is done.
+      ...(this.defense ? { defense: this.defense.tally() } : {}),
     };
   }
 
@@ -827,7 +851,9 @@ export class Room {
       if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: lookHair(p.look), tall: lookTall(p.look) });
     }
     this.critters.step(this.world, dt, now, where, isNight(env.time));
-    if (this.settings.monsters || this.adventure?.active) this.stepMonsters(dt, now, where);
+    // A wave with nobody left to see it goes home, to come again on Start.
+    if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
+    if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
       this.broadcast({ t: 'c', c: this.critters.pack() });
@@ -844,6 +870,8 @@ export class Room {
           this.broadcast({ t: 'adv', ...pack });
         }
       }
+      // The wave, the Star Stone's hearts, the bricks and the towers, as they change.
+      if (this.defense) this.sendDefense();
     }
 
     this.grow(now);
@@ -863,6 +891,7 @@ export class Room {
     if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
+    if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
     // King Grumble landing: a thump everyone sees, and a moment later, whoever
     // was on the ground near him then is knocked over.
@@ -962,11 +991,15 @@ export class Room {
     if (!Number.isInteger(msg.id)) return;
     const now = this.now();
     const m = this.monsters.get(msg.id);
-    if (!m || (!m.camp && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
+    if (!m || (!m.camp && !m.march && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     const weapon = weaponOf(p.look?.weapon);
     if (!landed && !this.monsters.canBop(m.id, at, weapon?.reach ?? 0)) return;
+    if (m.march) {
+      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
+      return;
+    }
     if (m.kind === 'king') {
       this.bopKing(p, m, now, weapon?.king ?? 1);
       return;
@@ -983,6 +1016,102 @@ export class Room {
     const b = m.body;
     this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
     if (m.camp) this.adventure?.guardGone(m, now);
+  }
+
+  // A monster marching on a tower defense island tapped (or landed on):
+  // power hearts off it, and with the last it goes pop, with bricks for it.
+  bopMarcher(p, m, now, power) {
+    const hit = this.defense?.tap(m, p.id, now, power);
+    if (!hit || hit.wait) return;
+    if (hit.hearts) {
+      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, march: true });
+      return;
+    }
+    this.defense.popped(m, this.monsters);
+    const b = m.body;
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    this.sendDefense();
+  }
+
+  // ------------------------------------------------ tower defense
+
+  // Start pressed, or a tower built on a pad (or made bigger) by someone
+  // standing by it. Anyone on the island can do either.
+  defendOp(conn, p, msg) {
+    const def = this.defense;
+    if (!def) return;
+    const now = this.now();
+    if (msg.cmd === 'start') {
+      if (!def.start(now, this.online)) return;
+      this.broadcast({ t: 'dwave', k: 'start', wave: def.wave, by: p.id });
+      this.sendDefense();
+      return;
+    }
+    if (msg.cmd !== 'build' || !Number.isInteger(msg.pad)) return;
+    const pad = def.padById(msg.pad);
+    if (!pad || Math.hypot(p.s[0] - pad.x, p.s[2] - pad.z) > BUILD_REACH + 1 || Math.abs(p.s[1] - pad.y) > 4) return;
+    const made = def.build(pad.id);
+    if (made.no) {
+      if (made.no === 'bricks') this.notice(conn, `That takes 🧱 ${made.cost} bricks. Pop monsters to get more!`);
+      return;
+    }
+    // Over anyone standing there, it goes up anyway (their page lifts them out of it).
+    const cells = made.cells;
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    this.broadcast({ t: 'tower', pad: pad.id, level: made.level, by: p.id });
+    this.sendDefense();
+    this.changed();
+  }
+
+  // The wave moving on (after the monsters have): towers' bubbles, monsters
+  // popped by them or getting to the Star Stone, and the wave done or lost.
+  stepDefense(now) {
+    const def = this.defense;
+    const zaps = [];
+    for (const n of def.step(this.world, now, this.monsters)) {
+      const b = n.monster?.body;
+      switch (n.t) {
+        case 'zap':
+          zaps.push([n.pad.id, n.monster.id, n.hearts]);
+          break;
+        case 'pop':
+          this.broadcast({ t: 'pop', id: n.monster.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+          break;
+        case 'leak':
+          this.broadcast({ t: 'leak', id: n.monster.id, hearts: n.hearts, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+          break;
+        case 'lost':
+          this.popAll(n.gone);
+          this.broadcast({ t: 'dwave', k: 'lost', wave: n.wave });
+          break;
+        case 'clear':
+          this.broadcast({ t: 'dwave', k: 'clear', wave: n.wave, bricks: n.bricks, won: n.won, by: this.onlinePlayers().map((q) => q.id) });
+          this.changed();
+          break;
+        default:
+          break;
+      }
+    }
+    if (zaps.length) this.broadcast({ t: 'zap', z: zaps });
+    if (zaps.length) this.sendDefense();
+  }
+
+  // Monsters gone home all at once (by: nobody), each with a pop.
+  popAll(gone) {
+    for (const m of gone) {
+      const b = m.body;
+      this.broadcast({ t: 'pop', id: m.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    }
+  }
+
+  // The defense as it is now, to everyone, when anything in it changed.
+  sendDefense() {
+    const pack = this.defense.pack(this.monsters);
+    const text = JSON.stringify(pack);
+    if (text === this.defSent) return;
+    this.defSent = text;
+    this.broadcast({ t: 'def', ...pack });
   }
 
   // A bop for King Grumble: nothing in his bubble, otherwise a heart (three
@@ -1200,6 +1329,7 @@ export class Room {
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look })),
       tokens: [...this.tokens],
       ...(this.adventure ? { adventure: this.adventure.save() } : {}),
+      ...(this.defense ? { defense: this.defense.save() } : {}),
     };
   }
 
@@ -1229,6 +1359,7 @@ export class Room {
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);
+    this.defense = this.adventure ? null : DefenseSim.load(save.defense, this.world, (seed ^ 0x2b992ddf ^ (Number(save.savedAt) | 0)) >>> 0);
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
     if (Array.isArray(save.players)) {

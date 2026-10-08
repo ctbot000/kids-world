@@ -166,10 +166,11 @@ export class Effects {
     this.tmp = new THREE.Color();
   }
 
-  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0 } = {}) {
+  // delay: seconds before it shows (and starts to move).
+  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0, delay = 0 } = {}) {
     if (this.list.length >= MAX) this.list.shift();
     const c = this.tmp.set(color);
-    this.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: 0, gravity, grow, drag, spin });
+    this.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: -delay, gravity, grow, drag, spin });
   }
 
   // ------------------------------------------------ recipes
@@ -297,6 +298,20 @@ export class Effects {
     }
   }
 
+  // A tower's bubble, flying from (x, y, z) to (tx, ty, tz), and bursting there.
+  bubbleShot(x, y, z, tx, ty, tz) {
+    const t = 0.28;
+    const vx = (tx - x) / t;
+    const vy = (ty - y) / t;
+    const vz = (tz - z) / t;
+    this.add('puff', x, y, z, { vx, vy, vz, size: 0.42, life: t, color: '#bfefff' });
+    this.add('sparkle', x, y, z, { vx, vy, vz, size: 0.2, life: t, color: '#ffffff' });
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.add('drop', tx, ty, tz, { vx: Math.cos(a) * 1.6 + vx * 0.05, vy: 1.5 + Math.random(), vz: Math.sin(a) * 1.6 + vz * 0.05, size: 0.12, life: 0.4, gravity: 10, color: '#9fe8ff', delay: t });
+    }
+  }
+
   dust(x, y, z) {
     for (let i = 0; i < 3; i++) {
       this.add('puff', x + (Math.random() - 0.5) * 0.4, y + 0.05, z + (Math.random() - 0.5) * 0.4, { vy: 0.4, size: 0.25, life: 0.4, grow: 0.8, color: '#ffffff' });
@@ -312,6 +327,18 @@ export class Effects {
       const p = this.list[i];
       p.age += dt;
       if (p.age >= p.life) continue;
+      if (p.age < 0) {
+        // Not showing yet: kept, and drawn nowhere.
+        this.list[n] = p;
+        c[n * 3] = p.x;
+        c[n * 3 + 1] = p.y;
+        c[n * 3 + 2] = p.z;
+        col[n * 4 + 3] = 0;
+        info[n * 2] = 0;
+        info[n * 2 + 1] = p.k;
+        n++;
+        continue;
+      }
       p.vy -= p.gravity * dt;
       if (p.drag) {
         const k = Math.max(0, 1 - p.drag * dt);

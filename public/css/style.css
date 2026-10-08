@@ -668,6 +668,31 @@ body.fullscreen .full-icon .leave {
   opacity: 0.35;
 }
 
+/* On a tower defense island: the wave, the Star Stone's hearts and the bricks. */
+.defense-bar {
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.defense-bar .muted {
+  font-weight: 600;
+}
+
+/* Build and Start: like Ride, in the island's sky blue; greyed when the bricks are short. */
+.defend-button {
+  background: #8fd8ff;
+  box-shadow:
+    0 4px 0 #4aa6d6,
+    0 3px 10px rgba(61, 46, 79, 0.25);
+}
+
+.defend-button.short {
+  filter: grayscale(0.7);
+  opacity: 0.8;
+}
+
 /* On an adventure island, how many camps are free. */
 .hearts .camps {
   margin-left: 6px;
@@ -995,6 +1020,10 @@ body.touch.playing #joystick {
 
 .adv-tag .bar.king span {
   background: #ff5f8f;
+}
+
+.adv-tag .bar.stone span {
+  background: #ffd84d;
 }
 
 .aim-hint {

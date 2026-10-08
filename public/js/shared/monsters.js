@@ -6,6 +6,9 @@
 // close up, and it takes a few taps: each one knocks it back a little, and
 // it comes straight back at you, crosser and quicker than before.
 //
+// On a tower defense island (defense.js) they march along the road from
+// their gate to the Star Stone instead, bumping nobody on the way.
+//
 // On an adventure island (adventure.js) monsters also keep to their camps,
 // whether the rule is on or not: guards that chase whoever comes into their
 // camp and go back to it after, and in his castle King Grumble, big and
@@ -63,6 +66,10 @@ export const KING_BODY = { radius: 0.95, height: 1.8 };
 // The crosser he gets (rage: 0, 1 at two thirds of his hearts, 2 at a
 // third), the quicker: at the last as quick as you walk, never as you run.
 const KING_MOVES = [3, 3.8, 4.6].map((run) => ({ walk: 1.8, run, jump: 9 }));
+// Marching along a tower defense island's road: a little quicker than they
+// hop about, and King Grumble slower.
+const MARCH = { walk: 2.5, run: 2.5, jump: 8 };
+const KING_MARCH = { walk: 1.4, run: 1.4, jump: 9 };
 // His stomp: now and then, near whoever he is after, he crouches (long
 // enough to see it coming, with a ring on the ground as far as it reaches),
 // jumps straight up and lands with a thump that knocks over anyone on the
@@ -171,22 +178,26 @@ export class MonsterSim {
     return this.list.find((m) => m.id === id) ?? null;
   }
 
-  // How many hop about the island by themselves, not keeping to a camp.
+  // How many hop about the island by themselves, not keeping to a camp
+  // nor marching.
   get roaming() {
     let n = 0;
-    for (const m of this.list) if (!m.camp) n++;
+    for (const m of this.list) if (!m.camp && !m.march) n++;
     return n;
   }
 
-  // camp: the id of the camp it keeps to (0: none); kind: 'blob' or 'king'.
-  add(world, x, y, z, { camp = 0, kind = 'blob' } = {}) {
-    if (!camp && this.roaming >= MAX_MONSTERS) return null;
+  // camp: the id of the camp it keeps to (0: none); kind: 'blob' or 'king';
+  // march: the way it marches along, as [{ x, y, z }] (a tower defense
+  // island's road, see defense.js), or null.
+  add(world, x, y, z, { camp = 0, kind = 'blob', march = null } = {}) {
+    if (!camp && !march && this.roaming >= MAX_MONSTERS) return null;
     const size = bodyOf(kind);
     const body = makeBody(x, y, z);
     body.radius = size.radius;
     body.height = size.height;
-    const rng = camp ? this.campRng : this.rng;
+    const rng = camp || march ? this.campRng : this.rng;
     const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts: BLOB_HEARTS, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
   }
@@ -201,9 +212,9 @@ export class MonsterSim {
     this.list = [];
   }
 
-  // Only the ones roaming about: those of the camps stay.
+  // Only the ones roaming about: those of the camps, and those marching, stay.
   clearRoaming() {
-    this.list = this.list.filter((m) => m.camp);
+    this.list = this.list.filter((m) => m.camp || m.march);
   }
 
   takeGone() {
@@ -265,6 +276,10 @@ export class MonsterSim {
       return inTent.get(p);
     };
     for (const m of [...this.list]) {
+      if (m.march) {
+        this.marchOn(world, m, dt);
+        continue;
+      }
       const b = m.body;
       const camp = m.camp ? (camps?.campById(m.camp) ?? null) : null;
       // Lonely, far from everyone: off it goes (one of a camp stays). In the
@@ -452,6 +467,47 @@ export class MonsterSim {
       }
     }
     return bumps;
+  }
+
+  // One marching along its way (see add): hop by hop from one cell of the
+  // road to the next, until it gets to the end of it (arrived). Stuck for a
+  // while, it hops on to where it was going; into the water, it is gone.
+  // along: how far it has got, in cells, for the towers to pick the one
+  // furthest on.
+  marchOn(world, m, dt) {
+    const b = m.body;
+    if (b.inWater || b.y < 2) {
+      this.remove(m.id);
+      this.gone.push(m);
+      return;
+    }
+    const way = m.march;
+    let to = way[m.leg];
+    while (to && Math.hypot(to.x - b.x, to.z - b.z) < 0.75) {
+      m.leg++;
+      m.stuck = 0;
+      to = way[m.leg];
+    }
+    if (!to) {
+      m.arrived = true;
+      m.along = way.length;
+      m.state = 'idle';
+      return;
+    }
+    const dx = to.x - b.x;
+    const dz = to.z - b.z;
+    const d = Math.hypot(dx, dz) || 1;
+    m.along = m.leg - Math.min(1, d);
+    const mx = dx / d;
+    const mz = dz / d;
+    m.yaw = Math.atan2(mx, mz);
+    m.state = 'hop';
+    stepBody(world, b, { mx, mz, jump: b.onGround, run: false }, dt, { autoJump: true, move: m.kind === 'king' ? KING_MARCH : MARCH });
+    m.stuck = Math.hypot(b.vx, b.vz) < 0.4 ? m.stuck + dt : 0;
+    if (m.stuck > 3) {
+      m.stuck = 0;
+      Object.assign(b, { x: to.x, y: Math.max(b.y, to.y), z: to.z, vx: 0, vy: 0, vz: 0 });
+    }
   }
 
   // Whether someone with their feet at p is landing on the one numbered id.

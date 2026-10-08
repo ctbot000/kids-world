@@ -14,6 +14,7 @@ import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EM
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { MAX_HEARTS } from './shared/monsters.js';
+import { towerTop } from './shared/defense.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
@@ -68,6 +69,8 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or tap it three times from close up!';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
+// What a tower defense island is (shared/defense.js).
+const DEFENSE_ABOUT = 'Monsters march along a road to the Star Stone. Build towers beside it with friends, and see off every wave!';
 
 // "a peach", "an apple".
 // "an elephant", "a unicorn".
@@ -353,6 +356,7 @@ export class UI {
     let online = true;
     let monsters = false;
     let adventure = false;
+    let defense = false;
     this.openModal((root) => {
       const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: rolled, placeholder: rolled, maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
       nameBox.spellcheck = false;
@@ -430,10 +434,24 @@ export class UI {
         this.sound.play('ui');
       };
       const adventureSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Adventure', role: 'switch', 'aria-checked': 'false' });
-      adventureSw.onclick = () => {
-        adventure = !adventure;
+      const defenseSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Tower defense', role: 'switch', 'aria-checked': 'false' });
+      // One or the other: an island is an adventure or a tower defense, never both.
+      const showKinds = () => {
         adventureSw.classList.toggle('on', adventure);
         adventureSw.setAttribute('aria-checked', String(adventure));
+        defenseSw.classList.toggle('on', defense);
+        defenseSw.setAttribute('aria-checked', String(defense));
+      };
+      adventureSw.onclick = () => {
+        adventure = !adventure;
+        if (adventure) defense = false;
+        showKinds();
+        this.sound.play('ui');
+      };
+      defenseSw.onclick = () => {
+        defense = !defense;
+        if (defense) adventure = false;
+        showKinds();
         this.sound.play('ui');
       };
       root.append(
@@ -462,6 +480,7 @@ export class UI {
         ),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, 'Friends can visit'), h('div', { class: 'muted' }, 'Friends join with your island code. Turn off to play alone.')), sw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '⚔️ Adventure'), h('div', { class: 'muted' }, ADVENTURE_ABOUT)), adventureSw),
+        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🗼 Tower defense'), h('div', { class: 'muted' }, DEFENSE_ABOUT)), defenseSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
         h(
           'button',
@@ -471,7 +490,7 @@ export class UI {
             style: 'margin-top:14px',
             onclick: () => {
               this.closeModal();
-              this.handlers.make({ theme, size, name: own || rolled, online, adventure, settings: monsters ? { monsters: true } : null });
+              this.handlers.make({ theme, size, name: own || rolled, online, adventure, defense, settings: monsters ? { monsters: true } : null });
             },
           },
           '✨ Make it!',
@@ -566,7 +585,15 @@ export class UI {
           const full = it.players >= it.max;
           const size = SIZES.find((s) => s.key === it.size)?.name ?? '';
           const who = it.players === 0 ? 'Nobody there right now' : `${it.players} of ${it.max} playing`;
-          const adv = it.adventure ? (it.adventure.won ? '🏆 Freed' : `⚔️ ${it.adventure.freed} of ${it.adventure.camps} camps free`) : '';
+          const adv = it.adventure
+            ? it.adventure.won
+              ? '🏆 Freed'
+              : `⚔️ ${it.adventure.freed} of ${it.adventure.camps} camps free`
+            : it.defense
+              ? it.defense.won
+                ? '🏆 Safe'
+                : `🗼 Wave ${it.defense.wave} of ${it.defense.waves}`
+              : '';
           return h(
             'div',
             { class: 'island-item' },
@@ -1454,6 +1481,7 @@ export class UI {
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
+          card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
@@ -1973,6 +2001,12 @@ export class UI {
       this.sound.unlock();
       game.toggleRide();
     };
+    $('defend').onmousedown = (e) => e.preventDefault();
+    $('defend').onclick = () => {
+      $('defend').blur();
+      this.sound.unlock();
+      game.defend();
+    };
     const on = (type, fn) => game.addEventListener(type, fn);
     on('players', () => this.renderFriends());
     on('settings', () => {
@@ -1989,6 +2023,8 @@ export class UI {
       }
     });
     on('adventure', () => this.renderHearts());
+    on('defense', () => this.renderDefense());
+    on('welcome', () => this.renderDefense());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -2009,6 +2045,8 @@ export class UI {
     this.input.enabled = false;
     $('hud').hidden = true;
     $('ride').hidden = true;
+    $('defend').hidden = true;
+    $('defense').hidden = true;
     document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
@@ -2469,6 +2507,22 @@ export class UI {
             adv.won ? '' : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
           );
         }
+        const def = g.defense;
+        if (def) {
+          const built = def.pads.filter((p) => p.level > 0).length;
+          root.append(
+            h('h3', {}, def.state === 'won' ? '🏆 This island is safe!' : '🗼 Tower defense'),
+            h(
+              'div',
+              { class: 'adventure-list' },
+              h('div', { class: `camp${def.state === 'won' ? ' free' : ''}` }, '🌊', ' Wave', h('span', { class: 'muted' }, def.state === 'won' ? 'all seen off' : `${def.wave} of ${def.waves}${def.state === 'march' ? ', coming!' : ''}`)),
+              h('div', { class: 'camp' }, '🌟', ' Star Stone', h('span', { class: 'muted' }, `${def.hearts} of ${def.max} hearts`)),
+              h('div', { class: 'camp' }, '🗼', ' Towers', h('span', { class: 'muted' }, `${built} of ${def.pads.length} pads`)),
+              h('div', { class: 'camp' }, '🧱', ' Bricks', h('span', { class: 'muted' }, String(def.bricks))),
+            ),
+            def.state === 'won' ? '' : h('p', { class: 'muted' }, 'Stand by a wooden pad beside the road to build a tower there, and again to make it bigger. Pop monsters for more bricks!'),
+          );
+        }
         root.append(h('p', { class: 'muted', style: 'margin-top:12px' }, `${g.players.size} ${g.players.size === 1 ? 'player' : 'players'} here now.`));
         // Players with a login, to invite one who is playing now.
         if (this.handlers?.login?.available()) {
@@ -2834,6 +2888,24 @@ export class UI {
     this.heartsShown = n;
   }
 
+  // On a tower defense island: the wave, the Star Stone's hearts and the
+  // bricks to build with; a shake when the Star Stone loses a heart.
+  renderDefense() {
+    const el = $('defense');
+    const d = this.game?.defense;
+    el.hidden = !d;
+    if (!d) return;
+    const wave = d.state === 'won' ? '🏆 Safe!' : `🌊 ${d.wave}/${d.waves}`;
+    el.setAttribute('aria-label', `${d.state === 'won' ? 'Every wave seen off' : `Wave ${d.wave} of ${d.waves}`}, the Star Stone has ${d.hearts} of ${d.max} hearts, ${d.bricks} bricks`);
+    el.replaceChildren(h('span', {}, wave), h('span', { class: 'stone' }, `🌟 ${d.hearts}`), h('span', {}, `🧱 ${d.bricks}`), d.state === 'march' && d.left ? h('span', { class: 'muted' }, `👾 ${d.left}`) : '');
+    if (d.hearts < (this.stoneShown ?? d.max)) {
+      el.classList.remove('hurt');
+      void el.offsetWidth;
+      el.classList.add('hurt');
+    }
+    this.stoneShown = d.hearts;
+  }
+
   setStatus(state, text) {
     const el = $('status');
     const icon = { online: '🟢', offline: '', connecting: '🟡', reconnecting: '🟡', 'id-taken': '🟡', failed: '🔴' }[state] ?? '';
@@ -2927,6 +2999,36 @@ export class UI {
     el.hidden = false;
   }
 
+  // On a tower defense island: Build, beside the pad you stand by (Bigger,
+  // for a tower there, with its cost in bricks), or by none, Start, while
+  // the next wave waits.
+  defendButton(g, r) {
+    const el = $('defend');
+    const t = g.defendTarget();
+    if (!t || this.modalOpen || (t.pad && !t.cost)) {
+      el.hidden = true;
+      return;
+    }
+    const d = g.defense;
+    const touch = this.input.touchMode;
+    const label = t.start ? `🌊 Start wave ${d.wave}` : t.pad.level ? `⬆️ Bigger · 🧱 ${t.cost}` : `🗼 Build · 🧱 ${t.cost}`;
+    const key = `${label}|${touch}|${d.bricks >= (t.cost ?? 0)}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren(label, touch ? '' : h('kbd', {}, 'V'));
+      el.setAttribute('aria-label', t.start ? `Start wave ${d.wave}` : `${t.pad.level ? 'Make the tower bigger' : 'Build a tower'} for ${t.cost} bricks`);
+      el.classList.toggle('short', !t.start && d.bricks < t.cost);
+    }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 170;
+    const scr = t.pad ? r.project(t.pad.x, t.pad.y + 1.2, t.pad.z) : null;
+    const x = scr?.visible ? scr.x : w / 2;
+    const y = scr?.visible ? scr.y : hgt - 170;
+    el.style.transform = `translate(${Math.min(w - 16 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
   // On an adventure island: over each camp near you, how its flag is going
   // (or what to do there), and over King Grumble, his hearts (or his bubble).
   adventureTags(g, r) {
@@ -2950,6 +3052,23 @@ export class UI {
       el.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
     };
     const bar = (share, kind) => h('div', { class: `bar ${kind}` }, h('span', { style: `width:${Math.round(share * 100)}%` }));
+    // On a tower defense island: over the Star Stone its hearts, over the
+    // gate what it is, and over each pad near you what it holds.
+    const def = g.defense;
+    if (def && me) {
+      const s = def.stone;
+      if (Math.hypot(s.x - me.x, s.z - me.z) < 50) {
+        tag('stone', s.x, s.y + 4.4, s.z, `${def.hearts}|${def.max}`, () => [h('div', { class: 'label' }, `🌟 Star Stone · ${def.hearts}`), bar(def.hearts / Math.max(1, def.max), 'stone')]);
+      }
+      const gt = def.gate;
+      if (def.state !== 'won' && Math.hypot(gt.x - me.x, gt.z - me.z) < 50) tag('gate', gt.x, gt.y + 7.4, gt.z, 'gate', () => [h('div', { class: 'label' }, '👾 Monster gate')]);
+      for (const p of def.pads) {
+        if (Math.hypot(p.x - me.x, p.z - me.z) > 24) continue;
+        const top = p.level ? towerTop(p, p.level).y + 1.1 : p.y + 1;
+        const label = p.level ? `🗼 ${'★'.repeat(p.level)}` : '🧱 Tower pad';
+        tag(`pad-${p.id}`, p.x, top, p.z, label, () => [h('div', { class: 'label' }, label)]);
+      }
+    }
     if (adv && me && !adv.won) {
       for (const c of adv.camps.values()) {
         if (c.freed || !c.flag) continue;
@@ -3021,6 +3140,7 @@ export class UI {
       }
     }
     this.rideButton(g, r);
+    this.defendButton(g, r);
     this.adventureTags(g, r);
     // The clock: sun, moon and weather.
     const t = g.env.time;

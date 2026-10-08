@@ -76,7 +76,7 @@ for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.SNOWY_LEAVES, B.COTTON_CAND
 
 // The height of the ground in every column, under any tree, and whether it
 // is under water: the sea (1), or a pond or ice above the sea (2).
-function groundMap(world) {
+export function groundMap(world) {
   const { W, D, H, sea } = world;
   const ground = new Int16Array(W * D);
   const wet = new Uint8Array(W * D);

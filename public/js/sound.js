@@ -284,6 +284,10 @@ export class Sound {
         this.tone(320 * r(), { decay: 0.18, gain: 0.12, slide: 900, slideTime: 0.12 });
         this.tone(NOTE(88), { at: 0.08, decay: 0.25, gain: 0.05, type: 'triangle' });
         break;
+      // A tower blowing a bubble: a soft little bloop.
+      case 'blow':
+        this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });
+        break;
       case 'shield':
         this.noise(0.25, { type: 'bandpass', freq: 2500, sweep: 6000, gain: 0.18 });
         this.tone(500, { decay: 0.15, gain: 0.15, slide: 1600, slideTime: 0.1 });

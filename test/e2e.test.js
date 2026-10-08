@@ -2634,6 +2634,63 @@ test('an adventure island with a friend: a camp’s monster popped with a click,
 
 // ---------------------------------------------------------------- the island's song
 
+test('a tower defense island: a tower built by its pad with V, a wave started with the Start button, and bubbles blown at its monsters', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  // Adventure first, then Tower defense: one or the other, never both.
+  await clickSwitch(page, '#modal .switch[aria-label="Adventure"]');
+  await clickSwitch(page, '#modal .switch[aria-label="Tower defense"]');
+  assert.equal(await page.evaluate(() => document.querySelector('#modal .switch[aria-label="Adventure"]').getAttribute('aria-checked')), 'false');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  const def = await page.evaluate(() => {
+    const d = window.kidsWorld.session.link.room.defense;
+    return { pads: d.pads.map(({ id, x, y, z }) => ({ id, x, y, z })), gate: d.gate, stone: d.stone, bricks: d.bricks, adventure: Boolean(window.kidsWorld.session.link.room.adventure) };
+  });
+  assert.equal(def.adventure, false);
+  // The wave, the Star Stone's hearts and the bricks, under the hotbar's row.
+  await until(page, (b) => !document.getElementById('defense').hidden && document.getElementById('defense').textContent.includes('1/10') && document.getElementById('defense').textContent.includes(`🧱 ${b}`), def.bricks);
+  const stand = (at) =>
+    page.evaluate((at) => {
+      const kw = window.kidsWorld;
+      Object.assign(kw.game.me.body, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, flying: false });
+      kw.game.sendMove(true);
+    }, at);
+  // By the pad nearest the gate: Build, and V builds a tower there.
+  const pad = def.pads.reduce((a, b) => (Math.hypot(b.x - def.gate.x, b.z - def.gate.z) < Math.hypot(a.x - def.gate.x, a.z - def.gate.z) ? b : a));
+  await stand({ x: pad.x + 1.5, y: pad.y, z: pad.z });
+  await until(page, () => !document.getElementById('defend').hidden && document.getElementById('defend').textContent.includes('Build'));
+  await page.keyboard.press('KeyV');
+  await until(page, (id) => window.kidsWorld.session.link.room.defense.padById(id).level === 1 && window.kidsWorld.game.defense.pads.find((p) => p.id === id).level === 1, pad.id);
+  await until(page, () => document.getElementById('defend').textContent.includes('Bigger'));
+  // Its blocks on the page's island too.
+  assert.equal(await page.evaluate((p) => window.kidsWorld.game.world.get(Math.floor(p.x), p.y, Math.floor(p.z)), pad), 14);
+  // Away from every pad, by the start: Start, clicked.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const fx = kw.renderer.effects;
+    window.bubbles = 0;
+    const shot = fx.bubbleShot.bind(fx);
+    fx.bubbleShot = (...a) => {
+      window.bubbles++;
+      shot(...a);
+    };
+  });
+  const spawn = await page.evaluate(() => window.kidsWorld.game.world.spawn);
+  await stand(spawn);
+  await until(page, () => !document.getElementById('defend').hidden && document.getElementById('defend').textContent.includes('Start wave 1'));
+  await page.click('#defend');
+  await until(page, () => window.kidsWorld.session.link.room.defense.state === 'march');
+  // Out of the gate they come, on the page too, and the tower blows bubbles at them.
+  await until(page, () => [...window.kidsWorld.game.monsters.values()].length > 0);
+  await stand({ x: pad.x + 1.5, y: pad.y, z: pad.z });
+  await until(page, () => window.bubbles > 0, undefined, 60000 * SLOW);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.defense.state), 'march');
+  await page.close();
+});
+
 test('an island song: the owner picks an MP3 in Settings, a friend here and one who comes later hear it, Island music brings the island music back, and the island plays it again when opened again', { skip }, async () => {
   // A song bigger than one piece (see shared/song.js): a short MP3 behind an
   // ID3 tag padded out with zeros, which players skip.

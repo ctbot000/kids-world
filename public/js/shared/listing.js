@@ -7,10 +7,12 @@
 // Peer to peer, a host's page tells the island keeper about its island while
 // it is open (see shared/keeper.js); on the dedicated server, the server
 // lists its own (GET api/islands). Either way the list is made of these:
-//   { code, name, theme, size, players, max, passcode, adventure }
+//   { code, name, theme, size, players, max, passcode, adventure, defense }
 // passcode: whether the island has one (never the passcode itself);
 // adventure, only on an adventure island: { camps, freed, won }, how many
-// monster camps it has and how many are free, and whether all of it is.
+// monster camps it has and how many are free, and whether all of it is;
+// defense, only on a tower defense island: { wave, waves, won }, the wave
+// it is on, of how many, and whether every one is seen off.
 
 import { isValidCode } from './codes.js';
 import { SIZES, THEMES } from './worldgen.js';
@@ -44,6 +46,8 @@ export function cleanListing(raw) {
   const max = count(raw.max, 1, 64);
   const adventure = raw.adventure && typeof raw.adventure === 'object' ? raw.adventure : null;
   const camps = adventure ? count(adventure.camps, 0, 32) : 0;
+  const defense = raw.defense && typeof raw.defense === 'object' ? raw.defense : null;
+  const waves = defense ? count(defense.waves, 1, 99) : 0;
   return {
     code: raw.code,
     name,
@@ -53,6 +57,7 @@ export function cleanListing(raw) {
     max,
     passcode: raw.passcode === true,
     ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true } } : {}),
+    ...(defense ? { defense: { wave: count(defense.wave, 1, waves), waves, won: defense.won === true } } : {}),
   };
 }
 

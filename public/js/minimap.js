@@ -297,6 +297,26 @@ export class MiniMap {
     // island's sky-blue one once it is free, and a crown on King Grumble's castle.
     for (const c of g.adventure?.camps.values() ?? []) campMark(ctx, X(c.x), Y(c.z), c, (big ? 1.5 : 1) * u);
 
+    // A tower defense island's road, the monsters' gate at one end of it and
+    // the Star Stone at the other.
+    const def = g.defense;
+    if (def) {
+      ctx.save();
+      ctx.beginPath();
+      def.path.forEach(([x, , z], i) => (i ? ctx.lineTo(X(x + 0.5), Y(z + 0.5)) : ctx.moveTo(X(x + 0.5), Y(z + 0.5))));
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = (big ? 4 : 2.6) * u;
+      ctx.strokeStyle = 'rgba(123, 79, 208, 0.75)';
+      ctx.stroke();
+      ctx.font = `${(big ? 22 : 12) * u}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👾', X(def.gate.x), Y(def.gate.z));
+      ctx.fillText('🌟', X(def.stone.x), Y(def.stone.z));
+      ctx.restore();
+    }
+
     // Friends: a dot in their T-shirt colour, and on the big map their animal (or kid) and name too.
     for (const p of g.players.values()) {
       if (p.me || !p.avatar) continue;

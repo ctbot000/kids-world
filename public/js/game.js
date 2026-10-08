@@ -1,12 +1,14 @@
 // One visit to an island, from this player's side: the copy of the world,
 // you walking about, your friends, the animals and any monsters moving
-// smoothly, your hearts, an adventure island's camps and flags, the tools,
+// smoothly, your hearts, an adventure island's camps and flags, a tower
+// defense island's waves and towers, the tools,
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
+import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { bodyOf, MAX_HEARTS, MONSTER_BODY, STOMP, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -110,6 +112,9 @@ export class Game extends EventTarget {
     this.adventure = null;
     this.dizzy = false;
     this.fireworks = [];
+    // A tower defense island's road, pads, towers and waves
+    // (shared/defense.js), as the island tells of them (null on any other).
+    this.defense = null;
     // The flying friend that sat on your head, once one has.
     this.perchedOn = 0;
     // The animal you are riding (see shared/riding.js), and the one close
@@ -256,6 +261,21 @@ export class Game extends EventTarget {
       case 'helped':
         this.helped(msg);
         break;
+      case 'def':
+        this.defenseNews(msg);
+        break;
+      case 'zap':
+        this.zapped(msg);
+        break;
+      case 'leak':
+        this.leaked(msg);
+        break;
+      case 'dwave':
+        this.waveNews(msg);
+        break;
+      case 'tower':
+        this.towerBuilt(msg);
+        break;
       case 'home':
         this.cameHome(msg);
         break;
@@ -324,6 +344,7 @@ export class Game extends EventTarget {
     this.setHearts(msg.hearts ?? MAX_HEARTS);
     this.dizzy = false;
     this.setAdventure(msg.adventure ?? null);
+    this.setDefense(msg.defense ?? null);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
@@ -890,7 +911,8 @@ export class Game extends EventTarget {
     if (msg.by === this.pid && performance.now() > (this.toldHit ?? 0)) {
       this.toldHit = performance.now() + 20000;
       const n = msg.hearts | 0;
-      this.emit('toast', { icon: '👾', text: `Bonk! ${n === 1 ? 'One more tap' : `${n} more taps`} and it pops. Watch out, it’s cross now! Jumping on it pops it at once.` });
+      const more = n === 1 ? 'One more tap' : `${n} more taps`;
+      this.emit('toast', { icon: '👾', text: msg.march ? `Bonk! ${more} and it pops. Jumping on it takes three!` : `Bonk! ${more} and it pops. Watch out, it’s cross now! Jumping on it pops it at once.` });
     }
   }
 
@@ -905,14 +927,15 @@ export class Game extends EventTarget {
     if (b.vy >= -0.5 || b.onGround || b.inWater) return;
     const now = performance.now();
     for (const entry of this.monsters.values()) {
-      // King Grumble can be landed on again and again.
+      // King Grumble can be landed on again and again (and so can one
+      // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
-      entry.stomped = entry.kind === 'king' ? now + 500 : Infinity;
+      entry.stomped = entry.kind === 'king' || this.defense ? now + 500 : Infinity;
       this.bop(entry.id, true);
       b.vy = 9;
       this.sound.play('jump');
@@ -1148,6 +1171,169 @@ export class Game extends EventTarget {
       if (!(p.me ? this.dizzy : p.dizzy) || !p.avatar) continue;
       const a = p.avatar.root.position;
       if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + 1.35 + p.avatar.sitTall, a.z, t);
+    }
+  }
+
+  // ------------------------------------------------ a tower defense island
+
+  // The road, the pads and the Star Stone, as the island tells of them as you arrive.
+  setDefense(d) {
+    this.defense = null;
+    const point = (o) => (o && [o.x, o.y, o.z].every(Number.isFinite) ? { x: o.x, y: o.y, z: o.z } : null);
+    if (d && Array.isArray(d.path) && Array.isArray(d.pads) && point(d.stone) && point(d.gate)) {
+      const pads = d.pads.filter((p) => Number.isInteger(p?.id) && point(p)).map((p) => ({ id: p.id, x: p.x, y: p.y, z: p.z, level: 0 }));
+      this.defense = { path: d.path.filter((c) => Array.isArray(c) && c.every(Number.isFinite)), pads, stone: point(d.stone), gate: point(d.gate), wave: 1, waves: 10, state: 'ready', hearts: 10, max: 10, bricks: 0, left: 0 };
+      this.defenseNews(d);
+    }
+    this.emit('defense');
+  }
+
+  // The wave, the Star Stone's hearts, the bricks and the towers, as they change.
+  defenseNews(msg) {
+    const d = this.defense;
+    if (!d) return;
+    const int = (v, was) => (Number.isInteger(v) ? v : was);
+    d.wave = int(msg.w, d.wave);
+    d.waves = int(msg.n, d.waves);
+    d.state = DEFENSE_STATES[msg.s] ?? d.state;
+    d.hearts = int(msg.h, d.hearts);
+    d.max = int(msg.hm, d.max);
+    d.bricks = int(msg.b, d.bricks);
+    d.left = int(msg.l, d.left);
+    if (Array.isArray(msg.lv)) d.pads.forEach((p, i) => (p.level = Math.max(0, Math.min(MAX_LEVEL, msg.lv[i] | 0))));
+    this.emit('defense');
+  }
+
+  // Towers blowing bubbles: each one flying from the top of its tower to
+  // the monster it is after.
+  zapped(msg) {
+    const d = this.defense;
+    if (!d || !Array.isArray(msg.z)) return;
+    const now = performance.now();
+    for (const [padId, id] of msg.z) {
+      const pad = d.pads.find((p) => p.id === padId);
+      const entry = this.monsters.get(id);
+      if (!pad || !entry) continue;
+      const from = towerTop(pad, Math.max(1, pad.level));
+      const to = entry.model.group.position;
+      if (!this.near(from.x, from.y, from.z, 60)) continue;
+      this.renderer.effects.bubbleShot(from.x, from.y, from.z, to.x, to.y + 0.5, to.z);
+      entry.model.squash = Math.max(entry.model.squash ?? 0, 0.25);
+      if (now > (this.zapSoundAt ?? 0) && this.near(from.x, from.y, from.z, 25)) {
+        this.zapSoundAt = now + 120;
+        this.sound.play('blow');
+      }
+    }
+  }
+
+  // A monster got to the Star Stone: a heart off it.
+  leaked(msg) {
+    const d = this.defense;
+    if (!d) return;
+    if (Number.isInteger(msg.hearts)) d.hearts = msg.hearts;
+    this.dropMonster(msg.id);
+    const s = d.stone;
+    if (this.near(s.x, s.y, s.z, 60)) {
+      this.renderer.effects.sparkles(s.x, s.y + 2, s.z, 16, ['#b18cff', '#ffffff', '#7b4fd0']);
+      this.renderer.effects.bang(s.x, s.y + 3.5, s.z);
+      this.sound.play('ouch');
+    }
+    if (performance.now() > (this.toldLeak ?? 0)) {
+      this.toldLeak = performance.now() + 15000;
+      this.emit('toast', { icon: '🌟', text: `A monster got to the Star Stone! ${d.hearts} ${d.hearts === 1 ? 'heart' : 'hearts'} left. Build more towers by the road!` });
+    }
+    this.emit('defense');
+  }
+
+  // A wave on its way, seen off, or lost (the Star Stone out of hearts);
+  // with the last one seen off, the island is safe: fireworks over the
+  // Star Stone, and a sticker and a diamond for everyone there.
+  waveNews(msg) {
+    const d = this.defense;
+    if (!d) return;
+    const n = msg.wave | 0;
+    if (msg.k === 'start') {
+      d.state = 'march';
+      this.sound.play('grumble', { big: true });
+      const by = msg.by === this.pid ? '' : `${this.players.get(msg.by)?.name ?? 'A friend'} pressed Start. `;
+      this.emit('toast', { icon: '🌊', text: `${by}Wave ${n} is coming! Here they come out of the gate…` });
+    } else if (msg.k === 'lost') {
+      d.state = 'ready';
+      this.sound.play('no');
+      this.emit('toast', { icon: '💫', text: `The monsters got the Star Stone! It shines again. Build more towers and try wave ${n} again!` });
+    } else if (msg.k === 'clear') {
+      const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
+      if (msg.won) {
+        d.state = 'won';
+        const s = d.stone;
+        const now = performance.now();
+        for (let i = 0; i < 10; i++) this.fireworks.push({ at: now + 300 + i * 380, x: s.x + (Math.random() - 0.5) * 16, y: s.y + 11 + Math.random() * 6, z: s.z + (Math.random() - 0.5) * 16 });
+        this.sound.play('victory');
+        if (mine) {
+          this.profile.count('defended');
+          this.profile.addToBasket('diamond', 1);
+        }
+        this.emit('toast', { icon: '🏆', text: `Every wave is seen off! ${this.world?.name ?? 'The island'} is safe!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+      } else {
+        d.state = 'ready';
+        this.sound.play('fanfare');
+        this.emit('toast', { icon: '🎉', text: `Wave ${n} seen off! 🧱 ${msg.bricks | 0} bricks for it. Press Start when you are ready for wave ${n + 1}.` });
+      }
+    }
+    this.emit('defense');
+  }
+
+  // A tower built on a pad, or made bigger.
+  towerBuilt(msg) {
+    const d = this.defense;
+    const pad = d?.pads.find((p) => p.id === msg.pad);
+    if (!pad) return;
+    pad.level = Math.max(0, Math.min(MAX_LEVEL, msg.level | 0));
+    const top = towerTop(pad, pad.level);
+    if (this.near(top.x, top.y, top.z, 50)) {
+      this.renderer.effects.sparkles(top.x, top.y, top.z, 24, ['#ffd84d', '#ffffff', '#5cc3f2']);
+      this.sound.play('stamp');
+    }
+    if (msg.by === this.pid) {
+      this.profile.count('towers');
+      if (pad.level === 1 && !this.toldTower) {
+        this.toldTower = true;
+        this.emit('toast', { icon: '🏰', text: 'A tower! It blows bubbles at monsters going by. Build by it again to make it bigger.' });
+      }
+    }
+    this.emit('defense');
+  }
+
+  // What the Build button does here: build on (or make bigger) the pad
+  // you stand by, or, by none, start the next wave. Null: nothing to do.
+  defendTarget() {
+    const d = this.defense;
+    if (!d || !this.me || this.riding || d.state === 'won') return null;
+    const b = this.me.body;
+    let pad = null;
+    let near = BUILD_REACH;
+    for (const p of d.pads) {
+      const far = Math.hypot(p.x - b.x, p.z - b.z);
+      if (far <= near && Math.abs(b.y - p.y) < 4) {
+        near = far;
+        pad = p;
+      }
+    }
+    if (pad) return { pad, cost: pad.level < MAX_LEVEL ? TOWER_COST[pad.level + 1] : 0 };
+    return d.state === 'ready' ? { start: true } : null;
+  }
+
+  defend() {
+    const t = this.defendTarget();
+    if (!t) return;
+    if (t.start) this.send({ t: 'defend', cmd: 'start' });
+    else if (t.cost) {
+      if (this.defense.bricks < t.cost) {
+        this.sound.play('no');
+        this.emit('toast', { icon: '🧱', text: `That takes 🧱 ${t.cost} bricks, and there are ${this.defense.bricks}. Pop monsters to get more!` });
+        return;
+      }
+      this.send({ t: 'defend', cmd: 'build', pad: t.pad.id });
     }
   }
 

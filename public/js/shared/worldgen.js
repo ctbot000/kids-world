@@ -4,6 +4,7 @@
 // friends, and a spot for everyone to arrive at; on an adventure island, the
 // grumpy monsters' camps and King Grumble's castle too.
 import { buildCamps } from './adventure.js';
+import { buildDefense } from './defense.js';
 import * as B from './blocks.js';
 import { placeBig, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
@@ -44,8 +45,10 @@ export function palette(theme) {
   }
 }
 
-// adventure: with monster camps all over it, to free (see adventure.js).
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false } = {}) {
+// adventure: with monster camps all over it, to free (see adventure.js);
+// defense: with a road for monsters to march along, and towers to build
+// beside it (see defense.js).
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);
@@ -336,7 +339,18 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     critters.splice(0, critters.length, ...made.critters);
   }
 
-  return { world, critters, fruit, mines, camps };
+  // ---------------------------------------------------------------- tower defense
+  // Or, the same way, the monsters' road from their gate to the Star Stone.
+  let road = null;
+  if (defense && !adventure) {
+    const made = buildDefense(world, new Rng(seed ^ 0x3c6ef372 ^ 0x9e3779b9), { pal, trees, critters, mines });
+    if (made) {
+      road = made.defense;
+      critters.splice(0, critters.length, ...made.critters);
+    }
+  }
+
+  return { world, critters, fruit, mines, camps, defense: road };
 }
 
 // ---------------------------------------------------------------- jewels
