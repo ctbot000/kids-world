@@ -1,0 +1,44 @@
+name: Pages
+
+# Publishes public/ to GitHub Pages from main. The tests are not run here:
+# they take a quarter of an hour on a runner and a few minutes on a
+# computer, so they run there before every push to main (.githooks/pre-push,
+# scripts/check.mjs).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # Packs public/. It is uploaded a job ahead of deploy-pages, because GitHub
+  # can take a moment to list a new artifact: looked up 0.3 s after an upload
+  # in the same job, it once was not found.
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+  deploy:
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
