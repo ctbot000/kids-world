@@ -43,3 +43,9 @@ for (const weight of [500, 700]) {
 }
 await copyFile(new URL('@fontsource/fredoka/LICENSE', modules), new URL('fonts/OFL.txt', vendor));
 console.log(`vendored @fontsource/fredoka@${fontVersion} -> public/vendor/fonts/`);
+
+const idbVersion = await version('idb-keyval');
+const idb = await read('idb-keyval', 'dist/index.js');
+const idbMin = await minify(idb, { module: true, compress: { passes: 2 }, mangle: true, format: { comments: false } });
+await writeFile(new URL('idb-keyval.js', vendor), `/*! idb-keyval ${idbVersion} | Apache-2.0 License | https://github.com/jakearchibald/idb-keyval */\n${idbMin.code}\n`);
+console.log(`vendored idb-keyval@${idbVersion} -> public/vendor/idb-keyval.js`);

@@ -10,6 +10,8 @@
 // device under keys of their own, so that players taking turns on one device
 // never mix up their islands. Which one is playing is remembered beside them.
 
+import { forgetSong } from './songs.js';
+
 const PREFIX = 'kidsworld.';
 const memory = new Map();
 let space = '';
@@ -208,13 +210,17 @@ export function storeIsland(id, snapshot) {
   const list = listIslands().filter((i) => i.id !== id);
   list.push({ id, name: snapshot.meta?.name ?? 'My Island', theme: snapshot.meta?.theme ?? 'sunny', code: snapshot.code ?? '', savedAt: snapshot.savedAt ?? Date.now() });
   list.sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
-  for (const old of list.splice(MAX_ISLANDS)) remove(`island.${old.id}`);
+  for (const old of list.splice(MAX_ISLANDS)) {
+    remove(`island.${old.id}`);
+    forgetSong(old.id);
+  }
   save('islands', list);
   return ok;
 }
 
 export function forgetIsland(id) {
   remove(`island.${id}`);
+  forgetSong(id);
   save(
     'islands',
     listIslands().filter((i) => i.id !== id),

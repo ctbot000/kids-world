@@ -5,7 +5,7 @@
 // without Chrome these tests are skipped.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, afterEach, before, test } from 'node:test';
@@ -2607,4 +2607,74 @@ test('an adventure island with a friend: a camp’s monster popped with a click,
   assert.deepEqual(pageErrors, []);
   await host.browserContext().close();
   await guest.browserContext().close();
+});
+
+// ---------------------------------------------------------------- the island's song
+
+test('an island song: the owner picks an MP3 in Settings, a friend here and one who comes later hear it, Island music brings the island music back, and the island plays it again when opened again', { skip }, async () => {
+  // A song bigger than one piece (see shared/song.js): a short MP3 behind an
+  // ID3 tag padded out with zeros, which players skip.
+  const tone = await readFile(new URL('./fixtures/tone.mp3', import.meta.url));
+  const pad = 700_000;
+  const tag = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, (pad >> 21) & 0x7f, (pad >> 14) & 0x7f, (pad >> 7) & 0x7f, pad & 0x7f]);
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-song-'));
+  const file = join(dir, 'Happy_Tune.mp3');
+  await writeFile(file, Buffer.concat([tag, Buffer.alloc(pad), tone]));
+  const pick = async (page, button) => {
+    const [chooser] = await Promise.all([page.waitForFileChooser(), clickButton(page, button, '#modal')]);
+    await chooser.accept([file]);
+  };
+  const hearing = (page) =>
+    until(page, () => {
+      const { game } = window.kidsWorld;
+      const el = game.sound.song?.el;
+      return game.song?.ready && game.song.name === 'Happy Tune' && el && !el.paused && el.currentTime > 0.2;
+    });
+  // A friend's page has been clicked (the go! button), so it may play sound.
+  const visit = async (code, name) => {
+    const page = await openPlayer(p2p(`&code=${code}`), { name });
+    await clickButton(page, 'go!', '#modal');
+    await inGame(page);
+    await page.evaluate(() => window.kidsWorld.game.sound.unlock());
+    return page;
+  };
+  try {
+    const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+    await makeIsland(host, { online: true });
+    const code = await host.evaluate(() => window.kidsWorld.game.code);
+    const guest = await visit(code, 'Brave Fox');
+
+    await host.click('#btn-settings');
+    await until(host, () => document.querySelector('#modal .song-setting')?.textContent.includes('instead of the island music'));
+    await pick(host, 'Pick an MP3');
+    await until(host, () => document.querySelector('#modal .song-name')?.textContent === 'Happy Tune');
+    await hearing(host);
+    assert.ok((await host.evaluate(() => window.kidsWorld.session.link.room.song.n)) >= 4, 'sent in pieces');
+    await hearing(guest);
+    await until(guest, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Now playing: Happy Tune')));
+    // The island music waits while the song plays.
+    assert.equal(await guest.evaluate(() => window.kidsWorld.game.sound.nextBeat), 0);
+
+    const late = await visit(code, 'Late Owl');
+    await hearing(late);
+
+    // Back to the island music, for everyone.
+    await clickButton(host, 'Island music', '#modal');
+    for (const page of [host, guest, late]) await until(page, () => !window.kidsWorld.game.song && !window.kidsWorld.game.sound.song && window.kidsWorld.game.sound.nextBeat > 0);
+    await late.browserContext().close();
+    await guest.browserContext().close();
+
+    // Picked again, it is the island's song the next time it is opened.
+    await pick(host, 'Pick an MP3');
+    await hearing(host);
+    await clickButton(host, 'Leave island', '#modal');
+    await until(host, () => !document.getElementById('title').hidden && !window.kidsWorld.game);
+    await clickButton(host, 'My islands');
+    await clickButton(host, 'Play', '#modal');
+    await inGame(host);
+    await hearing(host);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

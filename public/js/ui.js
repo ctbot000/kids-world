@@ -1884,6 +1884,14 @@ export class UI {
       this.renderHearts();
     });
     on('hearts', () => this.renderHearts());
+    on('song', () => {
+      this.drawSong?.();
+      const song = game.song;
+      if (song?.ready && song.id !== this.songToasted) {
+        this.songToasted = song.id;
+        this.toast('🎵', `Now playing: ${song.name}`);
+      }
+    });
     on('adventure', () => this.renderHearts());
     on('tool', () => {
       this.buildToolbar();
@@ -2347,6 +2355,7 @@ export class UI {
         } else if (g.settings.passcode) {
           root.append(h('p', { class: 'muted' }, '🔒 This island has a passcode.'));
         }
+        if (g.song) root.append(h('p', { class: 'muted song-line' }, '🎵 The island song: ', h('b', { lang: langOf(g.song.name) || undefined }, g.song.name)));
         const adv = g.adventure;
         if (adv) {
           const camps = [...adv.camps.values()];
@@ -2430,6 +2439,79 @@ export class UI {
     return el;
   }
 
+  // The island's song, for its owner: an MP3 from their device that plays
+  // for everyone instead of the island music, or the island music again.
+  songSetting() {
+    const g = this.game;
+    const handlers = this.gameHandlers;
+    const el = h('div', { class: 'song-setting' });
+    const file = h('input', { type: 'file', accept: '.mp3,audio/mpeg', hidden: true, 'aria-label': 'Pick an MP3 song' });
+    let busy = false;
+    file.addEventListener('change', async () => {
+      const picked = file.files?.[0];
+      file.value = '';
+      if (!picked) return;
+      busy = true;
+      draw();
+      const problem = await handlers.playSong(picked);
+      busy = false;
+      if (problem) {
+        this.sound.play('no');
+        this.toast('🙈', problem, 'warn');
+      }
+      draw();
+    });
+    const draw = () => {
+      const song = g.song;
+      const detail = busy
+        ? 'Getting the song ready…'
+        : song
+          ? h('span', {}, song.ready ? '▶️ ' : '⏳ ', h('b', { class: 'song-name', lang: langOf(song.name) || undefined }, song.name))
+          : 'Play an MP3 from your device for everyone here, instead of the island music.';
+      el.replaceChildren(
+        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🎵 Island song'), h('div', { class: 'muted' }, detail))),
+        h(
+          'div',
+          { class: 'row song-row' },
+          h(
+            'button',
+            {
+              class: 'chip',
+              type: 'button',
+              disabled: busy,
+              onclick: () => {
+                this.sound.unlock();
+                this.sound.play('ui');
+                file.click();
+              },
+            },
+            song ? '🎵 Pick another song' : '🎵 Pick an MP3',
+          ),
+          song
+            ? h(
+                'button',
+                {
+                  class: 'chip',
+                  type: 'button',
+                  disabled: busy,
+                  onclick: async () => {
+                    this.sound.play('ui');
+                    await handlers.playSong(null);
+                    draw();
+                  },
+                },
+                '🎶 Island music',
+              )
+            : null,
+        ),
+        file,
+      );
+    };
+    this.drawSong = draw;
+    draw();
+    return el;
+  }
+
   settingsDialog() {
     const g = this.game;
     const handlers = this.gameHandlers;
@@ -2486,6 +2568,7 @@ export class UI {
           toggle(g.settings.locked, '🚪 No new visitors', 'Friends already here can stay.', (on) => g.send({ t: 'host', cmd: 'settings', settings: { locked: on } })),
           this.passcodeSetting(),
           toggle(Boolean(g.settings.monsters), '👾 Monsters', MONSTERS_ABOUT, (on) => g.send({ t: 'host', cmd: 'settings', settings: { monsters: on } })),
+          this.songSetting(),
         );
         const dayRow = h('div', { class: 'row' });
         const days = [

@@ -14,6 +14,7 @@ import { BODY, BOUNCE, makeBody, onTrampoline, stepBody, unstick } from './share
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
+import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
@@ -67,6 +68,8 @@ export class Game extends EventTarget {
     // The island's passcode, known while you are its owner ('' for none),
     // and the one you typed to come in as a new visitor.
     this.passcode = '';
+    this.song = null;
+    this.songPieces = new SongPieces();
     this.typedPasscode = '';
     // The pass an invitation came with, which lets you in without the passcode.
     this.invitePass = '';
@@ -266,6 +269,9 @@ export class Game extends EventTarget {
         this.emit('notice', { text: msg.text, level: msg.level ?? 'warn' });
         if (msg.level !== 'info') this.sound.play('no');
         break;
+      case 'song':
+        this.songNews(msg);
+        break;
       case 'passcode':
         this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
         this.emit('settings');
@@ -315,10 +321,70 @@ export class Game extends EventTarget {
     this.dizzy = false;
     this.setAdventure(msg.adventure ?? null);
     this.setEnv(msg.env);
+    // The song goes on playing over a reconnect; its pieces come after this.
+    if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
     this.renderer.view.yaw = Math.PI * 0.9;
     this.emit('welcome', { again });
     this.emit('players');
     this.emit('settings');
+  }
+
+  // ------------------------------------------------ the island's song
+
+  // What is playing: null (the island music), or { id, name, ready } with
+  // ready false while its pieces are still coming. blob: the song itself.
+  setSong(song, blob = null) {
+    this.song = song;
+    this.songPieces = new SongPieces();
+    this.sound.setSong(blob);
+    this.emit('song');
+  }
+
+  songNews(msg) {
+    if (msg.off === true) {
+      if (this.song) this.setSong(null);
+      return;
+    }
+    const piece = cleanPiece(msg);
+    if (!piece || (this.song?.ready && this.song.id === piece.id)) return;
+    if (this.song?.id !== piece.id) this.setSong({ id: piece.id, name: piece.name, ready: false });
+    const whole = this.songPieces.add(piece);
+    if (whole == null) return;
+    const id = piece.id;
+    fetch(`data:audio/mpeg;base64,${whole}`)
+      .then((r) => r.blob())
+      .then((blob) => {
+        if (!this.closed && this.song?.id === id) this.setSong({ ...this.song, ready: true }, blob);
+      })
+      .catch(() => {});
+  }
+
+  // The owner plays an MP3 (a File, or a Blob with its name) for everyone.
+  // Resolves to '' once it is on its way, or what is wrong with it.
+  async playSong(file, name = file.name) {
+    if (this.pid !== this.host) return 'Only the island owner can pick the song.';
+    if (!(file.type === 'audio/mpeg' || /\.mp3$/i.test(name ?? ''))) return 'That is not an MP3 song.';
+    if (file.size > SONG_MAX_BYTES) return `That song is too big. Pick one under ${SONG_MAX_BYTES / 1024 / 1024} MB.`;
+    const url = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    const base64 = url.slice(url.indexOf(',') + 1);
+    if (!base64 || this.closed) return 'That song could not be read.';
+    const { id, n, pieces } = songPieces(base64);
+    const song = { id, name: songName(name), ready: true };
+    this.setSong(song, file.type === 'audio/mpeg' ? file : new Blob([file], { type: 'audio/mpeg' }));
+    pieces.forEach((data, i) => this.send({ t: 'host', cmd: 'song', id, name: song.name, i, n, data }));
+    return '';
+  }
+
+  // Back to the island music, for everyone.
+  stopSong() {
+    if (!this.song) return;
+    this.send({ t: 'host', cmd: 'song', off: true });
+    this.setSong(null);
   }
 
   // ------------------------------------------------ players
@@ -2275,5 +2341,6 @@ export class Game extends EventTarget {
     this.monsters.clear();
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
+    this.sound.setSong(null);
   }
 }

@@ -20,6 +20,7 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { cleanPiece } from './song.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
@@ -122,6 +123,9 @@ export class Room {
     this.adventure = null;
     this.advSent = '';
     this.stomps = [];
+    // The owner's song (song.js), in its pieces as they came, or null. Never
+    // saved: it is the owner's page that keeps it and plays it again.
+    this.song = null;
 
     if (save) {
       this.loadSave(save);
@@ -228,6 +232,23 @@ export class Room {
     this.host = next.id;
     this.broadcast({ t: 'host', pid: next.id });
     this.tellHost();
+    this.dropHalfSong();
+  }
+
+  // A song the owner was still sending when someone else became the owner
+  // never finishes coming: it goes, and the island music comes back.
+  dropHalfSong() {
+    // (Its parts are holes until they come, which every() would skip.)
+    if (!this.song?.parts.includes(undefined)) return;
+    this.song = null;
+    this.broadcast({ t: 'song', off: true });
+  }
+
+  // Everything of the song that has come so far, for a newcomer.
+  sendSong(conn) {
+    const s = this.song;
+    if (!s) return;
+    s.parts.forEach((data, i) => data !== undefined && this.sendTo(conn, { t: 'song', id: s.id, name: s.name, i, n: s.n, data }));
   }
 
   // ------------------------------------------------ messages
@@ -371,6 +392,7 @@ export class Room {
     c.pid = p.id;
     c.token = token;
     this.sendWelcome(conn, c);
+    this.sendSong(conn);
     this.changed();
   }
 
@@ -458,6 +480,7 @@ export class Room {
       env: this.envMessage(),
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
+      song: this.song ? { id: this.song.id, name: this.song.name } : null,
     });
   }
 
@@ -709,6 +732,24 @@ export class Room {
         this.host = target.id;
         this.broadcast({ t: 'host', pid: target.id });
         this.tellHost();
+        this.dropHalfSong();
+        break;
+      }
+      case 'song': {
+        // A piece of a new song, passed on to everyone else as it comes, or
+        // off: the island music again.
+        if (msg.off === true) {
+          if (!this.song) return;
+          this.song = null;
+          this.broadcast({ t: 'song', off: true }, conn);
+          return;
+        }
+        const piece = cleanPiece(msg);
+        if (!piece) return;
+        if (this.song?.id !== piece.id || this.song.n !== piece.n) this.song = { id: piece.id, name: piece.name, n: piece.n, parts: new Array(piece.n) };
+        if (this.song.parts[piece.i] !== undefined) return;
+        this.song.parts[piece.i] = piece.data;
+        this.broadcast({ t: 'song', ...piece, name: this.song.name }, conn);
         break;
       }
       case 'passcode': {

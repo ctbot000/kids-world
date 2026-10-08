@@ -2,7 +2,8 @@
 // building, boings and splashes, animal voices (birdsong, hoots, buzzing,
 // whale song, neighs, moos and an elephant's trumpet among them), hoofbeats, a chime when a friend arrives, little "animal
 // talk" babble when someone says something, and gentle music that changes
-// with the time of day.
+// with the time of day, unless the island's owner picked a song of their own
+// (an MP3, see shared/song.js), which plays round and round instead.
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 // Mixer levels at full volume: effects peak around -10 dB, music sits below them.
@@ -23,6 +24,8 @@ export class Sound {
     this.beat = 0;
     this.melodyNote = 7;
     this.ambienceAt = 0;
+    // The island's song: { url, el, source } while there is one.
+    this.song = null;
   }
 
   // Browsers only allow sound after the player has touched or clicked.
@@ -608,6 +611,41 @@ export class Sound {
 
   stopMusic() {
     this.musicOn = false;
+    this.song?.el.pause();
+  }
+
+  // The island's song (a Blob), played instead of the island music while
+  // the music is on, at the music's volume; null for the island music again.
+  setSong(blob) {
+    if (this.song) {
+      this.song.el.pause();
+      this.song.source?.disconnect();
+      URL.revokeObjectURL(this.song.url);
+      this.song = null;
+    }
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const el = new Audio(url);
+    el.loop = true;
+    this.song = { url, el, source: null };
+  }
+
+  // Through the mixer once there is one (see unlock), and playing while the
+  // music is on. A browser that refuses to play it yet is asked again later.
+  songLoop() {
+    const song = this.song;
+    if (!song) return;
+    if (!song.source) {
+      song.source = this.ctx.createMediaElementSource(song.el);
+      song.source.connect(this.music);
+    }
+    if (this.musicOn && song.el.paused && !song.asking) {
+      song.asking = true;
+      song.el
+        .play()
+        .catch(() => {})
+        .finally(() => (song.asking = false));
+    }
   }
 
   schedule() {
@@ -615,7 +653,8 @@ export class Sound {
     if (!ctx || ctx.state !== 'running') return;
     const now = ctx.currentTime;
     this.rainLoop(this.musicOn && (this.weather === 'rain' || this.weather === 'sprinkles'));
-    if (!this.musicOn) {
+    this.songLoop();
+    if (!this.musicOn || this.song) {
       this.nextBeat = 0;
       return;
     }

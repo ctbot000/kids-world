@@ -10,6 +10,7 @@ import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { Profile } from './profile.js';
 import { Sound } from './sound.js';
+import { forgetSong as forgetSongOf, keepSong, loadSong } from './songs.js';
 import * as storage from './storage.js';
 import { UI } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
@@ -299,6 +300,12 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
     }
     ui.renderIsland();
     if (mode === 'host') saveIsland();
+    // Your island plays the song you picked for it, again.
+    if (mode === 'host' && islandId && !game.song && game.pid === game.host) {
+      loadSong(islandId).then((kept) => {
+        if (kept && session?.game === game && !game.song) game.playSong(kept.blob, kept.name).catch(() => {});
+      });
+    }
   });
   game.addEventListener('fatal', (e) => {
     if (session?.game !== game) return;
@@ -679,6 +686,20 @@ const gameHandlers = {
   },
   // A passcode for the island ('' for none), as its owner.
   setPasscode: (passcode) => session?.game.send({ t: 'host', cmd: 'passcode', passcode }),
+  // The owner's song for the island (an MP3 File), or null for the island
+  // music. Resolves to '' or what is wrong with it.
+  playSong: async (file) => {
+    const s = session;
+    if (!s) return '';
+    if (!file) {
+      s.game.stopSong();
+      if (s.islandId) forgetSongOf(s.islandId);
+      return '';
+    }
+    const problem = await s.game.playSong(file).catch(() => 'That song could not be read.');
+    if (!problem && s.mode === 'host' && s.islandId) keepSong(s.islandId, file, file.name);
+    return problem;
+  },
   canSave: () => session?.mode === 'host',
   saveFile: () => downloadIsland(),
   keeper,

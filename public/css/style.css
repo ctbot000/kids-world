@@ -1581,6 +1581,14 @@ body.touch.playing #joystick {
   margin: -4px 0 8px;
 }
 
+.song-row {
+  margin: -4px 0 8px;
+}
+
+.song-name {
+  overflow-wrap: anywhere;
+}
+
 .passcode-input {
   flex: 0 0 auto;
   width: 7.5em;
