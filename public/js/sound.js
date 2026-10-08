@@ -284,6 +284,10 @@ export class Sound {
         this.tone(320 * r(), { decay: 0.18, gain: 0.12, slide: 900, slideTime: 0.12 });
         this.tone(NOTE(88), { at: 0.08, decay: 0.25, gain: 0.05, type: 'triangle' });
         break;
+      // A swing of the arm (the 👊 button): a soft whoosh.
+      case 'swish':
+        this.noise(0.14, { type: 'bandpass', freq: 700, sweep: 2200, q: 1.2, gain: 0.12 });
+        break;
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });

@@ -779,6 +779,9 @@ input
       case 'KeyQ':
         g.toggleRide();
         return true;
+      case 'KeyX':
+        g.attack();
+        return true;
       case 'KeyV':
         if (!g.defense) return false;
         g.defend();

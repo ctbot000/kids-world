@@ -7,7 +7,7 @@ import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
-import { GEAR, levelDoes, nextLevel, sellPrice, wearing } from './shared/shop.js';
+import { GEAR, levelDoes, nextLevel, sellPrice, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -66,7 +66,9 @@ function lineIcon(name) {
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // What the island rule for monsters means (shared/monsters.js).
-const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or tap it three times from close up!';
+// The bop button shows while a monster is this near.
+const ATTACK_SHOW = 14;
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)!';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 // What a tower defense island is (shared/defense.js).
@@ -1135,7 +1137,7 @@ export class UI {
                   return;
                 }
                 this.sound.play('fanfare');
-                const now = { shoes: "You're running faster now.", wings: "You're flying faster now.", weapon: 'Tap a monster to bop it!' }[g.key];
+                const now = { shoes: "You're running faster now.", wings: "You're flying faster now.", weapon: 'Walk up to a monster and bop it with the button (or X)!' }[g.key];
                 this.toast(next.icon, `You got the ${next.name}! ${now}`);
               };
               return h(
@@ -1481,6 +1483,7 @@ export class UI {
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further.']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -1994,6 +1997,11 @@ export class UI {
     hold($('btn-down'), 'downHeld');
     $('btn-down').addEventListener('pointerdown', () => game.pressDown());
     $('btn-fly').onclick = () => game.toggleFly();
+    $('btn-attack').onpointerdown = (e) => {
+      e.preventDefault();
+      this.sound.unlock();
+      game.attack();
+    };
     // Never keeping the focus, where Space (to jump) would press it again.
     $('ride').onmousedown = (e) => e.preventDefault();
     $('ride').onclick = () => {
@@ -2952,7 +2960,8 @@ export class UI {
       el.hidden = !pet || !kind;
     } else if (aim?.kind === 'monster') {
       const king = g.monsters.get(aim.id)?.kind === 'king';
-      el.textContent = !king ? '👾 Monster — tap to pop it!' : g.adventure?.shield ? '🫧 King Grumble is in his bubble' : '👑 King Grumble — tap to bop him!';
+      const press = g.touch ? `press ${$('btn-attack').textContent}` : 'press X';
+      el.textContent = !king ? `👾 Monster — walk up and ${press} to bop it!` : g.adventure?.shield ? '🫧 King Grumble is in his bubble' : `👑 King Grumble — walk up and ${press} to bop him!`;
       el.hidden = false;
     } else if (aim?.kind === 'friend') {
       el.textContent = `🤝 ${g.players.get(aim.pid)?.name ?? 'A friend'} is dizzy — tap to help them up!`;
@@ -3100,10 +3109,23 @@ export class UI {
   }
 
   // Name tags and speech bubbles follow everyone around; the maps keep up.
+  // The bop button, on touch screens while a monster is about, showing the
+  // toy weapon in your hand (or a fist).
+  attackButton() {
+    const g = this.game;
+    const me = g.me?.body;
+    const el = $('btn-attack');
+    const near = Boolean(me) && !g.riding && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - me.x, m.y - me.y, m.z - me.z) < ATTACK_SHOW);
+    if (el.hidden === near) el.hidden = !near;
+    const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
+    if (el.textContent !== icon) el.textContent = icon;
+  }
+
   frame(dt) {
     const g = this.game;
     if (!g?.world) return;
     this.minimap.frame(dt);
+    this.attackButton();
     const r = g.renderer;
     const seen = new Set();
     const me = g.me?.body;

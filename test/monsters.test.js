@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { BLOB_HEARTS, HEART_BACK_MS, heartsBack, HIT_MS, MAX_HEARTS, MAX_MONSTERS, MonsterSim, SAFE_RADIUS, TAP_REACH, unpackMonster } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, bopGap, HEART_BACK_MS, heartsBack, HIT_MS, MAX_HEARTS, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -140,7 +140,7 @@ test('hearts come back while nothing bumps you', () => {
   assert.deepEqual(a.all('hearts').map((m) => m.hearts), [3, 4, 5]);
 });
 
-test('jumping on a monster pops it at once; tapping it takes three taps, from close up, and it knocks it back and makes it cross', () => {
+test('jumping on a monster pops it at once; bopping it takes three bops, from right up close, and it knocks it back and makes it cross', () => {
   const { room, time } = meadowRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
@@ -187,13 +187,20 @@ test('jumping on a monster pops it at once; tapping it takes three taps, from cl
   }
   assert.equal(room.monsters.get(n.id), null, 'popped');
   assert.equal(b.last('pop').id, n.id);
-  // A tap from as far as the page lets you (TAP_REACH from your eyes to its
-  // middle) counts, even with the monster a step further on at the island.
-  const side = Math.sqrt(TAP_REACH ** 2 - (BODY.eye - 0.4) ** 2);
+  // A bop from as far as an arm reaches on the page counts, even with the
+  // monster a step further on at the island; a step past that does not.
+  const side = ARM_REACH + MONSTER_BODY.radius + 0.3;
   const far = room.monsters.add(room.world, spawn.x + 20 + side + 1, 11, spawn.z);
   room.receive(a, { t: 'm', s: [spawn.x + 20, 11, spawn.z, 0, 0, 0] });
   tap(far);
-  assert.equal(far.hearts, BLOB_HEARTS - 1, 'tapped from as far as a tap reaches');
+  assert.equal(far.hearts, BLOB_HEARTS - 1, 'bopped from as far as an arm reaches');
+  Object.assign(far.body, { x: spawn.x + 20 + side + BOP_SLACK + 0.2, vx: 0, vz: 0 });
+  tap(far);
+  assert.equal(far.hearts, BLOB_HEARTS - 1, 'out of reach');
+  room.monsters.remove(far.id);
+  // Only about level with you: not one up on a ledge over your head.
+  assert.equal(bopGap({ x: 0, y: 10, z: 0 }, { x: 1, y: 12.2, z: 0, radius: 0.42, height: 0.8 }, 5), null);
+  assert.ok(bopGap({ x: 0, y: 10, z: 0 }, { x: 1, y: 10, z: 0, radius: 0.42, height: 0.8 }, 5) < 0.3);
   // With monsters off, nothing to pop.
   const o = room.monsters.add(room.world, spawn.x + 28, 11, spawn.z);
   room.settings.monsters = false;

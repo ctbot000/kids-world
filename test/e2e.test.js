@@ -890,7 +890,7 @@ test('coming down from a height thumps and puffs up dust every time, however hig
   await page.browserContext().close();
 });
 
-test('monsters, turned on in Make an island: hearts on screen, one on its last heart popped with a click through leaves and grass, one with all its hearts only bonked, one taking a heart, and all gone when turned off', { skip }, async () => {
+test('monsters, turned on in Make an island: hearts on screen, one aimed at through leaves and grass but popped only with X from right up close, one with all its hearts only bonked, one taking a heart, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
@@ -973,10 +973,28 @@ test('monsters, turned on in Make an island: hearts on screen, one on its last h
   assert.equal(at.passed[0]?.dist, 0, 'the camera is in the leaves');
   assert.ok(at.passed.some((c) => c.block === TALL_GRASS), `the grass is in the way: ${JSON.stringify(at.passed)}`);
   assert.deepEqual(at.aim, { kind: 'monster', id });
+  // A click at it bops nothing: it says how bopping works.
   await page.mouse.click(at.x, at.y);
+  await until(page, () => document.body.textContent.includes('press X to bop it'));
+  // X, facing it from three steps off, is a swing at nothing: it is out of reach.
+  await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
+  await page.keyboard.press('KeyX');
+  await until(page, () => document.body.textContent.includes('Walk right up to a monster and face it'));
+  assert.equal(await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts, id), 1, 'too far to bop');
+  // Right up to it, X pops it.
+  await page.evaluate(({ x, y, z }) => {
+    const g = window.kidsWorld.game;
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z - 1, vx: 0, vy: 0, vz: 0 });
+    g.me.yaw = Math.PI;
+    g.sendMove(true);
+  }, spot);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 10));
+  // (A swing at most as often as a monster feels one.)
+  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  await page.keyboard.press('KeyX');
   await until(page, (id) => !window.kidsWorld.session.link.room.monsters.get(id) && !window.kidsWorld.game.monsters.has(id), id);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popped), 1);
-  // One with all its hearts: a tap takes one, and says how many more it takes.
+  // One with all its hearts: a bop takes one, and says how many more it takes.
   const full = await page.evaluate(({ x, y, z }) => {
     const room = window.kidsWorld.session.link.room;
     const m = room.monsters.add(room.world, x + 0.5, y, z - 2.5);
@@ -985,15 +1003,23 @@ test('monsters, turned on in Make an island: hearts on screen, one on its last h
   }, spot);
   await until(page, (id) => window.kidsWorld.game.monsters.has(id), full);
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
-  const tap = await page.evaluate((id) => {
-    const kw = window.kidsWorld;
-    const p = kw.game.monsters.get(id).model.group.position;
-    const s = kw.renderer.project(p.x, p.y + 0.4, p.z);
-    const rect = kw.renderer.canvas.getBoundingClientRect();
-    return { x: rect.left + s.x, y: rect.top + s.y };
-  }, full);
-  await page.mouse.click(tap.x, tap.y);
-  await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2 && document.body.textContent.includes('2 more taps'), full);
+  await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
+  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  await page.keyboard.press('KeyX');
+  await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2 && document.body.textContent.includes('2 more bops'), full);
+  // On a touch screen the 👊 button is there while a monster is about, and does the same (once
+  // the monster, knocked back, is in reach again).
+  await page.evaluate(
+    ({ id, x, y, z }) => Object.assign(window.kidsWorld.session.link.room.monsters.get(id).body, { x: x + 0.5, y, z: z - 2.5, vx: 0, vy: 0, vz: 0 }),
+    { id: full, ...spot },
+  );
+  await until(page, ({ id, z }) => Math.abs(window.kidsWorld.game.monsters.get(id).model.group.position.z - (z - 2.5)) < 0.05, { id: full, z: spot.z });
+  await page.evaluate(() => document.body.classList.add('touch'));
+  await until(page, () => !document.getElementById('btn-attack').hidden && document.getElementById('btn-attack').offsetWidth > 0);
+  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  await page.click('#btn-attack');
+  await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 1, full);
+  await page.evaluate(() => document.body.classList.remove('touch'));
   await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
   // One right beside you takes a heart, and knocks you back.
   const from = await page.evaluate(() => {
@@ -1091,6 +1117,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
   await makeIsland(page, { online: false });
   await hideRideButton(page);
+  // The bop button is shown or hidden by the test (on touch screens it shows while a monster is about).
+  await page.evaluate(() => (window.kidsWorld.ui.attackButton = () => {}));
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
   // buttons above the hotbar. The shortest upright screens have no room for the map. 1366×1024 is
   // sideways and wide enough for the whole hotbar between the thumbstick and the jump buttons.
@@ -1134,7 +1162,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   ];
   for (const [width, height, touch, map = true] of screens) {
     await page.setViewport({ width, height });
-    for (const full of [false, true]) {
+    for (const [full, bop] of [[false, false], [true, false], [false, true], [true, true]]) {
+      await page.evaluate((bop) => (document.getElementById('btn-attack').hidden = !bop), bop);
       await basketAndTouch(page, full, touch);
       const seen = await page.evaluate((touch) => {
         const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
@@ -1171,7 +1200,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
         }
         const talk = [...document.querySelectorAll('#talk button')].map((b) => [b.offsetWidth, b.offsetHeight]);
         const want = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--talk'));
-        const thumbs = [...document.querySelectorAll('#touch-buttons button')].map((b) => [b.offsetWidth, b.offsetHeight]);
+        const thumbs = [...document.querySelectorAll('#touch-buttons button:not([hidden])')].map((b) => [b.offsetWidth, b.offsetHeight]);
         const thumb = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch'));
         const whole = [document.body.offsetWidth, document.body.offsetHeight, getComputedStyle(document.body).opacity];
         // The hotbar makes room for the thumbstick and the jump buttons only where they are level
@@ -1214,7 +1243,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
           inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight,
         };
       }, touch);
-      const where = `${width}×${height}${touch ? ' touch' : ''}${full ? ' with a full basket' : ''}`;
+      const where = `${width}×${height}${touch ? ' touch' : ''}${full ? ' with a full basket' : ''}${bop ? ' and the bop button' : ''}`;
       assert.equal(seen.pills, full ? seen.kinds : 0, `on ${where} the basket shows every kind of treasure in it`);
       assert.deepEqual(seen.treasures, [], `on ${where} neither a button nor the thumbstick covers a treasure in the basket`);
       assert.deepEqual(seen.covered, [], `on ${where} the map is clear of the other buttons`);
@@ -1222,7 +1251,7 @@ test('the little map and the hotbar fit beside every other button, on screens of
       // The map's place beside the talk buttons is worked out from --talk.
       assert.deepEqual(seen.talk, [[seen.want, seen.want], [seen.want, seen.want]], `on ${where} the talk buttons are --talk across, as the map's place assumes`);
       if (touch) {
-        assert.deepEqual(seen.thumbs, [[seen.thumb, seen.thumb], [seen.thumb, seen.thumb], [78, 78]], `on ${where} go down and fly are --touch across, and jump 78 px`);
+        assert.deepEqual(seen.thumbs, [...(bop ? [[seen.thumb, seen.thumb]] : []), [seen.thumb, seen.thumb], [seen.thumb, seen.thumb], [78, 78]], `on ${where} bop, go down and fly are --touch across, and jump 78 px`);
       }
       // <body> has a touch class too, on touch screens, but it is no touch button.
       assert.deepEqual(seen.whole, [width, height, '1'], `on ${where} the page is the whole screen, not see-through`);
@@ -2439,7 +2468,7 @@ test('a logged-in player sees the other players and who is playing now, and invi
   }
 });
 
-test('an adventure island with a friend: a camp’s monster popped with a click, its flag raised together, and a dizzy friend helped up with a click', { skip }, async () => {
+test('an adventure island with a friend: a camp’s monster popped with X from up close, its flag raised together, and a dizzy friend helped up with a click', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Brave Fox' });
   await clickButton(host, 'Make an island');
   await clickButton(host, 'Flat Land', '#modal');
@@ -2544,7 +2573,13 @@ test('an adventure island with a friend: a camp’s monster popped with a click,
   const at = await target({ x: held[0], y: held[1] + 0.4, z: held[2] });
   assert.deepEqual(at.aim, { kind: 'monster', id }, `the monster, under the tap: ${JSON.stringify(at)}`);
   assert.ok(at.clear, `nothing over the monster on screen: ${JSON.stringify(at)}`);
+  // A click at it only says how to bop it; up close, facing it, X pops it.
   await host.mouse.click(at.x, at.y);
+  await until(host, () => document.body.textContent.includes('press X to bop it'));
+  assert.ok(await host.evaluate((id) => window.kidsWorld.session.link.room.monsters.get(id), id), 'a click pops nothing');
+  await stand(host, 2.5, -0.8);
+  await host.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
+  await host.keyboard.press('KeyX');
   try {
     await until(host, (id) => !window.kidsWorld.session.link.room.monsters.get(id), id);
   } catch (error) {

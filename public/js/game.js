@@ -9,7 +9,7 @@ import { CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, wat
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
-import { bodyOf, MAX_HEARTS, MONSTER_BODY, STOMP, TAP_REACH, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, HIT_MS, MAX_HEARTS, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -47,6 +47,10 @@ const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
 // speech bubble before it has been drawn.
 const BUBBLE_SECS = 4.5;
+// The 👊 button: a swing at most as often as a monster feels one (HIT_MS),
+// at a monster no further round from straight ahead than this (the cosine
+// of 70°).
+const FRONT = 0.34;
 
 const lerpAngle = (a, b, t) => {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -867,12 +871,13 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: '💖', text });
   }
 
-  // A monster popped: tapped or jumped on.
-  // Whoever bopped a monster swings what they have in hand.
+  // Whoever bopped a monster swings what they have in hand (you swung
+  // already, as you pressed 👊).
   swung(pid) {
-    this.players.get(pid)?.avatar?.swing();
+    if (pid !== this.pid) this.players.get(pid)?.avatar?.swing();
   }
 
+  // A monster popped: bopped or jumped on.
   popped(msg) {
     if (msg.by) this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
@@ -892,12 +897,12 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
-      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or tap it from close up until it pops.' });
+      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
   }
 
-  // A monster tapped, with hearts left: it squashes and hops back, and
-  // whoever tapped it hears how many more taps it takes.
+  // A monster bopped, with hearts left: it squashes and hops back, and
+  // whoever bopped it hears how many more bops it takes.
   monsterHit(msg) {
     this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
@@ -911,14 +916,76 @@ export class Game extends EventTarget {
     if (msg.by === this.pid && performance.now() > (this.toldHit ?? 0)) {
       this.toldHit = performance.now() + 20000;
       const n = msg.hearts | 0;
-      const more = n === 1 ? 'One more tap' : `${n} more taps`;
+      const more = n === 1 ? 'One more bop' : `${n} more bops`;
       this.emit('toast', { icon: '👾', text: msg.march ? `Bonk! ${more} and it pops. Jumping on it takes three!` : `Bonk! ${more} and it pops. Watch out, it’s cross now! Jumping on it pops it at once.` });
     }
   }
 
-  // Tapping a monster (any tool will do), or landing on it (on).
+  // Bopping a monster, or landing on it (on).
   bop(id, on = false) {
     this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
+  }
+
+  // The 👊 button (or X): a swing of the arm, and whatever is in it, at the
+  // monster right in front of you, if one is close enough: as far as an arm
+  // reaches, further with a toy weapon (see shop.js), and nothing through a
+  // wall. You turn to face it. Returns the monster's id, or null.
+  attack() {
+    if (!this.world || !this.me || this.riding) return null;
+    const now = performance.now();
+    if (this.dizzy || now < (this.attackAt ?? 0)) return null;
+    this.attackAt = now + HIT_MS;
+    const b = this.me.body;
+    const weapon = wornWeapon(this.profile.data.gear);
+    const reach = ARM_REACH + (weapon?.reach ?? 0);
+    // In front: the way you face, or, looking through your own eyes, the way
+    // you look.
+    if (this.renderer.camDist <= 1.3) this.me.yaw = this.renderer.view.yaw + Math.PI;
+    const fx = Math.sin(this.me.yaw);
+    const fz = Math.cos(this.me.yaw);
+    let best = null;
+    for (const [id, entry] of this.monsters) {
+      const m = entry.model.group.position;
+      const size = bodyOf(entry.kind);
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, reach);
+      if (gap === null) continue;
+      // In front of you (or right up against you, anywhere round you).
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < FRONT) continue;
+      const ey = b.y + BODY.eye;
+      const dy = m.y + size.height / 2 - ey;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      if (raycast(this.world, b.x, ey, b.z, dx / len, dy / len, dz / len, Math.max(0, len - size.radius), (block) => B.SOLID[block] === 1)) continue;
+      if (!best || gap < best.gap) best = { id, gap, dx, dz, m, size };
+    }
+    this.players.get(this.pid)?.avatar?.swing();
+    const hand = { x: b.x + fx * 0.5, y: b.y + 1, z: b.z + fz * 0.5 };
+    if (best) {
+      this.me.yaw = Math.atan2(best.dx, best.dz);
+      if (weapon?.key === 'blaster') {
+        this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, best.m.x, best.m.y + best.size.height / 2, best.m.z);
+        this.sound.play('blow');
+      } else {
+        this.sound.play('swish');
+      }
+      this.bop(best.id);
+      return best.id;
+    }
+    if (weapon?.key === 'blaster') {
+      this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + fx * reach, hand.y, hand.z + fz * reach);
+      this.sound.play('blow');
+    } else {
+      this.sound.play('swish');
+    }
+    // A monster you can see but not reach: say how bopping works, now and then.
+    const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
+    if (near && now > (this.toldReach ?? 0)) {
+      this.toldReach = now + 20000;
+      this.emit('toast', { icon: weapon?.icon ?? '👊', text: weapon?.key === 'blaster' ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster and face it, then bop!' });
+    }
+    return null;
   }
 
   // Landing on a monster pops it, and bounces you up.
@@ -1861,13 +1928,11 @@ export class Game extends EventTarget {
     const monster = r.pickMonster(ray, maxDist);
     if (monster) {
       const entry = this.monsters.get(monster.id);
-      // King Grumble, bigger, can be tapped from as much further, and so can
-      // anything with a toy weapon in hand.
+      // Not bopped with a tap (that is the 👊 button, see attack), but named,
+      // and a tap at one builds nothing behind it.
       const size = bodyOf(entry?.kind);
-      const extra = wornWeapon(this.profile.data.gear)?.reach ?? 0;
       const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, monster.dist - size.radius, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
-      const m = entry?.model.group.position;
-      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + size.height / 2 - eye.y, m.z - eye.z) <= TAP_REACH + extra + size.radius - MONSTER_BODY.radius ? { kind: 'monster', id: monster.id } : { kind: 'far' };
+      if (entry && !wall) return { kind: 'monster', id: monster.id };
     }
     // A friend sitting dizzy, to help up from beside them, unless a solid
     // block is in the way: the flowers of a camp just freed never hide one.
@@ -1989,7 +2054,7 @@ export class Game extends EventTarget {
       return;
     }
     if (aim.kind === 'monster') {
-      this.bop(aim.id);
+      this.emit('notice', { text: this.touch ? 'Walk up to it and press 👊 to bop it!' : 'Walk up to it and press X to bop it!', level: 'info' });
       return;
     }
     if (aim.kind === 'friend') {

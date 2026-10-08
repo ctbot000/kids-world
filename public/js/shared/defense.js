@@ -10,7 +10,7 @@
 // - Anyone presses Start for the next wave. Its monsters come out of the
 //   gate one after another, more of them and with more hearts each wave,
 //   and King Grumble himself in the middle and last wave, big and slow.
-//   Friends can pop them too, as anywhere: tap them, or jump on them.
+//   Friends can pop them too, as anywhere: bop them, or jump on them.
 // - Every monster popped, and every wave seen off, brings bricks for more
 //   towers. One that gets to the Star Stone takes a heart off it (King
 //   Grumble five), and a wave seen off gives it a couple back; with none

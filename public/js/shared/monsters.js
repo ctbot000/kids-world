@@ -2,9 +2,10 @@
 // Grumpy little jelly blobs hop out of the bushes, more of them at night,
 // and come after whoever is near. One that bumps into you knocks you back
 // and takes a heart; with no hearts left you pop back home with them all
-// again. Jump on one and it goes pop. Tapping one works too, but only from
-// close up, and it takes a few taps: each one knocks it back a little, and
-// it comes straight back at you, crosser and quicker than before.
+// again. Jump on one and it goes pop. Bopping one (the 👊 button, or X)
+// works too, but only right up close, as far as your arm (or the toy weapon
+// in it) reaches, and it takes a few bops: each one knocks it back a little,
+// and it comes straight back at you, crosser and quicker than before.
 //
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
@@ -84,19 +85,27 @@ export const DAZED_HIT = 3;
 // to giggle after.
 const BUMP_PAD = 0.38;
 const GIGGLE_MS = 1400;
-// Tapping one: from this far (from your eyes; only a few steps, so you have
-// to go right up to one), and the host lets a little more through, as a
-// monster on the move is a little further on there than on your screen. A
-// bigger one can be tapped from as much further as it is bigger.
-export const TAP_REACH = 4;
-export const BOP_REACH = TAP_REACH + 1.5;
-// A blob's hearts: one comes off with each tap (each friend can tap it once
+// Bopping one: whatever is right in front of you, as far as your arm
+// reaches (ARM_REACH, from your side to its side, and about level with you),
+// further with a toy weapon in it (see shop.js). The host lets a little more
+// through (BOP_SLACK), as a monster on the move is a little further on there
+// than on your screen.
+export const ARM_REACH = 1.2;
+export const BOP_SLACK = 1.2;
+// How far a body b (a monster's) is from the side of someone standing at p,
+// if it is about level with them and no further than reach, else null.
+export function bopGap(p, b, reach) {
+  if (b.y > p.y + 2.1 || b.y + b.height < p.y - 0.6) return null;
+  const gap = Math.max(0, Math.hypot(b.x - p.x, b.z - p.z) - b.radius - 0.3);
+  return gap <= reach ? gap : null;
+}
+// A blob's hearts: one comes off with each bop (each friend can bop it once
 // in HIT_MS), and with none left it goes pop. Left alone this long, it has
 // them all again.
 export const BLOB_HEARTS = 3;
 export const HIT_MS = 400;
 const HEAL_MS = 5000;
-// A tap knocks it back this fast, and up a little; then for a while it comes
+// A bop knocks it back this fast, and up a little; then for a while it comes
 // after whoever tapped it this fast: quicker than you walk, slower than you run.
 const HIT_PUSH = 7;
 const CROSS_MS = 5000;
@@ -520,9 +529,9 @@ export class MonsterSim {
     return Math.hypot(p.x - b.x, p.z - b.z) <= b.radius + LAND_PAD ? m : null;
   }
 
-  // A tap on a blob, by the player pid standing at p: a heart off it, a hop
+  // A bop on a blob, by the player pid standing at p: a heart off it, a hop
   // back away from them, and it comes after them, crosser and quicker, for a
-  // while. power: the hearts a tap takes (more with a toy weapon). Returns
+  // while. power: the hearts a bop takes (more with a toy weapon). Returns
   // { wait } (they tapped it a moment ago), or the hearts it has left (0: it
   // goes pop).
   hit(m, pid, p, now, power = 1) {
@@ -542,15 +551,13 @@ export class MonsterSim {
     return { hearts: m.hearts };
   }
 
-  // Whether someone at p can bop the one numbered id: by tapping it from as
-  // far as a tap reaches (extra further with a toy weapon, see shop.js), or
-  // by landing on it.
+  // Whether someone at p can bop the one numbered id from where they stand:
+  // as far as an arm reaches, and extra further with a toy weapon in it (see
+  // shop.js).
   canBop(id, p, extra = 0) {
     const m = this.get(id);
     if (!m) return null;
-    const b = m.body;
-    const reach = BOP_REACH + extra + b.radius - MONSTER_BODY.radius;
-    return Math.hypot(p.x - b.x, p.y + 1.3 - (b.y + b.height / 2), p.z - b.z) <= reach ? m : null;
+    return bopGap(p, m.body, ARM_REACH + extra + BOP_SLACK) === null ? null : m;
   }
 
   // Compact numbers for the wire: [id, x, y, z, yaw, state, kind] in hundredths.

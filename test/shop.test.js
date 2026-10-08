@@ -13,7 +13,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { addProgress, keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
 import { makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { AdventureSim } from '../public/js/shared/adventure.js';
-import { BLOB_HEARTS, HIT_MS, TAP_REACH } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { cleanCoins, cleanGear, COINS_MAX, GEAR, gearMove, lookWithGear, nextLevel, sale, sellPrice, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
@@ -184,9 +184,11 @@ test('a toy weapon is in the look the island sees while you have it on, and only
   assert.equal(cleanLook({ ...look, weapon: 'blaster' }).weapon, 'blaster');
   assert.equal(cleanLook({ ...look, weapon: 'cannon' }).weapon, undefined);
   for (let i = 1; i < WEAPONS.length; i++) {
-    assert.ok(WEAPONS[i].power >= WEAPONS[i - 1].power && WEAPONS[i].reach >= WEAPONS[i - 1].reach && WEAPONS[i].king >= WEAPONS[i - 1].king);
+    assert.ok(WEAPONS[i].power >= WEAPONS[i - 1].power && WEAPONS[i].king >= WEAPONS[i - 1].king);
     assert.ok(WEAPONS[i].power > WEAPONS[i - 1].power || WEAPONS[i].reach > WEAPONS[i - 1].reach, `${WEAPONS[i].name} does more`);
   }
+  // Each reaches further than an arm, and none far: no bopping from across the meadow.
+  for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 5, `${w.name} reaches ${w.reach}`);
 });
 
 // A flat meadow room with monsters on, and a player in it holding weapon.
@@ -220,22 +222,25 @@ function meadowRoom(weapon) {
   return { taps };
 }
 
-test('a toy weapon pops a blob in fewer taps, and from further away', () => {
-  const near = 2;
-  const far = TAP_REACH + 3;
+test('a toy weapon pops a blob in fewer bops, and only from as far as it reaches', () => {
+  // From dx blocks off (middle to middle): just inside what each reaches at
+  // the host, and just past it.
+  const edge = (w) => ARM_REACH + (w ? weaponOf(w).reach : 0) + BOP_SLACK + MONSTER_BODY.radius + 0.3;
   const hands = meadowRoom(null);
-  assert.equal(hands.taps(near), BLOB_HEARTS);
-  assert.equal(hands.taps(far), Infinity, 'too far without a weapon');
+  assert.equal(hands.taps(2), BLOB_HEARTS);
+  assert.equal(hands.taps(edge(null) - 0.1), BLOB_HEARTS);
+  assert.equal(hands.taps(edge(null) + 0.1), Infinity, 'too far for an arm');
   const sword = meadowRoom('sword');
-  assert.equal(sword.taps(near), 2);
-  assert.equal(sword.taps(far), Infinity, 'a sword is not much longer than an arm');
+  assert.equal(sword.taps(2), 2);
+  assert.equal(sword.taps(edge('sword') - 0.1), 2, 'a sword is longer than an arm');
+  assert.equal(sword.taps(edge('sword') + 0.1), Infinity);
   const blaster = meadowRoom('blaster');
-  assert.equal(blaster.taps(far), 2);
+  assert.equal(blaster.taps(edge('blaster') - 0.1), 2, 'a bubble flies a few steps');
+  assert.equal(blaster.taps(edge('blaster') + 0.1), Infinity, 'but not across the meadow');
   const hammer = meadowRoom('hammer');
-  assert.equal(hammer.taps(near), 1);
-  assert.equal(hammer.taps(far), 1);
-  assert.equal(hammer.taps(TAP_REACH + 6), Infinity, 'not from anywhere');
-  assert.equal(meadowRoom('cannon').taps(near), BLOB_HEARTS, 'no made-up weapons');
+  assert.equal(hammer.taps(2), 1);
+  assert.equal(hammer.taps(edge('hammer') + 0.1), Infinity, 'a hammer is swung up close');
+  assert.equal(meadowRoom('cannon').taps(2), BLOB_HEARTS, 'no made-up weapons');
 });
 
 test('King Grumble feels a Star Hammer\'s bop twice, and three times over when dazed', () => {

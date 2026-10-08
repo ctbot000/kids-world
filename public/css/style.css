@@ -770,9 +770,30 @@ body.fullscreen .full-icon .leave {
   right: max(14px, env(safe-area-inset-right));
   bottom: calc(max(10px, env(safe-area-inset-bottom)) + 100px);
   display: none;
-  grid-template-columns: auto auto;
+  grid-template-areas:
+    'down jump'
+    'fly jump';
   gap: 10px;
   align-items: end;
+}
+
+/* The bop button, bottom left of them, only while a monster is about. */
+#touch-buttons:has(> #btn-attack:not([hidden])) {
+  grid-template-areas:
+    'attack down jump'
+    '. fly jump';
+}
+
+#btn-down {
+  grid-area: down;
+}
+
+#btn-fly {
+  grid-area: fly;
+}
+
+#btn-attack {
+  grid-area: attack;
 }
 
 body.touch #touch-buttons {
@@ -793,8 +814,11 @@ body.touch #touch-buttons {
   width: 78px;
   height: 78px;
   font-size: 2rem;
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-area: jump;
+}
+
+.round.touch.attack[hidden] {
+  display: none;
 }
 
 .touch.on {
@@ -2530,11 +2554,23 @@ kbd {
     max-width: calc(100vw - 340px);
   }
 
+  /* With the bop button showing too, left of the touch buttons, it keeps as
+     much further from the right, and moves over that way to make room. */
+  body.touch:has(#btn-attack:not([hidden])) #bottom {
+    left: calc(50% - (var(--touch) + 10px) / 2);
+    max-width: calc(100vw - 350px - var(--touch));
+  }
+
   /* Chat lines keep between them too, 10px clear of either. */
   body.touch .chatlog {
     left: calc(max(14px, env(safe-area-inset-left)) + 16px + var(--stick));
     right: calc(max(14px, env(safe-area-inset-right)) + var(--touch) + 98px);
     margin-left: auto;
+  }
+
+  /* And clear of the bop button, left of the others, while it shows. */
+  body.touch:has(#btn-attack:not([hidden])) .chatlog {
+    right: calc(max(14px, env(safe-area-inset-right)) + 2 * var(--touch) + 108px);
   }
 }
 
@@ -2664,6 +2700,21 @@ kbd {
   #toolbar {
     gap: 2px;
     padding: 5px 4px;
+  }
+
+  /* No room beside the touch buttons for the bop button, left of them, where
+     the thumbstick is: it goes over the jump button instead, in the room under
+     the talk buttons. */
+  #touch-buttons:has(> #btn-attack:not([hidden])) {
+    grid-template-areas:
+      'down jump'
+      'fly jump';
+  }
+
+  #btn-attack {
+    position: absolute;
+    right: calc((78px - var(--touch)) / 2);
+    bottom: 88px;
   }
 }
 
