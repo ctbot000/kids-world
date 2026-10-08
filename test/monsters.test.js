@@ -99,6 +99,11 @@ test('monsters come out round the players, away from them and the start, more at
   assert.equal(room.monsters.wanted(8, true), MAX_MONSTERS);
   assert.ok(a.last('mon').m.length >= 1, 'everyone sees them');
   assert.ok(unpackMonster(a.last('mon').m[0]), 'in the compact form');
+  // With its hearts, for the bar over it: one fewer after a bop.
+  const m = room.monsters.list[0];
+  assert.deepEqual([unpackMonster(room.monsters.pack()[0]).hearts, unpackMonster(room.monsters.pack()[0]).max], [BLOB_HEARTS, BLOB_HEARTS]);
+  room.monsters.hit(m, a.id, { x: m.body.x + 1, y: m.body.y, z: m.body.z }, time.now());
+  assert.equal(unpackMonster(room.monsters.pack()[0]).hearts, BLOB_HEARTS - 1);
 });
 
 test('a monster chases you, bumps you back for a heart, and with none left sends you home with them all', () => {

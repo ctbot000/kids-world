@@ -787,6 +787,8 @@ export class Game extends EventTarget {
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
       }
       entry.snaps.push({ t: now, x: m.x, y: m.y, z: m.z, yaw: m.yaw, state: m.state });
+      entry.hearts = m.hearts;
+      entry.max = m.max;
       if (entry.snaps.length > 8) entry.snaps.shift();
     }
     // Gone (monsters turned off, or wandered off): a puff where each was.
@@ -903,6 +905,7 @@ export class Game extends EventTarget {
   monsterHit(msg) {
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.4;
+    if (entry && Number.isInteger(msg.hearts)) entry.hearts = msg.hearts;
     const p = entry?.model.group.position;
     if (p && this.near(p.x, p.y, p.z, 30)) {
       this.renderer.effects.sparkles(p.x, p.y + 0.6, p.z, 6, ['#ffffff', '#d9c8ff']);

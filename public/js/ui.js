@@ -3039,18 +3039,19 @@ export class UI {
   }
 
   // On an adventure island: over each camp near you, how its flag is going
-  // (or what to do there), and over King Grumble, his hearts (or his bubble).
+  // (or what to do there), and over King Grumble, his hearts (or his bubble);
+  // over any other monster, its hearts.
   adventureTags(g, r) {
     const seen = new Set();
     const adv = g.adventure;
     const me = g.me?.body;
-    const tag = (key, x, y, z, state, build) => {
+    const tag = (key, x, y, z, state, build, kind = '') => {
       const scr = r.project(x, y, z);
       if (!scr.visible) return;
       seen.add(key);
       let el = this.advTags.get(key);
       if (!el) {
-        el = h('div', { class: 'adv-tag' });
+        el = h('div', { class: `adv-tag ${kind}`.trim() });
         this.advTags.set(key, el);
         $('overlays').append(el);
       }
@@ -3099,6 +3100,18 @@ export class UI {
       if (p && adv.king && Math.hypot(p.x - me.x, p.z - me.z) < 45) {
         const { hearts, max } = adv.king;
         tag('king', p.x, p.y + 2.9, p.z, `${hearts}|${max}|${adv.shield}`, () => [h('div', { class: 'label' }, adv.shield ? '👑 King Grumble 🫧' : '👑 King Grumble'), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
+      }
+    }
+    // Over every other monster near you, a bar of the hearts it has left.
+    if (me) {
+      for (const e of g.monsters.values()) {
+        if (adv && e.kind === 'king') continue;
+        const p = e.model.group.position;
+        if (Math.hypot(p.x - me.x, p.z - me.z) > 30) continue;
+        const max = Math.max(1, e.max ?? 1);
+        const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
+        const top = e.kind === 'king' ? 2.9 : 1.1;
+        tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => [bar(hearts / max, 'monster')], 'mon');
       }
     }
     for (const [key, el] of this.advTags) {

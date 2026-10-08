@@ -570,13 +570,17 @@ export class MonsterSim {
       Math.round((wrap(m.yaw) + Math.PI) * 100),
       MONSTER_STATES.indexOf(m.state),
       MONSTER_KINDS.indexOf(m.kind),
+      // Its hearts, and how many it had to start with, for the bar over it
+      // (King Grumble's on an adventure island are adventure.js's instead).
+      m.hearts,
+      m.max ?? BLOB_HEARTS,
     ]);
   }
 }
 
 export function unpackMonster(row) {
   if (!Array.isArray(row) || row.length < 6 || !row.every(Number.isFinite)) return null;
-  return { id: row[0], x: row[1] / 100, y: row[2] / 100, z: row[3] / 100, yaw: row[4] / 100 - Math.PI, state: MONSTER_STATES[row[5]] ?? 'idle', kind: MONSTER_KINDS[row[6]] ?? 'blob' };
+  return { id: row[0], x: row[1] / 100, y: row[2] / 100, z: row[3] / 100, yaw: row[4] / 100 - Math.PI, state: MONSTER_STATES[row[5]] ?? 'idle', kind: MONSTER_KINDS[row[6]] ?? 'blob', hearts: row[7] ?? BLOB_HEARTS, max: Math.max(1, row[8] ?? BLOB_HEARTS) };
 }
 
 // Hearts, for one player: how many after a bump (0: home they go, and back

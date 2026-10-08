@@ -1061,6 +1061,23 @@ body.touch.playing #joystick {
   background: #ffd84d;
 }
 
+/* A monster's hearts: just the bar, small, over its head. */
+.adv-tag.mon {
+  padding: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.adv-tag.mon .bar {
+  width: 40px;
+  height: 6px;
+  background: rgba(61, 46, 79, 0.4);
+}
+
+.adv-tag.mon .bar.monster span {
+  background: #ff5f8f;
+}
+
 .aim-hint {
   position: absolute;
   left: 50%;
