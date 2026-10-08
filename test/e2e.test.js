@@ -293,13 +293,15 @@ function inView(page, cells) {
 // A spot on open ground a few steps from where the player stands, and the
 // screen point of the middle of its top face: the column nearest (dx, dz)
 // that can be seen and is dry land with nothing on it but air, a flower or a
-// tuft of grass. A column's highest block is not always that: world.top()
-// looks through water and stops at leaves, so where a walk ends beside a pond
-// or a tree it can be a pond's floor, whose top the water hides, or a treetop
-// as high as the camera. A failure names the island's seed, to replay it.
-async function spotNear(page, dx, dz) {
+// tuft of grass (only air if bare: a click at a flower acts on the flower,
+// not on the block under it). A column's highest block is not always that:
+// world.top() looks through water and stops at leaves, so where a walk ends
+// beside a pond or a tree it can be a pond's floor, whose top the water hides,
+// or a treetop as high as the camera. A failure names the island's seed, to
+// replay it.
+async function spotNear(page, dx, dz, { bare = false } = {}) {
   const { seed, cells } = await page.evaluate(
-    (dx, dz, tree) => {
+    (dx, dz, bare, tree) => {
       const g = window.kidsWorld.game;
       const b = g.me.body;
       const px = Math.floor(b.x);
@@ -311,7 +313,7 @@ async function spotNear(page, dx, dz) {
           if (Math.abs(x - px) <= 1 && Math.abs(z - pz) <= 1) continue;
           const y = g.world.top(x, z);
           const on = g.world.get(x, y + 1, z);
-          if (y > 0 && !tree[g.world.get(x, y, z)] && (on === 0 || (on >= 50 && on < 70))) open.push({ x, y, z });
+          if (y > 0 && !tree[g.world.get(x, y, z)] && (on === 0 || (!bare && on >= 50 && on < 70))) open.push({ x, y, z });
         }
       }
       const off = (c) => Math.hypot(c.x - px - dx, c.z - pz - dz);
@@ -319,6 +321,7 @@ async function spotNear(page, dx, dz) {
     },
     dx,
     dz,
+    bare,
     [...TREE_PART],
   );
   const seen = await inView(page, cells);
@@ -452,7 +455,7 @@ test('a pinch only zooms, never builds, a third finger down included; the finger
 test('a gem rock is dug out with a click into the basket, for keeps; a jewel from the basket is put down and picked up again', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false });
-  const { cell } = await spotNear(page, 3, 0);
+  const { cell } = await spotNear(page, 3, 0, { bare: true });
   // A ruby rock where the ground was, put there by the island itself.
   await page.evaluate(async (c) => {
     const B = await import('/js/shared/blocks.js');

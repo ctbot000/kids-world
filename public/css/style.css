@@ -350,6 +350,17 @@ body.fullscreen .full-icon .leave {
   pointer-events: none;
 }
 
+/* The bottom bar is as wide as its widest row, the hotbar: beside a narrower
+   row above it (the basket) and between the rows, what shows is the world,
+   and a tap there is for the world. */
+#hud > #bottom {
+  pointer-events: none;
+}
+
+#bottom > * {
+  pointer-events: auto;
+}
+
 #topbar {
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
