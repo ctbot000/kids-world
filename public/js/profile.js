@@ -4,6 +4,7 @@
 // every device: what another one sent the keeper is merged in here.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
+import { cleanCoins, cleanGear, COINS_MAX, nextLevel, sale } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -27,13 +28,15 @@ function clean(raw) {
     look: p.look ? cleanLook(p.look) : randomLook(),
     settings,
     basket,
+    coins: cleanCoins(p.coins),
+    gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
     tokens: p.tokens && typeof p.tokens === 'object' ? p.tokens : {},
     hotbar,
     seenHelp: p.seenHelp === true,
     made: p.made === true,
-    // When your name, look or basket last changed: 0 for a profile nobody has
+    // When your name, look, basket, coins or gear last changed: 0 for a profile nobody has
     // touched yet, which loses to any other when two are merged.
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
@@ -92,6 +95,39 @@ export class Profile extends EventTarget {
   addToBasket(key, n = 1) {
     if (!(key in this.data.basket)) return;
     this.data.basket[key] = Math.max(0, Math.min(999, this.data.basket[key] + n));
+    this.data.changedAt = Date.now();
+    this.store();
+    this.dispatchEvent(new CustomEvent('basket'));
+  }
+
+  // The shop (shop.js). Each says whether it happened.
+  sell(key, n = 1) {
+    const coins = sale(this.data.basket, key, n);
+    if (!coins) return false;
+    this.data.basket[key] -= n;
+    this.data.coins = Math.min(COINS_MAX, this.data.coins + coins);
+    this.shopped();
+    return true;
+  }
+
+  buy(kind) {
+    const next = nextLevel(this.data.gear, kind);
+    if (!next || this.data.coins < next.price) return false;
+    this.data.coins -= next.price;
+    this.data.gear[kind] = next.level;
+    delete this.data.gear.off[kind];
+    this.shopped();
+    return true;
+  }
+
+  wear(kind, on) {
+    if (!this.data.gear[kind]) return;
+    if (on) delete this.data.gear.off[kind];
+    else this.data.gear.off[kind] = true;
+    this.shopped();
+  }
+
+  shopped() {
     this.data.changedAt = Date.now();
     this.store();
     this.dispatchEvent(new CustomEvent('basket'));

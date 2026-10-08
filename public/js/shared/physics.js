@@ -9,6 +9,7 @@ export const MOVE = {
   run: 7,
   swim: 3,
   fly: 9,
+  flyUp: 7, // up and down
   gravity: 26,
   jump: 8.7, // about 1.45 blocks high
   groundAccel: 45,
@@ -229,7 +230,7 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
   b.vz = approach(b.vz, mz * speed, accel);
 
   if (b.flying) {
-    const target = input.jump ? 7 : input.down ? -7 : 0;
+    const target = input.jump ? move.flyUp : input.down ? -move.flyUp : 0;
     b.vy = approach(b.vy, target, 40 * dt);
   } else if (b.inWater) {
     if (input.jump) {

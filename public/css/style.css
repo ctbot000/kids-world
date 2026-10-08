@@ -1621,6 +1621,71 @@ body.touch.playing #joystick {
   font-size: 0.9rem;
 }
 
+.shop-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.gear-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.shop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border-radius: 18px;
+  background: white;
+  text-align: center;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+.shop-card img {
+  width: 40px;
+  height: 40px;
+}
+
+.shop-card .emoji {
+  font-size: 2.3rem;
+}
+
+.shop-card.locked .emoji {
+  filter: grayscale(1) opacity(0.45);
+}
+
+.shop-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.shop-buttons .chip:disabled {
+  opacity: 0.45;
+}
+
+.shop-empty {
+  grid-column: 1 / -1;
+}
+
+/* On a phone held upright the island's code needs the room: the shop is in
+   ⭐ Stickers there. */
+@media (max-width: 399px) {
+  #btn-shop-hud {
+    display: none;
+  }
+}
+
+.coins {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--sun);
+  font-weight: 700;
+}
+
 /* A dialog's title with a button beside it, clear of the close button. */
 .dialog-head {
   display: flex;

@@ -10,11 +10,12 @@ import { HELP_REACH } from './shared/adventure.js';
 import { bodyOf, MAX_HEARTS, MONSTER_BODY, STOMP, TAP_REACH, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, makeBody, onTrampoline, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
+import { gearMove } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
@@ -2028,9 +2029,11 @@ export class Game extends EventTarget {
     const fz = -Math.cos(yaw);
     const mx = fx * move.y + -fz * move.x;
     const mz = fz * move.y + fx * move.x;
+    // Faster in the gear you wear from the shop.
+    const gear = gearMove(this.profile.data.gear, MOVE);
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
-    const events = this.lift ? this.rideLift(dt) : !still && this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: !still && input.jump && !this.liftLatch, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true });
+    const events = this.lift ? this.rideLift(dt) : !still && this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: !still && input.jump && !this.liftLatch, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true, move: gear });
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
     if (this.monsters.size) this.stomp();
@@ -2045,7 +2048,7 @@ export class Game extends EventTarget {
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;
-    me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
+    me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
     if (events.bounced) {
       this.sound.play('boing', { speed: events.bounced });

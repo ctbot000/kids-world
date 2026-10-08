@@ -7,6 +7,7 @@ import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
+import { GEAR, nextLevel, sellPrice, wearing } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -314,6 +315,7 @@ export class UI {
     $('btn-pet').onclick = () => this.petDialog();
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = () => this.stickersDialog();
+    $('btn-shop').onclick = () => this.shopDialog();
     $('btn-ranking').onclick = () => this.rankingDialog();
     $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
@@ -1045,7 +1047,7 @@ export class UI {
       const count = STICKERS.filter((s) => got[s.key]).length;
       const ranking = this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
       root.append(
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1055,6 +1057,96 @@ export class UI {
         ),
       );
     });
+  }
+
+  // The shop: sell what is in your basket for coins, and buy running shoes
+  // and flying gear with them (shop.js). Redrawn as your basket changes, so
+  // what you find while it is open shows up to sell.
+  shopDialog() {
+    const p = this.profile;
+    let onBasket = null;
+    this.openModal(
+      (root) => {
+        const coins = h('span', { class: 'coins', 'aria-label': 'Your coins' });
+        const sell = h('div', { class: 'grid shop-grid' });
+        const gear = h('div', { class: 'grid shop-grid gear-grid' });
+        const button = (text, onclick, disabled = false) => h('button', { class: 'chip', type: 'button', disabled, onclick }, text);
+        const draw = () => {
+          coins.textContent = `🪙 ${p.data.coins.toLocaleString()}`;
+          const b = p.basket;
+          const have = B.COLLECTABLES.filter((c) => b[c.key] > 0);
+          sell.replaceChildren(
+            ...(have.length
+              ? have.map((c) => {
+                  const price = sellPrice(c.key);
+                  const n = b[c.key];
+                  const sold = (count) => () => {
+                    if (!p.sell(c.key, count)) return;
+                    this.sound.play('collect');
+                    this.toast('🪙', `Sold ${count === 1 ? withArticle(c.name.toLowerCase()) : `${count} ${c.plural.toLowerCase()}`} for ${price * count} ${price * count === 1 ? 'coin' : 'coins'}!`);
+                  };
+                  return h(
+                    'div',
+                    { class: 'shop-card' },
+                    this.img(c.item, c.name),
+                    h('b', {}, `${c.name} × ${n}`),
+                    h('span', { class: 'muted' }, `🪙 ${price} each`),
+                    h('div', { class: 'shop-buttons' }, button('Sell 1', sold(1)), n > 1 ? button(`Sell all (🪙 ${price * n})`, sold(n)) : null),
+                  );
+                })
+              : [h('p', { class: 'muted shop-empty' }, 'Your basket is empty. Pick fruit, find seashells and star pieces, and dig up jewels, then sell them here!')]),
+          );
+          gear.replaceChildren(
+            ...GEAR.map((g) => {
+              const level = p.data.gear[g.key];
+              const owned = level ? g.levels[level - 1] : null;
+              const next = nextLevel(p.data.gear, g.key);
+              const on = wearing(p.data.gear, g.key) > 0;
+              const buy = () => {
+                if (!p.buy(g.key)) {
+                  this.sound.play('no');
+                  return;
+                }
+                this.sound.play('fanfare');
+                this.toast(next.icon, `You got the ${next.name}! You're ${g.key === 'shoes' ? 'running' : 'flying'} faster now.`);
+              };
+              return h(
+                'div',
+                { class: `shop-card gear${owned ? '' : ' locked'}` },
+                h('span', { class: 'emoji' }, owned ? owned.icon : g.levels[0].icon),
+                h('b', {}, owned ? owned.name : g.name),
+                h('span', { class: 'muted' }, owned ? `${Math.round((owned.boost - 1) * 100)}% faster. ${g.about}` : g.about),
+                h(
+                  'div',
+                  { class: 'shop-buttons' },
+                  owned
+                    ? button(on ? '🙌 Take off' : '👕 Put on', () => {
+                        p.wear(g.key, !on);
+                        this.sound.play('ui');
+                      })
+                    : null,
+                  next
+                    ? button(`${owned ? 'Upgrade to' : 'Buy'} ${next.icon} ${next.name} (🪙 ${next.price})`, buy, p.data.coins < next.price)
+                    : h('span', { class: 'muted' }, '🏅 The best there is!'),
+                ),
+                next && p.data.coins < next.price ? h('span', { class: 'muted' }, `${next.price - p.data.coins} more coins to go!`) : null,
+              );
+            }),
+          );
+        };
+        root.append(
+          h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins),
+          h('h3', {}, 'Sell your treasures'),
+          sell,
+          h('h3', {}, 'Gear'),
+          gear,
+        );
+        draw();
+        onBasket = draw;
+        p.addEventListener('basket', onBasket);
+      },
+      { onClose: () => p.removeEventListener('basket', onBasket) },
+    );
   }
 
   // The ranking of the players with a login, from the island keeper, live:
@@ -1364,6 +1456,7 @@ export class UI {
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
+          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster and wings or a jet pack to fly faster!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
@@ -1855,6 +1948,7 @@ export class UI {
     $('btn-settings').onclick = () => this.settingsDialog();
     $('btn-help-hud').onclick = () => this.helpDialog();
     $('btn-stickers-hud').onclick = () => this.stickersDialog();
+    $('btn-shop-hud').onclick = () => this.shopDialog();
     $('island-badge').onclick = () => this.inviteDialog();
     $('btn-say').onclick = () => this.sayDialog();
     $('btn-emote').onclick = () => this.emoteDialog();
