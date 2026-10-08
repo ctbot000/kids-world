@@ -10,7 +10,94 @@ const HEAD_R = 0.34;
 const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
 const HR = [HEAD_R * HEAD.sx, HEAD_R * HEAD.sy, HEAD_R * HEAD.sz];
 
-const SWING_S = 0.35;
+// Swings at a monster, one for each toy weapon and a punch without one: a
+// wind-up, a strike that speeds up into the hit (at strike, a fraction of
+// the way through), a moment held there, and an easy way back. Each key is a
+// pose at a fraction of the way through: w how much of it (0 is the pose the
+// avatar would have anyway), fwd and raise the right arm (as armFwdR and
+// armRaiseR), wrist turns what is in that hand forward and down (0 holds it
+// square to the arm, as at rest), fwdL and raiseL the left (with wL how much), twist the
+// shoulders round (+ takes the right one back), lean forward, dip the body,
+// nod the head, and step the left foot forward.
+export const SWINGS = {
+  punch: {
+    secs: 0.34,
+    strike: 0.4,
+    keys: [
+      { at: 0, w: 0 },
+      { at: 0.22, w: 1, fwd: 0.45, raise: 0.3, twist: 0.3, lean: -0.03 },
+      { at: 0.4, w: 1, fwd: -1.6, raise: 0.08, twist: -0.4, lean: 0.14, step: 0.3, dip: -0.02 },
+      { at: 0.58, w: 1, fwd: -1.55, raise: 0.08, twist: -0.38, lean: 0.12, step: 0.3, dip: -0.02 },
+      { at: 1, w: 0 },
+    ],
+  },
+  // Up behind the shoulder, blade back, then down and across in front, the
+  // blade ending a little below level.
+  sword: {
+    secs: 0.44,
+    strike: 0.48,
+    keys: [
+      { at: 0, w: 0 },
+      { at: 0.3, w: 1, fwd: -2.5, raise: 0.75, wrist: -0.3, twist: 0.4, lean: -0.06, nod: -0.12 },
+      { at: 0.48, w: 1, fwd: -1, raise: -0.35, wrist: 1.05, twist: -0.42, lean: 0.16, step: 0.35, dip: -0.03, nod: 0.1 },
+      { at: 0.62, w: 1, fwd: -0.65, raise: -0.45, wrist: 0.95, twist: -0.48, lean: 0.14, step: 0.35, dip: -0.03, nod: 0.08 },
+      { at: 1, w: 0 },
+    ],
+  },
+  // Both hands up and back over the head, then down with all the body
+  // behind it, the head of the hammer landing on the ground in front.
+  hammer: {
+    secs: 0.6,
+    strike: 0.56,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.42, w: 1, wL: 1, fwd: -3, raise: 0.12, wrist: -0.2, fwdL: -2.8, raiseL: 0.05, lean: -0.16, nod: -0.18 },
+      { at: 0.56, w: 1, wL: 1, fwd: -1.1, raise: -0.08, wrist: 1.45, fwdL: -1.15, raiseL: -0.35, lean: 0.32, step: 0.4, dip: -0.08, nod: 0.18 },
+      { at: 0.72, w: 1, wL: 1, fwd: -0.95, raise: -0.08, wrist: 1.55, fwdL: -1, raiseL: -0.35, lean: 0.3, step: 0.4, dip: -0.07, nod: 0.15 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // Up to aim, the other hand under it, the barrel kept level; a kick up
+  // as the bubble goes, and down again.
+  blaster: {
+    secs: 0.42,
+    strike: 0.34,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.26, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
+      { at: 0.34, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
+      { at: 0.42, w: 1, wL: 1, fwd: -1.75, raise: 0.04, wrist: 1.35, fwdL: -1.55, raiseL: -0.32, twist: -0.1, lean: -0.06 },
+      { at: 0.6, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+};
+const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'wrist', 'fwdL', 'raiseL', 'twist', 'lean', 'nod', 'dip', 'step'];
+// What a key says of one of them: an arm angle a key leaves out is the next
+// key's (it has no weight there anyway), anything else is none.
+const ARM_ANGLES = new Set(['fwd', 'raise', 'wrist', 'fwdL', 'raiseL']);
+const poseValue = (key, mine, next) => mine[key] ?? (ARM_ANGLES.has(key) ? (next[key] ?? 0) : 0);
+// Ease in and out between keys, but into the strike speeding up all the way,
+// so it lands hard.
+const easeInOut = (k) => k * k * (3 - 2 * k);
+const easeIn = (k) => k * k * k;
+
+// The pose a swing has reached, k of the way through it.
+export function swingPose(swing, k) {
+  const { keys } = swing;
+  let i = 1;
+  while (i < keys.length - 1 && keys[i].at < k) i++;
+  const a = keys[i - 1];
+  const b = keys[i];
+  const f = Math.min(1, Math.max(0, (k - a.at) / (b.at - a.at || 1)));
+  const e = b.at === swing.strike ? easeIn(f) : easeInOut(f);
+  const pose = {};
+  for (const key of POSE_KEYS) {
+    const va = poseValue(key, a, b);
+    pose[key] = va + (poseValue(key, b, a) - va) * e;
+  }
+  return pose;
+}
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
@@ -673,6 +760,7 @@ export class Avatar {
     });
     // A toy weapon in the right hand.
     this.weapon = look.weapon ? weapon(look.weapon) : null;
+    this.weaponKind = this.weapon ? look.weapon : null;
     if (this.weapon) {
       this.weapon.position.set(0, -0.24 - armLong, 0.02);
       this.arms[1].add(this.weapon);
@@ -701,9 +789,12 @@ export class Avatar {
     });
   }
 
-  // A swing of the arm, at a monster: over and down, with whatever is in hand.
+  // A swing at a monster, with whatever is in hand (see SWINGS). Returns how
+  // long until it lands, in seconds.
   swing() {
     this.swingAt = this.time;
+    const swing = SWINGS[this.weaponKind] ?? SWINGS.punch;
+    return swing.secs * swing.strike;
   }
 
   playEmote(key) {
@@ -836,20 +927,39 @@ export class Avatar {
       }
     }
 
-    // A swing: the arm up in front, then down hard, over a third of a second.
+    // A swing (see SWINGS), over whatever the avatar is doing: the arms blend
+    // into it and back out, the shoulders twist, it leans in and steps in.
+    let twist = 0;
+    let dip = 0;
+    let step = 0;
+    let wrist = 0;
+    const swing = SWINGS[this.weaponKind] ?? SWINGS.punch;
     const swung = t - (this.swingAt ?? -Infinity);
-    if (swung < SWING_S) {
-      const k = swung / SWING_S;
-      armFwdR = k < 0.3 ? -2.7 * (k / 0.3) : -2.7 + 2.3 * ((k - 0.3) / 0.7);
-      armRaiseR = 0.1;
+    if (swung < swing.secs) {
+      const p = swingPose(swing, swung / swing.secs);
+      // The walking arm swing fades out while it swings.
+      armFwdR = armFwdR + (p.fwd + armSwing - armFwdR) * p.w;
+      armRaiseR = armRaiseR + (p.raise - armRaiseR) * p.w;
+      wrist = p.wrist * p.w;
+      if (p.wL) {
+        armFwdL = armFwdL + (p.fwdL - armSwing - armFwdL) * p.wL;
+        armRaiseL = armRaiseL + (p.raiseL - armRaiseL) * p.wL;
+      }
+      twist = p.twist;
+      lean += p.lean;
+      dip = p.dip;
+      headNod += p.nod;
+      step = p.step;
     }
 
     // Riding, the legs reach round the animal's sides and a little forward;
     // on a wide back, out in front.
     const spread = riding ? (this.ride?.spread ?? 0.85) : 0;
     const reach = riding ? (this.ride?.reach ?? 0.35) : 0;
-    legL.rotation.set(riding ? -reach : legSwing, 0, -spread);
-    legR.rotation.set(riding ? -reach : -legSwing, 0, spread);
+    // A step in to swing only standing; walking, the legs are busy.
+    const stepIn = anim === ANIM.idle ? step : 0;
+    legL.rotation.set(riding ? -reach : legSwing - stepIn, 0, -spread);
+    legR.rotation.set(riding ? -reach : -legSwing + stepIn * 0.6, 0, spread);
     if (anim === ANIM.dizzy) {
       // Legs out in front, sitting.
       legL.rotation.set(-1.4, 0, -0.18);
@@ -865,9 +975,10 @@ export class Avatar {
     // The arms hang from mirrored shoulders, so each side opens outward with its own sign.
     armL.rotation.set(armSwing + armFwdL, 0, -(armRaiseL ?? 0.18));
     armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR ?? 0.18);
-    this.body.position.y = bob + hop;
+    this.body.position.y = bob + hop + dip;
     this.body.rotation.y = spin;
-    this.torso.rotation.x = lean;
+    this.torso.rotation.set(lean, twist, 0);
+    if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist;
     this.head.rotation.set(headNod, 0, headTilt);
     if (this.tail) this.tail.rotation.y = Math.sin(t * (moving ? 10 : 3)) * 0.3;
     // A ponytail swings to and fro, pigtails from side to side; more on the move.

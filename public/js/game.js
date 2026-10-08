@@ -23,7 +23,7 @@ import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
-import { ANIM, shirtColor } from './render/avatar.js';
+import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
 
 export const TOOLS = [
   { key: 'build', name: 'Build', icon: '🧱', key1: 'B' },
@@ -47,10 +47,11 @@ const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
 // speech bubble before it has been drawn.
 const BUBBLE_SECS = 4.5;
-// The 👊 button: a swing at most as often as a monster feels one (HIT_MS),
-// at a monster no further round from straight ahead than this (the cosine
-// of 70°).
+// The 👊 button: a swing at a monster no further round from straight ahead
+// than this (the cosine of 70°).
 const FRONT = 0.34;
+// How much more than HIT_MS apart bops are sent.
+const BOP_SPACING = 120;
 
 const lerpAngle = (a, b, t) => {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -209,6 +210,9 @@ export class Game extends EventTarget {
         break;
       case 'emote':
         this.emoted(msg.pid, msg.e);
+        break;
+      case 'swing':
+        this.players.get(msg.pid)?.avatar?.swing();
         break;
       case 'c':
         this.critterStates(msg.c);
@@ -871,15 +875,8 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: '💖', text });
   }
 
-  // Whoever bopped a monster swings what they have in hand (you swung
-  // already, as you pressed 👊).
-  swung(pid) {
-    if (pid !== this.pid) this.players.get(pid)?.avatar?.swing();
-  }
-
   // A monster popped: bopped or jumped on.
   popped(msg) {
-    if (msg.by) this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
@@ -904,7 +901,6 @@ export class Game extends EventTarget {
   // A monster bopped, with hearts left: it squashes and hops back, and
   // whoever bopped it hears how many more bops it takes.
   monsterHit(msg) {
-    this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.4;
     const p = entry?.model.group.position;
@@ -926,17 +922,28 @@ export class Game extends EventTarget {
     this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
   }
 
+  // Whether the 👊 button can swing now: the last swing over, and this one
+  // landing well over HIT_MS after the last bop went (the host takes one a
+  // moment from each friend, and a bop that goes late, or comes quicker over
+  // the network, must not come too soon after it).
+  attackReady() {
+    const now = performance.now();
+    const swing = SWINGS[wornWeapon(this.profile.data.gear)?.key] ?? SWINGS.punch;
+    return now >= (this.attackAt ?? 0) && now + swing.secs * swing.strike * 1000 >= (this.bopSentAt ?? -Infinity) + HIT_MS + BOP_SPACING;
+  }
+
   // The 👊 button (or X): a swing of the arm, and whatever is in it, at the
   // monster right in front of you, if one is close enough: as far as an arm
   // reaches, further with a toy weapon (see shop.js), and nothing through a
   // wall. You turn to face it. Returns the monster's id, or null.
   attack() {
     if (!this.world || !this.me || this.riding) return null;
+    if (this.dizzy || !this.attackReady()) return null;
     const now = performance.now();
-    if (this.dizzy || now < (this.attackAt ?? 0)) return null;
-    this.attackAt = now + HIT_MS;
-    const b = this.me.body;
     const weapon = wornWeapon(this.profile.data.gear);
+    // Not again before this swing is over.
+    this.attackAt = now + (SWINGS[weapon?.key] ?? SWINGS.punch).secs * 1000;
+    const b = this.me.body;
     const reach = ARM_REACH + (weapon?.reach ?? 0);
     // In front: the way you face, or, looking through your own eyes, the way
     // you look.
@@ -960,25 +967,29 @@ export class Game extends EventTarget {
       if (raycast(this.world, b.x, ey, b.z, dx / len, dy / len, dz / len, Math.max(0, len - size.radius), (block) => B.SOLID[block] === 1)) continue;
       if (!best || gap < best.gap) best = { id, gap, dx, dz, m, size };
     }
-    this.players.get(this.pid)?.avatar?.swing();
-    const hand = { x: b.x + fx * 0.5, y: b.y + 1, z: b.z + fz * 0.5 };
-    if (best) {
-      this.me.yaw = Math.atan2(best.dx, best.dz);
+    if (best) this.me.yaw = Math.atan2(best.dx, best.dz);
+    // The bop (and a blaster's bubble) goes when the swing lands, a moment on;
+    // the whoosh of a swing as it starts.
+    const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
+    this.send({ t: 'swing' });
+    if (weapon?.key !== 'blaster') this.sound.play('swish');
+    const world = this.world;
+    setTimeout(() => {
+      if (this.world !== world) return;
+      const yaw = this.me.yaw;
+      const hand = { x: b.x + Math.sin(yaw) * 0.5, y: b.y + 1, z: b.z + Math.cos(yaw) * 0.5 };
+      const at = best && (this.monsters.get(best.id)?.model.group.position ?? best.m);
       if (weapon?.key === 'blaster') {
-        this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, best.m.x, best.m.y + best.size.height / 2, best.m.z);
+        if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
+        else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
-      } else {
-        this.sound.play('swish');
       }
-      this.bop(best.id);
-      return best.id;
-    }
-    if (weapon?.key === 'blaster') {
-      this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + fx * reach, hand.y, hand.z + fz * reach);
-      this.sound.play('blow');
-    } else {
-      this.sound.play('swish');
-    }
+      if (best) {
+        this.bopSentAt = performance.now();
+        this.bop(best.id);
+      }
+    }, lands * 1000);
+    if (best) return best.id;
     // A monster you can see but not reach: say how bopping works, now and then.
     const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
     if (near && now > (this.toldReach ?? 0)) {
@@ -1121,7 +1132,6 @@ export class Game extends EventTarget {
 
   // King Grumble bopped: a heart off him, or a boing off his bubble.
   kingHit(msg) {
-    this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position;
     if (msg.shielded) {

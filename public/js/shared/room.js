@@ -306,6 +306,11 @@ export class Room {
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
         break;
+      // A swing at a monster (the 👊 button), for friends to see it start as
+      // it does: the bop it lands comes a moment later.
+      case 'swing':
+        this.broadcast({ t: 'swing', pid }, conn);
+        break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
         p.look = cleanLook(msg.look, this.random);

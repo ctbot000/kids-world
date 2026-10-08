@@ -288,6 +288,10 @@ test('phrases, stickers and anything typed can be said: tidied, and never empty,
   assert.equal(b.last('emote').e, 'dance');
   room.receive(a, { t: 'emote', e: 'something-else' });
   assert.equal(b.all('emote').length, 1);
+  // A swing at a monster: friends see it start; the one swinging is not told.
+  room.receive(a, { t: 'swing' });
+  assert.deepEqual(b.last('swing'), { t: 'swing', pid: a.last('welcome').you });
+  assert.equal(a.all('swing').length, 0);
 });
 
 test('animals can be petted, fed, invited and said goodbye to', () => {

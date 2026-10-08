@@ -17,7 +17,7 @@ import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../publ
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { cleanCoins, cleanGear, COINS_MAX, GEAR, gearMove, lookWithGear, nextLevel, sale, sellPrice, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
-import { Avatar } from '../public/js/render/avatar.js';
+import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
 import { World } from '../public/js/shared/world.js';
 
 const DT = 1 / 60;
@@ -269,4 +269,29 @@ test('every toy weapon is drawn in the hand, and a swing moves the arm', () => {
     }
   }
   assert.equal(new Avatar({ animal: 'bear', fur: 'brown', shirt: 1, hat: 'none' }).weapon, null);
+});
+
+test('every swing starts and ends as the avatar stands, moves smoothly between, and lands when it says', () => {
+  for (const [kind, swing] of Object.entries(SWINGS)) {
+    // From and back to the pose it had: nothing of the swing at either end.
+    for (const k of [0, 1]) {
+      const p = swingPose(swing, k);
+      assert.equal(p.w, 0, `${kind} at ${k}`);
+      for (const key of ['twist', 'lean', 'dip', 'nod', 'step']) assert.equal(p[key], 0, `${kind} ${key} at ${k}`);
+    }
+    // No jumps: quick as a strike is, nothing in it moves faster than 150 radians a second, so
+    // over a six-thousandth of a second nothing moves more than 0.025.
+    const n = Math.ceil(swing.secs * 6000);
+    let last = swingPose(swing, 0);
+    for (let i = 1; i <= n; i++) {
+      const p = swingPose(swing, i / n);
+      for (const key of Object.keys(p)) assert.ok(Math.abs(p[key] - last[key]) <= 0.025, `${kind} ${key} jumps at ${(i / n).toFixed(3)}`);
+      last = p;
+    }
+    // Wound up behind or out to the side, then the arm out in front at the strike.
+    const strike = swingPose(swing, swing.strike);
+    assert.ok(strike.fwd < -0.9 && strike.w === 1, `${kind} strikes out in front`);
+    const av = new Avatar({ animal: 'kid', shirt: 1, hat: 'none', ...(kind === 'punch' ? {} : { weapon: kind }) });
+    assert.ok(Math.abs(av.swing() - swing.secs * swing.strike) < 1e-9, `${kind} says when it lands`);
+  }
 });

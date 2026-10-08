@@ -990,8 +990,8 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
     g.sendMove(true);
   }, spot);
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 10));
-  // (A swing at most as often as a monster feels one.)
-  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  // (Not before the last swing is over and its bop has had its moment.)
+  await until(page, () => window.kidsWorld.game.attackReady());
   await page.keyboard.press('KeyX');
   await until(page, (id) => !window.kidsWorld.session.link.room.monsters.get(id) && !window.kidsWorld.game.monsters.has(id), id);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popped), 1);
@@ -1005,7 +1005,7 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
   await until(page, (id) => window.kidsWorld.game.monsters.has(id), full);
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
   await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
-  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  await until(page, () => window.kidsWorld.game.attackReady());
   await page.keyboard.press('KeyX');
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2 && document.body.textContent.includes('2 more bops'), full);
   // On a touch screen the 👊 button is there while a monster is about, and does the same (once
@@ -1021,7 +1021,7 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
     return was;
   });
   await until(page, () => !document.getElementById('btn-attack').hidden && document.getElementById('btn-attack').offsetWidth > 0);
-  await until(page, () => performance.now() > window.kidsWorld.game.attackAt);
+  await until(page, () => window.kidsWorld.game.attackReady());
   await page.click('#btn-attack');
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 1, full);
   await page.evaluate((wasTouch) => document.body.classList.toggle('touch', wasTouch), wasTouch);
@@ -2473,7 +2473,7 @@ test('a logged-in player sees the other players and who is playing now, and invi
   }
 });
 
-test('an adventure island with a friend: a camp’s monster popped with X from up close, its flag raised together, and a dizzy friend helped up with a click', { skip }, async () => {
+test('an adventure island with a friend: a camp’s monster popped with X from up close (the friend seeing the swing), its flag raised together, and a dizzy friend helped up with a click', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Brave Fox' });
   await clickButton(host, 'Make an island');
   await clickButton(host, 'Flat Land', '#modal');
@@ -2585,6 +2585,9 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   await stand(host, 2.5, -0.8);
   await host.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
   await host.keyboard.press('KeyX');
+  // The friend sees the swing too.
+  const hostPid = await host.evaluate(() => window.kidsWorld.game.pid);
+  await until(guest, (pid) => window.kidsWorld.game.players.get(pid)?.avatar?.swingAt !== undefined, hostPid);
   try {
     await until(host, (id) => !window.kidsWorld.session.link.room.monsters.get(id), id);
   } catch (error) {
