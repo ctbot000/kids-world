@@ -1,5 +1,6 @@
 // Little pictures of a kid's hair styles, for choosing one in 🎨 Change me:
-// a face from the front, in your own skin and hair colours.
+// a face from the front, in your own skin and hair colours. With a grown-up's
+// face (see FACES in shared/words.js): glasses, a moustache or a beard.
 const TIE = '#ff6f9f';
 
 // The top of the hair, over a fringe swept into curls, or cut straight across.
@@ -26,7 +27,14 @@ const STYLES = {
   bun: { back: `<circle cx="24" cy="8" r="6"/>`, front: `<path d="${SWEPT}"/><ellipse cx="24" cy="12.6" rx="4.2" ry="1.7" fill="${TIE}"/>` },
 };
 
-export function hairIcon(style, skin, hair) {
+// Over the smile, in the hair colour (but the glasses).
+const FACE = {
+  glasses: '<g fill="none" stroke="#3a3340" stroke-width="1.4"><circle cx="19" cy="28.5" r="4"/><circle cx="29" cy="28.5" r="4"/><path d="M23 28.2L25 28.2M15 28L10 26.5M33 28L38 26.5"/></g>',
+  moustache: (hair) => `<path d="M24 32.2Q20 30.6 17.5 33.4Q20.5 34.6 24 33.4Q27.5 34.6 30.5 33.4Q28 30.6 24 32.2Z" fill="${hair}"/>`,
+  beard: (hair) => `<path d="M9.5 28Q10 39.5 17 41.5Q24 44 31 41.5Q38 39.5 38.5 28Q36 35 31 36.5Q27.5 33.8 24 33.8Q20.5 33.8 17 36.5Q12 35 9.5 28Z" fill="${hair}"/>`,
+};
+
+export function hairIcon(style, skin, hair, face = 'none') {
   const s = STYLES[style] ?? STYLES.short;
   const ears = s.ears === false ? '' : `<circle cx="9.5" cy="28" r="3" fill="${skin}"/><circle cx="38.5" cy="28" r="3" fill="${skin}"/>`;
   const svg = [
@@ -38,6 +46,9 @@ export function hairIcon(style, skin, hair) {
     '<ellipse cx="19" cy="28.5" rx="1.8" ry="2.3" fill="#2b2530"/><ellipse cx="29" cy="28.5" rx="1.8" ry="2.3" fill="#2b2530"/>',
     '<ellipse cx="14.5" cy="32.5" rx="2.4" ry="1.4" fill="#ff9ab0" opacity="0.75"/><ellipse cx="33.5" cy="32.5" rx="2.4" ry="1.4" fill="#ff9ab0" opacity="0.75"/>',
     '<path d="M21.5 34Q24 36.3 26.5 34" fill="none" stroke="#7a3b3b" stroke-width="1.3" stroke-linecap="round"/>',
+    face.includes('beard') ? FACE.beard(hair) : '',
+    face === 'moustache' || face.includes('beard') ? FACE.moustache(hair) : '',
+    face.includes('glasses') ? FACE.glasses : '',
     '</svg>',
   ].join('');
   const t = document.createElement('template');

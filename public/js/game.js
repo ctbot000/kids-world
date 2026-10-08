@@ -18,7 +18,7 @@ import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
 import { World } from './shared/world.js';
-import { KID, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
+import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor } from './render/avatar.js';
 
 export const TOOLS = [
@@ -519,7 +519,7 @@ export class Game extends EventTarget {
     const p = this.players.get(pid);
     if (!p || !this.me) return null;
     const look = p.me ? this.profile.look : p.look;
-    const head = headTop(look?.hat, look?.animal === KID ? look.hair : '');
+    const head = headTop(look?.hat, lookHair(look), lookTall(look));
     if (p.me) {
       const b = this.me.body;
       const speed = this.me.speed;
@@ -1042,7 +1042,7 @@ export class Game extends EventTarget {
     for (const p of this.players.values()) {
       if (!(p.me ? this.dizzy : p.dizzy) || !p.avatar) continue;
       const a = p.avatar.root.position;
-      if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + 1.35, a.z, t);
+      if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + 1.35 + p.avatar.sitTall, a.z, t);
     }
   }
 
@@ -2101,15 +2101,16 @@ export class Game extends EventTarget {
         continue;
       }
       if (now < e.next) continue;
-      const pos = p.avatar.root.position;
+      const { x, z } = p.avatar.root.position;
+      const y = p.avatar.root.position.y + p.avatar.tall;
       const fx = this.renderer.effects;
-      if (e.key === 'hearts') fx.hearts(pos.x, pos.y + 1.5, pos.z, 1);
-      else if (e.key === 'dance') fx.notes(pos.x, pos.y + 1.6, pos.z);
-      else if (e.key === 'sleepy') fx.zzz(pos.x, pos.y + 1.5, pos.z);
+      if (e.key === 'hearts') fx.hearts(x, y + 1.5, z, 1);
+      else if (e.key === 'dance') fx.notes(x, y + 1.6, z);
+      else if (e.key === 'sleepy') fx.zzz(x, y + 1.5, z);
       else if (e.key === 'surprise' && !e.done) {
-        fx.bang(pos.x, pos.y + 1.7, pos.z);
+        fx.bang(x, y + 1.7, z);
         e.done = true;
-      } else if (e.key === 'cheer' || e.key === 'clap') fx.sparkles(pos.x, pos.y + 1.6, pos.z, 2);
+      } else if (e.key === 'cheer' || e.key === 'clap') fx.sparkles(x, y + 1.6, z, 2);
       e.next = now + (e.key === 'sleepy' ? 600 : 350);
     }
   }

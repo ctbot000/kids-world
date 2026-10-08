@@ -106,11 +106,15 @@ export const EMOTE_KEYS = EMOTES.map((e) => e.key);
 
 // ---------------------------------------------------------------- looks
 
-// Who you can be: a kid, or one of the little animals. A kid has skin and
-// hair (skin, hair, hairColor in the look) where an animal has fur.
+// Who you can be: a kid, a grown-up, or one of the little animals. A kid or
+// a grown-up has skin and hair (skin, hair, hairColor in the look) where an
+// animal has fur; a grown-up stands taller, and may have glasses or a beard
+// (face in the look).
 export const KID = 'kid';
+export const GROWN_UP = 'grownup';
 export const ANIMALS = [
   { key: KID, name: 'Kid', icon: '🧒', fur: 'tan' },
+  { key: GROWN_UP, name: 'Grown-up', icon: '🧑', fur: 'tan' },
   { key: 'bunny', name: 'Bunny', icon: '🐰', fur: 'white' },
   { key: 'cat', name: 'Cat', icon: '🐱', fur: 'orange' },
   { key: 'bear', name: 'Bear', icon: '🐻', fur: 'brown' },
@@ -182,16 +186,33 @@ export const HAIR_COLORS = {
   blue: '#6cb2ee',
   green: '#7bd19f',
 };
+// What a grown-up has on their face, besides a smile.
+export const FACES = [
+  { key: 'none', name: 'Just me' },
+  { key: 'glasses', name: 'Glasses' },
+  { key: 'moustache', name: 'Moustache' },
+  { key: 'beard', name: 'Beard' },
+  { key: 'glasses-beard', name: 'Glasses and beard' },
+];
 // What a kid is when nothing (or nothing that makes sense) says otherwise.
 const KID_LOOK = { skin: 'golden', hair: 'short', hairColor: 'brown' };
 
-// What friends see of you in a list: your animal, or a kid with your skin.
+// Whether a look has skin and hair: a kid or a grown-up.
+export const isPerson = (look) => look?.animal === KID || look?.animal === GROWN_UP;
+// A person's hair style, or '' for an animal.
+export const lookHair = (look) => (isPerson(look) ? look.hair : '');
+// How much taller than a kid (or an animal) someone stands.
+export const GROWN_TALL = 0.32;
+export const lookTall = (look) => (look?.animal === GROWN_UP ? GROWN_TALL : 0);
+
+// What friends see of you in a list: your animal, or a kid or grown-up with your skin.
 export function lookIcon(look) {
   if (look?.animal === KID) return `🧒${SKIN_EMOJI[look.skin] ?? ''}`;
+  if (look?.animal === GROWN_UP) return `${look.face?.includes('beard') ? '🧔' : '🧑'}${SKIN_EMOJI[look.skin] ?? ''}`;
   return ANIMALS.find((a) => a.key === look?.animal)?.icon ?? '🙂';
 }
 
-// An animal (or a kid), a T-shirt and a hat: three draws, whatever comes up.
+// An animal (or a kid or a grown-up), a T-shirt and a hat: three draws, whatever comes up.
 function someLook(random) {
   const animal = pick(ANIMALS, random);
   return { animal: animal.key, fur: animal.fur, shirt: pick(SHIRT_COLORS, random), hat: pick(HATS, random).key };
@@ -199,12 +220,14 @@ function someLook(random) {
 
 export function randomLook(random = Math.random) {
   const look = someLook(random);
-  if (look.animal !== KID) return look;
-  return { ...look, skin: pick(Object.keys(SKIN_TONES), random), hair: pick(HAIRS, random).key, hairColor: pick(Object.keys(HAIR_COLORS), random) };
+  if (!isPerson(look)) return look;
+  const person = { ...look, skin: pick(Object.keys(SKIN_TONES), random), hair: pick(HAIRS, random).key, hairColor: pick(Object.keys(HAIR_COLORS), random) };
+  return look.animal === GROWN_UP ? { ...person, face: pick(FACES, random).key } : person;
 }
 
-// A look as it may be shown: anything unknown in it replaced. A kid's skin
-// and hair are kept only for a kid; a pet only when there is one.
+// A look as it may be shown: anything unknown in it replaced. Skin and hair
+// are kept only for a kid or a grown-up, a face only for a grown-up, and a
+// pet only when there is one.
 export function cleanLook(look, random = Math.random) {
   const fallback = someLook(random);
   const animal = ANIMALS.some((a) => a.key === look?.animal) ? look.animal : fallback.animal;
@@ -214,7 +237,7 @@ export function cleanLook(look, random = Math.random) {
     shirt: SHIRT_COLORS.includes(look?.shirt) ? look.shirt : fallback.shirt,
     hat: HATS.some((h) => h.key === look?.hat) ? look.hat : 'none',
   };
-  if (animal === KID) {
+  if (isPerson({ animal })) {
     clean = {
       ...clean,
       skin: Object.hasOwn(SKIN_TONES, look?.skin) ? look.skin : KID_LOOK.skin,
@@ -222,6 +245,7 @@ export function cleanLook(look, random = Math.random) {
       hairColor: Object.hasOwn(HAIR_COLORS, look?.hairColor) ? look.hairColor : KID_LOOK.hairColor,
     };
   }
+  if (animal === GROWN_UP) clean.face = FACES.some((f) => f.key === look?.face) ? look.face : 'none';
   const pet = cleanPet(look?.pet);
   return pet ? { ...clean, pet } : clean;
 }

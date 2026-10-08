@@ -119,6 +119,11 @@ test("a kid's skin and hair come along, tidied, and an animal has none", () => {
   // An animal has fur instead.
   room.receive(b, { t: 'look', look: { ...kid, animal: 'cat', fur: 'orange' } });
   assert.deepEqual(a.last('look').look, { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' });
+  // A grown-up keeps them, with glasses or a beard; a kid has neither.
+  room.receive(b, { t: 'look', look: { ...kid, animal: 'grownup', face: 'beard' } });
+  assert.deepEqual(a.last('look').look, { ...kid, animal: 'grownup', face: 'beard' });
+  room.receive(b, { t: 'look', look: { ...kid, face: 'beard' } });
+  assert.deepEqual(a.last('look').look, kid);
 });
 
 test("a pet comes along in its owner's look, and petting it or giving it a fruit is passed on to everyone", () => {

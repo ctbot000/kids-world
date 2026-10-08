@@ -9,7 +9,7 @@ import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FUR_COLORS, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isValidName, KID, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { MAX_HEARTS } from './shared/monsters.js';
@@ -841,15 +841,15 @@ export class UI {
                 {
                   class: `choice${a.key === look.animal ? ' on' : ''}`,
                   type: 'button',
-                  // A kid keeps the skin and hair last chosen; an animal comes in its own fur.
-                  onclick: () => choose(() => Object.assign(look, a.key === KID ? cleanLook({ ...look, animal: KID }) : { animal: a.key, fur: a.fur })),
+                  // A kid or a grown-up keeps the skin and hair last chosen; an animal comes in its own fur.
+                  onclick: () => choose(() => Object.assign(look, isPerson({ animal: a.key }) ? cleanLook({ ...look, animal: a.key }) : { animal: a.key, fur: a.fur })),
                 },
                 h('span', { class: 'emoji' }, a.key === look.animal ? lookIcon(look) : a.icon),
                 a.name,
               ),
             ),
           );
-          if (look.animal === KID) {
+          if (isPerson(look)) {
             parts.replaceChildren(
               h('h3', {}, 'Skin'),
               swatches(SKIN_TONES, look.skin, (key) => (look.skin = key)),
@@ -868,6 +868,23 @@ export class UI {
               ),
               h('h3', {}, 'Hair colour'),
               swatches(HAIR_COLORS, look.hairColor, (key) => (look.hairColor = key)),
+              ...(look.animal === GROWN_UP
+                ? [
+                    h('h3', {}, 'Face'),
+                    h(
+                      'div',
+                      { class: 'grid' },
+                      ...FACES.map((f) =>
+                        h(
+                          'button',
+                          { class: `choice${f.key === look.face ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.face = f.key)) },
+                          hairIcon(look.hair, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor], f.key),
+                          f.name,
+                        ),
+                      ),
+                    ),
+                  ]
+                : []),
             );
           } else {
             parts.replaceChildren(h('h3', {}, 'Fur colour'), swatches(FUR_COLORS, look.fur, (key) => (look.fur = key)));
@@ -2798,7 +2815,7 @@ export class UI {
       const far = me ? Math.hypot(pos.x - me.x, pos.z - me.z) : 0;
       const showName = p.id !== g.pid && far < 45;
       if (!showName && !p.bubble) continue;
-      const scr = r.project(pos.x, pos.y + 1.72, pos.z);
+      const scr = r.project(pos.x, pos.y + 1.72 + p.avatar.tall, pos.z);
       if (!scr.visible) continue;
       seen.add(p.id);
       let tag = this.tags.get(p.id);

@@ -1,9 +1,9 @@
-// The players: round-headed little animals, or kids, in a t-shirt, with a hat
+// The players: round-headed little animals, kids or grown-ups, in a t-shirt, with a hat
 // if they like. Built from simple shapes and animated by hand — walking,
 // jumping, swimming, flying, and the emotes (wave, dance, cheer...).
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
-import { FUR_COLORS, HAIR_COLORS, KID, SKIN_TONES } from '../shared/words.js';
+import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
 import { capsule, cone, cylinder, geo, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const HEAD_R = 0.34;
@@ -289,15 +289,59 @@ function merged(key, shape, matrices) {
   });
 }
 
-// ears: false where hair covers them.
-function kidFace(head, skin, ears = true) {
+// A kid's face, or a grown-up's (grown: with smaller eyes, and what they
+// have on it, see FACES in shared/words.js). ears: false where hair covers them.
+function kidFace(head, skin, { ears = true, grown = false, extra = 'none', hairColor = BLACK } = {}) {
   if (ears) for (const side of [-1, 1]) head.add(mesh(sphere(), toon(skin), side * HR[0] * 0.97, -0.03, -0.02, 0.05, 0.075, 0.06));
   const p = onFace(0, -0.04, 0);
-  head.add(mesh(sphere(), toon(darken(skin, 0.12)), p.x, p.y, p.z, 0.032, 0.024, 0.022));
+  head.add(mesh(sphere(), toon(darken(skin, 0.12)), p.x, p.y, p.z, grown ? 0.036 : 0.032, grown ? 0.03 : 0.024, 0.024));
   smile(head, 0.045, -0.11);
-  const e = eyes(head, 'big');
+  const e = eyes(head, grown ? 'dot' : 'big');
   blush(head);
+  if (extra.includes('glasses')) glasses(head);
+  if (extra.includes('beard')) beard(head, hairColor);
+  if (extra === 'moustache' || extra.includes('beard')) moustache(head, hairColor);
   return e;
+}
+
+// Round glasses over the eyes, with arms back to the ears.
+function glasses(head) {
+  const frame = toon('#3a3340');
+  for (const side of [-1, 1]) {
+    const p = onFace(side * 0.12, 0.02, 0.03);
+    const ring = mesh(torus(0.068, 0.011), frame, p.x, p.y, p.z);
+    ring.lookAt(p.clone().multiplyScalar(2));
+    const lens = mesh(cylinder(0.064, 0.064, 0.004, 20), toon('#d8f0ff', { transparent: true, opacity: 0.3 }), p.x, p.y, p.z);
+    lens.quaternion.setFromUnitVectors(UP, p.clone().normalize());
+    head.add(ring, lens);
+    // From the outer edge of the rim, back along the side of the head.
+    const edge = onFace(side * 0.19, 0.02, 0.02);
+    const ear = new THREE.Vector3(side * HR[0] * 1.02, 0.02, -0.04);
+    const arm = mesh(cylinder(0.009, 0.009, edge.distanceTo(ear), 6), frame, (edge.x + ear.x) / 2, (edge.y + ear.y) / 2, (edge.z + ear.z) / 2);
+    arm.quaternion.setFromUnitVectors(UP, ear.clone().sub(edge).normalize());
+    head.add(arm);
+  }
+  const bridge = onFace(0, 0.035, 0.03);
+  head.add(mesh(capsule(0.009, 0.05), frame, bridge.x, bridge.y, bridge.z).rotateZ(Math.PI / 2));
+}
+
+// A moustache under the nose, curling up a little at each end.
+function moustache(head, color) {
+  for (const side of [-1, 1]) {
+    const p = onFace(side * 0.045, -0.075, 0.008);
+    const m = mesh(sphere(1, 14, 10), toon(color), p.x, p.y, p.z, 0.055, 0.024, 0.03);
+    m.lookAt(p.clone().multiplyScalar(2));
+    m.rotateZ(side * 0.25);
+    head.add(m);
+  }
+}
+
+// A beard round the jaw, from ear to ear, under the smile.
+function beard(head, color) {
+  const mat = toon(color, { side: THREE.DoubleSide });
+  head.add(mesh(shell(1.06, { phi: Math.PI / 2 - 1.45, phiLength: 2.9, theta: 1.95, thetaLength: 0.95 }), mat, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
+  const chin = onFace(0, -0.25, 0.03);
+  head.add(mesh(sphere(1, 16, 12), toon(color), chin.x, chin.y, chin.z, 0.13, 0.09, 0.08));
 }
 
 // A kid's hair. Returns the bunches and tails that swing as you move.
@@ -538,8 +582,17 @@ export class Avatar {
     if (same) return;
     this.look = { ...look };
     if (this.body) this.root.remove(this.body);
-    const kid = look.animal === KID;
-    // A kid's skin is where an animal's fur is: face, neck and hands.
+    const kid = isPerson(look);
+    const grown = look.animal === GROWN_UP;
+    // How much taller a grown-up is than a kid: their legs, then the rest.
+    this.tall = lookTall(look);
+    const legLong = this.tall * 0.55;
+    this.legLong = legLong;
+    const up = this.tall - legLong;
+    // Sitting down, only the top half is taller.
+    this.sitTall = up;
+    const armLong = grown ? 0.09 : 0;
+    // A kid's (or a grown-up's) skin is where an animal's fur is: face, neck and hands.
     const fur = kid ? (SKIN_TONES[look.skin] ?? SKIN_TONES.golden) : (FUR_COLORS[look.fur] ?? FUR_COLORS.white);
     const shirt = shirtColor(look.shirt);
     const body = new THREE.Group();
@@ -548,29 +601,29 @@ export class Avatar {
 
     this.legs = [-1, 1].map((side) => {
       const leg = new THREE.Group();
-      leg.position.set(side * 0.1, 0.28, 0);
-      leg.add(mesh(cylinder(0.07, 0.08, 0.24, 12), toon(look.animal === 'frog' ? fur : darken(shirt, 0.35)), 0, -0.12, 0));
-      leg.add(mesh(sphere(), toon(look.animal === 'frog' ? darken(fur, 0.1) : '#6b4a3a'), 0, -0.24, 0.03, 0.085, 0.06, 0.11));
+      leg.position.set(side * 0.1, 0.28 + legLong, 0);
+      leg.add(mesh(cylinder(0.07, 0.08, 0.24 + legLong, 12), toon(look.animal === 'frog' ? fur : darken(shirt, 0.35)), 0, -0.12 - legLong / 2, 0));
+      leg.add(mesh(sphere(), toon(look.animal === 'frog' ? darken(fur, 0.1) : '#6b4a3a'), 0, -0.24 - legLong, 0.03, 0.085, 0.06, grown ? 0.12 : 0.11));
       body.add(leg);
       return leg;
     });
     this.torso = new THREE.Group();
-    this.torso.position.y = 0.28;
+    this.torso.position.y = 0.28 + legLong;
     body.add(this.torso);
-    this.torso.add(mesh(capsule(0.2, 0.16), toon(shirt), 0, 0.22, 0, 1, 1, 0.85));
+    this.torso.add(mesh(capsule(0.2, 0.16 + up), toon(shirt), 0, 0.22 + up / 2, 0, grown ? 1.08 : 1, 1, 0.85));
     // A little collar in the fur colour, so the head sits nicely.
-    this.torso.add(mesh(sphere(), toon(fur), 0, 0.44, 0, 0.14, 0.06, 0.12));
+    this.torso.add(mesh(sphere(), toon(fur), 0, 0.44 + up, 0, 0.14, 0.06, 0.12));
     this.arms = [-1, 1].map((side) => {
       const arm = new THREE.Group();
-      arm.position.set(side * 0.23, 0.4, 0);
+      arm.position.set(side * (grown ? 0.245 : 0.23), 0.4 + up, 0);
       arm.rotation.z = side * 0.18;
-      arm.add(mesh(capsule(0.062, 0.14), toon(shirt), 0, -0.1, 0));
-      arm.add(mesh(sphere(), toon(fur), 0, -0.22, 0, 0.07));
+      arm.add(mesh(capsule(0.062, 0.14 + armLong), toon(shirt), 0, -0.1 - armLong / 2, 0));
+      arm.add(mesh(sphere(), toon(fur), 0, -0.22 - armLong, 0, 0.07));
       this.torso.add(arm);
       return arm;
     });
     this.head = new THREE.Group();
-    this.head.position.y = 0.5;
+    this.head.position.y = 0.5 + up;
     this.torso.add(this.head);
     const skull = new THREE.Group();
     skull.position.y = 0.3;
@@ -578,8 +631,9 @@ export class Avatar {
     this.skull = skull;
     skull.add(mesh(sphere(HEAD_R, 28, 20), toon(fur), 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
     if (kid) {
-      this.eyes = kidFace(skull, fur, look.hair !== 'bob' && look.hair !== 'long');
-      this.sway = hair(skull, look.hair, HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown, look.hat);
+      const hairColor = HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown;
+      this.eyes = kidFace(skull, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', grown, extra: grown ? (look.face ?? 'none') : 'none', hairColor });
+      this.sway = hair(skull, look.hair, hairColor, look.hat);
     } else {
       ears(skull, look.animal, fur);
       this.eyes = face(skull, look.animal, fur);
@@ -644,7 +698,7 @@ export class Avatar {
       legSwing = 0.15;
     } else if (anim === ANIM.dizzy) {
       // Sat down with a bump, head going round and round.
-      bob = -0.24;
+      bob = -0.24 - this.legLong;
       lean = -0.12;
       armRaiseL = armRaiseR = 0.55;
       armFwdL = armFwdR = -0.35;
@@ -655,7 +709,8 @@ export class Avatar {
       // up and down with it, more the faster it goes.
       const k = Math.min(1, speed / 8);
       this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
-      bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06);
+      // Hips where a kid's would be, longer legs reaching further down its sides.
+      bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - this.legLong;
       lean = 0.1 + k * 0.15;
       armFwdL = armFwdR = -0.8 - Math.sin(this.phase) * 0.12 * k;
       armRaiseL = armRaiseR = 0.22;

@@ -17,7 +17,7 @@ import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
-import { KID } from './shared/words.js';
+import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
 const params = new URLSearchParams(location.search);
@@ -168,7 +168,7 @@ function showDemoPet() {
 function demoOwner() {
   const s = demo.world.spawn;
   const look = profile.look;
-  return { x: s.x, y: s.y, z: s.z, yaw: renderer.view.yaw, speed: 0, moving: false, flying: false, swimming: false, riding: '', head: headTop(look.hat, look.animal === KID ? look.hair : ''), headTaken: false, pose: true };
+  return { x: s.x, y: s.y, z: s.z, yaw: renderer.view.yaw, speed: 0, moving: false, flying: false, swimming: false, riding: '', head: headTop(look.hat, lookHair(look), lookTall(look)), headTaken: false, pose: true };
 }
 
 function demoFrame(dt) {

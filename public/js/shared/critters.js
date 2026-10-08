@@ -111,14 +111,15 @@ export const FLOWERS = new Set([B.TULIP, B.DAISY, B.BLUEBELL, B.COSMOS, B.SUNFLO
 // the skull (render/avatar.js puts it at 1.41), or on the hat. A kid's hair
 // (hair: its style; '' for an animal) is a little higher and lifts the hat
 // with it, more for curls; spikes and a bun stick up out of it, unless a hat
-// that covers the top of the head is over them.
+// that covers the top of the head is over them. A grown-up (tall: how much
+// taller than a kid) has all of it that much higher.
 const HEAD_TOP = { cap: 1.6, party: 1.76, crown: 1.42, beanie: 1.7, sprout: 1.66, straw: 1.52, headphones: 1.6 };
 const HAIR_TOP = { spiky: 1.51, curly: 1.53, bun: 1.57 };
 const OVER_HAIR = ['cap', 'beanie', 'straw', 'party'];
-export function headTop(hat, hair = '') {
+export function headTop(hat, hair = '', tall = 0) {
   const top = HEAD_TOP[hat] ?? 1.41;
-  if (!hair) return top;
-  return Math.max(top + (hair === 'curly' ? 0.07 : 0.025), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
+  if (!hair) return top + tall;
+  return tall + Math.max(top + (hair === 'curly' ? 0.07 : 0.025), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
 }
 
 // How high a rider's hips are over their feet, as render/avatar.js draws
@@ -1403,7 +1404,7 @@ export class CritterSim {
     c.lz = leader.z;
     c.still = !leader.anim && !leader.flying && moved < 0.03 ? c.still + dt : 0;
     if (c.still > 1 && !this.list.some((o) => o !== c && o.follow === c.follow && o.id < c.id && CRITTER_INFO[o.type].flies)) {
-      const top = leader.y + headTop(leader.hat, leader.hair);
+      const top = leader.y + headTop(leader.hat, leader.hair, leader.tall);
       if (c.onHead !== c.follow) {
         c.mode = 'fly';
         c.state = 'fly';

@@ -20,7 +20,7 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
-import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, KID, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
 
@@ -782,7 +782,7 @@ export class Room {
 
     const where = new Map();
     for (const p of this.players.values()) {
-      if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: p.look?.animal === KID ? p.look.hair : '' });
+      if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: lookHair(p.look), tall: lookTall(p.look) });
     }
     this.critters.step(this.world, dt, now, where, isNight(env.time));
     if (this.settings.monsters || this.adventure?.active) this.stepMonsters(dt, now, where);

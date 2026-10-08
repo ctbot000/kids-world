@@ -1,23 +1,32 @@
-// The players: every animal and every kid (each hair style under each hat)
-// can be drawn in every pose, and a flying friend on someone's head sits on
+// The players: every animal, every kid and every grown-up (each hair style
+// under each hat, and each grown-up's face) can be drawn in every pose, and a flying friend on someone's head sits on
 // their hair or their hat, neither in it nor above it.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { ANIM, Avatar } from '../public/js/render/avatar.js';
 import { headTop } from '../public/js/shared/critters.js';
-import { ANIMALS, cleanLook, EMOTE_KEYS, HAIR_COLORS, HAIRS, HATS, KID, lookIcon, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
+import { ANIMALS, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
 
 const LOOKS = ANIMALS.flatMap((a) =>
   HATS.flatMap((hat, i) =>
-    a.key === KID
-      ? HAIRS.map((hair, j) => ({ animal: KID, fur: a.fur, shirt: i, hat: hat.key, skin: Object.keys(SKIN_TONES)[j % 6], hair: hair.key, hairColor: Object.keys(HAIR_COLORS)[(i + j) % 10] }))
+    isPerson({ animal: a.key })
+      ? HAIRS.map((hair, j) => ({
+          animal: a.key,
+          fur: a.fur,
+          shirt: i,
+          hat: hat.key,
+          skin: Object.keys(SKIN_TONES)[j % 6],
+          hair: hair.key,
+          hairColor: Object.keys(HAIR_COLORS)[(i + j) % 10],
+          ...(a.key === GROWN_UP ? { face: FACES[(i + j) % FACES.length].key } : {}),
+        }))
       : [{ animal: a.key, fur: a.fur, shirt: i, hat: hat.key }],
   ),
 );
-const named = (look) => `${look.animal}${look.hair ? ` with ${look.hair} hair` : ''} in a ${look.hat} hat`;
+const named = (look) => `${look.animal}${look.hair ? ` with ${look.hair} hair` : ''}${look.face ? ` and ${look.face}` : ''} in a ${look.hat} hat`;
 
-test('every animal and every kid can be drawn in every pose', () => {
+test('every animal, kid and grown-up can be drawn in every pose', () => {
   for (const look of LOOKS) {
     const a = new Avatar(look);
     const poses = [...Object.values(ANIM).map((anim) => [anim, null]), ...EMOTE_KEYS.map((emote) => [ANIM.idle, emote])];
@@ -57,7 +66,7 @@ test("a flying friend on someone's head sits on top of their hair or their hat",
   };
   // A bow sits to one side, where the bird does not.
   for (const look of LOOKS.filter((l) => l.hat !== 'bow')) {
-    const sits = headTop(look.hat, look.animal === KID ? look.hair : '');
+    const sits = headTop(look.hat, lookHair(look), lookTall(look));
     const t = top(new Avatar(look));
     assert.ok(sits >= t && sits <= t + 0.03, `${named(look)}: sits at ${sits}, the top is at ${t.toFixed(3)}`);
   }
@@ -78,4 +87,43 @@ test("a kid's look: skin and hair, as chosen, as a kid starts out, or at random;
   assert.equal(lookIcon({ ...kid, skin: 'fair' }), '🧒🏻');
   assert.equal(lookIcon({ animal: 'cat' }), '🐱');
   assert.equal(lookIcon(null), '🙂');
+});
+
+test("a grown-up: a kid's skin and hair, a face of their own, and taller", () => {
+  const grown = { animal: GROWN_UP, fur: 'tan', shirt: 3, hat: 'cap', skin: 'brown', hair: 'curly', hairColor: 'silver', face: 'glasses-beard' };
+  assert.deepEqual(cleanLook(grown), grown);
+  assert.deepEqual(cleanLook({ ...grown, face: 'monocle' }), { ...grown, face: 'none' });
+  // A kid has no face to choose, and becoming a grown-up keeps the skin and hair.
+  const { face: _, ...kid } = { ...grown, animal: KID };
+  assert.deepEqual(cleanLook({ ...grown, animal: KID }), kid);
+  assert.deepEqual(cleanLook({ ...kid, animal: GROWN_UP }), { ...grown, face: 'none' });
+  assert.equal(lookIcon(grown), '🧔🏾');
+  assert.equal(lookIcon({ ...grown, face: 'glasses' }), '🧑🏾');
+  // As tall as they are drawn, standing; sitting dizzy or riding, their hips where a kid's are.
+  const height = (look) => {
+    const a = new Avatar(look);
+    a.update(0.1, ANIM.idle, 0);
+    a.root.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(a.skull).max.y;
+  };
+  const small = { ...kid, hat: 'none', hair: 'short' };
+  assert.ok(Math.abs(height({ ...small, animal: GROWN_UP }) - height(small) - GROWN_TALL) < 0.02);
+  assert.ok(height({ ...small, animal: GROWN_UP }) < 2 - 0.2, 'under a doorway two blocks high');
+  assert.equal(lookTall(small), 0);
+  for (const anim of [ANIM.ride, ANIM.dizzy]) {
+    const hips = (look) => {
+      const a = new Avatar(look);
+      a.update(0.1, anim, 0);
+      a.root.updateMatrixWorld(true);
+      return a.legs[0].getWorldPosition(new THREE.Vector3()).y;
+    };
+    assert.ok(Math.abs(hips({ ...small, animal: GROWN_UP }) - hips(small)) < 1e-9);
+  }
+  // Glasses, a moustache and a beard are made differently.
+  const parts = (face) => {
+    let n = 0;
+    new Avatar({ ...grown, face }).skull.traverse((o) => (n += o.isMesh ? 1 : 0));
+    return n;
+  };
+  assert.equal(new Set(FACES.map((f) => parts(f.key))).size, FACES.length);
 });
