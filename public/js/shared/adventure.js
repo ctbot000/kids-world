@@ -560,15 +560,16 @@ export class AdventureSim {
 
   // A friend bopping King Grumble: nothing gets through his bubble, each
   // friend can bop him once a moment, and while he sits dazed a bop takes
-  // DAZED_HIT hearts. Returns { shielded }, { wait }, or
+  // DAZED_HIT hearts; times: how many times over a bop counts (a Star
+  // Hammer's, see shop.js). Returns { shielded }, { wait }, or
   // { hit, hearts, max, beaten, dazed }.
-  hitKing(pid, now, dazed = false) {
+  hitKing(pid, now, dazed = false, times = 1) {
     if (this.shielded) return { shielded: true };
     const k = this.king;
     if (!k.id || k.hearts <= 0) return { wait: true };
     if (now - (k.hits.get(pid) ?? -Infinity) < KING_HIT_MS) return { wait: true };
     k.hits.set(pid, now);
-    k.hearts = Math.max(0, k.hearts - (dazed ? DAZED_HIT : 1));
+    k.hearts = Math.max(0, k.hearts - (dazed ? DAZED_HIT : 1) * times);
     k.hitAt = now;
     return { hit: true, hearts: k.hearts, max: k.max, beaten: k.hearts <= 0, dazed };
   }

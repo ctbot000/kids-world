@@ -10,6 +10,7 @@ const HEAD_R = 0.34;
 const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
 const HR = [HEAD_R * HEAD.sx, HEAD_R * HEAD.sy, HEAD_R * HEAD.sz];
 
+const SWING_S = 0.35;
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
@@ -464,6 +465,54 @@ function hair(head, style, color, hatKind) {
 }
 
 // lift: how much higher than on an animal's head it sits (on a kid's hair).
+// A toy weapon from the shop (shared/shop.js), held in the hand: its grip
+// at the hand, pointing forward with the arm down. Soft foam and bubbles,
+// in bright toy colours.
+export function weapon(kind) {
+  const g = new THREE.Group();
+  g.name = `weapon ${kind}`;
+  g.rotation.x = Math.PI / 2;
+  switch (kind) {
+    case 'sword':
+      g.add(
+        mesh(cylinder(0.028, 0.028, 0.14, 10), toon('#ffcf3f'), 0, 0.02, 0),
+        mesh(sphere(), toon('#ff7fb2'), 0, -0.06, 0, 0.04),
+        mesh(capsule(0.03, 0.04), toon('#ff7fb2'), 0, 0.1, 0, 3.2, 0.5, 1.2),
+        mesh(capsule(0.042, 0.42), toon('#5fb8f4'), 0, 0.36, 0, 1, 1, 0.55),
+      );
+      break;
+    case 'blaster':
+      g.add(
+        mesh(cylinder(0.03, 0.03, 0.14, 10), toon('#9b7bea'), 0, -0.02, -0.06),
+        mesh(capsule(0.065, 0.2), toon('#9b7bea'), 0, 0.12, 0),
+        mesh(sphere(), toon('#bff3ff', { transparent: true, opacity: 0.75 }), 0, 0.1, 0.09, 0.07),
+        mesh(cylinder(0.05, 0.035, 0.08, 14), toon('#ffcf3f'), 0, 0.28, 0),
+        mesh(torus(0.045, 0.012), toon('#ff7fb2'), 0, 0.33, 0),
+      );
+      break;
+    case 'hammer': {
+      g.add(mesh(cylinder(0.026, 0.026, 0.42, 10), toon('#ffcf3f'), 0, 0.16, 0));
+      const head = new THREE.Group();
+      head.position.y = 0.4;
+      head.rotation.z = Math.PI / 2;
+      head.add(
+        mesh(cylinder(0.1, 0.1, 0.28, 18), toon('#ff7fb2'), 0, 0, 0),
+        mesh(cylinder(0.11, 0.11, 0.03, 18), toon('#ffffff'), 0, 0.14, 0),
+        mesh(cylinder(0.11, 0.11, 0.03, 18), toon('#ffffff'), 0, -0.14, 0),
+      );
+      // A star on the side, like a sticker.
+      const star = mesh(cylinder(0.07, 0.07, 0.02, 5), toon('#ffd23f', { emissive: 0.25 }), 0, 0, 0.1);
+      star.rotation.x = Math.PI / 2;
+      head.add(star);
+      g.add(head);
+      break;
+    }
+    default:
+      return null;
+  }
+  return g;
+}
+
 function hat(head, kind, shirt, lift = 0) {
   const top = HR[1];
   const g = new THREE.Group();
@@ -622,6 +671,12 @@ export class Avatar {
       this.torso.add(arm);
       return arm;
     });
+    // A toy weapon in the right hand.
+    this.weapon = look.weapon ? weapon(look.weapon) : null;
+    if (this.weapon) {
+      this.weapon.position.set(0, -0.24 - armLong, 0.02);
+      this.arms[1].add(this.weapon);
+    }
     this.head = new THREE.Group();
     this.head.position.y = 0.5 + up;
     this.torso.add(this.head);
@@ -644,6 +699,11 @@ export class Avatar {
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = false;
     });
+  }
+
+  // A swing of the arm, at a monster: over and down, with whatever is in hand.
+  swing() {
+    this.swingAt = this.time;
   }
 
   playEmote(key) {
@@ -774,6 +834,14 @@ export class Avatar {
             break;
         }
       }
+    }
+
+    // A swing: the arm up in front, then down hard, over a third of a second.
+    const swung = t - (this.swingAt ?? -Infinity);
+    if (swung < SWING_S) {
+      const k = swung / SWING_S;
+      armFwdR = k < 0.3 ? -2.7 * (k / 0.3) : -2.7 + 2.3 * ((k - 0.3) / 0.7);
+      armRaiseR = 0.1;
     }
 
     // Riding, the legs reach round the animal's sides and a little forward;

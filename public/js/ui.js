@@ -7,7 +7,7 @@ import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { BOARDS } from './shared/ranking.js';
-import { GEAR, nextLevel, sellPrice, wearing } from './shared/shop.js';
+import { GEAR, levelDoes, nextLevel, sellPrice, wearing } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1108,14 +1108,16 @@ export class UI {
                   return;
                 }
                 this.sound.play('fanfare');
-                this.toast(next.icon, `You got the ${next.name}! You're ${g.key === 'shoes' ? 'running' : 'flying'} faster now.`);
+                const now = { shoes: "You're running faster now.", wings: "You're flying faster now.", weapon: 'Tap a monster to bop it!' }[g.key];
+                this.toast(next.icon, `You got the ${next.name}! ${now}`);
               };
               return h(
                 'div',
                 { class: `shop-card gear${owned ? '' : ' locked'}` },
                 h('span', { class: 'emoji' }, owned ? owned.icon : g.levels[0].icon),
                 h('b', {}, owned ? owned.name : g.name),
-                h('span', { class: 'muted' }, owned ? `${Math.round((owned.boost - 1) * 100)}% faster. ${g.about}` : g.about),
+                h('span', { class: 'muted' }, owned ? (owned.does ?? `${levelDoes(owned)} ${g.about}`) : g.about),
+                next ? h('span', { class: 'muted' }, `${owned ? 'Next' : 'First'}: ${next.icon} ${levelDoes(next)}`) : null,
                 h(
                   'div',
                   { class: 'shop-buttons' },
@@ -1456,7 +1458,7 @@ export class UI {
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster and wings or a jet pack to fly faster!']),
+          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, and a toy sword, bubble blaster or star hammer to pop monsters!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),

@@ -466,12 +466,13 @@ export class MonsterSim {
 
   // A tap on a blob, by the player pid standing at p: a heart off it, a hop
   // back away from them, and it comes after them, crosser and quicker, for a
-  // while. Returns { wait } (they tapped it a moment ago), or the hearts it
-  // has left (0: it goes pop).
-  hit(m, pid, p, now) {
+  // while. power: the hearts a tap takes (more with a toy weapon). Returns
+  // { wait } (they tapped it a moment ago), or the hearts it has left (0: it
+  // goes pop).
+  hit(m, pid, p, now, power = 1) {
     if (now - (m.hits.get(pid) ?? -Infinity) < HIT_MS) return { wait: true };
     m.hits.set(pid, now);
-    m.hearts = Math.max(0, m.hearts - 1);
+    m.hearts = Math.max(0, m.hearts - power);
     m.hitAt = now;
     if (!m.hearts) return { hearts: 0 };
     const b = m.body;
@@ -486,12 +487,13 @@ export class MonsterSim {
   }
 
   // Whether someone at p can bop the one numbered id: by tapping it from as
-  // far as a tap reaches, or by landing on it.
-  canBop(id, p) {
+  // far as a tap reaches (extra further with a toy weapon, see shop.js), or
+  // by landing on it.
+  canBop(id, p, extra = 0) {
     const m = this.get(id);
     if (!m) return null;
     const b = m.body;
-    const reach = BOP_REACH + b.radius - MONSTER_BODY.radius;
+    const reach = BOP_REACH + extra + b.radius - MONSTER_BODY.radius;
     return Math.hypot(p.x - b.x, p.y + 1.3 - (b.y + b.height / 2), p.z - b.z) <= reach ? m : null;
   }
 

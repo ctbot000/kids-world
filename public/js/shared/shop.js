@@ -1,8 +1,8 @@
 // The shop: sell what is in your basket for coins, and spend the coins on
-// gear that makes you faster: running shoes for your feet (walking, running
-// and swimming) and flying gear for the sky. Each kind of gear comes in
-// levels, bought one after another, each faster than the last; you wear the
-// best you have, and can take it off. Coins and gear are yours, kept with
+// gear: running shoes for your feet (walking, running and swimming), flying
+// gear for the sky, and toy weapons for popping monsters. Each kind of gear
+// comes in levels, bought one after another, each better than the last; you
+// wear the best you have, and can take it off. Coins and gear are yours, kept with
 // your basket (profile.js) and at the keeper (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 
@@ -50,7 +50,39 @@ export const GEAR = [
       { name: 'Jet Pack', icon: '🛩️', price: 200, boost: 1.8 },
     ],
   },
+  {
+    key: 'weapon',
+    name: 'Toy weapons',
+    about: 'Pop monsters with fewer taps, from further away.',
+    levels: [
+      { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 0.75, king: 1, does: 'Two taps pop a monster.' },
+      { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3, king: 1, does: 'Two taps pop a monster, from much further away.' },
+      { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 3, king: 2, does: 'One tap pops a monster, from far away, and King Grumble feels every bop twice.' },
+    ],
+  },
 ];
+
+// What a level of gear does, for the shop.
+export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1) * 100)}% faster.`;
+
+// The toy weapons: carried in your hand, so they are part of the look the
+// island sees (look.weapon, by key; see words.js cleanLook), which is how
+// the host knows how hard and how far you bop (room.js) and friends see it.
+export const WEAPONS = GEAR.find((g) => g.key === 'weapon').levels;
+export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
+
+// Your look as the island sees it: with the weapon you have on, if any.
+export function lookWithGear(look, gear) {
+  const { weapon: _, ...rest } = look ?? {};
+  const level = wearing(gear, 'weapon');
+  return level ? { ...rest, weapon: WEAPONS[level - 1].key } : rest;
+}
+
+// The weapon you have on (its level), or null.
+export const wornWeapon = (gear) => {
+  const level = wearing(gear, 'weapon');
+  return level ? WEAPONS[level - 1] : null;
+};
 
 export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 

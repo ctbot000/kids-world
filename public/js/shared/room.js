@@ -21,6 +21,7 @@ import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanPiece } from './song.js';
+import { weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 export const PROTOCOL = 1;
@@ -954,8 +955,9 @@ export class Room {
     this.broadcast({ t: 'helped', pid: q.id, by: p.id, hearts: q.hearts });
   }
 
-  // Jumping on a monster (msg.on): pop! Tapping one: a heart off it, and pop
-  // with the last. (King Grumble takes a lot of either.)
+  // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
+  // and from further, with a toy weapon in hand), and pop with the last.
+  // (King Grumble takes a lot of either.)
   bop(p, msg) {
     if (!Number.isInteger(msg.id)) return;
     const now = this.now();
@@ -963,13 +965,14 @@ export class Room {
     if (!m || (!m.camp && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
-    if (!landed && !this.monsters.canBop(m.id, at)) return;
+    const weapon = weaponOf(p.look?.weapon);
+    if (!landed && !this.monsters.canBop(m.id, at, weapon?.reach ?? 0)) return;
     if (m.kind === 'king') {
-      this.bopKing(p, m, now);
+      this.bopKing(p, m, now, weapon?.king ?? 1);
       return;
     }
     if (!landed) {
-      const hit = this.monsters.hit(m, p.id, at, now);
+      const hit = this.monsters.hit(m, p.id, at, now, weapon?.power ?? 1);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -985,8 +988,8 @@ export class Room {
   // A bop for King Grumble: nothing in his bubble, otherwise a heart (three
   // while he sits dazed from a stomp; he is too big to knock back); with none
   // left he goes pop, and the whole island is free.
-  bopKing(p, m, now) {
-    const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0));
+  bopKing(p, m, now, times = 1) {
+    const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0), times);
     if (!hit || hit.wait) return;
     if (hit.shielded) {
       this.broadcast({ t: 'kinghit', id: m.id, by: p.id, shielded: true });

@@ -15,7 +15,7 @@ import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove } from './shared/shop.js';
+import { gearMove, lookWithGear, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
@@ -128,7 +128,7 @@ export class Game extends EventTarget {
 
   joinMessage() {
     const p = this.profile;
-    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.look, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
+    return { t: 'join', protocol: PROTOCOL, name: p.name, look: lookWithGear(p.look, p.data.gear), token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
   }
 
   // As the owner of an island with a passcode: a pass for a friend you
@@ -847,7 +847,13 @@ export class Game extends EventTarget {
   }
 
   // A monster popped: tapped or jumped on.
+  // Whoever bopped a monster swings what they have in hand.
+  swung(pid) {
+    this.players.get(pid)?.avatar?.swing();
+  }
+
   popped(msg) {
+    if (msg.by) this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
@@ -872,6 +878,7 @@ export class Game extends EventTarget {
   // A monster tapped, with hearts left: it squashes and hops back, and
   // whoever tapped it hears how many more taps it takes.
   monsterHit(msg) {
+    this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.4;
     const p = entry?.model.group.position;
@@ -1024,6 +1031,7 @@ export class Game extends EventTarget {
 
   // King Grumble bopped: a heart off him, or a boing off his bubble.
   kingHit(msg) {
+    this.swung(msg.by);
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position;
     if (msg.shielded) {
@@ -1667,11 +1675,13 @@ export class Game extends EventTarget {
     const monster = r.pickMonster(ray, maxDist);
     if (monster) {
       const entry = this.monsters.get(monster.id);
-      // King Grumble, bigger, can be tapped from as much further.
+      // King Grumble, bigger, can be tapped from as much further, and so can
+      // anything with a toy weapon in hand.
       const size = bodyOf(entry?.kind);
+      const extra = wornWeapon(this.profile.data.gear)?.reach ?? 0;
       const wall = raycast(w, ray.origin.x, ray.origin.y, ray.origin.z, ray.dir.x, ray.dir.y, ray.dir.z, monster.dist - size.radius, (id, x, y, z, start, dist) => B.SOLID[id] === 1 && !r.seeThrough(dist, ray.dir));
       const m = entry?.model.group.position;
-      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + size.height / 2 - eye.y, m.z - eye.z) <= TAP_REACH + size.radius - MONSTER_BODY.radius ? { kind: 'monster', id: monster.id } : { kind: 'far' };
+      if (m && !wall) return Math.hypot(m.x - eye.x, m.y + size.height / 2 - eye.y, m.z - eye.z) <= TAP_REACH + extra + size.radius - MONSTER_BODY.radius ? { kind: 'monster', id: monster.id } : { kind: 'far' };
     }
     // A friend sitting dizzy, to help up from beside them, unless a solid
     // block is in the way: the flowers of a camp just freed never hide one.

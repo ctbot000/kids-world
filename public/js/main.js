@@ -18,6 +18,7 @@ import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
+import { lookWithGear, wornWeapon } from './shared/shop.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
@@ -59,6 +60,15 @@ keeper.addEventListener('needs-password', () => {
 keeper.addEventListener('invite', (e) => invited(e.detail));
 for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
 profile.addEventListener('count', () => keeper.counted());
+// A toy weapon bought, put on or taken off in the shop: friends on the
+// island see it in your hand, and the island lets it reach further.
+let weaponSent = wornWeapon(profile.data.gear)?.key ?? '';
+profile.addEventListener('basket', () => {
+  const weapon = wornWeapon(profile.data.gear)?.key ?? '';
+  if (weapon === weaponSent) return;
+  weaponSent = weapon;
+  session?.game?.send({ t: 'look', look: lookWithGear(profile.look, profile.data.gear), name: profile.name });
+});
 if (who) {
   const note = () => storage.notePlayer({ player: who.player, username: keeper.login.username, name: profile.name, look: profile.look });
   note();
@@ -666,7 +676,7 @@ const titleHandlers = {
   // you stop typing it for a moment.
   lookChanged: () => {
     clearTimeout(lookTimer);
-    if (session?.game) lookTimer = setTimeout(() => session?.game.send({ t: 'look', look: profile.look, name: profile.name }), 400);
+    if (session?.game) lookTimer = setTimeout(() => session?.game.send({ t: 'look', look: lookWithGear(profile.look, profile.data.gear), name: profile.name }), 400);
     else showDemoAvatar();
   },
   lookOpen: () => lookAtMe(true),
