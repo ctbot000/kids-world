@@ -7,6 +7,12 @@
 // in it) reaches, and it takes a few bops: each one knocks it back a little,
 // and it comes straight back at you, crosser and quicker than before.
 //
+// Tougher ones come out among them too, more of them at night: a Big
+// Bruiser, twice the size, that bumps two hearts off you and takes six bops
+// (a landing on it takes three, and you can land on it again and again),
+// and a Spiky, quick and prickly, that no one can jump on (landing on it
+// counts as a bump) and that takes four bops.
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -61,6 +67,10 @@ const LONELY_MS = 15000;
 const MOVE = { walk: 1.6, run: 3.4, jump: 8 };
 // Its size: as wide as it is round, and up to a player's middle.
 export const MONSTER_BODY = { radius: 0.42, height: 0.8 };
+// A Big Bruiser: about as tall as a player, and wide.
+export const BIG_BODY = { radius: 0.7, height: 1.3 };
+// A Spiky: a blob's size, with its spikes.
+export const SPIKY_BODY = { radius: 0.45, height: 0.85 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -111,6 +121,19 @@ const HIT_PUSH = 7;
 const CROSS_MS = 5000;
 const CROSS_RUN = 6.5;
 const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };
+// The roaming kinds, and how tough each is: its hearts, how many it bumps
+// off you, how many a landing on it takes (Infinity: it pops at once; 0:
+// nobody lands on it, it bumps them), and how it gets about, usually and
+// cross. A Big Bruiser is slow, but cross as quick as you walk; a Spiky is
+// quicker than a blob, though never as quick as you run.
+export const KINDS = {
+  blob: { hearts: BLOB_HEARTS, bump: 1, land: Infinity, move: MOVE, cross: CROSS_MOVE },
+  big: { hearts: 6, bump: 2, land: 3, move: { walk: 1.4, run: 3.6, jump: 9 }, cross: { walk: 1.4, run: 4.6, jump: 9 } },
+  spiky: { hearts: 4, bump: 1, land: 0, move: { walk: 2, run: 4.2, jump: 8 }, cross: { ...MOVE, run: CROSS_RUN } },
+};
+export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
+// Which kind comes out, by day and at night: the rest are blobs.
+const TOUGH = { day: { spiky: 0.2 }, night: { big: 0.2, spiky: 0.25 } };
 // Landing on one: your feet this far above its middle at least, and this
 // close side to side (a little more than touching, as you have moved on a
 // little by the time the host hears of it).
@@ -118,9 +141,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky'];
 
-export const bodyOf = (kind) => (kind === 'king' ? KING_BODY : MONSTER_BODY);
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY })[kind] ?? MONSTER_BODY;
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -174,6 +197,9 @@ export class MonsterSim {
     // The camps' monsters draw from randomness of their own, so the others
     // do just as they would without them.
     this.campRng = new Rng((seed ^ 0x2f6b1d3a) >>> 0);
+    // And which kind comes out from randomness of its own, so where and
+    // when they do is just as it was before there were tougher ones.
+    this.kindRng = new Rng((seed ^ 0x5bd1e995) >>> 0);
     this.list = [];
     this.nextId = 1;
     this.spawnAt = 0;
@@ -205,7 +231,8 @@ export class MonsterSim {
     body.radius = size.radius;
     body.height = size.height;
     const rng = camp || march ? this.campRng : this.rng;
-    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts: BLOB_HEARTS, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    const hearts = kindOf(kind).hearts;
+    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
     if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
@@ -236,6 +263,16 @@ export class MonsterSim {
     const out = this.stomps;
     this.stomps = [];
     return out;
+  }
+
+  // Which kind comes out next, by day or at night (see TOUGH).
+  pickKind(night) {
+    let r = this.kindRng.next();
+    for (const [kind, share] of Object.entries(TOUGH[night ? 'night' : 'day'])) {
+      if (r < share) return kind;
+      r -= share;
+    }
+    return 'blob';
   }
 
   // How many there should be with these players on the island.
@@ -274,7 +311,7 @@ export class MonsterSim {
       this.spawnAt = now + SPAWN_MS;
       if (this.roaming < this.wanted(people.length, night)) {
         const at = this.findSpot(world, people, havens);
-        if (at) this.add(world, at.x, at.y, at.z);
+        if (at) this.add(world, at.x, at.y, at.z, { kind: this.pickKind(night) });
       }
     }
     const bumps = [];
@@ -336,7 +373,7 @@ export class MonsterSim {
       m.target = target?.id ?? 0;
       // Left alone a while: all its hearts back.
       if (m.hitAt && now - m.hitAt >= HEAL_MS) {
-        m.hearts = BLOB_HEARTS;
+        m.hearts = m.max ?? BLOB_HEARTS;
         m.hitAt = 0;
       }
       // King Grumble's stomp only ever counts down while he is after someone.
@@ -444,7 +481,7 @@ export class MonsterSim {
       }
       // It gets about in hops.
       if ((mx || mz) && b.onGround) jump = true;
-      const move = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? CROSS_MOVE : MOVE;
+      const move = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
       const events = stepBody(world, b, { mx, mz, jump, run: m.state === 'chase' }, dt, { autoJump: true, move });
       if (events.bumped && m.state === 'hop') m.rest = 0;
       // Down from a stomp: the thump (see takeStomps), and a while till the next.
@@ -465,8 +502,10 @@ export class MonsterSim {
         for (const p of people) {
           if (p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
           if (Math.hypot(p.x - b.x, p.z - b.z) > b.radius + BUMP_PAD || sheltered(p)) continue;
-          // Their feet over its top: they are jumping on it, not bumped (see bop).
-          if (p.y > b.y + b.height - 0.25 || p.y + 1.5 < b.y) continue;
+          // Their feet over its top: they are jumping on it, not bumped (see
+          // bop), unless it is a Spiky, which nobody lands on.
+          const top = kindOf(m.kind).land ? b.height - 0.25 : b.height + 0.3;
+          if (p.y > b.y + top || p.y + 1.5 < b.y) continue;
           bumps.push({ monster: m, pid: p.id });
           m.giggle = now + GIGGLE_MS;
           m.target = 0;
@@ -583,10 +622,11 @@ export function unpackMonster(row) {
   return { id: row[0], x: row[1] / 100, y: row[2] / 100, z: row[3] / 100, yaw: row[4] / 100 - Math.PI, state: MONSTER_STATES[row[5]] ?? 'idle', kind: MONSTER_KINDS[row[6]] ?? 'blob', hearts: row[7] ?? BLOB_HEARTS, max: Math.max(1, row[8] ?? BLOB_HEARTS) };
 }
 
-// Hearts, for one player: how many after a bump (0: home they go, and back
-// to all of them), and how many come back while nothing bumps them.
-export function heartsAfterBump(hearts) {
-  return Math.max(0, hearts - 1);
+// Hearts, for one player: how many after a bump that takes n (0: home they
+// go, and back to all of them), and how many come back while nothing bumps
+// them.
+export function heartsAfterBump(hearts, n = 1) {
+  return Math.max(0, hearts - n);
 }
 
 export function heartsBack(hearts, sinceBumpMs) {

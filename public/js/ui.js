@@ -13,7 +13,7 @@ import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
-import { MAX_HEARTS } from './shared/monsters.js';
+import { bodyOf, MAX_HEARTS } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { blockIcon } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
@@ -68,7 +68,7 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 // What the island rule for monsters means (shared/monsters.js).
 // The bop button shows while a monster is this near.
 const ATTACK_SHOW = 14;
-const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)!';
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night.';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 // What a tower defense island is (shared/defense.js).
@@ -1483,7 +1483,7 @@ export class UI {
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky: bop it!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -3110,7 +3110,7 @@ export class UI {
         if (Math.hypot(p.x - me.x, p.z - me.z) > 30) continue;
         const max = Math.max(1, e.max ?? 1);
         const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
-        const top = e.kind === 'king' ? 2.9 : 1.1;
+        const top = e.kind === 'king' ? 2.9 : bodyOf(e.kind).height + 0.3;
         tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => [bar(hearts / max, 'monster')], 'mon');
       }
     }

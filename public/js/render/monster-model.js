@@ -1,18 +1,26 @@
 // A monster (shared/monsters.js): a grumpy jelly blob with cross eyebrows and
 // two little teeth, squashing as it lands and stretching as it hops, its
 // eyes glowing at night. A purple one on a sunny island, a frosty blue one
-// on a snowy one, and a sour green one on a candy one.
+// on a snowy one, and a sour green one on a candy one. A Big Bruiser is one
+// as tall as a player, deep red, with two horns; a Spiky a blob in orange
+// with a crest of spikes on its back.
 import * as THREE from '../../vendor/three.module.js';
 import { cone, mesh, onSurface, sphere, toon } from './toon.js';
 
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
+// The tougher kinds: their colours, and how much bigger than a blob.
+const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'] };
+const KIND_SCALE = { big: 1.62, spiky: 1.07 };
 const R = 0.42;
 const H = 0.36;
 
 export class MonsterModel {
-  constructor(theme = 'sunny') {
-    const [skin, core] = JELLY[theme] ?? JELLY.sunny;
+  // kind: 'blob', 'big' or 'spiky' (shared/monsters.js).
+  constructor(theme = 'sunny', kind = 'blob') {
+    const [skin, core] = KIND_JELLY[kind] ?? JELLY[theme] ?? JELLY.sunny;
+    const k = KIND_SCALE[kind] ?? 1;
     this.group = new THREE.Group();
+    this.group.scale.setScalar(k);
     this.body = new THREE.Group();
     this.group.add(this.body);
     const b = this.body;
@@ -46,9 +54,35 @@ export class MonsterModel {
       tooth.rotation.x = Math.PI;
       b.add(tooth);
     }
-    this.height = H * 2;
-    this.center = H;
-    this.pick = 0.5;
+    // Horns on a Big Bruiser, pointing up and out.
+    if (kind === 'big') {
+      for (const side of [-1, 1]) {
+        const horn = mesh(cone(0.06, 0.2, 8), toon('#fff1d0'), side * 0.2, H * 1.9, 0.05);
+        horn.rotation.z = -side * 0.5;
+        b.add(horn);
+      }
+    }
+    // Spikes on a Spiky: a crest from its head down its back, and a ring
+    // of them round its sides (none over its face).
+    if (kind === 'spiky') {
+      const spike = toon('#fff4c2');
+      const up = new THREE.Vector3(0, 1, 0);
+      const add = (a, el, len) => {
+        const x = R * Math.cos(el) * Math.sin(a);
+        const y = H * Math.sin(el);
+        const z = R * Math.cos(el) * Math.cos(a);
+        const n = new THREE.Vector3(x / (R * R), y / (H * H), z / (R * R)).normalize();
+        const s = mesh(cone(0.05, len, 6), spike, x + n.x * len * 0.4, H + y + n.y * len * 0.4, z + n.z * len * 0.4);
+        s.quaternion.setFromUnitVectors(up, n);
+        b.add(s);
+      };
+      for (const el of [1.3, 0.95, 0.6, 0.25]) add(Math.PI, el, 0.18);
+      for (let i = 0; i < 8; i++) add(Math.PI * (0.35 + (1.3 * i) / 7), 0.35, 0.13);
+    }
+    this.height = H * 2 * k;
+    this.center = H * k;
+    this.pick = 0.5 * k;
+    this.shadowScale = k;
     this.seen = 70;
     this.time = Math.random() * 10;
     this.lastY = null;

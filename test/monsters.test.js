@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, bopGap, HEART_BACK_MS, heartsBack, HIT_MS, MAX_HEARTS, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BIG_BODY, BLOB_HEARTS, BOP_SLACK, bopGap, HEART_BACK_MS, heartsBack, HIT_MS, KINDS, MAX_HEARTS, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -101,9 +101,10 @@ test('monsters come out round the players, away from them and the start, more at
   assert.ok(unpackMonster(a.last('mon').m[0]), 'in the compact form');
   // With its hearts, for the bar over it: one fewer after a bop.
   const m = room.monsters.list[0];
-  assert.deepEqual([unpackMonster(room.monsters.pack()[0]).hearts, unpackMonster(room.monsters.pack()[0]).max], [BLOB_HEARTS, BLOB_HEARTS]);
+  const full = KINDS[m.kind].hearts;
+  assert.deepEqual([unpackMonster(room.monsters.pack()[0]).hearts, unpackMonster(room.monsters.pack()[0]).max], [full, full]);
   room.monsters.hit(m, a.id, { x: m.body.x + 1, y: m.body.y, z: m.body.z }, time.now());
-  assert.equal(unpackMonster(room.monsters.pack()[0]).hearts, BLOB_HEARTS - 1);
+  assert.equal(unpackMonster(room.monsters.pack()[0]).hearts, full - 1);
 });
 
 test('a monster chases you, bumps you back for a heart, and with none left sends you home with them all', () => {
@@ -310,4 +311,102 @@ test('someone riding a big animal is never bumped', () => {
     now += 50;
     assert.deepEqual(sim.step(w, 0.05, now, [rider], false), []);
   }
+});
+
+test('tougher monsters come out too, more of them at night: never at day a Big Bruiser', () => {
+  const sim = new MonsterSim(3);
+  const count = (night) => {
+    const n = { blob: 0, big: 0, spiky: 0 };
+    for (let i = 0; i < 2000; i++) n[sim.pickKind(night)]++;
+    return n;
+  };
+  const day = count(false);
+  const night = count(true);
+  assert.equal(day.big, 0);
+  assert.ok(day.spiky > 300 && day.spiky < 500, `spikies by day: ${day.spiky}`);
+  assert.ok(night.big > 300 && night.big < 500, `bruisers at night: ${night.big}`);
+  assert.ok(night.blob < day.blob, 'fewer blobs at night');
+  // Each with its own size and hearts, on the wire too.
+  const w = meadow();
+  for (const kind of ['big', 'spiky']) {
+    const m = sim.add(w, 20.5, 11, 20.5, { kind });
+    assert.equal(m.hearts, KINDS[kind].hearts);
+    const row = unpackMonster(sim.pack().at(-1));
+    assert.deepEqual([row.kind, row.hearts, row.max], [kind, KINDS[kind].hearts, KINDS[kind].hearts]);
+  }
+  assert.equal(sim.list[0].body.radius, BIG_BODY.radius);
+});
+
+test('a Big Bruiser bumps two hearts off you, takes three landings or six bops, and heals back to six', () => {
+  const { room, time } = meadowRoom();
+  const a = join(room);
+  room.monsters.spawnAt = Infinity;
+  const spawn = room.world.spawn;
+  const x = spawn.x + 25;
+  const m = room.monsters.add(room.world, x + 6, 11, spawn.z, { kind: 'big' });
+  standFor(room, time, a, x, spawn.z, 8000, 11);
+  const bump = a.last('bump');
+  assert.ok(bump, 'it caught up');
+  assert.equal(bump.hearts, MAX_HEARTS - 2);
+  assert.equal(bump.big, true, 'a bigger knock back');
+  // Landed on: three hearts off, not a pop; again, and it pops.
+  const land = () => {
+    time.t += HIT_MS;
+    const b = m.body;
+    room.receive(a, { t: 'm', s: [b.x + 0.2, b.y + 1.5, b.z, 0, 0, 0] });
+    room.receive(a, { t: 'bop', id: m.id, on: true });
+  };
+  land();
+  assert.equal(m.hearts, KINDS.big.hearts - 3);
+  // Left alone, it heals back to all six.
+  time.t += 6000;
+  room.monsters.step(room.world, 0.05, time.now(), [], false, { roam: false });
+  assert.equal(m.hearts, KINDS.big.hearts);
+  land();
+  land();
+  assert.equal(room.monsters.get(m.id), null, 'popped');
+  // Bopped: six of them.
+  const n = room.monsters.add(room.world, x + 6, 11, spawn.z, { kind: 'big' });
+  let bops = 0;
+  while (room.monsters.get(n.id) && bops < 10) {
+    time.t += HIT_MS;
+    const b = n.body;
+    room.receive(a, { t: 'm', s: [b.x - 1.2, b.y, b.z, 0, 0, 0] });
+    room.receive(a, { t: 'bop', id: n.id });
+    bops++;
+  }
+  assert.equal(bops, KINDS.big.hearts);
+});
+
+test('a Spiky cannot be landed on: it bumps whoever tries, and takes four bops', () => {
+  const { room, time } = meadowRoom();
+  const a = join(room);
+  room.monsters.spawnAt = Infinity;
+  const spawn = room.world.spawn;
+  const x = spawn.x + 25;
+  const m = room.monsters.add(room.world, x, 11, spawn.z, { kind: 'spiky' });
+  m.giggle = Infinity;
+  // Landing on it does nothing to it...
+  room.receive(a, { t: 'm', s: [x + 0.1, 11.9, spawn.z, 0, 0, 0] });
+  room.receive(a, { t: 'bop', id: m.id, on: true });
+  assert.equal(m.hearts, KINDS.spiky.hearts);
+  // ...and with feet on its spikes, it bumps them.
+  m.giggle = 0;
+  const p = { id: a.id ?? 1, x: x + 0.1, y: 11.9, z: spawn.z };
+  const bumps = room.monsters.step(room.world, 0.05, time.now(), [p], false, { roam: false });
+  assert.equal(bumps.length, 1, 'ouch');
+  // A blob there would have been landed on instead.
+  const blob = new MonsterSim(1);
+  const bm = blob.add(room.world, x, 11, spawn.z);
+  assert.equal(blob.step(room.world, 0.05, time.now(), [{ ...p, x: bm.body.x + 0.1 }], false, { roam: false }).length, 0);
+  // Four bops pop it.
+  let bops = 0;
+  while (room.monsters.get(m.id) && bops < 10) {
+    time.t += HIT_MS;
+    const b = m.body;
+    room.receive(a, { t: 'm', s: [b.x - 1, b.y, b.z, 0, 0, 0] });
+    room.receive(a, { t: 'bop', id: m.id });
+    bops++;
+  }
+  assert.equal(bops, KINDS.spiky.hearts);
 });

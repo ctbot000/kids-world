@@ -21,7 +21,7 @@ import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { heartsAfterBump, heartsBack, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { heartsAfterBump, heartsBack, kindOf, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanPiece } from './song.js';
 import { weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -935,13 +935,14 @@ export class Room {
   hurt(pid, monster, now, stomp = false) {
     const p = this.players.get(pid);
     if (!p) return;
-    p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS);
+    p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump);
     p.bumpAt = now;
     p.healAt = now;
     p.safeUntil = now + SAFE_MS;
     const b = monster.body;
     const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), hearts: p.hearts, home: false };
-    if (monster.kind === 'king') msg.big = true;
+    if (monster.kind === 'king' || monster.kind === 'big') msg.big = true;
+    if (monster.kind === 'spiky') msg.spiky = true;
     if (stomp) msg.stomp = true;
     if (p.hearts === 0) {
       if (this.adventure && this.helperFor(pid, now)) {
@@ -991,7 +992,8 @@ export class Room {
 
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
   // and from further, with a toy weapon in hand), and pop with the last.
-  // (King Grumble takes a lot of either.)
+  // (King Grumble takes a lot of either, a Big Bruiser a few landings, and
+  // a Spiky is not landed on at all: see MonsterSim.step.)
   bop(p, msg) {
     if (!Number.isInteger(msg.id)) return;
     const now = this.now();
@@ -1009,8 +1011,10 @@ export class Room {
       this.bopKing(p, m, now, weapon?.king ?? 1);
       return;
     }
-    if (!landed) {
-      const hit = this.monsters.hit(m, p.id, at, now, weapon?.power ?? 1);
+    const land = kindOf(m.kind).land;
+    if (landed && !land) return;
+    if (!landed || land !== Infinity) {
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1));
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });

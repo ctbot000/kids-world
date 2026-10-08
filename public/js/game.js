@@ -52,6 +52,11 @@ const BUBBLE_SECS = 4.5;
 const FRONT = 0.34;
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
+// What each tougher monster is, told the first time one comes out near you.
+const TOUGH_TOLD = {
+  big: { icon: '💪', text: 'A Big Bruiser! It bumps two hearts off you and takes six bops. Jumping on it takes three.' },
+  spiky: { icon: '🦔', text: 'A Spiky! Don’t jump on it, ouch! Bop it four times instead.' },
+};
 
 const lerpAngle = (a, b, t) => {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -785,6 +790,12 @@ export class Game extends EventTarget {
         entry = { id: m.id, kind: m.kind, snaps: [], model: this.renderer.addMonster(m.id, m.kind), grumbleAt: now + Math.random() * 4000 };
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
+        // The first tough one near you this time: what it is.
+        const told = TOUGH_TOLD[m.kind];
+        if (told && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
+          (this.toldKinds ??= new Set()).add(m.kind);
+          this.emit('toast', told);
+        }
       }
       entry.snaps.push({ t: now, x: m.x, y: m.y, z: m.z, yaw: m.yaw, state: m.state });
       entry.hearts = m.hearts;
@@ -827,6 +838,10 @@ export class Game extends EventTarget {
       }
       if (msg.dizzy && p) this.emit('toast', { icon: '💫', text: `${p.name} is out of hearts! Go and tap them to help them up.` });
       return;
+    }
+    if (msg.spiky && !this.toldSpikes) {
+      this.toldSpikes = true;
+      this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
     this.setHearts(msg.hearts);
     this.sound.play('bump');
@@ -886,6 +901,7 @@ export class Game extends EventTarget {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
+      if (entry?.kind === 'big') fx.sparkles(p.x, p.y + 0.9, p.z, 30, ['#ff8fa3', '#ffffff', '#ffd84d']);
       if (entry?.kind === 'king') {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
@@ -916,7 +932,8 @@ export class Game extends EventTarget {
       this.toldHit = performance.now() + 20000;
       const n = msg.hearts | 0;
       const more = n === 1 ? 'One more bop' : `${n} more bops`;
-      this.emit('toast', { icon: '👾', text: msg.march ? `Bonk! ${more} and it pops. Jumping on it takes three!` : `Bonk! ${more} and it pops. Watch out, it’s cross now! Jumping on it pops it at once.` });
+      const jump = { big: 'Jumping on it takes three.', spiky: 'Don’t jump on it, though!' }[entry?.kind] ?? 'Jumping on it pops it at once.';
+      this.emit('toast', { icon: '👾', text: msg.march ? `Bonk! ${more} and it pops. Jumping on it takes three!` : `Bonk! ${more} and it pops. Watch out, it’s cross now! ${jump}` });
     }
   }
 
@@ -1011,12 +1028,14 @@ export class Game extends EventTarget {
       // King Grumble can be landed on again and again (and so can one
       // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
+      // Nobody lands on a Spiky: the host counts it as a bump.
+      if (entry.kind === 'spiky') continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
-      entry.stomped = entry.kind === 'king' || this.defense ? now + 500 : Infinity;
+      entry.stomped = entry.kind === 'king' || entry.kind === 'big' || this.defense ? now + 500 : Infinity;
       this.bop(entry.id, true);
       b.vy = 9;
       this.sound.play('jump');
@@ -1043,6 +1062,7 @@ export class Game extends EventTarget {
       m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
       const king = entry.kind === 'king';
+      const big = king || entry.kind === 'big';
       // King Grumble dazed from a stomp: stars round his crown, and the first
       // time you see it near, how to make the most of it.
       if (king && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
@@ -1052,9 +1072,9 @@ export class Game extends EventTarget {
           this.emit('toast', { icon: '💫', text: 'King Grumble is dazed after his stomp! Bop him now: every bop counts three times.' });
         }
       }
-      if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, king ? 24 : 10)) {
+      if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, big ? 24 : 10)) {
         entry.grumbleAt = now + 3500 + Math.random() * 4000;
-        this.sound.play('grumble', { big: king });
+        this.sound.play('grumble', { big });
       }
     }
   }

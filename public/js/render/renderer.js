@@ -166,10 +166,10 @@ export class Renderer {
     return petSeat(mount);
   }
 
-  // kind: 'blob', or 'king' for King Grumble.
+  // kind: 'blob', 'big' or 'spiky', or 'king' for King Grumble.
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : new MonsterModel(this.world?.theme);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : new MonsterModel(this.world?.theme, kind);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
