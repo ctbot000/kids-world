@@ -652,7 +652,7 @@ export class Sound {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     const now = ctx.currentTime;
-    this.rainLoop(this.musicOn && (this.weather === 'rain' || this.weather === 'sprinkles'));
+    this.rainLoop(this.musicOn ? { rain: 0.016, sprinkles: 0.008 }[this.weather] ?? 0 : 0);
     this.songLoop();
     if (!this.musicOn || this.song) {
       this.nextBeat = 0;
@@ -713,23 +713,30 @@ export class Sound {
     }
   }
 
-  rainLoop(on) {
+  // A soft hush under the music: dark filtered noise, quieter for sprinkles.
+  rainLoop(level) {
     const ctx = this.ctx;
-    if (on && !this.rain) {
+    if (level && !this.rain) {
       const src = ctx.createBufferSource();
       this.noise(0.01, { gain: 0.0001 }); // makes sure the noise buffer exists
       src.buffer = this.noiseBuffer;
       src.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = 'lowpass';
-      f.frequency.value = 1400;
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 700;
+      const high = ctx.createBiquadFilter();
+      high.type = 'highpass';
+      high.frequency.value = 150;
       const g = ctx.createGain();
       g.gain.value = 0.0001;
-      g.gain.setTargetAtTime(0.05, ctx.currentTime, 1.5);
-      src.connect(f).connect(g).connect(this.sfx);
+      src.connect(high).connect(low).connect(g).connect(this.sfx);
       src.start();
-      this.rain = { src, g };
-    } else if (!on && this.rain) {
+      this.rain = { src, g, level: 0 };
+    }
+    if (level && this.rain.level !== level) {
+      this.rain.g.gain.setTargetAtTime(level, ctx.currentTime, 1.5);
+      this.rain.level = level;
+    } else if (!level && this.rain) {
       const { src, g } = this.rain;
       g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.8);
       src.stop(ctx.currentTime + 3);
