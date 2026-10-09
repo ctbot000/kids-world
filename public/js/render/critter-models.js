@@ -5,7 +5,7 @@
 // elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
 // which live with them, are in vehicle-models.js.
 import * as THREE from '../../vendor/three.module.js';
-import { blobShadow, capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { bake, bakeCached, blobShadow, capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 
 const BLACK = '#2b2530';
@@ -22,7 +22,8 @@ function alongSurface(part, rx, ry, rz, p) {
 
 // A pair of wings, each hung from its own shoulder and reaching out to its own
 // side, so that one positive angle (rotation.z times the side) raises both
-// tips. A mirrored copy would turn the other way.
+// tips. A mirrored copy would turn the other way. The flight feathers fan out
+// along the trailing edge, baked into one shape per wing.
 export function wingPair(parent, { x, y, z = 0, length, width, thick = 0.016, color, tip = null, material = null }) {
   return [-1, 1].map((side) => {
     const w = new THREE.Group();
@@ -30,6 +31,16 @@ export function wingPair(parent, { x, y, z = 0, length, width, thick = 0.016, co
     w.userData.wing = side;
     w.add(mesh(sphere(), material ?? toon(color), side * length * 0.5, 0, 0, length * 0.5, thick, width));
     if (tip) w.add(mesh(sphere(), toon(tip), side * length * 0.9, 0.003, -width * 0.2, length * 0.14, thick * 1.1, width * 0.6));
+    const feathers = [];
+    const n = 4;
+    for (let i = 0; i < n; i++) {
+      const k = 0.45 + (i / (n - 1)) * 0.5;
+      const m = new THREE.Matrix4()
+        .makeRotationZ(side * (-0.35 - i * 0.16))
+        .setPosition(side * length * k, -thick * 0.5, -width * (0.28 + i * 0.02));
+      feathers.push({ g: capsule(length * 0.075, length * (0.34 - i * 0.03), 4, 8), m });
+    }
+    w.add(mesh(bakeCached(`feathers|${side}|${length}|${width}`, feathers), toon(tip ?? color)));
     parent.add(w);
     return w;
   });
@@ -68,8 +79,18 @@ function bunny(id) {
   const eyes = eyesOn(head, 0.15, 0.14, 0.14, 0.07, 0.02, 0.022);
   const nose = onSurface(0.15, 0.14, 0.14, 0, -0.03, 0.004);
   head.add(mesh(sphere(), toon('#ff7f9f'), nose.x, nose.y, nose.z, 0.02, 0.015, 0.012));
+  // Cheek tufts either side of the nose.
+  for (const side of [-1, 1]) {
+    const c = onSurface(0.15, 0.14, 0.14, side * 0.1, -0.03, -0.01);
+    head.add(mesh(sphere(1, 12, 8), toon(fur), c.x, c.y, c.z, 0.045, 0.035, 0.03));
+  }
   body.add(mesh(sphere(), toon(WHITE), 0, 0.2, -0.26, 0.07));
-  for (const side of [-1, 1]) body.add(mesh(sphere(), toon(fur), side * 0.11, 0.04, 0.12, 0.05, 0.04, 0.07));
+  // Feet with toes in front, haunches behind.
+  for (const side of [-1, 1]) {
+    body.add(mesh(sphere(1, 12, 8), toon(fur), side * 0.11, 0.04, 0.12, 0.05, 0.04, 0.07));
+    body.add(mesh(sphere(1, 12, 8), toon(fur), side * 0.08, 0.025, 0.19, 0.032, 0.02, 0.045));
+    body.add(mesh(sphere(1, 12, 8), toon(fur), side * 0.14, 0.025, 0.18, 0.028, 0.018, 0.04));
+  }
   return { group: g, body, head, eyes, height: 0.6 };
 }
 
@@ -91,7 +112,10 @@ function chick() {
     const wing = mesh(sphere(), toon('#ffcc33'), side * 0.16, 0.2, -0.01, 0.04, 0.09, 0.1);
     wing.userData.wing = side;
     body.add(wing);
+    // Feather tips on the wing, and little toes on each foot.
+    body.add(mesh(sphere(1, 10, 8), toon('#ffb84d'), side * 0.18, 0.16, -0.05, 0.025, 0.05, 0.06));
     body.add(mesh(cylinder(0.012, 0.012, 0.08, 6), toon('#ff9b2f'), side * 0.06, 0.04, 0.02));
+    for (const t of [-1, 0, 1]) body.add(mesh(sphere(1, 8, 6), toon('#ff9b2f'), side * 0.06 + t * 0.018, 0.004, 0.05, 0.008, 0.006, 0.014));
   }
   return { group: g, body, head, eyes, height: 0.5 };
 }
@@ -101,6 +125,8 @@ function sheep() {
   const body = new THREE.Group();
   g.add(body);
   const wool = toon('#fbfbf7');
+  // The fleece: a cloud of puffs, one shape for all of them.
+  const fleece = [];
   for (const [x, y, z, r] of [
     [0, 0.42, 0, 0.26],
     [0.14, 0.44, 0.12, 0.17],
@@ -109,9 +135,16 @@ function sheep() {
     [-0.14, 0.44, -0.14, 0.17],
     [0, 0.58, 0, 0.18],
     [0, 0.42, -0.24, 0.16],
+    [0.2, 0.52, 0, 0.12],
+    [-0.2, 0.52, 0, 0.12],
+    [0.1, 0.55, 0.18, 0.12],
+    [-0.1, 0.55, 0.18, 0.12],
+    [0.1, 0.54, -0.2, 0.12],
+    [-0.1, 0.54, -0.2, 0.12],
   ]) {
-    body.add(mesh(sphere(), wool, x, y, z, r));
+    fleece.push({ g: sphere(1, 16, 12), m: new THREE.Matrix4().makeScale(r, r, r).setPosition(x, y, z) });
   }
+  body.add(mesh(bakeCached('fleece', fleece), wool));
   for (const [x, z] of [
     [0.12, 0.14],
     [-0.12, 0.14],
@@ -119,6 +152,7 @@ function sheep() {
     [-0.12, -0.14],
   ]) {
     body.add(mesh(cylinder(0.035, 0.035, 0.24, 8), toon('#4a4450'), x, 0.12, z));
+    body.add(mesh(cylinder(0.042, 0.038, 0.05, 8), toon('#37323d'), x, 0.025, z));
   }
   const head = new THREE.Group();
   head.position.set(0, 0.52, 0.3);
@@ -148,11 +182,16 @@ function duck() {
   head.add(mesh(sphere(), toon('#ffffff'), 0, 0, 0, 0.12));
   const eyes = eyesOn(head, 0.12, 0.12, 0.12, 0.065, 0.03, 0.02);
   head.add(mesh(sphere(), toon('#ff9b2f'), 0, -0.03, 0.13, 0.06, 0.02, 0.06));
+  // Nostrils on the bill.
+  for (const side of [-1, 1]) head.add(mesh(sphere(1, 8, 6), toon('#d97a1a'), side * 0.018, -0.028, 0.16, 0.006, 0.004, 0.008));
   for (const side of [-1, 1]) {
     const wing = mesh(sphere(), toon('#f1f1f1'), side * 0.17, 0.2, -0.03, 0.04, 0.09, 0.15);
     wing.userData.wing = side;
     body.add(wing);
+    // A tipped feather on each wing, and webbed feet with a back toe.
+    body.add(mesh(sphere(1, 12, 8), toon('#e3e3e3'), side * 0.19, 0.17, -0.08, 0.028, 0.055, 0.08));
     body.add(mesh(sphere(), toon('#ff9b2f'), side * 0.07, 0.02, 0.04, 0.05, 0.015, 0.07));
+    body.add(mesh(sphere(1, 10, 8), toon('#ff9b2f'), side * 0.07, 0.012, -0.015, 0.03, 0.008, 0.02));
   }
   return { group: g, body, head, eyes, height: 0.5 };
 }
@@ -208,7 +247,12 @@ function bird(id) {
   const tail = new THREE.Group();
   tail.position.set(0, 0.02, -0.13);
   pivot.add(tail);
-  tail.add(mesh(sphere(), toon(k.wing), 0, 0, -0.06, 0.045, 0.012, 0.08));
+  // A fan of tail feathers, one shape.
+  const fan = [];
+  for (const a of [-0.45, 0, 0.45]) {
+    fan.push({ g: capsule(0.014, 0.09, 4, 8), m: new THREE.Matrix4().makeRotationZ(a).setPosition(0, 0, -0.06) });
+  }
+  tail.add(mesh(bakeCached('bird-fan', fan), toon(k.wing)));
   const folded = [-1, 1].map((side) => {
     const f = mesh(sphere(), toon(k.wing), side * 0.105, 0.01, -0.03, 0.03, 0.07, 0.1);
     f.rotation.x = 0.25;
@@ -329,7 +373,12 @@ function seagull() {
   const tail = new THREE.Group();
   tail.position.set(0, 0.02, -0.2);
   pivot.add(tail);
-  tail.add(mesh(sphere(), toon(WHITE_FEATHERS), 0, 0, -0.05, 0.065, 0.014, 0.08));
+  const gullFan = [];
+  for (const a of [-0.4, 0, 0.4]) {
+    gullFan.push({ g: capsule(0.016, 0.11, 4, 8), m: new THREE.Matrix4().makeRotationZ(a).setPosition(0, 0, -0.05) });
+  }
+  tail.add(mesh(bakeCached('gull-fan', gullFan), toon(WHITE_FEATHERS)));
+  tail.add(mesh(sphere(1, 10, 8), toon(TIPS), 0, 0.001, -0.1, 0.03, 0.01, 0.022));
   // Folded, the grey wings lie along its back, their black tips past the tail.
   const folded = [-1, 1].map((side) => {
     const f = new THREE.Group();
@@ -376,6 +425,9 @@ function fish(id) {
     f.userData.home = f.position.clone();
     f.add(mesh(sphere(), toon(k.body), 0, 0, 0, 0.045, 0.075, 0.12));
     f.add(mesh(sphere(), toon(k.stripe), 0, 0, 0.02, 0.048, 0.078, 0.025));
+    // A dorsal fin on the back, and a pectoral fin on each side.
+    f.add(mesh(cone(0.03, 0.06, 4), toon(k.fin), 0, 0.07, -0.01, 0.35, 1, 1).rotateX(-0.5));
+    for (const side of [-1, 1]) f.add(mesh(sphere(1, 10, 8), toon(k.fin), side * 0.042, -0.01, 0.05, 0.008, 0.026, 0.018));
     const tail = new THREE.Group();
     tail.position.z = -0.1;
     tail.add(mesh(cone(0.07, 0.1, 4), toon(k.fin), 0, 0, -0.05, 0.3, 1, 1).rotateX(Math.PI / 2));
@@ -417,7 +469,9 @@ function dolphin() {
   tail.position.z = -0.5;
   pivot.add(tail);
   tail.add(mesh(sphere(), skin, 0, 0, -0.15, 0.1, 0.11, 0.25));
-  tail.add(mesh(sphere(), skin, 0, 0, -0.38, 0.26, 0.025, 0.09));
+  // Flukes with a notch between them, swept back a little.
+  for (const side of [-1, 1]) tail.add(mesh(sphere(1, 16, 12), skin, side * 0.16, 0, -0.36, 0.15, 0.022, 0.1).rotateY(side * 0.25));
+  tail.add(mesh(sphere(1, 12, 8), skin, 0, 0, -0.31, 0.03, 0.02, 0.05));
   return { group: g, body, pivot, head, eyes, tail, height: 0.45, center: 0, shadow: 0, pick: 0.6, seen: 90 };
 }
 
@@ -452,6 +506,13 @@ function whale() {
   pivot.add(tail);
   tail.add(mesh(sphere(), skin, 0, 0.02, -0.35, 0.26, 0.24, 0.6));
   for (const side of [-1, 1]) tail.add(mesh(sphere(), skin, side * 0.36, 0.02, -0.92, 0.42, 0.045, 0.2).rotateY(side * 0.45));
+  // Pleats along its pale throat, the way a whale's is.
+  const pleats = [];
+  for (let i = 0; i < 5; i++) {
+    const y = -0.14 - i * 0.09;
+    pleats.push({ g: capsule(0.008, 0.75, 3, 6), m: new THREE.Matrix4().makeRotationX(Math.PI / 2 - 0.12).setPosition(0, y, 0.62 - i * 0.02) });
+  }
+  pivot.add(mesh(bakeCached('whale-pleats', pleats), toon('#c4d4e8')));
   return { group: g, body, pivot, head, eyes, tail, height: 1.1, center: 0, shadow: 0, pick: 1.2, seen: 160 };
 }
 
@@ -466,6 +527,10 @@ function turtle() {
   const SHELL = [0.27, 0.13, 0.32];
   pivot.add(mesh(sphere(), toon('#3f8f57'), 0, 0.03, 0, ...SHELL));
   pivot.add(mesh(sphere(), toon('#f2e6b0'), 0, -0.02, 0, 0.24, 0.05, 0.29));
+  // A rim round the edge of its shell.
+  const rim = mesh(torus(0.285, 0.02, Math.PI * 2), toon('#2f7246'), 0, 0.02, 0, 1, 0.82, 1.12);
+  rim.rotation.x = Math.PI / 2;
+  pivot.add(rim);
   // Paler plates on top of its shell.
   for (const [x, z] of [[0, 0], [-0.13, 0.09], [0.13, 0.09], [-0.13, -0.1], [0.13, -0.1]]) {
     const top = new THREE.Vector3(x, SHELL[1] * Math.sqrt(Math.max(0, 1 - (x / SHELL[0]) ** 2 - (z / SHELL[2]) ** 2)), z);
@@ -498,6 +563,7 @@ function turtle() {
 }
 
 const CRABS = ['#ff6b4a', '#ff8a3d', '#e8504f'];
+const CRAB_DARK = ['#c24830', '#c76a26', '#b23a3a'];
 
 // A crab faces +z, and walks off to its sides.
 function crab(id) {
@@ -520,7 +586,7 @@ function crab(id) {
     eyes.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), side * 0.057, 0.112, 0.02, 0.008));
   }
   head.add(eyes);
-  // Claws: an arm, a lower jaw, and an upper jaw that snaps.
+  // Claws: an arm, a lower jaw, and an upper jaw that snaps, with a tooth on each.
   const claws = [-1, 1].map((side) => {
     const c = new THREE.Group();
     c.position.set(side * 0.13, 0, 0.08);
@@ -528,9 +594,11 @@ function crab(id) {
     c.userData.side = side;
     c.add(mesh(cylinder(0.022, 0.022, 0.1, 8), shell, 0, 0, 0.05).rotateX(Math.PI / 2));
     c.add(mesh(sphere(), shell, 0, -0.005, 0.13, 0.045, 0.028, 0.06));
+    c.add(mesh(cone(0.012, 0.028, 6), toon(WHITE), 0.012, 0.004, 0.16).rotateZ(-0.8));
     const jaw = new THREE.Group();
     jaw.position.set(0, 0.012, 0.09);
     jaw.add(mesh(sphere(), shell, 0, 0.012, 0.045, 0.038, 0.022, 0.055));
+    jaw.add(mesh(cone(0.012, 0.028, 6), toon(WHITE), -0.012, 0.014, 0.075).rotateZ(0.8));
     c.add(jaw);
     c.userData.jaw = jaw;
     pivot.add(c);
@@ -544,6 +612,9 @@ function crab(id) {
       leg.rotation.z = -side * 1.05;
       leg.userData.side = side;
       leg.add(mesh(cylinder(0.008, 0.013, 0.14, 6), shell, 0, -0.07, 0));
+      // A knuckle where the leg bends, and a point at its tip.
+      leg.add(mesh(sphere(1, 8, 6), shell, 0, -0.075, 0, 0.016));
+      leg.add(mesh(cone(0.009, 0.025, 6), toon(CRAB_DARK[id % CRAB_DARK.length]), 0, -0.145, 0));
       pivot.add(leg);
       legs.push(leg);
     }
@@ -566,6 +637,14 @@ function octopus(id) {
   head.add(mesh(sphere(), skin, 0, 0, 0, 0.17, 0.2, 0.17));
   const eyes = eyesOn(head, 0.17, 0.2, 0.17, 0.065, -0.06, 0.034);
   const tentacles = [];
+  // A row of suckers down the underside of a tentacle: one shared shape.
+  const suckers = [];
+  for (let i = 0; i < 6; i++) {
+    const y = -0.08 - i * 0.055;
+    const r = 0.013 - i * 0.0012;
+    suckers.push({ g: sphere(1, 8, 6), m: new THREE.Matrix4().makeScale(r, r * 0.6, r).setPosition(0, y, 0.05 - i * 0.004) });
+  }
+  const suckerRow = bakeCached('suckers', suckers);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     const t = new THREE.Group();
@@ -573,6 +652,7 @@ function octopus(id) {
     t.rotation.y = a;
     const arm = new THREE.Group();
     arm.add(mesh(cone(0.065, 0.4, 8), skin, 0, -0.2, 0).rotateX(Math.PI));
+    arm.add(mesh(suckerRow, toon('#ffd9ea')));
     // A curl at the end.
     arm.add(mesh(sphere(1, 8, 6), skin, 0, -0.39, 0.025, 0.024));
     t.add(arm);
@@ -616,11 +696,17 @@ function penguin() {
     f.position.set(side * 0.15, 0.08, 0);
     f.userData.side = side;
     f.add(mesh(sphere(), back, side * 0.02, -0.12, 0, 0.035, 0.14, 0.07));
+    f.add(mesh(sphere(1, 10, 8), back, side * 0.03, -0.22, 0.01, 0.028, 0.045, 0.05));
     pivot.add(f);
     return f;
   });
+  // A stub of a tail at the back, and toes on each foot.
+  pivot.add(mesh(sphere(1, 12, 8), back, 0, -0.06, -0.16, 0.07, 0.03, 0.05));
   const feet = [-1, 1].map((side) => {
-    const f = mesh(sphere(), orange, side * 0.065, 0.015, 0.06, 0.05, 0.018, 0.075);
+    const f = new THREE.Group();
+    f.add(mesh(sphere(), orange, 0, 0.015, 0.06, 0.05, 0.018, 0.075));
+    for (const t of [-1, 0, 1]) f.add(mesh(sphere(1, 8, 6), orange, t * 0.018, 0.008, 0.11, 0.012, 0.008, 0.02));
+    f.position.x = side * 0.065;
     body.add(f);
     return f;
   });
@@ -645,6 +731,14 @@ function seal() {
   head.add(mesh(sphere(), pale, 0, -0.035, 0.12, 0.075, 0.055, 0.06));
   head.add(mesh(sphere(1, 8, 6), toon(BLACK), 0, -0.005, 0.175, 0.022, 0.016, 0.014));
   const eyes = eyesOn(head, 0.14, 0.13, 0.14, 0.055, 0.035, 0.03);
+  // Whiskers on its muzzle, three each side, one shape.
+  const sealWhiskers = [];
+  for (const side of [-1, 1]) {
+    for (const [dy, tilt] of [[0.018, 0.12], [0.004, 0], [-0.01, -0.12]]) {
+      sealWhiskers.push({ g: capsule(0.0028, 0.09, 3, 6), m: new THREE.Matrix4().makeRotationZ(side * (Math.PI / 2 - tilt)).setPosition(side * 0.07, -0.045 + dy, 0.15) });
+    }
+  }
+  head.add(mesh(bakeCached('seal-whiskers', sealWhiskers), toon('#e8eef2')));
   // A ball to play with, on its nose.
   const ball = new THREE.Group();
   ball.position.set(0, 0.2, 0.1);
