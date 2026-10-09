@@ -101,6 +101,7 @@ export function swingPose(swing, k) {
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
+const EYE = '#4a3226';
 
 // How far your middle is over the bed lying down: half how deep a body is.
 const LIE_LIFT = 0.16;
@@ -139,14 +140,41 @@ function eyes(head, style = 'dot') {
   const group = new THREE.Group();
   for (const side of [-1, 1]) {
     const p = onFace(side * 0.12, 0.02, 0.005);
-    const eye = mesh(sphere(1, 16, 12), toon(BLACK), p.x, p.y, p.z, 0.048, style === 'big' ? 0.075 : 0.062, 0.03);
-    eye.lookAt(p.clone().multiplyScalar(2));
-    const shine = mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.6 }), p.x + side * 0.012 - 0.01, p.y + 0.022, p.z + 0.024, 0.016);
-    group.add(eye, shine);
+    if (style === 'big') {
+      // A big round eye: a white, an iris, a pupil and a catchlight, turned to face out.
+      const eye = new THREE.Group();
+      eye.position.set(p.x, p.y, p.z);
+      eye.lookAt(p.clone().multiplyScalar(2));
+      eye.add(mesh(sphere(1, 18, 14), toon(WHITE), 0, 0, 0, 0.056, 0.072, 0.034));
+      const iris = mesh(sphere(1, 14, 10), toon(EYE), 0, -0.004, 0.016, 0.036, 0.05, 0.02);
+      iris.userData.iris = true;
+      eye.add(iris);
+      const pupil = mesh(sphere(1, 10, 8), toon(BLACK), 0, -0.006, 0.027, 0.02, 0.028, 0.011);
+      pupil.userData.iris = true;
+      eye.add(pupil);
+      eye.add(mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.75 }), -0.013, 0.02, 0.028, 0.011, 0.014, 0.007));
+      group.add(eye);
+    } else {
+      const eye = mesh(sphere(1, 16, 12), toon(BLACK), p.x, p.y, p.z, 0.048, 0.062, 0.03);
+      eye.lookAt(p.clone().multiplyScalar(2));
+      const shine = mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.6 }), p.x + side * 0.012 - 0.01, p.y + 0.022, p.z + 0.024, 0.016);
+      group.add(eye, shine);
+    }
   }
   group.userData.blink = true;
   head.add(group);
   return group;
+}
+
+// A pair of eyebrows above the eyes, flat and soft.
+function brows(head, color) {
+  for (const side of [-1, 1]) {
+    const p = onFace(side * 0.12, 0.145, 0.004);
+    const b = mesh(sphere(1, 12, 8), toon(color), p.x, p.y, p.z, 0.05, 0.016, 0.014);
+    b.lookAt(p.clone().multiplyScalar(2));
+    b.rotateZ(side * 0.12);
+    head.add(b);
+  }
 }
 
 function blush(head) {
@@ -173,6 +201,26 @@ function muzzle(head, color, noseColor = BLACK, size = 1) {
   head.add(mz);
   const n = mesh(sphere(1, 12, 8), toon(noseColor), p.x, p.y + 0.035 * size, p.z + 0.07 * size, 0.04, 0.03, 0.03);
   head.add(n);
+  // Nostrils either side of the nose, and a small mouth under it.
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(1, 8, 6), toon(darken(noseColor, 0.3)), p.x + side * 0.016 * size, p.y + 0.036 * size, p.z + 0.09 * size, 0.008, 0.01, 0.006));
+  }
+  const mouth = onFace(0, -0.135, 0.004);
+  head.add(mesh(capsule(0.006, 0.03), toon('#7a3b3b'), mouth.x, mouth.y, mouth.z + 0.04 * size).rotateZ(Math.PI / 2));
+}
+
+// Whiskers springing from the muzzle: three each side, all as one shape.
+function whiskers(head) {
+  const parts = [];
+  for (const side of [-1, 1]) {
+    for (const [dy, dz, tilt] of [[0.045, 0.02, 0.15], [0.0, -0.01, 0], [-0.04, 0.02, -0.15]]) {
+      const m = new THREE.Matrix4()
+        .makeRotationZ(side * (Math.PI / 2 - tilt))
+        .setPosition(side * 0.17, -0.07 + dy, dz + 0.1);
+      parts.push({ g: capsule(0.0035, 0.13), m });
+    }
+  }
+  head.add(mesh(bakeCached('whiskers', parts), toon('#f5ecf2')));
 }
 
 function ears(head, animal, fur) {
@@ -262,16 +310,16 @@ function face(head, animal, fur) {
     case 'panda': {
       for (const side of [-1, 1]) {
         const p = onFace(side * 0.12, 0.01, -0.01);
-        const patch = mesh(sphere(), toon(BLACK), p.x, p.y, p.z, 0.08, 0.1, 0.04);
+        const patch = mesh(sphere(1, 16, 12), toon(BLACK), p.x, p.y, p.z, 0.083, 0.105, 0.04);
         patch.rotation.z = side * 0.5;
         head.add(patch);
+        head.add(mesh(sphere(1, 12, 8), toon(darken(fur, 0.1)), p.x, p.y - 0.01, p.z + 0.02, 0.05, 0.065, 0.028));
       }
       const e = eyes(head, 'big');
-      for (const child of e.children) if (child.material.color.getHexString() === '2b2530') child.material = toon(WHITE);
-      for (const side of [-1, 1]) {
-        const p = onFace(side * 0.12, 0.02, 0.03);
-        head.add(mesh(sphere(), toon(BLACK), p.x, p.y, p.z, 0.028, 0.035, 0.015));
-      }
+      // A panda's eyes are pale in their dark patches.
+      e.traverse((o) => {
+        if (o.userData.iris) o.material = toon('#e8e4ee');
+      });
       muzzle(head, WHITE, BLACK, 0.8);
       return e;
     }
@@ -293,8 +341,14 @@ function face(head, animal, fur) {
     case 'bunny':
     case 'cat': {
       const p = onFace(0, -0.045, 0.004);
-      head.add(mesh(sphere(), toon('#ff7f9f'), p.x, p.y, p.z, 0.03, 0.022, 0.02));
+      head.add(mesh(sphere(1, 14, 10), toon('#ff7f9f'), p.x, p.y, p.z, 0.03, 0.022, 0.02));
       smile(head, 0.035, -0.1);
+      if (animal !== 'bunny') whiskers(head);
+      // A cheek ruff either side of the face, where the fur stands out.
+      for (const side of [-1, 1]) {
+        const c = onFace(side * 0.24, -0.09, -0.025);
+        head.add(mesh(sphere(1, 14, 10), toon(fur), c.x, c.y, c.z, 0.075, 0.06, 0.05));
+      }
       break;
     }
     default:
@@ -312,24 +366,53 @@ function tail(root, animal, fur) {
     case 'bunny':
     case 'bear':
     case 'panda':
-      t.add(mesh(sphere(), toon(animal === 'bunny' ? WHITE : animal === 'panda' ? BLACK : fur), 0, 0, -0.02, 0.08));
+      t.add(mesh(sphere(1, 16, 12), toon(animal === 'bunny' ? WHITE : animal === 'panda' ? BLACK : fur), 0, 0, -0.02, 0.08));
       break;
-    case 'cat':
-    case 'fox':
-    case 'mouse': {
-      const len = animal === 'mouse' ? 0.36 : 0.3;
-      const r = animal === 'fox' ? 0.08 : animal === 'mouse' ? 0.025 : 0.045;
-      const m = mesh(capsule(r, len), toon(animal === 'mouse' ? PINK : fur), 0, len / 2, -0.06);
-      m.rotation.x = -0.7;
-      t.add(m);
-      if (animal === 'fox') t.add(mesh(sphere(), toon(WHITE), 0, len * 0.95, -0.28, 0.07));
+    case 'cat': {
+      // A long tail that tapers in three steps, with a dark tip.
+      const seg = [
+        [0.045, 0.16, fur],
+        [0.034, 0.14, fur],
+        [0.024, 0.12, darken(fur, 0.35)],
+      ];
+      let y = 0.02;
+      for (const [r, len, col] of seg) {
+        const m = mesh(capsule(r, len * 0.8), toon(col), 0, y + len / 2 - 0.04, -0.02 - y * 0.35);
+        m.rotation.x = -0.55;
+        t.add(m);
+        y += len * 0.75;
+      }
       break;
     }
-    case 'puppy':
-      t.add(mesh(capsule(0.04, 0.14), toon(fur), 0, 0.08, -0.04).rotateX(-0.9));
+    case 'fox': {
+      // A big brush of a tail in overlapping steps of fur, white at the tip.
+      const brush = [
+        [0.085, 0, fur],
+        [0.08, 0.12, fur],
+        [0.07, 0.24, fur],
+        [0.055, 0.34, WHITE],
+      ];
+      for (const [r, along, col] of brush) {
+        t.add(mesh(sphere(1, 16, 12), toon(col), 0, 0.02 + along * 0.85, -0.04 - along * 0.35, r, r * 0.9, r));
+      }
       break;
+    }
+    case 'mouse': {
+      // A thin tail with a little bead at the end.
+      const m = mesh(capsule(0.022, 0.3), toon(PINK), 0, 0.15, -0.1);
+      m.rotation.x = -0.7;
+      t.add(m, mesh(sphere(1, 10, 8), toon(PINK), 0, 0.31, -0.2, 0.026));
+      break;
+    }
+    case 'puppy': {
+      const m = mesh(capsule(0.04, 0.14), toon(fur), 0, 0.08, -0.04);
+      m.rotation.x = -0.9;
+      t.add(m, mesh(sphere(1, 12, 8), toon(lighten(fur, 0.3)), 0, 0.04, -0.16, 0.042));
+      break;
+    }
     case 'pig':
       t.add(mesh(torus(0.04, 0.015), toon(fur), 0, 0.02, -0.02));
+      t.add(mesh(torus(0.024, 0.009), toon(darken(fur, 0.12)), 0, 0.024, -0.021));
       break;
     default:
       return null;
@@ -363,12 +446,27 @@ function onHead(up, turn, k = 1) {
 // A kid's face, or a grown-up's (grown: with smaller eyes, and what they
 // have on it, see FACES in shared/words.js). ears: false where hair covers them.
 function kidFace(head, skin, { ears = true, grown = false, extra = 'none', hairColor = BLACK } = {}) {
-  if (ears) for (const side of [-1, 1]) head.add(mesh(sphere(), toon(skin), side * HR[0] * 0.97, -0.03, -0.02, 0.05, 0.075, 0.06));
+  if (ears) {
+    for (const side of [-1, 1]) {
+      const ear = mesh(sphere(1, 14, 10), toon(skin), side * HR[0] * 0.97, -0.03, -0.02, 0.05, 0.075, 0.06);
+      ear.rotateZ(side * 0.2);
+      head.add(ear);
+      head.add(mesh(sphere(1, 10, 8), toon(darken(skin, 0.15)), side * HR[0] * 1.0, -0.03, 0.008, 0.028, 0.042, 0.03));
+    }
+  }
+  // Soft cheeks and a small chin, so the head reads as a face, not a ball.
+  for (const side of [-1, 1]) {
+    const c = onFace(side * 0.21, -0.1, -0.02);
+    head.add(mesh(sphere(1, 14, 10), toon(skin), c.x, c.y, c.z, 0.08, 0.07, 0.06));
+  }
+  const chin = onFace(0, -0.26, -0.01);
+  head.add(mesh(sphere(1, 12, 8), toon(skin), chin.x, chin.y, chin.z, 0.07, 0.05, 0.05));
   const p = onFace(0, -0.04, 0);
-  head.add(mesh(sphere(), toon(darken(skin, 0.12)), p.x, p.y, p.z, grown ? 0.036 : 0.032, grown ? 0.03 : 0.024, 0.024));
+  head.add(mesh(sphere(1, 16, 12), toon(darken(skin, 0.12)), p.x, p.y, p.z, grown ? 0.036 : 0.032, grown ? 0.03 : 0.024, 0.024));
   smile(head, 0.045, -0.11);
   const e = eyes(head, grown ? 'dot' : 'big');
   blush(head);
+  if (grown) brows(head, hairColor);
   if (extra.includes('glasses')) glasses(head);
   if (extra.includes('beard')) beard(head, hairColor);
   if (extra === 'moustache' || extra.includes('beard')) moustache(head, hairColor);
@@ -404,6 +502,9 @@ function moustache(head, color) {
     m.lookAt(p.clone().multiplyScalar(2));
     m.rotateZ(side * 0.25);
     head.add(m);
+    // The curl at the end, tipping up.
+    const tip = onFace(side * 0.095, -0.06, 0.01);
+    head.add(mesh(sphere(1, 12, 8), toon(color), tip.x, tip.y, tip.z, 0.024, 0.02, 0.024));
   }
 }
 
@@ -454,8 +555,11 @@ function hair(head, style, color, hatKind) {
     const b = new THREE.Group();
     b.position.set(x, y, z);
     b.add(mesh(sphere(1, 12, 8), toon(TIE), 0, 0, 0, 0.045));
+    // The tie wraps twice round the top of the bunch.
+    b.add(mesh(torus(0.05 * size, 0.012), toon(TIE), 0, -0.045 * size, 0).rotateX(Math.PI / 2));
     b.add(mesh(sphere(1, 16, 12), mat, 0, -0.15 * size, 0, 0.085 * size, 0.17 * size, 0.08 * size));
-    b.add(mesh(sphere(1, 12, 8), mat, 0, -0.3 * size, 0, 0.05 * size, 0.07 * size, 0.05 * size));
+    b.add(mesh(sphere(1, 14, 10), mat, 0, -0.28 * size, 0, 0.062 * size, 0.11 * size, 0.06 * size));
+    b.add(mesh(sphere(1, 12, 8), mat, 0, -0.38 * size, 0, 0.038 * size, 0.06 * size, 0.038 * size));
     b.userData = { side, rest: side ? side * 0.45 : 0.4 };
     if (side) b.rotation.z = b.userData.rest;
     else b.rotation.x = b.userData.rest;
@@ -463,15 +567,26 @@ function hair(head, style, color, hatKind) {
     return add(b);
   };
   switch (style) {
-    case 'spiky':
+    case 'spiky': {
       cap();
       swept();
+      // Spikes of two sizes, every one turned a little differently, as one shape.
       if (!covered) {
-        for (const [up, turn, len] of [[0.2, 0, 0.17], [0.55, 0.6, 0.15], [0.55, -0.6, 0.15], [0.75, 1.6, 0.13], [0.75, -1.6, 0.13], [0.8, 2.5, 0.14], [0.8, -2.5, 0.14], [0.85, Math.PI, 0.15]]) {
-          outward(mesh(cone(0.075, len, 10), mat), up, turn, 1.04, len / 2 - 0.02);
+        const spikes = [];
+        for (const [up, turn, len, tilt] of [
+          [0.2, 0, 0.17, 0], [0.5, 0.45, 0.14, 0.3], [0.5, -0.45, 0.14, -0.3],
+          [0.62, 1.05, 0.13, 0.2], [0.62, -1.05, 0.13, -0.2], [0.75, 1.7, 0.12, 0.1],
+          [0.75, -1.7, 0.12, -0.1], [0.8, 2.5, 0.13, 0.15], [0.8, -2.5, 0.13, -0.15],
+          [0.86, Math.PI, 0.14, 0.05], [0.35, 2.9, 0.11, 0.2], [0.35, -2.9, 0.11, -0.2],
+        ]) {
+          const { p, out } = onHead(up, turn, 1.04);
+          const q = new THREE.Quaternion().setFromUnitVectors(UP, out).multiply(new THREE.Quaternion().setFromAxisAngle(UP, tilt));
+          spikes.push({ g: cone(0.072, len, 10), m: new THREE.Matrix4().compose(p.addScaledVector(out, len / 2 - 0.02), q, new THREE.Vector3(1, 1, 1)) });
         }
+        add(mesh(bakeCached('spikes', spikes), mat));
       }
       break;
+    }
     case 'curly': {
       cover(1.05, { thetaLength: 1.75, tilt: 0.62 });
       // Curls all over, round the face: spread evenly, then kept to where hair grows.
@@ -496,6 +611,12 @@ function hair(head, style, color, hatKind) {
       // Down the sides and the back, round the face.
       cover(1.1, { phi: Math.PI / 2 + 0.85, phiLength: Math.PI * 2 - 1.7, theta: 0.9, thetaLength: style === 'bob' ? 1.25 : 1.45 });
       for (const fx of [-0.18, -0.06, 0.06, 0.18]) lock(fx, 0.16, 0.08, 0.075);
+      if (style === 'bob') {
+        // The hem of the bob turns under, all the way round.
+        const hem = mesh(torus(0.29, 0.045, Math.PI * 2), mat, 0, -0.16, -0.01, HEAD.sx * 1.02, 1, 0.98);
+        hem.rotation.x = Math.PI / 2 + 0.08;
+        add(hem);
+      }
       if (style === 'long') {
         // On down the back, past the shoulders, with rounded edges.
         const fall = new THREE.Group();
@@ -522,7 +643,12 @@ function hair(head, style, color, hatKind) {
       swept();
       if (!covered) {
         add(mesh(sphere(1, 16, 12), mat, 0, 0.36, -0.12, 0.14, 0.13, 0.14));
-        add(mesh(torus(0.1, 0.022), toon(TIE), 0, 0.29, -0.1).rotateX(Math.PI / 2 + 0.35));
+        add(mesh(torus(0.1, 0.02), toon(TIE), 0, 0.3, -0.1).rotateX(Math.PI / 2 + 0.4));
+        add(mesh(torus(0.105, 0.02), toon(TIE), 0, 0.35, -0.1).rotateX(Math.PI / 2 + 0.1));
+        // A few loose strands escaping the bun.
+        for (const [dx, dy, dz, len, roll] of [[-0.08, 0.3, -0.05, 0.09, 0.5], [0.07, 0.28, -0.04, 0.08, -0.4], [0, 0.42, -0.08, 0.07, 0.2]]) {
+          add(mesh(capsule(0.012, len), mat, dx, dy, dz).rotateZ(roll));
+        }
       }
       break;
     default: {
@@ -599,19 +725,28 @@ function hat(head, kind, shirt, lift = 0) {
   const add = (...ms) => ms.forEach((m) => g.add(m));
   switch (kind) {
     case 'cap': {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(shirt));
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(shirt));
       dome.scale.set(1.2, 0.8, 1.15);
-      add(dome, mesh(cylinder(0.2, 0.2, 0.02, 20), toon(shirt), 0, 0.01, 0.3, 1, 1, 0.8), mesh(sphere(), toon(WHITE), 0, 0.24, 0, 0.035));
+      add(dome);
+      // A band round the base, and a brim reaching forward over the eyes.
+      add(mesh(torus(0.29, 0.024), toon(darken(shirt, 0.2)), 0, 0.02, 0, 1.16, 1, 1.11).rotateX(Math.PI / 2));
+      add(mesh(roundedBox(0.34, 0.024, 0.24, 0.012), toon(shirt), 0, 0.015, 0.3));
+      add(mesh(sphere(1, 12, 8), toon(darken(shirt, 0.2)), 0, 0.235, 0, 0.034));
       break;
     }
     case 'flower': {
       const f = new THREE.Group();
       f.position.set(0.22, 0.08, 0.12);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        f.add(mesh(sphere(), toon('#ff8fc4'), Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0, 0.05, 0.05, 0.025));
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const petal = mesh(sphere(1, 14, 10), toon(i % 2 ? '#ff9fce' : '#ff8fc4'), Math.cos(a) * 0.062, Math.sin(a) * 0.062, 0, 0.048, 0.048, 0.024);
+        petal.rotation.z = a;
+        f.add(petal);
       }
-      f.add(mesh(sphere(), toon('#ffd84d'), 0, 0, 0.015, 0.04, 0.04, 0.02));
+      f.add(mesh(sphere(1, 12, 8), toon('#ffd84d'), 0, 0, 0.017, 0.036, 0.036, 0.02));
+      const leaf = mesh(sphere(1, 12, 8), toon('#5fae4e'), 0.05, -0.03, -0.01, 0.05, 0.022, 0.026);
+      leaf.rotation.z = 0.7;
+      f.add(leaf);
       f.rotation.y = 0.5;
       add(f);
       break;
@@ -620,54 +755,96 @@ function hat(head, kind, shirt, lift = 0) {
       const b = new THREE.Group();
       b.position.set(0.16, 0.12, 0.05);
       b.rotation.z = -0.3;
-      for (const side of [-1, 1]) b.add(mesh(sphere(), toon('#ff5f8f'), side * 0.08, 0, 0, 0.09, 0.06, 0.04));
-      b.add(mesh(sphere(), toon('#e0406f'), 0, 0, 0.01, 0.035));
+      // Each loop of the bow in two lobes, with a knot in the middle and two tails.
+      for (const side of [-1, 1]) {
+        b.add(mesh(sphere(1, 16, 12), toon('#ff5f8f'), side * 0.075, 0.018, 0, 0.072, 0.052, 0.038));
+        b.add(mesh(sphere(1, 16, 12), toon('#ff5f8f'), side * 0.075, -0.028, 0, 0.062, 0.044, 0.034));
+        const tail = mesh(capsule(0.016, 0.07), toon('#e0406f'), side * 0.05, -0.075, 0.005);
+        tail.rotation.z = side * 0.5;
+        b.add(tail);
+      }
+      b.add(mesh(sphere(1, 12, 8), toon('#e0406f'), 0, 0, 0.012, 0.034, 0.03, 0.026));
       add(b);
       break;
     }
     case 'party': {
       const c = mesh(cone(0.13, 0.32, 18), toon(shirt), 0, 0.2, 0);
-      add(c, mesh(sphere(), toon('#ffd84d'), 0, 0.37, 0, 0.05));
+      add(c, mesh(sphere(1, 14, 10), toon('#ffd84d'), 0, 0.37, 0, 0.05));
       for (let i = 0; i < 3; i++) add(mesh(torus(0.1 - i * 0.03, 0.012), toon(WHITE), 0, 0.09 + i * 0.08, 0).rotateX(Math.PI / 2));
+      // A ruffle round the base, where the hat sits on the head.
+      add(mesh(torus(0.115, 0.028, Math.PI * 2), toon(lighten(shirt, 0.3)), 0, 0.045, 0).rotateX(Math.PI / 2));
       break;
     }
     case 'crown': {
       const gold = toon('#ffcf3f', { emissive: 0.15 });
       add(mesh(cylinder(0.17, 0.17, 0.08, 20, true), gold, 0, 0.06, 0));
+      add(mesh(torus(0.168, 0.012), gold, 0, 0.022, 0).rotateX(Math.PI / 2));
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
         add(mesh(cone(0.04, 0.09, 4), gold, Math.cos(a) * 0.16, 0.14, Math.sin(a) * 0.16));
       }
-      add(mesh(sphere(), toon('#ff4f6f'), 0, 0.06, 0.17, 0.03));
+      // A jewel at each point, and one big one at the front.
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+        add(mesh(sphere(1, 10, 8), toon(i % 2 ? '#4fc3f7' : '#ff4f6f', { emissive: 0.2 }), Math.cos(a) * 0.16, 0.085, Math.sin(a) * 0.16, 0.022));
+      }
+      add(mesh(sphere(1, 12, 8), toon('#ff4f6f', { emissive: 0.25 }), 0, 0.06, 0.17, 0.03));
       break;
     }
     case 'beanie': {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(shirt));
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(shirt));
       dome.scale.set(1.18, 0.9, 1.12);
-      add(dome, mesh(torus(0.33, 0.045), toon(lighten(shirt, 0.35)), 0, 0.02, 0, 1.05, 1, 1).rotateX(Math.PI / 2), mesh(sphere(), toon(WHITE), 0, 0.3, 0, 0.07));
+      add(dome);
+      // Ribs running up the knit, and a turned-up brim.
+      const ribs = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const { p, out } = onHead(0.5, Math.PI / 2 - a, 1.16 * 1.18);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
+        ribs.push({ g: capsule(0.008, 0.2), m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)) });
+      }
+      add(mesh(bakeCached(`beanie-ribs|${shirt}`, ribs), toon(darken(shirt, 0.15))));
+      add(mesh(torus(0.33, 0.045), toon(lighten(shirt, 0.35)), 0, 0.02, 0, 1.05, 1, 1).rotateX(Math.PI / 2));
+      add(mesh(sphere(1, 14, 10), toon(WHITE), 0, 0.3, 0, 0.07), mesh(sphere(1, 10, 8), toon('#f0e8e0'), 0.02, 0.33, 0.01, 0.035));
       break;
     }
     case 'sprout': {
       add(mesh(cylinder(0.012, 0.012, 0.14, 6), toon('#4fae3e'), 0, 0.22, 0));
       for (const side of [-1, 1]) {
-        const l = mesh(sphere(), toon('#6fcf55'), side * 0.07, 0.3, 0, 0.08, 0.035, 0.04);
+        const l = mesh(sphere(1, 14, 10), toon(side > 0 ? '#6fcf55' : '#5fbf49'), side * 0.07, 0.3, 0, 0.08, 0.035, 0.04);
         l.rotation.z = side * 0.4;
         add(l);
       }
+      const bud = mesh(sphere(1, 10, 8), toon('#8fe072'), 0, 0.31, 0.02, 0.024);
+      add(bud);
       break;
     }
     case 'straw': {
       const straw = toon('#f2d27a');
       add(mesh(cylinder(0.42, 0.42, 0.025, 28), straw, 0, 0.02, 0));
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), straw);
+      // The weave: rings of ridges on the brim, all as one shape.
+      const weave = [];
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        weave.push({ g: capsule(0.008, 0.13), m: new THREE.Matrix4().makeRotationY(a).setPosition(Math.cos(a) * 0.31, 0.033, Math.sin(a) * 0.31) });
+      }
+      add(mesh(bakeCached('straw-weave', weave), toon('#dabc5f')));
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), straw);
       dome.scale.set(1.1, 0.8, 1.1);
       add(dome, mesh(cylinder(0.25, 0.25, 0.05, 24), toon('#ff6f8f'), 0, 0.04, 0));
+      add(mesh(torus(0.252, 0.012), toon('#e05580'), 0, 0.062, 0).rotateX(Math.PI / 2));
       break;
     }
     case 'headphones': {
       const band = mesh(torus(0.34, 0.025, Math.PI), toon(shirt), 0, -0.1, 0);
       add(band);
-      for (const side of [-1, 1]) add(mesh(cylinder(0.09, 0.09, 0.06, 16), toon(darken(shirt, 0.2)), side * 0.35, -0.12, 0).rotateZ(Math.PI / 2));
+      // A padded band riding just over it, and cups with cushions that meet the head.
+      add(mesh(torus(0.345, 0.033, Math.PI), toon(darken(shirt, 0.15)), 0, -0.1, 0));
+      for (const side of [-1, 1]) {
+        add(mesh(cylinder(0.09, 0.09, 0.06, 18), toon(darken(shirt, 0.2)), side * 0.35, -0.12, 0).rotateZ(Math.PI / 2));
+        add(mesh(torus(0.072, 0.02), toon('#3d3644'), side * 0.385, -0.12, 0).rotateY(Math.PI / 2));
+        add(mesh(sphere(1, 12, 8), toon(lighten(shirt, 0.25)), side * 0.315, -0.12, 0, 0.028, 0.05, 0.05));
+      }
       break;
     }
     default:
@@ -726,23 +903,62 @@ export class Avatar {
     this.legs = [-1, 1].map((side) => {
       const leg = new THREE.Group();
       leg.position.set(side * 0.1, 0.28 + legLong, 0);
-      leg.add(mesh(cylinder(0.07, 0.08, 0.24 + legLong, 12), toon(look.animal === 'frog' ? fur : darken(shirt, 0.35)), 0, -0.12 - legLong / 2, 0));
-      leg.add(mesh(sphere(), toon(look.animal === 'frog' ? darken(fur, 0.1) : '#6b4a3a'), 0, -0.24 - legLong, 0.03, 0.085, 0.06, grown ? 0.12 : 0.11));
+      // Trouser legs, tapering to the ankle; a frog's legs are its skin.
+      const trouser = look.animal === 'frog' ? fur : darken(shirt, 0.35);
+      leg.add(mesh(cylinder(0.062, 0.05, 0.2 + legLong, 14), toon(trouser), 0, -0.1 - legLong / 2, 0));
+      // The shorts, a little wider, ending above the knee.
+      leg.add(mesh(cylinder(0.082, 0.075, 0.1, 14), toon(trouser), 0, -0.05 - legLong * 0.15, 0));
+      // A shoe: a rounded sole, a toe cap over it and a little heel behind.
+      const shoe = look.animal === 'frog' ? darken(fur, 0.1) : '#6b4a3a';
+      leg.add(mesh(roundedBox(0.17, 0.055, 0.27, 0.024), toon(shoe), 0, -0.265 - legLong, 0.035));
+      leg.add(mesh(sphere(1, 16, 12), toon(lighten(shoe, 0.18)), 0, -0.245 - legLong, 0.115, 0.072, 0.05, 0.075));
+      leg.add(mesh(sphere(1, 12, 8), toon(shoe), 0, -0.25 - legLong, -0.06, 0.06, 0.045, 0.05));
       body.add(leg);
       return leg;
     });
     this.torso = new THREE.Group();
     this.torso.position.y = 0.28 + legLong;
     body.add(this.torso);
-    this.torso.add(mesh(capsule(0.2, 0.16 + up), toon(shirt), 0, 0.22 + up / 2, 0, grown ? 1.08 : 1, 1, 0.85));
+    // A shirt with a shape of its own: shoulders, a waist, a hem that flares.
+    this.torso.add(
+      mesh(
+        lathe([
+          [0.015, -0.05],
+          [0.13, -0.05],
+          [0.16, 0.04],
+          [0.15, 0.12 + up * 0.4],
+          [0.158, 0.22 + up * 0.55],
+          [0.152, 0.32 + up * 0.75],
+          [0.135, 0.4 + up * 0.9],
+          [0.085, 0.46 + up],
+          [0.06, 0.5 + up],
+        ]),
+        toon(shirt),
+        0,
+        0,
+        0,
+        grown ? 1.08 : 1,
+        1,
+        0.85,
+      ),
+    );
+    // A hem band at the bottom of the shirt, and two little buttons down the front.
+    this.torso.add(mesh(torus(0.148, 0.016), toon(darken(shirt, 0.22)), 0, 0.0, 0, grown ? 1.08 : 1, 1, 0.85).rotateX(Math.PI / 2));
+    this.torso.add(mesh(sphere(1, 10, 8), toon(lighten(shirt, 0.4)), 0, 0.3 + up * 0.7, 0.128, 0.016));
+    this.torso.add(mesh(sphere(1, 10, 8), toon(lighten(shirt, 0.4)), 0, 0.2 + up * 0.55, 0.14, 0.016));
     // A little collar in the fur colour, so the head sits nicely.
     this.torso.add(mesh(sphere(), toon(fur), 0, 0.44 + up, 0, 0.14, 0.06, 0.12));
     this.arms = [-1, 1].map((side) => {
       const arm = new THREE.Group();
       arm.position.set(side * (grown ? 0.245 : 0.23), 0.4 + up, 0);
       arm.rotation.z = side * 0.18;
-      arm.add(mesh(capsule(0.062, 0.14 + armLong), toon(shirt), 0, -0.1 - armLong / 2, 0));
-      arm.add(mesh(sphere(), toon(fur), 0, -0.22 - armLong, 0, 0.07));
+      // A sleeve to past the elbow, a cuff, and a bare forearm to the hand.
+      arm.add(mesh(capsule(0.066, 0.1 + armLong), toon(shirt), 0, -0.06 - armLong / 2, 0));
+      arm.add(mesh(torus(0.058, 0.014), toon(darken(shirt, 0.18)), 0, -0.12 - armLong, 0).rotateX(Math.PI / 2));
+      arm.add(mesh(cylinder(0.045, 0.04, 0.08, 12), toon(fur), 0, -0.17 - armLong, 0));
+      // A mitten hand with a thumb at the side.
+      arm.add(mesh(sphere(1, 16, 12), toon(fur), 0, -0.225 - armLong, 0, 0.062, 0.068, 0.055));
+      arm.add(mesh(sphere(1, 10, 8), toon(fur), side * 0.052, -0.215 - armLong, 0.012, 0.024, 0.034, 0.024));
       this.torso.add(arm);
       return arm;
     });
