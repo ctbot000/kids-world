@@ -3,7 +3,8 @@
 // the host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/, and runs the AI friend
-// (buddy.js) when Ollama is there, with its settings on the admin page. Usage:
+// (buddy.js) when Ollama is there, with its settings on the admin page, and
+// its own island here. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
@@ -304,7 +305,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const friend = new FriendControl({
     dir: store.dir,
     llm: new Ollama(),
-    make: (settings) =>
+    make: (settings, { homeFile }) =>
       new Buddy({
         llm: friend.llm,
         keeper: keeper ?? null,
@@ -315,6 +316,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         name: settings.name,
         wander: settings.wander,
         maxVisits: settings.maxVisits,
+        home: settings.home,
+        homeFile,
       }),
   });
   const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper, friend }) });
@@ -327,7 +330,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
   await friend.start();
   const stop = async () => {
-    friend.stop();
+    await friend.stop();
     await keeper?.stop();
     await server.shutdown();
     keeper?.rtc?.cleanup?.();

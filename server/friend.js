@@ -1,9 +1,11 @@
 // The AI friend (buddy.js) as the admin page runs it: its settings, saved in
 // the keeper's data folder as ai-friend.json, and what the page sees of it.
 // Settings: on or off, its name, its model (any Ollama has), whether it
-// visits islands by itself, and on how many islands at once. Until they are
-// first saved, they come from the environment (KIDS_WORLD_AI=off,
-// KIDS_WORLD_AI_NAME, KIDS_WORLD_AI_MODEL, KIDS_WORLD_AI_WANDER=off).
+// visits islands by itself, on how many islands at once, and whether it keeps
+// an island of its own (saved beside them as ai-friend-island.json). Until
+// they are first saved, they come from the environment (KIDS_WORLD_AI=off,
+// KIDS_WORLD_AI_NAME, KIDS_WORLD_AI_MODEL, KIDS_WORLD_AI_WANDER=off,
+// KIDS_WORLD_AI_HOME=off).
 // Changes apply at once: a new name from its next visit on, as the islands it
 // is on know it by the old one; turned off, it goes home from every island.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -14,6 +16,7 @@ import { KeepError } from './keeper.js';
 import { DEFAULT_MODEL } from './llm.js';
 
 export const SETTINGS_FILE = 'ai-friend.json';
+export const HOME_FILE = 'ai-friend-island.json';
 export const MAX_VISITS = 5;
 const MODEL_NAME = /^[\w.:/-]{1,100}$/;
 
@@ -24,6 +27,7 @@ export function defaultSettings(env = process.env) {
     model: env.KIDS_WORLD_AI_MODEL || DEFAULT_MODEL,
     wander: env.KIDS_WORLD_AI_WANDER !== 'off',
     maxVisits: 2,
+    home: env.KIDS_WORLD_AI_HOME !== 'off',
   };
 }
 
@@ -31,7 +35,7 @@ export function defaultSettings(env = process.env) {
 export function changeSettings(settings, change) {
   const next = { ...settings };
   if (!change || typeof change !== 'object') throw new KeepError('bad-settings', 'Those settings are not readable.');
-  for (const key of ['on', 'wander']) {
+  for (const key of ['on', 'wander', 'home']) {
     if (key in change) {
       if (typeof change[key] !== 'boolean') throw new KeepError('bad-settings', `${key} is on or off.`);
       next[key] = change[key];
@@ -55,9 +59,11 @@ export function changeSettings(settings, change) {
 
 export class FriendControl {
   // dir: where its settings are saved. llm: the Ollama (llm.js) it talks
-  // with, whose model the settings pick. make(settings): a new Buddy.
+  // with, whose model the settings pick. make(settings, { homeFile }): a new
+  // Buddy, keeping its own island in homeFile.
   constructor({ dir, llm, make, env = process.env }) {
     this.file = join(dir, SETTINGS_FILE);
+    this.homeFile = join(dir, HOME_FILE);
     this.llm = llm;
     this.make = make;
     this.settings = defaultSettings(env);
@@ -80,7 +86,7 @@ export class FriendControl {
   }
 
   async wake() {
-    this.buddy = this.make(this.settings);
+    this.buddy = this.make(this.settings, { homeFile: this.homeFile });
     this.last = this.buddy;
     await this.buddy.start();
   }
@@ -97,8 +103,9 @@ export class FriendControl {
     this.saved = true;
     this.llm.model = next.model;
     if (!next.on) {
-      this.buddy?.stop();
+      const b = this.buddy;
       this.buddy = null;
+      await b?.stop();
     } else if (!this.buddy) {
       await this.wake();
     } else {
@@ -106,6 +113,7 @@ export class FriendControl {
       b.rename(next.name);
       b.wander = next.wander;
       b.maxVisits = next.maxVisits;
+      if (next.home !== before.home) await b.setHome(next.home);
       if (next.model !== before.model) await b.check();
     }
     return next;
@@ -119,10 +127,11 @@ export class FriendControl {
     return true;
   }
 
-  // Something said on an island it is on, as its own words: '' when said,
-  // or why not; null when it is not on that island.
+  // Something said on an island it is on (its own too), as its own words:
+  // '' when said, or why not; null when it is not on that island.
   say(code, text) {
-    const visit = this.buddy?.visits.get(code);
+    const b = this.buddy;
+    const visit = b?.visits.get(code) ?? (b?.home?.island.code === code ? b.home : null);
     return visit && !visit.ended ? visit.sayForAdmin(text) : null;
   }
 
@@ -145,14 +154,17 @@ export class FriendControl {
       models: await this.llm.models(),
       maxVisits: MAX_VISITS,
       listed: b ? b.listing().online : false,
+      home: b?.home && !b.home.ended ? b.home.summary() : null,
       visits: b ? [...b.visits.values()].filter((v) => !v.ended).map((v) => v.summary()) : [],
       stats: seen ? { ...seen.stats } : null,
       history: seen ? [...seen.history].reverse() : [],
     };
   }
 
-  stop() {
-    this.buddy?.stop();
+  // Stopped, with its own island saved.
+  async stop() {
+    const b = this.buddy;
     this.buddy = null;
+    await b?.stop();
   }
 }

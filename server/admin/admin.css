@@ -409,6 +409,37 @@ button:disabled {
   margin: 0;
 }
 
+.visit.home {
+  border-color: var(--grass);
+}
+
+.doing {
+  overflow-wrap: anywhere;
+}
+
+.project {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.project progress {
+  flex: 1;
+  min-width: 80px;
+}
+
+.now {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--paper);
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
 .chat {
   max-height: 180px;
   margin: 4px 0 0;

@@ -3,9 +3,10 @@
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
 // taken out of the ranking, and where each was last seen from; and the AI
-// friend: its settings, the islands it is on and what is said there, how its
-// model answers and what it did lately, with a line for it to say on an
-// island it is on, as its own words. It reads /admin/api/state and
+// friend: its settings, what it is doing now, its own island and what it
+// builds there, the islands it is on and what is said there, how its model
+// answers and what it did lately, with a line for it to say on an island it
+// is on, as its own words. It reads /admin/api/state and
 // /admin/api/friend every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
@@ -394,6 +395,7 @@ function settingsForm() {
   const model = h('select', { 'aria-label': 'Its model' });
   const wander = h('input', { type: 'checkbox' });
   const visits = h('select', { 'aria-label': 'Islands at once' });
+  const home = h('input', { type: 'checkbox' });
   const save = h('button', { type: 'submit', disabled: true }, 'Save');
   const note = h('span', { class: 'muted', 'aria-live': 'polite' });
   const form = h(
@@ -404,6 +406,7 @@ function settingsForm() {
     h('label', {}, 'Model', model),
     h('label', { title: 'Now and then it visits an open island with somebody on it, the loneliest first. Off: it only comes when invited.' }, wander, 'Visits by itself'),
     h('label', {}, 'On up to', visits, 'islands at once'),
+    h('label', { title: 'An island of its own on this server, on the list of open islands, where it builds big things and anyone can visit.' }, home, 'Has its own island'),
     save,
     note,
   );
@@ -422,7 +425,7 @@ function settingsForm() {
     const res = await api('friend', {
       method: 'PUT',
       headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ on: on.checked, name: name.value, model: model.value, wander: wander.checked, maxVisits: Number(visits.value) }),
+      body: JSON.stringify({ on: on.checked, name: name.value, model: model.value, wander: wander.checked, maxVisits: Number(visits.value), home: home.checked }),
     });
     if (!res.ok) {
       save.disabled = false;
@@ -439,6 +442,7 @@ function settingsForm() {
     on.checked = s.on;
     name.value = s.name;
     wander.checked = s.wander;
+    home.checked = s.home;
     const models = state.models.includes(s.model) ? state.models : [s.model, ...state.models];
     model.replaceChildren(...models.map((m) => h('option', { value: m }, state.models.includes(m) ? m : `${m} (not in Ollama)`)));
     model.value = s.model;
@@ -480,25 +484,25 @@ function visitCard(code) {
     refreshFriend();
   };
   const home = () => friendAction(`visits/${code}/home`, `Send ${friendForm.state.settings.name} home from “${v.island}”? It does not come back there by itself for a while.`);
-  const el = h(
-    'article',
-    { class: 'visit' },
-    title,
-    info,
-    chat,
-    h('form', { class: 'say', onsubmit: send }, input, h('button', { type: 'submit' }, 'Say')),
-    note,
-    h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: home }, 'Send home')),
-  );
+  const doing = h('div', { class: 'doing', 'aria-live': 'polite' });
+  const builds = h('div');
+  const actions = h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: home }, 'Send home'));
+  const el = h('article', { class: 'visit' }, title, info, doing, builds, chat, h('form', { class: 'say', onsubmit: send }, input, h('button', { type: 'submit' }, 'Say')), note, actions);
   const update = (next) => {
     v = next;
-    title.textContent = `🏝️ ${v.island}`;
+    title.textContent = v.home ? `🏠 ${v.island} · its own island` : `🏝️ ${v.island}`;
+    el.classList.toggle('home', Boolean(v.home));
+    actions.hidden = Boolean(v.home);
+    doing.replaceChildren(h('b', {}, '🔧 Now: '), v.doing, v.thinking ? ' · 💭 thinking what to say' : '', v.planning ? ' · 💭 thinking what to build' : '');
+    builds.replaceChildren(...(v.home ? buildList(v) : []));
     input.setAttribute('aria-label', `Something for it to say on ${v.island}, as its own words`);
     chat.setAttribute('aria-label', `What was said on ${v.island}`);
     const people = v.players.length ? v.players.join(', ') : 'nobody';
     info.replaceChildren(
       h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
-      v.arrivedAt
+      v.home
+        ? h('div', { class: 'muted' }, `🏠 Lives here · ${plural(v.buildCount, 'thing', 'things')} built so far`)
+        : v.arrivedAt
         ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
         : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),
       h('div', {}, `👥 ${people}`, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · 💭 thinking' : ''),
@@ -518,6 +522,45 @@ function visitCard(code) {
   return { el, update };
 }
 
+// What it is building on its own island, and what it built there lately.
+function buildList(v) {
+  const p = v.project;
+  const out = [];
+  if (p) {
+    out.push(
+      h(
+        'div',
+        { class: 'project' },
+        `${p.icon} Building ${p.title}${p.name ? ` · “${p.name}”` : ''}`,
+        h('progress', { max: p.layers, value: p.layer, 'aria-label': `Layer ${p.layer} of ${p.layers}` }),
+        h('span', { class: 'muted' }, `${p.layer} / ${p.layers} layers`),
+      ),
+    );
+  }
+  if (v.builds.length) {
+    const key = `friend-builds`;
+    out.push(
+      h(
+        'details',
+        { class: 'fold', open: opened.has(key) || null, ontoggle: (e) => (e.target.open ? opened.add(key) : opened.delete(key)) },
+        h('summary', {}, `🏗️ Built lately (${v.builds.length})`),
+        h('ol', { class: 'recent' }, ...v.builds.map((b) => h('li', {}, h('time', {}, ago(b.at)), ` ${b.icon} ${b.title}`, b.name ? ` · “${b.name}”` : ''))),
+      ),
+    );
+  }
+  return out;
+}
+
+// What it is doing everywhere it is, one line each.
+function nowList(state) {
+  const all = [...(state.home ? [state.home] : []), ...state.visits];
+  if (!state.running) return [];
+  if (!all.length) return [h('li', { class: 'muted' }, 'Not on any island right now.')];
+  return all.map((v) =>
+    h('li', {}, h('b', {}, v.home ? `🏠 ${v.island}: ` : `🏝️ ${v.island}: `), v.doing, v.thinking ? ' · 💭 thinking what to say' : '', v.planning ? ' · 💭 thinking what to build' : ''),
+  );
+}
+
 // The section's parts, made once and filled in on every refresh.
 let friendView = null;
 const visitCards = new Map();
@@ -529,9 +572,9 @@ function renderFriend(state) {
   friendForm.state = state;
   friendForm.fill(state);
   if (!friendView) {
-    friendView = { line: h('div', { class: 'friend-line' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), visits: h('div', { class: 'visits' }), none: h('p', { class: 'muted' }, 'Not on any island right now.'), history: h('div') };
+    friendView = { line: h('div', { class: 'friend-line' }), now: h('ul', { class: 'now', 'aria-label': 'What it is doing now' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), visits: h('div', { class: 'visits' }), history: h('div') };
     const f = friendView;
-    $('friend').replaceChildren(f.line, friendForm.form, f.about, f.facts, f.visits, f.none, f.history);
+    $('friend').replaceChildren(f.line, f.now, friendForm.form, f.about, f.facts, f.visits, f.history);
   }
   const f = friendView;
   const s = state.settings;
@@ -552,24 +595,27 @@ function renderFriend(state) {
     : [];
   f.facts.hidden = !facts.length;
   f.facts.replaceChildren(...facts.map((x) => h('span', {}, x)));
-  // Cards come and go one by one; the ones staying are never moved.
-  const codes = new Set(state.visits.map((v) => v.code));
+  f.now.replaceChildren(...nowList(state));
+  f.now.hidden = !state.running;
+  // Cards come and go one by one; the ones staying are never moved. Its own island comes first.
+  const places = [...(state.home ? [state.home] : []), ...state.visits];
+  const codes = new Set(places.map((v) => v.code));
   for (const [code, card] of visitCards) {
     if (codes.has(code)) continue;
     card.el.remove();
     visitCards.delete(code);
   }
-  for (const v of state.visits) {
+  for (const v of places) {
     let card = visitCards.get(v.code);
     if (!card) {
       card = visitCard(v.code);
       visitCards.set(v.code, card);
-      f.visits.append(card.el);
+      if (v.home) f.visits.prepend(card.el);
+      else f.visits.append(card.el);
     }
     card.update(v);
   }
-  f.visits.hidden = !state.visits.length;
-  f.none.hidden = state.visits.length > 0 || !state.running;
+  f.visits.hidden = !places.length;
   f.history.replaceChildren(
     ...(state.history.length
       ? [h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, '📜 What it did lately'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))]

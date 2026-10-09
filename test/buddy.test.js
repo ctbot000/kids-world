@@ -5,7 +5,9 @@
 // one; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
-// its own words, and sends it home from one. The keeper lists it as a player to invite and
+// its own words, and sends it home from one. It keeps an island of its own,
+// where it builds what the model picks a layer at a time, kept over a
+// restart, and the admin page sees what it is doing there. The keeper lists it as a player to invite and
 // passes invitations on to it. The model here is a stand-in; visiting a
 // browser's island peer to peer is in e2e.test.js.
 import assert from 'node:assert/strict';
@@ -16,6 +18,7 @@ import { after, test } from 'node:test';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import * as B from '../public/js/shared/blocks.js';
 import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay } from '../server/buddy.js';
 import { adminHandler } from '../server/admin.js';
 import { FriendControl } from '../server/friend.js';
@@ -299,7 +302,7 @@ test('the admin page saves its settings and applies them, shows where it is and 
   const put = (body, headers = { 'X-Kids-World-Admin': '1' }) => fetch(base, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
   let state = await (await fetch(base)).json();
-  assert.deepEqual(state.settings, { on: true, name: DEFAULT_NAME, model: 'gemma3:4b', wander: true, maxVisits: 2 });
+  assert.deepEqual(state.settings, { on: true, name: DEFAULT_NAME, model: 'gemma3:4b', wander: true, maxVisits: 2, home: true });
   assert.equal(state.saved, false, 'from the environment until saved');
   assert.equal(state.ready, true);
   assert.deepEqual(state.models, ['gemma3:4b', 'llama3.2:3b']);
@@ -320,7 +323,7 @@ test('the admin page saves its settings and applies them, shows where it is and 
   assert.equal((await put({ maxVisits: 9 })).status, 400);
   assert.equal((await put({ name: '   ' })).status, 400);
   state = await (await put({ name: 'Bolt 🤖', model: 'llama3.2:3b', wander: false, maxVisits: 3 })).json();
-  assert.deepEqual(state.settings, { on: true, name: 'Bolt 🤖', model: 'llama3.2:3b', wander: false, maxVisits: 3 });
+  assert.deepEqual(state.settings, { on: true, name: 'Bolt 🤖', model: 'llama3.2:3b', wander: false, maxVisits: 3, home: true });
   assert.equal(llm.model, 'llama3.2:3b');
   assert.equal(control.buddy.name, 'Bolt 🤖');
   assert.equal(control.buddy.wander, false);
@@ -363,4 +366,71 @@ test('the admin page saves its settings and applies them, shows where it is and 
   await again.change({ on: true });
   assert.equal(again.buddy.name, 'Bolt 🤖');
   again.stop();
+});
+
+test('it keeps an island of its own, builds there what the model picks a layer at a time, and has it again after a restart', async () => {
+  const dir = await tempDir();
+  const homeFile = join(dir, 'ai-friend-island.json');
+  const llm = model((prompt) => {
+    if (prompt.includes('Things you can build')) return { thing: 'rocket', color: 'teal', size: 'small', name: 'Star Zoomer', say: 'I am building a rocket! 🚀' };
+    if (prompt.includes('Minji: build a castle')) return { say: 'A castle? Yes!', action: 'build', stamp: 'none' };
+    return { say: 'Hi Minji! Welcome to my island!', action: 'wave', stamp: 'none' };
+  });
+  const rooms = new Map();
+  const lines = [];
+  const buddy = friend({ llm, rooms, home: true, homeFile, layerMs: 30, firstBuildMs: 0, log: (text) => lines.push(text) });
+  await buddy.start();
+  assert.equal(rooms.size, 1, 'an island of its own on this server');
+  const [{ room }] = rooms.values();
+  const timer = setInterval(() => room.tick(), 100);
+  after(() => clearInterval(timer));
+  assert.equal(room.world.name, "Pip's Island");
+  const pip = await eventually(() => buddyIn(room));
+  assert.equal(room.host, pip.id, 'the owner of it');
+  assert.equal(room.listing().players, 1, 'on the list of open islands');
+  assert.equal(buddy.wanderOnce(), null, 'never visiting itself');
+
+  // It picks what to build, walks over and builds it a layer at a time, saying what it does.
+  const doing = await eventually(() => buddy.home.summary().doing.match(/^Building a teal rocket \(“Star Zoomer”\): layer \d+ of \d+$/));
+  assert.ok(doing);
+  assert.match(llm.asked.find((p) => p.includes('Things you can build')), /- rocket: a rocket/);
+  await eventually(() => buddy.builds.length === 1, 30000);
+  assert.deepEqual(
+    { key: buddy.builds[0].key, title: buddy.builds[0].title, name: buddy.builds[0].name },
+    { key: 'rocket', title: 'a teal rocket', name: 'Star Zoomer' },
+  );
+  const teal = B.TOY_BRICKS[5];
+  const count = (w) => w.blocks.reduce((n, id) => n + (id === teal ? 1 : 0), 0);
+  assert.ok(count(room.world) > 20, 'the rocket is there');
+  assert.ok(lines.some((l) => /started building a teal rocket, “Star Zoomer”, on its own island: “I am building a rocket! 🚀”/.test(l)));
+  assert.ok(lines.some((l) => /finished building a teal rocket/.test(l)));
+  assert.match(buddy.home.summary().doing, /Resting on its island|Looking around/);
+
+  // A friend comes, is greeted, says bye without sending it off its own island, and asks for a build.
+  const minji = child(room);
+  await eventually(() => minji.of('say').some((m) => m.pid === pip.id && m.text.startsWith('Hi Minji')));
+  minji.say({ t: 'say', text: 'bye Pip' });
+  await new Promise((done) => setTimeout(done, 3500));
+  assert.ok(buddyIn(room), 'still on its own island');
+  minji.say({ t: 'say', text: 'build a castle' });
+  await eventually(() => llm.asked.some((p) => p.includes('A friend asked you to build something')));
+  // Built though the friend who asked was just talking with it.
+  await eventually(() => buddy.builds.length === 2, 30000);
+
+  // Stopped and started again, as after a restart: the same island, with the rocket, and it its owner.
+  await buddy.stop();
+  const kept = JSON.parse(await readFile(homeFile, 'utf8'));
+  assert.equal(kept.code, room.code);
+  assert.equal(kept.builds[0].key, 'rocket');
+  const rooms2 = new Map();
+  const again = friend({ llm, rooms: rooms2, home: true, homeFile, firstBuildMs: 60000 });
+  await again.start();
+  const room2 = rooms2.get(room.code)?.room;
+  assert.ok(room2, 'under the same code');
+  assert.ok(count(room2.world) > 20, 'with what it built');
+  const pip2 = await eventually(() => buddyIn(room2));
+  assert.equal(pip2.id, pip.id, 'as the same player');
+  assert.equal(room2.host, pip2.id);
+  assert.equal(again.builds.length, 2);
+  await again.stop();
 });
