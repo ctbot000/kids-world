@@ -74,11 +74,12 @@ export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1
 export const WEAPONS = GEAR.find((g) => g.key === 'weapon').levels;
 export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 
-// Your look as the island sees it: with the weapon you have on, if any.
-export function lookWithGear(look, gear) {
-  const { weapon: _, ...rest } = look ?? {};
-  const level = wearing(gear, 'weapon');
-  return level ? { ...rest, weapon: WEAPONS[level - 1].key } : rest;
+// Your look as the island sees it: with the weapon you have on, if any, and
+// your level (levels.js), if given.
+export function lookWithGear(look, gear, level = 0) {
+  const { weapon: _, level: __, ...rest } = look ?? {};
+  const worn = wearing(gear, 'weapon');
+  return { ...rest, ...(worn ? { weapon: WEAPONS[worn - 1].key } : {}), ...(level ? { level } : {}) };
 }
 
 // The weapon you have on (its level), or null.

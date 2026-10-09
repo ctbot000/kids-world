@@ -242,6 +242,14 @@ export class Sound {
         [72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.1, decay: i === 3 ? 0.7 : 0.18, gain: 0.15, type: 'triangle' }));
         this.noise(0.6, { at: 0.35, type: 'highpass', freq: 6000, gain: 0.06 });
         break;
+      // Up a level: a rising fanfare and a shimmer.
+      case 'levelup':
+        [67, 72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.09, decay: 0.16, gain: 0.14, type: 'triangle' }));
+        this.tone(NOTE(84), { at: 0.4, decay: 0.9, gain: 0.16, type: 'triangle' });
+        this.tone(NOTE(88), { at: 0.4, decay: 0.9, gain: 0.08, type: 'triangle' });
+        this.tone(NOTE(91), { at: 0.4, decay: 0.9, gain: 0.06 });
+        this.noise(0.8, { at: 0.4, type: 'highpass', freq: 6000, gain: 0.06 });
+        break;
       case 'grow':
         for (let i = 0; i < 6; i++) this.tone(NOTE(72 + PENTA[i % 5] + 12 * Math.floor(i / 5)), { at: i * 0.07, decay: 0.2, gain: 0.08, type: 'triangle' });
         break;

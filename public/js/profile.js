@@ -4,7 +4,8 @@
 // every device: what another one sent the keeper is merged in here.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
-import { cleanCoins, cleanGear, COINS_MAX, nextLevel, sale } from './shared/shop.js';
+import { progressOf } from './shared/levels.js';
+import { cleanCoins, cleanGear, COINS_MAX, lookWithGear, nextLevel, sale } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -63,6 +64,16 @@ export class Profile extends EventTarget {
 
   get basket() {
     return this.data.basket;
+  }
+
+  // Your XP and level (levels.js), from what you have done.
+  get progress() {
+    return progressOf(this.data.stats, this.data.stickers);
+  }
+
+  // Your look as the island sees it: with your toy weapon and your level.
+  get shownLook() {
+    return lookWithGear(this.data.look, this.data.gear, this.progress.level);
   }
 
   update(changes) {
@@ -134,10 +145,11 @@ export class Profile extends EventTarget {
   }
 
   // Counts something you did, and hands out any sticker it earned. Says
-  // 'count', for the ranking.
+  // 'count', for the ranking, and 'level' when it took you up a level.
   count(stat, n = 1, { max = false } = {}) {
     const s = this.data.stats;
     if (!(stat in s)) return;
+    const before = this.progress.level;
     s[stat] = max ? Math.max(s[stat], n) : s[stat] + n;
     for (const sticker of STICKERS) {
       if (this.data.stickers[sticker.key] || !sticker.test(s)) continue;
@@ -146,6 +158,8 @@ export class Profile extends EventTarget {
     }
     this.storeSoon();
     this.dispatchEvent(new CustomEvent('count'));
+    const level = this.progress.level;
+    if (level > before) this.dispatchEvent(new CustomEvent('level', { detail: { level } }));
   }
 
   token(key) {

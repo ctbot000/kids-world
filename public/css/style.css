@@ -1760,6 +1760,94 @@ body.touch.playing #joystick {
   }
 }
 
+/* Your level (levels.js): on the title screen, at the top of the screen on
+   an island with a bar filling up to the next, at the top of ⭐ Stickers,
+   and on friends' name tags. */
+.level-chip {
+  background: #fff3b0;
+}
+
+/* On an island: a ring round ⭐ Stickers filling up to the next level, and
+   your level on its corner. */
+.level-ring {
+  position: relative;
+}
+
+.level-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--sun-dark) var(--xp, 0%), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  pointer-events: none;
+}
+
+.level-pip {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--sun);
+  border: 2px solid white;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.level-pip:empty {
+  display: none;
+}
+
+.level-bar {
+  display: block;
+  height: 6px;
+  min-width: 40px;
+  border-radius: 999px;
+  background: rgba(61, 46, 79, 0.15);
+  overflow: hidden;
+}
+
+.level-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sun);
+  transition: width 0.4s;
+}
+
+.level-bar.wide {
+  height: 12px;
+  width: min(320px, 100%);
+}
+
+.level-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 18px;
+  background: #fff8d6;
+  text-align: center;
+}
+
+.level-big {
+  font-size: 1.4rem;
+}
+
+.tag-level {
+  margin-right: 6px;
+  font-size: 0.75rem;
+}
+
 .coins {
   padding: 3px 12px;
   border-radius: 999px;

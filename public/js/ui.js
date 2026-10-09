@@ -6,6 +6,7 @@ import * as B from './shared/blocks.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
+import { STICKER_XP } from './shared/levels.js';
 import { BOARDS } from './shared/ranking.js';
 import { GEAR, levelDoes, nextLevel, sellPrice, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
@@ -186,6 +187,9 @@ export class UI {
       this.toast(s.icon, `New sticker: ${s.name}!`, 'sticker');
     });
     profile.addEventListener('basket', () => this.renderBasket());
+    for (const type of ['count', 'change']) profile.addEventListener(type, () => this.renderLevel());
+    profile.addEventListener('level', (e) => this.levelUp(e.detail.level));
+    this.renderLevel();
     this.minimap = new MiniMap($('minimap').querySelector('canvas'), atlas);
     $('minimap').addEventListener('click', () => this.mapDialog());
     this.fullMode = fullscreenMode();
@@ -319,7 +323,7 @@ export class UI {
     $('btn-me').onclick = () => this.meDialog();
     $('btn-pet').onclick = () => this.petDialog();
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
-    $('btn-stickers').onclick = () => this.stickersDialog();
+    $('btn-stickers').onclick = $('btn-level').onclick = () => this.stickersDialog();
     $('btn-shop').onclick = () => this.shopDialog();
     $('btn-ranking').onclick = () => this.rankingDialog();
     $('btn-players').onclick = () => this.playersDialog();
@@ -333,6 +337,36 @@ export class UI {
 
   renderMe() {
     $('me-name').textContent = `Hi, ${this.profile.name}!`;
+  }
+
+  // Your level and XP (levels.js): on the title screen, and on an island on
+  // the ⭐ Stickers button, with a ring round it filling up to the next level.
+  renderLevel() {
+    const { xp, level, into, need } = this.profile.progress;
+    const key = `${xp}|${level}`;
+    if (this.levelKey === key) return;
+    this.levelKey = key;
+    const label = need ? `Level ${level}: ${into.toLocaleString()} of ${need.toLocaleString()} XP to level ${level + 1}` : `Level ${level}, the top level!`;
+    const chip = $('btn-level');
+    chip.textContent = `⭐ Level ${level}`;
+    chip.title = label;
+    const button = $('btn-stickers-hud');
+    $('level-pip').textContent = String(level);
+    button.style.setProperty('--xp', `${need ? Math.floor((100 * into) / need) : 100}%`);
+    button.title = label;
+    button.setAttribute('aria-label', `Stickers. ${label}`);
+  }
+
+  // Up a level: a fanfare, and sparkles round you on an island.
+  levelUp(level) {
+    this.sound.play('levelup');
+    this.toast('🎉', `Level up! You are level ${level}!`, 'sticker level-up');
+    const me = this.game?.me?.body;
+    if (me) {
+      const fx = this.game.renderer.effects;
+      fx.sparkles(me.x, me.y + 1, me.z, 30, ['#ffd84d', '#ffffff', '#ff8fa3', '#9fe8ff']);
+      fx.firework(me.x, me.y + 4, me.z);
+    }
   }
 
   // The 🔑 by your name: there when there is a keeper to log in at, and
@@ -1075,7 +1109,16 @@ export class UI {
     this.openModal((root) => {
       const count = STICKERS.filter((s) => got[s.key]).length;
       const ranking = this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
+      const { xp, level, into, need } = this.profile.progress;
       root.append(
+        h(
+          'div',
+          { class: 'level-card' },
+          h('b', { class: 'level-big' }, `⭐ Level ${level}`),
+          h('div', { class: 'level-bar wide', role: 'img', 'aria-label': need ? `${into} of ${need} XP` : 'Full' }, h('span', { style: `width:${need ? Math.floor((100 * into) / need) : 100}%` })),
+          h('span', { class: 'muted' }, need ? `${xp.toLocaleString()} XP · ${(need - into).toLocaleString()} more to level ${level + 1}` : `${xp.toLocaleString()} XP · the top level!`),
+          h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
+        ),
         h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
         h(
           'div',
@@ -3157,13 +3200,13 @@ export class UI {
         this.tags.set(p.id, tag);
         $('overlays').append(tag);
       }
-      const key = `${p.name}|${p.bubble?.text ?? ''}|${showName}|${p.id === g.host}`;
+      const key = `${p.name}|${p.bubble?.text ?? ''}|${showName}|${p.id === g.host}|${p.look.level ?? 0}`;
       if (tag.dataset.key !== key) {
         tag.dataset.key = key;
         tag.style.setProperty('--c', shirtColor(p.look.shirt));
         tag.replaceChildren(
           p.bubble ? h('div', { class: `bubble${p.bubble.sticker ? ' sticker' : ''}`, lang: langOf(p.bubble.text) || undefined }, p.bubble.text) : '',
-          showName ? h('div', { class: 'name' }, p.name, p.id === g.host ? ' 🏝️' : '') : '',
+          showName ? h('div', { class: 'name' }, p.look.level ? h('span', { class: 'tag-level', title: `Level ${p.look.level}` }, `⭐${p.look.level}`) : '', p.name, p.id === g.host ? ' 🏝️' : '') : '',
         );
       }
       tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;

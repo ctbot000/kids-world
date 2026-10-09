@@ -2,6 +2,7 @@
 // an animal), and talking: typed, or ready-made phrases and stickers. The
 // host tidies and checks everything it receives.
 import { TOY_BRICKS } from './blocks.js';
+import { cleanLevel } from './levels.js';
 import { weaponOf } from './shop.js';
 
 export const NAME_WORDS = [
@@ -249,6 +250,8 @@ export function cleanLook(look, random = Math.random) {
   if (animal === GROWN_UP) clean.face = FACES.some((f) => f.key === look?.face) ? look.face : 'none';
   // A toy weapon from the shop, in your hand (see shop.js).
   if (weaponOf(look?.weapon)) clean.weapon = look.weapon;
+  // Your level, on your name tag (see levels.js).
+  if (cleanLevel(look?.level)) clean.level = look.level;
   const pet = cleanPet(look?.pet);
   return pet ? { ...clean, pet } : clean;
 }

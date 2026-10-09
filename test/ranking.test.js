@@ -314,7 +314,7 @@ test('a page watching the ranking hears of every change it would see, a moment l
 
   // What the ranking does not show is no news: a guest's profile, or a count no board counts.
   await store.keepProfileIn(KeeperStore.deviceId(PHONE), { name: 'Brave Fox', look: { animal: 'fox' }, stats: { placed: 999 } });
-  await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 70, danced: 4 } } });
+  await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 70, highest: 40 } } });
   await delay(400);
   assert.equal(news().length, 2);
   // A new login is: Brave Fox goes first.

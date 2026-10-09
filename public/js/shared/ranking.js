@@ -4,6 +4,7 @@
 // Players show up by their display name and look, the way friends see them,
 // never by their username; a player can leave the ranking, and a grown-up
 // can take them out of it on the admin pages.
+import { xpOf } from './levels.js';
 import { STICKERS } from './stickers.js';
 
 // The players each board shows; anyone further down sees only their own place.
@@ -22,6 +23,7 @@ export const BOARDS = [
   { key: 'animals', icon: '🐰', name: 'Animals', text: 'Most animals petted', hint: 'Pet an animal', score: (p) => count(p.stats.petted) },
   { key: 'treasures', icon: '🍎', name: 'Treasures', text: 'Most fruit, seashells, star pieces and jewels found', hint: 'Pick a fruit', score: (p) => count(count(p.stats.fruit) + count(p.stats.shells) + count(p.stats.stars) + count(p.stats.gems)) },
   { key: 'explorers', icon: '🧭', name: 'Explorers', text: 'Most steps walked', hint: 'Go for a walk', score: (p) => count(p.stats.steps) },
+  { key: 'levels', icon: '🎖️', name: 'Levels', text: 'Most XP, from everything they did', hint: 'Play a little', score: (p) => count(xpOf(p.stats, p.stickers)) },
 ];
 
 // Every board for these players: [{ id, profile }], profiles as kept. On

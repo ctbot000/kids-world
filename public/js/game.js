@@ -17,7 +17,7 @@ import { raycast } from './shared/raycast.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, lookWithGear, wornWeapon } from './shared/shop.js';
+import { gearMove, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
@@ -143,7 +143,7 @@ export class Game extends EventTarget {
 
   joinMessage() {
     const p = this.profile;
-    return { t: 'join', protocol: PROTOCOL, name: p.name, look: lookWithGear(p.look, p.data.gear), token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
+    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
   }
 
   // As the owner of an island with a passcode: a pass for a friend you
