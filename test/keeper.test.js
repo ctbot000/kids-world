@@ -11,7 +11,7 @@ import { challenge, keptProfile, toBase64Url, verifySignature, KEY_ALGORITHM, SI
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { candidateAddress, createIdentity, isPublicIp, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
+import { candidateAddress, createIdentity, isLocalIp, isPublicIp, pairAddress, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const dirs = [];
@@ -93,6 +93,18 @@ test('a page’s public IP address comes from its ICE candidates, never a privat
   assert.equal(candidateAddress('candidate:6 1 udp 41885439 198.51.100.9 3478 typ relay raddr 0.0.0.0 rport 0'), null);
   assert.equal(candidateAddress(''), null);
   for (const ip of ['10.1.2.3', '172.20.0.1', '100.100.1.1', '127.0.0.1', '169.254.1.1', '::1', 'fe80::1', 'fd00::1', '::ffff:8.8.8.8', 'nope']) assert.equal(isPublicIp(ip), false, ip);
+  for (const ip of ['10.1.2.3', '192.168.0.12', '127.0.0.1', '::1', 'fd00::1']) assert.equal(isLocalIp(ip), true, ip);
+  for (const ip of ['8.8.8.8', '169.254.1.1', 'fe80::1', '0.0.0.0', '::ffff:10.0.0.1']) assert.equal(isLocalIp(ip), false, ip);
+});
+
+test('the address a connection really talks to counts most, and a local one only when there is nothing better', () => {
+  const pair = (type, address) => ({ local: { type: 'host', address: '192.168.0.2' }, remote: { type, address } });
+  // Chrome sometimes sends only mDNS host candidates: the page's address is still the pair's.
+  assert.deepEqual(pairAddress(pair('prflx', '203.0.113.5')), { ip: '203.0.113.5', rank: 4 });
+  assert.deepEqual(pairAddress(pair('host', '192.168.0.12')), { ip: '192.168.0.12', rank: 0.5 });
+  assert.equal(pairAddress(pair('relay', '198.51.100.9')), null);
+  assert.equal(pairAddress(pair('host', 'fe80::1')), null);
+  assert.equal(pairAddress(null), null);
 });
 
 test('where a device was last seen from is kept in its record, once it has one', async () => {
@@ -107,10 +119,13 @@ test('where a device was last seen from is kept in its record, once it has one',
   // Back from somewhere else; a private address is never kept.
   time.nextDay();
   await store.noteAddress(device, '1.1.1.1');
-  await store.noteAddress(device, '192.168.0.5');
+  await store.noteAddress(device, '169.254.0.5');
   const [seen] = await store.devices();
   assert.equal(seen.ip, '1.1.1.1');
   assert.equal(seen.lastSeen, time.now());
+  // On the keeper's own network, the local address is all there is.
+  await store.noteAddress(device, '192.168.0.5');
+  assert.equal((await store.devices())[0].ip, '192.168.0.5');
 });
 
 test('a profile is kept without the tokens that let a player back into islands, or their settings', async () => {
@@ -216,6 +231,8 @@ test('the admin pages list, download and delete copies, for this computer only',
     const located = (await (await fetch(`${base}/admin/api/state`)).json()).devices[0];
     assert.equal(located.ip, '8.8.8.8');
     assert.equal(located.place.country, 'US');
+    await store.noteAddress(device, '192.168.0.5');
+    assert.deepEqual((await (await fetch(`${base}/admin/api/state`)).json()).devices[0].place, { local: 'network' });
 
     const file = await fetch(`${base}/admin/api/devices/${device}/islands/${ISLAND}?download`);
     assert.match(file.headers.get('content-disposition'), /^attachment; filename="maple-fields-\d{4}-\d{2}-\d{2}\.kidsworld\.json"$/);

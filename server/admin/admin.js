@@ -54,6 +54,7 @@ const countries = new Intl.DisplayNames(undefined, { type: 'region' });
 function whereFrom(device) {
   if (!device.ip) return null;
   const p = device.place;
+  if (p?.local) return h('div', { class: 'muted where-from' }, `🌐 ${device.ip} · ${p.local === 'computer' ? 'this computer' : 'on this computer’s own network'}`);
   const country = p?.country ? countries.of(p.country) : '';
   const where = [p?.city, p?.region && p.region !== p?.city ? p.region : '', country].filter(Boolean).join(', ');
   return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `🌐 ${device.ip}`, where ? ` · ${where}` : ' · somewhere unknown');

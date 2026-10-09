@@ -3,14 +3,15 @@
 // password for a player who forgot theirs, no login at all, or the copies of
 // a device that is gone moved into a player's login, and a player taken out
 // of the ranking, or put back, and where each player was last seen from: the
-// IP address and, from geoip-lite's offline database (no address leaves this
-// computer), roughly where that is. Only for this computer: requests from other
+// IP address (a local one for a player on this computer's own network) and,
+// from geoip-lite's offline database (no address leaves this computer),
+// roughly where that is. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import send from 'send';
-import { KeepError } from './keeper.js';
+import { isLoopbackIp, isPublicIp, KeepError } from './keeper.js';
 
 const ADMIN_DIR = fileURLToPath(new URL('./admin/', import.meta.url));
 const PAGES = {
@@ -26,6 +27,7 @@ const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 let geoip = null;
 async function place(ip) {
   if (!ip) return null;
+  if (!isPublicIp(ip)) return { local: isLoopbackIp(ip) ? 'computer' : 'network' };
   geoip ??= import('geoip-lite').then((m) => m.default);
   const found = (await geoip).lookup(ip);
   return found ? { country: found.country, region: found.region, city: found.city, timezone: found.timezone } : null;

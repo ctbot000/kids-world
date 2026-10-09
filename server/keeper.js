@@ -86,6 +86,19 @@ export function isPublicIp(ip) {
   return v !== 0 && !/^::ffff:/i.test(ip) && !NOT_PUBLIC.check(ip, v === 4 ? 'ipv4' : 'ipv6');
 }
 
+// A player on the keeper's own network (the same Wi-Fi, say) or on this
+// computer: their address there is all the keeper ever sees of them.
+const LOCAL = new BlockList();
+for (const [net, bits] of [['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16]]) LOCAL.addSubnet(net, bits, 'ipv4');
+for (const [net, bits] of [['::1', 128], ['fc00::', 7]]) LOCAL.addSubnet(net, bits, 'ipv6');
+
+export function isLocalIp(ip) {
+  const v = isIP(ip);
+  return v !== 0 && !/^::ffff:/i.test(ip) && LOCAL.check(ip, v === 4 ? 'ipv4' : 'ipv6');
+}
+
+export const isLoopbackIp = (ip) => /^127\./.test(ip) || ip === '::1';
+
 // The public IP address an ICE candidate from a page tells of, and how sure
 // it is that it is the player's: 3 for a server-reflexive one (what a STUN
 // server saw: the address of the player's internet connection), 2 for a host
@@ -97,6 +110,19 @@ export function candidateAddress(candidate) {
   const raddr = words.indexOf('raddr');
   const [ip, rank] = type === 'srflx' ? [words[4], 3] : type === 'host' ? [words[4], 2] : type === 'relay' && raddr > 0 ? [words[raddr + 1], 1] : [];
   return ip && isPublicIp(ip) ? { ip, rank } : null;
+}
+
+// The address a connection actually talks to, from node-datachannel's
+// selected candidate pair: 4 when it is public (the player's own, as their
+// router shows it, even when the page never sent its STUN candidate, as
+// Chrome sometimes does not), or 0.5 for one on the keeper's own network
+// (the page's own candidates there are only mDNS names). Not a relay's: that
+// is the TURN server's. Or null.
+export function pairAddress(pair) {
+  const remote = pair?.remote;
+  if (!remote || remote.type === 'relay' || typeof remote.address !== 'string') return null;
+  const ip = remote.address;
+  return isPublicIp(ip) ? { ip, rank: 4 } : isLocalIp(ip) ? { ip, rank: 0.5 } : null;
 }
 
 // The PeerJS cloud and the ICE servers PeerJS pages use by default, so the
@@ -338,11 +364,12 @@ export class KeeperStore extends EventEmitter {
     return record;
   }
 
-  // The public IP address a device (or a player, on any of their devices)
-  // was last seen from. Into its record now, if it has one and the address
+  // The IP address a device (or a player, on any of their devices) was last
+  // seen from: a public one, or a local one for a player on the keeper's own
+  // network. Into its record now, if it has one and the address
   // is new, or else with whatever it sends first.
   noteAddress(device, ip) {
-    if (!isDeviceId(device) || !isPublicIp(ip)) return Promise.resolve();
+    if (!isDeviceId(device) || !(isPublicIp(ip) || isLocalIp(ip))) return Promise.resolve();
     if (this.addresses.size >= 1000) this.addresses.clear();
     this.addresses.set(device, ip);
     return this.serial(async () => {
@@ -1056,11 +1083,7 @@ export class Keeper extends EventEmitter {
       const conn = this.conns.get(id);
       const c = p.candidate;
       if (!conn || typeof c?.candidate !== 'string' || !c.candidate) return;
-      const address = candidateAddress(c.candidate);
-      if (address && address.rank > (conn.address?.rank ?? 0)) {
-        conn.address = address;
-        this.noteAddress(conn);
-      }
+      this.learnAddress(conn, candidateAddress(c.candidate));
       try {
         conn.pc.addRemoteCandidate(c.candidate, typeof c.sdpMid === 'string' ? c.sdpMid : '0');
       } catch {
@@ -1085,6 +1108,7 @@ export class Keeper extends EventEmitter {
     pc.onLocalCandidate((candidate, mid) => this.signaling.send({ type: 'CANDIDATE', dst: peer, payload: { candidate: { candidate, sdpMid: mid, sdpMLineIndex: 0 }, type: 'data', connectionId: id } }));
     pc.onStateChange((state) => {
       if (state === 'failed' || state === 'closed') this.drop(conn);
+      else if (state === 'connected') this.learnAddress(conn, this.pairOf(conn));
     });
     pc.onDataChannel((dc) => {
       if (conn.closed || conn.dc) {
@@ -1185,13 +1209,32 @@ export class Keeper extends EventEmitter {
     conn.player = player;
     conn.token = token;
     conn.folder = player ?? KeeperStore.deviceId(device);
+    this.learnAddress(conn, this.pairOf(conn));
     this.noteAddress(conn);
   }
 
-  // Where this connection's page is, for the admin page, once both are known.
+  pairOf(conn) {
+    try {
+      return pairAddress(conn.pc?.getSelectedCandidatePair?.());
+    } catch {
+      return null;
+    }
+  }
+
+  // A better idea of where this connection's page is than it had.
+  learnAddress(conn, address) {
+    if (!address || address.rank <= (conn.address?.rank ?? 0)) return;
+    conn.address = address;
+    this.noteAddress(conn);
+  }
+
+  // Where this connection's page is, for the admin page, once both are known:
+  // for its folder, and for the device's own copies from before it logged in
+  // (which show as a player with no login until they are moved).
   noteAddress(conn) {
     if (!conn.folder || !conn.address) return;
-    this.store.noteAddress(conn.folder, conn.address.ip).catch((error) => this.log(error));
+    const own = isDeviceKey(conn.device) ? KeeperStore.deviceId(conn.device) : conn.folder;
+    for (const device of new Set([conn.folder, own])) this.store.noteAddress(device, conn.address.ip).catch((error) => this.log(error));
   }
 
   async handle(conn, msg) {
