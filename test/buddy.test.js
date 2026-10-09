@@ -24,6 +24,7 @@ import { adminHandler } from '../server/admin.js';
 import { FriendControl } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
+import { Ollama } from '../server/llm.js';
 
 const dirs = [];
 async function tempDir() {
@@ -317,6 +318,16 @@ test('the admin page saves its settings and applies them, shows where it is and 
   assert.deepEqual(state.visits[0].chat.at(-1), { name: DEFAULT_NAME, text: 'Hi Minji!', mine: true });
   assert.equal(state.stats.answers, 1);
   assert.match(state.history[0].text, /off to "Maple Fields", invited by Minji/);
+  // The model log: what it was sent, word for word, and what came back.
+  const { calls } = await (await fetch(`${base}/llm`)).json();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].state, 'answered');
+  assert.equal(calls[0].about, 'what to say on “Maple Fields”');
+  assert.deepEqual(calls[0].messages.map((m) => m.role), ['system', 'user']);
+  assert.match(calls[0].messages[1].content, /Friends here: Minji/);
+  assert.deepEqual(calls[0].answer, { say: 'Hi Minji!', action: 'none', stamp: 'none' });
+  assert.ok(calls[0].schema.properties.say);
+  assert.equal((await fetch(`${base}/llm`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } })).status, 405);
 
   // Settings: checked, saved, and applied; a new name from its next visit on.
   assert.equal((await put({ name: 'Bolt 🤖' }, {})).status, 403, 'only with the admin header');
@@ -433,4 +444,22 @@ test('it keeps an island of its own, builds there what the model picks a layer a
   assert.equal(room2.host, pip2.id);
   assert.equal(again.builds.length, 2);
   await again.stop();
+});
+
+test('the Ollama client fills in a trace of each question for the model log', async () => {
+  const sent = [];
+  const fetch = async (url, init) => {
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ message: { content: '{"say":"Hi!"}' }, prompt_eval_count: 120, eval_count: 9, total_duration: 2.5e9, load_duration: 1e9, prompt_eval_duration: 4e8, eval_duration: 1e9, done_reason: 'stop' }));
+  };
+  const llm = new Ollama({ url: 'http://ollama.test/', model: 'tiny', fetch });
+  const trace = {};
+  assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], { type: 'object' }, trace), { say: 'Hi!' });
+  assert.equal(trace.model, 'tiny');
+  assert.equal(trace.raw, '{"say":"Hi!"}');
+  assert.deepEqual(trace.ollama, { promptTokens: 120, tokens: 9, totalMs: 2500, loadMs: 1000, promptMs: 400, answerMs: 1000, doneReason: 'stop' });
+  assert.deepEqual(trace.options, sent[0].options);
+  assert.ok(trace.sentAt > 0);
+  // Without a trace, as before.
+  assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], { type: 'object' }), { say: 'Hi!' });
 });

@@ -9,7 +9,8 @@
 // roughly where that is; and the AI friend's settings, the islands it is on
 // and what is said there, how its model answers and what it did lately
 // (friend.js), with a line to say there as its own and a button to send it
-// home from an island. Only for this computer: requests from other
+// home from an island, and its model log: what it asked the model lately,
+// word for word, and what came back. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -75,7 +76,7 @@ function sendFile(req, res, file, extra = {}) {
     .pipe(res);
 }
 
-// The AI friend: GET what it is up to, PUT settings, POST /check to see
+// The AI friend: GET what it is up to, GET /llm for its model log, PUT settings, POST /check to see
 // whether its model is there now, POST /visits/<code>/home to send it home,
 // POST /visits/<code>/say { text } to have it say something there.
 async function friendApiFor(friend, req, res, rest) {
@@ -89,6 +90,10 @@ async function friendApiFor(friend, req, res, rest) {
     } catch (error) {
       return json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
     }
+  }
+  if (rest === '/llm') {
+    if (req.method !== 'GET') return res.writeHead(405, { Allow: 'GET' }).end();
+    return json(res, 200, { calls: friend.calls() });
   }
   if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
   if (rest === '/check') {

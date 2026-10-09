@@ -6,8 +6,10 @@
 // friend: its settings, what it is doing now, its own island and what it
 // builds there, the islands it is on and what is said there, how its model
 // answers and what it did lately, with a line for it to say on an island it
-// is on, as its own words. It reads /admin/api/state and
-// /admin/api/friend every few seconds.
+// is on, as its own words, and its model log: what it asked the model, word
+// for word, and what came back. It reads /admin/api/state and
+// /admin/api/friend every few seconds, and /admin/api/friend/llm too while
+// the model log is open.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
@@ -561,6 +563,113 @@ function nowList(state) {
   );
 }
 
+// ------------------------------------------------ its model log
+
+// Its last questions to the model, word for word, and what came back: read
+// from /admin/api/friend/llm only while the log is open.
+const logView = {
+  list: h('div', { class: 'calls' }),
+  note: h('p', { class: 'muted' }),
+  shown: '',
+};
+logView.el = h(
+  'details',
+  {
+    class: 'fold model-log',
+    ontoggle: (e) => {
+      if (e.target.open) {
+        opened.add('friend-llm');
+        refreshLog();
+      } else opened.delete('friend-llm');
+    },
+  },
+  h('summary', {}, '🔍 Model log'),
+  logView.note,
+  logView.list,
+);
+
+const STATE = { waiting: '⏳', answered: '✅', failed: '⚠️' };
+const secs = (ms) => (ms === null || ms === undefined ? '' : `${(ms / 1000).toFixed(1)} s`);
+
+// Text as it is, or JSON laid out to read.
+function pretty(text) {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
+
+function callCard(c) {
+  const key = `call-${c.at}-${c.id}`;
+  const o = c.ollama;
+  const tokens = o ? [o.promptTokens !== null ? `${o.promptTokens} in` : null, o.tokens !== null ? `${o.tokens} out` : null].filter(Boolean).join(' · ') : '';
+  const waited = c.sentAt ? c.sentAt - c.at : null;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(c, null, 2));
+    } catch {
+      alert('Could not copy it.');
+    }
+  };
+  return h(
+    'details',
+    { class: `call ${c.state}`, open: opened.has(key) || null, ontoggle: (e) => (e.target.open ? opened.add(key) : opened.delete(key)) },
+    h(
+      'summary',
+      {},
+      h('time', {}, time.format(c.at)),
+      ` ${STATE[c.state] ?? ''} ${c.about || 'a question'}`,
+      h('span', { class: 'muted' }, [c.state === 'waiting' ? (c.sentAt ? ' · asking…' : ' · waiting its turn…') : ` · ${secs(c.ms)}`, tokens ? ` · ${tokens} tokens` : ''].join('')),
+    ),
+    h(
+      'div',
+      { class: 'call-body' },
+      h(
+        'div',
+        { class: 'muted' },
+        [
+          c.model ? `Model ${c.model}` : null,
+          c.options ? Object.entries(c.options).map(([k, v]) => `${k} ${v}`).join(', ') : null,
+          waited ? `waited ${secs(waited)} for the questions before it` : null,
+          o?.loadMs >= 100 ? `loading the model ${secs(o.loadMs)}` : null,
+          o?.promptMs !== null && o?.promptMs !== undefined ? `reading ${secs(o.promptMs)}` : null,
+          o?.answerMs !== null && o?.answerMs !== undefined ? `answering ${secs(o.answerMs)}` : null,
+          o?.doneReason ? `stopped: ${o.doneReason}${o.doneReason === 'length' ? ' (ran out of words)' : ''}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        ' ',
+        h('button', { type: 'button', class: 'small', onclick: copy }, 'Copy as JSON'),
+      ),
+      ...c.messages.map((m) => h('div', { class: `msg ${m.role}` }, h('b', {}, m.role), h('pre', {}, m.content))),
+      c.state === 'failed' ? h('div', { class: 'msg error' }, h('b', {}, 'no answer'), h('pre', {}, c.error)) : null,
+      c.raw !== undefined ? h('div', { class: 'msg reply' }, h('b', {}, 'reply'), h('pre', {}, pretty(c.raw))) : c.answer !== undefined ? h('div', { class: 'msg reply' }, h('b', {}, 'answer'), h('pre', {}, JSON.stringify(c.answer, null, 2))) : null,
+      c.schema ? h('details', { class: 'fold' }, h('summary', {}, 'Answer schema'), h('pre', {}, JSON.stringify(c.schema, null, 2))) : null,
+    ),
+  );
+}
+
+async function refreshLog() {
+  if (!logView.el.open) return;
+  let calls = null;
+  try {
+    const res = await api('friend/llm');
+    if (res.ok) calls = (await res.json()).calls;
+  } catch {
+    calls = null;
+  }
+  const key = JSON.stringify(calls);
+  if (key === logView.shown) return;
+  logView.shown = key;
+  logView.note.textContent = !calls
+    ? 'The log could not be read. Is the keeper still running?'
+    : calls.length
+      ? `Its last ${plural(calls.length, 'question', 'questions')} to the model, newest first: everything it was sent, and what came back. Kept only in memory, until the keeper stops.`
+      : 'It has not asked the model anything yet.';
+  logView.list.replaceChildren(...(calls ?? []).map(callCard));
+}
+
 // The section's parts, made once and filled in on every refresh.
 let friendView = null;
 const visitCards = new Map();
@@ -574,7 +683,7 @@ function renderFriend(state) {
   if (!friendView) {
     friendView = { line: h('div', { class: 'friend-line' }), now: h('ul', { class: 'now', 'aria-label': 'What it is doing now' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), visits: h('div', { class: 'visits' }), history: h('div') };
     const f = friendView;
-    $('friend').replaceChildren(f.line, f.now, friendForm.form, f.about, f.facts, f.visits, f.history);
+    $('friend').replaceChildren(f.line, f.now, friendForm.form, f.about, f.facts, f.visits, f.history, logView.el);
   }
   const f = friendView;
   const s = state.settings;
@@ -632,6 +741,7 @@ async function refreshFriend() {
     state = null;
   }
   renderFriend(state);
+  if (state) await refreshLog();
 }
 
 let shown = '';

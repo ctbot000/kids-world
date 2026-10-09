@@ -8,6 +8,7 @@ export const DEFAULT_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_MODEL = 'gemma3:4b';
 
 const TIMEOUT_MS = 30000;
+const OPTIONS = { temperature: 0.7, num_predict: 160 };
 
 export class Ollama {
   constructor({ url = process.env.KIDS_WORLD_AI_URL || DEFAULT_URL, model = process.env.KIDS_WORLD_AI_MODEL || DEFAULT_MODEL, fetch = globalThis.fetch } = {}) {
@@ -45,23 +46,44 @@ export class Ollama {
   }
 
   // The model's answer to messages ([{ role, content }]), as the object the
-  // schema describes. Throws when there is none in time.
-  chat(messages, schema) {
-    const run = () => this.ask(messages, schema);
+  // schema describes. Throws when there is none in time. trace, when given,
+  // is filled in with how it went, for the admin page's model log: when it
+  // was sent (after the ones before it), the model's words as they came, and
+  // Ollama's own counts and times.
+  chat(messages, schema, trace = null) {
+    const run = () => this.ask(messages, schema, trace);
     const answer = this.queue.then(run, run);
     this.queue = answer.catch(() => {});
     return answer;
   }
 
-  async ask(messages, schema) {
+  async ask(messages, schema, trace = null) {
+    if (trace) {
+      trace.sentAt = Date.now();
+      trace.model = this.model;
+      trace.options = OPTIONS;
+    }
     const res = await this.fetch(`${this.url}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: this.model, messages, stream: false, format: schema, keep_alive: '30m', options: { temperature: 0.7, num_predict: 160 } }),
+      body: JSON.stringify({ model: this.model, messages, stream: false, format: schema, keep_alive: '30m', options: OPTIONS }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Ollama answered ${res.status}`);
     const body = await res.json();
+    if (trace) {
+      const ms = (ns) => (Number.isFinite(ns) ? Math.round(ns / 1e6) : null);
+      trace.raw = body.message?.content ?? '';
+      trace.ollama = {
+        promptTokens: body.prompt_eval_count ?? null,
+        tokens: body.eval_count ?? null,
+        totalMs: ms(body.total_duration),
+        loadMs: ms(body.load_duration),
+        promptMs: ms(body.prompt_eval_duration),
+        answerMs: ms(body.eval_duration),
+        doneReason: body.done_reason ?? '',
+      };
+    }
     return JSON.parse(body.message?.content ?? '');
   }
 }

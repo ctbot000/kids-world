@@ -95,6 +95,8 @@ const WANDER_MS = 3 * 60000;
 const CHECK_MS = 60000;
 // How many lines of what it did the admin page sees.
 const HISTORY = 60;
+// How many of its questions to the model the admin page's model log keeps.
+const CALLS = 40;
 // Its own island: a layer of a build at a time, and a rest between builds,
 // longer with nobody there to see. With friends there it plays with them, and
 // builds on once nobody has talked with it for a while (or they ask it to).
@@ -236,6 +238,10 @@ export class Buddy extends EventEmitter {
     };
     // How its model answers: how many, how many not, and how fast.
     this.stats = { answers: 0, failures: 0, totalMs: 0, lastMs: 0, lastError: '', lastErrorAt: 0 };
+    // Its last questions to the model, newest last, for the admin page's
+    // model log: everything sent and what came back. Only in memory.
+    this.calls = [];
+    this.callId = 0;
     this.tickMs = tickMs;
     this.layerMs = layerMs;
     this.firstBuildMs = firstBuildMs;
@@ -278,19 +284,25 @@ export class Buddy extends EventEmitter {
     if (this.keeper) this.keeper.buddy = this;
   }
 
-  // An answer from the model, counted and timed.
-  async ask(messages, schema) {
+  // An answer from the model, counted, timed and kept in the model log;
+  // about says what it was asked for and where.
+  async ask(messages, schema, about = '') {
     const start = this.now();
+    const call = { id: ++this.callId, at: start, about, messages, schema, state: 'waiting' };
+    this.calls.push(call);
+    if (this.calls.length > CALLS) this.calls.splice(0, this.calls.length - CALLS);
     try {
-      const answer = await this.llm.chat(messages, schema);
+      const answer = await this.llm.chat(messages, schema, call);
       this.stats.answers++;
       this.stats.lastMs = this.now() - start;
       this.stats.totalMs += this.stats.lastMs;
+      Object.assign(call, { state: 'answered', ms: this.stats.lastMs, answer });
       return answer;
     } catch (error) {
       this.stats.failures++;
       this.stats.lastError = error.message;
       this.stats.lastErrorAt = this.now();
+      Object.assign(call, { state: 'failed', ms: this.now() - start, error: error.message });
       throw error;
     }
   }
@@ -1035,7 +1047,7 @@ export class Visit extends EventEmitter {
     const asked = this.buildAsked;
     this.buildAsked = false;
     this.buddy
-      .ask(this.buildMessages(asked), BUILD_SCHEMA)
+      .ask(this.buildMessages(asked), BUILD_SCHEMA, `what to build on “${this.world?.name ?? this.island.name}”${asked ? ', as asked' : ''}`)
       .catch((error) => {
         this.buddy.log(`AI friend: no answer from the model about what to build (${error.message}); it picks something itself.`);
         return {};
@@ -1208,7 +1220,7 @@ export class Visit extends EventEmitter {
       { role: 'system', content: systemPrompt(this.name) },
       { role: 'user', content: this.situation(ask) },
     ];
-    return this.buddy.ask(messages, ANSWER_SCHEMA);
+    return this.buddy.ask(messages, ANSWER_SCHEMA, `what to say on “${this.world?.name ?? this.island.name}”${ask.then === 'leave' ? ', leaving' : ''}`);
   }
 
   // What the model is told about the island, who is there and what was said.

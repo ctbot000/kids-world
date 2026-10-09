@@ -161,6 +161,12 @@ export class FriendControl {
     };
   }
 
+  // The model log: its last questions to the model, newest first, with
+  // everything sent and what came back (the last one that ran, once it is off).
+  calls() {
+    return [...((this.buddy ?? this.last)?.calls ?? [])].reverse();
+  }
+
   // Stopped, with its own island saved.
   async stop() {
     const b = this.buddy;

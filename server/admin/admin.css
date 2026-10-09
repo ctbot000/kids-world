@@ -472,6 +472,72 @@ button:disabled {
   color: var(--grass);
 }
 
+.calls {
+  display: grid;
+  gap: 6px;
+}
+
+.call {
+  padding: 6px 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.call.failed {
+  border-color: #f5c6a8;
+}
+
+.call > summary {
+  font-size: 15px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.call time {
+  color: var(--ink-soft);
+}
+
+.call-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.msg b {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.call pre {
+  max-height: 320px;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--paper);
+  font: 13px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg.reply pre {
+  background: #eef8e8;
+}
+
+.msg.error pre {
+  background: #fdeee4;
+  color: var(--danger);
+}
+
+button.small {
+  padding: 1px 10px;
+  font-size: 13px;
+}
+
 @media (max-width: 480px) {
   .who {
     flex-wrap: wrap;
