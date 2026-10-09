@@ -19,15 +19,16 @@
 //
 // Vehicles (vehicle) live here too, as friends that never go anywhere by
 // themselves: a car, a boat, a digger that tunnels through the ground and
-// a mine cart that rolls along rails; and a bus and a ferry with seats for
-// friends to ride along (ride.seats). They park where they were left, and
-// someone driving one moves it the way a rider moves an animal.
+// a mine cart that rolls along rails; a bus and a ferry with seats for
+// friends to ride along (ride.seats); and a helicopter and a hot-air balloon
+// that fly. They park where they were left, and someone driving one moves
+// it the way a rider moves an animal.
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -68,13 +69,18 @@ export const CRITTER_INFO = {
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
   // speeds on them) and only creeps along off them. The bus and the ferry
-  // take friends along as well as their driver (ride.seats).
+  // take friends along as well as their driver (ride.seats). The helicopter
+  // and the balloon (vehicle: 'air') fly (ride.air): jump held takes them up
+  // and down brings them down, at their own speeds (fly, flyRun, flyUp),
+  // and left up in the air they come down gently by themselves (maxFall).
   car: { name: 'Car', icon: '🚗', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.5, z: -0.12, radius: 0.55, height: 1.75, float: 0.55, spread: 0.12, reach: 1.35, walk: 7, run: 12, swim: 2, jump: 8, trick: 'honk' }, names: ['Beep-Beep', 'Zoomy', 'Vroom', 'Cherry', 'Bumper', 'Speedy', 'Pip', 'Rosie', 'Turbo', 'Sunny'] },
   boat: { name: 'Boat', icon: '🚤', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.3, z: -0.15, radius: 0.6, sea: true, swim: 6.5, run: 10, float: 0, dive: 0, spread: 0.12, reach: 1.35, trick: 'honk' }, names: ['Splashy', 'Bubbles', 'Captain', 'Wave Rider', 'Skipper', 'Puddle Jumper', 'Bobby', 'Sea Breeze', 'Toot-Toot', 'Marina'] },
   digger: { name: 'Digger', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { drill: true, seat: 0.92, z: -0.22, radius: 0.6, height: 2.15, float: 0.75, spread: 0.15, reach: 1.3, walk: 3.5, run: 5, swim: 1.8, jump: 8.5 }, names: ['Rumbles', 'Scoop', 'Chomper', 'Drilly', 'Dusty', 'Rocky', 'Tunnel', 'Diggs', 'Muddy', 'Crunch'] },
   minecart: { name: 'Mine Cart', icon: '🚃', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.32, radius: 0.42, height: 1.6, float: 0.5, spread: 0.12, reach: 1.35, walk: 1.8, run: 2.6, swim: 1.5, jump: 7.6, trick: 'honk', rails: { speed: 7, run: 11 } }, names: ['Clickety', 'Rattle', 'Nugget', 'Rusty', 'Clank', 'Rolly', 'Coal', 'Jingle', 'Choo-Choo', 'Pebble'] },
   bus: { name: 'Bus', icon: '🚌', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.62, z: 0.85, radius: 0.95, height: 2, float: 0.7, spread: 0.12, reach: 1.3, walk: 6, run: 9.5, swim: 1.8, jump: 7, trick: 'honk', seats: [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.45], [0.3, -0.45], [-0.3, -1.1], [0.3, -1.1]] }, names: ['Busy', 'Big Yellow', 'Honky', 'Bumble', 'Choo-Bus', 'Daisy', 'Wheelie', 'Buddy', 'Jolly', 'Sunny Days'] },
   ferry: { name: 'Ferry', icon: '⛴️', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.38, z: 0.85, radius: 1, sea: true, swim: 5, run: 8, float: 0, dive: 0, spread: 0.12, reach: 1.3, trick: 'honk', seats: [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.45], [0.3, -0.45], [-0.3, -1.1], [0.3, -1.1]] }, names: ['Bobber', 'Captain Toot', 'Big Splash', 'Seasy', 'Marigold', 'Harbor', 'Puffin', 'Wavey', 'Tugboat', 'Anchor'] },
+  helicopter: { name: 'Helicopter', icon: '🚁', speed: 0, swims: true, flies: false, vehicle: 'air', ride: { air: true, seat: 0.42, z: 0.3, radius: 0.8, height: 2.1, float: 0.5, spread: 0.12, reach: 1.3, walk: 3, run: 4.5, swim: 1.5, fly: 8.5, flyRun: 13, flyUp: 6, maxFall: 3, trick: 'honk', seats: [[-0.29, -0.42], [0.29, -0.42]] }, names: ['Whirly', 'Chopper', 'Skye', 'Buzz', 'Propella', 'Hoverbug', 'Twirl', 'Dragonfly', 'Swoosh', 'Rotor'] },
+  balloon: { name: 'Hot-Air Balloon', icon: '🎈', speed: 0, swims: true, flies: false, vehicle: 'air', ride: { air: true, seat: 0.3, z: 0.55, radius: 0.95, height: 4.6, float: 0.5, spread: 0.12, reach: 1.3, walk: 1.5, run: 2, swim: 1, fly: 3.2, flyRun: 4.5, flyUp: 2.6, maxFall: 1.6, trick: 'honk', seats: [[-0.33, -0.05], [0.33, -0.05], [-0.33, -0.62], [0.33, -0.62]] }, names: ['Puffy', 'Rainbow', 'Cloud Hopper', 'Sky Bubble', 'Breezy', 'Floaty', 'Sunbeam', 'Lollipop', 'Up-Up', 'Marshmallow'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -88,6 +94,8 @@ export const CRITTER_INFO = {
 // jump button does instead of jumping: a leap, a spout, or a spray from the
 // trunk. seats: where friends riding along sit, [across, forward] from its
 // middle, at the driver's height (the driver's seat is the first: see riderAt).
+// air: it flies (see riding.js), its box (height) tall enough for all of it,
+// a balloon's balloon too.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
 // The animals, without the vehicles.
@@ -574,17 +582,37 @@ export function busesClearOf(vehicles = [], camps = [], defense = null) {
 // of their own, so nothing else on an island moves for them.
 export function placeBuses(world, rng, others = []) {
   const out = [];
+  const bus = nearStart(world, rng, 'bus', others);
+  if (bus) out.push(bus);
+  const ferry = byShore(world, rng, 'ferry', 3, others);
+  if (ferry) out.push(ferry);
+  return out;
+}
+
+// A spot on dry land with room for one of this kind, a little way from
+// where everyone comes in (further off if there is none nearby), clear of
+// what is in others, facing the start.
+function nearStart(world, rng, type, others) {
   const spawn = world.spawn;
   for (let tries = 0; tries < spots(world, 600); tries++) {
     const a = rng.next() * Math.PI * 2;
     const d = rng.range(6, tries < 300 ? 16 : 40);
     const p = perchAt(world, spawn.x + Math.cos(a) * d, spawn.z + Math.sin(a) * d);
-    if (!p || p.kind !== 'ground' || p.y <= world.sea + 1 || others.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 4 + (o.r ?? 0)) || !fits(world, 'bus', p.x, p.y, p.z)) continue;
-    out.push({ type: 'bus', x: p.x, y: p.y, z: p.z, yaw: Math.atan2(spawn.x - p.x, spawn.z - p.z) });
-    break;
+    if (!p || p.kind !== 'ground' || p.y <= world.sea + 1 || others.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 4 + (o.r ?? 0)) || !fits(world, type, p.x, p.y, p.z)) continue;
+    return { type, x: p.x, y: p.y, z: p.z, yaw: Math.atan2(spawn.x - p.x, spawn.z - p.z) };
   }
-  const ferry = byShore(world, rng, 'ferry', 3, others);
-  if (ferry) out.push(ferry);
+  return null;
+}
+
+// The vehicles that fly: a helicopter and a hot-air balloon, each on open
+// ground near where everyone comes in, clear of what is in others (see
+// busesClearOf) and of each other. Like the bus, with dice of their own.
+export function placeAircraft(world, rng, others = []) {
+  const out = [];
+  for (const type of ['helicopter', 'balloon']) {
+    const v = nearStart(world, rng, type, [...others, ...out.map((o) => ({ x: o.x, z: o.z, r: 1 }))]);
+    if (v) out.push(v);
+  }
   return out;
 }
 
@@ -1081,7 +1109,8 @@ export class CritterSim {
   // Parked: where it was left, until someone drives it. A boat floats at the
   // top of its water (and, with that water gone, goes to the nearest there
   // is); a car or a digger stands on the ground, falling onto it if what was
-  // under it went; a mine cart on rails stays on them, even on a slope.
+  // under it went; a mine cart on rails stays on them, even on a slope; and
+  // a helicopter or a balloon left up in the air comes gently down.
   // Honked at (petted), it honks back for a moment.
   stepVehicle(world, c, dt, now) {
     c.state = c.happyUntil > now ? 'happy' : 'idle';
@@ -1105,6 +1134,7 @@ export class CritterSim {
     c.x = b.x;
     c.y = b.y;
     c.z = b.z;
+    if (CRITTER_INFO[c.type].vehicle === 'air' && !b.onGround && !b.inWater && c.state === 'idle') c.state = 'fly';
   }
 
   // ------------------------------------------------ big animals

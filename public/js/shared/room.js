@@ -13,7 +13,7 @@
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -635,7 +635,7 @@ export class Room {
         // in, and big animals and vehicles at the nearest spot with room for
         // them, facing the one who asked for them.
         const info = CRITTER_INFO[msg.type];
-        const roomy = info.big || info.vehicle === 'land';
+        const roomy = info.big || info.vehicle === 'land' || info.vehicle === 'air';
         if (info.sea === 'water') at = nearestWater(w, msg.type, x, z);
         if (roomy) at = roomFor(w, msg.type, x, at.y, z);
         if (!at) {
@@ -1349,8 +1349,9 @@ export class Room {
       // 2: made since birds, owls, bees and seagulls came to the islands;
       // 3: since the sea creatures did; 4: since penguins and seals did; 5:
       // since the big animals did; 6: since jewels were hidden in the rock;
-      // 7: since the vehicles came.
-      v: 8,
+      // 7: since the vehicles came; 8: since the bus and the ferry did; 9:
+      // since the helicopter and the balloon did.
+      v: 9,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -1399,6 +1400,11 @@ export class Room {
     if (v < 8) {
       const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
       for (const f of placeBuses(this.world, new Rng(seed ^ 0x3243f6a8), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
+    }
+    // And a helicopter and a hot-air balloon, the same way.
+    if (v < 9) {
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      for (const f of placeAircraft(this.world, new Rng(seed ^ 0x13198a2e), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };

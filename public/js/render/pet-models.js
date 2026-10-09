@@ -379,12 +379,12 @@ const BUILDERS = { puppy, kitten, bunny, hamster, piglet, dragon, duckling, parr
 
 // Where a pet rides along, behind its owner, on each kind of animal and in
 // each vehicle: how far behind its middle.
-const SEATS = { pony: -0.5, unicorn: -0.5, reindeer: -0.5, cow: -0.52, elephant: -0.62, giraffe: -0.45, polarbear: -0.52, dolphin: -0.45, whale: -0.62, car: -0.63, boat: -0.75, digger: -0.55, minecart: -0.43, bus: 0.1, ferry: 0.1 };
+const SEATS = { pony: -0.5, unicorn: -0.5, reindeer: -0.5, cow: -0.52, elephant: -0.62, giraffe: -0.45, polarbear: -0.52, dolphin: -0.45, whale: -0.62, car: -0.63, boat: -0.75, digger: -0.55, minecart: -0.43, bus: 0.1, ferry: 0.1, helicopter: -0.42, balloon: -0.33 };
 const seatTops = new Map();
 
 // How high the top of a mount is there, standing still, measured once on a
 // model of its own: the highest point under where the pet sits (its saddle
-// left out).
+// left out, and anything up over it, such as a rotor or a balloon).
 function seatTop(type) {
   if (seatTops.has(type)) return seatTops.get(type);
   const m = new CritterModel(type, 0);
@@ -397,7 +397,7 @@ function seatTop(type) {
   for (const dx of [-0.07, 0, 0.07]) {
     for (const dz of [-0.07, 0, 0.07]) {
       ray.set(new THREE.Vector3(dx, 8, z + dz), down);
-      const hit = ray.intersectObject(m.group, true).find((h) => !m.saddle || !isInside(h.object, m.saddle));
+      const hit = ray.intersectObject(m.group, true).find((h) => (!m.saddle || !isInside(h.object, m.saddle)) && (!m.over || !isInside(h.object, m.over)));
       if (hit) top = Math.max(top, hit.point.y);
     }
   }

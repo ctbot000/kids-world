@@ -6,7 +6,9 @@
 //
 // Vehicles are driven the same way. The car and the boat honk; the digger
 // digs out the ground it drives into; a mine cart rolls along rails, round
-// their corners and up and down their slopes, and rolls on by itself.
+// their corners and up and down their slopes, and rolls on by itself. The
+// helicopter and the balloon fly: jump held lifts them off and up, down
+// brings them down, and they hover with neither.
 import * as B from './blocks.js';
 import { CRITTER_INFO, leapFrom, standHeight, SURFACE, swimmable, waterColumn } from './critters.js';
 import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
@@ -37,12 +39,13 @@ export function startRide(world, type, m) {
 // One step of the ride: input is { mx, mz } (which way, in the world), jump,
 // down and run. Returns what happened: jumped, landed (how hard), splashed,
 // leapt, trick (the whale's spout, the elephant's spray or a honk), dig (the
-// cells the digger's drill takes out: see drillCells), and rolled (how far a
-// mine cart went along its rails) and bumped (into the end of them).
+// cells the digger's drill takes out: see drillCells), rolled (how far a
+// mine cart went along its rails) and bumped (into the end of them), and
+// tookOff and touchedDown (a helicopter or a balloon).
 export function stepRide(world, ride, input, dt) {
   const r = ride.r;
   if (r.rails && !ride.rail) ride.rail = ontoRails(world, ride);
-  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : walk(world, ride, input, dt);
+  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : r.air ? fly(world, ride, input, dt) : walk(world, ride, input, dt);
   ride.held = Boolean(input.jump);
   const b = ride.body;
   if (!ride.rail && Math.hypot(b.vx, b.vz) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 8));
@@ -62,6 +65,31 @@ function walk(world, ride, input, dt) {
   if (r.drill && Math.hypot(input.mx || 0, input.mz || 0) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(input.mx, input.mz), Math.min(1, dt * 6));
   const ev = stepBody(world, b, { mx: input.mx, mz: input.mz, run: input.run, jump: input.jump && (!r.trick || b.inWater) }, dt, { move: r });
   ev.trick = trick;
+  return ev;
+}
+
+// Flying (as a player flies: see physics.js), at its own speeds. On the
+// ground (or afloat) it drives slowly about, and jump held lifts it off;
+// in the air it goes up while jump is held, down while down is, and hovers
+// with neither, landing as it comes down onto the ground. Coming down onto
+// water, it floats there.
+function fly(world, ride, input, dt) {
+  const r = ride.r;
+  const b = ride.body;
+  const was = b.flying;
+  if (input.jump && !b.flying) {
+    b.flying = true;
+    b.onGround = false;
+  }
+  const move = { ...r, fly: input.run ? r.flyRun : r.fly };
+  const ev = stepBody(world, b, { mx: input.mx, mz: input.mz, run: input.run, jump: b.flying && input.jump, down: b.flying && input.down }, dt, { move, autoJump: !b.flying });
+  if (b.flying && b.inWater && !input.jump) {
+    b.flying = false;
+    ev.splashed = true;
+  }
+  ev.tookOff = !was && b.flying;
+  ev.touchedDown = was && !b.flying;
+  ev.trick = false;
   return ev;
 }
 
@@ -323,6 +351,7 @@ function drill(world, ride, input, dt) {
 export function rideState(ride) {
   const b = ride.body;
   if (ride.leap) return 'jump';
+  if (b.flying) return 'fly';
   if (ride.rail) return ride.rail.v > ride.r.rails.speed * 1.1 ? 'run' : ride.rail.v > 0.3 ? 'walk' : 'idle';
   if (ride.r.sea || b.inWater) return 'swim';
   if (!b.onGround) return 'jump';
@@ -333,6 +362,8 @@ export function rideState(ride) {
 // Where the rider goes on getting off: down beside the animal (on its right,
 // its left, behind it or in front of it), wherever a player fits standing,
 // or swimming beside it; on top of where it is if there is no room about it.
+// Out of a helicopter or a balloon up in the air, flying beside it (flying:
+// true), with no ground near enough under it to stand on.
 export function getOffAt(world, ride) {
   const b = ride.body;
   const r = ride.r;
@@ -350,9 +381,11 @@ export function getOffAt(world, ride) {
       const z = b.z + dz * out * k;
       const w = waterColumn(world, x, z);
       // In the water, at the top of it; on land, on the ground by its feet.
-      const y = w && (r.sea || b.inWater) ? Math.max(w.floor + 1, w.top + SURFACE - 1.3) : standHeight(world, x, z, b.y + 0.5);
+      let y = w && (r.sea || b.inWater) ? Math.max(w.floor + 1, w.top + SURFACE - 1.3) : standHeight(world, x, z, b.y + 0.5);
+      const flying = y === null && Boolean(r.air);
+      if (flying) y = b.y;
       if (y === null || x < 0.5 || z < 0.5 || x > world.W - 0.5 || z > world.D - 0.5) continue;
-      if (!bodyOverlapsSolid(world, makeBody(x, y, z))) return { x, y, z };
+      if (!bodyOverlapsSolid(world, makeBody(x, y, z))) return flying ? { x, y, z, flying } : { x, y, z };
     }
   }
   const p = makeBody(b.x, b.y, b.z);

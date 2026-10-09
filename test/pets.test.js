@@ -20,6 +20,12 @@ import { cleanLook, cleanPet, EMOTE_KEYS, NAME_MAX, PET_COATS, PETS, randomPetNa
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
+// Whether o is part of group (or is it).
+const isIn = (o, group) => {
+  for (; o && group; o = o.parent) if (o === group) return true;
+  return false;
+};
+
 const DT = 1 / 60;
 const KINDS = PETS.map((p) => p.key);
 
@@ -333,7 +339,8 @@ test('a pet riding along sits on the back of the animal or in the vehicle, behin
     for (const dx of [-0.07, 0, 0.07]) {
       for (const dz of [-0.07, 0, 0.07]) {
         const ray = new THREE.Raycaster(new THREE.Vector3(seat.x + dx, seat.y + 3, seat.z + dz), up.clone().negate());
-        const hit = ray.intersectObject(mount.group, true).find((h) => !mount.saddle || !h.object.parent || h.object.parent !== mount.saddle);
+        // (Not a rotor or a balloon up over it.)
+        const hit = ray.intersectObject(mount.group, true).find((h) => (!mount.saddle || !h.object.parent || h.object.parent !== mount.saddle) && !isIn(h.object, mount.over));
         if (hit) top = Math.max(top, hit.point.y);
         if (hit && !dx && !dz) middle = hit.point.y;
       }

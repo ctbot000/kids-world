@@ -3,10 +3,14 @@
 // speedboat with an outboard motor and a flag, a yellow digger on tracks
 // with a drill on the front and a flashing light, a mine cart with a
 // lantern, and for friends to ride in together, an open-top bus and a
-// ferry, each with three rows of two seats behind the driver's. Each seat
+// ferry, each with three rows of two seats behind the driver's; and to fly,
+// a helicopter with a seat for two friends behind the pilot's, and a
+// hot-air balloon with a striped balloon over a basket for five. Each seat
 // is coloured as the T-shirt of whoever sits in it, and each vehicle is
 // moved by CritterModel (critter-models.js), which calls drive() each frame.
+// What is up over the seats (a rotor, a balloon) is in v.over.
 import * as THREE from '../../vendor/three.module.js';
+import { CRITTER_INFO } from '../shared/critters.js';
 import { cone, cylinder, geo, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
@@ -354,13 +358,176 @@ function ferry(id) {
   return { ...v, sea: true, height: 0.9, center: 0.3, pick: 1.25, shadow: 0, seen: 130 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, bus, ferry };
+// A rod from a to b ([x, y, z] each), r thick.
+function rod(parent, material, a, b, r) {
+  const from = new THREE.Vector3(...a);
+  const to = new THREE.Vector3(...b);
+  const m = mesh(cylinder(r, r, 1, 6), material);
+  m.position.copy(from).add(to).multiplyScalar(0.5);
+  m.scale.set(1, from.distanceTo(to), 1);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+  parent.add(m);
+  return m;
+}
+
+// A cushion with a back for a friend riding along, at (x, z), its top at y,
+// its material in v.seatPads (in the order of ride.seats in shared/critters.js).
+function friendSeat(v, x, z, y, w = 0.2) {
+  const pad = toon(SEAT).clone();
+  v.owned.push(pad);
+  v.seatPads.push(pad);
+  block(v.body, pad, x - w, y - 0.08, z - 0.25, x + w, y, z + 0.22);
+  block(v.body, pad, x - w, y - 0.08, z - 0.31, x + w, y + 0.34, z - 0.24);
+}
+
+const COPTERS = ['#e8453c', '#3a73d8', '#fcd535', '#2fc1b3', '#f47fb8', '#8c5bd6'];
+
+function helicopter(id) {
+  const v = rig();
+  const { body } = v;
+  const paint = toon(COPTERS[id % COPTERS.length]);
+  const white = toon('#f7f5ef');
+  const dark = toon('#4a4e57');
+  const metal = toon(METAL);
+  // Two skids to land on, and struts up to the floor.
+  for (const side of [-1, 1]) {
+    const skid = mesh(cylinder(0.045, 0.045, 1.5, 8), metal, side * 0.5, 0.05, 0.05);
+    skid.rotation.x = Math.PI / 2;
+    body.add(skid);
+    body.add(mesh(sphere(1, 8, 6), metal, side * 0.5, 0.05, 0.8, 0.045));
+    for (const z of [-0.45, 0.5]) rod(body, metal, [side * 0.5, 0.05, z], [side * 0.38, 0.28, z], 0.03);
+  }
+  // The cabin: a floor and low sides, a round nose with eyes, and a bubble
+  // windscreen in front of the pilot.
+  block(body, paint, -0.52, 0.26, -0.8, 0.52, 0.36, 0.8);
+  for (const side of [-1, 1]) {
+    block(body, paint, side * 0.52 - 0.07, 0.36, -0.8, side * 0.52, 0.66, 0.6);
+    block(body, white, side * 0.52 - 0.005, 0.44, -0.8, side * 0.52 + 0.005, 0.52, 0.6);
+    studs(body, paint, 0.66, [side * 0.485], [-0.6, -0.2, 0.2]);
+  }
+  block(body, paint, -0.52, 0.36, -0.86, 0.52, 0.72, -0.8);
+  body.add(mesh(sphere(1, 20, 14), paint, 0, 0.47, 0.72, 0.52, 0.32, 0.3));
+  // (The front quarter of a ball.)
+  const dome = geo('windscreen-dome', () => new THREE.SphereGeometry(1, 16, 8, 0, Math.PI, 0, Math.PI / 2));
+  body.add(mesh(dome, toon('#bfe8ff', { transparent: true, opacity: 0.45, side: THREE.DoubleSide }), 0, 0.62, 0.62, 0.48, 0.5, 0.32));
+  v.eyes = lampEyes(body, 0.22, 0.47, 0.95, 0.1, v.glow);
+  const stick = mesh(cylinder(0.02, 0.02, 0.3, 6), toon(BLACK), 0, 0.5, 0.62);
+  stick.rotation.x = -0.4;
+  body.add(stick);
+  body.add(mesh(sphere(1, 8, 6), toon('#ff4a4a'), 0, 0.64, 0.68, 0.045));
+  // The pilot's seat, and behind it a seat for two friends.
+  v.seat = block(body, v.pad, -0.24, 0.34, 0.08, 0.24, 0.42, 0.55);
+  block(body, v.pad, -0.24, 0.34, 0.02, 0.24, 0.76, 0.09);
+  v.seatPads = [];
+  for (const [x, z] of CRITTER_INFO.helicopter.ride.seats) friendSeat(v, x, z, 0.42, 0.18);
+  // The tail: a boom out the back, a fin, and a little rotor on its side.
+  const boom = mesh(cylinder(0.08, 0.17, 1.3, 12), paint, 0, 0.62, -1.45);
+  boom.rotation.x = Math.PI / 2;
+  body.add(boom);
+  block(body, white, -0.03, 0.62, -2.15, 0.03, 1.05, -1.95);
+  block(body, paint, -0.03, 0.88, -2.2, 0.03, 1.08, -2.0);
+  const tail = new THREE.Group();
+  tail.position.set(0.08, 0.72, -2.05);
+  for (const a of [0, Math.PI]) {
+    const blade = mesh(box(), white, 0, 0, 0, 0.02, 0.36, 0.06);
+    blade.rotation.x = a;
+    blade.position.y = 0;
+    tail.add(blade);
+  }
+  tail.add(mesh(sphere(1, 8, 6), dark, 0.01, 0, 0, 0.04));
+  body.add(tail);
+  v.tailRotor = tail;
+  // The mast behind the friends' seat, and on top of it, up over everyone's
+  // heads, the rotor.
+  const over = new THREE.Group();
+  body.add(over);
+  rod(over, dark, [0, 0.66, -0.83], [0, 2.05, -0.83], 0.05);
+  rod(over, dark, [0, 2.05, -0.83], [0, 2.05, -0.15], 0.04);
+  const rotor = new THREE.Group();
+  rotor.position.set(0, 2.08, -0.15);
+  rotor.add(mesh(cylinder(0.1, 0.12, 0.1, 12), dark));
+  rotor.add(mesh(sphere(1, 10, 8), paint, 0, 0.07, 0, 0.08));
+  for (let i = 0; i < 4; i++) {
+    const blade = new THREE.Group();
+    blade.rotation.y = (i * Math.PI) / 2;
+    blade.add(mesh(box(), i % 2 ? white : paint, 0.85, 0, 0, 1.6, 0.03, 0.16));
+    rotor.add(blade);
+  }
+  over.add(rotor);
+  v.rotor = rotor;
+  v.over = over;
+  return { ...v, air: true, height: 2.2, center: 0.7, pick: 1.05, shadow: 1, seen: 160 };
+}
+
+const BALLOONS = [
+  ['#ff5a5a', '#fff3c4'],
+  ['#3a8dde', '#fcd535'],
+  ['#ff8fc4', '#b8f0ff'],
+  ['#35a852', '#fff3c4'],
+];
+const RAINBOW = ['#ff5a5a', '#ff9d3a', '#fcd535', '#5fd36a', '#3a8dde', '#8c5bd6', '#ff8fc4', '#2fc1b3'];
+
+function balloon(id) {
+  const v = rig('#ffd27a');
+  const { body } = v;
+  const wicker = toon('#c99a5b');
+  const rim = toon('#8b5a3c');
+  const metal = toon(METAL);
+  // The basket, open at the top, with a padded rim.
+  block(body, wicker, -0.85, 0, -1, 0.85, 0.08, 0.95);
+  for (const side of [-1, 1]) {
+    block(body, wicker, side * 0.85 - 0.08, 0.08, -1, side * 0.85, 0.66, 0.95);
+    block(body, wicker, -0.85, 0.08, side < 0 ? -1 : 0.87, 0.85, 0.66, side < 0 ? -0.92 : 0.95);
+    block(body, rim, side * 0.85 - 0.1, 0.66, -1.02, side * 0.85 + 0.02, 0.74, 0.97);
+    block(body, rim, -0.87, 0.66, side < 0 ? -1.02 : 0.85, 0.87, 0.74, side < 0 ? -0.9 : 0.97);
+    // Weaving: a darker band round the middle.
+    block(body, rim, side * 0.85 - 0.005, 0.3, -1, side * 0.85 + 0.005, 0.38, 0.95);
+  }
+  // Lamps on the front, for eyes.
+  v.eyes = lampEyes(body, 0.3, 0.42, 0.96, 0.09, v.glow);
+  // The pilot's seat in front, two rows of two for friends behind, and a
+  // stool in the middle (where a pet sits).
+  v.seat = block(body, v.pad, -0.24, 0.22, 0.32, 0.24, 0.3, 0.8);
+  block(body, v.pad, -0.24, 0.22, 0.26, 0.24, 0.62, 0.33);
+  v.seatPads = [];
+  for (const [x, z] of CRITTER_INFO.balloon.ride.seats) friendSeat(v, x, z, 0.3, 0.2);
+  block(body, rim, -0.12, 0.08, -0.45, 0.12, 0.26, -0.21);
+  // Up over everyone: ropes from the corners, the burner, and the balloon
+  // itself, in stripes.
+  const over = new THREE.Group();
+  body.add(over);
+  const rope = toon('#6b4a2e');
+  for (const [x, z] of [[-0.8, -0.95], [0.8, -0.95], [-0.8, 0.9], [0.8, 0.9]]) rod(over, rope, [x, 0.72, z], [x * 0.55, 2.08, z * 0.5], 0.018);
+  over.add(mesh(cylinder(0.14, 0.11, 0.2, 12), metal, 0, 1.62, 0));
+  const flame = mesh(cone(0.11, 0.42, 10), toon('#ffb13a', { emissive: 0.9 }), 0, 1.92, 0);
+  over.add(flame);
+  v.flame = flame;
+  const colors = id % 3 === 2 ? RAINBOW : Array.from({ length: 8 }, (_, i) => BALLOONS[id % BALLOONS.length][i % 2]);
+  const envelope = new THREE.Group();
+  envelope.position.set(0, 3.4, 0);
+  envelope.scale.set(1.3, 1.25, 1.3);
+  colors.forEach((c, i) => {
+    const gore = geo(`balloon-gore${i}`, () => new THREE.SphereGeometry(1, 6, 18, (i * Math.PI) / 4, Math.PI / 4));
+    envelope.add(mesh(gore, toon(c)));
+  });
+  over.add(envelope);
+  v.envelope = envelope;
+  // The skirt at its bottom, round the burner.
+  const skirt = geo('balloon-skirt', () => new THREE.CylinderGeometry(0.62, 0.42, 0.42, 16, 1, true));
+  over.add(mesh(skirt, toon(colors[0], { side: THREE.DoubleSide }), 0, 2.25, 0));
+  v.over = over;
+  return { ...v, air: true, height: 4.6, center: 1.4, pick: 1.4, shadow: 1, seen: 220 };
+}
+
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, bus, ferry, helicopter, balloon };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
-// bobbing on the water, rocking along, and, honked (trick) or tapped
-// (happy), a bounce with its lights bright.
-export function drive(m, dt, state, moving) {
+// bobbing on the water, rocking along, a helicopter's rotor whirring and a
+// balloon's burner flaring as it goes up, and, honked (trick) or tapped
+// (happy), a bounce with its lights bright. air: how high it is over the
+// ground.
+export function drive(m, dt, state, moving, air = 0) {
   const t = m.time;
   const b = m.body;
   m.trick = Math.max(0, m.trick - dt);
@@ -369,7 +536,32 @@ export function drive(m, dt, state, moving) {
   const honk = m.trick > 0 || state === 'happy';
   m.glow.emissiveIntensity = honk ? 0.9 + Math.sin(t * 30) * 0.1 : 0.35;
   if (m.eyes) m.eyes.scale.setScalar(honk ? 1.15 : 1);
-  if (m.type === 'boat' || m.sea) {
+  if (m.air) {
+    // Up in the air (or flying low over the water), or on the ground.
+    const up = air > 0.3 || state === 'fly' || state === 'jump';
+    const fast = clamp(go / 10, 0, 1);
+    if (m.rotor) {
+      m.spin = clamp((m.spin ?? 0) + dt * (up ? 30 : moving ? 6 : -10), 0, up ? 30 : moving ? 12 : 30);
+      m.rotor.rotation.y += m.spin * dt;
+      m.tailRotor.rotation.x += m.spin * 1.4 * dt;
+      // Nose down going fast, leaning into its turns, and a little bob hovering.
+      if (up) {
+        b.position.y = Math.sin(t * 2.4) * 0.04;
+        b.rotation.set(fast * 0.22 - clamp(m.vy * 0.02, -0.1, 0.1), 0, -clamp(m.turn * 0.06, -0.25, 0.25));
+      } else {
+        b.position.y = moving ? Math.sin(t * 40) * 0.006 : 0;
+      }
+    } else {
+      // A balloon sways under its balloon up in the air, and its burner
+      // flares while it climbs (or toots).
+      if (up) b.rotation.set(Math.sin(t * 0.9) * 0.025, 0, Math.sin(t * 0.7) * 0.035);
+      m.envelope.scale.y = 1.25 + Math.sin(t * 1.3) * 0.015;
+      const burn = honk || m.vy > 0.3;
+      m.flame.visible = burn;
+      if (burn) m.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+    }
+    if (state === 'swim') b.position.y = Math.sin(t * 2) * 0.03 - 0.05;
+  } else if (m.type === 'boat' || m.sea) {
     const fast = clamp(go / 6, 0, 1);
     b.position.y = Math.sin(t * 2.1) * 0.03 + fast * (m.sea ? 0.03 : 0.06);
     b.rotation.set(-fast * 0.08 + Math.sin(t * 1.6) * 0.02, 0, Math.sin(t * 1.3) * 0.04 - clamp(m.turn * 0.04, -0.12, 0.12));

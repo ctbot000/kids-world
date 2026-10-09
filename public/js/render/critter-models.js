@@ -1136,7 +1136,7 @@ export class CritterModel {
     if (this.eyes) this.eyes.scale.y = 1;
     this.track(dt);
     if (this.vehicle) {
-      drive(this, dt, state, moving);
+      drive(this, dt, state, moving, air);
       return;
     }
     if (this.gait) {

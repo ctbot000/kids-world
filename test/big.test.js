@@ -15,6 +15,12 @@ import { getOffAt, rideState, startRide, stepRide } from '../public/js/shared/ri
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
+// Whether o is part of group (or is it).
+const isIn = (o, group) => {
+  for (; o && group; o = o.parent) if (o === group) return true;
+  return false;
+};
+
 const FL = Math.floor;
 
 function island(theme, seed) {
@@ -349,13 +355,15 @@ test('each rider sits on the saddle, on the top of the back', () => {
     m.update(1 / 60, 'idle', false, 0);
     m.setRider('#ff0000');
     m.group.updateMatrixWorld(true);
-    // The highest point under the rider's hips.
+    // The highest point under the rider's hips (not a rotor or a balloon
+    // up over it).
+    const under = (hits) => hits.find((h) => !m.over || !isIn(h.object, m.over));
     let top = -Infinity;
     for (const rad of [0, 0.06, 0.12]) {
       for (let i = 0; i < (rad ? 10 : 1); i++) {
         const a = (i / 10) * Math.PI * 2;
         const ray = new THREE.Raycaster(new THREE.Vector3(Math.cos(a) * rad, 6, (r.z ?? 0) + Math.sin(a) * rad), new THREE.Vector3(0, -1, 0));
-        top = Math.max(top, ray.intersectObject(m.group, true)[0]?.point.y ?? -Infinity);
+        top = Math.max(top, under(ray.intersectObject(m.group, true))?.point.y ?? -Infinity);
       }
     }
     assert.ok(Math.abs(top - r.seat) <= 0.02, `${type}: sits at ${r.seat}, its back is at ${top.toFixed(3)}`);

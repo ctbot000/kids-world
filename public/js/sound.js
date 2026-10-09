@@ -479,8 +479,11 @@ export class Sound {
         break;
       // Vehicles: each starts up with its own sound, and honks its own way
       // (type): the car beep-beeps, the boat toots, the mine cart rings its
-      // bell, the digger goes vrrrm, the bus goes honk-honk and the ferry
-      // gives one long, low toot.
+      // bell, the digger goes vrrrm, the bus goes honk-honk, the ferry
+      // gives one long, low toot, the helicopter goes beep-boop and the
+      // balloon's burner roars.
+      case 'helicopter':
+      case 'balloon':
       case 'bus':
       case 'ferry':
       case 'car':
@@ -491,7 +494,13 @@ export class Sound {
         this.play('honk', { type: name });
         break;
       case 'honk':
-        if (opts.type === 'ferry') {
+        if (opts.type === 'balloon') {
+          this.play('burner');
+        } else if (opts.type === 'helicopter') {
+          this.tone(NOTE(76), { type: 'square', attack: 0.01, decay: 0.14, gain: 0.04 });
+          this.tone(NOTE(69), { at: 0.16, type: 'square', attack: 0.01, decay: 0.2, gain: 0.04 });
+          this.tone(NOTE(81), { type: 'triangle', attack: 0.01, decay: 0.3, gain: 0.04, at: 0.08 });
+        } else if (opts.type === 'ferry') {
           this.tone(NOTE(43), { type: 'square', attack: 0.06, decay: 1.1, gain: 0.05, vibrato: 2 });
           this.tone(NOTE(50), { type: 'triangle', attack: 0.06, decay: 1.1, gain: 0.07 });
         } else if (opts.type === 'bus') {
@@ -514,8 +523,31 @@ export class Sound {
           }
         }
         break;
+      case 'burner':
+        // The balloon's burner: a whoosh of flame.
+        this.noise(0.7, { type: 'bandpass', freq: 500, sweep: 900, q: 0.7, gain: 0.16, attack: 0.06 });
+        this.noise(0.5, { type: 'lowpass', freq: 220, gain: 0.12, attack: 0.05 });
+        break;
+      case 'liftoff':
+        // Up into the air: the rotor winding up, or the burner roaring.
+        if (opts.type === 'balloon') this.play('burner');
+        else {
+          this.tone(60, { type: 'sawtooth', attack: 0.05, decay: 0.7, gain: 0.05, slide: 180, slideTime: 0.6, vibrato: 30 });
+          for (let i = 0; i < 5; i++) this.noise(0.06, { at: i * 0.12, type: 'lowpass', freq: 300 + i * 80, gain: 0.12 });
+        }
+        break;
       case 'motor':
-        // A puttering engine, higher the faster it goes; the digger grinds.
+        // A puttering engine, higher the faster it goes; the digger grinds;
+        // the helicopter's rotor goes whup-whup, and the balloon is quiet but
+        // for its burner now and then.
+        if (opts.type === 'helicopter') {
+          for (let i = 0; i < 3; i++) this.noise(0.05, { at: i * 0.11, type: 'lowpass', freq: 380, gain: 0.1 });
+          break;
+        }
+        if (opts.type === 'balloon') {
+          if (Math.random() < 0.3) this.play('burner');
+          break;
+        }
         this.tone((opts.type === 'digger' ? 55 : 80) + (opts.speed ?? 0) * 6, { type: 'sawtooth', attack: 0.02, decay: 0.18, gain: 0.025, vibrato: 20 });
         this.noise(0.12, { type: 'lowpass', freq: opts.type === 'boat' || opts.type === 'ferry' ? 900 : 400, gain: 0.05 });
         break;

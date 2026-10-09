@@ -1680,6 +1680,8 @@ export class Game extends EventTarget {
         minecart: 'Push to roll along the rails! Jump to ring the bell.',
         bus: 'Friends can hop on behind you! Jump to honk!',
         ferry: 'Friends can hop on behind you! Jump to toot!',
+        helicopter: `Hold jump to fly up, and ${this.touch ? '⬇️' : 'Shift'} to come down! Two friends can hop on behind you.`,
+        balloon: `Hold jump to float up, and ${this.touch ? '⬇️' : 'Shift'} to come down! Four friends can hop on with you.`,
       }[entry.type] ?? 'Jump to honk!';
       this.emit('toast', { icon: info.icon, text: `You are driving ${name}! ${what} ${how}` });
       this.profile.count('drives');
@@ -1711,7 +1713,9 @@ export class Game extends EventTarget {
     this.riding = null;
     const at = getOffAt(this.world, ride);
     const b = this.me.body;
-    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false, flying: false });
+    // Out of a helicopter or a balloon up in the air, you fly.
+    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false, flying: Boolean(at.flying) });
+    if (at.flying) this.emit('fly', true);
     unstick(this.world, b);
     const entry = this.critters.get(ride.id);
     if (entry) {
@@ -1760,13 +1764,17 @@ export class Game extends EventTarget {
     if (!a) return;
     this.aboard = null;
     const b = this.me.body;
+    let flying = false;
     const entry = this.critters.get(a.id);
     if (entry) {
       const g = entry.model.group;
       const at = getOffAt(this.world, { body: { x: g.position.x, y: g.position.y, z: g.position.z, inWater: false }, yaw: g.rotation.y, r: CRITTER_INFO[a.type].ride });
-      Object.assign(b, at);
+      Object.assign(b, { x: at.x, y: at.y, z: at.z });
+      flying = Boolean(at.flying);
     }
-    Object.assign(b, { vx: 0, vy: 0, vz: 0, onGround: false, flying: false });
+    // Out of a helicopter or a balloon up in the air, you fly.
+    Object.assign(b, { vx: 0, vy: 0, vz: 0, onGround: false, flying });
+    if (flying) this.emit('fly', true);
     unstick(this.world, b);
     this.sound.play('land');
     this.emit('ride');
@@ -1890,11 +1898,23 @@ export class Game extends EventTarget {
       }
     }
     if (ev.bumped) this.sound.play('bump');
+    // Up into the air, and back down.
+    if (ev.tookOff) {
+      this.sound.play('liftoff', { type: ride.type });
+      fxs.dust(r.x, r.y, r.z);
+      this.profile.count('flights');
+    }
+    if (ev.touchedDown) {
+      this.sound.play('land');
+      fxs.dust(r.x, r.y, r.z);
+    }
     const vehicle = CRITTER_INFO[ride.type].vehicle;
     if (vehicle) {
-      // An engine's hum, a little higher the faster it goes.
-      if (!ride.rail && speed > 0.5 && ride.type !== 'minecart') {
-        this.stepAcc += speed * dt;
+      // An engine's hum, a little higher the faster it goes (and up in the
+      // air, the whirr of the rotor or the roar of the burner, even hovering).
+      const flying = r.flying;
+      if (!ride.rail && (speed > 0.5 || flying) && ride.type !== 'minecart') {
+        this.stepAcc += Math.max(speed, flying ? 4 : 0) * dt;
         if (this.stepAcc > 1.4) {
           this.stepAcc = 0;
           this.sound.play('motor', { type: ride.type, speed });
@@ -1941,8 +1961,8 @@ export class Game extends EventTarget {
   }
 
   // Shift or ⬇️ pressed: off the animal you are riding on land (at sea, it
-  // dives, as long as it is held; the digger digs down, and a mine cart on
-  // its rails rolls on). On foot in the air, it lands you at the next bounce
+  // dives, as long as it is held; the digger digs down, a helicopter or a
+  // balloon comes down, and a mine cart on its rails rolls on). On foot in the air, it lands you at the next bounce
   // on a trampoline, held down then or not.
   pressDown() {
     if (this.dizzy) return;
@@ -1951,11 +1971,12 @@ export class Game extends EventTarget {
       return;
     }
     if (this.riding) {
-      if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
+      if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail && !this.riding.r.air) this.getOff();
       return;
     }
     if (this.aboard) {
-      if (!CRITTER_INFO[this.aboard.type].ride.sea) this.getOut();
+      const r = CRITTER_INFO[this.aboard.type].ride;
+      if (!r.sea && !r.air) this.getOut();
       return;
     }
     const b = this.me?.body;
@@ -2739,7 +2760,10 @@ export class Game extends EventTarget {
     const b = this.me?.body;
     if (!b || this.dizzy) return;
     // Off the animal you are riding, and up into the air.
-    if (this.aboard) this.getOut();
+    if (this.aboard) {
+      this.getOut();
+      b.flying = false;
+    }
     if (this.riding) {
       this.getOff();
       if (this.riding) return;

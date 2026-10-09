@@ -211,9 +211,13 @@ test('everything but the camps comes out just as it would on the island without 
     assert.ok(same > w.W * w.D * 0.3, `${theme.key}: most of the island (${same} columns)`);
     assert.deepEqual(w.spawn, plain.world.spawn);
     // Every vehicle, and every animal away from the camps; none in them.
+    // (Not the ones that come after the camps, kept clear of them, which
+    // can find room where a camp levelled the ground: see placeBuses.)
+    const after = new Set(['bus', 'ferry', 'helicopter', 'balloon']);
     const key = (c) => `${c.type}@${c.x},${c.y},${c.z}`;
     const kept = new Set(made.critters.map(key));
     for (const c of plain.critters) {
+      if (after.has(c.type)) continue;
       if (CRITTER_INFO[c.type].vehicle || clear(c.x, c.z)) assert.ok(kept.has(key(c)), `${theme.key}: ${key(c)} kept`);
     }
     for (const c of made.critters) {
