@@ -119,6 +119,13 @@ export class FriendControl {
     return true;
   }
 
+  // Something said on an island it is on, as its own words: '' when said,
+  // or why not; null when it is not on that island.
+  say(code, text) {
+    const visit = this.buddy?.visits.get(code);
+    return visit && !visit.ended ? visit.sayForAdmin(text) : null;
+  }
+
   // Whether the model is there, checked now rather than in a minute.
   async check() {
     await this.buddy?.check();

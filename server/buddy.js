@@ -20,7 +20,8 @@
 // Settings: on the admin page (friend.js), or before any are saved there,
 // KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME names it;
 // KIDS_WORLD_AI_WANDER=off keeps it to invitations. It keeps a short account
-// of what it did and how its model answers, for the admin page.
+// of what it did and how its model answers, for the admin page, which can
+// also have it say something on an island it is on, as its own words.
 import { EventEmitter } from 'node:events';
 import { HELP_REACH } from '../public/js/shared/adventure.js';
 import { CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
@@ -340,6 +341,8 @@ export class Visit extends EventEmitter {
     this.adventure = null;
     this.defense = null;
     this.chat = [];
+    // Lines the admin page had it say, until the island says them back.
+    this.forAdmin = [];
     this.body = null;
     this.yaw = 0;
     this.anim = ANIM.idle;
@@ -381,7 +384,7 @@ export class Visit extends EventEmitter {
       friend: name(this.friend),
       mode: this.dizzy ? 'dizzy' : this.mode,
       thinking: this.thinking,
-      chat: this.chat.map((c) => ({ name: c.mine ? this.name : c.name, text: c.text, mine: c.mine })),
+      chat: this.chat.map((c) => ({ name: c.mine ? this.name : c.name, text: c.text, mine: c.mine, ...(c.admin ? { admin: true } : {}) })),
     };
   }
 
@@ -554,7 +557,9 @@ export class Visit extends EventEmitter {
     const text = this.textOf(entry);
     if (!text) return;
     const mine = entry.pid === this.me;
-    this.chat.push({ name: entry.name, text, mine });
+    const k = mine ? this.forAdmin.indexOf(text) : -1;
+    if (k >= 0) this.forAdmin.splice(k, 1);
+    this.chat.push({ name: entry.name, text, mine, ...(k >= 0 ? { admin: true } : {}) });
     if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
     if (mine) return;
     const now = this.now();
@@ -917,6 +922,22 @@ export class Visit extends EventEmitter {
     unstick(this.world, b);
     this.link.send({ t: 'edit', seq: ++this.seq, kind: 'stamp', cells });
     return true;
+  }
+
+  // A line from the admin page, said as its own: '' when said, or why not.
+  // The island's own limits apply, as to any player.
+  sayForAdmin(raw) {
+    const text = cleanChat(raw);
+    if (!text) return `Something to say, up to ${CHAT_MAX} characters.`;
+    if (this.ended || !this.welcomed) return `${this.name} is not on that island yet.`;
+    const now = this.now();
+    this.saidAt = now;
+    this.quietAt = now + between(QUIET_MS, this.random);
+    this.forAdmin.push(text);
+    if (this.forAdmin.length > CHAT_KEEP) this.forAdmin.shift();
+    this.link.send({ t: 'say', text });
+    this.buddy.log(`AI friend: said something from the admin page on "${this.island.name}".`);
+    return '';
   }
 
   // ------------------------------------------------ going home

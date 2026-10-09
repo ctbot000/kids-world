@@ -8,7 +8,8 @@
 // from geoip-lite's offline database (no address leaves this computer),
 // roughly where that is; and the AI friend's settings, the islands it is on
 // and what is said there, how its model answers and what it did lately
-// (friend.js), with a button to send it home from an island. Only for this computer: requests from other
+// (friend.js), with a line to say there as its own and a button to send it
+// home from an island. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -75,7 +76,8 @@ function sendFile(req, res, file, extra = {}) {
 }
 
 // The AI friend: GET what it is up to, PUT settings, POST /check to see
-// whether its model is there now, POST /visits/<code>/home to send it home.
+// whether its model is there now, POST /visits/<code>/home to send it home,
+// POST /visits/<code>/say { text } to have it say something there.
 async function friendApiFor(friend, req, res, rest) {
   if (!friend) return json(res, 404, { error: 'The AI friend does not run here.' });
   if (rest === '') {
@@ -93,10 +95,15 @@ async function friendApiFor(friend, req, res, rest) {
     await friend.check();
     return json(res, 200, await friend.status());
   }
-  const home = /^\/visits\/([^/]+)\/home$/.exec(rest);
-  if (!home) return json(res, 404, { error: 'Not found' });
-  const ok = friend.sendHome(home[1]);
-  return json(res, ok ? 200 : 404, { ok });
+  const visit = /^\/visits\/([^/]+)\/(home|say)$/.exec(rest);
+  if (!visit) return json(res, 404, { error: 'Not found' });
+  if (visit[2] === 'home') {
+    const ok = friend.sendHome(visit[1]);
+    return json(res, ok ? 200 : 404, { ok });
+  }
+  const problem = friend.say(visit[1], (await readJson(req))?.text);
+  if (problem === null) return json(res, 404, { error: 'It is not on that island.' });
+  return problem ? json(res, 400, { error: problem }) : json(res, 200, { ok: true });
 }
 
 // Returns a handler: (req, res, pathname) => true when it answered.

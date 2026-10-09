@@ -345,6 +345,10 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.friend [hidden] {
+  display: none;
+}
+
 .friend p {
   margin: 0;
 }
@@ -415,6 +419,22 @@ button:disabled {
   font-size: 14px;
   list-style: none;
   overflow-wrap: anywhere;
+}
+
+.say {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.say input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 12px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  font: 500 15px var(--font);
+  color: var(--ink);
 }
 
 .chat .mine {

@@ -4,7 +4,8 @@
 // copies of a device that is gone moved into a player's login, or a player
 // taken out of the ranking, and where each was last seen from; and the AI
 // friend: its settings, the islands it is on and what is said there, how its
-// model answers and what it did lately. It reads /admin/api/state and
+// model answers and what it did lately, with a line for it to say on an
+// island it is on, as its own words. It reads /admin/api/state and
 // /admin/api/friend every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
@@ -13,7 +14,7 @@ import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
 import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
-import { lookIcon } from '/js/shared/words.js';
+import { CHAT_MAX, lookIcon } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
 const REFRESH_MS = 5000;
@@ -455,27 +456,71 @@ async function friendAction(path, question = '') {
   refreshFriend();
 }
 
-function visitCard(v, name) {
-  const chat = h(
-    'ol',
-    { class: 'chat', 'aria-label': `What was said on ${v.island}` },
-    ...(v.chat.length ? v.chat.map((c) => h('li', { class: c.mine ? 'mine' : null }, h('b', {}, c.name), ': ', c.text)) : [h('li', { class: 'muted' }, 'Nothing said yet.')]),
-  );
-  setTimeout(() => (chat.scrollTop = chat.scrollHeight), 0);
-  const people = v.players.length ? v.players.join(', ') : 'nobody';
-  return h(
+// An island it is on, kept from one refresh to the next and filled in anew,
+// so a line being typed to say there (in Korean, say, mid-word) stays as it is.
+function visitCard(code) {
+  let v = null;
+  const title = h('h4');
+  const info = h('div');
+  const chat = h('ol', { class: 'chat' });
+  let said = '';
+  const input = h('input', { type: 'text', autocomplete: 'off', maxlength: CHAT_MAX, placeholder: 'Something for it to say' });
+  const note = h('span', { class: 'muted', 'aria-live': 'polite' });
+  const send = async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    const res = await api(`friend/visits/${code}/say`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!res.ok) {
+      note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
+      return;
+    }
+    input.value = '';
+    note.textContent = '';
+    refreshFriend();
+  };
+  const home = () => friendAction(`visits/${code}/home`, `Send ${friendForm.state.settings.name} home from “${v.island}”? It does not come back there by itself for a while.`);
+  const el = h(
     'article',
     { class: 'visit' },
-    h('h4', {}, `🏝️ ${v.island}`),
-    h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
-    v.arrivedAt
-      ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
-      : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),
-    h('div', {}, `👥 ${people}`, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · 💭 thinking' : ''),
+    title,
+    info,
     chat,
-    h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: () => friendAction(`visits/${v.code}/home`, `Send ${name} home from “${v.island}”? It does not come back there by itself for a while.`) }, 'Send home')),
+    h('form', { class: 'say', onsubmit: send }, input, h('button', { type: 'submit' }, 'Say')),
+    note,
+    h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: home }, 'Send home')),
   );
+  const update = (next) => {
+    v = next;
+    title.textContent = `🏝️ ${v.island}`;
+    input.setAttribute('aria-label', `Something for it to say on ${v.island}, as its own words`);
+    chat.setAttribute('aria-label', `What was said on ${v.island}`);
+    const people = v.players.length ? v.players.join(', ') : 'nobody';
+    info.replaceChildren(
+      h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
+      v.arrivedAt
+        ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
+        : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),
+      h('div', {}, `👥 ${people}`, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · 💭 thinking' : ''),
+    );
+    const key = JSON.stringify(v.chat);
+    if (key === said) return;
+    said = key;
+    // Kept at the newest line, unless scrolled up to read.
+    const bottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 8;
+    chat.replaceChildren(
+      ...(v.chat.length
+        ? v.chat.map((c) => h('li', { class: c.mine ? 'mine' : null }, h('b', {}, c.name), c.admin ? h('span', { class: 'muted', title: 'Said from this page' }, ' (from here)') : null, ': ', c.text))
+        : [h('li', { class: 'muted' }, 'Nothing said yet.')]),
+    );
+    if (bottom) chat.scrollTop = chat.scrollHeight;
+  };
+  return { el, update };
 }
+
+// The section's parts, made once and filled in on every refresh.
+let friendView = null;
+const visitCards = new Map();
 
 function renderFriend(state) {
   $('friend-section').hidden = !state;
@@ -483,12 +528,20 @@ function renderFriend(state) {
   friendForm ??= settingsForm();
   friendForm.state = state;
   friendForm.fill(state);
+  if (!friendView) {
+    friendView = { line: h('div', { class: 'friend-line' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), visits: h('div', { class: 'visits' }), none: h('p', { class: 'muted' }, 'Not on any island right now.'), history: h('div') };
+    const f = friendView;
+    $('friend').replaceChildren(f.line, friendForm.form, f.about, f.facts, f.visits, f.none, f.history);
+  }
+  const f = friendView;
   const s = state.settings;
   const [cls, words] = !state.running
     ? ['off', 'Off: it does not visit anyone.']
     : state.ready
       ? ['on', `${s.name} is awake, with ${s.model}${state.listed ? '' : ' · busy on as many islands as it may be on'}`]
       : ['wait', `${s.name} is asleep: ${state.problem || 'checking its model…'}`];
+  f.line.replaceChildren(h('span', { class: `status ${cls}`, role: 'status' }, words), state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check the model now') : '');
+  f.about.replaceChildren('Ollama at ', h('code', {}, state.url), state.models.length ? ` has ${plural(state.models.length, 'model', 'models')}.` : ' answers with no models.', state.saved ? '' : ' These settings come from the environment until saved here.');
   const st = state.stats;
   const facts = st
     ? [
@@ -497,20 +550,30 @@ function renderFriend(state) {
         st.failures ? `⚠️ ${plural(st.failures, 'answer', 'answers')} that did not come, last ${ago(st.lastErrorAt)}: ${st.lastError}` : null,
       ].filter(Boolean)
     : [];
-  $('friend').replaceChildren(
-    h(
-      'div',
-      { class: 'friend-line' },
-      h('span', { class: `status ${cls}`, role: 'status' }, words),
-      state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check the model now') : null,
-    ),
-    friendForm.form,
-    h('p', { class: 'muted' }, `Ollama at `, h('code', {}, state.url), state.models.length ? ` has ${plural(state.models.length, 'model', 'models')}.` : ' answers with no models.', state.saved ? '' : ' These settings come from the environment until saved here.'),
-    facts.length ? h('div', { class: 'facts' }, ...facts.map((f) => h('span', {}, f))) : null,
-    state.visits.length ? h('div', { class: 'visits' }, ...state.visits.map((v) => visitCard(v, s.name))) : state.running ? h('p', { class: 'muted' }, 'Not on any island right now.') : null,
-    state.history.length
-      ? h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, '📜 What it did lately'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))
-      : null,
+  f.facts.hidden = !facts.length;
+  f.facts.replaceChildren(...facts.map((x) => h('span', {}, x)));
+  // Cards come and go one by one; the ones staying are never moved.
+  const codes = new Set(state.visits.map((v) => v.code));
+  for (const [code, card] of visitCards) {
+    if (codes.has(code)) continue;
+    card.el.remove();
+    visitCards.delete(code);
+  }
+  for (const v of state.visits) {
+    let card = visitCards.get(v.code);
+    if (!card) {
+      card = visitCard(v.code);
+      visitCards.set(v.code, card);
+      f.visits.append(card.el);
+    }
+    card.update(v);
+  }
+  f.visits.hidden = !state.visits.length;
+  f.none.hidden = state.visits.length > 0 || !state.running;
+  f.history.replaceChildren(
+    ...(state.history.length
+      ? [h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, '📜 What it did lately'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))]
+      : []),
   );
 }
 

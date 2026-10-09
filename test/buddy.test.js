@@ -4,7 +4,8 @@
 // flies to one far away, helps a dizzy friend up and bops a monster coming at
 // one; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
-// islands it is on with what is said there, and sends it home from one. The keeper lists it as a player to invite and
+// islands it is on with what is said there, has it say something there as
+// its own words, and sends it home from one. The keeper lists it as a player to invite and
 // passes invitations on to it. The model here is a stand-in; visiting a
 // browser's island peer to peer is in e2e.test.js.
 import assert from 'node:assert/strict';
@@ -282,7 +283,7 @@ test('it notices goodbyes and something personal said to it, never asks for anyt
   assert.equal(languageOf('こんにちは'), 'the same language they wrote in');
 });
 
-test('the admin page saves its settings and applies them, shows where it is and what is said, and sends it home', async () => {
+test('the admin page saves its settings and applies them, shows where it is and what is said, has it say something, and sends it home', async () => {
   const dir = await tempDir();
   const store = await new KeeperStore(join(dir, 'keep')).open();
   const { room, rooms, island } = server();
@@ -325,6 +326,24 @@ test('the admin page saves its settings and applies them, shows where it is and 
   assert.equal(control.buddy.wander, false);
   assert.equal(state.visits[0].chat.at(-1).name, DEFAULT_NAME, 'the island knows it by the name it came with');
   assert.deepEqual(JSON.parse(await readFile(join(store.dir, 'ai-friend.json'), 'utf8')), state.settings);
+
+  // Said there as its own words, under the name the island knows, and marked as from the admin page.
+  const say = (code, text) => fetch(`${base}/visits/${code}/say`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kids-World-Admin': '1' }, body: JSON.stringify({ text }) });
+  assert.equal((await say(island.code, '   ')).status, 400);
+  assert.equal((await say(island.code, 'x'.repeat(121))).status, 400);
+  assert.equal((await say('999999', 'Hello')).status, 404);
+  const asked = llm.asked.length;
+  assert.equal((await say(island.code, '간식 시간이야! 🍪')).status, 200);
+  const pid = buddyIn(room).id;
+  await eventually(() => minji.of('say').some((m) => m.pid === pid && m.text === '간식 시간이야! 🍪'));
+  state = await (await fetch(base)).json();
+  assert.deepEqual(state.visits[0].chat.at(-1), { name: DEFAULT_NAME, text: '간식 시간이야! 🍪', mine: true, admin: true });
+  assert.equal(llm.asked.length, asked, 'without asking the model');
+  assert.ok(!state.history.some((e) => e.text.includes('간식')), 'what was said is not in what it did');
+  // What it says next, the model sees as its own.
+  minji.say({ t: 'say', text: 'yay cookies' });
+  await eventually(() => llm.asked.length > asked);
+  assert.match(llm.asked.at(-1), /Pip 🤖 \(you\): 간식 시간이야! 🍪\nMinji: yay cookies/);
 
   // Sent home from the island, and not back there by itself for a while.
   const home = (code) => fetch(`${base}/visits/${code}/home`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } });
