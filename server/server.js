@@ -2,7 +2,8 @@
 // islands over WebSocket (with ws), so nobody's browser has to stay open as
 // the host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
-// that is set up, with its admin pages at /admin/. Usage:
+// that is set up, with its admin pages at /admin/, and runs the AI friend
+// (buddy.js) when Ollama is there. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
@@ -17,7 +18,9 @@ import { sortListings } from '../public/js/shared/listing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
-import { DEFAULT_DATA_DIR, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
+import { Buddy } from './buddy.js';
+import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
+import { Ollama } from './llm.js';
 import { WebSocketServer } from 'ws';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -302,7 +305,24 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     if (keeper) console.log(`Keeper: copies are kept in ${store.dir}; see them at http://localhost:${port}/admin/`);
   });
+  // The AI friend, unless KIDS_WORLD_AI=off: islands of this server, and
+  // with the keeper, invitations and islands peer to peer (see buddy.js).
+  let buddy = null;
+  if (process.env.KIDS_WORLD_AI !== 'off') {
+    buddy = new Buddy({
+      llm: new Ollama(),
+      keeper: keeper ?? null,
+      rooms: server.rooms,
+      rtc: keeper?.rtc ?? null,
+      server: keeper?.server ?? null,
+      iceServers: ICE_SERVERS,
+      ...(process.env.KIDS_WORLD_AI_NAME ? { name: process.env.KIDS_WORLD_AI_NAME } : {}),
+      wander: process.env.KIDS_WORLD_AI_WANDER !== 'off',
+    });
+    await buddy.start();
+  }
   const stop = async () => {
+    buddy?.stop();
     await keeper?.stop();
     await server.shutdown();
     keeper?.rtc?.cleanup?.();

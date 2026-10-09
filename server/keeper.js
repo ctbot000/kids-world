@@ -755,8 +755,9 @@ export class KeeperStore extends EventEmitter {
 // the session over; PeerServer then sends no OPEN, so an open socket that
 // hears no refusal for a moment counts as registered. After the computer
 // sleeps, the socket can look open long after the server dropped it, so a
-// heartbeat that comes late starts a new one.
-class Signaling extends EventEmitter {
+// heartbeat that comes late starts a new one. The AI friend (buddy.js) has
+// one too, under a random id, to dial the islands it visits.
+export class Signaling extends EventEmitter {
   constructor({ id, server }) {
     super();
     this.id = id;
@@ -849,6 +850,7 @@ class Signaling extends EventEmitter {
           ws.close();
           break;
         case 'OFFER':
+        case 'ANSWER':
         case 'CANDIDATE':
         case 'LEAVE':
         case 'EXPIRE':
@@ -947,6 +949,8 @@ export class Keeper extends EventEmitter {
     this.rankingNewsMs = rankingNewsMs;
     // Who invited whom when, for the limits on invitations.
     this.invited = new Map();
+    // The AI friend (see buddy.js), on the players list to invite, if any.
+    this.buddy = null;
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -1288,6 +1292,8 @@ export class Keeper extends EventEmitter {
     const players = all
       .filter((p) => p.id !== me && p.findable && p.profile?.name)
       .map((p) => ({ id: friendId(p.id), name: p.profile.name, look: p.profile.look, online: online.has(p.id) }));
+    // The AI friend, when this computer runs one: playing now while it can come.
+    if (this.buddy) players.push(this.buddy.listing());
     return { players: sortPlayers(players), shown: all.find((p) => p.id === me)?.findable ?? true };
   }
 
@@ -1303,10 +1309,20 @@ export class Keeper extends EventEmitter {
       throw new KeepError('wait', 'Wait a little before inviting again.');
     }
     const all = await this.store.players();
+    const from = all.find((p) => p.id === me)?.profile;
+    if (this.buddy && msg.to === this.buddy.id) {
+      if (!from?.name) throw new KeepError('bad', 'Pick a display name first.');
+      // It says itself why it cannot come, or comes.
+      const busy = this.buddy.invited(island, from.name);
+      if (busy) throw new KeepError(this.buddy.ready ? 'friend-busy' : 'away', busy);
+      sent.push({ to: msg.to, at: now });
+      this.invited.set(me, sent);
+      this.note({ device: me, what: 'invite', player: from.name, to: this.buddy.name, island: island.name });
+      return;
+    }
     const them = all.find((p) => p.findable && p.id !== me && friendId(p.id) === msg.to);
     const pages = them ? [...this.conns.values()].filter((c) => c.online && c.player === them.id && !c.closed) : [];
     if (!pages.length) throw new KeepError('away', 'They are not playing right now.');
-    const from = all.find((p) => p.id === me)?.profile;
     if (!from?.name) throw new KeepError('bad', 'Pick a display name first.');
     sent.push({ to: msg.to, at: now });
     this.invited.set(me, sent);

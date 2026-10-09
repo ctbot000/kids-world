@@ -16,7 +16,8 @@ import { CANDY_CANE, CLOTH, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig } from '../server/keeper.js';
+import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
+import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOptions } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -2891,4 +2892,59 @@ test('an island song: the owner picks an MP3 in Settings, a friend here and one 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('the AI friend, invited, dials an island a page hosts peer to peer: it comes in, says hello, answers and walks over', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Minji' });
+  await makeIsland(host, { online: true });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const asked = [];
+  const llm = {
+    problem: async () => '',
+    chat: async (messages) => {
+      const prompt = messages.at(-1).content;
+      asked.push(prompt);
+      return prompt.includes('Minji: 안녕 Pip') ? { say: '안녕 Minji! 뭐 만들까? 🧱', action: 'follow', stamp: 'none' } : { say: 'Hi Minji! Thanks for inviting me!', action: 'wave', stamp: 'none' };
+    },
+  };
+  const rtc = await import('node-datachannel');
+  const buddy = new Buddy({ llm, rtc: rtc.default ?? rtc, server: signalOptions(signal), iceServers: [], wander: false, log: () => {} });
+  await buddy.start();
+  try {
+    assert.equal(buddy.invited({ code, name: 'Anything', theme: 'sunny', size: 'small', server: false }, 'Minji'), '');
+    const pipId = () => host.evaluate((name) => [...window.kidsWorld.game.players.values()].find((p) => p.name === name)?.id, DEFAULT_NAME);
+    await eventually(pipId);
+    const pid = await pipId();
+    assert.equal(await host.evaluate((id) => window.kidsWorld.game.players.get(id).look.pet?.kind, pid), 'dragon', 'its pet comes along');
+    await until(host, () => [...document.querySelectorAll('#chatlog .line')].some((l) => l.textContent.includes('Thanks for inviting me!')));
+    assert.match(asked[0], /Friends here: Minji \(the island owner/);
+
+    // Spoken to in Korean, it answers in Korean and comes over.
+    const from = await host.evaluate((id) => {
+      const p = window.kidsWorld.game.players.get(id).snaps.at(-1);
+      return [p.x, p.z];
+    }, pid);
+    await host.evaluate(() => {
+      const g = window.kidsWorld.game;
+      const b = g.me.body;
+      b.x += 10;
+      g.sendMove(true);
+      g.say({ t: 'say', text: '안녕 Pip' });
+    });
+    await until(host, () => [...document.querySelectorAll('#chatlog .line')].some((l) => l.textContent.includes('뭐 만들까')));
+    assert.match(asked.at(-1), /Write "say" in Korean/);
+    await until(
+      host,
+      ([id, x, z]) => {
+        const g = window.kidsWorld.game;
+        const p = g.players.get(id).snaps.at(-1);
+        return Math.hypot(p.x - x, p.z - z) > 3 && Math.hypot(p.x - g.me.body.x, p.z - g.me.body.z) < 5;
+      },
+      [pid, ...from],
+    );
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    buddy.stop();
+  }
+  await until(host, () => window.kidsWorld.game.players.size === 1);
 });

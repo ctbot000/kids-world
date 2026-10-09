@@ -1,0 +1,56 @@
+// The AI friend's words come from a language model served on this computer by
+// Ollama (https://ollama.com): its HTTP API, with an answer shaped by a JSON
+// schema (structured outputs), so a small model's reply is always something
+// to act on. Nothing goes anywhere else. Settings:
+//   KIDS_WORLD_AI_URL    where Ollama is (http://127.0.0.1:11434)
+//   KIDS_WORLD_AI_MODEL  which model (gemma3:4b); `ollama pull <model>` first
+export const DEFAULT_URL = 'http://127.0.0.1:11434';
+export const DEFAULT_MODEL = 'gemma3:4b';
+
+const TIMEOUT_MS = 30000;
+
+export class Ollama {
+  constructor({ url = process.env.KIDS_WORLD_AI_URL || DEFAULT_URL, model = process.env.KIDS_WORLD_AI_MODEL || DEFAULT_MODEL, fetch = globalThis.fetch } = {}) {
+    this.url = url.replace(/\/+$/, '');
+    this.model = model;
+    this.fetch = fetch;
+    // One answer at a time: a small computer makes them one after another anyway.
+    this.queue = Promise.resolve();
+  }
+
+  // '' when the model is there to answer, or what is wrong.
+  async problem() {
+    let tags;
+    try {
+      const res = await this.fetch(`${this.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return `Ollama answered ${res.status}`;
+      tags = await res.json();
+    } catch {
+      return `Ollama is not running at ${this.url}`;
+    }
+    const names = (tags.models ?? []).map((m) => m.name);
+    const wanted = this.model.includes(':') ? this.model : `${this.model}:latest`;
+    return names.includes(wanted) ? '' : `Ollama has no model ${this.model} (ollama pull ${this.model})`;
+  }
+
+  // The model's answer to messages ([{ role, content }]), as the object the
+  // schema describes. Throws when there is none in time.
+  chat(messages, schema) {
+    const run = () => this.ask(messages, schema);
+    const answer = this.queue.then(run, run);
+    this.queue = answer.catch(() => {});
+    return answer;
+  }
+
+  async ask(messages, schema) {
+    const res = await this.fetch(`${this.url}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: this.model, messages, stream: false, format: schema, keep_alive: '30m', options: { temperature: 0.7, num_predict: 160 } }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`Ollama answered ${res.status}`);
+    const body = await res.json();
+    return JSON.parse(body.message?.content ?? '');
+  }
+}

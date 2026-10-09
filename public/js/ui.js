@@ -151,6 +151,8 @@ function playersTrouble(error) {
 // What to tell you when an invitation could not go, as [icon, words].
 function inviteTrouble(error, name) {
   if (error?.code === 'away') return ['😴', `${name} is not playing right now.`];
+  // The AI friend, busy on other islands or unable to reach this one: it says why.
+  if (error?.code === 'friend-busy') return ['🤖', error.message || `${name} can't come right now.`];
   if (error?.code === 'wait') return ['⏳', 'Wait a little before inviting again.'];
   return playersTrouble(error);
 }
