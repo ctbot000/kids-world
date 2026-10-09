@@ -859,6 +859,7 @@ export class Room {
     // A wave with nobody left to see it goes home, to come again on Start.
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
+    this.keepApart(where);
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
       this.broadcast({ t: 'c', c: this.critters.pack() });
@@ -881,6 +882,17 @@ export class Room {
 
     this.grow(now);
     this.nature(now);
+  }
+
+  // Animals and monsters that walked into someone, or into each other, step
+  // back out. Players keep out of everything themselves, each on their own
+  // page; someone riding is up on what they ride, which counts for them.
+  keepApart(where) {
+    const riding = new Set(this.critters.list.map((c) => c.rider).filter(Boolean));
+    const people = [];
+    for (const [id, w] of where) if (!riding.has(id)) people.push({ x: w.x, y: w.y, z: w.z, radius: BODY.radius, height: BODY.height, key: `p${id}` });
+    this.critters.keepApart(this.world, [...people, ...this.monsters.boxes()]);
+    if (this.monsters.list.length) this.monsters.keepApart(this.world, [...people, ...this.critters.boxes()]);
   }
 
   // ------------------------------------------------ monsters

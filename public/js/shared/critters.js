@@ -22,7 +22,7 @@
 // a mine cart that rolls along rails. They park where they were left, and
 // someone driving one moves it the way a rider moves an animal.
 import * as B from './blocks.js';
-import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
+import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
@@ -101,6 +101,30 @@ export function scaleCounts(counts, world) {
   const k = roomier(world);
   return Object.fromEntries(Object.entries(counts).map(([type, n]) => [type, Math.round(n * k)]));
 }
+// The room each animal on the ground takes up, for keeping things out of
+// each other (see physics.js pushOut): a small one's own (radius, height),
+// and a big one's or a vehicle's the box it gets about in. Flying friends
+// and those that keep to the sea have none: they go over and under
+// everyone. (The boat floats at the top of its water, its feet there.)
+const SMALL_BOX = {
+  bunny: [0.24, 0.55],
+  chick: [0.15, 0.35],
+  sheep: [0.38, 0.9],
+  duck: [0.2, 0.5],
+  turtle: [0.3, 0.4],
+  crab: [0.2, 0.3],
+  penguin: [0.24, 0.7],
+  seal: [0.38, 0.5],
+};
+export function critterBox(type) {
+  const info = CRITTER_INFO[type];
+  if (!info || info.flies) return null;
+  if (SMALL_BOX[type]) return { radius: SMALL_BOX[type][0], height: SMALL_BOX[type][1] };
+  if (type === 'boat') return { radius: info.ride.radius, height: 1 };
+  if (info.big || info.vehicle) return { radius: info.ride.radius, height: info.ride.height };
+  return null;
+}
+
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
 
@@ -725,6 +749,68 @@ export class CritterSim {
     else this.fall(world, c, dt);
     // Afloat, a penguin or a seal is swimming whatever it was doing.
     if (info.dives && c.state !== 'happy' && world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER) c.state = 'swim';
+  }
+
+  // Where each animal stands, for keeping things out of it: a box with a
+  // key (see physics.js pushOut). Not one under the water, nor one in the
+  // air in a leap.
+  boxes() {
+    const out = [];
+    for (const c of this.list) {
+      const box = critterBox(c.type);
+      if (box && !c.dive && !c.leap) out.push({ x: c.x, y: c.y, z: c.z, ...box, key: `c${c.id}`, c });
+    }
+    return out;
+  }
+
+  // Animals that walked into someone, or into each other, step back out
+  // (people: boxes of who is here, players and monsters, each with a key).
+  // Those being ridden go where their rider takes them, and parked vehicles
+  // stay put: everything else steps round them.
+  keepApart(world, people) {
+    const boxes = this.boxes();
+    const all = [...people, ...boxes];
+    for (const box of boxes) {
+      const c = box.c;
+      const info = CRITTER_INFO[c.type];
+      if (c.rider || info.vehicle) continue;
+      const { dx, dz } = pushOut(box, all.filter((o) => o !== box), box.key);
+      if (!dx && !dz) continue;
+      if (info.big) {
+        const b = this.bodyOf(world, c);
+        shove(world, b, dx, dz);
+        [c.x, c.z] = [b.x, b.z];
+      } else {
+        this.nudge(world, c, dx, dz);
+      }
+      [box.x, box.z] = [c.x, c.z];
+    }
+  }
+
+  // A small animal pushed aside: as far as it could walk there, no further
+  // up or down than a little step (or along the water, for a swimmer
+  // afloat), or along one way only if not both.
+  nudge(world, c, dx, dz) {
+    const info = CRITTER_INFO[c.type];
+    const afloat = world.get(FL(c.x), FL(c.y), FL(c.z)) === B.WATER;
+    for (const [mx, mz] of [[dx, dz], [dx, 0], [0, dz]]) {
+      if (!mx && !mz) continue;
+      const nx = c.x + mx;
+      const nz = c.z + mz;
+      if (nx < 0.3 || nz < 0.3 || nx > world.W - 0.3 || nz > world.D - 0.3) continue;
+      if (afloat) {
+        if (world.get(FL(nx), FL(c.y), FL(nz)) !== B.WATER || B.SOLID[world.get(FL(nx), FL(c.y) + 1, FL(nz))]) continue;
+        [c.x, c.z] = [nx, nz];
+        return true;
+      }
+      const ny = standHeight(world, nx, nz, c.y);
+      if (ny === null || Math.abs(ny - c.y) > 0.6) continue;
+      if (world.get(FL(nx), ny, FL(nz)) === B.WATER && !info.swims && !info.wades) continue;
+      [c.x, c.z] = [nx, nz];
+      if (ny > c.y) c.y = ny;
+      return true;
+    }
+    return false;
   }
 
   // dry: only somewhere out of the water.

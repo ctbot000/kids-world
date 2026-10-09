@@ -36,10 +36,10 @@ import { dirname } from 'node:path';
 import * as B from '../public/js/shared/blocks.js';
 import { generateCode } from '../public/js/shared/codes.js';
 import { HELP_REACH } from '../public/js/shared/adventure.js';
-import { CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
+import { critterBox, CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { isNight } from '../public/js/shared/env.js';
 import { MONSTER_KINDS } from '../public/js/shared/monsters.js';
-import { makeBody, stepBody, unstick } from '../public/js/shared/physics.js';
+import { BODY, keepApart, makeBody, stepBody, unstick } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { FACING, facingFromYaw, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, stampEdit } from '../public/js/shared/tools.js';
@@ -55,7 +55,7 @@ export const DEFAULT_NAME = 'Pip 🤖';
 export const DEFAULT_LOOK = { animal: 'kid', skin: 'golden', hair: 'spiky', hairColor: 'blue', shirt: 9, hat: 'headphones', pet: { kind: 'dragon', coat: 'sky', name: 'Sparky' } };
 
 // As the renderer's poses (render/avatar.js), which a page sends as s[4].
-const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, dizzy: 7 };
+const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7 };
 // A player's yaw (s[3]) as a page sends it: the way it faces, atan2(dx, dz).
 // (A camera's yaw, as stamps' facingFromYaw takes, looks the other way.)
 export const yawTowards = (dx, dz) => Math.atan2(dx, dz);
@@ -609,6 +609,18 @@ export class Visit extends EventEmitter {
     return [...this.players.values()].filter((p) => p.id !== this.me);
   }
 
+  // The players and the animals on the ground about it, for keeping out of
+  // (see physics.js keepApart). Someone riding is up on what they ride.
+  standing() {
+    const out = [];
+    for (const p of this.others()) if (p.s && p.s[4] !== ANIM.ride) out.push({ x: p.s[0], y: p.s[1], z: p.s[2], radius: BODY.radius, height: BODY.height, key: `p${p.id}` });
+    for (const c of this.critters.values()) {
+      const box = c.type && critterBox(c.type);
+      if (box) out.push({ x: c.x, y: c.y, z: c.z, ...box, key: `c${c.id}` });
+    }
+    return out;
+  }
+
   // ------------------------------------------------ what the island says
 
   receive(msg) {
@@ -1005,6 +1017,8 @@ export class Visit extends EventEmitter {
     }
     if (b.flying && !moving && !input.down && !(goal?.flyTo)) input.down = true;
     stepBody(this.world, b, input, dt, { bounce: true });
+    // Walked into someone or an animal: back out of them, as a player does.
+    keepApart(this.world, b, this.standing(), `p${this.me}`);
     const speed = Math.hypot(b.vx, b.vz);
     this.anim = this.dizzy ? ANIM.dizzy : b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
   }

@@ -5,14 +5,14 @@
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { ARM_REACH, bodyOf, bopGap, HIT_MS, MAX_HEARTS, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { seatNear, seatPose, standUpAt } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -675,6 +675,39 @@ export class Game extends EventTarget {
     };
   }
 
+  // Everyone and everything standing about, as this page sees them, for
+  // keeping out of each other (see physics.js keepApart): players (someone
+  // riding counts as what they ride), the animals and vehicles on the
+  // ground, monsters, and pets on their feet. Each has a key; skip: the one
+  // asking. You are left out unless a pet is asking.
+  standing(skip = `p${this.pid}`) {
+    const out = [];
+    const add = (key, at, radius, height) => {
+      if (key !== skip) out.push({ x: at.x, y: at.y, z: at.z, radius, height, key });
+    };
+    for (const p of this.players.values()) {
+      if (p.me) {
+        if (!this.riding) add(`p${p.id}`, this.me.body, BODY.radius, BODY.height);
+        continue;
+      }
+      const s = p.snaps?.[p.snaps.length - 1];
+      if (p.avatar && s?.anim !== ANIM.ride) add(`p${p.id}`, p.avatar.root.position, BODY.radius, BODY.height);
+    }
+    for (const c of this.critters.values()) {
+      const box = critterBox(c.type);
+      if (box && c.model) add(`c${c.id}`, c.model.group.position, box.radius, box.height);
+    }
+    for (const m of this.monsters.values()) {
+      const size = bodyOf(m.kind);
+      add(`m${m.id}`, m.model.group.position, size.radius, size.height);
+    }
+    for (const pet of this.pets.values()) {
+      const sim = pet.sim;
+      if (!sim.info.flies && sim.mode !== 'ride') add(`pet${pet.pid}`, sim.body, sim.body.radius, sim.body.height);
+    }
+    return out;
+  }
+
   // Whether a flying friend (an animal) sits on a head at the top (x, y, z).
   headTaken(x, y, z) {
     for (const c of this.critters.values()) {
@@ -697,6 +730,7 @@ export class Game extends EventTarget {
       if (!owner) continue;
       const sim = pet.sim;
       const ev = stepPet(this.world, sim, owner, dt, { night });
+      if (!sim.info.flies && sim.mode !== 'ride' && keepApart(this.world, sim.body, this.standing(`pet${pet.pid}`), `pet${pet.pid}`)) [sim.x, sim.z] = [sim.body.x, sim.body.z];
       const m = pet.model;
       const seat = sim.mode === 'ride' ? this.petMount(pet.pid) : null;
       if (ev.boarded) pet.hop = { t: 0, x: m.group.position.x, y: m.group.position.y, z: m.group.position.z };
@@ -1660,6 +1694,8 @@ export class Game extends EventTarget {
     // Down (Shift, or ⬇️) dives at sea (and gets off on land: see pressDown).
     const ev = stepRide(this.world, ride, { mx: fx * move.y + -fz * move.x, mz: fz * move.y + fx * move.x, jump: input.jump, down: input.down, run: input.run }, dt);
     const r = ride.body;
+    // On land and off the rails, it steps out of whatever it walked into too.
+    if (!ride.r.sea && !ride.rail) keepApart(this.world, r, this.standing(`c${ride.id}`), `c${ride.id}`);
     const seat = riderAt(ride.type, { x: r.x, y: r.y, z: r.z, yaw: ride.yaw });
     const b = me.body;
     Object.assign(b, { x: seat.x, y: seat.y, z: seat.z, vx: r.vx, vy: r.vy, vz: r.vz, onGround: r.onGround, inWater: false });
@@ -2469,6 +2505,8 @@ export class Game extends EventTarget {
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
     if (this.monsters.size) this.stomp();
+    // Walked into someone, an animal, a monster or a pet: back out of them.
+    if (!this.lift) keepApart(w, b, this.standing(), `p${this.pid}`);
     if (!this.toldLift && !this.lift && padUnder(w, b)) {
       this.toldLift = true;
       this.emit('toast', { icon: '🛗', text: `An elevator! ${this.touch ? 'Jump' : 'Press Space'} to go up, ${this.touch ? '⬇️' : 'Shift'} to go down.` });

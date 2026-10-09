@@ -320,3 +320,59 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
 export function cellHitsBody(x, y, z, b) {
   return x < b.x + b.radius && x + 1 > b.x - b.radius && z < b.z + b.radius && z + 1 > b.z - b.radius && y < b.y + b.height && y + 1 > b.y;
 }
+
+// Keeping things out of each other: people, animals, monsters and pets are
+// upright boxes too ({ x, y, z, radius, height }, round ones side to side),
+// and none stands in another. Each one that moves itself (you on your page,
+// an animal or a monster on the host, a pet on every page) steps out of
+// whatever it has walked into, sideways, as far as the blocks about let it.
+// Feet over the other's middle is standing or landing on it (a jump onto
+// a monster), not in it. key: who each is (a string), to settle which way
+// two in the very same spot go: opposite ways.
+export function pushOut(b, others, key = '') {
+  let dx = 0;
+  let dz = 0;
+  for (const o of others) {
+    if (b.y >= o.y + o.height * 0.5 || o.y >= b.y + b.height * 0.5) continue;
+    const ox = b.x + dx - o.x;
+    const oz = b.z + dz - o.z;
+    const need = b.radius + o.radius;
+    const d = Math.hypot(ox, oz);
+    if (d >= need) continue;
+    if (d > 1e-4) {
+      dx += (ox / d) * (need - d);
+      dz += (oz / d) * (need - d);
+    } else {
+      // Right on top of each other: a way of their own, and the other the opposite way.
+      const a = spotAngle(key < (o.key ?? '') ? key + (o.key ?? '') : (o.key ?? '') + key) + (key < (o.key ?? '') ? 0 : Math.PI);
+      dx += Math.sin(a) * need;
+      dz += Math.cos(a) * need;
+    }
+  }
+  return { dx, dz };
+}
+
+function spotAngle(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return ((h >>> 0) / 4294967296) * Math.PI * 2;
+}
+
+// Moves a body sideways by (dx, dz), stopping at blocks as walking does.
+// Returns whether it moved at all.
+export function shove(world, b, dx, dz) {
+  const x = b.x;
+  const z = b.z;
+  if (dx) sweep(world, b, 0, dx);
+  if (dz) sweep(world, b, 2, dz);
+  const r = b.radius;
+  b.x = Math.min(world.W - r, Math.max(r, b.x));
+  b.z = Math.min(world.D - r, Math.max(r, b.z));
+  return b.x !== x || b.z !== z;
+}
+
+// A body stepped out of all of others it stands in (see pushOut).
+export function keepApart(world, b, others, key = '') {
+  const { dx, dz } = pushOut(b, others, key);
+  return dx || dz ? shove(world, b, dx, dz) : false;
+}

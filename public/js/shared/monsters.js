@@ -30,7 +30,7 @@
 // as they see the animals. They are never saved: turning monsters off, or
 // opening the island again, starts it without any.
 import * as B from './blocks.js';
-import { makeBody, stepBody } from './physics.js';
+import { makeBody, pushOut, shove, stepBody } from './physics.js';
 import { Rng } from './rng.js';
 import { underTent } from './tents.js';
 
@@ -515,6 +515,28 @@ export class MonsterSim {
       }
     }
     return bumps;
+  }
+
+  // Where each one is, for keeping things out of it (see physics.js pushOut).
+  boxes() {
+    return this.list.map((m) => ({ x: m.body.x, y: m.body.y, z: m.body.z, radius: m.body.radius, height: m.body.height, key: `m${m.id}`, m }));
+  }
+
+  // Those that walked into someone, an animal or each other step back out
+  // (others: boxes of the players and the animals, each with a key). Right
+  // up against someone is still near enough to bump them. Those marching
+  // along a tower defense road keep to it, single file.
+  keepApart(world, others) {
+    const boxes = this.boxes();
+    const all = [...others, ...boxes];
+    for (const box of boxes) {
+      if (box.m.march) continue;
+      const { dx, dz } = pushOut(box, all.filter((o) => o !== box), box.key);
+      if (!dx && !dz) continue;
+      const b = box.m.body;
+      shove(world, b, dx, dz);
+      [box.x, box.z] = [b.x, b.z];
+    }
   }
 
   // One marching along its way (see add): hop by hop from one cell of the
