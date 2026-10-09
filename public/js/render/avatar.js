@@ -4,7 +4,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
-import { blobShadow, capsule, cone, cylinder, geo, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
 const HEAD_R = 0.34;
 const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
@@ -360,33 +360,6 @@ function onHead(up, turn, k = 1) {
   return { p, out };
 }
 
-// Copies of one shape, each placed by a matrix, as one shape: one draw for all.
-function merged(key, shape, matrices) {
-  return geo(key, () => {
-    const pos = shape.attributes.position;
-    const nrm = shape.attributes.normal;
-    const n = pos.count;
-    const positions = new Float32Array(n * 3 * matrices.length);
-    const normals = new Float32Array(n * 3 * matrices.length);
-    const indices = [];
-    const v = new THREE.Vector3();
-    const normalMatrix = new THREE.Matrix3();
-    matrices.forEach((m, k) => {
-      normalMatrix.getNormalMatrix(m);
-      for (let i = 0; i < n; i++) {
-        v.fromBufferAttribute(pos, i).applyMatrix4(m).toArray(positions, (k * n + i) * 3);
-        v.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize().toArray(normals, (k * n + i) * 3);
-      }
-      for (const j of shape.index.array) indices.push(j + k * n);
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    g.setIndex(indices);
-    return g;
-  });
-}
-
 // A kid's face, or a grown-up's (grown: with smaller eyes, and what they
 // have on it, see FACES in shared/words.js). ears: false where hair covers them.
 function kidFace(head, skin, { ears = true, grown = false, extra = 'none', hairColor = BLACK } = {}) {
@@ -512,9 +485,9 @@ function hair(head, style, color, hatKind) {
         const d = new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a));
         if (d.dot(pole) < -0.02) continue;
         const size = 0.085 + (i % 3) * 0.008;
-        curls.push(new THREE.Matrix4().makeScale(size, size, size).setPosition(d.x * HR[0] * 1.1, d.y * HR[1] * 1.1, d.z * HR[2] * 1.1));
+        curls.push({ g: sphere(1, 12, 9), m: new THREE.Matrix4().makeScale(size, size, size).setPosition(d.x * HR[0] * 1.1, d.y * HR[1] * 1.1, d.z * HR[2] * 1.1) });
       }
-      add(mesh(merged('curls', sphere(1, 12, 9), curls), mat));
+      add(mesh(bakeCached('curls', curls), mat));
       break;
     }
     case 'bob':
@@ -552,10 +525,19 @@ function hair(head, style, color, hatKind) {
         add(mesh(torus(0.1, 0.022), toon(TIE), 0, 0.29, -0.1).rotateX(Math.PI / 2 + 0.35));
       }
       break;
-    default:
+    default: {
       cap();
-      swept();
+      // A fuller fringe than the swept locks, all as one shape.
+      const fringe = [];
+      const Z = new THREE.Vector3(0, 0, 1);
+      for (const [fx, fy, sx, sy, roll] of [[-0.21, 0.165, 0.085, 0.06, 0.55], [-0.1, 0.15, 0.1, 0.07, 0.3], [0.01, 0.145, 0.1, 0.07, 0.1], [0.12, 0.155, 0.09, 0.065, -0.15], [0.22, 0.175, 0.075, 0.055, -0.45], [-0.26, 0.19, 0.06, 0.045, 0.7]]) {
+        const p = onFace(fx, fy, 0.014);
+        const q = new THREE.Quaternion().setFromUnitVectors(Z, p.clone().normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(Z, roll));
+        fringe.push({ g: sphere(1, 14, 10), m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(sx, sy, 0.045)) });
+      }
+      add(mesh(bakeCached('fringe|short', fringe), mat));
       break;
+    }
   }
   head.add(g);
   return sway;

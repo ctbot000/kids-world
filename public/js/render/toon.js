@@ -42,16 +42,83 @@ export function geo(key, make) {
 }
 
 export const sphere = (r = 1, w = 20, h = 14) => geo(`sphere${r}|${w}|${h}`, () => new THREE.SphereGeometry(r, w, h));
-export const capsule = (r, len) => geo(`capsule${r}|${len}`, () => new THREE.CapsuleGeometry(r, len, 6, 14));
+export const capsule = (r, len, cap = 6, rad = 14) => geo(`capsule${r}|${len}|${cap}|${rad}`, () => new THREE.CapsuleGeometry(r, len, cap, rad));
 export const cone = (r, h, s = 16) => geo(`cone${r}|${h}|${s}`, () => new THREE.ConeGeometry(r, h, s));
 export const cylinder = (rt, rb, h, s = 18) => geo(`cyl${rt}|${rb}|${h}|${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s));
 export const torus = (r, t, arc = Math.PI * 2) => geo(`torus${r}|${t}|${arc}`, () => new THREE.TorusGeometry(r, t, 8, 24, arc));
+// A shape turned round an axis, like a pot on a wheel: points from bottom to
+// top, each [x, y]. Rounded bodies, muzzles and horns come from this.
+export const lathe = (points, segs = 24) => geo(`lathe${points.map((p) => `${p[0]},${p[1]}`).join(';')}|${segs}`, () => new THREE.LatheGeometry(points.map((p) => new THREE.Vector2(p[0], p[1])), segs));
+// A box with its edges and corners rounded by r, for cabs and soles.
+export const roundedBox = (w, h, d, r = Math.min(w, h, d) * 0.2, s = 3) =>
+  geo(`rbox${w}|${h}|${d}|${r}|${s}`, () => {
+    const g = new THREE.BoxGeometry(w, h, d, s, s, s);
+    const pos = g.attributes.position;
+    const hx = w / 2 - r;
+    const hy = h / 2 - r;
+    const hz = d / 2 - r;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const cx = Math.max(-hx, Math.min(hx, v.x));
+      const cy = Math.max(-hy, Math.min(hy, v.y));
+      const cz = Math.max(-hz, Math.min(hz, v.z));
+      const out = new THREE.Vector3(v.x - cx, v.y - cy, v.z - cz);
+      const len = out.length();
+      if (len > 1e-9) out.multiplyScalar(r / len);
+      pos.setXYZ(i, cx + out.x, cy + out.y, cz + out.z);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
 
 export function mesh(geometry, material, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) {
   const m = new THREE.Mesh(geometry, material);
   m.position.set(x, y, z);
   m.scale.set(sx, sy, sz);
   return m;
+}
+
+// Many small shapes, each placed by a matrix, as one shape: one draw for all
+// of them. parts: [{ g: the shape, m: where it goes }]. bake makes a fresh one
+// of the caller's own (to dispose); bakeCached shares it for good, like every
+// other shape here. Only for parts that never move on their own.
+const bakeV = new THREE.Vector3();
+const bakeN = new THREE.Matrix3();
+
+function baked(parts) {
+  let count = 0;
+  for (const { g } of parts) count += g.attributes.position.count;
+  const positions = new Float32Array(count * 3);
+  const normals = new Float32Array(count * 3);
+  const indices = new Uint32Array(parts.reduce((n, { g }) => n + g.index.count, 0));
+  let v = 0;
+  let t = 0;
+  for (const { g, m } of parts) {
+    const pos = g.attributes.position;
+    const nor = g.attributes.normal;
+    bakeN.getNormalMatrix(m);
+    for (let i = 0; i < pos.count; i++) {
+      bakeV.fromBufferAttribute(pos, i).applyMatrix4(m).toArray(positions, (v + i) * 3);
+      bakeV.fromBufferAttribute(nor, i).applyMatrix3(bakeN).normalize().toArray(normals, (v + i) * 3);
+    }
+    for (let i = 0; i < g.index.count; i++) indices[t + i] = g.index.array[i] + v;
+    v += pos.count;
+    t += g.index.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  out.setIndex(new THREE.BufferAttribute(indices, 1));
+  return out;
+}
+
+export function bake(parts) {
+  return baked(parts);
+}
+
+export function bakeCached(key, parts) {
+  return geo(key, () => baked(parts));
 }
 
 // The soft round shadow under everyone's feet: a blob that fades out at the
