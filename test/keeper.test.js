@@ -11,7 +11,7 @@ import { challenge, keptProfile, toBase64Url, verifySignature, KEY_ALGORITHM, SI
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { createIdentity, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
+import { candidateAddress, createIdentity, isPublicIp, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const dirs = [];
@@ -82,6 +82,35 @@ test('a device only ever adds to its own copies, and the keeper refuses what is 
   const small = await new KeeperStore(await tempDir(), { maxBytes: 20000 }).open();
   await small.keepIsland(KEY, ISLAND, island());
   await assert.rejects(small.keepIsland(KEY, 'ffffffffffff', island()), (e) => e.code === 'full');
+});
+
+test('a page’s public IP address comes from its ICE candidates, never a private one', () => {
+  assert.deepEqual(candidateAddress('candidate:1 1 udp 1677729535 203.0.113.5 54321 typ srflx raddr 0.0.0.0 rport 0 generation 0'), { ip: '203.0.113.5', rank: 3 });
+  assert.deepEqual(candidateAddress('a=candidate:2 1 udp 2122260223 2001:db8::7 50000 typ host'), { ip: '2001:db8::7', rank: 2 });
+  assert.deepEqual(candidateAddress('candidate:3 1 udp 41885439 198.51.100.9 3478 typ relay raddr 203.0.113.5 rport 61000'), { ip: '203.0.113.5', rank: 1 });
+  assert.equal(candidateAddress('candidate:4 1 udp 2122260223 4f1c2d3e-aaaa.local 50000 typ host'), null);
+  assert.equal(candidateAddress('candidate:5 1 udp 2122260223 192.168.0.12 50000 typ host'), null);
+  assert.equal(candidateAddress('candidate:6 1 udp 41885439 198.51.100.9 3478 typ relay raddr 0.0.0.0 rport 0'), null);
+  assert.equal(candidateAddress(''), null);
+  for (const ip of ['10.1.2.3', '172.20.0.1', '100.100.1.1', '127.0.0.1', '169.254.1.1', '::1', 'fe80::1', 'fd00::1', '::ffff:8.8.8.8', 'nope']) assert.equal(isPublicIp(ip), false, ip);
+});
+
+test('where a device was last seen from is kept in its record, once it has one', async () => {
+  const time = clock();
+  const store = await new KeeperStore(await tempDir(), time).open();
+  const device = KeeperStore.deviceId(KEY);
+  // Connected before it sent anything: kept with the first thing it sends.
+  await store.noteAddress(device, '8.8.8.8');
+  assert.deepEqual(await store.devices(), []);
+  await store.keepProfile(KEY, { name: 'Sunny Otter' });
+  assert.equal((await store.devices())[0].ip, '8.8.8.8');
+  // Back from somewhere else; a private address is never kept.
+  time.nextDay();
+  await store.noteAddress(device, '1.1.1.1');
+  await store.noteAddress(device, '192.168.0.5');
+  const [seen] = await store.devices();
+  assert.equal(seen.ip, '1.1.1.1');
+  assert.equal(seen.lastSeen, time.now());
 });
 
 test('a profile is kept without the tokens that let a player back into islands, or their settings', async () => {
@@ -181,6 +210,12 @@ test('the admin pages list, download and delete copies, for this computer only',
     const state = await (await fetch(`${base}/admin/api/state`)).json();
     assert.equal(state.devices[0].profile.name, 'Sunny Otter');
     assert.equal(state.devices[0].islands[0].name, 'Maple Fields');
+    assert.equal(state.devices[0].ip, null);
+    assert.equal(state.devices[0].place, null);
+    await store.noteAddress(device, '8.8.8.8');
+    const located = (await (await fetch(`${base}/admin/api/state`)).json()).devices[0];
+    assert.equal(located.ip, '8.8.8.8');
+    assert.equal(located.place.country, 'US');
 
     const file = await fetch(`${base}/admin/api/devices/${device}/islands/${ISLAND}?download`);
     assert.match(file.headers.get('content-disposition'), /^attachment; filename="maple-fields-\d{4}-\d{2}-\d{2}\.kidsworld\.json"$/);

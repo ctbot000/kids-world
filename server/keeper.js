@@ -6,9 +6,9 @@
 // protocol is in public/js/shared/keeper.js.
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
-//   <data>/devices/<device>/device.json             when the device was seen, its profile, and
-//                                                   for a login, whether it left the ranking
-//                                                   and the players list
+//   <data>/devices/<device>/device.json             when the device was seen and from which
+//                                                   IP address, its profile, and for a login,
+//                                                   whether it left the ranking and the players list
 //   <data>/devices/<device>/login.json              its login, if it made one: the username, the
 //                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
@@ -26,6 +26,7 @@
 // node-datachannel, loaded only when the keeper goes online.
 import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { BlockList, isIP } from 'node:net';
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -69,6 +70,34 @@ export const DEFAULT_DATA_DIR = join(homedir(), '.kids-world');
 export const PUBLIC_CONFIG = fileURLToPath(new URL('../public/keeper.json', import.meta.url));
 
 const GB = 1024 ** 3;
+
+// Addresses that say nothing about where a player is: their own network's,
+// the carrier's shared one, loopback and link-local.
+const NOT_PUBLIC = new BlockList();
+for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 3]]) {
+  NOT_PUBLIC.addSubnet(net, bits, 'ipv4');
+}
+for (const [net, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) NOT_PUBLIC.addSubnet(net, bits, 'ipv6');
+
+// An IPv4-mapped IPv6 address is not one a page offers; BlockList would also
+// match a rule for those against every plain IPv4 address.
+export function isPublicIp(ip) {
+  const v = isIP(ip);
+  return v !== 0 && !/^::ffff:/i.test(ip) && !NOT_PUBLIC.check(ip, v === 4 ? 'ipv4' : 'ipv6');
+}
+
+// The public IP address an ICE candidate from a page tells of, and how sure
+// it is that it is the player's: 3 for a server-reflexive one (what a STUN
+// server saw: the address of the player's internet connection), 2 for a host
+// one that is public already, 1 for the address a relayed one was asked for
+// from. Browsers hide private host addresses behind mDNS names. Or null.
+export function candidateAddress(candidate) {
+  const words = String(candidate).replace(/^a=/, '').split(/\s+/);
+  const type = words[words.indexOf('typ') + 1];
+  const raddr = words.indexOf('raddr');
+  const [ip, rank] = type === 'srflx' ? [words[4], 3] : type === 'host' ? [words[4], 2] : type === 'relay' && raddr > 0 ? [words[raddr + 1], 1] : [];
+  return ip && isPublicIp(ip) ? { ip, rank } : null;
+}
 
 // The PeerJS cloud and the ICE servers PeerJS pages use by default, so the
 // keeper can reach every page a friend's island could.
@@ -218,6 +247,8 @@ export class KeeperStore extends EventEmitter {
     // Writes go one at a time, so two copies of one island never interleave.
     // Whatever runs in the queue must not wait for the queue itself.
     this.queue = Promise.resolve();
+    // Where devices were last seen from, until their records keep it (see noteAddress).
+    this.addresses = new Map();
     // Wrong pictures lately: per login name, and when, for every name.
     this.tries = new Map();
     this.wrong = [];
@@ -299,8 +330,28 @@ export class KeeperStore extends EventEmitter {
     const now = this.now();
     const old = (await readJson(file)) ?? { id: device, firstSeen: now };
     const record = { ...old, ...changes, id: device, lastSeen: now };
+    if (this.addresses.has(device)) {
+      record.ip = this.addresses.get(device);
+      this.addresses.delete(device);
+    }
     await this.write(file, JSON.stringify(record));
     return record;
+  }
+
+  // The public IP address a device (or a player, on any of their devices)
+  // was last seen from. Into its record now, if it has one and the address
+  // is new, or else with whatever it sends first.
+  noteAddress(device, ip) {
+    if (!isDeviceId(device) || !isPublicIp(ip)) return Promise.resolve();
+    if (this.addresses.size >= 1000) this.addresses.clear();
+    this.addresses.set(device, ip);
+    return this.serial(async () => {
+      if (!this.addresses.has(device)) return;
+      const old = await readJson(this.path(device, 'device.json'));
+      if (!old) return;
+      if (old.ip === ip) this.addresses.delete(device);
+      else await this.seen(device, {});
+    });
   }
 
   // ------------------------------------------------ copies
@@ -699,6 +750,7 @@ export class KeeperStore extends EventEmitter {
         lastSeen: info.lastSeen ?? 0,
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
+        ip: info.ip ?? null,
         ranked: info.ranked !== false,
         findable: info.findable !== false,
         // Never the hashes: when it was made, on how many devices it is, and
@@ -1004,6 +1056,11 @@ export class Keeper extends EventEmitter {
       const conn = this.conns.get(id);
       const c = p.candidate;
       if (!conn || typeof c?.candidate !== 'string' || !c.candidate) return;
+      const address = candidateAddress(c.candidate);
+      if (address && address.rank > (conn.address?.rank ?? 0)) {
+        conn.address = address;
+        this.noteAddress(conn);
+      }
       try {
         conn.pc.addRemoteCandidate(c.candidate, typeof c.sdpMid === 'string' ? c.sdpMid : '0');
       } catch {
@@ -1128,6 +1185,13 @@ export class Keeper extends EventEmitter {
     conn.player = player;
     conn.token = token;
     conn.folder = player ?? KeeperStore.deviceId(device);
+    this.noteAddress(conn);
+  }
+
+  // Where this connection's page is, for the admin page, once both are known.
+  noteAddress(conn) {
+    if (!conn.folder || !conn.address) return;
+    this.store.noteAddress(conn.folder, conn.address.ip).catch((error) => this.log(error));
   }
 
   async handle(conn, msg) {

@@ -2,7 +2,7 @@
 // (drawn with the game's own map code), and downloads or deletes, and their
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
-// taken out of the ranking. It reads /admin/api/state every few seconds.
+// taken out of the ranking, and where each was last seen from. It reads /admin/api/state every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
@@ -45,6 +45,18 @@ function size(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+const countries = new Intl.DisplayNames(undefined, { type: 'region' });
+
+// Where a player was last seen from: the IP address, and the city, region
+// and country it is in, as far as the keeper's database knows.
+function whereFrom(device) {
+  if (!device.ip) return null;
+  const p = device.place;
+  const country = p?.country ? countries.of(p.country) : '';
+  const where = [p?.city, p?.region && p.region !== p?.city ? p.region : '', country].filter(Boolean).join(', ');
+  return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `🌐 ${device.ip}`, where ? ` · ${where}` : ' · somewhere unknown');
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -312,7 +324,7 @@ function deviceCard(device, players) {
       'header',
       { class: 'who' },
       h('span', { class: 'avatar', style: `--c:${p ? shirtColor(p.look.shirt) : '#d8cfe0'}`, 'aria-hidden': 'true' }, lookIcon(p?.look)),
-      h('div', { class: 'name' }, h('h3', {}, name), h('div', { class: 'muted' }, `Last seen ${ago(device.lastSeen)} · first seen ${at.format(device.firstSeen)}`)),
+      h('div', { class: 'name' }, h('h3', {}, name), h('div', { class: 'muted' }, `Last seen ${ago(device.lastSeen)} · first seen ${at.format(device.firstSeen)}`), whereFrom(device)),
       h(
         'button',
         { class: 'danger quiet', type: 'button', onclick: () => remove(`devices/${device.id}`, `Delete everything kept from ${name}: ${plural(device.islands.length, 'island', 'islands')} and their profile? This cannot be undone.`) },

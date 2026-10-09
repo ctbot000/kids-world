@@ -31,6 +31,7 @@
     "three": "^0.186.1"
   },
   "dependencies": {
+    "geoip-lite": "^2.0.3",
     "node-datachannel": "^0.33.4",
     "send": "^1.2.1",
     "serve-static": "^2.2.1",

@@ -131,6 +131,10 @@ code {
   margin: 4px 0 0;
 }
 
+.where-from {
+  overflow-wrap: anywhere;
+}
+
 .recent {
   margin: 0;
   padding: 0;
