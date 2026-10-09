@@ -39,11 +39,15 @@ export const DEFAULT_LOOK = { animal: 'kid', skin: 'golden', hair: 'spiky', hair
 
 // As the renderer's poses (render/avatar.js), which a page sends as s[4].
 const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, dizzy: 7 };
+// A player's yaw (s[3]) as a page sends it: the way it faces, atan2(dx, dz).
+// (A camera's yaw, as stamps' facingFromYaw takes, looks the other way.)
+export const yawTowards = (dx, dz) => Math.atan2(dx, dz);
 
 const TICK_MS = 100;
 const MOVE_SEND_MS = 100;
 // How close it keeps to the friend it is with, and when it flies instead.
 const NEAR = 2.6;
+const TOO_CLOSE = 1.4;
 const FAR = 4.2;
 const FLY_FAR = 30;
 // Monsters closer than this to a friend get bopped.
@@ -605,7 +609,7 @@ export class Visit extends EventEmitter {
         const gap = Math.hypot(threat.x - b.x, threat.z - b.z);
         if (gap < (threat.kind === 'king' ? 3.6 : 2) && now - this.bopAt > BOP_MS) {
           this.bopAt = now;
-          this.yaw = Math.atan2(-(threat.x - b.x), -(threat.z - b.z));
+          this.yaw = yawTowards(threat.x - b.x, threat.z - b.z);
           this.link.send({ t: 'swing' });
           this.link.send({ t: 'bop', id: threat.id });
         }
@@ -617,8 +621,14 @@ export class Visit extends EventEmitter {
     this.friend = friend.id;
     const f = { x: friend.s[0], y: friend.s[1], z: friend.s[2] };
     if (this.mode === 'stay') return { ...f, look: true, reach: Infinity };
-    // Close enough already: just look at them, until they go further off.
+    // Right on top of them (both just came in at the start, say): a step
+    // aside first, then turn to them.
     const d = Math.hypot(f.x - b.x, f.z - b.z);
+    if (d < TOO_CLOSE) {
+      const a = d > 0.05 ? Math.atan2(b.x - f.x, b.z - f.z) : this.random() * Math.PI * 2;
+      return { x: f.x + Math.sin(a) * NEAR, y: f.y, z: f.z + Math.cos(a) * NEAR, reach: 0.3, face: f };
+    }
+    // Close enough already: just look at them, until they go further off.
     if (d < FAR && !this.walking) return { ...f, look: true, reach: Infinity };
     // A pet now and then, for an animal right beside it.
     if (d < FAR && now - this.pettedAt > PET_GAP_MS) {
@@ -661,13 +671,14 @@ export class Visit extends EventEmitter {
         } else if (b.inWater) {
           input.jump = true;
         }
-        if (moving) this.yaw = Math.atan2(-dx, -dz);
+        if (moving) this.yaw = yawTowards(dx, dz);
       } else {
         this.walking = false;
         // Arrived up in the air over a friend on the ground: down to land.
         if (b.flying && !goal.flyTo) input.down = true;
         this.stuck.since = 0;
-        this.yaw = Math.atan2(-dx, -dz);
+        const at = goal.face ?? goal;
+        if (Math.hypot(at.x - b.x, at.z - b.z) > 0.05) this.yaw = yawTowards(at.x - b.x, at.z - b.z);
       }
     }
     if (b.flying && !moving && !input.down && !(goal?.flyTo)) input.down = true;
@@ -827,15 +838,15 @@ export class Visit extends EventEmitter {
     const now = this.now();
     if (now - this.builtAt < BUILD_GAP_MS || (this.settings.build === 'host' && this.host !== this.me)) return false;
     const b = this.body;
-    const fx = -Math.sin(this.yaw);
-    const fz = -Math.cos(this.yaw);
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
     const x = Math.floor(b.x + fx * 5);
     const z = Math.floor(b.z + fz * 5);
     const y = this.world.groundBelow(x, Math.floor(b.y + 3), z);
     if (y < 0) return false;
     const hit = { x, y, z, nx: 0, ny: 1, nz: 0, id: this.world.get(x, y, z) };
     // Facing back towards it, as a player's stamp faces them.
-    const { cells } = stampEdit(this.world, hit, key, facingFromYaw(this.yaw));
+    const { cells } = stampEdit(this.world, hit, key, facingFromYaw(this.yaw + Math.PI));
     if (!cells.length) return false;
     this.builtAt = now;
     applyCells(this.world, cells);

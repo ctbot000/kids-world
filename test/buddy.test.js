@@ -112,7 +112,7 @@ test('invited, it comes in under its name and look, says hello, answers a friend
   assert.match(systemPrompt(DEFAULT_NAME), /Never ask for personal things/);
 });
 
-test('it walks after its friend, and flies to one far away', async () => {
+test('it walks after its friend facing the way it goes, and flies to one far away', async () => {
   const { room, rooms, island } = server({ theme: 'sunny', size: 'big', seed: 3 });
   const minji = child(room);
   const buddy = friend({ llm: model(), rooms });
@@ -128,7 +128,18 @@ test('it walks after its friend, and flies to one far away', async () => {
     minji.say({ t: 'm', s: [x, y, z, 0, 0, fly] });
   };
   goTo(8, 0);
-  await eventually(() => away(pip, me) < 4.5);
+  // Facing the way it walks, as a page's player does (yaw atan2(dx, dz)).
+  const facing = [];
+  let last = [...pip.s];
+  await eventually(() => {
+    const [dx, dz] = [pip.s[0] - last[0], pip.s[2] - last[2]];
+    if (Math.hypot(dx, dz) > 0.3) {
+      facing.push(Math.sin(pip.s[3]) * dx + Math.cos(pip.s[3]) * dz > 0);
+      last = [...pip.s];
+    }
+    return away(pip, me) < 4.5;
+  });
+  assert.ok(facing.length >= 3 && facing.every(Boolean), `forwards, not backwards: ${facing}`);
   let flew = false;
   goTo(-30, 35, 1);
   await eventually(() => {
