@@ -40,6 +40,8 @@ export const HILL_MODES = [
   { key: 'flat', name: 'Flatten', icon: '➖' },
 ];
 
+// How fast left and right turn you round looking through your own eyes (radians a second).
+const TURN_SPEED = 2.4;
 const INTERP_MS = 130;
 const CRITTER_INTERP_MS = 260;
 const MOVE_SEND_MS = 90;
@@ -1651,7 +1653,7 @@ export class Game extends EventTarget {
   moveRide(dt, input) {
     const ride = this.riding;
     const me = this.me;
-    const move = input.readMove();
+    const move = this.steer(input.readMove(), dt);
     const yaw = this.renderer.view.yaw;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
@@ -2433,6 +2435,15 @@ export class Game extends EventTarget {
     if (a) a.root.visible = on && !blink;
   }
 
+  // Looking through your own eyes, left and right turn you (and the way you
+  // look) instead of stepping sideways; from anywhere else they walk that way.
+  steer(move, dt) {
+    if (this.renderer.camDist > 1.3 || !move.x) return move;
+    this.renderer.view.yaw -= move.x * TURN_SPEED * dt;
+    if (!this.riding) this.me.yaw = this.renderer.view.yaw + Math.PI;
+    return { x: 0, y: move.y };
+  }
+
   moveMe(dt, input) {
     if (this.seat) {
       this.stayInSeat(dt, input);
@@ -2443,7 +2454,7 @@ export class Game extends EventTarget {
     const w = this.world;
     // Sitting dizzy, you go nowhere.
     const still = this.dizzy;
-    const move = still ? { x: 0, y: 0 } : input.readMove();
+    const move = this.steer(still ? { x: 0, y: 0 } : input.readMove(), dt);
     const yaw = this.renderer.view.yaw;
     // Forward is away from the camera.
     const fx = -Math.sin(yaw);

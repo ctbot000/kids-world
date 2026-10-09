@@ -385,6 +385,21 @@ test('the 🎥 button and L step the camera from behind you to your own eyes, to
   await settled('eyes');
   await until(page, () => window.kidsWorld.game.players.get(window.kidsWorld.game.pid)?.avatar?.root.visible === false);
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('through your eyes')));
+  // Left turns you round through your eyes, where you look and where you face, without stepping sideways.
+  const before = await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    return { yaw: g.renderer.view.yaw, x: g.me.body.x, z: g.me.body.z };
+  });
+  await page.keyboard.down('ArrowLeft');
+  await delay(600);
+  await page.keyboard.up('ArrowLeft');
+  const turned = await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    return { yaw: g.renderer.view.yaw, x: g.me.body.x, z: g.me.body.z, facing: g.me.yaw };
+  });
+  assert.ok(turned.yaw - before.yaw > 0.2, `turned left: ${JSON.stringify({ before, turned })}`);
+  assert.ok(Math.hypot(turned.x - before.x, turned.z - before.z) < 0.2, `stayed put: ${JSON.stringify({ before, turned })}`);
+  assert.ok(Math.abs(Math.sin((turned.facing - turned.yaw - Math.PI) / 2)) < 0.05, `faces the way it looks: ${JSON.stringify(turned)}`);
   await page.keyboard.press('KeyL');
   await settled('sky');
   const sky = await view();
