@@ -14,7 +14,7 @@ import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
-import { seatNear, seatPose, standUpAt } from './shared/seats.js';
+import { seatNear, seatPose, standUpAt, teaTableNear } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
@@ -1595,6 +1595,7 @@ export class Game extends EventTarget {
       this.emit('fly', false);
     }
     this.seat = { x: cell.x, y: cell.y, z: cell.z };
+    this.teaCounted = false;
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0 });
     this.sound.play('place', { kind: 'cloth' });
     this.profile.count('sat');
@@ -1617,6 +1618,32 @@ export class Game extends EventTarget {
     Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false });
     unstick(this.world, b);
     this.emit('ride');
+  }
+
+  // A tea party: you and a friend both sitting (shared/seats.js) with a Tea
+  // Table beside each of your seats, at the same table or two pushed
+  // together. Counted once each time you sit down, with hearts over the
+  // table; the 🫖 sticker is what it earns.
+  checkTeaParty() {
+    if (this.teaCounted || !this.seat) return;
+    const pose = seatPose(this.world, this.seat.x, this.seat.y, this.seat.z);
+    if (!pose || pose.pose !== 'sit') return;
+    const mine = teaTableNear(this.world, this.seat.x, this.seat.y, this.seat.z);
+    if (!mine) return;
+    for (const p of this.players.values()) {
+      if (p.me || !p.sitting || !p.avatar) continue;
+      const a = p.avatar.root.position;
+      const theirs = teaTableNear(this.world, Math.floor(a.x), Math.floor(a.y), Math.floor(a.z));
+      if (!theirs || Math.hypot(theirs.x - mine.x, theirs.z - mine.z) > 2) continue;
+      this.teaCounted = true;
+      this.profile.count('teas');
+      this.renderer.effects.hearts(mine.x + 0.5, mine.y + 1.4, mine.z + 0.5, 5);
+      if (!this.toldTea) {
+        this.toldTea = true;
+        this.emit('toast', { icon: '🫖', text: `Tea time with ${p.name}!` });
+      }
+      return;
+    }
   }
 
   // In your seat, staying put: up you get if you move, or if the seat goes
@@ -2580,6 +2607,7 @@ export class Game extends EventTarget {
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
+    if (this.seat) this.checkTeaParty();
     this.updateCritters(dt);
     this.seatPassengers(dt);
     this.updatePets(dt);
@@ -2802,6 +2830,8 @@ export class Game extends EventTarget {
       a.root.rotation.y = s.yaw;
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
+      // Sitting on a chair or a sofa (not lying in bed): tea party company.
+      p.sitting = s.anim === ANIM.sit;
       const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id || c.passengers.includes(p.id)) : null;
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));

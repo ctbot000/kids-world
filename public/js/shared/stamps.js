@@ -583,6 +583,29 @@ function picnic() {
   return c.list();
 }
 
+// A tea party for friends: a checked rug, a tea table with the tea all laid
+// out, a chair at each side of it facing in, and plants and flowers at the
+// corners.
+function teaParty() {
+  const c = new Cells();
+  for (let x = -2; x <= 2; x++) {
+    for (let z = 0; z <= 4; z++) {
+      c.put(x, -1, z, B.CHECKER_FLOOR);
+      c.put(x, 0, z, B.AIR);
+    }
+  }
+  c.put(0, 0, 2, B.TEA_TABLE);
+  c.put(-1, 0, 2, B.turnedTo(B.CHAIR, 0));
+  c.put(1, 0, 2, B.turnedTo(B.CHAIR, 2));
+  c.put(0, 0, 1, B.turnedTo(B.CHAIR, 1));
+  c.put(0, 0, 3, B.CHAIR);
+  c.put(-2, 0, 0, B.POTTED_PLANT);
+  c.put(2, 0, 4, B.POTTED_PLANT);
+  c.put(2, 0, 0, B.TULIP);
+  c.put(-2, 0, 4, B.DAISY);
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
@@ -603,6 +626,7 @@ export const STAMPS = [
   { key: 'garden', name: 'Flower Garden', icon: '🌻', cells: garden() },
   { key: 'pyramid', name: 'Pyramid', icon: '🔺', cells: pyramid() },
   { key: 'picnic', name: 'Picnic', icon: '🧺', cells: picnic() },
+  { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

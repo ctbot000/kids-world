@@ -11,6 +11,7 @@ import { XP_FOR } from '../public/js/shared/levels.js';
 import { meshChunk } from '../public/js/render/mesher.js';
 import { placeTemplate, stampByKey } from '../public/js/shared/stamps.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { teaTableNear } from '../public/js/shared/seats.js';
 import { applyCells, buildEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -31,7 +32,7 @@ const onTop = (x, z) => ({ x, y: 5, z, nx: 0, ny: 1, nz: 0, id: B.GRASS });
 test('the Home tab has floors, wallpaper and one of each piece of furniture', () => {
   assert.ok(B.CATEGORIES.some((c) => c.key === 'home'));
   const home = B.blocksIn('home');
-  for (const id of [B.CHAIR, B.SOFA, B.BED, B.BOOKSHELF, B.COUNTER, B.STOVE, B.FRIDGE, B.TV, B.FIREPLACE, B.PICTURE, B.TABLE, B.FLOOR_LAMP, B.POTTED_PLANT, B.PARQUET, B.CHECKER_FLOOR, ...B.CARPETS, ...B.WALLPAPERS]) {
+  for (const id of [B.CHAIR, B.SOFA, B.BED, B.BOOKSHELF, B.COUNTER, B.STOVE, B.FRIDGE, B.TV, B.FIREPLACE, B.PICTURE, B.TABLE, B.FLOOR_LAMP, B.POTTED_PLANT, B.TEA_TABLE, B.PARQUET, B.CHECKER_FLOOR, ...B.CARPETS, ...B.WALLPAPERS]) {
     assert.ok(home.includes(id), B.block(id).name);
   }
   // Only the first of a turned piece's four blocks is in the toy box.
@@ -188,4 +189,60 @@ test('sitting down earns Comfy Spot', () => {
   assert.ok(STAT_KEYS.includes('sat') && XP_FOR.sat.xp > 0);
   const sticker = STICKERS.find((s) => s.key === 'comfy');
   assert.equal(sticker.test(Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'sat' ? 1 : 0]))), true);
+});
+
+test('a tea table beside your seat makes it a tea party seat, and the stamp sets one for four friends', () => {
+  const w = meadow();
+  // Sitting in a chair with the tea table right beside it, facing it.
+  w.set(10, 6, 10, B.turnedTo(B.CHAIR, 1));
+  w.set(10, 6, 9, B.TEA_TABLE);
+  assert.deepEqual(teaTableNear(w, 10, 6, 10), { x: 10, y: 6, z: 9 });
+  // One further off, one diagonally, one above: not the table you sit at.
+  w.set(10, 6, 9, B.AIR);
+  w.set(10, 6, 8, B.TEA_TABLE);
+  assert.equal(teaTableNear(w, 10, 6, 10), null, 'two steps away');
+  w.set(10, 6, 8, B.AIR);
+  w.set(11, 6, 9, B.TEA_TABLE);
+  assert.equal(teaTableNear(w, 10, 6, 10), null, 'on the diagonal');
+  w.set(11, 6, 9, B.AIR);
+  w.set(10, 7, 9, B.TEA_TABLE);
+  assert.equal(teaTableNear(w, 10, 6, 10), null, 'a step up');
+  // The tea is laid out on the cloth: something above it, on the table.
+  const boxes = modelBoxes(B.TEA_TABLE);
+  const cloth = boxes.find(([, y0, , , y1] ) => y0 === 0.7 && y1 === 0.78);
+  assert.ok(cloth, 'the cloth is the table top');
+  assert.ok(boxes.some(([, y0]) => y0 >= 0.78), 'the tea sits on the cloth');
+  assert.ok(boxes.some(([, , , , y1] ) => y1 > 1), 'the teapot reaches over the top of its cell');
+  // The stamp: a checked rug, one tea table, and a chair at each side of it
+  // facing in.
+  const party = stampByKey('tea-party');
+  assert.ok(party);
+  const find = (id) => party.cells.filter(([, , , c]) => c === id).length;
+  assert.equal(find(B.TEA_TABLE), 1);
+  assert.equal([0, 1, 2, 3].reduce((a, k) => a + find(B.CHAIR + k), 0), 4, 'a chair at each side');
+  for (let facing = 0; facing < 4; facing++) {
+    const cells = placeTemplate(party.cells, 20, 6, 20, facing);
+    const table = cells.find(([, , , id]) => B.block(id).model === 'tea-table');
+    assert.ok(table, `facing ${facing}`);
+    const chairs = cells.filter(([, , , id]) => B.block(id).model === 'chair');
+    assert.equal(chairs.length, 4);
+    // Every chair sits right beside the table, facing it.
+    for (const [x, y, z, id] of chairs) {
+      const [fx, fz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][B.block(id).front];
+      assert.equal(
+        cells.some(([cx, cy, cz, cid]) => cx === x + fx && cy === y && cz === z + fz && B.block(cid).model === 'tea-table'),
+        true,
+        `facing ${facing}: the chair at ${x},${z} looks at the tea table`,
+      );
+    }
+  }
+});
+
+test('sitting down to tea with a friend earns Tea Party', () => {
+  assert.ok(STAT_KEYS.includes('teas') && XP_FOR.teas.xp > 0 && XP_FOR.teas.cap > 0);
+  const sticker = STICKERS.find((s) => s.key === 'tea-party');
+  assert.equal(sticker.icon, '🫖');
+  const stats = (n) => Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'teas' ? n : 0]));
+  assert.equal(sticker.test(stats(0)), false);
+  assert.equal(sticker.test(stats(1)), true);
 });

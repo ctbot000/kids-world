@@ -159,6 +159,9 @@ export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c
 export const TABLE = furniture(141, 'table', { name: 'Table', color: '#c98a52', turns: false, sound: 'wood' });
 export const FLOOR_LAMP = furniture(142, 'floor-lamp', { name: 'Floor Lamp', color: '#fbe7a1', turns: false, light: 14, sound: 'glass' });
 export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant', color: '#4caf50', turns: false, sound: 'plant' });
+// A little table set for tea: a cloth, a teapot, cups and a plate of cookies
+// (shared/furniture.js). Pull chairs up to it and sit down to tea together.
+export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });

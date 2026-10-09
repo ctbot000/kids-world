@@ -200,6 +200,36 @@ const MODELS = {
       box(0.4, 0.5, 0.2, 0.62, 0.72, 0.42, '#4caf50', 'leaves'),
     ];
   },
+
+  // A table laid for tea: a white cloth with a pink skirt over one leg, and
+  // on it a teapot (its spout to the right, facing whoever put it down), a
+  // cup on a saucer at each side and a little plate of cookies in front.
+  'tea-table'() {
+    const PINK = '#f29bc4';
+    const out = [
+      box(0.3, 0, 0.3, 0.7, 0.06, 0.7, DARK_WOOD, 'planks'),
+      box(0.42, 0.06, 0.42, 0.58, 0.52, 0.58, DARK_WOOD, 'planks'),
+      box(0.1, 0.54, 0.1, 0.9, 0.7, 0.9, PINK, 'cloth'),
+      box(0.06, 0.7, 0.06, 0.94, 0.78, 0.94, WHITE, 'cloth'),
+      // The teapot, behind the middle.
+      box(0.34, 0.78, 0.5, 0.58, 0.97, 0.74, WHITE, 'plain'),
+      box(0.58, 0.83, 0.56, 0.67, 0.91, 0.63, WHITE, 'plain'),
+      box(0.25, 0.83, 0.55, 0.3, 0.93, 0.69, WHITE, 'plain'),
+      box(0.39, 0.97, 0.55, 0.53, 1.0, 0.69, PINK, 'plain'),
+      box(0.43, 1.0, 0.59, 0.49, 1.04, 0.65, PINK, 'plain'),
+      // A cup on a saucer at each side.
+      box(0.12, 0.78, 0.18, 0.3, 0.8, 0.36, PINK, 'plain'),
+      box(0.16, 0.8, 0.22, 0.26, 0.89, 0.32, WHITE, 'plain'),
+      box(0.7, 0.78, 0.18, 0.88, 0.8, 0.36, PINK, 'plain'),
+      box(0.74, 0.8, 0.22, 0.84, 0.89, 0.32, WHITE, 'plain'),
+      // A plate of cookies in front.
+      box(0.38, 0.78, 0.12, 0.62, 0.8, 0.36, PINK, 'plain'),
+      box(0.41, 0.8, 0.16, 0.49, 0.84, 0.24, '#ffffff', 'cookie'),
+      box(0.51, 0.8, 0.2, 0.59, 0.84, 0.28, '#ffffff', 'cookie'),
+      box(0.46, 0.84, 0.18, 0.54, 0.88, 0.26, '#ffffff', 'cookie'),
+    ];
+    return out;
+  },
 };
 
 // The boxes of a piece of furniture in its own layout (facing -z).

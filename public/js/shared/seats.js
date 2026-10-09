@@ -100,6 +100,16 @@ export function seatPose(world, x, y, z) {
 
 const open = (world, x, y, z) => !BLOCKS[world.get(x, y, z)]?.solid && !BLOCKS[world.get(x, y + 1, z)]?.solid;
 
+// The tea table of a tea party you are having at the seat in cell (x, y, z):
+// the Tea Table beside it, sharing an edge with it, or null. Sitting at it
+// with a friend is a tea party (game.js checkTeaParty, the 🫖 sticker).
+export function teaTableNear(world, x, y, z) {
+  for (const [dx, dz] of DIRS) {
+    if (BLOCKS[world.get(x + dx, y, z + dz)]?.model === 'tea-table') return { x: x + dx, y, z: z + dz };
+  }
+  return null;
+}
+
 // Where you stand up from a seat at cell (x, y, z): in front of it if there
 // is room, else beside it, else on top of it.
 export function standUpAt(world, x, y, z) {
