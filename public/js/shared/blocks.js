@@ -8,6 +8,8 @@
 //   water  see-through, and you swim in it
 //   plant  drawn as crossed pictures, stands on a solid block
 //   item   a little collectable (fruit, shells, star pieces, jewels), drawn facing you
+//   furniture  a little model of boxes inside its cell (shared/furniture.js),
+//          most of them turned to face whoever put them down
 
 export const AIR = 0;
 
@@ -34,7 +36,7 @@ function def(id, key, props) {
   };
   if (typeof d.tiles === 'string') d.tiles = { top: d.tiles, side: d.tiles, bottom: d.tiles };
   else if (d.tiles) d.tiles = { top: d.tiles.top, side: d.tiles.side ?? d.tiles.top, bottom: d.tiles.bottom ?? d.tiles.top };
-  d.solid = d.kind === 'solid' || d.kind === 'glass';
+  d.solid = d.kind === 'solid' || d.kind === 'glass' || (d.kind === 'furniture' && d.solid !== false);
   d.opaque = d.kind === 'solid';
   d.cube = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'water';
   defs[id] = d;
@@ -97,6 +99,66 @@ export const CLOTH_COLORS = [
   ['white', 'White', '#f7f5ef'],
 ];
 export const CLOTHS = CLOTH_COLORS.map(([key, name, color], i) => def(93 + i, `cloth-${key}`, { name: `${name} Tent Cloth`, category: 'building', color, tiles: 'cloth', sound: 'cloth' }));
+
+// ---------------------------------------------------------------- home
+// For inside a house: floors and wallpaper (plain blocks), and furniture.
+export const CARPET_COLORS = [
+  ['red', 'Red', '#d9534f'],
+  ['blue', 'Blue', '#5b8fd9'],
+  ['pink', 'Pink', '#f29bc4'],
+  ['green', 'Green', '#6cbf6a'],
+];
+export const CARPETS = CARPET_COLORS.map(([key, name, color], i) => def(144 + i, `carpet-${key}`, { name: `${name} Carpet`, category: 'home', color, tiles: 'carpet', sound: 'cloth' }));
+export const PARQUET = def(148, 'parquet', { name: 'Wood Floor', category: 'home', tiles: 'parquet', sound: 'wood' });
+export const CHECKER_FLOOR = def(149, 'checker-floor', { name: 'Checked Tiles', category: 'home', tiles: 'checker', sound: 'stone' });
+export const WALLPAPERS = [
+  ['stripes', 'Striped Wallpaper'],
+  ['flowers', 'Flower Wallpaper'],
+  ['dots', 'Dotty Wallpaper'],
+  ['stars', 'Starry Wallpaper'],
+].map(([key, name], i) => def(150 + i, `wallpaper-${key}`, { name, category: 'home', tiles: `wallpaper-${key}`, sound: 'wood' }));
+
+// Furniture: a little model in its cell (shared/furniture.js draws it from
+// `model`). One that turns is four blocks in a row, one per way its front
+// can face (`front`, numbered as RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z); only
+// the first, facing -z, is in the toy box, and putting it down turns it to
+// face you. `color` is its main colour, for the map. It is solid unless it
+// says not, but never opaque: light and the view pass round it.
+export const FURNITURE = [];
+function furniture(id, key, props) {
+  const turns = props.turns !== false;
+  const ids = [];
+  for (let k = 0; k < (turns ? 4 : 1); k++) {
+    ids.push(
+      def(id + k, k === 0 ? key : `${key}-${k}`, {
+        kind: 'furniture',
+        tiles: 'plain',
+        model: key,
+        turns,
+        front: turns ? (3 + k) % 4 : 3,
+        base: id,
+        ...props,
+        category: k === 0 ? 'home' : null,
+      }),
+    );
+  }
+  FURNITURE.push(...ids);
+  return id;
+}
+export const CHAIR = furniture(101, 'chair', { name: 'Chair', color: '#c98a52', sound: 'wood' });
+export const SOFA = furniture(105, 'sofa', { name: 'Sofa', color: '#5b8fd9', sound: 'cloth' });
+export const BED = furniture(109, 'bed', { name: 'Bed', color: '#f29bc4', sound: 'cloth' });
+export const BOOKSHELF = furniture(113, 'bookshelf', { name: 'Bookshelf', color: '#a8703f', sound: 'wood' });
+export const COUNTER = furniture(117, 'counter', { name: 'Kitchen Counter', color: '#f3efe6', sound: 'wood' });
+export const STOVE = furniture(121, 'stove', { name: 'Stove', color: '#e7e9ec', sound: 'stone' });
+export const FRIDGE = furniture(125, 'fridge', { name: 'Fridge', color: '#cfe7f5', sound: 'stone' });
+export const TV = furniture(129, 'tv', { name: 'TV', color: '#3a3f4a', sound: 'glass' });
+export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
+// Hangs on a wall: put it against one and it faces out from it.
+export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
+export const TABLE = furniture(141, 'table', { name: 'Table', color: '#c98a52', turns: false, sound: 'wood' });
+export const FLOOR_LAMP = furniture(142, 'floor-lamp', { name: 'Floor Lamp', color: '#fbe7a1', turns: false, light: 14, sound: 'glass' });
+export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant', color: '#4caf50', turns: false, sound: 'plant' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });
@@ -193,8 +255,8 @@ export const isKnown = (id) => Number.isInteger(id) && id >= 0 && id < 256 && de
 export const SOLID = new Uint8Array(256);
 export const OPAQUE = new Uint8Array(256);
 export const EMIT = new Uint8Array(256);
-export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item
-const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5 };
+export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture
+const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6 };
 for (const d of defs) {
   if (!d) continue;
   SOLID[d.id] = d.solid ? 1 : 0;
@@ -223,6 +285,17 @@ export const K_GLASS = 2;
 export const K_WATER = 3;
 export const K_PLANT = 4;
 export const K_ITEM = 5;
+export const K_FURNITURE = 6;
+
+// The block in the toy box a turned piece of furniture is one of.
+export const baseOf = (id) => defs[id]?.base ?? id;
+// A piece of furniture turned so its front faces way `front` (0-3, as
+// RAIL_DIRS); anything else stays as it is.
+export const turnedTo = (id, front) => {
+  const d = defs[id];
+  if (!d?.turns) return id;
+  return d.base + ((((front - 3) % 4) + 4) % 4);
+};
 
 export const isSolid = (id) => SOLID[id] === 1;
 export const isWater = (id) => id === WATER;
@@ -240,6 +313,7 @@ export const CATEGORIES = [
   { key: 'building', name: 'Building', icon: '🏠' },
   { key: 'candy', name: 'Candy', icon: '🍭' },
   { key: 'plants', name: 'Plants', icon: '🌷' },
+  { key: 'home', name: 'Home', icon: '🛋️' },
 ];
 export const blocksIn = (category) => defs.filter((d) => d && d.category === category).map((d) => d.id);
 

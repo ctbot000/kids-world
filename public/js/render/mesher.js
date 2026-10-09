@@ -3,7 +3,7 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
 
 // The four ways along the ground, as shared/riding.js numbers them.
 const RAIL_DIRS = [
@@ -12,6 +12,7 @@ const RAIL_DIRS = [
   [-1, 0],
   [0, -1],
 ];
+import { furnitureBoxes } from '../shared/furniture.js';
 import { hash3 } from '../shared/rng.js';
 import { CHUNK } from '../shared/world.js';
 
@@ -86,7 +87,7 @@ class ItemPart extends Part {
 export function meshChunk(world, light, visuals, cx, cz) {
   const { W, H, D, sea } = world;
   const blocks = world.blocks;
-  const { faceLayer, tint, studTint } = visuals;
+  const { faceLayer, tint, studTint, layers } = visuals;
   const x0 = cx * CHUNK;
   const z0 = cz * CHUNK;
   const x1 = Math.min(W, x0 + CHUNK);
@@ -242,6 +243,8 @@ export function meshChunk(world, light, visuals, cx, cz) {
           plant(plants, x, y, z, id);
         } else if (kind === K_ITEM) {
           item(items, x, y, z, id);
+        } else if (kind === K_FURNITURE) {
+          furniture(opaque, x, y, z, id);
         }
       }
     }
@@ -327,6 +330,43 @@ export function meshChunk(world, light, visuals, cx, cz) {
     }
     part.verts += 4;
     part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
+  }
+
+  // Furniture: every face of each of its boxes, lit by the light in its
+  // cell (it is never opaque, so that is never dark), the texture laid on
+  // at the scale of a whole block. A box with the 'glow' tile is always
+  // bright.
+  function furniture(part, x, y, z, id) {
+    const sky = skyAt(x, y, z) * 17;
+    const lamp = lampAt(x, y, z) * 17;
+    for (const [x0, y0, z0, x1, y1, z1, color, tile] of furnitureBoxes(id, x, y, z, at)) {
+      const glow = tile === 'glow';
+      const layer = layers?.get(glow ? 'plain' : tile) ?? 0;
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      const lo = [x0, y0, z0];
+      const size = [x1 - x0, y1 - y0, z1 - z0];
+      for (const f of FACES) {
+        const shade = Math.round(f.shade * 255);
+        const v0 = part.verts;
+        for (const [cu, cv] of CORNERS) {
+          const p = [0, 1, 2].map((a) => lo[a] + size[a] * Math.max(0, Math.min(1, f.base[a] + f.u[a] * cu + f.v[a] * cv)));
+          part.pos.push(p[0], p[1], p[2]);
+          // Where the corner lies across and up the face, in block units.
+          const ua = f.u[0] ? 0 : f.u[1] ? 1 : 2;
+          const va = f.v[0] ? 0 : f.v[1] ? 1 : 2;
+          const u = f.u[ua] > 0 ? p[ua] - Math.floor(lo[ua]) : Math.floor(lo[ua]) + 1 - p[ua];
+          const v = f.v[va] > 0 ? p[va] - Math.floor(lo[va]) : Math.floor(lo[va]) + 1 - p[va];
+          part.uvl.push(u, 1 - v, layer);
+          part.col.push(r, g, b);
+          if (glow) part.lit.push(255, 255, 255, shade);
+          else part.lit.push(sky, lamp, 255, shade);
+        }
+        part.verts += 4;
+        part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
+      }
+    }
   }
 
   function item(part, x, y, z, id) {

@@ -132,7 +132,17 @@ export function buildOrigin(hit) {
 
 // ---------------------------------------------------------------- tools
 
-export function buildEdit(world, hit, id, size = 1, bodies = []) {
+// The way (0-3, as RAIL_DIRS) the front of a piece of furniture faces when
+// put down at a hit by a builder looking `facing` (as stamps): towards the
+// builder, or, for one that hangs on a wall, out from the wall.
+const FACE_DIRS = { '1,0': 0, '0,1': 1, '-1,0': 2, '0,-1': 3 };
+export function furnitureFront(hit, id, facing) {
+  if (B.block(id).wall && hit.ny === 0) return FACE_DIRS[`${hit.nx},${hit.nz}`] ?? 3;
+  return (((3 - facing) % 4) + 4) % 4;
+}
+
+export function buildEdit(world, hit, id, size = 1, bodies = [], facing = 0) {
+  id = B.turnedTo(id, furnitureFront(hit, id, facing));
   const o = new Overlay(world);
   const [ox, oy, oz] = buildOrigin(hit);
   const kind = B.KIND[id];

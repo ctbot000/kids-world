@@ -179,6 +179,20 @@ function house() {
     }
   }
   c.put(0, 4, 3, B.LAMP);
+  // Furnished inside (furniture faces -z, the way in, unless turned): a bed
+  // along the left wall, a bookshelf at the back, a table with two chairs,
+  // a picture by them, a plant by the door and a rug in the middle.
+  for (let x = -1; x <= 1; x++) for (let z = 2; z <= 3; z++) c.put(x, 0, z, B.CARPETS[0]);
+  c.put(-2, 1, 4, B.BED);
+  c.put(-2, 1, 5, B.BED);
+  c.put(0, 1, 5, B.BOOKSHELF);
+  c.put(1, 1, 3, B.TABLE);
+  c.put(2, 1, 3, B.TABLE);
+  c.put(1, 1, 2, B.turnedTo(B.CHAIR, 1));
+  c.put(1, 1, 4, B.CHAIR);
+  c.put(2, 3, 3, B.turnedTo(B.PICTURE, 2));
+  c.put(2, 1, 5, B.POTTED_PLANT);
+  c.put(-2, 1, 1, B.POTTED_PLANT);
   // A little doormat of flowers.
   c.put(-1, 1, -1, B.TULIP);
   c.put(1, 1, -1, B.DAISY);
@@ -600,10 +614,26 @@ export const FACING = [
   { f: [-1, 0], r: [0, -1] },
 ];
 
-// Where each cell of a template lands in the world.
+const DIRS = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
+
+// Where each cell of a template lands in the world, with any furniture in
+// it turned along with it.
 export function placeTemplate(cells, x, y, z, facing) {
   const { f, r } = FACING[((facing % 4) + 4) % 4];
-  return cells.map(([dx, dy, dz, id]) => [x + dx * r[0] + dz * f[0], y + dy, z + dx * r[1] + dz * f[1], id]);
+  const turn = (id) => {
+    const def = B.block(id);
+    if (!def.turns) return id;
+    const [dx, dz] = DIRS[def.front];
+    const wx = dx * r[0] + dz * f[0];
+    const wz = dx * r[1] + dz * f[1];
+    return B.turnedTo(id, DIRS.findIndex(([a, b]) => a === wx && b === wz));
+  };
+  return cells.map(([dx, dy, dz, id]) => [x + dx * r[0] + dz * f[0], y + dy, z + dx * r[1] + dz * f[1], turn(id)]);
 }
 
 // The facing (0-3) closest to a camera yaw, where yaw 0 looks toward -z.

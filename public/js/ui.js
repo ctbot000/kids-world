@@ -1519,6 +1519,7 @@ export class UI {
           card('🖌️', 'Paint', ['Choose the brush, pick a colour below, and tap blocks to paint them.']),
           card('⛰️', 'Hills', ['Raise, dig or flatten the land. Big sizes make big hills!']),
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
+          card('🛋️', 'Home', ['Make a cozy room with the toy box\'s 🛋️ Home tab: carpets, wood floors and wallpaper, a sofa, a bed, a table and chairs, a kitchen, a TV, a fireplace and more. Furniture turns to face you as you put it down, and a picture goes on the wall you tap. Put sofas, beds, tables or counters side by side to make a big one!']),
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🐶', 'Your pet', ['Pick a puppy, a kitten, a parrot, a baby dragon or another pet in 🐾 My pet. It comes along to every island! Tap it to pet it, and wave or dance: it does tricks too.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),

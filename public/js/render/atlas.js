@@ -1,7 +1,8 @@
 // Every block face, flower and fruit is painted here with Canvas 2D when the
 // game starts — no image files. Tiles go into one texture array (one layer
 // per tile), and the same paintings make the icons in the toy box.
-import { BLOCKS, GEMS, KIND, K_ITEM, K_PLANT } from '../shared/blocks.js';
+import { BLOCKS, GEMS, KIND, K_FURNITURE, K_ITEM, K_PLANT } from '../shared/blocks.js';
+import { modelBoxes } from '../shared/furniture.js';
 
 export const TILE = 64;
 
@@ -615,6 +616,116 @@ const PAINT = {
     bevel(ctx, 0.3);
   },
 
+  // ------------------------------------------------ home
+  // White with the faintest grain, for furniture to tint any colour.
+  plain(ctx) {
+    fill(ctx, '#ffffff');
+    speckles(ctx, 401, ['rgba(0,0,0,0.035)', 'rgba(255,255,255,0.5)'], 40, [1, 2.5]);
+  },
+  carpet(ctx) {
+    fill(ctx, '#f4f2ed');
+    speckles(ctx, 402, ['rgba(0,0,0,0.07)', 'rgba(255,255,255,0.4)'], 260, [0.8, 1.8]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(6, 6, TILE - 12, TILE - 12);
+    bevel(ctx, 0.25);
+  },
+  parquet(ctx) {
+    fill(ctx, '#c98a52');
+    // Little planks in a basket weave.
+    for (let by = 0; by < 2; by++) {
+      for (let bx = 0; bx < 2; bx++) {
+        const across = (bx + by) % 2 === 0;
+        for (let k = 0; k < 4; k++) {
+          ctx.fillStyle = ['#d49a62', '#c28349', '#cf9259', '#b97a42'][(k + bx * 2 + by) % 4];
+          if (across) ctx.fillRect(bx * 32, by * 32 + k * 8, 32, 8);
+          else ctx.fillRect(bx * 32 + k * 8, by * 32, 8, 32);
+          ctx.fillStyle = 'rgba(90,50,20,0.35)';
+          if (across) ctx.fillRect(bx * 32, by * 32 + k * 8, 32, 1);
+          else ctx.fillRect(bx * 32 + k * 8, by * 32, 1, 32);
+        }
+      }
+    }
+    bevel(ctx, 0.5);
+  },
+  checker(ctx) {
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        ctx.fillStyle = (x + y) % 2 ? '#3d4a63' : '#f4f1ea';
+        ctx.fillRect(x * 16, y * 16, 16, 16);
+      }
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(0, 0, TILE, 3);
+    bevel(ctx, 0.6);
+  },
+  'wallpaper-stripes'(ctx) {
+    fill(ctx, '#fde3ec');
+    for (let x = 0; x < TILE; x += 16) {
+      ctx.fillStyle = '#f7b6cd';
+      ctx.fillRect(x + 4, 0, 6, TILE);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillRect(x + 12, 0, 1.5, TILE);
+    }
+    bevel(ctx, 0.2);
+  },
+  'wallpaper-flowers'(ctx) {
+    fill(ctx, '#fff4cf');
+    for (const [x, y, c] of [
+      [16, 16, '#f47fb8'],
+      [48, 48, '#f47fb8'],
+      [48, 16, '#8c5bd6'],
+      [16, 48, '#3a73d8'],
+    ]) {
+      ctx.fillStyle = c;
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2;
+        ellipse(ctx, x + Math.cos(a) * 4.5, y + Math.sin(a) * 4.5, 3.6, 3.6);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#fcd535';
+      ellipse(ctx, x, y, 2.6, 2.6);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#9bd44a';
+    for (const [x, y] of [
+      [32, 32],
+      [0, 32],
+      [32, 0],
+      [0, 0],
+    ]) {
+      ellipse(ctx, x + 2, y + 2, 3, 1.6, 0.6);
+      ctx.fill();
+    }
+    bevel(ctx, 0.2);
+  },
+  'wallpaper-dots'(ctx) {
+    fill(ctx, '#d6ecfb');
+    ctx.fillStyle = '#ffffff';
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        ellipse(ctx, x * 16 + (y % 2 ? 12 : 4), y * 16 + 8, 3.5, 3.5);
+        ctx.fill();
+      }
+    }
+    bevel(ctx, 0.2);
+  },
+  'wallpaper-stars'(ctx) {
+    fill(ctx, '#2f3a6b');
+    speckles(ctx, 403, ['rgba(255,255,255,0.5)'], 18, [0.6, 1.2]);
+    ctx.fillStyle = '#fcd535';
+    for (const [x, y, r] of [
+      [14, 14, 6],
+      [46, 22, 4.5],
+      [26, 46, 5],
+      [54, 54, 3.5],
+    ]) {
+      star(ctx, x, y, r, r * 0.45);
+      ctx.fill();
+    }
+    bevel(ctx, 0.2);
+  },
+
   // ------------------------------------------------ plants (transparent)
   tulip(ctx) {
     stem(ctx, 32, 62, 32, 26);
@@ -1130,7 +1241,7 @@ export function buildAtlas() {
     const avg = averages.get(def.tiles.top) ?? [255, 255, 255];
     studTint.set(avg.map((v, k) => Math.min(255, (v * t[k]) / 255)), def.id * 3);
   }
-  return { data, count: names.length, layers, faceLayer, tint, studTint, images };
+  return { data, count: names.length, layers, faceLayer, tint, studTint, images, averages };
 }
 
 // A little 3D block (or the flower itself) for the toy box and hotbar.
@@ -1146,6 +1257,7 @@ export function blockIcon(atlas, id, size = 64) {
     img.src = atlas.images.get(name);
     return img;
   };
+  if (kind === K_FURNITURE) return Promise.resolve(furnitureIcon(atlas, id, canvas, ctx, size));
   if (kind === K_PLANT || kind === K_ITEM) {
     const img = load(def.tiles.top);
     return new Promise((resolve) => {
@@ -1201,4 +1313,51 @@ export function blockIcon(atlas, id, size = 64) {
     ctx.restore();
     return canvas.toDataURL();
   });
+}
+
+// A piece of furniture as the toy box shows it: its boxes seen from the front
+// and a little to the side and above, each face a flat colour (the box's
+// colour times its tile's), the ones further back drawn first.
+function furnitureIcon(atlas, id, canvas, ctx, size) {
+  // Seen from -x, -z: x goes left and back, z goes right and back; then
+  // made as big as fits (never more than half again a whole block's size),
+  // so a picture or a lamp is not lost in its square.
+  const flat = (x, y, z) => [(z - x) * 24, -y * 30 - (x + z) * 11];
+  const corners = modelBoxes(id).flatMap(([x0, y0, z0, x1, y1, z1]) => [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0, z1].map((z) => flat(x, y, z)))));
+  const xs = corners.map(([x]) => x);
+  const ys = corners.map(([, y]) => y);
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const s = Math.min((size * 0.84) / (maxX - minX), (size * 0.84) / (maxY - minY), (size / 64) * 1.5);
+  const at = (x, y, z) => {
+    const [fx, fy] = flat(x, y, z);
+    return [size / 2 + (fx - (minX + maxX) / 2) * s, size / 2 + (fy - (minY + maxY) / 2) * s];
+  };
+  const boxes = modelBoxes(id).map(([x0, y0, z0, x1, y1, z1, color, tile]) => {
+    const avg = tile === 'glow' ? [255, 255, 255] : (atlas.averages?.get(tile) ?? [255, 255, 255]);
+    const rgbOf = hex(color).map((v, k) => (v * avg[k]) / 255);
+    return { x0, x1, y0, y1, z0, z1, rgbOf, glow: tile === 'glow' };
+  });
+  boxes.sort((p, q) => q.x1 + q.z1 - (p.x1 + p.z1) || p.y0 - q.y0);
+  const poly = (pts, col) => {
+    ctx.beginPath();
+    pts.forEach(([x, y, z], i) => {
+      const [px, py] = at(x, y, z);
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 0.8 * (size / 64);
+    ctx.stroke();
+  };
+  for (const b of boxes) {
+    const { x0, x1, y0, y1, z0, z1 } = b;
+    const k = (f) => rgb(b.rgbOf.map((v) => (b.glow ? v : v * f)));
+    poly([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], k(0.78));
+    poly([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]], k(0.9));
+    poly([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], k(1));
+  }
+  return canvas.toDataURL();
 }

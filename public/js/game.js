@@ -2008,7 +2008,7 @@ export class Game extends EventTarget {
         if (this.basketPick && (this.profile.basket[this.basketPick] ?? 0) <= 0) return { kind: 'build', cells: [], collected: [], mode: 'add', empty: true };
         const bodies = [{ ...this.me.body, radius: BODY.radius + 0.02, height: BODY.height }];
         if (this.riding) bodies.push({ ...this.riding.body, radius: this.riding.body.radius + 0.02 });
-        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : this.size, bodies), mode: 'add' };
+        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : this.size, bodies, facing), mode: 'add' };
       }
       case 'pick':
         return { kind: 'pick', ...pickEdit(w, hit, this.size), mode: 'remove' };
@@ -2138,7 +2138,10 @@ export class Game extends EventTarget {
         } else if (B.KIND[first] === B.K_PLANT) {
           p.count('planted', n);
           if (B.block(first).grows) p.count('sprouts', n);
-        } else p.count('placed', n);
+        } else {
+          p.count('placed', n);
+          if (B.KIND[first] === B.K_FURNITURE) p.count('furnished', n);
+        }
         break;
       case 'pick':
       case 'collect':
@@ -2206,7 +2209,7 @@ export class Game extends EventTarget {
   pickBlock(ndc) {
     const aim = this.aim(ndc);
     if (aim?.kind !== 'block') return null;
-    const id = aim.hit.id;
+    const id = B.baseOf(aim.hit.id);
     const def = B.block(id);
     if (!def.category) return null;
     const hot = [...this.profile.data.hotbar];

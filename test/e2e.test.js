@@ -847,6 +847,38 @@ test('a huge circus tent put down from the toy box with a click is walked into t
   await page.browserContext().close();
 });
 
+test('a sofa picked in the toy box\'s Home tab goes down with a click turned to face you, and turned the other way when you look the other way', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Home', '#modal');
+  await until(page, () => [...document.querySelectorAll('#modal .choice img')].some((i) => i.alt === 'Sofa' && i.src.startsWith('data:image')));
+  await clickButton(page, 'Sofa', '#modal');
+  const sofa = await page.evaluate(async () => (await import('/js/shared/blocks.js')).SOFA);
+  await until(page, (id) => window.kidsWorld.game.selectedBlock() === id, sofa);
+  for (const turn of [0, Math.PI / 2]) {
+    await page.evaluate((turn) => {
+      window.kidsWorld.renderer.view.yaw += turn;
+      window.kidsWorld.step(1 / 60, 2);
+    }, turn);
+    const { cell, at } = await spotNear(page, 3, 0, { bare: true });
+    const above = { ...cell, y: cell.y + 1 };
+    await page.mouse.click(at.x, at.y);
+    await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) !== 0, above);
+    const got = await page.evaluate(async (c) => {
+      const B = await import('/js/shared/blocks.js');
+      const { facingFromYaw } = await import('/js/shared/stamps.js');
+      const id = window.kidsWorld.game.world.get(c.x, c.y, c.z);
+      return { base: B.baseOf(id), front: B.block(id).front, facing: facingFromYaw(window.kidsWorld.renderer.view.yaw) };
+    }, above);
+    assert.equal(got.base, sofa);
+    assert.equal(got.front, (7 - got.facing) % 4, `facing you: ${JSON.stringify(got)}`);
+  }
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.furnished), 2);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('coming down from a height thumps and puffs up dust every time, however high it was', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

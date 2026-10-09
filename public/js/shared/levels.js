@@ -54,6 +54,7 @@ export const XP_FOR = {
   rainbows: { xp: 10 },
   steps: { xp: 0.05 },
   popped: { xp: 5 },
+  furnished: { xp: 2 },
 };
 
 // XP for each sticker earned, on top of what earned it.
