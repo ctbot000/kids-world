@@ -20,6 +20,12 @@ import { NEAR_FADE, Terrain } from './terrain.js';
 const MAX_PREVIEW = MAX_EDIT_CELLS;
 // Nearer than this along the view, more than half of a block is dissolved.
 const SEE_THROUGH = (NEAR_FADE[0] + NEAR_FADE[1]) / 2;
+// The ways of looking the camera button steps through, in order.
+export const VIEWS = {
+  behind: { dist: 8, pitch: 0.45 },
+  eyes: { dist: 0.35, pitch: 0.12 },
+  sky: { dist: 18, pitch: 1.25 },
+};
 const tmpV = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const tmpC = new THREE.Color();
@@ -237,6 +243,7 @@ export class Renderer {
 
   orbit(dyaw, dpitch) {
     const v = this.view;
+    v.goal = null;
     v.yaw += dyaw;
     v.pitch = Math.min(1.35, Math.max(-0.35, v.pitch + dpitch));
   }
@@ -244,7 +251,28 @@ export class Renderer {
   // Zooming all the way in looks out through your own eyes.
   zoom(factor) {
     const v = this.view;
+    v.goal = null;
     v.dist = Math.min(18, Math.max(0.35, v.dist * factor));
+  }
+
+  // Which of VIEWS the camera is nearest to now, after any zooming and turning.
+  get viewName() {
+    const v = this.view.goal ?? this.view;
+    if (v.dist <= 1.3) return 'eyes';
+    if (v.dist >= 14 && v.pitch >= 1) return 'sky';
+    return 'behind';
+  }
+
+  // Glides the camera to the next way of looking: from behind you, through
+  // your own eyes, from high in the sky. Returns the one it goes to.
+  nextView() {
+    const names = Object.keys(VIEWS);
+    return this.setView(names[(names.indexOf(this.viewName) + 1) % names.length]);
+  }
+
+  setView(name) {
+    this.view.goal = { ...VIEWS[name] };
+    return name;
   }
 
   // A picture of the island as it is now, without the buttons on top.
@@ -270,6 +298,15 @@ export class Renderer {
       this.camDist = v.dist;
     }
     v.smooth.lerp(v.target, 1 - Math.exp(-dt * 12));
+    if (v.goal) {
+      const k = 1 - Math.exp(-dt * 6);
+      v.dist += (v.goal.dist - v.dist) * k;
+      v.pitch += (v.goal.pitch - v.pitch) * k;
+      if (Math.abs(v.goal.dist - v.dist) < 0.02 && Math.abs(v.goal.pitch - v.pitch) < 0.005) {
+        ({ dist: v.dist, pitch: v.pitch } = v.goal);
+        v.goal = null;
+      }
+    }
     const dir = tmpV.set(Math.sin(v.yaw) * Math.cos(v.pitch), Math.sin(v.pitch), Math.cos(v.yaw) * Math.cos(v.pitch));
     // Shifts the subject sideways on screen (positive: to the right), to make room for a dialog.
     v.shiftNow = (v.shiftNow ?? 0) + ((v.shift ?? 0) - (v.shiftNow ?? 0)) * Math.min(1, dt * 5);

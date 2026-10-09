@@ -65,6 +65,9 @@ function lineIcon(name) {
   return t.content.firstElementChild;
 }
 
+// The camera's ways of looking (render/renderer.js VIEWS), in words and pictures.
+const VIEW_NAMES = { behind: 'from behind you', eyes: 'through your eyes', sky: 'from the sky' };
+const VIEW_ICONS = { behind: '🧍', eyes: '👀', sky: '☁️' };
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // What the island rule for monsters means (shared/monsters.js).
@@ -250,6 +253,12 @@ export class UI {
   }
 
   // ------------------------------------------------ bits and pieces
+
+  // Steps the camera on: from behind you, through your eyes, from the sky.
+  nextView() {
+    const name = this.game.renderer.nextView();
+    this.toast('🎥', `Looking ${VIEW_NAMES[name]}`);
+  }
 
   toast(icon, text, kind = '') {
     const el = h('div', { class: `toast ${kind}` }, h('span', { class: 'icon' }, icon), h('span', {}, text));
@@ -1541,8 +1550,8 @@ export class UI {
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
-          card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
-          card('👀', 'See through your eyes', ['Zoom all the way in to look around as yourself.']),
+          card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'L'), ' changes how you look, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
+          card('🎥', 'See through your eyes', ['Press 🎥 to look from behind you, through your own eyes, or from high in the sky. Zooming all the way in looks through your eyes too.']),
           this.fullMode === 'toggle' ? card(lineIcon('full'), 'Full screen', ['The ', lineIcon('full'), ' button fills the whole screen with your island. It is in ⚙️ Settings too.']) : null,
           this.fullMode === 'home-screen' ? card(lineIcon('full'), 'Full screen', ['Add Kids World to the Home Screen and open it from there.']) : null,
         ),
@@ -2025,6 +2034,7 @@ export class UI {
     this.minimap.attach(game);
     this.renderMap();
     $('btn-toybox').onclick = () => this.toyBox();
+    $('btn-view').onclick = () => this.nextView();
     $('btn-photo').onclick = () => this.takePhoto();
     $('btn-settings').onclick = () => this.settingsDialog();
     $('btn-help-hud').onclick = () => this.helpDialog();
@@ -2718,6 +2728,24 @@ export class UI {
     return el;
   }
 
+  // Where the camera looks from, picked outright; 🎥 and L step through the same.
+  viewSetting() {
+    const r = this.game.renderer;
+    const row = h('div', { class: 'row' });
+    const draw = () =>
+      row.replaceChildren(
+        ...Object.entries(VIEW_NAMES).map(([name, words]) =>
+          h('button', { class: `chip${r.viewName === name ? ' on' : ''}`, type: 'button', 'data-view': name, onclick: () => {
+            this.sound.play('ui');
+            r.setView(name);
+            draw();
+          } }, `${VIEW_ICONS[name]} ${words[0].toUpperCase()}${words.slice(1)}`),
+        ),
+      );
+    draw();
+    return h('div', { class: 'setting' }, h('b', {}, '🎥 Look'), row);
+  }
+
   settingsDialog() {
     const g = this.game;
     const handlers = this.gameHandlers;
@@ -2747,6 +2775,7 @@ export class UI {
           p.setting('map', on);
           this.renderMap();
         }),
+        this.viewSetting(),
       );
       if (handlers.keeper?.config && handlers.login?.who()) {
         // Logged in, copies always go: that is what the login is for.

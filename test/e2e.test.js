@@ -369,6 +369,43 @@ test('playing alone: build with a click, pick up with a right-click, undo, talk'
   await page.browserContext().close();
 });
 
+test('the 🎥 button and L step the camera from behind you to your own eyes, to the sky and back, and you are hidden only through your eyes', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false });
+  const view = () => page.evaluate(() => {
+    const r = window.kidsWorld.game.renderer;
+    return { name: r.viewName, dist: r.view.dist, pitch: r.view.pitch, gliding: !!r.view.goal, me: window.kidsWorld.game.players.get(window.kidsWorld.game.pid)?.avatar?.root.visible };
+  });
+  const settled = (name) => until(page, (name) => {
+    const r = window.kidsWorld.game.renderer;
+    return !r.view.goal && r.viewName === name;
+  }, name);
+  assert.equal((await view()).name, 'behind');
+  await page.click('#btn-view');
+  await settled('eyes');
+  await until(page, () => window.kidsWorld.game.players.get(window.kidsWorld.game.pid)?.avatar?.root.visible === false);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('through your eyes')));
+  await page.keyboard.press('KeyL');
+  await settled('sky');
+  const sky = await view();
+  assert.ok(sky.dist >= 14 && sky.pitch >= 1, `high above: ${JSON.stringify(sky)}`);
+  await until(page, () => window.kidsWorld.game.players.get(window.kidsWorld.game.pid)?.avatar?.root.visible === true);
+  await page.click('#btn-view');
+  await settled('behind');
+  // Turning the camera while it glides lets go of where it was going.
+  await page.click('#btn-view');
+  await page.evaluate(() => window.kidsWorld.game.renderer.orbit(0.1, 0));
+  assert.equal((await view()).gliding, false);
+  // Settings picks one outright, the one in use marked.
+  await page.click('#btn-settings');
+  await page.click('#modal [data-view="sky"]');
+  await settled('sky');
+  await until(page, () => document.querySelector('#modal [data-view="sky"]').classList.contains('on'));
+  await page.keyboard.press('Escape');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a pinch only zooms, never builds, a third finger down included; the finger left after it turns the camera from where it is', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Pinchy Crab' });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

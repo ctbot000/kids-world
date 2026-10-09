@@ -803,6 +803,9 @@ input
       case 'KeyH':
         ui.helpDialog();
         return true;
+      case 'KeyL':
+        ui.nextView();
+        return true;
       case 'KeyP':
         ui.takePhoto();
         return true;

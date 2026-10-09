@@ -466,6 +466,13 @@ body.fullscreen .full-icon .leave {
   flex: none;
 }
 
+/* No room for it beside the island code on the narrowest phones: Settings has it there. */
+@media (max-width: 400px) {
+  #btn-view {
+    display: none;
+  }
+}
+
 .clock {
   font-size: 1.6rem;
   white-space: nowrap;
