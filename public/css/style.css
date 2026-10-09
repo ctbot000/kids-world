@@ -25,10 +25,14 @@
   --sun-dark: #e0a800;
   --pink: #ff7fb2;
   --pink-dark: #e0588f;
-  --coral: #ff8a65;
-  --purple: #9b7bea;
+  --select: #fff3b0;
   --shadow: 0 6px 18px rgba(61, 46, 79, 0.22);
   --radius: 20px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --glass: rgba(255, 250, 240, 0.62);
+  --glass-blur: blur(10px) saturate(1.4);
   --font: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Arial Rounded MT Bold', 'Nunito', system-ui, sans-serif;
   --tool: 58px;
   --slot: 56px;
@@ -115,7 +119,7 @@ button:focus-visible {
   color: white;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
   box-shadow:
-    0 6px 0 var(--shade, #0003),
+    0 5px 0 var(--shade, #0003),
     var(--shadow);
 }
 
@@ -123,8 +127,19 @@ button:focus-visible {
   font-size: 1.8rem;
 }
 
-.big:hover {
-  filter: brightness(1.06);
+/* On a pointer you can hover with, the toys lift a little to meet it. */
+@media (hover: hover) {
+  .big:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+  }
+
+  .chip:hover,
+  .round:hover,
+  .pill:hover {
+    filter: brightness(1.04);
+    transform: translateY(-1px);
+  }
 }
 
 .big:active,
@@ -133,7 +148,7 @@ button:focus-visible {
 .tool:active,
 .slot:active,
 .choice:active {
-  transform: translateY(4px);
+  transform: translateY(3px);
   box-shadow: 0 2px 0 var(--shade, #0003);
 }
 
@@ -264,9 +279,11 @@ body.fullscreen .full-icon .leave {
 .logo span {
   display: inline-block;
   color: white;
-  -webkit-text-stroke: 3px var(--ink);
+  -webkit-text-stroke: 2.5px var(--ink);
   paint-order: stroke fill;
-  text-shadow: 0 6px 0 var(--ink);
+  text-shadow:
+    0 5px 0 var(--ink),
+    0 14px 28px rgba(61, 46, 79, 0.3);
   animation: bob 2.4s ease-in-out infinite;
 }
 
@@ -289,10 +306,19 @@ body.fullscreen .full-icon .leave {
   margin: 0;
   font-size: 1.35rem;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px rgba(61, 46, 79, 0.14);
   padding: 6px 18px;
   border-radius: 999px;
   text-align: center;
+}
+
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .tagline {
+    background: rgba(255, 255, 255, 0.8);
+  }
 }
 
 .me-row {
@@ -381,8 +407,10 @@ body.fullscreen .full-icon .leave {
   flex-direction: column;
   align-items: stretch;
   padding: 6px 16px;
-  border-radius: 18px;
-  background: var(--paper);
+  border-radius: var(--radius-md);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
   text-align: left;
   min-width: 0;
@@ -420,8 +448,10 @@ body.fullscreen .full-icon .leave {
      after the second would show through padding. */
   border: solid transparent;
   border-width: 7px 12px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -489,7 +519,9 @@ body.fullscreen .full-icon .leave {
   gap: 8px;
   padding: 8px;
   border-radius: 24px;
-  background: rgba(255, 250, 240, 0.9);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
 }
 
@@ -543,8 +575,10 @@ body.fullscreen .full-icon .leave {
   flex-direction: column;
   gap: 6px;
   padding: 6px;
-  border-radius: 18px;
-  background: rgba(255, 250, 240, 0.9);
+  border-radius: var(--radius-md);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
 }
 
@@ -601,8 +635,10 @@ body.fullscreen .full-icon .leave {
   display: flex;
   gap: 6px;
   padding: 7px;
-  border-radius: 22px;
-  background: rgba(255, 250, 240, 0.92);
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
   overflow-x: auto;
   max-width: 100%;
@@ -638,7 +674,7 @@ body.fullscreen .full-icon .leave {
 }
 
 .slot.on {
-  background: #fff3b0;
+  background: var(--select);
   box-shadow:
     0 0 0 3px var(--sun),
     0 3px 0 var(--sun-dark);
@@ -670,7 +706,9 @@ body.fullscreen .full-icon .leave {
   gap: 2px;
   padding: 2px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   font-size: 1.15rem;
   line-height: 1.3;
@@ -732,6 +770,25 @@ body.fullscreen .full-icon .leave {
   }
   75% {
     transform: translateX(-3px);
+  }
+}
+
+/* Where the glass panels float, a blur behind them needs support for it:
+   without one they go back to more solid paper, still easy to read. */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .island-badge,
+  #toolbar,
+  .opt-group,
+  #hotbar {
+    background: rgba(255, 250, 240, 0.92);
+  }
+
+  .status {
+    background: rgba(255, 255, 255, 0.85);
+  }
+
+  .hearts {
+    background: rgba(255, 255, 255, 0.75);
   }
 }
 
@@ -928,6 +985,22 @@ body.touch.playing #joystick {
   position: absolute;
   inset: 0;
   overflow: hidden;
+}
+
+/* A breath of shade in the corners of the world, drawing the eye to the
+   middle. The tags and bubbles come after it and stay bright. */
+#overlays::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 42%, transparent 62%, rgba(35, 24, 58, 0.16) 100%);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  #overlays::before {
+    display: none;
+  }
 }
 
 .tag {
@@ -1251,7 +1324,7 @@ body.touch.playing #joystick {
 }
 
 .toast.sticker {
-  background: #fff3b0;
+  background: var(--select);
   border: 3px solid var(--sun);
 }
 
@@ -1340,12 +1413,22 @@ body.touch.playing #joystick {
   place-items: center;
   /* Clear of the clock and the notch, which the game draws under on an iPhone's Home Screen. */
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  background: rgba(61, 46, 79, 0.35);
+  background: rgba(45, 32, 66, 0.45);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   z-index: 20;
+}
+
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .modal {
+    background: rgba(45, 32, 66, 0.55);
+  }
 }
 
 .modal.see-through {
   background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   pointer-events: none;
 }
 
@@ -1388,9 +1471,26 @@ body.touch.playing #joystick {
   padding: 24px 22px 22px;
   border-radius: 28px;
   background: var(--paper);
-  border: 5px solid white;
-  box-shadow: 0 20px 50px rgba(61, 46, 79, 0.35);
-  animation: pop-in 0.22s cubic-bezier(0.3, 1.5, 0.5, 1);
+  box-shadow:
+    0 24px 60px rgba(61, 46, 79, 0.4),
+    0 4px 14px rgba(61, 46, 79, 0.18),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+  animation: panel-in 0.26s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+@keyframes panel-in {
+  from {
+    transform: scale(0.92) translateY(10px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.01) translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .panel.narrow {
@@ -1480,7 +1580,7 @@ body.touch.playing #joystick {
 }
 
 .choice.on {
-  background: #fff3b0;
+  background: var(--select);
   box-shadow:
     0 0 0 3px var(--sun),
     0 4px 0 var(--sun-dark);
@@ -1823,7 +1923,7 @@ body.touch.playing #joystick {
    an island with a bar filling up to the next, at the top of ⭐ Stickers,
    and on friends' name tags. */
 .level-chip {
-  background: #fff3b0;
+  background: var(--select);
 }
 
 /* On an island: a ring round ⭐ Stickers filling up to the next level, and
@@ -1946,7 +2046,7 @@ body.touch.playing #joystick {
 }
 
 .rank-row.you {
-  background: #fff3b0;
+  background: var(--select);
   box-shadow:
     0 0 0 3px var(--sun),
     0 3px 0 var(--sun-dark);

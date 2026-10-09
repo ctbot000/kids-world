@@ -4,7 +4,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
-import { capsule, cone, cylinder, geo, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { blobShadow, capsule, cone, cylinder, geo, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const HEAD_R = 0.34;
 const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
@@ -711,13 +711,8 @@ export class Avatar {
     this.ride = null;
     this.setLook(look);
     // A soft round shadow under the feet.
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.32, 20),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
+    const shadow = blobShadow(0.42);
     shadow.position.y = 0.02;
-    shadow.renderOrder = 1;
     this.shadow = shadow;
   }
 

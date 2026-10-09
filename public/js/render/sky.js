@@ -6,17 +6,17 @@ import { daylight } from '../shared/env.js';
 
 // Sky colours through the day: [time, zenith, horizon].
 const KEYS = [
-  [0.0, '#0a1034', '#1d2b5e'],
-  [0.19, '#141a4a', '#2a3268'],
-  [0.235, '#3b3f86', '#e59aac'],
-  [0.28, '#6cb8ee', '#ffcfa0'],
-  [0.36, '#56b4f0', '#c3e8ff'],
-  [0.5, '#48a8f0', '#cdeeff'],
-  [0.66, '#55abee', '#d8eeff'],
-  [0.73, '#5e82d3', '#ffb183'],
-  [0.775, '#303a7c', '#d97f95'],
-  [0.82, '#141a4a', '#2a3268'],
-  [1.0, '#0a1034', '#1d2b5e'],
+  [0.0, '#070c28', '#18224e'],
+  [0.19, '#101740', '#262f60'],
+  [0.235, '#3a3f88', '#f2a8b8'],
+  [0.28, '#6ab2ec', '#ffd9a8'],
+  [0.36, '#52b0ee', '#c6ecff'],
+  [0.5, '#3f9fe8', '#d6f0ff'],
+  [0.66, '#52a8ec', '#daf0ff'],
+  [0.73, '#5a7ed0', '#ff9a6b'],
+  [0.775, '#2c3778', '#d884a0'],
+  [0.82, '#101740', '#262f60'],
+  [1.0, '#070c28', '#18224e'],
 ];
 const KEY_COLORS = KEYS.map(([t, a, b]) => [t, new THREE.Color(a), new THREE.Color(b)]);
 
@@ -62,7 +62,7 @@ export function environment(time, weather, theme, out = {}) {
   // Night is blue moonlight, never pitch dark; mornings and evenings are golden.
   const sun = (out.sun ??= new THREE.Color());
   const warm = Math.max(0, 1 - Math.abs(Math.sin(sunAngle)) * 3.2);
-  sun.setRGB(1, 0.97, 0.92).lerp(tmpB.setRGB(1, 0.72, 0.5), warm * day);
+  sun.setRGB(1, 0.96, 0.88).lerp(tmpB.setRGB(1, 0.72, 0.5), warm * day);
   sun.lerp(tmpB.setRGB(0.42, 0.52, 0.9), 1 - day);
   if (gloom) sun.multiplyScalar(1 - gloom * 0.35);
   out.daylight = 0.34 + 0.66 * day;
@@ -87,8 +87,9 @@ function canvasTexture(size, draw) {
 function sunTexture() {
   return canvasTexture(256, (ctx, s) => {
     const c = s / 2;
-    const glow = ctx.createRadialGradient(c, c, s * 0.18, c, c, s * 0.5);
-    glow.addColorStop(0, 'rgba(255,236,150,0.9)');
+    const glow = ctx.createRadialGradient(c, c, s * 0.1, c, c, s * 0.5);
+    glow.addColorStop(0, 'rgba(255,240,170,0.95)');
+    glow.addColorStop(0.35, 'rgba(255,225,140,0.45)');
     glow.addColorStop(1, 'rgba(255,220,120,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, s, s);
@@ -191,6 +192,7 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 uHorizon;
   uniform vec3 uSunDir;
   uniform float uStars;
+  uniform float uDay;
   uniform float uTime;
   varying vec3 vDir;
   float hash(vec3 p) {
@@ -204,7 +206,10 @@ const SKY_FRAG = /* glsl */ `
     vec3 col = mix(uHorizon, uTop, smoothstep(-0.02, 0.55, h));
     col = mix(col, uHorizon * 0.85, smoothstep(0.0, -0.3, h));
     float sun = max(dot(d, uSunDir), 0.0);
-    col += vec3(1.0, 0.85, 0.6) * pow(sun, 24.0) * 0.25;
+    col += vec3(1.0, 0.85, 0.6) * pow(sun, 8.0) * 0.1;
+    col += vec3(1.0, 0.92, 0.72) * pow(sun, 32.0) * 0.22;
+    // A band of haze resting on the horizon, brighter through the day.
+    col = mix(col, uHorizon * 1.05, smoothstep(0.18, 0.0, abs(h)) * 0.4 * uDay);
     if (uStars > 0.01 && h > 0.0) {
       vec3 cell = floor(d * 160.0);
       float r = hash(cell);
@@ -231,6 +236,7 @@ export class Sky {
       uHorizon: { value: new THREE.Color() },
       uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uStars: { value: 0 },
+      uDay: { value: 1 },
       uTime: { value: 0 },
     };
     const dome = new THREE.Mesh(
@@ -273,14 +279,19 @@ export class Sky {
       const cz = (r() - 0.5) * 520;
       const n = 3 + Math.floor(r() * 4);
       for (let k = 0; k < n; k++) {
-        puffs.push([cx + (r() - 0.5) * 30, (r() - 0.5) * 3, cz + (r() - 0.5) * 16, 12 + r() * 16, 4 + r() * 3, 9 + r() * 10]);
+        puffs.push([cx + (r() - 0.5) * 30, (r() - 0.5) * 3, cz + (r() - 0.5) * 16, 10 + r() * 22, 3.5 + r() * 3, 8 + r() * 14]);
       }
     }
     const mesh = new THREE.InstancedMesh(box, this.cloudMaterial, puffs.length);
     const m = new THREE.Matrix4();
+    // Each puff a touch of its own: never a flat sheet of the same white.
+    const shade = new THREE.Color('#c9d6e8');
+    const tint = new THREE.Color();
     puffs.forEach(([x, y, z, sx, sy, sz], i) => {
       m.makeScale(sx, sy, sz).setPosition(x, y, z);
       mesh.setMatrixAt(i, m);
+      tint.setRGB(1, 1, 1).lerp(shade, 0.15 + 0.35 * r());
+      mesh.setColorAt(i, tint);
     });
     mesh.frustumCulled = false;
     mesh.renderOrder = -5;
@@ -309,13 +320,14 @@ export class Sky {
           vec3 c[7];
           c[0] = vec3(0.56, 0.36, 0.84); c[1] = vec3(0.23, 0.45, 0.85); c[2] = vec3(0.38, 0.77, 0.96);
           c[3] = vec3(0.21, 0.66, 0.32); c[4] = vec3(0.99, 0.84, 0.21); c[5] = vec3(0.96, 0.58, 0.19); c[6] = vec3(0.91, 0.27, 0.24);
-          float f = clamp(t, 0.0, 0.999) * 7.0;
-          return c[int(f)];
+          float f = clamp(t, 0.0, 0.999) * 6.0;
+          int i = int(f);
+          return mix(c[i], c[i + 1], smoothstep(0.25, 0.75, fract(f)));
         }
         void main() {
           float r = length(vLocal.xy);
           float t = (r - 238.0) / 44.0;
-          float edge = smoothstep(0.0, 0.08, t) * smoothstep(1.0, 0.92, t);
+          float edge = smoothstep(0.0, 0.15, t) * smoothstep(1.0, 0.85, t);
           gl_FragColor = vec4(band(t), uAlpha * edge * 0.55);
           #include <colorspace_fragment>
         }
@@ -383,6 +395,7 @@ export class Sky {
     u.uHorizon.value.copy(env.horizon);
     u.uSunDir.value.copy(env.sunDir);
     u.uStars.value = env.stars;
+    u.uDay.value = env.day;
     u.uTime.value = time;
     this.dome.position.copy(camera.position);
     this.sun.position.copy(camera.position).addScaledVector(env.sunDir, 700);
@@ -390,13 +403,13 @@ export class Sky {
     this.sun.visible = env.sunDir.y > -0.15;
     this.moon.visible = env.moonDir.y > -0.15;
     // Clouds drift slowly and wrap around the island.
-    const drift = (this.clouds.userData.drift = (this.clouds.userData.drift + dt * 1.2) % 520);
+    const drift = (this.clouds.userData.drift = (this.clouds.userData.drift + dt * 0.7) % 520);
     this.clouds.position.set(focus.x + ((drift + 260) % 520) - 260, focus.cloudY, focus.z);
     const night = 1 - env.day;
     this.cloudMaterial.color.setRGB(1, 1, 1).lerp(new THREE.Color(0.28, 0.32, 0.5), night * 0.85);
     const dark = this.weatherKind === 'rain' ? 0.35 : this.weatherKind === 'cloudy' ? 0.15 : 0;
     this.cloudMaterial.color.multiplyScalar(1 - dark);
-    this.cloudMaterial.opacity = this.weatherKind === 'clear' || this.weatherKind === 'rainbow' ? 0.82 : 0.96;
+    this.cloudMaterial.opacity = this.weatherKind === 'clear' || this.weatherKind === 'rainbow' ? 0.72 : 0.88;
 
     const wantRainbow = this.weatherKind === 'rainbow' && env.day > 0.3 ? 1 : 0;
     this.rainbowAlpha += (wantRainbow - this.rainbowAlpha) * Math.min(1, dt * 0.6);

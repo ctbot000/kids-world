@@ -235,8 +235,13 @@ export class Renderer {
     shadow.visible = true;
     const h = Math.max(0, y - g);
     shadow.position.set(x, g + 0.03, z);
-    shadow.scale.setScalar(scale * Math.max(0.4, 1 - h * 0.18));
-    shadow.material.opacity = 0.22 * Math.max(0.2, 1 - h * 0.25);
+    // The blob leans away from the sun, a little longer when the sun is low.
+    const sun = this.env.sunDir;
+    if (sun) shadow.rotation.z = Math.atan2(-sun.z, sun.x);
+    const low = sun ? (1 - Math.min(1, Math.abs(sun.y))) * Math.min(1, Math.hypot(sun.x, sun.z) * 2) : 0;
+    const fade = scale * Math.max(0.4, 1 - h * 0.18);
+    shadow.scale.set(fade * (1 + 0.3 * low), fade, 1);
+    shadow.material.opacity = 0.22 * Math.max(0.2, 1 - h * 0.25) * (0.35 + 0.65 * (this.env.daylight ?? 1));
   }
 
   // ------------------------------------------------ camera
@@ -481,9 +486,9 @@ export class Renderer {
     this.sun.intensity = 0.8 + 1.6 * env.day;
     this.sun.position.copy(state.focus).addScaledVector(env.day > 0.15 ? env.sunDir : env.moonDir, 50);
     this.sun.target.position.copy(state.focus);
-    this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 1, 1), 0.55);
+    this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 0.98, 0.94), 0.5);
     this.hemi.groundColor.setRGB(0.55, 0.62, 0.45).multiplyScalar(0.5 + 0.5 * env.day);
-    this.hemi.intensity = 1.1 + 0.6 * env.day;
+    this.hemi.intensity = 1.05 + 0.65 * env.day;
 
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);

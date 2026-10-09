@@ -156,7 +156,7 @@ const WATER_VERT = /* glsl */ `
   uniform float uTime;
   void main() {
     vec3 p = position;
-    float wave = sin(p.x * 1.3 + uTime * 1.4) + sin(p.z * 1.1 + uTime * 1.1);
+    float wave = sin(p.x * 1.3 + uTime * 1.4) + sin(p.z * 1.1 + uTime * 1.1) + sin((p.x + p.z) * 0.6 + uTime * 0.7) * 0.6;
     p.y += (wave * 0.035 - 0.02) * lit.w;
     vec4 world = modelMatrix * vec4(p, 1.0);
     vec4 mv = viewMatrix * world;
@@ -182,8 +182,14 @@ const WATER_FRAG = /* glsl */ `
     vec4 tex = texture(atlas, vec3(fract(flow), uWaterLayer));
     vec3 col = tex.rgb * lightOf(max(vLit.x, 0.35), vLit.y);
     float s = sin(vWorld.x * 2.3 + uTime * 1.3) * sin(vWorld.z * 1.9 - uTime * 1.1);
-    col += vec3(0.16) * smoothstep(0.72, 1.0, s) * vLit.w * uDaylight;
-    gl_FragColor = vec4(fogged(col, vDepth), 0.8);
+    float broad = sin(vWorld.x * 0.9 - uTime * 0.6) * sin(vWorld.z * 0.7 + uTime * 0.5);
+    col += vec3(0.12) * smoothstep(0.72, 1.0, s) * vLit.w * uDaylight;
+    col += vec3(0.08) * smoothstep(0.55, 1.0, broad) * vLit.w * uDaylight;
+    // Seen at a low angle, the water picks up the colour of the sky above it.
+    vec3 V = normalize(cameraPosition - vWorld);
+    float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 3.0);
+    col += uFogColor * fres * 0.18;
+    gl_FragColor = vec4(fogged(col, vDepth), 0.72);
     #include <colorspace_fragment>
   }
 `;

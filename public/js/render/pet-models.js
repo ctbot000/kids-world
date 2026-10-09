@@ -7,7 +7,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { PET_COATS } from '../shared/words.js';
 import { CritterModel, eyesOn, wingPair } from './critter-models.js';
-import { capsule, cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
+import { blobShadow, capsule, cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
 const PINK = '#ff9fb8';
@@ -448,12 +448,7 @@ export class PetModel {
     this.group.traverse((o) => {
       if (o.isMesh) o.castShadow = false;
     });
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(this.kind === 'hamster' || this.bird ? 0.16 : 0.22, 16),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.renderOrder = 1;
+    const shadow = blobShadow((this.kind === 'hamster' || this.bird ? 0.16 : 0.22) * 1.25, 0.2);
     this.shadow = shadow;
   }
 

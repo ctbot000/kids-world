@@ -5,7 +5,7 @@
 // elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
 // which live with them, are in vehicle-models.js.
 import * as THREE from '../../vendor/three.module.js';
-import { capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { blobShadow, capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 
 const BLACK = '#2b2530';
@@ -1115,12 +1115,7 @@ export class CritterModel {
     // still holds its trunk up to spray.
     this.phase = 0;
     this.trick = 0;
-    const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(parts.shadow || (type === 'sheep' ? 0.36 : 0.22), 16),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }),
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.renderOrder = 1;
+    const shadow = blobShadow((parts.shadow || (type === 'sheep' ? 0.36 : 0.22)) * 1.25, 0.2);
     this.shadow = shadow;
   }
 

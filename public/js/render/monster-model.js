@@ -5,7 +5,7 @@
 // as tall as a player, deep red, with two horns; a Spiky a blob in orange
 // with a crest of spikes on its back.
 import * as THREE from '../../vendor/three.module.js';
-import { cone, mesh, onSurface, sphere, toon } from './toon.js';
+import { blobShadow, cone, mesh, onSurface, sphere, toon } from './toon.js';
 
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
@@ -88,9 +88,7 @@ export class MonsterModel {
     this.lastY = null;
     this.vy = 0;
     this.squash = 0;
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.4, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }));
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.renderOrder = 1;
+    const shadow = blobShadow(0.5, 0.2);
     this.shadow = shadow;
   }
 
