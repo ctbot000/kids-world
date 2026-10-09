@@ -2363,7 +2363,7 @@ test('a keeper running code from before the ranking: the page says it needs an u
   }
 });
 
-test('the admin page shows each player, their login and their islands, drawn from above, deletes them, and moves a device’s copies into a login', { skip }, async () => {
+test('the admin page shows each player, their login and their islands, folded away and drawn from above once opened, deletes them, and moves a device’s copies into a login', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const store = await new KeeperStore(dir).open();
   const key = 'e5'.repeat(16);
@@ -2380,6 +2380,11 @@ test('the admin page shows each player, their login and their islands, drawn fro
   try {
     await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
     await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
+    // The islands are folded away, with no maps drawn, until opened.
+    assert.equal(await page.$eval('.fold > summary', (el) => el.textContent), '🏝️ 1 island');
+    assert.equal(await page.$('.island'), null);
+    await page.click('.fold > summary');
+    await until(page, () => document.querySelector('.island'));
     assert.equal(await page.$eval('.island h4', (el) => el.textContent), `❄️ ${room.world.name}`);
     assert.match(await page.$eval('.login-line', (el) => el.textContent), /Logs in as Brave Fox on 1 device/);
     // The island from above: one pixel per column.

@@ -204,6 +204,21 @@ code {
   margin-top: 14px;
 }
 
+.fold {
+  margin-top: 12px;
+}
+
+.fold summary {
+  width: fit-content;
+  font-size: 15px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.fold .fold {
+  margin-left: 4px;
+}
+
 .island {
   display: flex;
   gap: 12px;

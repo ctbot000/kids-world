@@ -343,8 +343,37 @@ function deviceCard(device, players) {
         )
       : null,
     loginRow(device, players.filter((p) => p.id !== device.id)),
-    device.islands.length ? h('div', { class: 'islands' }, ...device.islands.map((i) => islandCard(device, i))) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
+    device.islands.length ? islandList(device) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
   );
+}
+
+// Which lists of islands are open, so a redraw keeps them that way.
+const opened = new Set();
+
+// A player's islands, folded away until asked for, and their maps drawn only
+// then; the ones said goodbye to are folded again inside.
+function islandList(device) {
+  const kept = device.islands.filter((i) => !i.forgotten);
+  const gone = device.islands.filter((i) => i.forgotten);
+  const fold = (key, label, islands, more = null) => {
+    const list = h('details', { class: 'fold', open: opened.has(key) }, h('summary', {}, label));
+    const fill = () => {
+      if (list.dataset.filled) return;
+      list.dataset.filled = '1';
+      list.append(...(islands.length ? [h('div', { class: 'islands' }, ...islands.map((i) => islandCard(device, i)))] : []), ...(more ? [more] : []));
+    };
+    list.addEventListener('toggle', () => {
+      if (list.open) {
+        opened.add(key);
+        fill();
+      } else opened.delete(key);
+    });
+    if (list.open) fill();
+    return list;
+  };
+  const goodbyes = gone.length ? fold(`${device.id}/gone`, `🗑️ ${plural(gone.length, 'island', 'islands')} said goodbye to`, gone) : null;
+  const label = [`🏝️ ${plural(kept.length, 'island', 'islands')}`, gone.length ? `and ${gone.length} said goodbye to` : null].filter(Boolean).join(' ');
+  return fold(device.id, label, kept, goodbyes);
 }
 
 let shown = '';
