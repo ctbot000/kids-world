@@ -166,7 +166,11 @@ test('it helps a dizzy friend up, and bops a monster coming at one', async () =>
 
   room.settings.monsters = true;
   const w = room.world;
-  const m = room.monsters.add(w, me.s[0] + 3, w.groundBelow(Math.floor(me.s[0] + 3), Math.floor(me.s[1]) + 2, Math.floor(me.s[2])) + 1, me.s[2]);
+  // Between them: Minji stands in the start's safe place, which a monster
+  // keeps out of, so one put down further off goes round its edge, away up
+  // the hills, rather than at her.
+  const [mx, mz] = [(me.s[0] + pip.s[0]) / 2, (me.s[2] + pip.s[2]) / 2];
+  const m = room.monsters.add(w, mx, w.groundBelow(Math.floor(mx), Math.floor(me.s[1]) + 2, Math.floor(mz)) + 1, mz);
   assert.ok(m);
   const bopped = await eventually(() => minji.heard.find((x) => (x.t === 'mhit' || x.t === 'pop') && x.by === pip.id));
   assert.ok(bopped);

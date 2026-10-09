@@ -45,6 +45,8 @@ export const yawTowards = (dx, dz) => Math.atan2(dx, dz);
 
 const TICK_MS = 100;
 const MOVE_SEND_MS = 100;
+// The most it moves on in one tick, however late it comes.
+const MAX_STEP_S = 0.25;
 // How close it keeps to the friend it is with, and when it flies instead.
 const NEAR = 2.6;
 const TOO_CLOSE = 1.4;
@@ -478,7 +480,8 @@ export class Visit extends EventEmitter {
     const inviter = this.others().find((p) => p.name === this.invitedBy);
     this.friend = inviter?.id ?? (this.host !== this.me ? this.host : 0);
     // Nothing here may stop the keeper this runs in: a mistake is logged, and the visit ends.
-    this.ticker = setInterval(() => this.safely(() => this.tick(this.buddy.tickMs / 1000)), this.buddy.tickMs);
+    this.tickedAt = start;
+    this.ticker = setInterval(() => this.safely(() => this.tick()), this.buddy.tickMs);
     this.ticker.unref?.();
     this.event(this.invitedBy ? `You just arrived: ${this.invitedBy} invited you. Say hello!` : 'You just arrived to visit, by yourself. Say hello, and that they can say bye if they want you to go.', this.friend, 'wave');
   }
@@ -554,9 +557,13 @@ export class Visit extends EventEmitter {
 
   // ------------------------------------------------ every tick
 
-  tick(dt) {
+  // By the time gone since the last tick, as the room moves its monsters: a
+  // busy computer ticks late, and it would fall behind them.
+  tick() {
     if (this.ended || !this.body) return;
     const now = this.now();
+    const dt = Math.min(MAX_STEP_S, Math.max(0, (now - this.tickedAt) / 1000));
+    this.tickedAt = now;
     const others = this.others();
     if (!others.length) {
       this.aloneSince ||= now;
