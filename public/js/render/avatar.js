@@ -102,8 +102,13 @@ const BLACK = '#2b2530';
 const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
 
+// How far your middle is over the bed lying down: half how deep a body is.
+const LIE_LIFT = 0.16;
+
 // dizzy: sitting on the ground, out of hearts on an adventure island, until a friend helps you up.
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7 };
+// sit: on a chair or a sofa, the root at the seat; lie: in bed, on your
+// back, the root at your feet and your head behind you (shared/seats.js).
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9 };
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -855,6 +860,18 @@ export class Avatar {
       armFwdL = armFwdR = -0.35;
       headTilt = Math.sin(t * 5) * 0.28;
       headNod = 0.12 + Math.cos(t * 5) * 0.1;
+    } else if (anim === ANIM.sit) {
+      // Sitting back in the seat, hands in the lap, looking about now and then.
+      bob = -0.24 - this.legLong;
+      lean = -0.05;
+      armRaiseL = armRaiseR = 0.2;
+      armFwdL = armFwdR = -0.55;
+      headTilt = Math.sin(t * 0.7) * 0.06;
+      headNod = Math.sin(t * 0.45) * 0.05;
+    } else if (anim === ANIM.lie) {
+      // Flat on your back, arms by your sides, breathing slowly.
+      bob = Math.sin(t * 1.6) * 0.006;
+      armRaiseL = armRaiseR = 0.12;
     } else if (riding) {
       // Astride an animal, hands forward on the reins (or its neck), going
       // up and down with it, more the faster it goes.
@@ -967,6 +984,22 @@ export class Avatar {
       spin = 0;
       hop = 0;
     }
+    const sitting = anim === ANIM.sit;
+    const lying = anim === ANIM.lie;
+    if (sitting) {
+      // Legs out over the front of the seat, a little apart.
+      legL.rotation.set(-1.35, 0, -0.08);
+      legR.rotation.set(-1.35, 0, 0.08);
+    }
+    if (lying) {
+      legL.rotation.set(0, 0, -0.04);
+      legR.rotation.set(0, 0, 0.04);
+    }
+    if (sitting || lying) {
+      // Emotes play with the arms and the head, but nobody spins or hops out of bed.
+      spin = 0;
+      hop = 0;
+    }
     if (riding) {
       // Nor do emotes turn them round or lift them out of the saddle.
       spin = 0;
@@ -977,6 +1010,11 @@ export class Avatar {
     armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR ?? 0.18);
     this.body.position.y = bob + hop + dip;
     this.body.rotation.y = spin;
+    // In bed, the whole of you tips back about your feet, face up, and sinks
+    // to lie on your back.
+    this.body.rotation.x = lying ? -Math.PI / 2 : 0;
+    this.body.position.z = 0;
+    if (lying) this.body.position.y += LIE_LIFT;
     this.torso.rotation.set(lean, twist, 0);
     if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist;
     this.head.rotation.set(headNod, 0, headTilt);
@@ -991,7 +1029,7 @@ export class Avatar {
     // Blink now and then.
     if (this.eyes) {
       this.blinkAt -= dt;
-      const closed = this.blinkAt < 0.12 || this.emote === 'sleepy' || this.emote === 'laugh';
+      const closed = this.blinkAt < 0.12 || this.emote === 'sleepy' || this.emote === 'laugh' || (lying && !this.emote);
       this.eyes.scale.y = closed ? 0.12 : 1;
       if (this.blinkAt < 0) this.blinkAt = 2.5 + Math.random() * 3;
     }

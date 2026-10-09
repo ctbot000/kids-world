@@ -49,6 +49,7 @@ export const STICKERS = [
   { key: 'tower-builder', icon: '🗼', name: 'Tower Builder', text: 'Build a tower on a tower defense island', test: (s) => s.towers >= 1 },
   { key: 'star-keeper', icon: '🌟', name: 'Star Keeper', text: 'See off every wave on a tower defense island', test: (s) => s.defended >= 1 },
   { key: 'home-sweet-home', icon: '🛋️', name: 'Home Sweet Home', text: 'Put down 10 pieces of furniture', test: (s) => s.furnished >= 10 },
+  { key: 'comfy', icon: '🪑', name: 'Comfy Spot', text: 'Sit on a chair or a sofa, or lie down in a bed', test: (s) => s.sat >= 1 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat'];

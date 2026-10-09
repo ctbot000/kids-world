@@ -879,6 +879,62 @@ test('a sofa picked in the toy box\'s Home tab goes down with a click turned to 
   await page.browserContext().close();
 });
 
+test('beside a sofa the Sit button sits you on it, the island sees you sitting, and walking gets you up; Q lies you down in a bed', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A sofa facing you a step in front, a bed further off, and you standing still.
+  const at = await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const [x, y, z] = [Math.floor(b.x), Math.floor(b.y), Math.floor(b.z)];
+    const cells = [];
+    for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let dy = 0; dy < 3; dy++) if (g.world.get(x + dx, y + dy, z + dz) !== 0 && (dx || dz)) cells.push(x + dx, y + dy, z + dz, 0);
+    g.edit('pick', cells, { undoable: false });
+    g.edit('build', [x, y, z - 1, B.turnedTo(B.SOFA, 1), x + 3, y, z - 3, B.BED, x + 3, y, z - 2, B.BED], { undoable: false });
+    Object.assign(b, { x: x + 0.5, z: z + 0.5, vx: 0, vz: 0 });
+    window.kidsWorld.step(1 / 60, 10);
+    return { x, y, z };
+  });
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Sit'));
+  await page.click('#ride');
+  await until(page, () => window.kidsWorld.game.seat && window.kidsWorld.game.me.anim === 8);
+  const sat = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    kw.step(1 / 60, 10);
+    const b = kw.game.me.body;
+    return { y: b.y, yaw: kw.game.me.yaw, button: document.getElementById('ride').textContent };
+  });
+  assert.ok(sat.y > at.y + 0.4 && sat.y < at.y + 0.6, `on the seat: ${JSON.stringify(sat)}`);
+  assert.ok(Math.abs(sat.yaw) < 0.01, 'facing the way the sofa faces');
+  assert.ok(sat.button.includes('Get up'));
+  // The island (in this page, peer to peer) has you sitting, for friends to see.
+  await until(page, () => [...window.kidsWorld.session.link.room.players.values()].some((p) => p.s?.[4] === 8));
+  await until(page, () => window.kidsWorld.profile.data.stickers.comfy);
+  // A step forward gets you up, in front of the sofa.
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 3));
+  await page.keyboard.up('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  const up = await page.evaluate(() => ({ seat: window.kidsWorld.game.seat, anim: window.kidsWorld.game.me.anim, y: window.kidsWorld.game.me.body.y }));
+  assert.equal(up.seat, null);
+  assert.notEqual(up.anim, 8);
+  assert.ok(Math.abs(up.y - at.y) < 0.01, `back on the ground: ${JSON.stringify(up)}`);
+  // Beside the bed, Q lies you down in it, and Q gets you up again.
+  await page.evaluate((c) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: c.x + 2.5, y: c.y, z: c.z - 0.5, vx: 0, vz: 0 });
+    kw.step(1 / 60, 10);
+  }, at);
+  await until(page, () => document.getElementById('ride').textContent.includes('Lie down'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.me.anim === 9);
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !window.kidsWorld.game.seat);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('coming down from a height thumps and puffs up dust every time, however high it was', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

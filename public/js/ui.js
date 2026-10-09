@@ -17,6 +17,7 @@ import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, MAX_HEARTS } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { blockIcon } from './render/atlas.js';
+import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
 import { hairIcon } from './hair-icons.js';
@@ -1519,6 +1520,7 @@ export class UI {
           card('🖌️', 'Paint', ['Choose the brush, pick a colour below, and tap blocks to paint them.']),
           card('⛰️', 'Hills', ['Raise, dig or flatten the land. Big sizes make big hills!']),
           card('🏠', 'Stamps', ['Put down a whole house, tower, rainbow and more in one tap.']),
+          card('🪑', 'Sit down', ['Walk up to a chair or a sofa and tap 🪑 Sit (or press ', h('kbd', {}, 'Q'), '), or to a bed and tap 🛏️ Lie down. Walk, jump or press ', h('kbd', {}, 'Q'), ' again to get up.']),
           card('🛋️', 'Home', ['Make a cozy room with the toy box\'s 🛋️ Home tab: carpets, wood floors and wallpaper, a sofa, a bed, a table and chairs, a kitchen, a TV, a fireplace and more. Furniture turns to face you as you put it down, and a picture goes on the wall you tap. Put sofas, beds, tables or counters side by side to make a big one!']),
           card('🐰', 'Animals', ['Tap an animal to pet it. Give it fruit and it follows you, and a flying friend sits on your head when you stand still! Use the bunny tool to invite new friends.']),
           card('🐶', 'Your pet', ['Pick a puppy, a kitten, a parrot, a baby dragon or another pet in 🐾 My pet. It comes along to every island! Tap it to pet it, and wave or dance: it does tricks too.']),
@@ -3022,6 +3024,10 @@ export class UI {
   // you ride (or near the top, seeing through your own eyes): kept on the
   // screen, clear of the top bar, the toasts and the hotbar.
   rideButton(g, r) {
+    if (!g.riding && (g.seat || (!g.rideTarget && g.seatTarget))) {
+      this.seatButton(g, r);
+      return;
+    }
     const el = $('ride');
     const c = g.critters.get(g.riding?.id ?? g.rideTarget);
     const at = g.riding ? g.players.get(g.pid)?.avatar?.root.position : c?.model.group.position;
@@ -3043,6 +3049,34 @@ export class UI {
       el.hidden = true;
       return;
     }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 150;
+    const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
+    const y = scr.visible ? scr.y + 24 : 220;
+    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
+  // Sit (or Lie down), beside the chair, sofa or bed next to you, and Get up
+  // while you sit there: the Ride button, for seats.
+  seatButton(g, r) {
+    const el = $('ride');
+    const cell = g.seat ?? g.seatTarget;
+    const seat = seatOf(g.world.get(cell.x, cell.y, cell.z));
+    if (!seat || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const touch = this.input.touchMode;
+    const label = g.seat ? '👋 Get up' : seat.pose === 'lie' ? '🛏️ Lie down' : '🪑 Sit';
+    const key = `${label}|${touch}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
+      el.setAttribute('aria-label', label.slice(label.indexOf(' ') + 1));
+    }
+    const scr = r.project(cell.x + 0.5, cell.y + 1, cell.z + 0.5);
     const w = r.canvas.clientWidth;
     const hgt = r.canvas.clientHeight;
     const width = el.offsetWidth || 150;

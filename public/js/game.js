@@ -14,6 +14,7 @@ import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
+import { seatNear, seatPose, standUpAt } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
@@ -131,6 +132,10 @@ export class Game extends EventTarget {
     // enough to get on.
     this.riding = null;
     this.rideTarget = 0;
+    // The seat you sit on (its cell, see shared/seats.js), and the one close
+    // enough to sit on.
+    this.seat = null;
+    this.seatTarget = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -847,6 +852,8 @@ export class Game extends EventTarget {
     this.sound.play('bump');
     const b = this.me?.body;
     if (!b) return;
+    // Knocked out of your seat.
+    if (this.seat) this.standUp();
     this.renderer.effects.bang(b.x, b.y + 1.7, b.z);
     if (msg.home) {
       this.goHome(msg.at, this.adventure ? 'Out of hearts! Back to the nearest safe place, where no monster goes.' : 'Out of hearts! Back to the start of the island, where no monster goes.');
@@ -1485,13 +1492,89 @@ export class Game extends EventTarget {
       this.getOff();
       return;
     }
+    if (this.seat) {
+      this.standUp();
+      return;
+    }
     const id = this.rideTarget;
+    if (!id && this.seatTarget) {
+      this.sitDown(this.seatTarget);
+      return;
+    }
     if (!id) {
-      this.emit('notice', { text: 'Walk up to a big animal or a vehicle to ride it!', level: 'info' });
+      this.emit('notice', { text: 'Walk up to a big animal, a vehicle or a seat to ride it or sit on it!', level: 'info' });
       this.sound.play('no');
       return;
     }
     this.send({ t: 'critter', op: 'ride', id });
+  }
+
+  // Down on a chair or a sofa, or into bed (see shared/seats.js): you stay
+  // there until you move, jump, press Shift or Q, or something bumps you.
+  sitDown(cell) {
+    const pose = seatPose(this.world, cell.x, cell.y, cell.z);
+    if (!pose) return;
+    const b = this.me.body;
+    if (b.flying) {
+      b.flying = false;
+      this.emit('fly', false);
+    }
+    this.seat = { x: cell.x, y: cell.y, z: cell.z };
+    Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0 });
+    this.sound.play('place', { kind: 'cloth' });
+    this.profile.count('sat');
+    if (!this.toldSeat) {
+      this.toldSeat = true;
+      const name = B.block(this.world.get(cell.x, cell.y, cell.z)).name.toLowerCase();
+      const how = this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
+      this.emit('toast', { icon: pose.pose === 'lie' ? '🛏️' : '🛋️', text: pose.pose === 'lie' ? `Snuggled up in bed! ${how} to get up.` : `You sit on the ${name}. ${how} to get up.` });
+    }
+    this.emit('ride');
+  }
+
+  // Up out of your seat, in front of it (or beside it, or on top).
+  standUp() {
+    const c = this.seat;
+    if (!c) return;
+    this.seat = null;
+    const at = standUpAt(this.world, c.x, c.y, c.z);
+    const b = this.me.body;
+    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false });
+    unstick(this.world, b);
+    this.emit('ride');
+  }
+
+  // In your seat, staying put: up you get if you move, or if the seat goes
+  // (someone picked it up) or something else moved you (sent home, say).
+  stayInSeat(dt, input) {
+    const me = this.me;
+    const b = me.body;
+    const c = this.seat;
+    const pose = seatPose(this.world, c.x, c.y, c.z);
+    if (!pose || Math.hypot(b.x - pose.x, b.z - pose.z) > 0.8) {
+      this.seat = null;
+      if (pose) return;
+      unstick(this.world, b);
+      this.emit('ride');
+      return;
+    }
+    const move = input.readMove();
+    if (this.dizzy || Math.hypot(move.x, move.y) > 0.3 || input.jump || input.down) {
+      this.standUp();
+      this.liftLatch = true;
+      return;
+    }
+    Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
+    me.yaw = pose.yaw;
+    me.speed = 0;
+    me.anim = pose.pose === 'lie' ? ANIM.lie : ANIM.sit;
+    const a = this.players.get(this.pid)?.avatar;
+    if (a) {
+      a.root.position.set(b.x, b.y, b.z);
+      a.root.rotation.y = me.yaw;
+      a.update(dt, me.anim, 0);
+      a.shadow.visible = false;
+    }
   }
 
   // Up on its back (the island said yes): from now on you move it, and the
@@ -1676,6 +1759,10 @@ export class Game extends EventTarget {
   // on a trampoline, held down then or not.
   pressDown() {
     if (this.dizzy) return;
+    if (this.seat) {
+      this.standUp();
+      return;
+    }
     if (this.riding) {
       if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
       return;
@@ -1748,7 +1835,7 @@ export class Game extends EventTarget {
     }
     applyCells(w, cells);
     this.changed(cells);
-    if (this.me) unstick(w, this.riding?.body ?? this.me.body);
+    if (this.me && !this.seat) unstick(w, this.riding?.body ?? this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
     this.send(msg);
@@ -1785,7 +1872,7 @@ export class Game extends EventTarget {
       this.changed(apply);
     }
     if (!mine) this.editEffects(msg.kind, msg.cells, false);
-    if (this.me) unstick(w, this.riding?.body ?? this.me.body);
+    if (this.me && !this.seat) unstick(w, this.riding?.body ?? this.me.body);
   }
 
   ack(msg) {
@@ -2276,6 +2363,8 @@ export class Game extends EventTarget {
     if (this.riding) this.moveRide(dt, input);
     else this.moveMe(dt, input);
     this.rideTarget = this.findRideable();
+    const on = this.me.body;
+    this.seatTarget = !this.riding && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
@@ -2298,7 +2387,8 @@ export class Game extends EventTarget {
       v.pitch += (0.12 - v.pitch) * Math.min(1, dt * 4);
       v.dist += (this.pose.dist - v.dist) * Math.min(1, dt * 4);
     }
-    this.renderer.updateCamera(dt, b);
+    // Sitting or lying down, your eyes are lower than your hips are high.
+    this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.lie ? 0.95 : 0.45), z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z } });
     this.observe();
@@ -2344,6 +2434,10 @@ export class Game extends EventTarget {
   }
 
   moveMe(dt, input) {
+    if (this.seat) {
+      this.stayInSeat(dt, input);
+      return;
+    }
     const me = this.me;
     const b = me.body;
     const w = this.world;
@@ -2483,7 +2577,7 @@ export class Game extends EventTarget {
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
-      if (p.seated) a.shadow.visible = false;
+      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie) a.shadow.visible = false;
     }
     for (const p of this.players.values()) {
       if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;

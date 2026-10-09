@@ -144,3 +144,42 @@ test('a build into a room stays put after the edit is applied', () => {
   assert.equal(B.baseOf(w.get(3, 6, 3)), B.SOFA);
   assert.equal(B.block(w.get(3, 6, 3)).front, 1);
 });
+
+test('a seat beside you is found, you sit facing the way it faces, lie in bed from its foot, and stand up in front of it', async () => {
+  const { seatNear, seatPose, standUpAt } = await import('../public/js/shared/seats.js');
+  const w = meadow();
+  // A chair facing +z, and you standing in front of it.
+  w.set(10, 6, 10, B.turnedTo(B.CHAIR, 1));
+  assert.deepEqual(seatNear(w, { x: 10.5, y: 6, z: 11.6 }), { x: 10, y: 6, z: 10 });
+  assert.equal(seatNear(w, { x: 10.5, y: 6, z: 13.5 }), null, 'too far away');
+  const sit = seatPose(w, 10, 6, 10);
+  assert.equal(sit.pose, 'sit');
+  assert.ok(sit.y > 6.4 && sit.y < 6.7, `on the seat: ${sit.y}`);
+  // Facing +z: an avatar facing +z has yaw 0, and sits back from the front.
+  assert.ok(Math.abs(sit.yaw) < 1e-9);
+  assert.ok(sit.z < 10.5 && sit.z > 10.4);
+  assert.deepEqual(standUpAt(w, 10, 6, 10), { x: 10.5, y: 6, z: 11.5 }, 'up in front of it');
+  // With a wall in front, beside it.
+  w.set(10, 6, 11, B.PLANKS);
+  const up = standUpAt(w, 10, 6, 10);
+  assert.equal(up.y, 6);
+  assert.notDeepEqual([up.x, up.z], [10.5, 11.5]);
+  // A table is not a seat.
+  w.set(12, 6, 10, B.TABLE);
+  assert.equal(seatPose(w, 12, 6, 10), null);
+  // A bed two long facing -z: lying from the front one, whichever is picked.
+  w.set(20, 6, 10, B.BED);
+  w.set(20, 6, 11, B.BED);
+  for (const z of [10, 11]) {
+    const lie = seatPose(w, 20, 6, z);
+    assert.equal(lie.pose, 'lie');
+    assert.ok(lie.z > 10 && lie.z < 10.3, `feet at the foot: ${lie.z}`);
+    assert.ok(Math.abs(Math.abs(lie.yaw) - Math.PI) < 1e-9, 'facing -z, head to +z');
+  }
+});
+
+test('sitting down earns Comfy Spot', () => {
+  assert.ok(STAT_KEYS.includes('sat') && XP_FOR.sat.xp > 0);
+  const sticker = STICKERS.find((s) => s.key === 'comfy');
+  assert.equal(sticker.test(Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'sat' ? 1 : 0]))), true);
+});
