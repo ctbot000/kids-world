@@ -1056,6 +1056,9 @@ export class Keeper extends EventEmitter {
     this.invited = new Map();
     // The AI friend (see buddy.js), on the players list to invite, if any.
     this.buddy = null;
+    // Islands this process hosts peer to peer (host.js), on the list of open
+    // islands too: code → () => its listing, or null while it is not.
+    this.hosted = new Map();
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -1472,9 +1475,21 @@ export class Keeper extends EventEmitter {
     this.note({ device: me, what: 'invite', player: from.name, to: them.profile?.name ?? '', island: island.name });
   }
 
-  // The list of open islands: those whose hosts' pages are connected and said so.
+  // The list of open islands: those whose hosts' pages are connected and
+  // said so, and those this process hosts.
   openIslands() {
-    return sortListings([...this.conns.values()].filter((c) => c.island && !c.closed).map((c) => c.island));
+    const pages = [...this.conns.values()].filter((c) => c.island && !c.closed && !this.hosted.has(c.island.code)).map((c) => c.island);
+    const ours = [...this.hosted.values()].map((listing) => cleanListing(listing())).filter(Boolean);
+    return sortListings([...pages, ...ours]);
+  }
+
+  // An island this process hosts, on the list of open islands while listing() gives it.
+  listIsland(code, listing) {
+    this.hosted.set(code, listing);
+  }
+
+  unlistIsland(code) {
+    this.hosted.delete(code);
   }
 
   // The ranking, as an answer, or as news for a page watching it: news only

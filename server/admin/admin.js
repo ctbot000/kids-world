@@ -501,7 +501,7 @@ function visitCard(code) {
     info.replaceChildren(
       h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
       v.home
-        ? h('div', { class: 'muted' }, `🏠 Lives here · ${plural(v.buildCount, 'thing', 'things')} built so far`)
+        ? h('div', { class: 'muted' }, `🏠 Lives here · ${plural(v.buildCount, 'thing', 'things')} built so far${v.shared === 'online' ? ' · 🌍 on the list of open islands everywhere' : v.shared ? ` · 🌍 not reachable from other websites yet (${v.shared})` : ' · only on this server (no keeper online)'}`)
         : v.arrivedAt
         ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
         : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),

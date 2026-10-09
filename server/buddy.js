@@ -21,7 +21,9 @@
 // (saved in the keeper's data folder, so it is there again after a restart),
 // on the list of open islands for anyone to visit. There it builds big things
 // a layer at a time (builds.js), which the model picks: what friends there
-// ask for, or something new; and plays with whoever comes.
+// ask for, or something new; and plays with whoever comes. With the keeper
+// online it is hosted peer to peer too (host.js) and on the keeper's list of
+// open islands, so the game on any website can visit it.
 //
 // Settings: on the admin page (friend.js), or before any are saved there,
 // KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME names it;
@@ -45,6 +47,7 @@ import { World } from '../public/js/shared/world.js';
 import { CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTE_KEYS, langOf, PHRASES, STICKERS } from '../public/js/shared/words.js';
 import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKey, projectCells, reachOf } from './builds.js';
 import { LocalLink, PeerLink } from './dialer.js';
+import { PeerHost } from './host.js';
 import { friendId } from './keeper.js';
 
 export const DEFAULT_NAME = 'Pip 🤖';
@@ -331,13 +334,38 @@ export class Buddy extends EventEmitter {
       const visit = new Visit({ buddy: this, island, link: new LocalLink(room), home: true });
       this.home = visit;
       this.log(`AI friend: ${kept?.code === room.code ? 'back on' : 'made'} its own island "${room.world.name}" (code ${room.code}).`);
+      const unshare = this.shareHome(room);
       visit.once('end', (why) => {
+        unshare();
         if (this.home === visit) this.home = null;
         this.log(`AI friend: left its own island "${island.name}" (${why}).`);
       });
     } finally {
       this.opening = false;
     }
+  }
+
+  // Its island open to pages anywhere: hosted peer to peer, and on the
+  // keeper's list of open islands while it can be reached. Returns a
+  // function that stops that.
+  shareHome(room) {
+    if (!this.rtc || !this.keeper?.listIsland) return () => {};
+    const host = new PeerHost({ room, rtc: this.rtc, server: this.server, iceServers: this.iceServers });
+    let said = '';
+    host.on('state', (state, detail) => {
+      const now = state === 'online' ? 'online' : state === 'id-taken' || state === 'error' ? state : '';
+      if (!now || now === said) return;
+      said = now;
+      this.log(now === 'online' ? `AI friend: its island "${room.world.name}" is open to everyone, peer to peer.` : `AI friend: its island cannot be reached peer to peer yet (${detail || now}).`);
+    });
+    host.start();
+    this.homeHost = host;
+    this.keeper.listIsland(room.code, () => (host.state === 'online' && !room.closed ? room.listing() : null));
+    return () => {
+      this.keeper.unlistIsland(room.code);
+      host.stop();
+      if (this.homeHost === host) this.homeHost = null;
+    };
   }
 
   freeCode() {
@@ -549,6 +577,8 @@ export class Visit extends EventEmitter {
       ...(this.home
         ? {
             home: true,
+            // Whether pages anywhere can visit it (host.js): 'online', or not yet.
+            shared: this.buddy.homeHost?.state ?? '',
             planning: this.planning,
             project: this.project ? { title: this.project.title, name: this.project.name, icon: this.project.icon, layer: this.project.next, layers: this.project.layers.length } : null,
             builds: this.buddy.builds.slice(-12).reverse().map((b) => ({ title: b.title, name: b.name, icon: b.icon, at: b.at })),

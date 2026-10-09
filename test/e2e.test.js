@@ -2953,3 +2953,42 @@ test('the AI friend, invited, dials an island a page hosts peer to peer: it come
   }
   await until(host, () => window.kidsWorld.game.players.size === 1);
 });
+
+test('the AI friend’s own island is on the list of open islands through the keeper, and a page anywhere visits it peer to peer', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  // Its island lives in this server's rooms; the page comes from another server, as from GitHub Pages.
+  const rooms = new Map();
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const llm = {
+    problem: async () => '',
+    chat: async (messages) => (messages.at(-1).content.includes('Things you can build') ? { thing: 'cake', color: 'pink', size: 'small', name: 'Yum', say: 'Cake time!' } : { say: 'Welcome to my island!', action: 'wave', stamp: 'none' }),
+  };
+  const buddy = new Buddy({ llm, keeper, rooms, rtc: keeper.rtc, server: keeper.server, iceServers: [], wander: false, home: true, firstBuildMs: 60000, log: () => {} });
+  const ticker = setInterval(() => rooms.forEach((e) => e.room.online && e.room.tick()), 100);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Brave Fox' });
+  try {
+    await buddy.start();
+    await eventually(() => keeper.openIslands().some((i) => i.name === "Pip's Island"));
+    await clickButton(page, 'Visit a friend');
+    await until(page, () => [...document.querySelectorAll('#modal .open-islands b')].some((b) => b.textContent === "Pip's Island"));
+    await clickButton(page, '🛶 Visit', '#modal .open-islands');
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), "Pip's Island");
+    await until(page, (name) => [...window.kidsWorld.game.players.values()].some((p) => p.name === name), DEFAULT_NAME);
+    await until(page, () => [...document.querySelectorAll('#chatlog .line')].some((l) => l.textContent.includes('Welcome to my island!')));
+    const [{ room }] = rooms.values();
+    assert.equal(room.online, 2);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await buddy.stop();
+    clearInterval(ticker);
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+  assert.equal(keeper.openIslands().length, 0, 'off the list once it stops');
+});
