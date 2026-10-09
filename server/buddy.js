@@ -974,7 +974,15 @@ export class Visit extends EventEmitter {
           input.run = d > 8;
         }
         // Too far, stuck, or after a friend up in the air: fly.
-        const stuck = this.isStuck(now, moving);
+        const climbing = goal.flyTo && up > 1.5;
+        const stuck = this.isStuck(now, moving || climbing);
+        // Rising in place with something overhead (a tree's leaves, say):
+        // out from under it, a way that turns every second.
+        if (stuck && !moving) {
+          const a = Math.floor(now / 1000) * 2.4;
+          input.mx = Math.sin(a);
+          input.mz = Math.cos(a);
+        }
         if (!b.flying && (d > FLY_FAR || stuck || (goal.flyTo && up > 2) || (up > 3 && d < 8))) {
           b.flying = true;
           b.vy = 4;
@@ -1034,11 +1042,14 @@ export class Visit extends EventEmitter {
     const layer = p.layers[p.next];
     const up = layer ? Math.max(0, layer[1] - s.base) : 0;
     const b = this.body;
-    const near = Math.hypot(stand.x - b.x, stand.z - b.z) < 2.5 && b.y > s.base + up - 3;
+    const low = b.y <= s.base + up - 3;
+    const near = Math.hypot(stand.x - b.x, stand.z - b.z) < 2.5 && !low;
+    // Given up getting there, it goes on a layer at a time until it is there again.
+    if (near) p.tryingSince = now;
     if ((near || now - p.tryingSince > GIVE_UP_WALKING_MS) && now - p.layerAt > this.buddy.layerMs) this.placeLayer(now);
     if (!this.project) return null;
     this.doing = near ? `Building ${p.title}${p.name ? ` (“${p.name}”)` : ''}: layer ${p.next + 1} of ${p.layers.length}` : `Going over to build ${p.title}`;
-    return { x: stand.x, y: s.base + up, z: stand.z, reach: 1.2, face: { x: s.x + 0.5, z: s.z + 0.5 }, flyTo: up > 2 };
+    return { x: stand.x, y: s.base + up, z: stand.z, reach: 1.2, face: { x: s.x + 0.5, z: s.z + 0.5 }, flyTo: up > 2 || low };
   }
 
   // Asks the model what to build next: what friends asked for, or something new.
@@ -1146,7 +1157,6 @@ export class Visit extends EventEmitter {
     }
     if (cells.length) unstick(w, this.body);
     p.layerAt = now;
-    p.tryingSince = now;
     if (p.next >= p.layers.length) this.finishProject(now);
   }
 
@@ -1164,7 +1174,7 @@ export class Visit extends EventEmitter {
     else this.emote('cheer');
   }
 
-  // Wanting to go somewhere and getting nowhere for a second or more.
+  // Wanting to go somewhere (up too) and getting nowhere for a second or more.
   isStuck(now, moving) {
     const s = this.stuck;
     const b = this.body;
@@ -1172,8 +1182,8 @@ export class Visit extends EventEmitter {
       s.since = 0;
       return false;
     }
-    if (!s.since || Math.hypot(b.x - s.x, b.z - s.z) > 0.6) {
-      Object.assign(s, { since: now, x: b.x, z: b.z });
+    if (!s.since || Math.hypot(b.x - s.x, b.z - s.z) > 0.6 || Math.abs(b.y - s.y) > 0.6) {
+      Object.assign(s, { since: now, x: b.x, y: b.y, z: b.z });
       return false;
     }
     return now - s.since > 1200;
