@@ -19,14 +19,15 @@
 //
 // Vehicles (vehicle) live here too, as friends that never go anywhere by
 // themselves: a car, a boat, a digger that tunnels through the ground and
-// a mine cart that rolls along rails. They park where they were left, and
+// a mine cart that rolls along rails; and a bus and a ferry with seats for
+// friends to ride along (ride.seats). They park where they were left, and
 // someone driving one moves it the way a rider moves an animal.
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -66,11 +67,14 @@ export const CRITTER_INFO = {
   // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
-  // speeds on them) and only creeps along off them.
+  // speeds on them) and only creeps along off them. The bus and the ferry
+  // take friends along as well as their driver (ride.seats).
   car: { name: 'Car', icon: '🚗', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.5, z: -0.12, radius: 0.55, height: 1.75, float: 0.55, spread: 0.12, reach: 1.35, walk: 7, run: 12, swim: 2, jump: 8, trick: 'honk' }, names: ['Beep-Beep', 'Zoomy', 'Vroom', 'Cherry', 'Bumper', 'Speedy', 'Pip', 'Rosie', 'Turbo', 'Sunny'] },
   boat: { name: 'Boat', icon: '🚤', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.3, z: -0.15, radius: 0.6, sea: true, swim: 6.5, run: 10, float: 0, dive: 0, spread: 0.12, reach: 1.35, trick: 'honk' }, names: ['Splashy', 'Bubbles', 'Captain', 'Wave Rider', 'Skipper', 'Puddle Jumper', 'Bobby', 'Sea Breeze', 'Toot-Toot', 'Marina'] },
   digger: { name: 'Digger', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { drill: true, seat: 0.92, z: -0.22, radius: 0.6, height: 2.15, float: 0.75, spread: 0.15, reach: 1.3, walk: 3.5, run: 5, swim: 1.8, jump: 8.5 }, names: ['Rumbles', 'Scoop', 'Chomper', 'Drilly', 'Dusty', 'Rocky', 'Tunnel', 'Diggs', 'Muddy', 'Crunch'] },
   minecart: { name: 'Mine Cart', icon: '🚃', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.32, radius: 0.42, height: 1.6, float: 0.5, spread: 0.12, reach: 1.35, walk: 1.8, run: 2.6, swim: 1.5, jump: 7.6, trick: 'honk', rails: { speed: 7, run: 11 } }, names: ['Clickety', 'Rattle', 'Nugget', 'Rusty', 'Clank', 'Rolly', 'Coal', 'Jingle', 'Choo-Choo', 'Pebble'] },
+  bus: { name: 'Bus', icon: '🚌', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.62, z: 0.85, radius: 0.95, height: 2, float: 0.7, spread: 0.12, reach: 1.3, walk: 6, run: 9.5, swim: 1.8, jump: 7, trick: 'honk', seats: [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.45], [0.3, -0.45], [-0.3, -1.1], [0.3, -1.1]] }, names: ['Busy', 'Big Yellow', 'Honky', 'Bumble', 'Choo-Bus', 'Daisy', 'Wheelie', 'Buddy', 'Jolly', 'Sunny Days'] },
+  ferry: { name: 'Ferry', icon: '⛴️', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.38, z: 0.85, radius: 1, sea: true, swim: 5, run: 8, float: 0, dive: 0, spread: 0.12, reach: 1.3, trick: 'honk', seats: [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.45], [0.3, -0.45], [-0.3, -1.1], [0.3, -1.1]] }, names: ['Bobber', 'Captain Toot', 'Big Splash', 'Seasy', 'Marigold', 'Harbor', 'Puffin', 'Wavey', 'Tugboat', 'Anchor'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -82,7 +86,8 @@ export const CRITTER_INFO = {
 // by itself). A dolphin or the whale keeps to the top of the sea (float: how
 // far under it its middle is) or dives (dive: how far down). trick: what the
 // jump button does instead of jumping: a leap, a spout, or a spray from the
-// trunk.
+// trunk. seats: where friends riding along sit, [across, forward] from its
+// middle, at the driver's height (the driver's seat is the first: see riderAt).
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
 // The animals, without the vehicles.
@@ -120,7 +125,7 @@ export function critterBox(type) {
   const info = CRITTER_INFO[type];
   if (!info || info.flies) return null;
   if (SMALL_BOX[type]) return { radius: SMALL_BOX[type][0], height: SMALL_BOX[type][1] };
-  if (type === 'boat') return { radius: info.ride.radius, height: 1 };
+  if (info.vehicle === 'sea') return { radius: info.ride.radius, height: 1 };
   if (info.big || info.vehicle) return { radius: info.ride.radius, height: info.ride.height };
   return null;
 }
@@ -151,12 +156,18 @@ export function headTop(hat, hair = '', tall = 0) {
 const HIPS = 0.25;
 
 // Where someone riding an animal at (x, y, z, yaw) is: their feet, as
-// everybody's are, with their hips on its back.
-export function riderAt(type, m) {
+// everybody's are, with their hips on its back. seat: which seat, for a
+// vehicle with seats for friends (0 is the driver's; see ride.seats).
+export function riderAt(type, m, seat = 0) {
   const r = CRITTER_INFO[type].ride;
-  const z = r.z ?? 0;
-  return { x: m.x + Math.sin(m.yaw) * z, y: m.y + r.seat - HIPS, z: m.z + Math.cos(m.yaw) * z, yaw: m.yaw };
+  const [across, z] = seat > 0 && r.seats?.[seat - 1] ? r.seats[seat - 1] : [0, r.z ?? 0];
+  const sin = Math.sin(m.yaw);
+  const cos = Math.cos(m.yaw);
+  return { x: m.x + sin * z + cos * across, y: m.y + r.seat - HIPS, z: m.z + cos * z - sin * across, yaw: m.yaw };
 }
+
+// How many friends a vehicle takes along, besides its driver.
+export const seatsFor = (type) => CRITTER_INFO[type]?.ride?.seats?.length ?? 0;
 
 // ...and the other way round: where the animal is, under its rider.
 export function mountUnder(type, p) {
@@ -188,6 +199,7 @@ const WATERS = {
   penguin: { deep: 2 },
   seal: { deep: 2 },
   boat: { deep: 1 },
+  ferry: { deep: 2, wide: 1 },
 };
 // Where in the water each one swims, from a column of it: [lowest, highest].
 const BANDS = {
@@ -200,6 +212,7 @@ const BANDS = {
   seal: (w) => [Math.max(w.floor + 1.3, w.top + SURFACE - 3.5), w.top + SURFACE - 0.6],
   // A boat's bottom at the top of the water.
   boat: (w) => [w.top + SURFACE, w.top + SURFACE],
+  ferry: (w) => [w.top + SURFACE, w.top + SURFACE],
 };
 // A penguin's leap out of the water on its way: [how far, how high, how long].
 const PENGUIN_LEAP = [2.6, 0.9, 0.75];
@@ -210,6 +223,7 @@ export const NEEDS_WATER = {
   dolphin: 'Dolphins need the open sea: tap the water past the beach!',
   whale: 'A whale needs the deep sea, far out from the beach!',
   boat: 'A boat needs water: tap a pond or the sea!',
+  ferry: 'A ferry needs room on the water: tap a lake or the sea!',
 };
 
 // The first thing under the open sky in a column: the ground, a roof, a
@@ -519,6 +533,61 @@ export function onRails(world, x, y, z) {
 // it, and a digger by the way into the first mine (or, with no mines, near
 // the car); and a mine cart on the rails just inside each mine's doorway.
 // mines: as worldgen.js digs them, each with where its cart and its digger go.
+// A boat's or the ferry's spot: the sea `off` blocks out from the shore,
+// nearest to where everyone comes in (and not on top of another vehicle),
+// facing out to sea.
+function byShore(world, rng, type, off, others = []) {
+  const spawn = world.spawn;
+  let best = null;
+  for (let tries = 0; tries < spots(world, 1500); tries++) {
+    const x = rng.int(2, world.W - 3) + 0.5;
+    const z = rng.int(2, world.D - 3) + 0.5;
+    const w = waterFor(world, x, z, WATERS[type]);
+    if (!w || w.top !== world.sea || others.some((o) => Math.hypot(o.x - x, o.z - z) < 4 + (o.r ?? 0))) continue;
+    let shore = null;
+    for (const [dx, dz] of [[off, 0], [-off, 0], [0, off], [0, -off]]) if (!waterColumn(world, x + dx, z + dz) && skyline(world, x + dx, z + dz) >= 0) shore = [dx, dz];
+    if (!shore) continue;
+    const d = Math.hypot(x - spawn.x, z - spawn.z);
+    if (!best || d < best.d) best = { type, x, y: w.top + SURFACE, z, yaw: Math.atan2(-shore[0], -shore[1]), d };
+  }
+  if (best) delete best.d;
+  return best;
+}
+
+// What the bus and the ferry keep clear of, as { x, z, r }: the other
+// vehicles, and an adventure island's camps or a tower defense island's
+// road, pads, Star Stone and gate.
+export function busesClearOf(vehicles = [], camps = [], defense = null) {
+  const out = vehicles.map((v) => ({ x: v.x, z: v.z, r: 0 }));
+  for (const c of camps) out.push({ x: c.x, z: c.z, r: c.r + 3 });
+  if (defense) {
+    for (const [x, , z] of defense.path) out.push({ x: x + 0.5, z: z + 0.5, r: 0 });
+    for (const p of [...defense.pads, defense.stone]) out.push({ x: p.x, z: p.z, r: 1 });
+    out.push({ x: defense.gate.x, z: defense.gate.z, r: 4 });
+  }
+  return out;
+}
+
+// The vehicles for friends to ride in together: a bus near where everyone
+// comes in, and a ferry out from the shore, each clear of what is in
+// others (see busesClearOf). They came after everything else, and have dice
+// of their own, so nothing else on an island moves for them.
+export function placeBuses(world, rng, others = []) {
+  const out = [];
+  const spawn = world.spawn;
+  for (let tries = 0; tries < spots(world, 600); tries++) {
+    const a = rng.next() * Math.PI * 2;
+    const d = rng.range(6, tries < 300 ? 16 : 40);
+    const p = perchAt(world, spawn.x + Math.cos(a) * d, spawn.z + Math.sin(a) * d);
+    if (!p || p.kind !== 'ground' || p.y <= world.sea + 1 || others.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 4 + (o.r ?? 0)) || !fits(world, 'bus', p.x, p.y, p.z)) continue;
+    out.push({ type: 'bus', x: p.x, y: p.y, z: p.z, yaw: Math.atan2(spawn.x - p.x, spawn.z - p.z) });
+    break;
+  }
+  const ferry = byShore(world, rng, 'ferry', 3, others);
+  if (ferry) out.push(ferry);
+  return out;
+}
+
 export function placeVehicles(world, rng, mines = []) {
   const out = [];
   const spawn = world.spawn;
@@ -536,22 +605,8 @@ export function placeVehicles(world, rng, mines = []) {
   const car = open('car', [5, 14]) ?? open('car', [5, 40]);
   if (car) out.push(car);
   // The boat: the water by the shore nearest to where everyone comes in.
-  let boat = null;
-  for (let tries = 0; tries < spots(world, 1500); tries++) {
-    const x = rng.int(2, world.W - 3) + 0.5;
-    const z = rng.int(2, world.D - 3) + 0.5;
-    const w = waterFor(world, x, z, WATERS.boat);
-    if (!w || w.top !== world.sea) continue;
-    let shore = null;
-    for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) if (!waterColumn(world, x + dx, z + dz) && skyline(world, x + dx, z + dz) >= 0) shore = [dx, dz];
-    if (!shore) continue;
-    const d = Math.hypot(x - spawn.x, z - spawn.z);
-    if (!boat || d < boat.d) boat = { type: 'boat', x, y: w.top + SURFACE, z, yaw: Math.atan2(-shore[0], -shore[1]), d };
-  }
-  if (boat) {
-    delete boat.d;
-    out.push(boat);
-  }
+  const boat = byShore(world, rng, 'boat', 2);
+  if (boat) out.push(boat);
   const mine = mines.find((m) => m.digger);
   const spot = mine && roomFor(world, 'digger', mine.digger.x, mine.digger.y, mine.digger.z, 3);
   const digger = spot && !taken(spot.x, spot.z, 2) ? { type: 'digger', ...spot, yaw: mine.digger.yaw } : open('digger', [6, 20]) ?? open('digger', [6, 40]);
@@ -601,8 +656,11 @@ export class CritterSim {
       perch: '',
       onHead: 0,
       still: 0,
-      // Who is riding it (a big animal, a dolphin or the whale).
+      // Who is riding it (a big animal, a dolphin or the whale), or driving it.
       rider: 0,
+      // Who rides along in each of its other seats (0 for nobody), for a
+      // vehicle that has them.
+      passengers: new Array(seatsFor(type)).fill(0),
     };
     this.list.push(c);
     return c;
@@ -975,6 +1033,29 @@ export class CritterSim {
     if (!c || !CRITTER_INFO[c.type].ride) return null;
     Object.assign(c, { rider: pid, follow: 0, happyUntil: 0, leap: null, dive: null, body: null });
     return c;
+  }
+
+  // Someone hops on to ride along, in the first free seat: which seat (1 on,
+  // as riderAt counts them), or 0 if it has none free. Not if they drive it.
+  board(id, pid) {
+    const c = this.get(id);
+    if (!c?.passengers || c.rider === pid) return 0;
+    const had = c.passengers.indexOf(pid);
+    if (had >= 0) return had + 1;
+    const i = c.passengers.indexOf(0);
+    if (i < 0) return 0;
+    c.passengers[i] = pid;
+    return i + 1;
+  }
+
+  // Everyone up on something, driving or riding along.
+  aboard() {
+    const out = new Set();
+    for (const c of this.list) {
+      if (c.rider) out.add(c.rider);
+      for (const pid of c.passengers ?? []) if (pid) out.add(pid);
+    }
+    return out;
   }
 
   // Ridden: right under its rider (who says where they are: see riding.js),
@@ -2062,7 +2143,7 @@ export class CritterSim {
   }
 
   describe() {
-    return this.list.map((c) => ({ id: c.id, type: c.type, name: c.name, rider: c.rider ?? 0 }));
+    return this.list.map((c) => ({ id: c.id, type: c.type, name: c.name, rider: c.rider ?? 0, ...(c.passengers?.length ? { passengers: [...c.passengers] } : {}) }));
   }
 
   save() {

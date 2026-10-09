@@ -288,12 +288,13 @@ test('vehicles are brought where there is room for them (a boat on the water), s
 test('an island from before the vehicles gets a car, a boat and a digger, once', () => {
   const room = new Room({ code: '123456', theme: 'snowy', seed: 77, now: () => 1000 });
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 7);
+  assert.equal(save.v, 8);
   const count = (r) => r.critters.list.filter((c) => VEHICLES.includes(c.type)).length;
   const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: () => 2000 });
   const old = load({ ...save, v: 6, critters: save.critters.filter((c) => !VEHICLES.includes(c.type)) });
-  assert.deepEqual(old.critters.list.filter((c) => VEHICLES.includes(c.type)).map((c) => c.type).sort(), ['boat', 'car', 'digger']);
-  assert.equal(count(load(JSON.parse(JSON.stringify(old.exportSave())))), 3, 'and only once');
+  // (And the bus and the ferry, which came after them.)
+  assert.deepEqual(old.critters.list.filter((c) => VEHICLES.includes(c.type)).map((c) => c.type).sort(), ['boat', 'bus', 'car', 'digger', 'ferry']);
+  assert.equal(count(load(JSON.parse(JSON.stringify(old.exportSave())))), 5, 'and only once');
   assert.equal(count(load(save)), count(room), 'a new island keeps its own');
 });
 

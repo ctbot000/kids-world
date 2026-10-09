@@ -13,7 +13,7 @@
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, placeBig, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -649,7 +649,7 @@ export class Room {
       }
       case 'bye': {
         const riding = this.critters.get(msg.id);
-        if (riding?.rider) {
+        if (riding?.rider || riding?.passengers?.some(Boolean)) {
           this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
           return;
         }
@@ -661,19 +661,26 @@ export class Room {
       case 'ride': {
         const c = this.critters.get(msg.id);
         const r = c && CRITTER_INFO[c.type].ride;
-        if (!r || c.rider === p.id) return;
-        if (c.rider) {
+        if (!r || c.rider === p.id || c.passengers?.includes(p.id)) return;
+        // With someone driving, the others ride along, in the seats it has.
+        const along = Boolean(c.rider);
+        if (along && !seatsFor(c.type)) {
           this.notice(conn, `Someone is already riding ${c.name}!`, 'info');
+          return;
+        }
+        if (along && !c.passengers.includes(0)) {
+          this.notice(conn, `${c.name} is full! Wait for a seat.`, 'info');
           return;
         }
         // Close enough to climb on (with some room for being a little behind).
         if (Math.hypot(c.x - p.s[0], c.z - p.s[2]) > r.radius + 4 || Math.abs(c.y - p.s[1]) > 5) return;
         this.unride(p.id);
-        this.critters.ride(c.id, p.id);
+        const seat = along ? this.critters.board(c.id, p.id) : 0;
+        if (!along) this.critters.ride(c.id, p.id);
         // Up on its back at once, until they say where they are.
-        const at = riderAt(c.type, c);
+        const at = riderAt(c.type, c, seat);
         p.s = [+at.x.toFixed(2), +at.y.toFixed(2), +at.z.toFixed(2), +c.yaw.toFixed(2), p.s[4], p.s[5]];
-        this.broadcast({ t: 'ride', id: c.id, pid: p.id });
+        this.broadcast({ t: 'ride', id: c.id, pid: p.id, ...(seat ? { seat } : {}) });
         break;
       }
       case 'off':
@@ -681,7 +688,8 @@ export class Room {
         break;
       case 'trick': {
         // A spout from the whale, a spray from the elephant's trunk, or a honk.
-        const c = this.critters.list.find((o) => o.rider === p.id);
+        // Friends riding along can honk too.
+        const c = this.critters.list.find((o) => o.rider === p.id || o.passengers?.includes(p.id));
         const trick = c && CRITTER_INFO[c.type].ride.trick;
         if (trick === 'spout' || trick === 'spray' || trick === 'honk') this.broadcast({ t: 'cfx', id: c.id, fx: trick, by: p.id });
         break;
@@ -701,10 +709,16 @@ export class Room {
     else if (msg.op === 'pet') this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'pet' });
   }
 
-  // Whatever pid is riding stays where they got off it.
+  // Whatever pid is riding stays where they got off it; a seat they rode
+  // along in is free again.
   unride(pid) {
     const p = this.players.get(pid);
     for (const c of this.critters.list) {
+      const seat = c.passengers?.indexOf(pid) ?? -1;
+      if (seat >= 0) {
+        c.passengers[seat] = 0;
+        this.broadcast({ t: 'ride', id: c.id, pid: 0, seat: seat + 1 });
+      }
       if (c.rider !== pid) continue;
       if (p) Object.assign(c, mountUnder(c.type, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3] }));
       this.critters.letGo(c);
@@ -888,7 +902,7 @@ export class Room {
   // back out. Players keep out of everything themselves, each on their own
   // page; someone riding is up on what they ride, which counts for them.
   keepApart(where) {
-    const riding = new Set(this.critters.list.map((c) => c.rider).filter(Boolean));
+    const riding = this.critters.aboard();
     const people = [];
     for (const [id, w] of where) if (!riding.has(id)) people.push({ x: w.x, y: w.y, z: w.z, radius: BODY.radius, height: BODY.height, key: `p${id}` });
     this.critters.keepApart(this.world, [...people, ...this.monsters.boxes()]);
@@ -898,7 +912,7 @@ export class Room {
   // ------------------------------------------------ monsters
 
   stepMonsters(dt, now, where) {
-    const riding = new Set(this.critters.list.map((c) => c.rider).filter(Boolean));
+    const riding = this.critters.aboard();
     const people = [];
     for (const [id, w] of where) {
       const p = this.players.get(id);
@@ -1336,7 +1350,7 @@ export class Room {
       // 3: since the sea creatures did; 4: since penguins and seals did; 5:
       // since the big animals did; 6: since jewels were hidden in the rock;
       // 7: since the vehicles came.
-      v: 7,
+      v: 8,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -1381,6 +1395,11 @@ export class Room {
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);
     this.defense = this.adventure ? null : DefenseSim.load(save.defense, this.world, (seed ^ 0x2b992ddf ^ (Number(save.savedAt) | 0)) >>> 0);
+    // And a bus and a ferry, to ride in together, clear of the camps or the road.
+    if (v < 8) {
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      for (const f of placeBuses(this.world, new Rng(seed ^ 0x3243f6a8), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
+    }
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
     if (Array.isArray(save.players)) {

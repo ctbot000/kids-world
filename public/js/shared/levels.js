@@ -35,6 +35,7 @@ export const XP_FOR = {
   rides: { xp: 5 },
   searides: { xp: 10 },
   drives: { xp: 5 },
+  along: { xp: 5, cap: 100 },
   drilled: { xp: 0.2 },
   railed: { xp: 0.1 },
   lifts: { xp: 2, cap: 100 },

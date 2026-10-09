@@ -479,7 +479,10 @@ export class Sound {
         break;
       // Vehicles: each starts up with its own sound, and honks its own way
       // (type): the car beep-beeps, the boat toots, the mine cart rings its
-      // bell, and the digger goes vrrrm.
+      // bell, the digger goes vrrrm, the bus goes honk-honk and the ferry
+      // gives one long, low toot.
+      case 'bus':
+      case 'ferry':
       case 'car':
       case 'boat':
       case 'digger':
@@ -488,7 +491,15 @@ export class Sound {
         this.play('honk', { type: name });
         break;
       case 'honk':
-        if (opts.type === 'boat') {
+        if (opts.type === 'ferry') {
+          this.tone(NOTE(43), { type: 'square', attack: 0.06, decay: 1.1, gain: 0.05, vibrato: 2 });
+          this.tone(NOTE(50), { type: 'triangle', attack: 0.06, decay: 1.1, gain: 0.07 });
+        } else if (opts.type === 'bus') {
+          for (let i = 0; i < 2; i++) {
+            this.tone(NOTE(60), { at: i * 0.24, type: 'square', attack: 0.015, decay: 0.2, gain: 0.045 });
+            this.tone(NOTE(64), { at: i * 0.24, type: 'triangle', attack: 0.015, decay: 0.2, gain: 0.06 });
+          }
+        } else if (opts.type === 'boat') {
           this.tone(NOTE(55), { type: 'square', attack: 0.04, decay: 0.7, gain: 0.05, vibrato: 3 });
           this.tone(NOTE(62), { type: 'triangle', attack: 0.04, decay: 0.7, gain: 0.06 });
         } else if (opts.type === 'minecart') {
@@ -506,7 +517,7 @@ export class Sound {
       case 'motor':
         // A puttering engine, higher the faster it goes; the digger grinds.
         this.tone((opts.type === 'digger' ? 55 : 80) + (opts.speed ?? 0) * 6, { type: 'sawtooth', attack: 0.02, decay: 0.18, gain: 0.025, vibrato: 20 });
-        this.noise(0.12, { type: 'lowpass', freq: opts.type === 'boat' ? 900 : 400, gain: 0.05 });
+        this.noise(0.12, { type: 'lowpass', freq: opts.type === 'boat' || opts.type === 'ferry' ? 900 : 400, gain: 0.05 });
         break;
       case 'clack':
         // Clickety-clack over the joins of the rails.

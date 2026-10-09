@@ -5,7 +5,7 @@
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -197,7 +197,11 @@ export class Game extends EventTarget {
           if (typeof msg.name === 'string' && msg.name) p.name = msg.name;
           p.avatar?.setLook(msg.look);
           // The saddle under them changes colour with their T-shirt.
-          for (const c of this.critters.values()) if (c.rider === msg.pid) c.model.setRider(shirtColor(msg.look.shirt));
+          for (const c of this.critters.values()) {
+            if (c.rider === msg.pid) c.model.setRider(shirtColor(msg.look.shirt));
+            const seat = c.passengers.indexOf(msg.pid);
+            if (seat >= 0) c.model.setPassenger(seat, shirtColor(msg.look.shirt));
+          }
           if (msg.pid !== this.pid) this.syncPet(msg.pid);
           this.emit('players');
         }
@@ -345,6 +349,7 @@ export class Game extends EventTarget {
     this.renderer.setWorld(this.world);
     this.renderer.terrain.buildAll();
     this.riding = null;
+    this.aboard = null;
     this.pending.clear();
     this.undoStack = [];
     for (const pid of [...this.players.keys()]) this.removePlayer(pid, false, true);
@@ -357,7 +362,7 @@ export class Game extends EventTarget {
     const names = new Map(msg.critters.map((c) => [c.id, c]));
     for (const row of msg.pack) {
       const c = unpackCritter(row);
-      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0 });
+      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0, passengers: names.get(c.id)?.passengers });
     }
     for (const id of [...this.monsters.keys()]) this.dropMonster(id);
     this.monsterStates(msg.monsters ?? []);
@@ -504,9 +509,10 @@ export class Game extends EventTarget {
 
   addCritter(c) {
     const model = this.renderer.addCritter(c.id, c.type);
-    const entry = { id: c.id, type: c.type, name: c.name, snaps: [{ t: performance.now(), x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state }], model, last: null, voiceAt: 0, rider: 0 };
+    const entry = { id: c.id, type: c.type, name: c.name, snaps: [{ t: performance.now(), x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state }], model, last: null, voiceAt: 0, rider: 0, passengers: new Array(seatsFor(c.type)).fill(0) };
     this.critters.set(c.id, entry);
     if (c.rider) this.rideNews({ id: c.id, pid: c.rider });
+    if (Array.isArray(c.passengers)) c.passengers.forEach((pid, i) => pid && this.rideNews({ id: c.id, pid, seat: i + 1 }));
     return entry;
   }
 
@@ -546,6 +552,7 @@ export class Game extends EventTarget {
     const entry = this.critters.get(msg.id);
     if (!entry) return;
     if (this.riding?.id === msg.id) this.dismount();
+    if (this.aboard?.id === msg.id) this.hopOff();
     const p = entry.model.group.position;
     this.renderer.effects.sparkles(p.x, p.y + 0.4, p.z, 16);
     this.renderer.effects.hearts(p.x, p.y + 0.6, p.z, 2);
@@ -687,7 +694,7 @@ export class Game extends EventTarget {
     };
     for (const p of this.players.values()) {
       if (p.me) {
-        if (!this.riding) add(`p${p.id}`, this.me.body, BODY.radius, BODY.height);
+        if (!this.riding && !this.aboard) add(`p${p.id}`, this.me.body, BODY.radius, BODY.height);
         continue;
       }
       const s = p.snaps?.[p.snaps.length - 1];
@@ -910,6 +917,7 @@ export class Game extends EventTarget {
       // Out of hearts, with friends about: sit tight for one to come.
       this.dizzy = true;
       if (this.riding) this.dismount();
+      if (this.aboard) this.hopOff();
       b.flying = false;
       this.emit('fly', false);
       this.sound.play('dizzy');
@@ -922,6 +930,7 @@ export class Game extends EventTarget {
   // on your feet with all your hearts.
   goHome(at, text) {
     if (this.riding) this.dismount();
+    if (this.aboard) this.hopOff();
     const b = this.me.body;
     const spawn = this.world.spawn;
     const [x, y, z] = Array.isArray(at) && at.length === 3 && at.every(Number.isFinite) ? at : [spawn.x, spawn.y, spawn.z];
@@ -1000,7 +1009,7 @@ export class Game extends EventTarget {
   // reaches, further with a toy weapon (see shop.js), and nothing through a
   // wall. You turn to face it. Returns the monster's id, or null.
   attack() {
-    if (!this.world || !this.me || this.riding) return null;
+    if (!this.world || !this.me || this.riding || this.aboard) return null;
     if (this.dizzy || !this.attackReady()) return null;
     const now = performance.now();
     const weapon = wornWeapon(this.profile.data.gear);
@@ -1451,7 +1460,7 @@ export class Game extends EventTarget {
   // you stand by, or, by none, start the next wave. Null: nothing to do.
   defendTarget() {
     const d = this.defense;
-    if (!d || !this.me || this.riding || d.state === 'won') return null;
+    if (!d || !this.me || this.riding || this.aboard || d.state === 'won') return null;
     const b = this.me.body;
     let pad = null;
     let near = BUILD_REACH;
@@ -1486,6 +1495,10 @@ export class Game extends EventTarget {
   rideNews(msg) {
     const entry = this.critters.get(msg.id);
     if (!entry) return;
+    if (msg.seat) {
+      this.seatNews(entry, msg);
+      return;
+    }
     const was = entry.rider;
     entry.rider = msg.pid;
     if (was && was !== msg.pid) {
@@ -1495,21 +1508,43 @@ export class Game extends EventTarget {
     }
     const look = this.players.get(msg.pid)?.look;
     entry.model.setRider(msg.pid && look ? shirtColor(look.shirt) : null);
+    // Someone took the wheel of the one you ride along in.
+    if (msg.pid && msg.pid !== this.pid && this.aboard?.id === entry.id) this.profile.count('along');
     if (msg.pid === this.pid && this.riding?.id !== entry.id) this.mount(entry);
     else if (was === this.pid && msg.pid !== this.pid && this.riding?.id === entry.id) this.dismount();
     this.emit('ride');
   }
 
-  // The big animal you could get on: the nearest one beside you that nobody
-  // is riding.
+  // Someone hopped on to ride along in one of a vehicle's seats for
+  // friends, or got out of it (pid 0).
+  seatNews(entry, msg) {
+    const i = msg.seat - 1;
+    if (!(i < entry.passengers.length)) return;
+    const was = entry.passengers[i];
+    entry.passengers[i] = msg.pid;
+    const look = this.players.get(msg.pid)?.look;
+    entry.model.setPassenger(i, msg.pid && look ? shirtColor(look.shirt) : null);
+    if (msg.pid === this.pid && this.aboard?.id !== entry.id) this.hopOn(entry, msg.seat);
+    else if (was === this.pid && msg.pid !== this.pid && this.aboard?.id === entry.id) this.hopOff();
+    this.emit('ride');
+  }
+
+  // Whether you could get on this: nobody is riding it, or it has a seat
+  // free for you to ride along in.
+  canBoard(c) {
+    return !c.rider || c.passengers.includes(0);
+  }
+
+  // The big animal or vehicle you could get on: the nearest one beside you
+  // with room for you.
   findRideable() {
-    if (this.riding || !this.me) return 0;
+    if (this.riding || this.aboard || !this.me) return 0;
     const b = this.me.body;
     let best = 0;
     let near = Infinity;
     for (const c of this.critters.values()) {
       const r = CRITTER_INFO[c.type]?.ride;
-      if (!r || c.rider || !c.model.group.visible) continue;
+      if (!r || !this.canBoard(c) || !c.model.group.visible) continue;
       const p = c.model.group.position;
       const d = Math.hypot(p.x - b.x, p.z - b.z) - r.radius;
       const up = b.y - p.y;
@@ -1524,6 +1559,10 @@ export class Game extends EventTarget {
   // Q, or the Ride button: on the animal beside you, or off the one you are on.
   toggleRide() {
     if (this.dizzy) return;
+    if (this.aboard) {
+      this.getOut();
+      return;
+    }
     if (this.riding) {
       this.getOff();
       return;
@@ -1639,6 +1678,8 @@ export class Game extends EventTarget {
       const what = {
         digger: `Drive into a hill to dig a tunnel! Hold jump to dig up, or ${this.touch ? '⬇️' : 'Shift'} to dig down.`,
         minecart: 'Push to roll along the rails! Jump to ring the bell.',
+        bus: 'Friends can hop on behind you! Jump to honk!',
+        ferry: 'Friends can hop on behind you! Jump to toot!',
       }[entry.type] ?? 'Jump to honk!';
       this.emit('toast', { icon: info.icon, text: `You are driving ${name}! ${what} ${how}` });
       this.profile.count('drives');
@@ -1681,6 +1722,114 @@ export class Game extends EventTarget {
     }
     this.sound.play('land');
     this.emit('ride');
+  }
+
+  // In a seat for friends (the island said yes): a friend drives, and you
+  // ride along wherever they go.
+  hopOn(entry, seat) {
+    const b = this.me.body;
+    if (b.flying) {
+      b.flying = false;
+      this.emit('fly', false);
+    }
+    this.seat = null;
+    this.aboard = { id: entry.id, seat, type: entry.type, held: true, hop: { t: 0, x: b.x, y: b.y, z: b.z } };
+    this.sound.play('jump');
+    const info = CRITTER_INFO[entry.type];
+    const name = entry.name || `the ${info.name.toLowerCase()}`;
+    const driver = this.players.get(entry.rider);
+    const who = driver ? `${driver.name || 'A friend'} is driving.` : 'Nobody is driving yet.';
+    const how = this.touch ? 'Tap 👋 Get out to get out.' : 'Press Q to get out.';
+    this.emit('toast', { icon: info.icon, text: `All aboard ${name}! ${who} Jump to honk. ${how}` });
+    if (driver) this.profile.count('along');
+    this.emit('ride');
+  }
+
+  // Getting out of a seat for friends, at once.
+  getOut() {
+    if (!this.aboard) return;
+    this.sendMove(true);
+    this.send({ t: 'critter', op: 'off' });
+    this.hopOff();
+  }
+
+  // Down beside the vehicle (or where you were, if it went away), and on
+  // foot again.
+  hopOff() {
+    const a = this.aboard;
+    if (!a) return;
+    this.aboard = null;
+    const b = this.me.body;
+    const entry = this.critters.get(a.id);
+    if (entry) {
+      const g = entry.model.group;
+      const at = getOffAt(this.world, { body: { x: g.position.x, y: g.position.y, z: g.position.z, inWater: false }, yaw: g.rotation.y, r: CRITTER_INFO[a.type].ride });
+      Object.assign(b, at);
+    }
+    Object.assign(b, { vx: 0, vy: 0, vz: 0, onGround: false, flying: false });
+    unstick(this.world, b);
+    this.sound.play('land');
+    this.emit('ride');
+  }
+
+  // Riding along: nothing to steer, but jump honks.
+  rideAlong(input) {
+    const a = this.aboard;
+    if (!this.critters.get(a.id) || this.dizzy) {
+      this.hopOff();
+      return;
+    }
+    input.readMove();
+    if (input.jump && !a.held) {
+      const now = performance.now();
+      if (now > (a.trickAt ?? 0)) {
+        a.trickAt = now + 700;
+        this.send({ t: 'critter', op: 'trick' });
+      }
+    }
+    a.held = Boolean(input.jump);
+    this.me.anim = ANIM.ride;
+  }
+
+  // Everyone riding along in a vehicle, in their seats in it as it is drawn
+  // (you too, and the camera with you), whatever their page last said.
+  seatPassengers(dt) {
+    for (const c of this.critters.values()) {
+      if (!c.passengers.some(Boolean)) continue;
+      const g = c.model.group;
+      const r = CRITTER_INFO[c.type].ride;
+      const speed = c.model.hs ?? 0;
+      c.passengers.forEach((pid, i) => {
+        if (!pid) return;
+        const seat = riderAt(c.type, { x: g.position.x, y: g.position.y, z: g.position.z, yaw: g.rotation.y }, i + 1);
+        const p = this.players.get(pid);
+        const mine = pid === this.pid && this.aboard?.id === c.id;
+        // A friend's page that has not put them in it yet: where they are.
+        if (!p?.avatar || (!mine && !p.seated)) return;
+        let { x, y, z } = seat;
+        if (mine) {
+          Object.assign(this.me.body, { x, y, z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
+          this.me.yaw = seat.yaw;
+          this.me.speed = speed;
+          const h = this.aboard.hop;
+          if (h) {
+            // Hopping up from where you stood.
+            h.t += dt;
+            const k = Math.min(1, h.t / 0.3);
+            x = h.x + (x - h.x) * k;
+            y = h.y + (y - h.y) * k + Math.sin(Math.PI * k) * 0.5;
+            z = h.z + (z - h.z) * k;
+            if (k >= 1) this.aboard.hop = null;
+          }
+        }
+        const av = p.avatar;
+        av.root.position.set(x, y, z);
+        av.root.rotation.y = seat.yaw;
+        av.ride = r;
+        if (mine) av.update(dt, ANIM.ride, speed);
+        av.shadow.visible = false;
+      });
+    }
   }
 
   // Your animal, moved as you steer it, and you on its back.
@@ -1805,6 +1954,10 @@ export class Game extends EventTarget {
       if (!this.riding.r.sea && !this.riding.r.drill && !this.riding.rail) this.getOff();
       return;
     }
+    if (this.aboard) {
+      if (!CRITTER_INFO[this.aboard.type].ride.sea) this.getOut();
+      return;
+    }
     const b = this.me?.body;
     if (b && !b.flying && !b.inWater && !(b.onGround && b.vy === 0)) this.landNext = true;
   }
@@ -1873,7 +2026,7 @@ export class Game extends EventTarget {
     }
     applyCells(w, cells);
     this.changed(cells);
-    if (this.me && !this.seat) unstick(w, this.riding?.body ?? this.me.body);
+    if (this.me && !this.seat && !this.aboard) unstick(w, this.riding?.body ?? this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
     this.send(msg);
@@ -1910,7 +2063,7 @@ export class Game extends EventTarget {
       this.changed(apply);
     }
     if (!mine) this.editEffects(msg.kind, msg.cells, false);
-    if (this.me && !this.seat) unstick(w, this.riding?.body ?? this.me.body);
+    if (this.me && !this.seat && !this.aboard) unstick(w, this.riding?.body ?? this.me.body);
   }
 
   ack(msg) {
@@ -2103,7 +2256,7 @@ export class Game extends EventTarget {
     }
     // Not the animal you are riding, which is in the middle of the picture,
     // nor your pet riding along with you or sitting on your head.
-    const critter = r.pickCritter(ray, maxDist, this.riding?.id);
+    const critter = r.pickCritter(ray, maxDist, this.riding?.id ?? this.aboard?.id);
     const mode = this.pets.get(this.pid)?.sim.mode;
     const pet = r.pickPet(ray, maxDist, mode === 'ride' || mode === 'perch' ? this.pid : null);
     // Flowers and grass are see-through: one in front of an animal, or the
@@ -2399,13 +2552,15 @@ export class Game extends EventTarget {
     env.time = advanceTime(env.time, dt, env.mode);
     this.touch = input.touchMode;
     if (this.riding) this.moveRide(dt, input);
+    else if (this.aboard) this.rideAlong(input);
     else this.moveMe(dt, input);
     this.rideTarget = this.findRideable();
     const on = this.me.body;
-    this.seatTarget = !this.riding && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
+    this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     this.updateCritters(dt);
+    this.seatPassengers(dt);
     this.updatePets(dt);
     this.updateMonsters(dt);
     this.updateAdventure(dt);
@@ -2584,6 +2739,7 @@ export class Game extends EventTarget {
     const b = this.me?.body;
     if (!b || this.dizzy) return;
     // Off the animal you are riding, and up into the air.
+    if (this.aboard) this.getOut();
     if (this.riding) {
       this.getOff();
       if (this.riding) return;
@@ -2622,7 +2778,7 @@ export class Game extends EventTarget {
       a.root.rotation.y = s.yaw;
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
-      const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id) : null;
+      const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id || c.passengers.includes(p.id)) : null;
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);

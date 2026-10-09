@@ -6,7 +6,7 @@
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import * as B from './blocks.js';
-import { placeBig, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
+import { busesClearOf, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -327,7 +327,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- vehicles
   // Last, from their own randomness too.
-  critters.push(...placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines));
+  const vehicles = placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines);
+  critters.push(...vehicles);
 
   // ---------------------------------------------------------------- adventure
   // Last of all, from randomness of its own, on top of the island as it
@@ -349,6 +350,11 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       critters.splice(0, critters.length, ...made.critters);
     }
   }
+
+  // ---------------------------------------------------------------- riding together
+  // After all that, so it all comes out just as before them: a bus and a
+  // ferry, clear of everything else, with dice of their own.
+  critters.push(...placeBuses(world, new Rng(seed ^ 0x3243f6a8), busesClearOf(vehicles, camps, road)));
 
   return { world, critters, fruit, mines, camps, defense: road };
 }

@@ -1,9 +1,11 @@
 // The vehicles as little toy models, built like the bricks of the island
 // (boxy, with studs on top): a car with big round headlights for eyes, a
 // speedboat with an outboard motor and a flag, a yellow digger on tracks
-// with a drill on the front and a flashing light, and a mine cart with a
-// lantern. Each has a seat, coloured as its driver's T-shirt, and is moved
-// by CritterModel (critter-models.js), which calls drive() each frame.
+// with a drill on the front and a flashing light, a mine cart with a
+// lantern, and for friends to ride in together, an open-top bus and a
+// ferry, each with three rows of two seats behind the driver's. Each seat
+// is coloured as the T-shirt of whoever sits in it, and each vehicle is
+// moved by CritterModel (critter-models.js), which calls drive() each frame.
 import * as THREE from '../../vendor/three.module.js';
 import { cone, cylinder, geo, mesh, sphere, toon, torus } from './toon.js';
 
@@ -235,7 +237,124 @@ function minecart() {
   return { ...v, height: 1, center: 0.45, pick: 0.6, shadow: 0.55, seen: 100 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart };
+// The seats for friends, two to a row behind the driver (as ride.seats in
+// shared/critters.js), each a cushion of its own colour with a back,
+// cushions at height y. Their materials go in v.seatPads.
+function benches(v, y) {
+  v.seatPads = [];
+  const bench = toon('#f7f5ef');
+  for (const z of [0.2, -0.45, -1.1]) {
+    // A bench across, a little under the cushions (a pet sits between them).
+    block(v.body, bench, -0.52, y - 0.12, z - 0.3, 0.52, y - 0.03, z + 0.2);
+    for (const x of [-0.3, 0.3]) {
+      const pad = toon(SEAT).clone();
+      v.owned.push(pad);
+      v.seatPads.push(pad);
+      block(v.body, pad, x - 0.22, y - 0.08, z - 0.3, x + 0.22, y, z + 0.2);
+      block(v.body, pad, x - 0.22, y - 0.08, z - 0.36, x + 0.22, y + 0.36, z - 0.29);
+    }
+  }
+}
+
+const BUSES = ['#fcc419', '#e8453c', '#3a73d8', '#35a852'];
+
+function bus(id) {
+  const v = rig();
+  const { body } = v;
+  const paint = toon(BUSES[id % BUSES.length]);
+  const white = toon('#f7f5ef');
+  const dark = toon('#4a4e57');
+  v.wheels = [
+    [-1, 1],
+    [1, 1],
+    [-1, -1],
+    [1, -1],
+  ].map(([sx, sz]) => wheel(body, sx * 0.6, 0.26, sz * 0.95, 0.26, 0.16));
+  // The floor, and low sides all round to see everyone over.
+  block(body, paint, -0.6, 0.26, -1.5, 0.6, 0.54, 1.45);
+  for (const side of [-1, 1]) {
+    block(body, paint, side * 0.6 - 0.07, 0.54, -1.5, side * 0.6, 0.86, 1.2);
+    // A white stripe along each side, and studs along the top.
+    block(body, white, side * 0.6 - 0.01, 0.62, -1.5, side * 0.6 + 0.005, 0.7, 1.2);
+    studs(body, paint, 0.86, [side * 0.565], [-1.3, -0.8, -0.3, 0.2, 0.7]);
+  }
+  block(body, paint, -0.6, 0.54, -1.5, 0.6, 0.95, -1.43);
+  // The front: a bonnet with studs, and a windscreen and wheel for the driver.
+  block(body, paint, -0.6, 0.54, 1.2, 0.6, 0.86, 1.45);
+  studs(body, paint, 0.86, [-0.3, 0, 0.3], [1.33]);
+  block(body, toon('#bfe8ff', { transparent: true, opacity: 0.55 }), -0.55, 0.86, 1.17, 0.55, 1.22, 1.2);
+  const steer = mesh(torus(0.12, 0.022), toon(BLACK), 0, 0.88, 1.1);
+  steer.rotation.x = -0.6;
+  body.add(steer);
+  // The driver's seat, in front.
+  v.seat = block(body, v.pad, -0.24, 0.54, 0.55, 0.24, 0.62, 1.05);
+  block(body, v.pad, -0.24, 0.54, 0.49, 0.24, 0.98, 0.56);
+  benches(v, 0.62);
+  // A bell on a pole at the back, and bumpers, headlights for eyes and tail lights.
+  body.add(mesh(cylinder(0.02, 0.02, 0.6, 6), dark, 0.52, 1.1, -1.46));
+  body.add(mesh(sphere(1, 12, 10), v.glow, 0.52, 1.42, -1.46, 0.08));
+  for (const z of [-1.53, 1.48]) {
+    const b = mesh(cylinder(0.05, 0.05, 1.2, 10), white, 0, 0.32, z);
+    b.rotation.z = Math.PI / 2;
+    body.add(b);
+  }
+  v.eyes = lampEyes(body, 0.32, 0.68, 1.45, 0.12, v.glow);
+  for (const side of [-1, 1]) block(body, toon('#ff4a4a', { emissive: 0.3 }), side * 0.48 - 0.06, 0.66, -1.53, side * 0.48 + 0.06, 0.76, -1.5);
+  return { ...v, height: 1.3, center: 0.6, pick: 1.2, shadow: 1.25, seen: 120 };
+}
+
+function ferry(id) {
+  const v = rig();
+  const { body } = v;
+  const stripe = toon(BOATS[(id + 1) % BOATS.length]);
+  const white = toon('#f7f5ef');
+  const deck = toon('#c99a6b');
+  // The hull, its middle at the top of the water, a deck across it and a
+  // rail round it.
+  body.add(mesh(sphere(1, 28, 16), white, 0, -0.02, 0, 0.82, 0.34, 1.8));
+  body.add(mesh(sphere(1, 28, 16), stripe, 0, -0.06, 0, 0.835, 0.2, 1.82));
+  block(body, deck, -0.62, 0.2, -1.45, 0.62, 0.3, 1.25);
+  const rail = mesh(torus(1, 0.04), stripe, 0, 0.62, -0.05, 0.7, 1.58, 1);
+  rail.rotation.x = Math.PI / 2;
+  body.add(rail);
+  for (const [x, z] of [[-0.68, 0.6], [0.68, 0.6], [-0.68, -0.45], [0.68, -0.45], [-0.6, -1.25], [0.6, -1.25], [0, 1.52]]) body.add(mesh(cylinder(0.02, 0.02, 0.34, 6), stripe, x, 0.46, z));
+  // The driver's seat and wheel up front, behind a windscreen.
+  v.seat = block(body, v.pad, -0.24, 0.3, 0.55, 0.24, 0.38, 1.05);
+  block(body, v.pad, -0.24, 0.3, 0.49, 0.24, 0.74, 0.56);
+  block(body, toon('#bfe8ff', { transparent: true, opacity: 0.55 }), -0.45, 0.3, 1.24, 0.45, 0.8, 1.27);
+  const steer = mesh(torus(0.11, 0.022), toon(BLACK), 0, 0.62, 1.1);
+  steer.rotation.x = -0.6;
+  body.add(steer);
+  benches(v, 0.38);
+  // A life ring on each side, and eyes on the bow.
+  for (const side of [-1, 1]) {
+    const ring = mesh(torus(0.13, 0.045), toon('#ff7a3d'), side * 0.79, 0.24, 0.2);
+    ring.rotation.y = Math.PI / 2;
+    body.add(ring);
+  }
+  v.eyes = lampEyes(body, 0.22, 0.14, 1.66, 0.1, v.glow);
+  // A funnel at the back that puffs, and a propeller under the water.
+  body.add(mesh(cylinder(0.12, 0.15, 0.5, 14), stripe, 0, 0.55, -1.55));
+  body.add(mesh(cylinder(0.125, 0.125, 0.08, 14), toon(BLACK), 0, 0.82, -1.55));
+  const prop = new THREE.Group();
+  prop.position.set(0, -0.3, -1.72);
+  for (let i = 0; i < 3; i++) {
+    const b = mesh(sphere(1, 8, 6), toon(METAL), 0, 0, 0, 0.04, 0.11, 0.02);
+    b.position.set(Math.cos((i * Math.PI * 2) / 3) * 0.09, Math.sin((i * Math.PI * 2) / 3) * 0.09, 0);
+    b.rotation.z = (i * Math.PI * 2) / 3 + Math.PI / 2;
+    prop.add(b);
+  }
+  body.add(prop);
+  v.prop = prop;
+  // A flag at the bow.
+  body.add(mesh(cylinder(0.015, 0.015, 0.7, 6), toon('#8b5a3c'), 0, 0.85, 1.52));
+  const flag = mesh(box(), stripe, 0, 1.08, 1.4, 0.02, 0.16, 0.24);
+  body.add(flag);
+  v.flag = flag;
+  return { ...v, sea: true, height: 0.9, center: 0.3, pick: 1.25, shadow: 0, seen: 130 };
+}
+
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, bus, ferry };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -250,9 +369,9 @@ export function drive(m, dt, state, moving) {
   const honk = m.trick > 0 || state === 'happy';
   m.glow.emissiveIntensity = honk ? 0.9 + Math.sin(t * 30) * 0.1 : 0.35;
   if (m.eyes) m.eyes.scale.setScalar(honk ? 1.15 : 1);
-  if (m.type === 'boat') {
+  if (m.type === 'boat' || m.sea) {
     const fast = clamp(go / 6, 0, 1);
-    b.position.y = Math.sin(t * 2.1) * 0.03 + fast * 0.06;
+    b.position.y = Math.sin(t * 2.1) * 0.03 + fast * (m.sea ? 0.03 : 0.06);
     b.rotation.set(-fast * 0.08 + Math.sin(t * 1.6) * 0.02, 0, Math.sin(t * 1.3) * 0.04 - clamp(m.turn * 0.04, -0.12, 0.12));
     m.prop.rotation.z += dt * (moving ? 30 : 2);
     m.flag.rotation.y = Math.sin(t * (moving ? 12 : 3)) * 0.3;

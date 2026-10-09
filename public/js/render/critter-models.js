@@ -1306,6 +1306,12 @@ export class CritterModel {
     if (color) this.pad.color.set(color);
   }
 
+  // Someone riding along in a vehicle's seat i for friends (null: nobody),
+  // its cushion in the colour of their T-shirt.
+  setPassenger(i, color) {
+    this.seatPads?.[i]?.color.set(color ?? this.padColor);
+  }
+
   // Climbing or diving, and how fast it is turning, from where the group has
   // been put since last time.
   track(dt) {

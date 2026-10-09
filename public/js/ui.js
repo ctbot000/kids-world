@@ -1538,6 +1538,7 @@ export class UI {
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
+          card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky: bop it!']),
@@ -3055,28 +3056,31 @@ export class UI {
   // you ride (or near the top, seeing through your own eyes): kept on the
   // screen, clear of the top bar, the toasts and the hotbar.
   rideButton(g, r) {
-    if (!g.riding && (g.seat || (!g.rideTarget && g.seatTarget))) {
+    if (!g.riding && !g.aboard && (g.seat || (!g.rideTarget && g.seatTarget))) {
       this.seatButton(g, r);
       return;
     }
     const el = $('ride');
-    const c = g.critters.get(g.riding?.id ?? g.rideTarget);
-    const at = g.riding ? g.players.get(g.pid)?.avatar?.root.position : c?.model.group.position;
+    const on = g.riding ?? g.aboard;
+    const c = g.critters.get(on?.id ?? g.rideTarget);
+    const at = on ? g.players.get(g.pid)?.avatar?.root.position : c?.model.group.position;
     if (!c || !at || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const info = CRITTER_INFO[c.type];
     const touch = this.input.touchMode;
-    const label = g.riding ? (info.vehicle ? '👋 Get out' : '👋 Get off') : `${info.icon} ${info.vehicle ? 'Drive' : 'Ride'}`;
+    // With someone at the wheel, the others hop on to ride along.
+    const verb = info.vehicle ? (c.rider ? 'Hop on' : 'Drive') : 'Ride';
+    const label = on ? (info.vehicle ? '👋 Get out' : '👋 Get off') : `${info.icon} ${verb}`;
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', g.riding ? label.slice(3) : `${info.vehicle ? 'Drive' : 'Ride'} ${c.name || info.name}`);
+      el.setAttribute('aria-label', on ? label.slice(3) : `${verb} ${c.name || info.name}`);
     }
-    const scr = r.project(at.x, at.y + (g.riding ? 1 : c.model.center), at.z);
-    if (!scr.visible && !g.riding) {
+    const scr = r.project(at.x, at.y + (on ? 1 : c.model.center), at.z);
+    if (!scr.visible && !on) {
       el.hidden = true;
       return;
     }
