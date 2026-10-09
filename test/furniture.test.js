@@ -176,6 +176,12 @@ test('a seat beside you is found, you sit facing the way it faces, lie in bed fr
     assert.ok(lie.z > 10 && lie.z < 10.3, `feet at the foot: ${lie.z}`);
     assert.ok(Math.abs(Math.abs(lie.yaw) - Math.PI) < 1e-9, 'facing -z, head to +z');
   }
+  // A bed one block long: curled up in the middle of it.
+  w.set(24, 6, 10, B.turnedTo(B.BED, 0));
+  const curl = seatPose(w, 24, 6, 10);
+  assert.equal(curl.pose, 'curl');
+  assert.deepEqual([curl.x, curl.z], [24.5, 10.5]);
+  assert.ok(Math.abs(curl.yaw - Math.PI / 2) < 1e-9, 'facing +x, the way the bed faces');
 });
 
 test('sitting down earns Comfy Spot', () => {

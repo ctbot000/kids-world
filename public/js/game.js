@@ -1527,7 +1527,7 @@ export class Game extends EventTarget {
       this.toldSeat = true;
       const name = B.block(this.world.get(cell.x, cell.y, cell.z)).name.toLowerCase();
       const how = this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
-      this.emit('toast', { icon: pose.pose === 'lie' ? '🛏️' : '🛋️', text: pose.pose === 'lie' ? `Snuggled up in bed! ${how} to get up.` : `You sit on the ${name}. ${how} to get up.` });
+      this.emit('toast', { icon: pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit on the ${name}. ${how} to get up.` });
     }
     this.emit('ride');
   }
@@ -1567,7 +1567,7 @@ export class Game extends EventTarget {
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
     me.yaw = pose.yaw;
     me.speed = 0;
-    me.anim = pose.pose === 'lie' ? ANIM.lie : ANIM.sit;
+    me.anim = { sit: ANIM.sit, lie: ANIM.lie, curl: ANIM.curl }[pose.pose];
     const a = this.players.get(this.pid)?.avatar;
     if (a) {
       a.root.position.set(b.x, b.y, b.z);
@@ -2388,7 +2388,7 @@ export class Game extends EventTarget {
       v.dist += (this.pose.dist - v.dist) * Math.min(1, dt * 4);
     }
     // Sitting or lying down, your eyes are lower than your hips are high.
-    this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.lie ? 0.95 : 0.45), z: b.z } : b);
+    this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z } });
     this.observe();
@@ -2577,7 +2577,7 @@ export class Game extends EventTarget {
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
-      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie) a.shadow.visible = false;
+      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl) a.shadow.visible = false;
     }
     for (const p of this.players.values()) {
       if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;

@@ -1,4 +1,5 @@
-// Sitting on chairs and sofas, and lying in bed. Walk up to one and press Q
+// Sitting on chairs and sofas, and lying in bed (curled up in a bed one
+// block long, stretched out in a longer one). Walk up to one and press Q
 // (or the Sit button beside it): you sit facing the way it faces, or lie
 // down with your head at the head of the bed. Moving, jumping, Shift or Q
 // gets you up again, in front of it. Friends see you sit (render/avatar.js
@@ -31,6 +32,13 @@ function layoutPoint(front, lx, lz) {
   // Quarter turns from -z (the layout's front) round to `front`, as furniture.js.
   for (let i = 0; i < (front + 1) % 4; i++) [x, z] = [1 - z, x];
   return [x, z];
+}
+
+// Whether the cell one step (dx, dz) from (x, y, z) holds the same piece,
+// facing the same way, as `def`: one joined to it.
+function joined(world, x, y, z, def, dx, dz) {
+  const next = BLOCKS[world.get(x + dx, y, z + dz)];
+  return next?.model === def.model && next.front === def.front;
 }
 
 // The yaw an avatar has facing way `front` (it faces +z at yaw 0).
@@ -73,11 +81,15 @@ export function seatPose(world, x, y, z) {
   if (seat.pose === 'lie') {
     const [fx, fz] = DIRS[front];
     let [cx, cz] = [x, z];
-    for (let i = 0; i < 8; i++) {
-      const next = BLOCKS[world.get(cx + fx, y, cz + fz)];
-      if (next?.model !== def.model || next.front !== front) break;
+    for (let i = 0; i < 8 && joined(world, cx, y, cz, def, fx, fz); i++) {
       cx += fx;
       cz += fz;
+    }
+    // A bed one block long is too short to stretch out in: you curl up in
+    // the middle of it (render/avatar.js shrinks you just enough to fit).
+    if (cx === x && cz === z && !joined(world, x, y, z, def, -fx, -fz)) {
+      const [mx, mz] = layoutPoint(front, 0.5, 0.5);
+      return { x: x + mx, y: y + seat.h, z: z + mz, yaw, pose: 'curl', cell: { x, y, z } };
     }
     const [px, pz] = layoutPoint(front, 0.5, 0.14);
     return { x: cx + px, y: y + seat.h, z: cz + pz, yaw, pose: 'lie', cell: { x, y, z } };

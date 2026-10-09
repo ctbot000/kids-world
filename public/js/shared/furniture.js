@@ -57,15 +57,15 @@ const MODELS = {
     const z1 = back ? 1 : 0.96;
     const out = [box(0.05, 0.12, z0, 0.95, 0.3, z1, WOOD, 'planks'), box(0.08, 0.3, z0, 0.92, 0.48, z1, WHITE, 'cloth')];
     // The blanket, up to the pillow at the head.
-    out.push(box(0.07, 0.48, z0, 0.93, 0.54, back ? 1 : 0.6, '#f29bc4', 'cloth'));
+    out.push(box(0.07, 0.48, z0, 0.93, 0.54, back ? 1 : 0.64, '#f29bc4', 'cloth'));
     if (!back) {
-      out.push(box(0.05, 0, 0.88, 0.95, 0.95, 0.98, WOOD, 'planks'));
-      out.push(box(0.16, 0.48, 0.63, 0.84, 0.62, 0.86, WHITE, 'cloth'));
+      out.push(box(0.05, 0, 0.92, 0.95, 0.95, 0.99, WOOD, 'planks'));
+      out.push(box(0.16, 0.48, 0.66, 0.84, 0.62, 0.9, WHITE, 'cloth'));
     }
-    if (!front) out.push(box(0.05, 0, 0.02, 0.95, 0.6, 0.1, WOOD, 'planks'));
+    if (!front) out.push(box(0.05, 0, 0.01, 0.95, 0.6, 0.07, WOOD, 'planks'));
     for (const x of [0.05, 0.87]) {
-      if (!front) out.push(box(x, 0, 0.02, x + 0.08, 0.12, 0.1, DARK_WOOD, 'planks'));
-      if (!back) out.push(box(x, 0, 0.88, x + 0.08, 0.12, 0.96, DARK_WOOD, 'planks'));
+      if (!front) out.push(box(x, 0, 0.01, x + 0.08, 0.12, 0.07, DARK_WOOD, 'planks'));
+      if (!back) out.push(box(x, 0, 0.92, x + 0.08, 0.12, 0.99, DARK_WOOD, 'planks'));
     }
     return out;
   },

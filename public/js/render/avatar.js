@@ -104,11 +104,16 @@ const PINK = '#ff9fb8';
 
 // How far your middle is over the bed lying down: half how deep a body is.
 const LIE_LIFT = 0.16;
+// Curled up in a bed one block long, all of you fits in this much of it,
+// head to toe and side to side (shared/seats.js puts the root at its middle).
+const CURL_ROOM = { long: 0.84, wide: 0.84 };
 
 // dizzy: sitting on the ground, out of hearts on an adventure island, until a friend helps you up.
 // sit: on a chair or a sofa, the root at the seat; lie: in bed, on your
-// back, the root at your feet and your head behind you (shared/seats.js).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9 };
+// back, the root at your feet and your head behind you; curl: in a bed one
+// block long, curled up on your side with your knees up, made just small
+// enough to fit in it, the root in the middle of the bed (shared/seats.js).
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10 };
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -723,6 +728,7 @@ export class Avatar {
     if (same) return;
     this.look = { ...look };
     if (this.body) this.root.remove(this.body);
+    this.curlFit = null;
     const kid = isPerson(look);
     const grown = look.animal === GROWN_UP;
     // How much taller a grown-up is than a kid: their legs, then the rest.
@@ -868,6 +874,12 @@ export class Avatar {
       armFwdL = armFwdR = -0.55;
       headTilt = Math.sin(t * 0.7) * 0.06;
       headNod = Math.sin(t * 0.45) * 0.05;
+    } else if (anim === ANIM.curl) {
+      // Hugging your knees, chin tucked in, breathing slowly.
+      bob = 0;
+      armRaiseL = armRaiseR = 0.15;
+      armFwdL = armFwdR = -1.25 + Math.sin(t * 1.6) * 0.02;
+      headNod = 0.65;
     } else if (anim === ANIM.lie) {
       // Flat on your back, arms by your sides, breathing slowly.
       bob = Math.sin(t * 1.6) * 0.006;
@@ -984,12 +996,14 @@ export class Avatar {
       spin = 0;
       hop = 0;
     }
-    const sitting = anim === ANIM.sit;
+    const curled = anim === ANIM.curl;
+    const sitting = anim === ANIM.sit || curled;
     const lying = anim === ANIM.lie;
     if (sitting) {
-      // Legs out over the front of the seat, a little apart.
-      legL.rotation.set(-1.35, 0, -0.08);
-      legR.rotation.set(-1.35, 0, 0.08);
+      // Legs out over the front of the seat, a little apart (curled up,
+      // drawn right up).
+      legL.rotation.set(curled ? -1.7 : -1.35, 0, -0.08);
+      legR.rotation.set(curled ? -1.7 : -1.35, 0, 0.08);
     }
     if (lying) {
       legL.rotation.set(0, 0, -0.04);
@@ -1009,11 +1023,12 @@ export class Avatar {
     armL.rotation.set(armSwing + armFwdL, 0, -(armRaiseL ?? 0.18));
     armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR ?? 0.18);
     this.body.position.y = bob + hop + dip;
-    this.body.rotation.y = spin;
     // In bed, the whole of you tips back about your feet, face up, and sinks
     // to lie on your back.
-    this.body.rotation.x = lying ? -Math.PI / 2 : 0;
+    this.body.rotation.set(lying || curled ? -Math.PI / 2 : 0, curled ? Math.PI / 2 : spin, 0);
+    this.body.position.x = 0;
     this.body.position.z = 0;
+    this.body.scale.setScalar(1);
     if (lying) this.body.position.y += LIE_LIFT;
     this.torso.rotation.set(lean, twist, 0);
     if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist;
@@ -1026,13 +1041,52 @@ export class Avatar {
       if (side) b.rotation.z = rest + swing * side;
       else b.rotation.x = rest + swing;
     }
+    if (curled) {
+      // Curled up on your side (turned a quarter round, then tipped back),
+      // shrunk to fit the bed and moved so all of you is in the middle of it:
+      // measured once the whole pose is set.
+      const fit = (this.curlFit ??= this.measureCurl());
+      this.body.scale.setScalar(fit.scale);
+      this.body.position.set(fit.x, fit.y, fit.z);
+    }
     // Blink now and then.
     if (this.eyes) {
       this.blinkAt -= dt;
-      const closed = this.blinkAt < 0.12 || this.emote === 'sleepy' || this.emote === 'laugh' || (lying && !this.emote);
+      const closed = this.blinkAt < 0.12 || this.emote === 'sleepy' || this.emote === 'laugh' || ((lying || curled) && !this.emote);
       this.eyes.scale.y = closed ? 0.12 : 1;
       if (this.blinkAt < 0) this.blinkAt = 2.5 + Math.random() * 3;
     }
+  }
+
+  // How the curled-up pose (already set on the body, at full size) has to be
+  // shrunk and moved to fit CURL_ROOM, centred on the root and resting on it.
+  measureCurl() {
+    const { root } = this;
+    const [p, r] = [root.position.clone(), root.rotation.clone()];
+    root.position.set(0, 0, 0);
+    root.rotation.set(0, 0, 0);
+    this.body.position.set(0, 0, 0);
+    this.body.scale.setScalar(1);
+    root.updateMatrixWorld(true);
+    // Only what shows: a weapon put away or a hidden hat does not count.
+    const box = new THREE.Box3();
+    const part = new THREE.Box3();
+    const visit = (o) => {
+      if (!o.visible) return;
+      if (o.isMesh) {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        box.union(part.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+      }
+      for (const c of o.children) visit(c);
+    };
+    visit(this.body);
+    root.position.copy(p);
+    root.rotation.copy(r);
+    root.updateMatrixWorld(true);
+    const size = box.getSize(new THREE.Vector3());
+    const scale = Math.min(1, CURL_ROOM.long / size.z, CURL_ROOM.wide / size.x);
+    const mid = box.getCenter(new THREE.Vector3());
+    return { scale, x: -mid.x * scale, y: -box.min.y * scale, z: -mid.z * scale };
   }
 
   dispose() {
