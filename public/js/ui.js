@@ -1539,6 +1539,7 @@ export class UI {
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger or a mine cart and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
+          card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky: bop it!']),
@@ -2412,12 +2413,15 @@ export class UI {
     });
   }
 
-  // Talking: type anything, or tap a phrase or a sticker.
+  // Talking: type anything, or tap a phrase or a sticker. What has been said
+  // on the island is above, to read again and copy; the box takes a paste.
   sayDialog() {
     const g = this.game;
     this.openModal(
       (root) => {
         const box = h('input', { type: 'text', class: 'text-input', maxLength: CHAT_MAX, autocomplete: 'off', enterKeyHint: 'send', placeholder: 'Type something…', 'aria-label': 'Type something to say' });
+        const history = h('div', { class: 'chat-history', role: 'log', 'aria-label': 'What was said' });
+        this.chatHistory = { el: history, box };
         const send = () => {
           const text = cleanChat(box.value);
           if (!text) {
@@ -2429,6 +2433,7 @@ export class UI {
         };
         root.append(
           h('h2', {}, '💬 Say something'),
+          history,
           h(
             'form',
             {
@@ -2478,11 +2483,58 @@ export class UI {
             ),
           ),
         );
+        this.renderChatHistory();
         // With a keyboard, straight to typing; on a touch screen, the phrases first.
         if (!this.input.touchMode) setTimeout(() => box.focus(), 60);
       },
-      { seeThrough: true },
+      { seeThrough: true, onClose: () => (this.chatHistory = null) },
     );
+  }
+
+  // The island's chat so far (the game keeps the last 30, those said before
+  // you came too), the newest at the bottom and in view. Each line can be
+  // selected, and 📋 copies it; where the clipboard is out of reach (a page
+  // not on https), it goes into the box instead.
+  renderChatHistory() {
+    const g = this.game;
+    const view = this.chatHistory;
+    if (!g || !view?.el.isConnected) return;
+    const lines = g.chat
+      .map((m) => ({ m, text: typeof m.text === 'string' && m.text ? m.text : Number.isInteger(m.p) ? PHRASES[m.p] : STICKER_EMOJI[m.e] }))
+      .filter((l) => l.text);
+    const atEnd = view.el.scrollHeight - view.el.scrollTop - view.el.clientHeight < 8;
+    view.el.hidden = !lines.length;
+    view.el.replaceChildren(
+      ...lines.map(({ m, text }) => {
+        const who = m.pid === g.pid ? 'Me' : (m.name ?? g.players.get(m.pid)?.name ?? 'Someone');
+        return h(
+          'div',
+          { class: `said${m.pid === g.pid ? ' mine' : ''}` },
+          h('span', { class: 'said-text', lang: langOf(text) || undefined }, h('b', {}, `${who}: `), text),
+          h(
+            'button',
+            {
+              class: 'copy',
+              type: 'button',
+              'aria-label': `Copy “${text}”`,
+              title: 'Copy',
+              onclick: async () => {
+                try {
+                  await navigator.clipboard.writeText(text);
+                  this.toast('📋', 'Copied! Paste it anywhere you type.');
+                } catch {
+                  view.box.value = [...text].slice(0, CHAT_MAX).join('');
+                  view.box.focus();
+                }
+              },
+            },
+            '📋',
+          ),
+        );
+      }),
+    );
+    if (atEnd || !view.shown) view.el.scrollTop = view.el.scrollHeight;
+    view.shown = true;
   }
 
   emoteDialog() {
@@ -3014,6 +3066,7 @@ export class UI {
     const who = g?.players.get(msg.pid)?.name ?? 'Someone';
     const el = h('div', { class: 'line', lang: langOf(msg.text) || undefined }, h('b', {}, `${who}: `), msg.text);
     $('chatlog').append(el);
+    this.renderChatHistory();
     while ($('chatlog').children.length > 5) $('chatlog').firstElementChild.remove();
     this.chatRoom.observe(el);
     setTimeout(() => {

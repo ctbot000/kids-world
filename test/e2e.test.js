@@ -1969,6 +1969,20 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(host, (w) => [...window.kidsWorld.game.players.values()].some((p) => p.bubble?.text === w), words);
   await until(host, (w) => [...document.querySelectorAll('#chatlog .line')].some((l) => l.textContent.endsWith(w) && l.lang === 'ko'), words);
 
+  // The host reads it again in 💬, copies it with 📋 and pastes it into the box.
+  await host.browserContext().overridePermissions(new URL(host.url()).origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
+  await host.bringToFront();
+  await host.click('#btn-say');
+  await until(host, (w) => [...document.querySelectorAll('#modal .chat-history .said')].some((l) => l.querySelector('.said-text').textContent.endsWith(w)), words);
+  await host.evaluate((w) => [...document.querySelectorAll('#modal .chat-history .said')].find((l) => l.querySelector('.said-text').textContent.endsWith(w)).querySelector('.copy').click(), words);
+  await until(host, async (w) => (await navigator.clipboard.readText()) === w, words);
+  const hostBox = await host.waitForSelector('#modal .say-row input');
+  await hostBox.focus();
+  // Headless Chrome binds no shortcut to paste, so the key carries the command.
+  await host.keyboard.press('KeyV', { commands: ['Paste'] });
+  await until(host, (w) => document.querySelector('#modal .say-row input').value === w, words);
+  await host.keyboard.press('Escape');
+
   // The guest builds; the host sees it.
   const { cell, at } = await spotNear(guest, 2, 2);
   const above = { ...cell, y: cell.y + 1 };

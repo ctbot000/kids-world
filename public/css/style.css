@@ -1140,6 +1140,58 @@ body.touch.playing #joystick {
   overflow-wrap: break-word;
 }
 
+/* What has been said, to read again and copy: a few lines, scrolling, the
+   newest at the bottom. The words can be selected, unlike the rest of the game. */
+.chat-history {
+  max-height: min(30vh, 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  margin-bottom: 12px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: white;
+}
+
+.chat-history .said {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 10px;
+}
+
+.chat-history .said.mine {
+  background: rgba(159, 216, 255, 0.3);
+}
+
+.chat-history .said-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.chat-history .said-text:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.chat-history .copy {
+  flex: none;
+  width: 34px;
+  height: 30px;
+  border-radius: 10px;
+  background: none;
+  font-size: 1rem;
+}
+
+.chat-history .copy:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .say-row {
   flex-wrap: nowrap;
   margin-bottom: 14px;
