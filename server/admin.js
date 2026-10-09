@@ -6,7 +6,9 @@
 // IP address (a local one for a player on this computer's own network, and
 // an IPv6 one's IPv4 address too, when known) and,
 // from geoip-lite's offline database (no address leaves this computer),
-// roughly where that is. Only for this computer: requests from other
+// roughly where that is; and the AI friend's settings, the islands it is on
+// and what is said there, how its model answers and what it did lately
+// (friend.js), with a button to send it home from an island. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -72,8 +74,34 @@ function sendFile(req, res, file, extra = {}) {
     .pipe(res);
 }
 
+// The AI friend: GET what it is up to, PUT settings, POST /check to see
+// whether its model is there now, POST /visits/<code>/home to send it home.
+async function friendApiFor(friend, req, res, rest) {
+  if (!friend) return json(res, 404, { error: 'The AI friend does not run here.' });
+  if (rest === '') {
+    if (req.method === 'GET') return json(res, 200, await friend.status());
+    if (req.method !== 'PUT') return res.writeHead(405, { Allow: 'GET, PUT' }).end();
+    try {
+      await friend.change(await readJson(req));
+      return json(res, 200, await friend.status());
+    } catch (error) {
+      return json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
+    }
+  }
+  if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+  if (rest === '/check') {
+    await friend.check();
+    return json(res, 200, await friend.status());
+  }
+  const home = /^\/visits\/([^/]+)\/home$/.exec(rest);
+  if (!home) return json(res, 404, { error: 'Not found' });
+  const ok = friend.sendHome(home[1]);
+  return json(res, ok ? 200 : 404, { ok });
+}
+
 // Returns a handler: (req, res, pathname) => true when it answered.
-export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
+export function adminHandler({ store, keeper = null, friend = null, dataDir = store.dir }) {
+  const friendApi = (req, res, rest) => friendApiFor(friend, req, res, rest);
   return async function admin(req, res, pathname) {
     if (pathname !== '/admin' && !pathname.startsWith('/admin/')) return false;
     if (!isLocal(req)) {
@@ -105,6 +133,10 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         // An IPv6 address's IPv4 one, where there is one, places it better.
         devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip4 && isPublicIp(d.ip4) ? d.ip4 : d.ip) }))),
       });
+      return true;
+    }
+    if (pathname === '/admin/api/friend' || pathname.startsWith('/admin/api/friend/')) {
+      await friendApi(req, res, pathname.slice('/admin/api/friend'.length));
       return true;
     }
     const move = /^\/admin\/api\/devices\/([^/]+)\/move$/.exec(pathname);

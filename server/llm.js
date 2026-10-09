@@ -33,6 +33,17 @@ export class Ollama {
     return names.includes(wanted) ? '' : `Ollama has no model ${this.model} (ollama pull ${this.model})`;
   }
 
+  // The models Ollama has, by name ([] when it is not there).
+  async models() {
+    try {
+      const res = await this.fetch(`${this.url}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) return [];
+      return ((await res.json()).models ?? []).map((m) => m.name).sort();
+    } catch {
+      return [];
+    }
+  }
+
   // The model's answer to messages ([{ role, content }]), as the object the
   // schema describes. Throws when there is none in time.
   chat(messages, schema) {

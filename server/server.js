@@ -3,7 +3,7 @@
 // the host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/, and runs the AI friend
-// (buddy.js) when Ollama is there. Usage:
+// (buddy.js) when Ollama is there, with its settings on the admin page. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
@@ -19,6 +19,7 @@ import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
 import { Buddy } from './buddy.js';
+import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
 import { Ollama } from './llm.js';
 import { WebSocketServer } from 'ws';
@@ -297,7 +298,26 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = Number(values.port);
   const store = await new KeeperStore(values.data).open();
   const { keeper, config } = (await startKeeper(store)) ?? {};
-  const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper }) });
+  // The AI friend, as its settings on the admin page say (on unless
+  // KIDS_WORLD_AI=off before any are saved): islands of this server, and with
+  // the keeper, invitations and islands peer to peer (see buddy.js).
+  const friend = new FriendControl({
+    dir: store.dir,
+    llm: new Ollama(),
+    make: (settings) =>
+      new Buddy({
+        llm: friend.llm,
+        keeper: keeper ?? null,
+        rooms: server.rooms,
+        rtc: keeper?.rtc ?? null,
+        server: keeper?.server ?? null,
+        iceServers: ICE_SERVERS,
+        name: settings.name,
+        wander: settings.wander,
+        maxVisits: settings.maxVisits,
+      }),
+  });
+  const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper, friend }) });
   server.listen(port, values.host, () => {
     console.log(`Kids World is running at http://localhost:${port}/`);
     if (values.host === '0.0.0.0' || values.host === '::') {
@@ -305,24 +325,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     if (keeper) console.log(`Keeper: copies are kept in ${store.dir}; see them at http://localhost:${port}/admin/`);
   });
-  // The AI friend, unless KIDS_WORLD_AI=off: islands of this server, and
-  // with the keeper, invitations and islands peer to peer (see buddy.js).
-  let buddy = null;
-  if (process.env.KIDS_WORLD_AI !== 'off') {
-    buddy = new Buddy({
-      llm: new Ollama(),
-      keeper: keeper ?? null,
-      rooms: server.rooms,
-      rtc: keeper?.rtc ?? null,
-      server: keeper?.server ?? null,
-      iceServers: ICE_SERVERS,
-      ...(process.env.KIDS_WORLD_AI_NAME ? { name: process.env.KIDS_WORLD_AI_NAME } : {}),
-      wander: process.env.KIDS_WORLD_AI_WANDER !== 'off',
-    });
-    await buddy.start();
-  }
+  await friend.start();
   const stop = async () => {
-    buddy?.stop();
+    friend.stop();
     await keeper?.stop();
     await server.shutdown();
     keeper?.rtc?.cleanup?.();

@@ -336,6 +336,91 @@ button:disabled {
   color: var(--ink-soft);
 }
 
+.friend {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.friend p {
+  margin: 0;
+}
+
+.friend-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.friend-line .status {
+  box-shadow: none;
+  border: 2px solid var(--line);
+}
+
+.settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px;
+  border: 2px dashed var(--line);
+  border-radius: 16px;
+}
+
+.settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings input[type='text'] {
+  width: 12em;
+  padding: 5px 12px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  font: 500 15px var(--font);
+  color: var(--ink);
+}
+
+.visits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+}
+
+.visit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+}
+
+.visit h4 {
+  margin: 0;
+}
+
+.chat {
+  max-height: 180px;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 14px;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.chat .mine {
+  color: var(--grass);
+}
+
 @media (max-width: 480px) {
   .who {
     flex-wrap: wrap;

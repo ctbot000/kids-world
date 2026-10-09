@@ -3,11 +3,12 @@
 // model was told about it), builds when asked, walks after its friend and
 // flies to one far away, helps a dizzy friend up and bops a monster coming at
 // one; it goes home when asked, when left alone, and stays away from an island
-// whose owner sent it home. The keeper lists it as a player to invite and
+// whose owner sent it home. The admin page changes its settings, shows the
+// islands it is on with what is said there, and sends it home from one. The keeper lists it as a player to invite and
 // passes invitations on to it. The model here is a stand-in; visiting a
 // browser's island peer to peer is in e2e.test.js.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -15,7 +16,10 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay } from '../server/buddy.js';
+import { adminHandler } from '../server/admin.js';
+import { FriendControl } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
+import { createGameServer } from '../server/server.js';
 
 const dirs = [];
 async function tempDir() {
@@ -276,4 +280,68 @@ test('it notices goodbyes and something personal said to it, never asks for anyt
   assert.equal(languageOf('같이 놀자'), 'Korean');
   assert.equal(languageOf('hello'), 'English');
   assert.equal(languageOf('こんにちは'), 'the same language they wrote in');
+});
+
+test('the admin page saves its settings and applies them, shows where it is and what is said, and sends it home', async () => {
+  const dir = await tempDir();
+  const store = await new KeeperStore(join(dir, 'keep')).open();
+  const { room, rooms, island } = server();
+  const minji = child(room);
+  const llm = { ...model(() => ({ say: 'Hi Minji!', action: 'none', stamp: 'none' })), url: 'http://127.0.0.1:11434', models: async () => ['gemma3:4b', 'llama3.2:3b'] };
+  const control = new FriendControl({ dir: store.dir, llm, env: {}, make: (s) => friend({ llm, rooms, name: s.name, wander: s.wander, maxVisits: s.maxVisits }) });
+  after(() => control.stop());
+  await control.start();
+  const web = createGameServer({ log: () => {}, admin: adminHandler({ store, friend: control }) });
+  after(() => web.close());
+  await new Promise((done) => web.listen(0, '127.0.0.1', done));
+  const base = `http://127.0.0.1:${web.address().port}/admin/api/friend`;
+  const put = (body, headers = { 'X-Kids-World-Admin': '1' }) => fetch(base, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+
+  let state = await (await fetch(base)).json();
+  assert.deepEqual(state.settings, { on: true, name: DEFAULT_NAME, model: 'gemma3:4b', wander: true, maxVisits: 2 });
+  assert.equal(state.saved, false, 'from the environment until saved');
+  assert.equal(state.ready, true);
+  assert.deepEqual(state.models, ['gemma3:4b', 'llama3.2:3b']);
+
+  // Invited, it is on the island, with what was said there.
+  control.buddy.invited(island, 'Minji');
+  await eventually(() => minji.of('say').some((m) => m.text === 'Hi Minji!'));
+  state = await (await fetch(base)).json();
+  assert.equal(state.visits.length, 1);
+  assert.equal(state.visits[0].invitedBy, 'Minji');
+  assert.deepEqual(state.visits[0].players, ['Minji']);
+  assert.deepEqual(state.visits[0].chat.at(-1), { name: DEFAULT_NAME, text: 'Hi Minji!', mine: true });
+  assert.equal(state.stats.answers, 1);
+  assert.match(state.history[0].text, /off to "Maple Fields", invited by Minji/);
+
+  // Settings: checked, saved, and applied; a new name from its next visit on.
+  assert.equal((await put({ name: 'Bolt 🤖' }, {})).status, 403, 'only with the admin header');
+  assert.equal((await put({ maxVisits: 9 })).status, 400);
+  assert.equal((await put({ name: '   ' })).status, 400);
+  state = await (await put({ name: 'Bolt 🤖', model: 'llama3.2:3b', wander: false, maxVisits: 3 })).json();
+  assert.deepEqual(state.settings, { on: true, name: 'Bolt 🤖', model: 'llama3.2:3b', wander: false, maxVisits: 3 });
+  assert.equal(llm.model, 'llama3.2:3b');
+  assert.equal(control.buddy.name, 'Bolt 🤖');
+  assert.equal(control.buddy.wander, false);
+  assert.equal(state.visits[0].chat.at(-1).name, DEFAULT_NAME, 'the island knows it by the name it came with');
+  assert.deepEqual(JSON.parse(await readFile(join(store.dir, 'ai-friend.json'), 'utf8')), state.settings);
+
+  // Sent home from the island, and not back there by itself for a while.
+  const home = (code) => fetch(`${base}/visits/${code}/home`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } });
+  assert.equal((await home('999999')).status, 404);
+  assert.equal((await home(island.code)).status, 200);
+  await eventually(() => !buddyIn(room) && control.buddy.visits.size === 0);
+  assert.ok(control.buddy.avoid.get(island.code) > Date.now() + 3600000);
+
+  // Off, and on again as it was saved: by a new control, as after a restart.
+  state = await (await put({ on: false })).json();
+  assert.equal(state.running, false);
+  assert.equal(control.buddy, null);
+  assert.ok(state.history.length, 'what it did is still there');
+  const again = new FriendControl({ dir: store.dir, llm, env: { KIDS_WORLD_AI: 'off' }, make: (s) => friend({ llm, rooms, name: s.name }) });
+  await again.start();
+  assert.equal(again.buddy, null, 'the saved settings win over the environment');
+  await again.change({ on: true });
+  assert.equal(again.buddy.name, 'Bolt 🤖');
+  again.stop();
 });

@@ -17,8 +17,10 @@
 // a while. What is said goes only to the model on this computer, and is
 // forgotten when the visit ends.
 //
-// Settings (server.js): KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME
-// names it; KIDS_WORLD_AI_WANDER=off keeps it to invitations.
+// Settings: on the admin page (friend.js), or before any are saved there,
+// KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME names it;
+// KIDS_WORLD_AI_WANDER=off keeps it to invitations. It keeps a short account
+// of what it did and how its model answers, for the admin page.
 import { EventEmitter } from 'node:events';
 import { HELP_REACH } from '../public/js/shared/adventure.js';
 import { CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
@@ -72,10 +74,12 @@ const MOST_STAY_MS = 60 * 60000;
 const ALONE_MS = 15000;
 const CHAT_KEEP = 14;
 // After a visit, not back to that island (by itself) for this long.
-const AGAIN_MS = { kicked: 24 * 3600000, asked: 2 * 3600000, refused: 3600000 };
+const AGAIN_MS = { kicked: 24 * 3600000, asked: 2 * 3600000, 'sent home': 2 * 3600000, refused: 3600000 };
 const AGAIN_DEFAULT_MS = 30 * 60000;
 const WANDER_MS = 3 * 60000;
 const CHECK_MS = 60000;
+// How many lines of what it did the admin page sees.
+const HISTORY = 60;
 
 export const ACTIONS = ['none', 'follow', 'stay', 'wave', 'dance', 'cheer', 'hearts', 'clap', 'laugh', 'surprise', 'sleepy', 'build', 'pet', 'leave'];
 const EMOTE_ACTIONS = new Set(ACTIONS.filter((a) => EMOTE_KEYS.includes(a)));
@@ -166,14 +170,20 @@ export class Buddy extends EventEmitter {
     this.iceServers = iceServers;
     this.name = cleanName(name) || DEFAULT_NAME;
     // What children call it: its name without the robot, and for Pip, in Hangul too.
-    const bare = this.name.replace(/\s*🤖$/u, '').toLowerCase();
-    this.callNames = [bare, ...(bare === 'pip' ? ['핍'] : [])].filter(Boolean);
     this.look = cleanLook(look);
     this.maxVisits = maxVisits;
     this.wander = wander;
     this.random = random;
     this.now = now;
-    this.log = log;
+    // What it did, newest last, for the admin page: what is said is not in it.
+    this.history = [];
+    this.log = (text) => {
+      this.history.push({ at: this.now(), text: String(text).replace(/^AI friend: /, '') });
+      if (this.history.length > HISTORY) this.history.splice(0, this.history.length - HISTORY);
+      log(text);
+    };
+    // How its model answers: how many, how many not, and how fast.
+    this.stats = { answers: 0, failures: 0, totalMs: 0, lastMs: 0, lastError: '', lastErrorAt: 0 };
     this.tickMs = tickMs;
     this.id = friendId('kids-world ai friend');
     this.ready = false;
@@ -185,12 +195,41 @@ export class Buddy extends EventEmitter {
     this.timers = [];
   }
 
+  // What children call it: its name without the robot, and for Pip, in Hangul too.
+  get callNames() {
+    const bare = this.name.replace(/\s*🤖$/u, '').toLowerCase();
+    return [bare, ...(bare === 'pip' ? ['핍'] : [])].filter(Boolean);
+  }
+
+  // A new name, for the visits after this one: the islands it is on know it by the old one.
+  rename(name) {
+    this.name = cleanName(name) || DEFAULT_NAME;
+  }
+
   async start() {
     await this.check();
     this.timers.push(setInterval(() => this.check(), CHECK_MS));
-    if (this.wander) this.timers.push(setInterval(() => this.wanderOnce(), WANDER_MS));
+    // Wandering can be turned off and on while it runs.
+    this.timers.push(setInterval(() => this.wander && this.wanderOnce(), WANDER_MS));
     for (const t of this.timers) t.unref?.();
     if (this.keeper) this.keeper.buddy = this;
+  }
+
+  // An answer from the model, counted and timed.
+  async ask(messages, schema) {
+    const start = this.now();
+    try {
+      const answer = await this.llm.chat(messages, schema);
+      this.stats.answers++;
+      this.stats.lastMs = this.now() - start;
+      this.stats.totalMs += this.stats.lastMs;
+      return answer;
+    } catch (error) {
+      this.stats.failures++;
+      this.stats.lastError = error.message;
+      this.stats.lastErrorAt = this.now();
+      throw error;
+    }
   }
 
   // Whether the model is there to talk with.
@@ -285,6 +324,9 @@ export class Visit extends EventEmitter {
     this.link = link;
     this.invitedBy = invitedBy;
     this.pass = pass;
+    // Its name here, as the island knows it, even if it is renamed meanwhile.
+    this.name = buddy.name;
+    this.callNames = buddy.callNames;
     this.now = buddy.now;
     this.random = buddy.random;
     this.me = 0;
@@ -324,8 +366,23 @@ export class Visit extends EventEmitter {
     link.on('close', (why) => this.end(this.welcomed ? 'lost' : `could not get in: ${why}`, { quiet: true }));
   }
 
-  get name() {
-    return this.buddy.name;
+  // What the admin page shows of it: where, with whom, and what was said there.
+  summary() {
+    const name = (pid) => this.players.get(pid)?.name ?? '';
+    return {
+      code: this.island.code,
+      island: this.world?.name ?? this.island.name,
+      server: Boolean(this.island.server),
+      invitedBy: this.invitedBy,
+      arrivedAt: this.arrivedAt ?? 0,
+      leaveAt: this.leaveAt ?? 0,
+      owner: this.host !== this.me ? name(this.host) : '',
+      players: this.others().map((p) => p.name),
+      friend: name(this.friend),
+      mode: this.dizzy ? 'dizzy' : this.mode,
+      thinking: this.thinking,
+      chat: this.chat.map((c) => ({ name: c.mine ? this.name : c.name, text: c.text, mine: c.mine })),
+    };
   }
 
   joinMessage() {
@@ -504,7 +561,7 @@ export class Visit extends EventEmitter {
     this.quietAt = now + between(QUIET_MS, this.random);
     const speaker = this.players.get(entry.pid);
     const lower = text.toLowerCase();
-    const named = this.buddy.callNames.some((n) => lower.includes(n));
+    const named = this.callNames.some((n) => lower.includes(n));
     const near = speaker && this.body && Math.hypot(speaker.s[0] - this.body.x, speaker.s[2] - this.body.z) < 10;
     const toMe = named || this.others().length === 1 || near || speaker?.id === this.friend || this.random() < 0.3;
     if (!toMe) return;
@@ -750,7 +807,7 @@ export class Visit extends EventEmitter {
       { role: 'system', content: systemPrompt(this.name) },
       { role: 'user', content: this.situation(ask) },
     ];
-    return this.buddy.llm.chat(messages, ANSWER_SCHEMA);
+    return this.buddy.ask(messages, ANSWER_SCHEMA);
   }
 
   // What the model is told about the island, who is there and what was said.

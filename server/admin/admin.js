@@ -2,7 +2,10 @@
 // (drawn with the game's own map code), and downloads or deletes, and their
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
-// taken out of the ranking, and where each was last seen from. It reads /admin/api/state every few seconds.
+// taken out of the ranking, and where each was last seen from; and the AI
+// friend: its settings, the islands it is on and what is said there, how its
+// model answers and what it did lately. It reads /admin/api/state and
+// /admin/api/friend every few seconds.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
@@ -376,6 +379,152 @@ function islandList(device) {
   return fold(device.id, label, kept, goodbyes);
 }
 
+// ---------------------------------------------------------------- the AI friend
+
+const MODE = { follow: 'following', stay: 'waiting where it is', dizzy: 'dizzy' };
+
+// Its settings form, made once: a refresh fills it in only while nothing in
+// it has been changed and not saved.
+let friendForm = null;
+function settingsForm() {
+  const on = h('input', { type: 'checkbox' });
+  const name = h('input', { type: 'text', autocomplete: 'off', 'aria-label': 'Its name', maxlength: 40 });
+  name.spellcheck = false;
+  const model = h('select', { 'aria-label': 'Its model' });
+  const wander = h('input', { type: 'checkbox' });
+  const visits = h('select', { 'aria-label': 'Islands at once' });
+  const save = h('button', { type: 'submit', disabled: true }, 'Save');
+  const note = h('span', { class: 'muted', 'aria-live': 'polite' });
+  const form = h(
+    'form',
+    { class: 'settings' },
+    h('label', {}, on, 'On'),
+    h('label', {}, 'Name', name),
+    h('label', {}, 'Model', model),
+    h('label', { title: 'Now and then it visits an open island with somebody on it, the loneliest first. Off: it only comes when invited.' }, wander, 'Visits by itself'),
+    h('label', {}, 'On up to', visits, 'islands at once'),
+    save,
+    note,
+  );
+  let dirty = false;
+  const changed = () => {
+    dirty = true;
+    save.disabled = false;
+    note.textContent = '';
+  };
+  form.addEventListener('input', changed);
+  form.addEventListener('change', changed);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!on.checked && friendForm.state.visits.length && !confirm('Turn the AI friend off? It goes home from every island it is on.')) return;
+    save.disabled = true;
+    const res = await api('friend', {
+      method: 'PUT',
+      headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ on: on.checked, name: name.value, model: model.value, wander: wander.checked, maxVisits: Number(visits.value) }),
+    });
+    if (!res.ok) {
+      save.disabled = false;
+      note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
+      return;
+    }
+    dirty = false;
+    note.textContent = 'Saved.';
+    renderFriend(await res.json());
+  });
+  const fill = (state) => {
+    if (dirty) return;
+    const s = state.settings;
+    on.checked = s.on;
+    name.value = s.name;
+    wander.checked = s.wander;
+    const models = state.models.includes(s.model) ? state.models : [s.model, ...state.models];
+    model.replaceChildren(...models.map((m) => h('option', { value: m }, state.models.includes(m) ? m : `${m} (not in Ollama)`)));
+    model.value = s.model;
+    visits.replaceChildren(...Array.from({ length: state.maxVisits }, (_, k) => h('option', { value: k + 1 }, k + 1)));
+    visits.value = String(s.maxVisits);
+    save.disabled = true;
+  };
+  return { form, fill, state: null };
+}
+
+async function friendAction(path, question = '') {
+  if (question && !confirm(question)) return;
+  const res = await api(`friend/${path}`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } });
+  if (!res.ok) alert('That did not work. Is the keeper still running?');
+  refreshFriend();
+}
+
+function visitCard(v, name) {
+  const chat = h(
+    'ol',
+    { class: 'chat', 'aria-label': `What was said on ${v.island}` },
+    ...(v.chat.length ? v.chat.map((c) => h('li', { class: c.mine ? 'mine' : null }, h('b', {}, c.name), ': ', c.text)) : [h('li', { class: 'muted' }, 'Nothing said yet.')]),
+  );
+  setTimeout(() => (chat.scrollTop = chat.scrollHeight), 0);
+  const people = v.players.length ? v.players.join(', ') : 'nobody';
+  return h(
+    'article',
+    { class: 'visit' },
+    h('h4', {}, `🏝️ ${v.island}`),
+    h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
+    v.arrivedAt
+      ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
+      : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),
+    h('div', {}, `👥 ${people}`, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · 💭 thinking' : ''),
+    chat,
+    h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: () => friendAction(`visits/${v.code}/home`, `Send ${name} home from “${v.island}”? It does not come back there by itself for a while.`) }, 'Send home')),
+  );
+}
+
+function renderFriend(state) {
+  $('friend-section').hidden = !state;
+  if (!state) return;
+  friendForm ??= settingsForm();
+  friendForm.state = state;
+  friendForm.fill(state);
+  const s = state.settings;
+  const [cls, words] = !state.running
+    ? ['off', 'Off: it does not visit anyone.']
+    : state.ready
+      ? ['on', `${s.name} is awake, with ${s.model}${state.listed ? '' : ' · busy on as many islands as it may be on'}`]
+      : ['wait', `${s.name} is asleep: ${state.problem || 'checking its model…'}`];
+  const st = state.stats;
+  const facts = st
+    ? [
+        `💬 ${plural(st.answers, 'answer', 'answers')} from the model`,
+        st.answers ? `${(st.totalMs / st.answers / 1000).toFixed(1)} s each on average (last ${(st.lastMs / 1000).toFixed(1)} s)` : null,
+        st.failures ? `⚠️ ${plural(st.failures, 'answer', 'answers')} that did not come, last ${ago(st.lastErrorAt)}: ${st.lastError}` : null,
+      ].filter(Boolean)
+    : [];
+  $('friend').replaceChildren(
+    h(
+      'div',
+      { class: 'friend-line' },
+      h('span', { class: `status ${cls}`, role: 'status' }, words),
+      state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check the model now') : null,
+    ),
+    friendForm.form,
+    h('p', { class: 'muted' }, `Ollama at `, h('code', {}, state.url), state.models.length ? ` has ${plural(state.models.length, 'model', 'models')}.` : ' answers with no models.', state.saved ? '' : ' These settings come from the environment until saved here.'),
+    facts.length ? h('div', { class: 'facts' }, ...facts.map((f) => h('span', {}, f))) : null,
+    state.visits.length ? h('div', { class: 'visits' }, ...state.visits.map((v) => visitCard(v, s.name))) : state.running ? h('p', { class: 'muted' }, 'Not on any island right now.') : null,
+    state.history.length
+      ? h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, '📜 What it did lately'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))
+      : null,
+  );
+}
+
+async function refreshFriend() {
+  let state = null;
+  try {
+    const res = await api('friend');
+    if (res.ok) state = await res.json();
+  } catch {
+    state = null;
+  }
+  renderFriend(state);
+}
+
 let shown = '';
 let drawnAt = 0;
 
@@ -407,6 +556,7 @@ async function refresh(now = false) {
   }
   if (now) shown = '';
   render(state);
+  await refreshFriend();
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
