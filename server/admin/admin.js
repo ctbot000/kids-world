@@ -54,10 +54,11 @@ const countries = new Intl.DisplayNames(undefined, { type: 'region' });
 function whereFrom(device) {
   if (!device.ip) return null;
   const p = device.place;
-  if (p?.local) return h('div', { class: 'muted where-from' }, `🌐 ${device.ip} · ${p.local === 'computer' ? 'this computer' : 'on this computer’s own network'}`);
+  const ip = device.ip4 ? `${device.ip} (IPv4 ${device.ip4})` : device.ip;
+  if (p?.local) return h('div', { class: 'muted where-from' }, `🌐 ${ip} · ${p.local === 'computer' ? 'this computer' : 'on this computer’s own network'}`);
   const country = p?.country ? countries.of(p.country) : '';
   const where = [p?.city, p?.region && p.region !== p?.city ? p.region : '', country].filter(Boolean).join(', ');
-  return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `🌐 ${device.ip}`, where ? ` · ${where}` : ' · somewhere unknown');
+  return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `🌐 ${ip}`, where ? ` · ${where}` : ' · somewhere unknown');
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;

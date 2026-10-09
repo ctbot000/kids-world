@@ -3,7 +3,8 @@
 // password for a player who forgot theirs, no login at all, or the copies of
 // a device that is gone moved into a player's login, and a player taken out
 // of the ranking, or put back, and where each player was last seen from: the
-// IP address (a local one for a player on this computer's own network) and,
+// IP address (a local one for a player on this computer's own network, and
+// an IPv6 one's IPv4 address too, when known) and,
 // from geoip-lite's offline database (no address leaves this computer),
 // roughly where that is. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
@@ -101,7 +102,8 @@ export function adminHandler({ store, keeper = null, dataDir = store.dir }) {
         bytes: store.bytes,
         maxBytes: store.maxBytes,
         keepDays: store.keepDays,
-        devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip) }))),
+        // An IPv6 address's IPv4 one, where there is one, places it better.
+        devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip4 && isPublicIp(d.ip4) ? d.ip4 : d.ip) }))),
       });
       return true;
     }

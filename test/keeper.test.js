@@ -11,7 +11,7 @@ import { challenge, keptProfile, toBase64Url, verifySignature, KEY_ALGORITHM, SI
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { candidateAddress, createIdentity, isLocalIp, isPublicIp, pairAddress, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
+import { candidateAddress, createIdentity, embeddedIpv4, isLocalIp, isPublicIp, pairAddress, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const dirs = [];
@@ -97,6 +97,15 @@ test('a page’s public IP address comes from its ICE candidates, never a privat
   for (const ip of ['8.8.8.8', '169.254.1.1', 'fe80::1', '0.0.0.0', '::ffff:10.0.0.1']) assert.equal(isLocalIp(ip), false, ip);
 });
 
+test('an IPv6 address carries an IPv4 one only under NAT64, 6to4 and Teredo', () => {
+  assert.equal(embeddedIpv4('64:ff9b::cb00:7105'), '203.0.113.5');
+  assert.equal(embeddedIpv4('2002:cb00:7105::1'), '203.0.113.5');
+  assert.equal(embeddedIpv4('2001:0:4136:e378:8000:63bf:34ff:8efa'), '203.0.113.5');
+  assert.equal(embeddedIpv4('2406:5900:103c:287d::1'), null);
+  assert.equal(embeddedIpv4('64:ff9b::a00:1'), null, 'not a private one');
+  assert.equal(embeddedIpv4('203.0.113.5'), null);
+});
+
 test('the address a connection really talks to counts most, and a local one only when there is nothing better', () => {
   const pair = (type, address) => ({ local: { type: 'host', address: '192.168.0.2' }, remote: { type, address } });
   // Chrome sometimes sends only mDNS host candidates: the page's address is still the pair's.
@@ -123,6 +132,15 @@ test('where a device was last seen from is kept in its record, once it has one',
   const [seen] = await store.devices();
   assert.equal(seen.ip, '1.1.1.1');
   assert.equal(seen.lastSeen, time.now());
+  // With an IPv6 address, the IPv4 one the page offered too, or the one inside it.
+  await store.noteAddress(device, '2406:5900:103c:287d::1', '115.138.37.26');
+  assert.deepEqual([(await store.devices())[0].ip, (await store.devices())[0].ip4], ['2406:5900:103c:287d::1', '115.138.37.26']);
+  await store.noteAddress(device, '2002:cb00:7105::1');
+  assert.equal((await store.devices())[0].ip4, '203.0.113.5');
+  await store.noteAddress(device, '2406:5900:103c:287d::1', '192.168.0.5');
+  assert.equal((await store.devices())[0].ip4, null, 'a private IPv4 one says nothing more');
+  await store.noteAddress(device, '1.1.1.1', '8.8.8.8');
+  assert.equal((await store.devices())[0].ip4, null);
   // On the keeper's own network, the local address is all there is.
   await store.noteAddress(device, '192.168.0.5');
   assert.equal((await store.devices())[0].ip, '192.168.0.5');
@@ -231,6 +249,11 @@ test('the admin pages list, download and delete copies, for this computer only',
     const located = (await (await fetch(`${base}/admin/api/state`)).json()).devices[0];
     assert.equal(located.ip, '8.8.8.8');
     assert.equal(located.place.country, 'US');
+    // An IPv6 address is placed by its IPv4 one, when there is one.
+    await store.noteAddress(device, '2a00:1450:4001::1', '211.234.10.1');
+    const both = (await (await fetch(`${base}/admin/api/state`)).json()).devices[0];
+    assert.equal(both.ip4, '211.234.10.1');
+    assert.equal(both.place.country, 'KR');
     await store.noteAddress(device, '192.168.0.5');
     assert.deepEqual((await (await fetch(`${base}/admin/api/state`)).json()).devices[0].place, { local: 'network' });
 

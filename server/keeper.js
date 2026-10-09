@@ -99,6 +99,26 @@ export function isLocalIp(ip) {
 
 export const isLoopbackIp = (ip) => /^127\./.test(ip) || ip === '::1';
 
+// The IPv4 address an IPv6 one carries inside it, for the transition
+// prefixes that do: NAT64 (64:ff9b::/96), 6to4 (2002::/16) and Teredo
+// (2001::/32, the client's address inverted). Any other IPv6 address has no
+// IPv4 address of its own; the keeper learns one only if the page offers it.
+export function embeddedIpv4(ip) {
+  if (isIP(ip) !== 6) return null;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const part = (text) => (text ? text.split(':') : []);
+  let words = [...part(head), ...part(tail)];
+  if (words.at(-1)?.includes('.')) return null;
+  if (ip.includes('::')) words = [...part(head), ...Array(8 - words.length).fill('0'), ...part(tail)];
+  const n = words.map((w) => Number.parseInt(w, 16));
+  const v4 = (hi, lo, mask = 0) => [hi >> 8, hi & 255, lo >> 8, lo & 255].map((b) => b ^ mask).join('.');
+  let found = null;
+  if (n[0] === 0x64 && n[1] === 0xff9b && n.slice(2, 6).every((w) => w === 0)) found = v4(n[6], n[7]);
+  else if (n[0] === 0x2002) found = v4(n[1], n[2]);
+  else if (n[0] === 0x2001 && n[1] === 0) found = v4(n[6], n[7], 255);
+  return found && isPublicIp(found) ? found : null;
+}
+
 // The public IP address an ICE candidate from a page tells of, and how sure
 // it is that it is the player's: 3 for a server-reflexive one (what a STUN
 // server saw: the address of the player's internet connection), 2 for a host
@@ -357,7 +377,10 @@ export class KeeperStore extends EventEmitter {
     const old = (await readJson(file)) ?? { id: device, firstSeen: now };
     const record = { ...old, ...changes, id: device, lastSeen: now };
     if (this.addresses.has(device)) {
-      record.ip = this.addresses.get(device);
+      const { ip, ip4 } = this.addresses.get(device);
+      record.ip = ip;
+      if (ip4) record.ip4 = ip4;
+      else delete record.ip4;
       this.addresses.delete(device);
     }
     await this.write(file, JSON.stringify(record));
@@ -366,17 +389,19 @@ export class KeeperStore extends EventEmitter {
 
   // The IP address a device (or a player, on any of their devices) was last
   // seen from: a public one, or a local one for a player on the keeper's own
-  // network. Into its record now, if it has one and the address
-  // is new, or else with whatever it sends first.
-  noteAddress(device, ip) {
+  // network, and with an IPv6 one, the IPv4 one it also has (ip4), when
+  // known. Into its record now, if it has one and the address is new, or
+  // else with whatever it sends first.
+  noteAddress(device, ip, ip4 = null) {
     if (!isDeviceId(device) || !(isPublicIp(ip) || isLocalIp(ip))) return Promise.resolve();
+    ip4 = isIP(ip) === 6 ? (ip4 && isIP(ip4) === 4 && (isPublicIp(ip4) || !isPublicIp(ip)) ? ip4 : embeddedIpv4(ip)) : null;
     if (this.addresses.size >= 1000) this.addresses.clear();
-    this.addresses.set(device, ip);
+    this.addresses.set(device, { ip, ip4 });
     return this.serial(async () => {
       if (!this.addresses.has(device)) return;
       const old = await readJson(this.path(device, 'device.json'));
       if (!old) return;
-      if (old.ip === ip) this.addresses.delete(device);
+      if (old.ip === ip && (old.ip4 ?? null) === ip4) this.addresses.delete(device);
       else await this.seen(device, {});
     });
   }
@@ -778,6 +803,7 @@ export class KeeperStore extends EventEmitter {
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
         ip: info.ip ?? null,
+        ip4: info.ip4 ?? null,
         ranked: info.ranked !== false,
         findable: info.findable !== false,
         // Never the hashes: when it was made, on how many devices it is, and
@@ -1221,11 +1247,20 @@ export class Keeper extends EventEmitter {
     }
   }
 
-  // A better idea of where this connection's page is than it had.
+  // A better idea of where this connection's page is than it had: the
+  // best address of all, and the best IPv4 one, for when that is IPv6.
   learnAddress(conn, address) {
-    if (!address || address.rank <= (conn.address?.rank ?? 0)) return;
-    conn.address = address;
-    this.noteAddress(conn);
+    if (!address) return;
+    let better = false;
+    if (address.rank > (conn.address?.rank ?? 0)) {
+      conn.address = address;
+      better = true;
+    }
+    if (isIP(address.ip) === 4 && address.rank > (conn.address4?.rank ?? 0)) {
+      conn.address4 = address;
+      better = true;
+    }
+    if (better) this.noteAddress(conn);
   }
 
   // Where this connection's page is, for the admin page, once both are known:
@@ -1234,7 +1269,7 @@ export class Keeper extends EventEmitter {
   noteAddress(conn) {
     if (!conn.folder || !conn.address) return;
     const own = isDeviceKey(conn.device) ? KeeperStore.deviceId(conn.device) : conn.folder;
-    for (const device of new Set([conn.folder, own])) this.store.noteAddress(device, conn.address.ip).catch((error) => this.log(error));
+    for (const device of new Set([conn.folder, own])) this.store.noteAddress(device, conn.address.ip, conn.address4?.ip).catch((error) => this.log(error));
   }
 
   async handle(conn, msg) {
