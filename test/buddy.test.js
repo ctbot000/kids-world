@@ -20,7 +20,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
-import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay } from '../server/buddy.js';
+import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { adminHandler } from '../server/admin.js';
 import { FriendControl } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
@@ -98,7 +98,8 @@ test('invited, it comes in under its name and look, says hello, answers a friend
     if (prompt.includes('Minji: 같이 집 짓자')) return { say: '좋아! 집을 지을게! 🏠', action: 'build', stamp: 'house' };
     return { say: 'Yay!', action: 'none', stamp: 'none' };
   });
-  const buddy = friend({ llm, rooms });
+  const at = Date.UTC(2026, 9, 10, 12, 0);
+  const buddy = friend({ llm, rooms, now: () => at });
   await buddy.start();
   assert.equal(buddy.invited(island, 'Minji'), '');
   const pip = await eventually(() => buddyIn(room));
@@ -110,6 +111,9 @@ test('invited, it comes in under its name and look, says hello, answers a friend
   assert.ok(minji.of('emote').some((m) => m.pid === pip.id && m.e === 'wave'));
   assert.match(llm.asked[0], /Friends here: Minji \(the island owner, \d+ steps away, with a pet puppy called Biscuit\)/);
   assert.match(llm.asked[0], /Write "say" in English/);
+  assert.ok(llm.asked[0].includes(whenReal(at)), 'told the real date and time, so it can say what time it is');
+  assert.match(llm.asked[0], /In the game it is (day|night)/);
+  assert.match(llm.asked[0], /Outside the game it is \w+day, October \d{1,2}, 2026, \d{1,2}:\d{2} [AP]M\./);
 
   minji.say({ t: 'say', text: '같이 집 짓자' });
   const answer = await eventually(() => minji.of('say').find((m) => m.pid === pip.id && m.text.startsWith('좋아')));
@@ -120,6 +124,7 @@ test('invited, it comes in under its name and look, says hello, answers a friend
   assert.ok(built.cells.length > 100, 'a whole house');
   assert.match(systemPrompt(DEFAULT_NAME), /AI friend/);
   assert.match(systemPrompt(DEFAULT_NAME), /Never ask for personal things/);
+  assert.match(systemPrompt(DEFAULT_NAME), /When a child asks what time or day it is, tell them the real one/);
 });
 
 test('it walks after its friend facing the way it goes, and flies to one far away', async () => {

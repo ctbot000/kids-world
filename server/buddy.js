@@ -168,6 +168,7 @@ Rules, always:
 - Keep it gentle and kind: nothing scary, mean, rude or grown-up. If something is not for kids, talk about playing instead.
 - If a child is sad, scared or says someone hurts them, be kind and tell them to talk to a grown-up they trust.
 - Only say you did what you really do (the action below). Do not invent things in the game.
+- You know the real date and time outside the game (given in the situation); the game's day and night is its own, much quicker. When a child asks what time or day it is, tell them the real one, their way.
 
 You can do one thing with each answer ("action"): follow (go with the friend), stay (wait here), wave, dance, cheer, hearts, clap, laugh, surprise, sleepy, build (put down a stamp next to you, named in "stamp": ${STAMP_KEYS.join(', ')}), pet (pet the friend's pet), leave (go home: when they say bye or goodbye, or want you to go). Otherwise "none". "stamp" is "none" unless you build.
 By yourself you also pop monsters that come at your friends and help dizzy friends up.
@@ -190,6 +191,14 @@ const PRYING = /(where do you live|your (real )?(name|address|school|phone|age|e
 export const isPersonal = (text) => PERSONAL.test(text);
 export const isGoodbye = (text) => GOODBYE.test(text);
 export const isPrying = (text) => PRYING.test(text) && /[?？]|뭐|어디|몇/u.test(text);
+
+// The real date and time now, in words for the model: children ask what time
+// or day it is, and the game's own quick day and night is not it. Said where
+// this computer is, the time the children on it live by.
+export function whenReal(ms) {
+  const now = new Date(ms);
+  return `Outside the game it is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}, ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`;
+}
 
 // The language to answer in, by what they wrote: Korean, English, or theirs.
 export function languageOf(text) {
@@ -1260,7 +1269,7 @@ export class Visit extends EventEmitter {
     const lines = [];
     const kind = { sunny: 'sunny', snowy: 'snowy', candy: 'candy', flat: 'flat' }[w.theme] ?? w.theme;
     const owner = this.players.get(this.host);
-    const when = `It is ${isNight(this.env.time ?? 0.4) ? 'night' : 'day'}${this.env.weather && this.env.weather !== 'clear' ? ` and ${this.env.weather}` : ''}.`;
+    const when = `In the game it is ${isNight(this.env.time ?? 0.4) ? 'night' : 'day'}${this.env.weather && this.env.weather !== 'clear' ? ` and ${this.env.weather}` : ''}. ${whenReal(this.now())}`;
     if (this.home) {
       lines.push(`You are on your own ${kind} island "${w.name}", where you build big things for friends to visit. ${when}`);
       const built = this.buddy.builds.slice(-6).map((b) => b.title.replace(/^an? /, ''));
