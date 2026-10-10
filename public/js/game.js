@@ -5,6 +5,7 @@
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
+import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
@@ -138,6 +139,12 @@ export class Game extends EventTarget {
     // enough to sit on.
     this.seat = null;
     this.seatTarget = null;
+    // The games going at the island's arcade machines (shared/arcade.js),
+    // by their machines' cells; the one close enough to play at, and the
+    // one whose game you have open (see ui.js).
+    this.arcade = new Map();
+    this.arcadeTarget = null;
+    this.arcadeAt = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -300,6 +307,12 @@ export class Game extends EventTarget {
       case 'tower':
         this.towerBuilt(msg);
         break;
+      case 'arc':
+        this.setArcade(msg.s);
+        break;
+      case 'arcfx':
+        this.arcadeFx(msg);
+        break;
       case 'home':
         this.cameHome(msg);
         break;
@@ -370,6 +383,7 @@ export class Game extends EventTarget {
     this.dizzy = false;
     this.setAdventure(msg.adventure ?? null);
     this.setDefense(msg.defense ?? null);
+    this.setArcade(msg.arcade ?? []);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
@@ -1489,6 +1503,106 @@ export class Game extends EventTarget {
     }
   }
 
+  // ------------------------------------------------ the video arcade
+
+  // The games going at the island's arcade machines, as the island tells of
+  // them (shared/arcade.js packs them).
+  setArcade(list) {
+    this.arcade = new Map();
+    for (const p of Array.isArray(list) ? list : []) {
+      if (!p || typeof p.k !== 'string') continue;
+      this.arcade.set(p.k, p);
+    }
+    this.emit('arcade');
+  }
+
+  // Q (or the Play button) by a machine: its game opens, a round of it
+  // starting if none is going.
+  openArcade() {
+    const t = this.arcadeTarget;
+    if (!t) return;
+    this.arcadeAt = t;
+    this.send({ t: 'arcade', op: 'play', x: t.x, y: t.y, z: t.z });
+    this.sound.play('ui');
+    this.emit('arcade-open');
+  }
+
+  // ▶ Play in the game's window (a new round, or joining one).
+  arcadePlay() {
+    const t = this.arcadeAt;
+    if (!t) return;
+    this.send({ t: 'arcade', op: 'play', x: t.x, y: t.y, z: t.z });
+  }
+
+  arcadeBop(i) {
+    const t = this.arcadeAt;
+    if (t) this.send({ t: 'arcade', op: 'bop', x: t.x, y: t.y, z: t.z, i });
+  }
+
+  arcadeFlip(i) {
+    const t = this.arcadeAt;
+    if (t) this.send({ t: 'arcade', op: 'flip', x: t.x, y: t.y, z: t.z, i });
+  }
+
+  // The game's window closed: you leave the machine (its game goes on).
+  closeArcade() {
+    const t = this.arcadeAt;
+    this.arcadeAt = null;
+    if (t) this.send({ t: 'arcade', op: 'leave', x: t.x, y: t.y, z: t.z });
+  }
+
+  // What just happened at a machine: a blob popped, a card turned over, a
+  // pair found, a round or a board done. The window open at it shows it,
+  // and whoever it was earns their count of it (and a few coins, for a
+  // round or a board done together).
+  arcadeFx(msg) {
+    const mine = this.arcadeAt?.key === msg.k;
+    const playing = (rows) => Array.isArray(rows) && rows.some(([pid]) => pid === this.pid);
+    switch (msg.f) {
+      case 'pop':
+        if (msg.by === this.pid) this.profile.count('blobpops');
+        if (mine) this.sound.play('pop');
+        else {
+          const at = this.arcade.get(msg.k);
+          if (at && this.near(at.x + 0.5, at.y + 1, at.z + 0.5, 25)) this.renderer.effects.sparkles(at.x + 0.5, at.y + 1, at.z + 0.5, 6, ['#ffd84d', '#ff8fc4']);
+        }
+        break;
+      case 'flip':
+        if (mine) this.sound.play('place', { kind: 'cloth' });
+        break;
+      case 'pair':
+        if (msg.by === this.pid) this.profile.count('pairsfound');
+        if (mine) this.sound.play('collect');
+        break;
+      case 'round': {
+        if (mine) this.sound.play('fanfare');
+        if (!playing(msg.ps)) break;
+        this.profile.count('arcade');
+        const minePops = msg.ps.find(([pid]) => pid === this.pid)?.[1] ?? 0;
+        const coins = msg.s >= 35 ? 3 : msg.s >= 25 ? 2 : msg.s >= 15 ? 1 : 0;
+        if (coins && minePops) this.profile.earn(coins);
+        const best = msg.ps.reduce((a, b) => (b[1] > a[1] ? b : a), [0, 0]);
+        const who = best[0] === this.pid ? 'You' : this.players.get(best[0])?.name ?? 'A friend';
+        this.emit('toast', {
+          icon: '👾',
+          text: `Bop-a-Blob over — a score of ${msg.s} together! ${who} bopped the most.${coins && minePops ? ` 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'} for playing!` : ''}`,
+        });
+        break;
+      }
+      case 'board': {
+        if (mine) this.sound.play('victory');
+        if (!playing(msg.ps)) break;
+        this.profile.count('arcade');
+        const found = msg.ps.find(([pid]) => pid === this.pid)?.[1] ?? 0;
+        if (found) this.profile.earn(2);
+        this.emit('toast', { icon: '🃏', text: `All the pairs found! You found ${found} of them.${found ? ' 🪙 2 coins for playing!' : ''}` });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   // ------------------------------------------------ riding
 
   // Someone got on an animal, or off it (pid 0).
@@ -1574,6 +1688,10 @@ export class Game extends EventTarget {
     const id = this.rideTarget;
     if (!id && this.seatTarget) {
       this.sitDown(this.seatTarget);
+      return;
+    }
+    if (!id && this.arcadeTarget) {
+      this.openArcade();
       return;
     }
     if (!id) {
@@ -2619,6 +2737,7 @@ export class Game extends EventTarget {
     this.rideTarget = this.findRideable();
     const on = this.me.body;
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
+    this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3036,6 +3155,9 @@ export class Game extends EventTarget {
     this.players.clear();
     this.critters.clear();
     this.monsters.clear();
+    this.arcade.clear();
+    this.arcadeAt = null;
+    this.arcadeTarget = null;
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

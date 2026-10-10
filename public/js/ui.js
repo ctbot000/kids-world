@@ -3,6 +3,7 @@
 // settings, stickers, the ranking, help, logging in and full screen. Big
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
+import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -1542,6 +1543,7 @@ export class UI {
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
+          card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky: bop it!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
@@ -2093,6 +2095,8 @@ export class UI {
     on('adventure', () => this.renderHearts());
     on('defense', () => this.renderDefense());
     on('welcome', () => this.renderDefense());
+    on('arcade-open', () => this.arcadeDialog());
+    on('arcade', () => this.renderArcade());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -3113,6 +3117,10 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && g.arcadeTarget) {
+      this.arcadeButton(g, r);
+      return;
+    }
     const el = $('ride');
     const on = g.riding ?? g.aboard;
     const c = g.critters.get(on?.id ?? g.rideTarget);
@@ -3172,6 +3180,135 @@ export class UI {
     const y = scr.visible ? scr.y + 24 : 220;
     el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
     el.hidden = false;
+  }
+
+  // Play, beside an arcade machine next to you: the same button again.
+  arcadeButton(g, r) {
+    const el = $('ride');
+    const t = g.arcadeTarget;
+    if (!t || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const touch = this.input.touchMode;
+    const label = '🕹️ Play';
+    const key = `${label}|${touch}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
+      el.setAttribute('aria-label', `Play ${ARCADE_GAMES[t.game].name} at this machine`);
+    }
+    const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 150;
+    const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
+    const y = scr.visible ? scr.y + 24 : 220;
+    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
+  // The game at the arcade machine you pressed Play at, in a window: how it
+  // is going, everyone who is at it, and the playing itself. Kept up to
+  // date as the island tells of it (renderArcade).
+  arcadeDialog() {
+    const g = this.game;
+    const t = g?.arcadeAt;
+    if (!t) return;
+    const def = ARCADE_GAMES[t.game];
+    const blob = t.game === 'blob';
+    this.arcadeEls = null;
+    this.openModal(
+      (root) => {
+        const grid = h('div', { class: `arcade-grid ${blob ? 'holes' : 'cards'}`, role: 'group', 'aria-label': def.name });
+        const cells = [];
+        const n = blob ? 9 : 16;
+        for (let i = 0; i < n; i++) {
+          const el = h('button', { class: blob ? 'hole' : 'card', type: 'button', 'aria-label': blob ? `Hole ${i + 1}` : `Card ${i + 1}` }, blob ? '' : '?');
+          el.onclick = () => {
+            this.sound.unlock();
+            if (blob) g.arcadeBop(i);
+            else g.arcadeFlip(i);
+          };
+          cells.push(el);
+          grid.append(el);
+        }
+        const play = h('button', { class: 'big green arcade-play', type: 'button', onclick: () => g.arcadePlay() }, '▶ Play');
+        this.arcadeEls = { title: def, grid, cells, status: h('div', { class: 'arcade-status' }), players: h('div', { class: 'arcade-players' }), play, blob };
+        root.append(h('h2', {}, `${def.icon} ${def.name}`), this.arcadeEls.status, grid, this.arcadeEls.players, play, h('p', { class: 'muted arcade-how' }, def.how));
+      },
+      { onClose: () => {
+        this.arcadeEls = null;
+        g.closeArcade();
+      } },
+    );
+    this.renderArcade();
+  }
+
+  // The game's window, as it changes: what is in each hole or on each card,
+  // the score or the pairs, whose go it is, who is at the machine, and
+  // whether Play is there to be pressed. Only what changed is touched, so a
+  // tap never lands on a button that was swapped under it.
+  renderArcade() {
+    const g = this.game;
+    const els = this.arcadeEls;
+    if (!g?.arcadeAt || !els || !this.modalOpen) return;
+    const s = g.arcade.get(g.arcadeAt.key) ?? null;
+    const name = (pid) => (pid === g.pid ? 'You' : g.players.get(pid)?.name ?? 'A friend');
+    // What is going on: a count, a round, the scores after, or nothing yet.
+    const phase = s ? s.p : -1;
+    let status = '';
+    if (els.blob) {
+      if (phase === 0) status = `Get ready… ${Math.max(0, s.t)}!`;
+      else if (phase === 1) status = `Score ${s.s} · ${Math.max(0, s.t)}s left`;
+      else if (phase === 2) status = `All done — a score of ${s.s} together!`;
+      else status = 'Press Play to start a round!';
+    } else {
+      const found = s ? s.ps.reduce((n, [, p]) => n + p, 0) : 0;
+      if (phase === 1) status = s.w ? 'No, not a pair…' : `${s.t === g.pid ? 'Your turn' : `${name(s.t)}'s turn`} · ${found} of ${CARD_FACES.length} pairs found`;
+      else if (phase === 2) status = `All ${CARD_FACES.length} pairs found!`;
+      else status = 'Press Play to lay out the cards!';
+    }
+    if (els.status.dataset.k !== status) {
+      els.status.dataset.k = status;
+      els.status.textContent = status;
+    }
+    // The holes, or the cards.
+    for (let i = 0; i < els.cells.length; i++) {
+      const el = els.cells[i];
+      let k = 'off';
+      let face = '';
+      if (els.blob) {
+        const kind = s && phase === 1 ? s.h[i] : 0;
+        k = kind === 2 ? 'gold' : kind === 1 ? 'up' : 'off';
+        face = kind === 2 ? '⭐' : kind === 1 ? '👾' : '';
+      } else if (s && phase >= 1) {
+        const v = s.d[i];
+        if (v >= 9) (k = 'won'), (face = CARD_FACES[v - 9]);
+        else if (v >= 1) (k = 'up'), (face = CARD_FACES[v - 1]);
+      }
+      if (el.dataset.k !== `${k}|${face}`) {
+        el.dataset.k = `${k}|${face}`;
+        el.className = `${els.blob ? 'hole' : 'card'} ${k}`;
+        el.replaceChildren(face || (els.blob ? '' : '?'));
+      }
+      const can = els.blob ? phase === 1 : phase === 1 && !s?.w && s?.t === g.pid;
+      el.disabled = !can;
+    }
+    // Who is at the machine, and how each of them is doing.
+    if (els.players.dataset.k !== JSON.stringify(s?.ps ?? [])) {
+      els.players.dataset.k = JSON.stringify(s?.ps ?? []);
+      els.players.replaceChildren(
+        ...(s?.ps ?? []).map(([pid, n]) => h('span', { class: `chip arc-player${pid === s.t && !els.blob && phase === 1 ? ' turn' : ''}` }, `${name(pid)} ${els.blob ? '👆' : '🃏'} ${n}`)),
+      );
+    }
+    // Play, once the last round (or board) is over with its scores.
+    const show = !s || phase === 2;
+    els.play.hidden = !show;
+    if (show && els.play.dataset.k !== String(phase)) {
+      els.play.dataset.k = String(phase);
+      els.play.replaceChildren(phase === 2 ? '▶ Play again' : '▶ Play');
+    }
   }
 
   // On a tower defense island: Build, beside the pad you stand by (Bigger,

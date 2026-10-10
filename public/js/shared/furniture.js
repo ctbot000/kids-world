@@ -230,6 +230,58 @@ const MODELS = {
     ];
     return out;
   },
+
+  // An arcade machine, its screen glowing in the dark: a joystick and two
+  // buttons under a screen showing the game it runs (shared/arcade.js), and
+  // a lit marquee over it. This one runs Bop-a-Blob, with a blob on it.
+  'arcade-blob'() {
+    const out = [
+      box(0.08, 0.02, 0.34, 0.92, 0.82, 1, '#8c5bd6', 'plain'),
+      box(0.06, 0.02, 0.26, 0.94, 0.08, 0.34, DARK_WOOD, 'planks'),
+      box(0.06, 0.1, 0.24, 0.94, 0.3, 0.34, BLACK, 'plain'),
+      box(0.14, 0.36, 0.36, 0.86, 0.74, 0.44, BLACK, 'plain'),
+      box(0.18, 0.4, 0.34, 0.82, 0.7, 0.36, '#8fe3ff', 'glow'),
+      // The blob on the screen, with its cross eyes.
+      box(0.36, 0.44, 0.335, 0.64, 0.66, 0.355, '#f2a0e0', 'glow'),
+      box(0.42, 0.58, 0.325, 0.46, 0.62, 0.33, '#2c2f36', 'plain'),
+      box(0.54, 0.58, 0.325, 0.58, 0.62, 0.33, '#2c2f36', 'plain'),
+      box(0.44, 0.47, 0.325, 0.56, 0.51, 0.33, '#2c2f36', 'plain'),
+      // The marquee, lit from the front, and the coin slot.
+      box(0.04, 0.82, 0.4, 0.96, 0.94, 1, '#fcd535', 'plain'),
+      box(0.06, 0.83, 0.36, 0.94, 0.93, 0.4, '#ffe066', 'glow'),
+      box(0.46, 0.12, 0.3, 0.54, 0.15, 0.32, '#fcd535', 'plain'),
+      // A joystick and two buttons on the panel.
+      box(0.46, 0.3, 0.26, 0.54, 0.4, 0.32, '#2c2f36', 'plain'),
+      box(0.41, 0.4, 0.24, 0.59, 0.47, 0.31, '#e8453c', 'plain'),
+      box(0.22, 0.3, 0.27, 0.32, 0.35, 0.32, '#35a852', 'plain'),
+      box(0.68, 0.3, 0.27, 0.78, 0.35, 0.32, '#3a73d8', 'plain'),
+    ];
+    return out;
+  },
+
+  // The same machine in teal, running Picture Pairs: two little cards on
+  // its screen, one with a heart on it.
+  'arcade-pairs'() {
+    const out = [
+      box(0.08, 0.02, 0.34, 0.92, 0.82, 1, '#2fc1b3', 'plain'),
+      box(0.06, 0.02, 0.26, 0.94, 0.08, 0.34, DARK_WOOD, 'planks'),
+      box(0.06, 0.1, 0.24, 0.94, 0.3, 0.34, BLACK, 'plain'),
+      box(0.14, 0.36, 0.36, 0.86, 0.74, 0.44, BLACK, 'plain'),
+      box(0.18, 0.4, 0.34, 0.82, 0.7, 0.36, '#fff3c4', 'glow'),
+      box(0.26, 0.44, 0.335, 0.44, 0.66, 0.355, WHITE, 'plain'),
+      box(0.31, 0.5, 0.325, 0.39, 0.58, 0.33, '#f47fb8', 'plain'),
+      box(0.56, 0.44, 0.335, 0.74, 0.66, 0.355, WHITE, 'plain'),
+      box(0.61, 0.5, 0.325, 0.69, 0.58, 0.33, '#fcd535', 'plain'),
+      box(0.04, 0.82, 0.4, 0.96, 0.94, 1, '#f47fb8', 'plain'),
+      box(0.06, 0.83, 0.36, 0.94, 0.93, 0.4, '#ffd1e6', 'glow'),
+      box(0.46, 0.12, 0.3, 0.54, 0.15, 0.32, '#fcd535', 'plain'),
+      box(0.46, 0.3, 0.26, 0.54, 0.4, 0.32, '#2c2f36', 'plain'),
+      box(0.41, 0.4, 0.24, 0.59, 0.47, 0.31, '#f59331', 'plain'),
+      box(0.22, 0.3, 0.27, 0.32, 0.35, 0.32, '#e8453c', 'plain'),
+      box(0.68, 0.3, 0.27, 0.78, 0.35, 0.32, '#35a852', 'plain'),
+    ];
+    return out;
+  },
 };
 
 // The boxes of a piece of furniture in its own layout (facing -z).

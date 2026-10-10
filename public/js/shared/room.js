@@ -11,6 +11,7 @@
 // tick() about ten times a second.
 
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
+import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
@@ -134,6 +135,11 @@ export class Room {
     // The owner's song (song.js), in its pieces as they came, or null. Never
     // saved: it is the owner's page that keeps it and plays it again.
     this.song = null;
+    // The games going at the island's arcade machines (arcade.js), by their
+    // machines' cells. Never saved either: an island opened again starts
+    // with none.
+    this.arcade = null;
+    this.arcSent = '';
 
     if (save) {
       this.loadSave(save);
@@ -154,6 +160,7 @@ export class Room {
     // Never saved: an island opened again starts without any.
     this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
     this.monstersSent = false;
+    this.arcade = new ArcadeSim((this.world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
     this.hookWorld();
   }
 
@@ -185,6 +192,8 @@ export class Room {
       else if (B.block(before).grows) this.growth.delete(k);
       if (B.FRUIT_ITEMS.includes(before) && after === B.AIR) this.regrow.set(k, { id: before, at: this.now() + this.between(REGROW_MS), x, y, z });
       if (B.FRUIT_ITEMS.includes(after)) this.regrow.delete(k);
+      // An arcade machine picked up (or painted over): its game goes with it.
+      if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
     };
   }
 
@@ -229,6 +238,7 @@ export class Room {
     const p = this.players.get(pid);
     if (!p || this.connected(pid)) return;
     this.unride(pid);
+    if (this.arcade.left(pid)) this.sendArcade();
     p.online = false;
     this.broadcast({ t: 'left', pid });
     if (this.host === pid) this.passHost();
@@ -340,6 +350,9 @@ export class Room {
         break;
       case 'defend':
         this.defendOp(conn, p, msg);
+        break;
+      case 'arcade':
+        this.arcadeOp(conn, p, msg);
         break;
       case 'leave':
         this.clients.delete(conn);
@@ -498,6 +511,7 @@ export class Room {
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
       defense: this.defense?.describe(this.monsters) ?? null,
+      arcade: this.arcade.pack(this.now()),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
     });
   }
@@ -761,6 +775,7 @@ export class Room {
           other.close?.();
         }
         this.unride(target.id);
+        if (this.arcade.left(target.id)) this.sendArcade();
         this.kicked.add(target.id);
         for (const [token, owner] of this.tokens) if (owner === target.id) this.tokens.delete(token);
         target.online = false;
@@ -874,6 +889,11 @@ export class Room {
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.keepApart(where);
+    // The games at the arcade machines, as they go.
+    if (this.arcade.sessions.size) {
+      for (const fx of this.arcade.step(now)) this.broadcast({ t: 'arcfx', ...fx });
+      this.sendArcade();
+    }
     if (now - this.critterSentAt >= CRITTER_MS && this.online > 0) {
       this.critterSentAt = now;
       this.broadcast({ t: 'c', c: this.critters.pack() });
@@ -1147,6 +1167,56 @@ export class Room {
     if (text === this.defSent) return;
     this.defSent = text;
     this.broadcast({ t: 'def', ...pack });
+  }
+
+  // ------------------------------------------------ the video arcade
+
+  // Play pressed at an arcade machine, a bop at a blob, or a card turned
+  // over: anyone standing near the machine it is at (leaving it, from
+  // wherever they have got to). The games themselves run along in tick, and
+  // what each of these did is told to everyone in the 'arc' that follows
+  // (and at once, for a bop or a pair, in 'arcfx').
+  arcadeOp(conn, p, msg) {
+    if (msg.op === 'leave') {
+      if (this.arcade.left(p.id)) this.sendArcade();
+      return;
+    }
+    if (![msg.x, msg.y, msg.z].every(Number.isInteger)) return;
+    const game = gameOfBlock(this.world.get(msg.x, msg.y, msg.z));
+    if (!game) return;
+    const now = this.now();
+    if (Math.hypot(p.s[0] - msg.x - 0.5, p.s[2] - msg.z - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.y) > 4) return;
+    const key = keyOf(msg.x, msg.y, msg.z);
+    if (msg.op === 'play') {
+      this.arcade.play(msg.x, msg.y, msg.z, game, p.id, now);
+      this.sendArcade();
+      return;
+    }
+    if (msg.op === 'bop') {
+      const fx = this.arcade.bop(key, msg.i, p.id, now);
+      if (!fx) return;
+      this.broadcast({ t: 'arcfx', ...fx });
+      this.sendArcade();
+      return;
+    }
+    if (msg.op === 'flip') {
+      for (const fx of this.arcade.flip(key, msg.i, p.id, now)) this.broadcast({ t: 'arcfx', ...fx });
+      this.sendArcade();
+    }
+  }
+
+  // A machine gone (picked up, say): its game goes with it.
+  arcadeGone(x, y, z) {
+    if (this.arcade.removeAt(x, y, z)) this.sendArcade();
+  }
+
+  // The games at the arcade machines, to everyone, as they change.
+  sendArcade() {
+    const pack = this.arcade.pack(this.now());
+    const text = JSON.stringify(pack);
+    if (text === this.arcSent) return;
+    this.arcSent = text;
+    this.broadcast({ t: 'arc', s: pack });
   }
 
   // A bop for King Grumble: nothing in his bubble, otherwise a heart (three

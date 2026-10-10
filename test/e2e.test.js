@@ -12,7 +12,7 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { CANDY_CANE, CLOTH, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -2948,6 +2948,87 @@ test('a tower defense island: a tower built by its pad with V, a wave started wi
   await until(page, () => window.bubbles > 0, undefined, 60000 * SLOW);
   assert.equal(await page.evaluate(() => window.kidsWorld.game.defense.state), 'march');
   await page.close();
+});
+
+test('a video arcade: Q by a machine opens its game, blobs are bopped with taps, and pairs are flipped in turns, with counts kept', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Two machines host-side beside the start: Bop-a-Blob and Picture Pairs.
+  const spots = await page.evaluate(([blob, pairs]) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const out = [];
+    for (const [dx, id] of [
+      [3, blob],
+      [7, pairs],
+    ]) {
+      const x = Math.floor(b.x) + dx;
+      const z = Math.floor(b.z);
+      const y = room.world.top(x, z) + 1;
+      room.natureCell([x, y, z], id);
+      out.push({ x, y, z, id });
+    }
+    return out;
+  }, [ARCADE_BLOB, ARCADE_PAIRS]);
+  for (const s of spots) await until(page, (s) => window.kidsWorld.game.world.get(s.x, s.y, s.z) === s.id, s);
+  // Nothing rideable near the machines, so the Play button is what shows
+  // beside them (a pony or the toy car by the start would take it, and Q too).
+  await page.evaluate((spots) => {
+    const room = window.kidsWorld.session.link.room;
+    for (const c of [...room.critters.list]) {
+      if (spots.some((s) => Math.hypot(c.x - s.x, c.z - s.z) < 16)) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+  }, spots);
+  const [blobAt, pairsAt] = spots;
+  // Stand beside the Bop-a-Blob machine: a Play button, and Q opens the game.
+  const stand = (at, dx) =>
+    page.evaluate(({ at, dx }) => {
+      const kw = window.kidsWorld;
+      Object.assign(kw.game.me.body, { x: at.x + 0.5 + dx, y: at.y + 1, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+      kw.game.sendMove(true);
+      for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+    }, { at, dx });
+  await stand(blobAt, -1);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Bop-a-Blob'));
+  // Q started a round: after the count, blobs pop up, and tapping one bops
+  // it — the score and your own count of bops both go up.
+  await until(page, () => document.querySelector('.arcade-status').textContent.includes('Get ready'));
+  await until(page, () => [...document.querySelectorAll('.hole.up, .hole.gold')].length > 0, null, 20000 * SLOW);
+  await page.evaluate(() => [...document.querySelectorAll('.hole.up, .hole.gold')][0].click());
+  await until(page, () => window.kidsWorld.profile.data.stats.blobpops === 1);
+  await until(page, () => document.querySelector('.arcade-status').textContent.includes('Score 1') || (window.kidsWorld.game.arcade.get(window.kidsWorld.game.arcadeAt.key)?.s ?? 0) > 0);
+  // The machine gone while you play: the game goes with it.
+  await page.evaluate((at) => window.kidsWorld.session.link.room.natureCell([at.x, at.y, at.z], 0), blobAt);
+  await until(page, () => window.kidsWorld.game.arcade.get(window.kidsWorld.game.arcadeAt.key) === undefined && document.querySelector('.arcade-status').textContent.includes('Press Play'));
+  await page.keyboard.press('Escape');
+  // The Picture Pairs machine: Q lays out the cards, and yours are the
+  // flips: two cards over, and either a pair stays up or both go back down.
+  await stand(pairsAt, -1);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Picture Pairs'));
+  await until(page, () => [...document.querySelectorAll('.card')].length === 16 && ![...document.querySelectorAll('.card')].every((c) => c.disabled));
+  await page.evaluate(() => [...document.querySelectorAll('.card')].find((c) => !c.disabled).click());
+  await until(page, () => document.querySelectorAll('.card.up').length === 1);
+  await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.card')];
+    const up = cards.findIndex((c) => c.classList.contains('up'));
+    // The mate of the card first up, or anything else: whatever happens,
+    // the island saw both flips.
+    cards.filter((_, i) => i !== up).find((c) => !c.disabled).click();
+  });
+  await until(page, () => {
+    const s = window.kidsWorld.game.arcade.get(window.kidsWorld.game.arcadeAt.key);
+    return s && s.d.filter((v) => v > 0).length >= 2;
+  });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
 });
 
 test('an island song: the owner picks an MP3 in Settings, a friend here and one who comes later hear it, Island music brings the island music back, and the island plays it again when opened again', { skip }, async () => {

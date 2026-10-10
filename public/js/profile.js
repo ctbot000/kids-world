@@ -112,6 +112,14 @@ export class Profile extends EventTarget {
   }
 
   // The shop (shop.js). Each says whether it happened.
+  // Coins that came from somewhere other than selling: the prizes a round
+  // at the arcade pays out (see shared/arcade.js).
+  earn(n = 0) {
+    if (n <= 0) return;
+    this.data.coins = Math.min(COINS_MAX, this.data.coins + n);
+    this.shopped();
+  }
+
   sell(key, n = 1) {
     const coins = sale(this.data.basket, key, n);
     if (!coins) return false;

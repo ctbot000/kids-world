@@ -162,6 +162,11 @@ export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant
 // A little table set for tea: a cloth, a teapot, cups and a plate of cookies
 // (shared/furniture.js). Pull chairs up to it and sit down to tea together.
 export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });
+// Arcade machines, each running a mini-game everyone at it plays together
+// (shared/arcade.js): walk up and press Q to play. Their screens glow and
+// light the room a little.
+export const ARCADE_BLOB = furniture(158, 'arcade-blob', { name: 'Bop-a-Blob Machine', color: '#8c5bd6', light: 7, sound: 'stone' });
+export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pairs Machine', color: '#2fc1b3', light: 7, sound: 'stone' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });

@@ -606,6 +606,48 @@ function teaParty() {
   return c.list();
 }
 
+// A video arcade: a little hall with a checked floor, a striped awning over
+// its open front and star-topped posts, lit inside, with three arcade
+// machines down each side facing in — Bop-a-Blob and Picture Pairs — for
+// friends to play together (shared/arcade.js).
+function videoArcade() {
+  const c = new Cells();
+  // The floor: checked tiles inside, planks round the edge.
+  for (let x = -6; x <= 6; x++) {
+    for (let z = 0; z <= 10; z++) {
+      const edge = x === -6 || x === 6 || z === 0 || z === 10;
+      c.put(x, 0, z, edge ? B.PLANKS : B.CHECKER_FLOOR);
+    }
+  }
+  // Walls of charcoal bricks with windows, open at the front, and air
+  // inside them up to the roof.
+  for (let y = 1; y <= 4; y++) {
+    for (let x = -6; x <= 6; x++) {
+      for (let z = 0; z <= 10; z++) {
+        const side = x === -6 || x === 6 || z === 10 || (z === 0 && Math.abs(x) === 6);
+        if (side) {
+          const window = y === 2 && (z === 3 || z === 7) && Math.abs(x) === 6;
+          const backWindow = z === 10 && y === 2 && [-3, 3].includes(x);
+          c.put(x, y, z, window || backWindow ? B.GLASS : y === 3 && z === 10 && [-5, 0, 5].includes(x) ? B.LAMP : CHARCOAL);
+        } else if (y < 5) c.put(x, y, z, B.AIR);
+      }
+    }
+  }
+  // The roof, and the striped awning over the way in.
+  for (let x = -6; x <= 6; x++) {
+    for (let z = 0; z <= 10; z++) c.put(x, 5, z, B.PLANKS);
+    if (Math.abs(x) <= 4) c.put(x, 4, -1, x % 2 === 0 ? RED_CLOTH : WHITE_CLOTH);
+  }
+  // A star on each post by the way in.
+  for (const x of [-6, 6]) c.put(x, 4, 0, B.STAR_BLOCK);
+  // The machines down each side, facing in: Bop-a-Blob and Picture Pairs.
+  for (const z of [2, 5, 8]) {
+    c.put(-5, 1, z, B.turnedTo(z === 5 ? B.ARCADE_PAIRS : B.ARCADE_BLOB, 0));
+    c.put(5, 1, z, B.turnedTo(z === 5 ? B.ARCADE_BLOB : B.ARCADE_PAIRS, 2));
+  }
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
@@ -627,6 +669,7 @@ export const STAMPS = [
   { key: 'pyramid', name: 'Pyramid', icon: '🔺', cells: pyramid() },
   { key: 'picnic', name: 'Picnic', icon: '🧺', cells: picnic() },
   { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },
+  { key: 'video-arcade', name: 'Video Arcade', icon: '🕹️', cells: videoArcade() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

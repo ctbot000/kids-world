@@ -53,6 +53,9 @@ export const STICKERS = [
   { key: 'tea-party', icon: '🫖', name: 'Tea Party', text: 'Sit down to tea with a friend', test: (s) => s.teas >= 1 },
   { key: 'all-aboard', icon: '🚌', name: 'All Aboard!', text: 'Ride along in a bus or a ferry a friend is driving', test: (s) => s.along >= 1 },
   { key: 'up-up-away', icon: '🚁', name: 'Up, Up and Away!', text: 'Fly a helicopter or a hot-air balloon', test: (s) => s.flights >= 1 },
+  { key: 'game-on', icon: '🕹️', name: 'Game On', text: 'Play a mini-game at an arcade machine', test: (s) => s.arcade >= 1 },
+  { key: 'blob-bopper', icon: '👾', name: 'Blob Bopper', text: 'Bop 50 blobs on Bop-a-Blob', test: (s) => s.blobpops >= 50 },
+  { key: 'sharp-memory', icon: '🃏', name: 'Sharp Memory', text: 'Find 25 pairs on Picture Pairs', test: (s) => s.pairsfound >= 25 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound'];

@@ -59,6 +59,9 @@ export const XP_FOR = {
   furnished: { xp: 2 },
   sat: { xp: 2, cap: 50 },
   teas: { xp: 10, cap: 100 },
+  arcade: { xp: 10 },
+  blobpops: { xp: 1, cap: 2000 },
+  pairsfound: { xp: 3, cap: 1000 },
 };
 
 // XP for each sticker earned, on top of what earned it.
