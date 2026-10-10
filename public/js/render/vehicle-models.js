@@ -11,7 +11,7 @@
 // What is up over the seats (a rotor, a balloon) is in v.over.
 import * as THREE from '../../vendor/three.module.js';
 import { CRITTER_INFO } from '../shared/critters.js';
-import { cone, cylinder, geo, mesh, sphere, toon, torus } from './toon.js';
+import { bakeCached, cone, cylinder, geo, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
 const TIRE = '#3a3540';
@@ -43,6 +43,13 @@ function wheel(parent, x, y, z, r, width, tire = TIRE, hub = '#f4f1ea') {
   const h = mesh(cylinder(r * 0.45, r * 0.45, width + 0.02, 12), toon(hub));
   h.rotation.z = Math.PI / 2;
   w.add(h);
+  // A ring of lug nuts on the hub, turning with it: one shape for all of them.
+  const nuts = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    nuts.push({ g: sphere(1, 6, 4), m: new THREE.Matrix4().makeScale(r * 0.05, r * 0.05, r * 0.05).setPosition(Math.sign(x || 1) * (width / 2 + 0.016), Math.sin(a) * r * 0.28, Math.cos(a) * r * 0.28) });
+  }
+  w.add(mesh(bakeCached(`lugnuts|${r}|${width}`, nuts), toon('#6a7480')));
   // A spoke, to see it turn.
   w.add(mesh(box(), toon(tire), Math.sign(x) * (width / 2 + 0.012), 0, 0, 0.01, r * 0.75, r * 0.16));
   parent.add(w);
@@ -53,6 +60,10 @@ function wheel(parent, x, y, z, r, width, tire = TIRE, hub = '#f4f1ea') {
 function lampEyes(parent, x, y, z, r, glow) {
   const eyes = new THREE.Group();
   for (const side of [-1, 1]) {
+    // A bezel the lamp sits in.
+    const bezel = mesh(torus(r * 0.95, r * 0.16, Math.PI * 2), toon('#f7f5ef'), side * x, y, z - r * 0.1, r, r, 1);
+    bezel.rotation.y = Math.PI / 2;
+    eyes.add(bezel);
     eyes.add(mesh(sphere(1, 16, 12), glow, side * x, y, z, r, r, r * 0.7));
     eyes.add(mesh(sphere(1, 10, 8), toon(BLACK), side * x, y + r * 0.1, z + r * 0.6, r * 0.42, r * 0.5, r * 0.25));
     eyes.add(mesh(sphere(1, 6, 4), toon('#ffffff', { emissive: 0.5 }), side * x + r * 0.12, y + r * 0.3, z + r * 0.75, r * 0.15));
@@ -100,8 +111,19 @@ function car(id) {
   // see shared/critters.js) and its back.
   v.seat = block(body, v.pad, -0.3, 0.44, -0.42, 0.3, 0.51, 0.08);
   block(body, v.pad, -0.3, 0.44, -0.47, 0.3, 0.95, -0.4);
-  // A windscreen and a steering wheel.
+  // A windscreen and a steering wheel, the glass in a pale frame.
   block(body, toon('#bfe8ff', { transparent: true, opacity: 0.55 }), -0.38, 0.66, 0.2, 0.38, 0.92, 0.23);
+  block(body, white, -0.41, 0.63, 0.19, -0.38, 0.95, 0.24);
+  block(body, white, 0.38, 0.63, 0.19, 0.41, 0.95, 0.24);
+  block(body, white, -0.41, 0.89, 0.19, 0.41, 0.95, 0.24);
+  // Wheel arches over the wheels.
+  for (const side of [-1, 1]) {
+    for (const z of [0.48, -0.48]) {
+      const arch = mesh(torus(0.24, 0.05, Math.PI), paint, side * 0.44, 0.2, z);
+      arch.rotation.y = Math.PI / 2;
+      body.add(arch);
+    }
+  }
   const steer = mesh(torus(0.11, 0.022), toon(BLACK), 0, 0.76, 0.14);
   steer.rotation.x = -0.6;
   body.add(steer);

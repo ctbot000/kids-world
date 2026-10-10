@@ -24,10 +24,21 @@ export class MonsterModel {
     this.body = new THREE.Group();
     this.group.add(this.body);
     const b = this.body;
-    // A see-through jelly round a darker middle.
+    // A see-through jelly round a softer layer, round a darker middle, with
+    // bubbles rising through it.
     b.add(mesh(sphere(), toon(skin, { transparent: true, opacity: 0.82 }), 0, H, 0, R, H, R));
+    b.add(mesh(sphere(), toon(skin, { transparent: true, opacity: 0.5 }), 0, H * 0.95, 0, R * 0.8, H * 0.8, R * 0.8));
     b.add(mesh(sphere(), toon(core), 0, H * 0.85, -0.04, R * 0.55, H * 0.5, R * 0.55));
     b.add(mesh(sphere(1, 10, 8), toon('#ffffff', { emissive: 0.4, transparent: true, opacity: 0.7 }), -0.16, H * 1.6, 0.2, 0.07, 0.04, 0.05));
+    for (const [x, y, z, r] of [
+      [0.12, H * 1.45, -0.06, 0.035],
+      [-0.08, H * 1.2, 0.12, 0.028],
+      [0.05, H * 0.7, 0.16, 0.022],
+    ]) {
+      b.add(mesh(sphere(1, 8, 6), toon('#ffffff', { transparent: true, opacity: 0.35 }), x, y, z, r));
+    }
+    // Little jelly feet under it.
+    for (const side of [-1, 1]) b.add(mesh(sphere(1, 12, 8), toon(skin, { transparent: true, opacity: 0.82 }), side * 0.16, 0.03, 0.05, 0.09, 0.045, 0.1));
     // Eyes, which glow at night.
     this.eyeWhite = toon('#fff7d6');
     this.eyeGlow = toon('#fff27a', { emissive: 0.9 });
@@ -35,12 +46,13 @@ export class MonsterModel {
     this.brows = [];
     for (const side of [-1, 1]) {
       const p = onSurface(R, H, R, side * 0.14, 0.06, 0.005);
-      const eye = mesh(sphere(1, 12, 8), this.eyeWhite, p.x, p.y + H, p.z, 0.075, 0.085, 0.04);
+      const eye = mesh(sphere(1, 14, 10), this.eyeWhite, p.x, p.y + H, p.z, 0.082, 0.092, 0.04);
       b.add(eye);
       this.eyes.push(eye);
-      b.add(mesh(sphere(1, 8, 6), toon('#2b2530'), p.x - side * 0.01, p.y + H - 0.01, p.z + 0.03, 0.035, 0.042, 0.02));
+      b.add(mesh(sphere(1, 8, 6), toon('#2b2530'), p.x - side * 0.01, p.y + H - 0.012, p.z + 0.032, 0.038, 0.046, 0.02));
+      b.add(mesh(sphere(1, 6, 4), toon('#ffffff', { emissive: 0.6 }), p.x + side * 0.012, p.y + H + 0.022, p.z + 0.042, 0.012, 0.014, 0.006));
       // Cross: the brows slope down towards the middle.
-      const brow = mesh(sphere(1, 8, 6), toon('#2b2530'), p.x - side * 0.01, p.y + H + 0.1, p.z + 0.01, 0.085, 0.022, 0.025);
+      const brow = mesh(sphere(1, 8, 6), toon('#2b2530'), p.x - side * 0.01, p.y + H + 0.105, p.z + 0.01, 0.085, 0.022, 0.025);
       brow.rotation.z = side * 0.45;
       b.add(brow);
       this.brows.push({ mesh: brow, side });
@@ -54,11 +66,18 @@ export class MonsterModel {
       tooth.rotation.x = Math.PI;
       b.add(tooth);
     }
-    // Horns on a Big Bruiser, pointing up and out.
+    // Horns on a Big Bruiser, curving up and out in two steps.
     if (kind === 'big') {
       for (const side of [-1, 1]) {
-        const horn = mesh(cone(0.06, 0.2, 8), toon('#fff1d0'), side * 0.2, H * 1.9, 0.05);
-        horn.rotation.z = -side * 0.5;
+        const horn = new THREE.Group();
+        horn.position.set(side * 0.2, H * 1.9, 0.05);
+        horn.rotation.z = -side * 0.45;
+        horn.add(mesh(cone(0.062, 0.16, 10), toon('#fff1d0'), 0, 0.08, 0));
+        const tip = new THREE.Group();
+        tip.position.y = 0.15;
+        tip.rotation.z = -side * 0.5;
+        tip.add(mesh(cone(0.042, 0.12, 10), toon('#f3dfae'), 0, 0.06, 0));
+        horn.add(tip);
         b.add(horn);
       }
     }
@@ -76,8 +95,8 @@ export class MonsterModel {
         s.quaternion.setFromUnitVectors(up, n);
         b.add(s);
       };
-      for (const el of [1.3, 0.95, 0.6, 0.25]) add(Math.PI, el, 0.18);
-      for (let i = 0; i < 8; i++) add(Math.PI * (0.35 + (1.3 * i) / 7), 0.35, 0.13);
+      for (const [el, len] of [[1.3, 0.15], [0.95, 0.19], [0.6, 0.21], [0.25, 0.17]]) add(Math.PI, el, len);
+      for (let i = 0; i < 8; i++) add(Math.PI * (0.35 + (1.3 * i) / 7), 0.35, i % 2 ? 0.11 : 0.145);
     }
     this.height = H * 2 * k;
     this.center = H * k;

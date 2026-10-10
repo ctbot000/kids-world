@@ -5,7 +5,7 @@
 // the ground round him as he crouches to stomp; and the ring of a stomp
 // rushing out over the ground.
 import * as THREE from '../../vendor/three.module.js';
-import { cone, cylinder, mesh, sphere, toon } from './toon.js';
+import { cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 import { MonsterModel } from './monster-model.js';
 
 // The flags, drawn once: [width, height] of the cloth by the kind of camp.
@@ -173,6 +173,9 @@ export class KingModel extends MonsterModel {
     const crown = new THREE.Group();
     crown.position.y = 0.7;
     crown.add(mesh(cylinder(0.17, 0.19, 0.1, 16), gold, 0, 0.03, 0));
+    // Rims on the band, top and bottom.
+    crown.add(mesh(torus(0.178, 0.012), gold, 0, 0.075, 0).rotateX(Math.PI / 2));
+    crown.add(mesh(torus(0.186, 0.012), gold, 0, -0.015, 0).rotateX(Math.PI / 2));
     for (let k = 0; k < 5; k++) {
       const a = (k / 5) * Math.PI * 2;
       crown.add(mesh(cone(0.05, 0.13, 6), gold, Math.sin(a) * 0.16, 0.14, Math.cos(a) * 0.16));
