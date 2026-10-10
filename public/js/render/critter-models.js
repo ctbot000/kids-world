@@ -1,8 +1,9 @@
 // The animal friends as little models: bunnies that hop, chicks that peck,
 // fluffy sheep, ducks that paddle about, butterflies that flutter, birds,
 // owls, bees and seagulls; in the sea, schools of fish, dolphins, a whale,
-// turtles, crabs and octopuses; and big ones to ride: ponies, cows, an
-// elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
+// turtles, crabs and octopuses; big ones to ride: ponies, cows, an
+// elephant, a giraffe, reindeer, polar bears and unicorns; and a giant
+// mosquito on stilt legs, the one big animal that flies. The vehicles,
 // which live with them, are in vehicle-models.js.
 import * as THREE from '../../vendor/three.module.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, onSurface, sphere, toon, torus } from './toon.js';
@@ -1237,7 +1238,105 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, ...VEHICLE_BUILDERS };
+// A giant mosquito, as big as a pony: a round furry body in soft blue-grey,
+// a long sloping tail with darker stripes round it, big dark eyes, two
+// feathered antennae and a long snout it sips with, six long stilt legs
+// that dangle and sway, and a pair of narrow wings that are a blur in the
+// air. It never bites: it drinks nectar at the flowers.
+const MOSQUITO_FUR = ['#8494ab', '#9aa5b8', '#76859e'];
+const MOSQUITO_STRIPE = '#4e5a70';
+
+// One leg, from its hip on the body: out and up over its side to a knee,
+// then a long thin shin down (a stilt, longer than the whole body), with a
+// tiny foot on the end.
+function mosquitoLeg(pivot, side, z, forward) {
+  const leg = new THREE.Group();
+  leg.position.set(side * 0.14, 0.03, z);
+  leg.userData = { side };
+  const hip = [0, 0, 0];
+  const knee = [side * 0.3, 0.24, forward];
+  const foot = [side * 0.36, -0.63, forward * 1.5];
+  for (const [a, b, r0, r1] of [
+    [hip, knee, 0.017, 0.012],
+    [knee, foot, 0.011, 0.007],
+  ]) {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    const bone = mesh(cylinder(r1, r0, d.length(), 6), toon('#5d6a80'), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+    bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    leg.add(bone);
+  }
+  leg.add(mesh(sphere(1, 6, 4), toon('#3a3438'), foot[0], foot[1], foot[2], 0.018, 0.012, 0.032));
+  pivot.add(leg);
+  return leg;
+}
+
+function mosquito(id) {
+  const fur = toon(MOSQUITO_FUR[id % MOSQUITO_FUR.length]);
+  const { g, body, pivot } = bigRig(0.62);
+  // The thorax, round and furry, with a hump over its shoulders and a pale
+  // belly underneath.
+  pivot.add(mesh(sphere(), fur, 0, 0.02, 0.1, 0.28, 0.27, 0.32));
+  pivot.add(mesh(sphere(), fur, 0, 0.17, 0, 0.16, 0.13, 0.15));
+  pivot.add(mesh(sphere(), toon('#bcc7d6'), 0, -0.09, 0.08, 0.2, 0.15, 0.24));
+  // The tail slopes up behind, ringed with darker stripes.
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.08, -0.2);
+  tail.rotation.x = 0.24;
+  pivot.add(tail);
+  tail.add(mesh(capsule(0.12, 0.3), fur, 0, 0.03, -0.2).rotateX(Math.PI / 2));
+  tail.add(mesh(sphere(), fur, 0, 0.07, -0.44, 0.085));
+  tail.add(mesh(sphere(), fur, 0, 0.1, -0.53, 0.05));
+  for (const [z, r] of [
+    [-0.14, 0.121],
+    [-0.3, 0.114],
+    [-0.42, 0.088],
+  ]) {
+    const k = Math.sqrt(Math.max(0.01, 1 - ((z + 0.05) / 0.4) ** 2));
+    tail.add(mesh(sphere(), toon(MOSQUITO_STRIPE), 0, 0.02 + (z + 0.2) * 0.12, z, r * k + 0.006, r * k + 0.006, 0.014));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.15, 0.34);
+  pivot.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.15, 0.14, 0.135));
+  const eyes = sideEyes(head, 0.088, 0.045, 0.06, 0.052);
+  for (const side of [-1, 1]) {
+    // Feathered antennae, waving slowly about above its eyes.
+    const a = mesh(cylinder(0.005, 0.003, 0.2, 5), toon(BLACK), side * 0.05, 0.22, 0.06);
+    a.rotation.set(0.35, 0, -side * 0.5);
+    head.add(a);
+    head.add(mesh(sphere(1, 6, 4), toon(BLACK), side * 0.095, 0.27, 0.065, 0.012));
+  }
+  // The long snout it sips with, out in front and a little down.
+  const snout = new THREE.Group();
+  snout.position.set(0, -0.05, 0.1);
+  snout.rotation.x = 0.3;
+  head.add(snout);
+  snout.add(mesh(cylinder(0.017, 0.009, 0.5, 6), toon('#3a3438'), 0, 0, 0.25).rotateX(Math.PI / 2));
+  head.userData.snout = snout;
+  // The wings: long and narrow and almost see-through, with a dark tip.
+  const glass = toon('#e8f4ff', { transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+  const wings = wingPair(pivot, { x: 0.12, y: 0.28, z: -0.04, length: 0.52, width: 0.085, thick: 0.007, material: glass, tip: '#aebdd6' });
+  // The halteres: the little knobbed stalks a mosquito steers with, behind
+  // its wings.
+  for (const side of [-1, 1]) {
+    pivot.add(mesh(cylinder(0.008, 0.006, 0.09, 5), toon('#5d6a80'), side * 0.12, 0.14, -0.26).rotateX(0.5));
+    pivot.add(mesh(sphere(1, 6, 4), toon('#5d6a80'), side * 0.12, 0.17, -0.28, 0.014));
+  }
+  // Six stilt legs, the front pair reaching forward, the middle pair down
+  // and the back pair sweeping behind.
+  const legs = [
+    mosquitoLeg(pivot, -1, 0.2, 0.1),
+    mosquitoLeg(pivot, 1, 0.2, 0.1),
+    mosquitoLeg(pivot, -1, 0, 0),
+    mosquitoLeg(pivot, 1, 0, 0),
+    mosquitoLeg(pivot, -1, -0.18, -0.06),
+    mosquitoLeg(pivot, 1, -0.18, -0.06),
+  ];
+  const s = saddle(pivot, 0.31, 0.27, 0.26, -0.06);
+  return { group: g, body, pivot, head, eyes, tail, wings, folded: [], legs, ...s, height: 1.15, shadow: 0.5, pick: 0.6, center: 0.75, seen: 130, flapRate: 34 };
+}
+
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, mosquito, ...VEHICLE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1354,6 +1453,9 @@ export class CritterModel {
         break;
       case 'seal':
         this.flop(state, moving);
+        break;
+      case 'mosquito':
+        this.drone(state, moving);
         break;
       default:
         break;
@@ -1538,6 +1640,36 @@ export class CritterModel {
     this.pivot.position.x = sitting ? 0 : Math.sin(t * 2.65) * 0.04;
     this.pivot.rotation.z = sitting ? 0 : Math.sin(t * 3.1) * 0.15;
     if (!sitting) this.body.position.y = Math.sin(t * 5.3) * 0.03;
+  }
+
+  // A giant mosquito. In the air its narrow wings are a blur and it never
+  // quite keeps still; perched on the ground, its stilt legs dangle and
+  // sway as it looks about, and it creeps along on them when it must; at a
+  // flower it dips its snout down to sip; asleep, its wings lie still
+  // along its back.
+  drone(state, moving) {
+    const t = this.time;
+    const flying = state === 'fly';
+    const asleep = state === 'sleep';
+    const a = asleep ? 0.06 : flying ? 0.4 + Math.sin(t * this.flapRate) * 0.5 : 0.28 + Math.sin(t * 7) * 0.1;
+    for (const w of this.wings) w.rotation.z = w.userData.wing * a;
+    this.pivot.rotation.set(flying ? clamp(-this.vy * 0.14, -0.5, 0.5) : 0, 0, flying ? clamp(-this.turn * 0.3, -0.55, 0.55) : 0);
+    this.body.position.y = flying ? Math.sin(t * 4.5) * 0.04 : Math.sin(t * 2) * 0.012;
+    this.tail.rotation.y = Math.sin(t * (flying ? 3 : 1.7) + this.id) * 0.1;
+    if (state === 'eat') {
+      // Sipping: its snout dips down at the flower.
+      this.head.rotation.x = 0.35 + Math.sin(t * 5) * 0.08;
+    } else if (!flying && !asleep) {
+      this.head.rotation.y = Math.sin(t * 0.8 + this.id) * 0.5;
+    }
+    // Legs: folded up and trailing behind in the air, dangling and swaying
+    // perched, and stepping from one to the next creeping along.
+    const step = moving && !flying && !asleep;
+    this.legs.forEach((leg, i) => {
+      const sway = Math.sin(t * (step ? 7 : 1.7) + i * (step ? 2.1 : 1.9));
+      leg.rotation.x = flying ? -0.75 + Math.sin(t * 3 + i * 1.3) * 0.08 : step ? sway * 0.35 : sway * 0.09;
+      leg.rotation.z = leg.userData.side * (flying ? 0.5 : 0.1);
+    });
   }
 
   // Three fish, tails going, keeping together; one of them leaps out of the

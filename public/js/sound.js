@@ -396,6 +396,12 @@ export class Sound {
         this.tone(190 * r(), { type: 'sawtooth', attack: 0.06, decay: 0.55, gain: 0.025, vibrato: 14, slide: 215 * r() });
         this.tone(380 * r(), { type: 'triangle', attack: 0.06, decay: 0.5, gain: 0.015, vibrato: 20 });
         break;
+      case 'mosquito':
+        // Neeee-e-e-e: a thin whine, higher than a bee's, rising and
+        // falling as it drones about.
+        this.tone(560 * r(), { type: 'sawtooth', attack: 0.1, decay: 0.8, gain: 0.014, vibrato: 7, slide: 700 * r(), slideTime: 0.6 });
+        this.tone(1120 * r(), { type: 'triangle', attack: 0.1, decay: 0.7, gain: 0.005, vibrato: 11 });
+        break;
       case 'fish':
         // Blub, blub.
         for (let i = 0; i < 2; i++) this.tone(500 * r(), { at: i * 0.12, decay: 0.08, gain: 0.06, slide: 900, slideTime: 0.06 });
@@ -531,6 +537,7 @@ export class Sound {
       case 'liftoff':
         // Up into the air: the rotor winding up, or the burner roaring.
         if (opts.type === 'balloon') this.play('burner');
+        else if (opts.type === 'mosquito') this.play('mosquito');
         else {
           this.tone(60, { type: 'sawtooth', attack: 0.05, decay: 0.7, gain: 0.05, slide: 180, slideTime: 0.6, vibrato: 30 });
           for (let i = 0; i < 5; i++) this.noise(0.06, { at: i * 0.12, type: 'lowpass', freq: 300 + i * 80, gain: 0.12 });

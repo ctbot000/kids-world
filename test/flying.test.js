@@ -179,7 +179,7 @@ test('one friend flies it and the others hop on, as many as it has seats for; an
   assert.ok(Math.abs(heli.y - high) < 1e-6);
 
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 9);
+  assert.equal(save.v, 10);
   const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: () => 2000 });
   const count = (r) => r.critters.list.filter((c) => AIR.includes(c.type)).length;
   const old = load({ ...save, v: 8, critters: save.critters.filter((c) => !AIR.includes(c.type)) });

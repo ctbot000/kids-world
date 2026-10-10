@@ -6,7 +6,7 @@
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import * as B from './blocks.js';
-import { busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
+import { busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -317,6 +317,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   }
   critters.push(...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng), ...placeBig(world, rng));
+  // The giant mosquitos came after all of those, from randomness of their
+  // own, so the rest of the island comes out just as it did before them.
+  critters.push(...placeGiant(world, new Rng(seed ^ 0x94d049bb)));
 
   // ---------------------------------------------------------------- jewels and mines
   // Last, from randomness of their own, so the rest of the island comes out

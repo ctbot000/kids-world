@@ -17,6 +17,12 @@
 // get about the way players do (physics.js), and someone riding one moves it
 // themselves (riding.js); the dolphins and the whale take riders too.
 //
+// One flying friend is giant: the mosquito, as big as a pony and quite
+// harmless — it sips nectar at the flowers, and never bites. It drones
+// slowly about the meadows, hanging in the air now and then, and is the
+// one big animal that takes a rider up into the sky (ride.air, as the
+// helicopter does: riding.js).
+//
 // Vehicles (vehicle) live here too, as friends that never go anywhere by
 // themselves: a car, a boat, a digger that tunnels through the ground and
 // a mine cart that rolls along rails; a bus and a ferry with seats for
@@ -28,7 +34,7 @@ import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from '
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'mosquito'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -65,6 +71,11 @@ export const CRITTER_INFO = {
   reindeer: { name: 'Reindeer', icon: '🦌', speed: 1.4, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 11 }, names: ['Dasher', 'Dancer', 'Prancer', 'Comet', 'Cupid', 'Blitzen', 'Jingle', 'Holly', 'Snowflake', 'Aurora'] },
   polarbear: { name: 'Polar Bear', icon: '🐻‍❄️', speed: 1, swims: true, flies: false, big: true, paddles: true, ground: ICY, home: 10, ride: { seat: 1.05, radius: 0.46, height: 2.25, float: 0.75, spread: 1, walk: 4.5, run: 7.5, swim: 5, jump: 8.5 }, names: ['Nanook', 'Iceberg', 'Blizzard', 'Mitten', 'Snowdrift', 'Polo', 'Nuka', 'Glacier', 'Puffball', 'Yeti'] },
   unicorn: { name: 'Unicorn', icon: '🦄', speed: 1.6, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.21, radius: 0.44, height: 2.4, float: 0.85, spread: 0.85, walk: 6, run: 10.5, swim: 3.5, jump: 11.5 }, names: ['Stardust', 'Moonbeam', 'Candyfloss', 'Celeste', 'Dreamy', 'Sugarplum', 'Pixie', 'Starlight', 'Wish', 'Lullaby'] },
+  // A giant mosquito (flies, and rides, but not one of BIG: it gets about
+  // the way the flying friends do, not the big animals). air: its rider
+  // flies it as they do the helicopter, jump held lifting off and up, down
+  // bringing down, hovering with neither.
+  mosquito: { name: 'Giant Mosquito', icon: '🦟', speed: 2.1, swims: true, flies: true, ride: { air: true, seat: 0.98, z: -0.02, radius: 0.55, height: 2.2, float: 0.72, spread: 0.9, walk: 2.6, run: 4, swim: 1.8, fly: 6.5, flyRun: 9.5, flyUp: 5 }, names: ['Whizzy', 'Zizzy', 'Bumbly', 'Squeaker', 'Hummer', 'Muzzer', 'Drony', 'Nectar', 'Midge', 'Slim'] },
   // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
@@ -185,7 +196,7 @@ export function mountUnder(type, p) {
 }
 
 // How a friend following you flies round you: how far out, and how high.
-const ORBIT = { bird: [1.15, 1.9], owl: [1.3, 2], bee: [0.75, 1.55], butterfly: [0.8, 1.6], seagull: [2.2, 2.9] };
+const ORBIT = { bird: [1.15, 1.9], owl: [1.3, 2], bee: [0.75, 1.55], butterfly: [0.8, 1.6], seagull: [2.2, 2.9], mosquito: [2.3, 2.5] };
 // Small hops about on the ground, for birds and seagulls.
 const HOP = { speed: 1.4, swims: false };
 // Sitting on a flower is on top of its blossom, most of the way up its cell.
@@ -481,6 +492,32 @@ export function placeBig(world, rng, counts = scaleCounts(bigCounts(world.theme)
         const p = perchAt(world, rng.int(3, world.W - 4) + 0.5, rng.int(3, world.D - 4) + 0.5);
         if (!p || (type === 'polarbear' ? !onShore(world, p) : p.kind !== 'ground' || p.ground === B.SAND || p.y <= world.sea + 1)) continue;
         if (Math.hypot(p.x - spawn.x, p.z - spawn.z) < 10 || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 3)) continue;
+        if (!fits(world, type, p.x, p.y, p.z)) continue;
+        out.push({ type, x: p.x, y: p.y, z: p.z });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// How many giant mosquitos an island starts with: none in the snow, where
+// one would be far too cold.
+export function giantCounts(theme) {
+  return theme === 'snowy' ? {} : { mosquito: 2 };
+}
+
+// Where they start out: perched out in the open on dry land, with room for
+// a rider, away from where everyone comes in and from each other.
+export function placeGiant(world, rng, counts = scaleCounts(giantCounts(world.theme), world)) {
+  const out = [];
+  const spawn = world.spawn;
+  for (const [type, n] of Object.entries(counts)) {
+    for (let i = 0; i < n; i++) {
+      for (let tries = 0; tries < spots(world, 800); tries++) {
+        const p = perchAt(world, rng.int(2, world.W - 3) + 0.5, rng.int(2, world.D - 3) + 0.5);
+        if (!p || p.kind === 'water') continue;
+        if (Math.hypot(p.x - spawn.x, p.z - spawn.z) < 8 || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 6)) continue;
         if (!fits(world, type, p.x, p.y, p.z)) continue;
         out.push({ type, x: p.x, y: p.y, z: p.z });
         break;
@@ -1087,14 +1124,14 @@ export class CritterSim {
   }
 
   // Ridden: right under its rider (who says where they are: see riding.js),
-  // walking, running or swimming as they go.
+  // walking, running or swimming as they go; flying, on one that flies.
   carry(world, c, p, dt) {
     const r = CRITTER_INFO[c.type].ride;
     const at = mountUnder(c.type, p);
     const speed = Math.hypot(at.x - c.x, at.z - c.z) / Math.max(dt, 1e-3);
     Object.assign(c, { x: at.x, y: at.y, z: at.z, yaw: at.yaw });
     const wet = r.sea || world.get(FL(c.x), FL(c.y + 0.5), FL(c.z)) === B.WATER;
-    c.state = wet ? 'swim' : speed > r.walk * 1.15 ? 'run' : speed > 0.5 ? 'walk' : 'idle';
+    c.state = p.flying ? 'fly' : wet ? 'swim' : speed > r.walk * 1.15 ? 'run' : speed > 0.5 ? 'walk' : 'idle';
   }
 
   // Its rider got off, or went home: it stays where they left it a moment,
@@ -1493,6 +1530,20 @@ export class CritterSim {
       case 'bee':
         this.nextFlower(world, c);
         return;
+      case 'mosquito': {
+        // A sip at a flower now and then; the rest of the time hanging
+        // about in the air, well up off the ground.
+        if (this.rng.chance(0.3)) {
+          const f = this.findPerch(world, c, 1, 10, 16, (q) => q.flower, 30);
+          if (f) {
+            this.flyTo(c, { x: f.x, y: f.y + 1.1, z: f.z }, 'flower');
+            return;
+          }
+        }
+        const s = this.around(c, 2, 8, 16);
+        this.flyTo(c, this.airAbove(world, s.x, s.z, 2, 5), 'air');
+        return;
+      }
       default:
         this.flutter(world, c);
     }
@@ -1592,7 +1643,8 @@ export class CritterSim {
 
   // Fed a fruit, a flying friend goes along with you: round and round you
   // while you move, and onto your head once you stand still. One friend to a
-  // head; any others keep flying round.
+  // head; any others keep flying round. A giant one is far too big to sit on
+  // anybody's head: it hangs in the air beside you instead.
   follow(world, c, dt, leader) {
     c.followed = true;
     const moved = Math.hypot(leader.x - (c.lx ?? leader.x), leader.y - (c.ly ?? leader.y), leader.z - (c.lz ?? leader.z));
@@ -1600,7 +1652,7 @@ export class CritterSim {
     c.ly = leader.y;
     c.lz = leader.z;
     c.still = !leader.anim && !leader.flying && moved < 0.03 ? c.still + dt : 0;
-    if (c.still > 1 && !this.list.some((o) => o !== c && o.follow === c.follow && o.id < c.id && CRITTER_INFO[o.type].flies)) {
+    if (c.still > 1 && !CRITTER_INFO[c.type].ride && !this.list.some((o) => o !== c && o.follow === c.follow && o.id < c.id && CRITTER_INFO[o.type].flies)) {
       const top = leader.y + headTop(leader.hat, leader.hair, leader.tall);
       if (c.onHead !== c.follow) {
         c.mode = 'fly';
@@ -1726,7 +1778,7 @@ export class CritterSim {
     if (c.goal === 'flower' || c.goal === 'air') {
       c.mode = 'hover';
       c.state = c.goal === 'flower' ? 'eat' : 'fly';
-      c.timer = c.goal === 'flower' ? this.rng.range(2, 4.5) : c.type === 'butterfly' ? 0.05 : this.rng.range(0.4, 1.4);
+      c.timer = c.goal === 'flower' ? this.rng.range(2, 4.5) : c.type === 'butterfly' ? 0.05 : c.type === 'mosquito' ? this.rng.range(1.2, 3.2) : this.rng.range(0.4, 1.4);
     }
   }
 

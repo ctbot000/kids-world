@@ -419,7 +419,7 @@ const BUILDERS = { puppy, kitten, bunny, hamster, piglet, dragon, duckling, parr
 
 // Where a pet rides along, behind its owner, on each kind of animal and in
 // each vehicle: how far behind its middle.
-const SEATS = { pony: -0.5, unicorn: -0.5, reindeer: -0.5, cow: -0.52, elephant: -0.62, giraffe: -0.45, polarbear: -0.52, dolphin: -0.45, whale: -0.62, car: -0.63, boat: -0.75, digger: -0.55, minecart: -0.43, bus: 0.1, ferry: 0.1, helicopter: -0.42, balloon: -0.33 };
+const SEATS = { pony: -0.5, unicorn: -0.5, reindeer: -0.5, cow: -0.52, elephant: -0.62, giraffe: -0.45, polarbear: -0.52, dolphin: -0.45, whale: -0.62, car: -0.63, boat: -0.75, digger: -0.55, minecart: -0.43, bus: 0.1, ferry: 0.1, helicopter: -0.42, balloon: -0.33, mosquito: -0.55 };
 const seatTops = new Map();
 
 // How high the top of a mount is there, standing still, measured once on a

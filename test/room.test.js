@@ -374,7 +374,7 @@ test('sea creatures are invited at the water, and a whale only where the sea is 
 test('an island from before the flying friends or the sea creatures gets them, once', () => {
   const { room, time } = makeRoom();
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 9);
+  assert.equal(save.v, 10);
   const FLYERS = ['bird', 'owl', 'bee', 'seagull'];
   const SEA = ['fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
   const count = (r, types) => r.critters.list.filter((c) => types.includes(c.type)).length;

@@ -1714,7 +1714,9 @@ export class Game extends EventTarget {
       this.profile.count('drives');
     } else {
       const how = this.touch ? 'Tap 👋 Get off to get down.' : 'Press Q to get off.';
-      const trick = { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ?? 'Jump to jump!';
+      const trick =
+        { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ??
+        (ride.r.air ? `Hold jump to fly up, and ${this.touch ? '⬇️' : 'Shift'} to come down!` : 'Jump to jump!');
       this.emit('toast', { icon: info.icon, text: `You are riding ${name}! ${trick} ${how}` });
       this.profile.count('rides');
       if (ride.r.sea) this.profile.count('searides');
@@ -1882,7 +1884,9 @@ export class Game extends EventTarget {
     if (!ride.r.sea && !ride.rail) keepApart(this.world, r, this.standing(`c${ride.id}`), `c${ride.id}`);
     const seat = riderAt(ride.type, { x: r.x, y: r.y, z: r.z, yaw: ride.yaw });
     const b = me.body;
-    Object.assign(b, { x: seat.x, y: seat.y, z: seat.z, vx: r.vx, vy: r.vy, vz: r.vz, onGround: r.onGround, inWater: false });
+    // Flying with it (a helicopter, a balloon, a giant mosquito) says so on
+    // your own body too: the island knows, and King Grumble's stomp misses.
+    Object.assign(b, { x: seat.x, y: seat.y, z: seat.z, vx: r.vx, vy: r.vy, vz: r.vz, onGround: r.onGround, inWater: false, flying: Boolean(r.flying) });
     const speed = Math.hypot(r.vx, r.vz);
     me.yaw = ride.yaw;
     me.speed = speed;
@@ -1929,7 +1933,9 @@ export class Game extends EventTarget {
     if (ev.tookOff) {
       this.sound.play('liftoff', { type: ride.type });
       fxs.dust(r.x, r.y, r.z);
-      this.profile.count('flights');
+      // The 🚁 sticker is for flying the aircraft; riding a giant mosquito
+      // counts as a ride (as anywhere else you get on one).
+      if (CRITTER_INFO[ride.type].vehicle) this.profile.count('flights');
     }
     if (ev.touchedDown) {
       this.sound.play('land');
@@ -1951,6 +1957,13 @@ export class Game extends EventTarget {
       if (ride.r.sea && speed > 2 && Math.random() < dt * 10) {
         const top = this.surfaceAt(r.x, r.z);
         if (top !== null) fxs.splash(r.x - Math.sin(ride.yaw) * 0.8, top, r.z - Math.cos(ride.yaw) * 0.8);
+      }
+    } else if (ride.r.air && r.flying) {
+      // Riding a giant mosquito: its whine, on and off, as it drones along.
+      this.stepAcc += Math.max(speed, 3) * dt;
+      if (this.stepAcc > 2.6) {
+        this.stepAcc = 0;
+        this.sound.play('mosquito');
       }
     } else if (r.onGround && speed > 0.5) {
       // Hoofbeats, or big soft paws.
@@ -2896,7 +2909,7 @@ export class Game extends EventTarget {
       // owls only at night). Seagulls and the whale are heard from further
       // off, and less often.
       const info = CRITTER_INFO[c.type];
-      const far = { seagull: 24, whale: 34, dolphin: 18 }[c.type] ?? (info?.big ? 14 : 9);
+      const far = { seagull: 24, whale: 34, dolphin: 18, mosquito: 16 }[c.type] ?? (info?.big ? 14 : 9);
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
       if (!info?.vehicle && state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;

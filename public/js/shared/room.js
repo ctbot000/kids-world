@@ -13,7 +13,7 @@
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -632,10 +632,10 @@ export class Room {
         // Flying friends come in above any water, and fly off from there.
         if (CRITTER_INFO[msg.type].flies) while (at.y < w.H && w.get(Math.floor(x), Math.floor(at.y), Math.floor(z)) === B.WATER) at.y++;
         // Swimmers (and boats) come in at the nearest water they can live
-        // in, and big animals and vehicles at the nearest spot with room for
-        // them, facing the one who asked for them.
+        // in, and big animals, air mounts and land vehicles at the nearest
+        // spot with room for them, facing the one who asked for them.
         const info = CRITTER_INFO[msg.type];
-        const roomy = info.big || info.vehicle === 'land' || info.vehicle === 'air';
+        const roomy = info.big || Boolean(info.ride?.air) || info.vehicle === 'land';
         if (info.sea === 'water') at = nearestWater(w, msg.type, x, z);
         if (roomy) at = roomFor(w, msg.type, x, at.y, z);
         if (!at) {
@@ -1350,8 +1350,9 @@ export class Room {
       // 3: since the sea creatures did; 4: since penguins and seals did; 5:
       // since the big animals did; 6: since jewels were hidden in the rock;
       // 7: since the vehicles came; 8: since the bus and the ferry did; 9:
-      // since the helicopter and the balloon did.
-      v: 9,
+      // since the helicopter and the balloon did; 10: since the giant
+      // mosquitos did.
+      v: 10,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -1387,6 +1388,8 @@ export class Room {
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
+    // And the giant mosquitos.
+    if (v < 10) for (const f of placeGiant(this.world, new Rng(seed ^ 0x94d049bb))) this.critters.add(f.type, f.x, f.y, f.z);
     // And vehicles: a car, a boat and a digger (the mines of an island from
     // before them have no rails, nor a mine cart).
     if (v < 7) for (const f of placeVehicles(this.world, new Rng(seed ^ 0x4cf5ad43))) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
