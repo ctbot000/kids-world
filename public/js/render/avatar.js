@@ -131,6 +131,56 @@ function darken(hex, k) {
   return `#${c.multiplyScalar(1 - k).getHexString()}`;
 }
 
+// Trousers that go with a shirt: blue jeans, or sand-coloured ones under a
+// shirt that is blue already.
+function trousersFor(shirt) {
+  const hsl = new THREE.Color(shirt).getHSL({});
+  const blue = hsl.h > 0.45 && hsl.h < 0.8 && hsl.s > 0.3;
+  if (blue || hsl.s < 0.15 && hsl.l < 0.4) return '#c9a877';
+  return '#4b67a1';
+}
+
+// Sneakers to match the shirt, red where the shirt is pale or dull.
+function shoeFor(shirt) {
+  const hsl = new THREE.Color(shirt).getHSL({});
+  return hsl.s < 0.3 || hsl.l > 0.8 ? '#e8453c' : darken(shirt, 0.08);
+}
+
+// A sneaker, its ground at y 0 and its toe toward +z: the sole with a bumper
+// round the toe, the upper, and the laces, each one shape for every shoe.
+const sneakerSole = () =>
+  bakeCached('sneaker-sole', [
+    { g: roundedBox(0.15, 0.04, 0.25, 0.018), m: new THREE.Matrix4().makeTranslation(0, 0.02, 0) },
+    { g: sphere(1, 16, 10), m: new THREE.Matrix4().makeTranslation(0, 0.042, 0.07).scale(new THREE.Vector3(0.072, 0.03, 0.06)) },
+  ]);
+const sneakerUpper = () =>
+  bakeCached('sneaker-upper', [
+    { g: sphere(1, 18, 12), m: new THREE.Matrix4().makeTranslation(0, 0.045, -0.005).scale(new THREE.Vector3(0.07, 0.055, 0.118)) },
+    { g: cylinder(0.058, 0.064, 0.05, 16), m: new THREE.Matrix4().makeTranslation(0, 0.085, -0.04) },
+    { g: torus(0.058, 0.012), m: new THREE.Matrix4().makeTranslation(0, 0.11, -0.04).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2)) },
+  ]);
+const sneakerLaces = () =>
+  bakeCached(
+    'sneaker-laces',
+    [0.035, 0.0, -0.025].map((z, i) => ({
+      g: capsule(0.008, 0.06, 3, 6),
+      m: new THREE.Matrix4().makeTranslation(0, 0.088 + i * 0.01 - (z > 0 ? 0.008 : 0), z).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)),
+    })),
+  );
+
+// A five-pointed star, a little thick, facing +z: the badge on a t-shirt.
+const starShape = () =>
+  geo('star-badge', () => {
+    const s = new THREE.Shape();
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI / 2 + (i * Math.PI) / 5;
+      const r = i % 2 ? 0.017 : 0.04;
+      if (i) s.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      else s.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    return new THREE.ExtrudeGeometry(s, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 });
+  });
+
 // A feature sitting on the face, pushed out along the head's surface.
 function onFace(fx, fy, out) {
   return onSurface(HR[0], HR[1], HR[2], fx, fy, out);
@@ -139,20 +189,20 @@ function onFace(fx, fy, out) {
 function eyes(head, style = 'dot') {
   const group = new THREE.Group();
   for (const side of [-1, 1]) {
-    const p = onFace(side * 0.12, 0.02, 0.005);
+    const p = onFace(side * 0.12, 0.02, style === 'big' ? -0.01 : 0.005);
     if (style === 'big') {
       // A big round eye: a white, an iris, a pupil and a catchlight, turned to face out.
       const eye = new THREE.Group();
       eye.position.set(p.x, p.y, p.z);
       eye.lookAt(p.clone().multiplyScalar(2));
-      eye.add(mesh(sphere(1, 18, 14), toon(WHITE), 0, 0, 0, 0.056, 0.072, 0.034));
-      const iris = mesh(sphere(1, 14, 10), toon(EYE), 0, -0.004, 0.016, 0.036, 0.05, 0.02);
+      eye.add(mesh(sphere(1, 18, 14), toon(WHITE), 0, 0, 0, 0.056, 0.072, 0.024));
+      const iris = mesh(sphere(1, 14, 10), toon(EYE), 0, -0.004, 0.01, 0.036, 0.05, 0.016);
       iris.userData.iris = true;
       eye.add(iris);
-      const pupil = mesh(sphere(1, 10, 8), toon(BLACK), 0, -0.006, 0.027, 0.02, 0.028, 0.011);
+      const pupil = mesh(sphere(1, 10, 8), toon(BLACK), 0, -0.006, 0.018, 0.02, 0.028, 0.01);
       pupil.userData.iris = true;
       eye.add(pupil);
-      eye.add(mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.75 }), -0.013, 0.02, 0.028, 0.011, 0.014, 0.007));
+      eye.add(mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.75 }), -0.013, 0.02, 0.026, 0.011, 0.014, 0.006));
       group.add(eye);
     } else {
       const eye = mesh(sphere(1, 16, 12), toon(BLACK), p.x, p.y, p.z, 0.048, 0.062, 0.03);
@@ -187,10 +237,11 @@ function blush(head) {
 }
 
 function smile(head, width = 0.05, y = -0.1) {
-  const p = onFace(0, y, 0.004);
+  const p = onFace(0, y, -0.004);
   const m = mesh(torus(width, 0.012, Math.PI), toon('#7a3b3b'), p.x, p.y, p.z);
   m.rotation.z = Math.PI;
-  m.rotation.x = -0.35;
+  // Leaning back with the chin, so it lies on the face rather than poking out.
+  m.rotation.x = 0.3;
   head.add(m);
   return m;
 }
@@ -516,6 +567,91 @@ function beard(head, color) {
   head.add(mesh(sphere(1, 16, 12), toon(color), chin.x, chin.y, chin.z, 0.13, 0.09, 0.08));
 }
 
+// Where hair stops going down the head, `turn` round from the face: over
+// the forehead at the front, lower round the sides and lowest at the back.
+const capLine = (turn) => {
+  const a = Math.abs(turn);
+  return a < 0.9 ? 0.95 : a < 1.8 ? 0.95 + (a - 0.9) * 0.75 : 1.62 + (a - 1.8) * 0.33;
+};
+const bobLine = (turn) => (Math.abs(turn) < 1.0 ? 0.95 : 2.12);
+const longLine = (turn) => (Math.abs(turn) < 1.0 ? 0.95 : 2.3);
+
+// Hair combed down from the crown, as one sculpted shell: ridges run from
+// the top of the head down to a hairline that dips into a soft point at the
+// end of each lock, and the edge rolls under so the hair has thickness.
+// line(turn) is how far down it reaches, `turn` round from the face.
+function combed(key, line, k = 1.06, ridges = 22) {
+  return geo(`combed|${key}|${k}`, () => {
+    const cols = ridges * 4;
+    const rows = 22;
+    const positions = [];
+    const index = [];
+    for (let i = 0; i <= cols; i++) {
+      const turn = (i / cols) * Math.PI * 2 - Math.PI;
+      const wave = Math.cos(turn * ridges);
+      const reach = line(turn) + 0.07 * wave;
+      for (let j = 0; j <= rows; j++) {
+        const v = j / rows;
+        const up = v * reach;
+        // Ridges grow from nothing at the crown; the last stretch rolls under.
+        const ridge = 0.03 * (0.5 + 0.5 * wave) * Math.min(1, up / 0.5);
+        const roll = v > 0.9 ? ((v - 0.9) / 0.1) ** 2 * 0.05 : 0;
+        const r = k * (1 + ridge - roll);
+        positions.push(Math.sin(up) * Math.sin(turn) * HR[0] * r, Math.cos(up) * HR[1] * r, Math.sin(up) * Math.cos(turn) * HR[2] * r);
+      }
+    }
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const a = i * (rows + 1) + j;
+        const b = a + rows + 1;
+        index.push(a, a + 1, b, b, a + 1, b + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+// Long hair hanging down the back past the shoulders: a curtain in the same
+// ridged locks as the top, each ending in a soft point, its edges rolled in.
+const hairFall = () =>
+  geo('hair-fall', () => {
+    const cols = 48;
+    const rows = 14;
+    const spread = 1.25;
+    const positions = [];
+    const index = [];
+    for (let i = 0; i <= cols; i++) {
+      const u = i / cols;
+      const a = Math.PI - spread + u * spread * 2;
+      const wave = Math.cos((a - Math.PI) * 11);
+      const bottom = -0.58 - 0.045 * wave;
+      const edge = Math.min(u, 1 - u);
+      for (let j = 0; j <= rows; j++) {
+        const v = j / rows;
+        const y = -0.2 + (bottom + 0.2) * v;
+        const roll = (v > 0.85 ? ((v - 0.85) / 0.15) ** 2 * 0.035 : 0) + (edge < 0.08 ? ((0.08 - edge) / 0.08) ** 2 * 0.035 : 0);
+        const r = 0.272 + 0.035 * v + 0.012 * (0.5 + 0.5 * wave) * Math.min(1, v * 3) - roll;
+        positions.push(Math.sin(a) * r, y, Math.cos(a) * r);
+      }
+    }
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const a = i * (rows + 1) + j;
+        const b = a + rows + 1;
+        index.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    return g;
+  });
+
 // A kid's hair. Returns the bunches and tails that swing as you move.
 function hair(head, style, color, hatKind) {
   const g = new THREE.Group();
@@ -528,8 +664,10 @@ function hair(head, style, color, hatKind) {
     return m;
   };
   const cover = (k, opts) => add(mesh(shell(k, opts), shellMat, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
-  // The top and the back, clear of the forehead.
-  const cap = () => cover(1.07, { thetaLength: 1.59, tilt: 0.6 });
+  // The top and the back, clear of the forehead, combed into locks.
+  const cap = () => {
+    add(mesh(combed('cap', capLine), shellMat));
+  };
   // A lock of hair lying flat over the forehead, rolled round in place.
   const lock = (fx, fy, sx, sy, roll = 0) => {
     const p = onFace(fx, fy, 0.014);
@@ -607,23 +745,14 @@ function hair(head, style, color, hatKind) {
     }
     case 'bob':
     case 'long': {
-      cap();
-      // Down the sides and the back, round the face.
-      cover(1.1, { phi: Math.PI / 2 + 0.85, phiLength: Math.PI * 2 - 1.7, theta: 0.9, thetaLength: style === 'bob' ? 1.25 : 1.45 });
+      // Down the sides and the back, round the face, to the jaw.
+      add(mesh(combed(style, style === 'bob' ? bobLine : longLine, 1.08), shellMat));
       for (const fx of [-0.18, -0.06, 0.06, 0.18]) lock(fx, 0.16, 0.08, 0.075);
-      if (style === 'bob') {
-        // The hem of the bob turns under, all the way round.
-        const hem = mesh(torus(0.29, 0.045, Math.PI * 2), mat, 0, -0.16, -0.01, HEAD.sx * 1.02, 1, 0.98);
-        hem.rotation.x = Math.PI / 2 + 0.08;
-        add(hem);
-      }
       if (style === 'long') {
         // On down the back, past the shoulders, with rounded edges.
         const fall = new THREE.Group();
         fall.scale.x = HEAD.sx;
-        fall.add(mesh(geo('hair-fall', () => new THREE.CylinderGeometry(0.266, 0.3, 0.3, 20, 1, true, Math.PI - 1.2, 2.4)), shellMat, 0, -0.4, 0));
-        fall.add(mesh(geo('hair-end', () => new THREE.TorusGeometry(0.27, 0.05, 8, 20, 2.4).rotateX(Math.PI / 2).rotateY(Math.PI / 2 + 1.2)), mat, 0, -0.55, 0));
-        for (const side of [-1, 1]) fall.add(mesh(capsule(0.05, 0.28), mat, side * Math.sin(1.2) * 0.25, -0.41, -Math.cos(1.2) * 0.25));
+        fall.add(mesh(hairFall(), shellMat));
         add(fall);
       }
       break;
@@ -900,65 +1029,112 @@ export class Avatar {
     this.body = body;
     this.root.add(body);
 
+    const frog = look.animal === 'frog';
+    const pants = frog ? fur : trousersFor(shirt);
+    const pantsMat = toon(pants);
+    const seam = toon(darken(pants, 0.18));
+    const shoeUpper = frog ? darken(fur, 0.1) : shoeFor(shirt);
     this.legs = [-1, 1].map((side) => {
       const leg = new THREE.Group();
       leg.position.set(side * 0.1, 0.28 + legLong, 0);
-      // Trouser legs, tapering to the ankle; a frog's legs are its skin.
-      const trouser = look.animal === 'frog' ? fur : darken(shirt, 0.35);
-      leg.add(mesh(cylinder(0.062, 0.05, 0.2 + legLong, 14), toon(trouser), 0, -0.1 - legLong / 2, 0));
-      // The shorts, a little wider, ending above the knee.
-      leg.add(mesh(cylinder(0.082, 0.075, 0.1, 14), toon(trouser), 0, -0.05 - legLong * 0.15, 0));
-      // A shoe: a rounded sole, a toe cap over it and a little heel behind.
-      const shoe = look.animal === 'frog' ? darken(fur, 0.1) : '#6b4a3a';
-      leg.add(mesh(roundedBox(0.17, 0.055, 0.27, 0.024), toon(shoe), 0, -0.265 - legLong, 0.035));
-      leg.add(mesh(sphere(1, 16, 12), toon(lighten(shoe, 0.18)), 0, -0.245 - legLong, 0.115, 0.072, 0.05, 0.075));
-      leg.add(mesh(sphere(1, 12, 8), toon(shoe), 0, -0.25 - legLong, -0.06, 0.06, 0.045, 0.05));
+      // A trouser leg from the hip down to the ankle, full at the thigh and
+      // narrowing to a rolled-up cuff; a frog's legs are its skin.
+      leg.add(
+        mesh(
+          lathe([
+            [0, -0.22 - legLong],
+            [0.054, -0.22 - legLong],
+            [0.058, -0.15 - legLong * 0.75],
+            [0.066, -0.06 - legLong * 0.3],
+            [0.08, 0.01],
+            [0.07, 0.05],
+            [0, 0.06],
+          ], 18),
+          pantsMat,
+        ),
+      );
+      if (!frog) leg.add(mesh(torus(0.056, 0.014), seam, 0, -0.205 - legLong, 0).rotateX(Math.PI / 2));
+      // A sneaker: a pale rubber sole with a bumper round the toe, a padded
+      // upper in a bright colour and laces across the top.
+      const y = -0.28 - legLong;
+      const sole = frog ? toon(darken(fur, 0.25)) : toon('#f6f1ea');
+      leg.add(mesh(sneakerSole(), sole, 0, y, 0.03));
+      leg.add(mesh(sneakerUpper(), toon(shoeUpper), 0, y, 0.03));
+      if (!frog) leg.add(mesh(sneakerLaces(), toon('#ffffff'), 0, y, 0.03));
       body.add(leg);
       return leg;
     });
     this.torso = new THREE.Group();
     this.torso.position.y = 0.28 + legLong;
     body.add(this.torso);
-    // A shirt with a shape of its own: shoulders, a waist, a hem that flares.
+    const wide = grown ? 1.08 : 1;
+    // The seat of the trousers, with a waistband, under the shirt.
     this.torso.add(
       mesh(
         lathe([
-          [0.015, -0.05],
-          [0.13, -0.05],
-          [0.16, 0.04],
-          [0.15, 0.12 + up * 0.4],
-          [0.158, 0.22 + up * 0.55],
-          [0.152, 0.32 + up * 0.75],
-          [0.135, 0.4 + up * 0.9],
-          [0.085, 0.46 + up],
-          [0.06, 0.5 + up],
+          [0, -0.08],
+          [0.13, -0.08],
+          [0.152, -0.04],
+          [0.156, 0.06],
+          [0, 0.06],
         ]),
-        toon(shirt),
+        pantsMat,
         0,
         0,
         0,
-        grown ? 1.08 : 1,
+        wide,
         1,
         0.85,
       ),
     );
-    // A hem band at the bottom of the shirt, and two little buttons down the front.
-    this.torso.add(mesh(torus(0.148, 0.016), toon(darken(shirt, 0.22)), 0, 0.0, 0, grown ? 1.08 : 1, 1, 0.85).rotateX(Math.PI / 2));
-    this.torso.add(mesh(sphere(1, 10, 8), toon(lighten(shirt, 0.4)), 0, 0.3 + up * 0.7, 0.128, 0.016));
-    this.torso.add(mesh(sphere(1, 10, 8), toon(lighten(shirt, 0.4)), 0, 0.2 + up * 0.55, 0.14, 0.016));
-    // A little collar in the fur colour, so the head sits nicely.
-    this.torso.add(mesh(sphere(), toon(fur), 0, 0.44 + up, 0, 0.14, 0.06, 0.12));
+    if (!frog) this.torso.add(mesh(torus(0.154, 0.015), seam, 0, 0.035, 0, wide, 1, 0.85).rotateX(Math.PI / 2));
+    // A t-shirt with a shape of its own: a chest, square shoulders, and a hem
+    // that sits out over the trousers.
+    this.torso.add(
+      mesh(
+        lathe([
+          [0.02, 0.05],
+          [0.152, 0.05],
+          [0.166, 0.08],
+          [0.158, 0.16 + up * 0.45],
+          [0.162, 0.26 + up * 0.6],
+          [0.158, 0.36 + up * 0.8],
+          [0.142, 0.42 + up * 0.93],
+          [0.1, 0.465 + up],
+          [0.06, 0.49 + up],
+        ], 28),
+        toon(shirt),
+        0,
+        0,
+        0,
+        wide,
+        1,
+        0.85,
+      ),
+    );
+    // A hem band, a ribbed collar round the neck, and a star on the chest.
+    this.torso.add(mesh(torus(0.163, 0.014), toon(darken(shirt, 0.16)), 0, 0.065, 0, wide, 1, 0.85).rotateX(Math.PI / 2));
+    this.torso.add(mesh(torus(0.068, 0.017), toon(darken(shirt, 0.18)), 0, 0.47 + up, 0.005, 1, 1, 0.9).rotateX(Math.PI / 2 - 0.12));
+    const badge = mesh(starShape(), toon(lighten(shirt, 0.65)), 0, 0.27 + up * 0.62, 0.133);
+    badge.rotation.x = -0.1;
+    this.torso.add(badge);
+    // A neck in the fur colour, so the head sits nicely.
+    this.torso.add(mesh(cylinder(0.056, 0.062, 0.08, 14), toon(fur), 0, 0.48 + up, 0));
     this.arms = [-1, 1].map((side) => {
       const arm = new THREE.Group();
-      arm.position.set(side * (grown ? 0.245 : 0.23), 0.4 + up, 0);
+      arm.position.set(side * (grown ? 0.215 : 0.2), 0.39 + up, 0);
       arm.rotation.z = side * 0.18;
-      // A sleeve to past the elbow, a cuff, and a bare forearm to the hand.
-      arm.add(mesh(capsule(0.066, 0.1 + armLong), toon(shirt), 0, -0.06 - armLong / 2, 0));
-      arm.add(mesh(torus(0.058, 0.014), toon(darken(shirt, 0.18)), 0, -0.12 - armLong, 0).rotateX(Math.PI / 2));
-      arm.add(mesh(cylinder(0.045, 0.04, 0.08, 12), toon(fur), 0, -0.17 - armLong, 0));
-      // A mitten hand with a thumb at the side.
-      arm.add(mesh(sphere(1, 16, 12), toon(fur), 0, -0.225 - armLong, 0, 0.062, 0.068, 0.055));
-      arm.add(mesh(sphere(1, 10, 8), toon(fur), side * 0.052, -0.215 - armLong, 0.012, 0.024, 0.034, 0.024));
+      // A rounded shoulder that melts into the shirt, a short sleeve opening
+      // out to a hem, then a bare arm down to the hand.
+      arm.add(mesh(sphere(1, 16, 12), toon(shirt), 0, 0, 0, 0.074, 0.07, 0.07));
+      arm.add(mesh(lathe([[0.072, 0], [0.075, -0.05], [0.07, -0.095], [0.045, -0.1], [0, -0.1]], 16), toon(shirt)));
+      arm.add(mesh(torus(0.064, 0.013), toon(darken(shirt, 0.16)), 0, -0.092, 0).rotateX(Math.PI / 2));
+      arm.add(mesh(capsule(0.042, 0.08 + armLong), toon(fur), 0, -0.14 - armLong / 2, 0));
+      // A chubby hand: a palm, four fingers together and a thumb.
+      const hy = -0.215 - armLong;
+      arm.add(mesh(sphere(1, 16, 12), toon(fur), 0, hy, 0, 0.056, 0.058, 0.048));
+      arm.add(mesh(capsule(0.04, 0.02), toon(fur), 0, hy - 0.035, 0.004, 1.15, 1, 0.9));
+      arm.add(mesh(capsule(0.017, 0.022), toon(fur), side * 0.05, hy + 0.005, 0.016).rotateZ(side * 0.5));
       this.torso.add(arm);
       return arm;
     });
