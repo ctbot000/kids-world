@@ -7,7 +7,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { PET_COATS } from '../shared/words.js';
 import { CritterModel, eyesOn, wingPair } from './critter-models.js';
-import { bakeCached, blobShadow, capsule, cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
+import { bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
 const PINK = '#ff9fb8';
@@ -42,6 +42,23 @@ function rig(y, half) {
   return { g, body, roll, pivot };
 }
 
+// A chubby little leg, its top at y 0 and its paw at -len: full at the top
+// (fuller still at the haunch of a back leg), narrowing to a wrist above the
+// paw, smoothed so the light runs round it evenly.
+const petLeg = (len, r, haunch) =>
+  lathe(
+    [
+      [0, -len],
+      ...new THREE.SplineCurve(
+        [[0.95, 1], [0.92, 0.82], [0.98, 0.6], [1.25, 0.35], [haunch ? 1.75 : 1.45, 0.12], [haunch ? 1.8 : 1.5, 0]].map(([k, t]) => new THREE.Vector2(k * r, -len * t)),
+      )
+        .getPoints(16)
+        .map((v) => [v.x, v.y]),
+      [0, 0.02],
+    ],
+    18,
+  );
+
 // Four legs, each turning about its top (at height top under the hips' line):
 // the front ones at z = front, the back ones at z = back, x out either side.
 function fourLegs(pivot, { x, front, back, top, len, r, color, paw }) {
@@ -54,7 +71,7 @@ function fourLegs(pivot, { x, front, back, top, len, r, color, paw }) {
     const leg = new THREE.Group();
     leg.position.set(side * x, top, z);
     leg.userData = { side, front: z === front };
-    leg.add(mesh(cylinder(r * 0.9, r, len, 10), toon(color), 0, -len / 2, 0));
+    leg.add(mesh(petLeg(len, r, z !== front), toon(color)));
     leg.add(mesh(sphere(1, 10, 8), toon(paw), 0, -len + r * 0.5, r * 0.4, r * 1.25, r * 0.85, r * 1.5));
     // Toes showing at the front of the paw.
     for (const t of [-1, 0, 1]) leg.add(mesh(sphere(1, 8, 6), toon(paw), t * r * 0.7, -len + r * 0.3, r * 1.1, r * 0.34, r * 0.26, r * 0.4));

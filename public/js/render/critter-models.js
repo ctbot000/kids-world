@@ -5,7 +5,7 @@
 // elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
 // which live with them, are in vehicle-models.js.
 import * as THREE from '../../vendor/three.module.js';
-import { bake, bakeCached, blobShadow, capsule, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { bake, bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, onSurface, sphere, toon, torus } from './toon.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 
 const BLACK = '#2b2530';
@@ -779,10 +779,34 @@ function bigRig(y) {
   return { g, body, pivot };
 }
 
+// How thick a leg is from the hip (0) to the ground (1), in leg radii: a
+// hoofed leg is muscled at the top, slim below the knee, with a fetlock above
+// the hoof; a bear's is thick all the way to its paw; an elephant's a column
+// that spreads a little into its foot.
+const LEG_SHAPES = {
+  hoof: [[0, 1.75], [0.14, 1.7], [0.3, 1.3], [0.44, 0.92], [0.5, 1.04], [0.56, 0.86], [0.78, 0.74], [0.86, 0.92], [0.92, 0.82], [0.94, 0.8]],
+  paw: [[0, 1.6], [0.2, 1.45], [0.45, 1.12], [0.6, 1.0], [0.85, 0.98], [0.95, 1.05], [0.98, 0.9]],
+  column: [[0, 1.0], [0.25, 1.06], [0.5, 1.0], [0.8, 0.98], [0.93, 1.08], [0.99, 1.12], [1, 1.0]],
+};
+
+// One leg's shape, its top at y 0 and its foot at -len.
+const legShape = (kind, len, r) => {
+  // Smoothed through the points, so the bands of light run round it evenly.
+  const rings = LEG_SHAPES[kind].map(([t, k]) => new THREE.Vector2(k * r, -len * t)).reverse();
+  const smooth = new THREE.SplineCurve(rings).getPoints(24).map((v) => [v.x, v.y]);
+  // Rounded over at the top, so no edge shows where it goes into the body.
+  const top = smooth.at(-1)[0];
+  const dome = [0.4, 0.75, 0.95].map((a) => [Math.cos(a * (Math.PI / 2)) * top, Math.sin(a * (Math.PI / 2)) * top * 0.7]);
+  return lathe([[0, smooth[0][1]], ...smooth, ...dome, [0, top * 0.7]], 22);
+};
+
 // Four legs, each turning about its hip (hip: how far under the pivot): the
 // front ones at z = front, the back ones at z = back, x out to either side.
-function fourLegs(pivot, { x, front, back, hip, len, r, color, hoof = null, knees = false, paw = null }) {
-  const shin = hoof ? len - 0.06 : len;
+function fourLegs(pivot, { x, front, back, hip, len, r, color, hoof = null, paw = null }) {
+  const kind = hoof ? 'hoof' : paw ? 'paw' : 'column';
+  const shape = legShape(kind, len, r);
+  // A hoof: a short cone flaring to the ground, with a pale band at the top.
+  const hoofShape = lathe([[0, 0], [r * 1.08, 0], [r * 1.02, 0.03], [r * 0.86, len * 0.07], [0, len * 0.07]], 16);
   return [
     [-1, front],
     [1, front],
@@ -792,9 +816,9 @@ function fourLegs(pivot, { x, front, back, hip, len, r, color, hoof = null, knee
     const leg = new THREE.Group();
     leg.position.set(side * x, hip, z);
     leg.userData = { side, front: z > 0 };
-    leg.add(mesh(cylinder(r * 0.85, r, shin, 10), toon(color), 0, -shin / 2, 0));
-    if (hoof) leg.add(mesh(cylinder(r * 0.95, r * 1.08, 0.07, 10), toon(hoof), 0, -len + 0.035, 0));
-    if (knees) leg.add(mesh(sphere(1, 10, 8), toon(color), 0, -len * 0.5, 0, r * 1.3));
+    // Flatter from side to side than from front to back, like a real leg.
+    leg.add(mesh(shape, toon(color), 0, 0, 0, 0.86, 1, 1));
+    if (hoof) leg.add(mesh(hoofShape, toon(hoof), 0, -len, 0));
     if (paw) leg.add(mesh(sphere(), toon(paw), 0, -len + 0.04, 0.03, r * 1.15, 0.06, r * 1.35));
     pivot.add(leg);
     return leg;
@@ -873,8 +897,6 @@ function pony(id, kind = 'pony') {
     pivot.add(mesh(sphere(), toon(k.mane), 0, 0.03, -0.53, 0.17, 0.17, 0.1));
   }
   const legs = fourLegs(pivot, { x: 0.17, front: 0.36, back: -0.36, hip: -0.18, len: 0.64, r: 0.075, color: k.coat, hoof: k.hoof });
-  // Feathered fetlocks above each hoof.
-  for (const leg of legs) leg.add(mesh(sphere(1, 10, 8), toon(k.coat), 0, -0.56, 0.01, 0.075, 0.07, 0.075));
 
   const neck = new THREE.Group();
   neck.position.set(0, 0.14, 0.42);
@@ -882,7 +904,9 @@ function pony(id, kind = 'pony') {
   const n = new THREE.Group();
   n.rotation.x = 0.6;
   neck.add(n);
-  n.add(mesh(capsule(0.13, 0.28), coat, 0, 0.2, 0));
+  // A neck deep where it meets the chest, slimming up to the head, its crest
+  // arching under the mane.
+  n.add(mesh(lathe([[0, -0.1], [0.15, -0.08], [0.165, 0.02], [0.145, 0.16], [0.125, 0.3], [0.115, 0.4], [0.09, 0.46], [0, 0.48]], 20), coat, 0, 0, 0, 1, 1, 1.12));
   // The mane, down the back of the neck: rows of strands, baked per colour;
   // a reindeer's ruff, under it, stays in puffs.
   if (deer) {
@@ -1058,7 +1082,7 @@ function elephant(id) {
   pivot.add(mesh(sphere(), grey, 0, 0, 0, ...R));
   const legs = fourLegs(pivot, { x: 0.32, front: 0.46, back: -0.46, hip: -0.46, len: 0.64, r: 0.17, color: GREY });
   // Toenails.
-  for (const leg of legs) for (const x of [-0.08, 0, 0.08]) leg.add(mesh(sphere(1, 8, 6), toon('#f4efe6'), x, -0.6, 0.14, 0.035, 0.03, 0.02));
+  for (const leg of legs) for (const x of [-0.08, 0, 0.08]) leg.add(mesh(sphere(1, 8, 6), toon('#f4efe6'), x * 1.2, -0.6, 0.17, 0.04, 0.034, 0.024));
   const neck = new THREE.Group();
   neck.position.set(0, 0.18, 0.72);
   pivot.add(neck);
@@ -1136,7 +1160,7 @@ function giraffe(id) {
   ]) {
     patch(pivot, spot, R, [dx, dy, dz], w, h);
   }
-  const legs = fourLegs(pivot, { x: 0.15, front: 0.3, back: -0.32, hip: -0.27, len: 1.05, r: 0.062, color: '#f3cf6b', hoof: '#5a4030', knees: true });
+  const legs = fourLegs(pivot, { x: 0.15, front: 0.3, back: -0.32, hip: -0.27, len: 1.05, r: 0.062, color: '#f3cf6b', hoof: '#5a4030' });
   const neck = new THREE.Group();
   neck.position.set(0, 0.16, 0.36);
   pivot.add(neck);
