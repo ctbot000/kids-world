@@ -2154,7 +2154,7 @@ export class Game extends EventTarget {
   // in it going in your basket (and, those dug out, for keeps).
   drill(dig) {
     // Only the owner builds on this island right now: the drill stays still.
-    if (this.settings.build === 'host' && this.pid !== this.host) {
+    if (!this.mayBuild) {
       if (!this.riding.toldNoDig) this.emit('notice', { text: 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
       this.riding.toldNoDig = true;
       return;
@@ -2201,9 +2201,21 @@ export class Game extends EventTarget {
 
   // ------------------------------------------------ edits
 
+  // Whether you may change this island: yours, or its owner lets friends build.
+  get mayBuild() {
+    return this.settings.build !== 'host' || this.pid === this.host;
+  }
+
   // Makes a change here at once and asks the island to make it for everyone.
   edit(kind, cells, { expect = null, undoable = true } = {}) {
     if (!cells.length) return false;
+    // Only the owner builds here right now: nothing changes, so nothing is
+    // picked up, collected or spent either (the island would only say no).
+    if (!this.mayBuild) {
+      this.emit('notice', { text: 'The island owner is the only builder right now.', level: 'warn' });
+      this.sound.play('no');
+      return false;
+    }
     const seq = ++this.seq;
     const w = this.world;
     const undo = [];

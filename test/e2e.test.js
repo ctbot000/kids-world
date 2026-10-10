@@ -2073,6 +2073,15 @@ test('two friends peer to peer: visiting, building together, rules and saying go
   await until(guest, () => document.querySelector('.toast.warn')?.textContent.includes('only builder'));
   await until(guest, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === c.was, { ...above2, was });
   assert.equal(await blockAt(host, above2), was);
+  // Nor does picking up an apple fill the guest's basket, however many times they try.
+  const apples = await guest.evaluate((c) => {
+    const kw = window.kidsWorld;
+    const before = kw.profile.basket.apple ?? 0;
+    for (let i = 0; i < 3; i++) kw.game.commit({ kind: 'collect', cells: [c.x, c.y, c.z, 0], collected: [70] }, c);
+    return [before, kw.profile.basket.apple ?? 0];
+  }, above2);
+  assert.equal(apples[1], apples[0]);
+  assert.equal(await blockAt(guest, above2), was);
 
   // Both worlds are identical, block for block.
   const hash = (page) =>
