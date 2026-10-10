@@ -10,6 +10,7 @@ import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFA
 import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
+import { XP_FOR } from './shared/levels.js';
 import { ARM_REACH, bodyOf, bopGap, HIT_MS, MAX_HEARTS, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -963,7 +964,9 @@ export class Game extends EventTarget {
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
-    if ([p.x, p.y, p.z].every(Number.isFinite) && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40)) {
+    const here = [p.x, p.y, p.z].every(Number.isFinite);
+    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40);
+    if (near) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
@@ -978,6 +981,12 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
+      // The reward for it, where it happened: stars out of the monster, and
+      // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
+      // gave (levels.js), so what it says is what you got.
+      const xp = XP_FOR.popped.xp;
+      if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, entry?.kind === 'king' || entry?.kind === 'big' ? 7 : 4);
+      if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
   }

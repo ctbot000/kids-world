@@ -177,6 +177,9 @@ export class UI {
     this.tags = new Map();
     // Over an adventure island's camps and King Grumble (see adventureTags).
     this.advTags = new Map();
+    // What you got for popping a monster, over where you did it (see reward).
+    this.floats = new Map();
+    this.floatId = 0;
     this.modalClose = null;
     $('modal-close').addEventListener('click', () => this.closeModal());
     $('modal').addEventListener('pointerdown', (e) => {
@@ -266,6 +269,30 @@ export class UI {
     $('toasts').append(el);
     while ($('toasts').children.length > 4) $('toasts').firstElementChild.remove();
     setTimeout(() => el.remove(), 4100);
+  }
+
+  // A reward for something you did, over where you did it: a popped
+  // monster's XP (game.js popped). A pill of what you got rises away from
+  // the spot and fades (frame keeps it over the place as you look about),
+  // and the ⭐ ring on the Stickers button pings, the XP going in: what the
+  // ring says and what the pill says are the same thing.
+  reward({ x, y, z, xp }) {
+    if (![x, y, z, xp].every(Number.isFinite) || xp <= 0) return;
+    const el = h('div', { class: 'float-reward', title: `${xp} XP toward your next level` }, h('span', {}, `⭐ +${xp}`));
+    $('overlays').append(el);
+    this.floats.set(`reward-${this.floatId++}`, { x, y, z, at: performance.now(), el });
+    while (this.floats.size > 8) {
+      const oldest = this.floats.keys().next().value;
+      this.floats.get(oldest).el.remove();
+      this.floats.delete(oldest);
+    }
+    const button = $('btn-stickers-hud');
+    button.classList.remove('gain');
+    // So a pulse still going round again starts over.
+    void button.offsetWidth;
+    button.classList.add('gain');
+    clearTimeout(this.gainTimer);
+    this.gainTimer = setTimeout(() => button.classList.remove('gain'), 700);
   }
 
   loading(text, onCancel = null) {
@@ -2104,6 +2131,7 @@ export class UI {
     });
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
+    on('reward', (e) => this.reward(e.detail));
     on('notice', (e) => this.toast(e.detail.level === 'info' ? '💡' : '🙈', e.detail.text, e.detail.level === 'info' ? '' : 'warn'));
     on('chat', (e) => this.chatLine(e.detail));
     on('fly', (e) => $('btn-fly').classList.toggle('on', e.detail));
@@ -2124,6 +2152,8 @@ export class UI {
     this.tags.clear();
     for (const el of this.advTags.values()) el.remove();
     this.advTags.clear();
+    for (const f of this.floats.values()) f.el.remove();
+    this.floats.clear();
     $('chatlog').replaceChildren();
     this.closeModal();
   }
@@ -3480,6 +3510,23 @@ export class UI {
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);
+    // The reward floats: each up out of the world where it happened and
+    // gone, a second and a bit on.
+    for (const [key, f] of this.floats) {
+      const t = (performance.now() - f.at) / 1200;
+      if (t >= 1) {
+        f.el.remove();
+        this.floats.delete(key);
+        continue;
+      }
+      const scr = r.project(f.x, f.y + 0.9 + t * 1.2, f.z);
+      if (!scr.visible) {
+        f.el.style.opacity = '0';
+        continue;
+      }
+      f.el.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -50%)`;
+      f.el.style.opacity = t < 0.7 ? 1 : String(1 - (t - 0.7) / 0.3);
+    }
     // The clock: sun, moon and weather.
     const t = g.env.time;
     const w = g.env.weather;

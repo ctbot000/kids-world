@@ -220,6 +220,22 @@ export class Effects {
     }
   }
 
+  // Experience earned (levels.js), as stars that drift up out of what you
+  // did for it: a popped monster most of all (game.js popped).
+  stars(x, y, z, count = 4) {
+    for (let i = 0; i < count; i++) {
+      this.add('star', x + (Math.random() - 0.5) * 0.7, y + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.7, {
+        vy: 1.3 + Math.random() * 0.8,
+        vx: (Math.random() - 0.5) * 0.5,
+        vz: (Math.random() - 0.5) * 0.5,
+        size: 0.2 + Math.random() * 0.16,
+        life: 1 + Math.random() * 0.4,
+        drag: 0.6,
+        color: ['#ffd84d', '#fff3a0', '#ffffff'][i % 3],
+      });
+    }
+  }
+
   sparkles(x, y, z, count = 12, colors = ['#fff3a0', '#ffffff', '#ffd84d', '#9fe8ff']) {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
