@@ -6,9 +6,11 @@
 // before it goes.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import * as B from '../public/js/shared/blocks.js';
 import { campCount, cleanStage, guardsFor, kingHearts, raiseSeconds } from '../public/js/shared/adventure.js';
+import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
-import { PROTOCOL } from '../public/js/shared/room.js';
+import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { createGameServer } from '../server/server.js';
 
@@ -235,6 +237,41 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   const current = one.room;
   one.stop();
   assert.deepEqual(retired.at(-1), current);
+});
+
+// Nobody builds on the shared isle, and nothing flies on it: it is
+// everyone's adventure, on foot, and it stays as it was made.
+test('nobody builds on it and nothing flies on it: an adventure on foot', () => {
+  const { isle: one } = isle();
+  const room = one.room;
+
+  // Made without its helicopter and balloon: nothing on it can fly.
+  assert.deepEqual(room.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle === 'air'), [], 'no aircraft on it');
+
+  // And none can be brought there to fly either.
+  const a = join(room, 'Sunny Otter');
+  const w = room.world;
+  room.receive(a, { t: 'critter', op: 'invite', type: 'helicopter', x: w.spawn.x + 3, y: w.spawn.y, z: w.spawn.z });
+  assert.equal(a.last('notice').text, 'Nothing flies on Adventure Isle — it is an adventure on foot!');
+  assert.equal(room.critters.list.some((c) => c.type === 'helicopter'), false, 'none came');
+
+  // Were one there anyway, nobody gets off the ground on it.
+  const whirly = room.critters.add('helicopter', w.spawn.x + 2, w.spawn.y, w.spawn.z + 2);
+  room.receive(a, { t: 'm', s: [w.spawn.x + 2, w.spawn.y, w.spawn.z + 2, 0, 0, 0] });
+  room.receive(a, { t: 'critter', op: 'ride', id: whirly.id });
+  assert.equal(whirly.rider, 0, 'nobody flying');
+  assert.equal(a.last('ride'), undefined, 'nobody even gets a seat in it');
+
+  // Building: the island stays as it was made, whoever tries whatever tool.
+  const x = Math.floor(w.spawn.x) + 3;
+  const z = Math.floor(w.spawn.z);
+  const y = w.top(x, z) + 1;
+  for (const kind of EDIT_KINDS) {
+    room.receive(a, { t: 'edit', seq: 7, kind, cells: [x, y, z, kind === 'pick' || kind === 'undo' ? B.AIR : B.STONE] });
+    assert.equal(w.get(x, y, z), B.AIR, `${kind} changes nothing`);
+  }
+  assert.equal(a.last('notice').text, 'Adventure Isle stays just as it is — no building here!');
+  assert.deepEqual(a.last('ack'), { t: 'ack', seq: 7, fix: [x, y, z, B.AIR] });
 });
 
 // ------------------------------------------------ over the real server

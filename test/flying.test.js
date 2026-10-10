@@ -33,7 +33,7 @@ function run(world, ride, input, secs) {
   return evs;
 }
 
-test('every island has a helicopter and a balloon near where everyone comes in, on dry land with room, clear of the other vehicles', () => {
+test('every island but the shared isle has a helicopter and a balloon near where everyone comes in, on dry land with room, clear of the other vehicles', () => {
   for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
     for (const [seed, size] of [
       [4242, 'small'],
@@ -59,6 +59,11 @@ test('every island has a helicopter and a balloon near where everyone comes in, 
     for (const v of adv.critters.filter((c) => AIR.includes(c.type))) {
       for (const c of adv.camps) assert.ok(Math.hypot(v.x - c.x, v.z - c.z) >= c.r + 3, `${seed}: the ${v.type} clear of camp ${c.id}`);
     }
+  }
+  // The shared isle (Adventure Isle) has none at all: nothing flies there.
+  for (const seed of [5, 11]) {
+    const isle = generate({ seed, theme: 'sunny', size: 'small', adventure: true, shared: true });
+    for (const type of AIR) assert.equal(isle.critters.filter((c) => c.type === type).length, 0, `${seed}: no ${type} on the shared isle`);
   }
 });
 

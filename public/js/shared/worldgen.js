@@ -48,8 +48,10 @@ export function palette(theme) {
 // adventure: with monster camps all over it, to free (see adventure.js);
 // defense: with a road for monsters to march along, and towers to build
 // beside it (see defense.js); stage: the public adventure island's stage,
-// for how many camps it gets.
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false, stage = 1 } = {}) {
+// for how many camps it gets; shared: the public adventure island itself,
+// where nobody builds and nothing flies (see room.js), so it is made
+// without its helicopter and balloon.
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false, stage = 1, shared = false } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);
@@ -359,8 +361,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   critters.push(...buses);
 
   // ---------------------------------------------------------------- flying
-  // And after those, the same way: a helicopter and a hot-air balloon.
-  const aircraft = placeAircraft(world, new Rng(seed ^ 0x13198a2e), busesClearOf([...vehicles, ...buses], camps, road));
+  // And after those, the same way: a helicopter and a hot-air balloon — but
+  // never on the shared isle, where nothing flies: it is an adventure on foot.
+  const aircraft = shared ? [] : placeAircraft(world, new Rng(seed ^ 0x13198a2e), busesClearOf([...vehicles, ...buses], camps, road));
   critters.push(...aircraft);
 
   // ---------------------------------------------------------------- kicking along

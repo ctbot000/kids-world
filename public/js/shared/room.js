@@ -96,7 +96,8 @@ export class Room {
   // Either { theme, size, name, seed, adventure, defense, stage } for a
   // brand-new island, or { save }. stage: the public adventure island's
   // (see shared/adventure.js); shared: an island everybody owns, so nobody
-  // becomes its owner — the public adventure island is one.
+  // becomes its owner — the public adventure island is one, and nobody
+  // builds on it and nothing flies on it either: it stays as it was made.
   constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
@@ -151,7 +152,7 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
+      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage, shared: this.shared });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -551,6 +552,13 @@ export class Room {
     }
     const n = cells.length / 4;
     const expect = Array.isArray(msg.expect) && msg.expect.length === n ? msg.expect : null;
+    // The shared isle is nobody's to build on: it stays as it was made, for
+    // everyone who comes, so nothing is picked up or collected either.
+    if (this.shared) {
+      this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
+      this.notice(conn, `${this.world.name} stays just as it is — no building here!`);
+      return;
+    }
     const refused = this.settings.build === 'host' && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
@@ -644,6 +652,11 @@ export class Room {
       }
       case 'invite': {
         if (!CRITTER_INFO[msg.type] || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // Nothing flies on the shared isle, so none is brought to it either.
+        if (this.shared && CRITTER_INFO[msg.type].vehicle === 'air') {
+          this.notice(conn, `Nothing flies on ${this.world.name} — it is an adventure on foot!`, 'info');
+          return;
+        }
         if (this.critters.list.length >= this.critters.max) {
           this.notice(conn, 'The island is full of animal friends already!', 'info');
           return;
@@ -685,6 +698,12 @@ export class Room {
         const c = this.critters.get(msg.id);
         const r = c && CRITTER_INFO[c.type].ride;
         if (!r || c.rider === p.id || c.passengers?.includes(p.id)) return;
+        // The shared isle is conquered on foot: were an aircraft there
+        // somehow, nobody gets off the ground on it.
+        if (this.shared && r.air) {
+          this.notice(conn, `Nothing flies on ${this.world.name} — it is an adventure on foot!`, 'info');
+          return;
+        }
         // With someone driving, the others ride along, in the seats it has.
         const along = Boolean(c.rider);
         if (along && !seatsFor(c.type)) {

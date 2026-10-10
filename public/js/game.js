@@ -1715,6 +1715,12 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
+    // The shared isle is conquered on foot: nothing flies there.
+    if (this.shared && CRITTER_INFO[this.critters.get(id)?.type]?.ride?.air) {
+      this.emit('notice', { text: `Nothing flies on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
+      this.sound.play('no');
+      return;
+    }
     this.send({ t: 'critter', op: 'ride', id });
   }
 
@@ -2153,9 +2159,10 @@ export class Game extends EventTarget {
   // The digger's drill taking out the ground in front of it, with any jewels
   // in it going in your basket (and, those dug out, for keeps).
   drill(dig) {
-    // Only the owner builds on this island right now: the drill stays still.
+    // Only the owner builds on this island right now (or it is the shared
+    // isle, nobody's to build on): the drill stays still.
     if (!this.mayBuild) {
-      if (!this.riding.toldNoDig) this.emit('notice', { text: 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
+      if (!this.riding.toldNoDig) this.emit('notice', { text: this.shared ? `${this.world.name} stays just as it is, so the digger cannot dig.` : 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
       this.riding.toldNoDig = true;
       return;
     }
@@ -2201,18 +2208,20 @@ export class Game extends EventTarget {
 
   // ------------------------------------------------ edits
 
-  // Whether you may change this island: yours, or its owner lets friends build.
+  // Whether you may change this island: yours, or its owner lets friends
+  // build. The shared isle is nobody's to build on: it stays as it was made.
   get mayBuild() {
-    return this.settings.build !== 'host' || this.pid === this.host;
+    return !this.shared && (this.settings.build !== 'host' || this.pid === this.host);
   }
 
   // Makes a change here at once and asks the island to make it for everyone.
   edit(kind, cells, { expect = null, undoable = true } = {}) {
     if (!cells.length) return false;
-    // Only the owner builds here right now: nothing changes, so nothing is
-    // picked up, collected or spent either (the island would only say no).
+    // Only the owner builds here right now (or it is the shared isle,
+    // nobody's to build on): nothing changes, so nothing is picked up,
+    // collected or spent either (the island would only say no).
     if (!this.mayBuild) {
-      this.emit('notice', { text: 'The island owner is the only builder right now.', level: 'warn' });
+      this.emit('notice', { text: this.shared ? `${this.world.name} stays just as it is — no building here!` : 'The island owner is the only builder right now.', level: 'warn' });
       this.sound.play('no');
       return false;
     }
@@ -2730,6 +2739,12 @@ export class Game extends EventTarget {
   }
 
   invite(hit) {
+    // Nothing flies on the shared isle, so none is brought to it either.
+    if (this.shared && CRITTER_INFO[this.critterType]?.vehicle === 'air') {
+      this.emit('notice', { text: `Nothing flies on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
+      this.sound.play('no');
+      return;
+    }
     const x = hit.x + hit.nx + 0.5;
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz + 0.5;
