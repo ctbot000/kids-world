@@ -34,7 +34,7 @@ import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from '
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index.
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'mosquito'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'mosquito', 'scooter'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -92,6 +92,10 @@ export const CRITTER_INFO = {
   ferry: { name: 'Ferry', icon: '⛴️', speed: 0, swims: true, flies: false, vehicle: 'sea', sea: 'water', ride: { seat: 0.38, z: 0.85, radius: 1, sea: true, swim: 5, run: 8, float: 0, dive: 0, spread: 0.12, reach: 1.3, trick: 'honk', seats: [[-0.3, 0.2], [0.3, 0.2], [-0.3, -0.45], [0.3, -0.45], [-0.3, -1.1], [0.3, -1.1]] }, names: ['Bobber', 'Captain Toot', 'Big Splash', 'Seasy', 'Marigold', 'Harbor', 'Puffin', 'Wavey', 'Tugboat', 'Anchor'] },
   helicopter: { name: 'Helicopter', icon: '🚁', speed: 0, swims: true, flies: false, vehicle: 'air', ride: { air: true, seat: 0.42, z: 0.3, radius: 0.8, height: 2.1, float: 0.5, spread: 0.12, reach: 1.3, walk: 3, run: 4.5, swim: 1.5, fly: 8.5, flyRun: 13, flyUp: 6, maxFall: 3, trick: 'honk', seats: [[-0.29, -0.42], [0.29, -0.42]] }, names: ['Whirly', 'Chopper', 'Skye', 'Buzz', 'Propella', 'Hoverbug', 'Twirl', 'Dragonfly', 'Swoosh', 'Rotor'] },
   balloon: { name: 'Hot-Air Balloon', icon: '🎈', speed: 0, swims: true, flies: false, vehicle: 'air', ride: { air: true, seat: 0.3, z: 0.55, radius: 0.95, height: 4.6, float: 0.5, spread: 0.12, reach: 1.3, walk: 1.5, run: 2, swim: 1, fly: 3.2, flyRun: 4.5, flyUp: 2.6, maxFall: 1.6, trick: 'honk', seats: [[-0.33, -0.05], [0.33, -0.05], [-0.33, -0.62], [0.33, -0.62]] }, names: ['Puffy', 'Rainbow', 'Cloud Hopper', 'Sky Bubble', 'Breezy', 'Floaty', 'Sunbeam', 'Lollipop', 'Up-Up', 'Marshmallow'] },
+  // A kick scooter (stand): its rider stands on the deck rather than sits,
+  // quicker than anyone runs and nimble, hopping the little steps itself.
+  // The jump button rings its bell.
+  scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -106,7 +110,9 @@ export const CRITTER_INFO = {
 // trunk. seats: where friends riding along sit, [across, forward] from its
 // middle, at the driver's height (the driver's seat is the first: see riderAt).
 // air: it flies (see riding.js), its box (height) tall enough for all of it,
-// a balloon's balloon too.
+// a balloon's balloon too. stand: its rider stands on it rather than sits
+// (a kick scooter), their feet on the deck, seat the height of their hips
+// over it.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
 // The animals, without the vehicles.
@@ -172,7 +178,7 @@ export function headTop(hat, hair = '', tall = 0) {
 
 // How high a rider's hips are over their feet, as render/avatar.js draws
 // them, less a little for sinking into the saddle.
-const HIPS = 0.25;
+export const HIPS = 0.25;
 
 // Where someone riding an animal at (x, y, z, yaw) is: their feet, as
 // everybody's are, with their hips on its back. seat: which seat, for a
@@ -650,6 +656,16 @@ export function placeAircraft(world, rng, others = []) {
     const v = nearStart(world, rng, type, [...others, ...out.map((o) => ({ x: o.x, z: o.z, r: 1 }))]);
     if (v) out.push(v);
   }
+  return out;
+}
+
+// The kick scooter: one on open ground by where everyone comes in, ready to
+// hop on, clear of what is in others (see busesClearOf). Like the aircraft,
+// with dice of its own.
+export function placeScooters(world, rng, others = []) {
+  const out = [];
+  const v = nearStart(world, rng, 'scooter', others);
+  if (v) out.push(v);
   return out;
 }
 

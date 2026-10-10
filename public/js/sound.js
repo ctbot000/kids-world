@@ -486,8 +486,8 @@ export class Sound {
       // Vehicles: each starts up with its own sound, and honks its own way
       // (type): the car beep-beeps, the boat toots, the mine cart rings its
       // bell, the digger goes vrrrm, the bus goes honk-honk, the ferry
-      // gives one long, low toot, the helicopter goes beep-boop and the
-      // balloon's burner roars.
+      // gives one long, low toot, the helicopter goes beep-boop, the
+      // balloon's burner roars, and the kick scooter's bell goes ring-ring.
       case 'helicopter':
       case 'balloon':
       case 'bus':
@@ -496,6 +496,7 @@ export class Sound {
       case 'boat':
       case 'digger':
       case 'minecart':
+      case 'scooter':
         this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
         this.play('honk', { type: name });
         break;
@@ -519,6 +520,12 @@ export class Sound {
           this.tone(NOTE(62), { type: 'triangle', attack: 0.04, decay: 0.7, gain: 0.06 });
         } else if (opts.type === 'minecart') {
           for (let i = 0; i < 2; i++) this.tone(2100 * r(), { at: i * 0.16, decay: 0.45, gain: 0.05 });
+        } else if (opts.type === 'scooter') {
+          // Ring-ring! A bright little bell, twice over.
+          for (let i = 0; i < 2; i++) {
+            this.tone(2350 * r(), { at: i * 0.13, type: 'square', attack: 0.002, decay: 0.16, gain: 0.03 });
+            this.tone(3520 * r(), { at: i * 0.13, type: 'triangle', attack: 0.002, decay: 0.1, gain: 0.018 });
+          }
         } else if (opts.type === 'digger') {
           this.noise(0.5, { type: 'bandpass', freq: 900, sweep: 1600, q: 2, gain: 0.12, attack: 0.03 });
           this.tone(90 * r(), { type: 'sawtooth', attack: 0.04, decay: 0.5, gain: 0.05, slide: 130, vibrato: 25 });
@@ -553,6 +560,12 @@ export class Sound {
         }
         if (opts.type === 'balloon') {
           if (Math.random() < 0.3) this.play('burner');
+          break;
+        }
+        if (opts.type === 'scooter') {
+          // No engine at all: little wheels whirring along the ground.
+          this.noise(0.16, { type: 'lowpass', freq: 500 + (opts.speed ?? 0) * 60, gain: 0.035 });
+          this.tone(120 + (opts.speed ?? 0) * 10, { type: 'sine', attack: 0.02, decay: 0.14, gain: 0.012 });
           break;
         }
         this.tone((opts.type === 'digger' ? 55 : 80) + (opts.speed ?? 0) * 6, { type: 'sawtooth', attack: 0.02, decay: 0.18, gain: 0.025, vibrato: 20 });

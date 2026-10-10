@@ -13,7 +13,7 @@
 import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -1351,8 +1351,8 @@ export class Room {
       // since the big animals did; 6: since jewels were hidden in the rock;
       // 7: since the vehicles came; 8: since the bus and the ferry did; 9:
       // since the helicopter and the balloon did; 10: since the giant
-      // mosquitos did.
-      v: 10,
+      // mosquitos did; 11: since the kick scooter did.
+      v: 11,
       code: this.code,
       savedAt: this.now(),
       meta: this.world.meta(),
@@ -1408,6 +1408,11 @@ export class Room {
     if (v < 9) {
       const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
       for (const f of placeAircraft(this.world, new Rng(seed ^ 0x13198a2e), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
+    }
+    // And a kick scooter, the same way.
+    if (v < 11) {
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      for (const f of placeScooters(this.world, new Rng(seed ^ 0x85ebca6b), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
     this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };

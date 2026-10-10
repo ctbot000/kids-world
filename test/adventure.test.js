@@ -213,7 +213,7 @@ test('everything but the camps comes out just as it would on the island without 
     // Every vehicle, and every animal away from the camps; none in them.
     // (Not the ones that come after the camps, kept clear of them, which
     // can find room where a camp levelled the ground: see placeBuses.)
-    const after = new Set(['bus', 'ferry', 'helicopter', 'balloon']);
+    const after = new Set(['bus', 'ferry', 'helicopter', 'balloon', 'scooter']);
     const key = (c) => `${c.type}@${c.x},${c.y},${c.z}`;
     const kept = new Set(made.critters.map(key));
     for (const c of plain.critters) {

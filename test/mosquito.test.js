@@ -207,14 +207,16 @@ test('the wire carries a giant mosquito as it is', () => {
   const row = sim.pack()[0];
   const back = unpackCritter(row);
   assert.equal(back.type, 'mosquito');
-  assert.equal(CRITTER_TYPES[CRITTER_TYPES.indexOf('mosquito')], 'mosquito');
-  assert.equal(CRITTER_TYPES.at(-1), 'mosquito', 'new kinds go on the end');
+  // Its place on the wire never changes: new kinds go on the end (the
+  // scooter, after it, took the next one).
+  assert.equal(CRITTER_TYPES.indexOf('mosquito'), 32);
+  assert.equal(CRITTER_TYPES.at(-1), 'scooter');
 });
 
 test('an island from before the giant mosquitos gets them, once', () => {
   const room = new Room({ code: '123456', theme: 'sunny', seed: 77, now: () => 1000 });
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 10);
+  assert.equal(save.v, 11);
   const count = (r) => r.critters.list.filter((c) => c.type === 'mosquito').length;
   const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: () => 2000 });
   const old = load({ ...save, v: 9, critters: save.critters.filter((c) => c.type !== 'mosquito') });

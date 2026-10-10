@@ -1705,6 +1705,7 @@ export class Game extends EventTarget {
       const what = {
         digger: `Drive into a hill to dig a tunnel! Hold jump to dig up, or ${this.touch ? '⬇️' : 'Shift'} to dig down.`,
         minecart: 'Push to roll along the rails! Jump to ring the bell.',
+        scooter: 'Quicker than you run! Jump to ring the bell.',
         bus: 'Friends can hop on behind you! Jump to honk!',
         ferry: 'Friends can hop on behind you! Jump to toot!',
         helicopter: `Hold jump to fly up, and ${this.touch ? '⬇️' : 'Shift'} to come down! Two friends can hop on behind you.`,

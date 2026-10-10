@@ -7,8 +7,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { CRITTER_INFO, CritterSim, fits, onRails, swimmable, VEHICLES, waterColumn } from '../public/js/shared/critters.js';
-import { bodyOverlapsSolid } from '../public/js/shared/physics.js';
+import { CRITTER_INFO, CritterSim, fits, HIPS, onRails, riderAt, swimmable, VEHICLES, waterColumn } from '../public/js/shared/critters.js';
+import { bodyOverlapsSolid, MOVE } from '../public/js/shared/physics.js';
 import { drillCells, getOffAt, railNext, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
@@ -50,7 +50,7 @@ const dig = (world, r, input, seconds) => {
   return found;
 };
 
-test('every island starts with a car, a boat and a digger, and a mine cart on rails in every mine', () => {
+test('every island starts with a car, a boat, a digger and a kick scooter, and a mine cart on rails in every mine', () => {
   for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
     for (const [seed, size] of [
       [4242, 'small'],
@@ -64,8 +64,9 @@ test('every island starts with a car, a boat and a digger, and a mine cart on ra
       assert.equal(of('car').length, 1, `${where}: a car`);
       assert.equal(of('boat').length, 1, `${where}: a boat`);
       assert.equal(of('digger').length, 1, `${where}: a digger`);
+      assert.equal(of('scooter').length, 1, `${where}: a kick scooter`);
       assert.equal(of('minecart').length, mines.length, `${where}: a mine cart in each mine`);
-      for (const c of [...of('car'), ...of('digger')]) {
+      for (const c of [...of('car'), ...of('digger'), ...of('scooter')]) {
         assert.ok(fits(world, c.type, c.x, c.y, c.z), `${where}: the ${c.type} has room for itself and a driver`);
         assert.ok(!waterColumn(world, c.x, c.z), `${where}: the ${c.type} on dry land`);
       }
@@ -139,6 +140,31 @@ test('a car drives faster than you run, honks instead of jumping, and hops up a 
   assert.ok(Math.abs(r.body.vx - CRITTER_INFO.car.ride.walk) < 0.01, `driving at ${r.body.vx}`);
   go(w, r, { mx: 1, mz: 0, run: true }, 3);
   assert.equal(r.body.y, 7, 'up the step');
+  assert.ok(Math.abs(r.yaw - Math.PI / 2) < 0.05, 'facing the way it goes');
+  assert.ok(!bodyOverlapsSolid(w, r.body));
+});
+
+test('a kick scooter is quicker than you run, rings its bell instead of jumping, hops up a step, and you stand on the deck', () => {
+  const w = meadow();
+  for (let z = 0; z < 48; z++) for (let x = 30; x < 48; x++) w.set(x, 6, z, B.GRASS);
+  const r = ride(w, 'scooter', 10.5, 6, 20.5);
+  // A rider standing on the deck: their feet 0.2 over its origin, right on
+  // the deck (as big.test.js measures on the model), not sitting astride.
+  const at = riderAt('scooter', { x: r.body.x, y: r.body.y, z: r.body.z, yaw: r.yaw });
+  assert.ok(Math.abs(at.y - (r.body.y + 0.2)) < 1e-9, `feet on the deck, at ${at.y - r.body.y}`);
+  assert.ok(CRITTER_INFO.scooter.ride.stand, 'a standing ride');
+  const [first] = go(w, r, { jump: true }, 1 / 60);
+  assert.ok(first.trick && !first.jumped, 'a ring of the bell, not a jump');
+  assert.ok(!go(w, r, { jump: true }, 0.5).some((ev) => ev.trick), 'once for each press');
+  go(w, r, { mx: 1, mz: 0 }, 1);
+  assert.ok(Math.abs(r.body.vx - CRITTER_INFO.scooter.ride.walk) < 0.01, `scooting at ${r.body.vx}`);
+  assert.ok(CRITTER_INFO.scooter.ride.walk > MOVE.walk, 'quicker than walking');
+  go(w, r, { mx: 1, mz: 0, run: true }, 3);
+  assert.ok(Math.abs(r.body.vx - CRITTER_INFO.scooter.ride.run) < 0.01, `and running along at ${r.body.vx}`);
+  assert.ok(CRITTER_INFO.scooter.ride.run > MOVE.run, 'quicker than you run');
+  assert.ok(CRITTER_INFO.scooter.ride.run < CRITTER_INFO.car.ride.run, 'but slower than the car');
+  assert.equal(r.body.y, 7, 'up the step');
+  assert.equal(rideState(r), 'run');
   assert.ok(Math.abs(r.yaw - Math.PI / 2) < 0.05, 'facing the way it goes');
   assert.ok(!bodyOverlapsSolid(w, r.body));
 });
@@ -288,13 +314,14 @@ test('vehicles are brought where there is room for them (a boat on the water), s
 test('an island from before the vehicles gets a car, a boat and a digger, once', () => {
   const room = new Room({ code: '123456', theme: 'snowy', seed: 77, now: () => 1000 });
   const save = JSON.parse(JSON.stringify(room.exportSave()));
-  assert.equal(save.v, 10);
+  assert.equal(save.v, 11);
   const count = (r) => r.critters.list.filter((c) => VEHICLES.includes(c.type)).length;
   const load = (s) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(s)), now: () => 2000 });
   const old = load({ ...save, v: 6, critters: save.critters.filter((c) => !VEHICLES.includes(c.type)) });
-  // (And the bus and the ferry, the helicopter and the balloon, which came after them.)
-  assert.deepEqual(old.critters.list.filter((c) => VEHICLES.includes(c.type)).map((c) => c.type).sort(), ['balloon', 'boat', 'bus', 'car', 'digger', 'ferry', 'helicopter']);
-  assert.equal(count(load(JSON.parse(JSON.stringify(old.exportSave())))), 7, 'and only once');
+  // (And the bus and the ferry, the helicopter and the balloon, which came
+  // after them, and the kick scooter after those.)
+  assert.deepEqual(old.critters.list.filter((c) => VEHICLES.includes(c.type)).map((c) => c.type).sort(), ['balloon', 'boat', 'bus', 'car', 'digger', 'ferry', 'helicopter', 'scooter']);
+  assert.equal(count(load(JSON.parse(JSON.stringify(old.exportSave())))), 8, 'and only once');
   assert.equal(count(load(save)), count(room), 'a new island keeps its own');
 });
 

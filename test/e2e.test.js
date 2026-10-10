@@ -750,6 +750,59 @@ test('a digger beside you is driven with the Drive button: it digs a tunnel thro
   await page.browserContext().close();
 });
 
+test('a kick scooter beside you is driven with the Drive button: quicker than you run, its bell rings for jump, and Q gets you out', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A kick scooter two steps from you, facing the open way you look.
+  const id = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const { BIG, roomFor, VEHICLES } = await import('/js/shared/critters.js');
+    for (const c of [...room.critters.list]) if (BIG.includes(c.type) || VEHICLES.includes(c.type)) room.critters.remove(c.id);
+    const b = kw.game.me.body;
+    const at = roomFor(room.world, 'scooter', b.x, b.y, b.z - 2, 1);
+    const c = room.critters.add('scooter', at.x, at.y, at.z, null, 0);
+    Object.assign(c, { timer: 1e9, yaw: 0 });
+    kw.renderer.view.yaw = Math.PI;
+    return c.id;
+  });
+  await until(page, (id) => window.kidsWorld.game.rideTarget === id && !document.getElementById('ride').hidden, id);
+  assert.match(await page.$eval('#ride', (el) => el.textContent), /🛴 Drive/);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  await page.click('#ride');
+  await until(page, (id) => window.kidsWorld.game.riding?.id === id && window.kidsWorld.session.link.room.critters.get(id).rider === window.kidsWorld.game.pid, id);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('You are driving')));
+  // Standing on the deck, going quicker than you run.
+  const from = await page.evaluate(() => ({ ...window.kidsWorld.game.riding.body }));
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 90));
+  const gone = await page.evaluate((from) => {
+    const kw = window.kidsWorld;
+    const r = kw.game.riding.body;
+    const b = kw.game.me.body;
+    // Where you stand, in the scooter's own frame: just ahead of its middle
+    // (ride.z), not sliding off sideways.
+    const fx = Math.sin(kw.game.riding.yaw);
+    const fz = Math.cos(kw.game.riding.yaw);
+    return { d: Math.hypot(r.x - from.x, r.z - from.z), along: (b.x - r.x) * fx + (b.z - r.z) * fz, across: (b.x - r.x) * fz - (b.z - r.z) * fx, feet: b.y - r.y, speed: kw.game.me.speed };
+  }, from);
+  await page.keyboard.up('KeyW');
+  assert.ok(gone.d > 4, `scooted along ${gone.d.toFixed(2)}`);
+  assert.ok(Math.abs(gone.along - 0.06) < 0.03, `standing on the deck, just ahead of its middle (${gone.along.toFixed(2)})`);
+  assert.ok(Math.abs(gone.across) < 0.03, `not sliding off it (${gone.across.toFixed(2)})`);
+  assert.ok(Math.abs(gone.feet - 0.2) < 0.05, `feet on the deck, at +${gone.feet.toFixed(2)}`);
+  assert.ok(gone.speed > 5, `quicker than you run, at ${gone.speed.toFixed(1)}`);
+  // Jump rings the bell: the trick goes to the island and back for everyone.
+  await page.keyboard.down('Space');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 5));
+  await page.keyboard.up('Space');
+  await until(page, (id) => window.kidsWorld.game.critters.get(id)?.model.trick > 0, id);
+  await page.keyboard.press('KeyQ');
+  await until(page, (id) => !window.kidsWorld.game.riding && window.kidsWorld.session.link.room.critters.get(id).rider === 0, id);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on an elevator pad, Space rides up to the pad above and Shift back down, with a hint and a sticker', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

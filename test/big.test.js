@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { BIG, bigCounts, scaleCounts, CRITTER_INFO, CRITTER_TYPES, CritterSim, fits, mountUnder, nearestWater, riderAt, SURFACE, swimmable, waterColumn } from '../public/js/shared/critters.js';
+import { BIG, bigCounts, scaleCounts, CRITTER_INFO, CRITTER_TYPES, CritterSim, fits, HIPS, mountUnder, nearestWater, riderAt, SURFACE, swimmable, waterColumn } from '../public/js/shared/critters.js';
 import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { getOffAt, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { World } from '../public/js/shared/world.js';
@@ -356,7 +356,8 @@ test('each rider sits on the saddle, on the top of the back', () => {
     m.setRider('#ff0000');
     m.group.updateMatrixWorld(true);
     // The highest point under the rider's hips (not a rotor or a balloon
-    // up over it).
+    // up over it). Standing (a kick scooter), their feet are on the deck,
+    // their hips a rider's own height above it (HIPS, critters.js).
     const under = (hits) => hits.find((h) => !m.over || !isIn(h.object, m.over));
     let top = -Infinity;
     for (const rad of [0, 0.06, 0.12]) {
@@ -366,7 +367,8 @@ test('each rider sits on the saddle, on the top of the back', () => {
         top = Math.max(top, under(ray.intersectObject(m.group, true))?.point.y ?? -Infinity);
       }
     }
-    assert.ok(Math.abs(top - r.seat) <= 0.02, `${type}: sits at ${r.seat}, its back is at ${top.toFixed(3)}`);
+    const seat = r.stand ? r.seat - HIPS : r.seat;
+    assert.ok(Math.abs(top - seat) <= 0.02, `${type}: sits at ${seat}, its back is at ${top.toFixed(3)}`);
     // Big enough a box for a rider sitting there (without a hat).
     if (!r.sea) assert.ok(r.height >= r.seat + 1.15, `${type}: room for the rider's head`);
     m.dispose();

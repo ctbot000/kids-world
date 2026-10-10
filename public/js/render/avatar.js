@@ -1258,15 +1258,26 @@ export class Avatar {
       bob = Math.sin(t * 1.6) * 0.006;
       armRaiseL = armRaiseR = 0.12;
     } else if (riding) {
-      // Astride an animal, hands forward on the reins (or its neck), going
-      // up and down with it, more the faster it goes.
-      const k = Math.min(1, speed / 8);
-      this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
-      // Hips where a kid's would be, longer legs reaching further down its sides.
-      bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - this.legLong;
-      lean = 0.1 + k * 0.15;
-      armFwdL = armFwdR = -0.8 - Math.sin(this.phase) * 0.12 * k;
-      armRaiseL = armRaiseR = 0.22;
+      if (this.ride?.stand) {
+        // Kicking along standing up (a kick scooter): front foot planted on
+        // the deck, the other kicking back, hands on the handlebars.
+        const k = Math.min(1, speed / 9);
+        this.phase += dt * (speed > 0.4 ? 3.5 + speed * 1.3 : 0);
+        bob = Math.abs(Math.sin(this.phase * 0.5)) * (0.008 + k * 0.02);
+        lean = 0.07 + k * 0.16;
+        armFwdL = armFwdR = -1.1 - k * 0.12;
+        armRaiseL = armRaiseR = 0.12;
+      } else {
+        // Astride an animal, hands forward on the reins (or its neck), going
+        // up and down with it, more the faster it goes.
+        const k = Math.min(1, speed / 8);
+        this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
+        // Hips where a kid's would be, longer legs reaching further down its sides.
+        bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - this.legLong;
+        lean = 0.1 + k * 0.15;
+        armFwdL = armFwdR = -0.8 - Math.sin(this.phase) * 0.12 * k;
+        armRaiseL = armRaiseR = 0.22;
+      }
     } else {
       bob = Math.sin(t * 2) * 0.008;
       armRaiseL = armRaiseR = 0.18 + Math.sin(t * 2) * 0.03;
@@ -1355,13 +1366,19 @@ export class Avatar {
     }
 
     // Riding, the legs reach round the animal's sides and a little forward;
-    // on a wide back, out in front.
-    const spread = riding ? (this.ride?.spread ?? 0.85) : 0;
-    const reach = riding ? (this.ride?.reach ?? 0.35) : 0;
+    // on a wide back, out in front. Standing up (a kick scooter), the front
+    // foot is planted on the deck and the other kicks along behind.
+    const stand = riding && Boolean(this.ride?.stand);
+    const spread = riding && !stand ? (this.ride?.spread ?? 0.85) : 0;
+    const reach = riding && !stand ? (this.ride?.reach ?? 0.35) : 0;
     // A step in to swing only standing; walking, the legs are busy.
     const stepIn = anim === ANIM.idle ? step : 0;
     legL.rotation.set(riding ? -reach : legSwing - stepIn, 0, -spread);
     legR.rotation.set(riding ? -reach : -legSwing + stepIn * 0.6, 0, spread);
+    if (stand) {
+      legL.rotation.set(-0.08, 0, -0.05);
+      legR.rotation.set(speed > 0.4 ? 0.55 + Math.sin(this.phase) * 0.5 : 0.18, 0, 0.05);
+    }
     if (anim === ANIM.dizzy) {
       // Legs out in front, sitting.
       legL.rotation.set(-1.4, 0, -0.18);

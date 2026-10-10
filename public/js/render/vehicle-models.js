@@ -2,7 +2,8 @@
 // (boxy, with studs on top): a car with big round headlights for eyes, a
 // speedboat with an outboard motor and a flag, a yellow digger on tracks
 // with a drill on the front and a flashing light, a mine cart with a
-// lantern, and for friends to ride in together, an open-top bus and a
+// lantern, a kick scooter with a bell that lights up when it rings, and
+// for friends to ride in together, an open-top bus and a
 // ferry, each with three rows of two seats behind the driver's; and to fly,
 // a helicopter with a seat for two friends behind the pilot's, and a
 // hot-air balloon with a striped balloon over a basket for five. Each seat
@@ -261,6 +262,38 @@ function minecart() {
   body.add(mesh(cone(0.08, 0.06, 10), iron, 0, 1.0, 0.5));
   v.eyes = null;
   return { ...v, height: 1, center: 0.45, pick: 0.6, shadow: 0.55, seen: 100 };
+}
+
+const SCOOTERS = ['#f2495c', '#3a73d8', '#35a852', '#8c5bd6', '#f59331', '#f47fb8'];
+
+// A kick scooter: a deck to stand on (the grip pad on top of it turns the
+// colour of whoever is riding), two little wheels that spin as it goes, a
+// column up to handlebars with grips, and a bell that lights up when rung.
+function scooter(id) {
+  const v = rig('#ffd36b');
+  const { body } = v;
+  const paint = toon(SCOOTERS[id % SCOOTERS.length]);
+  const metal = toon(METAL);
+  const dark = toon('#4a4e57');
+  // Two little wheels, front and back.
+  v.wheels = [0.42, -0.42].map((z) => wheel(body, 0, 0.12, z, 0.12, 0.09));
+  // The deck, with the grip pad on top of it (where the rider stands).
+  block(body, paint, -0.16, 0.13, -0.4, 0.16, 0.17, 0.4);
+  v.seat = block(body, v.pad, -0.13, 0.17, -0.36, 0.13, 0.2, 0.34);
+  studs(body, paint, 0.17, [-0.08, 0.08], [0.36]);
+  // A lip over the back wheel, like a kicked-up tail.
+  block(body, paint, -0.12, 0.2, -0.46, 0.12, 0.25, -0.38);
+  // The column up from the front wheel, tilted back a little, to the
+  // handlebars: a crossbar with a grip each end.
+  rod(body, metal, [0, 0.14, 0.42], [0, 0.96, 0.29], 0.035);
+  block(body, paint, -0.05, 0.13, 0.36, 0.05, 0.21, 0.45);
+  rod(body, metal, [-0.23, 0.96, 0.29], [0.23, 0.96, 0.29], 0.028);
+  for (const side of [-1, 1]) block(body, dark, side < 0 ? -0.34 : 0.23, 0.93, 0.25, side < 0 ? -0.23 : 0.34, 0.99, 0.33);
+  // The bell on the left of the bar, which lights up when it rings.
+  body.add(mesh(cylinder(0.012, 0.012, 0.05, 6), dark, -0.12, 0.99, 0.29));
+  body.add(mesh(sphere(1, 12, 8), v.glow, -0.12, 1.03, 0.29, 0.05, 0.035, 0.05));
+  v.eyes = null;
+  return { ...v, height: 1.05, center: 0.55, pick: 0.65, shadow: 0.5, seen: 95 };
 }
 
 // The seats for friends, two to a row behind the driver (as ride.seats in
@@ -541,7 +574,7 @@ function balloon(id) {
   return { ...v, air: true, height: 4.6, center: 1.4, pick: 1.4, shadow: 1, seen: 220 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, bus, ferry, helicopter, balloon };
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, bus, ferry, helicopter, balloon };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -592,7 +625,7 @@ export function drive(m, dt, state, moving, air = 0) {
   } else {
     // An engine's shake, a bounce off the ground, and a tilt in the air.
     b.position.y = moving ? Math.sin(t * 40) * 0.006 : 0;
-    b.rotation.set(state === 'jump' ? clamp(-m.vy * 0.03, -0.3, 0.3) : 0, 0, m.type === 'minecart' && moving ? Math.sin(t * 9) * 0.03 : 0);
+    b.rotation.set(state === 'jump' ? clamp(-m.vy * 0.03, -0.3, 0.3) : 0, 0, m.type === 'minecart' && moving ? Math.sin(t * 9) * 0.03 : m.type === 'scooter' ? -clamp(m.turn * 0.06, -0.22, 0.22) : 0);
     if (state === 'swim') b.position.y = Math.sin(t * 2) * 0.03 - 0.05;
   }
   if (honk) b.position.y += Math.abs(Math.sin(t * 14)) * 0.05;
