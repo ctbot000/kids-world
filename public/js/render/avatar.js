@@ -507,11 +507,15 @@ function kidFace(head, skin, { ears = true, grown = false, extra = 'none', hairC
   }
   // Soft cheeks and a small chin, so the head reads as a face, not a ball.
   for (const side of [-1, 1]) {
-    const c = onFace(side * 0.21, -0.1, -0.02);
-    head.add(mesh(sphere(1, 14, 10), toon(skin), c.x, c.y, c.z, 0.08, 0.07, 0.06));
+    const c = onFace(side * 0.2, -0.1, -0.03);
+    const cheek = mesh(sphere(1, 16, 12), toon(skin), c.x, c.y, c.z, 0.09, 0.075, 0.045);
+    cheek.lookAt(c.clone().multiplyScalar(2));
+    head.add(cheek);
   }
-  const chin = onFace(0, -0.26, -0.01);
-  head.add(mesh(sphere(1, 12, 8), toon(skin), chin.x, chin.y, chin.z, 0.07, 0.05, 0.05));
+  const chin = onFace(0, -0.25, -0.025);
+  const jaw = mesh(sphere(1, 16, 12), toon(skin), chin.x, chin.y, chin.z, 0.085, 0.05, 0.04);
+  jaw.lookAt(chin.clone().multiplyScalar(2));
+  head.add(jaw);
   const p = onFace(0, -0.04, 0);
   head.add(mesh(sphere(1, 16, 12), toon(darken(skin, 0.12)), p.x, p.y, p.z, grown ? 0.036 : 0.032, grown ? 0.03 : 0.024, 0.024));
   smile(head, 0.045, -0.11);
@@ -1128,7 +1132,7 @@ export class Avatar {
       // out to a hem, then a bare arm down to the hand.
       arm.add(mesh(sphere(1, 16, 12), toon(shirt), 0, 0, 0, 0.074, 0.07, 0.07));
       arm.add(mesh(lathe([[0.072, 0], [0.075, -0.05], [0.07, -0.095], [0.045, -0.1], [0, -0.1]], 16), toon(shirt)));
-      arm.add(mesh(torus(0.064, 0.013), toon(darken(shirt, 0.16)), 0, -0.092, 0).rotateX(Math.PI / 2));
+      arm.add(mesh(torus(0.068, 0.012), toon(darken(shirt, 0.16)), 0, -0.088, 0).rotateX(Math.PI / 2));
       arm.add(mesh(capsule(0.042, 0.08 + armLong), toon(fur), 0, -0.14 - armLong / 2, 0));
       // A chubby hand: a palm, four fingers together and a thumb.
       const hy = -0.215 - armLong;

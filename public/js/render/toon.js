@@ -1,16 +1,26 @@
-// Soft cartoon materials shared by everyone and everything that moves: three
-// flat bands of light instead of smooth shading, like a picture book.
+// Soft cartoon materials shared by everyone and everything that moves: light
+// that rolls smoothly from a gentle shade into full light, never down to
+// black, like a picture book painted in soft gouache.
 import * as THREE from '../../vendor/three.module.js';
 
 let gradient = null;
 const cache = new Map();
 
+// How lit a surface is (0 to 1) for how much it faces the light, from facing
+// away (0) to facing it (1): the shade, then an eased turn into the light.
+export function shading(x) {
+  const k = Math.min(1, Math.max(0, (x - 0.28) / 0.5));
+  return 0.5 + 0.5 * k * k * (3 - 2 * k);
+}
+
 function gradientMap() {
   if (gradient) return gradient;
-  const data = new Uint8Array([120, 185, 255]);
-  gradient = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
-  gradient.minFilter = THREE.NearestFilter;
-  gradient.magFilter = THREE.NearestFilter;
+  const n = 32;
+  const data = new Uint8Array(n);
+  for (let i = 0; i < n; i++) data[i] = Math.round(shading(i / (n - 1)) * 255);
+  gradient = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
+  gradient.minFilter = THREE.LinearFilter;
+  gradient.magFilter = THREE.LinearFilter;
   gradient.generateMipmaps = false;
   gradient.needsUpdate = true;
   return gradient;
