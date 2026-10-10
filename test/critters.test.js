@@ -10,7 +10,7 @@ import { CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, perchAt, scale
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
-const FLYERS = ['bird', 'owl', 'bee', 'seagull', 'butterfly', 'mosquito'];
+const FLYERS = ['bird', 'owl', 'bee', 'seagull', 'butterfly'];
 const FL = Math.floor;
 
 function island(theme, seed) {

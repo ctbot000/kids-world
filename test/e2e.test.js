@@ -2767,8 +2767,11 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   // (Before the host goes in: one of them chasing the host would knock them about the camp.)
   const id = await host.evaluate((c) => {
     const room = window.kidsWorld.session.link.room;
-    const [m, ...rest] = room.monsters.list.filter((o) => o.camp === c.id);
-    for (const o of rest) room.monsters.remove(o.id);
+    // A blob to hold still in front of the host: the camp's mosquito, up in
+    // the air, is out of reach of a bop from the ground until it darts.
+    const all = room.monsters.list.filter((o) => o.camp === c.id);
+    const m = all.find((o) => o.kind === 'blob') ?? all[0];
+    for (const o of all) if (o !== m) room.monsters.remove(o.id);
     // None coming back while this runs, however slowly (a popped one would in 20 seconds).
     room.adventure.campById(c.id).back = [Infinity, Infinity, Infinity];
     Object.assign(m.body, { x: c.x + 2.5, y: c.y, z: c.z - 2, vx: 0, vy: 0, vz: 0 });

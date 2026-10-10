@@ -12,6 +12,7 @@ import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
+import { MosquitoModel } from './mosquito-model.js';
 import { PetModel, petSeat } from './pet-models.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
@@ -172,10 +173,11 @@ export class Renderer {
     return petSeat(mount);
   }
 
-  // kind: 'blob', 'big' or 'spiky', or 'king' for King Grumble.
+  // kind: 'blob', 'big' or 'spiky', 'king' for King Grumble, 'mosquito' for
+  // the giant mosquito.
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : new MonsterModel(this.world?.theme, kind);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;

@@ -4,8 +4,9 @@
 // bubble. Friends free the island together:
 //
 // - A camp's monsters come out when someone comes near, and keep to their
-//   camp, chasing whoever comes in. One popped comes back a while later,
-//   until the camp is free.
+//   camp, chasing whoever comes in. One of them is a mosquito, hanging over
+//   the camp on the wing. One popped comes back a while later, until the
+//   camp is free.
 // - Standing by the flag with no monster in the camp lowers it and raises
 //   the island's own, and the more friends stand there, the faster it goes.
 //   Up all the way, the camp is free: its ground turns back into grass and
@@ -471,7 +472,9 @@ export class AdventureSim {
   }
 
   // A camp's monster hopping out: somewhere in the camp, not right beside anyone.
+  // One of them is a mosquito, hanging over the camp on the wing.
   addGuard(world, c, people, monsters) {
+    const bug = monsters.list.filter((m) => m.camp === c.id && m.kind === 'mosquito').length < 1 ? 'mosquito' : 'blob';
     for (let tries = 0; tries < 30; tries++) {
       const a = this.rng.range(-Math.PI, Math.PI);
       const d = this.rng.range(2.5, Math.max(3, c.r - 2.5));
@@ -480,9 +483,9 @@ export class AdventureSim {
       const y = standHeight(world, x, z, c.y + 2);
       if (y === null || Math.abs(y - c.y) > 3) continue;
       if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 3)) continue;
-      return monsters.add(world, x, y, z, { camp: c.id });
+      return monsters.add(world, x, y, z, { camp: c.id, kind: bug });
     }
-    return monsters.add(world, c.x + 2.5, c.y, c.z, { camp: c.id });
+    return monsters.add(world, c.x + 2.5, c.y, c.z, { camp: c.id, kind: bug });
   }
 
   // A camp awake: its popped monsters coming back, and its flag going up
@@ -554,7 +557,7 @@ export class AdventureSim {
   // while, while the camp is not free. King Grumble's helpers do not.
   guardGone(m, now) {
     const c = this.campById(m.camp);
-    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind !== 'blob') return;
+    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king') return;
     c.back.push(now + GUARD_BACK_MS);
   }
 

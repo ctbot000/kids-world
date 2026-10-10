@@ -10,7 +10,9 @@
 // - Anyone presses Start for the next wave. Its monsters come out of the
 //   gate one after another, more of them and with more hearts each wave,
 //   and King Grumble himself in the middle and last wave, big and slow.
-//   Friends can pop them too, as anywhere: bop them, or jump on them.
+//   From the second wave a few giant mosquitos fly among them, quicker
+//   along the road, more of them each wave. Friends can pop them too, as
+//   anywhere: bop them, or jump on them.
 // - Every monster popped, and every wave seen off, brings bricks for more
 //   towers. One that gets to the Star Stone takes a heart off it (King
 //   Grumble five), and a wave seen off gives it a couple back; with none
@@ -52,16 +54,19 @@ export const START_MS = 3000;
 // Hearts the Star Stone gets back with each wave seen off.
 export const STONE_BACK = 2;
 // How many hearts a monster takes off the Star Stone, getting there.
-export const LEAK = { blob: 1, king: 5 };
+export const LEAK = { blob: 1, mosquito: 1, king: 5 };
 // What comes in wave n (1 to WAVES): how many little monsters (and one
 // more for each friend past the first, up to four), how many hearts each
-// has, how long between them, and King Grumble's hearts (0: he stays home).
+// has, how long between them, King Grumble's hearts (0: he stays home),
+// and how many mosquitos fly among them (none in the first wave, then more
+// and more, up to five).
 export function waveOf(n, players = 1) {
   return {
     blobs: 5 + n + Math.min(4, Math.max(0, players - 1)),
     hearts: Math.round(3 + 1.6 * (n - 1) + 0.12 * (n - 1) ** 2),
     every: Math.max(700, 1500 - 70 * n),
     king: n === Math.ceil(WAVES / 2) ? 40 : n === WAVES ? 120 : 0,
+    mosquitos: n < 2 ? 0 : Math.min(5, 1 + Math.floor((n - 2) / 2)),
   };
 }
 // The states a defense goes through: waiting for Start, a wave marching,
@@ -538,7 +543,11 @@ export class DefenseSim {
   start(now, players = 1) {
     if (this.state !== 'ready') return false;
     const w = waveOf(this.wave, players);
-    this.queue = Array.from({ length: w.blobs }, () => 'blob');
+    // The mosquitos spread through the wave, one between each run of blobs,
+    // so they never all come at once.
+    const total = w.blobs + w.mosquitos;
+    const at = new Set(Array.from({ length: w.mosquitos }, (_, i) => Math.round(((i + 1) * total) / (w.mosquitos + 1)) - 1));
+    this.queue = Array.from({ length: total }, (_, i) => (at.has(i) ? 'mosquito' : 'blob'));
     if (w.king) this.queue.splice(Math.floor(w.blobs * 0.6), 0, 'king');
     this.blobHearts = w.hearts;
     this.kingHearts = w.king;

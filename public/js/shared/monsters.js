@@ -13,6 +13,14 @@
 // and a Spiky, quick and prickly, that no one can jump on (landing on it
 // counts as a bump) and that takes four bops.
 //
+// And a giant mosquito, the one that used to drone about the meadows as a
+// friend: it never touches the ground now, but hangs in the air well up out
+// of reach, whining, and darts down at whoever it sees quicker than you
+// walk (never as quick as you run) to bump a heart off them. Nobody can
+// jump on one — it is up in the air — so swat it instead: two bops and it
+// goes pop. Being a flyer, it crosses the water, where the others cannot
+// follow, but it keeps out of the safe places like any of them.
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -71,6 +79,9 @@ export const MONSTER_BODY = { radius: 0.42, height: 0.8 };
 export const BIG_BODY = { radius: 0.7, height: 1.3 };
 // A Spiky: a blob's size, with its spikes.
 export const SPIKY_BODY = { radius: 0.45, height: 0.85 };
+// A giant mosquito: about a Big Bruiser's height, rounder, and it never
+// touches the ground.
+export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -130,10 +141,17 @@ export const KINDS = {
   blob: { hearts: BLOB_HEARTS, bump: 1, land: Infinity, move: MOVE, cross: CROSS_MOVE },
   big: { hearts: 6, bump: 2, land: 3, move: { walk: 1.4, run: 3.6, jump: 9 }, cross: { walk: 1.4, run: 4.6, jump: 9 } },
   spiky: { hearts: 4, bump: 1, land: 0, move: { walk: 2, run: 4.2, jump: 8 }, cross: { ...MOVE, run: CROSS_RUN } },
+  // A mosquito darts at you, so its run is how fast it flies; cross (after
+  // a bop) as quick as the others get, still never as quick as you run.
+  mosquito: { hearts: 2, bump: 1, land: 0, move: { walk: 2.2, run: 5.2 }, cross: { walk: 2.2, run: 6.5 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs.
-const TOUGH = { day: { spiky: 0.2 }, night: { big: 0.2, spiky: 0.25 } };
+const TOUGH = { day: { spiky: 0.2, mosquito: 0.12 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2 } };
+// How high a mosquito keeps itself over the ground (or the water) beneath
+// it: well up out of reach of arm and jump until it darts at someone, when
+// it comes down to bump height; and how quickly it rises and sinks.
+export const MOSQUITO_HOVER = { high: 2.3, low: 1.0, march: 1.1, up: 3 };
 // Landing on one: your feet this far above its middle at least, and this
 // close side to side (a little more than touching, as you have moved on a
 // little by the time the host hears of it).
@@ -141,9 +159,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY })[kind] ?? MONSTER_BODY;
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -230,6 +248,8 @@ export class MonsterSim {
     const body = makeBody(x, y, z);
     body.radius = size.radius;
     body.height = size.height;
+    // A mosquito comes out already on the wing.
+    if (kind === 'mosquito') body.flying = true;
     const rng = camp || march ? this.campRng : this.rng;
     const hearts = kindOf(kind).hearts;
     const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
@@ -327,6 +347,7 @@ export class MonsterSim {
         continue;
       }
       const b = m.body;
+      const fly = m.kind === 'mosquito';
       const camp = m.camp ? (camps?.campById(m.camp) ?? null) : null;
       // Lonely, far from everyone: off it goes (one of a camp stays). In the
       // water, it goes too.
@@ -380,7 +401,6 @@ export class MonsterSim {
       if (!target) m.stompAt = 0;
       let mx = 0;
       let mz = 0;
-      let jump = false;
       const every = STOMP_EVERY[m.rage ?? 0] ?? STOMP.every;
       if (now < (m.dazed ?? 0)) {
         m.state = 'dazed';
@@ -457,8 +477,8 @@ export class MonsterSim {
         }
         m.state = m.wander ? 'hop' : 'idle';
       }
-      // Never into a safe place (round its edge instead), nor into the
-      // water or a tent.
+      // Never into a safe place (round its edge instead), nor, on the
+      // ground, into the water or a tent (a mosquito flies over both).
       if (mx || mz) {
         const into = (x, z) => havens.find((h) => campDistance(h, x, z) < h.r && campDistance(h, x, z) < campDistance(h, b.x, b.z)) ?? null;
         const h = into(b.x + mx * 0.9, b.z + mz * 0.9);
@@ -472,17 +492,25 @@ export class MonsterSim {
         }
         const ax = b.x + mx * 0.9;
         const az = b.z + mz * 0.9;
-        if (into(ax, az) || wet(world, ax, b.y, az) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))) {
+        if (into(ax, az) || (!fly && (wet(world, ax, b.y, az) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))))) {
           mx = 0;
           mz = 0;
           m.wander = null;
           if (m.state === 'hop') m.state = 'idle';
         }
       }
-      // It gets about in hops.
-      if ((mx || mz) && b.onGround) jump = true;
-      const move = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
-      const events = stepBody(world, b, { mx, mz, jump, run: m.state === 'chase' }, dt, { autoJump: true, move });
+      const pace = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
+      let events;
+      if (fly) {
+        // A mosquito hangs in the air well up out of reach, coming down to
+        // bump height only as it darts at someone.
+        b.flying = true;
+        const want = Math.max(world.top(FL(b.x), FL(b.z)), world.sea) + 1 + (m.state === 'chase' ? MOSQUITO_HOVER.low : MOSQUITO_HOVER.high);
+        events = stepBody(world, b, { mx, mz, jump: b.y < want - 0.2, down: b.y > want + 0.2, run: false }, dt, { move: { fly: m.state === 'chase' ? pace.run : pace.walk, flyUp: MOSQUITO_HOVER.up } });
+      } else {
+        // The others get about in hops.
+        events = stepBody(world, b, { mx, mz, jump: (mx || mz) && b.onGround, run: m.state === 'chase' }, dt, { autoJump: true, move: pace });
+      }
       if (events.bumped && m.state === 'hop') m.rest = 0;
       // Down from a stomp: the thump (see takeStomps), and a while till the next.
       if (m.slam && b.onGround) {
@@ -572,7 +600,15 @@ export class MonsterSim {
     const mz = dz / d;
     m.yaw = Math.atan2(mx, mz);
     m.state = 'hop';
-    stepBody(world, b, { mx, mz, jump: b.onGround, run: false }, dt, { autoJump: true, move: m.kind === 'king' ? KING_MARCH : MARCH });
+    // A mosquito flits along above the road, the same height all the way
+    // and quicker than the hop-alongs; the others hop along it.
+    if (m.kind === 'mosquito') {
+      b.flying = true;
+      const want = to.y + MOSQUITO_HOVER.march;
+      stepBody(world, b, { mx, mz, jump: b.y < want - 0.2, down: b.y > want + 0.2, run: false }, dt, { move: { fly: 3.2, flyUp: MOSQUITO_HOVER.up } });
+    } else {
+      stepBody(world, b, { mx, mz, jump: b.onGround, run: false }, dt, { autoJump: true, move: m.kind === 'king' ? KING_MARCH : MARCH });
+    }
     m.stuck = Math.hypot(b.vx, b.vz) < 0.4 ? m.stuck + dt : 0;
     if (m.stuck > 3) {
       m.stuck = 0;

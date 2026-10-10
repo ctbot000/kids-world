@@ -14,7 +14,7 @@ import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './ad
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placeGiant, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -932,6 +932,12 @@ export class Room {
   // ------------------------------------------------ monsters
 
   stepMonsters(dt, now, where) {
+    // Dizzy for too long, with no friend to help: back to the nearest safe
+    // place — before the monsters move, so nothing bumps them at the very
+    // moment they come round.
+    for (const p of this.players.values()) {
+      if (p.online && p.dizzyUntil && now >= p.dizzyUntil) this.sendHome(p, now);
+    }
     const riding = this.critters.aboard();
     const people = [];
     for (const [id, w] of where) {
@@ -962,8 +968,6 @@ export class Room {
     }
     for (const p of this.players.values()) {
       if (!p.online) continue;
-      // Dizzy for too long, with no friend to help: back to the nearest safe place.
-      if (p.dizzyUntil && now >= p.dizzyUntil) this.sendHome(p, now);
       // Hearts come back while nothing bumps you.
       if ((p.hearts ?? MAX_HEARTS) >= MAX_HEARTS || p.dizzyUntil) continue;
       const hearts = heartsBack(p.hearts, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
@@ -1458,8 +1462,8 @@ export class Room {
     if (v < 3) for (const f of placeSea(this.world, new Rng(seed ^ 0x6b43a9b5))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 4) for (const f of placePolar(this.world, new Rng(seed ^ 0x3c6ef372))) this.critters.add(f.type, f.x, f.y, f.z);
     if (v < 5) for (const f of placeBig(this.world, new Rng(seed ^ 0x1b873593))) this.critters.add(f.type, f.x, f.y, f.z);
-    // And the giant mosquitos.
-    if (v < 10) for (const f of placeGiant(this.world, new Rng(seed ^ 0x94d049bb))) this.critters.add(f.type, f.x, f.y, f.z);
+    // (Islands from before v 10 got giant mosquitos here; they are monsters
+    // now, monsters.js, so islands from before them get none.)
     // And vehicles: a car, a boat and a digger (the mines of an island from
     // before them have no rails, nor a mine cart).
     if (v < 7) for (const f of placeVehicles(this.world, new Rng(seed ^ 0x4cf5ad43))) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);

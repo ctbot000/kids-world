@@ -14,7 +14,7 @@ import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK
 import * as B from '../public/js/shared/blocks.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing } from '../public/js/shared/listing.js';
-import { campDistance, DAZE_MS, DAZED_HIT, MAX_HEARTS, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, MAX_HEARTS, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { generate, SIZES, THEMES } from '../public/js/shared/worldgen.js';
@@ -62,11 +62,22 @@ function play(room, time, ms, ...where) {
   }
 }
 
-// Pops every monster of a camp, each by landing on it.
-function popAll(room, c, who) {
+// Pops every monster of a camp: each by landing on it, except the
+// mosquito, which nobody can land on — two bops from beside it, up where it
+// hovers.
+function popAll(room, c, who, time) {
   for (const m of guards(room, c)) {
-    room.receive(who, { t: 'm', s: [m.body.x, m.body.y + m.body.height, m.body.z, 0, 0, 0] });
-    room.receive(who, { t: 'bop', id: m.id, on: true });
+    if (m.kind === 'mosquito') {
+      for (let i = 0; i < 2 && room.monsters.get(m.id); i++) {
+        time.t += HIT_MS;
+        room.receive(who, { t: 'm', s: [m.body.x + 1.4, m.body.y, m.body.z, 0, 0, 0] });
+        room.receive(who, { t: 'bop', id: m.id });
+        room.tick();
+      }
+    } else {
+      room.receive(who, { t: 'm', s: [m.body.x, m.body.y + m.body.height, m.body.z, 0, 0, 0] });
+      room.receive(who, { t: 'bop', id: m.id, on: true });
+    }
   }
 }
 
@@ -240,7 +251,9 @@ test('a camp’s monsters come out as someone comes near, one more than there ar
   const edge = [c.x + c.r + 10, c.z];
   play(room, time, 300, [a, ...edge]);
   assert.equal(guards(room, c).length, guardsFor(1));
-  assert.ok(a.last('mon').m.map(unpackMonster).every((m) => m.kind === 'blob'));
+  const kinds = a.last('mon').m.map(unpackMonster).map((m) => m.kind);
+  assert.equal(kinds.filter((k) => k === 'mosquito').length, 1, 'one mosquito hanging over the camp');
+  assert.ok(kinds.every((k) => k === 'blob' || k === 'mosquito'), 'the rest blobs');
   play(room, time, 20000, [a, ...edge]);
   for (const m of guards(room, c)) {
     assert.ok(campDistance(c, m.body.x, m.body.z) <= c.r, 'in their camp');
@@ -287,7 +300,7 @@ test('a flag goes up only with nobody of its camp in it, faster with more friend
   assert.equal(c.progress, 0);
   assert.deepEqual(a.last('adv').c.find((r) => r[0] === c.id), [c.id, 0, 1, 1], 'everyone sees it guarded, with one by it');
   // Popped, all of them: up it goes, a tenth a second for one...
-  popAll(room, c, a);
+  popAll(room, c, a, time);
   assert.equal(guards(room, c).length, 0);
   play(room, time, 3000, [a, ...byFlag(c)], [b, spawn.x, spawn.z]);
   assert.ok(Math.abs(c.progress - 0.3) < 0.02, `one friend: ${c.progress}`);
@@ -312,7 +325,7 @@ test('a camp freed: its monsters go, its gloomy ground turns into grass and flow
   const b = join(room, 'Brave Otter');
   const [c, d] = camps(room);
   play(room, time, 300, [a, c.x + c.r + 10, c.z], [b, c.x + c.r + 10, c.z + 1]);
-  popAll(room, c, a);
+  popAll(room, c, a, time);
   play(room, time, raiseSeconds(2) * 1000 + 300, [a, ...byFlag(c)], [b, ...byFlag(c, -2.5)]);
   assert.equal(c.freed, true);
   const freed = b.last('freed');
