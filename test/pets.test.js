@@ -336,13 +336,16 @@ test('a pet riding along sits on the back of the animal or in the vehicle, behin
     mount.group.updateMatrixWorld(true);
     let top = -Infinity;
     let middle = -Infinity;
-    for (const dx of [-0.07, 0, 0.07]) {
-      for (const dz of [-0.07, 0, 0.07]) {
+    // A square under the pet, turned with the mount as the pet is.
+    for (const a of [-0.07, 0, 0.07]) {
+      for (const b of [-0.07, 0, 0.07]) {
+        const dx = a * Math.cos(0.7) + b * Math.sin(0.7);
+        const dz = b * Math.cos(0.7) - a * Math.sin(0.7);
         const ray = new THREE.Raycaster(new THREE.Vector3(seat.x + dx, seat.y + 3, seat.z + dz), up.clone().negate());
         // (Not a rotor or a balloon up over it.)
         const hit = ray.intersectObject(mount.group, true).find((h) => (!mount.saddle || !h.object.parent || h.object.parent !== mount.saddle) && !isIn(h.object, mount.over));
         if (hit) top = Math.max(top, hit.point.y);
-        if (hit && !dx && !dz) middle = hit.point.y;
+        if (hit && !a && !b) middle = hit.point.y;
       }
     }
     assert.ok(Math.abs(top - seat.y) < 0.03, `${type}: sitting on it (${top.toFixed(2)} under ${seat.y.toFixed(2)})`);

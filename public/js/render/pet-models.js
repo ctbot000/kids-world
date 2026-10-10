@@ -428,6 +428,8 @@ const seatTops = new Map();
 function seatTop(type) {
   if (seatTops.has(type)) return seatTops.get(type);
   const m = new CritterModel(type, 0);
+  // At rest, not caught mid-roll (a model starts at a random time, and a boat rocks).
+  m.time = 0;
   m.update(0, 'idle', false, 0);
   m.group.updateMatrixWorld(true);
   const z = SEATS[type] ?? -0.5;
