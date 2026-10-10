@@ -162,6 +162,18 @@ export class Game extends EventTarget {
     return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
   }
 
+  // The world's own profile to earn and carry with here (the shared isle has
+  // one apart from yours — see main.js, which swaps it in once the island has
+  // said it is that one). Everything after — counts, basket, gear, the level
+  // in your look — goes to whichever it is.
+  useProfile(profile) {
+    if (this.profile === profile) return;
+    this.profile.removeEventListener('change', this.onProfile);
+    this.profile = profile;
+    this.profile.addEventListener('change', this.onProfile);
+    if (this.pid) this.syncPet(this.pid);
+  }
+
   // As the owner of an island with a passcode: a pass for a friend you
   // invite, so they come in without it (see Room.givePass). Resolves with
   // it, or '' when the island gave none in a few seconds.

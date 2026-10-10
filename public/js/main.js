@@ -18,7 +18,7 @@ import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
-import { wornWeapon } from './shared/shop.js';
+import { lookWithGear, wornWeapon } from './shared/shop.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
@@ -28,6 +28,34 @@ const params = new URLSearchParams(location.search);
 const who = storage.loadWho();
 storage.useSpace(who?.player ?? null);
 const profile = new Profile();
+// The shared isle is a world of its own, so it keeps a world of you: the ⭐
+// experience, level and stickers, the 🪙 coins, the basket's treasures and
+// the gear you have there are the isle's own, kept under their own key and
+// never sent to the keeper or its ranking. You are still you there: your
+// name, look, pet and settings come from your profile, and changing them
+// there changes them everywhere (the isle's page hears of it at once).
+const isle = new Profile('adventure');
+for (const [key, get] of Object.entries({
+  name: () => profile.name,
+  look: () => profile.look,
+  settings: () => profile.settings,
+  // Your look as the isle sees it: yours, with the isle's own gear and level.
+  shownLook: () => lookWithGear(profile.look, isle.data.gear, isle.progress.level),
+})) Object.defineProperty(isle, key, { get });
+const isleUpdate = isle.update.bind(isle);
+isle.update = (changes) => {
+  // Your name and look are yours everywhere: they go to your profile.
+  const yours = {};
+  if ('name' in changes) yours.name = changes.name;
+  if ('look' in changes) yours.look = changes.look;
+  if (Object.keys(yours).length) profile.update(yours);
+  const own = { ...changes };
+  delete own.name;
+  delete own.look;
+  if (Object.keys(own).length) isleUpdate(own);
+};
+isle.setting = (key, value) => profile.setting(key, value);
+profile.addEventListener('change', () => isle.dispatchEvent(new CustomEvent('change')));
 const sound = new Sound();
 sound.setLevels(profile.settings);
 const atlas = buildAtlas();
@@ -42,7 +70,7 @@ try {
   throw error;
 }
 const input = new Input(canvas, document.getElementById('joystick'));
-const ui = new UI({ profile, sound, atlas, input });
+const ui = new UI({ profile, isle, sound, atlas, input });
 // Copies of your islands and of you go to the keeper whenever it is online,
 // and logged in, what your other devices sent comes back.
 const keeper = new KeeperClient({ profile, login: who });
@@ -66,17 +94,21 @@ profile.addEventListener('count', () => keeper.counted());
 // A toy weapon bought, put on or taken off in the shop: friends on the
 // island see it in your hand, and the island lets it reach further. A new
 // level (here, or from another device of yours) shows on your name tag.
-let weaponSent = wornWeapon(profile.data.gear)?.key ?? '';
-let levelSent = profile.progress.level;
+// On the shared isle, the weapon and the level are the isle's own.
+let weaponSent = '';
+let levelSent = 0;
 const sendGear = () => {
-  const weapon = wornWeapon(profile.data.gear)?.key ?? '';
-  const level = profile.progress.level;
+  const p = session?.game?.profile ?? profile;
+  const weapon = wornWeapon(p.data.gear)?.key ?? '';
+  const level = p.progress.level;
   if (weapon === weaponSent && level === levelSent) return;
   weaponSent = weapon;
   levelSent = level;
-  session?.game?.send({ t: 'look', look: profile.shownLook, name: profile.name });
+  session?.game?.send({ t: 'look', look: p.shownLook, name: profile.name });
 };
-for (const type of ['basket', 'level', 'change']) profile.addEventListener(type, sendGear);
+for (const p of [profile, isle]) {
+  for (const type of ['basket', 'level', 'change']) p.addEventListener(type, sendGear);
+}
 if (who) {
   const note = () => storage.notePlayer({ player: who.player, username: keeper.login.username, name: profile.name, look: profile.look });
   note();
@@ -305,12 +337,19 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   game.addEventListener('welcome', (e) => {
     if (session?.game !== game) return;
     profile.setToken(key, game.token);
+    // The shared isle is a world of its own: from here you earn and carry
+    // the isle's things, not yours (see useProfile) — and the island hears
+    // your look as the isle has it, its own level and gear in your hands.
+    game.useProfile(game.shared ? isle : profile);
+    weaponSent = '';
+    levelSent = 0;
+    sendGear();
     if (!session.started) {
       session.started = true;
       ui.hideLoading();
       ui.attach(game, gameHandlers);
       sound.startMusic();
-      if (mode !== 'host') profile.count('visits');
+      if (mode !== 'host') game.profile.count('visits');
       if (!profile.data.seenHelp) {
         profile.update({ seenHelp: true });
         setTimeout(() => ui.toast('👋', 'Welcome! Walk with WASD or your thumb, and tap to build. ❓ shows how to play.'), 600);
@@ -701,7 +740,7 @@ const titleHandlers = {
   // you stop typing it for a moment.
   lookChanged: () => {
     clearTimeout(lookTimer);
-    if (session?.game) lookTimer = setTimeout(() => session?.game.send({ t: 'look', look: profile.shownLook, name: profile.name }), 400);
+    if (session?.game) lookTimer = setTimeout(() => session?.game?.send({ t: 'look', look: (session?.game?.profile ?? profile).shownLook, name: profile.name }), 400);
     else showDemoAvatar();
   },
   lookOpen: () => lookAtMe(true),
@@ -862,6 +901,7 @@ function frame(now) {
 // For automated tests: the running pieces, and a way to step time without frames.
 window.kidsWorld = {
   profile,
+  isle,
   renderer,
   ui,
   input,

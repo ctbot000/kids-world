@@ -173,7 +173,11 @@ const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
 const levelTag = (look) => (look?.level ? h('span', { class: 'tag-level', title: `Level ${look.level}` }, `⭐${look.level} `) : null);
 
 export class UI {
-  constructor({ profile, sound, atlas, input }) {
+  constructor({ profile, isle = null, sound, atlas, input }) {
+    this.home = profile;
+    this.isle = isle;
+    // The world you are in: your profile, or on the shared isle the isle's
+    // own (see attach and detach) — its pages show that one's things.
     this.profile = profile;
     this.sound = sound;
     this.atlas = atlas;
@@ -197,14 +201,17 @@ export class UI {
         this.closeModal();
       }
     });
-    profile.addEventListener('sticker', (e) => {
-      const s = e.detail;
-      this.sound.play('sticker');
-      this.toast(s.icon, `New sticker: ${s.name}!`, 'sticker');
-    });
-    profile.addEventListener('basket', () => this.renderBasket());
-    for (const type of ['count', 'change']) profile.addEventListener(type, () => this.renderLevel());
-    profile.addEventListener('level', (e) => this.levelUp(e.detail.level));
+    for (const p of [profile, isle]) {
+      if (!p) continue;
+      p.addEventListener('sticker', (e) => {
+        const s = e.detail;
+        this.sound.play('sticker');
+        this.toast(s.icon, `New sticker: ${s.name}!`, 'sticker');
+      });
+      p.addEventListener('basket', () => this.renderBasket());
+      for (const type of ['count', 'change']) p.addEventListener(type, () => this.renderLevel());
+      p.addEventListener('level', (e) => this.levelUp(e.detail.level));
+    }
     this.renderLevel();
     this.minimap = new MiniMap($('minimap').querySelector('canvas'), atlas);
     $('minimap').addEventListener('click', () => this.mapDialog());
@@ -1164,11 +1171,15 @@ export class UI {
   }
 
   stickersDialog() {
-    const got = this.profile.data.stickers;
+    const p = this.profile;
+    const got = p.data.stickers;
+    // On the shared isle, these are the isle's own, apart from yours
+    // everywhere else: said so, and the ranking of other worlds stays out.
+    const isle = p === this.isle;
     this.openModal((root) => {
       const count = STICKERS.filter((s) => got[s.key]).length;
-      const ranking = this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
-      const { xp, level, into, need } = this.profile.progress;
+      const ranking = !isle && this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
+      const { xp, level, into, need } = p.progress;
       root.append(
         h(
           'div',
@@ -1177,6 +1188,7 @@ export class UI {
           h('div', { class: 'level-bar wide', role: 'img', 'aria-label': need ? `${into} of ${need} XP` : 'Full' }, h('span', { style: `width:${need ? Math.floor((100 * into) / need) : 100}%` })),
           h('span', { class: 'muted' }, need ? `${xp.toLocaleString()} XP · ${(need - into).toLocaleString()} more to level ${level + 1}` : `${xp.toLocaleString()} XP · the top level!`),
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
+          isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else.') : null,
         ),
         h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
         h(
@@ -1269,6 +1281,7 @@ export class UI {
         };
         root.append(
           h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins),
+          p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures and this gear are the isle’s, apart from yours everywhere else.') : null,
           h('h3', {}, 'Sell your treasures'),
           sell,
           h('h3', {}, 'Gear'),
@@ -1593,7 +1606,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever!']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
@@ -2072,6 +2085,13 @@ export class UI {
   attach(game, handlers) {
     this.game = game;
     this.gameHandlers = handlers;
+    // The world you are in, as the game has it: on the shared isle its own
+    // XP, level, coins, basket and gear show, not yours everywhere else.
+    if (game.profile !== this.profile) {
+      this.profile = game.profile;
+      this.levelKey = '';
+      this.renderLevel();
+    }
     $('title').hidden = true;
     $('hud').hidden = false;
     document.body.classList.add('playing');
@@ -2165,6 +2185,10 @@ export class UI {
 
   detach() {
     this.game = null;
+    // Back at the title, your own world again.
+    this.profile = this.home;
+    this.levelKey = '';
+    this.renderLevel();
     this.minimap.detach();
     this.input.enabled = false;
     $('hud').hidden = true;

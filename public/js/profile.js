@@ -2,6 +2,10 @@
 // stickers you have earned. Kept on this device, and copied to the keeper
 // (see keeper.js) unless that is switched off. Logged in, you are the same on
 // every device: what another one sent the keeper is merged in here.
+//
+// The shared isle keeps a profile of its own under its own key (see main.js):
+// a world of its own, so what you earn and carry there stays apart from all
+// this, and never goes to the keeper.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
@@ -44,9 +48,12 @@ function clean(raw) {
 }
 
 export class Profile extends EventTarget {
-  constructor() {
+  // key: what this one is kept under on this device (storage.js) — 'profile'
+  // for you, 'adventure' for the shared isle's own world of you.
+  constructor(key = 'profile') {
     super();
-    this.data = clean(load('profile', null));
+    this.key = key;
+    this.data = clean(load(key, null));
     this.store();
   }
 
@@ -188,7 +195,7 @@ export class Profile extends EventTarget {
 
   store() {
     clearTimeout(this.timer);
-    if (!this.frozen) save('profile', this.data);
+    if (!this.frozen) save(this.key, this.data);
   }
 
   // Writes no more: the page is about to reload as a player these things

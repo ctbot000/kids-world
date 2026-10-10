@@ -122,7 +122,7 @@ export function forgetPlayer(player) {
 // island. Returns false, with everything put back, if the browser refused.
 export function moveGuestTo(player) {
   const islands = read(`${PREFIX}islands`, []);
-  const keys = ['profile', 'keeper', 'islands', ...(Array.isArray(islands) ? islands : []).filter((i) => typeof i?.id === 'string').map((i) => `island.${i.id}`)];
+  const keys = ['profile', 'adventure', 'keeper', 'islands', ...(Array.isArray(islands) ? islands : []).filter((i) => typeof i?.id === 'string').map((i) => `island.${i.id}`)];
   const moved = [];
   const to = PREFIX + spaceOf(player);
   for (const key of keys) {
@@ -182,9 +182,11 @@ export function moveGuestIslandsTo(player) {
 }
 
 // The guest starts afresh, keeping only how this device is set up: their
-// things went with the player who logged in.
+// things went with the player who logged in — the shared isle's own world
+// of them too.
 export function resetGuest() {
   const old = read(`${PREFIX}profile`, null);
+  erase(`${PREFIX}adventure`);
   erase(`${PREFIX}keeper`);
   erase(`${PREFIX}islands`);
   write(`${PREFIX}profile`, { settings: old?.settings, hotbar: old?.hotbar, seenHelp: old?.seenHelp === true });
