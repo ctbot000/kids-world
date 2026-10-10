@@ -2971,21 +2971,24 @@ test('a tower defense island: a tower built by its pad with V, a wave started wi
 test('a video arcade: Q by a machine opens its game, blobs are bopped with taps, and pairs are flipped in turns, with counts kept', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
-  // Two machines host-side beside the start: Bop-a-Blob and Picture Pairs.
+  // Two machines host-side beside the start: Bop-a-Blob and Picture Pairs,
+  // each on a cell at the level of the ground you stand on, with the cell
+  // beside it at that level too — for now and then a tree's canopy hangs
+  // over a cell by the start, and a machine put on top of it is out of reach.
   const spots = await page.evaluate(([blob, pairs]) => {
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
     const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
     const out = [];
-    for (const [dx, id] of [
-      [3, blob],
-      [7, pairs],
-    ]) {
-      const x = Math.floor(b.x) + dx;
-      const z = Math.floor(b.z);
-      const y = room.world.top(x, z) + 1;
-      room.natureCell([x, y, z], id);
-      out.push({ x, y, z, id });
+    let from = Math.floor(b.x) + 3;
+    for (const id of [blob, pairs]) {
+      let x = from;
+      while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+      room.natureCell([x, ground + 1, z], id);
+      out.push({ x, y: ground + 1, z, id });
+      from = x + 4;
     }
     return out;
   }, [ARCADE_BLOB, ARCADE_PAIRS]);
