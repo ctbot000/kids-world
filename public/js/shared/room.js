@@ -10,7 +10,7 @@
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
-import { AdventureSim, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
+import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
@@ -93,12 +93,17 @@ function cleanSettings(raw, base = defaultSettings()) {
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 
 export class Room {
-  // Either { theme, size, name, seed, adventure, defense } for a brand-new island, or { save }.
-  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  // Either { theme, size, name, seed, adventure, defense, stage } for a
+  // brand-new island, or { save }. stage: the public adventure island's
+  // (see shared/adventure.js); shared: an island everybody owns, so nobody
+  // becomes its owner — the public adventure island is one.
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
     this.random = random;
+    this.stage = cleanStage(stage);
+    this.shared = shared === true;
     this.clients = new Map();
     this.tokens = new Map();
     this.players = new Map();
@@ -146,7 +151,7 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure });
+      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -154,7 +159,7 @@ export class Room {
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
-      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps }, s ^ 0x510e527f);
+      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage }, s ^ 0x510e527f);
       if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
@@ -417,7 +422,9 @@ export class Room {
       this.tokens.set(token, p.id);
     }
     if (p.id === this.reservedHost) this.reservedHost = 0;
-    if (!this.host || (!this.players.get(this.host)?.online && !this.reservedHost)) this.host = p.id;
+    // A shared island has no owner: nobody becomes its host, so its rules
+    // stay as they are and nobody can close it or passcode it.
+    if (!this.shared && (!this.host || (!this.players.get(this.host)?.online && !this.reservedHost))) this.host = p.id;
     this.broadcast({ t: 'joined', player: this.describePlayer(p) });
     c.pid = p.id;
     c.token = token;
@@ -513,6 +520,8 @@ export class Room {
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
+      // An island everybody owns (the public adventure island).
+      shared: this.shared === true,
     });
   }
 
@@ -747,6 +756,10 @@ export class Room {
   // ------------------------------------------------ owner commands
 
   hostCommand(conn, p, msg) {
+    if (this.shared) {
+      this.notice(conn, 'This island is everyone’s, so nobody is its owner. Everybody is welcome!', 'info');
+      return;
+    }
     if (p.id !== this.host) {
       this.notice(conn, 'Only the island owner can do that.');
       return;
@@ -848,6 +861,9 @@ export class Room {
       players: this.online,
       max: MAX_PLAYERS,
       passcode: this.passcode !== '',
+      // The one public adventure island (whoever keeps it sets this, see
+      // server/adventure.js): true while it is the one to conquer.
+      public: this.public === true,
       // An adventure island: how many camps it has, how many are free, and whether all of it is.
       ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
       // A tower defense island: the wave it is on, of how many, and whether every one is done.
@@ -1472,6 +1488,7 @@ export class Room {
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);
+    if (this.adventure) this.stage = this.adventure.stage;
     this.defense = this.adventure ? null : DefenseSim.load(save.defense, this.world, (seed ^ 0x2b992ddf ^ (Number(save.savedAt) | 0)) >>> 0);
     // And a bus and a ferry, to ride in together, clear of the camps or the road.
     if (v < 8) {

@@ -1,6 +1,8 @@
 // Dedicated server: serves the game from public/ (with serve-static) and hosts
 // islands over WebSocket (with ws), so nobody's browser has to stay open as
-// the host. The keeper's WebRTC module is loaded only when it starts.
+// the host. It also keeps the one public adventure island everyone conquers
+// together (adventure.js). The keeper's WebRTC module is loaded only when it
+// starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/, and runs the AI friend
 // (buddy.js) on Z.ai's models with the local Ollama as a standby, with its
@@ -19,6 +21,7 @@ import { sortListings } from '../public/js/shared/listing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
+import { PublicAdventure, RETIRED_KEEP_MS } from './adventure.js';
 import { Buddy } from './buddy.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
@@ -42,6 +45,10 @@ export function createGameServer({
   maxConnections = 1600,
   // How long an island with nobody on it is kept, so friends can come back.
   idleMs = 2 * 60 * 60 * 1000,
+  // How long a conquered public adventure island is kept after everyone
+  // leaves it, and whether the server keeps one at all.
+  retiredKeepMs = RETIRED_KEEP_MS,
+  publicAdventure = true,
   // What pages get at /keeper.json: the keeper this server runs, or none.
   keeperConfig = null,
   // The admin pages' handler, from adminHandler().
@@ -59,6 +66,9 @@ export function createGameServer({
   });
   const rooms = new Map();
   const sockets = new Set();
+  // The one public adventure island everyone conquers together
+  // (adventure.js): one of the rooms, marked `public`, always on the list.
+  const isle = publicAdventure ? new PublicAdventure({ rooms, log, retiredKeepMs }).start() : null;
   // Its `clients` are the open connections.
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
@@ -90,9 +100,10 @@ export function createGameServer({
       return;
     }
     // The list of open islands here (see shared/listing.js): those with
-    // someone on them, and not closed to new visitors.
+    // someone on them, and not closed to new visitors — and the public
+    // adventure island, whoever is on it, first.
     if (pathname === '/api/islands') {
-      const open = [...rooms.values()].map((entry) => (entry.room.online > 0 ? entry.room.listing() : null)).filter(Boolean);
+      const open = [...rooms.values()].map((entry) => (entry.public || entry.room.online > 0 ? entry.room.listing() : null)).filter(Boolean);
       const body = JSON.stringify({ islands: sortListings(open) });
       res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(body);
       return;
@@ -216,12 +227,16 @@ export function createGameServer({
         entry.emptySince = 0;
         continue;
       }
+      // The public adventure island is kept whatever comes.
+      if (entry.public) continue;
       entry.emptySince ||= now;
       if (now - entry.emptySince > idleMs) {
         entry.room.close();
         rooms.delete(code);
       }
     }
+    // The public adventure island's stages follow one another (adventure.js).
+    isle?.tick(now);
     if (++beat % Math.round(HEARTBEAT_MS / TICK_MS) === 0) {
       for (const ws of wss.clients) {
         if (!ws.isAlive) {
@@ -236,9 +251,11 @@ export function createGameServer({
   timer.unref();
 
   server.rooms = rooms;
+  server.publicAdventure = isle;
   server.shutdown = () =>
     new Promise((done) => {
       clearInterval(timer);
+      isle?.stop();
       for (const entry of rooms.values()) entry.room.close();
       rooms.clear();
       server.close(() => done());

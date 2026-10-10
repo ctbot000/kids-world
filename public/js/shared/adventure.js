@@ -25,6 +25,9 @@
 //
 // The island is made with its camps (buildCamps, from worldgen.js), and the
 // host runs the rest (AdventureSim, from room.js), as it runs the monsters.
+// The dedicated server also keeps one public adventure island for everyone,
+// conquered stage by stage, each harder than the last (server/adventure.js);
+// a stage number scales everything below that says so.
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
 import { campDistance, DAZED_HIT, SAFE_RADIUS } from './monsters.js';
@@ -38,7 +41,7 @@ export const CASTLE_RADIUS = 10;
 // for one friend, two, three, and four or more.
 export const FLAG_REACH = 3.5;
 const RAISE_SECONDS = [Infinity, 10, 6, 4.5, 4];
-export const raiseSeconds = (friends) => RAISE_SECONDS[Math.max(0, Math.min(4, friends))];
+export const raiseSeconds = (friends, stage = 1) => stageRaise(RAISE_SECONDS[Math.max(0, Math.min(4, friends))], stage);
 // Anyone this far beyond a camp's fence wakes its monsters; with nobody near
 // for a while, they go back to sleep.
 export const WAKE = 34;
@@ -46,11 +49,11 @@ export const SLEEP_MS = 15000;
 // A camp's monster popped comes back this long after, while the camp is not free.
 export const GUARD_BACK_MS = 20000;
 // How many monsters keep a camp: more with more friends on the island.
-export const guardsFor = (players) => Math.min(5, 1 + Math.max(1, players));
+export const guardsFor = (players, stage = 1) => stageGuards(Math.min(5, 1 + Math.max(1, players)), stage);
 // King Grumble's hearts, more with more friends on the island; each friend
 // can bop him once in this long. Nobody bopping him for KING_HEAL_MS, he
 // gets a heart back, and another every KING_HEAL_EVERY after.
-export const kingHearts = (players) => 12 + 6 * Math.min(8, Math.max(1, players));
+export const kingHearts = (players, stage = 1) => stageKing(12 + 6 * Math.min(8, Math.max(1, players)), stage);
 export const KING_HIT_MS = 800;
 export const KING_HEAL_MS = 8000;
 const KING_HEAL_EVERY = 2000;
@@ -60,13 +63,36 @@ export const DIZZY_MS = 10000;
 export const HELP_REACH = 4;
 export const HELP_HEARTS = 3;
 
+// The public adventure island the dedicated server keeps for everyone
+// (server/adventure.js) is conquered stage by stage, each stage a little
+// harder, on and on without end. Stage 1 plays as any adventure island;
+// every stage after has more camps (up to four more), one more guard in
+// each of them every third stage (up to eight), King Grumble with a fifth
+// more hearts each stage (up to four times as many), and flags that take a
+// tenth longer to raise each stage (up to twice as long). Past those the
+// stages go on as hard as they ever get, so none is ever hopeless.
+export const STAGE_CAMPS = 4;
+export const STAGE_GUARDS = 8;
+export const STAGE_KING = 4;
+export const STAGE_RAISE = 2;
+// A stage as told: 1 when it is none or nonsense, and never past 9999.
+export const cleanStage = (stage) => (Number.isInteger(stage) && stage >= 1 ? Math.min(stage, 9999) : 1);
+export const stageCamps = (base, stage) => base + Math.min(STAGE_CAMPS, Math.floor((cleanStage(stage) - 1) / 2));
+export const stageGuards = (base, stage) => Math.min(STAGE_GUARDS, base + Math.floor((cleanStage(stage) - 1) / 3));
+export const stageKing = (base, stage) => Math.round(base * Math.min(STAGE_KING, 1 + (cleanStage(stage) - 1) / 5));
+export const stageRaise = (base, stage) => {
+  const by = Math.min(STAGE_RAISE, 1 + (cleanStage(stage) - 1) / 10);
+  return by === 1 ? base : Math.round(base * by);
+};
+
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 const PURPLE = B.TOY_BRICKS[8];
 
-// How many camps an island gets: three on a cozy one, more on a bigger one.
-export function campCount(world) {
-  return Math.max(1, Math.round(4 * Math.sqrt((world.W * world.D) / (128 * 128)) - 1));
+// How many camps an island gets: three on a cozy one, more on a bigger one,
+// and more again on the higher stages of the public adventure island.
+export function campCount(world, stage = 1) {
+  return stageCamps(Math.max(1, Math.round(4 * Math.sqrt((world.W * world.D) / (128 * 128)) - 1)), stage);
 }
 
 // ---------------------------------------------------------------- making them
@@ -283,17 +309,18 @@ function castleWalls(world, spot, side) {
 // out as it would without). pal: the island's ground (worldgen.js palette);
 // trees: as worldgen.js grew them, to take down those in the way; critters:
 // the animals and vehicles, to keep out of the camps; mines: their ways in,
-// to keep clear. Returns { camps, critters }: each camp as
+// to keep clear; stage: the public adventure island's stage, for how many
+// camps it gets. Returns { camps, critters }: each camp as
 // { id, kind: 'camp' or 'castle', x, y, z, r }, numbered from the one
 // nearest the start, with the castle last; (x, y, z) is where its flag
 // stands, on the ground in the middle; and the critters left.
-export function buildCamps(world, rng, { pal, trees = [], critters = [], mines = [] }) {
+export function buildCamps(world, rng, { pal, trees = [], critters = [], mines = [], stage = 1 }) {
   const map = groundMap(world);
   const vehicles = critters.filter((c) => CRITTER_INFO[c.type]?.vehicle);
   const spots = [];
   const castle = choose(world, map, rng, { r: CASTLE_RADIUS, square: true, far: true, taken: spots, mines, vehicles });
   if (castle) spots.push({ ...castle, kind: 'castle' });
-  for (let i = 0; i < campCount(world); i++) {
+  for (let i = 0; i < campCount(world, stage); i++) {
     const camp = choose(world, map, rng, { r: CAMP_RADIUS, square: false, far: false, taken: spots, mines, vehicles });
     if (!camp) break;
     spots.push({ ...camp, kind: 'camp' });
@@ -351,9 +378,11 @@ const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), h
 
 export class AdventureSim {
   // camps: as buildCamps makes them (and saves keep them), with whether
-  // each is free; won: King Grumble popped, and the whole island free.
-  constructor({ camps = [], won = false } = {}, seed = 1) {
+  // each is free; won: King Grumble popped, and the whole island free;
+  // stage: the public adventure island's, for how hard its monsters are.
+  constructor({ camps = [], won = false, stage = 1 } = {}, seed = 1) {
     this.rng = new Rng(seed);
+    this.stage = cleanStage(stage);
     this.camps = camps.map((c) => {
       const freed = Boolean(c.freed) || Boolean(won);
       return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false };
@@ -383,7 +412,7 @@ export class AdventureSim {
   // How the adventure is going, for the list of open islands.
   tally() {
     const camps = this.camps.filter((c) => c.kind === 'camp');
-    return { camps: camps.length, freed: camps.filter((c) => c.freed).length, won: this.won };
+    return { camps: camps.length, freed: camps.filter((c) => c.freed).length, won: this.won, stage: this.stage };
   }
 
   // The safe places no monster goes into: the island's start, and every
@@ -418,7 +447,7 @@ export class AdventureSim {
   step(world, dt, now, people, monsters, players) {
     const news = [];
     if (!this.active) return news;
-    const want = guardsFor(players);
+    const want = guardsFor(players, this.stage);
     for (const c of this.camps) {
       if (c.freed) continue;
       if (people.some((p) => campDistance(c, p.x, p.z) <= c.r + WAKE)) {
@@ -444,10 +473,10 @@ export class AdventureSim {
       const at = this.kingSpot(world, c);
       const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: 'king' });
       m.passive = this.shielded;
-      this.king = { ...noKing(), id: m.id, hearts: kingHearts(players), max: kingHearts(players) };
+      this.king = { ...noKing(), id: m.id, hearts: kingHearts(players, this.stage), max: kingHearts(players, this.stage) };
       return;
     }
-    for (let i = 0; i < guardsFor(players); i++) this.addGuard(world, c, people, monsters);
+    for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
   }
 
   // Nobody near for a while: its monsters go back in, and come out afresh
@@ -502,7 +531,7 @@ export class AdventureSim {
     c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
     c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5);
     if (!c.holders || c.guarded) return;
-    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders));
+    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.stage));
     if (c.progress >= 1) news.push(this.free(c, people, monsters));
   }
 
@@ -593,6 +622,7 @@ export class AdventureSim {
     return {
       camps: this.camps.map((c) => ({ id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed, progress: +c.progress.toFixed(3) })),
       won: this.won,
+      stage: this.stage,
       ...this.pack(),
     };
   }
@@ -609,7 +639,7 @@ export class AdventureSim {
   }
 
   save() {
-    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won };
+    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won, stage: this.stage };
   }
 
   // An adventure as saved, checked, or null for none.
@@ -623,6 +653,6 @@ export class AdventureSim {
       if (c.x < 0 || c.z < 0 || c.x > world.W || c.z > world.D || c.y < 1 || c.y > world.H || c.r < 2 || c.r > 20) continue;
       camps.push({ id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true });
     }
-    return camps.length ? new AdventureSim({ camps, won: raw.won === true }, seed) : null;
+    return camps.length ? new AdventureSim({ camps, won: raw.won === true, stage: cleanStage(raw.stage) }, seed) : null;
   }
 }

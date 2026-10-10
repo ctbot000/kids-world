@@ -27,6 +27,7 @@ test('a listing is tidied, and anything that is not one is refused', () => {
     players: 8,
     max: 8,
     passcode: false,
+    public: false,
   });
   assert.equal(cleanListing(listing('123456', { passcode: true, theme: 'candy', size: 'huge' })).passcode, true);
   assert.equal(cleanListing(listing('12345')), null, 'a code has six numbers');
@@ -161,7 +162,7 @@ test('a room lists itself while it is open to new visitors', () => {
   const { room } = makeRoom();
   const owner = join(room);
   join(room, { name: 'Brave Otter' });
-  assert.deepEqual(room.listing(), { code: '123456', name: 'Frosty Fjord', theme: 'snowy', size: 'big', players: 2, max: MAX_PLAYERS, passcode: false });
+  assert.deepEqual(room.listing(), { code: '123456', name: 'Frosty Fjord', theme: 'snowy', size: 'big', players: 2, max: MAX_PLAYERS, passcode: false, public: false });
   room.receive(owner, { t: 'host', cmd: 'passcode', passcode: '1234' });
   assert.equal(room.listing().passcode, true);
   room.receive(owner, { t: 'host', cmd: 'settings', settings: { locked: true } });

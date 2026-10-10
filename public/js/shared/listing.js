@@ -7,10 +7,13 @@
 // Peer to peer, a host's page tells the island keeper about its island while
 // it is open (see shared/keeper.js); on the dedicated server, the server
 // lists its own (GET api/islands). Either way the list is made of these:
-//   { code, name, theme, size, players, max, passcode, adventure, defense }
+//   { code, name, theme, size, players, max, passcode, public, adventure, defense }
 // passcode: whether the island has one (never the passcode itself);
-// adventure, only on an adventure island: { camps, freed, won }, how many
-// monster camps it has and how many are free, and whether all of it is;
+// public: the one public adventure island the server keeps for everyone to
+// conquer together (server/adventure.js), which heads the list;
+// adventure, only on an adventure island: { camps, freed, won, stage }, how
+// many monster camps it has and how many are free, whether all of it is,
+// and the public one's stage;
 // defense, only on a tower defense island: { wave, waves, won }, the wave
 // it is on, of how many, and whether every one is seen off.
 
@@ -56,14 +59,15 @@ export function cleanListing(raw) {
     players: count(raw.players, 0, max),
     max,
     passcode: raw.passcode === true,
-    ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true } } : {}),
+    public: raw.public === true,
+    ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true, stage: count(adventure.stage, 1, 9999) } } : {}),
     ...(defense ? { defense: { wave: count(defense.wave, 1, waves), waves, won: defense.won === true } } : {}),
   };
 }
 
-// The busiest first (full ones last, as nobody can come in), then by name;
-// at most LIST_MAX.
+// The one public adventure island first, then the busiest (full ones last,
+// as nobody can come in), then by name; at most LIST_MAX.
 export function sortListings(list) {
   const room = (i) => (i.players >= i.max ? -1 : i.players);
-  return [...list].sort((a, b) => room(b) - room(a) || a.name.localeCompare(b.name) || a.code.localeCompare(b.code)).slice(0, LIST_MAX);
+  return [...list].sort((a, b) => (b.public === true) - (a.public === true) || room(b) - room(a) || a.name.localeCompare(b.name) || a.code.localeCompare(b.code)).slice(0, LIST_MAX);
 }

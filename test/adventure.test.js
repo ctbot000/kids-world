@@ -239,7 +239,7 @@ test('everything but the camps comes out just as it would on the island without 
 });
 
 test('a camp’s monsters come out as someone comes near, one more than there are friends (up to five), and keep to their camp', () => {
-  assert.deepEqual([1, 2, 3, 4, 8].map(guardsFor), [2, 3, 4, 5, 5]);
+  assert.deepEqual([1, 2, 3, 4, 8].map((n) => guardsFor(n)), [2, 3, 4, 5, 5]);
   const { room, time } = adventureRoom();
   const a = join(room);
   const spawn = room.world.spawn;
@@ -286,7 +286,7 @@ test('one comes after whoever goes into its camp, gives up once they are well ou
 });
 
 test('a flag goes up only with nobody of its camp in it, faster with more friends; a monster popped comes back a while after', () => {
-  assert.deepEqual([1, 2, 3, 4, 6].map(raiseSeconds), [10, 6, 4.5, 4, 4]);
+  assert.deepEqual([1, 2, 3, 4, 6].map((n) => raiseSeconds(n)), [10, 6, 4.5, 4, 4]);
   const { room, time } = adventureRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
@@ -472,7 +472,7 @@ test('out of his bubble, each friend can bop King Grumble once a moment: more fr
   const again = new Room({ save: room.exportSave(), now: time.now });
   assert.equal(again.adventure.won, true);
   assert.ok(again.adventure.camps.every((c) => c.freed));
-  assert.deepEqual(again.listing().adventure, { camps: camps(room).length, freed: camps(room).length, won: true });
+  assert.deepEqual(again.listing().adventure, { camps: camps(room).length, freed: camps(room).length, won: true, stage: 1 });
 });
 
 test('King Grumble’s stomp knocks over whoever is on the ground near him as he lands, and misses anyone jumping', () => {
@@ -583,7 +583,7 @@ test('turning monsters off leaves the camps’ monsters be; an adventure is kept
   assert.ok(guards(room, c).length > 0, 'the camp keeps its monsters');
   room.campFreed(room.adventure.free(d, [], room.monsters));
   const listing = room.listing();
-  assert.deepEqual(listing.adventure, { camps: camps(room).length, freed: 1, won: false });
+  assert.deepEqual(listing.adventure, { camps: camps(room).length, freed: 1, won: false, stage: 1 });
   assert.deepEqual(cleanListing(listing).adventure, listing.adventure);
   assert.equal(cleanListing({ ...listing, adventure: undefined }).adventure, undefined, 'none on other islands');
   const again = new Room({ save: room.exportSave(), now: time.now });

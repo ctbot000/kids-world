@@ -47,8 +47,9 @@ export function palette(theme) {
 
 // adventure: with monster camps all over it, to free (see adventure.js);
 // defense: with a road for monsters to march along, and towers to build
-// beside it (see defense.js).
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false } = {}) {
+// beside it (see defense.js); stage: the public adventure island's stage,
+// for how many camps it gets.
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false, stage = 1 } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);
@@ -335,7 +336,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // would be without: the monsters' camps, and King Grumble's castle.
   let camps = [];
   if (adventure) {
-    const made = buildCamps(world, new Rng(seed ^ 0x6a09e667), { pal, trees, critters, mines });
+    const made = buildCamps(world, new Rng(seed ^ 0x6a09e667), { pal, trees, critters, mines, stage });
     camps = made.camps;
     critters.splice(0, critters.length, ...made.critters);
   }

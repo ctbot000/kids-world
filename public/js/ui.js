@@ -661,10 +661,13 @@ export class UI {
           const full = it.players >= it.max;
           const size = SIZES.find((s) => s.key === it.size)?.name ?? '';
           const who = it.players === 0 ? 'Nobody there right now' : `${it.players} of ${it.max} playing`;
+          // The public adventure island's stage (any other adventure island
+          // is stage 1, where it goes without saying).
+          const stage = it.adventure && (it.public || it.adventure.stage > 1) ? `Stage ${it.adventure.stage} · ` : '';
           const adv = it.adventure
             ? it.adventure.won
               ? '🏆 Freed'
-              : `⚔️ ${it.adventure.freed} of ${it.adventure.camps} camps free`
+              : `⚔️ ${stage}${it.adventure.freed} of ${it.adventure.camps} camps free`
             : it.defense
               ? it.defense.won
                 ? '🏆 Safe'
@@ -673,7 +676,7 @@ export class UI {
           return h(
             'div',
             { class: 'island-item' },
-            h('span', { class: 'emoji' }, THEME_ICON[it.theme] ?? '🏝️'),
+            h('span', { class: 'emoji' }, it.public ? '🌟' : (THEME_ICON[it.theme] ?? '🏝️')),
             h('div', { class: 'info' }, h('b', { lang: langOf(it.name) || undefined }, it.name), h('span', { class: 'muted' }, [adv, size, who, it.passcode ? '🔒 Passcode' : ''].filter(Boolean).join(' · '))),
             h(
               'button',
@@ -1574,6 +1577,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
+          card('🌟', 'The shared isle', ['On the game\'s own server, 🌟 Adventure Isle at the top of the islands list is one everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
@@ -2608,6 +2612,7 @@ export class UI {
     this.openModal(
       (root) => {
         root.append(h('h2', {}, `🏝️ ${g.world?.name ?? 'Island'}`));
+        if (g.shared) root.append(h('p', { class: 'muted' }, '🌟 Everyone’s island: anybody can come, and the more of you there are, the sooner it is free.'));
         if (handlers.canInvite()) {
           const link = handlers.inviteLink();
           root.append(
@@ -2647,11 +2652,15 @@ export class UI {
         if (adv) {
           const camps = [...adv.camps.values()];
           const castle = camps.find((c) => c.kind === 'castle');
+          // The shared isle says which of its stages this is; any other
+          // adventure island is stage 1, where it goes without saying.
+          const staged = g.shared || adv.stage > 1;
           root.append(
-            h('h3', {}, adv.won ? '🏆 This island is free!' : '⚔️ Adventure'),
+            h('h3', {}, adv.won ? '🏆 This island is free!' : `⚔️ Adventure${staged ? ` — stage ${adv.stage}` : ''}`),
             h(
               'div',
               { class: 'adventure-list' },
+              ...(staged ? [h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, String(adv.stage)))] : []),
               ...camps
                 .filter((c) => c.kind === 'camp')
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` Camp ${c.id}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),

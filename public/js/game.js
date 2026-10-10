@@ -354,6 +354,9 @@ export class Game extends EventTarget {
     const again = Boolean(this.world) && this.code === msg.code;
     this.pid = msg.you;
     this.host = msg.host;
+    // An island everybody owns, so nobody is its owner (the public adventure
+    // island): its card says which of its stages you are on.
+    this.shared = msg.shared === true;
     this.code = msg.code;
     this.token = msg.token;
     this.settings = msg.settings;
@@ -1170,7 +1173,8 @@ export class Game extends EventTarget {
         const kind = c.kind === 'castle' ? 'castle' : 'camp';
         camps.set(c.id, { id: c.id, kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true, progress: Number(c.progress) || 0, friends: 0, guarded: false, flag: this.renderer.addFlag(c.id, kind) });
       }
-      this.adventure = { camps, won: a.won === true, king: null, shield: true };
+      // The public adventure island's stage, 1 on any other adventure island.
+      this.adventure = { camps, won: a.won === true, stage: Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1, king: null, shield: true };
       this.adventureNews(a);
     }
     this.emit('adventure');
