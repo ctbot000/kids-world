@@ -2398,13 +2398,17 @@ test('the ranking shows the players with a login to anyone, live: you marked onc
   await keeper.store.makeLogin(KeeperStore.deviceId('e5'.repeat(16)), 'dogs and stars', { name: 'Brave Fox', stats: { placed: 30 } }, { username: 'fox' });
   const page = await openPlayer(url, { name: 'Sunny Otter' });
   let friend = null;
-  const names = () => page.evaluate(() => [...document.querySelectorAll('#modal .rank-row .who')].map((b) => b.firstChild.textContent));
+  const names = () => page.evaluate(() => [...document.querySelectorAll('#modal .rank-row .who')].map((b) => [...b.childNodes].find((n) => n.nodeType === Node.TEXT_NODE).textContent));
+  // Their level by their name (⭐N: levels.js), Minji level 2 for her 120
+  // blocks and 2 stickers, Brave Fox level 1 for his 30.
+  const levels = () => page.$$eval('#modal .rank-row .tag-level', (els) => els.map((el) => el.textContent.trim()));
   try {
     // A guest sees it from the title screen, and is told how to be in it.
     await clickButton(page, 'Ranking');
     await clickButton(page, 'Builders', '#modal');
     await until(page, () => document.querySelectorAll('#modal .rank-row').length === 2);
     assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
+    assert.deepEqual(await levels(), ['⭐2', '⭐1'], 'each row says their level');
     assert.match(await page.$eval('#modal .ranking-foot', (el) => el.textContent), /Players with a login are in the ranking/);
     assert.equal(await page.$('#modal .ranking-foot input'), null);
     await page.keyboard.press('Escape');
@@ -2440,7 +2444,7 @@ test('the ranking shows the players with a login to anyone, live: you marked onc
     await reloadsAfter(friend, () => friend.keyboard.press('Enter'));
     await until(friend, () => window.kidsWorld.keeper.listed && !window.kidsWorld.keeper.syncing);
     await friend.evaluate(() => window.kidsWorld.profile.count('placed', 200));
-    await until(page, () => document.querySelector('#modal .rank-row .who')?.firstChild.textContent === 'Brave Fox');
+    await until(page, () => document.querySelector('#modal .rank-row .who')?.textContent.includes('Brave Fox'));
     assert.deepEqual(await names(), ['Brave Fox', 'Minji']);
     assert.equal(await page.$eval('#modal .rank-row .score', (el) => el.textContent), '230');
     assert.equal(await page.$eval('#modal .rank-row.you .place', (el) => el.textContent), '🥈');
@@ -2629,7 +2633,7 @@ test('a logged-in player sees the other players and who is playing now, and invi
   const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
   const password = 'rocket-apple7';
   await keeper.store.makeLogin(KeeperStore.deviceId('a1'.repeat(16)), password, { name: 'Sunny Otter', look: { animal: 'cat', shirt: 4 } }, { username: 'otter' });
-  await keeper.store.makeLogin(KeeperStore.deviceId('c3'.repeat(16)), password, { name: 'Minji', look: { animal: 'bunny', shirt: 2 } }, { username: 'minji' });
+  await keeper.store.makeLogin(KeeperStore.deviceId('c3'.repeat(16)), password, { name: 'Minji', look: { animal: 'bunny', shirt: 2 }, stats: { placed: 120 } }, { username: 'minji' });
   await keeper.store.makeLogin(KeeperStore.deviceId('e5'.repeat(16)), password, { name: 'Brave Fox' }, { username: 'fox' });
   const host = await openPlayer(url, { name: 'Guest One' });
   const friend = await openPlayer(url, { name: 'Guest Two' });
@@ -2646,15 +2650,16 @@ test('a logged-in player sees the other players and who is playing now, and invi
     await until(friend, () => document.querySelector('#modal')?.textContent.includes('Log in with 🔑'));
     await friend.keyboard.press('Escape');
 
-    // Both log in. Minji sees everyone else, Sunny Otter playing now.
+    // Both log in. Minji sees everyone else, Sunny Otter playing now, each
+    // with their level by their name (⭐1 is where everyone starts).
     await logIn(friend, 'minji');
     await logIn(host, 'otter');
     await eventually(() => keeper.onlinePlayers().size === 2);
     await clickButton(friend, 'Players');
     await until(friend, () => document.querySelectorAll('#modal .player-item').length === 2);
     assert.deepEqual(await players(friend), [
-      ['Sunny Otter', '🟢 Playing now', ''],
-      ['Brave Fox', 'Not playing right now', ''],
+      ['⭐1 Sunny Otter', '🟢 Playing now', ''],
+      ['⭐1 Brave Fox', 'Not playing right now', ''],
     ]);
     assert.equal(await friend.$eval('#modal .ranking-foot input', (el) => el.checked), true);
     await friend.keyboard.press('Escape');
@@ -2668,15 +2673,15 @@ test('a logged-in player sees the other players and who is playing now, and invi
     await clickButton(host, 'Invite a player', '#modal');
     await until(host, () => document.querySelectorAll('#modal .player-item').length === 2);
     assert.deepEqual(await players(host), [
-      ['Minji', '🟢 Playing now', '💌 Invite'],
-      ['Brave Fox', 'Not playing right now', ''],
+      ['⭐2 Minji', '🟢 Playing now', '💌 Invite'],
+      ['⭐1 Brave Fox', 'Not playing right now', ''],
     ]);
     await clickButton(host, '💌 Invite', '#modal');
     await until(host, () => document.querySelector('#modal .player-item button')?.textContent === '✅ Invited');
 
     // Minji is asked, by name and island, and goes: no passcode asked for.
     await until(friend, () => document.querySelector('#invitations .invitation'));
-    assert.equal(await friend.$eval('#invitations .invitation .words', (el) => el.textContent), 'Sunny Otter invites you to 🍭 Candy Cove!');
+    assert.equal(await friend.$eval('#invitations .invitation .words', (el) => el.textContent), '⭐1 Sunny Otter invites you to 🍭 Candy Cove!');
     await clickButton(friend, 'Let’s go!', '#invitations');
     await inGame(friend);
     assert.equal(await friend.evaluate(() => window.kidsWorld.game.world.name), 'Candy Cove');
@@ -2688,7 +2693,7 @@ test('a logged-in player sees the other players and who is playing now, and invi
     await until(friend, () => document.querySelector('#modal .ranking-foot input'));
     await clickSwitch(friend, '#modal .ranking-foot input');
     await until(friend, () => document.querySelector('#modal .ranking-foot')?.textContent.includes('You are not on the list'));
-    await until(host, () => [...document.querySelectorAll('#modal .player-item b')].map((b) => b.textContent).join() === 'Brave Fox');
+    await until(host, () => [...document.querySelectorAll('#modal .player-item b')].map((b) => b.textContent).join() === '⭐1 Brave Fox');
     assert.deepEqual(pageErrors, []);
   } finally {
     await host.browserContext().close();

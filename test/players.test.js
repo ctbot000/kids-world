@@ -94,7 +94,7 @@ test('a logged-in page sees the other players, who is playing now, and can leave
   const { store, keeper } = await keeperWith();
   const sister = KeeperStore.deviceId(SISTER);
   const laptop = KeeperStore.deviceId(LAPTOP);
-  await store.makeLogin(sister, PASSWORD, { name: 'Minji', look: { animal: 'bunny', shirt: 2 } }, { username: 'minji kim' });
+  await store.makeLogin(sister, PASSWORD, { name: 'Minji', look: { animal: 'bunny', shirt: 2 }, stats: { placed: 120 }, stickers: { 'first-block': 5 } }, { username: 'minji kim' });
   await store.makeLogin(laptop, PASSWORD, { name: 'Brave Fox', look: { animal: 'fox' } }, { username: 'fox fan' });
   // A guest with a profile but no login is never on it.
   await store.keepProfileIn(KeeperStore.deviceId(PHONE), { name: 'Shy Owl' });
@@ -110,12 +110,12 @@ test('a logged-in page sees the other players, who is playing now, and can leave
   assert.equal(list.t, 'players');
   assert.equal(list.shown, true);
   assert.deepEqual(
-    list.players.map((p) => [p.name, p.look.animal, p.online]),
+    list.players.map((p) => [p.name, p.look.animal, p.look.level, p.online]),
     [
-      ['Brave Fox', 'fox', false],
-      ['Minji', 'bunny', false],
+      ['Brave Fox', 'fox', 1, false],
+      ['Minji', 'bunny', 2, false],
     ],
-    'everyone else with a login, never yourself',
+    'everyone else with a login, never yourself, each with their level in their look',
   );
   assert.equal(list.players.find((p) => p.name === 'Minji').id, friendId(sister));
   const text = JSON.stringify(list);
@@ -183,7 +183,9 @@ test('an invitation goes to every page of the player that is playing now, from w
   reply = await tablet.say({ t: 'invite', to, island: { ...ISLAND, pass: 'f0'.repeat(16) } });
   assert.deepEqual(reply, { t: 'kept', what: 'invite', to });
   for (const p of [phone, laptop]) {
-    assert.deepEqual(p.news(), [{ t: 'invite-news', from: { id: friendId(KeeperStore.deviceId(TABLET)), name: 'Sunny Otter', look: (await store.list(KeeperStore.deviceId(TABLET))).profile.look }, island: { ...ISLAND, pass: 'f0'.repeat(16) } }]);
+    // Sunny Otter has done nothing yet: level 1 comes in the look anyway, as
+    // friends see it (see shownProfile in server/keeper.js).
+    assert.deepEqual(p.news(), [{ t: 'invite-news', from: { id: friendId(KeeperStore.deviceId(TABLET)), name: 'Sunny Otter', look: { ...(await store.list(KeeperStore.deviceId(TABLET))).profile.look, level: 1 } }, island: { ...ISLAND, pass: 'f0'.repeat(16) } }]);
   }
   assert.deepEqual(hidden.news(), []);
   assert.ok(keeper.recent.some((e) => e.what === 'invite' && e.player === 'Sunny Otter' && e.to === 'Minji' && e.island === 'Candy Cove'));

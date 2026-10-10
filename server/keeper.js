@@ -62,8 +62,10 @@ import {
   toBase64Url,
 } from '../public/js/shared/keeper.js';
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
+import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { rankBoards } from '../public/js/shared/ranking.js';
+import { lookWithGear } from '../public/js/shared/shop.js';
 import { World } from '../public/js/shared/world.js';
 
 export const DEFAULT_DATA_DIR = join(homedir(), '.kids-world');
@@ -277,6 +279,12 @@ const HOUR_TRIES = 200;
 const HOUR_MS = 3600000;
 // The devices one login can be on at once; the one unused longest is logged out.
 const MAX_SESSIONS = 20;
+
+// A kept profile with the look as friends see the player (see shownLook in
+// profile.js): the toy weapon worn, and the level worked out from what they
+// have done (levels.js), which travels in looks (cleanLook) — onto the name
+// tag over them and into the ranking rows, the players list, and invitations.
+const shownProfile = (profile) => ({ ...profile, look: lookWithGear(profile.look, profile.gear, progressOf(profile.stats, profile.stickers).level) });
 
 // Says 'change' whenever a player's profile or login changes, or something
 // is deleted: what the ranking is made of (see Keeper.rankingChanged).
@@ -731,12 +739,13 @@ export class KeeperStore extends EventEmitter {
 
   // Every player with a login, their profile, and whether they are in the
   // ranking and on the players list: [{ id, profile, ranked, findable }].
-  // Read once for everyone watching the ranking.
+  // The look comes with the player's level in it (shownProfile), for every
+  // list this serves. Read once for everyone watching the ranking.
   async players() {
     const players = [];
     for (const { device } of await this.logins()) {
       const record = await readJson(this.path(device, 'device.json'));
-      players.push({ id: device, profile: record?.profile ? keptProfile(record.profile) : null, ranked: record?.ranked !== false, findable: record?.findable !== false });
+      players.push({ id: device, profile: record?.profile ? shownProfile(keptProfile(record.profile)) : null, ranked: record?.ranked !== false, findable: record?.findable !== false });
     }
     return players;
   }

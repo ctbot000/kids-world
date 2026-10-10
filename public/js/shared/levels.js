@@ -3,8 +3,8 @@
 // already counts (stickers.js STAT_KEYS) and the stickers you have, never
 // kept by itself, so it comes along to every device with a login the way
 // those do, and the keeper can rank it (ranking.js). Friends see your level
-// on your name tag: it travels in your look (look.level, see words.js
-// cleanLook).
+// on your name tag and in the lists of players: it travels in your look
+// (look.level, see words.js cleanLook).
 import { STICKERS } from './stickers.js';
 
 // XP for each one of a thing counted. cap: only this many of it earn XP,

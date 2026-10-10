@@ -166,6 +166,12 @@ const INVITE_AGAIN_MS = 15000;
 
 const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
+// Another player's level by their name (levels.js), wherever a list says who
+// someone is — the tag over them in the world, the ranking, the players, an
+// invitation, the friends on an island: it travels in their look (look.level).
+// ⭐N, with the level said aloud on a hover.
+const levelTag = (look) => (look?.level ? h('span', { class: 'tag-level', title: `Level ${look.level}` }, `⭐${look.level} `) : null);
+
 export class UI {
   constructor({ profile, sound, atlas, input }) {
     this.profile = profile;
@@ -1304,7 +1310,7 @@ export class UI {
             { class: `rank-row${e.you ? ' you' : ''}` },
             h('span', { class: 'place', 'aria-label': `Number ${e.rank}` }, MEDALS[e.rank] ?? String(e.rank)),
             h('span', { class: 'avatar', style: `--c:${shirtColor(e.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(e.look)),
-            h('b', { class: 'who', lang: langOf(e.name) || undefined }, e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
+            h('b', { class: 'who', lang: langOf(e.name) || undefined }, levelTag(e.look), e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
             h('span', { class: `score${changed ? ' bump' : ''}` }, Number(e.score).toLocaleString()),
           );
         // Made once, so a tap on one is never lost to the keeper's news redrawing them.
@@ -1338,7 +1344,7 @@ export class UI {
             return;
           }
           const top = Array.isArray(shown.top) ? shown.top : [];
-          const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.look, you: true } : null;
+          const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.shownLook, you: true } : null;
           const before = drawn.key === current ? drawn.scores : null;
           const changed = (e) => Boolean(before) && before.get(e.name) !== e.score;
           drawn = { key: current, scores: new Map([...top, ...(you ? [you] : [])].map((e) => [e.name, e.score])) };
@@ -1459,7 +1465,7 @@ export class UI {
             'div',
             { class: `island-item player-item${p.online ? ' online' : ''}` },
             h('span', { class: 'avatar', style: `--c:${shirtColor(p.look?.shirt)}`, 'aria-hidden': 'true' }, lookIcon(p.look)),
-            h('div', { class: 'info' }, h('b', { lang: langOf(p.name) || undefined }, p.name), h('span', { class: 'muted' }, p.online ? '🟢 Playing now' : 'Not playing right now')),
+            h('div', { class: 'info' }, h('b', { lang: langOf(p.name) || undefined }, levelTag(p.look), p.name), h('span', { class: 'muted' }, p.online ? '🟢 Playing now' : 'Not playing right now')),
             button,
           );
         };
@@ -1536,7 +1542,7 @@ export class UI {
       h(
         'p',
         { class: 'words' },
-        h('b', { lang: langOf(from.name) || undefined }, from.name),
+        h('b', { lang: langOf(from.name) || undefined }, levelTag(from.look), from.name),
         ' invites you to ',
         h('b', { lang: langOf(island.name) || undefined }, `${THEME_ICON[island.theme] ?? '🏝️'} ${island.name}`),
         '!',
@@ -2948,7 +2954,7 @@ export class UI {
               'div',
               { class: 'player-row' },
               h('span', { class: 'friend', style: `--c:${shirtColor(q.look.shirt)}` }, lookIcon(q.look)),
-              h('span', { class: 'who' }, q.name, q.id === g.host ? ' 🏝️' : ''),
+              h('span', { class: 'who' }, levelTag(q.look), q.name, q.id === g.host ? ' 🏝️' : ''),
               isHost
                 ? h(
                     'button',
@@ -3515,7 +3521,7 @@ export class UI {
         tag.style.setProperty('--c', shirtColor(p.look.shirt));
         tag.replaceChildren(
           p.bubble ? h('div', { class: `bubble${p.bubble.sticker ? ' sticker' : ''}`, lang: langOf(p.bubble.text) || undefined }, p.bubble.text) : '',
-          showName ? h('div', { class: 'name' }, p.look.level ? h('span', { class: 'tag-level', title: `Level ${p.look.level}` }, `⭐${p.look.level}`) : '', p.name, p.id === g.host ? ' 🏝️' : '') : '',
+          showName ? h('div', { class: 'name' }, levelTag(p.look), p.name, p.id === g.host ? ' 🏝️' : '') : '',
         );
       }
       tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;

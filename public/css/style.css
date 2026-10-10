@@ -2051,6 +2051,9 @@ body.touch.playing #joystick {
   font-size: 1.4rem;
 }
 
+/* Another player's level before their name: on the tag over them in the
+   world, and in the ranking rows, the players list, invitations, and the
+   friends on an island (ui.js levelTag). */
 .tag-level {
   margin-right: 6px;
   font-size: 0.75rem;
