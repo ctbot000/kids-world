@@ -137,6 +137,15 @@ export class FriendControl {
     return visit && !visit.ended ? visit.sayForAdmin(text) : null;
   }
 
+  // Something said to it on an island it is on (its own too), the way a
+  // player's words reach it, for the admin page to exercise it: '' when it
+  // will answer, or why not; null when it is not on that island.
+  chat(code, text) {
+    const b = this.buddy;
+    const visit = b?.visits.get(code) ?? (b?.home?.island.code === code ? b.home : null);
+    return visit && !visit.ended ? visit.chatForAdmin(text) : null;
+  }
+
   // Whether the model is there, checked now rather than in a minute.
   async check() {
     await this.buddy?.check();

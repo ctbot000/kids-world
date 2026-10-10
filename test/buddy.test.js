@@ -5,7 +5,8 @@
 // one; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
-// its own words, and sends it home from one. It keeps an island of its own,
+// its own words, talks with it there as a player would (the model's answer
+// said on the island), and sends it home from one. It keeps an island of its own,
 // where it builds what the model picks a layer at a time, kept over a
 // restart, and the admin page sees what it is doing there. The keeper lists it as a player to invite and
 // passes invitations on to it. The model here is a stand-in; visiting a
@@ -292,7 +293,7 @@ test('the admin page saves its settings and applies them, shows where it is and 
   const store = await new KeeperStore(join(dir, 'keep')).open();
   const { room, rooms, island } = server();
   const minji = child(room);
-  const llm = { ...model(() => ({ say: 'Hi Minji!', action: 'none', stamp: 'none' })), url: 'http://127.0.0.1:11434', models: async () => ['gemma3:4b', 'llama3.2:3b'] };
+  const llm = { ...model((prompt) => (prompt.includes('Admin: hi from the admin page') ? { say: 'Hello from your AI friend!', action: 'wave', stamp: 'none' } : { say: 'Hi Minji!', action: 'none', stamp: 'none' })), url: 'http://127.0.0.1:11434', models: async () => ['gemma3:4b', 'llama3.2:3b'] };
   const control = new FriendControl({ dir: store.dir, llm, env: {}, make: (s) => friend({ llm, rooms, name: s.name, wander: s.wander, maxVisits: s.maxVisits }) });
   after(() => control.stop());
   await control.start();
@@ -358,12 +359,48 @@ test('the admin page saves its settings and applies them, shows where it is and 
   minji.say({ t: 'say', text: 'yay cookies' });
   await eventually(() => llm.asked.length > asked);
   assert.match(llm.asked.at(-1), /Pip 🤖 \(you\): 간식 시간이야! 🍪\nMinji: yay cookies/);
+  await eventually(() => minji.of('say').filter((m) => m.pid === pid && m.text === 'Hi Minji!').length === 2);
+
+  // Talked with from the page, as a player would be: the admin's line reaches
+  // only it and the page, the model is asked about it, and its answer is said
+  // on the island and shown as its own.
+  const chat = (code, text) => fetch(`${base}/visits/${code}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kids-World-Admin': '1' }, body: JSON.stringify({ text }) });
+  assert.equal((await chat(island.code, '   ')).status, 400);
+  assert.equal((await chat(island.code, 'x'.repeat(121))).status, 400);
+  assert.equal((await chat('999999', 'hello')).status, 404);
+  const asks = llm.asked.length;
+  assert.equal((await chat(island.code, 'hi from the admin page')).status, 200);
+  await eventually(() => minji.of('say').some((m) => m.pid === pid && m.text === 'Hello from your AI friend!'));
+  assert.ok(!minji.of('say').some((m) => m.text === 'hi from the admin page'), 'the admin’s line is not said on the island');
+  assert.match(llm.asked.at(-1), /Admin: hi from the admin page\n\nAdmin just said: "hi from the admin page"\nAnswer Admin\./);
+  assert.match(llm.asked.at(-1), /"Admin" is not a player on the island/);
+  state = await (await fetch(base)).json();
+  assert.deepEqual(state.visits[0].chat.at(-2), { name: 'Admin', text: 'hi from the admin page', mine: false, admin: true });
+  assert.deepEqual(state.visits[0].chat.at(-1), { name: DEFAULT_NAME, text: 'Hello from your AI friend!', mine: true });
+  const { calls: askedNow } = await (await fetch(`${base}/llm`)).json();
+  assert.equal(askedNow[0].about, 'what to say on “Maple Fields”, asked from the admin page');
+
+  // Something personal said to it from the page: the model is told not to repeat it.
+  assert.equal((await chat(island.code, 'my school is Hanbit')).status, 200);
+  await eventually(() => llm.asked.length > asks + 1);
+  assert.match(llm.asked.at(-1), /Admin: my school is Hanbit/);
+  assert.match(llm.asked.at(-1), /That was something personal\. Do not repeat it/);
 
   // Sent home from the island, and not back there by itself for a while.
   const home = (code) => fetch(`${base}/visits/${code}/home`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } });
   assert.equal((await home('999999')).status, 404);
   assert.equal((await home(island.code)).status, 200);
   await eventually(() => !buddyIn(room) && control.buddy.visits.size === 0);
+  assert.ok(control.buddy.avoid.get(island.code) > Date.now() + 3600000);
+
+  // A goodbye said to it from the page, as a player would say it: it answers
+  // bye and goes home, and stays away from the island by itself for a while.
+  assert.equal(control.buddy.invited(island, 'Minji'), '');
+  const back = control.buddy.visits.get(island.code);
+  await eventually(() => back?.welcomed);
+  assert.equal((await chat(island.code, 'bye Pip')).status, 200);
+  await eventually(() => back.ended && control.buddy.visits.size === 0);
+  assert.match(llm.asked.at(-1), /saying goodbye to you/);
   assert.ok(control.buddy.avoid.get(island.code) > Date.now() + 3600000);
 
   // Off, and on again as it was saved: by a new control, as after a restart.

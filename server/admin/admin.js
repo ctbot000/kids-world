@@ -5,10 +5,12 @@
 // taken out of the ranking, and where each was last seen from; and the AI
 // friend: its settings, what it is doing now, its own island and what it
 // builds there, the islands it is on and what is said there, how its model
-// answers and what it did lately, with a line for it to say on an island it
-// is on, as its own words, and its model log: what it asked the model, word
-// for word, and what came back. It reads /admin/api/state and
-// /admin/api/friend every few seconds, and /admin/api/friend/llm too while
+// answers and what it did lately, with a line to talk with it on an island
+// it is on, which its model answers, a line for it to say there, as its own
+// words, and its model log: what it asked the model, word for word, and what
+// came back. It reads /admin/api/state and /admin/api/friend every few
+// seconds — every moment, for a while, after something is said to it, so its
+// answer shows as it comes — and /admin/api/friend/llm too while
 // the model log is open.
 import { buildAtlas } from '/js/render/atlas.js';
 import { shirtColor } from '/js/render/avatar.js';
@@ -22,6 +24,10 @@ import { THEMES } from '/js/shared/worldgen.js';
 
 const REFRESH_MS = 5000;
 const REDRAW_MS = 60000;
+// Once something has been said to the AI friend, its state is read this
+// often, until this long has passed without another line.
+const ANSWER_MS = 1200;
+const ANSWER_WATCH_MS = 20000;
 const $ = (id) => document.getElementById(id);
 
 function h(tag, props = {}, ...children) {
@@ -471,8 +477,25 @@ function visitCard(code) {
   const info = h('div');
   const chat = h('ol', { class: 'chat' });
   let said = '';
+  const talk = h('input', { type: 'text', autocomplete: 'off', maxlength: CHAT_MAX, placeholder: 'Say something to it' });
   const input = h('input', { type: 'text', autocomplete: 'off', maxlength: CHAT_MAX, placeholder: 'Something for it to say' });
   const note = h('span', { class: 'muted', 'aria-live': 'polite' });
+  // Said to it, as a player's words are: it answers through its model, and
+  // the answer is said on the island (and shown here) as its own.
+  const converse = async (e) => {
+    e.preventDefault();
+    const text = talk.value.trim();
+    if (!text) return;
+    const res = await api(`friend/visits/${code}/chat`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!res.ok) {
+      note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
+      return;
+    }
+    talk.value = '';
+    note.textContent = '';
+    refreshFriend();
+    watchFriend();
+  };
   const send = async (e) => {
     e.preventDefault();
     const text = input.value.trim();
@@ -490,15 +513,30 @@ function visitCard(code) {
   const doing = h('div', { class: 'doing', 'aria-live': 'polite' });
   const builds = h('div');
   const actions = h('div', { class: 'actions' }, h('button', { class: 'danger', type: 'button', onclick: home }, 'Send home'));
-  const el = h('article', { class: 'visit' }, title, info, doing, builds, chat, h('form', { class: 'say', onsubmit: send }, input, h('button', { type: 'submit' }, 'Say')), note, actions);
+  const el = h(
+    'article',
+    { class: 'visit' },
+    title,
+    info,
+    doing,
+    builds,
+    chat,
+    h('form', { class: 'say talk', onsubmit: converse }, talk, h('button', { type: 'submit' }, 'Chat')),
+    h('form', { class: 'say', onsubmit: send }, input, h('button', { type: 'submit' }, 'Say')),
+    note,
+    actions,
+  );
   const update = (next) => {
     v = next;
+    const name = friendForm.state.settings.name;
     title.textContent = v.home ? `🏠 ${v.island} · its own island` : `🏝️ ${v.island}`;
     el.classList.toggle('home', Boolean(v.home));
     actions.hidden = Boolean(v.home);
     doing.replaceChildren(h('b', {}, '🔧 Now: '), v.doing, v.thinking ? ' · 💭 thinking what to say' : '', v.planning ? ' · 💭 thinking what to build' : '');
     builds.replaceChildren(...(v.home ? buildList(v) : []));
-    input.setAttribute('aria-label', `Something for it to say on ${v.island}, as its own words`);
+    talk.placeholder = `Say something to ${name}`;
+    talk.setAttribute('aria-label', `Talk with ${name} on ${v.island}: what is said to it, it answers`);
+    input.setAttribute('aria-label', `Something for ${name} to say on ${v.island}, as its own words`);
     chat.setAttribute('aria-label', `What was said on ${v.island}`);
     const people = v.players.length ? v.players.join(', ') : 'nobody';
     info.replaceChildren(
@@ -777,6 +815,24 @@ function render(state) {
       ? state.devices.map((d) => deviceCard(d, state.devices.filter((p) => p.login)))
       : [h('p', { class: 'empty' }, 'Nothing kept yet. When someone plays while the keeper is online, their islands show up here.')]),
   );
+}
+
+// After something is said to the AI friend, its answer comes in a few
+// seconds: its state is read closely for a while, each new line starting the
+// watch again, instead of waiting for the slow refresh the rest of the page
+// uses. One watcher; a line while it runs just makes it last longer.
+let watchUntil = 0;
+let watching = false;
+function watchFriend() {
+  watchUntil = Date.now() + ANSWER_WATCH_MS;
+  if (watching) return;
+  watching = true;
+  const tick = async () => {
+    await refreshFriend();
+    if (Date.now() < watchUntil) setTimeout(tick, ANSWER_MS);
+    else watching = false;
+  };
+  setTimeout(tick, ANSWER_MS);
 }
 
 let timer = 0;

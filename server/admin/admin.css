@@ -468,6 +468,11 @@ button:disabled {
   color: var(--ink);
 }
 
+/* The line said to the friend, rather than for it to say, stands out a little. */
+.say.talk input {
+  border-color: var(--sky);
+}
+
 .chat .mine {
   color: var(--grass);
 }

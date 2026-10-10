@@ -30,7 +30,8 @@
 // KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME names it;
 // KIDS_WORLD_AI_WANDER=off keeps it to invitations. It keeps a short account
 // of what it did and how its model answers, for the admin page, which can
-// also have it say something on an island it is on, as its own words.
+// also have it say something on an island it is on, as its own words, and
+// talk with it there the way a player would, which its model answers.
 import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -54,6 +55,9 @@ import { friendId } from './keeper.js';
 export const DEFAULT_NAME = 'Pip 🤖';
 // A kid in headphones and a sky-blue T-shirt, with a baby dragon.
 export const DEFAULT_LOOK = { animal: 'kid', skin: 'golden', hair: 'spiky', hairColor: 'blue', shirt: 9, hat: 'headphones', pet: { kind: 'dragon', coat: 'sky', name: 'Sparky' } };
+// What the admin page appears as, talking with it on an island it is on:
+// its lines reach only it and the page, and nobody on the island says them.
+export const ADMIN_NAME = 'Admin';
 
 // As the renderer's poses (render/avatar.js), which a page sends as s[4].
 const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7 };
@@ -1245,7 +1249,7 @@ export class Visit extends EventEmitter {
       { role: 'system', content: systemPrompt(this.name) },
       { role: 'user', content: this.situation(ask) },
     ];
-    return this.buddy.ask(messages, ANSWER_SCHEMA, `what to say on “${this.world?.name ?? this.island.name}”${ask.then === 'leave' ? ', leaving' : ''}`);
+    return this.buddy.ask(messages, ANSWER_SCHEMA, `what to say on “${this.world?.name ?? this.island.name}”${ask.admin ? ', asked from the admin page' : ''}${ask.then === 'leave' ? ', leaving' : ''}`);
   }
 
   // What the model is told about the island, who is there and what was said.
@@ -1301,6 +1305,7 @@ export class Visit extends EventEmitter {
     else lines.push(`Say something to ${to?.name ?? 'your friends'}.`);
     if (ask.personal) lines.push('That was something personal. Do not repeat it: kindly tell them to keep things like that secret online.');
     if (ask.bye) lines.push('They are saying goodbye to you: say a friendly bye, and use action leave.');
+    if (ask.admin) lines.push('"Admin" is not a player on the island: they are the person who looks after this server, trying you out from its page. Be yourself with them, as friendly as ever.');
     lines.push(`Write "say" in ${languageOf(theirs?.text ?? `${w.name} ${this.others().map((p) => p.name).join(' ')}`)}.`);
     return lines.join('\n');
   }
@@ -1390,6 +1395,27 @@ export class Visit extends EventEmitter {
     if (this.forAdmin.length > CHAT_KEEP) this.forAdmin.shift();
     this.link.send({ t: 'say', text });
     this.buddy.log(`AI friend: said something from the admin page on "${this.island.name}".`);
+    return '';
+  }
+
+  // A line from the admin page, said to it the way a player's words reach it,
+  // to exercise what it does: the model is asked, and its answer is said on
+  // the island as its own (a goodbye by the admin sends it home, as by a
+  // player). The admin's line itself stays between it and the page. '' when
+  // it will answer, or why not.
+  chatForAdmin(raw) {
+    const text = cleanChat(raw);
+    if (!text) return `Something to say, up to ${CHAT_MAX} characters.`;
+    if (this.ended || !this.welcomed) return `${this.name} is not on that island yet.`;
+    const now = this.now();
+    this.quietAt = now + between(QUIET_MS, this.random);
+    this.leaveAt = Math.min(this.arrivedAt + MOST_STAY_MS, Math.max(this.leaveAt, now + STAY_MORE_MS));
+    this.chat.push({ name: ADMIN_NAME, text, mine: false, admin: true });
+    if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
+    // A moment for the line to be finished, as with a player, then the model.
+    const bye = !this.home && isGoodbye(text);
+    clearTimeout(this.listenTimer);
+    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: 0, admin: true, personal: isPersonal(text), ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
     return '';
   }
 
