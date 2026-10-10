@@ -7,7 +7,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { PET_COATS } from '../shared/words.js';
 import { CritterModel, eyesOn, wingPair } from './critter-models.js';
-import { blobShadow, capsule, cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
+import { bakeCached, blobShadow, capsule, cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
 const PINK = '#ff9fb8';
@@ -56,6 +56,8 @@ function fourLegs(pivot, { x, front, back, top, len, r, color, paw }) {
     leg.userData = { side, front: z === front };
     leg.add(mesh(cylinder(r * 0.9, r, len, 10), toon(color), 0, -len / 2, 0));
     leg.add(mesh(sphere(1, 10, 8), toon(paw), 0, -len + r * 0.5, r * 0.4, r * 1.25, r * 0.85, r * 1.5));
+    // Toes showing at the front of the paw.
+    for (const t of [-1, 0, 1]) leg.add(mesh(sphere(1, 8, 6), toon(paw), t * r * 0.7, -len + r * 0.3, r * 1.1, r * 0.34, r * 0.26, r * 0.4));
     pivot.add(leg);
     return leg;
   });
@@ -132,10 +134,12 @@ function puppy(coat) {
     e.rotation.z = side * 0.3;
     e.userData.side = side;
     e.add(mesh(sphere(), toon(p.dark), side * 0.012, -0.06, 0, 0.045, 0.085, 0.024));
+    e.add(mesh(sphere(1, 8, 6), toon(p.light), side * 0.014, -0.062, 0.012, 0.028, 0.062, 0.014));
     head.add(e);
     return e;
   });
   p.tail.add(mesh(capsule(0.022, 0.09), toon(p.fur), 0, 0.06, -0.012).rotateX(-0.25));
+  p.tail.add(mesh(sphere(1, 10, 8), toon(p.light), 0, 0.115, -0.03, 0.026));
   return { ...p, ears, earRest: 0.3, earFlap: 'floppy', height: 0.52, pick: 0.3 };
 }
 
@@ -256,6 +260,11 @@ function dragon(coat) {
   blush(head, H[2], 0.08, -0.03);
   for (const side of [-1, 1]) head.add(mesh(cone(0.024, 0.075, 8), toon('#fff3d6'), side * 0.055, 0.1, -0.03).rotateX(-0.5).rotateZ(-side * 0.25));
   for (let i = 0; i < 4; i++) pivot.add(mesh(cone(0.022, 0.05, 6), toon(spike), 0, p.R[1] * 0.98 - i * 0.008, m.half + 0.11 - i * 0.075).rotateX(-0.35));
+  // Plates across its pale belly.
+  for (let i = 0; i < 4; i++) {
+    const z = m.half + 0.1 - i * 0.07;
+    pivot.add(mesh(torus(0.055 - i * 0.006, 0.012, Math.PI), toon(shade('#fff0b8', -0.12)), 0, -p.R[1] * 0.28, z).rotateX(Math.PI / 2 - 0.3));
+  }
   // Wings at its shoulders, which flap in the air and fold away on the ground.
   const wings = wingPair(pivot, { x: 0.08, y: 0.075, z: m.half + 0.06, length: 0.24, width: 0.11, thick: 0.012, color: shade(fur, 0.35), tip: spike });
   // A long tail, in three bends that sway, with a spade at the end.
@@ -317,6 +326,7 @@ function duckling(coat) {
     w.position.set(side * 0.095, 0.02, -0.01);
     w.userData.wing = side;
     w.add(mesh(sphere(), toon(shade(fur, -0.08)), side * 0.01, -0.01, 0, 0.03, 0.06, 0.075));
+    w.add(mesh(sphere(1, 10, 8), toon(shade(fur, -0.16)), side * 0.012, -0.035, -0.045, 0.024, 0.035, 0.045));
     pivot.add(w);
     return w;
   });
@@ -342,22 +352,35 @@ function parrot(coat) {
   head.position.set(0, 0.13, 0.015);
   pivot.add(head);
   head.add(mesh(sphere(1, 18, 14), toon(fur), 0, 0, 0, 0.08));
-  // A pale face round the eyes, and a big hooked beak.
+  // A pale face round the eyes, and a big hooked beak over a little cere.
   for (const side of [-1, 1]) head.add(mesh(sphere(), toon(k.face), side * 0.04, 0.005, 0.05, 0.035, 0.035, 0.022));
   const eyes = eyesOn(head, 0.08, 0.08, 0.08, 0.04, 0.012, 0.016);
-  head.add(mesh(sphere(), toon('#3a3238'), 0, -0.012, 0.072, 0.032, 0.035, 0.035));
-  head.add(mesh(cone(0.026, 0.06, 10), toon('#3a3238'), 0, -0.038, 0.09).rotateX(Math.PI * 0.85));
+  const beak = toon('#e8a33d');
+  head.add(mesh(sphere(1, 12, 10), toon('#f4f0e8'), 0, -0.004, 0.068, 0.024, 0.018, 0.018));
+  const hook = mesh(cone(0.03, 0.06, 10), beak, 0, -0.03, 0.078);
+  hook.rotation.x = Math.PI * 0.92;
+  head.add(hook);
+  const point = mesh(cone(0.018, 0.03, 8), toon('#c77f28'), 0, -0.052, 0.072);
+  point.rotation.x = Math.PI * 0.55;
+  head.add(point);
   blush(head, 0.08, 0.05, -0.02);
   const band = collar(pivot, { y: 0.085, z: 0.012, r: 0.05, lean: 0.1, tag: false });
   const tail = new THREE.Group();
   tail.position.set(0, -0.09, -0.04);
   pivot.add(tail);
-  for (const side of [-1, 0, 1]) tail.add(mesh(sphere(), toon(side ? k.tail : k.wing), side * 0.022, -0.1, -0.02, 0.022, 0.12, 0.009).rotateZ(side * 0.15));
+  // Long tail feathers stepped down its back.
+  for (const side of [-1, 0, 1]) tail.add(mesh(capsule(0.011, 0.13, 4, 8), toon(side ? k.tail : k.wing), side * 0.02, -0.09, -0.015).rotateX(-0.5).rotateZ(side * 0.18));
   const folded = [-1, 1].map((side) => {
     const f = new THREE.Group();
-    f.position.set(side * 0.075, 0.03, -0.02);
-    f.add(mesh(sphere(), toon(k.wing), side * 0.008, -0.04, 0, 0.026, 0.1, 0.06));
-    if (k.tip) f.add(mesh(sphere(), toon(k.tip), side * 0.01, -0.12, -0.01, 0.02, 0.04, 0.04));
+    f.position.set(side * 0.08, 0.035, -0.02);
+    f.rotation.z = side * 0.12;
+    f.add(mesh(sphere(), toon(k.wing), side * 0.008, -0.045, 0, 0.03, 0.105, 0.062));
+    // Layered primaries reaching back past its body.
+    const feathers = [];
+    for (let i = 0; i < 3; i++) {
+      feathers.push({ g: capsule(0.009, 0.08 - i * 0.012, 4, 8), m: new THREE.Matrix4().makeRotationZ(side * (0.25 + i * 0.15)).setPosition(side * 0.012, -0.08 - i * 0.012, -0.01 - i * 0.012) });
+    }
+    f.add(mesh(bakeCached(`parrot-primaries|${side}|${k.wing}`, feathers), toon(k.tip ?? k.tail)));
     pivot.add(f);
     return f;
   });

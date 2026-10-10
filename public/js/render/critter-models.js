@@ -873,6 +873,8 @@ function pony(id, kind = 'pony') {
     pivot.add(mesh(sphere(), toon(k.mane), 0, 0.03, -0.53, 0.17, 0.17, 0.1));
   }
   const legs = fourLegs(pivot, { x: 0.17, front: 0.36, back: -0.36, hip: -0.18, len: 0.64, r: 0.075, color: k.coat, hoof: k.hoof });
+  // Feathered fetlocks above each hoof.
+  for (const leg of legs) leg.add(mesh(sphere(1, 10, 8), toon(k.coat), 0, -0.56, 0.01, 0.075, 0.07, 0.075));
 
   const neck = new THREE.Group();
   neck.position.set(0, 0.14, 0.42);
@@ -881,17 +883,31 @@ function pony(id, kind = 'pony') {
   n.rotation.x = 0.6;
   neck.add(n);
   n.add(mesh(capsule(0.13, 0.28), coat, 0, 0.2, 0));
-  // The mane, down the back of the neck; a reindeer's ruff, under it.
-  for (let i = 0; i < 6; i++) {
-    const t = 0.04 + i * 0.07;
-    if (deer) n.add(mesh(sphere(1, 10, 8), mane(i), 0, t - 0.04, 0.1, 0.1, 0.09, 0.07));
-    else n.add(mesh(sphere(1, 10, 8), mane(i), 0, t, -0.1, 0.055, 0.075, 0.07));
+  // The mane, down the back of the neck: rows of strands, baked per colour;
+  // a reindeer's ruff, under it, stays in puffs.
+  if (deer) {
+    for (let i = 0; i < 6; i++) {
+      const t = 0.04 + i * 0.07;
+      n.add(mesh(sphere(1, 10, 8), mane(i), 0, t - 0.04, 0.1, 0.1, 0.09, 0.07));
+    }
+  } else {
+    for (let i = 0; i < 6; i++) {
+      const t = 0.04 + i * 0.07;
+      const color = unicorn ? RAINBOW[i % RAINBOW.length] : k.mane;
+      const strands = [];
+      for (const [dx, roll, len] of [[-0.045, 0.25, 0.12], [0, 0, 0.14], [0.045, -0.25, 0.12]]) {
+        strands.push({ g: capsule(0.016, len, 4, 8), m: new THREE.Matrix4().makeRotationZ(roll).setPosition(dx, t + len * 0.35, -0.1) });
+      }
+      n.add(mesh(bakeCached(`mane|${i}|${color}`, strands), toon(color)));
+    }
   }
   const head = new THREE.Group();
   head.position.set(0, 0.44, 0.02);
   head.rotation.x = -0.15;
   n.add(head);
   head.add(mesh(sphere(), coat, 0, 0, 0.05, 0.13, 0.145, 0.21));
+  // A blaze down the face, between the eyes.
+  if (!deer) patch(head, unicorn ? '#ffe9f4' : '#f3e9d8', [0.13, 0.145, 0.21], [0, 0.75, 1], 0.03, 0.09);
   head.add(mesh(sphere(), toon(k.nose), 0, -0.04, 0.22, 0.105, 0.095, 0.105));
   if (k.tip) head.add(mesh(sphere(), toon(k.tip, { emissive: k.tip === RED_NOSE ? 0.6 : 0 }), 0, -0.015, 0.315, 0.05, 0.04, 0.035));
   else for (const side of [-1, 1]) head.add(mesh(sphere(1, 8, 6), toon('#3a2a2a'), side * 0.045, -0.01, 0.32, 0.018, 0.024, 0.012));
@@ -940,7 +956,11 @@ function pony(id, kind = 'pony') {
   } else if (deer) {
     tail.add(mesh(sphere(1, 10, 8), toon('#fbf6ee'), 0, -0.02, -0.04, 0.07, 0.09, 0.06));
   } else {
-    tail.add(mesh(sphere(1, 10, 8), mane(0), 0, -0.22, -0.09, 0.075, 0.3, 0.08).rotateX(0.35));
+    // A tail of flowing strands with a tuft at the end.
+    for (const [dx, roll] of [[-0.03, 0.2], [0, 0], [0.03, -0.2]]) {
+      tail.add(mesh(capsule(0.02, 0.24, 4, 8), mane(0), dx, -0.2, -0.08).rotateX(0.35 + roll));
+    }
+    tail.add(mesh(sphere(1, 10, 8), mane(1), 0, -0.33, -0.11, 0.055, 0.07, 0.05));
   }
   const s = saddle(pivot, R[1], 0.3, 0.27);
   return {
@@ -1012,7 +1032,10 @@ function cow(id) {
     const ear = mesh(sphere(), white, side * 0.19, 0.08, -0.05, 0.08, 0.035, 0.05);
     ear.rotation.z = side * 0.3;
     head.add(ear);
+    head.add(mesh(sphere(1, 8, 6), toon('#f2c9c9'), side * 0.19, 0.08, -0.02, 0.05, 0.022, 0.03).rotateZ(side * 0.3));
   }
+  // A forelock over the eyes.
+  head.add(mesh(sphere(1, 10, 8), toon(dark), 0.05, 0.13, 0.08, 0.07, 0.035, 0.05));
   const eyes = sideEyes(head, 0.12, 0.06, 0.1, 0.03);
   // A bell on a red strap.
   neck.add(mesh(torus(0.16, 0.024), toon('#e8413c'), 0, 0.02, 0.06).rotateX(Math.PI / 2 - 0.9));
@@ -1021,7 +1044,8 @@ function cow(id) {
   tail.position.set(0, 0.16, -0.6);
   pivot.add(tail);
   tail.add(mesh(cylinder(0.015, 0.015, 0.4, 6), white, 0, -0.2, -0.02));
-  tail.add(mesh(sphere(1, 8, 6), toon(dark), 0, -0.42, -0.02, 0.05, 0.08, 0.05));
+  // A tassel at the end of the tail.
+  for (const dx of [-0.025, 0, 0.025]) tail.add(mesh(capsule(0.012, 0.09, 4, 6), toon(dark), dx, -0.44, -0.02));
   const s = saddle(pivot, R[1], 0.33, 0.28);
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.45, shadow: 0.6, pick: 0.75, center: 0.85, seen: 110, gait: { len: 0.64, run: 3.5, happy: 'hop', graze: 0.7 } };
 }
@@ -1080,7 +1104,13 @@ function elephant(id) {
   tail.position.set(0, 0.1, -0.84);
   pivot.add(tail);
   tail.add(mesh(cylinder(0.02, 0.02, 0.45, 6), grey, 0, -0.22, 0));
-  tail.add(mesh(sphere(1, 8, 6), toon('#4a4450'), 0, -0.46, 0, 0.04, 0.07, 0.04));
+  // The brush on the end of its tail.
+  const brush = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    brush.push({ g: capsule(0.008, 0.1, 3, 6), m: new THREE.Matrix4().makeRotationZ(Math.PI / 2 + Math.sin(a) * 0.35).setPosition(Math.cos(a) * 0.015, -0.48 + Math.sin(a) * 0.012, 0) });
+  }
+  tail.add(mesh(bakeCached('elephant-brush', brush), toon('#4a4450')));
   // Its saddle is a big bright blanket.
   const s = saddle(pivot, R[1], 0.52, 0.5, -0.08, true);
   return { group: g, body, pivot, neck, head, eyes, ears, trunk, tip, tail, legs, ...s, height: 2.05, shadow: 0.9, pick: 1.1, center: 1.1, seen: 140, gait: { len: 0.64, run: 3.2, happy: 'trunk', graze: 0.15 } };
@@ -1144,7 +1174,8 @@ function giraffe(id) {
   tail.position.set(0, 0.12, -0.5);
   pivot.add(tail);
   tail.add(mesh(cylinder(0.015, 0.015, 0.45, 6), coat, 0, -0.22, -0.02));
-  tail.add(mesh(sphere(1, 8, 6), toon('#4a3020'), 0, -0.46, -0.02, 0.04, 0.08, 0.04));
+  // A tuft at the end of the tail, in a fan.
+  for (const [dx, roll] of [[-0.02, 0.3], [0, 0], [0.02, -0.3]]) tail.add(mesh(capsule(0.01, 0.08, 4, 6), toon('#4a3020'), dx, -0.47, -0.02).rotateZ(roll));
   const s = saddle(pivot, R[1], 0.27, 0.25, -0.14);
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 2.9, shadow: 0.55, pick: 0.85, center: 1.35, seen: 160, gait: { len: 1.05, run: 4, happy: 'sway', graze: -0.25 } };
 }
@@ -1157,6 +1188,8 @@ function polarbear(id) {
   pivot.add(mesh(sphere(), fur, 0, 0.03, -0.3, 0.36, 0.33, 0.32));
   pivot.add(mesh(sphere(), fur, 0, 0.02, 0.28, 0.34, 0.32, 0.32));
   const legs = fourLegs(pivot, { x: 0.22, front: 0.36, back: -0.36, hip: -0.24, len: 0.44, r: 0.12, color: '#f6f2e8', paw: '#efe8d8' });
+  // Dark claws showing in each paw.
+  for (const leg of legs) for (const x of [-0.05, 0, 0.05]) leg.add(mesh(cone(0.014, 0.035, 6), toon('#5a5040'), x, -0.415, 0.12).rotateX(1.2));
   const neck = new THREE.Group();
   neck.position.set(0, 0.06, 0.5);
   pivot.add(neck);
