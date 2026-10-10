@@ -902,6 +902,16 @@ body.touch #touch-buttons {
   display: none;
 }
 
+/* On the shared isle (Adventure Isle) nobody builds and nobody flies on
+   their own: its tools, its toy box and its fly button are not there. */
+#toolbar[hidden],
+#toolopts[hidden],
+#hotbar[hidden],
+#btn-toybox[hidden],
+#btn-fly[hidden] {
+  display: none;
+}
+
 .touch.on {
   background: var(--sun);
 }

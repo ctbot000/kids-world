@@ -1,9 +1,10 @@
 // The public adventure island: the one adventure island this server keeps
 // for everyone to conquer together, on the list of open islands even while
 // nobody is on it (as 🌟 Adventure Isle, heading the list). Players come
-// and go as on any island; nobody builds on it and nothing flies on it —
-// it is everyone's adventure, on foot. Freed, the island is retired and
-// the next stage's takes its place at once, a little harder (see
+// and go as on any island; its toy box stays shut (nobody builds on it, and
+// nothing is brought to it or sent away) and nobody flies on their own on
+// it — it is everyone's adventure, on foot. Freed, the island is retired
+// and the next stage's takes its place at once, a little harder (see
 // shared/adventure.js), on and on without end — and at the beginning of
 // each day it starts over again at stage 1.
 //

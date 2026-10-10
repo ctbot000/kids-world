@@ -239,28 +239,40 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   assert.deepEqual(retired.at(-1), current);
 });
 
-// Nobody builds on the shared isle, and nothing flies on it: it is
-// everyone's adventure, on foot, and it stays as it was made.
-test('nobody builds on it and nothing flies on it: an adventure on foot', () => {
+// The shared isle keeps its toy box shut and its players on their own feet:
+// nobody builds on it, nothing is brought to it or sent away (flying there
+// is a matter for each player's own page, not the island) — though its
+// helicopter and balloon are there to fly, as on any island.
+test('its toy box stays shut: nobody builds on it, nothing is brought to it or sent away', () => {
   const { isle: one } = isle();
   const room = one.room;
-
-  // Made without its helicopter and balloon: nothing on it can fly.
-  assert.deepEqual(room.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle === 'air'), [], 'no aircraft on it');
-
-  // And none can be brought there to fly either.
   const a = join(room, 'Sunny Otter');
   const w = room.world;
-  room.receive(a, { t: 'critter', op: 'invite', type: 'helicopter', x: w.spawn.x + 3, y: w.spawn.y, z: w.spawn.z });
-  assert.equal(a.last('notice').text, 'Nothing flies on Adventure Isle — it is an adventure on foot!');
-  assert.equal(room.critters.list.some((c) => c.type === 'helicopter'), false, 'none came');
 
-  // Were one there anyway, nobody gets off the ground on it.
-  const whirly = room.critters.add('helicopter', w.spawn.x + 2, w.spawn.y, w.spawn.z + 2);
-  room.receive(a, { t: 'm', s: [w.spawn.x + 2, w.spawn.y, w.spawn.z + 2, 0, 0, 0] });
+  // Its helicopter and balloon are there to fly, as on any island, and
+  // anyone rides them (leaving one up in the air, each player's own page
+  // says whether they come down or fly).
+  for (const type of ['helicopter', 'balloon']) {
+    assert.ok(room.critters.list.some((c) => c.type === type), `the ${type} is there`);
+  }
+  const whirly = room.critters.list.find((c) => c.type === 'helicopter');
+  room.receive(a, { t: 'm', s: [whirly.x, whirly.y, whirly.z, 0, 0, 0] });
   room.receive(a, { t: 'critter', op: 'ride', id: whirly.id });
-  assert.equal(whirly.rider, 0, 'nobody flying');
-  assert.equal(a.last('ride'), undefined, 'nobody even gets a seat in it');
+  assert.equal(whirly.rider, a.pid, 'flying its helicopter works as anywhere');
+  room.receive(a, { t: 'critter', op: 'off' });
+
+  // But nothing is brought to it, animal or vehicle: its toy box stays shut.
+  const before = room.critters.list.length;
+  room.receive(a, { t: 'critter', op: 'invite', type: 'bunny', x: w.spawn.x + 3, y: w.spawn.y, z: w.spawn.z });
+  room.receive(a, { t: 'critter', op: 'invite', type: 'helicopter', x: w.spawn.x + 3, y: w.spawn.y, z: w.spawn.z });
+  assert.equal(room.critters.list.length, before, 'nothing came');
+  assert.equal(a.last('notice').text, 'Adventure Isle stays just as it was made, so its toy box stays shut!');
+
+  // Nor is anything sent away: what is on it is everyone's.
+  const stays = room.critters.list.find((c) => !c.rider && !CRITTER_INFO[c.type].vehicle);
+  room.receive(a, { t: 'critter', op: 'bye', id: stays.id });
+  assert.ok(room.critters.get(stays.id), 'it stays');
+  assert.equal(a.last('notice').text, 'Adventure Isle is everyone’s, so its animals and vehicles stay.');
 
   // Building: the island stays as it was made, whoever tries whatever tool.
   const x = Math.floor(w.spawn.x) + 3;

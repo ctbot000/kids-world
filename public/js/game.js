@@ -1715,12 +1715,6 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
-    // The shared isle is conquered on foot: nothing flies there.
-    if (this.shared && CRITTER_INFO[this.critters.get(id)?.type]?.ride?.air) {
-      this.emit('notice', { text: `Nothing flies on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
-      this.sound.play('no');
-      return;
-    }
     this.send({ t: 'critter', op: 'ride', id });
   }
 
@@ -1883,9 +1877,11 @@ export class Game extends EventTarget {
     this.riding = null;
     const at = getOffAt(this.world, ride);
     const b = this.me.body;
-    // Out of a helicopter or a balloon up in the air, you fly.
-    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false, flying: Boolean(at.flying) });
-    if (at.flying) this.emit('fly', true);
+    // Out of a helicopter or a balloon up in the air, you fly — but never
+    // on the shared isle, where nobody flies on their own: there you come down.
+    const flying = !this.shared && Boolean(at.flying);
+    Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false, flying });
+    if (flying) this.emit('fly', true);
     unstick(this.world, b);
     const entry = this.critters.get(ride.id);
     if (entry) {
@@ -1942,7 +1938,9 @@ export class Game extends EventTarget {
       Object.assign(b, { x: at.x, y: at.y, z: at.z });
       flying = Boolean(at.flying);
     }
-    // Out of a helicopter or a balloon up in the air, you fly.
+    // Out of a helicopter or a balloon up in the air, you fly — but never
+    // on the shared isle, where nobody flies on their own: there you come down.
+    flying = !this.shared && flying;
     Object.assign(b, { vx: 0, vy: 0, vz: 0, onGround: false, flying });
     if (flying) this.emit('fly', true);
     unstick(this.world, b);
@@ -2718,6 +2716,12 @@ export class Game extends EventTarget {
     const entry = this.critters.get(id);
     if (!entry) return;
     if (this.tool === 'friends') {
+      // What is on the shared isle is everyone's, and stays with the island.
+      if (this.shared) {
+        this.emit('notice', { text: `${this.world.name} is everyone’s, so its animals and vehicles stay.`, level: 'info' });
+        this.sound.play('no');
+        return;
+      }
       this.send({ t: 'critter', op: 'bye', id });
       return;
     }
@@ -2739,9 +2743,9 @@ export class Game extends EventTarget {
   }
 
   invite(hit) {
-    // Nothing flies on the shared isle, so none is brought to it either.
-    if (this.shared && CRITTER_INFO[this.critterType]?.vehicle === 'air') {
-      this.emit('notice', { text: `Nothing flies on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
+    // The shared isle's toy box stays shut: nothing is brought to it.
+    if (this.shared) {
+      this.emit('notice', { text: `${this.world.name} stays just as it was made, so its toy box stays shut!`, level: 'info' });
       this.sound.play('no');
       return;
     }
@@ -2955,6 +2959,13 @@ export class Game extends EventTarget {
   toggleFly() {
     const b = this.me?.body;
     if (!b || this.dizzy) return;
+    // The shared isle is an adventure on foot: you cannot fly there on
+    // your own (its helicopter and balloon fly as anywhere — ride them!).
+    if (this.shared) {
+      this.emit('notice', { text: `No flying on your own on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
+      this.sound.play('no');
+      return;
+    }
     // Off the animal you are riding, and up into the air.
     if (this.aboard) {
       this.getOut();
