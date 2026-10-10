@@ -3,8 +3,8 @@
 // the host. The keeper's WebRTC module is loaded only when it starts.
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/, and runs the AI friend
-// (buddy.js) when Ollama is there, with its settings on the admin page, and
-// its own island here. Usage:
+// (buddy.js) on Z.ai's models with the local Ollama as a standby, with its
+// settings on the admin page, and its own island here. Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
@@ -22,7 +22,7 @@ import { adminHandler } from './admin.js';
 import { Buddy } from './buddy.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
-import { Ollama } from './llm.js';
+import { Fallback, Ollama, Zai } from './llm.js';
 import { WebSocketServer } from 'ws';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -301,10 +301,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const { keeper, config } = (await startKeeper(store)) ?? {};
   // The AI friend, as its settings on the admin page say (on unless
   // KIDS_WORLD_AI=off before any are saved): islands of this server, and with
-  // the keeper, invitations and islands peer to peer (see buddy.js).
+  // the keeper, invitations and islands peer to peer (see buddy.js). Its model
+  // is Z.ai's, with the local Ollama to answer when Z.ai cannot (llm.js).
   const friend = new FriendControl({
     dir: store.dir,
-    llm: new Ollama(),
+    llm: new Fallback(new Zai(), new Ollama()),
     make: (settings, { homeFile }) =>
       new Buddy({
         llm: friend.llm,

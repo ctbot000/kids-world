@@ -303,7 +303,7 @@ test('the admin page saves its settings and applies them, shows where it is and 
   const put = (body, headers = { 'X-Kids-World-Admin': '1' }) => fetch(base, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
   let state = await (await fetch(base)).json();
-  assert.deepEqual(state.settings, { on: true, name: DEFAULT_NAME, model: 'gemma3:4b', wander: true, maxVisits: 2, home: true });
+  assert.deepEqual(state.settings, { on: true, name: DEFAULT_NAME, model: 'glm-5.3-flash', wander: true, maxVisits: 2, home: true });
   assert.equal(state.saved, false, 'from the environment until saved');
   assert.equal(state.ready, true);
   assert.deepEqual(state.models, ['gemma3:4b', 'llama3.2:3b']);

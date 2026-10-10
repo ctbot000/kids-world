@@ -445,8 +445,9 @@ function settingsForm() {
     name.value = s.name;
     wander.checked = s.wander;
     home.checked = s.home;
+    const provider = state.llms?.[0]?.name ?? 'Ollama';
     const models = state.models.includes(s.model) ? state.models : [s.model, ...state.models];
-    model.replaceChildren(...models.map((m) => h('option', { value: m }, state.models.includes(m) ? m : `${m} (not in Ollama)`)));
+    model.replaceChildren(...models.map((m) => h('option', { value: m }, state.models.includes(m) ? m : `${m} (not in ${provider})`)));
     model.value = s.model;
     visits.replaceChildren(...Array.from({ length: state.maxVisits }, (_, k) => h('option', { value: k + 1 }, k + 1)));
     visits.value = String(s.maxVisits);
@@ -602,7 +603,7 @@ function pretty(text) {
 
 function callCard(c) {
   const key = `call-${c.at}-${c.id}`;
-  const o = c.ollama;
+  const o = c.ollama ?? c.zai;
   const tokens = o ? [o.promptTokens !== null ? `${o.promptTokens} in` : null, o.tokens !== null ? `${o.tokens} out` : null].filter(Boolean).join(' · ') : '';
   const waited = c.sentAt ? c.sentAt - c.at : null;
   const copy = async () => {
@@ -630,6 +631,7 @@ function callCard(c) {
         { class: 'muted' },
         [
           c.model ? `Model ${c.model}` : null,
+          c.fellBack ? `the local model answered instead (${c.fellBack})` : null,
           c.options ? Object.entries(c.options).map(([k, v]) => `${k} ${v}`).join(', ') : null,
           waited ? `waited ${secs(waited)} for the questions before it` : null,
           o?.loadMs >= 100 ? `loading the model ${secs(o.loadMs)}` : null,
@@ -693,7 +695,21 @@ function renderFriend(state) {
       ? ['on', `${s.name} is awake, with ${s.model}${state.listed ? '' : ' · busy on as many islands as it may be on'}`]
       : ['wait', `${s.name} is asleep: ${state.problem || 'checking its model…'}`];
   f.line.replaceChildren(h('span', { class: `status ${cls}`, role: 'status' }, words), state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check the model now') : '');
-  f.about.replaceChildren('Ollama at ', h('code', {}, state.url), state.models.length ? ` has ${plural(state.models.length, 'model', 'models')}.` : ' answers with no models.', state.saved ? '' : ' These settings come from the environment until saved here.');
+  // What it talks with: the model it asks, and the local one that answers
+  // when that cannot. A problem is only spelled out when the other one still
+  // answers; when neither does, the line above says why it is asleep.
+  const llms = state.llms ?? [{ name: 'Ollama', url: state.url, model: s.model, problem: state.problem ?? '' }];
+  f.about.replaceChildren(
+    ...llms.flatMap((l, k) => [
+      k ? ', falling back to ' : '',
+      `${l.name} at `,
+      h('code', {}, l.url),
+      ` (${l.model})`,
+      l.problem && llms.some((o, i) => i !== k && !o.problem) ? `: ${l.problem}` : '',
+    ]),
+    '.',
+    state.saved ? '' : ' These settings come from the environment until saved here.',
+  );
   const st = state.stats;
   const facts = st
     ? [

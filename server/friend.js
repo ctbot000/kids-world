@@ -1,11 +1,12 @@
 // The AI friend (buddy.js) as the admin page runs it: its settings, saved in
 // the keeper's data folder as ai-friend.json, and what the page sees of it.
-// Settings: on or off, its name, its model (any Ollama has), whether it
-// visits islands by itself, on how many islands at once, and whether it keeps
-// an island of its own (saved beside them as ai-friend-island.json). Until
-// they are first saved, they come from the environment (KIDS_WORLD_AI=off,
-// KIDS_WORLD_AI_NAME, KIDS_WORLD_AI_MODEL, KIDS_WORLD_AI_WANDER=off,
-// KIDS_WORLD_AI_HOME=off).
+// Settings: on or off, its name, its model (any Z.ai has; when Z.ai cannot
+// answer, the local Ollama answers with its own, from KIDS_WORLD_AI_MODEL),
+// whether it visits islands by itself, on how many islands at once, and
+// whether it keeps an island of its own (saved beside them as
+// ai-friend-island.json). Until they are first saved, they come from the
+// environment (KIDS_WORLD_AI=off, KIDS_WORLD_AI_NAME, KIDS_WORLD_ZAI_MODEL,
+// KIDS_WORLD_AI_WANDER=off, KIDS_WORLD_AI_HOME=off).
 // Changes apply at once: a new name from its next visit on, as the islands it
 // is on know it by the old one; turned off, it goes home from every island.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -13,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { isValidName, NAME_MAX } from '../public/js/shared/words.js';
 import { DEFAULT_NAME } from './buddy.js';
 import { KeepError } from './keeper.js';
-import { DEFAULT_MODEL } from './llm.js';
+import { DEFAULT_ZAI_MODEL } from './llm.js';
 
 export const SETTINGS_FILE = 'ai-friend.json';
 export const HOME_FILE = 'ai-friend-island.json';
@@ -24,7 +25,7 @@ export function defaultSettings(env = process.env) {
   return {
     on: env.KIDS_WORLD_AI !== 'off',
     name: env.KIDS_WORLD_AI_NAME || DEFAULT_NAME,
-    model: env.KIDS_WORLD_AI_MODEL || DEFAULT_MODEL,
+    model: env.KIDS_WORLD_ZAI_MODEL || DEFAULT_ZAI_MODEL,
     wander: env.KIDS_WORLD_AI_WANDER !== 'off',
     maxVisits: 2,
     home: env.KIDS_WORLD_AI_HOME !== 'off',
@@ -58,9 +59,10 @@ export function changeSettings(settings, change) {
 }
 
 export class FriendControl {
-  // dir: where its settings are saved. llm: the Ollama (llm.js) it talks
-  // with, whose model the settings pick. make(settings, { homeFile }): a new
-  // Buddy, keeping its own island in homeFile.
+  // dir: where its settings are saved. llm: what it talks with (llm.js: Z.ai
+  // with the local Ollama as a standby), whose model the settings pick.
+  // make(settings, { homeFile }): a new Buddy, keeping its own island in
+  // homeFile.
   constructor({ dir, llm, make, env = process.env }) {
     this.file = join(dir, SETTINGS_FILE);
     this.homeFile = join(dir, HOME_FILE);
@@ -152,6 +154,7 @@ export class FriendControl {
       problem: b ? (b.problem ?? '') : '',
       url: this.llm.url,
       models: await this.llm.models(),
+      llms: this.llm.states?.() ?? null,
       maxVisits: MAX_VISITS,
       listed: b ? b.listing().online : false,
       home: b?.home && !b.home.ended ? b.home.summary() : null,

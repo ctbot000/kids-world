@@ -1,6 +1,7 @@
 // The AI friend: a player run by this computer, who visits islands, talks
 // with the children there and helps them. Its words come from a language
-// model served here by Ollama (llm.js); what it does is played out by this
+// model, Z.ai's over the internet or one served here by Ollama (llm.js); what
+// it does is played out by this
 // file with the game's own engine, the way a page would: it joins an island
 // as one more player (dialing a host's page peer to peer, or straight into a
 // room of this dedicated server: dialer.js), walks and flies after a friend
@@ -14,8 +15,8 @@
 //     that has somebody on it (the loneliest first), never one with a passcode.
 // It goes home when it is asked to, when everyone else has gone, when the
 // island's owner sends it home (then it does not come back that day), or after
-// a while. What is said goes only to the model on this computer, and is
-// forgotten when the visit ends.
+// a while. What is said goes only to the model that answers it, Z.ai's or the
+// one on this computer, and is forgotten when the visit ends.
 //
 // Its own island: on this dedicated server, it keeps an island of its own
 // (saved in the keeper's data folder, so it is there again after a restart),
