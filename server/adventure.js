@@ -12,6 +12,7 @@
 // all that day, so a restart puts back just the island that was meant to be.
 import { generateCode } from '../public/js/shared/codes.js';
 import { Room } from '../public/js/shared/room.js';
+import { PeerHost } from './host.js';
 
 export const PUBLIC_ISLAND_NAME = 'Adventure Isle';
 // How long a retired island is kept after everyone leaves it.
@@ -49,6 +50,11 @@ export class PublicAdventure {
     this.log = log;
     this.now = now;
     this.retiredKeepMs = retiredKeepMs;
+    // Each island as it comes and goes (set before start(), see shareTheIsle):
+    // onOpen(room) for the new public island of a stage, onRetire(room) for
+    // the one that stopped being it.
+    this.onOpen = null;
+    this.onRetire = null;
     this.stage = 0;
     this.day = '';
     this.entry = null;
@@ -91,6 +97,7 @@ export class PublicAdventure {
     room.public = true;
     this.entry = { code, room, emptySince: 0, public: true };
     this.rooms.set(code, this.entry);
+    this.onOpen?.(room);
     return this.entry;
   }
 
@@ -115,7 +122,7 @@ export class PublicAdventure {
     }
     if (this.entry.room.closed) {
       // Gone by itself (the server shutting down): never while ticking.
-      this.entry = null;
+      this.retire(now, '');
       this.open(this.stage, day);
       return;
     }
@@ -136,6 +143,7 @@ export class PublicAdventure {
     this.entry.public = false;
     this.retired.push({ code, room, emptySince: room.online > 0 ? 0 : now });
     if (room.online > 0) room.broadcast({ t: 'notice', level: 'info', text });
+    this.onRetire?.(room);
   }
 
   // Retired islands go once everyone has left them and a while has passed.
@@ -143,6 +151,7 @@ export class PublicAdventure {
     for (let i = this.retired.length - 1; i >= 0; i--) {
       const r = this.retired[i];
       if (r.room.closed) {
+        this.rooms.delete(r.code);
         this.retired.splice(i, 1);
         continue;
       }
@@ -165,6 +174,7 @@ export class PublicAdventure {
   stop() {
     this.stopped = true;
     const closing = this.entry ? [this.entry, ...this.retired] : [...this.retired];
+    if (this.entry) this.onRetire?.(this.entry.room);
     for (const entry of closing) {
       if (entry.room.closed) continue;
       entry.room.close();
@@ -173,4 +183,45 @@ export class PublicAdventure {
     this.entry = null;
     this.retired = [];
   }
+}
+
+// The shared isle over WebRTC as well, the way the AI friend's island is
+// (buddy.js): each of its stages hosted peer to peer under its code and on
+// the keeper's list of open islands, so pages anywhere — the game on GitHub
+// Pages — can come and conquer it together. Returns a function that stops it.
+export function shareTheIsle(keeper, isle, { log = () => {}, iceServers } = {}) {
+  const hosts = new Map();
+  const share = (room) => {
+    if (!room || hosts.has(room) || room.closed) return;
+    const host = new PeerHost({ room, rtc: keeper.rtc, server: keeper.server, ...(iceServers ? { iceServers } : {}) });
+    let said = '';
+    host.on('state', (state, detail) => {
+      const now = state === 'online' ? 'online' : state === 'id-taken' || state === 'error' ? state : '';
+      if (!now || now === said) return;
+      said = now;
+      log(now === 'online' ? `Adventure Isle: stage ${room.stage} is open to everyone, peer to peer.` : `Adventure Isle: stage ${room.stage} cannot be reached peer to peer yet (${detail || now}).`);
+    });
+    host.start();
+    keeper.listIsland(room.code, () => (host.state === 'online' && !room.closed ? room.listing() : null));
+    hosts.set(room, host);
+  };
+  const unshare = (room) => {
+    const host = hosts.get(room);
+    if (!host) return;
+    hosts.delete(room);
+    keeper.unlistIsland(room.code);
+    host.stop();
+  };
+  isle.onOpen = share;
+  isle.onRetire = unshare;
+  share(isle.room);
+  return () => {
+    isle.onOpen = null;
+    isle.onRetire = null;
+    for (const [room, host] of hosts) {
+      keeper.unlistIsland(room.code);
+      host.stop();
+    }
+    hosts.clear();
+  };
 }

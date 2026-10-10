@@ -21,7 +21,7 @@ import { sortListings } from '../public/js/shared/listing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
-import { PublicAdventure, RETIRED_KEEP_MS } from './adventure.js';
+import { PublicAdventure, RETIRED_KEEP_MS, shareTheIsle } from './adventure.js';
 import { Buddy } from './buddy.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
@@ -339,6 +339,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }),
   });
   const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper, friend }) });
+  // The shared isle hosted peer to peer too, so pages anywhere can conquer
+  // it together (see shareTheIsle).
+  const sharedIsle = keeper && server.publicAdventure ? shareTheIsle(keeper, server.publicAdventure, { log: (text) => console.log(text) }) : null;
   server.listen(port, values.host, () => {
     console.log(`Kids World is running at http://localhost:${port}/`);
     if (values.host === '0.0.0.0' || values.host === '::') {
@@ -349,6 +352,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await friend.start();
   const stop = async () => {
     await friend.stop();
+    sharedIsle?.();
     await keeper?.stop();
     await server.shutdown();
     keeper?.rtc?.cleanup?.();

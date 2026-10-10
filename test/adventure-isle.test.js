@@ -206,6 +206,37 @@ test('the beginning of a day starts the stages over at 1', () => {
   assert.equal(one.stage, 2, 'and on the stages go');
 });
 
+test('each island as it comes and goes, told to whoever wants it (the server, to host it peer to peer)', () => {
+  const { rooms, time, isle: one } = isle({ retiredKeepMs: 60 * 1000 });
+  const opened = [];
+  const retired = [];
+  one.onOpen = (room) => opened.push(room);
+  one.onRetire = (room) => retired.push(room);
+  assert.deepEqual([opened, retired], [[], []], 'nothing until it changes');
+
+  const first = one.room;
+  first.adventure.win(first.monsters);
+  one.tick(time.now());
+  assert.deepEqual(opened, [one.room], 'the next stage opened');
+  assert.deepEqual(retired, [first], 'the conquered one retired');
+  assert.equal(rooms.has(first.code), true, 'still one of the rooms, until swept');
+
+  const second = one.room;
+  const midnight = new Date(time.t);
+  midnight.setHours(24, 0, 0, 0);
+  time.t = midnight.getTime();
+  one.tick(time.now());
+  assert.deepEqual(opened, [second, one.room], 'the new day opened');
+  assert.deepEqual(retired, [first, second], 'the day\'s last one retired');
+  assert.equal(rooms.has(first.code), false, 'the first one swept in the night');
+  assert.equal(rooms.has(second.code), true, 'the second one waits for its while');
+
+  // Stopping tells of the current one too, so its sharing stops with it.
+  const current = one.room;
+  one.stop();
+  assert.deepEqual(retired.at(-1), current);
+});
+
 // ------------------------------------------------ over the real server
 
 let server;

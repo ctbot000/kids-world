@@ -17,6 +17,7 @@ import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
 import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
+import { shareTheIsle } from '../server/adventure.js';
 import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOptions } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
@@ -3194,4 +3195,52 @@ test('the AI friend’s own island is on the list of open islands through the ke
     await rm(dir, { recursive: true, force: true });
   }
   assert.equal(keeper.openIslands().length, 0, 'off the list once it stops');
+});
+
+test('the shared isle is a way in of its own on the title screen, to the island the server keeps', { skip }, async () => {
+  const page = await openPlayer(base, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Adventure Isle');
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.host), 0, 'nobody owns it');
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.shared), true);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.adventure.camps.size > 0), true, 'its camps are there');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+  }
+});
+
+test('the shared isle is on the keeper’s list of open islands too, hosted peer to peer, and a page anywhere conquers it from the title screen', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  // The isle lives in this server's rooms; the page plays peer to peer, as from GitHub Pages.
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const share = shareTheIsle(keeper, games.publicAdventure, { log: () => {}, iceServers: [] });
+  const ticker = setInterval(() => {
+    for (const entry of games.rooms.values()) if (entry.room.online > 0) entry.room.tick();
+    games.publicAdventure.tick(Date.now());
+  }, 100);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Brave Fox' });
+  try {
+    // On the keeper's list, and first.
+    await eventually(() => keeper.openIslands().some((i) => i.public));
+    assert.equal(keeper.openIslands().find((i) => i.public).name, 'Adventure Isle');
+    // The title screen's own way in, straight there over WebRTC.
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Adventure Isle');
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.shared), true);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    share();
+    clearInterval(ticker);
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

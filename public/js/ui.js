@@ -357,6 +357,10 @@ export class UI {
     $('hud').hidden = true;
     this.renderMe();
     this.renderLogin();
+    // The shared isle (server/adventure.js): its own way in, where the list
+    // of open islands is — the dedicated server's, or a keeper's.
+    this.renderIsle();
+    $('btn-isle').onclick = () => handlers.sharedIsle?.();
     $('btn-new').onclick = () => this.newIslandDialog();
     $('btn-visit').onclick = () => this.visitDialog();
     $('btn-mine').onclick = () => this.myIslandsDialog();
@@ -420,6 +424,12 @@ export class UI {
     chip.classList.toggle('on', Boolean(login?.who()));
     $('btn-ranking').hidden = !login?.available();
     $('btn-players').hidden = !login?.available();
+  }
+
+  // The 🌟 shared isle's own way in, there wherever the list of open
+  // islands is: the dedicated server's own list, or a keeper's.
+  renderIsle() {
+    $('btn-isle').hidden = !this.handlers?.listAvailable?.();
   }
 
   // The island's name: any typed, or one rolled for its kind (shown grey
@@ -1577,7 +1587,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
-          card('🌟', 'The shared isle', ['On the game\'s own server, 🌟 Adventure Isle at the top of the islands list is one everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),

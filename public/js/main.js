@@ -48,7 +48,10 @@ const ui = new UI({ profile, sound, atlas, input });
 const keeper = new KeeperClient({ profile, login: who });
 keeper.addEventListener('status', () => ui.renderKeeper());
 keeper.addEventListener('kept', () => ui.renderKeeper());
-keeper.addEventListener('config', () => ui.renderLogin());
+keeper.addEventListener('config', () => {
+  ui.renderLogin();
+  ui.renderIsle();
+});
 keeper.addEventListener('islands', () => ui.renderIslandList());
 keeper.addEventListener('synced', () => ui.renderKeeper());
 keeper.addEventListener('gone', () => loginGone());
@@ -666,6 +669,22 @@ const titleHandlers = {
   // The list of open islands is there with the dedicated server, or a keeper.
   listAvailable: () => serverMode || Boolean(keeper.config),
   openIslands,
+  // 🌟 The shared isle, straight from the title screen: the one public
+  // adventure island (server/adventure.js) off whichever list there is.
+  sharedIsle: async () => {
+    let isle = null;
+    try {
+      isle = (await openIslands()).find((i) => i.public) ?? null;
+    } catch {
+      // no list to ask
+    }
+    if (isle) {
+      visitIsland(isle.code);
+      return;
+    }
+    ui.visitDialog();
+    ui.toast('😴', 'The shared isle is not on the list right now. Try again in a moment!', 'warn');
+  },
   visitedBefore,
   islands: () => storage.listIslands(),
   open: (id) => openIsland(id),

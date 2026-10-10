@@ -344,6 +344,12 @@ body.fullscreen .full-icon .leave {
   width: min(420px, 100%);
 }
 
+/* The shared isle, first and right across: the one island everyone
+   conquers together (only where the list of open islands is). */
+.isle-button {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 900px) and (min-height: 600px) {
   .big-buttons {
     grid-template-columns: repeat(3, 1fr);
