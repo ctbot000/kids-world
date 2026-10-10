@@ -21,6 +21,7 @@ import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
 import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
+import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
 import { FriendControl } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
@@ -226,6 +227,50 @@ test('it goes home when asked or left alone, and stays away from an island whose
   await eventually(() => buddyIn(other.room));
   other.room.detach(joon.conn);
   await eventually(() => buddy.visits.size === 0, 25000);
+});
+
+test('it never comes to the shared isle, Adventure Isle — invited, by itself, or once it is conquered', async () => {
+  const rooms = new Map();
+  const isle = new PublicAdventure({ rooms, log: () => {} }).start();
+  const [entry] = [...rooms.values()];
+  const ticks = setInterval(() => entry.room.tick(), 100);
+  after(() => clearInterval(ticks));
+  child(entry.room, 'Minji');
+  const buddy = friend({ llm: model(), rooms });
+  await buddy.start();
+
+  // Invited to the isle, it says why it will not come, and stays home — a
+  // page's invitation too, which knows the island only by its name.
+  const invite = { code: entry.room.code, name: PUBLIC_ISLAND_NAME, theme: 'sunny', size: 'small', server: true };
+  assert.match(buddy.invited(invite, 'Minji'), /leaves 🌟 Adventure Isle to everyone/);
+  assert.match(buddy.invited({ ...invite, code: '654321', server: false }, 'Minji'), /Adventure Isle/);
+  assert.equal(buddy.visits.size, 0);
+
+  // By itself, it does not drop in on the isle either: with nowhere else to
+  // go, it stays home.
+  assert.equal(buddy.wanderOnce(), null);
+
+  // Any other island is as ever: with one to go to, it goes.
+  const other = server({ code: '111222', name: 'Candy Cove', theme: 'candy' });
+  rooms.set(other.room.code, { room: other.room });
+  child(other.room, 'Joon');
+  const visit = buddy.wanderOnce();
+  assert.equal(visit?.island.code, '111222');
+  await eventually(() => buddyIn(other.room));
+  visit.end('stopped', { quiet: true });
+  await eventually(() => buddy.visits.size === 0);
+
+  // The isle conquered: its island stays open a while for whoever is on it,
+  // and the next stage's takes its place — neither is for the friend.
+  entry.room.adventure.win(entry.room.monsters);
+  isle.tick();
+  assert.equal(entry.room.public, false, 'conquered, so no longer the public one');
+  const next = [...rooms.values()].find((e) => e.public).room;
+  assert.notEqual(next.code, entry.room.code);
+  child(next, 'Brave Fox');
+  assert.match(buddy.invited({ ...invite, code: entry.room.code }, 'Minji'), /Adventure Isle/);
+  assert.equal(buddy.wanderOnce(), null);
+  assert.equal(buddy.visits.size, 0);
 });
 
 test('the keeper lists it as playing now while it can come, and passes invitations on to it', async () => {

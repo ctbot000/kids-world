@@ -13,6 +13,9 @@
 //     come), so a logged-in player can 💌 Invite it to their island;
 //   - by itself: now and then it visits an island on the list of open islands
 //     that has somebody on it (the loneliest first), never one with a passcode.
+// The one island it never comes to, however it is asked, is the shared one,
+// 🌟 Adventure Isle: that is everybody's adventure, and it leaves it to the
+// children (see adventure.js).
 // It goes home when it is asked to, when everyone else has gone, when the
 // island's owner sends it home (then it does not come back that day), or after
 // a while. What is said goes only to the model that answers it, Z.ai's or the
@@ -47,6 +50,7 @@ import { FACING, facingFromYaw, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, stampEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 import { CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTE_KEYS, langOf, PHRASES, STICKERS } from '../public/js/shared/words.js';
+import { PUBLIC_ISLAND_NAME } from './adventure.js';
 import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKey, projectCells, reachOf } from './builds.js';
 import { LocalLink, PeerLink } from './dialer.js';
 import { PeerHost } from './host.js';
@@ -452,10 +456,23 @@ export class Buddy extends EventEmitter {
     return island.server ? Boolean(this.rooms?.get(island.code)) : Boolean(this.rtc);
   }
 
+  // Whether an island is the shared one, 🌟 Adventure Isle — the one public
+  // adventure island everybody conquers together, an adventure on foot that
+  // is nobody's. The friend never comes there, invited or by itself: it is
+  // everyone's adventure, not a visit. An island of this server says so
+  // itself (shared, even once a stage is conquered and its island waits for
+  // its players to go); one from the keeper's list is marked as the public
+  // one; a page's invitation knows it only by its name.
+  isSharedIsle(island) {
+    if (island.server) return Boolean(this.rooms?.get(island.code)?.room?.shared);
+    return island.public === true || island.name === PUBLIC_ISLAND_NAME;
+  }
+
   // An invitation (cleanInvite's island) from a player: '' when it comes, or
   // why it cannot, for the keeper to say.
   invited(island, from) {
     if (!this.ready) return `${this.name} is asleep right now.`;
+    if (this.isSharedIsle(island)) return `${this.name} leaves 🌟 ${PUBLIC_ISLAND_NAME} to everyone — that island is everybody’s adventure!`;
     if (this.visits.has(island.code) || island.code === this.home?.island.code) return '';
     if (this.visits.size >= this.maxVisits) return `${this.name} is playing on other islands right now. Try again later!`;
     if (!this.canReach(island)) return `${this.name} can't get to that island.`;
@@ -480,7 +497,7 @@ export class Buddy extends EventEmitter {
     if (!this.ready || this.visits.size >= this.maxVisits - 1) return null;
     const now = this.now();
     for (const [code, until] of this.avoid) if (until <= now) this.avoid.delete(code);
-    const open = this.openIslands().filter((i) => i.players >= 1 && i.players < i.max && !i.passcode && !this.visits.has(i.code) && i.code !== this.home?.island.code && !this.avoid.has(i.code) && this.canReach(i));
+    const open = this.openIslands().filter((i) => i.players >= 1 && i.players < i.max && !i.passcode && !this.visits.has(i.code) && i.code !== this.home?.island.code && !this.avoid.has(i.code) && !this.isSharedIsle(i) && this.canReach(i));
     if (!open.length) return null;
     const fewest = Math.min(...open.map((i) => i.players));
     const lonely = open.filter((i) => i.players === fewest);
