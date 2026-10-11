@@ -403,6 +403,15 @@ export class Sound {
         this.tone(560 * r(), { type: 'sawtooth', attack: 0.1, decay: 0.8, gain: 0.014, vibrato: 7, slide: 700 * r(), slideTime: 0.6 });
         this.tone(1120 * r(), { type: 'triangle', attack: 0.1, decay: 0.7, gain: 0.005, vibrato: 11 });
         break;
+      case 'spider':
+        // Tk-tk-tk-tk: a giant spider's legs skittering over the bricks as
+        // it scuttles at you, quicker and quicker away.
+        for (let i = 0; i < 6; i++) {
+          const at = i * (0.05 - i * 0.004);
+          this.noise(0.014, { at, type: 'highpass', freq: 2800, gain: 0.06 });
+          this.tone(1300 - i * 80, { at, decay: 0.028, gain: 0.026, slide: 700, slideTime: 0.028 });
+        }
+        break;
       case 'fish':
         // Blub, blub.
         for (let i = 0; i < 2; i++) this.tone(500 * r(), { at: i * 0.12, decay: 0.08, gain: 0.06, slide: 900, slideTime: 0.06 });

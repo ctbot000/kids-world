@@ -75,6 +75,7 @@ const TOUGH_TOLD = {
   big: { icon: '💪', text: 'A Big Bruiser! It bumps twice as much HP off you and takes six bops. Jumping on it takes three.' },
   spiky: { icon: '🦔', text: 'A Spiky! Don’t jump on it, ouch! Bop it four times instead.' },
   mosquito: { icon: '🦟', text: 'A giant mosquito! It darts at you out of the air, so don’t try to jump on it — swat it instead: two bops and it’s off!' },
+  spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
 };
 
 const lerpAngle = (a, b, t) => {
@@ -1262,8 +1263,10 @@ export class Game extends EventTarget {
       }
       if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, big ? 24 : 10)) {
         entry.grumbleAt = now + 3500 + Math.random() * 4000;
-        // A mosquito whines as it comes at you; the others grumble.
+        // A mosquito whines and a spider skitters as they come at you; the
+        // others grumble.
         if (entry.kind === 'mosquito') this.sound.play('mosquito');
+        else if (entry.kind === 'spider') this.sound.play('spider');
         else this.sound.play('grumble', { big });
       }
     }

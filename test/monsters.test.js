@@ -334,7 +334,7 @@ test('someone riding a big animal is never bumped', () => {
 test('tougher monsters come out too, more of them at night: never at day a Big Bruiser', () => {
   const sim = new MonsterSim(3);
   const count = (night) => {
-    const n = { blob: 0, big: 0, spiky: 0, mosquito: 0 };
+    const n = { blob: 0, big: 0, spiky: 0, mosquito: 0, spider: 0 };
     for (let i = 0; i < 2000; i++) n[sim.pickKind(night)]++;
     return n;
   };
@@ -343,12 +343,15 @@ test('tougher monsters come out too, more of them at night: never at day a Big B
   assert.equal(day.big, 0);
   assert.ok(day.spiky > 300 && day.spiky < 500, `spikies by day: ${day.spiky}`);
   assert.ok(day.mosquito > 150 && day.mosquito < 330, `mosquitos by day: ${day.mosquito}`);
+  assert.ok(day.spider > 100 && day.spider < 220, `spiders by day: ${day.spider}`);
   assert.ok(night.big > 300 && night.big < 500, `bruisers at night: ${night.big}`);
   assert.ok(night.mosquito > 300 && night.mosquito < 500, `mosquitos at night: ${night.mosquito}`);
+  assert.ok(night.spider > 260 && night.spider < 380, `spiders at night: ${night.spider}`);
+  assert.ok(night.spider > day.spider * 1.5, 'spiders mostly at night');
   assert.ok(night.blob < day.blob, 'fewer blobs at night');
   // Each with its own size and hearts, on the wire too.
   const w = meadow();
-  for (const kind of ['big', 'spiky', 'mosquito']) {
+  for (const kind of ['big', 'spiky', 'mosquito', 'spider']) {
     const m = sim.add(w, 20.5, 11, 20.5, { kind });
     assert.equal(m.hearts, KINDS[kind].hearts);
     const row = unpackMonster(sim.pack().at(-1));

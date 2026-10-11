@@ -21,6 +21,13 @@
 // goes pop. Being a flyer, it crosses the water, where the others cannot
 // follow, but it keeps out of the safe places like any of them.
 //
+// And a giant spider, low and wide on eight legs, mostly out at night: it
+// scuttles as quick as a mosquito darts, quicker than you walk (never as
+// quick as you run), so run away from one rather than walk. Unlike a Spiky
+// or a mosquito you can jump on it: two of its four hearts come off with
+// each landing, so two jumps see it off — or four bops. It keeps to the
+// ground, out of the water and the safe places like the others.
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -91,6 +98,9 @@ export const SPIKY_BODY = { radius: 0.45, height: 0.85 };
 // A giant mosquito: about a Big Bruiser's height, rounder, and it never
 // touches the ground.
 export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
+// A giant spider: wider than a Big Bruiser is round but only up to your
+// middle, skittering about on its eight legs.
+export const SPIDER_BODY = { radius: 0.55, height: 0.95 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -153,10 +163,15 @@ export const KINDS = {
   // A mosquito darts at you, so its run is how fast it flies; cross (after
   // a bop) as quick as the others get, still never as quick as you run.
   mosquito: { hearts: 2, bump: 1, land: 0, move: { walk: 2.2, run: 5.2 }, cross: { walk: 2.2, run: 6.5 } },
+  // A giant spider scuttles: as quick as a mosquito, so quicker than you
+  // walk (never as quick as you run); cross as quick as the others get. A
+  // landing on its back takes two of its four hearts.
+  spider: { hearts: 4, bump: 1, land: 2, move: { walk: 2.4, run: 5.2, jump: 8 }, cross: { walk: 2.4, run: 6.5, jump: 8 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
-// Which kind comes out, by day and at night: the rest are blobs.
-const TOUGH = { day: { spiky: 0.2, mosquito: 0.12 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2 } };
+// Which kind comes out, by day and at night: the rest are blobs. A giant
+// spider is hardly ever about by day and oftener at night.
+const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2, spider: 0.16 } };
 // How high a mosquito keeps itself over the ground (or the water) beneath
 // it: well up out of reach of arm and jump until it darts at someone, when
 // it comes down to bump height; and how quickly it rises and sinks.
@@ -168,9 +183,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY })[kind] ?? MONSTER_BODY;
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));

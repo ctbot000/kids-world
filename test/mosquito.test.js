@@ -73,9 +73,8 @@ function step(sim, world, ms, people, night = false) {
   return bumps;
 }
 
-test('the mosquito is a monster now, on the end of the kinds, and no animal any more', () => {
+test('the mosquito is a monster now, and no animal any more', () => {
   assert.equal(MONSTER_KINDS.indexOf('mosquito'), 4, 'new kinds go on the end: the wire sends the index');
-  assert.equal(MONSTER_KINDS.at(-1), 'mosquito');
   assert.ok(!CRITTER_TYPES.includes('mosquito'), 'no critter of them');
   assert.equal(CRITTER_TYPES.at(-1), 'scooter');
   const sim = new MonsterSim(1);
