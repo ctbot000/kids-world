@@ -176,6 +176,56 @@ test('coming back with a token keeps who you are, and ownership', () => {
   assert.equal(again.last('welcome').you, 1);
 });
 
+test('the same login on another device comes back as the same player, replacing the other', () => {
+  const { room } = makeRoom();
+  const who = 'ab'.repeat(32);
+  const a = join(room, { who });
+  const friend = join(room, { name: 'Brave Otter' });
+  // Another device: no token, but the same login.
+  const b = join(room, { who, name: 'Happy Panda' });
+  assert.equal(b.last('welcome').you, 1, 'the same player, not a second one');
+  assert.equal(a.last('error').code, 'replaced');
+  assert.ok(a.closed);
+  assert.equal(b.last('welcome').players.length, 2, 'once on the island');
+  assert.equal(friend.all('joined').length, 1, 'friends never see a second one come in');
+  // Someone else's login, or none, is someone else.
+  assert.equal(join(room, { who: 'cd'.repeat(32) }).last('welcome').you, 3);
+  assert.equal(join(room, { who: 'not a who' }).last('welcome').you, 4);
+  // And it is kept over a save.
+  const copy = new Room({ code: '123456', save: JSON.parse(JSON.stringify(room.exportSave())) });
+  const c = conn();
+  copy.attach(c);
+  copy.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', who });
+  assert.equal(c.last('welcome').you, 1);
+});
+
+test('a login comes back by who it is only once let in like anyone, and never in place of the hosting page', () => {
+  const { room } = makeRoom();
+  const who = 'ab'.repeat(32);
+  // The page the island lives in (net.js), logged in.
+  const local = conn();
+  local.hosting = true;
+  room.attach(local);
+  room.receive(local, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', who });
+  const b = join(room, { who });
+  assert.equal(b.last('error').code, 'twice');
+  assert.ok(!local.last('error'), 'the island stays up');
+  // A locked island stays locked to it.
+  const { room: locked } = makeRoom();
+  const owner = join(locked, { name: 'Brave Otter' });
+  const a = join(locked, { who });
+  locked.detach(a);
+  locked.receive(owner, { t: 'host', cmd: 'settings', settings: { locked: true } });
+  assert.equal(locked.settings.locked, true);
+  assert.equal(join(locked, { who }).last('error').code, 'locked');
+  // Kicked on one device is kicked on all.
+  locked.receive(owner, { t: 'host', cmd: 'settings', settings: { locked: false } });
+  const a2 = join(locked, { who });
+  assert.equal(a2.last('welcome').you, 2);
+  locked.receive(owner, { t: 'host', cmd: 'kick', pid: 2 });
+  assert.equal(join(locked, { who }).last('error').code, 'kicked');
+});
+
 test('edits are checked, applied, echoed to everyone and acknowledged', () => {
   const { room } = makeRoom();
   const a = join(room);

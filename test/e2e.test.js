@@ -3239,6 +3239,39 @@ test('the shared isle is a way in of its own on the title screen, to the island 
   }
 });
 
+// The same login on two devices is one player on the isle: the device that
+// comes in last plays, and the other is sent back to the title, told why.
+test('the same login on two devices is on the shared isle once, the one in last', { skip }, async () => {
+  const who = () => localStorage.setItem('kidsworld.who', JSON.stringify({ player: '0123456789abcdef0123', token: '0123456789abcdef0123456789abcdef', username: 'Otter Fan 7' }));
+  const tablet = await openPlayer(base, { name: 'Sunny Otter' }, who);
+  const phone = await openPlayer(base, { name: 'Sunny Otter' }, who);
+  const enter = async (page) => {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+  };
+  try {
+    await enter(tablet);
+    const you = await tablet.evaluate(() => window.kidsWorld.game.pid);
+    // Toasts go in a few seconds, sooner than the phone may come in.
+    await tablet.evaluate(() => {
+      window.toasted = [];
+      new MutationObserver(() => window.toasted.push(document.getElementById('toasts').textContent)).observe(document.getElementById('toasts'), { childList: true });
+    });
+    await enter(phone);
+    assert.equal(await phone.evaluate(() => window.kidsWorld.game.pid), you, 'the same player');
+    await until(tablet, () => !document.getElementById('title').hidden);
+    await until(tablet, () => window.toasted.some((t) => t.includes('from another tab or device')));
+    const isle = [...server.rooms.values()].find((entry) => entry.public).room;
+    assert.equal([...isle.players.values()].filter((p) => p.online).length, 1, 'on the isle once');
+    assert.equal(await phone.evaluate(() => window.kidsWorld.game.players.size), 1, 'nobody else there to see');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await tablet.browserContext().close();
+    await phone.browserContext().close();
+  }
+});
+
 // A world of its own: on the isle you earn and carry the isle's things — kept
 // under its own key, apart from your profile — so its level is what shows
 // there, and what you do there touches nothing of yours everywhere else; back

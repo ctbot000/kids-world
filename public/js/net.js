@@ -103,6 +103,8 @@ export class HostLink extends Link {
     this.local = {
       send: (text) => queueMicrotask(() => this.deliver(JSON.parse(text))),
       close() {},
+      // The island lives in this page: it is never replaced by another device.
+      hosting: true,
     };
     this.room.attach(this.local);
     this.guests = new Map();

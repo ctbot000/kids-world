@@ -27,6 +27,13 @@ const params = new URLSearchParams(location.search);
 // here, or the guest. Logging in or out reloads the page as the other.
 const who = storage.loadWho();
 storage.useSpace(who?.player ?? null);
+// Who you are to the islands you join when logged in: the same on every
+// device you log in on, so an island knows you are already there instead of
+// letting you in twice. A hash of the login's folder, which stays a secret
+// (the island's owner hears this, and peer to peer that is someone's page).
+const islandWho = who && crypto.subtle
+  ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kids-world island player ${who.player}`))), (b) => b.toString(16).padStart(2, '0')).join('')
+  : '';
 const profile = new Profile();
 // The shared isle is a world of its own, so it keeps a world of you: the ⭐
 // experience, level and stickers, the 🪙 coins, the basket's treasures and
@@ -317,6 +324,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
   game.token = profile.token(key);
+  game.who = islandWho;
   game.typedPasscode = passcode;
   game.invitePass = pass;
   renderer.removeAvatar(-1);

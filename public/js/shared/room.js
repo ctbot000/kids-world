@@ -95,6 +95,8 @@ function cleanSettings(raw, base = defaultSettings()) {
 }
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+// Who a logged-in player is, as their pages tell an island (see main.js).
+export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 
 export class Room {
   // Either { theme, size, name, seed, adventure, defense, stage } for a
@@ -385,6 +387,19 @@ export class Room {
     }
     let token = typeof msg.token === 'string' ? msg.token : '';
     let p = this.tokens.has(token) ? this.players.get(this.tokens.get(token)) : null;
+    // A login's pages say who they are (see main.js), so the same login on
+    // another device comes back as the same player instead of a second one.
+    const who = isWho(msg.who) ? msg.who : '';
+    const known = !p && who ? ([...this.players.values()].find((q) => q.who === who) ?? null) : null;
+    if (known && this.kicked.has(known.id)) {
+      this.sendTo(conn, { t: 'error', code: 'kicked', text: 'The island owner said goodbye for now.' });
+      return;
+    }
+    // Peer to peer, the page the island lives in cannot be the one replaced.
+    if (known && [...this.clients].some(([other, oc]) => oc.pid === known.id && other.hosting)) {
+      this.sendTo(conn, { t: 'error', code: 'twice', text: 'You are on this island already, on another device.' });
+      return;
+    }
     if (p && this.kicked.has(p.id)) {
       this.sendTo(conn, { t: 'error', code: 'kicked', text: 'The island owner said goodbye for now.' });
       return;
@@ -395,11 +410,14 @@ export class Room {
         this.sendTo(conn, { t: 'error', code: 'locked', text: 'This island is closed to new visitors right now.' });
         return;
       }
-      if (this.online >= MAX_PLAYERS) {
+      if (this.online - (known?.online ? 1 : 0) >= MAX_PLAYERS) {
         this.sendTo(conn, { t: 'error', code: 'full', text: `This island already has ${MAX_PLAYERS} friends on it. Try again later!` });
         return;
       }
       if (this.passcode && this.players.size > 0 && !this.passFits(msg.pass) && !this.passcodeFits(conn, msg.passcode)) return;
+      // Only the reconnect token lets someone past the lock or the passcode:
+      // a login comes back by who it is once it is let in like anyone else.
+      p = known;
     }
     const look = cleanLook(msg.look, this.random);
     const wanted = nameOf(msg.name) || randomName(this.random);
@@ -419,7 +437,7 @@ export class Room {
       p.name = this.uniqueName(wanted, p.id);
     } else {
       const spawn = this.world.spawn;
-      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0] };
+      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], ...(who ? { who } : {}) };
       p.hp = p.maxHp = hpFor(p);
       this.players.set(p.id, p);
       this.prunePlayers();
@@ -1497,7 +1515,7 @@ export class Room {
       passcode: this.passcode,
       host: this.host,
       nextPid: this.nextPid,
-      players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look })),
+      players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look, ...(p.who ? { who: p.who } : {}) })),
       tokens: [...this.tokens],
       ...(this.adventure ? { adventure: this.adventure.save() } : {}),
       ...(this.defense ? { defense: this.defense.save() } : {}),
@@ -1561,6 +1579,7 @@ export class Room {
           look: cleanLook(raw.look, this.random),
           online: false,
           s: [spawn.x, spawn.y, spawn.z, 0, 0, 0],
+          ...(isWho(raw.who) ? { who: raw.who } : {}),
         });
       }
     }

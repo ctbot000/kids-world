@@ -97,6 +97,8 @@ export class Game extends EventTarget {
     this.host = 0;
     this.code = '';
     this.token = '';
+    // Who you are when logged in, the same on all your devices (see main.js).
+    this.who = '';
     this.settings = { build: 'everyone', locked: false, day: 'cycle', monsters: false, passcode: false };
     // The island's passcode, known while you are its owner ('' for none),
     // and the one you typed to come in as a new visitor.
@@ -178,7 +180,7 @@ export class Game extends EventTarget {
 
   joinMessage() {
     const p = this.profile;
-    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
+    return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.who ? { who: this.who } : {}), ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
   }
 
   // The world's own profile to earn and carry with here (the shared isle has
