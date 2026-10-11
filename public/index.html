@@ -24,7 +24,7 @@
 <section id="title" class="screen" hidden>
   <div class="title-top">
   <h1 class="logo" aria-label="Kids World"><span>K</span><span>i</span><span>d</span><span>s</span> <span>W</span><span>o</span><span>r</span><span>l</span><span>d</span></h1>
-  <p class="tagline">Build a happy island with your friends!</p>
+  <p class="tagline" id="tagline">Build a happy island with your friends!</p>
   <div class="me-row">
     <div class="me-name" id="me-name"></div>
     <button class="chip level-chip" id="btn-level" type="button"></button>
@@ -34,11 +34,16 @@
   </div>
   </div>
   <div class="title-bottom">
+  <div class="tabs mode-switch" id="mode-switch" role="tablist" aria-label="Which world" hidden>
+    <button class="chip" id="mode-build" type="button" role="tab">🧱 Build</button>
+    <button class="chip" id="mode-adventure" type="button" role="tab">⚔️ Adventure</button>
+  </div>
   <div class="big-buttons">
     <button class="big pink isle-button" id="btn-isle" type="button" hidden><span class="emoji">🌟</span> Adventure Isle</button>
     <button class="big green" id="btn-new" type="button"><span class="emoji">🏝️</span> Make an island</button>
     <button class="big blue" id="btn-visit" type="button"><span class="emoji">✈️</span> Visit a friend</button>
     <button class="big yellow" id="btn-mine" type="button"><span class="emoji">📒</span> My islands</button>
+    <p class="tagline isle-away" id="isle-away" hidden>Adventure Isle opens when the island keeper is online.</p>
   </div>
   <div class="small-buttons">
     <button class="chip" id="btn-stickers" type="button">⭐ Stickers</button>

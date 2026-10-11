@@ -24,6 +24,7 @@ import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from 
 import { hairIcon } from './hair-icons.js';
 import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
+import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
 
 const $ = (id) => document.getElementById(id);
@@ -382,6 +383,8 @@ export class UI {
     // of open islands is — the dedicated server's, or a keeper's.
     this.renderIsle();
     $('btn-isle').onclick = () => handlers.sharedIsle?.();
+    $('mode-build').onclick = () => this.setTitleWorld('home');
+    $('mode-adventure').onclick = () => this.setTitleWorld('isle');
     $('btn-new').onclick = () => this.newIslandDialog();
     $('btn-visit').onclick = () => this.visitDialog();
     $('btn-mine').onclick = () => this.myIslandsDialog();
@@ -390,7 +393,7 @@ export class UI {
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
     $('btn-stickers').onclick = $('btn-level').onclick = () => this.stickersDialog();
     $('btn-shop').onclick = () => this.shopDialog();
-    $('btn-ranking').onclick = () => this.rankingDialog();
+    $('btn-ranking').onclick = () => this.rankingDialog(this.profile === this.isle ? 'isle' : 'home');
     $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
     $('btn-sound').onclick = () => this.soundDialog();
@@ -450,7 +453,45 @@ export class UI {
   // The 🌟 shared isle's own way in, there wherever the list of open
   // islands is: the dedicated server's own list, or a keeper's.
   renderIsle() {
-    $('btn-isle').hidden = !this.handlers?.listAvailable?.();
+    this.renderTitleWorld();
+  }
+
+  // 🧱 Build or ⚔️ Adventure on the title screen: two worlds of you, kept
+  // apart. Build is your islands and your friends', with your level,
+  // stickers, shop and ranking; Adventure is the shared isle, with its own.
+  // There once the isle is (where the list of open islands is) or you have
+  // been on it; remembered on this device, and the world you last played in.
+  hasIsleWorld() {
+    return Boolean(this.isle) && (Boolean(this.handlers?.listAvailable?.()) || this.isle.progress.xp > 0);
+  }
+
+  setTitleWorld(world) {
+    this.titleWorld = world === 'isle' ? 'isle' : 'home';
+    save('titleWorld', this.titleWorld);
+    this.renderTitleWorld();
+  }
+
+  renderTitleWorld() {
+    this.titleWorld ??= load('titleWorld', 'home') === 'isle' ? 'isle' : 'home';
+    const can = this.hasIsleWorld();
+    const isle = can && this.titleWorld === 'isle';
+    $('mode-switch').hidden = !can;
+    for (const [id, on] of [['mode-build', !isle], ['mode-adventure', isle]]) {
+      $(id).classList.toggle('on', on);
+      $(id).setAttribute('aria-selected', String(on));
+    }
+    const list = Boolean(this.handlers?.listAvailable?.());
+    $('btn-isle').hidden = !isle || !list;
+    $('isle-away').hidden = !isle || list;
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine']) $(id).hidden = isle;
+    $('tagline').textContent = isle ? 'Free Adventure Isle from grumpy monsters together!' : 'Build a happy island with your friends!';
+    // At the title, the pages show the world picked (on an island, the one you are in).
+    const p = isle ? this.isle : this.home;
+    if (!this.game && p !== this.profile) {
+      this.profile = p;
+      this.levelKey = '';
+      this.renderLevel();
+    }
   }
 
   // The island's name: any typed, or one rolled for its kind (shown grey
@@ -2153,6 +2194,8 @@ export class UI {
       this.levelKey = '';
       this.renderLevel();
     }
+    // Back at the title, the world you played in.
+    if (this.isle) this.setTitleWorld(game.profile === this.isle ? 'isle' : 'home');
     $('title').hidden = true;
     $('hud').hidden = false;
     document.body.classList.add('playing');
@@ -2246,8 +2289,8 @@ export class UI {
 
   detach() {
     this.game = null;
-    // Back at the title, your own world again.
-    this.profile = this.home;
+    // Back at the title, the world picked there.
+    this.profile = this.titleWorld === 'isle' && this.hasIsleWorld() ? this.isle : this.home;
     this.levelKey = '';
     this.renderLevel();
     this.minimap.detach();

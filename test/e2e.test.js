@@ -3226,6 +3226,7 @@ test('the AI friend’s own island is on the list of open islands through the ke
 test('the shared isle is a way in of its own on the title screen, to the island the server keeps', { skip }, async () => {
   const page = await openPlayer(base, { name: 'Brave Fox' });
   try {
+    await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await inGame(page);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Adventure Isle');
@@ -3246,6 +3247,7 @@ test('on the shared isle, your XP, level and what you do are the isle’s own, a
   const page = await openPlayer(base, { name: 'Brave Fox', stats: { steps: 50000 } });
   try {
     assert.equal(await page.evaluate(() => window.kidsWorld.profile.progress.level), 7, 'a past on other islands');
+    await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await inGame(page);
     await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
@@ -3264,11 +3266,18 @@ test('on the shared isle, your XP, level and what you do are the isle’s own, a
     assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.visits), 0);
     assert.equal(await page.evaluate(() => Object.keys(localStorage).includes('kidsworld.adventure')), true, 'kept under its own key');
 
-    // Back at the title, your own level again.
+    // Back at the title, on ⚔️ Adventure with the isle's level and the way
+    // back in; 🧱 Build has your own level and your islands.
     await page.click('#btn-settings');
     await clickButton(page, 'Leave island', '#modal');
     await until(page, () => !document.getElementById('title').hidden);
-    assert.equal(await page.$eval('#btn-level', (el) => el.textContent), '⭐ Level 7');
+    assert.equal(await page.$eval('#mode-adventure', (el) => el.classList.contains('on')), true, 'the world you played in');
+    assert.equal(await page.$eval('#btn-level', (el) => el.textContent), '⭐ Level 1');
+    assert.equal(await page.$eval('#btn-new', (el) => el.hidden), true, 'no islands to make on the isle’s side');
+    await clickButton(page, '🧱 Build');
+    await until(page, () => document.getElementById('btn-level').textContent === '⭐ Level 7');
+    assert.equal(await page.$eval('#btn-isle', (el) => el.hidden), true, 'the isle is on its own side');
+    assert.equal(await page.$eval('#btn-new', (el) => el.hidden), false);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -3307,6 +3316,7 @@ test('the isle’s own world of you is kept at the keeper and ranked on boards o
 
     // Off to the isle: what they do there is the isle's world alone.
     await eventually(() => keeper.openIslands().some((i) => i.public));
+    await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await inGame(page);
     await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
@@ -3367,6 +3377,7 @@ test('the shared isle is on the keeper’s list of open islands too, hosted peer
     await eventually(() => keeper.openIslands().some((i) => i.public));
     assert.equal(keeper.openIslands().find((i) => i.public).name, 'Adventure Isle');
     // The title screen's own way in, straight there over WebRTC.
+    await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await inGame(page);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Adventure Isle');

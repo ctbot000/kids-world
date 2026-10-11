@@ -357,6 +357,23 @@ body.fullscreen .full-icon .leave {
   }
 }
 
+/* Build or Adventure on the title screen: your worlds, each with its own
+   level, stickers, shop and ranking (the shared isle's apart from the rest). */
+.mode-switch {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.mode-switch .chip {
+  font-size: 1.1rem;
+  padding: 10px 20px;
+}
+
+.isle-away {
+  grid-column: 1 / -1;
+  font-size: 1.05rem;
+}
+
 .small-buttons {
   display: flex;
   gap: 10px;
