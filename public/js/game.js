@@ -24,6 +24,7 @@ import { gearMove, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
+import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
@@ -123,11 +124,14 @@ export class Game extends EventTarget {
     this.seenRainbow = false;
     // An adventure island's camps and King Grumble (shared/adventure.js), as
     // the island tells of them (null on any other island); whether you sit
-    // dizzy there, out of hearts, until a friend helps you up; and the
-    // fireworks when it is all free.
+    // dizzy there, out of hearts, until a friend helps you up; the fireworks
+    // when it is all free; and the extra-credit quizzes a conquered one
+    // offers you (shared/quiz.js) — the offer, and the quiz you are taking.
     this.adventure = null;
     this.dizzy = false;
     this.fireworks = [];
+    this.quizOffer = null;
+    this.quiz = null;
     // A tower defense island's road, pads, towers and waves
     // (shared/defense.js), as the island tells of them (null on any other).
     this.defense = null;
@@ -1178,6 +1182,10 @@ export class Game extends EventTarget {
   setAdventure(a) {
     this.renderer.clearFlags();
     this.adventure = null;
+    // Any quizzes were for the island as it was won: on one arrived at, even
+    // a conquered one, none are yours to take.
+    this.quizOffer = null;
+    this.quiz = null;
     if (a && Array.isArray(a.camps) && a.camps.length) {
       const camps = new Map();
       for (const c of a.camps) {
@@ -1302,6 +1310,11 @@ export class Game extends EventTarget {
     if (mine) {
       this.profile.count('kings');
       this.profile.addToBasket('diamond', 1);
+      // Everyone who freed the island may take its extra-credit quizzes
+      // (shared/quiz.js): the offer comes up by itself once the fireworks
+      // have had their moment (updateAdventure), and after that waits with
+      // the 🎓 by the flag (ui.js) for as long as you stay.
+      this.quizOffer = { at: performance.now() + WIN_OFFER_MS, told: false, taken: { junior: false, senior: false } };
     }
     if (this.dizzy) {
       this.dizzy = false;
@@ -1311,6 +1324,55 @@ export class Game extends EventTarget {
     const what = hero ? `${hero} popped King Grumble!` : 'Every camp is free!';
     this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
+  }
+
+  // ------------------------------------------------ extra-credit quizzes
+
+  // One of the quizzes a conquered island offered (shared/quiz.js), its
+  // questions picked and shuffled by chance: { level, questions, picks (the
+  // answers you have given), right (how many of them were right), done }.
+  // Says 'quiz', for the window taking it (ui.js). Returns true when the
+  // answer was right, false when it was not, and undefined when it was no
+  // answer to take (no quiz going, the quiz done, or a nonsense answer).
+  quizAnswer(i) {
+    const q = this.quiz;
+    if (!q || q.done) return;
+    const ask = q.questions[q.picks.length];
+    if (!ask || !Number.isInteger(i) || i < 0 || i >= ask.choices.length) return;
+    const right = i === ask.answer;
+    q.picks.push(i);
+    if (right) q.right++;
+    if (q.picks.length < q.questions.length) {
+      this.emit('quiz');
+      return right;
+    }
+    // The last one answered: the quiz is done, and the extra credit is yours.
+    q.done = true;
+    q.coins = quizCoins(q.right, q.level);
+    q.xp = XP_FOR.quizzes.xp + q.right * XP_FOR.quizright.xp + (q.right === q.questions.length ? XP_FOR.quizperfect.xp : 0);
+    this.quizOffer.taken[q.level] = true;
+    this.profile.count('quizzes');
+    this.profile.count('quizright', q.right);
+    if (q.right === q.questions.length) this.profile.count('quizperfect');
+    if (q.coins) this.profile.earn(q.coins);
+    const b = this.me?.body;
+    if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: q.xp });
+    this.emit('quiz');
+    return right;
+  }
+
+  // A quiz begun: one of the island's offer, not already taken. Says 'quiz',
+  // which opens the window on it (ui.js).
+  startQuiz(level) {
+    if (!this.quizOffer || this.quizOffer.taken[level] || !QUIZ_LEVELS[level]) return;
+    this.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0), picks: [], right: 0, done: false };
+    this.emit('quiz');
+  }
+
+  // The quiz window closed: a quiz half done simply goes, to be begun afresh
+  // if you like (nothing was earned from it yet).
+  closeQuiz() {
+    this.quiz = null;
   }
 
   // A friend helped someone up (by 0: the island did, being freed).
@@ -1342,11 +1404,17 @@ export class Game extends EventTarget {
     this.goHome(msg.at, 'Back you go to the nearest safe place, with all your hearts.');
   }
 
-  // Each frame: the flags where their camps are, fireworks going off, and
-  // stars going round the head of anyone dizzy.
+  // Each frame: the flags where their camps are, fireworks going off, stars
+  // going round the head of anyone dizzy, and the quizzes a conquered island
+  // comes offering once the fireworks have had their moment.
   updateAdventure(dt) {
     const adv = this.adventure;
     const now = performance.now();
+    const offer = this.quizOffer;
+    if (offer && !offer.told && now >= offer.at) {
+      offer.told = true;
+      this.emit('quiz-offer');
+    }
     if (adv) {
       for (const c of adv.camps.values()) {
         if (!c.flag) continue;

@@ -3314,3 +3314,124 @@ kbd {
   text-align: center;
 }
 
+/* ------------------------------------------------ extra-credit quizzes */
+
+/* The 🎓 by a conquered island's flag, there to be tapped (the overlays it
+   floats in let nothing else take a tap). */
+.adv-tag.quiz {
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgba(255, 246, 214, 0.95);
+}
+
+@media (hover: hover) {
+  .adv-tag.quiz:hover {
+    filter: brightness(1.03);
+  }
+}
+
+/* The two quizzes to pick from, a name and what each pays in one big button. */
+.quiz-level {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  line-height: 1.2;
+}
+
+.quiz-sub {
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0.85;
+  text-shadow: none;
+}
+
+/* A quiz's window: how far it has gone, the question, and its answers in a
+   column of buttons — one column, for the answers can be a sentence long. */
+.quiz-status {
+  min-height: 1.6em;
+  margin: 2px 0 12px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.quiz-question {
+  margin: 6px 0 14px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.quiz-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quiz-answer {
+  padding: 13px 18px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: 0 4px 0 var(--line);
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease,
+    filter 0.15s ease;
+}
+
+@media (hover: hover) {
+  .quiz-answer:not(:disabled):hover {
+    filter: brightness(1.03);
+    transform: translateY(-1px);
+  }
+}
+
+.quiz-answer:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--line);
+}
+
+.quiz-answer:disabled {
+  cursor: default;
+}
+
+/* An answer given: the right one outlined in grass, a wrong pick in pink,
+   the rest faded back. */
+.quiz-answer.right {
+  outline: 4px solid var(--grass);
+}
+
+.quiz-answer.wrong {
+  outline: 4px solid var(--pink-dark);
+}
+
+.quiz-answer.dim {
+  opacity: 0.55;
+}
+
+.quiz-verdict {
+  margin: 12px 0;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* The end of a quiz: the score, and the extra credit it earned. */
+.quiz-result {
+  margin: 10px 0 4px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.quiz-credit {
+  margin: 0 0 18px;
+  font-weight: 700;
+  text-align: center;
+}
+

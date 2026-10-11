@@ -17,6 +17,7 @@ import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, MAX_HEARTS } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
+import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -1708,6 +1709,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
+          card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
@@ -2272,6 +2274,8 @@ export class UI {
     });
     on('arcade-open', () => this.arcadeDialog());
     on('arcade', () => this.renderArcade());
+    on('quiz-offer', () => this.quizOfferDialog(true));
+    on('quiz', () => this.quizNews());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -2831,7 +2835,11 @@ export class UI {
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` Camp ${c.id}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
               castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, '👑', ' King Grumble', h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in his bubble 🫧' : 'ready to pop!')) : '',
             ),
-            adv.won ? '' : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
+            adv.won && g.quizOffer && (!g.quizOffer.taken.junior || !g.quizOffer.taken.senior)
+              ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag: one at elementary school Year 2 level, one at middle school Year 3. Every answer right pays!')
+              : adv.won
+                ? ''
+                : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
           );
         }
         const def = g.defense;
@@ -3515,6 +3523,163 @@ export class UI {
     }
   }
 
+  // ------------------------------------------------ extra-credit quizzes
+
+  // A quiz begun or answered, as the game tells of it (game.js startQuiz and
+  // quizAnswer): the window on it opens, or the one already open shows where
+  // it has got to.
+  quizNews() {
+    const g = this.game;
+    if (!g?.quiz) return;
+    if (this.quizEls?.quiz !== g.quiz) this.quizDialog();
+    else this.renderQuiz();
+  }
+
+  // The quizzes a conquered adventure island offers (game.js quizOffer): one
+  // at elementary school second-year level, one at middle school third-year
+  // level, each for extra credit. auto: come up by itself once the island
+  // was won, so never over a window already open — after that, the 🎓 by the
+  // flag opens this again (adventureTags).
+  quizOfferDialog(auto = false) {
+    const g = this.game;
+    if (!g?.quizOffer || (auto && this.modalOpen)) return;
+    const levels = Object.values(QUIZ_LEVELS);
+    const left = levels.filter((l) => !g.quizOffer.taken[l.key]).length;
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '🎓 Extra credit!'),
+          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — a few questions, and every answer you get right pays.` : 'You have done both of this island’s quizzes. Well done!'),
+        );
+        for (const l of levels) {
+          const done = g.quizOffer.taken[l.key];
+          root.append(
+            h(
+              'button',
+              {
+                class: `big ${l.key === 'senior' ? 'pink' : 'blue'}`,
+                type: 'button',
+                disabled: done,
+                onclick: () => {
+                  this.sound.unlock();
+                  this.sound.play('ui');
+                  g.startQuiz(l.key);
+                },
+              },
+              h('span', { class: 'emoji' }, l.icon),
+              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, done ? '✓ done' : `🪙 ${quizCoins(1, l.key)} a right answer`)),
+            ),
+          );
+        }
+        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE} questions each. Finish one and the other is still there, by the 🎓 by the flag, as long as you stay on the island.`));
+      },
+      { narrow: true },
+    );
+  }
+
+  // The quiz you are taking, in a window: where it has got to, the question
+  // being asked with its answers to pick from, and after the last one, what
+  // you got and what it earned. Kept up to date as you answer (renderQuiz).
+  // A question answered stays up a moment to show which answer was right,
+  // until Next goes on to the question after it.
+  quizDialog() {
+    const g = this.game;
+    const q = g?.quiz;
+    if (!q) return;
+    const def = QUIZ_LEVELS[q.level];
+    this.quizEls = null;
+    this.quizAt = 0;
+    this.openModal(
+      (root) => {
+        const status = h('div', { class: 'quiz-status' });
+        const box = h('div', { class: 'quiz-box' });
+        this.quizEls = { quiz: q, status, box };
+        root.append(h('h2', {}, `${def.icon} ${def.name}`), status, box);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          this.quizEls = null;
+          // Another quiz taken over this window (startQuiz from its results)
+          // must not be closed with the window it took over.
+          if (g.quiz === q) g.closeQuiz();
+        },
+      },
+    );
+    this.renderQuiz();
+  }
+
+  // The quiz's window, as it changes: the question and its answers (the one
+  // you picked, which was right, and which was not), or the results and what
+  // they earned, with the other quiz there to take if it is still to do.
+  renderQuiz() {
+    const g = this.game;
+    const q = g?.quiz;
+    const els = this.quizEls;
+    if (!q || els?.quiz !== q || !this.modalOpen) return;
+    const total = q.questions.length;
+    if (q.done && !els.done) {
+      els.done = true;
+      this.sound.play(q.right === total ? 'victory' : 'fanfare');
+    }
+    const i = Math.min(this.quizAt, q.picks.length);
+    const status = q.done && this.quizAt >= total ? `You got ${q.right} of ${total} right!` : `Question ${i + 1} of ${total} · ${q.right} right`;
+    if (els.status.dataset.k !== status) {
+      els.status.dataset.k = status;
+      els.status.textContent = status;
+    }
+    // All answered, and past the last one's answer: the results.
+    if (q.done && this.quizAt >= total) {
+      const perfect = q.right === total;
+      const coins = q.coins ?? quizCoins(q.right, q.level);
+      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && !g.quizOffer?.taken[l.key]);
+      els.box.replaceChildren(
+        h('div', { class: `quiz-result${perfect ? ' perfect' : ''}` }, `${perfect ? '💯' : '🎓'} ${q.right} of ${total} right`),
+        h(
+          'p',
+          { class: 'quiz-credit' },
+          perfect ? 'Perfect, every one right! ' : q.right ? 'Well done! ' : '',
+          `Extra credit: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
+        ),
+        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), ` The ${other.name} quiz`) : '',
+        h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
+      );
+      return;
+    }
+    // The question being asked, or the one just answered, its answers marked.
+    const ask = q.questions[i];
+    const answered = this.quizAt < q.picks.length;
+    const answers = h(
+      'div',
+      { class: 'quiz-answers', role: 'group', 'aria-label': 'Answers' },
+      ask.choices.map((choice, at) =>
+        h(
+          'button',
+          {
+            class: `quiz-answer${answered ? (at === ask.answer ? ' right' : at === q.picks[this.quizAt] ? ' wrong' : ' dim') : ''}`,
+            type: 'button',
+            disabled: answered,
+            onclick: () => {
+              this.sound.unlock();
+              const right = g.quizAnswer(at);
+              if (right === true) this.sound.play('collect');
+              else if (right === false) this.sound.play('no');
+            },
+          },
+          choice,
+        ),
+      ),
+    );
+    els.box.replaceChildren(
+      h('div', { class: 'quiz-question' }, ask.q),
+      answers,
+      answered ? h('p', { class: 'quiz-verdict' }, q.picks[this.quizAt] === ask.answer ? '✅ Yes, that’s the one!' : '❌ Not this one — the right answer is the one outlined green.') : '',
+      answered
+        ? h('button', { class: 'big green', type: 'button', onclick: () => { this.sound.play('ui'); this.quizAt++; this.renderQuiz(); } }, this.quizAt === total - 1 ? 'How you did ▶' : 'Next ▶')
+        : '',
+    );
+  }
+
   // On a tower defense island: Build, beside the pad you stand by (Bigger,
   // for a tower there, with its cost in bricks), or by none, Start, while
   // the next wave waits.
@@ -3552,13 +3717,14 @@ export class UI {
     const seen = new Set();
     const adv = g.adventure;
     const me = g.me?.body;
-    const tag = (key, x, y, z, state, build, kind = '') => {
+    const tag = (key, x, y, z, state, build, kind = '', onClick = null) => {
       const scr = r.project(x, y, z);
       if (!scr.visible) return;
       seen.add(key);
       let el = this.advTags.get(key);
       if (!el) {
         el = h('div', { class: `adv-tag ${kind}`.trim() });
+        if (onClick) el.onclick = () => { this.sound.unlock(); onClick(); };
         this.advTags.set(key, el);
         $('overlays').append(el);
       }
@@ -3607,6 +3773,16 @@ export class UI {
       if (p && adv.king && Math.hypot(p.x - me.x, p.z - me.z) < 45) {
         const { hearts, max } = adv.king;
         tag('king', p.x, p.y + 2.9, p.z, `${hearts}|${max}|${adv.shield}`, () => [h('div', { class: 'label' }, adv.shield ? '👑 King Grumble 🫧' : '👑 King Grumble'), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
+      }
+    }
+    // A conquered island's extra-credit quizzes wait by its flag — the
+    // castle's, or the last camp's on an island that had no castle — until
+    // both are done: 🎓 over it, and a tap takes them (ui.js quizOfferDialog).
+    if (adv && me && adv.won && g.quizOffer && Object.values(QUIZ_LEVELS).some((l) => !g.quizOffer.taken[l.key])) {
+      const camps = [...adv.camps.values()];
+      const spot = camps.find((c) => c.kind === 'castle') ?? camps[camps.length - 1];
+      if (spot && Math.hypot(spot.x - me.x, spot.z - me.z) < 50) {
+        tag('quiz', spot.x, spot.y + 4.6, spot.z, 'quiz', () => [h('div', { class: 'label' }, '🎓 Extra credit quiz!')], 'quiz', () => this.quizOfferDialog());
       }
     }
     // Over every other monster near you, a bar of the hearts it has left.

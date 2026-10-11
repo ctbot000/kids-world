@@ -62,6 +62,9 @@ export const XP_FOR = {
   arcade: { xp: 10 },
   blobpops: { xp: 1, cap: 2000 },
   pairsfound: { xp: 3, cap: 1000 },
+  quizzes: { xp: 10 },
+  quizright: { xp: 5, cap: 5000 },
+  quizperfect: { xp: 25 },
 };
 
 // XP for each sticker earned, on top of what earned it.
