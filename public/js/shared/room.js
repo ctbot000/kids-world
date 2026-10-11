@@ -1,7 +1,7 @@
 // A hosted island: the world and everything around it — who is here, their
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
 // into trees, fruit growing back, what the island's owner allows, the
-// monsters when the owner lets them in (with everyone's hearts), and on an
+// monsters when the owner lets them in (with everyone's HP), and on an
 // adventure island its camps to free (see adventure.js), and on a tower
 // defense island the waves of monsters and the towers (see defense.js).
 //
@@ -10,7 +10,7 @@
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
-import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_HEARTS, HELP_REACH } from './adventure.js';
+import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_REACH, helpHp } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
@@ -21,11 +21,15 @@ import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
+import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { heartsAfterBump, heartsBack, kindOf, MAX_HEARTS, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { hpAfterBump, hpBack, kindOf, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanPiece } from './song.js';
 import { weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
+
+// The most HP someone has, from the level on their look.
+const hpFor = (p) => maxHp(cleanLevel(p.look?.level) || 1);
 
 export const PROTOCOL = 1;
 
@@ -330,6 +334,7 @@ export class Room {
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
         p.look = cleanLook(msg.look, this.random);
+        this.levelHp(p);
         const name = nameOf(msg.name);
         if (name) p.name = this.uniqueName(name, p.id);
         this.broadcast({ t: 'look', pid, look: p.look, name: p.name });
@@ -409,12 +414,13 @@ export class Room {
       }
       p.online = true;
       p.look = look;
-      p.hearts = MAX_HEARTS;
+      p.hp = p.maxHp = hpFor(p);
       p.dizzyUntil = 0;
       p.name = this.uniqueName(wanted, p.id);
     } else {
       const spawn = this.world.spawn;
-      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], hearts: MAX_HEARTS };
+      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0] };
+      p.hp = p.maxHp = hpFor(p);
       this.players.set(p.id, p);
       this.prunePlayers();
     }
@@ -514,7 +520,7 @@ export class Room {
       critters: this.critters.describe(),
       pack: this.critters.pack(),
       monsters: this.monsters.pack(),
-      hearts: this.players.get(c.pid)?.hearts ?? MAX_HEARTS,
+      ...this.hpOf(this.players.get(c.pid)),
       env: this.envMessage(),
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
@@ -1004,39 +1010,39 @@ export class Room {
     }
     for (const p of this.players.values()) {
       if (!p.online) continue;
-      // Hearts come back while nothing bumps you.
-      if ((p.hearts ?? MAX_HEARTS) >= MAX_HEARTS || p.dizzyUntil) continue;
-      const hearts = heartsBack(p.hearts, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
-      if (hearts === p.hearts) continue;
-      p.hearts = hearts;
+      // HP comes back while nothing bumps you.
+      if (p.hp >= p.maxHp || p.dizzyUntil) continue;
+      const hp = hpBack(p.hp, p.maxHp, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
+      if (hp === p.hp) continue;
+      p.hp = hp;
       p.healAt = now;
-      this.sendToPid(p.id, { t: 'hearts', hearts });
+      this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
     }
   }
 
   // A monster bumped into someone (stomp: King Grumble's landing knocked
-  // them over): a heart gone. With none left, they sit dizzy where they are
+  // them over): some HP gone. With none left, they sit dizzy where they are
   // on an adventure island while a friend there could come and help them up;
-  // otherwise back they go to the nearest safe place, with every heart again.
+  // otherwise back they go to the nearest safe place, with all their HP again.
   hurt(pid, monster, now, stomp = false) {
     const p = this.players.get(pid);
     if (!p) return;
-    p.hearts = heartsAfterBump(p.hearts ?? MAX_HEARTS, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump);
+    p.hp = hpAfterBump(p.hp, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump);
     p.bumpAt = now;
     p.healAt = now;
     p.safeUntil = now + SAFE_MS;
     const b = monster.body;
-    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), hearts: p.hearts, home: false };
+    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), ...this.hpOf(p), home: false };
     if (monster.kind === 'king' || monster.kind === 'big') msg.big = true;
     if (monster.kind === 'spiky') msg.spiky = true;
     if (stomp) msg.stomp = true;
-    if (p.hearts === 0) {
+    if (p.hp === 0) {
       if (this.adventure && this.helperFor(pid, now)) {
         p.dizzyUntil = now + DIZZY_MS;
         msg.dizzy = true;
       } else {
         const at = this.goHome(p, now);
-        Object.assign(msg, { home: true, hearts: MAX_HEARTS, at });
+        Object.assign(msg, { home: true, ...this.hpOf(p), at });
       }
     }
     this.broadcast(msg);
@@ -1049,10 +1055,10 @@ export class Room {
   }
 
   // Back to the nearest safe place (the start, or a camp freed), safe, with
-  // every heart again. Returns where, as [x, y, z].
+  // all their HP again. Returns where, as [x, y, z].
   goHome(p, now) {
     const at = this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
-    p.hearts = MAX_HEARTS;
+    p.hp = p.maxHp;
     p.dizzyUntil = 0;
     p.healAt = now;
     p.safeUntil = now + SAFE_MS;
@@ -1062,18 +1068,18 @@ export class Room {
 
   sendHome(p, now) {
     const at = this.goHome(p, now);
-    this.broadcast({ t: 'home', pid: p.id, at, hearts: MAX_HEARTS });
+    this.broadcast({ t: 'home', pid: p.id, at, ...this.hpOf(p) });
   }
 
   // A friend tapping someone sitting dizzy, from beside them: up they get,
-  // with a few hearts.
+  // with some of their HP.
   help(p, msg) {
     const now = this.now();
     const q = this.players.get(msg.pid);
     if (!q?.online || q === p || !((q.dizzyUntil ?? 0) > now) || (p.dizzyUntil ?? 0) > now) return;
     if (Math.hypot(q.s[0] - p.s[0], q.s[1] - p.s[1], q.s[2] - p.s[2]) > HELP_REACH + 1.5) return;
-    Object.assign(q, { dizzyUntil: 0, hearts: HELP_HEARTS, bumpAt: now, healAt: now, safeUntil: now + SAFE_MS * 2 });
-    this.broadcast({ t: 'helped', pid: q.id, by: p.id, hearts: q.hearts });
+    Object.assign(q, { dizzyUntil: 0, hp: helpHp(q.maxHp), bumpAt: now, healAt: now, safeUntil: now + SAFE_MS * 2 });
+    this.broadcast({ t: 'helped', pid: q.id, by: p.id, ...this.hpOf(q) });
   }
 
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
@@ -1319,34 +1325,50 @@ export class Room {
   }
 
   // The island free: anyone dizzy gets up, and with no monsters roaming, nothing
-  // can bump anyone now, so everyone has all their hearts.
+  // can bump anyone now, so everyone has all their HP.
   allWell() {
     const now = this.now();
     for (const p of this.players.values()) {
       if ((p.dizzyUntil ?? 0) > now) {
         p.dizzyUntil = 0;
-        p.hearts = this.settings.monsters ? HELP_HEARTS : MAX_HEARTS;
-        if (p.online) this.broadcast({ t: 'helped', pid: p.id, by: 0, hearts: p.hearts });
+        p.hp = this.settings.monsters ? helpHp(p.maxHp) : p.maxHp;
+        if (p.online) this.broadcast({ t: 'helped', pid: p.id, by: 0, ...this.hpOf(p) });
         continue;
       }
       p.dizzyUntil = 0;
-      if (this.settings.monsters || (p.hearts ?? MAX_HEARTS) === MAX_HEARTS) continue;
-      p.hearts = MAX_HEARTS;
-      if (p.online) this.sendToPid(p.id, { t: 'hearts', hearts: MAX_HEARTS });
+      if (this.settings.monsters || p.hp === p.maxHp) continue;
+      p.hp = p.maxHp;
+      if (p.online) this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
     }
   }
 
   // Monsters turned off: every one roaming about goes (those of an adventure
   // island's camps stay), and, unless those are about, everyone has all their
-  // hearts.
+  // HP.
   noMonsters() {
     this.monsters.clearRoaming();
     if (this.adventure?.active) return;
     for (const p of this.players.values()) {
-      if ((p.hearts ?? MAX_HEARTS) === MAX_HEARTS) continue;
-      p.hearts = MAX_HEARTS;
-      if (p.online) this.sendToPid(p.id, { t: 'hearts', hearts: MAX_HEARTS });
+      if (p.hp === p.maxHp) continue;
+      p.hp = p.maxHp;
+      if (p.online) this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
     }
+  }
+
+  // Someone's HP as a message carries it: { hp, max }.
+  hpOf(p) {
+    const max = p?.maxHp ?? maxHp(1);
+    return { hp: p?.hp ?? max, max };
+  }
+
+  // A new look with a new level on it: a level up gives more HP (levels.js),
+  // and as much of it as is new comes straight away.
+  levelHp(p) {
+    const max = hpFor(p);
+    if (max === p.maxHp) return;
+    p.hp = Math.max(0, Math.min(max, (p.hp ?? max) + Math.max(0, max - (p.maxHp ?? max))));
+    p.maxHp = max;
+    if (p.online) this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
   }
 
   sendToPid(pid, msg) {

@@ -723,7 +723,7 @@ body.fullscreen .full-icon .leave {
   font-size: 1.5rem;
 }
 
-/* Your hearts, while the island has monsters: full ones red, lost ones pale. */
+/* Your HP, while the island has monsters: a number and a bar. */
 .hearts {
   display: flex;
   gap: 2px;
@@ -742,9 +742,43 @@ body.fullscreen .full-icon .leave {
   display: none;
 }
 
-.hearts .lost {
-  filter: grayscale(1);
-  opacity: 0.35;
+.hearts .hp-label,
+.hearts .hp-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hearts .hp-num {
+  min-width: 4.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Green while there is plenty, amber at half, red when it runs low. */
+.hearts .hp-bar {
+  align-self: center;
+  width: 84px;
+  height: 10px;
+  margin: 0 4px;
+  border-radius: 999px;
+  background: rgba(61, 46, 79, 0.18);
+  overflow: hidden;
+}
+
+.hearts .hp-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #4cc46a;
+  transition: width 0.25s;
+}
+
+.hearts .hp-bar.half > span {
+  background: #f2b233;
+}
+
+.hearts .hp-bar.low > span {
+  background: #ef5a5a;
 }
 
 /* On a tower defense island: the wave, the Star Stone's hearts and the bricks. */

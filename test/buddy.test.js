@@ -174,7 +174,7 @@ test('it helps a dizzy friend up, and bops a monster coming at one', async () =>
   const pip = await eventually(() => buddyIn(room));
   const me = room.players.get(minji.me);
   minji.say({ t: 'm', s: [pip.s[0] + 6, pip.s[1], pip.s[2], 0, 0, 0] });
-  me.hearts = 1;
+  me.hp = 1;
   room.hurt(me.id, { id: 999, kind: 'blob', body: { x: me.s[0] + 1, z: me.s[2] } }, Date.now());
   assert.ok(me.dizzyUntil > Date.now(), 'dizzy');
   const helped = await eventually(() => minji.of('helped').find((m) => m.pid === me.id));

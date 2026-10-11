@@ -10,11 +10,11 @@
 // and all of it kept when saved, and on the list of open islands.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, HELP_HEARTS, KING_HEAL_MS, KING_HIT_MS, kingHearts, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
+import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
 import * as B from '../public/js/shared/blocks.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing } from '../public/js/shared/listing.js';
-import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, MAX_HEARTS, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, maxHp, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { generate, SIZES, THEMES } from '../public/js/shared/worldgen.js';
@@ -276,7 +276,7 @@ test('one comes after whoever goes into its camp, gives up once they are well ou
   // In the camp: chased, and bumped.
   play(room, time, 8000, [a, ...byFlag(c)]);
   assert.ok(a.all('bump').length >= 1, 'caught');
-  assert.ok(a.last('bump').hearts < MAX_HEARTS);
+  assert.ok(a.last('bump').hp < maxHp(1));
   // Well out: they give up, and go back in.
   play(room, time, 15000, [a, c.x + c.r + 16, c.z]);
   for (const m of guards(room, c)) {
@@ -352,28 +352,28 @@ test('a camp freed: its monsters go, its gloomy ground turns into grass and flow
   assert.ok(havens.some((h) => h.x === c.x && h.z === c.z && h.r > c.r));
   // Out of hearts near it, with nobody to help: back you come, by its flag.
   room.receive(b, { t: 'leave' });
-  room.players.get(a.pid).hearts = 1;
+  room.players.get(a.pid).hp = 1;
   play(room, time, 300, [a, d.x + d.r + 10, d.z]);
   play(room, time, 10000, [a, ...byFlag(d)]);
   const home = a.all('bump').find((m) => m.home);
   assert.ok(home, 'sent back');
   const nearest = [room.world.spawn, c].sort((p, q) => Math.hypot(p.x - d.x, p.z - d.z) - Math.hypot(q.x - d.x, q.z - d.z))[0];
   assert.ok(Math.hypot(home.at[0] - nearest.x, home.at[2] - nearest.z) < 3, 'to the nearest safe place');
-  assert.equal(home.hearts, MAX_HEARTS);
+  assert.equal(home.hp, maxHp(1));
 });
 
-test('out of hearts with a friend on the island you sit dizzy, nothing bumps you, and a friend beside you helps you up', () => {
+test('out of HP with a friend on the island you sit dizzy, nothing bumps you, and a friend beside you helps you up', () => {
   const { room, time } = adventureRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
   const [c] = camps(room);
   const spawn = room.world.spawn;
   play(room, time, 300, [a, c.x + c.r + 10, c.z], [b, spawn.x, spawn.z]);
-  room.players.get(a.pid).hearts = 1;
+  room.players.get(a.pid).hp = 1;
   play(room, time, 8000, [a, ...byFlag(c)], [b, spawn.x, spawn.z]);
   const dizzy = b.all('bump').find((m) => m.pid === a.pid && m.dizzy);
   assert.ok(dizzy, 'dizzy');
-  assert.equal(dizzy.hearts, 0);
+  assert.equal(dizzy.hp, 0);
   const bumps = a.all('bump').length;
   play(room, time, 3000, [a, ...byFlag(c)], [b, spawn.x, spawn.z]);
   assert.equal(a.all('bump').length, bumps, 'nobody bumps someone dizzy');
@@ -384,10 +384,10 @@ test('out of hearts with a friend on the island you sit dizzy, nothing bumps you
   const [x, z, y] = byFlag(c);
   room.receive(b, { t: 'm', s: [x + 1.5, y, z, 0, 0, 0] });
   room.receive(b, { t: 'help', pid: a.pid });
-  assert.deepEqual(b.last('helped'), { t: 'helped', pid: a.pid, by: b.pid, hearts: HELP_HEARTS });
-  assert.equal(room.players.get(a.pid).hearts, HELP_HEARTS);
+  assert.deepEqual(b.last('helped'), { t: 'helped', pid: a.pid, by: b.pid, hp: helpHp(maxHp(1)), max: maxHp(1) });
+  assert.equal(room.players.get(a.pid).hp, helpHp(maxHp(1)));
   // Dizzy for too long, with nobody coming: back to the start.
-  room.players.get(a.pid).hearts = 1;
+  room.players.get(a.pid).hp = 1;
   room.players.get(a.pid).safeUntil = 0;
   play(room, time, 8000, [a, ...byFlag(c)], [b, spawn.x, spawn.z]);
   assert.ok(a.all('bump').some((m) => m.pid === a.pid && m.dizzy));
@@ -395,8 +395,8 @@ test('out of hearts with a friend on the island you sit dizzy, nothing bumps you
   const home = b.last('home');
   assert.equal(home.pid, a.pid);
   assert.deepEqual(home.at, [spawn.x, spawn.y, spawn.z]);
-  assert.equal(home.hearts, MAX_HEARTS);
-  assert.equal(room.players.get(a.pid).hearts, MAX_HEARTS);
+  assert.equal(home.hp, maxHp(1));
+  assert.equal(room.players.get(a.pid).hp, maxHp(1));
 });
 
 // An adventure island with every camp but the castle free, someone at the

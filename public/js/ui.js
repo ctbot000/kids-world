@@ -15,7 +15,7 @@ import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
-import { bodyOf, MAX_HEARTS } from './shared/monsters.js';
+import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { blockIcon } from './render/atlas.js';
@@ -76,7 +76,7 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 // What the island rule for monsters means (shared/monsters.js).
 // The bop button shows while a monster is this near.
 const ATTACK_SHOW = 14;
-const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take a heart. Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night.';
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take some of your HP (each level up gives you more of it). Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night.';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 // What a tower defense island is (shared/defense.js).
@@ -426,10 +426,10 @@ export class UI {
     button.setAttribute('aria-label', `Stickers. ${label}`);
   }
 
-  // Up a level: a fanfare, and sparkles round you on an island.
+  // Up a level: a fanfare (with the HP it brings), and sparkles round you on an island.
   levelUp(level) {
     this.sound.play('levelup');
-    this.toast('🎉', `Level up! You are level ${level}!`, 'sticker level-up');
+    this.toast('🎉', `Level up! You are level ${level}! Max HP ${maxHp(level)}!`, 'sticker level-up');
     const me = this.game?.me?.body;
     if (me) {
       const fx = this.game.renderer.effects;
@@ -1708,7 +1708,7 @@ export class UI {
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
-          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
+          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -2208,7 +2208,7 @@ export class UI {
     this.renderBasket();
     this.renderFriends();
     this.renderIsland();
-    this.renderHearts();
+    this.renderHp();
     this.minimap.attach(game);
     this.renderMap();
     $('btn-toybox').onclick = () => this.toyBox();
@@ -2255,9 +2255,9 @@ export class UI {
     on('players', () => this.renderFriends());
     on('settings', () => {
       this.renderIsland();
-      this.renderHearts();
+      this.renderHp();
     });
-    on('hearts', () => this.renderHearts());
+    on('hp', () => this.renderHp());
     on('song', () => {
       this.drawSong?.();
       const song = game.song;
@@ -2266,7 +2266,7 @@ export class UI {
         this.toast('🎵', `Now playing: ${song.name}`);
       }
     });
-    on('adventure', () => this.renderHearts());
+    on('adventure', () => this.renderHp());
     on('defense', () => this.renderDefense());
     on('welcome', () => {
       this.renderDefense();
@@ -3214,32 +3214,36 @@ export class UI {
     $('island-code').textContent = this.gameHandlers?.canInvite() ? `Code ${prettyCode(g.code)}` : 'Playing alone';
   }
 
-  // Your hearts, shown while the island has monsters (or camps to free); a
-  // shake when one goes. On an adventure island, how many camps are free too.
-  renderHearts() {
+  // Your HP, shown while the island has monsters (or camps to free): the
+  // number and a bar, going amber and then red as it runs low, and a shake
+  // when a bump takes some. On an adventure island, how many camps are free too.
+  renderHp() {
     const el = $('hearts');
     const g = this.game;
     const adv = g?.adventure;
     const shown = Boolean(g?.settings.monsters) || Boolean(adv && !adv.won);
     el.hidden = !shown;
     if (!shown) {
-      this.heartsShown = MAX_HEARTS;
+      this.hpShown = Infinity;
       return;
     }
-    const n = g.hearts;
+    const { hp, maxHp } = g;
+    const share = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
     const camps = adv ? [...adv.camps.values()].filter((c) => c.kind === 'camp') : [];
     const freed = camps.filter((c) => c.freed).length;
-    el.setAttribute('aria-label', `${n} of ${MAX_HEARTS} hearts${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
+    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
     el.replaceChildren(
-      ...Array.from({ length: MAX_HEARTS }, (_, i) => h('span', { class: i < n ? '' : 'lost' }, '❤️')),
+      h('span', { class: 'hp-label' }, '❤️ HP'),
+      h('span', { class: `hp-bar${share <= 0.25 ? ' low' : share <= 0.5 ? ' half' : ''}` }, h('span', { style: `width: ${(share * 100).toFixed(1)}%` })),
+      h('span', { class: 'hp-num' }, `${hp}/${maxHp}`),
       adv ? h('span', { class: 'camps' }, `🚩 ${freed}/${camps.length}`) : '',
     );
-    if (n < (this.heartsShown ?? MAX_HEARTS)) {
+    if (hp < (this.hpShown ?? Infinity)) {
       el.classList.remove('hurt');
       void el.offsetWidth;
       el.classList.add('hurt');
     }
-    this.heartsShown = n;
+    this.hpShown = hp;
   }
 
   // On a tower defense island: the wave, the Star Stone's hearts and the

@@ -1,6 +1,6 @@
 // One visit to an island, from this player's side: the copy of the world,
 // you walking about, your friends, the animals and any monsters moving
-// smoothly, your hearts, an adventure island's camps and flags, a tower
+// smoothly, your HP, an adventure island's camps and flags, a tower
 // defense island's waves and towers, the tools,
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
@@ -11,7 +11,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, HIT_MS, MAX_HEARTS, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, HIT_MS, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -60,7 +60,7 @@ const FRONT = 0.34;
 const BOP_SPACING = 120;
 // What each tougher monster is, told the first time one comes out near you.
 const TOUGH_TOLD = {
-  big: { icon: '💪', text: 'A Big Bruiser! It bumps two hearts off you and takes six bops. Jumping on it takes three.' },
+  big: { icon: '💪', text: 'A Big Bruiser! It bumps twice as much HP off you and takes six bops. Jumping on it takes three.' },
   spiky: { icon: '🦔', text: 'A Spiky! Don’t jump on it, ouch! Bop it four times instead.' },
   mosquito: { icon: '🦟', text: 'A giant mosquito! It darts at you out of the air, so don’t try to jump on it — swat it instead: two bops and it’s off!' },
 };
@@ -97,9 +97,9 @@ export class Game extends EventTarget {
     this.critters = new Map();
     // Everyone's pets (shared/pets.js), by their owner: each page moves them all.
     this.pets = new Map();
-    // Monsters (shared/monsters.js), while the island has them, and your hearts.
+    // Monsters (shared/monsters.js), while the island has them, and your HP.
     this.monsters = new Map();
-    this.hearts = MAX_HEARTS;
+    this.hp = this.maxHp = maxHp(1);
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
     this.chat = [];
     this.me = null;
@@ -124,7 +124,7 @@ export class Game extends EventTarget {
     this.seenRainbow = false;
     // An adventure island's camps and King Grumble (shared/adventure.js), as
     // the island tells of them (null on any other island); whether you sit
-    // dizzy there, out of hearts, until a friend helps you up; the fireworks
+    // dizzy there, out of HP, until a friend helps you up; the fireworks
     // when it is all free; and the extra-credit quizzes a conquered one
     // offers you (shared/quiz.js) — the offer, and the quiz you are taking.
     this.adventure = null;
@@ -280,8 +280,8 @@ export class Game extends EventTarget {
       case 'bump':
         this.bumped(msg);
         break;
-      case 'hearts':
-        this.setHearts(msg.hearts);
+      case 'hp':
+        this.setHp(msg);
         break;
       case 'pop':
         this.popped(msg);
@@ -400,7 +400,7 @@ export class Game extends EventTarget {
     }
     for (const id of [...this.monsters.keys()]) this.dropMonster(id);
     this.monsterStates(msg.monsters ?? []);
-    this.setHearts(msg.hearts ?? MAX_HEARTS);
+    this.setHp(msg);
     this.dizzy = false;
     this.setAdventure(msg.adventure ?? null);
     this.setDefense(msg.defense ?? null);
@@ -899,14 +899,15 @@ export class Game extends EventTarget {
     this.monsters.delete(id);
   }
 
-  setHearts(n) {
-    if (!Number.isInteger(n)) return;
-    this.hearts = Math.max(0, Math.min(MAX_HEARTS, n));
-    this.emit('hearts', this.hearts);
+  // Your HP, and the most you can have, as a message carries them ({ hp, max }).
+  setHp(msg) {
+    if (Number.isInteger(msg?.max) && msg.max > 0) this.maxHp = msg.max;
+    if (Number.isInteger(msg?.hp)) this.hp = Math.max(0, Math.min(this.maxHp, msg.hp));
+    this.emit('hp', this.hp);
   }
 
   // A monster bumped into someone: you are knocked back (further by King
-  // Grumble), or out of hearts sent home, or on an adventure island left
+  // Grumble), or out of HP sent home, or on an adventure island left
   // sitting dizzy for a friend to help up; a friend gets a little burst of stars.
   bumped(msg) {
     const entry = this.monsters.get(msg.id);
@@ -919,14 +920,14 @@ export class Game extends EventTarget {
         this.renderer.effects.bang(at.x, at.y + 1.7, at.z);
         this.sound.play('bump');
       }
-      if (msg.dizzy && p) this.emit('toast', { icon: '💫', text: `${p.name} is out of hearts! Go and tap them to help them up.` });
+      if (msg.dizzy && p) this.emit('toast', { icon: '💫', text: `${p.name} is out of HP! Go and tap them to help them up.` });
       return;
     }
     if (msg.spiky && !this.toldSpikes) {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
-    this.setHearts(msg.hearts);
+    this.setHp(msg);
     this.sound.play('bump');
     const b = this.me?.body;
     if (!b) return;
@@ -934,7 +935,7 @@ export class Game extends EventTarget {
     if (this.seat) this.standUp();
     this.renderer.effects.bang(b.x, b.y + 1.7, b.z);
     if (msg.home) {
-      this.goHome(msg.at, this.adventure ? 'Out of hearts! Back to the nearest safe place, where no monster goes.' : 'Out of hearts! Back to the start of the island, where no monster goes.');
+      this.goHome(msg.at, this.adventure ? 'Out of HP! Back to the nearest safe place, where no monster goes.' : 'Out of HP! Back to the start of the island, where no monster goes.');
       return;
     }
     // Knocked back, away from it, and up a little.
@@ -949,20 +950,20 @@ export class Game extends EventTarget {
     b.onGround = false;
     this.flashUntil = performance.now() + 1600;
     if (msg.dizzy) {
-      // Out of hearts, with friends about: sit tight for one to come.
+      // Out of HP, with friends about: sit tight for one to come.
       this.dizzy = true;
       if (this.riding) this.dismount();
       if (this.aboard) this.hopOff();
       b.flying = false;
       this.emit('fly', false);
       this.sound.play('dizzy');
-      this.emit('toast', { icon: '💫', text: 'Out of hearts! Sit tight: a friend can tap you to help you up.' });
+      this.emit('toast', { icon: '💫', text: 'Out of HP! Sit tight: a friend can tap you to help you up.' });
       this.emit('dizzy', true);
     }
   }
 
   // Back to a safe place (at, as [x, y, z]; or the start of the island), and
-  // on your feet with all your hearts.
+  // on your feet with all your HP.
   goHome(at, text) {
     if (this.riding) this.dismount();
     if (this.aboard) this.hopOff();
@@ -1385,7 +1386,7 @@ export class Game extends EventTarget {
     if (msg.pid === this.pid) {
       this.dizzy = false;
       this.emit('dizzy', false);
-      this.setHearts(msg.hearts);
+      this.setHp(msg);
       this.sound.play('helpup');
       this.emit('toast', { icon: '🤝', text: helper ? `${helper.name} helped you up!` : 'Up you get!' });
     } else if (msg.by === this.pid) {
@@ -1400,8 +1401,8 @@ export class Game extends EventTarget {
     const p = this.players.get(msg.pid);
     if (p) p.dizzy = false;
     if (msg.pid !== this.pid || !this.me) return;
-    this.setHearts(msg.hearts);
-    this.goHome(msg.at, 'Back you go to the nearest safe place, with all your hearts.');
+    this.setHp(msg);
+    this.goHome(msg.at, 'Back you go to the nearest safe place, with all your HP.');
   }
 
   // Each frame: the flags where their camps are, fireworks going off, stars

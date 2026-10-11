@@ -19,7 +19,7 @@
 //   stomps. Left alone, he gets hearts back. Each friend can bop him about
 //   once a second, so the more of you there are, the sooner he goes pop,
 //   and the whole island is free.
-// - Out of hearts with a friend on the island, you sit dizzy for a while,
+// - Out of HP with a friend on the island, you sit dizzy for a while,
 //   until a friend comes and taps you to help you up (or you go back to the
 //   nearest safe place).
 //
@@ -57,11 +57,12 @@ export const kingHearts = (players, stage = 1) => stageKing(12 + 6 * Math.min(8,
 export const KING_HIT_MS = 800;
 export const KING_HEAL_MS = 8000;
 const KING_HEAL_EVERY = 2000;
-// Out of hearts with a friend about: dizzy this long, unless a friend this
-// near taps you, which gets you up with this many hearts.
+// Out of HP with a friend about: dizzy this long, unless a friend this
+// near taps you, which gets you up with this share of your HP.
 export const DIZZY_MS = 10000;
 export const HELP_REACH = 4;
-export const HELP_HEARTS = 3;
+export const HELP_SHARE = 0.6;
+export const helpHp = (max) => Math.round(max * HELP_SHARE);
 
 // The public adventure island the dedicated server keeps for everyone
 // (server/adventure.js) is conquered stage by stage, each stage a little

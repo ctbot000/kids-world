@@ -1,14 +1,14 @@
 // Monsters: an island rule the owner can turn on (off unless they do).
 // Grumpy little jelly blobs hop out of the bushes, more of them at night,
 // and come after whoever is near. One that bumps into you knocks you back
-// and takes a heart; with no hearts left you pop back home with them all
-// again. Jump on one and it goes pop. Bopping one (the 👊 button, or X)
+// and takes some of your HP; with none left you pop back home with all of
+// it again. Jump on one and it goes pop. Bopping one (the 👊 button, or X)
 // works too, but only right up close, as far as your arm (or the toy weapon
 // in it) reaches, and it takes a few bops: each one knocks it back a little,
 // and it comes straight back at you, crosser and quicker than before.
 //
 // Tougher ones come out among them too, more of them at night: a Big
-// Bruiser, twice the size, that bumps two hearts off you and takes six bops
+// Bruiser, twice the size, that bumps twice as much HP off you and takes six bops
 // (a landing on it takes three, and you can land on it again and again),
 // and a Spiky, quick and prickly, that no one can jump on (landing on it
 // counts as a bump) and that takes four bops.
@@ -16,7 +16,7 @@
 // And a giant mosquito, the one that used to drone about the meadows as a
 // friend: it never touches the ground now, but hangs in the air well up out
 // of reach, whining, and darts down at whoever it sees quicker than you
-// walk (never as quick as you run) to bump a heart off them. Nobody can
+// walk (never as quick as you run) to bump some HP off them. Nobody can
 // jump on one — it is up in the air — so swat it instead: two bops and it
 // goes pop. Being a flyer, it crosses the water, where the others cannot
 // follow, but it keeps out of the safe places like any of them.
@@ -29,7 +29,7 @@
 // camp and go back to it after, and in his castle King Grumble, big and
 // slow, who stomps the ground now and then.
 //
-// Nobody gets hurt: hearts come back by themselves, the start of the island
+// Nobody gets hurt: HP comes back by itself, the start of the island
 // (and every camp freed) and every tent are safe places no monster goes
 // into, and they cannot swim, reach someone riding an animal or catch
 // anyone who runs.
@@ -39,12 +39,21 @@
 // opening the island again, starts it without any.
 import * as B from './blocks.js';
 import { makeBody, pushOut, shove, stepBody } from './physics.js';
+import { MAX_LEVEL } from './levels.js';
 import { Rng } from './rng.js';
 import { underTent } from './tents.js';
 
-export const MAX_HEARTS = 5;
-// A heart back this long after the last bump, and every this long after that.
-export const HEART_BACK_MS = 6000;
+// Your HP (hit points): BASE_HP at level 1 and HP_PER_LEVEL more with each
+// level up (levels.js), so the higher your level the more bumps you can take.
+// A bump takes BUMP_HP (twice that from a Big Bruiser), so five of them send
+// someone at level 1 home.
+export const BASE_HP = 100;
+export const HP_PER_LEVEL = 5;
+export const BUMP_HP = 20;
+export const maxHp = (level) => BASE_HP + HP_PER_LEVEL * (Math.max(1, Math.min(MAX_LEVEL, Number.isInteger(level) ? level : 1)) - 1);
+// HP_BACK of it back this long after the last bump, and every this long after that.
+export const HP_BACK_MS = 6000;
+export const HP_BACK = 20;
 // After a bump, a moment when nothing can bump you again.
 export const SAFE_MS = 1600;
 // How far round the island's start a monster never goes.
@@ -680,14 +689,14 @@ export function unpackMonster(row) {
   return { id: row[0], x: row[1] / 100, y: row[2] / 100, z: row[3] / 100, yaw: row[4] / 100 - Math.PI, state: MONSTER_STATES[row[5]] ?? 'idle', kind: MONSTER_KINDS[row[6]] ?? 'blob', hearts: row[7] ?? BLOB_HEARTS, max: Math.max(1, row[8] ?? BLOB_HEARTS) };
 }
 
-// Hearts, for one player: how many after a bump that takes n (0: home they
-// go, and back to all of them), and how many come back while nothing bumps
-// them.
-export function heartsAfterBump(hearts, n = 1) {
-  return Math.max(0, hearts - n);
+// HP, for one player: how much after a bump that counts n times over (0:
+// home they go, and back to all of it), and how much comes back while
+// nothing bumps them.
+export function hpAfterBump(hp, n = 1) {
+  return Math.max(0, hp - n * BUMP_HP);
 }
 
-export function heartsBack(hearts, sinceBumpMs) {
-  if (hearts >= MAX_HEARTS || sinceBumpMs < HEART_BACK_MS) return hearts;
-  return Math.min(MAX_HEARTS, hearts + 1);
+export function hpBack(hp, max, sinceBumpMs) {
+  if (hp >= max || sinceBumpMs < HP_BACK_MS) return hp;
+  return Math.min(max, hp + HP_BACK);
 }

@@ -16,7 +16,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { GUARD_BACK_MS } from '../public/js/shared/adventure.js';
 import { CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { LEAK, waveOf } from '../public/js/shared/defense.js';
-import { HIT_MS, KINDS, MAX_HEARTS, MONSTER_KINDS, MONSTER_STATES, MonsterSim, MOSQUITO_HOVER, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { HIT_MS, BUMP_HP, KINDS, maxHp, MONSTER_KINDS, MONSTER_STATES, MonsterSim, MOSQUITO_HOVER, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { MosquitoModel } from '../public/js/render/mosquito-model.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -150,7 +150,7 @@ test('a mosquito bumps a heart off you, nobody can jump on it, and two bops see 
   }
   const bump = a.last('bump');
   assert.ok(bump, 'it caught them');
-  assert.equal(bump.hearts, MAX_HEARTS - KINDS.mosquito.bump, 'one heart');
+  assert.equal(bump.hp, maxHp(1) - KINDS.mosquito.bump * BUMP_HP, 'one bump');
   assert.equal(bump.big ?? false, false, 'no bigger knock back');
   // Nobody can jump on it: a landing on it counts for nothing at all.
   assert.equal(KINDS.mosquito.land, 0);

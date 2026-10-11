@@ -1088,7 +1088,7 @@ test('coming down from a height thumps and puffs up dust every time, however hig
   await page.browserContext().close();
 });
 
-test('monsters, turned on in Make an island: hearts on screen, one aimed at through leaves and grass but popped only with X from right up close, one with all its hearts only bonked, one taking a heart, and all gone when turned off', { skip }, async () => {
+test('monsters, turned on in Make an island: HP on screen, one aimed at through leaves and grass but popped only with X from right up close, one with all its hearts only bonked, one taking some HP, and all gone when turned off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
@@ -1097,7 +1097,7 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
   await clickButton(page, 'Make it', '#modal');
   await inGame(page);
   assert.equal(await page.evaluate(() => window.kidsWorld.session.link.room.settings.monsters), true);
-  await until(page, () => !document.getElementById('hearts').hidden && document.querySelectorAll('#hearts span:not(.lost)').length === 5);
+  await until(page, () => !document.getElementById('hearts').hidden && document.querySelector('#hearts .hp-num')?.textContent === '100/100');
   // Cells changed on the island, as the island changes them (as grass grows),
   // and once they have reached the game.
   const change = async (cells) => {
@@ -1224,22 +1224,22 @@ test('monsters, turned on in Make an island: hearts on screen, one aimed at thro
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 1, full);
   await page.evaluate((wasTouch) => document.body.classList.toggle('touch', wasTouch), wasTouch);
   await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
-  // One right beside you takes a heart, and knocks you back.
+  // One right beside you takes some HP, and knocks you back.
   const from = await page.evaluate(() => {
     const kw = window.kidsWorld;
     const b = kw.game.me.body;
     kw.session.link.room.monsters.add(kw.session.link.room.world, b.x, b.y, b.z - 0.5);
     return { x: b.x, z: b.z };
   });
-  await until(page, () => window.kidsWorld.game.hearts === 4 && document.querySelectorAll('#hearts .lost').length === 1);
+  await until(page, () => window.kidsWorld.game.hp === 80 && document.querySelector('#hearts .hp-num')?.textContent === '80/100');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
   const pushed = await page.evaluate((from) => Math.hypot(window.kidsWorld.game.me.body.x - from.x, window.kidsWorld.game.me.body.z - from.z), from);
   assert.ok(pushed > 0.8, `knocked back ${pushed.toFixed(2)}`);
-  // Off in Settings: no monsters, no hearts.
+  // Off in Settings: no monsters, all your HP.
   await page.click('#btn-settings');
   await clickSwitch(page, '#modal .switch[aria-label="👾 Monsters"]');
   await until(page, () => document.getElementById('hearts').hidden && window.kidsWorld.game.monsters.size === 0 && !window.kidsWorld.session.link.room.settings.monsters);
-  assert.equal(await page.evaluate(() => window.kidsWorld.game.hearts), 5);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.hp), 100);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
@@ -2888,11 +2888,11 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   await host.evaluate((pid) => {
     const room = window.kidsWorld.session.link.room;
     const p = room.players.get(pid);
-    p.hearts = 1;
+    p.hp = 1;
     p.safeUntil = 0;
     room.hurt(pid, { id: 0, kind: 'blob', body: { x: p.s[0], z: p.s[2] + 1 } }, room.now());
   }, guestPid);
-  await until(guest, () => window.kidsWorld.game.dizzy && window.kidsWorld.game.hearts === 0 && window.kidsWorld.game.me.body.onGround);
+  await until(guest, () => window.kidsWorld.game.dizzy && window.kidsWorld.game.hp === 0 && window.kidsWorld.game.me.body.onGround);
   await until(host, (pid) => window.kidsWorld.game.players.get(pid)?.dizzy, guestPid);
   const sat = await guest.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, y: window.kidsWorld.game.me.body.y, z: window.kidsWorld.game.me.body.z }));
   await stand(host, sat.x - c.x, sat.z - c.z + 2.5);
@@ -2911,7 +2911,7 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   assert.deepEqual(friend.aim, { kind: 'friend', pid: guestPid }, `the friend, under the tap: ${JSON.stringify(friend)}`);
   assert.ok(friend.clear, `nothing over the friend on screen: ${JSON.stringify(friend)}`);
   await host.mouse.click(friend.x, friend.y);
-  await until(guest, () => !window.kidsWorld.game.dizzy && window.kidsWorld.game.hearts === 3);
+  await until(guest, () => !window.kidsWorld.game.dizzy && window.kidsWorld.game.hp === Math.round(window.kidsWorld.game.maxHp * 0.6) && window.kidsWorld.game.hp > 0);
   await until(host, () => window.kidsWorld.profile.data.stats.helped === 1);
   assert.deepEqual(pageErrors, []);
   await host.browserContext().close();

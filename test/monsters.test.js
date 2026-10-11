@@ -1,13 +1,13 @@
 // Monsters, an island rule: off unless the owner turns them on; coming out
 // round the players, more at night; chasing whoever is near, bumping them
 // back and taking a heart (and sending them home with them all again when
-// none are left); hearts coming back; popping when tapped or jumped on;
+// none are left); HP coming back; popping when tapped or jumped on;
 // never in the water or the safe place round the start; and all gone when
 // turned off.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { ARM_REACH, BIG_BODY, BLOB_HEARTS, BOP_SLACK, bopGap, HEART_BACK_MS, heartsBack, HIT_MS, KINDS, MAX_HEARTS, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BIG_BODY, BLOB_HEARTS, BOP_SLACK, bopGap, BUMP_HP, HIT_MS, HP_BACK, HP_BACK_MS, hpBack, HP_PER_LEVEL, KINDS, maxHp, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -27,10 +27,10 @@ function conn() {
   return c;
 }
 
-function join(room, name = 'Happy Panda') {
+function join(room, name = 'Happy Panda', { look = { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' } } = {}) {
   const c = conn();
   room.attach(c);
-  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' } });
+  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look });
   return c;
 }
 
@@ -66,7 +66,8 @@ test('monsters are off unless the owner turns them on, and only the owner can', 
   const b = join(room, 'Brave Otter');
   assert.equal(a.last('welcome').settings.monsters, false);
   assert.deepEqual(a.last('welcome').monsters, []);
-  assert.equal(a.last('welcome').hearts, MAX_HEARTS);
+  assert.equal(a.last('welcome').hp, maxHp(1));
+  assert.equal(a.last('welcome').max, maxHp(1));
   standFor(room, time, a, room.world.spawn.x + 20, room.world.spawn.z, 20000);
   assert.equal(room.monsters.list.length, 0, 'none come out');
   room.receive(b, { t: 'host', cmd: 'settings', settings: { monsters: true } });
@@ -107,7 +108,7 @@ test('monsters come out round the players, away from them and the start, more at
   assert.equal(unpackMonster(room.monsters.pack()[0]).hearts, full - 1);
 });
 
-test('a monster chases you, bumps you back for a heart, and with none left sends you home with them all', () => {
+test('a monster chases you, bumps some HP off you, and with none left sends you home with all of it', () => {
   const { room, time } = meadowRoom();
   const a = join(room);
   const spawn = room.world.spawn;
@@ -119,31 +120,48 @@ test('a monster chases you, bumps you back for a heart, and with none left sends
   const bumps = a.all('bump');
   assert.ok(bumps.length >= 1, 'it caught up');
   assert.equal(bumps[0].id, m.id);
-  assert.equal(bumps[0].hearts, MAX_HEARTS - 1);
+  assert.equal(bumps[0].hp, maxHp(1) - BUMP_HP);
   // Standing still, bumped again and again: never sooner than the safe moment
-  // after each, and home with every heart at the last.
+  // after each, and home with all your HP at the last.
   for (let t = 0; t < 20000 && !a.last('bump').home; t += 100) standFor(room, time, a, x, z, 100, 11);
   const all = a.all('bump');
   const home = all.at(-1);
-  assert.ok(home.home, 'out of hearts');
-  assert.equal(all.length, MAX_HEARTS);
-  assert.equal(home.hearts, MAX_HEARTS);
-  for (let i = 1; i < all.length; i++) assert.ok(all[i].hearts === all[i - 1].hearts - 1 || all[i].home);
+  assert.ok(home.home, 'out of HP');
+  assert.equal(all.length, maxHp(1) / BUMP_HP);
+  assert.equal(home.hp, maxHp(1));
+  for (let i = 1; i < all.length; i++) assert.ok(all[i].hp === all[i - 1].hp - BUMP_HP || all[i].home);
   const p = room.players.get(1);
   assert.deepEqual(p.s.slice(0, 3), [spawn.x, spawn.y, spawn.z], 'back at the start');
 });
 
-test('hearts come back while nothing bumps you', () => {
-  assert.equal(heartsBack(2, HEART_BACK_MS - 1), 2);
-  assert.equal(heartsBack(2, HEART_BACK_MS), 3);
-  assert.equal(heartsBack(MAX_HEARTS, HEART_BACK_MS * 10), MAX_HEARTS);
+test('HP comes back while nothing bumps you', () => {
+  assert.equal(hpBack(40, 100, HP_BACK_MS - 1), 40);
+  assert.equal(hpBack(40, 100, HP_BACK_MS), 40 + HP_BACK);
+  assert.equal(hpBack(95, 100, HP_BACK_MS), 100);
+  assert.equal(hpBack(100, 100, HP_BACK_MS * 10), 100);
   const { room, time } = meadowRoom();
   const a = join(room);
   room.monsters.spawnAt = Infinity;
-  room.players.get(1).hearts = 2;
+  room.players.get(1).hp = 40;
   room.players.get(1).bumpAt = time.t;
-  standFor(room, time, a, room.world.spawn.x, room.world.spawn.z, HEART_BACK_MS * 3 + 500);
-  assert.deepEqual(a.all('hearts').map((m) => m.hearts), [3, 4, 5]);
+  standFor(room, time, a, room.world.spawn.x, room.world.spawn.z, HP_BACK_MS * 3 + 500);
+  assert.deepEqual(a.all('hp').map((m) => m.hp), [40 + HP_BACK, 40 + 2 * HP_BACK, 40 + 3 * HP_BACK]);
+});
+
+test('a higher level means more HP, and a level up brings the new HP at once', () => {
+  assert.equal(maxHp(1), 100);
+  assert.equal(maxHp(11), 100 + 10 * HP_PER_LEVEL);
+  assert.equal(maxHp(undefined), maxHp(1));
+  const { room } = meadowRoom();
+  const a = join(room);
+  const p = room.players.get(1);
+  assert.deepEqual([p.hp, p.maxHp], [maxHp(1), maxHp(1)]);
+  p.hp = 60;
+  room.receive(a, { t: 'look', look: { ...p.look, level: 3 } });
+  assert.deepEqual(a.last('hp'), { t: 'hp', hp: 60 + 2 * HP_PER_LEVEL, max: maxHp(3) });
+  // Coming back at level 3: with all of it.
+  const b = join(room, 'Brave Otter', { look: { ...p.look, level: 3 } });
+  assert.deepEqual([b.last('welcome').hp, b.last('welcome').max], [maxHp(3), maxHp(3)]);
 });
 
 test('jumping on a monster pops it at once; bopping it takes three bops, from right up close, and it knocks it back and makes it cross', () => {
@@ -286,16 +304,16 @@ test('a monster goes round the safe place, and round a wall, to get at you', () 
   }
 });
 
-test('turning monsters off sends every one away and gives everyone all their hearts', () => {
+test('turning monsters off sends every one away and gives everyone all their HP', () => {
   const { room, time } = meadowRoom();
   const a = join(room);
   room.monsters.spawnAt = Infinity;
   room.monsters.add(room.world, room.world.spawn.x + 20, 11, room.world.spawn.z);
-  room.players.get(1).hearts = 1;
+  room.players.get(1).hp = 1;
   standFor(room, time, a, room.world.spawn.x, room.world.spawn.z, 300);
   room.receive(a, { t: 'host', cmd: 'settings', settings: { monsters: false } });
   assert.equal(room.monsters.list.length, 0);
-  assert.equal(a.last('hearts').hearts, MAX_HEARTS);
+  assert.equal(a.last('hp').hp, maxHp(1));
   standFor(room, time, a, room.world.spawn.x, room.world.spawn.z, 500);
   assert.deepEqual(a.last('mon').m, [], 'everyone hears they are gone');
 });
@@ -339,7 +357,7 @@ test('tougher monsters come out too, more of them at night: never at day a Big B
   assert.equal(sim.list[0].body.radius, BIG_BODY.radius);
 });
 
-test('a Big Bruiser bumps two hearts off you, takes three landings or six bops, and heals back to six', () => {
+test('a Big Bruiser bumps twice the HP off you, takes three landings or six bops, and heals back to six', () => {
   const { room, time } = meadowRoom();
   const a = join(room);
   room.monsters.spawnAt = Infinity;
@@ -349,7 +367,7 @@ test('a Big Bruiser bumps two hearts off you, takes three landings or six bops, 
   standFor(room, time, a, x, spawn.z, 8000, 11);
   const bump = a.last('bump');
   assert.ok(bump, 'it caught up');
-  assert.equal(bump.hearts, MAX_HEARTS - 2);
+  assert.equal(bump.hp, maxHp(1) - 2 * BUMP_HP);
   assert.equal(bump.big, true, 'a bigger knock back');
   // Landed on: three hearts off, not a pop; again, and it pops.
   const land = () => {
