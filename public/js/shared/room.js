@@ -529,6 +529,8 @@ export class Room {
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
       shared: this.shared === true,
+      // A conquered stage of it: where everyone goes on to (server/adventure.js).
+      ...(this.next ? { next: this.next } : {}),
     });
   }
 

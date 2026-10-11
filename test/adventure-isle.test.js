@@ -147,6 +147,13 @@ test('conquered: the next stage is up at once, the conquered one waits for its p
   assert.deepEqual(next.listing().adventure, { camps: next.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 2 });
   assert.equal(room.closed, false, 'the conquered island stays open a while');
   assert.ok(a.last('notice').text.includes('stage 2'), 'those there hear where the next one is');
+  assert.deepEqual(a.last('next'), { t: 'next', code: next.code, stage: 2 }, 'and their pages where to take them on to');
+  const late = join(room, 'Late Llama');
+  assert.deepEqual(late.last('welcome').next, { code: next.code, stage: 2 }, 'whoever comes back to it hears too');
+  const fresh = join(next, 'Fresh Fox');
+  assert.equal(fresh.last('welcome').next, undefined, 'the next stage has no next stage yet');
+  room.receive(late, { t: 'leave' });
+  next.receive(fresh, { t: 'leave' });
 
   // A second conquest, and a third: on and on, one at a time.
   for (const stage of [3, 4]) {
@@ -212,9 +219,11 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   const { rooms, time, isle: one } = isle({ retiredKeepMs: 60 * 1000 });
   const opened = [];
   const retired = [];
+  const gone = [];
   one.onOpen = (room) => opened.push(room);
   one.onRetire = (room) => retired.push(room);
-  assert.deepEqual([opened, retired], [[], []], 'nothing until it changes');
+  one.onGone = (room) => gone.push(room);
+  assert.deepEqual([opened, retired, gone], [[], [], []], 'nothing until it changes');
 
   const first = one.room;
   first.adventure.win(first.monsters);
@@ -222,6 +231,7 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   assert.deepEqual(opened, [one.room], 'the next stage opened');
   assert.deepEqual(retired, [first], 'the conquered one retired');
   assert.equal(rooms.has(first.code), true, 'still one of the rooms, until swept');
+  assert.deepEqual(gone, [], 'not gone yet: whoever is on it stays on it, peer to peer too');
 
   const second = one.room;
   const midnight = new Date(time.t);
@@ -231,12 +241,14 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   assert.deepEqual(opened, [second, one.room], 'the new day opened');
   assert.deepEqual(retired, [first, second], 'the day\'s last one retired');
   assert.equal(rooms.has(first.code), false, 'the first one swept in the night');
+  assert.deepEqual(gone, [first], 'and told of, so its sharing stops');
   assert.equal(rooms.has(second.code), true, 'the second one waits for its while');
 
   // Stopping tells of the current one too, so its sharing stops with it.
   const current = one.room;
   one.stop();
   assert.deepEqual(retired.at(-1), current);
+  assert.deepEqual(gone, [first, current, second], 'every island there was, gone');
 });
 
 // The shared isle keeps its toy box shut and its players on their own feet:

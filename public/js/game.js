@@ -8,7 +8,7 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
-import { HELP_REACH } from './shared/adventure.js';
+import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { ARM_REACH, bodyOf, bopGap, HIT_MS, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
@@ -18,6 +18,7 @@ import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstic
 import { raycast } from './shared/raycast.js';
 import { seatNear, seatPose, standUpAt, teaTableNear } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
+import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { gearMove, wornWeapon } from './shared/shop.js';
@@ -142,6 +143,8 @@ export class Game extends EventTarget {
     this.dizzy = false;
     this.fireworks = [];
     this.quizOffer = null;
+    // The shared isle's next stage once this one is conquered (setNextStage).
+    this.nextStage = null;
     this.quiz = null;
     // A tower defense island's road, pads, towers and waves
     // (shared/defense.js), as the island tells of them (null on any other).
@@ -318,6 +321,9 @@ export class Game extends EventTarget {
       case 'won':
         this.islandWon(msg);
         break;
+      case 'next':
+        this.setNextStage(msg);
+        break;
       case 'helped':
         this.helped(msg);
         break;
@@ -414,6 +420,7 @@ export class Game extends EventTarget {
     this.setHp(msg);
     this.dizzy = false;
     this.setAdventure(msg.adventure ?? null);
+    this.setNextStage(msg.next ?? null);
     this.setDefense(msg.defense ?? null);
     this.setArcade(msg.arcade ?? []);
     this.setEnv(msg.env);
@@ -1410,6 +1417,15 @@ export class Game extends EventTarget {
     const what = hero ? `${hero} popped King Grumble!` : 'Every camp is free!';
     this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
+  }
+
+  // The shared isle's stage conquered, the next one is up: { code, stage }
+  // of its island (server/adventure.js), where the page takes you on to by
+  // itself in a little while (ui.js). Says 'next-stage'.
+  setNextStage(msg) {
+    const code = typeof msg?.code === 'string' && isValidCode(msg.code) && msg.code !== this.code ? msg.code : '';
+    this.nextStage = code ? { code, stage: cleanStage(msg.stage) } : null;
+    this.emit('next-stage');
   }
 
   // ------------------------------------------------ extra-credit quizzes

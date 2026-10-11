@@ -792,6 +792,12 @@ const gameHandlers = {
     if (!problem && s.mode === 'host' && s.islandId) keepSong(s.islandId, file, file.name);
     return problem;
   },
+  // On to the shared isle's next stage, its island's code (ui.js nextStageNews).
+  nextStage: (code) => {
+    if (!session) return;
+    backToTitle();
+    visitIsland(code);
+  },
   canSave: () => session?.mode === 'host',
   saveFile: () => downloadIsland(),
   keeper,

@@ -76,6 +76,11 @@ export const STAGE_CAMPS = 4;
 export const STAGE_GUARDS = 8;
 export const STAGE_KING = 4;
 export const STAGE_RAISE = 2;
+// How long after a stage of the public adventure island is conquered the
+// page takes everyone there on to the next one by itself (ui.js) — the
+// fireworks first, and never while a window (a quiz, say) is open.
+export const NEXT_STAGE_SECONDS = 15;
+
 // A stage as told: 1 when it is none or nonsense, and never past 9999.
 export const cleanStage = (stage) => (Number.isInteger(stage) && stage >= 1 ? Math.min(stage, 9999) : 1);
 export const stageCamps = (base, stage) => base + Math.min(STAGE_CAMPS, Math.floor((cleanStage(stage) - 1) / 2));

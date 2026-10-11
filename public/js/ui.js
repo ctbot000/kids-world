@@ -18,6 +18,7 @@ import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
+import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -1710,7 +1711,7 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
@@ -2245,6 +2246,12 @@ export class UI {
       this.sound.unlock();
       game.toggleRide();
     };
+    $('next-stage').onmousedown = (e) => e.preventDefault();
+    $('next-stage').onclick = () => {
+      this.sound.unlock();
+      this.sound.play('ui');
+      this.goNextStage();
+    };
     $('defend').onmousedown = (e) => e.preventDefault();
     $('defend').onclick = () => {
       $('defend').blur();
@@ -2276,6 +2283,7 @@ export class UI {
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
+    on('next-stage', () => this.nextStageNews());
     on('tool', () => {
       this.buildToolbar();
       this.buildHotbar();
@@ -2288,6 +2296,8 @@ export class UI {
     on('chat', (e) => this.chatLine(e.detail));
     on('fly', (e) => $('btn-fly').classList.toggle('on', e.detail));
     on('aim', (e) => this.aimHint(e.detail));
+    // Come back to a conquered stage (a reconnect, say): on you go from it.
+    this.nextStageNews();
     this.input.enabled = true;
   }
 
@@ -2303,6 +2313,7 @@ export class UI {
     $('ride').hidden = true;
     $('defend').hidden = true;
     $('defense').hidden = true;
+    this.stopNextStage();
     document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
     this.tags.clear();
@@ -3575,10 +3586,54 @@ export class UI {
             ),
           );
         }
-        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE} questions each. Finish one and the other is still there, by the 🎓 by the flag, as long as you stay on the island.`));
+        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE} questions each. Finish one and the other is still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${g.nextStage.stage}` : 'as long as you stay on the island'}.`));
       },
       { narrow: true },
     );
+  }
+
+  // ------------------------------------------------ on to the next stage
+
+  // A stage of the shared isle conquered: a button counts down to the next
+  // stage (game.js nextStage), and at nought, or tapped, off you go there.
+  // The countdown holds while a window is open — a quiz, say — so nobody is
+  // whisked away in the middle of one.
+  nextStageNews() {
+    const next = this.game?.nextStage;
+    if (!next) {
+      this.stopNextStage();
+      return;
+    }
+    if (this.nextGo?.code === next.code) return;
+    this.stopNextStage();
+    this.nextGo = { ...next, left: NEXT_STAGE_SECONDS };
+    this.nextTimer = setInterval(() => {
+      if (this.modalOpen) return;
+      if (--this.nextGo.left <= 0) this.goNextStage();
+      else this.renderNextStage();
+    }, 1000);
+    this.renderNextStage();
+  }
+
+  renderNextStage() {
+    const go = this.nextGo;
+    const el = $('next-stage');
+    el.hidden = !go;
+    if (!go) return;
+    el.replaceChildren(h('span', { class: 'emoji' }, '🌟'), `Stage ${go.stage} in ${go.left}…`, h('span', { class: 'go' }, 'Go now ▶'));
+  }
+
+  goNextStage() {
+    const go = this.nextGo;
+    this.stopNextStage();
+    if (go) this.gameHandlers?.nextStage?.(go.code);
+  }
+
+  stopNextStage() {
+    clearInterval(this.nextTimer);
+    this.nextTimer = 0;
+    this.nextGo = null;
+    $('next-stage').hidden = true;
   }
 
   // The quiz you are taking, in a window: where it has got to, the question

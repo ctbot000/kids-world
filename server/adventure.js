@@ -54,9 +54,10 @@ export class PublicAdventure {
     this.retiredKeepMs = retiredKeepMs;
     // Each island as it comes and goes (set before start(), see shareTheIsle):
     // onOpen(room) for the new public island of a stage, onRetire(room) for
-    // the one that stopped being it.
+    // the one that stopped being it, and onGone(room) once that one is gone.
     this.onOpen = null;
     this.onRetire = null;
+    this.onGone = null;
     this.stage = 0;
     this.day = '';
     this.entry = null;
@@ -129,22 +130,31 @@ export class PublicAdventure {
       return;
     }
     if (this.entry.room.adventure?.won) {
-      const done = this.stage;
-      this.retire(now, `On to stage ${done + 1}! 🌟 ${PUBLIC_ISLAND_NAME} is first on the list of islands — come and conquer it together!`);
-      this.open(done + 1, day);
-      this.say(`stage ${done} conquered; stage ${this.stage} is up (code ${this.entry.code}).`);
+      // The next stage's island first, so everyone on this one can be told
+      // where it is: their pages fly them on there by themselves (ui.js).
+      const done = this.entry;
+      this.open(this.stage + 1, day);
+      const next = { code: this.entry.code, stage: this.stage };
+      this.retire(now, `On to stage ${next.stage}! 🌟 Off you all go there in a moment — come and conquer it together!`, done, next);
+      this.say(`stage ${next.stage - 1} conquered; stage ${next.stage} is up (code ${next.code}).`);
     }
   }
 
   // The island that was the public one: no longer the island to conquer, no
-  // longer listed as public, told where the next one is, and kept until
-  // everyone has left it (and a while).
-  retire(now, text) {
-    const { code, room } = this.entry;
+  // longer listed as public, told where the next one is (next: the next
+  // stage's { code, stage }, when it was won), and kept until everyone has
+  // left it (and a while).
+  retire(now, text, entry = this.entry, next = null) {
+    const { code, room } = entry;
     room.public = false;
-    this.entry.public = false;
+    entry.public = false;
+    // Anyone coming back to it (a page reconnecting) is told too.
+    if (next) room.next = next;
     this.retired.push({ code, room, emptySince: room.online > 0 ? 0 : now });
-    if (room.online > 0) room.broadcast({ t: 'notice', level: 'info', text });
+    if (room.online > 0) {
+      if (text) room.broadcast({ t: 'notice', level: 'info', text });
+      if (next) room.broadcast({ t: 'next', ...next });
+    }
     this.onRetire?.(room);
   }
 
@@ -155,6 +165,7 @@ export class PublicAdventure {
       if (r.room.closed) {
         this.rooms.delete(r.code);
         this.retired.splice(i, 1);
+        this.onGone?.(r.room);
         continue;
       }
       if (r.room.online > 0) {
@@ -166,6 +177,7 @@ export class PublicAdventure {
       r.room.close();
       this.rooms.delete(r.code);
       this.retired.splice(i, 1);
+      this.onGone?.(r.room);
     }
   }
 
@@ -178,9 +190,9 @@ export class PublicAdventure {
     const closing = this.entry ? [this.entry, ...this.retired] : [...this.retired];
     if (this.entry) this.onRetire?.(this.entry.room);
     for (const entry of closing) {
-      if (entry.room.closed) continue;
-      entry.room.close();
+      if (!entry.room.closed) entry.room.close();
       this.rooms.delete(entry.code);
+      this.onGone?.(entry.room);
     }
     this.entry = null;
     this.retired = [];
@@ -207,6 +219,10 @@ export function shareTheIsle(keeper, isle, { log = () => {}, iceServers } = {}) 
     keeper.listIsland(room.code, () => (host.state === 'online' && !room.closed ? room.listing() : null));
     hosts.set(room, host);
   };
+  // A stage won or a day over: off the list at once, but whoever is on it
+  // stays on it, peer to peer too, until it goes — to see the fireworks and
+  // to be told where the next stage is.
+  const unlist = (room) => keeper.unlistIsland(room.code);
   const unshare = (room) => {
     const host = hosts.get(room);
     if (!host) return;
@@ -215,11 +231,13 @@ export function shareTheIsle(keeper, isle, { log = () => {}, iceServers } = {}) 
     host.stop();
   };
   isle.onOpen = share;
-  isle.onRetire = unshare;
+  isle.onRetire = unlist;
+  isle.onGone = unshare;
   share(isle.room);
   return () => {
     isle.onOpen = null;
     isle.onRetire = null;
+    isle.onGone = null;
     for (const [room, host] of hosts) {
       keeper.unlistIsland(room.code);
       host.stop();

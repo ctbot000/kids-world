@@ -3392,3 +3392,58 @@ test('the shared isle is on the keeper’s list of open islands too, hosted peer
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// A stage of the shared isle conquered: a button counts down to the next
+// stage and the page goes on there by itself — peer to peer too, the
+// conquered island staying up for its players meanwhile — holding while a
+// window is open.
+test('a conquered stage of the shared isle goes on to the next stage by itself', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const share = shareTheIsle(keeper, games.publicAdventure, { log: () => {}, iceServers: [] });
+  const ticker = setInterval(() => {
+    for (const entry of games.rooms.values()) if (entry.room.online > 0) entry.room.tick();
+    games.publicAdventure.tick(Date.now());
+  }, 100);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Brave Fox' });
+  try {
+    await eventually(() => keeper.openIslands().some((i) => i.public));
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    const first = games.publicAdventure.room;
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), first.code);
+
+    first.adventure.win(first.monsters);
+    await eventually(() => games.publicAdventure.stage === 2);
+    const second = games.publicAdventure.room;
+    await until(page, () => !document.getElementById('next-stage').hidden);
+    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /Stage 2 in \d+/);
+    assert.equal(await page.evaluate(() => window.kidsWorld.session.link.state), 'online', 'still on the conquered island');
+
+    // Never while a window is open.
+    await page.evaluate(() => (window.kidsWorld.ui.nextGo.left = 1));
+    await page.click('#btn-settings');
+    await until(page, () => !document.getElementById('modal').hidden);
+    await delay(2500);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), first.code, 'held while the window is open');
+
+    // Closed, and off it goes, onto stage 2.
+    await page.click('#modal-close');
+    await until(page, (code) => window.kidsWorld.game?.code === code && window.kidsWorld.session?.started, second.code);
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.adventure.stage), 2);
+    assert.equal(await page.$eval('#next-stage', (el) => el.hidden), true);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    share();
+    clearInterval(ticker);
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
