@@ -5,6 +5,9 @@
 // nobody can be turned away; and the conquered island waiting for its players
 // before it goes.
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { campCount, cleanStage, guardsFor, kingHearts, raiseSeconds } from '../public/js/shared/adventure.js';
@@ -179,6 +182,42 @@ test('conquered: the next stage is up at once, the conquered one waits for its p
   }
   assert.equal(rooms.size, 1, 'gone once empty and their while past');
   assert.equal(publicEntries(rooms)[0].room.adventure.stage, 4);
+});
+
+test('the stage is kept over a restart that day, and starts over at 1 the next day', (t) => {
+  const dir = mkdtempSync(joinPath(tmpdir(), 'kw-isle-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = joinPath(dir, 'adventure-isle.json');
+  const time = clock(new Date(2026, 9, 11, 12).getTime());
+  const make = () => new PublicAdventure({ rooms: new Map(), now: time.now, log: () => {}, file }).start();
+
+  const one = make();
+  assert.equal(one.stage, 1);
+  for (let i = 0; i < 2; i++) {
+    one.room.adventure.win(one.room.monsters);
+    one.tick(time.now());
+  }
+  assert.equal(one.stage, 3);
+  const seed = one.room.world.seed;
+  one.stop();
+
+  // The server starts again that day: on at stage 3, the very same island.
+  const again = make();
+  assert.equal(again.stage, 3);
+  assert.equal(again.room.stage, 3);
+  assert.equal(again.room.world.seed, seed);
+  again.stop();
+
+  // The next day it starts over, and that is kept too.
+  time.advance(24 * 60 * 60 * 1000);
+  const tomorrow = make();
+  assert.equal(tomorrow.stage, 1);
+  tomorrow.stop();
+  assert.equal(make().stage, 1);
+
+  // Nonsense in the file is stage 1, not a crash.
+  writeFileSync(file, 'not json');
+  assert.equal(make().stage, 1);
 });
 
 test('the beginning of a day starts the stages over at 1', () => {

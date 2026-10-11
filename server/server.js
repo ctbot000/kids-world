@@ -13,6 +13,7 @@
 //   npm start -- --data ~/kw-copies  # where the keeper keeps copies (or KIDS_WORLD_DATA)
 import { createServer, STATUS_CODES } from 'node:http';
 import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import serveStatic from 'serve-static';
@@ -49,6 +50,8 @@ export function createGameServer({
   // leaves it, and whether the server keeps one at all.
   retiredKeepMs = RETIRED_KEEP_MS,
   publicAdventure = true,
+  // Where the public adventure island's stage is kept over a restart, or none.
+  isleFile = null,
   // What pages get at /keeper.json: the keeper this server runs, or none.
   keeperConfig = null,
   // The admin pages' handler, from adminHandler().
@@ -68,7 +71,7 @@ export function createGameServer({
   const sockets = new Set();
   // The one public adventure island everyone conquers together
   // (adventure.js): one of the rooms, marked `public`, always on the list.
-  const isle = publicAdventure ? new PublicAdventure({ rooms, log, retiredKeepMs }).start() : null;
+  const isle = publicAdventure ? new PublicAdventure({ rooms, log, retiredKeepMs, file: isleFile }).start() : null;
   // Its `clients` are the open connections.
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
@@ -338,7 +341,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         homeFile,
       }),
   });
-  const server = createGameServer({ keeperConfig: config ?? null, admin: adminHandler({ store, keeper, friend }) });
+  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend }) });
   // The shared isle hosted peer to peer too, so pages anywhere can conquer
   // it together (see shareTheIsle).
   const sharedIsle = keeper && server.publicAdventure ? shareTheIsle(keeper, server.publicAdventure, { log: (text) => console.log(text) }) : null;

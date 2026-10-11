@@ -9,9 +9,11 @@
 // each day it starts over again at stage 1.
 //
 // A retired island stays open a while for whoever is on it to enjoy their
-// win, and once everyone has left it, it goes. The stage is not kept over a
-// restart: the day decides it, and the island of a stage is the same one
-// all that day, so a restart puts back just the island that was meant to be.
+// win, and once everyone has left it, it goes. The stage is kept over a
+// restart (in `file`, when given), and the island of a stage is the same one
+// all that day, so a restart that day puts back just the island it had.
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { generateCode } from '../public/js/shared/codes.js';
 import { Room } from '../public/js/shared/room.js';
 import { PeerHost } from './host.js';
@@ -45,13 +47,15 @@ function seedFor(day, stage) {
 export class PublicAdventure {
   // rooms: the server's islands (see server.js), which the island of each
   // stage is one of. retiredKeepMs: how long a conquered (or a day's ended)
-  // island is kept after everyone leaves it.
-  constructor({ rooms, log = () => {}, now = () => Date.now(), retiredKeepMs = RETIRED_KEEP_MS } = {}) {
+  // island is kept after everyone leaves it. file: where the day and stage
+  // are kept over a restart, or none.
+  constructor({ rooms, log = () => {}, now = () => Date.now(), retiredKeepMs = RETIRED_KEEP_MS, file = null } = {}) {
     if (!rooms) throw new Error('The public adventure island needs the server\'s islands.');
     this.rooms = rooms;
     this.log = log;
     this.now = now;
     this.retiredKeepMs = retiredKeepMs;
+    this.file = file;
     // Each island as it comes and goes (set before start(), see shareTheIsle):
     // onOpen(room) for the new public island of a stage, onRetire(room) for
     // the one that stopped being it, and onGone(room) once that one is gone.
@@ -69,14 +73,40 @@ export class PublicAdventure {
     return this.entry && !this.entry.room.closed ? this.entry.room : null;
   }
 
-  // Makes the island of stage 1 for today. Call tick() now and then (the
-  // server does, about ten times a second) for the stages to follow.
+  // Makes the island of today's stage: the one kept from before a restart
+  // today, or stage 1. Call tick() now and then (the server does, about ten
+  // times a second) for the stages to follow.
   start() {
     if (this.entry) return this;
-    const now = this.now();
-    this.open(1, dayOf(now));
-    this.say(`Adventure Isle is up: stage 1 (code ${this.entry.code}).`);
+    const day = dayOf(this.now());
+    const kept = this.readKept();
+    const stage = kept?.day === day ? kept.stage : 1;
+    this.open(stage, day);
+    this.say(`Adventure Isle is up: stage ${stage} (code ${this.entry.code}).`);
     return this;
+  }
+
+  readKept() {
+    if (!this.file) return null;
+    try {
+      const kept = JSON.parse(readFileSync(this.file, 'utf8'));
+      return typeof kept?.day === 'string' && Number.isInteger(kept.stage) && kept.stage >= 1 ? kept : null;
+    } catch (error) {
+      if (error.code !== 'ENOENT') this.say(`its stage in ${this.file} could not be read (${error.message}).`);
+      return null;
+    }
+  }
+
+  // The day and stage, written as each stage opens: a tiny file, rarely.
+  keep() {
+    if (!this.file) return;
+    try {
+      mkdirSync(dirname(this.file), { recursive: true });
+      writeFileSync(`${this.file}.tmp`, `${JSON.stringify({ day: this.day, stage: this.stage })}\n`);
+      renameSync(`${this.file}.tmp`, this.file);
+    } catch (error) {
+      this.say(`its stage could not be kept (${error.message}).`);
+    }
   }
 
   // A new stage (or a new day's stage 1) in place of the current island:
@@ -85,6 +115,7 @@ export class PublicAdventure {
   open(stage, day) {
     this.stage = stage;
     this.day = day;
+    this.keep();
     const code = this.freeCode();
     const room = new Room({
       code,
