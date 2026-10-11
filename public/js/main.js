@@ -9,6 +9,7 @@ import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { Profile } from './profile.js';
+import { watchErrors } from './report.js';
 import { Sound } from './sound.js';
 import { forgetSong as forgetSongOf, keepSong, loadSong } from './songs.js';
 import * as storage from './storage.js';
@@ -21,6 +22,9 @@ import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
 import { lookWithGear, wornWeapon } from './shared/shop.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
+
+// What goes wrong in the page from here on goes along with a problem report.
+watchErrors();
 
 const params = new URLSearchParams(location.search);
 // Who is playing: the player logged in on this device, with their own things
@@ -105,6 +109,11 @@ keeper.addEventListener('gone', () => loginGone());
 keeper.addEventListener('needs-password', () => {
   if (!session && !ui.modalOpen) ui.makeLoginDialog({ why: 'Logins have passwords now, instead of secret pictures. Pick one for yours!' });
   else ui.toast('🔑', 'Your login needs a password now: pick one in 🔑 My login on the title screen.');
+});
+// A problem you told of reached the keeper (or was one too many lately).
+keeper.addEventListener('reported', (e) => {
+  if (e.detail.t === 'kept') ui.toast('🐞', 'The grown-ups got your note. Thank you!');
+  else if (e.detail.code === 'wait') ui.toast('🐞', 'The grown-ups have lots of your notes already. They will look soon!');
 });
 // An invitation to a friend's island, while you are playing (see invited()).
 keeper.addEventListener('invite', (e) => invited(e.detail));

@@ -3502,3 +3502,79 @@ test('a conquered stage of the shared isle goes on to the next stage by itself',
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('a problem is told of with a picture of the screen, and waits for the keeper when it is away', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  let keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Bug Finder' });
+  try {
+    await makeIsland(page, { online: false, theme: 'Flat Land', name: 'Buggy Bay' });
+    // From How to play: the dialog closes, the picture is taken, and what you write goes with it.
+    await page.click('#btn-help-hud');
+    await clickButton(page, 'Something went wrong?', '#modal');
+    await page.waitForSelector('#modal .report-text', { visible: true, timeout: 30000 * SLOW });
+    assert.ok(await page.$eval('#modal .report-shot', (img) => img.src.startsWith('data:image/jpeg;base64,')), 'a picture of the screen');
+    await page.type('#modal .report-text', 'The bunny fell through the floor!');
+    await clickButton(page, 'Send', '#modal');
+    await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('got your note')));
+    const [report] = await keeper.store.reports();
+    assert.equal(report.text, 'The bunny fell through the floor!');
+    assert.equal(report.player, 'Bug Finder');
+    assert.equal(report.about.where, 'island');
+    assert.equal(report.about.island.name, 'Buggy Bay');
+    assert.equal(report.about.island.kind, 'build');
+    assert.equal(report.about.island.host, true);
+    assert.ok(report.picture);
+    // The island with its buttons on top: a JPEG as big as the page, and not one colour all over.
+    const jpeg = await readFile(await keeper.store.reportPicture(report.id));
+    assert.deepEqual([...jpeg.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+    const look = await page.evaluate(async (url) => {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      // The hotbar's corner of the screen, which only the page's half draws, and the island's middle.
+      const at = (x, y) => [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
+      const bar = document.querySelector('#hotbar').getBoundingClientRect();
+      return { width: img.width, height: img.height, hotbar: at(Math.round(bar.left + 4), Math.round(bar.top + bar.height / 2)), middle: at(img.width >> 1, img.height >> 2) };
+    }, `data:image/jpeg;base64,${jpeg.toString('base64')}`);
+    assert.equal(look.width, 720);
+    assert.equal(look.height, 480);
+    assert.notDeepEqual(look.hotbar, look.middle, 'the hotbar is drawn over the island');
+
+    // The keeper is away: the next one waits in the page, over a reload, until it is back.
+    await keeper.stop();
+    await until(page, () => window.kidsWorld.keeper.state !== 'ready');
+    await page.click('#btn-settings');
+    await clickButton(page, 'Something went wrong?', '#modal');
+    await page.waitForSelector('#modal .report-text', { visible: true, timeout: 30000 * SLOW });
+    await page.type('#modal .report-text', 'It went dark');
+    // Without the picture.
+    await page.click('#modal .report-picture .switch');
+    await clickButton(page, 'Send', '#modal');
+    await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('wakes up')));
+    await page.evaluate(() => window.kidsWorld.keeper.reportsStored);
+    await page.reload();
+    await page.waitForFunction(() => window.kidsWorld?.keeper.reports.length === 1, { timeout: 30000 * SLOW });
+    keeper = await keeperOnline(identity, dir);
+    await eventually(async () => (await keeper.store.reports()).length === 2, 60000 * SLOW);
+    const [later] = await keeper.store.reports();
+    assert.equal(later.text, 'It went dark');
+    assert.equal(later.picture, false);
+    assert.equal(later.about.island.name, 'Buggy Bay');
+    await until(page, () => window.kidsWorld.keeper.reports.length === 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

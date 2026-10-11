@@ -9,7 +9,8 @@
 // answers and what it did lately, with a line to talk with it on an island
 // it is on, which its model answers, a line for it to say there, as its own
 // words, and its model log: what it asked the model, word for word, and what
-// came back. It reads /admin/api/state and /admin/api/friend every few
+// came back; and the problems players told of, with a picture of their
+// screen, to mark done or delete. It reads /admin/api/state and /admin/api/friend every few
 // seconds — every moment, for a while, after something is said to it, so its
 // answer shows as it comes — and /admin/api/friend/llm too while
 // the model log is open.
@@ -118,6 +119,63 @@ async function remove(path, question) {
   if (!confirm(question)) return;
   const res = await api(path, { method: 'DELETE', headers: { 'X-Kids-World-Admin': '1' } });
   if (!res.ok) alert('That could not be deleted. Is the keeper still running?');
+  refresh(true);
+}
+
+// ---------------------------------------------------------------- problems
+
+// A problem a player told of: what they wrote, the picture of their screen
+// (bigger in a new tab), where they were and on what, and what went wrong in
+// the page lately. Marked done once looked into, which folds it away under
+// the ones still to do.
+function reportCard(r) {
+  const a = r.about ?? {};
+  const isl = a.island;
+  const who = r.player || 'A player';
+  const seen = h('button', { type: 'button', onclick: () => change(`reports/${r.id}/seen`, 'PUT', { on: !r.seen }) }, r.seen ? '↩️ Not done' : '✅ Done');
+  const picture = r.picture ? `/admin/api/reports/${r.id}/picture` : null;
+  return h(
+    'article',
+    { class: `report${r.seen ? ' seen' : ''}` },
+    picture ? h('a', { class: 'shot', href: picture, target: '_blank', rel: 'noopener' }, h('img', { src: picture, alt: `${who}’s screen`, loading: 'lazy' })) : null,
+    h(
+      'div',
+      { class: 'body' },
+      h('header', { class: 'who' }, h('div', { class: 'name' }, h('h3', {}, who, r.username && r.username !== who ? h('span', { class: 'muted' }, ` (${r.username})`) : null), h('div', { class: 'muted' }, ago(r.at))), seen, h('button', { class: 'danger quiet', type: 'button', onclick: () => remove(`reports/${r.id}`, `Delete ${who}’s report? This cannot be undone.`) }, 'Delete')),
+      r.text ? h('p', { class: 'said' }, r.text) : h('p', { class: 'muted' }, 'Just a picture, no words.'),
+      h(
+        'div',
+        { class: 'facts' },
+        a.where === 'title' ? h('span', {}, '🏠 On the title screen') : null,
+        isl ? h('span', {}, `🏝️ ${isl.name || 'An island'}${isl.code ? ` · ${prettyCode(isl.code)}` : ''}${isl.kind ? ` · ${isl.kind}` : ''}${isl.theme ? ` · ${isl.theme}` : ''} · ${plural(isl.players, 'player', 'players')} · ${isl.host ? 'their own' : 'a friend’s'}${isl.online ? `, ${isl.online}` : ''}`) : null,
+        a.screen ? h('span', {}, `🖥️ ${a.screen}${a.touch ? ', touch' : ''}`) : null,
+      ),
+      a.agent ? h('div', { class: 'muted agent' }, a.agent, a.page ? ` · ${a.page}` : '') : null,
+      a.errors?.length ? h('details', { class: 'errors' }, h('summary', {}, `⚠️ ${plural(a.errors.length, 'error', 'errors')} in the page lately`), h('pre', {}, a.errors.join('\n'))) : null,
+    ),
+  );
+}
+
+let reportsShown = '';
+function renderReports(state) {
+  const reports = state.reports ?? [];
+  $('reports-section').hidden = reports.length === 0;
+  const key = JSON.stringify(reports);
+  if (key === reportsShown) return;
+  reportsShown = key;
+  const open = reports.filter((r) => !r.seen);
+  const done = reports.filter((r) => r.seen);
+  $('reports').replaceChildren(
+    ...[
+      ...(open.length ? open.map(reportCard) : [h('p', { class: 'empty' }, 'Nothing to look into: every problem is marked done.')]),
+      done.length ? h('details', { class: 'done-reports' }, h('summary', {}, `✅ ${plural(done.length, 'done', 'done')}`), ...done.map(reportCard)) : null,
+    ].filter(Boolean),
+  );
+}
+
+async function change(path, method, body) {
+  const res = await api(path, { method, headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) alert('That did not work. Is the keeper still running?');
   refresh(true);
 }
 
@@ -285,6 +343,7 @@ const DID = {
   'new-password': () => ' picked a new password',
   adopt: (e) => ` brought ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what they did'} from before into their login`,
   invite: (e) => ` invited ${e.to || 'a player'} to “${e.island}”`,
+  report: () => ' told of a problem',
 };
 
 function renderRecent(state) {
@@ -840,6 +899,7 @@ function render(state) {
   if (!state) return;
   renderSummary(state);
   renderRecent(state);
+  renderReports(state);
   const key = JSON.stringify(state.devices);
   if (editing || (key === shown && Date.now() - drawnAt < REDRAW_MS)) return;
   shown = key;
@@ -879,7 +939,7 @@ async function refresh(now = false) {
   } catch {
     state = null;
   }
-  if (now) shown = '';
+  if (now) shown = reportsShown = '';
   render(state);
   await refreshFriend();
   timer = setTimeout(refresh, REFRESH_MS);

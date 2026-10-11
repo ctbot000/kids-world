@@ -11,7 +11,7 @@ import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
 import { GEAR, levelDoes, nextLevel, POTION, sellPrice, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
-import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -28,6 +28,7 @@ import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
 import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
+import { recentErrors, screenshot } from './report.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1766,6 +1767,7 @@ export class UI {
             ? 'Your things stay on this device, and the island keeper keeps a copy. Log in with 🔑 to have them on your other devices too. Friends see your name, how you look and the phrases you pick.'
             : 'Everything stays on this device. Friends see your name, how you look and the phrases you pick.',
         ),
+        this.reportButton(),
       );
     });
   }
@@ -2109,6 +2111,125 @@ export class UI {
       },
       { narrow: true },
     );
+  }
+
+  // ------------------------------------------------ problems
+
+  // The button to tell of a problem, where there is an island keeper to tell.
+  reportButton(kind = 'chip report-button') {
+    if (!this.reportKeeper()?.config) return null;
+    return h('button', { class: kind, type: 'button', onclick: () => this.reportDialog() }, '🐞 Something went wrong?');
+  }
+
+  reportKeeper() {
+    return this.gameHandlers?.keeper ?? this.handlers?.login?.keeper ?? null;
+  }
+
+  // Something went wrong: what you write goes to the grown-ups who run the
+  // island keeper, with a picture of your screen as it was (the dialog this
+  // came from closes first, and the picture can stay behind), where you
+  // were, and what went wrong in the page lately (see report.js).
+  async reportDialog() {
+    const keeper = this.reportKeeper();
+    if (!keeper?.config) return;
+    this.closeModal();
+    this.loading('📷 Taking a picture of your screen…');
+    // The dialog that closed is off the screen by the next frame.
+    await new Promise((done) => requestAnimationFrame(() => done()));
+    let picture = '';
+    try {
+      picture = await screenshot(this.game?.renderer ?? null);
+    } catch {
+      picture = '';
+    }
+    this.hideLoading();
+    const about = this.reportAbout();
+    this.openModal(
+      (root) => {
+        let withPicture = Boolean(picture);
+        const text = h('textarea', { class: 'text-input report-text', rows: 4, maxLength: REPORT_TEXT_MAX, placeholder: 'What happened? What did you think would happen?', 'aria-label': 'What went wrong' });
+        const note = h('p', { class: 'login-note warn', 'aria-live': 'polite', hidden: true });
+        const shot = picture ? h('img', { class: 'report-shot', src: picture, alt: 'A picture of your screen' }) : null;
+        const sw = h('button', { class: 'switch on', type: 'button', role: 'switch', 'aria-checked': 'true', 'aria-label': 'Send the picture too' });
+        sw.onclick = () => {
+          withPicture = !withPicture;
+          sw.classList.toggle('on', withPicture);
+          sw.setAttribute('aria-checked', String(withPicture));
+          shot.classList.toggle('off', !withPicture);
+          this.sound.play('ui');
+        };
+        const send = h(
+          'button',
+          {
+            class: 'big green',
+            type: 'button',
+            onclick: () => {
+              const words = text.value.trim();
+              if (!words && !withPicture) {
+                note.hidden = false;
+                note.textContent = '✏️ Write what went wrong first.';
+                text.focus();
+                return;
+              }
+              if (!keeper.report({ text: words, picture: withPicture ? picture : null, about })) {
+                note.hidden = false;
+                note.textContent = '🙈 There is no island keeper to tell right now.';
+                return;
+              }
+              this.closeModal();
+              this.sound.play('sticker');
+              this.toast('📮', keeper.state === 'ready' ? 'Thank you! Your note is on its way to the grown-ups.' : 'Thank you! Your note goes to the grown-ups when the island keeper wakes up.');
+            },
+          },
+          '📮 Send',
+        );
+        root.append(
+          h('h2', {}, '🐞 Something went wrong?'),
+          h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it.'),
+          text,
+          shot
+            ? h(
+                'div',
+                { class: 'setting report-picture' },
+                shot,
+                h('div', {}, h('b', {}, '📷 Send this picture too'), h('div', { class: 'muted' }, 'It shows them what your screen looked like.')),
+                sw,
+              )
+            : null,
+          note,
+          h('div', { class: 'row', style: 'margin-top:12px' }, send),
+          h('p', { class: 'muted', style: 'margin-top:10px' }, 'Your name, the island you are on and what kind of device you have go along too. Never write your password here.'),
+        );
+        setTimeout(() => text.focus(), 60);
+      },
+      { narrow: true },
+    );
+  }
+
+  // Who and where you were, for a problem report: your name, the screen, the device, and the
+  // island (never its passcode), with what went wrong in the page lately.
+  reportAbout() {
+    const g = this.game;
+    return {
+      name: this.profile.name,
+      page: `${location.origin}${location.pathname}`,
+      agent: navigator.userAgent,
+      screen: `${innerWidth}×${innerHeight} @${Math.round(devicePixelRatio * 100) / 100}x`,
+      touch: Boolean(this.input.touchMode),
+      where: g ? 'island' : 'title',
+      island: g?.world
+        ? {
+            name: g.world.name,
+            code: g.code,
+            kind: g.adventure ? 'adventure' : g.defense ? 'defense' : 'build',
+            theme: g.world.theme,
+            players: g.players.size,
+            host: g.pid === g.host,
+            online: this.gameHandlers?.canInvite?.() ? 'open to friends' : 'alone',
+          }
+        : null,
+      errors: recentErrors(),
+    };
   }
 
   // ------------------------------------------------ full screen
@@ -3194,6 +3315,7 @@ export class UI {
           handlers.canSave() ? h('button', { class: 'chip', type: 'button', onclick: () => handlers.saveFile() }, '💾 Save island to a file') : null,
           h('button', { class: 'chip', type: 'button', onclick: () => this.meDialog() }, '🎨 Change me'),
           h('button', { class: 'chip', type: 'button', onclick: () => this.petDialog() }, '🐾 My pet'),
+          this.reportButton('chip'),
           h(
             'button',
             {

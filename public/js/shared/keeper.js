@@ -74,6 +74,8 @@ export const OLDEST_VERSION = 1;
 // The longest message: an island, as JSON. A busy island is a few hundred KB.
 export const MAX_TEXT = 4 * 1024 * 1024;
 export const MAX_PARTS = Math.ceil(MAX_TEXT / CHUNK);
+// What a player writes about a problem, at most (see report.js).
+export const REPORT_TEXT_MAX = 1000;
 
 export const SIGN_ALGORITHM = { name: 'ECDSA', hash: 'SHA-256' };
 export const KEY_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' };

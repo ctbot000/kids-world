@@ -297,6 +297,7 @@ async function startKeeper(store) {
     'made-login': (e, who) => `made the login ${e.username || ''} for ${who || 'a player'}`,
     'new-password': (e, who) => `gave ${who || 'a player'} a new password`,
     adopt: (e, who) => `moved ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what a device did'} from before into ${who || 'a player'}'s login`,
+    report: (e, who) => `got a problem report from ${who || 'a player'}: see it at /admin/`,
   };
   keeper.on('kept', (e) => console.log(`Keeper: ${(said[e.what] ?? said.profile)(e, e.player)}`));
   try {

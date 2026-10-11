@@ -20,9 +20,13 @@
 // invite you to their islands, which comes as an 'invite' event. It brings
 // that list, and sends your invitations (see shared/friends.js).
 //
+// It takes the problems players tell of to the keeper too (see report.js),
+// copies or not, kept in IndexedDB until the keeper has them.
+//
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
 
+import { get, set } from '../vendor/idb-keyval.js';
 import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
@@ -54,6 +58,8 @@ const LIST_AGAIN_MS = 60000;
 const ONLINE_AGAIN_MS = 60000;
 // Logged in, coming back to the game after this long asks the keeper for news.
 const RESYNC_MS = 2 * 60000;
+// Problem reports waiting for the keeper, at most: the oldest go first.
+const REPORTS_WAITING = 5;
 
 // Why the keeper could not do something you asked: asleep (not online),
 // refused (someone else has its id), gone (your login was removed), none (no
@@ -127,6 +133,9 @@ export class KeeperClient extends EventTarget {
     this.present = false;
     this.presentSent = null;
     this.presentTimer = 0;
+    // Problem reports waiting for the keeper (see report), the oldest first.
+    this.reports = [];
+    this.reportsStored = Promise.resolve();
     const saved = load('keeper', null);
     this.data = {
       device: isDeviceKey(saved?.device) ? saved.device : randomHex(16),
@@ -190,6 +199,9 @@ export class KeeperClient extends EventTarget {
     } finally {
       this.emit('config');
     }
+    // Problem reports from before, still waiting, ahead of any told of since.
+    const waiting = await get('reports').catch(() => null);
+    if (Array.isArray(waiting) && waiting.length) this.reports = [...waiting, ...this.reports].slice(-REPORTS_WAITING);
     window.addEventListener('online', () => {
       if (this.state === 'away') this.schedule(FIRST_TRY_MS);
     });
@@ -198,7 +210,7 @@ export class KeeperClient extends EventTarget {
       if (!document.hidden) this.resync();
     });
     this.setState(this.enabled ? 'idle' : 'off');
-    if (this.enabled && this.pending()) this.schedule(this.login ? 0 : FIRST_TRY_MS);
+    if ((this.enabled || this.reports.length) && this.pending()) this.schedule(this.login ? 0 : FIRST_TRY_MS);
   }
 
   setEnabled(on) {
@@ -260,6 +272,9 @@ export class KeeperClient extends EventTarget {
     if (listing !== this.listingSent) {
       return { msg: this.listing ? { t: 'open-island', island: this.listing } : { t: 'close-island' }, answer: () => (this.listingSent = listing) };
     }
+    // A problem a player told of, copies or not.
+    const report = this.reports[0];
+    if (report) return { msg: { t: 'report', report }, answer: (reply) => this.reported(report, reply) };
     if (!this.enabled) return null;
     if (this.login) {
       if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
@@ -419,6 +434,37 @@ export class KeeperClient extends EventTarget {
     this.watched = true;
     this.rankingLive = reply.t === 'ranking' && isBoardsOf(this.watchWorld, reply.boards);
     if (this.rankingLive && this.watching) this.emit('ranking', { ...reply, world: this.watchWorld });
+  }
+
+  // A problem a player told of (see report.js): { text, picture, about },
+  // for the keeper, copies or not. It waits here (in IndexedDB, over a
+  // reload) until the keeper has it, and a 'reported' event says so. False
+  // when there is no keeper to tell.
+  report(report) {
+    if (!this.config || this.state === 'gone') return false;
+    this.reports = [...this.reports, report].slice(-REPORTS_WAITING);
+    this.storeReports();
+    this.halted = false;
+    if (this.state === 'ready') this.flush();
+    else if (!this.peer && this.state !== 'refused') this.schedule(0);
+    return true;
+  }
+
+  // The keeper's answer to a report: kept, or never to be (bad, or too many
+  // lately), else it goes again later.
+  reported(report, reply) {
+    if (reply.t === 'error' && reply.code !== 'bad' && reply.code !== 'wait') {
+      this.away();
+      return;
+    }
+    this.reports = this.reports.filter((r) => r !== report);
+    this.storeReports();
+    this.emit('reported', reply);
+  }
+
+  // Resolves once the reports waiting are in IndexedDB.
+  storeReports() {
+    this.reportsStored = set('reports', this.reports).catch(() => {});
   }
 
   // Puts the island this page hosts on the list of open islands (a listing,
@@ -782,7 +828,7 @@ export class KeeperClient extends EventTarget {
     // Copies are off: only something you asked for called the keeper, and
     // that has failed now. (Watching the ranking, or with an island on the
     // list, it is tried again.)
-    if (!this.enabled && !this.watching && !this.listing && !this.present) {
+    if (!this.enabled && !this.watching && !this.listing && !this.present && !this.reports.length) {
       this.setState('off');
       return;
     }

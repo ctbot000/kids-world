@@ -12,7 +12,8 @@
 // (friend.js), with a line to say there as its own, a line to say to it that
 // its model answers, and a button to send it home from an island, and its
 // model log: what it asked the model lately, word for word, and what came
-// back. Only for this computer: requests from other
+// back; and the problems players told of, each with a picture of their
+// screen, to look into, mark done and delete. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -151,11 +152,34 @@ export function adminHandler({ store, keeper = null, friend = null, dataDir = st
         keepDays: store.keepDays,
         // An IPv6 address's IPv4 one, where there is one, places it better.
         devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip4 && isPublicIp(d.ip4) ? d.ip4 : d.ip) }))),
+        reports: await store.reports(),
       });
       return true;
     }
     if (pathname === '/admin/api/friend' || pathname.startsWith('/admin/api/friend/')) {
       await friendApi(req, res, pathname.slice('/admin/api/friend'.length));
+      return true;
+    }
+    const report = /^\/admin\/api\/reports\/([^/]+)(?:\/(picture|seen))?$/.exec(pathname);
+    if (report) {
+      // A problem a player told of: the picture of their screen, marked
+      // looked into (or not), or deleted.
+      const [, id, part] = report;
+      if (part === 'picture') {
+        const file = req.method === 'GET' || req.method === 'HEAD' ? await store.reportPicture(id) : null;
+        if (file) sendFile(req, res, file);
+        else if (req.method !== 'GET' && req.method !== 'HEAD') res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+        else json(res, 404, { error: 'No such picture' });
+      } else if (part === 'seen') {
+        if (req.method !== 'PUT') res.writeHead(405, { Allow: 'PUT' }).end();
+        else {
+          const ok = await store.setReportSeen(id, (await readJson(req))?.on !== false);
+          json(res, ok ? 200 : 404, { ok });
+        }
+      } else if (req.method === 'DELETE') {
+        const ok = await store.deleteReport(id);
+        json(res, ok ? 200 : 404, { ok });
+      } else res.writeHead(405, { Allow: 'DELETE' }).end();
       return true;
     }
     const move = /^\/admin\/api\/devices\/([^/]+)\/move$/.exec(pathname);

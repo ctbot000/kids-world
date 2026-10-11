@@ -14,6 +14,9 @@
 //                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
 //   <data>/devices/<device>/islands/<id>/<day>.json the island as it was at the end of that day
+//   <data>/reports/<id>.json                        a problem a player told of: what they wrote,
+//                                                   who, and what the page knew of where they were
+//   <data>/reports/<id>.jpg                         and the picture of their screen, if it came
 //
 // <device> is a hash of the secret device key, so a page can only ever add
 // to its own copies. A login turns that folder into a player: other devices
@@ -51,6 +54,7 @@ import {
   MAX_PARTS,
   MAX_TEXT,
   OLDEST_VERSION,
+  REPORT_TEXT_MAX,
   cleanPassword,
   cleanUsername,
   PASSWORD_MAX,
@@ -310,12 +314,14 @@ export class KeeperStore extends EventEmitter {
     // Logins are checked one at a time: each check is a slow hash per player
     // of that name, and the counts of wrong tries hold only if none overlap.
     this.checking = Promise.resolve();
+    // Problem reports lately, per folder, for the limit on them.
+    this.reportTimes = new Map();
   }
 
   // Counts what is kept already, and gives logins from before usernames one.
   // Folders are made when the first copy arrives.
   async open() {
-    this.bytes = await folderSize(join(this.dir, 'devices'));
+    this.bytes = (await folderSize(join(this.dir, 'devices'))) + (await folderSize(join(this.dir, 'reports')));
     await this.nameOldLogins();
     return this;
   }
@@ -896,6 +902,145 @@ export class KeeperStore extends EventEmitter {
       return true;
     });
   }
+
+  // ------------------------------------------------ problem reports
+
+  // Keeps a problem report from this folder: { id, player }.
+  keepReport(device, raw) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    const report = cleanReport(raw);
+    if (!report) return Promise.reject(new KeepError('bad', 'That is not a problem report.'));
+    const now = this.now();
+    const times = (this.reportTimes.get(device) ?? []).filter((t) => now - t < HOUR_MS);
+    if (times.length >= REPORTS_AN_HOUR) return Promise.reject(new KeepError('wait', 'That is a lot of reports. Try again later.'));
+    times.push(now);
+    this.reportTimes.set(device, times);
+    if (this.reportTimes.size > 1000) this.reportTimes.delete(this.reportTimes.keys().next().value);
+    return this.serial(async () => {
+      const folder = join(this.dir, 'reports');
+      const id = `${now}-${randomHex(4)}`;
+      const record = (await readJson(this.path(device, 'device.json'))) ?? {};
+      const login = await this.readLogin(device);
+      const info = {
+        id,
+        at: now,
+        device,
+        // The name the keeper has for them, or, before their first copy (or with copies off), the page's.
+        player: record.profile?.name || report.about.name,
+        username: login?.username ?? '',
+        text: report.text,
+        about: report.about,
+        picture: Boolean(report.picture),
+        seen: false,
+      };
+      const text = JSON.stringify(info);
+      this.room(text.length + (report.picture?.length ?? 0));
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      if (report.picture) {
+        await writeFile(join(folder, `${id}.jpg`), report.picture);
+        this.bytes += report.picture.length;
+      }
+      await this.write(join(folder, `${id}.json`), text);
+      // The newest REPORTS_KEPT, and the rest go.
+      const ids = (await readdir(folder)).filter((f) => f.endsWith('.json') && isReportId(f.slice(0, -5))).map((f) => f.slice(0, -5)).sort();
+      for (const old of ids.slice(0, Math.max(0, ids.length - REPORTS_KEPT))) await this.dropReport(old);
+      return { id, player: info.player };
+    });
+  }
+
+  // Every report, the newest first, without the pictures.
+  async reports() {
+    const folder = join(this.dir, 'reports');
+    const out = [];
+    for (const f of await readdir(folder).catch(() => [])) {
+      if (!f.endsWith('.json') || !isReportId(f.slice(0, -5))) continue;
+      const report = await readJson(join(folder, f));
+      if (report) out.push(report);
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }
+
+  // The picture of a report's screen, or null.
+  async reportPicture(id) {
+    if (!isReportId(id)) return null;
+    const file = join(this.dir, 'reports', `${id}.jpg`);
+    return (await stat(file).catch(() => null)) ? file : null;
+  }
+
+  // Marks a report looked into (seen), or not.
+  setReportSeen(id, seen) {
+    if (!isReportId(id)) return Promise.resolve(false);
+    return this.serial(async () => {
+      const file = join(this.dir, 'reports', `${id}.json`);
+      const report = await readJson(file);
+      if (!report) return false;
+      await this.write(file, JSON.stringify({ ...report, seen: Boolean(seen) }));
+      return true;
+    });
+  }
+
+  deleteReport(id) {
+    if (!isReportId(id)) return Promise.resolve(false);
+    return this.serial(() => this.dropReport(id));
+  }
+
+  // In the queue already.
+  async dropReport(id) {
+    const folder = join(this.dir, 'reports');
+    if (!(await stat(join(folder, `${id}.json`)).catch(() => null))) return false;
+    for (const ext of ['jpg', 'json']) {
+      const file = join(folder, `${id}.${ext}`);
+      const size = await sizeOf(file);
+      await rm(file, { force: true });
+      this.bytes = Math.max(0, this.bytes - size);
+    }
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------- problem reports
+
+// A problem a player told of, from a page (see KeeperClient.report): what
+// they wrote, a picture of their screen, and what the page knew about where
+// they were. Each kind of thing is tidied, and anything else dropped.
+const REPORT_PICTURE_MAX = 3 * 1024 * 1024;
+// Kept: the newest this many, and from one folder, this many an hour.
+const REPORTS_KEPT = 200;
+const REPORTS_AN_HOUR = 6;
+const isReportId = (v) => typeof v === 'string' && /^\d{13}-[0-9a-f]{8}$/.test(v);
+const shortText = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max) : '');
+
+export function cleanReport(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const text = shortText(raw.text, REPORT_TEXT_MAX);
+  const picture = typeof raw.picture === 'string' ? /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw.picture)?.[1] : null;
+  const bytes = picture ? Buffer.from(picture, 'base64') : null;
+  // A JPEG starts FF D8 FF.
+  const jpeg = bytes && bytes.length <= REPORT_PICTURE_MAX && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? bytes : null;
+  if (!text && !jpeg) return null;
+  const a = raw.about && typeof raw.about === 'object' ? raw.about : {};
+  const island = a.island && typeof a.island === 'object' ? a.island : null;
+  const about = {
+    name: shortText(a.name, 40),
+    page: shortText(a.page, 200),
+    agent: shortText(a.agent, 300),
+    screen: shortText(a.screen, 40),
+    touch: a.touch === true,
+    where: shortText(a.where, 40),
+    island: island
+      ? {
+          name: shortText(island.name, 60),
+          code: isValidCode(island.code) ? island.code : '',
+          kind: shortText(island.kind, 20),
+          theme: shortText(island.theme, 20),
+          players: Number.isInteger(island.players) ? Math.max(0, Math.min(island.players, 999)) : 0,
+          host: island.host === true,
+          online: shortText(island.online, 20),
+        }
+      : null,
+    errors: (Array.isArray(a.errors) ? a.errors : []).slice(-10).map((e) => shortText(e, 500)).filter(Boolean),
+  };
+  return { text, picture: jpeg, about };
 }
 
 // ---------------------------------------------------------------- signaling
@@ -1469,6 +1614,13 @@ export class Keeper extends EventEmitter {
         await this.invite(conn, mine('invite players'), msg);
         this.reply(conn, { t: 'kept', what: 'invite', to: msg.to });
         break;
+      case 'report': {
+        // A problem a player told of, with a picture of their screen.
+        const { id, player } = await this.store.keepReport(conn.folder, msg.report);
+        this.reply(conn, { t: 'kept', what: 'report', id });
+        this.note({ device: conn.folder, what: 'report', player });
+        break;
+      }
       case 'bye':
         this.drop(conn);
         break;

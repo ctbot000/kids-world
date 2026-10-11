@@ -559,3 +559,67 @@ button.small {
     aspect-ratio: 1;
   }
 }
+
+.reports {
+  display: grid;
+  gap: 16px;
+}
+
+.report {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.report.seen {
+  margin-top: 12px;
+  opacity: 0.75;
+}
+
+.report .shot {
+  flex: none;
+}
+
+.report .shot img {
+  display: block;
+  width: 320px;
+  max-width: 100%;
+  border-radius: 12px;
+  border: 2px solid var(--line);
+}
+
+.report .body {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.report .who {
+  flex-wrap: wrap;
+}
+
+.report .said {
+  margin: 10px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+}
+
+.report .agent {
+  overflow-wrap: anywhere;
+}
+
+.report .errors pre {
+  overflow-x: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.done-reports > summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+}

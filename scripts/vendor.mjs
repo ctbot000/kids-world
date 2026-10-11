@@ -49,3 +49,10 @@ const idb = await read('idb-keyval', 'dist/index.js');
 const idbMin = await minify(idb, { module: true, compress: { passes: 2 }, mangle: true, format: { comments: false } });
 await writeFile(new URL('idb-keyval.js', vendor), `/*! idb-keyval ${idbVersion} | Apache-2.0 License | https://github.com/jakearchibald/idb-keyval */\n${idbMin.code}\n`);
 console.log(`vendored idb-keyval@${idbVersion} -> public/vendor/idb-keyval.js`);
+
+// Pictures of the whole screen, buttons and all, for problem reports (report.js).
+const shotVersion = await version('modern-screenshot');
+const shot = await read('modern-screenshot', 'dist/index.mjs');
+const shotMin = await minify(shot, { module: true, compress: { passes: 2 }, mangle: true, format: { comments: false } });
+await writeFile(new URL('modern-screenshot.js', vendor), `/*! modern-screenshot ${shotVersion} | MIT License | https://github.com/qq15725/modern-screenshot */\n${shotMin.code}\n`);
+console.log(`vendored modern-screenshot@${shotVersion} -> public/vendor/modern-screenshot.js`);

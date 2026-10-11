@@ -1,6 +1,6 @@
 // The keeper's store and admin pages: islands filed by device with one copy a
-// day, profiles without tokens, what it refuses, and admin pages only this
-// computer can use. Pages sending copies peer to peer are in e2e.test.js.
+// day, profiles without tokens, problem reports, what it refuses, and admin
+// pages only this computer can use. Pages sending copies peer to peer are in e2e.test.js.
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,7 +11,7 @@ import { challenge, keptProfile, toBase64Url, verifySignature, KEY_ALGORITHM, SI
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
-import { candidateAddress, createIdentity, embeddedIpv4, isLocalIp, isPublicIp, pairAddress, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
+import { candidateAddress, cleanReport, createIdentity, embeddedIpv4, isLocalIp, isPublicIp, pairAddress, KeepError, KeeperStore, loadIdentity, publicConfig, sameKeeper } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
 const dirs = [];
@@ -224,6 +224,75 @@ test('/keeper.json names the keeper this server runs, and none by default', asyn
   } finally {
     await plain.shutdown();
     await keeping.shutdown();
+  }
+});
+
+// The start of a JPEG, which is all the keeper checks a picture by.
+const JPEG = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 0xff, 0xd9]).toString('base64')}`;
+
+test('a problem report is tidied: words, a JPEG and where they were, nothing else', () => {
+  assert.equal(cleanReport(null), null);
+  assert.equal(cleanReport({ text: '   ' }), null, 'neither words nor a picture');
+  assert.equal(cleanReport({ picture: 'data:image/png;base64,iVBORw0KGgo=' }), null, 'only a JPEG');
+  assert.equal(cleanReport({ picture: `data:image/jpeg;base64,${Buffer.from('<svg>').toString('base64')}` }), null, 'one that really is');
+  const report = cleanReport({
+    text: `  It broke\u0007!\n${'a'.repeat(2000)}`,
+    picture: JPEG,
+    secret: 'never kept',
+    about: { name: 'Sunny Otter', island: { name: 'Maple Fields', code: 'nope', players: 1e9, host: true }, errors: Array.from({ length: 20 }, (_, i) => `error ${i}`), token: 'never kept' },
+  });
+  assert.equal(report.text.length, 1000);
+  assert.ok(report.text.startsWith('It broke!\n'), 'what cannot be seen goes, the lines stay');
+  assert.equal(report.picture[0], 0xff);
+  assert.equal(report.secret, undefined);
+  assert.equal(report.about.token, undefined);
+  assert.equal(report.about.name, 'Sunny Otter');
+  assert.deepEqual({ ...report.about.island }, { name: 'Maple Fields', code: '', kind: '', theme: '', players: 999, host: true, online: '' });
+  assert.deepEqual(report.about.errors, Array.from({ length: 10 }, (_, i) => `error ${i + 10}`), 'the latest ten errors');
+});
+
+test('problem reports are kept with their pictures, a few an hour from each device, and the admin pages show, mark and delete them', async () => {
+  const time = clock();
+  const store = await new KeeperStore(await tempDir(), { now: time.now, dayOf: time.dayOf }).open();
+  const device = KeeperStore.deviceId(KEY);
+  await store.keepProfile(KEY, { name: 'Sunny Otter' });
+  await assert.rejects(store.keepReport(device, { text: '' }), (e) => e instanceof KeepError && e.code === 'bad');
+  const before = store.bytes;
+  const { id, player } = await store.keepReport(device, { text: 'The pony is stuck', picture: JPEG, about: { name: 'Someone Else', where: 'island' } });
+  assert.equal(player, 'Sunny Otter', 'the name the keeper has for them');
+  assert.ok(store.bytes > before);
+  // Before a first copy, the page's own name.
+  assert.equal((await store.keepReport(KeeperStore.deviceId(OTHER), { text: 'Hi', about: { name: 'Lucky Bunny' } })).player, 'Lucky Bunny');
+  for (let i = 0; i < 5; i++) await store.keepReport(device, { text: `again ${i}` });
+  await assert.rejects(store.keepReport(device, { text: 'one too many' }), (e) => e instanceof KeepError && e.code === 'wait');
+  time.nextDay();
+  await store.keepReport(device, { text: 'the next day' });
+  assert.equal((await store.reports()).length, 8);
+
+  const server = createGameServer({ log: () => {}, admin: adminHandler({ store }) });
+  const base = `http://127.0.0.1:${await listen(server)}`;
+  const change = (path, method, body) => fetch(`${base}/admin/api/reports/${path}`, { method, headers: { 'X-Kids-World-Admin': '1' }, body: body && JSON.stringify(body) });
+  try {
+    const { reports } = await (await fetch(`${base}/admin/api/state`)).json();
+    assert.equal(reports[0].text, 'the next day', 'the newest first');
+    const first = reports.find((r) => r.id === id);
+    assert.deepEqual([first.player, first.text, first.picture, first.seen, first.about.where], ['Sunny Otter', 'The pony is stuck', true, false, 'island']);
+    const picture = await fetch(`${base}/admin/api/reports/${id}/picture`);
+    assert.equal(picture.headers.get('content-type'), 'image/jpeg');
+    assert.equal((await picture.arrayBuffer()).byteLength, 14);
+    assert.equal((await fetch(`${base}/admin/api/reports/${reports[0].id}/picture`)).status, 404, 'one without a picture');
+    assert.equal((await fetch(`${base}/admin/api/reports/../../keeper.json/picture`)).status, 404);
+    assert.equal((await fetch(`${base}/admin/api/reports/${id}`, { method: 'DELETE' })).status, 403, 'not without the admin header');
+    assert.equal((await change(`${id}/seen`, 'PUT', { on: true })).status, 200);
+    assert.equal((await store.reports()).find((r) => r.id === id).seen, true);
+    const kept = store.bytes;
+    assert.equal((await change(id, 'DELETE')).status, 200);
+    assert.ok(store.bytes < kept);
+    assert.equal((await change(id, 'DELETE')).status, 404);
+    assert.equal((await fetch(`${base}/admin/api/reports/${id}/picture`)).status, 404);
+    assert.equal((await store.reports()).length, 7);
+  } finally {
+    await server.shutdown();
   }
 });
 
