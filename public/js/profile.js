@@ -9,7 +9,7 @@
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { cleanCoins, cleanGear, COINS_MAX, lookWithGear, nextLevel, sale } from './shared/shop.js';
+import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -34,6 +34,7 @@ function clean(raw) {
     settings,
     basket,
     coins: cleanCoins(p.coins),
+    potions: cleanPotions(p.potions),
     gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
@@ -41,7 +42,7 @@ function clean(raw) {
     hotbar,
     seenHelp: p.seenHelp === true,
     made: p.made === true,
-    // When your name, look, basket, coins or gear last changed: 0 for a profile nobody has
+    // When your name, look, basket, coins, potions or gear last changed: 0 for a profile nobody has
     // touched yet, which loses to any other when two are merged.
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
@@ -142,6 +143,25 @@ export class Profile extends EventTarget {
     this.data.coins -= next.price;
     this.data.gear[kind] = next.level;
     delete this.data.gear.off[kind];
+    this.shopped();
+    return true;
+  }
+
+  // An HP potion (shop.js POTION): each says whether it happened.
+  buyPotion(n = 1) {
+    const count = Number.isInteger(n) && n > 0 ? Math.min(n, 999 - this.data.potions) : 0;
+    const price = POTION.price * count;
+    if (!count || this.data.coins < price) return false;
+    this.data.coins -= price;
+    this.data.potions += count;
+    this.shopped();
+    return true;
+  }
+
+  // One drunk (the island's half of it is game.js drink): out of your pocket.
+  drinkPotion() {
+    if (this.data.potions < 1) return false;
+    this.data.potions--;
     this.shopped();
     return true;
   }

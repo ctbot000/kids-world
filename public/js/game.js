@@ -21,7 +21,7 @@ import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, wornWeapon } from './shared/shop.js';
+import { gearMove, POTION, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
@@ -329,6 +329,9 @@ export class Game extends EventTarget {
         break;
       case 'helped':
         this.helped(msg);
+        break;
+      case 'healed':
+        this.healed(msg);
         break;
       case 'def':
         this.defenseNews(msg);
@@ -1067,6 +1070,23 @@ export class Game extends EventTarget {
     this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
   }
 
+  // Drinking an HP potion (the 🧪 button by your HP, or Y): one out of your
+  // pocket and, the island agreeing (room.js), all your HP back at once —
+  // sitting dizzy too, up you get on your own. Says whether you drank it.
+  drink() {
+    if (!this.world || !this.me) return false;
+    if (this.hp >= this.maxHp && !this.dizzy) {
+      this.emit('toast', { icon: '🧪', text: 'Your HP is already full up!' });
+      return false;
+    }
+    if (!this.profile.drinkPotion()) {
+      this.emit('toast', { icon: '🧪', text: `No potions left! The 🛒 shop sells them for ${POTION.price} coins.` });
+      return false;
+    }
+    this.send({ t: 'potion' });
+    return true;
+  }
+
   // Whether the 👊 button can swing now: the last swing over, and this one
   // landing well over HIT_MS after the last bop went (the host takes one a
   // moment from each friend, and a bop that goes late, or comes quicker over
@@ -1500,6 +1520,26 @@ export class Game extends EventTarget {
       this.sound.play('helpup');
       this.emit('toast', { icon: '🤝', text: `You helped ${p?.name ?? 'your friend'} up!` });
     }
+  }
+
+  // Someone drank an HP potion (shop.js): hearts over them wherever they
+  // stand, and their HP — and their feet, if they sat dizzy — their own
+  // again. What it filled up to is in the message ({ hp, max }).
+  healed(msg) {
+    const p = this.players.get(msg.pid);
+    if (p) p.dizzy = false;
+    const mine = msg.pid === this.pid;
+    const at = mine ? this.me?.body : p?.avatar?.root.position;
+    if (at && this.near(at.x, at.y, at.z, 30)) {
+      this.renderer.effects.hearts(at.x, at.y + 1.6, at.z, 5);
+      this.renderer.effects.sparkles(at.x, at.y + 1.2, at.z, 8, ['#ff8fc4', '#ffffff', '#b18cff']);
+    }
+    if (!mine) return;
+    this.dizzy = false;
+    this.emit('dizzy', false);
+    this.setHp(msg);
+    this.sound.play('sip');
+    this.emit('toast', { icon: '🧪', text: 'Glug glug… HP filled right up!' });
   }
 
   // Dizzy too long, with no friend coming: back to the nearest safe place.

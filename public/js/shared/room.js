@@ -352,6 +352,9 @@ export class Room {
       case 'bop':
         this.bop(p, msg);
         break;
+      case 'potion':
+        this.drank(p);
+        break;
       case 'host':
         this.hostCommand(conn, p, msg);
         break;
@@ -1100,6 +1103,20 @@ export class Room {
     if (Math.hypot(q.s[0] - p.s[0], q.s[1] - p.s[1], q.s[2] - p.s[2]) > HELP_REACH + 1.5) return;
     Object.assign(q, { dizzyUntil: 0, hp: helpHp(q.maxHp), bumpAt: now, healAt: now, safeUntil: now + SAFE_MS * 2 });
     this.broadcast({ t: 'helped', pid: q.id, by: p.id, ...this.hpOf(q) });
+  }
+
+  // An HP potion drunk (shop.js, one out of the drinker's pocket at their
+  // end): all their HP back at once, and up on their own if they were the
+  // one sitting dizzy. With none missing, there is nothing to drink for.
+  drank(p) {
+    const now = this.now();
+    const dizzy = (p.dizzyUntil ?? 0) > now;
+    if (p.hp >= p.maxHp && !dizzy) return;
+    p.hp = p.maxHp;
+    p.dizzyUntil = 0;
+    p.healAt = now;
+    p.safeUntil = Math.max(p.safeUntil ?? 0, now + SAFE_MS);
+    this.broadcast({ t: 'healed', pid: p.id, ...this.hpOf(p) });
   }
 
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,

@@ -9,7 +9,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { GEAR, levelDoes, nextLevel, sellPrice, wearing, wornWeapon } from './shared/shop.js';
+import { GEAR, levelDoes, nextLevel, POTION, sellPrice, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -77,7 +77,7 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 // What the island rule for monsters means (shared/monsters.js).
 // The bop button shows while a monster is this near.
 const ATTACK_SHOW = 14;
-const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take some of your HP (each level up gives you more of it). Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night.';
+const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take some of your HP (each level up gives you more of it). Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night. HP comes back by itself — or drink a 🧪 potion from the shop to fill it up at once.';
 // What an adventure island is (shared/adventure.js).
 const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 // What a tower defense island is (shared/defense.js).
@@ -1253,9 +1253,9 @@ export class UI {
     });
   }
 
-  // The shop: sell what is in your basket for coins, and buy running shoes
-  // and flying gear with them (shop.js). Redrawn as your basket changes, so
-  // what you find while it is open shows up to sell.
+  // The shop: sell what is in your basket for coins, and buy running shoes,
+  // flying gear and HP potions with them (shop.js). Redrawn as your basket
+  // changes, so what you find while it is open shows up to sell.
   shopDialog() {
     const p = this.profile;
     let onBasket = null;
@@ -1264,6 +1264,7 @@ export class UI {
         const coins = h('span', { class: 'coins', 'aria-label': 'Your coins' });
         const sell = h('div', { class: 'grid shop-grid' });
         const gear = h('div', { class: 'grid shop-grid gear-grid' });
+        const potions = h('div', { class: 'grid shop-grid' });
         const button = (text, onclick, disabled = false) => h('button', { class: 'chip', type: 'button', disabled, onclick }, text);
         const draw = () => {
           coins.textContent = `🪙 ${p.data.coins.toLocaleString()}`;
@@ -1329,14 +1330,47 @@ export class UI {
               );
             }),
           );
+          potions.replaceChildren(
+            h(
+              'div',
+              { class: 'shop-card gear' },
+              h('span', { class: 'emoji' }, POTION.icon),
+              h('b', {}, POTION.name),
+              h('span', { class: 'muted' }, POTION.does),
+              h('span', { class: 'muted' }, p.data.potions > 0 ? `You have ${p.data.potions} ${p.data.potions === 1 ? 'potion' : 'potions'} to drink.` : 'Drink one with the 🧪 button by your HP, or with Y.'),
+              h(
+                'div',
+                { class: 'shop-buttons' },
+                button(`Buy one (🪙 ${POTION.price})`, () => {
+                  if (!p.buyPotion()) {
+                    this.sound.play('no');
+                    return;
+                  }
+                  this.sound.play('collect');
+                  this.toast(POTION.icon, `You got an HP Potion! ${p.data.potions} to drink now.`);
+                }, p.data.coins < POTION.price),
+                button(`Buy 5 (🪙 ${POTION.price * 5})`, () => {
+                  if (!p.buyPotion(5)) {
+                    this.sound.play('no');
+                    return;
+                  }
+                  this.sound.play('collect');
+                  this.toast(POTION.icon, `Five HP Potions! ${p.data.potions} to drink now.`);
+                }, p.data.coins < POTION.price * 5 || p.data.potions > 994),
+              ),
+              p.data.coins < POTION.price ? h('span', { class: 'muted' }, `${POTION.price - p.data.coins} more coins to go!`) : null,
+            ),
+          );
         };
         root.append(
           h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins),
-          p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures and this gear are the isle’s, apart from yours everywhere else.') : null,
+          p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures, potions and gear are the isle’s, apart from yours everywhere else.') : null,
           h('h3', {}, 'Sell your treasures'),
           sell,
           h('h3', {}, 'Gear'),
           gear,
+          h('h3', {}, '🧪 Potions'),
+          potions,
         );
         draw();
         onBasket = draw;
@@ -1708,6 +1742,7 @@ export class UI {
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
@@ -1715,7 +1750,7 @@ export class UI {
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, and a toy sword, bubble blaster or star hammer to pop monsters!']),
+          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster or star hammer to pop monsters, and 🧪 potions to fill your HP up!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
@@ -2239,6 +2274,14 @@ export class UI {
       this.sound.unlock();
       game.attack();
     };
+    // The potion button, like the ride button, never keeping the focus,
+    // where Space (to jump) would press it again.
+    $('btn-potion').onmousedown = (e) => e.preventDefault();
+    $('btn-potion').onclick = () => {
+      $('btn-potion').blur();
+      this.sound.unlock();
+      game.drink();
+    };
     // Never keeping the focus, where Space (to jump) would press it again.
     $('ride').onmousedown = (e) => e.preventDefault();
     $('ride').onclick = () => {
@@ -2275,6 +2318,7 @@ export class UI {
     });
     on('adventure', () => this.renderHp());
     on('defense', () => this.renderDefense());
+    on('dizzy', () => this.renderHp());
     on('welcome', () => {
       this.renderDefense();
       this.renderShared();
@@ -2502,6 +2546,8 @@ export class UI {
         ),
       ),
     );
+    // A potion drunk or bought shows on the 🧪 button too (shop.js).
+    this.renderPotion();
   }
 
   pickBasket(key) {
@@ -3230,12 +3276,15 @@ export class UI {
   // when a bump takes some. On an adventure island, how many camps are free too.
   renderHp() {
     const el = $('hearts');
+    const row = $('hp-row');
     const g = this.game;
     const adv = g?.adventure;
     const shown = Boolean(g?.settings.monsters) || Boolean(adv && !adv.won);
     el.hidden = !shown;
+    row.hidden = !shown;
     if (!shown) {
       this.hpShown = Infinity;
+      this.renderPotion();
       return;
     }
     const { hp, maxHp } = g;
@@ -3255,6 +3304,22 @@ export class UI {
       el.classList.add('hurt');
     }
     this.hpShown = hp;
+    this.renderPotion();
+  }
+
+  // The 🧪 button by your HP (shop.js): a potion to drink, there whenever
+  // you have one and there is something to drink it for — some HP missing,
+  // or sitting dizzy on an adventure island.
+  renderPotion() {
+    const el = $('btn-potion');
+    const g = this.game;
+    const n = this.profile?.data.potions ?? 0;
+    const drinkable = Boolean(g) && !g.closed && n > 0 && (g.hp < g.maxHp || g.dizzy);
+    el.hidden = !drinkable;
+    if (!drinkable) return;
+    const text = `🧪 ${n}`;
+    if (el.textContent !== text) el.textContent = text;
+    el.setAttribute('aria-label', `Drink an HP potion (${n} left)`);
   }
 
   // On a tower defense island: the wave, the Star Stone's hearts and the

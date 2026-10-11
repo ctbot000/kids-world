@@ -1235,6 +1235,17 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
   const pushed = await page.evaluate((from) => Math.hypot(window.kidsWorld.game.me.body.x - from.x, window.kidsWorld.game.me.body.z - from.z), from);
   assert.ok(pushed > 0.8, `knocked back ${pushed.toFixed(2)}`);
+  // An HP potion from the shop, drunk with Y (or the 🧪 button by your HP):
+  // all of it back at once, and the button gone until you are hurt again.
+  await page.evaluate(() => {
+    window.kidsWorld.profile.earn(20);
+    window.kidsWorld.profile.buyPotion();
+  });
+  await until(page, () => !document.getElementById('btn-potion').hidden && document.getElementById('btn-potion').textContent === '🧪 1');
+  await page.keyboard.press('KeyY');
+  await until(page, () => window.kidsWorld.game.hp === 100 && document.querySelector('#hearts .hp-num')?.textContent === '100/100' && document.getElementById('btn-potion').hidden);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.potions), 0);
+  assert.ok(await page.evaluate(() => document.body.textContent.includes('HP filled right up')));
   // Off in Settings: no monsters, all your HP.
   await page.click('#btn-settings');
   await clickSwitch(page, '#modal .switch[aria-label="👾 Monsters"]');

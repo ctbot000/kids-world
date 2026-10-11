@@ -2,8 +2,9 @@
 // gear: running shoes for your feet (walking, running and swimming), flying
 // gear for the sky, and toy weapons for popping monsters. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
-// wear the best you have, and can take it off. Coins and gear are yours, kept with
-// your basket (profile.js) and at the keeper (keeper.js).
+// wear the best you have, and can take it off. HP potions are used up when
+// you drink them. Coins, potions and gear are yours, kept with your basket
+// (profile.js) and at the keeper (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 
 export const COINS_MAX = 99999;
@@ -64,6 +65,22 @@ export const GEAR = [
     ],
   },
 ];
+
+// An HP potion: the one thing the shop sells that is used up. Bought with
+// coins, carried with them (profile.js) and drunk to fill your HP right up,
+// at once, even mid-fight — or sitting dizzy on an adventure island, to get
+// up on your own (the island's half of it is room.js, 'potion').
+export const POTION = {
+  key: 'potion',
+  name: 'HP Potion',
+  icon: '🧪',
+  price: 10,
+  does: 'Fills your HP right up at once — even while a monster is after you, or to get up on your own when you are sitting dizzy.',
+};
+
+// Potions as kept: a whole number, never silly (like coins, but no more than
+// a basket holds).
+export const cleanPotions = (n) => (Number.isInteger(n) && n > 0 ? Math.min(999, n) : 0);
 
 // What a level of gear does, for the shop.
 export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1) * 100)}% faster.`;

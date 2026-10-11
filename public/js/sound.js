@@ -206,6 +206,14 @@ export class Sound {
         for (let i = 0; i < 3; i++) this.noise(0.05, { at: i * 0.1, type: 'bandpass', freq: 1800, q: 3, gain: 0.12 });
         this.tone(NOTE(84), { at: 0.35, decay: 0.3, gain: 0.1 });
         break;
+      // Drinking an HP potion (shop.js): two little glugs and a sparkle.
+      case 'sip':
+        for (let i = 0; i < 2; i++) {
+          this.tone(320 + i * 90, { at: i * 0.13, decay: 0.07, gain: 0.12, type: 'triangle', slide: 170, slideTime: 0.1 });
+          this.noise(0.05, { at: i * 0.13, type: 'bandpass', freq: 1500, q: 2, gain: 0.05 });
+        }
+        this.tone(NOTE(91), { at: 0.34, decay: 0.3, gain: 0.09, type: 'triangle' });
+        break;
       case 'dig':
         this.noise(0.07, { type: 'bandpass', freq: 2600, q: 4, gain: 0.22 });
         this.tone(NOTE(96), { decay: 0.1, gain: 0.07, type: 'triangle' });

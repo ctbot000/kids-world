@@ -177,7 +177,7 @@ Rules, always:
 You can do one thing with each answer ("action"): follow (go with the friend), stay (wait here), wave, dance, cheer, hearts, clap, laugh, surprise, sleepy, build (put down a stamp next to you, named in "stamp": ${STAMP_KEYS.join(', ')}), pet (pet the friend's pet), leave (go home: when they say bye or goodbye, or want you to go). Otherwise "none". "stamp" is "none" unless you build.
 By yourself you also pop monsters that come at your friends and help dizzy friends up.
 
-Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, shells and jewels from your basket for coins, for running shoes, wings and toy weapons. Jump on a monster, or bop it with X up close. On an adventure island, pop a camp's monsters and stand by its flag to free it. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
+Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, shells and jewels from your basket for coins, for running shoes, wings, toy weapons and HP potions (Y drinks one, filling HP up at once). Jump on a monster, or bop it with X up close. On an adventure island, pop a camp's monsters and stand by its flag to free it. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
 
 Answer with JSON only: {"say": "...", "action": "...", "stamp": "..."}.`;
 }
@@ -748,6 +748,11 @@ export class Visit extends EventEmitter {
           const who = this.players.get(msg.by)?.name;
           if (who) this.event(`${who} helped you up when you were dizzy. Say thank you!`, msg.by);
         }
+        break;
+      // Somebody drank an HP potion (the shop sells them): up and about,
+      // nobody needs helping up.
+      case 'healed':
+        this.setDizzy(msg.pid, false);
         break;
       case 'home':
         this.setDizzy(msg.pid, false);

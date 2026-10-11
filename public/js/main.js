@@ -877,6 +877,10 @@ input
       case 'KeyX':
         g.attack();
         return true;
+      case 'KeyY':
+        if (!g.world) return false;
+        g.drink();
+        return true;
       case 'KeyV':
         if (!g.defense) return false;
         g.defend();

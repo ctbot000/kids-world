@@ -65,7 +65,7 @@
 // in the hello, before that check; the keeper still answers them.
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
-import { cleanCoins, cleanGear, COINS_MAX } from './shop.js';
+import { cleanCoins, cleanGear, cleanPotions, COINS_MAX } from './shop.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
 export const KEEPER_VERSION = 2;
@@ -126,9 +126,10 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
   }
 }
 
-// What is kept of a profile: your name and look, your basket, coins and
-// gear from the shop, what you have done and the stickers it earned, and
-// when your name, look, basket, coins or gear last changed. Never your tokens, which let you back into islands as yourself,
+// What is kept of a profile: your name and look, your basket, coins,
+// potions and gear from the shop, what you have done and the stickers it
+// earned, and when your name, look, basket, coins, potions or gear last
+// changed. Never your tokens, which let you back into islands as yourself,
 // nor your settings. The page sends exactly this.
 export function keptProfile(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
@@ -150,6 +151,7 @@ export function keptProfile(raw) {
     look: cleanLook(p.look),
     basket,
     coins: cleanCoins(p.coins),
+    potions: cleanPotions(p.potions),
     gear: cleanGear(p.gear),
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, 64),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, 64),
@@ -205,8 +207,9 @@ export function usernameProblem(v) {
 }
 
 // One player's profile from two devices, put together: the name, look,
-// basket, coins and gear from whichever changed them last, every sticker either has earned
-// (dated the earlier day), and the most either has done of everything.
+// basket, coins, potions and gear from whichever changed them last, every
+// sticker either has earned (dated the earlier day), and the most either has
+// done of everything.
 export function mergeProfiles(mine, theirs) {
   const a = keptProfile(mine);
   const b = keptProfile(theirs);
@@ -215,7 +218,7 @@ export function mergeProfiles(mine, theirs) {
   for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
   const stats = { ...a.stats };
   for (const [key, n] of Object.entries(b.stats)) stats[key] = Math.max(stats[key] ?? 0, n);
-  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, gear: newer.gear, changedAt: newer.changedAt, stats, stickers };
+  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, gear: newer.gear, changedAt: newer.changedAt, stats, stickers };
 }
 
 // What you did as the guest on a device, added to the player you logged in
@@ -234,7 +237,7 @@ export function addProgress(player, guest) {
   for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
   const gear = cleanGear(a.gear);
   for (const key of Object.keys(gear)) if (key !== 'off') gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
-  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), gear };
+  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:
