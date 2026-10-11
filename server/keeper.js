@@ -7,8 +7,9 @@
 //
 //   <data>/keeper.json                              the keeper's id and key pair (private)
 //   <data>/devices/<device>/device.json             when the device was seen and from which
-//                                                   IP address, its profile, and for a login,
-//                                                   whether it left the ranking and the players list
+//                                                   IP address, its profile and the isle's own
+//                                                   world of it, and for a login, whether it left
+//                                                   the ranking and the players list
 //   <data>/devices/<device>/login.json              its login, if it made one: the username, the
 //                                                   password's hash, the logged-in devices' tokens' hashes
 //   <data>/devices/<device>/islands/<id>/info.json  the island's name, theme, code, times
@@ -64,7 +65,7 @@ import {
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
-import { rankBoards } from '../public/js/shared/ranking.js';
+import { boardsOf, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
 import { lookWithGear } from '../public/js/shared/shop.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -490,6 +491,29 @@ export class KeeperStore extends EventEmitter {
     return { device, player: profile.name, onlyStats };
   }
 
+  // The isle's own world of a player (the shared isle is a world of its own,
+  // see main.js): its own profile, kept beside theirs the same way — its own
+  // basket, coins, gear, stickers and what they did there.
+  keepAdventure(key, raw) {
+    if (!isDeviceKey(key)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    return this.keepAdventureIn(KeeperStore.deviceId(key), raw);
+  }
+
+  keepAdventureIn(device, raw) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'Unknown device.'));
+    const profile = keptProfile(raw);
+    return this.serial(() => this.storeAdventure(device, profile));
+  }
+
+  async storeAdventure(device, profile) {
+    this.room(JSON.stringify(profile).length);
+    await mkdir(this.path(device), { recursive: true, mode: 0o700 });
+    const old = (await readJson(this.path(device, 'device.json')))?.adventure?.profile;
+    await this.seen(device, { adventure: { profile, profileAt: this.now() } });
+    const onlyStats = Boolean(old) && JSON.stringify({ ...keptProfile(old), stats: 0 }) === JSON.stringify({ ...profile, stats: 0 });
+    return { device, player: profile.name, onlyStats };
+  }
+
   // ------------------------------------------------ logins
 
   async readLogin(device) {
@@ -674,11 +698,18 @@ export class KeeperStore extends EventEmitter {
         await rename(from, to);
         moved++;
       }
-      const theirs = (await readJson(this.path(device, 'device.json')))?.profile;
+      const gone = await readJson(this.path(device, 'device.json'));
+      const theirs = gone?.profile;
       const record = await readJson(this.path(player, 'device.json'));
       if (theirs && record?.profile) {
         // The player's name, look and basket; everyone's stickers.
         await this.seen(player, { profile: mergeProfiles(record.profile, { ...theirs, changedAt: 0 }), profileAt: this.now() });
+      }
+      // The isle's own world of them joins the player's the same way.
+      const isleTheirs = gone?.adventure?.profile;
+      const isleMine = record?.adventure?.profile;
+      if (isleTheirs && isleMine) {
+        await this.seen(player, { adventure: { profile: mergeProfiles(isleMine, { ...isleTheirs, changedAt: 0 }), profileAt: this.now() } });
       }
       await this.remove(this.path(device));
       return moved;
@@ -688,9 +719,10 @@ export class KeeperStore extends EventEmitter {
   // ------------------------------------------------ for a logged-in page
 
   // The player's profile and islands, so each of their devices can fetch
-  // what it lacks, and the islands they said goodbye to, so it drops those.
+  // what it lacks, and the islands they said goodbye to, so it drops those;
+  // and the isle's own world of them, to merge with theirs here.
   async list(device) {
-    if (!isDeviceId(device)) return { profile: null, islands: [], forgotten: [] };
+    if (!isDeviceId(device)) return { profile: null, adventure: null, islands: [], forgotten: [] };
     const record = await readJson(this.path(device, 'device.json'));
     const islands = [];
     const forgotten = [];
@@ -701,7 +733,7 @@ export class KeeperStore extends EventEmitter {
       if (info.forgotten) forgotten.push({ id, at: info.forgotten });
       else islands.push({ id, name: info.name, theme: info.theme, code: info.code, savedAt: info.savedAt });
     }
-    return { profile: record?.profile ?? null, islands, forgotten };
+    return { profile: record?.profile ?? null, adventure: record?.adventure?.profile ?? null, islands, forgotten };
   }
 
   // The latest copy of one of the player's islands, as kept (JSON text).
@@ -732,27 +764,30 @@ export class KeeperStore extends EventEmitter {
 
   // Every board of the ranking (see rankBoards): the players with a login,
   // but for those who left it. me: the player asking, if logged in, who
-  // also learns whether they are in it ({ shown }).
-  async ranking(me = null) {
-    return KeeperStore.rankingOf(await this.players(), me);
+  // also learns whether they are in it ({ shown }). world: 'isle' for the
+  // isle's own boards, from the isle's own world of each player.
+  async ranking(me = null, world = 'home') {
+    return KeeperStore.rankingOf(await this.players(world), me, world);
   }
 
   // Every player with a login, their profile, and whether they are in the
   // ranking and on the players list: [{ id, profile, ranked, findable }].
   // The look comes with the player's level in it (shownProfile), for every
   // list this serves. Read once for everyone watching the ranking.
-  async players() {
+  // world: 'isle' for each one's world on the shared isle.
+  async players(world = 'home') {
     const players = [];
     for (const { device } of await this.logins()) {
       const record = await readJson(this.path(device, 'device.json'));
-      players.push({ id: device, profile: record?.profile ? shownProfile(keptProfile(record.profile)) : null, ranked: record?.ranked !== false, findable: record?.findable !== false });
+      const kept = world === 'isle' ? record?.adventure?.profile : record?.profile;
+      players.push({ id: device, profile: kept ? shownProfile(keptProfile(kept)) : null, ranked: record?.ranked !== false, findable: record?.findable !== false });
     }
     return players;
   }
 
-  static rankingOf(players, me = null) {
+  static rankingOf(players, me = null, world = 'home') {
     const shown = players.find((p) => p.id === me)?.ranked ?? true;
-    return { ...rankBoards(players.filter((p) => p.profile && p.ranked), me), ...(isPlayerId(me) ? { shown } : {}) };
+    return { ...rankBoards(players.filter((p) => p.profile && p.ranked), me, RANKING_TOP, boardsOf(world)), ...(isPlayerId(me) ? { shown } : {}) };
   }
 
   // A player with a login joins the ranking, or leaves it: by their own
@@ -811,6 +846,8 @@ export class KeeperStore extends EventEmitter {
         lastSeen: info.lastSeen ?? 0,
         profile: info.profile ?? null,
         profileAt: info.profileAt ?? 0,
+        // The isle's own world of them, when they have played there.
+        adventure: info.adventure?.profile ? { profile: info.adventure.profile, adventureAt: info.adventure.profileAt ?? 0 } : null,
         ip: info.ip ?? null,
         ip4: info.ip4 ?? null,
         ranked: info.ranked !== false,
@@ -1321,6 +1358,14 @@ export class Keeper extends EventEmitter {
         if (!onlyStats) this.note({ device, what: 'profile', player });
         break;
       }
+      case 'adventure': {
+        // The isle's own world of you (the shared isle is a world of its
+        // own), kept beside your profile the same way.
+        const { device, player, onlyStats } = await this.store.keepAdventureIn(conn.folder, msg.profile);
+        this.reply(conn, { t: 'kept', what: 'adventure' });
+        if (!onlyStats) this.note({ device, what: 'adventure', player });
+        break;
+      }
       case 'login': {
         // Pages from before usernames send the made-up name.
         const { player, token, username, profile } = await this.store.login(msg.username ?? msg.name, msg.password);
@@ -1369,12 +1414,14 @@ export class Keeper extends EventEmitter {
         await this.store.forgetIsland(mine('say goodbye to islands'), msg.id, msg.at);
         this.reply(conn, { t: 'kept', what: 'forget', id: msg.id });
         break;
-      case 'ranking':
+      case 'ranking': {
         // watch: and news of every change from now on (see rankingChanged),
-        // until 'unwatch' or the page goes.
-        if (msg.watch === true) conn.watching = true;
-        this.sendRanking(conn, await this.store.ranking(conn.player));
+        // until 'unwatch' or the page goes. world: the isle's own boards.
+        const world = msg.world === 'isle' ? 'isle' : 'home';
+        if (msg.watch === true) conn.watching = world === 'isle' ? 'isle' : true;
+        this.sendRanking(conn, await this.store.ranking(conn.player, world));
         break;
+      }
       case 'unwatch':
         conn.watching = false;
         this.reply(conn, { t: 'kept', what: 'unwatch' });
@@ -1524,8 +1571,17 @@ export class Keeper extends EventEmitter {
   async sendRankingNews() {
     const watching = [...this.conns.values()].filter((c) => c.watching);
     if (!watching.length) return;
-    const players = await this.store.players();
-    for (const conn of watching) if (!conn.closed) this.sendRanking(conn, KeeperStore.rankingOf(players, conn.player), true);
+    // Both worlds' players, each read once however many pages watch them.
+    const read = new Map();
+    const playersOf = async (world) => {
+      if (!read.has(world)) read.set(world, await this.store.players(world));
+      return read.get(world);
+    };
+    for (const conn of watching) {
+      if (conn.closed) continue;
+      const world = conn.watching === 'isle' ? 'isle' : 'home';
+      this.sendRanking(conn, KeeperStore.rankingOf(await playersOf(world), conn.player, world), true);
+    }
   }
 
   // A page asked for something this keeper does not know: most likely the

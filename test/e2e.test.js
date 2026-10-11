@@ -2542,6 +2542,15 @@ test('the admin page shows each player, their login and their islands, folded aw
       ['ffffffffffff'],
     );
     assert.equal(fox.profile.stickers.rainbow, 1);
+
+    // The isle's own world of them, folded away under their islands.
+    await store.keepAdventure(key, { name: 'Brave Fox', stats: { popped: 12, freed: 2, kings: 1 } });
+    await page.reload();
+    await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
+    await until(page, () => document.querySelector('.isle-world > summary')?.textContent.includes('level 3'));
+    await page.click('.isle-world > summary');
+    assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /12 monsters popped/);
+    assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /1 King Grumble popped/);
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();
@@ -3263,6 +3272,80 @@ test('on the shared isle, your XP, level and what you do are the isle’s own, a
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
+  }
+});
+
+// The isle's own world of you, kept at the keeper as your other one is: sent
+// by the page beside your profile, and ranked on the isle's own boards, which
+// the ranking switches to — on the isle first thing.
+test('the isle’s own world of you is kept at the keeper and ranked on boards of its own', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const share = shareTheIsle(keeper, games.publicAdventure, { log: () => {}, iceServers: [] });
+  const ticker = setInterval(() => {
+    for (const entry of games.rooms.values()) if (entry.room.online > 0) entry.room.tick();
+    games.publicAdventure.tick(Date.now());
+  }, 100);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Brave Fox' });
+  try {
+    // A login first, so the isle's world of them is kept with it and ranked.
+    const username = 'Otter Fan 7';
+    const password = 'rocket-apple7';
+    await clickButton(page, 'Log in');
+    await clickButton(page, 'Make my login', '#modal');
+    await typeInto(page, username, password, 'rocket-apple8');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('not the same'));
+    await typeInto(page, username, password, password);
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    const player = await page.evaluate(() => window.kidsWorld.keeper.login.player);
+
+    // Off to the isle: what they do there is the isle's world alone.
+    await eventually(() => keeper.openIslands().some((i) => i.public));
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
+    await page.keyboard.down('ArrowLeft');
+    await page.keyboard.down('KeyW');
+    await until(page, () => window.kidsWorld.isle.data.stats.steps > 0);
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('ArrowLeft');
+    await page.evaluate(() => window.kidsWorld.isle.count('popped', 7));
+
+    // The isle's world of them reaches the keeper, beside their profile.
+    const isleKept = () => keeper.store.list(player).then((l) => l.adventure);
+    await eventually(async () => (await isleKept())?.stats?.steps > 0 && (await isleKept())?.stats?.popped === 7);
+    assert.equal((await isleKept()).name, username, 'their name, as everywhere');
+    assert.equal((await keeper.store.list(player)).profile.stats?.popped ?? 0, 0, 'their other world untouched');
+
+    // On the isle, the ranking opens on the isle's own boards, live, with
+    // them on them for what they did there.
+    await page.click('#btn-stickers-hud');
+    await clickButton(page, 'Ranking', '#modal');
+    await until(page, () => document.querySelector('#modal .rank-row.you'));
+    await clickButton(page, 'Monsters', '#modal');
+    await until(page, () => document.querySelector('#modal .rank-row.you .score')?.textContent === '7');
+    assert.equal(await page.$eval('#modal .live', (el) => !el.hidden), true, 'live');
+
+    // The other world's ranking is a switch away, with its own boards.
+    await clickButton(page, 'Every island', '#modal');
+    await until(page, () => {
+      const tabs = [...document.querySelectorAll('#modal .tabs')];
+      return tabs.some((t) => t.textContent.includes('Builders')) && !tabs.some((t) => t.textContent.includes('Monsters'));
+    });
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await share();
+    clearInterval(ticker);
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
   }
 });
 

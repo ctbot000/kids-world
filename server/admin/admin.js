@@ -2,7 +2,8 @@
 // (drawn with the game's own map code), and downloads or deletes, and their
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
-// taken out of the ranking, and where each was last seen from; and the AI
+// taken out of the ranking, and where each was last seen from; the isle's
+// own world of each player, folded away under their islands; and the AI
 // friend: its settings, what it is doing now, its own island and what it
 // builds there, the islands it is on and what is said there, how its model
 // answers and what it did lately, with a line to talk with it on an island
@@ -17,6 +18,7 @@ import { shirtColor } from '/js/render/avatar.js';
 import { MapImage } from '/js/minimap.js';
 import { STICKERS } from '/js/profile.js';
 import { prettyCode } from '/js/shared/codes.js';
+import { progressOf } from '/js/shared/levels.js';
 import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
 import { CHAT_MAX, lookIcon } from '/js/shared/words.js';
@@ -277,6 +279,7 @@ function renderSummary(state) {
 const DID = {
   island: (e) => ` sent “${e.island}”`,
   profile: () => ' sent their profile',
+  adventure: () => ' sent the isle’s world of them',
   login: (e) => ` logged in on a device${e.username ? ` as ${e.username}` : ''}`,
   'made-login': (e) => ` made a login${e.username ? `, ${e.username}` : ''}`,
   'new-password': () => ' picked a new password',
@@ -327,6 +330,36 @@ function islandCard(device, island) {
   );
 }
 
+// The isle's own world of a player (the shared isle is a world of its own):
+// its level, stickers and what they did there, as their devices sent it
+// beside their profile. Folded away under their islands.
+function isleWorld(device) {
+  const p = device.adventure?.profile;
+  if (!p) return null;
+  const stickers = STICKERS.filter((s) => p.stickers?.[s.key]);
+  const treasures = Object.values(p.basket ?? {}).reduce((a, b) => a + b, 0);
+  const level = progressOf(p.stats ?? {}, p.stickers ?? {}).level;
+  return h(
+    'details',
+    {
+      class: 'fold isle-world',
+      open: opened.has(`${device.id}/isle`) || null,
+      ontoggle: (e) => (e.target.open ? opened.add(`${device.id}/isle`) : opened.delete(`${device.id}/isle`)),
+    },
+    h('summary', {}, `🌟 Adventure Isle, their other world · level ${level}`),
+    h(
+      'div',
+      { class: 'facts' },
+      h('span', { title: stickers.map((s) => s.name).join(', ') || 'No stickers there yet' }, `🏅 ${plural(stickers.length, 'sticker', 'stickers')} of ${STICKERS.length} `, h('span', { class: 'icons' }, stickers.map((s) => s.icon).join(''))),
+      h('span', {}, `👾 ${plural(p.stats?.popped ?? 0, 'monster', 'monsters')} popped`),
+      h('span', {}, `🏕️ ${plural(p.stats?.freed ?? 0, 'camp', 'camps')} freed`),
+      h('span', {}, `👑 ${plural(p.stats?.kings ?? 0, 'King Grumble', 'King Grumbles')} popped`),
+      h('span', {}, `🧺 ${plural(treasures, 'treasure', 'treasures')} · 🪙 ${(p.coins ?? 0).toLocaleString()} coins`),
+    ),
+    h('p', { class: 'muted' }, `The isle’s own world of them, sent by their devices as this one is and ranked on the isle’s own boards. Last sent ${ago(device.adventure.adventureAt)}.`),
+  );
+}
+
 function deviceCard(device, players) {
   const p = device.profile;
   const stickers = STICKERS.filter((s) => p?.stickers?.[s.key]);
@@ -357,6 +390,7 @@ function deviceCard(device, players) {
       : null,
     loginRow(device, players.filter((p) => p.id !== device.id)),
     device.islands.length ? islandList(device) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
+    isleWorld(device),
   );
 }
 

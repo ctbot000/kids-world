@@ -13,7 +13,8 @@
 //   page → keeper   { t: 'me', device, login? }      login: { player, token }
 //   keeper → page   { t: 'me', player? }             player: the login, unless it is gone
 // Then one message at a time, each answered before the next:
-//   page → keeper   { t: 'island', id, save }  or  { t: 'profile', profile }
+//   page → keeper   { t: 'island', id, save },  { t: 'profile', profile }
+//                    or { t: 'adventure', profile }  (the isle's own world of you)
 //   keeper → page   { t: 'kept', what, id?, savedAt? }  or  { t: 'error', code, text }
 // Logins:
 //   { t: 'login', username, password }                → { t: 'login', player, token, username, profile }
@@ -26,12 +27,13 @@
 // made with secret pictures, before passwords: a device logged in to one
 // sets one. Pages from before usernames sent the made-up name as `name`.
 // A logged-in page also brings back what its other devices sent:
-//   { t: 'list' }                         → { t: 'list', profile, islands, forgotten }
+//   { t: 'list' }                         → { t: 'list', profile, adventure?, islands, forgotten }
 //   { t: 'fetch', id }                    → { t: 'island', id, save }
 //   { t: 'forget', id }                   → { t: 'kept', what: 'forget', id }
 // The ranking of the players with a login (see ranking.js), for any page:
-//   { t: 'ranking', watch? }              → { t: 'ranking', players, boards, shown? }
-//                                           (shown: logged in, whether you are in it)
+//   { t: 'ranking', watch?, world? }      → { t: 'ranking', players, boards, shown? }
+//                                           (world: 'isle' for the isle's own boards;
+//                                            shown: logged in, whether you are in it)
 //   { t: 'unwatch' }                      → { t: 'kept', what: 'unwatch' }
 //   { t: 'ranked', on }                   → { t: 'kept', what: 'ranked', on }
 //                                           (logged in: in the ranking, or left out)

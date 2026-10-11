@@ -6,7 +6,8 @@
 // IP address (a local one for a player on this computer's own network, and
 // an IPv6 one's IPv4 address too, when known) and,
 // from geoip-lite's offline database (no address leaves this computer),
-// roughly where that is; and the AI friend's settings, the islands it is on
+// roughly where that is; the isle's own world of each player, beside their
+// profile; and the AI friend's settings, the islands it is on
 // and what is said there, how its model answers and what it did lately
 // (friend.js), with a line to say there as its own, a line to say to it that
 // its model answers, and a button to send it home from an island, and its

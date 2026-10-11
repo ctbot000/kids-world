@@ -28,6 +28,7 @@ import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISL
 import { Reassembler, sendText } from './shared/framing.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
+import { isBoardsOf } from './shared/ranking.js';
 import { isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
 const FIRST_TRY_MS = 3000;
@@ -75,9 +76,13 @@ function ownerToken(save) {
 
 export class KeeperClient extends EventTarget {
   // login: { player, token, username? } when logged in on this device.
-  constructor({ profile, login = null, configUrl = 'keeper.json' }) {
+  // isle: the shared isle's own world of you (a Profile, see main.js), whose
+  // copy goes to the keeper beside yours and comes back merged, and whose
+  // own ranking (ranking.js) a page can watch.
+  constructor({ profile, isle = null, login = null, configUrl = 'keeper.json' }) {
     super();
     this.profile = profile;
+    this.isle = isle;
     this.login = login;
     this.configUrl = configUrl;
     this.config = null;
@@ -91,6 +96,7 @@ export class KeeperClient extends EventTarget {
     this.failures = 0;
     this.waiting = null;
     this.profileSentAt = 0;
+    this.adventureSentAt = 0;
     // What you asked for (logging in, out...), sent before any copy.
     this.requests = [];
     // Logged in: whether this connection brought back what the keeper has yet,
@@ -102,10 +108,12 @@ export class KeeperClient extends EventTarget {
     this.syncedAt = 0;
     // Watching the ranking (while it is on screen), whether this connection
     // asked to yet, and whether the keeper answered with it, so that its
-    // news can come (one running older code does not know it).
+    // news can come (one running older code does not know it). watchWorld:
+    // whose boards are watched — everyone's, or the isle's own.
     this.watching = false;
     this.watched = false;
     this.rankingLive = false;
+    this.watchWorld = 'home';
     this.watchTimer = 0;
     this.countTimer = 0;
     // The island this page hosts, on the list of open islands (see
@@ -124,6 +132,8 @@ export class KeeperClient extends EventTarget {
       device: isDeviceKey(saved?.device) ? saved.device : randomHex(16),
       sent: saved?.sent && typeof saved.sent === 'object' ? saved.sent : {},
       profile: typeof saved?.profile === 'string' ? saved.profile : '',
+      // The isle's own world of you, as last sent ('' for never).
+      adventure: typeof saved?.adventure === 'string' ? saved.adventure : '',
       lastKept: Number.isFinite(saved?.lastKept) ? saved.lastKept : 0,
       // Islands you said goodbye to while logged in, for your other devices to drop too.
       forgets: saved?.forgets && typeof saved.forgets === 'object' ? saved.forgets : {},
@@ -237,7 +247,7 @@ export class KeeperClient extends EventTarget {
   // not have yet. Each comes with what to do with the keeper's answer.
   next() {
     // Watching the ranking: asked for on each new connection, and again now and then.
-    if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true }, answer: (reply) => this.watchedAs(reply) };
+    if (this.watching && !this.watched) return { msg: { t: 'ranking', watch: true, world: this.watchWorld }, answer: (reply) => this.watchedAs(reply) };
     // Your open island, as it is now, or that it is not open any more. (A
     // keeper running older code says it does not know this, once.)
     // Logged in: whether you are playing now. (A keeper running older code
@@ -265,6 +275,19 @@ export class KeeperClient extends EventTarget {
       const onlyStats = JSON.stringify({ ...kept, stats: 0 }) === JSON.stringify({ ...before, stats: 0 });
       if (!onlyStats || Date.now() - this.profileSentAt >= (this.login ? STATS_EVERY_MS : PROFILE_EVERY_MS)) {
         return this.copy({ t: 'profile', profile: kept }, () => (this.data.profile = profile));
+      }
+    }
+    // The isle's own world of you, beside it: kept the same way, for the
+    // isle's own ranking and your other devices.
+    if (this.isle) {
+      const keptIsle = keptProfile(this.isle.data);
+      const adventure = JSON.stringify(keptIsle);
+      if (adventure !== this.data.adventure) {
+        const before = this.data.adventure ? JSON.parse(this.data.adventure) : {};
+        const onlyStats = JSON.stringify({ ...keptIsle, stats: 0 }) === JSON.stringify({ ...before, stats: 0 });
+        if (!onlyStats || Date.now() - this.adventureSentAt >= (this.login ? STATS_EVERY_MS : PROFILE_EVERY_MS)) {
+          return this.copy({ t: 'adventure', profile: keptIsle }, () => (this.data.adventure = adventure));
+        }
       }
     }
     const islands = listIslands()
@@ -360,20 +383,21 @@ export class KeeperClient extends EventTarget {
 
   // Watches the ranking of the players with a login (see shared/ranking.js)
   // while it is on screen, whether or not copies go: it comes now, and again
-  // whenever it changes, as 'ranking' events with { players, boards, shown? },
-  // until unwatchRanking(). The connection stays open meanwhile, and comes
-  // back if it breaks. Resolves with the first answer; rejects with a
-  // KeeperProblem if the keeper could not be asked (it is asked again when
-  // it can be).
-  watchRanking() {
+  // whenever it changes, as 'ranking' events with { world, players, boards,
+  // shown? }, until unwatchRanking(). world: 'isle' for the isle's own
+  // boards. The connection stays open meanwhile, and comes back if it
+  // breaks. Resolves with the first answer; rejects with a KeeperProblem if
+  // the keeper could not be asked (it is asked again when it can be).
+  watchRanking(world = 'home') {
     this.watching = true;
+    this.watchWorld = world === 'isle' ? 'isle' : 'home';
     clearInterval(this.watchTimer);
     this.watchTimer = setInterval(() => {
       if (this.state !== 'ready') return;
       this.watched = false;
       this.flush();
     }, WATCH_AGAIN_MS);
-    return this.request({ t: 'ranking', watch: true }, { answered: (reply) => this.watchedAs(reply) });
+    return this.request({ t: 'ranking', watch: true, world: this.watchWorld }, { answered: (reply) => this.watchedAs(reply) });
   }
 
   unwatchRanking() {
@@ -383,16 +407,18 @@ export class KeeperClient extends EventTarget {
     if (this.state === 'ready' && this.rankingLive) this.request({ t: 'unwatch' }).catch(() => {});
     this.watched = false;
     this.rankingLive = false;
+    this.watchWorld = 'home';
     this.flush();
   }
 
   // The keeper's answer to watching the ranking, or its news. Asked on this
   // connection either way (a keeper that said no is not asked again at
-  // once); live only if the keeper knows the ranking.
+  // once); live only if the keeper knows the ranking, and answered with the
+  // world that was asked for (one running older code ranks only everyone's).
   watchedAs(reply) {
     this.watched = true;
-    this.rankingLive = reply.t === 'ranking';
-    if (this.rankingLive && this.watching) this.emit('ranking', reply);
+    this.rankingLive = reply.t === 'ranking' && isBoardsOf(this.watchWorld, reply.boards);
+    if (this.rankingLive && this.watching) this.emit('ranking', { ...reply, world: this.watchWorld });
   }
 
   // Puts the island this page hosts on the list of open islands (a listing,
@@ -467,15 +493,17 @@ export class KeeperClient extends EventTarget {
   }
 
   // You did something the game counts. Logged in, it goes to the keeper
-  // within a few seconds, for the ranking.
+  // within a few seconds, for the ranking — yours, or the isle's own world
+  // of you, whichever this was (see next: both are throttled apart).
   counted() {
     if (!this.login || this.countTimer) return;
+    const last = Math.max(this.profileSentAt, this.adventureSentAt);
     this.countTimer = setTimeout(
       () => {
         this.countTimer = 0;
         this.nudge();
       },
-      Math.max(0, this.profileSentAt + STATS_EVERY_MS - Date.now()),
+      Math.max(0, last + STATS_EVERY_MS - Date.now()),
     );
   }
 
@@ -535,6 +563,11 @@ export class KeeperClient extends EventTarget {
     if (reply.profile) {
       this.profile.merge(reply.profile);
       this.data.profile = JSON.stringify(keptProfile(reply.profile));
+    }
+    // The isle's own world of you, the same way.
+    if (reply.adventure && this.isle) {
+      this.isle.merge(reply.adventure);
+      this.data.adventure = JSON.stringify(keptProfile(reply.adventure));
     }
     const mine = listIslands().map((i) => ({ id: i.id, savedAt: i.savedAt ?? 0 }));
     const islands = Array.isArray(reply.islands) ? reply.islands : [];
@@ -725,6 +758,7 @@ export class KeeperClient extends EventTarget {
       return;
     }
     if (item.msg.t === 'profile') this.profileSentAt = Date.now();
+    if (item.msg.t === 'adventure') this.adventureSentAt = Date.now();
     this.waiting = item;
     this.replyTimer = setTimeout(() => this.away(), REPLY_TIMEOUT_MS);
     this.send(item.msg);

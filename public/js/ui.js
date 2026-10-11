@@ -8,7 +8,7 @@ import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
-import { BOARDS } from './shared/ranking.js';
+import { boardsOf } from './shared/ranking.js';
 import { GEAR, levelDoes, nextLevel, sellPrice, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
@@ -165,6 +165,14 @@ function inviteTrouble(error, name) {
 const INVITE_AGAIN_MS = 15000;
 
 const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+// The ranking's worlds: everyone's everywhere, and the isle's own. A world's
+// boards come from ranking.js; the keeper ranks each from that world's copy
+// of every player.
+const RANKING_WORLDS = [
+  { key: 'home', icon: '🏝️', name: 'Every island' },
+  { key: 'isle', icon: '🌟', name: 'Adventure Isle' },
+];
 
 // Another player's level by their name (levels.js), wherever a list says who
 // someone is — the tag over them in the world, the ranking, the players, an
@@ -1174,11 +1182,11 @@ export class UI {
     const p = this.profile;
     const got = p.data.stickers;
     // On the shared isle, these are the isle's own, apart from yours
-    // everywhere else: said so, and the ranking of other worlds stays out.
+    // everywhere else: said so, and ranked on boards of their own.
     const isle = p === this.isle;
     this.openModal((root) => {
       const count = STICKERS.filter((s) => got[s.key]).length;
-      const ranking = !isle && this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog() }, '🏆 Ranking') : null;
+      const ranking = this.handlers?.login?.available() ? h('button', { class: 'chip', type: 'button', onclick: () => this.rankingDialog(isle ? 'isle' : 'home') }, '🏆 Ranking') : null;
       const { xp, level, into, need } = p.progress;
       root.append(
         h(
@@ -1188,7 +1196,7 @@ export class UI {
           h('div', { class: 'level-bar wide', role: 'img', 'aria-label': need ? `${into} of ${need} XP` : 'Full' }, h('span', { style: `width:${need ? Math.floor((100 * into) / need) : 100}%` })),
           h('span', { class: 'muted' }, need ? `${xp.toLocaleString()} XP · ${(need - into).toLocaleString()} more to level ${level + 1}` : `${xp.toLocaleString()} XP · the top level!`),
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
-          isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else.') : null,
+          isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
         h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
         h(
@@ -1299,14 +1307,20 @@ export class UI {
   // a tab for each board, its top players and your own place, redrawn as
   // the keeper tells of changes (a score that changed pops). Logged in, you
   // can leave it, or join it again; as the guest, logging in puts you in it.
-  rankingDialog() {
+  // Adventure Isle has a ranking of its own beside the other one (ranking.js
+  // ISLE_BOARDS), from the isle's own world of each player: on the isle, the
+  // isle's boards are what it opens with.
+  rankingDialog(world = null) {
     const keeper = this.handlers?.login?.keeper;
     if (!keeper) return;
-    let current = BOARDS.some((b) => b.key === this.lastBoard) ? this.lastBoard : BOARDS[0].key;
+    let on = world === 'isle' || world === 'home' ? world : this.lastRankingWorld ?? (this.profile === this.isle ? 'isle' : 'home');
+    let boards = boardsOf(on);
+    let current = boards.some((b) => b.key === this.lastBoard) ? this.lastBoard : boards[0].key;
     let onNews = null;
     let onStatus = null;
     this.openModal(
       (root) => {
+        const worldRow = h('div', { class: 'tabs ranking-tabs' });
         const tabRow = h('div', { class: 'tabs ranking-tabs' });
         const note = this.loginNote();
         const list = h('ol', { class: 'ranking' });
@@ -1326,28 +1340,64 @@ export class UI {
             h('b', { class: 'who', lang: langOf(e.name) || undefined }, levelTag(e.look), e.name, e.you ? h('span', { class: 'muted' }, ' (you)') : null),
             h('span', { class: `score${changed ? ' bump' : ''}` }, Number(e.score).toLocaleString()),
           );
-        // Made once, so a tap on one is never lost to the keeper's news redrawing them.
-        const tabs = BOARDS.map((b) =>
-          h(
-            'button',
-            {
-              class: 'chip',
-              type: 'button',
-              onclick: () => {
-                current = b.key;
-                this.sound.play('ui');
-                draw();
-              },
-            },
-            h('span', { class: 'emoji' }, b.icon),
-            h('span', {}, b.name),
-          ),
-        );
-        tabRow.append(...tabs);
+        const drawWorlds = () => {
+          worldRow.replaceChildren(
+            ...RANKING_WORLDS.map((w) =>
+              h(
+                'button',
+                {
+                  class: `chip${w.key === on ? ' on' : ''}`,
+                  type: 'button',
+                  onclick: () => switchTo(w.key),
+                },
+                h('span', { class: 'emoji' }, w.icon),
+                h('span', {}, w.name),
+              ),
+            ),
+          );
+        };
+        // The boards of the world being looked at, made anew when it changes
+        // (a tap on one is never lost to the keeper's news redrawing them).
+        let tabs = [];
+        const makeTabs = () => {
+          tabRow.replaceChildren(
+            ...(tabs = boards.map((b) =>
+              h(
+                'button',
+                {
+                  class: 'chip',
+                  type: 'button',
+                  onclick: () => {
+                    current = b.key;
+                    this.sound.play('ui');
+                    draw();
+                  },
+                },
+                h('span', { class: 'emoji' }, b.icon),
+                h('span', {}, b.name),
+              ),
+            )),
+          );
+        };
+        const switchTo = (w) => {
+          if (w === on) return;
+          on = w;
+          this.lastRankingWorld = w;
+          boards = boardsOf(w);
+          if (!boards.some((b) => b.key === current)) current = boards[0].key;
+          this.ranking = null;
+          drawn = { key: '', scores: new Map() };
+          drawWorlds();
+          makeTabs();
+          draw();
+          note.say('🔎', 'Asking the island keeper…');
+          keeper.unwatchRanking();
+          ask(w);
+        };
         const draw = () => {
           this.lastBoard = current;
-          BOARDS.forEach((b, i) => tabs[i].classList.toggle('on', b.key === current));
-          const board = BOARDS.find((b) => b.key === current);
+          boards.forEach((b, i) => tabs[i].classList.toggle('on', b.key === current));
+          const board = boards.find((b) => b.key === current);
           const reply = this.ranking;
           const shown = reply?.boards?.find((b) => b.key === current);
           aboutText.textContent = board.text;
@@ -1357,13 +1407,14 @@ export class UI {
             return;
           }
           const top = Array.isArray(shown.top) ? shown.top : [];
-          const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, name: this.profile.name, look: this.profile.shownLook, you: true } : null;
+          const mine = on === 'isle' && this.isle ? { name: this.profile.name, look: this.isle.shownLook } : { name: this.profile.name, look: this.profile.shownLook };
+          const you = shown.you && top.length && !top.some((e) => e.you) ? { ...shown.you, ...mine, you: true } : null;
           const before = drawn.key === current ? drawn.scores : null;
           const changed = (e) => Boolean(before) && before.get(e.name) !== e.score;
           drawn = { key: current, scores: new Map([...top, ...(you ? [you] : [])].map((e) => [e.name, e.score])) };
           if (!top.length) list.replaceChildren(h('li', { class: 'rank-empty muted' }, `Nobody yet. ${board.hint} to be the first!`));
           else list.replaceChildren(...top.map((e) => row(e, changed(e))), you ? h('li', { class: 'rank-gap', 'aria-hidden': 'true' }, '⋯') : '', you ? row(you, changed(you)) : '');
-          const mine = keeper.login && reply.shown !== false && !shown.you && top.length ? h('p', { class: 'muted' }, `${board.hint} to be on this board too!`) : '';
+          const hint = keeper.login && reply.shown !== false && !shown.you && top.length ? h('p', { class: 'muted' }, `${board.hint} to be on this board too!`) : '';
           const players = reply.players ? ` ${reply.players} ${reply.players === 1 ? 'player is' : 'players are'} in it now.` : '';
           if (keeper.login) {
             const box = h('input', { type: 'checkbox', checked: reply.shown !== false });
@@ -1382,7 +1433,7 @@ export class UI {
               }
             });
             foot.replaceChildren(
-              mine,
+              hint,
               h('label', { class: 'check-row' }, box, h('span', {}, 'Show me in the ranking')),
               h('p', { class: 'muted' }, reply.shown === false ? 'You are not in the ranking: nobody sees your name here.' : `Everyone sees your display name, ${this.profile.name}, and how you look.${players}`),
             );
@@ -1391,6 +1442,7 @@ export class UI {
           }
         };
         onNews = (e) => {
+          if (e.detail.world !== on) return;
           this.ranking = e.detail;
           note.say('', '');
           if (list.isConnected) draw();
@@ -1398,14 +1450,23 @@ export class UI {
         onStatus = () => {
           if (list.isConnected) live.hidden = !isLive();
         };
+        const ask = (w) =>
+          keeper.watchRanking(w).then(() => {
+            if (!list.isConnected) return;
+            // A keeper from before this world's boards answers with the
+            // other world's: it says so here, and in its terminal.
+            if (!keeper.rankingLive) note.say('🛠️', 'The island keeper needs an update before it can show this ranking. Ask a grown-up to update it!');
+          }).catch((error) => {
+            if (list.isConnected) note.say(...rankingTrouble(error), 'warn');
+          });
         keeper.addEventListener('ranking', onNews);
         keeper.addEventListener('status', onStatus);
-        root.append(h('h2', {}, '🏆 Ranking'), tabRow, about, h('div', { class: 'rank-note' }, note), list, foot);
+        root.append(h('h2', {}, '🏆 Ranking'), worldRow, tabRow, about, h('div', { class: 'rank-note' }, note), list, foot);
+        drawWorlds();
+        makeTabs();
         draw();
         note.say('🔎', 'Asking the island keeper…');
-        keeper.watchRanking().catch((error) => {
-          if (list.isConnected) note.say(...rankingTrouble(error), 'warn');
-        });
+        ask(on);
       },
       {
         onClose: () => {
@@ -1606,7 +1667,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, and never jump on a prickly orange Spiky or a darting giant mosquito: bop them!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of hearts? Sit tight until a friend taps you to help you up.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place: stage 2, stage 3 and on. Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),

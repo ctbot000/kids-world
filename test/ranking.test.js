@@ -11,7 +11,7 @@ import { after, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION, keptProfile } from '../public/js/shared/keeper.js';
-import { BOARDS, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
+import { BOARDS, ISLE_BOARDS, isBoardsOf, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
 import { STICKERS } from '../public/js/shared/stickers.js';
 import { adminHandler } from '../server/admin.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
@@ -101,6 +101,104 @@ test('made-up stickers, silly counts and players with no name do not count', () 
     board(result, 'builders').top.map((e) => e.name),
     ['Sneaky'],
   );
+});
+
+// ------------------------------------------------ the isle's own world
+
+test('the isle has boards of its own, and nothing done elsewhere leads them', () => {
+  const isle = rankBoards([player('p1', 'Mina', { stats: { popped: 12, freed: 2, kings: 1 } }), player('p2', 'Bo', { stats: { popped: 5, freed: 4, steps: 3000 } })], null, RANKING_TOP, ISLE_BOARDS);
+  assert.deepEqual(
+    isle.boards.map((b) => b.key),
+    ISLE_BOARDS.map((b) => b.key),
+  );
+  assert.deepEqual(
+    board(isle, 'monsters').top.map((e) => [e.rank, e.name, e.score]),
+    [
+      [1, 'Mina', 12],
+      [2, 'Bo', 5],
+    ],
+  );
+  assert.deepEqual(board(isle, 'camps').top.map((e) => [e.name, e.score]), [
+    ['Bo', 4],
+    ['Mina', 2],
+  ]);
+  assert.deepEqual(board(isle, 'kings').top.map((e) => [e.name, e.score]), [['Mina', 1]]);
+  // What there is no board for on the isle: building, treasures, animals.
+  for (const key of ['builders', 'treasures', 'animals']) assert.equal(ISLE_BOARDS.some((b) => b.key === key), false);
+
+  // A keeper from before the isle's ranking answers with the other world's
+  // boards, whatever was asked: caught by the one board only the isle has.
+  assert.equal(isBoardsOf('isle', isle.boards), true);
+  assert.equal(isBoardsOf('home', isle.boards), false);
+  assert.equal(isBoardsOf('home', rankBoards([player('p1', 'Mina')]).boards), true);
+  assert.equal(isBoardsOf('isle', rankBoards([player('p1', 'Mina')]).boards), false);
+  assert.equal(isBoardsOf('home', null), false);
+});
+
+test('the keeper keeps the isle\'s own world of each player beside their profile, and ranks it apart', async () => {
+  const store = await new KeeperStore(await tempDir()).open();
+  const tablet = KeeperStore.deviceId(TABLET);
+  const sister = KeeperStore.deviceId(SISTER);
+  const guest = KeeperStore.deviceId(GUEST);
+  await store.makeLogin(tablet, PASSWORD, { name: 'Sunny Otter', stats: { placed: 900, popped: 2 } }, { username: 'otter' });
+  await store.makeLogin(sister, PASSWORD, { name: 'Minji', stats: { placed: 10 } }, { username: 'minji' });
+  // The isle's own world of them, sent beside their profiles.
+  await store.keepAdventureIn(tablet, { name: 'Sunny Otter', look: { animal: 'fox' }, stats: { popped: 12, freed: 2, kings: 1 } });
+  await store.keepAdventureIn(sister, { name: 'Minji', look: { animal: 'bunny' }, stats: { popped: 5, freed: 4, steps: 3000 } });
+  // A guest's isle world is kept too, but never ranked.
+  await store.keepAdventureIn(guest, { name: 'Brave Fox', stats: { popped: 99 } });
+
+  // The isle's boards: what was done there, not everywhere else.
+  const isle = await store.ranking(null, 'isle');
+  assert.equal(isle.players, 2);
+  assert.deepEqual(board(isle, 'monsters').top.map((e) => [e.name, e.score]), [
+    ['Sunny Otter', 12],
+    ['Minji', 5],
+  ]);
+  assert.deepEqual(board(isle, 'camps').top.map((e) => [e.name, e.score]), [
+    ['Minji', 4],
+    ['Sunny Otter', 2],
+  ]);
+  // Your own place, and marked in the top.
+  const mine = await store.ranking(tablet, 'isle');
+  assert.deepEqual(board(mine, 'monsters').you, { rank: 1, score: 12 });
+  // The isle's level in the rows, not the one from everywhere else (levels.js:
+  // 12 popped, 2 camps freed and a king is 360 XP, level 3).
+  assert.equal(board(mine, 'monsters').top[0].look.level, 3);
+  // The other ranking is as it was: the guest's popping counts for nothing
+  // there either, and building still leads.
+  const home = await store.ranking();
+  assert.deepEqual(
+    home.boards.map((b) => b.key),
+    BOARDS.map((b) => b.key),
+  );
+  assert.deepEqual(board(home, 'builders').top.map((e) => [e.name, e.score]), [
+    ['Sunny Otter', 900],
+    ['Minji', 10],
+  ]);
+  assert.equal(board(home, 'monsters'), undefined, 'no monsters board but on the isle');
+
+  // It comes back with the list, and a player out of the ranking is out of both.
+  assert.equal((await store.list(tablet)).adventure.stats.popped, 12);
+  await store.setRanked(sister, false);
+  assert.equal((await store.ranking(null, 'isle')).players, 1);
+  assert.equal((await store.ranking()).players, 1);
+
+  // The admin pages see it: each player's other world, with its own level.
+  const devices = await store.devices();
+  const fox = devices.find((d) => d.id === tablet);
+  assert.equal(fox.adventure.profile.stats.popped, 12);
+  assert.equal(devices.find((d) => d.id === guest).adventure.profile.name, 'Brave Fox');
+  assert.equal(devices.find((d) => d.id === sister).adventure.profile.stats.popped, 5);
+
+  // A device's copies moved into a login bring its isle world along: the
+  // most of each, as with the profile.
+  await store.setRanked(sister, true);
+  const old = KeeperStore.deviceId(PHONE);
+  await store.keepAdventureIn(old, { name: 'Old Phone', stats: { popped: 7, freed: 1 } });
+  await store.adoptDevice(old, sister);
+  assert.equal((await store.list(sister)).adventure.stats.popped, 7, 'the most of each');
+  assert.equal((await store.list(sister)).adventure.stats.freed, 4);
 });
 
 test('the keeper ranks the players with a login, but for those who left it, whatever else changes', async () => {
@@ -236,6 +334,64 @@ test('the protocol: any page sees the ranking, and a logged-in one can leave it 
   );
   assert.deepEqual(await tablet.say({ t: 'ranked', on: true }), { t: 'kept', what: 'ranked', on: true });
   assert.equal((await tablet.say({ t: 'ranking' })).players, 2);
+});
+
+test('the protocol: the isle\'s world of you goes to the keeper, comes back with the list, and its ranking is watched apart', async () => {
+  const dir = await tempDir();
+  const store = await new KeeperStore(dir).open();
+  const keeper = new Keeper({ store, identity: await createIdentity(dir), log: () => {}, rankingNewsMs: 200 });
+  await keeper.loadKey();
+  await store.makeLogin(KeeperStore.deviceId(SISTER), PASSWORD, { name: 'Minji', stats: { placed: 10 } }, { username: 'minji' });
+
+  // Minji's tablet logs in and sends the isle's world of her, as its own
+  // kind of copy beside her profile.
+  const tablet = await page(keeper);
+  await tablet.say({ t: 'hello', v: KEEPER_VERSION, nonce: '22'.repeat(16) });
+  await tablet.say({ t: 'me', device: TABLET });
+  await tablet.say({ t: 'login', username: 'minji', password: PASSWORD });
+  assert.deepEqual(await tablet.say({ t: 'adventure', profile: { name: 'Minji', look: { animal: 'bunny' }, stats: { popped: 7 } } }), { t: 'kept', what: 'adventure' });
+  // The list of what her other devices sent brings it back, to merge with.
+  const list = await tablet.say({ t: 'list' });
+  assert.equal(list.adventure.stats.popped, 7);
+  assert.equal(list.adventure.name, 'Minji');
+
+  // A guest watches the isle's ranking: its own boards, from that world.
+  const watcher = await page(keeper);
+  await watcher.say({ t: 'hello', v: KEEPER_VERSION, nonce: '11'.repeat(16) });
+  await watcher.say({ t: 'me', device: GUEST });
+  const first = await watcher.say({ t: 'ranking', watch: true, world: 'isle' });
+  assert.equal(watcher.conn.watching, 'isle');
+  assert.deepEqual(
+    first.boards.map((b) => b.key),
+    ISLE_BOARDS.map((b) => b.key),
+  );
+  assert.deepEqual(board(first, 'monsters').top.map((e) => [e.name, e.score]), [['Minji', 7]]);
+  const news = () => watcher.replies.filter((r) => r.t === 'ranking-news');
+
+  // She pops monsters on the isle: the watcher hears of it there, and her
+  // building everywhere else changes nothing on the isle's boards.
+  await tablet.say({ t: 'adventure', profile: { name: 'Minji', look: { animal: 'bunny' }, stats: { popped: 9, placed: 500 } } });
+  await until(() => news().length === 1);
+  assert.deepEqual(board(news()[0], 'monsters').top.map((e) => [e.name, e.score]), [['Minji', 9]]);
+  assert.equal(board(news()[0], 'builders'), undefined, 'no building but on the other world\'s boards');
+
+  // A watcher of the other ranking is told nothing new by it.
+  const other = await page(keeper);
+  await other.say({ t: 'hello', v: KEEPER_VERSION, nonce: '33'.repeat(16) });
+  await other.say({ t: 'me', device: PHONE });
+  await other.say({ t: 'ranking', watch: true });
+  assert.equal(other.conn.watching, true);
+  await tablet.say({ t: 'adventure', profile: { name: 'Minji', look: { animal: 'bunny' }, stats: { popped: 11, placed: 500 } } });
+  await until(() => news().length === 2);
+  await delay(400);
+  assert.deepEqual(other.replies.filter((r) => r.t === 'ranking-news'), [], 'the isle is no news to the other ranking');
+
+  // Stopped watching: no more news.
+  assert.deepEqual(await watcher.say({ t: 'unwatch' }), { t: 'kept', what: 'unwatch' });
+  await tablet.say({ t: 'adventure', profile: { name: 'Minji', look: { animal: 'bunny' }, stats: { popped: 13, placed: 500 } } });
+  await delay(400);
+  assert.equal(news().length, 2);
+  await keeper.stop();
 });
 
 test('the admin pages take a player out of the ranking, and put them back', async () => {

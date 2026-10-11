@@ -55,7 +55,18 @@ isle.update = (changes) => {
   if (Object.keys(own).length) isleUpdate(own);
 };
 isle.setting = (key, value) => profile.setting(key, value);
-profile.addEventListener('change', () => isle.dispatchEvent(new CustomEvent('change')));
+// You are you on the isle too: its copy of you knows your name and look
+// (they go to the keeper beside its own world of you).
+const mirrorYou = () => {
+  if (isle.data.name !== profile.data.name || isle.data.look !== profile.data.look) {
+    isle.data.name = profile.data.name;
+    isle.data.look = profile.data.look;
+    isle.storeSoon();
+  }
+  isle.dispatchEvent(new CustomEvent('change'));
+};
+profile.addEventListener('change', mirrorYou);
+mirrorYou();
 const sound = new Sound();
 sound.setLevels(profile.settings);
 const atlas = buildAtlas();
@@ -72,8 +83,9 @@ try {
 const input = new Input(canvas, document.getElementById('joystick'));
 const ui = new UI({ profile, isle, sound, atlas, input });
 // Copies of your islands and of you go to the keeper whenever it is online,
-// and logged in, what your other devices sent comes back.
-const keeper = new KeeperClient({ profile, login: who });
+// and logged in, what your other devices sent comes back — the isle's own
+// world of you among them, kept and brought back the same way.
+const keeper = new KeeperClient({ profile, isle, login: who });
 keeper.addEventListener('status', () => ui.renderKeeper());
 keeper.addEventListener('kept', () => ui.renderKeeper());
 keeper.addEventListener('config', () => {
@@ -89,8 +101,10 @@ keeper.addEventListener('needs-password', () => {
 });
 // An invitation to a friend's island, while you are playing (see invited()).
 keeper.addEventListener('invite', (e) => invited(e.detail));
-for (const type of ['change', 'basket', 'sticker']) profile.addEventListener(type, () => keeper.nudge());
-profile.addEventListener('count', () => keeper.counted());
+for (const p of [profile, isle]) {
+  for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
+  p.addEventListener('count', () => keeper.counted());
+}
 // A toy weapon bought, put on or taken off in the shop: friends on the
 // island see it in your hand, and the island lets it reach further. A new
 // level (here, or from another device of yours) shows on your name tag.
@@ -630,6 +644,10 @@ function playAs({ player, token, username = '', profile: kept }, { adopt = false
   if (adopt && storage.moveGuestIslandsTo(player)) {
     const base = here && kept ? { ...here, ...mergeProfiles(here, kept) } : (mine ?? {});
     mine = { ...base, ...addProgress(base, d), changedAt: Date.now(), tokens: { ...d.tokens, ...base.tokens } };
+    // The isle's own world of the guest joins the player's here, too.
+    const isleHere = storage.loadFor(player, 'adventure', null);
+    const guestIsle = storage.load('adventure', null);
+    if (guestIsle) storage.saveFor(player, 'adventure', isleHere ? { ...isleHere, ...addProgress(isleHere, guestIsle) } : guestIsle);
     storage.resetGuest();
   }
   if (mine && mine !== here) storage.saveFor(player, 'profile', mine);
