@@ -47,6 +47,17 @@ export const HILL_MODES = [
 const TURN_SPEED = 2.4;
 const INTERP_MS = 130;
 const CRITTER_INTERP_MS = 260;
+// A monster is drawn where it is now (see monsterNow): carried on from its
+// last update no further than this, a guess put right fading out this fast,
+// and not carried on at all in these states, when it stands still.
+const PREDICT_MS = 260;
+const PREDICT_FADE = 8;
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed']);
+// A bopped monster flies back about this far (the host's HIT_PUSH, see
+// monsters.js), most of it in the first KICK_SECS: drawn so at once, not
+// only once the host's next update says so.
+const KICK_DIST = 1.4;
+const KICK_SECS = 0.15;
 const MOVE_SEND_MS = 90;
 const REPEAT_MS = 230;
 const UNDO_KEEP = 40;
@@ -1018,6 +1029,14 @@ export class Game extends EventTarget {
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.4;
     if (entry && Number.isInteger(msg.hearts)) entry.hearts = msg.hearts;
+    // Knocked back away from whoever bopped it (one marching keeps to its road).
+    const from = msg.by === this.pid ? this.me?.body : this.players.get(msg.by)?.avatar?.root.position;
+    if (entry?.drawn && from && !msg.march) {
+      const dx = entry.drawn.x - from.x;
+      const dz = entry.drawn.z - from.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.01) entry.kick = { x: dx / d, z: dz / d, at: performance.now(), snap: entry.seenSnap };
+    }
     const p = entry?.model.group.position;
     if (p && this.near(p.x, p.y, p.z, 30)) {
       this.renderer.effects.sparkles(p.x, p.y + 0.6, p.z, 6, ['#ffffff', '#d9c8ff']);
@@ -1139,12 +1158,78 @@ export class Game extends EventTarget {
     }
   }
 
+  // Where a monster is drawn: where it is now, as near as can be told, not
+  // where it was a moment ago like the animals. Drawn in the past, one
+  // chasing you was still a step off when its bump knocked you back, and one
+  // you bopped flew back long after the bonk. So side to side it carries on
+  // from its last update at the speed it was going (still, if it was
+  // standing still), no further than PREDICT_MS on; a guess put right by
+  // the next update fades out rather than jumping. Up and down it hops as
+  // it did a moment ago (a hop is too quick to guess), stepping up onto
+  // whatever it is over now; and it is never drawn inside you.
+  monsterNow(entry, dt) {
+    const snaps = entry.snaps;
+    const last = snaps[snaps.length - 1];
+    if (!last) return null;
+    const past = this.interpolate(snaps, CRITTER_INTERP_MS);
+    const prev = snaps[snaps.length - 2];
+    let x = last.x;
+    let z = last.z;
+    if (prev && !STILL_STATES.has(last.state) && last.t - prev.t > 20) {
+      const k = Math.min(performance.now() - last.t, PREDICT_MS) / (last.t - prev.t);
+      x += (last.x - prev.x) * k;
+      z += (last.z - prev.z) * k;
+    }
+    // A new update moving the guess: from where it was drawn, smoothly.
+    if (entry.seenSnap !== last && entry.drawn) {
+      entry.err = { x: entry.drawn.x - x, z: entry.drawn.z - z };
+    }
+    entry.seenSnap = last;
+    // Bopped a moment ago, before any update since: flying back already.
+    const kick = entry.kick;
+    if (kick && kick.snap === last) {
+      const d = KICK_DIST * (1 - Math.exp(-(performance.now() - kick.at) / 1000 / KICK_SECS));
+      x += kick.x * d;
+      z += kick.z * d;
+    } else entry.kick = null;
+    if (entry.err) {
+      const fade = Math.exp(-dt * PREDICT_FADE);
+      entry.err.x *= fade;
+      entry.err.z *= fade;
+      // Not across the island: a long way off, it just goes there.
+      if (Math.hypot(entry.err.x, entry.err.z) > 4) entry.err = null;
+      else {
+        x += entry.err.x;
+        z += entry.err.z;
+      }
+    }
+    let y = past.y;
+    const w = this.world;
+    for (let up = 0; up < 2 && w && B.SOLID[w.get(Math.floor(x), Math.floor(y + 0.05), Math.floor(z))] === 1; up++) y = Math.floor(y + 0.05) + 1;
+    // Never inside you: right up against you at the most.
+    const me = this.me?.body;
+    if (me && !this.riding && !this.aboard) {
+      const size = bodyOf(entry.kind);
+      const dx = x - me.x;
+      const dz = z - me.z;
+      const d = Math.hypot(dx, dz);
+      const min = size.radius + BODY.radius;
+      if (d < min && d > 0.001 && y < me.y + BODY.height && y + size.height > me.y) {
+        x = me.x + (dx / d) * min;
+        z = me.z + (dz / d) * min;
+      }
+    }
+    entry.drawn = { x, z };
+    entry.yaw = entry.yaw === undefined ? last.yaw : lerpAngle(entry.yaw, last.yaw, 1 - Math.exp(-dt * 12));
+    return { x, y, z, yaw: entry.yaw, state: last.state };
+  }
+
   updateMonsters(dt) {
     const now = performance.now();
     const night = isNight(this.env.time);
     const cam = this.renderer.camera.position;
     for (const entry of this.monsters.values()) {
-      const s = this.interpolate(entry.snaps, CRITTER_INTERP_MS);
+      const s = this.monsterNow(entry, dt);
       if (!s) continue;
       const m = entry.model;
       m.group.position.set(s.x, s.y, s.z);
