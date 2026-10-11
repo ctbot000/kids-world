@@ -1,16 +1,28 @@
 // Full screen: the island fills the whole screen, without the browser's bars.
 // iPhones have no way for a page to do that, but the game opened from the
-// Home Screen fills it all the same.
+// Home Screen fills it all the same. iPads have the calls, but there any swipe
+// down leaves full screen again, and playing is all swipes: a gesture of
+// WebKit's own, in every iPad browser, that no page can turn off. So iPads are
+// sent to the Home Screen too, where nothing swipes the game away.
 
 const doc = () => globalThis.document;
 
 // 'toggle': the page can go full screen by itself.
-// 'home-screen': Safari on an iPhone, which can only do it from the Home Screen.
+// 'home-screen': an iPhone or iPad, which can only do it from the Home Screen.
 // 'none': already opened from the Home Screen, or a browser that cannot.
 export function fullscreenMode() {
   const d = doc();
+  const nav = globalThis.navigator;
+  if (isIPad(nav)) return nav.standalone === true ? 'none' : 'home-screen';
   if (d.fullscreenEnabled ?? d.webkitFullscreenEnabled) return 'toggle';
-  return globalThis.navigator?.standalone === false ? 'home-screen' : 'none';
+  return nav?.standalone === false ? 'home-screen' : 'none';
+}
+
+// iPads ask for desktop pages by default and so say they are a Mac, the one
+// Mac with a touch screen.
+function isIPad(nav) {
+  if (!nav) return false;
+  return /iPad/.test(nav.userAgent ?? '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
 }
 
 export function isFullscreen() {

@@ -1718,7 +1718,7 @@ test('a dialog opened from beside "Change me" takes its place and puts the camer
   await page.browserContext().close();
 });
 
-test('full screen from the title, the top bar and Settings; iPhones are shown the Home Screen', { skip }, async () => {
+test('full screen from the title, the top bar and Settings; iPhones and iPads are shown the Home Screen', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tiny Owl' });
   const isFull = () => document.fullscreenElement === document.documentElement && document.body.classList.contains('fullscreen');
   await page.bringToFront();
@@ -1746,8 +1746,19 @@ test('full screen from the title, the top bar and Settings; iPhones are shown th
   await phone.click('#btn-fullscreen');
   await until(phone, () => document.getElementById('modal-body').textContent.includes('Add to Home Screen'));
   assert.equal(await phone.evaluate(() => document.fullscreenElement), null);
-  assert.deepEqual(pageErrors, []);
   await phone.browserContext().close();
+
+  // An iPad can, but any swipe down there leaves it again: it is shown the Home Screen too.
+  const tablet = await openPlayer(base + '?p2p=1', { name: 'Calm Otter' }, () => {
+    Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' });
+    Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 5 });
+  });
+  await tablet.bringToFront();
+  await tablet.click('#btn-fullscreen');
+  await until(tablet, () => document.getElementById('modal-body').textContent.includes('Add to Home Screen'));
+  assert.equal(await tablet.evaluate(() => document.fullscreenElement), null);
+  assert.deepEqual(pageErrors, []);
+  await tablet.browserContext().close();
 });
 
 test('the whole island code shows beside the top buttons, and a long connection message beside or under them', { skip }, async () => {

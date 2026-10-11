@@ -2173,7 +2173,7 @@ export class UI {
     return h('div', { class: 'setting' }, h('div', {}, label, h('div', { class: 'muted' }, 'Just your island, without the browser around it.')), sw);
   }
 
-  // Safari on an iPhone cannot fill the screen, but the game opened from the Home Screen does.
+  // An iPhone cannot fill the screen, nor an iPad for long, but the game opened from the Home Screen does.
   homeScreenDialog() {
     this.openModal(
       (root) => {

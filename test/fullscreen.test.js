@@ -1,5 +1,5 @@
 // Full screen through the standard calls and Safari's older prefixed ones,
-// and iPhones, which can only get it by opening the game from the Home Screen.
+// and iPhones and iPads, which can only get it by opening the game from the Home Screen.
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { fullscreenMode, isFullscreen, setFullscreen } from '../public/js/fullscreen.js';
@@ -71,6 +71,24 @@ test('Safari on an iPhone is pointed to the Home Screen, where nothing more is n
   // Any other browser that cannot, such as a page inside a frame that does not allow it.
   pretend({ document: doc, navigator: {} });
   assert.equal(fullscreenMode(), 'none');
+});
+
+test('an iPad is pointed to the Home Screen, since any swipe down there leaves full screen', () => {
+  const { doc } = fakePage();
+  const desktop = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel' };
+  // Asking for the desktop page, as iPads do by default (Chrome too), it says it is a Mac with a touch screen.
+  pretend({ document: doc, navigator: { ...desktop, maxTouchPoints: 5, standalone: false } });
+  assert.equal(fullscreenMode(), 'home-screen');
+  pretend({ document: doc, navigator: { ...desktop, maxTouchPoints: 5 } });
+  assert.equal(fullscreenMode(), 'home-screen');
+  pretend({ document: doc, navigator: { userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) CriOS/140.0', platform: 'iPad', maxTouchPoints: 5 } });
+  assert.equal(fullscreenMode(), 'home-screen');
+  // Opened from the Home Screen, it is full screen already.
+  pretend({ document: doc, navigator: { ...desktop, maxTouchPoints: 5, standalone: true } });
+  assert.equal(fullscreenMode(), 'none');
+  // A real Mac goes full screen as before.
+  pretend({ document: doc, navigator: { ...desktop, maxTouchPoints: 0, standalone: false } });
+  assert.equal(fullscreenMode(), 'toggle');
 });
 
 test('a refused request is a rejected promise, never a throw', async () => {
