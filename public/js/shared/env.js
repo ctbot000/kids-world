@@ -58,13 +58,14 @@ function smooth(a, b, x) {
 
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles'];
 
-// What comes next, and for how many seconds.
+// What comes next, and for how many seconds. A volcano island never rains:
+// the rain would only hiss away on the lava (and no rainbow without it).
 export function nextWeather(current, theme, random = Math.random) {
   const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : 'rain';
   if (current === 'rain' || current === 'snow' || current === 'sprinkles') return { weather: 'rainbow', seconds: 70 + random() * 40 };
   if (current === 'rainbow') return { weather: 'clear', seconds: 200 + random() * 160 };
   const r = random();
-  if (r < 0.55) return { weather: 'clear', seconds: 180 + random() * 180 };
+  if (r < 0.55 || (theme === 'volcano' && r < 0.95)) return { weather: 'clear', seconds: 180 + random() * 180 };
   if (r < 0.8) return { weather: 'cloudy', seconds: 120 + random() * 120 };
   return { weather: wet, seconds: 90 + random() * 90 };
 }

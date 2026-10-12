@@ -6,7 +6,7 @@ A cozy 3D block-building island game for kids, to play together in the browser. 
 
 ![Three friends on an island: a fox saying "Let's build!", a waving bunny and a dancing panda, next to a fountain, a lamp post, a house, a flower garden and a rainbow](docs/screenshot.jpg)
 
-1. Press **Make an island**, pick a kind of island (Sunny, Snowy, Candy or Flat Land) and how big it is (Cozy, Big or Huge), and name it: type any name, or roll one with 🎲. Turn on **⚔️ Adventure** for monster camps to free with friends, **🗼 Tower defense** for waves of monsters to see off with towers, or **👾 Monsters** if you want some about.
+1. Press **Make an island**, pick a kind of island (Sunny, Snowy, Candy, Volcano or Flat Land) and how big it is (Cozy, Big or Huge), and name it: type any name, or roll one with 🎲. Turn on **⚔️ Adventure** for monster camps to free with friends, **🗼 Tower defense** for waves of monsters to see off with towers, or **👾 Monsters** if you want some about.
 2. Tell a friend your six-digit **island code** (it's at the top of the screen). They press **Visit a friend** and type it in, or pick your island from **🌍 Islands open now** under it. Up to 8 players can be on one island together.
 3. Build together. Your island is saved on your device, and **My islands** opens it again later. While the [island keeper](#the-island-keeper) is online, it keeps a copy too, and **🔑 Log in** brings you and your islands to your other devices.
 

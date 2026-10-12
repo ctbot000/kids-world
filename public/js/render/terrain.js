@@ -1,6 +1,7 @@
 // The blocky world on the GPU: one group of meshes per 16x16 chunk, rebuilt
 // when blocks change, with shaders that mix sunlight, lamp light and corner
-// shadows, sway the flowers, turn fruit to face you and ripple the water.
+// shadows, sway the flowers, turn fruit to face you, ripple the water and
+// drift the lava.
 import * as THREE from '../../vendor/three.module.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
@@ -194,6 +195,53 @@ const WATER_FRAG = /* glsl */ `
   }
 `;
 
+const LAVA_VERT = /* glsl */ `
+  attribute vec3 uvl;
+  attribute vec3 tint;
+  attribute vec4 lit;
+  varying vec3 vUvl;
+  varying vec4 vLit;
+  varying float vDepth;
+  varying vec3 vWorld;
+  uniform float uTime;
+  void main() {
+    vec3 p = position;
+    float wave = sin(p.x * 0.9 + uTime * 0.5) + sin(p.z * 0.7 + uTime * 0.4);
+    p.y += (wave * 0.02 - 0.01) * lit.w;
+    vec4 world = modelMatrix * vec4(p, 1.0);
+    vec4 mv = viewMatrix * world;
+    gl_Position = projectionMatrix * mv;
+    vUvl = uvl;
+    vLit = lit;
+    vDepth = -mv.z;
+    vWorld = world.xyz;
+  }
+`;
+
+const LAVA_FRAG = /* glsl */ `
+  precision highp sampler2DArray;
+  uniform sampler2DArray atlas;
+  uniform float uLavaLayer;
+  varying vec3 vUvl;
+  varying vec4 vLit;
+  varying float vDepth;
+  varying vec3 vWorld;
+  ${LIGHT_GLSL}
+  void main() {
+    // Molten rock: the painted crust drifting slowly round, hotter and
+    // darker in patches that come and go, bright however dark the night.
+    vec2 flow = vec2(vWorld.x + vWorld.y * 0.3, vWorld.z) * 0.35 + vec2(uTime * 0.012, -uTime * 0.009);
+    vec4 tex = texture(atlas, vec3(fract(flow), uLavaLayer));
+    vec3 col = tex.rgb * 1.3;
+    float s = sin(vWorld.x * 1.7 + uTime * 0.5) * sin(vWorld.z * 1.3 - uTime * 0.4);
+    float broad = sin(vWorld.x * 0.5 + uTime * 0.23) * sin(vWorld.z * 0.4 - uTime * 0.17);
+    col += vec3(0.32, 0.09, 0.0) * smoothstep(0.55, 1.0, s);
+    col += vec3(0.18, 0.05, 0.0) * smoothstep(0.4, 1.0, broad);
+    gl_FragColor = vec4(fogged(col, vDepth), 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+
 const STUD_VERT = /* glsl */ `
   attribute vec3 offset;
   attribute vec3 tint;
@@ -297,6 +345,7 @@ export class Terrain {
       uFogFar: { value: 150 },
       uTime: { value: 0 },
       uWaterLayer: { value: atlas.layers.get('water') ?? 0 },
+      uLavaLayer: { value: atlas.layers.get('lava') ?? 0 },
       uNearFade: { value: 1 },
     };
     const make = (vertexShader, fragmentShader, extra = {}) =>
@@ -306,6 +355,7 @@ export class Terrain {
       plants: make(SOLID_VERT, SOLID_FRAG, { defines: { CUTOUT: 1, SWAY: 1 }, side: THREE.DoubleSide }),
       items: make(ITEM_VERT, ITEM_FRAG, { side: THREE.DoubleSide }),
       water: make(WATER_VERT, WATER_FRAG, { transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+      lava: make(LAVA_VERT, LAVA_FRAG),
       glass: make(SOLID_VERT, SOLID_FRAG, { defines: { GLASS: 1 }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
       studs: make(STUD_VERT, STUD_FRAG),
     };
@@ -374,10 +424,18 @@ export class Terrain {
       g.setIndex(idx);
       return g;
     };
-    this.sea = new THREE.Mesh(build(y, this.atlas.layers.get('water'), [255, 255, 255], 255), this.materials.water);
+    // A volcano island rises out of a sea of lava, over dark basalt depths.
+    const volcano = this.world.theme === 'volcano';
+    this.sea = new THREE.Mesh(
+      build(y, this.atlas.layers.get(volcano ? 'lava' : 'water'), [255, 255, 255], 255),
+      volcano ? this.materials.lava : this.materials.water,
+    );
     this.sea.frustumCulled = false;
     this.sea.renderOrder = 2;
-    this.floor = new THREE.Mesh(build(Math.max(1, sea - 9), this.atlas.layers.get('sand'), [220, 205, 170], 150), this.materials.opaque);
+    this.floor = new THREE.Mesh(
+      build(Math.max(1, sea - 9), this.atlas.layers.get(volcano ? 'basalt' : 'sand'), volcano ? [125, 122, 132] : [220, 205, 170], 150),
+      this.materials.opaque,
+    );
     this.floor.frustumCulled = false;
     this.group.add(this.sea, this.floor);
   }
@@ -463,6 +521,7 @@ export class Terrain {
     add(data.plants, this.materials.plants);
     add(data.items, this.materials.items, data.items.corner);
     add(data.water, this.materials.water, null, 2);
+    add(data.lava, this.materials.lava, null, 2);
     add(data.glass, this.materials.glass, null, 3);
     if (data.studs.count) {
       // Each chunk gets its own copy of the (tiny) stud shape: disposing a

@@ -1016,6 +1016,116 @@ function unicorn(id) {
 
 const reindeer = (id) => pony(id, 'reindeer');
 
+// Dragon coats, in fire colours: the coat, the dark of its spikes and horns,
+// and the brighter skin of its wings.
+const DRAGONS = [
+  { coat: '#cd4f36', spike: '#7a2a18', wing: '#e8703f' },
+  { coat: '#a63a28', spike: '#5f1d10', wing: '#c95831' },
+  { coat: '#c96b2a', spike: '#7a3c12', wing: '#e8933f' },
+  { coat: '#8a3c3c', spike: '#4f1c1c', wing: '#b35555' },
+];
+
+// The dragon of a volcano island: a big four-footed dragon on the same body
+// as the ponies (so it walks as they do), with a long neck, a horned head,
+// spikes down its back, plates across its pale belly, a spaded tail — and
+// great wings, folded at its sides on the ground and beating in the air.
+function dragon(id) {
+  const k = DRAGONS[id % DRAGONS.length];
+  const coat = toon(k.coat);
+  const spike = toon(k.spike);
+  const belly = '#ffe6b3';
+  const { g, body, pivot } = bigRig(0.92);
+  const R = [0.42, 0.38, 0.72];
+  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), coat, 0, 0.02, 0.42, 0.34, 0.34, 0.36));
+  pivot.add(mesh(sphere(), coat, 0, 0.03, -0.42, 0.36, 0.34, 0.36));
+  // Pale plates across its belly.
+  pivot.add(mesh(sphere(), toon(belly), 0, -0.16, 0.05, 0.28, 0.18, 0.58));
+  for (let i = 0; i < 5; i++) {
+    const z = 0.4 - i * 0.2;
+    pivot.add(mesh(torus(0.24 - Math.abs(z) * 0.08, 0.02, Math.PI), toon('#e2c186'), 0, -0.2, z).rotateX(Math.PI / 2 + 0.45));
+  }
+  const legs = fourLegs(pivot, { x: 0.24, front: 0.42, back: -0.42, hip: -0.24, len: 0.66, r: 0.1, color: k.coat, paw: belly });
+
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.18, 0.56);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.75;
+  neck.add(n);
+  n.add(mesh(lathe([[0, -0.1], [0.17, -0.06], [0.19, 0.1], [0.16, 0.28], [0.12, 0.42], [0, 0.46]], 20), coat, 0, 0, 0, 1, 1, 1.15));
+  // A ruff of spikes where the neck meets the shoulders.
+  for (const side of [-1, 1]) n.add(mesh(cone(0.045, 0.14, 6), spike, side * 0.14, 0.02, -0.06).rotateZ(-side * 0.6));
+
+  const head = new THREE.Group();
+  head.position.set(0, 0.42, 0.05);
+  head.rotation.x = -0.55;
+  n.add(head);
+  head.add(mesh(sphere(), coat, 0, 0, 0.04, 0.17, 0.15, 0.22));
+  // A long snout with nostrils, and a smile under it.
+  head.add(mesh(sphere(), coat, 0, -0.035, 0.22, 0.1, 0.08, 0.15));
+  for (const side of [-1, 1]) head.add(mesh(sphere(), spike, side * 0.045, 0.015, 0.34, 0.018, 0.024, 0.016));
+  head.add(mesh(torus(0.07, 0.012, Math.PI), toon('#7a2a2a'), 0, -0.075, 0.2).rotateX(Math.PI / 2 - 0.2));
+  const eyes = sideEyes(head, 0.135, 0.07, 0.08, 0.032);
+  // Little horns, and a fin of an ear behind them.
+  for (const side of [-1, 1]) {
+    const horn = mesh(cone(0.035, 0.17, 8), toon('#fff3d6'), side * 0.09, 0.17, -0.05);
+    horn.rotation.set(-0.4, 0, -side * 0.35);
+    head.add(horn);
+    const fin = mesh(sphere(1, 10, 8), toon(k.wing), side * 0.13, 0.06, -0.16, 0.015, 0.09, 0.07);
+    fin.rotation.z = side * 0.25;
+    head.add(fin);
+  }
+  // Smoke-dark brows make it look asleep.
+  for (const side of [-1, 1]) head.add(mesh(capsule(0.012, 0.07, 4, 6), spike, side * 0.13, 0.115, 0.05).rotateZ(Math.PI / 2 - side * 0.15));
+
+  // Spikes down its shoulders and rump, clear of the saddle between them,
+  // and down its tail.
+  for (const [i, z] of [0.5, 0.35, -0.42, -0.54, -0.66].entries()) pivot.add(mesh(cone(0.05, 0.16 - i * 0.012, 6), spike, 0, R[1] * 0.98 - i * 0.012, z));
+
+  // Wings at its shoulders (render/critter-models.js wingPair), folded up
+  // along its back on the ground and beating in the air (see update below).
+  const wings = wingPair(pivot, { x: 0.16, y: 0.3, z: 0.3, length: 0.95, width: 0.44, thick: 0.028, color: k.wing, tip: k.spike });
+
+  // A long tail in bends that sway, with a spade at the end.
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.14, -0.72);
+  pivot.add(tail);
+  let at = tail;
+  const bends = [];
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Group();
+    if (i) b.position.z = -0.24;
+    b.add(mesh(capsule(0.11 - i * 0.026, 0.18), coat, 0, 0, -0.12).rotateX(Math.PI / 2));
+    b.add(mesh(cone(0.05, 0.12, 6), spike, 0, 0.07, -0.1).rotateX(-0.3));
+    at.add(b);
+    bends.push(b);
+    at = b;
+  }
+  at.add(mesh(cone(0.09, 0.2, 4), spike, 0, 0, -0.3).rotateX(-Math.PI / 2));
+
+  const s = saddle(pivot, R[1], 0.36, 0.32, -0.05, true);
+  return {
+    group: g,
+    body,
+    pivot,
+    neck,
+    head,
+    eyes,
+    tail,
+    legs,
+    wings,
+    bends,
+    ...s,
+    height: 1.7,
+    shadow: 0.7,
+    pick: 0.9,
+    center: 1.0,
+    seen: 130,
+    gait: { len: 0.8, run: 4, happy: 'rear', graze: 0.45 },
+  };
+}
+
 function cow(id) {
   const { g, body, pivot } = bigRig(0.8);
   const white = toon('#fbfbf7');
@@ -1238,7 +1348,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, ...VEHICLE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1287,8 +1397,11 @@ export class CritterModel {
       return;
     }
     if (this.gait) {
-      this.trot(dt, state, moving);
+      // A dragon flying counts as a jump for its legs (tucked up under it)
+      // and beats its wings; on the ground they stay folded to its back.
+      this.trot(dt, state === 'fly' ? 'jump' : state, moving);
       if (state === 'sleep') this.eyes.scale.y = 0.12;
+      if (this.wings) this.flap(dt, state);
       return;
     }
     switch (this.type) {
@@ -1373,6 +1486,23 @@ export class CritterModel {
   // it, galloping (front legs, then back), jumping, swimming, grazing, lying
   // down asleep, and happy, each in its own way. The elephant's trunk sways,
   // curls up to its mouth, comes up to spray, and up out of the water.
+  // A dragon's wings: folded up along its back at rest, a slow lazy stretch
+  // now and then; out and beating when it flies, its legs tucked up under it.
+  flap(dt, state) {
+    const t = this.time;
+    const flying = state === 'fly';
+    for (const w of this.wings) {
+      const side = w.userData.wing;
+      const beat = Math.sin(t * 6.5);
+      const spread = flying ? 0.2 + beat * 0.5 : 1.2 + Math.sin(t * 1.1) * 0.06;
+      w.rotation.set(flying ? beat * 0.12 : 0, 0, side * spread);
+    }
+    if (this.bends) {
+      const sway = Math.sin(t * (flying ? 5 : 1.2)) * (flying ? 0.3 : 0.12);
+      this.bends.forEach((b, i) => (b.rotation.y = sway * (i ? 0.6 : 1)));
+    }
+  }
+
   trot(dt, state, moving) {
     const t = this.time;
     const g = this.gait;

@@ -6,6 +6,8 @@
 //   solid  an opaque cube you can stand on
 //   glass  a see-through cube you can stand on
 //   water  see-through, and you swim in it
+//   lava   see-through and glowing, swum in as water is — but it burns
+//          (a volcano island's own, worldgen.js; shared/room.js)
 //   plant  drawn as crossed pictures, stands on a solid block
 //   item   a little collectable (fruit, shells, star pieces, jewels), drawn facing you
 //   furniture  a little model of boxes inside its cell (shared/furniture.js),
@@ -38,7 +40,7 @@ function def(id, key, props) {
   else if (d.tiles) d.tiles = { top: d.tiles.top, side: d.tiles.side ?? d.tiles.top, bottom: d.tiles.bottom ?? d.tiles.top };
   d.solid = d.kind === 'solid' || d.kind === 'glass' || (d.kind === 'furniture' && d.solid !== false);
   d.opaque = d.kind === 'solid';
-  d.cube = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'water';
+  d.cube = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'water' || d.kind === 'lava';
   defs[id] = d;
   byKey[key] = d;
   return id;
@@ -58,6 +60,13 @@ export const LEAVES = def(8, 'leaves', { name: 'Leaves', category: 'nature', til
 export const PINE_LEAVES = def(9, 'pine-leaves', { name: 'Pine Leaves', category: 'nature', tiles: 'pine-leaves', sound: 'leaves' });
 export const WATER = def(10, 'water', { name: 'Water', kind: 'water', category: 'nature', tiles: 'water', sound: 'water' });
 export const ICE = def(11, 'ice', { name: 'Ice', category: 'nature', tiles: 'ice', sound: 'glass' });
+// Volcano rock, dark and dusty: the ground of a volcano island
+// (worldgen.js), in and round the mountain's crater.
+export const BASALT = def(28, 'basalt', { name: 'Basalt', category: 'nature', tiles: 'basalt', studs: true, sound: 'stone', under: 5 });
+// Molten rock. You can swim in it as in water (physics.js), but it burns
+// hard (room.js, LAVA_HP in monsters.js): a volcano island's sea, lakes and
+// crater are made of it, and it glows in the dark.
+export const LAVA = def(29, 'lava', { name: 'Lava', kind: 'lava', category: 'nature', tiles: 'lava', light: 12, sound: 'water' });
 export const CLOUD = def(18, 'cloud', { name: 'Cloud', category: 'nature', tiles: 'cloud', sound: 'soft' });
 export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', category: 'nature', tiles: { top: 'snow', side: 'snowy-leaves', bottom: 'pine-leaves' }, sound: 'snow' });
 // The grumpy monsters' ground, round their camps on an adventure island
@@ -263,8 +272,8 @@ export const isKnown = (id) => Number.isInteger(id) && id >= 0 && id < 256 && de
 export const SOLID = new Uint8Array(256);
 export const OPAQUE = new Uint8Array(256);
 export const EMIT = new Uint8Array(256);
-export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture
-const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6 };
+export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture, 7 lava
+const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6, lava: 7 };
 for (const d of defs) {
   if (!d) continue;
   SOLID[d.id] = d.solid ? 1 : 0;
@@ -274,7 +283,7 @@ for (const d of defs) {
 }
 // Natural ground, which the hills tool shapes.
 export const TERRAIN = new Uint8Array(256);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, ...GEM_ROCKS]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, ...GEM_ROCKS]) TERRAIN[id] = 1;
 // Gem rocks, which a tap digs a jewel out of.
 export const GEM_ROCK = new Uint8Array(256);
 for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
@@ -294,6 +303,7 @@ export const K_WATER = 3;
 export const K_PLANT = 4;
 export const K_ITEM = 5;
 export const K_FURNITURE = 6;
+export const K_LAVA = 7;
 
 // The block in the toy box a turned piece of furniture is one of.
 export const baseOf = (id) => defs[id]?.base ?? id;
@@ -307,9 +317,10 @@ export const turnedTo = (id, front) => {
 
 export const isSolid = (id) => SOLID[id] === 1;
 export const isWater = (id) => id === WATER;
-// Cells a build can go into: empty space, water, and the little things that
-// get pushed aside (flowers, grass).
-export const isReplaceable = (id) => id === AIR || id === WATER || KIND[id] === K_PLANT;
+export const isLava = (id) => id === LAVA;
+// Cells a build can go into: empty space, water or lava, and the little
+// things that get pushed aside (flowers, grass).
+export const isReplaceable = (id) => id === AIR || id === WATER || id === LAVA || KIND[id] === K_PLANT;
 
 // What lies under the top block of a column, for the hills tool.
 export const underOf = (id) => defs[id]?.under || id;

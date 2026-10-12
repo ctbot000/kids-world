@@ -2299,8 +2299,8 @@ export class Game extends EventTarget {
     if (ev.tookOff) {
       this.sound.play('liftoff', { type: ride.type });
       fxs.dust(r.x, r.y, r.z);
-      // The 🚁 sticker is for flying the aircraft.
-      if (CRITTER_INFO[ride.type].vehicle) this.profile.count('flights');
+      // The 🚁 sticker is for flying the aircraft — and the dragon.
+      if (CRITTER_INFO[ride.type].vehicle || ride.r.air) this.profile.count('flights');
     }
     if (ev.touchedDown) {
       this.sound.play('land');

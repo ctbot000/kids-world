@@ -208,7 +208,7 @@ function groundAt(world, x, z) {
   if (y < 1 || y >= world.H - 2) return null;
   const under = world.get(cx, y, cz);
   if (!B.SOLID[under] || B.TREE_PART[under] || B.CLOTH[under]) return null;
-  if (B.SOLID[world.get(cx, y + 1, cz)] || B.SOLID[world.get(cx, y + 2, cz)] || world.get(cx, y + 1, cz) === B.WATER) return null;
+  if (B.SOLID[world.get(cx, y + 1, cz)] || B.SOLID[world.get(cx, y + 2, cz)] || world.get(cx, y + 1, cz) === B.WATER || world.get(cx, y + 1, cz) === B.LAVA) return null;
   return y + 1;
 }
 
@@ -218,13 +218,14 @@ function tentAt(world, x, y, z, r) {
   return underTent(world, x - r, y, z - r) || underTent(world, x + r, y, z - r) || underTent(world, x - r, y, z + r) || underTent(world, x + r, y, z + r);
 }
 
-// Whether the column at (x, z) is water a monster would fall into.
+// Whether the column at (x, z) is water or lava a monster would fall into
+// (a volcano island's sea and lakes are lava: into the fire, no monster goes).
 function wet(world, x, y, z) {
   const cx = FL(x);
   const cz = FL(z);
   for (let yy = FL(y + 0.5); yy >= Math.max(0, FL(y) - 3); yy--) {
     const id = world.get(cx, yy, cz);
-    if (id === B.WATER) return true;
+    if (id === B.WATER || id === B.LAVA) return true;
     if (B.SOLID[id]) return false;
   }
   return false;
@@ -374,12 +375,12 @@ export class MonsterSim {
       const fly = m.kind === 'mosquito';
       const camp = m.camp ? (camps?.campById(m.camp) ?? null) : null;
       // Lonely, far from everyone: off it goes (one of a camp stays). In the
-      // water, it goes too.
+      // water or the lava, it goes too.
       if (!m.camp) {
         const nearest = people.reduce((best, p) => Math.min(best, Math.hypot(p.x - b.x, p.z - b.z)), Infinity);
         m.lonely = nearest > LONELY ? m.lonely + dt * 1000 : 0;
       }
-      if (m.lonely > LONELY_MS || b.inWater || b.y < 2 || (m.camp && !camp)) {
+      if (m.lonely > LONELY_MS || b.inWater || b.inLava || b.y < 2 || (m.camp && !camp)) {
         this.remove(m.id);
         if (m.camp) this.gone.push(m);
         continue;
@@ -598,7 +599,7 @@ export class MonsterSim {
   // furthest on.
   marchOn(world, m, dt) {
     const b = m.body;
-    if (b.inWater || b.y < 2) {
+    if (b.inWater || b.inLava || b.y < 2) {
       this.remove(m.id);
       this.gone.push(m);
       return;

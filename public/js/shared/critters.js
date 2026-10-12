@@ -30,7 +30,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -87,6 +87,16 @@ export const CRITTER_INFO = {
   // quicker than anyone runs and nimble, hopping the little steps itself.
   // The jump button rings its bell.
   scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
+  // The dragon, the one dragon of a volcano island (worldgen.js): asleep on
+  // the volcano by day and night, wings folded, until someone climbs on.
+  // It flies like the helicopter and the balloon do (ride.air, riding.js):
+  // hold jump to lift off. wild: the island's own, never one to invite from
+  // the toy box or send away (room.js) — there is only the one.
+  dragon: {
+    name: 'Dragon', icon: '🐲', speed: 1.1, swims: false, flies: false, big: true, wild: true, home: 20,
+    ride: { air: true, seat: 1.36, z: 0.05, radius: 0.6, height: 2.6, float: 0.95, spread: 0.85, reach: 0.9, walk: 4.5, run: 8, swim: 2.5, jump: 9, fly: 9, flyRun: 13, flyUp: 6.5, maxFall: 3 },
+    names: ['Ember', 'Cinder', 'Blaze', 'Smoky', 'Pepper', 'Sooty', 'Toasty', 'Flame', 'Rusty', 'Magma'],
+  },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -106,8 +116,9 @@ export const CRITTER_INFO = {
 // over it.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
-// The animals, without the vehicles.
-export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle);
+// The animals, without the vehicles — and without the wild ones, which are
+// their island's own (the dragon), not anyone's to invite.
+export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild);
 // New states go on the end too.
 export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run'];
 export const MAX_CRITTERS = 64;
@@ -357,7 +368,10 @@ function roofed(world, c) {
 
 // How many of each newer flying friend an island starts with.
 export function flyerCounts(theme) {
-  return theme === 'snowy' ? { bird: 3, owl: 2, seagull: 2 } : { bird: 3, owl: 1, bee: 3, seagull: 2 };
+  if (theme === 'snowy') return { bird: 3, owl: 2, seagull: 2 };
+  // Nothing circles the smoke of a volcano but the odd bird.
+  if (theme === 'volcano') return { bird: 2, owl: 1 };
+  return { bird: 3, owl: 1, bee: 3, seagull: 2 };
 }
 
 const isShore = (world, p) => p.kind === 'ground' && p.ground === B.SAND && p.y <= world.sea + 3;
@@ -389,9 +403,11 @@ export function placeFlyers(world, rng, counts = scaleCounts(flyerCounts(world.t
   return out;
 }
 
-// How many sea creatures an island starts with: no turtles in the snow.
+// How many sea creatures an island starts with: no turtles in the snow, and
+// none at all in a volcano island's sea of lava.
 export function seaCounts(theme) {
   if (theme === 'snowy') return { fish: 3, dolphin: 2, whale: 1, crab: 2, octopus: 1 };
+  if (theme === 'volcano') return {};
   // Flat Land's sea is a narrow moat, with no beach.
   if (theme === 'flat') return { fish: 3, turtle: 1, octopus: 1 };
   return { fish: 4, dolphin: 2, whale: 1, turtle: 2, crab: 3, octopus: 1 };
@@ -466,10 +482,12 @@ export function placePolar(world, rng, counts = scaleCounts(polarCounts(world.th
 
 // How many big animals an island starts with: ponies, cows, an elephant and a
 // giraffe; reindeer and polar bears in the snow; unicorns on candy islands.
+// A volcano island has none — its one big animal is the dragon (placeDragon).
 export function bigCounts(theme) {
   if (theme === 'snowy') return { reindeer: 3, polarbear: 2 };
   if (theme === 'candy') return { unicorn: 3, pony: 1 };
   if (theme === 'flat') return { pony: 2, cow: 2 };
+  if (theme === 'volcano') return {};
   return { pony: 2, cow: 2, elephant: 1, giraffe: 1 };
 }
 
@@ -498,6 +516,27 @@ export function placeBig(world, rng, counts = scaleCounts(bigCounts(world.theme)
     }
   }
   return out;
+}
+
+// The one dragon of a volcano island: asleep as near the volcano's crater as
+// it can lay its bulk (the rim, or the slope below), facing out over the
+// island. Never more than the one — and none at all if somehow there is
+// nowhere it fits.
+export function placeDragon(world, rng, peak = null) {
+  const home = peak ? { x: peak.x, z: peak.z } : { x: world.W / 2, z: world.D / 2 };
+  const roost = (r) => {
+    for (let tries = 0; tries < 300; tries++) {
+      const a = rng.next() * Math.PI * 2;
+      const d = rng.range(3, r);
+      const p = perchAt(world, home.x + Math.cos(a) * d, home.z + Math.sin(a) * d);
+      if (!p || p.kind !== 'ground' || p.y <= world.sea + 2) continue;
+      if (world.get(FL(p.x), FL(p.y - 1), FL(p.z)) === B.LAVA) continue;
+      if (!fits(world, 'dragon', p.x, p.y, p.z)) continue;
+      return { type: 'dragon', x: p.x, y: p.y, z: p.z, yaw: Math.atan2(world.spawn.x - p.x, world.spawn.z - p.z) };
+    }
+    return null;
+  };
+  return [roost(14) ?? roost(40) ?? roomFor(world, 'dragon', home.x, world.sea + 6, home.z, 24)].filter(Boolean);
 }
 
 // The nearest spot to (x, z), within r and near the height y, where a big

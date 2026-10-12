@@ -3,7 +3,7 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
 
 // The four ways along the ground, as shared/riding.js numbers them.
 const RAIL_DIRS = [
@@ -95,6 +95,7 @@ export function meshChunk(world, light, visuals, cx, cz) {
 
   const opaque = new Part();
   const water = new Part();
+  const lava = new Part();
   const glass = new Part();
   const plants = new Part();
   const items = new ItemPart();
@@ -103,11 +104,13 @@ export function meshChunk(world, light, visuals, cx, cz) {
   const studLit = new Buf(Uint8Array);
 
   // The block at a cell; past the sides of the world, the sea bed goes on
-  // forever below the waterline (so the world's cut edge is never drawn).
+  // forever below the waterline (so the world's cut edge is never drawn). A
+  // volcano island's sea is lava.
+  const seaLiquid = world.theme === 'volcano' ? LAVA : WATER;
   const at = (x, y, z) => {
     if (y < 0) return STONE;
     if (y >= H) return AIR;
-    if (x < 0 || z < 0 || x >= W || z >= D) return y <= sea ? (y <= sea - 1 ? STONE : WATER) : AIR;
+    if (x < 0 || z < 0 || x >= W || z >= D) return y <= sea ? (y <= sea - 1 ? STONE : seaLiquid) : AIR;
     return blocks[(x * D + z) * H + y];
   };
   const skyAt = (x, y, z) => light.skyAt(x, y, z);
@@ -215,19 +218,23 @@ export function meshChunk(world, light, visuals, cx, cz) {
             studCol.push(studTint[id * 3], studTint[id * 3 + 1], studTint[id * 3 + 2]);
             studLit.push(skyAt(x, y + 1, z) * 17, lampAt(x, y + 1, z) * 17);
           }
-        } else if (kind === K_WATER) {
+        } else if (kind === K_WATER || kind === K_LAVA) {
+          // A liquid: water or lava, drawn in its own part with its own
+          // material (terrain.js). Lava is lit by its own glow, however dark.
+          const liquid = kind === K_LAVA ? LAVA : WATER;
+          const part = kind === K_LAVA ? lava : water;
           const above = at(x, y + 1, z);
-          const top = above === WATER ? 1 : WATER_TOP;
-          const surface = above !== WATER;
+          const top = above === liquid ? 1 : WATER_TOP;
+          const surface = above !== liquid;
           for (let d = 0; d < 6; d++) {
             const f = FACES[d];
             const nid = at(x + f.n[0], y + f.n[1], z + f.n[2]);
-            if (nid === WATER || OPAQUE[nid]) continue;
+            if (nid === liquid || OPAQUE[nid]) continue;
             const nx = x + f.n[0];
             const ny = y + f.n[1];
             const nz = z + f.n[2];
-            const flat = [Math.max(skyAt(nx, ny, nz), skyAt(x, y, z)), Math.max(lampAt(nx, ny, nz), lampAt(x, y, z))];
-            quad(water, x, y, z, f, faceLayer[id * 3 + f.tile], id, 'water', flat, top, surface);
+            const flat = kind === K_LAVA ? [15, 15] : [Math.max(skyAt(nx, ny, nz), skyAt(x, y, z)), Math.max(lampAt(nx, ny, nz), lampAt(x, y, z))];
+            quad(part, x, y, z, f, faceLayer[id * 3 + f.tile], id, 'water', flat, top, surface);
           }
         } else if (kind === K_GLASS) {
           for (let d = 0; d < 6; d++) {
@@ -395,6 +402,7 @@ export function meshChunk(world, light, visuals, cx, cz) {
     cz,
     opaque: opaque.out(),
     water: water.out(),
+    lava: lava.out(),
     glass: glass.out(),
     plants: plants.out(),
     items: items.out(),

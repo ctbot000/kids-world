@@ -76,7 +76,7 @@ function step(sim, world, ms, people, night = false) {
 test('the mosquito is a monster now, and no animal any more', () => {
   assert.equal(MONSTER_KINDS.indexOf('mosquito'), 4, 'new kinds go on the end: the wire sends the index');
   assert.ok(!CRITTER_TYPES.includes('mosquito'), 'no critter of them');
-  assert.equal(CRITTER_TYPES.at(-1), 'scooter');
+  assert.equal(CRITTER_TYPES.at(-1), 'dragon');
   const sim = new MonsterSim(1);
   const w = meadow();
   const m = sim.add(w, 20.5, 11, 20.5, { kind: 'mosquito' });

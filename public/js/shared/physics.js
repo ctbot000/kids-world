@@ -1,6 +1,8 @@
 // Walking, jumping, swimming, flying and bouncing on trampolines through a
 // world of blocks. A body is an upright box: (x, z) its centre, y its feet.
-import { SOLID, TRAMPOLINE, WATER } from './blocks.js';
+// Lava is swum in as water is, only thicker (half speed again), for the
+// volcano island: the burning itself is the host's to do (shared/room.js).
+import { LAVA, SOLID, TRAMPOLINE, WATER } from './blocks.js';
 
 export const BODY = { radius: 0.3, height: 1.5, eye: 1.3 };
 
@@ -33,7 +35,7 @@ export const BOUNCE = {
 const EPS = 1e-4;
 
 export function makeBody(x, y, z) {
-  return { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false, inWater: false, headInWater: false, flying: false, radius: BODY.radius, height: BODY.height };
+  return { x, y, z, vx: 0, vy: 0, vz: 0, onGround: false, inWater: false, inLava: false, headInWater: false, flying: false, radius: BODY.radius, height: BODY.height };
 }
 
 function overlapsSolid(world, x0, y0, z0, x1, y1, z1) {
@@ -213,9 +215,12 @@ export function stepBody(world, b, input, dt, options = {}) {
 // float is lower than that).
 function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
   const wasInWater = b.inWater;
-  b.inWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.wade ?? 0.5)), Math.floor(b.z)) === WATER;
-  b.headInWater = world.get(Math.floor(b.x), Math.floor(b.y + (b.float ?? b.height - 0.2)), Math.floor(b.z)) === WATER;
-  if (b.inWater && !wasInWater && b.vy < -4) events.splashed = true;
+  const wade = world.get(Math.floor(b.x), Math.floor(b.y + (b.wade ?? 0.5)), Math.floor(b.z));
+  b.inWater = wade === WATER;
+  b.inLava = wade === LAVA;
+  const inLiquid = b.inWater || b.inLava;
+  b.headInWater = [WATER, LAVA].includes(world.get(Math.floor(b.x), Math.floor(b.y + (b.float ?? b.height - 0.2)), Math.floor(b.z)));
+  if (inLiquid && !wasInWater && b.vy < -4) events.splashed = true;
 
   let mx = input.mx || 0;
   let mz = input.mz || 0;
@@ -224,15 +229,15 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
     mx /= len;
     mz /= len;
   }
-  const speed = b.flying ? move.fly : b.inWater ? move.swim : input.run ? move.run : move.walk;
-  const accel = (b.flying || b.onGround || b.inWater ? move.groundAccel : move.airAccel) * dt;
+  const speed = b.flying ? move.fly : b.inLava ? move.swim * 0.5 : b.inWater ? move.swim : input.run ? move.run : move.walk;
+  const accel = (b.flying || b.onGround || inLiquid ? move.groundAccel : move.airAccel) * dt;
   b.vx = approach(b.vx, mx * speed, accel);
   b.vz = approach(b.vz, mz * speed, accel);
 
   if (b.flying) {
     const target = input.jump ? move.flyUp : input.down ? -move.flyUp : 0;
     b.vy = approach(b.vy, target, 40 * dt);
-  } else if (b.inWater) {
+  } else if (inLiquid) {
     if (input.jump) {
       // Swim up; at the surface, a kick is enough to climb out onto a ledge,
       // as high as a block over the water.

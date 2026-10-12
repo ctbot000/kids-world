@@ -47,6 +47,7 @@ export const ISLAND_WORDS = {
   sunny: ['Sunny', 'Sparkle', 'Cozy', 'Rainbow', 'Honey', 'Coconut', 'Clover', 'Blossom', 'Seashell', 'Starfish', 'Lemon', 'Maple'],
   snowy: ['Snowflake', 'Frosty', 'Mitten', 'Twinkle', 'Winter', 'Icicle', 'Cocoa', 'Snowball', 'Pinecone', 'Starlight', 'Snuggle', 'Aurora'],
   candy: ['Candy', 'Sugar', 'Gumdrop', 'Lollipop', 'Marshmallow', 'Cupcake', 'Sprinkle', 'Bubblegum', 'Toffee', 'Jellybean', 'Cookie', 'Sherbet'],
+  volcano: ['Ember', 'Cinder', 'Lava', 'Magma', 'Smoky', 'Ash', 'Pepper', 'Flame', 'Toasty', 'Crater', 'Ruby', 'Spark'],
   flat: ['Builder', 'Brick', 'Meadow', 'Sunny', 'Happy', 'Grassy', 'Wide', 'Clover', 'Daisy', 'Breezy', 'Maple', 'Buttercup'],
 };
 export const ISLAND_PLACES = ['Island', 'Cove', 'Bay', 'Isle', 'Meadow', 'Hills', 'Harbor', 'Beach', 'Valley', 'Garden', 'Village', 'Park'];

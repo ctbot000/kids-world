@@ -292,6 +292,34 @@ const PAINT = {
     ctx.stroke();
     bevel(ctx, 0.6);
   },
+  // Volcano rock: dark and dusty, with a colder sheen than stone.
+  basalt(ctx) {
+    fill(ctx, '#585c68');
+    blobs(ctx, 44, 'rgba(38,40,50,0.5)', 10, 3, 8);
+    blobs(ctx, 45, 'rgba(104,108,124,0.45)', 6, 2, 5);
+    speckles(ctx, 46, ['#484c58', '#6b6f7e', '#7d8089'], 34, [1.2, 2.8]);
+    bevel(ctx, 0.9);
+  },
+  // Molten rock: dark crust plates over a bright orange glow, with hot
+  // cracks running between them. The lava shader (render/terrain.js) makes
+  // it drift and shimmer.
+  lava(ctx) {
+    fill(ctx, '#e05a1e');
+    blobs(ctx, 47, 'rgba(122,30,8,0.55)', 8, 6, 12);
+    blobs(ctx, 48, 'rgba(255,170,50,0.6)', 7, 2, 5);
+    const r = speckleRandom(49);
+    ctx.strokeStyle = 'rgba(255,214,92,0.7)';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 5; i++) {
+      const x = r() * 40 + 6;
+      const y = r() * 56 + 4;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + (r() - 0.5) * 14, y + r() * 12, x + (r() - 0.5) * 20, y + r() * 20);
+      ctx.stroke();
+    }
+  },
   cloud(ctx) {
     fill(ctx, '#fdfeff');
     blobs(ctx, 91, 'rgba(210,225,245,0.5)', 8, 6, 12);

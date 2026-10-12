@@ -6,7 +6,7 @@
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import * as B from './blocks.js';
-import { busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
+import { busesClearOf, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
@@ -16,6 +16,7 @@ export const THEMES = [
   { key: 'sunny', name: 'Sunny Island', icon: '🏝️', blurb: 'Beaches, fruit trees and flowers' },
   { key: 'snowy', name: 'Snowy Island', icon: '❄️', blurb: 'Snow, pine trees and frozen ponds' },
   { key: 'candy', name: 'Candy Island', icon: '🍭', blurb: 'Frosting hills and lollipop trees' },
+  { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -40,6 +41,8 @@ export function palette(theme) {
       return { top: B.SNOW, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
     case 'candy':
       return { top: B.FROSTING, under: B.COOKIE, deep: B.CHOCOLATE, beach: B.SAND, flowers: [B.GUMDROP, B.LOLLIPOP, B.COSMOS], grass: 0 };
+    case 'volcano':
+      return { top: B.BASALT, under: B.STONE, deep: B.STONE, beach: B.BASALT, flowers: [B.TULIP, B.COSMOS], grass: 0 };
     default:
       return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.TULIP, B.DAISY, B.BLUEBELL, B.COSMOS, B.SUNFLOWER], grass: B.TALL_GRASS };
   }
@@ -63,13 +66,15 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- shape
   const mAngle = rng.next() * Math.PI * 2;
-  const mDist = rng.range(0.18, 0.3) * W;
+  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : rng.range(0.18, 0.3) * W;
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
-  const mHeight = theme === 'snowy' ? 24 : 18;
-  // A bigger island has more mountains, spread about the first one.
+  const mHeight = theme === 'snowy' ? 24 : theme === 'volcano' ? 26 : 18;
+  // A bigger island has more mountains, spread about the first one — but a
+  // volcano island has the one volcano, taller than most mountains, near the
+  // middle so its crater looks over everything.
   const mountains = [{ x: mx, z: mz, height: mHeight }];
-  const wantMountains = Math.round(Math.sqrt(area) * 2) - 1;
+  const wantMountains = theme === 'volcano' ? 1 : Math.round(Math.sqrt(area) * 2) - 1;
   for (let tries = 0; tries < 100 && mountains.length < wantMountains; tries++) {
     const a = rng.next() * Math.PI * 2;
     const r = rng.range(0.1, 0.32) * W;
@@ -105,7 +110,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- ponds
   const ponds = [];
-  if (theme !== 'flat') {
+  // A volcano island has none: its water would only boil away (see the lava
+  // pools below, and shared/room.js for water brought to it).
+  if (theme !== 'flat' && theme !== 'volcano') {
     const want = rng.int(1, 2) + more(1) - 1;
     for (let tries = 0; tries < more(200) && ponds.length < want; tries++) {
       const px = rng.int(24, W - 25);
@@ -138,7 +145,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
           top = theme === 'candy' ? B.CANDY_CANE : B.STONE;
           under = theme === 'candy' ? B.CHOCOLATE : B.STONE;
         }
-        if (h > sea + 18 + hash2(seed + 1, x, z) * 2) top = theme === 'candy' ? B.COTTON_CANDY : B.SNOW;
+        if (h > sea + 18 + hash2(seed + 1, x, z) * 2 && theme !== 'volcano') top = theme === 'candy' ? B.COTTON_CANDY : B.SNOW;
       }
       for (let y = 1; y <= h; y++) {
         let id = pal.deep;
@@ -147,7 +154,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
         if (h < sea - 1 && y === h && hash2(seed + 3, x, z) < 0.25) id = B.PEBBLES;
         world.set(x, y, z, id);
       }
-      for (let y = h + 1; y <= sea; y++) world.set(x, y, z, B.WATER);
+      // The sea round a volcano island is lava; every other island's is water.
+      const liquid = theme === 'volcano' ? B.LAVA : B.WATER;
+      for (let y = h + 1; y <= sea; y++) world.set(x, y, z, liquid);
     }
   }
 
@@ -178,10 +187,97 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   }
 
+  // ---------------------------------------------------------------- the volcano
+  // The volcano itself: a crater of lava in the mountain's summit, with a
+  // rim round it; and here and there at the mountain's foot, small lakes of
+  // lava. Where the lava is, nothing spawns and nobody starts: lavaSpots
+  // keeps its distance (see isLand below).
+  const lavaSpots = [];
+  if (theme === 'volcano') {
+    const vx = Math.round(mx);
+    const vz = Math.round(mz);
+    let peak = 0;
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) peak = Math.max(peak, hi(vx + dx, vz + dz));
+    const bowl = 4; // the lava lake's radius
+    const crest = 6; // how far the rim stands proud of the slope
+    const fade = 13; // beyond this, the mountain is as it was shaped
+    const rim = peak + 1; // the rim's lip
+    const lakeTop = rim - 3; // the lava's surface
+    for (let dx = -fade; dx <= fade; dx++) {
+      for (let dz = -fade; dz <= fade; dz++) {
+        const x = vx + dx;
+        const z = vz + dz;
+        if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) continue;
+        const d = Math.hypot(dx, dz);
+        if (d > fade) continue;
+        if (d <= bowl) {
+          // The bowl: a basalt floor, deeper in the middle, lava upon it.
+          const floor = lakeTop - 2 + Math.round((d / bowl) ** 2 * 1.5);
+          for (let y = Math.max(2, floor) + 1; y <= Math.min(H - 2, rim + 2); y++) world.set(x, y, z, B.AIR);
+          world.set(x, Math.max(2, floor), z, B.BASALT);
+          for (let y = Math.max(2, floor) + 1; y <= lakeTop; y++) world.set(x, y, z, B.LAVA);
+          heights[x * D + z] = Math.max(2, floor);
+        } else {
+          // The rim: the crest of the volcano, standing a little proud of
+          // the old summit and fading back into the mountain's own slope.
+          const was = hi(x, z);
+          const t = smoothstep(crest, fade, d);
+          const top = Math.min(H - 3, Math.round(rim + (was - rim) * t) + (d <= crest + 1 ? 1 : 0));
+          for (let y = Math.min(was, top) + 1; y <= Math.max(was, top); y++) world.set(x, y, z, y <= top ? (y >= top - 3 ? B.BASALT : pal.deep) : B.AIR);
+          world.set(x, top, z, B.BASALT);
+          heights[x * D + z] = top;
+        }
+      }
+    }
+    lavaSpots.push({ x: vx, z: vz, r: bowl + 3 });
+    // Small lakes of lava at the mountain's foot.
+    const wantPools = rng.int(1, 2) + more(1) - 1;
+    for (let tries = 0; tries < more(300) && lavaSpots.length < 1 + wantPools; tries++) {
+      const px = rng.int(20, W - 21);
+      const pz = rng.int(20, D - 21);
+      const h0 = hi(px, pz);
+      if (h0 < sea + 2 || h0 > sea + 8) continue;
+      if (Math.hypot(px - vx, pz - vz) < 26 || Math.hypot(px - cx, pz - cz) < 10) continue;
+      if (lavaSpots.some((s) => Math.hypot(s.x - px, s.z - pz) < s.r + 14)) continue;
+      const r = rng.range(2.4, 3.4);
+      const level = h0 - 1;
+      let fits = true;
+      for (let x = Math.floor(px - r) - 1; x <= Math.ceil(px + r) + 1 && fits; x++) {
+        for (let z = Math.floor(pz - r) - 1; z <= Math.ceil(pz + r) + 1 && fits; z++) {
+          const d = Math.hypot(x - px, z - pz);
+          if (d > r + 1.5) continue;
+          const h = hi(x, z);
+          if (Math.abs(h - h0) > 2) fits = false;
+        }
+      }
+      if (!fits) continue;
+      for (let x = Math.floor(px - r); x <= Math.ceil(px + r); x++) {
+        for (let z = Math.floor(pz - r); z <= Math.ceil(pz + r); z++) {
+          const d = Math.hypot(x - px, z - pz) / r;
+          if (d > 1) continue;
+          const floor = level - 1 - Math.round(1.4 * (1 - d * d));
+          for (let y = floor + 1; y <= Math.max(hi(x, z), level); y++) world.set(x, y, z, y <= level ? B.LAVA : B.AIR);
+          world.set(x, floor, z, B.BASALT);
+          heights[x * D + z] = floor;
+        }
+      }
+      // A rim round it, so the lava never stands beside thin air.
+      for (let x = Math.floor(px - r) - 1; x <= Math.ceil(px + r) + 1; x++) {
+        for (let z = Math.floor(pz - r) - 1; z <= Math.ceil(pz + r) + 1; z++) {
+          if (world.get(x, level, z) === B.LAVA) continue;
+          for (let y = hi(x, z) + 1; y <= level; y++) world.set(x, y, z, y === level ? B.BASALT : pal.under);
+          heights[x * D + z] = Math.max(hi(x, z), level);
+        }
+      }
+      lavaSpots.push({ x: px, z: pz, r: r + 3 });
+    }
+  }
+
   // ---------------------------------------------------------------- spawn
+  const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);
   const isLand = (x, z) => {
     const h = hi(x, z);
-    return h > sea && world.get(x, h, z) === pal.top && world.get(x, h + 1, z) === B.AIR;
+    return h > sea && world.get(x, h, z) === pal.top && world.get(x, h + 1, z) === B.AIR && !overLava(x, z);
   };
   const flatAround = (x, z, r) => {
     const h = hi(x, z);
@@ -211,7 +307,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   };
   const treeFits = (x, z, spacing) => isLand(x, z) && !nearSpawn(x, z, 8) && trees.every((t) => Math.hypot(t.x - x, t.z - z) >= spacing);
-  const treeCount = more(theme === 'flat' ? 8 : 70);
+  const treeCount = more(theme === 'flat' ? 8 : theme === 'volcano' ? 20 : 70);
   for (let tries = 0; tries < more(3000) && trees.length < treeCount; tries++) {
     const x = rng.int(3, W - 4);
     const z = rng.int(3, D - 4);
@@ -222,7 +318,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     const y = hi(x, z) + 1;
     const high = hi(x, z) > sea + 9;
     let cells;
-    if (theme === 'snowy') cells = pineTree(rng, true);
+    if (theme === 'volcano') cells = deadTree(rng);
+    else if (theme === 'snowy') cells = pineTree(rng, true);
     else if (theme === 'candy') cells = rng.chance(0.3) ? fruitTree(rng, fruit, rng.int(2, 4)) : candyTree(rng);
     else if (high || (theme === 'sunny' && forest > 0.35 && rng.chance(0.5))) cells = pineTree(rng, false);
     else if (rng.chance(0.3)) cells = fruitTree(rng, fruit, rng.int(2, 4));
@@ -230,7 +327,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     trees.at(-1).cells = placeTemplate(cells, x, y, z, 0);
     place(trees.at(-1).cells);
   }
-  // An orchard of the island's own fruit, not far from where everyone arrives.
+  // A little orchard of the island's own fruit by where everyone arrives —
+  // on a volcano island, the one grove the fire never reached.
   const orchardAngle = rng.next() * Math.PI * 2;
   let orchard = 0;
   for (let tries = 0; tries < 400 && orchard < 4; tries++) {
@@ -304,7 +402,16 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     return null;
   };
   const onLand = (x, z) => isLand(x, z) || (world.get(x, hi(x, z), z) === pal.top && B.KIND[world.get(x, hi(x, z) + 1, z)] === B.K_PLANT);
-  const counts = scaleCounts(theme === 'snowy' ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 } : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 4 }, world);
+  // A volcano island keeps a few hardy bunnies, chicks and sheep; nothing
+  // flies in the smoke but the odd bird, and nothing lives in the lava sea.
+  const counts = scaleCounts(
+    theme === 'snowy'
+      ? { bunny: 5, sheep: 4, chick: 2, duck: 2, butterfly: 0 }
+      : theme === 'volcano'
+        ? { bunny: 2, sheep: 2, chick: 2 }
+        : { bunny: 4, chick: 4, sheep: 3, duck: 3, butterfly: 4 },
+    world,
+  );
   for (const [type, n] of Object.entries(counts)) {
     for (let i = 0; i < n; i++) {
       let s;
@@ -318,6 +425,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   }
   critters.push(...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng), ...placeBig(world, rng));
+  // The one dragon, asleep on the volcano (critters.js).
+  if (theme === 'volcano') critters.push(...placeDragon(world, rng, mountains[0]));
 
   // ---------------------------------------------------------------- jewels and mines
   // Last, from randomness of their own, so the rest of the island comes out
@@ -372,15 +481,28 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
 // ---------------------------------------------------------------- jewels
 
+// A tree the volcano burnt long ago: a bare trunk with a branch or two, and
+// nothing growing on it.
+function deadTree(rng) {
+  const h = rng.int(3, 5);
+  const cells = [];
+  for (let i = 0; i < h; i++) cells.push([0, i, 0, B.WOOD]);
+  if (rng.chance(0.6)) cells.push([1, h - 2, 0, B.WOOD]);
+  if (rng.chance(0.6)) cells.push([-1, h - 3, 0, B.WOOD]);
+  return cells;
+}
+
 // Which jewel a gem rock holds: diamonds are the rarest.
 function gemRock(r) {
   return r < 0.22 ? B.GEM_ROCKS[0] : r < 0.44 ? B.GEM_ROCKS[1] : r < 0.66 ? B.GEM_ROCKS[2] : r < 0.88 ? B.GEM_ROCKS[3] : B.DIAMOND_ROCK;
 }
 
-// The rock deep down that jewels hide in: stone, or chocolate on a candy island.
+// The rock deep down that jewels hide in: stone, or chocolate on a candy
+// island, or the basalt of a volcano.
 const DEEP = new Uint8Array(256);
 DEEP[B.STONE] = 1;
 DEEP[B.CHOCOLATE] = 1;
+DEEP[B.BASALT] = 1;
 const ROCKY = new Uint8Array(256);
 for (let id = 0; id < 256; id++) if (B.TERRAIN[id]) ROCKY[id] = 1;
 ROCKY[B.MAGIC_FLOOR] = 1;

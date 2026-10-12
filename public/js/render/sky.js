@@ -41,6 +41,7 @@ function skyAt(time, top, horizon) {
 const GRAY_DAY = new THREE.Color('#9fb0c4');
 const GRAY_NIGHT = new THREE.Color('#1c2236');
 const CANDY_TINT = new THREE.Color('#ffb3d9');
+const VOLCANO_TINT = new THREE.Color('#ff8a5c');
 
 // Everything the scene's lighting needs for a moment of the day.
 export function environment(time, weather, theme, out = {}) {
@@ -55,6 +56,11 @@ export function environment(time, weather, theme, out = {}) {
     horizon.lerp(tmpA, gloom * 0.8);
   }
   if (theme === 'candy') horizon.lerp(CANDY_TINT, 0.25 * day);
+  // Over a volcano island the sky smoulders, warmest at the horizon.
+  if (theme === 'volcano') {
+    horizon.lerp(VOLCANO_TINT, 0.22 + 0.18 * day);
+    top.lerp(VOLCANO_TINT, 0.1 * day);
+  }
   const sunAngle = (time - 0.25) * Math.PI * 2;
   out.sunDir = (out.sunDir ?? new THREE.Vector3()).set(Math.cos(sunAngle), Math.sin(sunAngle), 0.32).normalize();
   out.moonDir = (out.moonDir ?? new THREE.Vector3()).copy(out.sunDir).multiplyScalar(-1);

@@ -681,6 +681,12 @@ export class Room {
       }
       case 'invite': {
         if (!CRITTER_INFO[msg.type] || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // A wild friend (the dragon) is its island's own: there is only the
+        // one, on the volcano island it was born on.
+        if (CRITTER_INFO[msg.type].wild) {
+          this.notice(conn, 'The dragon is the volcano island’s own — there is only one, and it stays there!', 'info');
+          return;
+        }
         // The shared isle's toy box stays shut: nothing is brought to it,
         // animal or vehicle — it has everything it means to have.
         if (this.shared) {
@@ -723,6 +729,11 @@ export class Room {
         const riding = this.critters.get(msg.id);
         if (riding?.rider || riding?.passengers?.some(Boolean)) {
           this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
+          return;
+        }
+        // The dragon stays: the volcano island would not be itself without it.
+        if (CRITTER_INFO[riding?.type]?.wild) {
+          this.notice(conn, `${riding.name} the dragon is the island’s own — they stay!`, 'info');
           return;
         }
         const c = this.critters.remove(msg.id);
