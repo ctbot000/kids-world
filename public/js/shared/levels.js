@@ -72,12 +72,13 @@ export const STICKER_XP = 25;
 
 export const MAX_LEVEL = 99;
 
-// XP to go from a level to the next: a little more each time (100, 200,
-// 300, ...), so the first levels come quickly and later ones mean a lot.
-export const xpToNext = (level) => 100 * level;
+// XP to go from a level to the next: 100 for the first, and more each time
+// — and more of a stretch the higher you go (100, 220, 360, 520, 700, ...),
+// so the first levels come quickly and the high ones mean a lot of playing.
+export const xpToNext = (level) => 100 * level + 10 * level * (level - 1);
 
-// The XP it takes to reach a level from nothing.
-export const xpForLevel = (level) => 50 * level * (level - 1);
+// The XP it takes to reach a level from nothing: all the steps up to it.
+export const xpForLevel = (level) => (10 * level * (level - 1) * (level + 13)) / 3;
 
 // More than anyone does of one thing: a count above it is taken as this.
 const MOST = 10_000_000;
@@ -94,11 +95,12 @@ export function xpOf(stats, stickers) {
   return Math.floor(xp);
 }
 
-// The level for an amount of XP: 1 to start with.
+// The level for an amount of XP: 1 to start with. Level by level, there
+// being no tidy way to turn the sum of the steps back the other way.
 export function levelFor(xp) {
-  // xpForLevel(l) <= xp, solved for l.
-  const level = Math.floor((1 + Math.sqrt(1 + (Number.isFinite(xp) && xp > 0 ? xp : 0) / 12.5)) / 2);
-  return Math.max(1, Math.min(MAX_LEVEL, level));
+  let level = 1;
+  while (level < MAX_LEVEL && xp >= xpForLevel(level + 1)) level++;
+  return level;
 }
 
 // Where you are: { xp, level, into: XP into this level, need: XP this level

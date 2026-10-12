@@ -3301,7 +3301,7 @@ test('the same login on two devices is on the shared isle once, the one in last'
 test('on the shared isle, your XP, level and what you do are the isle’s own, apart from everywhere else', { skip }, async () => {
   const page = await openPlayer(base, { name: 'Brave Fox', stats: { steps: 50000 } });
   try {
-    assert.equal(await page.evaluate(() => window.kidsWorld.profile.progress.level), 7, 'a past on other islands');
+    assert.equal(await page.evaluate(() => window.kidsWorld.profile.progress.level), 6, 'a past on other islands');
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await inGame(page);
@@ -3330,7 +3330,7 @@ test('on the shared isle, your XP, level and what you do are the isle’s own, a
     assert.equal(await page.$eval('#btn-level', (el) => el.textContent), '⭐ Level 1');
     assert.equal(await page.$eval('#btn-new', (el) => el.hidden), true, 'no islands to make on the isle’s side');
     await clickButton(page, '🧱 Build');
-    await until(page, () => document.getElementById('btn-level').textContent === '⭐ Level 7');
+    await until(page, () => document.getElementById('btn-level').textContent === '⭐ Level 6');
     assert.equal(await page.$eval('#btn-isle', (el) => el.hidden), true, 'the isle is on its own side');
     assert.equal(await page.$eval('#btn-new', (el) => el.hidden), false);
     assert.deepEqual(pageErrors, []);

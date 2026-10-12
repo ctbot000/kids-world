@@ -46,7 +46,7 @@ test('each level takes more XP than the last, from level 1 to the top', () => {
 
 test('progress says how far into the level you are, and nothing more to go at the top', () => {
   const p = progressOf({ placed: 150 }, {});
-  assert.deepEqual(p, { xp: 150, level: 2, into: 50, need: 200 });
+  assert.deepEqual(p, { xp: 150, level: 2, into: 50, need: 220 });
   assert.deepEqual(progressOf({ kings: 1e6 }, {}), { xp: 2e8, level: MAX_LEVEL, into: 0, need: 0 });
 });
 
