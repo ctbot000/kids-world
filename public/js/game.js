@@ -951,6 +951,10 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
+    if (msg.lava && !this.toldLava) {
+      this.toldLava = true;
+      this.emit('toast', { icon: '🔥', text: 'Hot, hot, hot! Get out of the lava — it burns a lot!' });
+    }
     this.setHp(msg);
     this.sound.play('bump');
     const b = this.me?.body;
@@ -3140,8 +3144,9 @@ export class Game extends EventTarget {
       this.sound.play('splash');
       fxs.splash(b.x, b.y + 0.8, b.z);
     }
-    if (b.inWater && !this.wasInWater) this.profile.count('swims');
-    this.wasInWater = b.inWater;
+    // A swim in the lava counts too, bold swimmer (it burns: room.js).
+    if ((b.inWater || b.inLava) && !this.wasInWater) this.profile.count('swims');
+    this.wasInWater = b.inWater || b.inLava;
     if (b.onGround && speed > 0.5) {
       this.stepAcc += speed * dt;
       if (this.stepAcc > 1.1) {

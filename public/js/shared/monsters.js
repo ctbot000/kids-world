@@ -63,6 +63,11 @@ export const HP_BACK_MS = 6000;
 export const HP_BACK = 20;
 // After a bump, a moment when nothing can bump you again.
 export const SAFE_MS = 1600;
+// Standing in lava takes this many bumps' worth of HP off (twice a monster
+// bump's 20: much more than any of them), again and again while you stay in
+// it, each hit as far apart apart as a bump — get out of the lava!
+// (shared/room.js does the taking.)
+export const LAVA_BUMPS = 2;
 // How far round the island's start a monster never goes.
 export const SAFE_RADIUS = 9;
 // How many there are for each player on the island, by day and at night,

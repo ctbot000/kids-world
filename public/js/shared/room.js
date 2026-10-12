@@ -23,7 +23,7 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { hpAfterBump, hpBack, kindOf, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanPiece } from './song.js';
 import { weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -53,6 +53,10 @@ const LAND_POWER = 3;
 const ENV_MS = 5000;
 const GROW_MS = [45000, 80000];
 const REGROW_MS = [120000, 200000];
+// On a volcano island, ice melts into water after this long, and water
+// boils away after this (a little sparkle and it is gone, stepMelts).
+const MELT_MS = [5000, 9000];
+const BOIL_MS = [7000, 13000];
 const SHELL_MS = 60000;
 const STAR_MS = 25000;
 const MAX_SHELLS = 16;
@@ -182,6 +186,11 @@ export class Room {
     const w = this.world;
     this.counts = { shells: 0, stars: 0 };
     this.growth.clear();
+    // On a volcano island, water brought to it boils away and ice melts into
+    // water that boils away in turn (stepMelts, each tick): what the heat
+    // has left to do, by the cell it will do it to.
+    this.melts = new Map();
+    const volcano = w.theme === 'volcano';
     for (let x = 0; x < w.W; x++) {
       for (let z = 0; z < w.D; z++) {
         for (let y = 1; y < w.H; y++) {
@@ -190,6 +199,8 @@ export class Room {
           if (id === B.SHELL) this.counts.shells++;
           else if (id === B.STAR_PIECE) this.counts.stars++;
           else if (B.block(id).grows) this.growth.set(w.index(x, y, z), this.now() + this.between(GROW_MS));
+          else if (volcano && id === B.WATER) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
+          else if (volcano && id === B.ICE) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(MELT_MS), to: B.WATER });
         }
       }
     }
@@ -206,6 +217,12 @@ export class Room {
       if (B.FRUIT_ITEMS.includes(after)) this.regrow.delete(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
+      // Water or ice put down on a volcano island is not there to stay.
+      if (volcano) {
+        if (after === B.WATER) this.melts.set(k, { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
+        else if (after === B.ICE) this.melts.set(k, { x, y, z, at: this.now() + this.between(MELT_MS), to: B.WATER });
+        else this.melts.delete(k);
+      }
     };
   }
 
@@ -965,6 +982,11 @@ export class Room {
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.keepApart(where);
+    // The volcano's own dangers and chores: lava burns whoever stands in it,
+    // water boils away and ice melts, and HP comes back whatever took it.
+    this.stepLava(now);
+    this.stepMelts(now);
+    this.healUp(now);
     // The games at the arcade machines, as they go.
     if (this.arcade.sessions.size) {
       for (const fx of this.arcade.step(now)) this.broadcast({ t: 'arcfx', ...fx });
@@ -1042,36 +1064,34 @@ export class Room {
         this.hurt(p.id, s.monster, now, true);
       }
     }
-    for (const p of this.players.values()) {
-      if (!p.online) continue;
-      // HP comes back while nothing bumps you.
-      if (p.hp >= p.maxHp || p.dizzyUntil) continue;
-      const hp = hpBack(p.hp, p.maxHp, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
-      if (hp === p.hp) continue;
-      p.hp = hp;
-      p.healAt = now;
-      this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
-    }
   }
 
   // A monster bumped into someone (stomp: King Grumble's landing knocked
-  // them over): some HP gone. With none left, they sit dizzy where they are
-  // on an adventure island while a friend there could come and help them up;
-  // otherwise back they go to the nearest safe place, with all their HP again.
+  // them over): some HP gone, and all that follows (see knock).
   hurt(pid, monster, now, stomp = false) {
     const p = this.players.get(pid);
     if (!p) return;
-    p.hp = hpAfterBump(p.hp, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump);
-    p.bumpAt = now;
-    p.healAt = now;
-    p.safeUntil = now + SAFE_MS;
     const b = monster.body;
-    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2), ...this.hpOf(p), home: false };
+    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2) };
     if (monster.kind === 'king' || monster.kind === 'big') msg.big = true;
     if (monster.kind === 'spiky') msg.spiky = true;
     if (stomp) msg.stomp = true;
+    this.knock(p, now, hpAfterBump(p.hp, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump), msg);
+  }
+
+  // HP off someone, by whatever took it — a monster's bump, King Grumble's
+  // stomp, the lava — with the safe moment after, and with none left, they
+  // sit dizzy where they are on an adventure island while a friend there
+  // could come and help them up; otherwise back they go to the nearest safe
+  // place, with all their HP again. The message says what happened.
+  knock(p, now, hp, msg) {
+    p.hp = hp;
+    p.bumpAt = now;
+    p.healAt = now;
+    p.safeUntil = now + SAFE_MS;
+    Object.assign(msg, this.hpOf(p), { home: false });
     if (p.hp === 0) {
-      if (this.adventure && this.helperFor(pid, now)) {
+      if (this.adventure && this.helperFor(p.id, now)) {
         p.dizzyUntil = now + DIZZY_MS;
         msg.dizzy = true;
       } else {
@@ -1080,6 +1100,55 @@ export class Room {
       }
     }
     this.broadcast(msg);
+  }
+
+  // Lava burns: standing in it takes twice a monster bump's HP off, again
+  // and again while you stay in it, each hit as far apart as a bump. Riding
+  // anything — the dragon, say — you are up out of it and safe.
+  stepLava(now) {
+    if (this.world.theme !== 'volcano') return;
+    const riding = this.critters.aboard();
+    for (const p of this.players.values()) {
+      if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
+      const s = p.s;
+      if (this.world.get(Math.floor(s[0]), Math.floor(s[1] + 0.5), Math.floor(s[2])) !== B.LAVA) continue;
+      this.knock(p, now, hpAfterBump(p.hp, LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });
+    }
+  }
+
+  // Water boils away on a volcano island, and ice melts into water that
+  // boils away in turn (see hookWorld for what is queued, and when): a
+  // little at a time, as one edit everyone sees, so no one cell pops on its
+  // own. What somebody has changed by hand since is left alone.
+  stepMelts(now) {
+    if (!this.melts.size) return;
+    const cells = [];
+    for (const [k, m] of this.melts) {
+      if (m.at > now) continue;
+      this.melts.delete(k);
+      const id = this.world.get(m.x, m.y, m.z);
+      if (id !== (m.to === B.WATER ? B.ICE : B.WATER)) continue;
+      this.world.set(m.x, m.y, m.z, m.to);
+      cells.push(m.x, m.y, m.z, m.to);
+    }
+    if (cells.length) {
+      this.broadcast({ t: 'edit', by: 0, kind: 'nature', cells });
+      this.changed();
+    }
+  }
+
+  // HP comes back by itself, whatever took it: 20 every six seconds that
+  // nothing has, for everyone in, sent to them alone.
+  healUp(now) {
+    for (const p of this.players.values()) {
+      if (!p.online) continue;
+      if (p.hp >= p.maxHp || p.dizzyUntil) continue;
+      const hp = hpBack(p.hp, p.maxHp, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
+      if (hp === p.hp) continue;
+      p.hp = hp;
+      p.healAt = now;
+      this.sendToPid(p.id, { t: 'hp', ...this.hpOf(p) });
+    }
   }
 
   // Whether anyone else on the island could help someone up (nobody dizzy too).
