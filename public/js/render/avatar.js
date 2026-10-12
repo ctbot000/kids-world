@@ -85,6 +85,20 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // The Lava Blade: drawn up high behind, both hands on it, then a great
+  // diagonal cut down across, the whole body winding into it — slower than
+  // the sword and heavier, and it lands like it.
+  lavablade: {
+    secs: 0.52,
+    strike: 0.5,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.32, w: 1, wL: 1, fwd: -2.7, raise: 0.9, elbow: 0.55, wrist: -0.35, fwdL: -2.55, raiseL: 0.8, elbowL: 0.6, twist: 0.5, lean: -0.09, nod: -0.14 },
+      { at: 0.5, w: 1, wL: 1, fwd: -0.95, raise: -0.4, elbow: 0.1, wrist: 1.15, fwdL: -0.85, raiseL: -0.5, elbowL: 0.15, twist: -0.5, lean: 0.2, step: 0.4, dip: -0.05, nod: 0.12 },
+      { at: 0.66, w: 1, wL: 1, fwd: -0.75, raise: -0.48, elbow: 0.16, wrist: 1.05, fwdL: -0.7, raiseL: -0.55, elbowL: 0.2, twist: -0.54, lean: 0.18, step: 0.4, dip: -0.05, nod: 0.1 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
 };
 const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL', 'twist', 'lean', 'nod', 'dip', 'step'];
 // What a key says of one of them: an arm angle a key leaves out is the next
@@ -1279,6 +1293,20 @@ export function weapon(kind) {
       star.rotation.x = Math.PI / 2;
       head.add(star);
       g.add(head);
+      break;
+    }
+    case 'lavablade': {
+      // A chunky toy cleaver of glowing lava: a warm handle, a guard of
+      // dark rock, and a blade that shines bright orange like it just came
+      // out of the crater, with a drip at its tip.
+      g.add(
+        mesh(cylinder(0.03, 0.03, 0.15, 10), toon('#5a4636'), 0, 0.02, 0),
+        mesh(sphere(), toon('#ffd97a'), 0, -0.055, 0, 0.032),
+        mesh(capsule(0.05, 0.05), toon('#4a4652'), 0, 0.105, 0, 1, 0.55, 1.3),
+        mesh(capsule(0.052, 0.46), toon('#ff8c2e', { emissive: 0.45 }), 0, 0.4, 0, 1, 1, 0.42),
+        mesh(capsule(0.03, 0.3), toon('#ffd23f', { emissive: 0.6 }), 0, 0.5, 0.018, 1, 1, 0.2),
+        mesh(sphere(), toon('#ffd97a', { emissive: 0.7 }), 0, 0.65, 0, 0.026),
+      );
       break;
     }
     default:

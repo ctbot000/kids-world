@@ -1091,6 +1091,19 @@ export class Game extends EventTarget {
     return true;
   }
 
+  // The next of your toy weapons into your hand (N, or the button by the
+  // bop button): whichever of those you own you like, kept for every island.
+  // Says whether it changed (with one weapon or none, there is nothing to
+  // change, and the shop is where weapons come from).
+  cycleWeapon() {
+    if (!this.world || !this.profile) return false;
+    const weapon = this.profile.nextWeapon();
+    if (!weapon) return false;
+    this.sound.play('ui');
+    this.emit('toast', { icon: weapon.icon, text: `${weapon.name} in hand!` });
+    return true;
+  }
+
   // Whether the 👊 button can swing now: the last swing over, and this one
   // landing well over HIT_MS after the last bop went (the host takes one a
   // moment from each friend, and a bop that goes late, or comes quicker over

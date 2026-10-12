@@ -9,7 +9,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { GEAR, levelDoes, nextLevel, POTION, sellPrice, wearing, wornWeapon } from './shared/shop.js';
+import { GEAR, levelDoes, nextLevel, POTION, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1327,6 +1327,21 @@ export class UI {
                     ? button(`${owned ? 'Upgrade to' : 'Buy'} ${next.icon} ${next.name} (🪙 ${next.price})`, buy, p.data.coins < next.price)
                     : h('span', { class: 'muted' }, '🏅 The best there is!'),
                 ),
+                // Any of the weapons you own can be the one in your hand:
+                // carry whichever you like, and flip through them on the
+                // island with N (or the button by the bop button).
+                g.key === 'weapon' && level > 1
+                  ? h(
+                      'div',
+                      { class: 'shop-buttons' },
+                      ...WEAPONS.slice(0, level).map((w, i) =>
+                        button(`${w.icon} ${w.name}${wornWeapon(p.data.gear)?.key === w.key ? ' ✅' : ''}`, () => {
+                          p.pickWeapon(i + 1);
+                          this.sound.play('ui');
+                        }),
+                      ),
+                    )
+                  : null,
                 next && p.data.coins < next.price ? h('span', { class: 'muted' }, `${next.price - p.data.coins} more coins to go!`) : null,
               );
             }),
@@ -1742,7 +1757,7 @@ export class UI {
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it, face it and press ', h('kbd', {}, 'X'), ' or the 👊 button to bop it. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
@@ -2394,6 +2409,13 @@ export class UI {
       e.preventDefault();
       this.sound.unlock();
       game.attack();
+    };
+    // The weapon button, by it: the next of your toy weapons into your hand.
+    $('btn-weapon').onmousedown = (e) => e.preventDefault();
+    $('btn-weapon').onclick = () => {
+      $('btn-weapon').blur();
+      this.sound.unlock();
+      game.cycleWeapon();
     };
     // The potion button, like the ride button, never keeping the focus,
     // where Space (to jump) would press it again.
@@ -4052,7 +4074,8 @@ export class UI {
 
   // Name tags and speech bubbles follow everyone around; the maps keep up.
   // The bop button, on touch screens while a monster is about, showing the
-  // toy weapon in your hand (or a fist).
+  // toy weapon in your hand (or a fist) — and beside it, with two or more
+  // weapons to carry, the button that flips through them.
   attackButton() {
     const g = this.game;
     const me = g.me?.body;
@@ -4061,6 +4084,10 @@ export class UI {
     if (el.hidden === near) el.hidden = !near;
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;
+    const swap = $('btn-weapon');
+    const weapons = this.profile.data.gear.weapon >= 2;
+    if (swap.hidden === weapons) swap.hidden = !weapons;
+    if (weapons && swap.textContent !== icon) swap.textContent = icon;
   }
 
   frame(dt) {

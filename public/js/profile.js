@@ -9,7 +9,7 @@
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale } from './shared/shop.js';
+import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, WEAPONS, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -143,6 +143,8 @@ export class Profile extends EventTarget {
     this.data.coins -= next.price;
     this.data.gear[kind] = next.level;
     delete this.data.gear.off[kind];
+    // A new weapon goes straight into your hand (choose another any time).
+    if (kind === 'weapon') this.data.gear.pick.weapon = next.level;
     this.shopped();
     return true;
   }
@@ -171,6 +173,28 @@ export class Profile extends EventTarget {
     if (on) delete this.data.gear.off[kind];
     else this.data.gear.off[kind] = true;
     this.shopped();
+  }
+
+  // Which of the weapons you own is in your hand (level: 1 for the first,
+  // the Foam Sword). Any you like — a long reach or a hard hit — and friends
+  // see it in your hand at once. Returns the weapon, or null.
+  pickWeapon(level) {
+    if (!Number.isInteger(level) || level < 1 || level > this.data.gear.weapon) return null;
+    this.data.gear.pick.weapon = level;
+    delete this.data.gear.off.weapon;
+    this.shopped();
+    return WEAPONS[level - 1];
+  }
+
+  // The next of your weapons round: for the button by the bop button (and
+  // its key, N), flipping through them as it is pressed. With one taken off
+  // in the shop, it is that one back into your hand.
+  nextWeapon() {
+    const have = this.data.gear.weapon;
+    if (have < 2) return null;
+    const worn = wornWeapon(this.data.gear);
+    if (!worn) return this.pickWeapon(this.data.gear.pick.weapon || have);
+    return this.pickWeapon((WEAPONS.indexOf(worn) + 1) % have + 1);
   }
 
   shopped() {

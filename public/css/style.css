@@ -966,6 +966,30 @@ body.fullscreen .full-icon .leave {
     '. fly jump';
 }
 
+/* The weapon button, beside whichever of them is there: left of the bop
+   button with a monster about, left of the rest without one. It is only
+   shown with two or more weapons to flip through (ui.js). */
+#touch-buttons:has(> #btn-weapon:not([hidden])) {
+  grid-template-areas:
+    'weapon down jump'
+    '. fly jump';
+}
+
+#touch-buttons:has(> #btn-weapon:not([hidden])):has(> #btn-attack:not([hidden])) {
+  grid-template-areas:
+    'weapon down jump'
+    'attack fly jump';
+}
+
+#btn-weapon {
+  grid-area: weapon;
+}
+
+#btn-weapon[hidden],
+#btn-attack[hidden] {
+  display: none;
+}
+
 #btn-down {
   grid-area: down;
 }
@@ -997,10 +1021,6 @@ body.touch #touch-buttons {
   height: 78px;
   font-size: 2rem;
   grid-area: jump;
-}
-
-.round.touch.attack[hidden] {
-  display: none;
 }
 
 /* On the shared isle (Adventure Isle) nobody builds and nobody flies on
@@ -2992,9 +3012,11 @@ kbd {
     max-width: calc(100vw - 340px);
   }
 
-  /* With the bop button showing too, left of the touch buttons, it keeps as
-     much further from the right, and moves over that way to make room. */
-  body.touch:has(#btn-attack:not([hidden])) #bottom {
+  /* With the bop button showing too (or the weapon button in its place),
+     left of the touch buttons, it keeps as much further from the right, and
+     moves over that way to make room. */
+  body.touch:has(#btn-attack:not([hidden])) #bottom,
+  body.touch:has(#btn-weapon:not([hidden])) #bottom {
     left: calc(50% - (var(--touch) + 10px) / 2);
     max-width: calc(100vw - 350px - var(--touch));
   }
@@ -3006,8 +3028,10 @@ kbd {
     margin-left: auto;
   }
 
-  /* And clear of the bop button, left of the others, while it shows. */
-  body.touch:has(#btn-attack:not([hidden])) .chatlog {
+  /* And clear of the bop button (or the weapon button in its place), left
+     of the others, while it shows. */
+  body.touch:has(#btn-attack:not([hidden])) .chatlog,
+  body.touch:has(#btn-weapon:not([hidden])) .chatlog {
     right: calc(max(14px, env(safe-area-inset-right)) + 2 * var(--touch) + 108px);
   }
 }
@@ -3140,10 +3164,12 @@ kbd {
     padding: 5px 4px;
   }
 
-  /* No room beside the touch buttons for the bop button, left of them, where
-     the thumbstick is: it goes over the jump button instead, in the room under
-     the talk buttons. */
-  #touch-buttons:has(> #btn-attack:not([hidden])) {
+  /* No room beside the touch buttons for the bop button (or the weapon
+     button), left of them, where the thumbstick is: the bop button goes
+     over the jump button instead, in the room under the talk buttons, and
+     the weapon button goes just above it. */
+  #touch-buttons:has(> #btn-attack:not([hidden])),
+  #touch-buttons:has(> #btn-weapon:not([hidden])) {
     grid-template-areas:
       'down jump'
       'fly jump';
@@ -3153,6 +3179,12 @@ kbd {
     position: absolute;
     right: calc((78px - var(--touch)) / 2);
     bottom: 88px;
+  }
+
+  #btn-weapon {
+    position: absolute;
+    right: calc((78px - var(--touch)) / 2);
+    bottom: calc(88px + var(--touch) + 10px);
   }
 }
 

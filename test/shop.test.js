@@ -65,9 +65,14 @@ test('each level of gear costs more and makes you faster than the one before', (
 });
 
 test('gear and coins are tidied: no levels that do not exist, no made-up kinds, no silly sums', () => {
-  assert.deepEqual(cleanGear(null), { off: {}, shoes: 0, wings: 0, weapon: 0 });
-  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, shoes: GEAR[0].levels.length, wings: 0, weapon: 0 });
-  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, shoes: 0, wings: 0, weapon: 0 });
+  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0 });
+  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, weapon: 0 });
+  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0 });
+  // A chosen weapon is kept, and only one of those owned: anything else
+  // falls back to the best (wornWeapon).
+  assert.equal(cleanGear({ weapon: 2, pick: { weapon: 1 } }).pick.weapon, 1);
+  assert.equal(cleanGear({ weapon: 2, pick: { weapon: 3 } }).pick.weapon, 0, 'not one of yours');
+  assert.equal(cleanGear({ weapon: 2, pick: { weapon: 'sword' } }).pick.weapon, 0);
   assert.equal(cleanCoins(-4), 0);
   assert.equal(cleanCoins(2.5), 0);
   assert.equal(cleanCoins('12'), 0);
@@ -163,7 +168,7 @@ test('coins and gear are kept at the keeper, from the device that changed them l
   const theirs = { name: 'Sunny Otter', coins: 3, gear: { shoes: 2, wings: 1, off: { wings: true } }, changedAt: 200 };
   const kept = keptProfile({ ...theirs, coins: 1e12 });
   assert.equal(kept.coins, COINS_MAX);
-  assert.deepEqual(kept.gear, { off: { wings: true }, shoes: 2, wings: 1, weapon: 0 });
+  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, weapon: 0 });
   const merged = mergeProfiles(mine, theirs);
   assert.equal(merged.coins, 3);
   assert.equal(merged.gear.shoes, 2);
@@ -178,10 +183,12 @@ test('a toy weapon is in the look the island sees while you have it on, and only
   const look = { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' };
   assert.equal(lookWithGear(look, { weapon: 0, off: {} }).weapon, undefined);
   assert.equal(lookWithGear(look, { weapon: 3, off: {} }).weapon, 'hammer');
+  assert.equal(lookWithGear(look, { weapon: 4, off: {} }).weapon, 'lavablade', 'the best there is');
   assert.equal(lookWithGear({ ...look, weapon: 'hammer' }, { weapon: 3, off: { weapon: true } }).weapon, undefined, 'taken off');
   assert.equal(wornWeapon({ weapon: 1, off: {} }).key, 'sword');
   assert.equal(wornWeapon({ weapon: 0, off: {} }), null);
   assert.equal(cleanLook({ ...look, weapon: 'blaster' }).weapon, 'blaster');
+  assert.equal(cleanLook({ ...look, weapon: 'lavablade' }).weapon, 'lavablade');
   assert.equal(cleanLook({ ...look, weapon: 'cannon' }).weapon, undefined);
   for (let i = 1; i < WEAPONS.length; i++) {
     assert.ok(WEAPONS[i].power >= WEAPONS[i - 1].power && WEAPONS[i].king >= WEAPONS[i - 1].king);
@@ -189,6 +196,51 @@ test('a toy weapon is in the look the island sees while you have it on, and only
   }
   // Each reaches further than an arm, and none far: no bopping from across the meadow.
   for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 5, `${w.name} reaches ${w.reach}`);
+});
+
+test('any of the weapons you own can be the one in your hand: the one you pick, or the best', () => {
+  // Picked: that one, whatever the best you have.
+  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1 }, off: {} }).key, 'sword');
+  assert.equal(wornWeapon({ weapon: 4, pick: { weapon: 2 }, off: {} }).key, 'blaster');
+  assert.equal(lookWithGear({ animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' }, { weapon: 4, pick: { weapon: 1 }, off: {} }).weapon, 'sword');
+  // No pick (or one not yours, or silly): the best you have.
+  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 4 }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1.5 }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 3, pick: {}, off: {} }).key, 'hammer');
+  // Taken off: none at all, picked or not.
+  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1 }, off: { weapon: true } }), null);
+});
+
+test('buying a weapon puts it in your hand, and you can carry any of yours: the shop, or N to flip through them', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const p = new Profile();
+    assert.equal(p.nextWeapon(), null, 'nothing to flip through');
+    assert.equal(p.pickWeapon(1), null, 'nothing to pick either');
+    p.earn(1000);
+    for (const key of ['sword', 'blaster', 'hammer', 'lavablade']) {
+      assert.equal(p.buy('weapon'), true);
+      // Each new one goes straight into your hand.
+      assert.equal(wornWeapon(p.data.gear).key, key);
+    }
+    assert.equal(p.nextWeapon().key, 'sword', 'round to the first');
+    assert.equal(p.nextWeapon().key, 'blaster');
+    assert.equal(p.pickWeapon(4).key, 'lavablade');
+    assert.equal(p.pickWeapon(5), null, 'not one of yours');
+    assert.equal(p.pickWeapon(0), null);
+    assert.equal(wornWeapon(p.data.gear).key, 'lavablade', 'the pick stays');
+    p.wear('weapon', false);
+    assert.equal(wornWeapon(p.data.gear), null, 'off is off, picked or not');
+    assert.equal(p.nextWeapon().key, 'lavablade', 'flipping puts it back on');
+    // Kept on this device.
+    const again = new Profile();
+    assert.equal(again.data.gear.pick.weapon, 4);
+    assert.equal(wornWeapon(again.data.gear).key, 'lavablade');
+  } finally {
+    delete globalThis.localStorage;
+  }
 });
 
 // A flat meadow room with monsters on, and a player in it holding weapon.
@@ -240,6 +292,10 @@ test('a toy weapon pops a blob in fewer bops, and only from as far as it reaches
   const hammer = meadowRoom('hammer');
   assert.equal(hammer.taps(2), 1);
   assert.equal(hammer.taps(edge('hammer') + 0.1), Infinity, 'a hammer is swung up close');
+  const lavablade = meadowRoom('lavablade');
+  assert.equal(lavablade.taps(2), 1, 'a Lava Blade pops in one');
+  assert.equal(lavablade.taps(edge('lavablade') - 0.1), 1, 'from a step away');
+  assert.equal(lavablade.taps(edge('lavablade') + 0.1), Infinity);
   assert.equal(meadowRoom('cannon').taps(2), BLOB_HEARTS, 'no made-up weapons');
 });
 
@@ -250,7 +306,9 @@ test('King Grumble feels a Star Hammer\'s bop twice, and three times over when d
   const b = king();
   assert.equal(AdventureSim.prototype.hitKing.call(b, 1, 0, false, weaponOf('sword').king).hearts, 29);
   const c = king();
-  assert.equal(AdventureSim.prototype.hitKing.call(c, 1, 0, true, 2).hearts, 24);
+  assert.equal(AdventureSim.prototype.hitKing.call(c, 1, 0, false, weaponOf('lavablade').king).hearts, 27, 'a Lava Blade thrice over');
+  const d = king();
+  assert.equal(AdventureSim.prototype.hitKing.call(d, 1, 0, true, 2).hearts, 24);
 });
 
 test('every toy weapon is drawn in the hand, and a swing moves the arm', () => {

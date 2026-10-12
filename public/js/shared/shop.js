@@ -2,9 +2,10 @@
 // gear: running shoes for your feet (walking, running and swimming), flying
 // gear for the sky, and toy weapons for popping monsters. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
-// wear the best you have, and can take it off. HP potions are used up when
-// you drink them. Coins, potions and gear are yours, kept with your basket
-// (profile.js) and at the keeper (keeper.js).
+// wear the best you have (the weapon you pick of them), and can take it
+// off. HP potions are used up when you drink them. Coins, potions and gear
+// are yours, kept with your basket (profile.js) and at the keeper
+// (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 
 export const COINS_MAX = 99999;
@@ -57,11 +58,14 @@ export const GEAR = [
     about: 'Pop monsters with fewer bops, from a little further away.',
     // power: the hearts a bop takes; reach: how much further than an arm it
     // reaches (monsters.js ARM_REACH); king: how many times over King
-    // Grumble feels a bop.
+    // Grumble feels a bop. Any you have can be the one in your hand — carry
+    // whichever you like (profile.js pickWeapon, ui.js): a long reach or a
+    // hard hit, by what you are popping.
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, does: 'Two bubbles pop a monster, a few steps in front of you.' },
       { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, does: 'One bop pops a monster right in front of you, and King Grumble feels every bop twice.' },
+      { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, does: 'One bop pops any monster from a step away, and King Grumble feels every bop three times over.' },
     ],
   },
 ];
@@ -95,28 +99,36 @@ export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 // your level (levels.js), if given.
 export function lookWithGear(look, gear, level = 0) {
   const { weapon: _, level: __, ...rest } = look ?? {};
-  const worn = wearing(gear, 'weapon');
-  return { ...rest, ...(worn ? { weapon: WEAPONS[worn - 1].key } : {}), ...(level ? { level } : {}) };
+  const worn = wornWeapon(gear);
+  return { ...rest, ...(worn ? { weapon: worn.key } : {}), ...(level ? { level } : {}) };
 }
 
-// The weapon you have on (its level), or null.
+// The weapon you have on: the one you have chosen to carry of those you own
+// (pick, by its level), or the best you have. Null with none, or it taken off.
 export const wornWeapon = (gear) => {
-  const level = wearing(gear, 'weapon');
-  return level ? WEAPONS[level - 1] : null;
+  if (gear?.off?.weapon) return null;
+  const have = gear?.weapon ?? 0;
+  if (!have) return null;
+  const pick = gear?.pick?.weapon;
+  const level = Number.isInteger(pick) && pick >= 1 && pick <= have ? pick : have;
+  return WEAPONS[level - 1];
 };
 
 export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 
-// Gear as kept: the level of each kind you have (0 for none), and which you
-// have taken off.
+// Gear as kept: the level of each kind you have (0 for none), which you
+// have taken off, and for the weapons which of them you carry (pick: its
+// level, 1 for the first; without one, the best you have).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
-  const out = { off: {} };
+  const out = { off: {}, pick: {} };
   for (const g of GEAR) {
     const n = p[g.key];
     out[g.key] = Number.isInteger(n) && n > 0 ? Math.min(g.levels.length, n) : 0;
     if (p.off?.[g.key] === true) out.off[g.key] = true;
   }
+  const pick = Number.isInteger(p.pick?.weapon) ? p.pick.weapon : 0;
+  out.pick.weapon = pick >= 1 && pick <= out.weapon ? pick : 0;
   return out;
 }
 

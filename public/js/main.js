@@ -886,6 +886,9 @@ input
       case 'KeyX':
         g.attack();
         return true;
+      case 'KeyN':
+        if (!g.cycleWeapon()) return false;
+        return true;
       case 'KeyY':
         if (!g.world) return false;
         g.drink();
