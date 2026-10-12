@@ -153,18 +153,20 @@ const HAPPY_MS = 2200;
 export const FLOWERS = new Set([B.TULIP, B.DAISY, B.BLUEBELL, B.COSMOS, B.SUNFLOWER, B.LOLLIPOP, B.GUMDROP]);
 
 // How high above someone's feet a flying friend sits on their head: on top of
-// the skull (render/avatar.js puts it at 1.41), or on the hat. A kid's hair
-// (hair: its style; '' for an animal) is a little higher and lifts the hat
-// with it, more for curls; spikes and a bun stick up out of it, unless a hat
-// that covers the top of the head is over them. A grown-up (tall: how much
-// taller than a kid) has all of it that much higher.
-const HEAD_TOP = { cap: 1.6, party: 1.76, crown: 1.42, beanie: 1.7, sprout: 1.66, straw: 1.52, headphones: 1.6 };
-const HAIR_TOP = { spiky: 1.51, curly: 1.53, bun: 1.57 };
+// the head (render/avatar.js has an animal's at 1.41, and a kid's under their
+// hair), or on the hat. A person's hats (hair: their hair style; '' for an
+// animal) are made to fit their smaller head, and sit a little higher on
+// curls; spikes and a bun stick up out of the hair, unless a hat that covers
+// the top of the head is over them. A grown-up (tall: how much taller than a
+// kid) has all of it that much higher. All in hundredths, as positions are
+// sent, so a friend on a head is drawn just where it sits.
+const ANIMAL_TOP = { cap: 1.49, party: 1.55, crown: 1.44, beanie: 1.53, sprout: 1.52, straw: 1.46, headphones: 1.49 };
+const PERSON_TOP = { cap: 1.47, party: 1.52, crown: 1.42, beanie: 1.51, sprout: 1.5, straw: 1.45, headphones: 1.48 };
+const HAIR_TOP = { spiky: 1.47, curly: 1.45, bun: 1.46 };
 const OVER_HAIR = ['cap', 'beanie', 'straw', 'party'];
 export function headTop(hat, hair = '', tall = 0) {
-  const top = HEAD_TOP[hat] ?? 1.41;
-  if (!hair) return top + tall;
-  return tall + Math.max(top + (hair === 'curly' ? 0.07 : 0.025), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
+  if (!hair) return (ANIMAL_TOP[hat] ?? 1.41) + tall;
+  return tall + Math.max((PERSON_TOP[hat] ?? 0) + (hair === 'curly' ? 0.02 : 0), OVER_HAIR.includes(hat) ? 0 : (HAIR_TOP[hair] ?? 1.43));
 }
 
 // How high a rider's hips are over their feet, as render/avatar.js draws

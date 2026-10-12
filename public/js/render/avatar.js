@@ -1,33 +1,47 @@
-// The players: round-headed little animals, kids or grown-ups, in a t-shirt, with a hat
-// if they like. Built from simple shapes and animated by hand — walking,
-// jumping, swimming, flying, and the emotes (wave, dance, cheer...).
+// The players: kids and grown-ups shaped like real people — a kid about six
+// heads tall and a grown-up seven, with long legs that bend at the knee, arms
+// that bend at the elbow, hands with fingers, and faces with lidded eyes, a
+// nose and lips — and the little animals on a body like a kid's, with their
+// own round heads. Everyone wears a t-shirt, jeans and sneakers, and a hat if
+// they like. Built from shapes sculpted in code and animated by hand:
+// walking, running, jumping, swimming, flying, sitting, riding, and the
+// emotes (wave, dance, cheer...).
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
-import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
+import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
+// Heads are made at one size, HEAD_R or so from the middle to the top, and
+// scaled down to the body they go on.
 const HEAD_R = 0.34;
-const HEAD = { sx: 1.08, sy: 0.96, sz: 1 };
-const HR = [HEAD_R * HEAD.sx, HEAD_R * HEAD.sy, HEAD_R * HEAD.sz];
+const headShape = (sx, sy, sz) => ({ sx, sy, sz, r: [HEAD_R * sx, HEAD_R * sy, HEAD_R * sz] });
+// An animal's round head; and a person's, narrower than it is tall and deeper
+// than it is wide, with a jaw under it (see headPoint).
+const HEAD = headShape(1.08, 0.96, 1);
+const HR = HEAD.r;
+const PERSON = headShape(0.8, 1, 0.93);
+const PR = PERSON.r;
 
 // Swings at a monster, one for each toy weapon and a punch without one: a
 // wind-up, a strike that speeds up into the hit (at strike, a fraction of
 // the way through), a moment held there, and an easy way back. Each key is a
 // pose at a fraction of the way through: w how much of it (0 is the pose the
 // avatar would have anyway), fwd and raise the right arm (as armFwdR and
-// armRaiseR), wrist turns what is in that hand forward and down (0 holds it
-// square to the arm, as at rest), fwdL and raiseL the left (with wL how much), twist the
+// armRaiseR) and elbow how far its elbow bends, wrist turns what is in that
+// hand forward and down (0 holds it square to the upper arm, as at rest),
+// fwdL, raiseL and elbowL the left arm (with wL how much), twist the
 // shoulders round (+ takes the right one back), lean forward, dip the body,
 // nod the head, and step the left foot forward.
 export const SWINGS = {
+  // The fist drawn back by the shoulder, then the arm straight out.
   punch: {
     secs: 0.34,
     strike: 0.4,
     keys: [
       { at: 0, w: 0 },
-      { at: 0.22, w: 1, fwd: 0.45, raise: 0.3, twist: 0.3, lean: -0.03 },
-      { at: 0.4, w: 1, fwd: -1.6, raise: 0.08, twist: -0.4, lean: 0.14, step: 0.3, dip: -0.02 },
-      { at: 0.58, w: 1, fwd: -1.55, raise: 0.08, twist: -0.38, lean: 0.12, step: 0.3, dip: -0.02 },
+      { at: 0.22, w: 1, fwd: 0.45, raise: 0.3, elbow: 1.9, twist: 0.3, lean: -0.03 },
+      { at: 0.4, w: 1, fwd: -1.6, raise: 0.08, elbow: 0.05, twist: -0.4, lean: 0.14, step: 0.3, dip: -0.02 },
+      { at: 0.58, w: 1, fwd: -1.55, raise: 0.08, elbow: 0.1, twist: -0.38, lean: 0.12, step: 0.3, dip: -0.02 },
       { at: 1, w: 0 },
     ],
   },
@@ -38,9 +52,9 @@ export const SWINGS = {
     strike: 0.48,
     keys: [
       { at: 0, w: 0 },
-      { at: 0.3, w: 1, fwd: -2.5, raise: 0.75, wrist: -0.3, twist: 0.4, lean: -0.06, nod: -0.12 },
-      { at: 0.48, w: 1, fwd: -1, raise: -0.35, wrist: 1.05, twist: -0.42, lean: 0.16, step: 0.35, dip: -0.03, nod: 0.1 },
-      { at: 0.62, w: 1, fwd: -0.65, raise: -0.45, wrist: 0.95, twist: -0.48, lean: 0.14, step: 0.35, dip: -0.03, nod: 0.08 },
+      { at: 0.3, w: 1, fwd: -2.5, raise: 0.75, elbow: 0.7, wrist: -0.3, twist: 0.4, lean: -0.06, nod: -0.12 },
+      { at: 0.48, w: 1, fwd: -1, raise: -0.35, elbow: 0.12, wrist: 1.05, twist: -0.42, lean: 0.16, step: 0.35, dip: -0.03, nod: 0.1 },
+      { at: 0.62, w: 1, fwd: -0.65, raise: -0.45, elbow: 0.2, wrist: 0.95, twist: -0.48, lean: 0.14, step: 0.35, dip: -0.03, nod: 0.08 },
       { at: 1, w: 0 },
     ],
   },
@@ -51,9 +65,9 @@ export const SWINGS = {
     strike: 0.56,
     keys: [
       { at: 0, w: 0, wL: 0 },
-      { at: 0.42, w: 1, wL: 1, fwd: -3, raise: 0.12, wrist: -0.2, fwdL: -2.8, raiseL: 0.05, lean: -0.16, nod: -0.18 },
-      { at: 0.56, w: 1, wL: 1, fwd: -1.1, raise: -0.08, wrist: 1.45, fwdL: -1.15, raiseL: -0.35, lean: 0.32, step: 0.4, dip: -0.08, nod: 0.18 },
-      { at: 0.72, w: 1, wL: 1, fwd: -0.95, raise: -0.08, wrist: 1.55, fwdL: -1, raiseL: -0.35, lean: 0.3, step: 0.4, dip: -0.07, nod: 0.15 },
+      { at: 0.42, w: 1, wL: 1, fwd: -3, raise: 0.12, elbow: 0.6, wrist: -0.2, fwdL: -2.8, raiseL: 0.05, elbowL: 0.6, lean: -0.16, nod: -0.18 },
+      { at: 0.56, w: 1, wL: 1, fwd: -1.1, raise: -0.08, elbow: 0.15, wrist: 1.45, fwdL: -1.15, raiseL: -0.35, elbowL: 0.15, lean: 0.32, step: 0.4, dip: -0.08, nod: 0.18 },
+      { at: 0.72, w: 1, wL: 1, fwd: -0.95, raise: -0.08, elbow: 0.15, wrist: 1.55, fwdL: -1, raiseL: -0.35, elbowL: 0.15, lean: 0.3, step: 0.4, dip: -0.07, nod: 0.15 },
       { at: 1, w: 0, wL: 0 },
     ],
   },
@@ -64,18 +78,18 @@ export const SWINGS = {
     strike: 0.34,
     keys: [
       { at: 0, w: 0, wL: 0 },
-      { at: 0.26, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
-      { at: 0.34, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
-      { at: 0.42, w: 1, wL: 1, fwd: -1.75, raise: 0.04, wrist: 1.35, fwdL: -1.55, raiseL: -0.32, twist: -0.1, lean: -0.06 },
-      { at: 0.6, w: 1, wL: 1, fwd: -1.45, raise: 0.04, wrist: 1.45, fwdL: -1.3, raiseL: -0.32, twist: -0.12, lean: 0.06 },
+      { at: 0.26, w: 1, wL: 1, fwd: -1.45, raise: 0.04, elbow: 0.2, wrist: 1.45, fwdL: -0.95, raiseL: -0.4, elbowL: 0.6, twist: -0.12, lean: 0.06 },
+      { at: 0.34, w: 1, wL: 1, fwd: -1.45, raise: 0.04, elbow: 0.2, wrist: 1.45, fwdL: -0.95, raiseL: -0.4, elbowL: 0.6, twist: -0.12, lean: 0.06 },
+      { at: 0.42, w: 1, wL: 1, fwd: -1.75, raise: 0.04, elbow: 0.3, wrist: 1.35, fwdL: -1.2, raiseL: -0.4, elbowL: 0.62, twist: -0.1, lean: -0.06 },
+      { at: 0.6, w: 1, wL: 1, fwd: -1.45, raise: 0.04, elbow: 0.2, wrist: 1.45, fwdL: -0.95, raiseL: -0.4, elbowL: 0.6, twist: -0.12, lean: 0.06 },
       { at: 1, w: 0, wL: 0 },
     ],
   },
 };
-const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'wrist', 'fwdL', 'raiseL', 'twist', 'lean', 'nod', 'dip', 'step'];
+const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL', 'twist', 'lean', 'nod', 'dip', 'step'];
 // What a key says of one of them: an arm angle a key leaves out is the next
 // key's (it has no weight there anyway), anything else is none.
-const ARM_ANGLES = new Set(['fwd', 'raise', 'wrist', 'fwdL', 'raiseL']);
+const ARM_ANGLES = new Set(['fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL']);
 const poseValue = (key, mine, next) => mine[key] ?? (ARM_ANGLES.has(key) ? (next[key] ?? 0) : 0);
 // Ease in and out between keys, but into the strike speeding up all the way,
 // so it lands hard.
@@ -103,8 +117,107 @@ const WHITE = '#ffffff';
 const PINK = '#ff9fb8';
 const EYE = '#4a3226';
 
-// How far your middle is over the bed lying down: half how deep a body is.
-const LIE_LIFT = 0.16;
+// How a body is put together, in blocks up from the soles: a kid's (and an
+// animal's) and a grown-up's, in the proportions of real people. hip, knee:
+// how high those joints are, hipX how far out the hips; hem: how high the
+// jeans come down to. thigh, shin: the jeans' radius at the top, middle and
+// bottom of each. seat and shirt: rings of the jeans' seat and the t-shirt,
+// each [height over the hips, half width, depth in front, depth behind].
+// shoulder: the shoulder joints' [height over the hips, distance out]. neck:
+// [bottom, radius, top] over the hips. arm: the upper arm's and forearm's
+// lengths, and the arm's radius at the shoulder, elbow and wrist. sleeve: how
+// far down the t-shirt's sleeves come. hand, foot: their sizes. badge: the
+// star on the shirt's [height, size]. head: a person's skull, its scale (k),
+// its middle over the hips (y) and forward (z), and the neck's pivot (pivot).
+const BUILDS = {
+  kid: {
+    hip: 0.71,
+    hipX: 0.068,
+    knee: 0.385,
+    hem: 0.07,
+    thigh: [0.064, 0.055, 0.047],
+    shin: [0.047, 0.044, 0.042],
+    seat: [
+      [-0.108, 0.04, 0.03, 0.035],
+      [-0.095, 0.098, 0.064, 0.076],
+      [-0.06, 0.116, 0.074, 0.09],
+      [-0.01, 0.121, 0.077, 0.093],
+      [0.04, 0.118, 0.074, 0.086],
+      [0.08, 0.111, 0.07, 0.077],
+      [0.09, 0.09, 0.058, 0.062],
+    ],
+    shirt: [
+      [0.035, 0.123, 0.082, 0.092],
+      [0.09, 0.114, 0.075, 0.08],
+      [0.155, 0.106, 0.071, 0.073],
+      [0.235, 0.112, 0.078, 0.072],
+      [0.305, 0.121, 0.085, 0.074],
+      [0.355, 0.126, 0.081, 0.075],
+      [0.388, 0.12, 0.071, 0.068],
+      [0.41, 0.098, 0.059, 0.058],
+      [0.426, 0.062, 0.047, 0.046],
+    ],
+    shoulder: [0.364, 0.119],
+    neck: [0.39, 0.037, 0.52],
+    arm: [0.245, 0.2, 0.036, 0.03, 0.022],
+    sleeve: 0.1,
+    hand: 1.22,
+    foot: 1,
+    badge: [0.3, 0.6],
+    head: { k: 0.36, y: 0.5776, z: 0.014, pivot: 0.46 },
+  },
+  grown: {
+    hip: 0.9,
+    hipX: 0.085,
+    knee: 0.49,
+    hem: 0.085,
+    thigh: [0.08, 0.068, 0.056],
+    shin: [0.056, 0.053, 0.05],
+    seat: [
+      [-0.13, 0.05, 0.036, 0.042],
+      [-0.115, 0.122, 0.078, 0.094],
+      [-0.072, 0.146, 0.09, 0.112],
+      [-0.012, 0.152, 0.094, 0.115],
+      [0.048, 0.149, 0.091, 0.106],
+      [0.096, 0.14, 0.087, 0.095],
+      [0.108, 0.114, 0.072, 0.077],
+    ],
+    shirt: [
+      [0.042, 0.154, 0.1, 0.112],
+      [0.105, 0.143, 0.092, 0.098],
+      [0.18, 0.133, 0.087, 0.09],
+      [0.285, 0.142, 0.097, 0.09],
+      [0.385, 0.157, 0.108, 0.093],
+      [0.45, 0.163, 0.103, 0.094],
+      [0.495, 0.156, 0.09, 0.085],
+      [0.524, 0.122, 0.074, 0.072],
+      [0.545, 0.077, 0.058, 0.057],
+    ],
+    shoulder: [0.462, 0.153],
+    neck: [0.49, 0.048, 0.64],
+    arm: [0.3, 0.255, 0.046, 0.038, 0.028],
+    sleeve: 0.125,
+    hand: 1.5,
+    foot: 1.28,
+    badge: [0.38, 0.75],
+    head: { k: 0.335, y: 0.7161, z: 0.016, pivot: 0.59 },
+  },
+};
+// An animal's head on a kid's body: bigger than a person's, its top where a
+// kid's is.
+const ANIMAL_SKULL = { k: 0.42, y: 1.41 - HR[1] * 0.42 - BUILDS.kid.hip, z: 0.015, pivot: 0.45 };
+// How far out from the sides the arms hang, clear of the hips.
+const REST_RAISE = 0.09;
+// How high the hips are over the root riding (critters.js HIPS, and a little
+// for sinking into the saddle), and over the seat sitting.
+const RIDE_HIPS = 0.28;
+const SIT_HIPS = 0.075;
+// How far forward you lean swimming, and how high over the root the middle
+// of your head is: just over the water, which comes up to 1.175 over a
+// swimmer's root (physics.js floats them with the top of the water block 1.3
+// over it, and render/mesher.js draws the water's top 0.125 under that).
+const SWIM_LEAN = 0.62;
+const SWIM_HEAD = 1.23;
 // Curled up in a bed one block long, all of you fits in this much of it,
 // head to toe and side to side (shared/seats.js puts the root at its middle).
 const CURL_ROOM = { long: 0.84, wide: 0.84 };
@@ -131,6 +244,10 @@ function darken(hex, k) {
   return `#${c.multiplyScalar(1 - k).getHexString()}`;
 }
 
+function mix(hex, other, k) {
+  return `#${new THREE.Color(hex).lerp(new THREE.Color(other), k).getHexString()}`;
+}
+
 // Trousers that go with a shirt: blue jeans, or sand-coloured ones under a
 // shirt that is blue already.
 function trousersFor(shirt) {
@@ -146,26 +263,70 @@ function shoeFor(shirt) {
   return hsl.s < 0.3 || hsl.l > 0.8 ? '#e8453c' : darken(shirt, 0.08);
 }
 
-// A sneaker, its ground at y 0 and its toe toward +z: the sole with a bumper
-// round the toe, the upper, and the laces, each one shape for every shoe.
-const sneakerSole = () =>
-  bakeCached('sneaker-sole', [
-    { g: roundedBox(0.15, 0.04, 0.25, 0.018), m: new THREE.Matrix4().makeTranslation(0, 0.02, 0) },
-    { g: sphere(1, 16, 10), m: new THREE.Matrix4().makeTranslation(0, 0.042, 0.07).scale(new THREE.Vector3(0.072, 0.03, 0.06)) },
-  ]);
-const sneakerUpper = () =>
-  bakeCached('sneaker-upper', [
-    { g: sphere(1, 18, 12), m: new THREE.Matrix4().makeTranslation(0, 0.045, -0.005).scale(new THREE.Vector3(0.07, 0.055, 0.118)) },
-    { g: cylinder(0.058, 0.064, 0.05, 16), m: new THREE.Matrix4().makeTranslation(0, 0.085, -0.04) },
-    { g: torus(0.058, 0.012), m: new THREE.Matrix4().makeTranslation(0, 0.11, -0.04).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2)) },
-  ]);
-const sneakerLaces = () =>
-  bakeCached(
-    'sneaker-laces',
-    [0.035, 0.0, -0.025].map((z, i) => ({
-      g: capsule(0.008, 0.06, 3, 6),
-      m: new THREE.Matrix4().makeTranslation(0, 0.088 + i * 0.01 - (z > 0 ? 0.008 : 0), z).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)),
-    })),
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const UP = new THREE.Vector3(0, 1, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+// Where a part goes: at p, turned by q and then by the angles (rx, ry, rz) in
+// its own frame, and scaled by (sx, sy, sz).
+function placed(p, q, sx = 1, sy = sx, sz = sx, rx = 0, ry = 0, rz = 0) {
+  const turn = q.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)));
+  return new THREE.Matrix4().compose(p, turn, new THREE.Vector3(sx, sy, sz));
+}
+const facing = (n) => new THREE.Quaternion().setFromUnitVectors(Z_AXIS, n);
+const NO_TURN = new THREE.Quaternion();
+const at = (x, y, z, sx = 1, sy = sx, sz = sx, rx = 0, ry = 0, rz = 0) => placed(new THREE.Vector3(x, y, z), NO_TURN, sx, sy, sz, rx, ry, rz);
+// A rod of length 1 along y, stood from a to b.
+function between(a, b, r = 1) {
+  const d = b.clone().sub(a);
+  return new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(UP, d.clone().normalize()), new THREE.Vector3(r, d.length(), r));
+}
+
+// A sneaker, its sole at y 0 under the ankle and its toe forward (+z), size
+// times a kid's: a rubber sole a little wider than the shoe, an upper that
+// rises from a low toe to a padded collar round the ankle, and in white the
+// laces across the top and a stripe along each side.
+const sneakerSole = (size) =>
+  loft(
+    [
+      [-0.052, 0.012, 0.007, 0.007, 0.013],
+      [-0.048, 0.026, 0.012, 0.012, 0.013],
+      [-0.032, 0.031, 0.013, 0.013, 0.013],
+      [0.0, 0.031, 0.013, 0.013, 0.013],
+      [0.04, 0.032, 0.012, 0.012, 0.012],
+      [0.08, 0.038, 0.012, 0.012, 0.012],
+      [0.115, 0.037, 0.012, 0.012, 0.012],
+      [0.14, 0.03, 0.012, 0.011, 0.013],
+      [0.151, 0.019, 0.01, 0.009, 0.014],
+      [0.156, 0.007, 0.005, 0.005, 0.015],
+    ].map(([z, ...r]) => [z * size, ...r.map((v) => v * size)]),
+    { along: 'z', n: 3.4, segs: 20 },
+  );
+const sneakerUpper = (size) =>
+  loft(
+    [
+      [-0.048, 0.012, 0.016, 0.012, 0.062],
+      [-0.044, 0.025, 0.035, 0.024, 0.048],
+      [-0.026, 0.03, 0.036, 0.028, 0.05],
+      [0.0, 0.031, 0.034, 0.028, 0.05],
+      [0.03, 0.032, 0.028, 0.025, 0.046],
+      [0.065, 0.034, 0.02, 0.02, 0.042],
+      [0.095, 0.035, 0.015, 0.017, 0.037],
+      [0.12, 0.033, 0.012, 0.014, 0.034],
+      [0.14, 0.026, 0.01, 0.012, 0.032],
+      [0.149, 0.015, 0.007, 0.008, 0.03],
+      [0.152, 0.004, 0.003, 0.003, 0.03],
+    ].map(([z, ...r]) => [z * size, ...r.map((v) => v * size)]),
+    { along: 'z', n: 2.4, segs: 22 },
+  );
+const sneakerTrim = (size) =>
+  geo(`sneaker-trim|${size}`, () =>
+    bake([
+      // Laces across the top of the instep, following its slope.
+      ...[0.028, 0.048, 0.068].map((z, i) => ({ g: capsule(0.0042, 0.03, 3, 6), m: at(0, 0.075 - i * 0.007, z, 1, 1, 1, -0.32, 0, Math.PI / 2) })),
+      // A stripe along each side, from the heel up towards the laces.
+      ...[-1, 1].map((side) => ({ g: sphere(1, 12, 8), m: at(side * 0.032, 0.045, 0.03, 0.005, 0.011, 0.04, -0.35, side * 0.06, 0) })),
+    ].map(({ g, m }) => ({ g, m: new THREE.Matrix4().makeScale(size, size, size).multiply(m) }))),
   );
 
 // A five-pointed star, a little thick, facing +z: the badge on a t-shirt.
@@ -216,16 +377,6 @@ function eyes(head, style = 'dot') {
   return group;
 }
 
-// A pair of eyebrows above the eyes, flat and soft.
-function brows(head, color) {
-  for (const side of [-1, 1]) {
-    const p = onFace(side * 0.12, 0.145, 0.004);
-    const b = mesh(sphere(1, 12, 8), toon(color), p.x, p.y, p.z, 0.05, 0.016, 0.014);
-    b.lookAt(p.clone().multiplyScalar(2));
-    b.rotateZ(side * 0.12);
-    head.add(b);
-  }
-}
 
 function blush(head) {
   for (const side of [-1, 1]) {
@@ -285,10 +436,10 @@ function ears(head, animal, fur) {
     case 'bunny':
       for (const side of [-1, 1]) {
         const g = new THREE.Group();
-        g.position.set(side * 0.13, topY * 0.8, -0.02);
+        g.position.set(side * 0.19, topY * 0.8, -0.02);
         g.rotation.z = -side * 0.18;
-        g.add(mesh(sphere(), toon(fur), 0, 0.26, 0, 0.075, 0.28, 0.05));
-        g.add(mesh(sphere(), toon(inner), 0, 0.26, 0.025, 0.045, 0.22, 0.03));
+        g.add(mesh(sphere(), toon(fur), 0, 0.26, 0, 0.065, 0.28, 0.05));
+        g.add(mesh(sphere(), toon(inner), 0, 0.26, 0.025, 0.04, 0.22, 0.03));
         g.userData.ear = side;
         add(g);
       }
@@ -342,9 +493,9 @@ function face(head, animal, fur) {
   switch (animal) {
     case 'frog': {
       for (const side of [-1, 1]) {
-        head.add(mesh(sphere(), toon(fur), side * 0.15, HR[1] * 0.78, 0.1, 0.12));
-        head.add(mesh(sphere(), toon(WHITE), side * 0.15, HR[1] * 0.8, 0.17, 0.085));
-        head.add(mesh(sphere(), toon(BLACK), side * 0.15, HR[1] * 0.8, 0.245, 0.045, 0.055, 0.02));
+        head.add(mesh(sphere(), toon(fur), side * 0.2, HR[1] * 0.78, 0.1, 0.12));
+        head.add(mesh(sphere(), toon(WHITE), side * 0.2, HR[1] * 0.8, 0.17, 0.085));
+        head.add(mesh(sphere(), toon(BLACK), side * 0.2, HR[1] * 0.8, 0.245, 0.045, 0.055, 0.02));
       }
       smile(head, 0.12, -0.05);
       blush(head);
@@ -410,9 +561,12 @@ function face(head, animal, fur) {
   return e;
 }
 
-function tail(root, animal, fur) {
+// An animal's tail, at the seat of its jeans (where), a little smaller than
+// its head would make it.
+function tail(root, animal, fur, where) {
   const t = new THREE.Group();
-  t.position.set(0, 0.36, -0.2);
+  t.position.copy(where);
+  t.scale.setScalar(0.72);
   switch (animal) {
     case 'bunny':
     case 'bear':
@@ -472,113 +626,395 @@ function tail(root, animal, fur) {
   return t;
 }
 
-// ------------------------------------------------ kids
+// ------------------------------------------------ people
+
+// A kid's face and a grown-up's: how long the jaw is under the eyes (jaw), how
+// far the chin comes forward (chin) and the jaw narrows (narrow), and where
+// things are on it: the brow ridge (brow, up the head), the eyes (eyeY up,
+// apart out, eyeR their size, open how far the upper lid is up), the nose
+// (its tip's size and height), the mouth (its height and width) and how
+// thick the eyebrows are. A kid's eyes are bigger and lower in a rounder face.
+const FACE_SHAPES = {
+  kid: { key: 'kid', jaw: 1, chin: 0.65, narrow: 0.24, brow: 0.1, eyeY: -0.045, apart: 0.106, eyeR: 0.063, open: 0.5, nose: 0.026, noseTip: -0.15, mouth: -0.232, mouthW: 0.85, browT: 0.011 },
+  grown: { key: 'grown', jaw: 1.12, chin: 0.85, narrow: 0.3, brow: 0.14, eyeY: -0.03, apart: 0.102, eyeR: 0.056, open: 0.42, nose: 0.03, noseTip: -0.168, mouth: -0.262, mouthW: 1, browT: 0.013 },
+};
+// Where the eyes are round the head (see headPoint), for the sockets they sit in.
+for (const f of Object.values(FACE_SHAPES)) {
+  f.eyeV = f.eyeY / (PR[1] * f.jaw);
+  f.eyeU = f.apart / (PR[0] * (1 - f.narrow * Math.abs(f.eyeV) ** 1.6));
+}
+
+const smoothstep = (w) => w * w * (3 - 2 * w);
+
+// A person's head, shaped like a real one: PERSON's ellipsoid over the eyes,
+// and below them a jaw that narrows and comes forward to a chin, the back of
+// the head drawn in to the neck; a ridge for the brow, and the eyes set in
+// under it. (u, v, w) is a point on a ball of radius 1, v up and w to the
+// face; out gets where it goes. Only z is moved for the sculpting, so faceAt
+// can find a point of the face from x and y.
+function headPoint(f, u, v, w, out) {
+  const low = Math.max(0, -v);
+  const x = PR[0] * u * (1 - f.narrow * low ** 1.6);
+  const y = PR[1] * v * (v < 0 ? f.jaw : 1);
+  let z = PR[2] * w;
+  if (w > 0) {
+    const brow = Math.exp(-(((v - f.brow) / 0.08) ** 2) - (u / 0.55) ** 4);
+    const socket = Math.exp(-(((Math.abs(u) - f.eyeU) / 0.17) ** 2) - ((v - f.eyeV) / 0.1) ** 2);
+    z += PR[2] * smoothstep(w) * (f.chin * low ** 3 * (1 - u * u) + 0.03 * brow - 0.035 * socket);
+  } else z *= 1 - 0.3 * low ** 1.4;
+  return out.set(x, y, z);
+}
+
+// A point on a shape made round a ball (shape(u, v, w, out) puts the point
+// for the direction d there), and which way is out there, worked out from the
+// shape itself: no seams where the ball's own would be.
+function surfaceAt(shape, d) {
+  const p = shape(d.x, d.y, d.z, new THREE.Vector3());
+  const t1 = new THREE.Vector3().crossVectors(Math.abs(d.y) > 0.99 ? X_AXIS : UP, d).normalize();
+  const t2 = new THREE.Vector3().crossVectors(d, t1);
+  const a = t1.multiplyScalar(1e-3).add(d).normalize();
+  const b = t2.multiplyScalar(1e-3).add(d).normalize();
+  const pa = shape(a.x, a.y, a.z, new THREE.Vector3()).sub(p);
+  const pb = shape(b.x, b.y, b.z, new THREE.Vector3()).sub(p);
+  return { p, n: pa.cross(pb).normalize() };
+}
+
+const personHead = (f) =>
+  geo(`person-head|${f.key}`, () => {
+    const g = new THREE.SphereGeometry(1, 56, 36);
+    const pos = g.attributes.position;
+    const nor = g.attributes.normal;
+    const d = new THREE.Vector3();
+    const shape = (u, v, w, out) => headPoint(f, u, v, w, out);
+    for (let i = 0; i < pos.count; i++) {
+      const { p, n } = surfaceAt(shape, d.fromBufferAttribute(pos, i).normalize());
+      pos.setXYZ(i, p.x, p.y, p.z);
+      nor.setXYZ(i, n.x, n.y, n.z);
+    }
+    return g;
+  });
+
+// The point of a person's face at (fx, fy) — across, and up from the middle
+// of the head — pushed `out` along the way out there, and that way.
+function faceAt(f, fx, fy, out = 0) {
+  const v = Math.max(-0.995, Math.min(0.995, fy / (PR[1] * (fy < 0 ? f.jaw : 1))));
+  const low = Math.max(0, -v);
+  const u = fx / (PR[0] * (1 - f.narrow * low ** 1.6));
+  const w = Math.sqrt(Math.max(0, 1 - u * u - v * v));
+  const { p, n } = surfaceAt((a, b, c, o) => headPoint(f, a, b, c, o), new THREE.Vector3(u, v, w).normalize());
+  return { p: p.addScaledVector(n, out), n };
+}
+
+// The eyes: each an eyeball set in under the brow, turned out a little from
+// straight ahead (q), its middle at c; the upper lids turn about the line
+// through both middles (axis) to blink.
+function eyeLayout(f) {
+  const r = f.eyeR;
+  const eyes = [-1, 1].map((side) => {
+    const { p, n } = faceAt(f, side * f.apart, f.eyeY);
+    const c = p.addScaledVector(n, 0.014 - r);
+    const q = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, new THREE.Vector3(side * 0.1, 0, 1).normalize());
+    return { side, c, q };
+  });
+  return { r, eyes, axis: new THREE.Vector3(0, eyes[0].c.y, eyes[0].c.z) };
+}
+const inEye = (e, x, y, z) => new THREE.Vector3(x, y, z).applyQuaternion(e.q).add(e.c);
+
+// The lids, as caps over the eyeball: the upper one's pole tilted back (so
+// its edge arches over the eye) and its edge `open` above the eye's middle in
+// front, the lower one's edge `low` below it. Turning the upper lid down by
+// open + low (and a little) shuts the eye.
+const LID = { tilt: 0.45, low: 0.47, lowTilt: 0.3 };
+const upperLid = (r, open) => geo(`lid-up|${r}|${open}`, () => new THREE.SphereGeometry(r * 1.07, 20, 8, 0, Math.PI, 0, Math.PI / 2 + LID.tilt - open).rotateX(-LID.tilt));
+const lowerLid = (r) =>
+  geo(`lid-low|${r}`, () => {
+    const cap = Math.PI / 2 + LID.lowTilt - LID.low;
+    return new THREE.SphereGeometry(r * 1.05, 20, 6, 0, Math.PI, Math.PI - cap, cap).rotateX(LID.lowTilt);
+  });
+// The lashes along the upper lid's edge, across the front of the eye.
+const lashLine = (r, open) =>
+  geo(`lash|${r}|${open}`, () => {
+    const R = r * 1.07;
+    const cap = Math.PI / 2 + LID.tilt - open;
+    const arc = 2.3;
+    return new THREE.TorusGeometry(R * Math.sin(cap), 0.0075, 5, 20, arc)
+      .rotateZ(Math.PI / 2 - arc / 2)
+      .rotateX(Math.PI / 2)
+      .translate(0, R * Math.cos(cap), 0)
+      .rotateX(-LID.tilt);
+  });
+
+// The nose: a bridge from between the eyes out to a rounded tip, with a wing
+// either side of it (in skin, with the head); and the nostrils under it.
+function noseParts(f) {
+  const s = f.nose;
+  const tip = faceAt(f, 0, f.noseTip);
+  const tipP = tip.p.clone().addScaledVector(tip.n, s * 1.05);
+  const top = faceAt(f, 0, f.eyeY + 0.01, 0.004).p;
+  const along = top.clone().sub(tipP);
+  const bridge = new THREE.Matrix4().compose(
+    top.clone().add(tipP).multiplyScalar(0.5),
+    new THREE.Quaternion().setFromUnitVectors(UP, along.clone().normalize()),
+    new THREE.Vector3(s * 0.78, along.length() * 0.56, s * 0.85),
+  );
+  const parts = [
+    { g: sphere(1, 14, 12), m: bridge },
+    { g: sphere(1, 14, 12), m: placed(tipP, facing(tip.n), s) },
+  ];
+  for (const side of [-1, 1]) {
+    const wing = faceAt(f, side * s * 1.18, f.noseTip - s * 0.45, s * 0.5);
+    parts.push({ g: sphere(1, 12, 10), m: placed(wing.p, facing(wing.n), s * 0.74, s * 0.62, s * 0.72) });
+  }
+  return parts;
+}
+function nostrilParts(f) {
+  const s = f.nose;
+  return [-1, 1].map((side) => {
+    const { p, n } = faceAt(f, side * s * 0.62, f.noseTip - s * 0.92, s * 0.98);
+    return { g: sphere(1, 10, 8), m: placed(p, facing(n), s * 0.38, s * 0.2, s * 0.32, 0.5, 0, -side * 0.3) };
+  });
+}
+
+// The ears, at the sides, as high as from the brow to the bottom of the
+// nose, leaning back a little and turned out: the outer ear in skin, and the
+// hollow inside it a little darker.
+function earParts(inner) {
+  return [-1, 1].map((side) => {
+    const p = new THREE.Vector3(side * (PR[0] * 0.96 + (inner ? 0.013 : 0)), -0.085, -0.045);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.12, -side * 0.28, side * 0.05));
+    return inner ? { g: sphere(1, 12, 10), m: placed(p, q, 0.012, 0.064, 0.044) } : { g: sphere(1, 16, 12), m: placed(p, q, 0.028, 0.094, 0.068) };
+  });
+}
+
+// Everything of a face in skin, as one shape: the head, the nose, the lower
+// lids, and the ears unless hair covers them.
+const personSkin = (f, ears) =>
+  geo(`person-skin|${f.key}|${ears}`, () => {
+    const eye = eyeLayout(f);
+    return bake([
+      { g: personHead(f), m: new THREE.Matrix4() },
+      ...noseParts(f),
+      ...eye.eyes.map((e) => ({ g: lowerLid(eye.r), m: placed(e.c, e.q) })),
+      ...(ears ? earParts(false) : []),
+    ]);
+  });
+
+// Eyebrows: an arch over each eye, flat on the brow, the outer end a little higher.
+const browShape = (f) =>
+  geo(`brows|${f.key}`, () =>
+    bake(
+      [-1, 1].map((side) => {
+        const { p, n } = faceAt(f, side * f.apart * 1.04, f.eyeY + (f.key === 'kid' ? 0.078 : 0.072), 0.006);
+        const R = 0.11;
+        const arc = 0.85;
+        const m = placed(p, facing(n), 1, 1, 1, 0, 0, side * 0.12)
+          .multiply(new THREE.Matrix4().makeTranslation(0, -R, 0))
+          .multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2 - arc / 2))
+          .multiply(new THREE.Matrix4().makeScale(1, 1, 0.55));
+        return { g: torus(R, f.browT, arc), m };
+      }),
+    ),
+  );
+
+// Lips: an upper lip in two curves meeting in a bow, and a fuller lower lip.
+const lipShape = (f) =>
+  geo(`lips|${f.key}`, () => {
+    const s = f.mouthW;
+    const parts = [-1, 1].map((side) => {
+      const { p, n } = faceAt(f, side * 0.021 * s, f.mouth + 0.011, 0.003);
+      return { g: sphere(1, 14, 10), m: placed(p, facing(n), 0.032 * s, 0.0105, 0.015, 0, 0, -side * 0.18) };
+    });
+    const { p, n } = faceAt(f, 0, f.mouth - 0.016, 0.004);
+    parts.push({ g: sphere(1, 16, 10), m: placed(p, facing(n), 0.04 * s, 0.0155, 0.017) });
+    return bake(parts);
+  });
+// ...and the line between them, turning up a little at the corners: a smile.
+const mouthLine = (f) =>
+  geo(`mouth|${f.key}`, () => {
+    const { p, n } = faceAt(f, 0, f.mouth, 0.006);
+    const R = 0.11;
+    const arc = 0.85 * f.mouthW;
+    const m = placed(p, facing(n))
+      .multiply(new THREE.Matrix4().makeTranslation(0, R, 0))
+      .multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 2 - arc / 2));
+    return bake([{ g: torus(R, 0.0055, arc), m }]);
+  });
+
+// A kid's rosy cheeks.
+const cheekShape = (f) =>
+  geo(`cheeks|${f.key}`, () =>
+    bake(
+      [-1, 1].map((side) => {
+        const { p, n } = faceAt(f, side * 0.155, -0.12, 0.004);
+        return { g: sphere(1, 12, 8), m: placed(p, facing(n), 0.055, 0.03, 0.01) };
+      }),
+    ),
+  );
+
+// Lips a little rosier and darker than the skin.
+const lipColor = (skin) => mix(darken(skin, 0.12), '#c4505c', 0.3);
+
+// A person's face on a skull, a kid's or a grown-up's (grown: what they have
+// on it, see FACES in shared/words.js; ears: false where hair covers them).
+// Returns the upper lids, which turn down by LID_SHUT to blink.
+function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = BLACK } = {}) {
+  const eye = eyeLayout(f);
+  const add = (g, mat) => skull.add(mesh(g, mat));
+  add(personSkin(f, ears), toon(skin));
+  if (ears) add(geo('ear-hollows', () => bake(earParts(true))), toon(darken(skin, 0.16)));
+  add(geo(`nostrils|${f.key}`, () => bake(nostrilParts(f))), toon(darken(skin, 0.45)));
+  // The eyes: whites, a brown iris, a pupil and a catchlight.
+  const r = eye.r;
+  const iris = f.key === 'kid' ? 0.54 : 0.5;
+  const eyePart = (name, g, x, y, z, sx, sy, sz) =>
+    add(
+      geo(`eye-${name}|${f.key}`, () => bake(eye.eyes.map((e) => ({ g, m: placed(inEye(e, x, y, z), e.q, sx, sy, sz) })))),
+      toon(...{ white: ['#fbf8f3'], iris: ['#6b4430'], pupil: ['#1c1416'], shine: [WHITE, { emissive: 0.7 }] }[name]),
+    );
+  eyePart('white', sphere(1, 20, 14), 0, 0, 0, r, r, r);
+  eyePart('iris', sphere(1, 16, 12), 0, -0.03 * r, 0.9 * r, iris * r, iris * r, 0.12 * r);
+  eyePart('pupil', sphere(1, 12, 8), 0, -0.03 * r, 0.975 * r, 0.23 * r, 0.23 * r, 0.08 * r);
+  eyePart('shine', sphere(1, 8, 6), -0.2 * r, 0.17 * r, 1.01 * r, 0.07 * r, 0.07 * r, 0.035 * r);
+  // The upper lids and their lashes, which close together.
+  const lids = new THREE.Group();
+  lids.position.copy(eye.axis);
+  const off = new THREE.Matrix4().makeTranslation(-eye.axis.x, -eye.axis.y, -eye.axis.z);
+  const onLid = (g) => eye.eyes.map((e) => ({ g, m: off.clone().multiply(placed(e.c, e.q)) }));
+  lids.add(mesh(geo(`lids|${f.key}`, () => bake(onLid(upperLid(r, f.open)))), toon(skin)));
+  lids.add(mesh(geo(`lashes|${f.key}`, () => bake(onLid(lashLine(r, f.open)))), toon('#2a1f22')));
+  lids.userData.shut = f.open + LID.low + 0.05;
+  skull.add(lids);
+  add(browShape(f), toon(darken(hairColor, 0.22)));
+  const lips = lipColor(skin);
+  add(lipShape(f), toon(lips));
+  add(mouthLine(f), toon(darken(lips, 0.45)));
+  if (f.key === 'kid') add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: 0.22 }));
+  if (extra.includes('glasses')) glasses(skull, eye);
+  if (extra.includes('beard')) beard(skull, f, hairColor);
+  if (extra === 'moustache' || extra.includes('beard')) moustache(skull, f, hairColor);
+  return lids;
+}
+
+// Round glasses in front of the eyes, with a bridge over the nose and arms
+// back to the ears: the frame, and the lenses in it.
+function glasses(skull, eye) {
+  const ring = eye.r * 1.32;
+  const frame = [];
+  const lenses = [];
+  const rim = (e, x) => inEye(e, x, -0.01, eye.r + 0.026);
+  for (const e of eye.eyes) {
+    frame.push({ g: torus(ring, 0.0085), m: placed(rim(e, 0), e.q) });
+    lenses.push({ g: cylinder(ring, ring, 0.004, 24), m: placed(rim(e, 0), e.q, 1, 1, 1, Math.PI / 2) });
+    frame.push({ g: cylinder(1, 1, 1, 6), m: between(rim(e, e.side * ring), new THREE.Vector3(e.side * PR[0] * 1.02, -0.04, -0.06), 0.0085) });
+  }
+  const [a, b] = eye.eyes.map((e) => rim(e, -e.side * ring));
+  frame.push({ g: cylinder(1, 1, 1, 6), m: between(a, b.clone().add(new THREE.Vector3(0, 0.004, 0)), 0.0085) });
+  skull.add(mesh(bake(frame), toon('#3a3340')), mesh(bake(lenses), toon('#d8f0ff', { transparent: true, opacity: 0.28 })));
+}
+
+// A moustache under the nose, curling up a little at each end.
+function moustache(skull, f, color) {
+  const parts = [-1, 1].flatMap((side) => {
+    const a = faceAt(f, side * 0.032, f.noseTip - 0.052, 0.012);
+    const b = faceAt(f, side * 0.074, f.noseTip - 0.066, 0.008);
+    return [
+      { g: sphere(1, 14, 10), m: placed(a.p, facing(a.n), 0.043, 0.017, 0.022, 0, 0, side * 0.28) },
+      { g: sphere(1, 12, 8), m: placed(b.p, facing(b.n), 0.022, 0.013, 0.017, 0, 0, side * 0.7) },
+    ];
+  });
+  skull.add(mesh(geo(`moustache|${f.key}`, () => bake(parts)), toon(color)));
+}
+
+// A beard over the jaw from ear to ear: a shell on the face, from under the
+// lower lip and up the cheeks to sideburns in front of the ears, thinning
+// out at its edges; and a fuller chin.
+function beard(skull, f, color) {
+  const cover = geo(`beard|${f.key}`, () => {
+    const cols = 44;
+    const rows = 16;
+    const shape = (u, v, w, out) => headPoint(f, u, v, w, out);
+    // Where it starts, round the face from the front (a 0): under the lip,
+    // round the mouth, up the cheeks, and highest at the sideburns.
+    const top = (a) => {
+      const s = Math.abs(a);
+      if (s < 0.28) return -0.8;
+      if (s < 0.75) return -0.8 + ((s - 0.28) / 0.47) * 0.48;
+      if (s < 1.3) return -0.32 + ((s - 0.75) / 0.55) * 0.3;
+      return -0.02;
+    };
+    const positions = [];
+    const index = [];
+    for (let i = 0; i <= cols; i++) {
+      const a = -1.5 + (i / cols) * 3;
+      const from = top(a);
+      for (let j = 0; j <= rows; j++) {
+        const v = from + (j / rows) * (-0.995 - from);
+        const ring = Math.sqrt(1 - v * v);
+        const { p, n } = surfaceAt(shape, new THREE.Vector3(Math.sin(a) * ring, v, Math.cos(a) * ring));
+        const edge = Math.min(1, j / 3, Math.min(i, cols - i) / 4);
+        p.addScaledVector(n, 0.004 + 0.03 * edge);
+        positions.push(p.x, p.y, p.z);
+      }
+    }
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const p = i * (rows + 1) + j;
+        const q = p + rows + 1;
+        index.push(p, p + 1, q, q, p + 1, q + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    return g;
+  });
+  skull.add(mesh(cover, toon(color)));
+  const { p, n } = faceAt(f, 0, -PR[1] * f.jaw * 0.88, 0.03);
+  skull.add(mesh(geo(`beard-chin|${f.key}`, () => bake([{ g: sphere(1, 16, 12), m: placed(p, facing(n), 0.1, 0.07, 0.06) }])), toon(color)));
+}
 
 // Hats that sit over the top of the head, where a bun or spikes would poke through.
 const CROWN_HATS = ['cap', 'beanie', 'straw', 'party'];
 const TIE = '#ff6f9f';
-const UP = new THREE.Vector3(0, 1, 0);
 
-// A piece of a shell k times the size of the head. Around the head, phi 0 is
-// the left side, π/2 the face, π the right side and 3π/2 the back; theta goes
-// down from the top. tilt leans it back, to reach lower behind than in front.
+// A piece of a shell round a head, k times HEAD_R, to be scaled to the
+// head's shape. Around the head, phi 0 is the left side, π/2 the face, π the
+// right side and 3π/2 the back; theta goes down from the top. tilt leans it
+// back, to reach lower behind than in front.
 function shell(k, { phi = 0, phiLength = Math.PI * 2, theta = 0, thetaLength = Math.PI, tilt = 0 } = {}) {
   return geo(`shell${k}|${phi}|${phiLength}|${theta}|${thetaLength}|${tilt}`, () => new THREE.SphereGeometry(HEAD_R * k, 28, 16, phi, phiLength, theta, thetaLength).rotateX(-tilt));
 }
 
-// A point on the head k times its size, `up` from the top and `turn` round
-// from the face (to its left), and which way is out there.
+// A point on a person's head, k times its size, `up` from the top and `turn`
+// round from the face (to its left), and which way is out there.
 function onHead(up, turn, k = 1) {
-  const p = new THREE.Vector3(Math.sin(up) * Math.sin(turn) * HR[0] * k, Math.cos(up) * HR[1] * k, Math.sin(up) * Math.cos(turn) * HR[2] * k);
-  const out = new THREE.Vector3(p.x / HR[0] ** 2, p.y / HR[1] ** 2, p.z / HR[2] ** 2).normalize();
+  const p = new THREE.Vector3(Math.sin(up) * Math.sin(turn) * PR[0] * k, Math.cos(up) * PR[1] * k, Math.sin(up) * Math.cos(turn) * PR[2] * k);
+  const out = new THREE.Vector3(p.x / PR[0] ** 2, p.y / PR[1] ** 2, p.z / PR[2] ** 2).normalize();
   return { p, out };
 }
 
-// A kid's face, or a grown-up's (grown: with smaller eyes, and what they
-// have on it, see FACES in shared/words.js). ears: false where hair covers them.
-function kidFace(head, skin, { ears = true, grown = false, extra = 'none', hairColor = BLACK } = {}) {
-  if (ears) {
-    for (const side of [-1, 1]) {
-      const ear = mesh(sphere(1, 14, 10), toon(skin), side * HR[0] * 0.97, -0.03, -0.02, 0.05, 0.075, 0.06);
-      ear.rotateZ(side * 0.2);
-      head.add(ear);
-      head.add(mesh(sphere(1, 10, 8), toon(darken(skin, 0.15)), side * HR[0] * 1.0, -0.03, 0.008, 0.028, 0.042, 0.03));
-    }
-  }
-  // Soft cheeks and a small chin, so the head reads as a face, not a ball.
-  for (const side of [-1, 1]) {
-    const c = onFace(side * 0.2, -0.1, -0.03);
-    const cheek = mesh(sphere(1, 16, 12), toon(skin), c.x, c.y, c.z, 0.09, 0.075, 0.045);
-    cheek.lookAt(c.clone().multiplyScalar(2));
-    head.add(cheek);
-  }
-  const chin = onFace(0, -0.25, -0.025);
-  const jaw = mesh(sphere(1, 16, 12), toon(skin), chin.x, chin.y, chin.z, 0.085, 0.05, 0.04);
-  jaw.lookAt(chin.clone().multiplyScalar(2));
-  head.add(jaw);
-  const p = onFace(0, -0.04, 0);
-  head.add(mesh(sphere(1, 16, 12), toon(darken(skin, 0.12)), p.x, p.y, p.z, grown ? 0.036 : 0.032, grown ? 0.03 : 0.024, 0.024));
-  smile(head, 0.045, -0.11);
-  const e = eyes(head, grown ? 'dot' : 'big');
-  blush(head);
-  if (grown) brows(head, hairColor);
-  if (extra.includes('glasses')) glasses(head);
-  if (extra.includes('beard')) beard(head, hairColor);
-  if (extra === 'moustache' || extra.includes('beard')) moustache(head, hairColor);
-  return e;
-}
-
-// Round glasses over the eyes, with arms back to the ears.
-function glasses(head) {
-  const frame = toon('#3a3340');
-  for (const side of [-1, 1]) {
-    const p = onFace(side * 0.12, 0.02, 0.03);
-    const ring = mesh(torus(0.068, 0.011), frame, p.x, p.y, p.z);
-    ring.lookAt(p.clone().multiplyScalar(2));
-    const lens = mesh(cylinder(0.064, 0.064, 0.004, 20), toon('#d8f0ff', { transparent: true, opacity: 0.3 }), p.x, p.y, p.z);
-    lens.quaternion.setFromUnitVectors(UP, p.clone().normalize());
-    head.add(ring, lens);
-    // From the outer edge of the rim, back along the side of the head.
-    const edge = onFace(side * 0.19, 0.02, 0.02);
-    const ear = new THREE.Vector3(side * HR[0] * 1.02, 0.02, -0.04);
-    const arm = mesh(cylinder(0.009, 0.009, edge.distanceTo(ear), 6), frame, (edge.x + ear.x) / 2, (edge.y + ear.y) / 2, (edge.z + ear.z) / 2);
-    arm.quaternion.setFromUnitVectors(UP, ear.clone().sub(edge).normalize());
-    head.add(arm);
-  }
-  const bridge = onFace(0, 0.035, 0.03);
-  head.add(mesh(capsule(0.009, 0.05), frame, bridge.x, bridge.y, bridge.z).rotateZ(Math.PI / 2));
-}
-
-// A moustache under the nose, curling up a little at each end.
-function moustache(head, color) {
-  for (const side of [-1, 1]) {
-    const p = onFace(side * 0.045, -0.075, 0.008);
-    const m = mesh(sphere(1, 14, 10), toon(color), p.x, p.y, p.z, 0.055, 0.024, 0.03);
-    m.lookAt(p.clone().multiplyScalar(2));
-    m.rotateZ(side * 0.25);
-    head.add(m);
-    // The curl at the end, tipping up.
-    const tip = onFace(side * 0.095, -0.06, 0.01);
-    head.add(mesh(sphere(1, 12, 8), toon(color), tip.x, tip.y, tip.z, 0.024, 0.02, 0.024));
-  }
-}
-
-// A beard round the jaw, from ear to ear, under the smile.
-function beard(head, color) {
-  const mat = toon(color, { side: THREE.DoubleSide });
-  head.add(mesh(shell(1.06, { phi: Math.PI / 2 - 1.45, phiLength: 2.9, theta: 1.95, thetaLength: 0.95 }), mat, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
-  const chin = onFace(0, -0.25, 0.03);
-  head.add(mesh(sphere(1, 16, 12), toon(color), chin.x, chin.y, chin.z, 0.13, 0.09, 0.08));
+// A point on the front of a person's head, above the eyes (where the
+// sculpting of headPoint leaves it as it is), pushed out.
+function onBrow(fx, fy, out) {
+  return onSurface(PR[0], PR[1], PR[2], fx, fy, out);
 }
 
 // Where hair stops going down the head, `turn` round from the face: over
-// the forehead at the front, lower round the sides and lowest at the back.
+// the forehead at the front, down in front of the ears, up over them, and
+// down again behind them to the nape.
 const capLine = (turn) => {
   const a = Math.abs(turn);
-  return a < 0.9 ? 0.95 : a < 1.8 ? 0.95 + (a - 0.9) * 0.75 : 1.62 + (a - 1.8) * 0.33;
+  const ramp = (a0, a1, v0, v1) => v0 + ((a - a0) / (a1 - a0)) * (v1 - v0);
+  if (a < 0.9) return 0.95;
+  if (a < 1.32) return ramp(0.9, 1.32, 0.95, 1.7);
+  if (a < 1.48) return ramp(1.32, 1.48, 1.7, 1.42);
+  if (a < 1.95) return 1.42;
+  if (a < 2.35) return ramp(1.95, 2.35, 1.42, 2.08);
+  return ramp(2.35, Math.PI, 2.08, 2.3);
 };
-const bobLine = (turn) => (Math.abs(turn) < 1.0 ? 0.95 : 2.12);
-const longLine = (turn) => (Math.abs(turn) < 1.0 ? 0.95 : 2.3);
+const bobLine = (turn) => (Math.abs(turn) < 1.12 ? 0.95 : 2.12);
+const longLine = (turn) => (Math.abs(turn) < 1.12 ? 0.95 : 2.3);
 
 // Hair combed down from the crown, as one sculpted shell: ridges run from
 // the top of the head down to a hairline that dips into a soft point at the
@@ -601,7 +1037,7 @@ function combed(key, line, k = 1.06, ridges = 22) {
         const ridge = 0.03 * (0.5 + 0.5 * wave) * Math.min(1, up / 0.5);
         const roll = v > 0.9 ? ((v - 0.9) / 0.1) ** 2 * 0.05 : 0;
         const r = k * (1 + ridge - roll);
-        positions.push(Math.sin(up) * Math.sin(turn) * HR[0] * r, Math.cos(up) * HR[1] * r, Math.sin(up) * Math.cos(turn) * HR[2] * r);
+        positions.push(Math.sin(up) * Math.sin(turn) * PR[0] * r, Math.cos(up) * PR[1] * r, Math.sin(up) * Math.cos(turn) * PR[2] * r);
       }
     }
     for (let i = 0; i < cols; i++) {
@@ -619,27 +1055,32 @@ function combed(key, line, k = 1.06, ridges = 22) {
   });
 }
 
-// Long hair hanging down the back past the shoulders: a curtain in the same
-// ridged locks as the top, each ending in a soft point, its edges rolled in.
-const hairFall = () =>
-  geo('hair-fall', () => {
+// Long hair hanging down the back, past the shoulders to the shoulder
+// blades: a curtain in the same ridged locks as the top, each ending in a
+// soft point, its edges rolled in. At the top it goes round the back of the
+// head; lower down it lies flatter, behind the shoulders, over the back.
+const hairFall = (length) =>
+  geo(`hair-fall|${length}`, () => {
     const cols = 48;
-    const rows = 14;
-    const spread = 1.25;
+    const rows = 20;
+    const spread = 1.15;
     const positions = [];
     const index = [];
     for (let i = 0; i <= cols; i++) {
       const u = i / cols;
       const a = Math.PI - spread + u * spread * 2;
       const wave = Math.cos((a - Math.PI) * 11);
-      const bottom = -0.58 - 0.045 * wave;
+      const bottom = -length - 0.05 * wave;
       const edge = Math.min(u, 1 - u);
       for (let j = 0; j <= rows; j++) {
         const v = j / rows;
-        const y = -0.2 + (bottom + 0.2) * v;
-        const roll = (v > 0.85 ? ((v - 0.85) / 0.15) ** 2 * 0.035 : 0) + (edge < 0.08 ? ((0.08 - edge) / 0.08) ** 2 * 0.035 : 0);
-        const r = 0.272 + 0.035 * v + 0.012 * (0.5 + 0.5 * wave) * Math.min(1, v * 3) - roll;
-        positions.push(Math.sin(a) * r, y, Math.cos(a) * r);
+        const y = -0.16 + (bottom + 0.16) * v;
+        const roll = (v > 0.88 ? ((v - 0.88) / 0.12) ** 2 * 0.03 : 0) + (edge < 0.08 ? ((0.08 - edge) / 0.08) ** 2 * 0.03 : 0);
+        const r = 0.325 + 0.012 * (0.5 + 0.5 * wave) * Math.min(1, v * 3) - roll;
+        // Round the head at the top, flatter over the back lower down.
+        const flat = smoothstep(Math.min(1, Math.max(0, (-0.16 - y) / 0.32)));
+        const back = -0.27 - 0.06 * Math.cos(((a - Math.PI) / spread) * (Math.PI / 2)) - 0.01 * (0.5 + 0.5 * wave);
+        positions.push(Math.sin(a) * r * (1 - 0.08 * flat), y, Math.cos(a) * r * (1 - flat) + (back + roll) * flat);
       }
     }
     for (let i = 0; i < cols; i++) {
@@ -656,8 +1097,9 @@ const hairFall = () =>
     return g;
   });
 
-// A kid's hair. Returns the bunches and tails that swing as you move.
-function hair(head, style, color, hatKind) {
+// A person's hair (fall: how far long hair hangs down the back). Returns the
+// bunches and tails that swing as you move.
+function hair(head, style, color, hatKind, fall = 1) {
   const g = new THREE.Group();
   const shellMat = toon(color, { side: THREE.DoubleSide });
   const mat = toon(color);
@@ -667,42 +1109,43 @@ function hair(head, style, color, hatKind) {
     g.add(m);
     return m;
   };
-  const cover = (k, opts) => add(mesh(shell(k, opts), shellMat, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
+  const cover = (k, opts) => add(mesh(shell(k, opts), shellMat, 0, 0, 0, PERSON.sx, PERSON.sy, PERSON.sz));
   // The top and the back, clear of the forehead, combed into locks.
   const cap = () => {
     add(mesh(combed('cap', capLine), shellMat));
   };
   // A lock of hair lying flat over the forehead, rolled round in place.
   const lock = (fx, fy, sx, sy, roll = 0) => {
-    const p = onFace(fx, fy, 0.014);
+    const p = onBrow(fx, fy, 0.014);
     const m = mesh(sphere(1, 14, 10), mat, p.x, p.y, p.z, sx, sy, 0.045);
     m.lookAt(p.clone().multiplyScalar(2));
     m.rotateZ(roll);
     return add(m);
   };
   const swept = () => {
-    lock(-0.16, 0.18, 0.1, 0.07, 0.55);
-    lock(-0.04, 0.155, 0.11, 0.075, 0.35);
-    lock(0.09, 0.165, 0.1, 0.065, 0.15);
+    lock(-0.15, 0.18, 0.1, 0.07, 0.55);
+    lock(-0.04, 0.16, 0.105, 0.075, 0.35);
+    lock(0.085, 0.17, 0.095, 0.065, 0.15);
   };
-  // Something sticking out of the head along the way out, sunk in a little.
-  const outward = (m, up, turn, k, sink) => {
-    const { p, out } = onHead(up, turn, k);
-    m.quaternion.setFromUnitVectors(UP, out);
-    m.position.copy(p).addScaledVector(out, sink);
-    return add(m);
-  };
-  // A bunch of hair hanging from a tie, which swings: side 0 behind, -1 or 1 beside.
-  const bunch = (x, y, z, side, size) => {
+  // A bunch of hair hanging from a tie, which swings: side 0 behind, -1 or 1
+  // beside. len: how long it hangs, thick: how thick it is.
+  const bunch = (x, y, z, side, len, thick = 1) => {
     const b = new THREE.Group();
     b.position.set(x, y, z);
-    b.add(mesh(sphere(1, 12, 8), toon(TIE), 0, 0, 0, 0.045));
-    // The tie wraps twice round the top of the bunch.
-    b.add(mesh(torus(0.05 * size, 0.012), toon(TIE), 0, -0.045 * size, 0).rotateX(Math.PI / 2));
-    b.add(mesh(sphere(1, 16, 12), mat, 0, -0.15 * size, 0, 0.085 * size, 0.17 * size, 0.08 * size));
-    b.add(mesh(sphere(1, 14, 10), mat, 0, -0.28 * size, 0, 0.062 * size, 0.11 * size, 0.06 * size));
-    b.add(mesh(sphere(1, 12, 8), mat, 0, -0.38 * size, 0, 0.038 * size, 0.06 * size, 0.038 * size));
-    b.userData = { side, rest: side ? side * 0.45 : 0.4 };
+    b.add(mesh(geo(`bunch-tie|${thick}`, () => bake([{ g: sphere(1, 12, 8), m: at(0, 0, 0, 0.045 * thick) }, { g: torus(0.05 * thick, 0.012), m: at(0, -0.045 * thick, 0, 1, 1, 1, Math.PI / 2) }])), toon(TIE)));
+    b.add(
+      mesh(
+        geo(`bunch|${len}|${thick}`, () =>
+          bake([
+            { g: sphere(1, 16, 12), m: at(0, -0.15 * len, 0, 0.085 * thick, 0.17 * len, 0.08 * thick) },
+            { g: sphere(1, 14, 10), m: at(0, -0.28 * len, 0, 0.062 * thick, 0.11 * len, 0.06 * thick) },
+            { g: sphere(1, 12, 8), m: at(0, -0.38 * len, 0, 0.038 * thick, 0.06 * len, 0.038 * thick) },
+          ]),
+        ),
+        mat,
+      ),
+    );
+    b.userData = { side, rest: side ? side * 0.3 : 0.4 };
     if (side) b.rotation.z = b.userData.rest;
     else b.rotation.x = b.userData.rest;
     sway.push(b);
@@ -741,8 +1184,8 @@ function hair(head, style, color, hatKind) {
         const a = i * 2.39996;
         const d = new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a));
         if (d.dot(pole) < -0.02) continue;
-        const size = 0.085 + (i % 3) * 0.008;
-        curls.push({ g: sphere(1, 12, 9), m: new THREE.Matrix4().makeScale(size, size, size).setPosition(d.x * HR[0] * 1.1, d.y * HR[1] * 1.1, d.z * HR[2] * 1.1) });
+        const size = 0.08 + (i % 3) * 0.008;
+        curls.push({ g: sphere(1, 12, 9), m: new THREE.Matrix4().makeScale(size, size, size).setPosition(d.x * PR[0] * 1.1, d.y * PR[1] * 1.1, d.z * PR[2] * 1.1) });
       }
       add(mesh(bakeCached('curls', curls), mat));
       break;
@@ -751,35 +1194,30 @@ function hair(head, style, color, hatKind) {
     case 'long': {
       // Down the sides and the back, round the face, to the jaw.
       add(mesh(combed(style, style === 'bob' ? bobLine : longLine, 1.08), shellMat));
-      for (const fx of [-0.18, -0.06, 0.06, 0.18]) lock(fx, 0.16, 0.08, 0.075);
-      if (style === 'long') {
-        // On down the back, past the shoulders, with rounded edges.
-        const fall = new THREE.Group();
-        fall.scale.x = HEAD.sx;
-        fall.add(mesh(hairFall(), shellMat));
-        add(fall);
-      }
+      for (const fx of [-0.17, -0.057, 0.057, 0.17]) lock(fx, 0.165, 0.075, 0.072);
+      // On down the back, past the shoulders, with rounded edges.
+      if (style === 'long') add(mesh(hairFall(fall), shellMat));
       break;
     }
     case 'ponytail':
       cap();
       swept();
-      bunch(0, 0.22, -0.33, 0, 1.3);
+      bunch(0, 0.17, -(PR[2] + 0.012), 0, 2, 0.95);
       break;
     case 'pigtails':
       cap();
-      for (const fx of [-0.15, 0, 0.15]) lock(fx, 0.16, 0.085, 0.07);
-      for (const side of [-1, 1]) bunch(side * 0.36, 0.1, -0.08, side, 1);
+      for (const fx of [-0.14, 0, 0.14]) lock(fx, 0.165, 0.08, 0.07);
+      for (const side of [-1, 1]) bunch(side * (PR[0] + 0.035), 0.05, -0.07, side, 1.45, 0.95);
       break;
     case 'bun':
       cap();
       swept();
       if (!covered) {
-        add(mesh(sphere(1, 16, 12), mat, 0, 0.36, -0.12, 0.14, 0.13, 0.14));
-        add(mesh(torus(0.1, 0.02), toon(TIE), 0, 0.3, -0.1).rotateX(Math.PI / 2 + 0.4));
-        add(mesh(torus(0.105, 0.02), toon(TIE), 0, 0.35, -0.1).rotateX(Math.PI / 2 + 0.1));
+        add(mesh(sphere(1, 16, 12), mat, 0, 0.35, -0.13, 0.14, 0.13, 0.14));
+        add(mesh(torus(0.1, 0.02), toon(TIE), 0, 0.29, -0.11).rotateX(Math.PI / 2 + 0.4));
+        add(mesh(torus(0.105, 0.02), toon(TIE), 0, 0.34, -0.11).rotateX(Math.PI / 2 + 0.1));
         // A few loose strands escaping the bun.
-        for (const [dx, dy, dz, len, roll] of [[-0.08, 0.3, -0.05, 0.09, 0.5], [0.07, 0.28, -0.04, 0.08, -0.4], [0, 0.42, -0.08, 0.07, 0.2]]) {
+        for (const [dx, dy, dz, len, roll] of [[-0.08, 0.29, -0.06, 0.09, 0.5], [0.07, 0.27, -0.05, 0.08, -0.4], [0, 0.41, -0.09, 0.07, 0.2]]) {
           add(mesh(capsule(0.012, len), mat, dx, dy, dz).rotateZ(roll));
         }
       }
@@ -788,10 +1226,9 @@ function hair(head, style, color, hatKind) {
       cap();
       // A fuller fringe than the swept locks, all as one shape.
       const fringe = [];
-      const Z = new THREE.Vector3(0, 0, 1);
-      for (const [fx, fy, sx, sy, roll] of [[-0.21, 0.165, 0.085, 0.06, 0.55], [-0.1, 0.15, 0.1, 0.07, 0.3], [0.01, 0.145, 0.1, 0.07, 0.1], [0.12, 0.155, 0.09, 0.065, -0.15], [0.22, 0.175, 0.075, 0.055, -0.45], [-0.26, 0.19, 0.06, 0.045, 0.7]]) {
-        const p = onFace(fx, fy, 0.014);
-        const q = new THREE.Quaternion().setFromUnitVectors(Z, p.clone().normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(Z, roll));
+      for (const [fx, fy, sx, sy, roll] of [[-0.19, 0.165, 0.08, 0.06, 0.55], [-0.09, 0.15, 0.095, 0.07, 0.3], [0.01, 0.145, 0.095, 0.07, 0.1], [0.11, 0.155, 0.085, 0.065, -0.15], [0.2, 0.175, 0.07, 0.055, -0.45], [-0.24, 0.19, 0.055, 0.045, 0.7]]) {
+        const p = onBrow(fx, fy, 0.014);
+        const q = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, p.clone().normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, roll));
         fringe.push({ g: sphere(1, 14, 10), m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(sx, sy, 0.045)) });
       }
       add(mesh(bakeCached('fringe|short', fringe), mat));
@@ -802,7 +1239,6 @@ function hair(head, style, color, hatKind) {
   return sway;
 }
 
-// lift: how much higher than on an animal's head it sits (on a kid's hair).
 // A toy weapon from the shop (shared/shop.js), held in the hand: its grip
 // at the hand, pointing forward with the arm down. Soft foam and bubbles,
 // in bright toy colours.
@@ -851,10 +1287,13 @@ export function weapon(kind) {
   return g;
 }
 
-function hat(head, kind, shirt, lift = 0) {
-  const top = HR[1];
+// A hat on a head: an animal's, or a person's (person), fitted to its shape.
+// lift: how much higher it sits than on the bare head (on a person's hair).
+function hat(head, kind, shirt, lift = 0, person = false) {
+  const top = (person ? PR : HR)[1];
   const g = new THREE.Group();
   g.position.set(0, top * 0.72 + lift, 0);
+  if (person) g.scale.set(PR[0] / HR[0], 0.9, PR[2] / HR[2]);
   const add = (...ms) => ms.forEach((m) => g.add(m));
   switch (kind) {
     case 'cap': {
@@ -928,15 +1367,16 @@ function hat(head, kind, shirt, lift = 0) {
       const dome = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(shirt));
       dome.scale.set(1.18, 0.9, 1.12);
       add(dome);
-      // Ribs running up the knit, and a turned-up brim.
+      // Ribs running up the knit, each a band over the dome from the brim on
+      // one side to the brim on the other, and a turned-up brim.
+      const rib = geo('beanie-rib', () => new THREE.SphereGeometry(1, 8, 10, 0, Math.PI * 2, 0, Math.PI / 2));
       const ribs = [];
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        const { p, out } = onHead(0.5, Math.PI / 2 - a, 1.16 * 1.18);
-        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
-        ribs.push({ g: capsule(0.008, 0.2), m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)) });
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI;
+        const reach = 1 / Math.hypot(Math.sin(a) / 0.354, Math.cos(a) / 0.336) + 0.007;
+        ribs.push({ g: rib, m: at(0, 0, 0, 0.009, 0.277, reach, 0, a, 0) });
       }
-      add(mesh(bakeCached(`beanie-ribs|${shirt}`, ribs), toon(darken(shirt, 0.15))));
+      add(mesh(bakeCached('beanie-ribs', ribs), toon(darken(shirt, 0.15))));
       add(mesh(torus(0.33, 0.045), toon(lighten(shirt, 0.35)), 0, 0.02, 0, 1.05, 1, 1).rotateX(Math.PI / 2));
       add(mesh(sphere(1, 14, 10), toon(WHITE), 0, 0.3, 0, 0.07), mesh(sphere(1, 10, 8), toon('#f0e8e0'), 0.02, 0.33, 0.01, 0.035));
       break;
@@ -987,6 +1427,54 @@ function hat(head, kind, shirt, lift = 0) {
   return g;
 }
 
+// The parts of a body, shaped as a build (BUILDS) says, each hanging from
+// its joint: a trouser leg from the hip down to the knee and on from the
+// knee (its rounded top fills the bend) to the hem; an arm from the shoulder
+// to the elbow, and the forearm from the elbow (rounded the same) to the wrist.
+// lathe() wants its points from the bottom up; these are from the joint down.
+const hanging = (points, segs) => lathe([...points].reverse(), segs);
+const thighShape = (B) => {
+  const L = B.hip - B.knee;
+  const [top, mid, low] = B.thigh;
+  return hanging([[0, 0.07], [top * 0.8, 0.06], [top, 0.015], [top * 0.97, -0.07], [mid, -L * 0.52], [low * 1.02, -L * 0.86], [low, -L], [low * 0.62, -L - low * 0.62], [0, -L - low * 0.8]], 20);
+};
+const shinShape = (B) => {
+  const L = B.knee - B.hem;
+  const [top, mid, low] = B.shin;
+  return hanging([[0, top * 0.92], [top * 0.68, top * 0.74], [top, 0.004], [top * 1.01, -0.05], [mid, -L * 0.48], [low, -L], [low * 0.55, -L - 0.006], [0, -L - 0.008]], 20);
+};
+const upperArmShape = (B) => {
+  const [len, , rs, re] = B.arm;
+  return hanging([[0, -0.015], [rs * 0.9, -0.03], [rs * 0.95, -B.sleeve * 0.6], [(rs + re) * 0.51, -len * 0.62], [re, -len], [re * 0.6, -len - re * 0.62], [0, -len - re * 0.82]], 16);
+};
+const forearmShape = (B) => {
+  const [, len, , re, rw] = B.arm;
+  return hanging([[0, re * 0.9], [re * 0.68, re * 0.74], [re, 0], [re * 1.04, -len * 0.24], [(re + rw) * 0.5, -len * 0.62], [rw, -len], [rw * 0.6, -len - 0.005], [0, -len - 0.007]], 16);
+};
+// The shoulder rounded in its sleeve, and the short sleeve opening out from it.
+const sleeveShape = (B) => {
+  const rs = B.arm[2];
+  return geo(`sleeve|${rs}|${B.sleeve}`, () =>
+    bake([
+      { g: sphere(1, 16, 12), m: at(0, 0, 0, rs * 1.22, rs * 1.02, rs * 1.18) },
+      { g: hanging([[rs * 1.12, 0.016], [rs * 1.22, -0.012], [rs * 1.25, -B.sleeve * 0.6], [rs * 1.24, -B.sleeve], [rs * 1.02, -B.sleeve - 0.004]], 18), m: new THREE.Matrix4() },
+    ]),
+  );
+};
+// A hand at the wrist, hanging down, its palm to the body (side: which
+// hand, -1 or 1) and its thumb forward: a palm, four fingers a little curled
+// and a thumb, size times a small hand.
+const handShape = (size, side) =>
+  geo(`hand|${size}|${side}`, () => {
+    const parts = [{ g: sphere(1, 14, 10), m: at(0, -0.034, 0.001, 0.0118, 0.035, 0.0235) }];
+    // From the front (by the thumb) to the back: how long each finger is.
+    for (const [z, len, r] of [[0.0155, 0.038, 0.0062], [0.005, 0.043, 0.0065], [-0.0055, 0.04, 0.0062], [-0.0158, 0.032, 0.0056]]) {
+      parts.push({ g: capsule(r, len - 2 * r, 4, 8), m: at(-side * 0.002, -0.056 - len / 2, z, 1, 1, 1, 0, 0, -side * 0.22) });
+    }
+    parts.push({ g: capsule(0.0074, 0.02, 4, 8), m: at(-side * 0.006, -0.033, 0.024, 1, 1, 1, -0.55, 0, -side * 0.15) });
+    return bake(parts.map(({ g, m }) => ({ g, m: new THREE.Matrix4().makeScale(size, size, size).multiply(m) })));
+  });
+
 export class Avatar {
   constructor(look, { name = '' } = {}) {
     this.root = new THREE.Group();
@@ -1016,19 +1504,18 @@ export class Avatar {
     this.look = { ...look };
     if (this.body) this.root.remove(this.body);
     this.curlFit = null;
-    const kid = isPerson(look);
+    const person = isPerson(look);
     const grown = look.animal === GROWN_UP;
-    // How much taller a grown-up is than a kid: their legs, then the rest.
+    const B = grown ? BUILDS.grown : BUILDS.kid;
+    this.build = B;
+    // How much taller a grown-up is than a kid.
     this.tall = lookTall(look);
-    const legLong = this.tall * 0.55;
-    this.legLong = legLong;
-    const up = this.tall - legLong;
-    // Sitting down, only the top half is taller.
-    this.sitTall = up;
-    const armLong = grown ? 0.09 : 0;
     // A kid's (or a grown-up's) skin is where an animal's fur is: face, neck and hands.
-    const fur = kid ? (SKIN_TONES[look.skin] ?? SKIN_TONES.golden) : (FUR_COLORS[look.fur] ?? FUR_COLORS.white);
+    const fur = person ? (SKIN_TONES[look.skin] ?? SKIN_TONES.golden) : (FUR_COLORS[look.fur] ?? FUR_COLORS.white);
+    const skin = toon(fur);
     const shirt = shirtColor(look.shirt);
+    const shirtMat = toon(shirt);
+    const band = toon(darken(shirt, 0.16));
     const body = new THREE.Group();
     this.body = body;
     this.root.add(body);
@@ -1037,137 +1524,117 @@ export class Avatar {
     const pants = frog ? fur : trousersFor(shirt);
     const pantsMat = toon(pants);
     const seam = toon(darken(pants, 0.18));
-    const shoeUpper = frog ? darken(fur, 0.1) : shoeFor(shirt);
-    this.legs = [-1, 1].map((side) => {
+    // Legs: a thigh from the hip, then the knee and the shin down to a
+    // sneaker (a frog's legs are its skin, and its feet bare).
+    this.legs = [];
+    this.knees = [];
+    for (const side of [-1, 1]) {
       const leg = new THREE.Group();
-      leg.position.set(side * 0.1, 0.28 + legLong, 0);
-      // A trouser leg from the hip down to the ankle, full at the thigh and
-      // narrowing to a rolled-up cuff; a frog's legs are its skin.
-      leg.add(
-        mesh(
-          lathe([
-            [0, -0.22 - legLong],
-            [0.054, -0.22 - legLong],
-            [0.058, -0.15 - legLong * 0.75],
-            [0.066, -0.06 - legLong * 0.3],
-            [0.08, 0.01],
-            [0.07, 0.05],
-            [0, 0.06],
-          ], 18),
-          pantsMat,
-        ),
-      );
-      if (!frog) leg.add(mesh(torus(0.056, 0.014), seam, 0, -0.205 - legLong, 0).rotateX(Math.PI / 2));
-      // A sneaker: a pale rubber sole with a bumper round the toe, a padded
-      // upper in a bright colour and laces across the top.
-      const y = -0.28 - legLong;
-      const sole = frog ? toon(darken(fur, 0.25)) : toon('#f6f1ea');
-      leg.add(mesh(sneakerSole(), sole, 0, y, 0.03));
-      leg.add(mesh(sneakerUpper(), toon(shoeUpper), 0, y, 0.03));
-      if (!frog) leg.add(mesh(sneakerLaces(), toon('#ffffff'), 0, y, 0.03));
+      leg.position.set(side * B.hipX, B.hip, 0);
+      leg.add(mesh(thighShape(B), pantsMat));
+      const knee = new THREE.Group();
+      knee.position.y = B.knee - B.hip;
+      knee.add(mesh(shinShape(B), pantsMat));
+      if (!frog) knee.add(mesh(torus(B.shin[2] + 0.001, 0.0105), seam, 0, B.hem - B.knee + 0.011, 0).rotateX(Math.PI / 2));
+      knee.add(mesh(sneakerSole(B.foot), toon(frog ? darken(fur, 0.25) : '#f6f1ea'), 0, -B.knee, 0));
+      knee.add(mesh(sneakerUpper(B.foot), toon(frog ? darken(fur, 0.1) : shoeFor(shirt)), 0, -B.knee, 0));
+      if (!frog) knee.add(mesh(sneakerTrim(B.foot), toon('#ffffff'), 0, -B.knee, 0));
+      leg.add(knee);
       body.add(leg);
-      return leg;
-    });
+      this.legs.push(leg);
+      this.knees.push(knee);
+    }
     this.torso = new THREE.Group();
-    this.torso.position.y = 0.28 + legLong;
+    this.torso.position.y = B.hip;
     body.add(this.torso);
-    const wide = grown ? 1.08 : 1;
-    // The seat of the trousers, with a waistband, under the shirt.
-    this.torso.add(
-      mesh(
-        lathe([
-          [0, -0.08],
-          [0.13, -0.08],
-          [0.152, -0.04],
-          [0.156, 0.06],
-          [0, 0.06],
-        ]),
-        pantsMat,
-        0,
-        0,
-        0,
-        wide,
-        1,
-        0.85,
-      ),
-    );
-    if (!frog) this.torso.add(mesh(torus(0.154, 0.015), seam, 0, 0.035, 0, wide, 1, 0.85).rotateX(Math.PI / 2));
-    // A t-shirt with a shape of its own: a chest, square shoulders, and a hem
-    // that sits out over the trousers.
-    this.torso.add(
-      mesh(
-        lathe([
-          [0.02, 0.05],
-          [0.152, 0.05],
-          [0.166, 0.08],
-          [0.158, 0.16 + up * 0.45],
-          [0.162, 0.26 + up * 0.6],
-          [0.158, 0.36 + up * 0.8],
-          [0.142, 0.42 + up * 0.93],
-          [0.1, 0.465 + up],
-          [0.06, 0.49 + up],
-        ], 28),
-        toon(shirt),
-        0,
-        0,
-        0,
-        wide,
-        1,
-        0.85,
-      ),
-    );
-    // A hem band, a ribbed collar round the neck, and a star on the chest.
-    this.torso.add(mesh(torus(0.163, 0.014), toon(darken(shirt, 0.16)), 0, 0.065, 0, wide, 1, 0.85).rotateX(Math.PI / 2));
-    this.torso.add(mesh(torus(0.068, 0.017), toon(darken(shirt, 0.18)), 0, 0.47 + up, 0.005, 1, 1, 0.9).rotateX(Math.PI / 2 - 0.12));
-    const badge = mesh(starShape(), toon(lighten(shirt, 0.65)), 0, 0.27 + up * 0.62, 0.133);
-    badge.rotation.x = -0.1;
+    // The seat of the jeans, with a pocket either side behind.
+    this.torso.add(mesh(loft(B.seat), pantsMat));
+    if (!frog) {
+      const [y, , , back] = B.seat[3];
+      const w = B.seat[3][1];
+      this.torso.add(mesh(geo(`pockets|${w}`, () => bake([-1, 1].map((side) => ({ g: roundedBox(w * 0.46, w * 0.42, 0.012, 0.005), m: at(side * w * 0.4, y - 0.03, -back * 0.92, 1, 1, 1, 0.12, -side * 0.35, 0) })))), seam));
+    }
+    // A t-shirt with a shape of its own: a chest, shoulders, a waist, and a
+    // hem that sits out over the jeans; a band round the hem, a ribbed collar
+    // round the neck, and a star on the chest.
+    const hem = B.shirt[0];
+    const collar = B.shirt[B.shirt.length - 1];
+    this.torso.add(mesh(loft(B.shirt, { segs: 28, ends: [false, true] }), shirtMat));
+    this.torso.add(mesh(torus(hem[1], 0.009), band, 0, hem[0] + 0.006, (hem[2] - hem[3]) / 2, 1, (hem[2] + hem[3]) / 2 / hem[1], 1).rotateX(Math.PI / 2));
+    this.torso.add(mesh(torus(collar[1], 0.0105), band, 0, collar[0] - 0.004, 0.002, 1, collar[2] / collar[1], 1).rotateX(Math.PI / 2 - 0.12));
+    const [badgeY, badgeSize] = B.badge;
+    const chest = B.shirt.find(([y]) => y >= badgeY) ?? B.shirt[4];
+    const badge = mesh(starShape(), toon(lighten(shirt, 0.65)), 0, badgeY, chest[2] - 0.002, badgeSize);
+    badge.rotation.x = -0.12;
     this.torso.add(badge);
-    // A neck in the fur colour, so the head sits nicely.
-    this.torso.add(mesh(cylinder(0.056, 0.062, 0.08, 14), toon(fur), 0, 0.48 + up, 0));
-    this.arms = [-1, 1].map((side) => {
+    // A neck in the skin colour, up into the head.
+    const [neckY, neckR, neckTop] = B.neck;
+    this.torso.add(mesh(lathe([[0, neckY], [neckR * 1.08, neckY + 0.004], [neckR * 1.02, neckY + 0.04], [neckR, (neckY + neckTop) / 2], [neckR * 0.97, neckTop], [0, neckTop + 0.004]], 16), skin));
+    // Arms: a shoulder in its short sleeve, a bare arm down to the elbow, and
+    // the forearm down to the hand.
+    this.arms = [];
+    this.elbows = [];
+    this.hands = [];
+    for (const side of [-1, 1]) {
       const arm = new THREE.Group();
-      arm.position.set(side * (grown ? 0.215 : 0.2), 0.39 + up, 0);
-      arm.rotation.z = side * 0.18;
-      // A rounded shoulder that melts into the shirt, a short sleeve opening
-      // out to a hem, then a bare arm down to the hand.
-      arm.add(mesh(sphere(1, 16, 12), toon(shirt), 0, 0, 0, 0.074, 0.07, 0.07));
-      arm.add(mesh(lathe([[0.072, 0], [0.075, -0.05], [0.07, -0.095], [0.045, -0.1], [0, -0.1]], 16), toon(shirt)));
-      arm.add(mesh(torus(0.068, 0.012), toon(darken(shirt, 0.16)), 0, -0.088, 0).rotateX(Math.PI / 2));
-      arm.add(mesh(capsule(0.042, 0.08 + armLong), toon(fur), 0, -0.14 - armLong / 2, 0));
-      // A chubby hand: a palm, four fingers together and a thumb.
-      const hy = -0.215 - armLong;
-      arm.add(mesh(sphere(1, 16, 12), toon(fur), 0, hy, 0, 0.056, 0.058, 0.048));
-      arm.add(mesh(capsule(0.04, 0.02), toon(fur), 0, hy - 0.035, 0.004, 1.15, 1, 0.9));
-      arm.add(mesh(capsule(0.017, 0.022), toon(fur), side * 0.05, hy + 0.005, 0.016).rotateZ(side * 0.5));
+      arm.position.set(side * B.shoulder[1], B.shoulder[0], 0);
+      arm.add(mesh(sleeveShape(B), shirtMat));
+      arm.add(mesh(torus(B.arm[2] * 1.22, 0.0068), band, 0, -B.sleeve + 0.005, 0).rotateX(Math.PI / 2));
+      arm.add(mesh(upperArmShape(B), skin));
+      const elbow = new THREE.Group();
+      elbow.position.y = -B.arm[0];
+      elbow.add(mesh(forearmShape(B), skin));
+      const hand = new THREE.Group();
+      hand.position.y = -B.arm[1];
+      hand.add(mesh(handShape(B.hand, side), skin));
+      elbow.add(hand);
+      arm.add(elbow);
       this.torso.add(arm);
-      return arm;
-    });
-    // A toy weapon in the right hand.
+      this.arms.push(arm);
+      this.elbows.push(elbow);
+      this.hands.push(hand);
+    }
+    // A toy weapon in the right hand, its grip in the palm.
     this.weapon = look.weapon ? weapon(look.weapon) : null;
     this.weaponKind = this.weapon ? look.weapon : null;
     if (this.weapon) {
-      this.weapon.position.set(0, -0.24 - armLong, 0.02);
-      this.arms[1].add(this.weapon);
+      this.weapon.position.set(0, -0.045 * B.hand, 0.006 * B.hand);
+      this.hands[1].add(this.weapon);
     }
+    // The head turns on the neck; the skull is made at its own size and
+    // scaled to the body.
+    const H = person ? B.head : ANIMAL_SKULL;
     this.head = new THREE.Group();
-    this.head.position.y = 0.5 + up;
+    this.head.position.y = H.pivot;
     this.torso.add(this.head);
     const skull = new THREE.Group();
-    skull.position.y = 0.3;
+    skull.position.set(0, H.y - H.pivot, H.z);
+    skull.scale.setScalar(H.k);
     this.head.add(skull);
     this.skull = skull;
-    skull.add(mesh(sphere(HEAD_R, 28, 20), toon(fur), 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
-    if (kid) {
+    if (person) {
       const hairColor = HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown;
-      this.eyes = kidFace(skull, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', grown, extra: grown ? (look.face ?? 'none') : 'none', hairColor });
-      this.sway = hair(skull, look.hair, hairColor, look.hat);
+      const f = grown ? FACE_SHAPES.grown : FACE_SHAPES.kid;
+      this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor });
+      this.lidShut = this.eyes.userData.shut;
+      this.sway = hair(skull, look.hair, hairColor, look.hat, grown ? 1.15 : 1);
     } else {
+      skull.add(mesh(sphere(HEAD_R, 28, 20), skin, 0, 0, 0, HEAD.sx, HEAD.sy, HEAD.sz));
       ears(skull, look.animal, fur);
       this.eyes = face(skull, look.animal, fur);
+      this.lidShut = 0;
       this.sway = [];
     }
-    this.hat = hat(skull, look.hat, shirt, kid ? (look.hair === 'curly' ? 0.07 : 0.025) : 0);
-    this.tail = tail(this.torso, look.animal, fur);
+    this.hat = hat(skull, look.hat, shirt, person ? (look.hair === 'curly' ? 0.07 : 0.025) : 0, person);
+    const back = B.seat.reduce((most, ring) => Math.max(most, ring[3]), 0);
+    this.tail = tail(this.torso, look.animal, fur, new THREE.Vector3(0, -0.02, -back + 0.01));
+    // Where the top of your head is sitting on the ground (dizzy), and how
+    // far behind your middle the back of you reaches (the back of your head,
+    // or of your jeans), to lie on it.
+    this.sitTop = 1.41 + this.tall - (B.hip - SIT_HIPS);
+    this.lieLift = Math.max(back, (person ? PR[2] * 1.08 : HR[2]) * H.k - H.z);
+    // How far down you sink swimming, leaning forward, to have your head just out of the water.
+    this.swimDrop = B.hip + H.y * Math.cos(SWIM_LEAN) - SWIM_HEAD;
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = false;
     });
@@ -1192,95 +1659,156 @@ export class Avatar {
     this.time += dt;
     const t = this.time;
     this.anim = anim;
+    const B = this.build;
     const moving = anim === ANIM.walk || anim === ANIM.run;
+    const running = anim === ANIM.run;
     const riding = anim === ANIM.ride;
-    this.phase += dt * (moving ? 3.2 + speed * 1.6 : 0);
-    const s = Math.sin(this.phase);
+    const rate = moving ? 3.2 + speed * 1.6 : 0;
+    this.phase += dt * rate;
+    const ph = this.phase;
+    const s = Math.sin(ph);
     const [legL, legR] = this.legs;
+    const [kneeL, kneeR] = this.knees;
     const [armL, armR] = this.arms;
+    const [elbowL, elbowR] = this.elbows;
     // Rest pose.
     let bob = 0;
     let lean = 0;
     let legSwing = 0;
     let armSwing = 0;
-    let armRaiseL = 0.18;
-    let armRaiseR = 0.18;
+    let armRaiseL = REST_RAISE;
+    let armRaiseR = REST_RAISE;
     let armFwdL = 0;
     let armFwdR = 0;
+    // How far each elbow and knee bends.
+    let bendL = 0.14;
+    let bendR = 0.14;
+    let kneeBendL = 0.04;
+    let kneeBendR = 0.04;
     let spin = 0;
     let headTilt = 0;
     let headNod = 0;
+    let twist = 0;
+    // Poses that put both legs just so: for each, [forward (-) or back,
+    // out, how far the knee bends, and the shin turned back in under it].
+    let legs = null;
 
     if (moving) {
-      const k = anim === ANIM.run ? 1 : 0.75;
-      legSwing = s * 0.7 * k;
-      armSwing = -s * 0.6 * k;
-      bob = Math.abs(s) * 0.05 * k;
-      lean = 0.08 * k;
+      // Strides as long as carry you over the ground at that speed, each knee
+      // bending as its foot swings through (most just after it leaves the
+      // ground), the arms swinging against the legs and the shoulders
+      // turning with them.
+      const stride = Math.min(0.8, Math.max(0.3, speed / (B.hip * rate)));
+      legSwing = s * stride;
+      armSwing = -s * stride * (running ? 0.95 : 0.75);
+      const lift = running ? 1.5 : 0.85;
+      kneeBendL = 0.1 + lift * Math.max(0, -Math.cos(ph + 0.54)) ** 1.3;
+      kneeBendR = 0.1 + lift * Math.max(0, Math.cos(ph + 0.54)) ** 1.3;
+      bendL = (running ? 1.4 : 0.32) + 0.25 * Math.max(0, s);
+      bendR = (running ? 1.4 : 0.32) + 0.25 * Math.max(0, -s);
+      bob = running ? Math.abs(s) * 0.045 - 0.025 : (Math.abs(Math.cos(ph)) - 0.6) * 0.022;
+      lean = running ? 0.17 : 0.05;
+      twist = s * (running ? 0.1 : 0.07);
     } else if (anim === ANIM.air) {
+      // Up in a jump, knees tucked, arms out for balance.
       legSwing = 0.3;
-      armRaiseL = armRaiseR = 1.4;
-    } else if (anim === ANIM.swim) {
-      lean = 0.5;
-      armFwdL = Math.sin(t * 6) * 0.9 - 1.2;
-      armFwdR = Math.sin(t * 6 + Math.PI) * 0.9 - 1.2;
-      legSwing = Math.sin(t * 8) * 0.4;
-      bob = Math.sin(t * 3) * 0.04 - 0.35;
-    } else if (anim === ANIM.fly) {
-      armRaiseL = armRaiseR = 1.25;
-      lean = 0.25;
-      bob = Math.sin(t * 2.5) * 0.06;
-      legSwing = 0.15;
-    } else if (anim === ANIM.dizzy) {
-      // Sat down with a bump, head going round and round.
-      bob = -0.24 - this.legLong;
-      lean = -0.12;
-      armRaiseL = armRaiseR = 0.55;
+      kneeBendL = 0.55;
+      kneeBendR = 0.75;
+      armRaiseL = armRaiseR = 0.8;
       armFwdL = armFwdR = -0.35;
+      bendL = bendR = 0.55;
+    } else if (anim === ANIM.swim) {
+      lean = SWIM_LEAN;
+      armFwdL = Math.sin(t * 6) * 0.9 - 1.5;
+      armFwdR = Math.sin(t * 6 + Math.PI) * 0.9 - 1.5;
+      bendL = 0.35 + 0.3 * Math.max(0, Math.cos(t * 6));
+      bendR = 0.35 + 0.3 * Math.max(0, -Math.cos(t * 6));
+      armRaiseL = armRaiseR = 0.25;
+      legSwing = Math.sin(t * 8) * 0.35;
+      kneeBendL = 0.2 + 0.25 * Math.max(0, Math.sin(t * 8));
+      kneeBendR = 0.2 + 0.25 * Math.max(0, -Math.sin(t * 8));
+      bob = Math.sin(t * 3) * 0.04 - this.swimDrop;
+    } else if (anim === ANIM.fly) {
+      // Gliding, arms out like wings and a little back, legs trailing.
+      armRaiseL = armRaiseR = 1.1 + Math.sin(t * 2.5) * 0.06;
+      armFwdL = armFwdR = 0.3;
+      bendL = bendR = 0.25;
+      lean = 0.35;
+      bob = Math.sin(t * 2.5) * 0.06;
+      legs = [[0.22, -0.05, 0.3, 0], [0.32, 0.05, 0.5, 0]];
+    } else if (anim === ANIM.dizzy) {
+      // Sat down with a bump, legs out in front, leaning back on your hands,
+      // head going round and round.
+      bob = -(B.hip - SIT_HIPS);
+      lean = -0.18;
+      armRaiseL = armRaiseR = 0.35;
+      armFwdL = armFwdR = 0.4;
+      bendL = bendR = 0.12;
       headTilt = Math.sin(t * 5) * 0.28;
       headNod = 0.12 + Math.cos(t * 5) * 0.1;
+      legs = [[-1.42, -0.16, 0.3, 0], [-1.42, 0.16, 0.3, 0]];
     } else if (anim === ANIM.sit) {
-      // Sitting back in the seat, hands in the lap, looking about now and then.
-      bob = -0.24 - this.legLong;
-      lean = -0.05;
-      armRaiseL = armRaiseR = 0.2;
-      armFwdL = armFwdR = -0.55;
+      // Sitting back in the seat, knees over its edge, hands in the lap,
+      // looking about now and then.
+      bob = -(B.hip - SIT_HIPS);
+      lean = -0.04;
+      armRaiseL = armRaiseR = 0;
+      armFwdL = armFwdR = -0.3;
+      bendL = bendR = 0.85;
       headTilt = Math.sin(t * 0.7) * 0.06;
       headNod = Math.sin(t * 0.45) * 0.05;
+      legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
     } else if (anim === ANIM.curl) {
       // Hugging your knees, chin tucked in, breathing slowly.
-      bob = 0;
-      armRaiseL = armRaiseR = 0.15;
-      armFwdL = armFwdR = -1.25 + Math.sin(t * 1.6) * 0.02;
-      headNod = 0.65;
+      armRaiseL = armRaiseR = -0.05;
+      armFwdL = armFwdR = -0.85 + Math.sin(t * 1.6) * 0.02;
+      bendL = bendR = 1.25;
+      headNod = 0.55;
+      legs = [[-2.05, -0.05, 2.3, 0], [-2.05, 0.05, 2.3, 0]];
     } else if (anim === ANIM.lie) {
       // Flat on your back, arms by your sides, breathing slowly.
       bob = Math.sin(t * 1.6) * 0.006;
       armRaiseL = armRaiseR = 0.12;
+      bendL = bendR = 0.1;
+      legs = [[0, -0.04, 0.04, 0], [0, 0.04, 0.04, 0]];
     } else if (riding) {
       if (this.ride?.stand) {
         // Kicking along standing up (a kick scooter): front foot planted on
         // the deck, the other kicking back, hands on the handlebars.
         const k = Math.min(1, speed / 9);
-        this.phase += dt * (speed > 0.4 ? 3.5 + speed * 1.3 : 0);
+        const kick = speed > 0.4;
+        this.phase += dt * (kick ? 3.5 + speed * 1.3 : 0);
         bob = Math.abs(Math.sin(this.phase * 0.5)) * (0.008 + k * 0.02);
         lean = 0.07 + k * 0.16;
-        armFwdL = armFwdR = -1.1 - k * 0.12;
-        armRaiseL = armRaiseR = 0.12;
+        armFwdL = armFwdR = -0.95 - k * 0.12;
+        armRaiseL = armRaiseR = 0.1;
+        bendL = bendR = 0.55;
+        legs = [
+          [-0.08, -0.05, 0.12, 0],
+          [kick ? 0.55 + Math.sin(this.phase) * 0.5 : 0.18, 0.05, kick ? 0.25 + 0.45 * Math.max(0, -Math.cos(this.phase)) : 0.1, 0],
+        ];
       } else {
         // Astride an animal, hands forward on the reins (or its neck), going
-        // up and down with it, more the faster it goes.
+        // up and down with it, more the faster it goes; or sat in a seat.
         const k = Math.min(1, speed / 8);
         this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
         // Hips where a kid's would be, longer legs reaching further down its sides.
-        bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - this.legLong;
+        bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - (B.hip - RIDE_HIPS);
         lean = 0.1 + k * 0.15;
-        armFwdL = armFwdR = -0.8 - Math.sin(this.phase) * 0.12 * k;
-        armRaiseL = armRaiseR = 0.22;
+        armFwdL = armFwdR = -0.55 - Math.sin(this.phase) * 0.12 * k;
+        armRaiseL = armRaiseR = 0.15;
+        bendL = bendR = 0.85;
+        // The legs reach round the animal's sides and a little forward, the
+        // shins hanging down its sides; on a wide back, or in a seat, out
+        // in front with the knees bent over.
+        const spread = this.ride?.spread ?? 0.85;
+        const reach = this.ride?.reach ?? 0.35;
+        const knee = Math.max(1, reach);
+        legs = [[-reach, -spread, knee, spread * 0.75], [-reach, spread, knee, -spread * 0.75]];
       }
     } else {
-      bob = Math.sin(t * 2) * 0.008;
-      armRaiseL = armRaiseR = 0.18 + Math.sin(t * 2) * 0.03;
+      bob = Math.sin(t * 2) * 0.006;
+      armRaiseL = armRaiseR = REST_RAISE + Math.sin(t * 2) * 0.015;
     }
 
     // Emotes play over the pose for a few seconds.
@@ -1292,8 +1820,9 @@ export class Avatar {
       else {
         switch (this.emote) {
           case 'wave':
-            armRaiseR = 2.6;
-            armFwdR = Math.sin(e * 12) * 0.35;
+            armRaiseR = 2.55;
+            armFwdR = Math.sin(e * 12) * 0.3;
+            bendR = 0.45;
             headTilt = 0.15;
             break;
           case 'dance':
@@ -1301,22 +1830,28 @@ export class Avatar {
             hop = Math.abs(Math.sin(e * 7)) * 0.12;
             armRaiseL = 2.2 + Math.sin(e * 7) * 0.5;
             armRaiseR = 2.2 - Math.sin(e * 7) * 0.5;
+            bendL = bendR = 0.5;
             legSwing = Math.sin(e * 7) * 0.4;
+            kneeBendL = 0.25 + 0.3 * Math.max(0, Math.sin(e * 7));
+            kneeBendR = 0.25 + 0.3 * Math.max(0, -Math.sin(e * 7));
             break;
           case 'cheer':
             armRaiseL = armRaiseR = 2.7;
+            bendL = bendR = 0.2;
             hop = Math.max(0, Math.sin(e * 6)) * 0.3;
             break;
           case 'hearts':
+            // Hands together over the heart.
             headTilt = Math.sin(e * 3) * 0.2;
-            armFwdL = armFwdR = -0.9;
-            armRaiseL = armRaiseR = -0.35;
+            armFwdL = armFwdR = -0.55;
+            armRaiseL = armRaiseR = -0.28;
+            bendL = bendR = 1.65;
             break;
           case 'clap': {
             const c = Math.abs(Math.sin(e * 10));
-            armFwdL = armFwdR = -1.3;
-            armRaiseL = -0.5 * c - 0.05;
-            armRaiseR = -0.5 * c - 0.05;
+            armFwdL = armFwdR = -0.85;
+            armRaiseL = armRaiseR = -0.3 * c - 0.02;
+            bendL = bendR = 0.95;
             break;
           }
           case 'sleepy':
@@ -1324,14 +1859,17 @@ export class Avatar {
             headNod = 0.25 + Math.sin(e * 2) * 0.05;
             break;
           case 'laugh':
+            // Head back, hands on your tummy, shaking with it.
             headNod = -0.3;
             bob = Math.abs(Math.sin(e * 16)) * 0.03;
-            armFwdL = armFwdR = -0.6;
-            armRaiseL = armRaiseR = -0.2;
+            armFwdL = armFwdR = -0.35;
+            armRaiseL = armRaiseR = -0.12;
+            bendL = bendR = 1.5;
             break;
           case 'surprise':
             hop = Math.max(0, Math.sin(Math.min(e, 0.6) * 5.2)) * 0.18;
-            armRaiseL = armRaiseR = 1.1;
+            armRaiseL = armRaiseR = 0.9;
+            bendL = bendR = 1.3;
             headNod = -0.2;
             break;
           default:
@@ -1342,7 +1880,6 @@ export class Avatar {
 
     // A swing (see SWINGS), over whatever the avatar is doing: the arms blend
     // into it and back out, the shoulders twist, it leans in and steps in.
-    let twist = 0;
     let dip = 0;
     let step = 0;
     let wrist = 0;
@@ -1353,65 +1890,48 @@ export class Avatar {
       // The walking arm swing fades out while it swings.
       armFwdR = armFwdR + (p.fwd + armSwing - armFwdR) * p.w;
       armRaiseR = armRaiseR + (p.raise - armRaiseR) * p.w;
+      bendR = bendR + (p.elbow - bendR) * p.w;
       wrist = p.wrist * p.w;
       if (p.wL) {
         armFwdL = armFwdL + (p.fwdL - armSwing - armFwdL) * p.wL;
         armRaiseL = armRaiseL + (p.raiseL - armRaiseL) * p.wL;
+        bendL = bendL + (p.elbowL - bendL) * p.wL;
       }
-      twist = p.twist;
+      twist += p.twist;
       lean += p.lean;
       dip = p.dip;
       headNod += p.nod;
       step = p.step;
     }
 
-    // Riding, the legs reach round the animal's sides and a little forward;
-    // on a wide back, out in front. Standing up (a kick scooter), the front
-    // foot is planted on the deck and the other kicks along behind.
-    const stand = riding && Boolean(this.ride?.stand);
-    const spread = riding && !stand ? (this.ride?.spread ?? 0.85) : 0;
-    const reach = riding && !stand ? (this.ride?.reach ?? 0.35) : 0;
-    // A step in to swing only standing; walking, the legs are busy.
-    const stepIn = anim === ANIM.idle ? step : 0;
-    legL.rotation.set(riding ? -reach : legSwing - stepIn, 0, -spread);
-    legR.rotation.set(riding ? -reach : -legSwing + stepIn * 0.6, 0, spread);
-    if (stand) {
-      legL.rotation.set(-0.08, 0, -0.05);
-      legR.rotation.set(speed > 0.4 ? 0.55 + Math.sin(this.phase) * 0.5 : 0.18, 0, 0.05);
-    }
-    if (anim === ANIM.dizzy) {
-      // Legs out in front, sitting.
-      legL.rotation.set(-1.4, 0, -0.18);
-      legR.rotation.set(-1.4, 0, 0.18);
-      spin = 0;
-      hop = 0;
-    }
     const curled = anim === ANIM.curl;
     const sitting = anim === ANIM.sit || curled;
     const lying = anim === ANIM.lie;
-    if (sitting) {
-      // Legs out over the front of the seat, a little apart (curled up,
-      // drawn right up).
-      legL.rotation.set(curled ? -1.7 : -1.35, 0, -0.08);
-      legR.rotation.set(curled ? -1.7 : -1.35, 0, 0.08);
+    if (legs) {
+      legL.rotation.set(legs[0][0], 0, legs[0][1]);
+      legR.rotation.set(legs[1][0], 0, legs[1][1]);
+      kneeL.rotation.set(legs[0][2], 0, legs[0][3]);
+      kneeR.rotation.set(legs[1][2], 0, legs[1][3]);
+    } else {
+      // A step in to swing only standing; walking, the legs are busy.
+      const stepIn = anim === ANIM.idle ? step : 0;
+      legL.rotation.set(legSwing - stepIn, 0, 0);
+      legR.rotation.set(-legSwing + stepIn * 0.6, 0, 0);
+      kneeL.rotation.set(kneeBendL + stepIn * 0.3, 0, 0);
+      kneeR.rotation.set(kneeBendR, 0, 0);
     }
-    if (lying) {
-      legL.rotation.set(0, 0, -0.04);
-      legR.rotation.set(0, 0, 0.04);
-    }
-    if (sitting || lying) {
-      // Emotes play with the arms and the head, but nobody spins or hops out of bed.
+    if (anim === ANIM.dizzy || sitting || lying || riding) {
+      // Emotes play with the arms and the head, but nobody spins or hops
+      // out of a seat, a bed or the saddle, or sitting dizzy.
       spin = 0;
       hop = 0;
     }
-    if (riding) {
-      // Nor do emotes turn them round or lift them out of the saddle.
-      spin = 0;
-      hop = 0;
-    }
-    // The arms hang from mirrored shoulders, so each side opens outward with its own sign.
-    armL.rotation.set(armSwing + armFwdL, 0, -(armRaiseL ?? 0.18));
-    armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR ?? 0.18);
+    // The arms hang from mirrored shoulders, so each side opens outward with
+    // its own sign; the elbows bend the forearms forward.
+    armL.rotation.set(armSwing + armFwdL, 0, -armRaiseL);
+    armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR);
+    elbowL.rotation.x = -bendL;
+    elbowR.rotation.x = -bendR;
     this.body.position.y = bob + hop + dip;
     // In bed, the whole of you tips back about your feet, face up, and sinks
     // to lie on your back.
@@ -1419,10 +1939,12 @@ export class Avatar {
     this.body.position.x = 0;
     this.body.position.z = 0;
     this.body.scale.setScalar(1);
-    if (lying) this.body.position.y += LIE_LIFT;
+    if (lying) this.body.position.y += this.lieLift;
     this.torso.rotation.set(lean, twist, 0);
-    if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist;
-    this.head.rotation.set(headNod, 0, headTilt);
+    // What is in hand keeps the angle it would have with the arm straight.
+    if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist + bendR;
+    // The head keeps looking ahead as the shoulders turn.
+    this.head.rotation.set(headNod, -twist * 0.8, headTilt);
     if (this.tail) this.tail.rotation.y = Math.sin(t * (moving ? 10 : 3)) * 0.3;
     // A ponytail swings to and fro, pigtails from side to side; more on the move.
     for (const b of this.sway) {
@@ -1439,11 +1961,12 @@ export class Avatar {
       this.body.scale.setScalar(fit.scale);
       this.body.position.set(fit.x, fit.y, fit.z);
     }
-    // Blink now and then.
+    // Blink now and then: a person's lids come down, an animal's eyes squeeze shut.
     if (this.eyes) {
       this.blinkAt -= dt;
       const closed = this.blinkAt < 0.12 || this.emote === 'sleepy' || this.emote === 'laugh' || ((lying || curled) && !this.emote);
-      this.eyes.scale.y = closed ? 0.12 : 1;
+      if (this.lidShut) this.eyes.rotation.x = closed ? this.lidShut : 0;
+      else this.eyes.scale.y = closed ? 0.12 : 1;
       if (this.blinkAt < 0) this.blinkAt = 2.5 + Math.random() * 3;
     }
   }

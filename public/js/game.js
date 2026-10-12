@@ -1579,7 +1579,7 @@ export class Game extends EventTarget {
     for (const p of this.players.values()) {
       if (!(p.me ? this.dizzy : p.dizzy) || !p.avatar) continue;
       const a = p.avatar.root.position;
-      if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + 1.35 + p.avatar.sitTall, a.z, t);
+      if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + p.avatar.sitTop + 0.12, a.z, t, 0.24);
     }
   }
 

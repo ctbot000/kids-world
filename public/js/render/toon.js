@@ -59,6 +59,59 @@ export const torus = (r, t, arc = Math.PI * 2) => geo(`torus${r}|${t}|${arc}`, (
 // A shape turned round an axis, like a pot on a wheel: points from bottom to
 // top, each [x, y]. Rounded bodies, muzzles and horns come from this.
 export const lathe = (points, segs = 24) => geo(`lathe${points.map((p) => `${p[0]},${p[1]}`).join(';')}|${segs}`, () => new THREE.LatheGeometry(points.map((p) => new THREE.Vector2(p[0], p[1])), segs));
+// A smooth tube through rings, each a rounded oval across it (a superellipse,
+// squarer the bigger n is), for bodies and shoes: up y, each ring [y, half
+// width, depth in front (+z), depth behind]; or forwards along z, each ring
+// [z, half width, height above its middle, depth below, y of its middle].
+// ends: whether the first and the last ring are closed over.
+export const loft = (rings, { along = 'y', segs = 24, n = 2.2, ends = [true, true] } = {}) =>
+  geo(`loft${along}|${segs}|${n}|${ends}|${rings.join(';')}`, () => {
+    const e = 2 / n;
+    const pow = (c) => Math.sign(c) * Math.abs(c) ** e;
+    const positions = [];
+    const index = [];
+    for (const [at, w, a, b, mid = 0] of rings) {
+      for (let i = 0; i < segs; i++) {
+        const t = (i / segs) * Math.PI * 2;
+        const c = pow(Math.cos(t));
+        const s = pow(Math.sin(t));
+        const d = s > 0 ? a : b;
+        if (along === 'y') positions.push(w * c, at, d * s);
+        else positions.push(w * c, mid + d * s, at);
+      }
+    }
+    // Round from +x towards +z (or +y), so this way round faces out.
+    const up = along === 'y';
+    for (let j = 0; j < rings.length - 1; j++) {
+      for (let i = 0; i < segs; i++) {
+        const p = j * segs + i;
+        const q = j * segs + ((i + 1) % segs);
+        if (up) index.push(p, p + segs, q, q, p + segs, q + segs);
+        else index.push(p, q, p + segs, q, q + segs, p + segs);
+      }
+    }
+    // An end closed over: a fan from a point in the middle of its ring.
+    const close = (j, first) => {
+      const [at, , , , mid = 0] = rings[j];
+      const c = positions.length / 3;
+      if (up) positions.push(0, at, 0);
+      else positions.push(0, mid, at);
+      for (let i = 0; i < segs; i++) {
+        const p = j * segs + i;
+        const q = j * segs + ((i + 1) % segs);
+        if (first === up) index.push(c, p, q);
+        else index.push(c, q, p);
+      }
+    };
+    if (ends[0]) close(0, true);
+    if (ends[1]) close(rings.length - 1, false);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    return g;
+  });
+
 // A box with its edges and corners rounded by r, for cabs and soles.
 export const roundedBox = (w, h, d, r = Math.min(w, h, d) * 0.2, s = 3) =>
   geo(`rbox${w}|${h}|${d}|${r}|${s}`, () => {

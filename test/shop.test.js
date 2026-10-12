@@ -258,7 +258,8 @@ test('every toy weapon is drawn in the hand, and a swing moves the arm', () => {
     for (const animal of ['kid', 'grownup', 'bear']) {
       const av = new Avatar({ animal, fur: 'brown', shirt: 1, hat: 'none', weapon: w.key });
       assert.ok(av.weapon, `${w.key} for ${animal}`);
-      assert.equal(av.weapon.parent, av.arms[1]);
+      // A boolean: a failing equal() would print a diff of two whole scene graphs.
+      assert.ok(av.weapon.parent === av.hands[1], `${w.key} in ${animal}'s right hand`);
       av.update(1 / 60, 0, 0);
       const rest = av.arms[1].rotation.x;
       av.swing();
