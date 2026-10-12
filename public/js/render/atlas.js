@@ -162,6 +162,264 @@ function leaf(ctx, x, y, len, angle, color = '#56b947') {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- the farm's paintings
+// Crops are painted for planes a block wide, standing crossed in a #
+// (render/mesher.js crop): the bottom of the picture is the ground, and only
+// as much of it shows as the crop stands tall — a just-planted one, the
+// bottom quarter or so — so each stage is painted that high, a couple of
+// plants across. Tall corn is the whole picture, stretched up.
+
+// A leaflet without an edge, for feathery and small leaves.
+function leaflet(ctx, x, y, len, angle, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = color;
+  ellipse(ctx, len / 2, 0, len / 2, len / 4.5);
+  ctx.fill();
+  ctx.restore();
+}
+
+// A carrot's feathery frond, from (x0, y0) out to (x1, y1).
+function frond(ctx, x0, y0, x1, y1, color = '#5cbf46') {
+  stem(ctx, x0, y0, x1, y1, color, 2.2);
+  const a = Math.atan2(y1 - y0, x1 - x0);
+  for (let t = 0.3; t <= 1.001; t += 0.12) {
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    const len = 7 - t * 3;
+    leaflet(ctx, x, y, len, a - 1, color);
+    leaflet(ctx, x, y, len, a + 1, color);
+  }
+}
+
+// A round leaf on its stalk, its veins drawn in.
+function roundLeaf(ctx, x, y, r, color = '#3f9a3a') {
+  ctx.fillStyle = color;
+  ellipse(ctx, x, y, r, r * 0.86);
+  ctx.fill();
+  outline(ctx, 'rgba(20,60,20,0.5)', 1.5);
+  ctx.strokeStyle = 'rgba(200,240,170,0.45)';
+  ctx.lineWidth = 1.2;
+  for (const a of [-2.2, -1.57, -0.9]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + r * 0.6);
+    ctx.lineTo(x + Math.cos(a) * r * 0.8, y + Math.sin(a) * r * 0.8);
+    ctx.stroke();
+  }
+}
+
+// A watermelon leaf: deep lobes, three round ones together.
+function lobedLeaf(ctx, x, y, r, color = '#2f8a3f') {
+  ctx.fillStyle = color;
+  for (const [dx, dy, k] of [
+    [-r * 0.55, r * 0.1, 0.62],
+    [r * 0.55, r * 0.1, 0.62],
+    [0, -r * 0.35, 0.7],
+  ]) {
+    ellipse(ctx, x + dx, y + dy, r * k, r * k * 0.8);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(190,235,160,0.4)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 0.5);
+  ctx.lineTo(x, y - r * 0.8);
+  ctx.stroke();
+}
+
+// Three round leaflets together, as a strawberry's leaves grow.
+function trefoil(ctx, x, y, r, color = '#43a548') {
+  for (const a of [-2.4, -1.57, -0.74]) {
+    ctx.fillStyle = color;
+    ellipse(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r, r * 0.78, r * 0.62, a);
+    ctx.fill();
+    outline(ctx, 'rgba(20,70,25,0.45)', 1.2);
+  }
+}
+
+// A little flower of five round petals.
+function blossom(ctx, x, y, r, petal = '#ffffff', middle = '#ffd23a') {
+  ctx.fillStyle = petal;
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    ellipse(ctx, x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, r * 0.5, r * 0.5);
+    ctx.fill();
+  }
+  ctx.fillStyle = middle;
+  ellipse(ctx, x, y, r * 0.38, r * 0.38);
+  ctx.fill();
+}
+
+// A strawberry hanging point down, its seeds and its green cap.
+function berry(ctx, x, y, s) {
+  ctx.fillStyle = '#e8323e';
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s * 0.5);
+  ctx.quadraticCurveTo(x - s * 1.05, y + s * 0.5, x, y + s * 1.25);
+  ctx.quadraticCurveTo(x + s * 1.05, y + s * 0.5, x + s, y - s * 0.5);
+  ctx.quadraticCurveTo(x, y - s * 1.0, x - s, y - s * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  outline(ctx, 'rgba(120,10,20,0.55)', 1.2);
+  ctx.fillStyle = '#ffe680';
+  for (const [dx, dy] of [
+    [-0.45, 0],
+    [0.4, 0.05],
+    [0, 0.35],
+    [-0.2, 0.75],
+    [0.25, 0.7],
+    [0, -0.25],
+  ]) {
+    ellipse(ctx, x + dx * s, y + dy * s, Math.max(0.7, s * 0.09), Math.max(0.9, s * 0.13));
+    ctx.fill();
+  }
+  ctx.fillStyle = '#3f9a3a';
+  for (const a of [-2.6, -1.57, -0.55]) leaflet(ctx, x, y - s * 0.55, s * 0.9, a, '#3f9a3a');
+}
+
+// A round tomato with a highlight and a star of green on top.
+function ripeTomato(ctx, x, y, r, color = '#e8382c') {
+  ctx.fillStyle = color;
+  ellipse(ctx, x, y, r, r * 0.9);
+  ctx.fill();
+  outline(ctx, 'rgba(110,15,10,0.55)', 1.4);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ellipse(ctx, x - r * 0.4, y - r * 0.3, r * 0.22, r * 0.32, 0.5);
+  ctx.fill();
+  for (let i = 0; i < 5; i++) leaflet(ctx, x, y - r * 0.82, r * 0.7, (i / 5) * Math.PI * 2, '#3f9a3a');
+}
+
+// An ear of corn, sticking out from its stalk: kernels in rows, wrapped at
+// the bottom in its husk, a tuft of silk at the tip.
+function cob(ctx, x, y, len, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = '#ffd23a';
+  ellipse(ctx, 0, -len / 2, len * 0.2, len / 2);
+  ctx.fill();
+  outline(ctx, 'rgba(150,100,10,0.55)', 1.2);
+  ctx.fillStyle = 'rgba(205,150,20,0.55)';
+  for (let row = 0; row < 6; row++) {
+    for (const k of [-0.45, 0, 0.45]) {
+      ellipse(ctx, k * len * 0.2, -len * (0.15 + row * 0.13), len * 0.045, len * 0.035);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = '#8fcf6a';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(s * len * 0.42, -len * 0.4, s * len * 0.08, -len * 0.62);
+    ctx.quadraticCurveTo(s * len * 0.12, -len * 0.3, 0, 0);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#b5703a';
+  ctx.lineWidth = 1.2;
+  for (const s of [-1, 0, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, -len);
+    ctx.lineTo(s * len * 0.12, -len * 1.18);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// A corn stalk from the ground up to `top`, its long leaves arching out.
+function cornStalk(ctx, x, top, leaves) {
+  stem(ctx, x, 64, x, top, '#6dab3a', 4.5);
+  ctx.strokeStyle = '#5ea338';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  leaves.forEach((y, i) => {
+    const s = i % 2 ? 1 : -1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + s * 13, y - 10, x + s * 17, y + 3);
+    ctx.stroke();
+  });
+}
+
+// A corn stalk's tassel, a spray of thin lines at its top.
+function tassel(ctx, x, y, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  for (const dx of [-6, -3, 0, 3, 6]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 6);
+    ctx.quadraticCurveTo(x + dx * 0.5, y, x + dx, y - 3 + Math.abs(dx) * 0.5);
+    ctx.stroke();
+  }
+}
+
+// A curly tendril, as vines have.
+function tendril(ctx, x, y, s) {
+  ctx.strokeStyle = '#5ea338';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let a = 0; a < Math.PI * 3; a += 0.3) {
+    const r = s * (1 - a / (Math.PI * 3.4));
+    ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.stroke();
+}
+
+// A gourd, round and ribbed (a pumpkin, or a little green one growing).
+function gourd(ctx, x, y, rx, ry, color, rib) {
+  ctx.fillStyle = color;
+  for (const k of [-0.42, 0.42, 0]) {
+    ellipse(ctx, x + k * rx, y, rx * (k ? 0.62 : 0.66), ry);
+    ctx.fill();
+  }
+  ctx.strokeStyle = rib;
+  ctx.lineWidth = 1.3;
+  for (const k of [-0.32, 0.32]) {
+    ctx.beginPath();
+    ctx.ellipse(x + k * rx, y, rx * 0.25, ry * 0.95, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ellipse(ctx, x, y, rx, ry);
+  outline(ctx, 'rgba(90,50,10,0.45)', 1.2);
+}
+
+// A watermelon, striped.
+function melon(ctx, x, y, rx, ry) {
+  ctx.fillStyle = '#7fcf5f';
+  ellipse(ctx, x, y, rx, ry);
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = '#2f7a32';
+  ctx.lineWidth = Math.max(1.5, rx * 0.18);
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(x + k * rx * 0.4, y - ry);
+    ctx.quadraticCurveTo(x + k * rx * 0.48 + 1.5, y, x + k * rx * 0.4, y + ry);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ellipse(ctx, x, y, rx, ry);
+  outline(ctx, 'rgba(20,60,20,0.5)', 1.3);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ellipse(ctx, x - rx * 0.35, y - ry * 0.4, rx * 0.25, ry * 0.18, -0.3);
+  ctx.fill();
+}
+
+// The ridges of a farmland's furrows, light on top and shaded under.
+function furrows(ctx, base, ridge, light, groove) {
+  fill(ctx, base);
+  for (let i = 0; i < 4; i++) {
+    const y = 3 + i * 16;
+    ctx.fillStyle = ridge;
+    ctx.fillRect(0, y, TILE, 8);
+    ctx.fillStyle = light;
+    ctx.fillRect(0, y, TILE, 2);
+    ctx.fillStyle = groove;
+    ctx.fillRect(0, y + 10, TILE, 4);
+  }
+}
+
 // ---------------------------------------------------------------- the tiles
 
 const PAINT = {
@@ -948,6 +1206,238 @@ const PAINT = {
     outline(ctx, 'rgba(140,60,40,0.55)', 2);
   },
 
+  // ------------------------------------------------ the farm
+  // Farmland in furrows, and watered (darker still, by its block's colour,
+  // and glinting).
+  farmland(ctx) {
+    furrows(ctx, '#7a5234', '#946642', 'rgba(255,225,180,0.2)', 'rgba(45,25,12,0.35)');
+    speckles(ctx, 81, ['#6a4429', '#a57650', '#8a5d3a'], 46, [1, 2.4]);
+    bevel(ctx, 0.6);
+  },
+  'farmland-wet'(ctx) {
+    furrows(ctx, '#6e4a30', '#86603f', 'rgba(255,240,220,0.22)', 'rgba(30,18,10,0.42)');
+    speckles(ctx, 82, ['#5c3c25', '#94694a', '#7a5236'], 40, [1, 2.4]);
+    const r = speckleRandom(83);
+    ctx.fillStyle = 'rgba(225,240,255,0.75)';
+    for (let i = 0; i < 9; i++) {
+      ellipse(ctx, 4 + r() * 56, 13.5 + Math.floor(r() * 4) * 16, 1.8 + r() * 1.6, 0.9);
+      ctx.fill();
+    }
+    bevel(ctx, 0.6);
+  },
+  // Just planted, every crop alike: a ridge of soil, shoots just up.
+  'crop-planted'(ctx) {
+    for (const x of [16, 48]) {
+      ctx.fillStyle = '#7a5234';
+      ellipse(ctx, x, 63, 15, 6);
+      ctx.fill();
+      ctx.fillStyle = '#946642';
+      ellipse(ctx, x, 61.5, 11, 3);
+      ctx.fill();
+      for (const dx of [-5, 4]) {
+        stem(ctx, x + dx, 60, x + dx + 1, 52, '#6fcf55', 2);
+        leaflet(ctx, x + dx + 1, 52.5, 6, -2.5, '#7ad15a');
+        leaflet(ctx, x + dx + 1, 52.5, 6, -0.6, '#7ad15a');
+      }
+    }
+  },
+  'crop-carrot-1'(ctx) {
+    for (const x of [18, 46]) for (const [dx, top] of [[-9, 44], [0, 39], [9, 45]]) frond(ctx, x, 63, x + dx, top);
+  },
+  'crop-carrot-2'(ctx) {
+    for (const x of [17, 47]) for (const [dx, top] of [[-14, 30], [-5, 22], [5, 21], [14, 31]]) frond(ctx, x, 63, x + dx, top, '#55b843');
+  },
+  'crop-carrot-3'(ctx) {
+    for (const x of [17, 47]) {
+      for (const [dx, top] of [[-15, 22], [-6, 13], [5, 12], [15, 23]]) frond(ctx, x, 58, x + dx, top, '#4fae3e');
+      // The carrot's orange top, just out of the ground.
+      ctx.fillStyle = '#ff8a1f';
+      ellipse(ctx, x, 63, 7.5, 7);
+      ctx.fill();
+      outline(ctx, 'rgba(150,60,0,0.55)', 1.4);
+      ctx.strokeStyle = 'rgba(190,80,0,0.6)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x - 5, 60);
+      ctx.lineTo(x - 1, 60.5);
+      ctx.moveTo(x + 1, 62);
+      ctx.lineTo(x + 5, 61.5);
+      ctx.stroke();
+    }
+  },
+  'crop-strawberry-1'(ctx) {
+    for (const x of [18, 46]) {
+      stem(ctx, x, 64, x, 52, '#4fae3e', 2);
+      trefoil(ctx, x, 50, 5.5);
+    }
+  },
+  'crop-strawberry-2'(ctx) {
+    for (const x of [16, 48]) {
+      for (const [dx, y, r] of [[-7, 44, 7], [7, 46, 7], [0, 34, 7.5]]) {
+        stem(ctx, x, 64, x + dx, y + 2, '#4fae3e', 2);
+        trefoil(ctx, x + dx, y, r);
+      }
+    }
+    for (const [x, y] of [[9, 30], [33, 40], [55, 29], [26, 54]]) blossom(ctx, x, y, 6);
+  },
+  'crop-strawberry-3'(ctx) {
+    for (const x of [16, 48]) {
+      for (const [dx, y, r] of [[-8, 36, 7.5], [8, 38, 7.5], [0, 25, 8]]) {
+        stem(ctx, x, 64, x + dx, y + 2, '#4fae3e', 2);
+        trefoil(ctx, x + dx, y, r);
+      }
+    }
+    for (const [x, y, s] of [[8, 48, 5.5], [24, 52, 6], [40, 47, 5.5], [56, 52, 6], [32, 38, 5]]) berry(ctx, x, y, s);
+  },
+  'crop-tomato-1'(ctx) {
+    for (const x of [18, 46]) {
+      stem(ctx, x, 64, x, 42, '#4f9a3a', 2.5);
+      for (const [y, a] of [[56, -2.6], [52, -0.5], [46, -2.4], [44, -0.7]]) leaf(ctx, x, y, 9, a, '#4caf50');
+    }
+  },
+  'crop-tomato-2'(ctx) {
+    // Tied to a stake, as tomatoes are.
+    ctx.fillStyle = '#a8703f';
+    ctx.fillRect(30.5, 16, 3, 48);
+    stem(ctx, 32, 64, 30, 20, '#4f9a3a', 3);
+    for (const [y, a] of [[58, -2.7], [54, -0.4], [46, -2.5], [42, -0.6], [34, -2.6], [30, -0.5], [24, -1.6]]) leaf(ctx, 31, y, 13, a, '#3f9a3a');
+    for (const [x, y] of [[20, 38], [44, 28], [42, 50]]) {
+      ctx.fillStyle = '#ffd23a';
+      star(ctx, x, y, 4.5, 2);
+      ctx.fill();
+    }
+    ripeTomato(ctx, 22, 50, 4.5, '#8fcf4a');
+    ripeTomato(ctx, 40, 38, 4, '#8fcf4a');
+  },
+  'crop-tomato-3'(ctx) {
+    ctx.fillStyle = '#a8703f';
+    ctx.fillRect(30.5, 8, 3, 56);
+    stem(ctx, 32, 64, 30, 12, '#4f9a3a', 3);
+    for (const [y, a] of [[58, -2.7], [54, -0.4], [46, -2.5], [42, -0.6], [33, -2.6], [28, -0.5], [20, -2.4], [16, -0.8]]) leaf(ctx, 31, y, 14, a, '#3f9a3a');
+    for (const [x, y, r] of [[21, 28, 6], [42, 22, 6.5], [20, 46, 6.5], [43, 41, 7], [33, 55, 5.5]]) ripeTomato(ctx, x, y, r);
+  },
+  'crop-corn-1'(ctx) {
+    ctx.strokeStyle = '#6dbf45';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    for (const x of [20, 44]) {
+      for (const [dx, top] of [[-10, 34], [2, 29], [11, 36]]) {
+        ctx.beginPath();
+        ctx.moveTo(x, 64);
+        ctx.quadraticCurveTo(x + dx * 0.2, 46, x + dx, top);
+        ctx.stroke();
+      }
+    }
+  },
+  'crop-corn-2'(ctx) {
+    for (const x of [19, 45]) {
+      cornStalk(ctx, x, 9, [54, 44, 33, 22]);
+      tassel(ctx, x, 6, '#e6d48a');
+    }
+  },
+  'crop-corn-3'(ctx) {
+    for (const x of [19, 45]) {
+      cornStalk(ctx, x, 9, [56, 46, 25, 16]);
+      cob(ctx, x, 42, 18, x < 32 ? 0.35 : -0.35);
+      tassel(ctx, x, 6, '#d9a93a');
+    }
+  },
+  'crop-pumpkin-1'(ctx) {
+    stem(ctx, 4, 62, 60, 61, '#5ea338', 2.5);
+    roundLeaf(ctx, 18, 52, 8);
+    roundLeaf(ctx, 46, 54, 7);
+  },
+  'crop-pumpkin-2'(ctx) {
+    stem(ctx, 2, 60, 62, 58, '#5ea338', 3);
+    for (const [x, y, r] of [[10, 46, 9], [31, 38, 10], [52, 44, 9], [44, 56, 7]]) roundLeaf(ctx, x, y, r);
+    tendril(ctx, 20, 56, 4);
+    // A yellow flower, and a little green pumpkin coming.
+    blossom(ctx, 22, 30, 7, '#ffc233', '#f08a1a');
+    gourd(ctx, 30, 57, 8, 6, '#86c051', 'rgba(60,110,30,0.6)');
+  },
+  // Ripe, the pumpkin itself is boxes (render/mesher.js GOURDS): these are
+  // its leaves, out at either side of it.
+  'crop-pumpkin-3'(ctx) {
+    stem(ctx, 0, 61, 64, 60, '#5ea338', 3);
+    for (const [x, y, r] of [[7, 50, 8.5], [57, 49, 8.5], [14, 58, 6], [50, 58, 6]]) roundLeaf(ctx, x, y, r);
+    tendril(ctx, 4, 40, 3.5);
+    tendril(ctx, 60, 39, 3.5);
+  },
+  'crop-watermelon-1'(ctx) {
+    stem(ctx, 4, 62, 60, 61, '#4f9a3a', 2.5);
+    lobedLeaf(ctx, 18, 53, 8);
+    lobedLeaf(ctx, 46, 54, 7);
+  },
+  'crop-watermelon-2'(ctx) {
+    stem(ctx, 2, 60, 62, 59, '#4f9a3a', 3);
+    for (const [x, y, r] of [[10, 46, 9], [32, 40, 9.5], [53, 45, 9], [20, 56, 7]]) lobedLeaf(ctx, x, y, r);
+    tendril(ctx, 44, 55, 4);
+    blossom(ctx, 46, 32, 6, '#ffe04a', '#e8b020');
+    melon(ctx, 36, 57, 9, 6);
+  },
+  'crop-watermelon-3'(ctx) {
+    stem(ctx, 0, 61, 64, 60, '#4f9a3a', 3);
+    for (const [x, y, r] of [[7, 50, 8.5], [57, 50, 8.5], [14, 58, 6], [50, 58, 6]]) lobedLeaf(ctx, x, y, r);
+    tendril(ctx, 4, 40, 3.5);
+    tendril(ctx, 60, 40, 3.5);
+  },
+  // The skins of a ripe pumpkin and watermelon (render/mesher.js GOURDS).
+  'pumpkin-skin'(ctx) {
+    fill(ctx, '#ff9420');
+    for (let x = 0; x < TILE; x += 13) {
+      const g = ctx.createLinearGradient(x, 0, x + 13, 0);
+      g.addColorStop(0, 'rgba(190,80,0,0.45)');
+      g.addColorStop(0.5, 'rgba(255,190,90,0.35)');
+      g.addColorStop(1, 'rgba(190,80,0,0.45)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, 0, 13, TILE);
+    }
+    bevel(ctx, 0.35);
+  },
+  'melon-skin'(ctx) {
+    fill(ctx, '#7fcf5f');
+    ctx.fillStyle = '#2f7a32';
+    for (let x = 4; x < TILE; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      for (let y = 0; y <= TILE; y += 8) ctx.lineTo(x + (y % 16 ? 3 : -1), y);
+      for (let y = TILE; y >= 0; y -= 8) ctx.lineTo(x + 6 + (y % 16 ? 2 : -2), y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    bevel(ctx, 0.35);
+  },
+  // The watering can, as the toy box shows it (it is never put down).
+  'watering-can'(ctx) {
+    ctx.strokeStyle = '#2f7fc0';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(18, 28);
+    ctx.quadraticCurveTo(28, 6, 40, 28);
+    ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(42, 46);
+    ctx.lineTo(56, 24);
+    ctx.stroke();
+    ctx.fillStyle = '#4fa8e8';
+    ctx.beginPath();
+    ctx.roundRect(10, 26, 34, 30, 6);
+    ctx.fill();
+    outline(ctx, 'rgba(20,60,110,0.6)', 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(14, 30, 26, 5);
+    ctx.fillStyle = '#2f7fc0';
+    ellipse(ctx, 57, 22, 5, 4, -0.6);
+    ctx.fill();
+    ctx.fillStyle = '#9fd8ff';
+    for (const [x, y] of [[59, 32], [55, 38], [61, 42], [57, 49]]) {
+      ellipse(ctx, x, y, 1.8, 2.6);
+      ctx.fill();
+    }
+  },
+
   // ------------------------------------------------ items (transparent, drawn facing you)
   apple(ctx) {
     ctx.fillStyle = '#ec3d3d';
@@ -1073,6 +1563,80 @@ const PAINT = {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     star(ctx, 28, 30, 7, 3);
     ctx.fill();
+  },
+  // Vegetables, as the basket shows them.
+  carrot(ctx) {
+    ctx.fillStyle = '#ff8a1f';
+    ctx.beginPath();
+    ctx.moveTo(10, 58);
+    ctx.quadraticCurveTo(22, 30, 36, 18);
+    ctx.quadraticCurveTo(46, 14, 50, 22);
+    ctx.quadraticCurveTo(48, 30, 38, 38);
+    ctx.quadraticCurveTo(22, 52, 10, 58);
+    ctx.closePath();
+    ctx.fill();
+    outline(ctx, 'rgba(150,60,0,0.6)', 2.2);
+    ctx.strokeStyle = 'rgba(190,80,0,0.6)';
+    ctx.lineWidth = 1.6;
+    for (const [x, y, k] of [[22, 44, 5], [30, 33, 6], [38, 26, 5]]) {
+      ctx.beginPath();
+      ctx.moveTo(x - k * 0.4, y - k * 0.5);
+      ctx.lineTo(x + k * 0.6, y + k * 0.3);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ellipse(ctx, 34, 24, 2.5, 6, 0.8);
+    ctx.fill();
+    for (const [a, len] of [[-1.9, 16], [-1.3, 18], [-0.7, 15]]) frond(ctx, 46, 18, 46 + Math.cos(a) * len, 18 + Math.sin(a) * len, '#4fae3e');
+  },
+  strawberry(ctx) {
+    berry(ctx, 32, 32, 19);
+  },
+  tomato(ctx) {
+    ripeTomato(ctx, 32, 36, 21);
+    stem(ctx, 32, 17, 35, 9, '#4f8a2a', 3);
+  },
+  corn(ctx) {
+    cob(ctx, 22, 58, 50, 0.45);
+  },
+  pumpkin(ctx) {
+    gourd(ctx, 32, 38, 26, 20, '#ff9420', 'rgba(190,80,0,0.6)');
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ellipse(ctx, 22, 30, 3.5, 7, 0.4);
+    ctx.fill();
+    stem(ctx, 32, 20, 35, 9, '#6b8f2e', 5);
+    leaf(ctx, 35, 14, 15, -0.3);
+  },
+  // A slice, as a watermelon is best known.
+  watermelon(ctx) {
+    ctx.fillStyle = '#3f9a3a';
+    ctx.beginPath();
+    ctx.moveTo(4, 26);
+    ctx.arc(32, 26, 28, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e8f5c8';
+    ctx.beginPath();
+    ctx.moveTo(8, 26);
+    ctx.arc(32, 26, 24, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff4f5e';
+    ctx.beginPath();
+    ctx.moveTo(10, 26);
+    ctx.arc(32, 26, 22, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(4, 26);
+    ctx.arc(32, 26, 28, 0, Math.PI);
+    ctx.closePath();
+    outline(ctx, 'rgba(20,70,20,0.6)', 2.2);
+    ctx.fillStyle = '#3a2a2a';
+    for (const [x, y] of [[20, 32], [28, 38], [36, 38], [44, 32], [32, 30], [24, 40], [40, 40]]) {
+      ellipse(ctx, x, y, 1.6, 2.6, (x - 32) * 0.05);
+      ctx.fill();
+    }
   },
 };
 
@@ -1349,9 +1913,11 @@ export function blockIcon(atlas, id, size = 64) {
 function furnitureIcon(atlas, id, canvas, ctx, size) {
   // Seen from -x, -z: x goes left and back, z goes right and back; then
   // made as big as fits (never more than half again a whole block's size),
-  // so a picture or a lamp is not lost in its square.
+  // so a picture or a lamp is not lost in its square. A fence is shown
+  // joined up both sides, as it mostly stands.
   const flat = (x, y, z) => [(z - x) * 24, -y * 30 - (x + z) * 11];
-  const corners = modelBoxes(id).flatMap(([x0, y0, z0, x1, y1, z1]) => [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0, z1].map((z) => flat(x, y, z)))));
+  const shown = modelBoxes(id, BLOCKS[id].model === 'fence' ? (dx, dz) => dz === 0 : undefined);
+  const corners = shown.flatMap(([x0, y0, z0, x1, y1, z1]) => [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0, z1].map((z) => flat(x, y, z)))));
   const xs = corners.map(([x]) => x);
   const ys = corners.map(([, y]) => y);
   const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -1360,7 +1926,7 @@ function furnitureIcon(atlas, id, canvas, ctx, size) {
     const [fx, fy] = flat(x, y, z);
     return [size / 2 + (fx - (minX + maxX) / 2) * s, size / 2 + (fy - (minY + maxY) / 2) * s];
   };
-  const boxes = modelBoxes(id).map(([x0, y0, z0, x1, y1, z1, color, tile]) => {
+  const boxes = shown.map(([x0, y0, z0, x1, y1, z1, color, tile]) => {
     const avg = tile === 'glow' ? [255, 255, 255] : (atlas.averages?.get(tile) ?? [255, 255, 255]);
     const rgbOf = hex(color).map((v, k) => (v * avg[k]) / 255);
     return { x0, x1, y0, y1, z0, z1, rgbOf, glow: tile === 'glow' };

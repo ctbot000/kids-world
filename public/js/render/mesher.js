@@ -3,7 +3,7 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, FRUIT_ITEMS, GEM_ITEMS, RAIL, SHELL, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
+import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, CROP_OF, CROPS, FRUIT_ITEMS, GEM_ITEMS, RAIL, RIPE, SHELL, STAGE_OF, STAR_PIECE, STONE, SUNFLOWER } from '../shared/blocks.js';
 
 // The four ways along the ground, as shared/riding.js numbers them.
 const RAIL_DIRS = [
@@ -17,6 +17,27 @@ import { hash3 } from '../shared/rng.js';
 import { CHUNK } from '../shared/world.js';
 
 export const WATER_TOP = 0.875;
+
+// How tall a crop stands at each stage (corn grows taller than you), and
+// how much of the wind it feels at the top (out of 255; a flower's is 255).
+const CROP_HEIGHTS = [0.3, 0.5, 0.78, 0.92];
+const CORN_HEIGHTS = [0.3, 0.62, 1.2, 1.5];
+const CROP_SWAY = 110;
+// A ripe pumpkin or watermelon is a fruit too big to draw flat: a few boxes
+// (as furniture is drawn, render/mesher.js furniture), sitting among its
+// leaves, each [x0, y0, z0, x1, y1, z1, colour, tile], the boxes a little
+// apart so it looks round.
+export const GOURDS = {
+  pumpkin: [
+    [0.18, 0.03, 0.26, 0.82, 0.5, 0.74, '#ffffff', 'pumpkin-skin'],
+    [0.26, 0, 0.18, 0.74, 0.54, 0.82, '#ffffff', 'pumpkin-skin'],
+    [0.46, 0.54, 0.46, 0.55, 0.66, 0.55, '#6b8f2e', 'plain'],
+  ],
+  watermelon: [
+    [0.12, 0.02, 0.28, 0.88, 0.42, 0.72, '#ffffff', 'melon-skin'],
+    [0.2, 0, 0.22, 0.8, 0.46, 0.78, '#ffffff', 'melon-skin'],
+  ],
+};
 
 // For each face: normal, texture-right axis u, texture-up axis v, and the
 // corner the face starts from (as 0/1 offsets). Corners go base, +u, +u+v, +v,
@@ -246,6 +267,8 @@ export function meshChunk(world, light, visuals, cx, cz) {
           }
         } else if (id === RAIL) {
           rail(plants, x, y, z);
+        } else if (CROP_OF[id]) {
+          crop(x, y, z, id);
         } else if (kind === K_PLANT) {
           plant(plants, x, y, z, id);
         } else if (kind === K_ITEM) {
@@ -286,6 +309,50 @@ export function meshChunk(world, light, visuals, cx, cz) {
       }
       part.verts += 4;
       part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
+    }
+  }
+
+  // A crop grows in rows: its picture on four planes crossed in a #, each
+  // right across the cell, so the rows of a field run on from one to the
+  // next. A ripe pumpkin or watermelon lies among its leaves as boxes.
+  function crop(x, y, z, id) {
+    const layer = faceLayer[id * 3];
+    const c = CROPS[CROP_OF[id] - 1];
+    const stage = STAGE_OF[id];
+    const h = (c.key === 'corn' ? CORN_HEIGHTS : CROP_HEIGHTS)[stage] * (0.94 + hash3(13, x, y, z) * 0.12);
+    // As much of the picture as it stands tall, from the bottom up (all of
+    // it, stretched, for corn taller than a block).
+    const top = Math.max(0, 1 - h);
+    const sky = skyAt(x, y, z) * 17;
+    const lamp = lampAt(x, y, z) * 17;
+    for (const [along, at] of [
+      [0, 0.28],
+      [0, 0.72],
+      [1, 0.28],
+      [1, 0.72],
+    ]) {
+      const v0 = plants.verts;
+      // Along x at z = at, or along z at x = at.
+      const ends = along === 0 ? [[x, z + at], [x + 1, z + at]] : [[x + at, z + 1], [x + at, z]];
+      const pts = [
+        [...ends[0], y, 0, 1, 0],
+        [...ends[1], y, 1, 1, 0],
+        [...ends[1], y + h, 1, top, CROP_SWAY],
+        [...ends[0], y + h, 0, top, CROP_SWAY],
+      ];
+      for (const [px, pz, py, u, v, sway] of pts) {
+        plants.pos.push(px, py, pz);
+        plants.uvl.push(u, v, layer);
+        plants.col.push(255, 255, 255);
+        plants.lit.push(sky, lamp, 255, sway);
+      }
+      plants.verts += 4;
+      plants.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
+    }
+    if (stage === RIPE && GOURDS[c.key]) {
+      // Each one turned its own way, by a quarter or not.
+      const turn = hash3(17, x, y, z) < 0.5;
+      boxes(opaque, x, y, z, GOURDS[c.key].map(([x0, y0, z0, x1, y1, z1, color, tile]) => (turn ? [x + z0, y + y0, z + x0, x + z1, y + y1, z + x1, color, tile] : [x + x0, y + y0, z + z0, x + x1, y + y1, z + z1, color, tile])));
     }
   }
 
@@ -344,9 +411,15 @@ export function meshChunk(world, light, visuals, cx, cz) {
   // at the scale of a whole block. A box with the 'glow' tile is always
   // bright.
   function furniture(part, x, y, z, id) {
+    boxes(part, x, y, z, furnitureBoxes(id, x, y, z, at));
+  }
+
+  // Boxes in cell (x, y, z), as furniture's are: [x0, y0, z0, x1, y1, z1,
+  // colour, tile] in world space.
+  function boxes(part, x, y, z, list) {
     const sky = skyAt(x, y, z) * 17;
     const lamp = lampAt(x, y, z) * 17;
-    for (const [x0, y0, z0, x1, y1, z1, color, tile] of furnitureBoxes(id, x, y, z, at)) {
+    for (const [x0, y0, z0, x1, y1, z1, color, tile] of list) {
       const glow = tile === 'glow';
       const layer = layers?.get(glow ? 'plain' : tile) ?? 0;
       const r = parseInt(color.slice(1, 3), 16);

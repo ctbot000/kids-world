@@ -8,8 +8,10 @@
 //   water  see-through, and you swim in it
 //   lava   see-through and glowing, swum in as water is — but it burns
 //          (a volcano island's own, worldgen.js; shared/room.js)
-//   plant  drawn as crossed pictures, stands on a solid block
-//   item   a little collectable (fruit, shells, star pieces, jewels), drawn facing you
+//   plant  drawn as crossed pictures, stands on a solid block (crops stand
+//          on farmland, and are drawn crossed in a #)
+//   item   a little collectable (fruit, vegetables, shells, star pieces,
+//          jewels), drawn facing you
 //   furniture  a little model of boxes inside its cell (shared/furniture.js),
 //          most of them turned to face whoever put them down
 
@@ -147,7 +149,7 @@ function furniture(id, key, props) {
         front: turns ? (3 + k) % 4 : 3,
         base: id,
         ...props,
-        category: k === 0 ? 'home' : null,
+        category: k === 0 ? (props.category ?? 'home') : null,
       }),
     );
   }
@@ -255,9 +257,65 @@ export const GEM_ROCKS = GEMS.map(([key, name], i) => def(80 + i, `${key}-rock`,
 export const GEM_ITEMS = GEMS.map(([key, name], i) => def(85 + i, key, { name, kind: 'item', tiles: key, collect: key, light: 6, sound: 'glass' }));
 export const DIAMOND_ROCK = GEM_ROCKS[4];
 
+// ---------------------------------------------------------------- farm
+// Farmland: soil turned over in furrows, for crops to grow in. Watered — by
+// the watering can, the rain, or water close by — it turns dark, and what
+// grows in it grows twice as fast; it dries out again after a while
+// (shared/room.js). Planting a vegetable on grass, dirt, snow, frosting or
+// basalt turns the ground over into farmland first (tools.js).
+export const FARMLAND = def(166, 'farmland', { name: 'Farmland', category: 'farm', tiles: { top: 'farmland', side: 'dirt', bottom: 'dirt' }, sound: 'dirt', under: 3 });
+export const WET_FARMLAND = def(167, 'wet-farmland', { name: 'Watered Farmland', color: '#b49c8c', tiles: { top: 'farmland-wet', side: 'dirt', bottom: 'dirt' }, sound: 'dirt', under: 3 });
+
+// Crops: vegetables to grow on farmland, each in four stages — just
+// planted, a sprout, growing and ripe — one block each (plants drawn
+// crossed in a #, render/mesher.js). The host moves each on a stage at a
+// time (room.js): `stage` is the seconds a stage takes on watered farmland,
+// twice that on dry. A ripe one, tapped with any tool, is picked into the
+// basket (tools.js harvestEdit), `gives` of it: some grow back (`regrows`,
+// back to a sprout), the rest leave the farmland bare to plant again.
+// Planting one from the basket starts a new one, as a fruit grows a tree,
+// and the shop sells a few of each to start with (shop.js).
+export const CROPS = [
+  { key: 'carrot', name: 'Carrot', plural: 'Carrots', icon: '🥕', color: '#ff8a1f', stage: 20, gives: 2, regrows: false },
+  { key: 'strawberry', name: 'Strawberry', plural: 'Strawberries', icon: '🍓', color: '#ef3b4a', stage: 25, gives: 2, regrows: true },
+  { key: 'tomato', name: 'Tomato', plural: 'Tomatoes', icon: '🍅', color: '#e8382c', stage: 30, gives: 2, regrows: true },
+  { key: 'corn', name: 'Corn Cob', plural: 'Corn Cobs', icon: '🌽', color: '#ffd23a', stage: 35, gives: 2, regrows: true },
+  { key: 'pumpkin', name: 'Pumpkin', plural: 'Pumpkins', icon: '🎃', color: '#ff9420', stage: 45, gives: 2, regrows: false },
+  { key: 'watermelon', name: 'Watermelon', plural: 'Watermelons', icon: '🍉', color: '#3fae4a', stage: 50, gives: 2, regrows: false },
+];
+export const RIPE = 3;
+const STAGE_NAMES = ['Planted', 'Sprouting', 'Growing', 'Ripe'];
+// [crop][stage]: the block of each stage of each crop.
+export const CROP_STAGES = CROPS.map((c, i) =>
+  STAGE_NAMES.map((word, s) =>
+    def(168 + i * 4 + s, `${c.key}-${word.toLowerCase()}`, {
+      name: `${word} ${c.name}`,
+      kind: 'plant',
+      // Just planted, every crop looks alike: a little mound with shoots.
+      tiles: s === 0 ? 'crop-planted' : `crop-${c.key}-${s}`,
+      crop: c.key,
+      stage: s,
+      collect: s === RIPE ? c.key : null,
+      sound: 'plant',
+    }),
+  ),
+);
+// Vegetables as they go in the basket, and as the basket shows them.
+export const CROP_ITEMS = CROPS.map((c, i) => def(192 + i, c.key, { name: c.name, kind: 'item', tiles: c.key, collect: c.key, sound: 'plant' }));
+// The watering can: pick it in the toy box and tap farmland (or what grows
+// in it) to water it, a patch at a time with a big brush. Never put down
+// itself (tools.js waterEdit; the host turns one away).
+export const WATERING_CAN = def(198, 'watering-can', { name: 'Watering Can', kind: 'plant', category: 'farm', tiles: 'watering-can', sound: 'water' });
+// A scarecrow to stand watch over the crops, with a pumpkin for a head and
+// a straw hat, turned to face whoever put it down; and a wooden fence that
+// joins up with the fence beside it (shared/furniture.js).
+export const SCARECROW = furniture(199, 'scarecrow', { name: 'Scarecrow', color: '#e8453c', category: 'farm', sound: 'wood' });
+export const FENCE = furniture(203, 'fence', { name: 'Fence', color: '#c98a52', turns: false, category: 'farm', sound: 'wood' });
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),
+  ...CROPS.map((c, i) => ({ key: c.key, name: c.name, plural: c.plural, item: CROP_ITEMS[i], sprout: CROP_STAGES[i][0], crop: true })),
   { key: 'shell', name: 'Seashell', plural: 'Seashells', item: SHELL, sprout: 0 },
   { key: 'star', name: 'Star Piece', plural: 'Star Pieces', item: STAR_PIECE, sprout: 0 },
   ...GEMS.map(([key, name, plural], i) => ({ key, name, plural, item: GEM_ITEMS[i], sprout: 0 })),
@@ -281,9 +339,28 @@ for (const d of defs) {
   EMIT[d.id] = d.light;
   KIND[d.id] = KIND_CODE[d.kind];
 }
-// Natural ground, which the hills tool shapes.
+// Natural ground, which the hills tool shapes (farmland is ground too).
 export const TERRAIN = new Uint8Array(256);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, ...GEM_ROCKS]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, ...GEM_ROCKS]) TERRAIN[id] = 1;
+// Farmland, dry (1) or watered (2): what crops grow in.
+export const SOIL = new Uint8Array(256);
+SOIL[FARMLAND] = 1;
+SOIL[WET_FARMLAND] = 2;
+// Ground that planting a vegetable on turns over into farmland.
+export const TILLS = new Uint8Array(256);
+for (const id of [GRASS, DIRT, SNOW, FROSTING, BASALT]) TILLS[id] = 1;
+// Which crop a block is a stage of (its index in CROPS, plus one; 0 for
+// anything else), and which stage.
+export const CROP_OF = new Uint8Array(256);
+export const STAGE_OF = new Uint8Array(256);
+CROP_STAGES.forEach((stages, i) => stages.forEach((id, s) => ((CROP_OF[id] = i + 1), (STAGE_OF[id] = s))));
+export const isCrop = (id) => CROP_OF[id] > 0;
+export const isRipe = (id) => CROP_OF[id] > 0 && STAGE_OF[id] === RIPE;
+export const cropOf = (id) => CROPS[CROP_OF[id] - 1] ?? null;
+export const cropByKey = (key) => CROPS.find((c) => c.key === key) ?? null;
+// What animals and pets will eat from your basket: fruit and vegetables.
+export const FOODS = [...FRUITS.map(([key]) => key), ...CROPS.map((c) => c.key)];
+export const isFood = (key) => FOODS.includes(key);
 // Gem rocks, which a tap digs a jewel out of.
 export const GEM_ROCK = new Uint8Array(256);
 for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
@@ -332,6 +409,7 @@ export const CATEGORIES = [
   { key: 'building', name: 'Building', icon: '🏠' },
   { key: 'candy', name: 'Candy', icon: '🍭' },
   { key: 'plants', name: 'Plants', icon: '🌷' },
+  { key: 'farm', name: 'Farm', icon: '🌾' },
   { key: 'home', name: 'Home', icon: '🛋️' },
 ];
 export const blocksIn = (category) => defs.filter((d) => d && d.category === category).map((d) => d.id);

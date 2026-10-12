@@ -3,21 +3,28 @@
 // gear for the sky, and toy weapons for popping monsters. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
 // wear the best you have (the weapon you pick of them), and can take it
-// off. HP potions are used up when you drink them. Coins, potions and gear
-// are yours, kept with your basket (profile.js) and at the keeper
-// (keeper.js).
+// off. HP potions are used up when you drink them, and vegetables to plant
+// go in the basket. Coins, potions and gear are yours, kept with your basket
+// (profile.js) and at the keeper (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 
 export const COINS_MAX = 99999;
 
 // Coins for one of each thing in the basket: fruit grows back on the trees,
-// a diamond is found once in a mine.
+// vegetables take growing (the bigger, the longer), a diamond is found once
+// in a mine.
 export const SELL_PRICES = {
   apple: 1,
   orange: 1,
   peach: 1,
   pear: 1,
   cherry: 1,
+  carrot: 1,
+  strawberry: 1,
+  tomato: 1,
+  corn: 2,
+  pumpkin: 3,
+  watermelon: 3,
   shell: 2,
   star: 5,
   ruby: 10,
@@ -81,6 +88,13 @@ export const POTION = {
   price: 10,
   does: 'Fills your HP right up at once — even while a monster is after you, or to get up on your own when you are sitting dizzy.',
 };
+
+// Vegetables to plant, to start a farm with (blocks.js CROPS): SEED_PACK of
+// a kind at a time, into the basket, for more than they would sell for —
+// it is the farm that pays, each ripe one giving more than was planted.
+export const SEED_PACK = 5;
+export const SEED_PRICES = { carrot: 8, strawberry: 8, tomato: 8, corn: 15, pumpkin: 20, watermelon: 20 };
+export const seedPrice = (key) => SEED_PRICES[key] ?? 0;
 
 // Potions as kept: a whole number, never silly (like coins, but no more than
 // a basket holds).

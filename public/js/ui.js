@@ -9,7 +9,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { GEAR, levelDoes, nextLevel, POTION, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
+import { GEAR, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1266,6 +1266,9 @@ export class UI {
         const sell = h('div', { class: 'grid shop-grid' });
         const gear = h('div', { class: 'grid shop-grid gear-grid' });
         const potions = h('div', { class: 'grid shop-grid' });
+        const seeds = h('div', { class: 'grid shop-grid' });
+        // Nothing is planted on the shared isle: no vegetables for sale there.
+        const farming = p !== this.isle;
         const button = (text, onclick, disabled = false) => h('button', { class: 'chip', type: 'button', disabled, onclick }, text);
         const draw = () => {
           coins.textContent = `🪙 ${p.data.coins.toLocaleString()}`;
@@ -1290,7 +1293,7 @@ export class UI {
                     h('div', { class: 'shop-buttons' }, button('Sell 1', sold(1)), n > 1 ? button(`Sell all (🪙 ${price * n})`, sold(n)) : null),
                   );
                 })
-              : [h('p', { class: 'muted shop-empty' }, 'Your basket is empty. Pick fruit, find seashells and star pieces, and dig up jewels, then sell them here!')]),
+              : [h('p', { class: 'muted shop-empty' }, 'Your basket is empty. Pick fruit, grow vegetables, find seashells and star pieces, and dig up jewels, then sell them here!')]),
           );
           gear.replaceChildren(
             ...GEAR.map((g) => {
@@ -1377,6 +1380,33 @@ export class UI {
               p.data.coins < POTION.price ? h('span', { class: 'muted' }, `${POTION.price - p.data.coins} more coins to go!`) : null,
             ),
           );
+          if (farming) {
+            seeds.replaceChildren(
+              ...B.COLLECTABLES.filter((c) => seedPrice(c.key)).map((c) => {
+                const price = seedPrice(c.key);
+                const crop = B.cropByKey(c.key);
+                return h(
+                  'div',
+                  { class: 'shop-card' },
+                  this.img(c.item, c.name),
+                  h('b', {}, `${SEED_PACK} ${c.plural}`),
+                  h('span', { class: 'muted' }, `${crop.regrows ? 'Grows back after picking.' : 'Plant again after picking.'} Sells for 🪙 ${sellPrice(c.key)} each.`),
+                  h(
+                    'div',
+                    { class: 'shop-buttons' },
+                    button(`Buy ${SEED_PACK} (🪙 ${price})`, () => {
+                      if (!p.buySeeds(c.key)) {
+                        this.sound.play('no');
+                        return;
+                      }
+                      this.sound.play('collect');
+                      this.toast(crop.icon, `${SEED_PACK} ${c.plural.toLowerCase()} in your basket! Tap one there, then tap the ground to plant it.`);
+                    }, p.data.coins < price),
+                  ),
+                );
+              }),
+            );
+          }
         };
         root.append(
           h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins),
@@ -1387,6 +1417,9 @@ export class UI {
           gear,
           h('h3', {}, '🧪 Potions'),
           potions,
+          farming ? h('h3', {}, '🌱 Vegetables to plant') : null,
+          farming ? h('p', { class: 'muted' }, 'Plant them on farmland (or grass) and water them: every ripe one you pick gives you two!') : null,
+          farming ? seeds : null,
         );
         draw();
         onBasket = draw;
@@ -1765,8 +1798,9 @@ export class UI {
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
+          card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🛒', 'Shop', ['Sell your fruit, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster or star hammer to pop monsters, and 🧪 potions to fill your HP up!']),
+          card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster or star hammer to pop monsters, 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
@@ -2681,7 +2715,7 @@ export class UI {
           {
             class: g.basketPick === c.key ? 'on' : '',
             type: 'button',
-            title: c.sprout ? `${c.plural}: plant one, or give one to an animal` : `${c.plural}: put one down`,
+            title: c.crop ? `${c.plural}: plant one on farmland or grass, or give one to an animal` : c.sprout ? `${c.plural}: plant one, or give one to an animal` : `${c.plural}: put one down`,
             onclick: () => this.pickBasket(c.key),
           },
           this.img(c.item, c.name),
@@ -2704,7 +2738,8 @@ export class UI {
     this.buildToolOptions();
     if (g.basketPick) {
       const c = B.COLLECTABLES.find((x) => x.key === key);
-      this.toast(c.sprout ? '🌱' : '✨', c.sprout ? `Tap the ground to plant ${withArticle(c.key)} tree, or tap an animal to give it one!` : `Tap the ground to put down ${withArticle(c.name.toLowerCase())}.`);
+      if (c.crop) this.toast(B.cropByKey(key).icon, `Tap farmland or grass to plant ${withArticle(c.name.toLowerCase())}, or tap an animal to give it one!`);
+      else this.toast(c.sprout ? '🌱' : '✨', c.sprout ? `Tap the ground to plant ${withArticle(c.key)} tree, or tap an animal to give it one!` : `Tap the ground to put down ${withArticle(c.name.toLowerCase())}.`);
     }
   }
 
@@ -2806,6 +2841,8 @@ export class UI {
                     g.previewKey = '';
                     this.buildHotbar();
                     this.closeModal();
+                    if (id === B.WATERING_CAN) this.toast('🚿', 'Tap farmland to water it: what grows there grows twice as fast!');
+                    else if (id === B.FARMLAND) this.toast('🌱', 'Put down farmland, then plant vegetables from your basket in it. The 🛒 shop has some to start you off!');
                   },
                 },
                 this.img(id, B.block(id).name),
@@ -3542,6 +3579,14 @@ export class UI {
       el.hidden = false;
     } else if (aim?.kind === 'far') {
       el.textContent = 'Too far away — walk closer!';
+      el.hidden = false;
+    } else if (aim?.kind === 'block' && (B.CROP_OF[aim.hit.id] || B.SOIL[aim.hit.id])) {
+      // How a crop is getting on, and whether its farmland is watered.
+      const { x, y, z, id } = aim.hit;
+      const crop = B.cropOf(id);
+      const wet = B.SOIL[crop ? g.world.get(x, y - 1, z) : id] === 2;
+      if (crop) el.textContent = `${crop.icon} ${crop.plural} — ${['just planted', 'sprouting', 'growing', 'ripe! Tap to pick'][B.STAGE_OF[id]]}${wet ? ' 💧' : ''}`;
+      else el.textContent = wet ? '💧 Watered farmland — plant vegetables in it' : '🌱 Farmland — plant vegetables in it, and water it';
       el.hidden = false;
     } else {
       el.hidden = true;

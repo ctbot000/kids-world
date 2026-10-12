@@ -59,6 +59,9 @@ export const STICKERS = [
   { key: 'quiz-whiz', icon: '🧠', name: 'Quiz Whiz', text: 'Finish an extra-credit quiz on a conquered adventure island', test: (s) => s.quizzes >= 1 },
   { key: 'quiz-perfect', icon: '💯', name: 'Perfect Score', text: 'Get every answer right on an extra-credit quiz', test: (s) => s.quizperfect >= 1 },
   { key: 'photographer', icon: '📸', name: 'Photographer', text: 'Take 5 photos', test: (s) => s.photos >= 5 },
+  { key: 'little-farmer', icon: '🧑‍🌾', name: 'Little Farmer', text: 'Pick a vegetable you grew', test: (s) => s.harvested >= 1 },
+  { key: 'splish-splash', icon: '🚿', name: 'Splish Splash', text: 'Water farmland with the watering can', test: (s) => s.watered >= 1 },
+  { key: 'bumper-crop', icon: '🌾', name: 'Bumper Crop', text: 'Pick 100 vegetables', test: (s) => s.harvested >= 100 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'quizzes', 'quizright', 'quizperfect', 'photos'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];

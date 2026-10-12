@@ -9,7 +9,7 @@
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, WEAPONS, wornWeapon } from './shared/shop.js';
+import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -156,6 +156,16 @@ export class Profile extends EventTarget {
     if (!count || this.data.coins < price) return false;
     this.data.coins -= price;
     this.data.potions += count;
+    this.shopped();
+    return true;
+  }
+
+  // A pack of a vegetable to plant (shop.js SEED_PACK), into the basket.
+  buySeeds(key) {
+    const price = seedPrice(key);
+    if (!price || this.data.coins < price || !(key in this.data.basket) || this.data.basket[key] > 999 - SEED_PACK) return false;
+    this.data.coins -= price;
+    this.data.basket[key] += SEED_PACK;
     this.shopped();
     return true;
   }

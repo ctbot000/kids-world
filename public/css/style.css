@@ -3214,6 +3214,31 @@ kbd {
   }
 }
 
+/* Touch screens held sideways put the hotbar, and the basket over it, in the
+   gap between the thumbstick and the jump buttons (see body.touch #bottom).
+   Under 700px wide that gap holds only two treasures side by side once the
+   bop button shows too (160px at 560x640), and a full basket, eighteen kinds,
+   would stand over the middle of the island in a tower of rows; under 450px
+   tall, like a phone held sideways, even four rows (at 844x390) leave the
+   chat lines no room. There too it keeps to one row. */
+@media not all and (max-aspect-ratio: 3/4) {
+  @media (max-width: 699px), (max-height: 449px) {
+    body.touch .basket {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      max-width: calc(100% + 12px);
+      padding: 4px 6px 8px;
+      margin: -4px -6px -8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    body.touch .basket button {
+      flex: none;
+    }
+  }
+}
+
 /* Upright, the touch buttons and the thumbstick stand closer on it, and so
    chat lines on the thumbstick. */
 @media (max-aspect-ratio: 3/4) and (max-height: 639px) {

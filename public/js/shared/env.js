@@ -58,6 +58,10 @@ function smooth(a, b, x) {
 
 export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles'];
 
+// Something falling out of the sky — rain, snow or candy sprinkles — which
+// waters farmland out under the open sky (shared/room.js).
+export const isRaining = (weather) => weather === 'rain' || weather === 'snow' || weather === 'sprinkles';
+
 // What comes next, and for how many seconds. A volcano island never rains:
 // the rain would only hiss away on the lava (and no rainbow without it).
 export function nextWeather(current, theme, random = Math.random) {

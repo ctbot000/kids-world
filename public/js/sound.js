@@ -198,6 +198,11 @@ export class Sound {
         this.noise(0.4, { type: 'bandpass', freq: 900, q: 0.7, gain: 0.3 });
         for (let i = 0; i < 4; i++) this.tone(600 + Math.random() * 600, { at: 0.05 + i * 0.05, decay: 0.05, gain: 0.05, slide: 1400 });
         break;
+      // The watering can: a soft shower, and drops pattering on the soil.
+      case 'water':
+        this.noise(0.5, { type: 'highpass', freq: 2600, gain: 0.05, attack: 0.06 });
+        for (let i = 0; i < 7; i++) this.noise(0.04, { at: 0.04 + i * 0.055 + Math.random() * 0.02, type: 'bandpass', freq: 1600 + Math.random() * 1600, q: 4, gain: 0.08 });
+        break;
       case 'pet':
         this.tone(NOTE(88), { decay: 0.3, gain: 0.12 });
         this.tone(NOTE(91), { at: 0.1, decay: 0.35, gain: 0.12 });

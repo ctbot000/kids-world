@@ -12,7 +12,7 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -537,6 +537,74 @@ test('a gem rock is dug out with a click into the basket, for keeps; a jewel fro
   await page.mouse.click(ground.at.x, ground.at.y);
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 0, above);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.basket.ruby), 1);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+// Where a crop standing on a cell is on screen, once the camera has turned
+// to see it (aimed at, a click there is at the crop, not the farmland).
+function cropAt(page, cell) {
+  return page.evaluate((c) => {
+    const kw = window.kidsWorld;
+    const r = kw.renderer;
+    for (let k = 0; k < 16; k++) {
+      r.view.yaw = (k * Math.PI) / 8;
+      r.view.pitch = k < 8 ? 0.9 : 0.6;
+      r.view.dist = 6;
+      kw.step(1 / 60, 40);
+      const p = r.project(c.x + 0.5, c.y + 1.2, c.z + 0.5);
+      const rect = r.canvas.getBoundingClientRect();
+      const h = kw.game.aim({ x: (p.x / rect.width) * 2 - 1, y: -(p.y / rect.height) * 2 + 1 })?.hit;
+      if (h?.x === c.x && h.y === c.y + 1 && h.z === c.z && document.elementFromPoint(rect.left + p.x, rect.top + p.y) === r.canvas) return { x: rect.left + p.x, y: rect.top + p.y };
+    }
+    return null;
+  }, cell);
+}
+
+test('a carrot from the basket is planted with a click on grass, watered with the watering can from the toy box, and picked with a click once ripe: two into the basket', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { basket: { carrot: 1 } });
+  await makeIsland(page, { online: false });
+  const { cell } = await spotNear(page, 3, 0, { bare: true });
+  const above = { ...cell, y: cell.y + 1 };
+  // Grass to plant in, put there by the island itself.
+  await page.evaluate(async (c) => {
+    const B = await import('/js/shared/blocks.js');
+    window.kidsWorld.session.link.room.natureCell([c.x, c.y, c.z], B.GRASS);
+  }, cell);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 2, cell);
+  const at = await aimAt(page, cell);
+  await page.click('#basket button[title^="Carrots"]');
+  await page.mouse.click(at.x, at.y);
+  // The grass turned over into farmland, and the carrot in it.
+  await until(page, ({ cell, above, soil, carrot }) => window.kidsWorld.game.world.get(cell.x, cell.y, cell.z) === soil && window.kidsWorld.game.world.get(above.x, above.y, above.z) === carrot, { cell, above, soil: FARMLAND, carrot: CROP_STAGES[0][0] });
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.basket.carrot), 0, 'planted out of the basket');
+  // The watering can, from the toy box's Farm tab, tapped at the carrot waters its farmland.
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Farm', '#modal');
+  await clickButton(page, 'Watering Can', '#modal');
+  await until(page, (can) => window.kidsWorld.game.selectedBlock() === can, WATERING_CAN);
+  let crop = await cropAt(page, cell);
+  assert.ok(crop, 'the carrot can be seen');
+  await page.mouse.click(crop.x, crop.y);
+  await until(page, ({ cell, wet }) => window.kidsWorld.game.world.get(cell.x, cell.y, cell.z) === wet, { cell, wet: WET_FARMLAND });
+  await until(page, () => window.kidsWorld.profile.data.stickers['splish-splash']);
+  // Hurried on by the island, it grows ripe...
+  await until(
+    page,
+    ({ above, ripe }) => {
+      const kw = window.kidsWorld;
+      for (const c of kw.session.link.room.crops.values()) c.grown = c.need;
+      return kw.game.world.get(above.x, above.y, above.z) === ripe;
+    },
+    { above, ripe: CROP_STAGES[0][3] },
+  );
+  // ...and a click picks it, whatever the tool: two carrots, and the farmland bare to plant again.
+  crop = await cropAt(page, cell);
+  await page.mouse.click(crop.x, crop.y);
+  await until(page, () => window.kidsWorld.profile.basket.carrot === 2);
+  assert.equal(await blockAt(page, above), 0);
+  assert.equal(await blockAt(page, cell), WET_FARMLAND);
+  await until(page, () => window.kidsWorld.profile.data.stickers['little-farmer']);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
@@ -1346,7 +1414,9 @@ test('the little map and the hotbar fit beside every other button, on screens of
   // talk buttons on computer screens that are narrow but neither short nor upright, like 700×800.
   // On narrow screens held sideways under 400 px tall it keeps to one row too, level with the
   // thumbstick and the jump buttons: the treasures it scrolls out of sight reach under them, but
-  // are not drawn there.
+  // are not drawn there. So it does on touch screens held sideways under 700 px wide or 450 px
+  // tall, in the gap between the thumbstick and the jump buttons, where all eighteen kinds would
+  // wrap into a tower two wide (560×640 with the bop button) or four rows (844×390).
   // Chat lines stand on all that too, between the buttons: on the shortest screens only the
   // newest fits, and from 600 px tall all five that the chat log keeps.
   const screens = [

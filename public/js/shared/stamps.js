@@ -550,6 +550,27 @@ function garden() {
   return c.list();
 }
 
+// A vegetable patch: four rows of farmland either side of a ditch of water
+// that keeps them watered, a fence all round with a way in at the front, a
+// scarecrow keeping watch at the back between two hay bales. Nothing grows
+// in it yet: it is for planting vegetables from your basket.
+function vegetablePatch() {
+  const c = new Cells();
+  for (let x = -3; x <= 3; x++) {
+    for (let z = 0; z <= 7; z++) {
+      const edge = x === -3 || x === 3 || z === 0 || z === 7;
+      const ditch = x === 0 && z >= 2 && z <= 5;
+      c.put(x, -1, z, edge || z === 6 || (x === 0 && z === 1) ? B.GRASS : ditch ? B.WATER : B.FARMLAND);
+      for (let y = 0; y <= 3; y++) c.put(x, y, z, B.AIR);
+      if (edge && !(x === 0 && z === 0)) c.put(x, 0, z, B.FENCE);
+    }
+  }
+  c.put(0, 0, 6, B.SCARECROW);
+  c.put(-2, 0, 6, B.HAY);
+  c.put(2, 0, 6, B.HAY);
+  return c.list();
+}
+
 function pyramid() {
   const c = new Cells();
   for (let y = 0; y <= 4; y++) {
@@ -666,6 +687,7 @@ export const STAMPS = [
   { key: 'boat', name: 'Sail Boat', icon: '⛵', cells: boat() },
   { key: 'lamp-post', name: 'Lamp Post', icon: '💡', cells: lampPost() },
   { key: 'garden', name: 'Flower Garden', icon: '🌻', cells: garden() },
+  { key: 'vegetable-patch', name: 'Vegetable Patch', icon: '🥕', cells: vegetablePatch() },
   { key: 'pyramid', name: 'Pyramid', icon: '🔺', cells: pyramid() },
   { key: 'picnic', name: 'Picnic', icon: '🧺', cells: picnic() },
   { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },

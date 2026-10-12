@@ -24,7 +24,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
-import { applyCells, buildEdit, drillEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit } from './shared/tools.js';
+import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -61,6 +61,10 @@ const KICK_DIST = 1.4;
 const KICK_SECS = 0.15;
 const MOVE_SEND_MS = 90;
 const REPEAT_MS = 230;
+// Drops of water out of the watering can, and how seldom crops ripening near
+// you play their little tune.
+const WATER_DROPS = ['#5fb8ff', '#a8dcff', '#ffffff'];
+const RIPE_TUNE_MS = 4000;
 const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
 // speech bubble before it has been drawn.
@@ -846,12 +850,12 @@ export class Game extends EventTarget {
     return entry ? this.renderer.petSeat(entry.model) : null;
   }
 
-  // Petting a pet (anyone's), or giving it a fruit you are holding: it shows
-  // here at once, and everyone else sees it too.
+  // Petting a pet (anyone's), or giving it a fruit or a vegetable you are
+  // holding: it shows here at once, and everyone else sees it too.
   touchPet(pid) {
     const pet = this.pets.get(pid);
     if (!pet) return;
-    const fruit = this.basketPick && B.FRUITS.some(([k]) => k === this.basketPick) ? this.basketPick : null;
+    const fruit = this.basketPick && B.isFood(this.basketPick) ? this.basketPick : null;
     if (fruit && (this.profile.basket[fruit] ?? 0) > 0) {
       this.send({ t: 'pet', op: 'feed', pid, fruit });
       this.spendBasket();
@@ -2570,6 +2574,12 @@ export class Game extends EventTarget {
     const fx = this.renderer.effects;
     const n = cells.length / 4;
     const first = [cells[0], cells[1], cells[2]];
+    // The island's farming: crops moving on a stage, farmland soaking up
+    // the rain or drying out, all over the island.
+    if (kind === 'crop') {
+      this.cropEffects(cells);
+      return;
+    }
     if (!mine && !this.near(first[0], first[1], first[2], 28)) return;
     const tint = this.renderer.atlas.studTint;
     const colorOf = (id) => `rgb(${tint[id * 3]},${tint[id * 3 + 1]},${tint[id * 3 + 2]})`;
@@ -2577,6 +2587,7 @@ export class Game extends EventTarget {
     for (let i = 0; i < n; i += every) {
       const [x, y, z, id] = [cells[i * 4], cells[i * 4 + 1], cells[i * 4 + 2], cells[i * 4 + 3]];
       if (kind === 'grow' || kind === 'nature') fx.sparkles(x + 0.5, y + 0.5, z + 0.5, 3);
+      else if (kind === 'water') fx.sparkles(x + 0.5, y + 1.3, z + 0.5, 4, WATER_DROPS);
       else if (id === B.AIR || id === B.WATER) fx.pop(x, y, z, '#ffffff', n > 4 ? 3 : 10);
       else fx.place(x, y, z, colorOf(id));
     }
@@ -2585,6 +2596,26 @@ export class Game extends EventTarget {
       const id = cells[3];
       if (kind === 'pick') this.sound.play('pop');
       else if (kind === 'build' || kind === 'stamp') this.sound.play('place', { kind: B.block(id).sound });
+      else if (kind === 'water') this.sound.play('water');
+    }
+  }
+
+  // Crops the island moved on a stage (and farmland it watered or dried,
+  // which shows by itself): a twinkle of its colour over each one that is
+  // ripe now, and near you a little tune — not more than every few seconds,
+  // however many ripen.
+  cropEffects(cells) {
+    let near = false;
+    for (let i = 0; i < cells.length; i += 4) {
+      const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
+      if (!B.isRipe(id) || !this.near(x, y, z, 28)) continue;
+      this.renderer.effects.sparkles(x + 0.5, y + 0.7, z + 0.5, 5, [B.cropOf(id).color, '#ffffff', '#fff3a0']);
+      near ||= this.near(x, y, z, 16);
+    }
+    const now = performance.now();
+    if (near && now >= (this.ripeTuneAt ?? 0)) {
+      this.ripeTuneAt = now + RIPE_TUNE_MS;
+      this.sound.play('grow');
     }
   }
 
@@ -2731,9 +2762,13 @@ export class Game extends EventTarget {
     const facing = facingFromYaw(this.renderer.view.yaw);
     // Treasures, and gem rocks to dig a jewel out of, whatever the tool.
     if (B.KIND[hit.id] === B.K_ITEM || B.GEM_ROCK[hit.id]) return { kind: 'collect', ...pickEdit(w, hit, 1), mode: 'remove' };
+    // A ripe crop to pick, whatever the tool.
+    if (B.isRipe(hit.id)) return { kind: 'collect', ...harvestEdit(w, hit), mode: 'remove' };
     switch (this.tool) {
       case 'build': {
         const id = this.selectedBlock();
+        // The watering can waters farmland; it is never put down itself.
+        if (id === B.WATERING_CAN) return { kind: 'water', ...waterEdit(w, hit, this.size), mode: 'paint' };
         if (this.basketPick && (this.profile.basket[this.basketPick] ?? 0) <= 0) return { kind: 'build', cells: [], collected: [], mode: 'add', empty: true };
         const bodies = [{ ...this.me.body, radius: BODY.radius + 0.02, height: BODY.height }];
         if (this.riding) bodies.push({ ...this.riding.body, radius: this.riding.body.radius + 0.02 });
@@ -2824,8 +2859,8 @@ export class Game extends EventTarget {
       return;
     }
     const tool = this.tool;
-    if (secondary && tool !== 'pick') {
-      // Right-click always picks up, whatever the tool.
+    if (secondary && tool !== 'pick' && !B.isRipe(aim.hit.id)) {
+      // Right-click always picks up, whatever the tool (a ripe crop is picked as ever).
       const plan = pickEdit(this.world, aim.hit, 1);
       this.commit({ kind: 'pick', ...plan }, aim.hit);
       return;
@@ -2841,6 +2876,16 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
+    // Watering farmland that is wet already only splashes; anything else
+    // the watering can is no good for.
+    if (plan.kind === 'water' && !plan.cells.length) {
+      if (plan.spots.length) this.waterFx(plan.spots);
+      else {
+        this.emit('notice', { text: 'The watering can is for farmland: tap the soil, or what grows in it!', level: 'info' });
+        this.sound.play('no');
+      }
+      return;
+    }
     this.commit(plan, aim.hit);
   }
 
@@ -2852,7 +2897,8 @@ export class Game extends EventTarget {
     }
     const kind = plan.kind === 'collect' ? 'pick' : plan.kind;
     // Undo would put a treasure back to be found again: finding is for keeps.
-    if (!this.edit(kind, cells, { undoable: plan.kind !== 'collect' })) return;
+    // (Nor does it dry out what the watering can watered.)
+    if (!this.edit(kind, cells, { undoable: plan.kind !== 'collect' && plan.kind !== 'water' })) return;
     this.previewKey = '';
     this.editEffects(kind, cells, true);
     const p = this.profile;
@@ -2862,8 +2908,11 @@ export class Game extends EventTarget {
       case 'build':
         this.sound.play('place', { kind: B.block(first).sound });
         if (this.basketPick) {
+          // A vegetable planted (on the farmland it may have turned over).
+          const sown = cells.some((id, i) => i % 4 === 3 && B.CROP_OF[id]);
           this.spendBasket();
           if (B.block(first).grows) p.count('sprouts');
+          if (sown) p.count('sown');
         } else if (B.KIND[first] === B.K_PLANT) {
           p.count('planted', n);
           if (B.block(first).grows) p.count('sprouts', n);
@@ -2890,10 +2939,22 @@ export class Game extends EventTarget {
         p.count('stamps');
         this.renderer.effects.sparkles(hit.x + 0.5, hit.y + 1.5, hit.z + 0.5, 20);
         break;
+      case 'water':
+        this.sound.play('water');
+        p.count('watered', n);
+        break;
       default:
         break;
     }
     if (plan.collected?.length) this.collect(plan.collected, cells);
+  }
+
+  // The watering can poured on farmland that is wet already ([x, y, z]
+  // cells): drops on it and a trickle, and nothing else (an edit that
+  // waters some shows its drops in editEffects).
+  waterFx(spots) {
+    for (const [x, y, z] of spots) this.renderer.effects.sparkles(x + 0.5, y + 1.3, z + 0.5, 4, WATER_DROPS);
+    this.sound.play('water');
   }
 
   collect(ids, cells) {
@@ -2905,6 +2966,7 @@ export class Game extends EventTarget {
       if (!key) continue;
       p.addToBasket(key, 1);
       if (B.FRUIT_ITEMS.includes(id)) p.count('fruit');
+      else if (B.isRipe(id)) p.count('harvested');
       else if (id === B.SHELL) p.count('shells');
       else if (id === B.STAR_PIECE) p.count('stars');
       else if (B.isJewel(id)) {
@@ -2914,6 +2976,8 @@ export class Game extends EventTarget {
         if (gem) colors.unshift(gem[3], gem[3]);
         if (B.GEM_ROCK[id]) dug.push(gem);
       }
+      const crop = B.cropOf(id);
+      if (crop) colors.unshift(crop.color, crop.color);
       this.emit('collected', { key, id });
     }
     // Dug out of the rock: say which jewel it was.
@@ -2974,7 +3038,7 @@ export class Game extends EventTarget {
       this.send({ t: 'critter', op: 'pet', id });
       return;
     }
-    const fruit = this.basketPick && B.FRUITS.some(([k]) => k === this.basketPick) ? this.basketPick : null;
+    const fruit = this.basketPick && B.isFood(this.basketPick) ? this.basketPick : null;
     if (fruit && (this.profile.basket[fruit] ?? 0) > 0) {
       this.send({ t: 'critter', op: 'feed', id, fruit });
       this.spendBasket();

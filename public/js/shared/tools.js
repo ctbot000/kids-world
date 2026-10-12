@@ -45,10 +45,12 @@ export class Overlay {
 
 // ---------------------------------------------------------------- shared rules
 
-// Plants and little items need a block under them; fruit needs a tree beside it.
+// Plants and little items need a block under them; fruit needs a tree beside
+// it, and a crop farmland under it.
 export function supported(o, x, y, z, id) {
   const kind = B.KIND[id];
   if (kind !== B.K_PLANT && kind !== B.K_ITEM) return true;
+  if (B.CROP_OF[id]) return B.SOIL[o.get(x, y - 1, z)] > 0;
   if (B.block(id).collect && B.FRUIT_ITEMS.includes(id)) {
     return (
       B.TREE_PART[o.get(x + 1, y, z)] ||
@@ -157,8 +159,14 @@ export function buildEdit(world, hit, id, size = 1, bodies = [], facing = 0) {
     const here = o.get(x, y, z);
     if (!B.isReplaceable(here) || here === id) continue;
     if (small) {
-      if (!supported(o, x, y, z, id)) continue;
       if (here === B.WATER) continue;
+      // A crop never goes where one grows already, and planted on grass
+      // (or dirt, snow, frosting or basalt) turns the ground over first.
+      if (B.CROP_OF[id]) {
+        if (B.CROP_OF[here]) continue;
+        if (B.TILLS[o.get(x, y - 1, z)]) o.set(x, y - 1, z, B.FARMLAND);
+      }
+      if (!supported(o, x, y, z, id)) continue;
     } else if (B.SOLID[id] && overlapsAny(x, y, z, bodies)) {
       continue;
     }
@@ -354,6 +362,45 @@ export function stampEdit(world, hit, key, facing) {
   settle(o, touched);
   const cells = o.cells();
   return { cells, collected: collectedBy(world, cells) };
+}
+
+// A ripe crop picked: what it gives goes in the basket (`gives` of it), and
+// it grows back from a sprout, or leaves its farmland bare to plant again.
+export function harvestEdit(world, hit) {
+  const id = world.get(hit.x, hit.y, hit.z);
+  if (!B.isRipe(id)) return { cells: [], collected: [] };
+  const crop = B.cropOf(id);
+  const after = crop.regrows ? B.CROP_STAGES[B.CROP_OF[id] - 1][1] : B.AIR;
+  return { cells: [hit.x, hit.y, hit.z, after], collected: Array(crop.gives).fill(id) };
+}
+
+// The farmland a hit means: the farmland itself, or what it holds up (a
+// crop growing in it). Returns its cell, or null.
+export function soilAt(world, hit) {
+  if (B.SOIL[world.get(hit.x, hit.y, hit.z)]) return [hit.x, hit.y, hit.z];
+  if (B.KIND[world.get(hit.x, hit.y, hit.z)] === B.K_PLANT && B.SOIL[world.get(hit.x, hit.y - 1, hit.z)]) return [hit.x, hit.y - 1, hit.z];
+  return null;
+}
+
+// The watering can tapped at farmland (or a crop in it): the farmland
+// there watered, and with a bigger brush the farmland round it too — at the
+// same height, or a block up or down on a slope. Returns the cells, and
+// `spots`: every farmland it poured on, watered already or not.
+export function waterEdit(world, hit, size = 1) {
+  const at = soilAt(world, hit);
+  const o = new Overlay(world);
+  const spots = [];
+  for (const [dx, , dz] of at ? patch(0, 1, 0, size) : []) {
+    for (const dy of [0, 1, -1]) {
+      const [x, y, z] = [at[0] + dx, at[1] + dy, at[2] + dz];
+      const id = o.get(x, y, z);
+      if (!B.SOIL[id]) continue;
+      spots.push([x, y, z]);
+      if (id === B.FARMLAND) o.set(x, y, z, B.WET_FARMLAND);
+      break;
+    }
+  }
+  return { cells: o.cells(), collected: [], spots };
 }
 
 // A sprout grown into its tree. Returns [] when the sprout is gone.

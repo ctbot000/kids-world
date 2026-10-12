@@ -282,6 +282,45 @@ const MODELS = {
     ];
     return out;
   },
+
+  // A scarecrow on its pole, taller than its cell like a grown-up: a red
+  // shirt with a blue patch, its arms out along a crossbar with straw for
+  // hands, straw poking out under it, a smiling pumpkin for a head and a
+  // straw hat with a red band.
+  scarecrow() {
+    const RED = '#e8453c';
+    const STRAW = '#f2cf62';
+    return [
+      box(0.46, 0, 0.46, 0.54, 1.02, 0.54, DARK_WOOD, 'planks'),
+      box(0.04, 0.86, 0.47, 0.96, 0.92, 0.53, WOOD, 'planks'),
+      box(0.3, 0.56, 0.36, 0.7, 0.98, 0.64, RED, 'cloth'),
+      box(0.12, 0.82, 0.39, 0.3, 0.96, 0.61, RED, 'cloth'),
+      box(0.7, 0.82, 0.39, 0.88, 0.96, 0.61, RED, 'cloth'),
+      box(0.4, 0.68, 0.35, 0.5, 0.78, 0.36, '#3a73d8', 'cloth'),
+      box(0.02, 0.8, 0.42, 0.12, 0.94, 0.58, STRAW, 'hay-side'),
+      box(0.88, 0.8, 0.42, 0.98, 0.94, 0.58, STRAW, 'hay-side'),
+      box(0.33, 0.48, 0.38, 0.67, 0.56, 0.62, STRAW, 'hay-side'),
+      box(0.32, 0.98, 0.34, 0.68, 1.28, 0.66, '#ffffff', 'pumpkin-skin'),
+      box(0.39, 1.14, 0.33, 0.46, 1.21, 0.34, BLACK, 'plain'),
+      box(0.54, 1.14, 0.33, 0.61, 1.21, 0.34, BLACK, 'plain'),
+      box(0.41, 1.05, 0.33, 0.59, 1.08, 0.34, BLACK, 'plain'),
+      box(0.22, 1.28, 0.24, 0.78, 1.32, 0.76, STRAW, 'hay-top'),
+      box(0.35, 1.32, 0.37, 0.65, 1.46, 0.63, STRAW, 'hay-top'),
+      box(0.345, 1.32, 0.365, 0.655, 1.36, 0.635, RED, 'plain'),
+    ];
+  },
+
+  // A wooden fence post, with two rails out to each fence beside it.
+  fence(same) {
+    const out = [box(0.4, 0, 0.4, 0.6, 0.94, 0.6, WOOD, 'planks'), box(0.37, 0.94, 0.37, 0.63, 1, 0.63, DARK_WOOD, 'planks')];
+    for (const y of [0.3, 0.66]) {
+      if (same(-1, 0)) out.push(box(0, y, 0.44, 0.4, y + 0.13, 0.56, WOOD, 'planks'));
+      if (same(1, 0)) out.push(box(0.6, y, 0.44, 1, y + 0.13, 0.56, WOOD, 'planks'));
+      if (same(0, -1)) out.push(box(0.44, y, 0, 0.56, y + 0.13, 0.4, WOOD, 'planks'));
+      if (same(0, 1)) out.push(box(0.44, y, 0.6, 0.56, y + 0.13, 1, WOOD, 'planks'));
+    }
+    return out;
+  },
 };
 
 // The boxes of a piece of furniture in its own layout (facing -z).

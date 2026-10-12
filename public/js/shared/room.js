@@ -1,6 +1,7 @@
 // A hosted island: the world and everything around it — who is here, their
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
-// into trees, fruit growing back, what the island's owner allows, the
+// into trees, fruit growing back, crops growing on farmland (and the rain
+// and water close by watering it), what the island's owner allows, the
 // monsters when the owner lets them in (with everyone's HP), and on an
 // adventure island its camps to free (see adventure.js), and on a tower
 // defense island the waves of monsters and the towers (see defense.js).
@@ -15,7 +16,7 @@ import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
-import { advanceTime, DAY_MODES, isNight, nextWeather, WEATHERS } from './env.js';
+import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
@@ -41,7 +42,7 @@ function nameOf(raw) {
   return isValidName(name) && [...name].length <= NAME_MAX ? name : '';
 }
 export const MAX_PLAYERS = 8;
-export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature'];
+export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature', 'water'];
 
 const RATE_BURST = 240;
 const RATE_PER_SEC = 90;
@@ -57,6 +58,18 @@ const REGROW_MS = [120000, 200000];
 // boils away after this (a little sparkle and it is gone, stepMelts).
 const MELT_MS = [5000, 9000];
 const BOIL_MS = [7000, 13000];
+// Crops (blocks.js CROPS) are looked at this often, each moving on a stage
+// once it has grown long enough: its crop's `stage` seconds on watered
+// farmland, twice that on dry, each one a little more or less (STAGE_SPREAD)
+// so that a field ripens a few at a time.
+const FARM_MS = 1000;
+const STAGE_SPREAD = [0.8, 1.2];
+// Farmland is looked at about this often for rain falling on it (out under
+// the open sky) or water close by (SOAK blocks across, a block up or down),
+// which water it; watered, it dries out once DRY_MS has passed with neither.
+const SOIL_MS = [3000, 6000];
+const DRY_MS = [240000, 360000];
+const SOAK = 2;
 const SHELL_MS = 60000;
 const STAR_MS = 25000;
 const MAX_SHELLS = 16;
@@ -125,6 +138,9 @@ export class Room {
     this.reservedHost = 0;
     this.growth = new Map();
     this.regrow = new Map();
+    // The crops growing and the farmland they grow in (see farm), by cell.
+    this.crops = new Map();
+    this.soil = new Map();
     this.counts = { shells: 0, stars: 0 };
     this.encoded = null;
     this.onUpdate = null;
@@ -140,6 +156,8 @@ export class Room {
     this.envSentAt = t;
     this.shellAt = t + SHELL_MS;
     this.starAt = t + STAR_MS;
+    this.farmAt = t + FARM_MS;
+    this.farmedAt = t;
     // The camps to free, on an adventure island (adventure.js), and King
     // Grumble's landings still to work out (see stepMonsters).
     this.adventure = null;
@@ -186,6 +204,8 @@ export class Room {
     const w = this.world;
     this.counts = { shells: 0, stars: 0 };
     this.growth.clear();
+    this.crops.clear();
+    this.soil.clear();
     // On a volcano island, water brought to it boils away and ice melts into
     // water that boils away in turn (stepMelts, each tick): what the heat
     // has left to do, by the cell it will do it to.
@@ -199,6 +219,8 @@ export class Room {
           if (id === B.SHELL) this.counts.shells++;
           else if (id === B.STAR_PIECE) this.counts.stars++;
           else if (B.block(id).grows) this.growth.set(w.index(x, y, z), this.now() + this.between(GROW_MS));
+          else if (B.CROP_OF[id]) this.planted(x, y, z, id);
+          else if (B.SOIL[id]) this.tilled(x, y, z, id);
           else if (volcano && id === B.WATER) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
           else if (volcano && id === B.ICE) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(MELT_MS), to: B.WATER });
         }
@@ -215,6 +237,12 @@ export class Room {
       else if (B.block(before).grows) this.growth.delete(k);
       if (B.FRUIT_ITEMS.includes(before) && after === B.AIR) this.regrow.set(k, { id: before, at: this.now() + this.between(REGROW_MS), x, y, z });
       if (B.FRUIT_ITEMS.includes(after)) this.regrow.delete(k);
+      // A crop planted, picked, or on a stage (which starts it growing
+      // afresh), and farmland turned over, watered or dried out.
+      if (B.CROP_OF[after]) this.planted(x, y, z, after);
+      else if (B.CROP_OF[before]) this.crops.delete(k);
+      if (B.SOIL[after]) this.tilled(x, y, z, after);
+      else if (B.SOIL[before]) this.soil.delete(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // Water or ice put down on a volcano island is not there to stay.
@@ -628,7 +656,8 @@ export class Room {
     for (let i = 0; i < cells.length; i += 4) {
       const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
       const here = this.world.get(x, y, z);
-      let ok = !expect || expect[i / 4] === here;
+      // The watering can waters what it is tapped at; it is never put down.
+      let ok = (!expect || expect[i / 4] === here) && id !== B.WATERING_CAN;
       if (ok && B.SOLID[id] && !B.SOLID[here]) {
         for (const q of others) {
           const body = { x: q.s[0], y: q.s[1], z: q.s[2], radius: BODY.radius, height: BODY.height };
@@ -690,7 +719,8 @@ export class Room {
         break;
       }
       case 'feed': {
-        if (!B.FRUITS.some(([key]) => key === msg.fruit)) return;
+        // Fruit or a vegetable (still `fruit`, as pages from before vegetables send it).
+        if (!B.isFood(msg.fruit)) return;
         const c = this.critters.feed(msg.id, p.id, who, now);
         // A vehicle is only honked at.
         if (c) this.broadcast({ t: 'cfx', id: c.id, fx: CRITTER_INFO[c.type].vehicle ? 'pet' : 'yum', by: p.id, fruit: msg.fruit });
@@ -805,7 +835,7 @@ export class Room {
   petOp(p, msg) {
     const owner = this.players.get(msg.pid);
     if (!owner?.online || !owner.look?.pet) return;
-    if (msg.op === 'feed' && B.FRUITS.some(([key]) => key === msg.fruit)) this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'yum', fruit: msg.fruit });
+    if (msg.op === 'feed' && B.isFood(msg.fruit)) this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'yum', fruit: msg.fruit });
     else if (msg.op === 'pet') this.broadcast({ t: 'pfx', pid: owner.id, by: p.id, fx: 'pet' });
   }
 
@@ -1013,6 +1043,7 @@ export class Room {
     }
 
     this.grow(now);
+    this.farm(now);
     this.nature(now);
   }
 
@@ -1524,6 +1555,68 @@ export class Room {
       this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: [r.x, r.y, r.z, r.id] });
       this.changed();
     }
+  }
+
+  // A crop at a stage, to grow from nothing on to the next (see farm): how
+  // long that takes, in seconds on dry farmland.
+  planted(x, y, z, id) {
+    const crop = B.cropOf(id);
+    this.crops.set(this.world.index(x, y, z), { x, y, z, grown: 0, need: 2 * crop.stage * this.between(STAGE_SPREAD) });
+  }
+
+  // Farmland, to look at for rain or water close by now and then (see
+  // farm), and once watered, when it dries out.
+  tilled(x, y, z, id) {
+    const now = this.now();
+    this.soil.set(this.world.index(x, y, z), { x, y, z, at: now + this.between(SOIL_MS), dryAt: B.SOIL[id] === 2 ? now + this.between(DRY_MS) : 0 });
+  }
+
+  // Crops grow a stage at a time, twice as fast in watered farmland; the
+  // rain waters farmland out under the open sky, and water close by any
+  // farmland at all, which dries out a while after neither does. What
+  // changes goes out as one edit, the crops' and the farmland's together.
+  farm(now) {
+    if (now < this.farmAt) return;
+    // Up to a minute at a time: a host page whose ticks were held back
+    // (hidden, say) catches up rather than stopping.
+    const dt = Math.min(60, (now - this.farmedAt) / 1000);
+    this.farmedAt = now;
+    this.farmAt = now + FARM_MS;
+    if (!this.crops.size && !this.soil.size) return;
+    const w = this.world;
+    const cells = [];
+    for (const c of this.crops.values()) {
+      const id = w.get(c.x, c.y, c.z);
+      if (!B.CROP_OF[id] || B.STAGE_OF[id] >= B.RIPE) continue;
+      c.grown += dt * (B.SOIL[w.get(c.x, c.y - 1, c.z)] === 2 ? 2 : 1);
+      if (c.grown >= c.need) cells.push(c.x, c.y, c.z, B.CROP_STAGES[B.CROP_OF[id] - 1][B.STAGE_OF[id] + 1]);
+    }
+    const raining = isRaining(this.env.weather);
+    for (const s of this.soil.values()) {
+      if (s.at > now) continue;
+      s.at = now + this.between(SOIL_MS);
+      const id = w.get(s.x, s.y, s.z);
+      const soaked = (raining && w.top(s.x, s.z) === s.y) || this.waterNear(s.x, s.y, s.z);
+      if (B.SOIL[id] === 1 && soaked) cells.push(s.x, s.y, s.z, B.WET_FARMLAND);
+      else if (B.SOIL[id] === 2 && soaked) s.dryAt = now + this.between(DRY_MS);
+      else if (B.SOIL[id] === 2 && now >= s.dryAt) cells.push(s.x, s.y, s.z, B.FARMLAND);
+    }
+    if (!cells.length) return;
+    for (let i = 0; i < cells.length; i += 4) w.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'crop', cells });
+    this.changed();
+  }
+
+  // Whether there is water within SOAK blocks across of a cell, from a block
+  // below it to a block above.
+  waterNear(x, y, z) {
+    const w = this.world;
+    for (let dx = -SOAK; dx <= SOAK; dx++) {
+      for (let dz = -SOAK; dz <= SOAK; dz++) {
+        for (let dy = -1; dy <= 1; dy++) if (w.get(x + dx, y + dy, z + dz) === B.WATER) return true;
+      }
+    }
+    return false;
   }
 
   // Seashells wash up on the beach; at night, stars fall.
