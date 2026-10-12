@@ -93,6 +93,27 @@ test('a profile says when what you did takes you up a level, once, and you show 
   }
 });
 
+test('photos are counted, and five of them are the Photographer’s sticker', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const sticker = STICKERS.find((s) => s.key === 'photographer');
+    assert.ok(sticker, 'the sticker is there');
+    const p = new Profile();
+    const got = [];
+    p.addEventListener('sticker', (e) => got.push(e.detail.key));
+    for (let i = 0; i < 4; i++) p.count('photos');
+    assert.deepEqual(got, [], 'four is not five');
+    assert.equal(p.data.stats.photos, 4);
+    p.count('photos');
+    assert.deepEqual(got, ['photographer'], 'the fifth one is');
+    assert.equal(p.progress.xp, 5 * 5 + STICKER_XP, 'each photo a little XP, and the sticker its 25');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
 test('the ranking has a board for XP', () => {
   const players = [
     { id: 'a', profile: { name: 'Ann', look: {}, stats: { placed: 10 }, stickers: {} } },

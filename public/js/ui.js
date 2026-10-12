@@ -3355,7 +3355,9 @@ export class UI {
     });
   }
 
-  // Saves a picture of the island (without the buttons) to the device.
+  // Saves a picture of the island (without the buttons) to the device, and
+  // counts towards the 📸 Photographer sticker (5 of them) — on whichever
+  // world you are in: your own, or the isle's own there.
   takePhoto() {
     const g = this.game;
     if (!g) return;
@@ -3372,6 +3374,7 @@ export class UI {
     flash.hidden = false;
     setTimeout(() => (flash.hidden = true), 520);
     this.sound.play('photo');
+    g.profile?.count('photos');
     const a = document.createElement('a');
     const name = (g.world?.name ?? 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
     a.href = url;

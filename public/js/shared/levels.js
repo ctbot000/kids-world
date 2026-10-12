@@ -65,6 +65,7 @@ export const XP_FOR = {
   quizzes: { xp: 10 },
   quizright: { xp: 5, cap: 5000 },
   quizperfect: { xp: 25 },
+  photos: { xp: 5, cap: 100 },
 };
 
 // XP for each sticker earned, on top of what earned it.
