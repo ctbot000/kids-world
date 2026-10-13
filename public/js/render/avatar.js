@@ -1534,6 +1534,13 @@ function dressUp(av, kind, B) {
   const shoulderY = B.shoulder[0];
   const backAt = (y) => (B.shirt.find(([ry]) => ry >= y) ?? ring(B.shirt.length - 1))[3];
   // A shell a little bigger than the t-shirt, rings from..to of it.
+  // The little parts that never move on their own, fused into one shape for
+  // each colour and what they are on (see bakeCached): name, to, mat.
+  const fused = new Map();
+  const put = (name, to, mat, g, m) => {
+    if (!fused.has(name)) fused.set(name, { to, mat, parts: [] });
+    fused.get(name).parts.push({ g, m });
+  };
   const shell = (from, to, grow, front = grow) => loft(B.shirt.slice(from, to + 1).map(([y, w, a, b]) => [y, w * grow, a * front, b * grow]), { segs: 28, ends: [false, false] });
   // A cape or a robe, hung from the back of the collar.
   const cape = (outer, lining, len, bottom, flap, rest) => {
@@ -1544,9 +1551,10 @@ function dressUp(av, kind, B) {
     g.add(mesh(capeSheet(top, bottom, len, 0.07 * k), toon(lining, { side: THREE.BackSide })));
     torso.add(g);
     // Clasps at the front of the shoulders, holding it on.
-    for (const side of [-1, 1]) torso.add(mesh(sphere(1, 12, 8), toon('#f5c542'), side * B.shoulder[1] * 0.62, shoulderY + 0.03 * k, ring(6)[2] * 0.75, 0.02 * k));
+    for (const side of [-1, 1]) put('clasps', torso, toon('#f5c542'), sphere(1, 12, 8), at(side * B.shoulder[1] * 0.62, shoulderY + 0.03 * k, ring(6)[2] * 0.75, 0.02 * k));
     return { g, top, flap, rest };
   };
+  let flapping = null;
   switch (kind) {
     case 'scarf': {
       // A stripy scarf round the neck, its end hanging down behind one
@@ -1557,14 +1565,16 @@ function dressUp(av, kind, B) {
       const end = new THREE.Group();
       end.position.set(-cw * 0.7, cy + 0.005 * k, -backAt(cy) - 0.012 * k);
       const seg = 0.045 * k;
-      for (let i = 0; i < 4; i++) end.add(mesh(roundedBox(0.06 * k, seg, 0.016 * k, 0.006 * k), toon(stripes[i % 2]), 0, -seg * (i + 0.5), 0));
-      for (const x of [-0.022, -0.007, 0.008, 0.023]) end.add(mesh(cylinder(0.004 * k, 0.004 * k, 0.025 * k, 6), toon(stripes[0]), x * k, -seg * 4 - 0.012 * k, 0));
+      for (let i = 0; i < 4; i++) put(`end${i % 2}`, end, toon(stripes[i % 2]), roundedBox(0.06 * k, seg, 0.016 * k, 0.006 * k), at(0, -seg * (i + 0.5), 0));
+      for (const x of [-0.022, -0.007, 0.008, 0.023]) put('end0', end, toon(stripes[0]), cylinder(0.004 * k, 0.004 * k, 0.025 * k, 6), at(x * k, -seg * 4 - 0.012 * k, 0));
       torso.add(end);
-      return { part: end, flap: 1.1, rest: 0.08 };
+      flapping = { part: end, flap: 1.1, rest: 0.08 };
+      break;
     }
     case 'cape': {
       const c = cape('#e23b3b', '#f5c542', B.shoulder[0] + B.hip - 0.24 * k, c0(B) * 2.9, 0.6, 0.06);
-      return { part: c.g, flap: c.flap, rest: c.rest };
+      flapping = { part: c.g, flap: c.flap, rest: c.rest };
+      break;
     }
     case 'robe': {
       // A long velvet robe down to the heels, with a white fur trim along
@@ -1578,9 +1588,10 @@ function dressUp(av, kind, B) {
       torso.add(mesh(torus(cw * 1.08, 0.034 * k), toon('#fbf8f2'), 0, cy + 0.01 * k, 0, 1, cf / cw, 1).rotateX(Math.PI / 2 - 0.1));
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2;
-        torso.add(mesh(sphere(1, 6, 4), toon(BLACK), Math.cos(a) * (cw * 1.08 + 0.026 * k), cy + 0.022 * k, Math.sin(a) * (cf * 1.08 + 0.026 * k), 0.007 * k));
+        put('spots', torso, toon(BLACK), sphere(1, 6, 4), at(Math.cos(a) * (cw * 1.08 + 0.026 * k), cy + 0.022 * k, Math.sin(a) * (cf * 1.08 + 0.026 * k), 0.007 * k));
       }
-      return { part: c.g, flap: c.flap, rest: c.rest };
+      flapping = { part: c.g, flap: c.flap, rest: c.rest };
+      break;
     }
     case 'armor': {
       // A shiny breastplate over the t-shirt, a gold rim round its edges, a
@@ -1590,15 +1601,15 @@ function dressUp(av, kind, B) {
       torso.add(mesh(shell(0, 7, 1.12, 1.2), steel));
       for (const i of [0, 7]) {
         const [y, w, a, b] = ring(i);
-        torso.add(mesh(torus(w * 1.12, 0.008 * k), gold, 0, y, ((a - b) * 1.15) / 2, 1, ((a + b) * 1.16) / 2 / (w * 1.12), 1).rotateX(Math.PI / 2));
+        put('rims', torso, gold, torus(w * 1.12, 0.008 * k), at(0, y, ((a - b) * 1.15) / 2, 1, ((a + b) * 1.16) / 2 / (w * 1.12), 1, Math.PI / 2));
       }
       const [badgeY] = B.badge;
       const front = (B.shirt.find(([y]) => y >= badgeY) ?? ring(4))[2] * 1.2 + 0.004;
       const red = toon('#d93a3a');
-      torso.add(mesh(roundedBox(0.03 * k, 0.11 * k, 0.01 * k, 0.004 * k), red, 0, badgeY, front).rotateX(-0.12));
-      torso.add(mesh(roundedBox(0.08 * k, 0.03 * k, 0.01 * k, 0.004 * k), red, 0, badgeY + 0.012 * k, front).rotateX(-0.12));
+      put('cross', torso, red, roundedBox(0.03 * k, 0.11 * k, 0.01 * k, 0.004 * k), at(0, badgeY, front, 1, 1, 1, -0.12));
+      put('cross', torso, red, roundedBox(0.08 * k, 0.03 * k, 0.01 * k, 0.004 * k), at(0, badgeY + 0.012 * k, front, 1, 1, 1, -0.12));
       for (const arm of av.arms) arm.add(mesh(geo('pauldron', () => new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2)), steel, 0, -0.012 * k, 0, B.arm[2] * 1.75, B.arm[2] * 1.4, B.arm[2] * 1.65));
-      return null;
+      break;
     }
     case 'firesuit': {
       // A firefighter's coat over the t-shirt: thick and yellow, with
@@ -1609,22 +1620,24 @@ function dressUp(av, kind, B) {
       torso.add(mesh(shell(0, B.shirt.length - 1, 1.09, 1.12), coat));
       for (const i of [1, 4]) {
         const [y, w, a, b] = ring(i);
-        for (const [dy, m, r] of [[0, lime, 0.013], [0.022 * k, bright, 0.007], [-0.022 * k, bright, 0.007]]) {
-          torso.add(mesh(torus(w * 1.1, r * k), m, 0, y + dy, ((a - b) * 1.12) / 2, 1, ((a + b) * 1.12) / 2 / (w * 1.1), 1).rotateX(Math.PI / 2));
+        for (const [dy, name, m, r] of [[0, 'lime', lime, 0.013], [0.022 * k, 'bright', bright, 0.007], [-0.022 * k, 'bright', bright, 0.007]]) {
+          put(name, torso, m, torus(w * 1.1, r * k), at(0, y + dy, ((a - b) * 1.12) / 2, 1, ((a + b) * 1.12) / 2 / (w * 1.1), 1, Math.PI / 2));
         }
       }
       // Buckles down the front.
       const black = toon('#3a3a40');
-      for (const i of [2, 3, 5]) torso.add(mesh(roundedBox(0.03 * k, 0.012 * k, 0.008 * k, 0.003 * k), black, 0, ring(i)[0], ring(i)[2] * 1.12 + 0.004));
+      for (const i of [2, 3, 5]) put('buckles', torso, black, roundedBox(0.03 * k, 0.012 * k, 0.008 * k, 0.003 * k), at(0, ring(i)[0], ring(i)[2] * 1.12 + 0.004));
       for (const arm of av.arms) {
         arm.add(mesh(sleeveShape(B), coat, 0, 0, 0, 1.1, 1.6, 1.1));
         arm.add(mesh(torus(B.arm[2] * 1.38, 0.008 * k), lime, 0, -B.sleeve * 1.4, 0).rotateX(Math.PI / 2));
       }
-      return null;
+      break;
     }
     default:
-      return null;
+      break;
   }
+  for (const [name, { to, mat, parts }] of fused) to.add(mesh(bakeCached(`outfit|${kind}|${name}|${B === BUILDS.grown ? 'grown' : 'kid'}`, parts), mat));
+  return flapping;
 }
 // A cape's width at the bottom goes by how wide the shoulders are.
 const c0 = (B) => B.shoulder[1];
