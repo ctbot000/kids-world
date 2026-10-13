@@ -40,6 +40,24 @@ export function toon(color, { emissive = 0, transparent = false, opacity = 1, si
   return m;
 }
 
+// Something bopped flashes white for a moment, as in a Zelda game.
+const FLASH = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.92 });
+// Every part of a model drawn in FLASH (on), or as it was (off): each part's
+// own material kept by it while it flashes, and taken up again afresh each
+// frame, as a model may change one (eyes aglow at night) as it goes.
+export function flashModel(group, on) {
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    if (on && o.material !== FLASH) {
+      o.userData.unflash = o.material;
+      o.material = FLASH;
+    } else if (!on && o.material === FLASH) {
+      o.material = o.userData.unflash;
+      delete o.userData.unflash;
+    }
+  });
+}
+
 // Shared shapes, made once.
 const geos = new Map();
 export function geo(key, make) {

@@ -21,7 +21,7 @@ import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, POTION, wornOutfit, wornWeapon } from './shared/shop.js';
+import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
@@ -29,6 +29,7 @@ import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
+import { flashModel } from './render/toon.js';
 
 export const TOOLS = [
   { key: 'build', name: 'Build', icon: '🧱', key1: 'B' },
@@ -69,9 +70,24 @@ const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
 // speech bubble before it has been drawn.
 const BUBBLE_SECS = 4.5;
-// The 👊 button: a swing at a monster no further round from straight ahead
-// than this (the cosine of 70°).
+// The 👊 button: the bubble blaster's bubble goes at a monster no further
+// round from straight ahead than this (the cosine of 70°); any other swing
+// sweeps round in front of you, like a sword in a Zelda game, and hits every
+// monster it passes, as far round as this either side (the cosine of 100°).
 const FRONT = 0.34;
+const SWEEP = -0.17;
+// A monster bopped flashes white, on and off, this long.
+const FLASH_MS = 300;
+const FLASH_BLINK = 75;
+// How each swing's slash looks (render/effects.js slash): its colour, how
+// high over the swinger's feet, and the hammer's coming down from overhead.
+// The blaster has none: it blows a bubble.
+const SLASHES = {
+  punch: { color: '#ffe27a', y: 0.95 },
+  sword: { color: '#4fc3ff', y: 0.95 },
+  hammer: { color: '#ffc21a', y: 1.25, upright: true },
+  lavablade: { color: '#ff6a1f', y: 0.95 },
+};
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
 // What each tougher monster is, told the first time one comes out near you.
@@ -273,9 +289,12 @@ export class Game extends EventTarget {
       case 'emote':
         this.emoted(msg.pid, msg.e);
         break;
-      case 'swing':
-        this.players.get(msg.pid)?.avatar?.swing();
+      case 'swing': {
+        const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
+        const world = this.world;
+        setTimeout(() => this.world === world && this.slashFrom(this.players.get(msg.pid)?.avatar), lands * 1000);
         break;
+      }
       case 'c':
         this.critterStates(msg.c);
         break;
@@ -1049,6 +1068,7 @@ export class Game extends EventTarget {
   monsterHit(msg) {
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.4;
+    if (entry) entry.flashUntil = performance.now() + FLASH_MS;
     if (entry && Number.isInteger(msg.hearts)) entry.hearts = msg.hearts;
     // Knocked back away from whoever bopped it (one marching keeps to its road).
     const from = msg.by === this.pid ? this.me?.body : this.players.get(msg.by)?.avatar?.root.position;
@@ -1118,10 +1138,22 @@ export class Game extends EventTarget {
     return now >= (this.attackAt ?? 0) && now + swing.secs * swing.strike * 1000 >= (this.bopSentAt ?? -Infinity) + HIT_MS + BOP_SPACING;
   }
 
-  // The 👊 button (or X): a swing of the arm, and whatever is in it, at the
-  // monster right in front of you, if one is close enough: as far as an arm
-  // reaches, further with a toy weapon (see shop.js), and nothing through a
-  // wall. You turn to face it. Returns the monster's id, or null.
+  // The slash a swing leaves in the air as it lands, round in front of
+  // whoever swung (avatar) as far as their weapon reaches.
+  slashFrom(avatar) {
+    const look = avatar && SLASHES[avatar.weaponKind ?? 'punch'];
+    if (!look) return;
+    const { position: at, rotation, scale } = avatar.root;
+    if (!this.near(at.x, at.y, at.z, 40)) return;
+    const reach = 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
+    this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright });
+  }
+
+  // The 👊 button (or X): a swing of the arm, and whatever is in it. It
+  // sweeps round in front of you and bops every monster it passes through,
+  // as far as an arm reaches, further with a toy weapon (see shop.js), and
+  // nothing through a wall; the bubble blaster's bubble goes at the nearest
+  // one in front of you instead. Returns the nearest one's id, or null.
   attack() {
     if (!this.world || !this.me || this.riding || this.aboard) return null;
     if (this.dizzy || !this.attackReady()) return null;
@@ -1136,6 +1168,8 @@ export class Game extends EventTarget {
     if (this.renderer.camDist <= 1.3) this.me.yaw = this.renderer.view.yaw + Math.PI;
     const fx = Math.sin(this.me.yaw);
     const fz = Math.cos(this.me.yaw);
+    const blaster = weapon?.key === 'blaster';
+    const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
       const m = entry.model.group.position;
@@ -1146,33 +1180,38 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < FRONT) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster ? FRONT : SWEEP)) continue;
       const ey = b.y + BODY.eye;
       const dy = m.y + size.height / 2 - ey;
       const len = Math.hypot(dx, dy, dz) || 1;
       if (raycast(this.world, b.x, ey, b.z, dx / len, dy / len, dz / len, Math.max(0, len - size.radius), (block) => B.SOLID[block] === 1)) continue;
-      if (!best || gap < best.gap) best = { id, gap, dx, dz, m, size };
+      const hit = { id, gap, dx, dz, m, size };
+      hits.push(hit);
+      if (!best || gap < best.gap) best = hit;
     }
-    if (best) this.me.yaw = Math.atan2(best.dx, best.dz);
+    // The blaster turns to aim at its one; a sweep goes the way you face,
+    // turning only for one right up against you behind.
+    const behind = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1) < SWEEP;
+    if (best && (blaster || behind(best))) this.me.yaw = Math.atan2(best.dx, best.dz);
     // The bop (and a blaster's bubble) goes when the swing lands, a moment on;
     // the whoosh of a swing as it starts.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
     this.send({ t: 'swing' });
-    if (weapon?.key !== 'blaster') this.sound.play('swish');
+    if (!blaster) this.sound.play('swish');
     const world = this.world;
     setTimeout(() => {
       if (this.world !== world) return;
       const yaw = this.me.yaw;
       const hand = { x: b.x + Math.sin(yaw) * 0.5, y: b.y + 1, z: b.z + Math.cos(yaw) * 0.5 };
       const at = best && (this.monsters.get(best.id)?.model.group.position ?? best.m);
-      if (weapon?.key === 'blaster') {
+      if (blaster) {
         if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
         else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
-      }
+      } else this.slashFrom(this.players.get(this.pid)?.avatar);
       if (best) {
         this.bopSentAt = performance.now();
-        this.bop(best.id);
+        for (const hit of blaster ? [best] : hits) this.bop(hit.id);
       }
     }, lands * 1000);
     if (best) return best.id;
@@ -1180,7 +1219,7 @@ export class Game extends EventTarget {
     const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
     if (near && now > (this.toldReach ?? 0)) {
       this.toldReach = now + 20000;
-      this.emit('toast', { icon: weapon?.icon ?? '👊', text: weapon?.key === 'blaster' ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster and face it, then bop!' });
+      this.emit('toast', { icon: weapon?.icon ?? '👊', text: blaster ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
     }
     return null;
   }
@@ -1292,6 +1331,9 @@ export class Game extends EventTarget {
       }
       const ground = this.renderer.groundUnder(s.x, s.y, s.z);
       m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
+      const flash = now < (entry.flashUntil ?? 0) && Math.floor((entry.flashUntil - now) / FLASH_BLINK) % 2 === 0;
+      if (flash || entry.flashed) flashModel(m.group, flash);
+      entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
       const king = entry.kind === 'king';
       const big = king || entry.kind === 'big';
@@ -1409,6 +1451,7 @@ export class Game extends EventTarget {
     }
     if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max };
     if (entry) entry.model.squash = msg.dazed ? 0.6 : 0.45;
+    if (entry) entry.flashUntil = performance.now() + FLASH_MS;
     if (p && this.near(p.x, p.y, p.z, 40)) {
       this.renderer.effects.sparkles(p.x, p.y + 1.4, p.z, msg.dazed ? 36 : 14, ['#ffd84d', '#ffffff', '#ff8fc4']);
       this.renderer.effects.bang(p.x, p.y + 2.3, p.z);

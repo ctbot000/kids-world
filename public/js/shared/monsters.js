@@ -130,7 +130,7 @@ export const DAZED_HIT = 3;
 // to giggle after.
 const BUMP_PAD = 0.38;
 const GIGGLE_MS = 1400;
-// Bopping one: whatever is right in front of you, as far as your arm
+// Bopping one: a swing sweeps round in front of you (game.js), as far as your arm
 // reaches (ARM_REACH, from your side to its side, and about level with you),
 // further with a toy weapon in it (see shop.js). The host lets a little more
 // through (BOP_SLACK), as a monster on the move is a little further on there

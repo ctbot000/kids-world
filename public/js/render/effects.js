@@ -123,6 +123,34 @@ const VERT = /* glsl */ `
   }
 `;
 
+// A slash: a sweep of light along an arc, its head running from one end to
+// the other with a trail fading out behind it, brightest at the outer edge
+// where the blade's tip goes.
+const SLASH_VERT = /* glsl */ `
+  attribute vec2 ts; // how far along the arc, and how far out (0 to 1)
+  varying vec2 vTs;
+  void main() {
+    vTs = ts;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const SLASH_FRAG = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uHead;
+  uniform float uTrail;
+  varying vec2 vTs;
+  void main() {
+    float d = uHead - vTs.x;
+    if (d < 0.0 || d > uTrail) discard;
+    float a = pow(1.0 - d / uTrail, 0.6) * smoothstep(0.0, 0.25, vTs.y) * (0.55 + 0.45 * vTs.y);
+    gl_FragColor = vec4(mix(uColor, vec3(1.0), pow(vTs.y, 8.0) * 0.7), a * 0.95);
+    #include <colorspace_fragment>
+  }
+`;
+const SLASH_SECS = 0.26;
+const SLASH_TRAIL = 0.55;
+const SLASH_POOL = 8;
+
 const FRAG = /* glsl */ `
   uniform sampler2D map;
   varying vec2 vUv;
@@ -164,6 +192,76 @@ export class Effects {
     this.mesh.renderOrder = 5;
     scene.add(this.mesh);
     this.tmp = new THREE.Color();
+    this.scene = scene;
+    this.slashes = [];
+    this.slashGeos = new Map();
+  }
+
+  // An arc of geometry from angle `from` to `to` (round from straight ahead,
+  // the way the swing goes) between radius inner and outer, flat on the
+  // ground's plane; made once for each shape.
+  slashGeo(from, to, inner, outer) {
+    const key = `${from}|${to}|${inner}|${outer}`;
+    let g = this.slashGeos.get(key);
+    if (g) return g;
+    const n = 24;
+    const pos = [];
+    const ts = [];
+    const index = [];
+    for (let i = 0; i <= n; i++) {
+      const a = from + ((to - from) * i) / n;
+      for (const [r, out] of [[inner, 0], [outer, 1]]) {
+        pos.push(Math.sin(a) * r, 0, Math.cos(a) * r);
+        ts.push(i / n, out);
+      }
+      if (i) index.push(i * 2 - 2, i * 2 - 1, i * 2, i * 2 - 1, i * 2 + 1, i * 2);
+    }
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('ts', new THREE.Float32BufferAttribute(ts, 2));
+    g.setIndex(index);
+    this.slashGeos.set(key, g);
+    return g;
+  }
+
+  // A swing's slash at (x, y, z), facing yaw: a sweep from the swinger's
+  // right round to their left (or, upright, from over their head down in
+  // front of them), as far out as reach, in color.
+  slash(x, y, z, yaw, { reach = 1.5, color = '#ffffff', upright = false, tilt = -0.2, from, to } = {}) {
+    let s = this.slashes.find((one) => !one.group.visible);
+    if (!s) {
+      if (this.slashes.length >= SLASH_POOL) s = this.slashes.reduce((a, b) => (a.age > b.age ? a : b));
+      else {
+        const mat = new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: new THREE.Color() }, uHead: { value: 0 }, uTrail: { value: SLASH_TRAIL } },
+          vertexShader: SLASH_VERT,
+          fragmentShader: SLASH_FRAG,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const group = new THREE.Group();
+        const mesh = new THREE.Mesh(this.slashGeo(0, 1, 0, 1), mat);
+        mesh.frustumCulled = false;
+        mesh.renderOrder = 4;
+        group.add(mesh);
+        this.scene.add(group);
+        s = { group, mesh, mat, age: 0 };
+        this.slashes.push(s);
+      }
+    }
+    const lo = from ?? -1.75;
+    const hi = to ?? (upright ? 0.6 : 1.75);
+    s.mesh.geometry = this.slashGeo(lo, hi, Math.max(0.3, reach * 0.45), reach);
+    s.group.position.set(x, y, z);
+    s.group.rotation.set(0, yaw, 0);
+    // Upright: the arc stood on its side, up over the head and down in
+    // front; otherwise tipped a little, the blade ending lower than it began.
+    s.mesh.rotation.set(0, 0, upright ? -Math.PI / 2 : tilt);
+    s.mat.uniforms.uColor.value.set(color);
+    s.mat.uniforms.uHead.value = 0;
+    s.age = 0;
+    s.group.visible = true;
   }
 
   // delay: seconds before it shows (and starts to move).
@@ -335,6 +433,12 @@ export class Effects {
   }
 
   update(dt) {
+    for (const s of this.slashes) {
+      if (!s.group.visible) continue;
+      s.age += dt;
+      s.mat.uniforms.uHead.value = (s.age / SLASH_SECS) * (1 + SLASH_TRAIL);
+      if (s.age >= SLASH_SECS) s.group.visible = false;
+    }
     let n = 0;
     const c = this.center.array;
     const col = this.color.array;

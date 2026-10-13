@@ -1246,7 +1246,7 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   // X, facing it from three steps off, is a swing at nothing: it is out of reach.
   await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
   await page.keyboard.press('KeyX');
-  await until(page, () => document.body.textContent.includes('Walk right up to a monster and face it'));
+  await until(page, () => document.body.textContent.includes('Walk right up to a monster, then swing'));
   assert.equal(await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts, id), 1, 'too far to bop');
   // Right up to it, X pops it.
   await page.evaluate(({ x, y, z }) => {
@@ -1292,6 +1292,31 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 1, full);
   await page.evaluate((wasTouch) => document.body.classList.toggle('touch', wasTouch), wasTouch);
   await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
+  // A swing sweeps round in front, like a sword in a Zelda game: one swing bops a monster off to
+  // either side at once (each well round from straight ahead), flashing them white and leaving a
+  // slash in the air.
+  const pair = await page.evaluate(({ x, y, z }) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    Object.assign(kw.game.me.body, { x: x + 0.5, y, z: z - 1, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+    return [-1.3, 1.3].map((dx) => {
+      const m = room.monsters.add(room.world, x + 0.5 + dx, y, z - 1.2);
+      m.giggle = Infinity;
+      return m.id;
+    });
+  }, spot);
+  await until(page, (ids) => ids.every((id) => window.kidsWorld.game.monsters.has(id)), pair);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  await page.evaluate(() => (window.kidsWorld.game.me.yaw = Math.PI));
+  await until(page, () => window.kidsWorld.game.attackReady());
+  await page.keyboard.press('KeyX');
+  await until(page, (ids) => ids.every((id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2), pair);
+  assert.ok(
+    await page.evaluate((ids) => ids.every((id) => window.kidsWorld.game.monsters.get(id).flashUntil > 0) && window.kidsWorld.renderer.effects.slashes.length > 0, pair),
+    'both flash, and the swing leaves a slash',
+  );
+  await page.evaluate((ids) => ids.forEach((id) => window.kidsWorld.session.link.room.monsters.remove(id)), pair);
   // One right beside you takes some HP, and knocks you back.
   const from = await page.evaluate(() => {
     const kw = window.kidsWorld;
