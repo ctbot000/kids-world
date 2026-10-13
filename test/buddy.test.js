@@ -23,7 +23,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
-import { FriendControl } from '../server/friend.js';
+import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 import { Ollama } from '../server/llm.js';
@@ -549,4 +549,47 @@ test('the Ollama client fills in a trace of each question for the model log', as
   assert.ok(trace.sentAt > 0);
   // Without a trace, as before.
   assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], { type: 'object' }), { say: 'Hi!' });
+});
+
+test('the tokens its models take are tallied a day at a time, saved, and shown on the admin page', async () => {
+  const dir = await tempDir();
+  const DAY = 86400000;
+  let now = new Date(2026, 9, 13, 12).getTime();
+  const usage = new TokenUsage(join(dir, USAGE_FILE), () => now);
+  usage.add([{ name: 'Z.ai', model: 'glm-5.3-flash', promptTokens: 900, tokens: 40 }]);
+  now -= 10 * DAY;
+  usage.add([{ name: 'Z.ai', model: 'glm-5.3-flash', promptTokens: 800, tokens: 30 }, { name: 'Ollama', model: 'gemma3:4b', promptTokens: 700, tokens: 20 }]);
+  now += 10 * DAY;
+  usage.add([{ name: 'Ollama', model: 'gemma3:4b', promptTokens: -5, tokens: Number.NaN }]);
+  const s = usage.summary();
+  assert.equal(s.since, dayOf(now - 10 * DAY));
+  assert.deepEqual(s.periods.map((p) => p.key), ['today', 'week', 'month', 'all']);
+  const [today, week, month, all] = s.periods;
+  assert.deepEqual(today.rows, [
+    { name: 'Z.ai', model: 'glm-5.3-flash', answers: 1, promptTokens: 900, tokens: 40 },
+    { name: 'Ollama', model: 'gemma3:4b', answers: 1, promptTokens: 0, tokens: 0 },
+  ]);
+  assert.deepEqual(week.total, today.total, 'ten days ago is not in the last 7');
+  assert.deepEqual(month.total, { answers: 4, promptTokens: 2400, tokens: 90 });
+  assert.deepEqual(all.total, month.total);
+  await usage.save();
+  const again = await new TokenUsage(join(dir, USAGE_FILE), () => now).load();
+  assert.deepEqual(again.summary(), s, 'kept after a restart');
+
+  // Each answer the friend gets is counted, and the admin page sees it.
+  const llm = { ...model(), url: 'http://127.0.0.1:11434', models: async () => [] };
+  const chat = llm.chat;
+  llm.chat = async (messages, schema, trace) => {
+    (trace.usage ??= []).push({ name: 'Z.ai', model: 'glm-5.3-flash', promptTokens: 100, tokens: 10 });
+    return chat(messages, schema, trace);
+  };
+  const { rooms } = server();
+  const control = new FriendControl({ dir, llm, env: { KIDS_WORLD_AI_HOME: 'off' }, now: () => now, make: (st) => friend({ llm, rooms, name: st.name }) });
+  await control.start();
+  await control.buddy.ask([{ role: 'user', content: 'hi' }], {}, 'a test');
+  const shown = (await control.status()).usage;
+  assert.equal(shown.periods[0].rows.find((r) => r.name === 'Z.ai').promptTokens, 1000);
+  await control.stop();
+  const saved = JSON.parse(await readFile(join(dir, USAGE_FILE), 'utf8'));
+  assert.equal(saved.days[dayOf(now)].find((r) => r.name === 'Z.ai').answers, 2, 'saved on stop');
 });

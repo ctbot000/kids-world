@@ -24,6 +24,7 @@ test('the Z.ai client asks with the answer shape in words, and reads its JSON', 
   assert.equal(trace.model, 'glm-5.3-flash');
   assert.equal(trace.raw, 'Sure! {"say":"Hi!"}');
   assert.deepEqual(trace.zai, { promptTokens: 90, tokens: 8 });
+  assert.deepEqual(trace.usage, [{ name: 'Z.ai', model: 'glm-5.3-flash', promptTokens: 90, tokens: 8 }], 'its tokens, for the tally');
   assert.ok(trace.sentAt > 0);
   assert.equal(sent[0].body.max_tokens, 1, 'one tiny question looks for its endpoint first');
   const asked = sent.at(-1);
@@ -138,6 +139,7 @@ test('a fallback around the real Ollama client still talks to it the same way', 
   const trace = {};
   assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA, trace), { say: 'Hi!' });
   assert.equal(trace.fellBack, 'Z.ai has no API key (ZAI_API_KEY)');
+  assert.deepEqual(trace.usage?.map((u) => u.name), ['Ollama'], 'only the one that answered took tokens');
   assert.equal(trace.model, 'tiny');
   assert.equal(sent[0].url, 'http://ollama.test/api/chat');
 });

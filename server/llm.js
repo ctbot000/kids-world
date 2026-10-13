@@ -18,6 +18,14 @@ export const ZAI_URLS = ['https://api.z.ai/api/paas/v4', 'https://api.z.ai/api/c
 export const DEFAULT_ZAI_MODEL = 'glm-5.3-flash';
 
 const TIMEOUT_MS = 30000;
+
+// The tokens one answer took, added to the trace's usage: one entry for each
+// model that answered (Z.ai's, then Ollama's when it fell back), counted on
+// the admin page whether or not the answer was any good.
+function spent(trace, llm, promptTokens, tokens) {
+  const count = (n) => (Number.isFinite(n) && n >= 0 ? n : 0);
+  (trace.usage ??= []).push({ name: llm.name, model: llm.model, promptTokens: count(promptTokens), tokens: count(tokens) });
+}
 const OPTIONS = { temperature: 0.7, num_predict: 160 };
 const ZAI_OPTIONS = { temperature: 0.7, max_tokens: 200 };
 
@@ -95,6 +103,7 @@ export class Ollama {
         answerMs: ms(body.eval_duration),
         doneReason: body.done_reason ?? '',
       };
+      spent(trace, this, body.prompt_eval_count, body.eval_count);
     }
     return JSON.parse(body.message?.content ?? '');
   }
@@ -193,6 +202,7 @@ export class Zai {
     if (trace) {
       trace.raw = words;
       trace.zai = { promptTokens: body.usage?.prompt_tokens ?? null, tokens: body.usage?.completion_tokens ?? null };
+      spent(trace, this, body.usage?.prompt_tokens, body.usage?.completion_tokens);
     }
     return this.read(words);
   }

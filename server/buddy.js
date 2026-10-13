@@ -260,6 +260,8 @@ export class Buddy extends EventEmitter {
     // model log: everything sent and what came back. Only in memory.
     this.calls = [];
     this.callId = 0;
+    // Told the tokens each answer took (usage entries from llm.js), if set.
+    this.onUsage = null;
     this.tickMs = tickMs;
     this.layerMs = layerMs;
     this.firstBuildMs = firstBuildMs;
@@ -322,6 +324,9 @@ export class Buddy extends EventEmitter {
       this.stats.lastErrorAt = this.now();
       Object.assign(call, { state: 'failed', ms: this.now() - start, error: error.message });
       throw error;
+    } finally {
+      // The tokens it took, answered or not, for the admin page's tally.
+      if (call.usage?.length) this.onUsage?.(call.usage);
     }
   }
 

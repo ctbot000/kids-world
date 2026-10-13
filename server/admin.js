@@ -12,8 +12,9 @@
 // (friend.js), with a line to say there as its own, a line to say to it that
 // its model answers, and a button to send it home from an island, and its
 // model log: what it asked the model lately, word for word, and what came
-// back; and the problems players told of, each with a picture of their
-// screen, to look into, mark done and delete. Only for this computer: requests from other
+// back, and the tokens its models took a day at a time; and the problems
+// players told of, each with a picture of their screen, to look into, mark
+// done and delete. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';

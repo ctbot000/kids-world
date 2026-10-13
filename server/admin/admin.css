@@ -193,6 +193,45 @@ code {
   font-size: 15px;
 }
 
+/* A grid item: without this the table would widen the card, not scroll in it. */
+.usage-section {
+  min-width: 0;
+}
+
+.usage-section h3 {
+  margin: 14px 0 6px;
+  font-size: 16px;
+}
+
+/* Wide tables scroll on their own, never the page. */
+.usage-wrap {
+  overflow-x: auto;
+}
+
+.usage {
+  border-collapse: collapse;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage th,
+.usage td {
+  padding: 6px 12px;
+  border-bottom: 2px solid var(--line);
+  text-align: right;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.usage th[scope='row'],
+.usage thead th:first-child {
+  text-align: left;
+}
+
+.usage .muted {
+  font-size: 13px;
+}
+
 .icons {
   letter-spacing: 2px;
 }

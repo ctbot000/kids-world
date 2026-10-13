@@ -6,7 +6,7 @@
 // own world of each player, folded away under their islands; and the AI
 // friend: its settings, what it is doing now, its own island and what it
 // builds there, the islands it is on and what is said there, how its model
-// answers and what it did lately, with a line to talk with it on an island
+// answers, the tokens its models took and what it did lately, with a line to talk with it on an island
 // it is on, which its model answers, a line for it to say there, as its own
 // words, and its model log: what it asked the model, word for word, and what
 // came back; and the problems players told of, with a picture of their
@@ -803,6 +803,43 @@ async function refreshLog() {
   logView.list.replaceChildren(...(calls ?? []).map(callCard));
 }
 
+// The tokens its models took (kept by the keeper, a day at a time): today,
+// the last 7 and 30 days and all of it, a row for each model and the totals,
+// each cell the tokens in all and, under it, how many went in (the prompt)
+// and came out, and in how many answers.
+const PERIODS = { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', all: 'All' };
+const num = (n) => n.toLocaleString();
+
+function usageTable(usage) {
+  if (!usage?.since) return [h('p', { class: 'muted' }, '🧮 No tokens used yet.')];
+  const periods = usage.periods;
+  const models = periods.at(-1).rows.map((r) => ({ name: r.name, model: r.model }));
+  const cell = (c) =>
+    c?.answers
+      ? h('td', {}, h('b', {}, num(c.promptTokens + c.tokens)), h('div', { class: 'muted' }, `${num(c.promptTokens)} in · ${num(c.tokens)} out`), h('div', { class: 'muted' }, plural(c.answers, 'answer', 'answers')))
+      : h('td', { class: 'muted' }, '—');
+  const row = (head, of) => h('tr', {}, h('th', { scope: 'row' }, head), ...periods.map((p) => cell(of(p))));
+  return [
+    h('h3', {}, '🧮 Tokens used'),
+    h(
+      'div',
+      { class: 'usage-wrap' },
+      h(
+        'table',
+        { class: 'usage' },
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Model'), ...periods.map((p) => h('th', { scope: 'col' }, p.key === 'all' ? `All, since ${usage.since}` : PERIODS[p.key])))),
+        h(
+          'tbody',
+          {},
+          ...models.map((m) => row(h('span', {}, m.model, h('div', { class: 'muted' }, m.name)), (p) => p.rows.find((r) => r.name === m.name && r.model === m.model))),
+          models.length > 1 ? row('Total', (p) => p.total) : null,
+        ),
+      ),
+    ),
+    h('p', { class: 'muted' }, 'Counted from what each model said it took; Ollama runs on this computer and costs nothing. Days are this computer’s own.'),
+  ];
+}
+
 // The section's parts, made once and filled in on every refresh.
 let friendView = null;
 const visitCards = new Map();
@@ -814,9 +851,9 @@ function renderFriend(state) {
   friendForm.state = state;
   friendForm.fill(state);
   if (!friendView) {
-    friendView = { line: h('div', { class: 'friend-line' }), now: h('ul', { class: 'now', 'aria-label': 'What it is doing now' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), visits: h('div', { class: 'visits' }), history: h('div') };
+    friendView = { line: h('div', { class: 'friend-line' }), now: h('ul', { class: 'now', 'aria-label': 'What it is doing now' }), about: h('p', { class: 'muted' }), facts: h('div', { class: 'facts' }), usage: h('div', { class: 'usage-section' }), visits: h('div', { class: 'visits' }), history: h('div') };
     const f = friendView;
-    $('friend').replaceChildren(f.line, f.now, friendForm.form, f.about, f.facts, f.visits, f.history, logView.el);
+    $('friend').replaceChildren(f.line, f.now, friendForm.form, f.about, f.facts, f.usage, f.visits, f.history, logView.el);
   }
   const f = friendView;
   const s = state.settings;
@@ -851,6 +888,11 @@ function renderFriend(state) {
     : [];
   f.facts.hidden = !facts.length;
   f.facts.replaceChildren(...facts.map((x) => h('span', {}, x)));
+  const usageKey = JSON.stringify(state.usage ?? null);
+  if (f.usage.dataset.key !== usageKey) {
+    f.usage.dataset.key = usageKey;
+    f.usage.replaceChildren(...usageTable(state.usage));
+  }
   f.now.replaceChildren(...nowList(state));
   f.now.hidden = !state.running;
   // Cards come and go one by one; the ones staying are never moved. Its own island comes first.
