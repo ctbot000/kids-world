@@ -9,7 +9,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { GEAR, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
+import { CLOTHES, GEAR, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1255,8 +1255,9 @@ export class UI {
   }
 
   // The shop: sell what is in your basket for coins, and buy running shoes,
-  // flying gear and HP potions with them (shop.js). Redrawn as your basket
-  // changes, so what you find while it is open shows up to sell.
+  // flying gear, toy weapons, clothes and HP potions with them (shop.js).
+  // Redrawn as your basket changes, so what you find while it is open shows
+  // up to sell.
   shopDialog() {
     const p = this.profile;
     let onBasket = null;
@@ -1266,6 +1267,7 @@ export class UI {
         const sell = h('div', { class: 'grid shop-grid' });
         const gear = h('div', { class: 'grid shop-grid gear-grid' });
         const potions = h('div', { class: 'grid shop-grid' });
+        const clothes = h('div', { class: 'grid shop-grid gear-grid' });
         const seeds = h('div', { class: 'grid shop-grid' });
         // Nothing is planted on the shared isle: no vegetables for sale there.
         const farming = p !== this.isle;
@@ -1349,6 +1351,39 @@ export class UI {
               );
             }),
           );
+          // Clothes: any of them, in any order, one on at a time; some just
+          // for looks, some with a power while you have them on.
+          clothes.replaceChildren(
+            ...CLOTHES.map((c) => {
+              const owned = p.data.gear.clothes.includes(c.key);
+              const on = p.data.gear.outfit === c.key;
+              return h(
+                'div',
+                { class: `shop-card gear${owned ? '' : ' locked'}` },
+                h('span', { class: 'emoji' }, c.icon),
+                h('b', {}, `${c.name}${on ? ' ✅' : ''}`),
+                h('span', { class: 'muted' }, `${c.power ? '✨ ' : ''}${c.does}`),
+                h(
+                  'div',
+                  { class: 'shop-buttons' },
+                  owned
+                    ? button(on ? '🙌 Take off' : '👕 Put on', () => {
+                        p.putOn(on ? '' : c.key);
+                        this.sound.play('ui');
+                      })
+                    : button(`Buy ${c.icon} (🪙 ${c.price})`, () => {
+                        if (!p.buyClothes(c.key)) {
+                          this.sound.play('no');
+                          return;
+                        }
+                        this.sound.play('fanfare');
+                        this.toast(c.icon, `You got the ${c.name}! You're wearing it now${c.power ? ` — ${c.does.charAt(0).toLowerCase()}${c.does.slice(1)}` : '.'}`);
+                      }, p.data.coins < c.price),
+                ),
+                !owned && p.data.coins < c.price ? h('span', { class: 'muted' }, `${c.price - p.data.coins} more coins to go!`) : null,
+              );
+            }),
+          );
           potions.replaceChildren(
             h(
               'div',
@@ -1415,6 +1450,9 @@ export class UI {
           sell,
           h('h3', {}, 'Gear'),
           gear,
+          h('h3', {}, '👕 Clothes'),
+          h('p', { class: 'muted' }, 'Wear one at a time over your t-shirt: friends see it on you. The ✨ ones give you a power while you have them on.'),
+          clothes,
           h('h3', {}, '🧪 Potions'),
           potions,
           farming ? h('h3', {}, '🌱 Vegetables to plant') : null,
@@ -1800,7 +1838,7 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster or star hammer to pop monsters, 🧪 potions to fill your HP up, and vegetables to plant!']),
+          card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),

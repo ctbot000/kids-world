@@ -9,7 +9,7 @@
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
+import { CLOTHES, cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -145,6 +145,29 @@ export class Profile extends EventTarget {
     delete this.data.gear.off[kind];
     // A new weapon goes straight into your hand (choose another any time).
     if (kind === 'weapon') this.data.gear.pick.weapon = next.level;
+    this.shopped();
+    return true;
+  }
+
+  // Clothes (shop.js CLOTHES): bought once, and put straight on.
+  buyClothes(key) {
+    const c = CLOTHES.find((x) => x.key === key);
+    const g = this.data.gear;
+    if (!c || g.clothes.includes(key) || this.data.coins < c.price) return false;
+    this.data.coins -= c.price;
+    g.clothes = CLOTHES.filter((x) => x.key === key || g.clothes.includes(x.key)).map((x) => x.key);
+    g.outfit = key;
+    this.shopped();
+    return true;
+  }
+
+  // Put on clothes you have (friends see them at once), or take them off
+  // (none: '' or null).
+  putOn(key) {
+    const g = this.data.gear;
+    const outfit = key && g.clothes.includes(key) ? key : '';
+    if (key && !outfit) return false;
+    g.outfit = outfit;
     this.shopped();
     return true;
   }

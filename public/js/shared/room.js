@@ -26,7 +26,7 @@ import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { cleanPiece } from './song.js';
-import { weaponOf } from './shop.js';
+import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 // The most HP someone has, from the level on their look.
@@ -1107,7 +1107,9 @@ export class Room {
     if (monster.kind === 'king' || monster.kind === 'big') msg.big = true;
     if (monster.kind === 'spiky') msg.spiky = true;
     if (stomp) msg.stomp = true;
-    this.knock(p, now, hpAfterBump(p.hp, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump), msg);
+    const bumps = monster.kind === 'king' ? 1 : kindOf(monster.kind).bump;
+    // Knight Armor (shop.js CLOTHES) takes half of it.
+    this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? bumps / 2 : bumps), msg);
   }
 
   // HP off someone, by whatever took it — a monster's bump, King Grumble's
@@ -1135,12 +1137,13 @@ export class Room {
 
   // Lava burns: standing in it takes twice a monster bump's HP off, again
   // and again while you stay in it, each hit as far apart as a bump. Riding
-  // anything — the dragon, say — you are up out of it and safe.
+  // anything — the dragon, say — you are up out of it and safe, and so is
+  // anyone in a Fire Suit (shop.js CLOTHES).
   stepLava(now) {
     if (this.world.theme !== 'volcano') return;
     const riding = this.critters.aboard();
     for (const p of this.players.values()) {
-      if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
+      if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0) || hasPower(p.look, 'fireproof')) continue;
       const s = p.s;
       if (this.world.get(Math.floor(s[0]), Math.floor(s[1] + 0.5), Math.floor(s[2])) !== B.LAVA) continue;
       this.knock(p, now, hpAfterBump(p.hp, LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });

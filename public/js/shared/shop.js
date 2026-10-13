@@ -1,6 +1,7 @@
 // The shop: sell what is in your basket for coins, and spend the coins on
 // gear: running shoes for your feet (walking, running and swimming), flying
-// gear for the sky, and toy weapons for popping monsters. Each kind of gear
+// gear for the sky, toy weapons for popping monsters, and clothes, some for
+// looks and some with a power. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
 // wear the best you have (the weapon you pick of them), and can take it
 // off. HP potions are used up when you drink them, and vegetables to plant
@@ -77,6 +78,28 @@ export const GEAR = [
   },
 ];
 
+// Clothes: bought one at a time, in any order, and worn over your t-shirt
+// one at a time (gear.clothes, gear.outfit). Some are just for looks; some
+// give you a power while you have them on: power names it, for whoever
+// gives it — the host (room.js: armor, fireproof) or your own page (jump,
+// physics.js MOVE.jump). They are part of your look (look.outfit), so
+// friends see them on you and the host knows what you have on.
+export const CLOTHES = [
+  { key: 'scarf', name: 'Cozy Scarf', icon: '🧣', price: 15, does: 'Just for looks: a stripy scarf that flaps as you run.' },
+  { key: 'cape', name: 'Hero Cape', icon: '🦸', price: 120, power: 'jump', jump: 10.6, does: 'Jump half as high again: right up onto a wall two blocks tall!' },
+  { key: 'armor', name: 'Knight Armor', icon: '🛡️', price: 180, power: 'armor', does: 'Monster bumps and King Grumble’s stomps take only half as much HP.' },
+  { key: 'firesuit', name: 'Fire Suit', icon: '🧑‍🚒', price: 220, power: 'fireproof', does: 'Lava never burns you: swim in it on a volcano island!' },
+  { key: 'robe', name: 'Royal Robe', icon: '👑', price: 500, does: 'Just for looks: a long velvet robe with a fluffy white collar, fit for a king or a queen.' },
+];
+export const outfitOf = (key) => CLOTHES.find((c) => c.key === key) ?? null;
+
+// The clothes you have on (from gear), or null.
+export const wornOutfit = (gear) => (gear?.clothes?.includes(gear.outfit) ? outfitOf(gear.outfit) : null);
+
+// Whether a look (yours, or a friend's as the host sees it) has on clothes
+// with this power.
+export const hasPower = (look, power) => outfitOf(look?.outfit)?.power === power;
+
 // An HP potion: the one thing the shop sells that is used up. Bought with
 // coins, carried with them (profile.js) and drunk to fill your HP right up,
 // at once, even mid-fight — or sitting dizzy on an adventure island, to get
@@ -112,9 +135,10 @@ export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 // Your look as the island sees it: with the weapon you have on, if any, and
 // your level (levels.js), if given.
 export function lookWithGear(look, gear, level = 0) {
-  const { weapon: _, level: __, ...rest } = look ?? {};
+  const { weapon: _, level: __, outfit: ___, ...rest } = look ?? {};
   const worn = wornWeapon(gear);
-  return { ...rest, ...(worn ? { weapon: worn.key } : {}), ...(level ? { level } : {}) };
+  const outfit = wornOutfit(gear);
+  return { ...rest, ...(worn ? { weapon: worn.key } : {}), ...(outfit ? { outfit: outfit.key } : {}), ...(level ? { level } : {}) };
 }
 
 // The weapon you have on: the one you have chosen to carry of those you own
@@ -132,7 +156,8 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 
 // Gear as kept: the level of each kind you have (0 for none), which you
 // have taken off, and for the weapons which of them you carry (pick: its
-// level, 1 for the first; without one, the best you have).
+// level, 1 for the first; without one, the best you have); the clothes you
+// have (in CLOTHES order) and the ones you have on ('' for none).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -143,6 +168,9 @@ export function cleanGear(raw) {
   }
   const pick = Number.isInteger(p.pick?.weapon) ? p.pick.weapon : 0;
   out.pick.weapon = pick >= 1 && pick <= out.weapon ? pick : 0;
+  const clothes = Array.isArray(p.clothes) ? p.clothes : [];
+  out.clothes = CLOTHES.filter((c) => clothes.includes(c.key)).map((c) => c.key);
+  out.outfit = out.clothes.includes(p.outfit) ? p.outfit : '';
   return out;
 }
 
@@ -158,11 +186,13 @@ const boost = (gear, key) => {
 
 // Speeds for physics.js (stepBody's options.move) with the gear worn, or
 // null with none, to go as fast as anyone.
+// The Hero Cape jumps higher, too.
 export function gearMove(gear, base) {
   const feet = boost(gear, 'shoes');
   const sky = boost(gear, 'wings');
-  if (feet === 1 && sky === 1) return null;
-  return { walk: base.walk * feet, run: base.run * feet, swim: base.swim * feet, fly: base.fly * sky, flyUp: base.flyUp * sky };
+  const jump = wornOutfit(gear)?.jump;
+  if (feet === 1 && sky === 1 && !jump) return null;
+  return { walk: base.walk * feet, run: base.run * feet, swim: base.swim * feet, fly: base.fly * sky, flyUp: base.flyUp * sky, ...(jump ? { jump } : {}) };
 }
 
 // Selling n of a basket's key: the coins it brings, or 0 when it cannot be

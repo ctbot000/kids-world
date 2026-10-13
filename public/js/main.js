@@ -19,7 +19,7 @@ import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
-import { lookWithGear, wornWeapon } from './shared/shop.js';
+import { lookWithGear, wornOutfit, wornWeapon } from './shared/shop.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
@@ -121,18 +121,21 @@ for (const p of [profile, isle]) {
   for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
   p.addEventListener('count', () => keeper.counted());
 }
-// A toy weapon bought, put on or taken off in the shop: friends on the
+// A toy weapon (or clothes) bought, put on or taken off in the shop: friends on the
 // island see it in your hand, and the island lets it reach further. A new
 // level (here, or from another device of yours) shows on your name tag.
 // On the shared isle, the weapon and the level are the isle's own.
 let weaponSent = '';
+let outfitSent = '';
 let levelSent = 0;
 const sendGear = () => {
   const p = session?.game?.profile ?? profile;
   const weapon = wornWeapon(p.data.gear)?.key ?? '';
+  const outfit = wornOutfit(p.data.gear)?.key ?? '';
   const level = p.progress.level;
-  if (weapon === weaponSent && level === levelSent) return;
+  if (weapon === weaponSent && outfit === outfitSent && level === levelSent) return;
   weaponSent = weapon;
+  outfitSent = outfit;
   levelSent = level;
   session?.game?.send({ t: 'look', look: p.shownLook, name: profile.name });
 };
@@ -373,6 +376,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
     // your look as the isle has it, its own level and gear in your hands.
     game.useProfile(game.shared ? isle : profile);
     weaponSent = '';
+    outfitSent = '';
     levelSent = 0;
     sendGear();
     if (!session.started) {

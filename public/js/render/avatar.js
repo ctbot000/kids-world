@@ -1489,6 +1489,146 @@ const sleeveShape = (B) => {
     ]),
   );
 };
+// Clothes from the shop (shared/shop.js CLOTHES), over the t-shirt.
+// A sheet hanging from its top edge down the back, for a cape or a robe:
+// top and bottom its widths, len how far down it goes, bulge how far its
+// middle stands out behind the edges at the bottom, rows [from, to] of it
+// (0 the top, 1 the bottom) for a trim along the hem, and out how far it is
+// pushed back, to lie over the sheet itself. Round from +x, it faces back.
+const capeSheet = (top, bottom, len, bulge, rows = [0, 1], out = 0) =>
+  geo(`cape|${top}|${bottom}|${len}|${bulge}|${rows}|${out}`, () => {
+    const W = 12;
+    const H = 10;
+    const positions = [];
+    const index = [];
+    for (let j = 0; j <= H; j++) {
+      const v = rows[0] + ((rows[1] - rows[0]) * j) / H;
+      const w = top + (bottom - top) * v;
+      for (let i = 0; i <= W; i++) {
+        const u = i / W - 0.5;
+        // Rounder about the shoulders, wider and in soft folds lower down.
+        const z = -(0.012 + bulge * v) * Math.cos(u * Math.PI * 0.9) - 0.006 * v * Math.sin((u + 0.5) * Math.PI * 6) - out;
+        positions.push(u * w, -v * len, z);
+      }
+    }
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const p = j * (W + 1) + i;
+        index.push(p, p + 1, p + W + 1, p + 1, p + W + 2, p + W + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    return g;
+  });
+
+// What a kind of clothes looks like: dressed onto the avatar (its torso and
+// arms), and returns what flaps as you go — { part, flap: how far it swings
+// back at a run, rest: and standing still } — or null for nothing that does.
+function dressUp(av, kind, B) {
+  const torso = av.torso;
+  const k = B.hip / BUILDS.kid.hip;
+  const ring = (i) => B.shirt[i];
+  const shoulderY = B.shoulder[0];
+  const backAt = (y) => (B.shirt.find(([ry]) => ry >= y) ?? ring(B.shirt.length - 1))[3];
+  // A shell a little bigger than the t-shirt, rings from..to of it.
+  const shell = (from, to, grow, front = grow) => loft(B.shirt.slice(from, to + 1).map(([y, w, a, b]) => [y, w * grow, a * front, b * grow]), { segs: 28, ends: [false, false] });
+  // A cape or a robe, hung from the back of the collar.
+  const cape = (outer, lining, len, bottom, flap, rest) => {
+    const g = new THREE.Group();
+    const top = B.shoulder[1] * 1.55;
+    g.position.set(0, shoulderY + 0.035 * k, -backAt(shoulderY) - 0.004);
+    g.add(mesh(capeSheet(top, bottom, len, 0.07 * k), toon(outer)));
+    g.add(mesh(capeSheet(top, bottom, len, 0.07 * k), toon(lining, { side: THREE.BackSide })));
+    torso.add(g);
+    // Clasps at the front of the shoulders, holding it on.
+    for (const side of [-1, 1]) torso.add(mesh(sphere(1, 12, 8), toon('#f5c542'), side * B.shoulder[1] * 0.62, shoulderY + 0.03 * k, ring(6)[2] * 0.75, 0.02 * k));
+    return { g, top, flap, rest };
+  };
+  switch (kind) {
+    case 'scarf': {
+      // A stripy scarf round the neck, its end hanging down behind one
+      // shoulder: that is what flies out behind as you run.
+      const [cy, cw, cf] = ring(B.shirt.length - 1);
+      const stripes = ['#e8453c', '#ffffff'];
+      torso.add(mesh(torus(cw * 1.18, 0.024 * k), toon(stripes[0]), 0, cy + 0.012 * k, 0.004, 1, cf / cw, 1).rotateX(Math.PI / 2 - 0.1));
+      const end = new THREE.Group();
+      end.position.set(-cw * 0.7, cy + 0.005 * k, -backAt(cy) - 0.012 * k);
+      const seg = 0.045 * k;
+      for (let i = 0; i < 4; i++) end.add(mesh(roundedBox(0.06 * k, seg, 0.016 * k, 0.006 * k), toon(stripes[i % 2]), 0, -seg * (i + 0.5), 0));
+      for (const x of [-0.022, -0.007, 0.008, 0.023]) end.add(mesh(cylinder(0.004 * k, 0.004 * k, 0.025 * k, 6), toon(stripes[0]), x * k, -seg * 4 - 0.012 * k, 0));
+      torso.add(end);
+      return { part: end, flap: 1.1, rest: 0.08 };
+    }
+    case 'cape': {
+      const c = cape('#e23b3b', '#f5c542', B.shoulder[0] + B.hip - 0.24 * k, c0(B) * 2.9, 0.6, 0.06);
+      return { part: c.g, flap: c.flap, rest: c.rest };
+    }
+    case 'robe': {
+      // A long velvet robe down to the heels, with a white fur trim along
+      // the hem and a fluffy white collar, both with ermine's black spots.
+      const len = B.shoulder[0] + B.hip - 0.05 * k;
+      const bottom = c0(B) * 3.3;
+      const c = cape('#6a2c91', '#f2c84b', len, bottom, 0.22, 0.05);
+      const top = c.top;
+      c.g.add(mesh(capeSheet(top, bottom, len, 0.07 * k, [0.92, 1], 0.004), toon('#fbf8f2')));
+      const [cy, cw, cf] = ring(B.shirt.length - 2);
+      torso.add(mesh(torus(cw * 1.08, 0.034 * k), toon('#fbf8f2'), 0, cy + 0.01 * k, 0, 1, cf / cw, 1).rotateX(Math.PI / 2 - 0.1));
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        torso.add(mesh(sphere(1, 6, 4), toon(BLACK), Math.cos(a) * (cw * 1.08 + 0.026 * k), cy + 0.022 * k, Math.sin(a) * (cf * 1.08 + 0.026 * k), 0.007 * k));
+      }
+      return { part: c.g, flap: c.flap, rest: c.rest };
+    }
+    case 'armor': {
+      // A shiny breastplate over the t-shirt, a gold rim round its edges, a
+      // red cross on the chest, and a round plate on each shoulder.
+      const steel = toon('#cfd6e0');
+      const gold = toon('#e9b93a');
+      torso.add(mesh(shell(0, 7, 1.12, 1.2), steel));
+      for (const i of [0, 7]) {
+        const [y, w, a, b] = ring(i);
+        torso.add(mesh(torus(w * 1.12, 0.008 * k), gold, 0, y, ((a - b) * 1.15) / 2, 1, ((a + b) * 1.16) / 2 / (w * 1.12), 1).rotateX(Math.PI / 2));
+      }
+      const [badgeY] = B.badge;
+      const front = (B.shirt.find(([y]) => y >= badgeY) ?? ring(4))[2] * 1.2 + 0.004;
+      const red = toon('#d93a3a');
+      torso.add(mesh(roundedBox(0.03 * k, 0.11 * k, 0.01 * k, 0.004 * k), red, 0, badgeY, front).rotateX(-0.12));
+      torso.add(mesh(roundedBox(0.08 * k, 0.03 * k, 0.01 * k, 0.004 * k), red, 0, badgeY + 0.012 * k, front).rotateX(-0.12));
+      for (const arm of av.arms) arm.add(mesh(geo('pauldron', () => new THREE.SphereGeometry(1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2)), steel, 0, -0.012 * k, 0, B.arm[2] * 1.75, B.arm[2] * 1.4, B.arm[2] * 1.65));
+      return null;
+    }
+    case 'firesuit': {
+      // A firefighter's coat over the t-shirt: thick and yellow, with
+      // shining bands round the middle and the chest, and its sleeves.
+      const coat = toon('#e7b52c');
+      const bright = toon('#e8f0f2', { emissive: 0.25 });
+      const lime = toon('#c8f04a');
+      torso.add(mesh(shell(0, B.shirt.length - 1, 1.09, 1.12), coat));
+      for (const i of [1, 4]) {
+        const [y, w, a, b] = ring(i);
+        for (const [dy, m, r] of [[0, lime, 0.013], [0.022 * k, bright, 0.007], [-0.022 * k, bright, 0.007]]) {
+          torso.add(mesh(torus(w * 1.1, r * k), m, 0, y + dy, ((a - b) * 1.12) / 2, 1, ((a + b) * 1.12) / 2 / (w * 1.1), 1).rotateX(Math.PI / 2));
+        }
+      }
+      // Buckles down the front.
+      const black = toon('#3a3a40');
+      for (const i of [2, 3, 5]) torso.add(mesh(roundedBox(0.03 * k, 0.012 * k, 0.008 * k, 0.003 * k), black, 0, ring(i)[0], ring(i)[2] * 1.12 + 0.004));
+      for (const arm of av.arms) {
+        arm.add(mesh(sleeveShape(B), coat, 0, 0, 0, 1.1, 1.6, 1.1));
+        arm.add(mesh(torus(B.arm[2] * 1.38, 0.008 * k), lime, 0, -B.sleeve * 1.4, 0).rotateX(Math.PI / 2));
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+// A cape's width at the bottom goes by how wide the shoulders are.
+const c0 = (B) => B.shoulder[1];
+
 // A hand at the wrist, hanging down, its palm to the body (side: which
 // hand, -1 or 1) and its thumb forward: a palm, four fingers a little curled
 // and a thumb, size times a small hand.
@@ -1654,8 +1794,12 @@ export class Avatar {
       this.sway = [];
     }
     this.hat = hat(skull, look.hat, shirt, person ? (look.hair === 'curly' ? 0.07 : 0.025) : 0, person);
+    // Clothes from the shop, over all of it.
+    this.outfit = look.outfit ? dressUp(this, look.outfit, B) : null;
     const back = B.seat.reduce((most, ring) => Math.max(most, ring[3]), 0);
     this.tail = tail(this.torso, look.animal, fur, new THREE.Vector3(0, -0.02, -back + 0.01));
+    // A cape or a robe hangs over a tail, which would poke through it.
+    if (this.tail && (look.outfit === 'cape' || look.outfit === 'robe')) this.tail.visible = false;
     // Where the top of your head is sitting on the ground (dizzy), and how
     // far behind your middle the back of you reaches (the back of your head,
     // or of your jeans), to lie on it.
@@ -1974,6 +2118,15 @@ export class Avatar {
     // The head keeps looking ahead as the shoulders turn.
     this.head.rotation.set(headNod, -twist * 0.8, headTilt);
     if (this.tail) this.tail.rotation.y = Math.sin(t * (moving ? 10 : 3)) * 0.3;
+    // A cape (or a scarf's end) flies out behind as you go: a little
+    // walking, a lot running, swimming, flying or in the air; a robe is
+    // heavier.
+    if (this.outfit) {
+      const { part, flap, rest } = this.outfit;
+      const out = running ? 1 : moving ? 0.45 : anim === ANIM.fly || anim === ANIM.air || anim === ANIM.swim ? 1.3 : 0;
+      const target = rest + flap * out + (out ? Math.sin(t * 9) * 0.05 * flap : Math.sin(t * 1.6) * 0.02);
+      part.rotation.x += (target - part.rotation.x) * Math.min(1, dt * 8);
+    }
     // A ponytail swings to and fro, pigtails from side to side; more on the move.
     for (const b of this.sway) {
       const { side, rest } = b.userData;

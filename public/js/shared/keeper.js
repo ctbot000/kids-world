@@ -227,7 +227,7 @@ export function mergeProfiles(mine, theirs) {
 // as there, once, when you say it was you: every sticker either has earned
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew is the higher of the two), and the
-// better gear of each kind.
+// better gear of each kind, and the clothes of both.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -238,7 +238,8 @@ export function addProgress(player, guest) {
   const basket = {};
   for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
   const gear = cleanGear(a.gear);
-  for (const key of Object.keys(gear)) if (key !== 'off') gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
+  for (const key of ['shoes', 'wings', 'weapon']) gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
+  gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
   return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear };
 }
 

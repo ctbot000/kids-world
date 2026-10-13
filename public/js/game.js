@@ -21,7 +21,7 @@ import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, POTION, wornWeapon } from './shared/shop.js';
+import { gearMove, POTION, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
@@ -3223,6 +3223,11 @@ export class Game extends EventTarget {
     }
     // A swim in the lava counts too, bold swimmer (it burns: room.js).
     if ((b.inWater || b.inLava) && !this.wasInWater) this.profile.count('swims');
+    // In a Fire Suit, lava does not burn (room.js): said so the first time.
+    if (b.inLava && !this.toldFireproof && wornOutfit(this.profile.data.gear)?.power === 'fireproof') {
+      this.toldFireproof = true;
+      this.emit('toast', { icon: '🧑‍🚒', text: 'Your Fire Suit keeps you cool — swim in the lava all you like!' });
+    }
     this.wasInWater = b.inWater || b.inLava;
     if (b.onGround && speed > 0.5) {
       this.stepAcc += speed * dt;
