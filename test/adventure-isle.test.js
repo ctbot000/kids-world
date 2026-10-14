@@ -254,6 +254,46 @@ test('the beginning of a day starts the stages over at 1', () => {
   assert.equal(one.stage, 2, 'and on the stages go');
 });
 
+test('a stage won at midnight goes on to the new day\'s stage 1, not nowhere', () => {
+  // Won just at midnight: the day turns before the next stage opens, and
+  // those on it go on to stage 1 as after any win.
+  const { time, isle: one } = isle();
+  let room = one.room;
+  room.adventure.win(room.monsters);
+  one.tick(time.now());
+  room = one.room;
+  assert.equal(one.stage, 2);
+  const a = join(room, 'Brave Fox');
+  room.adventure.win(room.monsters);
+  const midnight = new Date(time.t);
+  midnight.setHours(24, 0, 0, 0);
+  time.t = midnight.getTime();
+  one.tick(time.now());
+  assert.equal(one.stage, 1);
+  assert.deepEqual(a.last('next'), { t: 'next', code: one.room.code, stage: 1 }, 'sent on to stage 1');
+
+  // Won just before midnight: its players fly on to the next stage's
+  // island, which the day turning has retired by the time they get there;
+  // it sends them on to stage 1. Those there mid-stage are only told.
+  const { time: t2, isle: two } = isle();
+  const first = two.room;
+  const b = join(first, 'Happy Panda');
+  first.adventure.win(first.monsters);
+  two.tick(t2.now());
+  const second = two.room;
+  assert.deepEqual(b.last('next'), { t: 'next', code: second.code, stage: 2 });
+  const c = join(second, 'Quick Owl');
+  const midnight2 = new Date(t2.t);
+  midnight2.setHours(24, 0, 0, 0);
+  t2.t = midnight2.getTime();
+  two.tick(t2.now());
+  assert.equal(two.stage, 1);
+  assert.equal(c.last('next'), undefined, 'mid-stage, only told of the new day');
+  assert.ok(c.last('notice').text.includes('stage 1'));
+  const late = join(second, 'Late Bear');
+  assert.deepEqual(late.last('welcome').next, { code: two.room.code, stage: 1 }, 'arriving after midnight, sent on to stage 1');
+});
+
 test('each island as it comes and goes, told to whoever wants it (the server, to host it peer to peer)', () => {
   const { rooms, time, isle: one } = isle({ retiredKeepMs: 60 * 1000 });
   const opened = [];

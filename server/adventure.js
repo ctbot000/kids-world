@@ -149,9 +149,18 @@ export class PublicAdventure {
     this.sweep(now);
     const day = dayOf(now);
     if (day !== this.day) {
-      this.retire(now, `A new day! 🌟 ${PUBLIC_ISLAND_NAME} starts again from stage 1 — it is first on the list of islands.`);
+      // Stage 1's island first, so the old one can say where it is: anyone
+      // who comes to the old one later (the stage won just before midnight,
+      // its players flying on to it) goes on to stage 1, and if the old one
+      // was won (just at midnight), those on it go on now, as after any win.
+      const done = this.entry;
+      const won = !!done.room.adventure?.won;
       this.open(1, day);
-      this.say(`Adventure Isle: a new day; stage 1 is up (code ${this.entry.code}).`);
+      const next = { code: this.entry.code, stage: 1 };
+      this.retire(now, won
+        ? `A new day! 🌟 ${PUBLIC_ISLAND_NAME} starts again from stage 1 — off you all go there in a moment!`
+        : `A new day! 🌟 ${PUBLIC_ISLAND_NAME} starts again from stage 1 — it is first on the list of islands.`, done, next, won);
+      this.say(`a new day; stage 1 is up (code ${next.code}).`);
       return;
     }
     if (this.entry.room.closed) {
@@ -175,16 +184,18 @@ export class PublicAdventure {
   // longer listed as public, told where the next one is (next: the next
   // stage's { code, stage }, when it was won), and kept until everyone has
   // left it (and a while).
-  retire(now, text, entry = this.entry, next = null) {
+  // tell: whether those on it now are sent on to next too (a day turning
+  // in the middle of a stage only tells them of the new day).
+  retire(now, text, entry = this.entry, next = null, tell = !!next) {
     const { code, room } = entry;
     room.public = false;
     entry.public = false;
-    // Anyone coming back to it (a page reconnecting) is told too.
+    // Anyone coming to it from here on (a page reconnecting) is told too.
     if (next) room.next = next;
     this.retired.push({ code, room, emptySince: room.online > 0 ? 0 : now });
     if (room.online > 0) {
       if (text) room.broadcast({ t: 'notice', level: 'info', text });
-      if (next) room.broadcast({ t: 'next', ...next });
+      if (next && tell) room.broadcast({ t: 'next', ...next });
     }
     this.onRetire?.(room);
   }
