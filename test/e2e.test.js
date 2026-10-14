@@ -1294,7 +1294,8 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await page.evaluate((id) => window.kidsWorld.session.link.room.monsters.remove(id), full);
   // A swing sweeps round in front, like a sword in a Zelda game: one swing bops a monster off to
   // either side at once (each well round from straight ahead), flashing them white and leaving a
-  // slash in the air.
+  // slash in the air. It lands hard: the swing and both monsters stop dead a moment, the camera
+  // jolts, and they hop back leaning away from the blow.
   const pair = await page.evaluate(({ x, y, z }) => {
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
@@ -1315,6 +1316,13 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   assert.ok(
     await page.evaluate((ids) => ids.every((id) => window.kidsWorld.game.monsters.get(id).flashUntil > 0) && window.kidsWorld.renderer.effects.slashes.length > 0, pair),
     'both flash, and the swing leaves a slash',
+  );
+  assert.ok(
+    await page.evaluate((ids) => {
+      const g = window.kidsWorld.game;
+      return g.hitStopUntil > 0 && ids.every((id) => g.monsters.get(id).stopUntil === g.hitStopUntil && g.monsters.get(id).struckAt > 0);
+    }, pair),
+    'the swing and both monsters stopped dead as it landed',
   );
   await page.evaluate((ids) => ids.forEach((id) => window.kidsWorld.session.link.room.monsters.remove(id)), pair);
   // One right beside you takes some HP, and knocks you back.

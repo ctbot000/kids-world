@@ -364,6 +364,42 @@ export class Effects {
     this.add('zzz', x + 0.2, y, z, { vy: 0.5, vx: 0.25, size: 0.28, life: 1.8, grow: 0.2, color: '#c9d6ff' });
   }
 
+  // A blow landing at (x, y, z), going the way (dx, dz) along the ground: a
+  // white flash there that is gone almost at once, a ring of sparkles in
+  // color bursting out round it, and quick streaks flying on the way the
+  // blow went, falling as they go.
+  impact(x, y, z, dx, dz, color = '#ffffff') {
+    this.add('sparkle', x, y, z, { size: 1.1, life: 0.12, grow: -4, color: '#ffffff' });
+    this.add('puff', x, y, z, { size: 0.4, life: 0.15, grow: 4, color });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+      const up = Math.random() * 1.6 - 0.5;
+      this.add('sparkle', x, y, z, {
+        vx: Math.cos(a) * 3.2,
+        vy: up * 3.2,
+        vz: Math.sin(a) * 3.2,
+        size: 0.22 + Math.random() * 0.1,
+        life: 0.22 + Math.random() * 0.1,
+        drag: 6,
+        color: i % 2 ? color : '#ffffff',
+      });
+    }
+    for (let i = 0; i < 6; i++) {
+      const s = 5 + Math.random() * 3;
+      const side = (Math.random() - 0.5) * 1.4;
+      this.add('square', x, y, z, {
+        vx: (dx - dz * side) * s,
+        vy: 1.5 + Math.random() * 2.5,
+        vz: (dz + dx * side) * s,
+        size: 0.08 + Math.random() * 0.06,
+        life: 0.35 + Math.random() * 0.2,
+        gravity: 16,
+        drag: 3,
+        color: i % 3 ? color : '#ffffff',
+      });
+    }
+  }
+
   bang(x, y, z) {
     this.add('bang', x, y, z, { vy: 0.6, size: 0.5, life: 1.1, color: '#ffd84d' });
   }

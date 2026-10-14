@@ -60,6 +60,12 @@ const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed']);
 // only once the host's next update says so.
 const KICK_DIST = 1.4;
 const KICK_SECS = 0.15;
+// And as it flies back, it hops up off the ground (KICK_HOP high at the
+// top, a small one less) and leans back from the blow (KICK_LEAN radians at
+// the most), springing upright again, all in RECOIL_SECS.
+const KICK_HOP = 0.45;
+const KICK_LEAN = 0.5;
+const RECOIL_SECS = 0.4;
 const MOVE_SEND_MS = 90;
 const REPEAT_MS = 230;
 // Drops of water out of the watering can, and how seldom crops ripening near
@@ -88,6 +94,18 @@ const SLASHES = {
   hammer: { color: '#ffc21a', y: 1.25, upright: true },
   lavablade: { color: '#ff6a1f', y: 0.95 },
 };
+// How each swing lands on a monster: your swing and the monsters it hit
+// stop dead for stop ms (a little longer for each more one), the camera
+// jolts by shake, and the hit bursts in the slash's colour. The heavier the
+// weapon, the harder it lands.
+const IMPACTS = {
+  punch: { stop: 55, shake: 0.06 },
+  sword: { stop: 70, shake: 0.08 },
+  hammer: { stop: 120, shake: 0.2 },
+  lavablade: { stop: 100, shake: 0.14 },
+};
+const STOP_MORE = 15;
+const STOP_MAX = 160;
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
 // What each tougher monster is, told the first time one comes out near you.
@@ -1066,20 +1084,35 @@ export class Game extends EventTarget {
   // A monster bopped, with hearts left: it squashes and hops back, and
   // whoever bopped it hears how many more bops it takes.
   monsterHit(msg) {
+    const now = performance.now();
     const entry = this.monsters.get(msg.id);
-    if (entry) entry.model.squash = 0.4;
-    if (entry) entry.flashUntil = performance.now() + FLASH_MS;
+    // Your own bop landed already (strike): it flashed, stopped and burst then.
+    const struck = entry && msg.by === this.pid && now - (entry.struckAt ?? -Infinity) < 1500;
+    if (entry) entry.model.squash = Math.max(entry.model.squash ?? 0, 0.4);
+    if (entry && !struck) entry.flashUntil = now + FLASH_MS;
     if (entry && Number.isInteger(msg.hearts)) entry.hearts = msg.hearts;
-    // Knocked back away from whoever bopped it (one marching keeps to its road).
+    // Knocked back away from whoever bopped it (one marching keeps to its
+    // road), once it has stopped dead from the blow.
     const from = msg.by === this.pid ? this.me?.body : this.players.get(msg.by)?.avatar?.root.position;
-    if (entry?.drawn && from && !msg.march) {
+    let away = null;
+    if (entry?.drawn && from) {
       const dx = entry.drawn.x - from.x;
       const dz = entry.drawn.z - from.z;
       const d = Math.hypot(dx, dz);
-      if (d > 0.01) entry.kick = { x: dx / d, z: dz / d, at: performance.now(), snap: entry.seenSnap };
+      if (d > 0.01) away = { x: dx / d, z: dz / d };
     }
+    if (entry && !struck && away) {
+      entry.stopUntil = now + IMPACTS.punch.stop;
+      if (!msg.march) entry.recoil = { ...away, at: entry.stopUntil };
+    }
+    if (away && !msg.march) entry.kick = { ...away, at: Math.max(now, entry.stopUntil ?? 0), snap: entry.seenSnap };
     const p = entry?.model.group.position;
     if (p && this.near(p.x, p.y, p.z, 30)) {
+      if (!struck && away) {
+        const size = bodyOf(entry.kind);
+        const r = size.radius * 0.8;
+        this.renderer.effects.impact(p.x - away.x * r, p.y + size.height * 0.55, p.z - away.z * r, away.x, away.z, '#ffffff');
+      }
       this.renderer.effects.sparkles(p.x, p.y + 0.6, p.z, 6, ['#ffffff', '#d9c8ff']);
       this.renderer.effects.bang(p.x, p.y + 1, p.z);
       this.sound.play('bump');
@@ -1149,6 +1182,42 @@ export class Game extends EventTarget {
     this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright });
   }
 
+  // Your swing landing on monsters (hits, as attack found them), at once,
+  // not only once the island says so: the swing and every monster in it
+  // stop dead a moment, as in a Zelda game, the camera jolts, each one
+  // flashes and squashes, a burst flies off it from where the blow met it,
+  // and it hops back leaning away from the blow; the whack is as heavy as
+  // the weapon (kind) is. Not King Grumble safe in his bubble: that bounces.
+  strike(hits, kind) {
+    const look = IMPACTS[kind] ?? IMPACTS.punch;
+    const color = SLASHES[kind]?.color ?? SLASHES.punch.color;
+    const now = performance.now();
+    const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1));
+    const b = this.me.body;
+    let landed = 0;
+    for (const hit of hits) {
+      const entry = this.monsters.get(hit.id);
+      if (!entry || (entry.kind === 'king' && this.adventure?.shield)) continue;
+      const m = entry.model.group.position;
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      entry.stopUntil = until;
+      entry.struckAt = now;
+      entry.flashUntil = until + FLASH_MS;
+      entry.model.squash = Math.max(entry.model.squash ?? 0, 0.45);
+      entry.recoil = { x: dx / d, z: dz / d, at: until };
+      // Where the blow met it: its near side, a little over half way up.
+      const r = hit.size.radius * 0.8;
+      this.renderer.effects.impact(m.x - (dx / d) * r, m.y + hit.size.height * 0.55, m.z - (dz / d) * r, dx / d, dz / d, color);
+      landed++;
+    }
+    if (!landed) return;
+    this.hitStopUntil = until;
+    this.renderer.shake(look.shake);
+    this.sound.play('whack', { kind });
+  }
+
   // The 👊 button (or X): a swing of the arm, and whatever is in it. It
   // sweeps round in front of you and bops every monster it passes through,
   // as far as an arm reaches, further with a toy weapon (see shop.js), and
@@ -1208,7 +1277,10 @@ export class Game extends EventTarget {
         if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
         else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
-      } else this.slashFrom(this.players.get(this.pid)?.avatar);
+      } else {
+        this.slashFrom(this.players.get(this.pid)?.avatar);
+        if (hits.length) this.strike(hits, weapon?.key ?? 'punch');
+      }
       if (best) {
         this.bopSentAt = performance.now();
         for (const hit of blaster ? [best] : hits) this.bop(hit.id);
@@ -1278,7 +1350,7 @@ export class Game extends EventTarget {
     // Bopped a moment ago, before any update since: flying back already.
     const kick = entry.kick;
     if (kick && kick.snap === last) {
-      const d = KICK_DIST * (1 - Math.exp(-(performance.now() - kick.at) / 1000 / KICK_SECS));
+      const d = KICK_DIST * (1 - Math.exp(-Math.max(0, performance.now() - kick.at) / 1000 / KICK_SECS));
       x += kick.x * d;
       z += kick.z * d;
     } else entry.kick = null;
@@ -1296,6 +1368,13 @@ export class Game extends EventTarget {
     let y = past.y;
     const w = this.world;
     for (let up = 0; up < 2 && w && B.SOLID[w.get(Math.floor(x), Math.floor(y + 0.05), Math.floor(z))] === 1; up++) y = Math.floor(y + 0.05) + 1;
+    // Hopping back from a bop: up and down again (a big one hardly leaves the ground).
+    const recoil = entry.recoil;
+    if (recoil) {
+      const k = (performance.now() - recoil.at) / 1000 / RECOIL_SECS;
+      if (k >= 1) entry.recoil = null;
+      else if (k > 0) y += KICK_HOP * (entry.kind === 'king' ? 0 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
+    }
     // Never inside you: right up against you at the most.
     const me = this.me?.body;
     if (me && !this.riding && !this.aboard) {
@@ -1319,18 +1398,31 @@ export class Game extends EventTarget {
     const night = isNight(this.env.time);
     const cam = this.renderer.camera.position;
     for (const entry of this.monsters.values()) {
-      const s = this.monsterNow(entry, dt);
+      // Stopped dead by a blow: held where it was, shivering.
+      const stopped = now < (entry.stopUntil ?? 0) && entry.held;
+      const s = stopped ? entry.held : this.monsterNow(entry, dt);
       if (!s) continue;
+      if (!stopped) entry.held = s;
       const m = entry.model;
-      m.group.position.set(s.x, s.y, s.z);
+      const shiver = stopped ? 0.04 : 0;
+      m.group.position.set(s.x + (Math.random() - 0.5) * shiver, s.y, s.z + (Math.random() - 0.5) * shiver);
+      m.group.rotation.order = 'YXZ';
       m.group.rotation.y = s.yaw;
+      // Leaning back from the blow, top first, and springing upright.
+      const recoil = entry.recoil;
+      const k = recoil ? (now - recoil.at) / 1000 / RECOIL_SECS : 1;
+      const lean = k > 0 && k < 1 ? KICK_LEAN * (entry.kind === 'king' ? 0.3 : 1) * Math.sin(Math.PI * Math.sqrt(k)) * (1 - k) : 0;
+      const c = Math.cos(s.yaw);
+      const sn = Math.sin(s.yaw);
+      m.group.rotation.x = lean ? lean * (recoil.x * sn + recoil.z * c) : 0;
+      m.group.rotation.z = lean ? -lean * (recoil.x * c - recoil.z * sn) : 0;
       m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
       if (!m.group.visible) {
         m.shadow.visible = false;
         continue;
       }
       const ground = this.renderer.groundUnder(s.x, s.y, s.z);
-      m.update(dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
+      m.update(stopped ? 0 : dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
       const flash = now < (entry.flashUntil ?? 0) && Math.floor((entry.flashUntil - now) / FLASH_BLINK) % 2 === 0;
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
@@ -3294,7 +3386,8 @@ export class Game extends EventTarget {
       const a = self.avatar;
       a.root.position.set(b.x, b.y, b.z);
       a.root.rotation.y = me.yaw;
-      a.update(dt, me.anim, speed);
+      // Your swing stops dead a moment as it lands on a monster (strike).
+      a.update(performance.now() < (this.hitStopUntil ?? 0) ? 0 : dt, me.anim, speed);
       this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
     }
   }

@@ -309,6 +309,25 @@ export class Sound {
       case 'swish':
         this.noise(0.14, { type: 'bandpass', freq: 700, sweep: 2200, q: 1.2, gain: 0.12 });
         break;
+      // A swing landing on a monster (opts.kind, what swung): a fist's
+      // thump, a toy sword's crisp thwack, the Star Hammer's heavy bonk with
+      // a boom under it, and the Lava Blade's thwack with a hiss after.
+      case 'whack': {
+        const kind = opts.kind;
+        if (kind === 'hammer') {
+          this.tone(150 * r(), { decay: 0.32, gain: 0.4, slide: 55, slideTime: 0.28 });
+          this.noise(0.18, { type: 'lowpass', freq: 900, sweep: 200, gain: 0.4 });
+          this.tone(NOTE(84) * r(), { decay: 0.35, gain: 0.05, type: 'triangle' });
+        } else if (kind === 'sword' || kind === 'lavablade') {
+          this.noise(0.07, { type: 'bandpass', freq: 2600, sweep: 900, q: 1.4, gain: 0.32 });
+          this.tone(260 * r(), { decay: 0.12, gain: 0.3, type: 'triangle', slide: 120, slideTime: 0.1 });
+          if (kind === 'lavablade') this.noise(0.45, { at: 0.04, type: 'highpass', freq: 3500, sweep: 7000, gain: 0.08 });
+        } else {
+          this.tone(120 * r(), { decay: 0.14, gain: 0.38, slide: 60, slideTime: 0.12 });
+          this.noise(0.08, { type: 'lowpass', freq: 1400, sweep: 300, gain: 0.32 });
+        }
+        break;
+      }
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });
