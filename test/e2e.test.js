@@ -2631,11 +2631,11 @@ test('the admin page shows each player, their login and their islands, folded aw
     await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
     await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
     // The islands are folded away, with no maps drawn, until opened.
-    assert.equal(await page.$eval('.fold > summary', (el) => el.textContent), '🏝️ 1 island');
+    assert.equal(await page.$eval('.fold > summary', (el) => el.textContent), '1 island');
     assert.equal(await page.$('.island'), null);
     await page.click('.fold > summary');
     await until(page, () => document.querySelector('.island'));
-    assert.equal(await page.$eval('.island h4', (el) => el.textContent), `❄️ ${room.world.name}`);
+    assert.equal(await page.$eval('.island h4', (el) => el.textContent), room.world.name);
     assert.match(await page.$eval('.login-line', (el) => el.textContent), /Logs in as Brave Fox on 1 device/);
     // The island from above: one pixel per column.
     await until(page, () => document.querySelector('img.map')?.naturalWidth === 128);

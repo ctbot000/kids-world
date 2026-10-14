@@ -308,7 +308,7 @@ test('the admin pages list, download and delete copies, for this computer only',
   try {
     const page = await fetch(`${base}/admin/`);
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /Island keeper/);
+    assert.match(await page.text(), /Keeper admin/);
     const state = await (await fetch(`${base}/admin/api/state`)).json();
     assert.equal(state.devices[0].profile.name, 'Sunny Otter');
     assert.equal(state.devices[0].islands[0].name, 'Maple Fields');

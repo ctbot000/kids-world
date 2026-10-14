@@ -3,32 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Island keeper</title>
+    <title>Kids World · Keeper admin</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/admin/admin.css" />
     <script type="module" src="/admin/admin.js"></script>
   </head>
   <body>
     <header class="top">
-      <h1>🏝️ Island keeper</h1>
+      <div class="brand"><h1>Keeper admin</h1><span class="muted">Kids World</span></div>
       <div id="status" class="status" role="status">Loading…</div>
     </header>
     <main>
       <section id="summary" class="summary" aria-label="Summary"></section>
       <section id="reports-section" hidden>
-        <h2>🐞 Problems players told of</h2>
+        <h2>Problem reports <span id="reports-count" class="badge"></span></h2>
         <div id="reports" class="reports"></div>
       </section>
       <section id="friend-section" hidden>
         <h2>AI friend</h2>
-        <div id="friend" class="friend"></div>
+        <div id="friend" class="friend card"></div>
       </section>
       <section id="recent-section" hidden>
-        <h2>Lately</h2>
-        <ol id="recent" class="recent"></ol>
+        <h2>Recent activity</h2>
+        <ol id="recent" class="recent card"></ol>
       </section>
       <section>
-        <h2>Players</h2>
+        <h2>Players <span id="devices-count" class="badge"></span></h2>
         <div id="devices" class="devices"></div>
       </section>
     </main>

@@ -22,7 +22,7 @@ import { prettyCode } from '/js/shared/codes.js';
 import { progressOf } from '/js/shared/levels.js';
 import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
-import { CHAT_MAX, lookIcon } from '/js/shared/words.js';
+import { CHAT_MAX } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
 const REFRESH_MS = 5000;
@@ -71,13 +71,24 @@ function whereFrom(device) {
   if (!device.ip) return null;
   const p = device.place;
   const ip = device.ip4 ? `${device.ip} (IPv4 ${device.ip4})` : device.ip;
-  if (p?.local) return h('div', { class: 'muted where-from' }, `🌐 ${ip} · ${p.local === 'computer' ? 'this computer' : 'on this computer’s own network'}`);
+  if (p?.local) return h('div', { class: 'muted where-from' }, `IP ${ip} · ${p.local === 'computer' ? 'this computer' : 'local network'}`);
   const country = p?.country ? countries.of(p.country) : '';
   const where = [p?.city, p?.region && p.region !== p?.city ? p.region : '', country].filter(Boolean).join(', ');
-  return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `🌐 ${ip}`, where ? ` · ${where}` : ' · somewhere unknown');
+  return h('div', { class: 'muted where-from', title: p?.timezone ? `Time zone ${p.timezone}` : null }, `IP ${ip}`, where ? ` · ${where}` : ' · location unknown');
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const num = (n) => n.toLocaleString();
+
+// A figure and what it counts, the figure in bold.
+const fact = (n, label, title = null) => h('span', { title }, h('b', {}, num(n)), ` ${label}`);
+
+// Up to two letters of a player's name, for their avatar.
+function initials(name) {
+  const words = name.trim().split(/\s+/u).filter(Boolean);
+  const letters = words.length > 1 ? [words[0], words.at(-1)].map((w) => [...w][0]) : [...(words[0] ?? '?')].slice(0, 2);
+  return letters.join('').toUpperCase();
+}
 const api = (path, options) => fetch(`/admin/api/${path}`, { cache: 'no-store', ...options });
 
 // ---------------------------------------------------------------- pictures
@@ -132,26 +143,26 @@ function reportCard(r) {
   const a = r.about ?? {};
   const isl = a.island;
   const who = r.player || 'A player';
-  const seen = h('button', { type: 'button', onclick: () => change(`reports/${r.id}/seen`, 'PUT', { on: !r.seen }) }, r.seen ? '↩️ Not done' : '✅ Done');
+  const seen = h('button', { type: 'button', onclick: () => change(`reports/${r.id}/seen`, 'PUT', { on: !r.seen }) }, r.seen ? 'Reopen' : 'Mark resolved');
   const picture = r.picture ? `/admin/api/reports/${r.id}/picture` : null;
   return h(
     'article',
-    { class: `report${r.seen ? ' seen' : ''}` },
+    { class: `report card${r.seen ? ' seen' : ''}` },
     picture ? h('a', { class: 'shot', href: picture, target: '_blank', rel: 'noopener' }, h('img', { src: picture, alt: `${who}’s screen`, loading: 'lazy' })) : null,
     h(
       'div',
       { class: 'body' },
       h('header', { class: 'who' }, h('div', { class: 'name' }, h('h3', {}, who, r.username && r.username !== who ? h('span', { class: 'muted' }, ` (${r.username})`) : null), h('div', { class: 'muted' }, ago(r.at))), seen, h('button', { class: 'danger quiet', type: 'button', onclick: () => remove(`reports/${r.id}`, `Delete ${who}’s report? This cannot be undone.`) }, 'Delete')),
-      r.text ? h('p', { class: 'said' }, r.text) : h('p', { class: 'muted' }, 'Just a picture, no words.'),
+      r.text ? h('p', { class: 'said' }, r.text) : h('p', { class: 'muted' }, 'No description, screenshot only.'),
       h(
         'div',
         { class: 'facts' },
-        a.where === 'title' ? h('span', {}, '🏠 On the title screen') : null,
-        isl ? h('span', {}, `🏝️ ${isl.name || 'An island'}${isl.code ? ` · ${prettyCode(isl.code)}` : ''}${isl.kind ? ` · ${isl.kind}` : ''}${isl.theme ? ` · ${isl.theme}` : ''} · ${plural(isl.players, 'player', 'players')} · ${isl.host ? 'their own' : 'a friend’s'}${isl.online ? `, ${isl.online}` : ''}`) : null,
-        a.screen ? h('span', {}, `🖥️ ${a.screen}${a.touch ? ', touch' : ''}`) : null,
+        a.where === 'title' ? h('span', {}, 'Title screen') : null,
+        isl ? h('span', {}, `Island ${isl.name || '(unnamed)'}${isl.code ? ` · ${prettyCode(isl.code)}` : ''}${isl.kind ? ` · ${isl.kind}` : ''}${isl.theme ? ` · ${isl.theme}` : ''} · ${plural(isl.players, 'player', 'players')} · ${isl.host ? 'host' : 'guest'}${isl.online ? `, ${isl.online}` : ''}`) : null,
+        a.screen ? h('span', {}, `Screen ${a.screen}${a.touch ? ', touch' : ''}`) : null,
       ),
       a.agent ? h('div', { class: 'muted agent' }, a.agent, a.page ? ` · ${a.page}` : '') : null,
-      a.errors?.length ? h('details', { class: 'errors' }, h('summary', {}, `⚠️ ${plural(a.errors.length, 'error', 'errors')} in the page lately`), h('pre', {}, a.errors.join('\n'))) : null,
+      a.errors?.length ? h('details', { class: 'errors' }, h('summary', {}, `${plural(a.errors.length, 'recent page error', 'recent page errors')}`), h('pre', {}, a.errors.join('\n'))) : null,
     ),
   );
 }
@@ -160,6 +171,9 @@ let reportsShown = '';
 function renderReports(state) {
   const reports = state.reports ?? [];
   $('reports-section').hidden = reports.length === 0;
+  const waiting = reports.filter((r) => !r.seen).length;
+  $('reports-count').textContent = waiting ? `${waiting} open` : 'all resolved';
+  $('reports-count').className = `badge${waiting ? ' bad' : ' ok'}`;
   const key = JSON.stringify(reports);
   if (key === reportsShown) return;
   reportsShown = key;
@@ -167,8 +181,8 @@ function renderReports(state) {
   const done = reports.filter((r) => r.seen);
   $('reports').replaceChildren(
     ...[
-      ...(open.length ? open.map(reportCard) : [h('p', { class: 'empty' }, 'Nothing to look into: every problem is marked done.')]),
-      done.length ? h('details', { class: 'done-reports' }, h('summary', {}, `✅ ${plural(done.length, 'done', 'done')}`), ...done.map(reportCard)) : null,
+      ...(open.length ? open.map(reportCard) : [h('p', { class: 'empty' }, 'No open reports.')]),
+      done.length ? h('details', { class: 'done-reports' }, h('summary', {}, `Resolved (${done.length})`), ...done.map(reportCard)) : null,
     ].filter(Boolean),
   );
 }
@@ -264,8 +278,8 @@ function loginRow(device, players) {
     refresh(true);
   };
   const words = login
-    ? `🔑 Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · needs a password (it had secret pictures)'} · ${device.ranked ? '🏆 in the ranking' : 'left out of the ranking'}${device.findable === false ? ' · off the players list' : ''}`
-    : '🔑 No login';
+    ? `Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · no password yet (picture login)'} · ${device.ranked ? 'ranked' : 'excluded from ranking'}${device.findable === false ? ' · hidden from players list' : ''}`
+    : 'No login';
   return h(
     'div',
     { class: 'login' },
@@ -273,8 +287,8 @@ function loginRow(device, players) {
       'div',
       { class: 'login-line' },
       h('span', {}, words),
-      h('button', { type: 'button', onclick: type }, login ? (login.password ? 'New password' : 'Set a password') : 'Make a login'),
-      login ? h('button', { type: 'button', onclick: rank }, device.ranked ? 'Take out of the ranking' : 'Put back in the ranking') : null,
+      h('button', { type: 'button', onclick: type }, login ? (login.password ? 'Reset password' : 'Set password') : 'Create login'),
+      login ? h('button', { type: 'button', onclick: rank }, device.ranked ? 'Exclude from ranking' : 'Include in ranking') : null,
       login
         ? h(
             'button',
@@ -295,12 +309,12 @@ function renderStatus(state) {
   const k = state?.keeper;
   if (!state) {
     el.className = 'status off';
-    el.textContent = 'The keeper is not running. Start it with npm start.';
+    el.textContent = 'Keeper not running. Start it with npm start.';
     return;
   }
   if (!k) {
     el.className = 'status off';
-    el.textContent = 'Not online as the keeper: run npm run keeper-setup, then npm start again.';
+    el.textContent = 'Not online as the keeper. Run npm run keeper-setup, then npm start.';
     return;
   }
   const words = {
@@ -318,7 +332,7 @@ function renderStatus(state) {
       {},
       h('b', {}, words[k.state] ?? k.state),
       k.state === 'online' ? ` since ${time.format(k.since)}` : null,
-      k.connections ? ` · ${plural(k.connections, 'player', 'players')} sending now` : null,
+      k.connections ? ` · ${plural(k.connections, 'connection', 'connections')}` : null,
     ),
   );
 }
@@ -326,11 +340,20 @@ function renderStatus(state) {
 function renderSummary(state) {
   const islands = state.devices.reduce((n, d) => n + d.islands.length, 0);
   const full = state.bytes / state.maxBytes;
+  const logins = state.devices.filter((d) => d.login).length;
+  $('devices-count').textContent = state.devices.length;
   $('summary').replaceChildren(
-    h('div', { class: 'stat' }, h('b', {}, state.devices.length), h('span', {}, state.devices.length === 1 ? 'player' : 'players')),
-    h('div', { class: 'stat' }, h('b', {}, islands), h('span', {}, islands === 1 ? 'island' : 'islands')),
-    h('div', { class: `stat${full > 0.9 ? ' warn' : ''}` }, h('b', {}, size(state.bytes)), h('span', {}, `of ${size(state.maxBytes)}`)),
-    h('p', { class: 'muted where' }, 'Copies are kept in ', h('code', {}, state.dataDir), `, one a day for the last ${state.keepDays} days each island was played.`),
+    h('div', { class: 'stat card' }, h('span', { class: 'label' }, 'Players'), h('b', {}, num(state.devices.length)), h('span', { class: 'muted' }, `${num(logins)} with a login`)),
+    h('div', { class: 'stat card' }, h('span', { class: 'label' }, 'Islands'), h('b', {}, num(islands)), h('span', { class: 'muted' }, `${state.keepDays} days of daily copies`)),
+    h(
+      'div',
+      { class: `stat card${full > 0.9 ? ' warn' : ''}` },
+      h('span', { class: 'label' }, 'Storage'),
+      h('b', {}, size(state.bytes)),
+      h('span', { class: 'muted' }, `of ${size(state.maxBytes)} · ${Math.round(full * 100)}%`),
+      h('div', { class: 'meter' }, h('span', { style: `width:${Math.min(100, full * 100).toFixed(1)}%` })),
+    ),
+    h('p', { class: 'muted where' }, 'Data directory ', h('code', {}, state.dataDir), `. One copy a day is kept for the last ${state.keepDays} days each island was played.`),
   );
 }
 
@@ -362,7 +385,7 @@ function islandCard(device, island) {
     else img.classList.add('missing');
   });
   const choice = h('select', { 'aria-label': `Which copy of ${island.name}` }, ...island.days.map((day, k) => h('option', { value: day }, k === 0 ? `Latest (${day})` : day)));
-  const download = h('a', { class: 'button', download: '' }, '⬇️ Download');
+  const download = h('a', { class: 'button', download: '' }, 'Download');
   const point = () => download.setAttribute('href', `/admin/api/devices/${device.id}/islands/${island.id}?day=${choice.value}&download`);
   choice.addEventListener('change', point);
   point();
@@ -374,10 +397,10 @@ function islandCard(device, island) {
     h(
       'div',
       { class: 'about' },
-      h('h4', {}, `${theme?.icon ?? '🏝️'} ${island.name}`),
+      h('h4', { title: island.name }, island.name),
       h('div', { class: 'muted' }, [theme?.name, island.code ? `code ${prettyCode(island.code)}` : null].filter(Boolean).join(' · ')),
       h('div', { class: 'muted' }, `Saved ${ago(island.savedAt)} · ${size(island.bytes)} · ${plural(island.days.length, 'copy', 'copies')}`),
-      island.forgotten ? h('div', { class: 'muted' }, `🗑️ Said goodbye to ${ago(island.forgotten)}, on one of their devices`) : null,
+      island.forgotten ? h('div', { class: 'muted' }, `Removed on a device ${ago(island.forgotten)}`) : null,
       h(
         'div',
         { class: 'actions' },
@@ -405,17 +428,18 @@ function isleWorld(device) {
       open: opened.has(`${device.id}/isle`) || null,
       ontoggle: (e) => (e.target.open ? opened.add(`${device.id}/isle`) : opened.delete(`${device.id}/isle`)),
     },
-    h('summary', {}, `🌟 Adventure Isle, their other world · level ${level}`),
+    h('summary', {}, `Adventure Isle · level ${level}`),
     h(
       'div',
       { class: 'facts' },
-      h('span', { title: stickers.map((s) => s.name).join(', ') || 'No stickers there yet' }, `🏅 ${plural(stickers.length, 'sticker', 'stickers')} of ${STICKERS.length} `, h('span', { class: 'icons' }, stickers.map((s) => s.icon).join(''))),
-      h('span', {}, `👾 ${plural(p.stats?.popped ?? 0, 'monster', 'monsters')} popped`),
-      h('span', {}, `🏕️ ${plural(p.stats?.freed ?? 0, 'camp', 'camps')} freed`),
-      h('span', {}, `👑 ${plural(p.stats?.kings ?? 0, 'King Grumble', 'King Grumbles')} popped`),
-      h('span', {}, `🧺 ${plural(treasures, 'treasure', 'treasures')} · 🪙 ${(p.coins ?? 0).toLocaleString()} coins`),
+      fact(stickers.length, `of ${STICKERS.length} stickers`, stickers.map((s) => s.name).join(', ') || 'No stickers there yet'),
+      fact(p.stats?.popped ?? 0, (p.stats?.popped ?? 0) === 1 ? 'monster popped' : 'monsters popped'),
+      fact(p.stats?.freed ?? 0, (p.stats?.freed ?? 0) === 1 ? 'camp freed' : 'camps freed'),
+      fact(p.stats?.kings ?? 0, (p.stats?.kings ?? 0) === 1 ? 'King Grumble popped' : 'King Grumbles popped'),
+      fact(treasures, treasures === 1 ? 'treasure' : 'treasures'),
+      fact(p.coins ?? 0, 'coins'),
     ),
-    h('p', { class: 'muted' }, `The isle’s own world of them, sent by their devices as this one is and ranked on the isle’s own boards. Last sent ${ago(device.adventure.adventureAt)}.`),
+    h('p', { class: 'muted' }, `Progress on the shared Adventure Isle, ranked on its own boards. Last synced ${ago(device.adventure.adventureAt)}.`),
   );
 }
 
@@ -426,11 +450,11 @@ function deviceCard(device, players) {
   const name = p?.name || 'A player';
   return h(
     'article',
-    { class: 'device' },
+    { class: 'device card' },
     h(
       'header',
       { class: 'who' },
-      h('span', { class: 'avatar', style: `--c:${p ? shirtColor(p.look.shirt) : '#d8cfe0'}`, 'aria-hidden': 'true' }, lookIcon(p?.look)),
+      h('span', { class: 'avatar', style: `--c:${p ? shirtColor(p.look.shirt) : '#8a919c'}`, 'aria-hidden': 'true' }, initials(name)),
       h('div', { class: 'name' }, h('h3', {}, name), h('div', { class: 'muted' }, `Last seen ${ago(device.lastSeen)} · first seen ${at.format(device.firstSeen)}`), whereFrom(device)),
       h(
         'button',
@@ -442,13 +466,13 @@ function deviceCard(device, players) {
       ? h(
           'div',
           { class: 'facts' },
-          h('span', { title: stickers.map((s) => s.name).join(', ') || 'No stickers yet' }, `🏅 ${stickers.length} of ${STICKERS.length} stickers `, h('span', { class: 'icons' }, stickers.map((s) => s.icon).join(''))),
-          h('span', {}, `🧺 ${plural(treasures, 'treasure', 'treasures')}`),
-          h('span', {}, `🧱 ${plural(p.stats?.placed ?? 0, 'block', 'blocks')} built`),
+          fact(stickers.length, `of ${STICKERS.length} stickers`, stickers.map((s) => s.name).join(', ') || 'No stickers yet'),
+          fact(treasures, treasures === 1 ? 'treasure' : 'treasures'),
+          fact(p.stats?.placed ?? 0, (p.stats?.placed ?? 0) === 1 ? 'block built' : 'blocks built'),
         )
       : null,
     loginRow(device, players.filter((p) => p.id !== device.id)),
-    device.islands.length ? islandList(device) : h('p', { class: 'muted' }, 'No islands yet: this player has only visited friends.'),
+    device.islands.length ? islandList(device) : h('p', { class: 'muted' }, 'No islands of their own.'),
     isleWorld(device),
   );
 }
@@ -477,8 +501,8 @@ function islandList(device) {
     if (list.open) fill();
     return list;
   };
-  const goodbyes = gone.length ? fold(`${device.id}/gone`, `🗑️ ${plural(gone.length, 'island', 'islands')} said goodbye to`, gone) : null;
-  const label = [`🏝️ ${plural(kept.length, 'island', 'islands')}`, gone.length ? `and ${gone.length} said goodbye to` : null].filter(Boolean).join(' ');
+  const goodbyes = gone.length ? fold(`${device.id}/gone`, `${plural(gone.length, 'removed island', 'removed islands')}`, gone) : null;
+  const label = [plural(kept.length, 'island', 'islands'), gone.length ? `${gone.length} removed` : null].filter(Boolean).join(' · ');
   return fold(device.id, label, kept, goodbyes);
 }
 
@@ -622,10 +646,10 @@ function visitCard(code) {
   const update = (next) => {
     v = next;
     const name = friendForm.state.settings.name;
-    title.textContent = v.home ? `🏠 ${v.island} · its own island` : `🏝️ ${v.island}`;
+    title.replaceChildren(v.island, v.home ? h('span', { class: 'badge accent' }, 'Home') : null);
     el.classList.toggle('home', Boolean(v.home));
     actions.hidden = Boolean(v.home);
-    doing.replaceChildren(h('b', {}, '🔧 Now: '), v.doing, v.thinking ? ' · 💭 thinking what to say' : '', v.planning ? ' · 💭 thinking what to build' : '');
+    doing.replaceChildren(h('b', {}, 'Now: '), v.doing, v.thinking ? ' · thinking what to say' : '', v.planning ? ' · thinking what to build' : '');
     builds.replaceChildren(...(v.home ? buildList(v) : []));
     talk.placeholder = `Say something to ${name}`;
     talk.setAttribute('aria-label', `Talk with ${name} on ${v.island}: what is said to it, it answers`);
@@ -635,11 +659,11 @@ function visitCard(code) {
     info.replaceChildren(
       h('div', { class: 'muted' }, [`code ${prettyCode(v.code)}`, v.server ? 'on this server' : 'peer to peer', v.owner ? `${v.owner}’s island` : null].filter(Boolean).join(' · ')),
       v.home
-        ? h('div', { class: 'muted' }, `🏠 Lives here · ${plural(v.buildCount, 'thing', 'things')} built so far${v.shared === 'online' ? ' · 🌍 on the list of open islands everywhere' : v.shared ? ` · 🌍 not reachable from other websites yet (${v.shared})` : ' · only on this server (no keeper online)'}`)
+        ? h('div', { class: 'muted' }, `${plural(v.buildCount, 'build', 'builds')} so far${v.shared === 'online' ? ' · listed everywhere' : v.shared ? ` · not reachable from other sites yet (${v.shared})` : ' · this server only (keeper offline)'}`)
         : v.arrivedAt
-        ? h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 Came by itself'} · came ${ago(v.arrivedAt)} · goes home by ${time.format(v.leaveAt)}`)
-        : h('div', { class: 'muted' }, `${v.invitedBy ? `💌 Invited by ${v.invitedBy}` : '🚶 By itself'} · getting there…`),
-      h('div', {}, `👥 ${people}`, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · 💭 thinking' : ''),
+        ? h('div', { class: 'muted' }, `${v.invitedBy ? `Invited by ${v.invitedBy}` : 'Came by itself'} · arrived ${ago(v.arrivedAt)} · leaves by ${time.format(v.leaveAt)}`)
+        : h('div', { class: 'muted' }, `${v.invitedBy ? `Invited by ${v.invitedBy}` : 'By itself'} · joining…`),
+      h('div', {}, h('span', { class: 'muted' }, 'Players: '), people, v.friend ? ` · ${MODE[v.mode] ?? v.mode} ${v.mode === 'follow' ? v.friend : ''}`.trimEnd() : '', v.thinking ? ' · thinking' : ''),
     );
     const key = JSON.stringify(v.chat);
     if (key === said) return;
@@ -665,7 +689,7 @@ function buildList(v) {
       h(
         'div',
         { class: 'project' },
-        `${p.icon} Building ${p.title}${p.name ? ` · “${p.name}”` : ''}`,
+        `Building ${p.title}${p.name ? ` · “${p.name}”` : ''}`,
         h('progress', { max: p.layers, value: p.layer, 'aria-label': `Layer ${p.layer} of ${p.layers}` }),
         h('span', { class: 'muted' }, `${p.layer} / ${p.layers} layers`),
       ),
@@ -677,8 +701,8 @@ function buildList(v) {
       h(
         'details',
         { class: 'fold', open: opened.has(key) || null, ontoggle: (e) => (e.target.open ? opened.add(key) : opened.delete(key)) },
-        h('summary', {}, `🏗️ Built lately (${v.builds.length})`),
-        h('ol', { class: 'recent' }, ...v.builds.map((b) => h('li', {}, h('time', {}, ago(b.at)), ` ${b.icon} ${b.title}`, b.name ? ` · “${b.name}”` : ''))),
+        h('summary', {}, `Recent builds (${v.builds.length})`),
+        h('ol', { class: 'recent' }, ...v.builds.map((b) => h('li', {}, h('time', {}, ago(b.at)), ` ${b.title}`, b.name ? ` · “${b.name}”` : ''))),
       ),
     );
   }
@@ -691,7 +715,7 @@ function nowList(state) {
   if (!state.running) return [];
   if (!all.length) return [h('li', { class: 'muted' }, 'Not on any island right now.')];
   return all.map((v) =>
-    h('li', {}, h('b', {}, v.home ? `🏠 ${v.island}: ` : `🏝️ ${v.island}: `), v.doing, v.thinking ? ' · 💭 thinking what to say' : '', v.planning ? ' · 💭 thinking what to build' : ''),
+    h('li', {}, h('b', {}, `${v.island}${v.home ? ' (home)' : ''}: `), v.doing, v.thinking ? ' · thinking what to say' : '', v.planning ? ' · thinking what to build' : ''),
   );
 }
 
@@ -715,12 +739,12 @@ logView.el = h(
       } else opened.delete('friend-llm');
     },
   },
-  h('summary', {}, '🔍 Model log'),
+  h('summary', {}, 'Model log'),
   logView.note,
   logView.list,
 );
 
-const STATE = { waiting: '⏳', answered: '✅', failed: '⚠️' };
+const STATE = { waiting: ['Pending', 'warn'], answered: ['OK', 'ok'], failed: ['Failed', 'bad'] };
 const secs = (ms) => (ms === null || ms === undefined ? '' : `${(ms / 1000).toFixed(1)} s`);
 
 // Text as it is, or JSON laid out to read.
@@ -751,8 +775,9 @@ function callCard(c) {
       'summary',
       {},
       h('time', {}, time.format(c.at)),
-      ` ${STATE[c.state] ?? ''} ${c.about || 'a question'}`,
-      h('span', { class: 'muted' }, [c.state === 'waiting' ? (c.sentAt ? ' · asking…' : ' · waiting its turn…') : ` · ${secs(c.ms)}`, tokens ? ` · ${tokens} tokens` : ''].join('')),
+      STATE[c.state] ? h('span', { class: `badge ${STATE[c.state][1]}` }, STATE[c.state][0]) : null,
+      c.about || 'a question',
+      h('span', { class: 'muted' }, [c.state === 'waiting' ? (c.sentAt ? 'asking…' : 'queued…') : secs(c.ms), tokens ? `${tokens} tokens` : ''].filter(Boolean).join(' · ')),
     ),
     h(
       'div',
@@ -808,10 +833,9 @@ async function refreshLog() {
 // each cell the tokens in all and, under it, how many went in (the prompt)
 // and came out, and in how many answers.
 const PERIODS = { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', all: 'All' };
-const num = (n) => n.toLocaleString();
 
 function usageTable(usage) {
-  if (!usage?.since) return [h('p', { class: 'muted' }, '🧮 No tokens used yet.')];
+  if (!usage?.since) return [h('p', { class: 'muted' }, 'No token usage recorded yet.')];
   const periods = usage.periods;
   const models = periods.at(-1).rows.map((r) => ({ name: r.name, model: r.model }));
   const cell = (c) =>
@@ -820,7 +844,7 @@ function usageTable(usage) {
       : h('td', { class: 'muted' }, '—');
   const row = (head, of) => h('tr', {}, h('th', { scope: 'row' }, head), ...periods.map((p) => cell(of(p))));
   return [
-    h('h3', {}, '🧮 Tokens used'),
+    h('h3', {}, 'Token usage'),
     h(
       'div',
       { class: 'usage-wrap' },
@@ -836,7 +860,7 @@ function usageTable(usage) {
         ),
       ),
     ),
-    h('p', { class: 'muted' }, 'Counted from what each model said it took; Ollama runs on this computer and costs nothing. Days are this computer’s own.'),
+    h('p', { class: 'muted' }, 'As reported by each model. Ollama runs locally at no cost. Days follow this computer’s time zone.'),
   ];
 }
 
@@ -858,11 +882,11 @@ function renderFriend(state) {
   const f = friendView;
   const s = state.settings;
   const [cls, words] = !state.running
-    ? ['off', 'Off: it does not visit anyone.']
+    ? ['off', 'Off']
     : state.ready
-      ? ['on', `${s.name} is awake, with ${s.model}${state.listed ? '' : ' · busy on as many islands as it may be on'}`]
-      : ['wait', `${s.name} is asleep: ${state.problem || 'checking its model…'}`];
-  f.line.replaceChildren(h('span', { class: `status ${cls}`, role: 'status' }, words), state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check the model now') : '');
+      ? ['on', `${s.name} ready · ${s.model}${state.listed ? '' : ' · at island limit'}`]
+      : ['wait', `${s.name} unavailable: ${state.problem || 'checking the model…'}`];
+  f.line.replaceChildren(h('span', { class: `status ${cls}`, role: 'status' }, words), state.running ? h('button', { type: 'button', onclick: () => friendAction('check') }, 'Check model') : '');
   // What it talks with: the model it asks, and the local one that answers
   // when that cannot. A problem is only spelled out when the other one still
   // answers; when neither does, the line above says why it is asleep.
@@ -881,9 +905,9 @@ function renderFriend(state) {
   const st = state.stats;
   const facts = st
     ? [
-        `💬 ${plural(st.answers, 'answer', 'answers')} from the model`,
-        st.answers ? `${(st.totalMs / st.answers / 1000).toFixed(1)} s each on average (last ${(st.lastMs / 1000).toFixed(1)} s)` : null,
-        st.failures ? `⚠️ ${plural(st.failures, 'answer', 'answers')} that did not come, last ${ago(st.lastErrorAt)}: ${st.lastError}` : null,
+        `${plural(st.answers, 'answer', 'answers')} from the model`,
+        st.answers ? `${(st.totalMs / st.answers / 1000).toFixed(1)} s average (last ${(st.lastMs / 1000).toFixed(1)} s)` : null,
+        st.failures ? `${plural(st.failures, 'failure', 'failures')}, last ${ago(st.lastErrorAt)}: ${st.lastError}` : null,
       ].filter(Boolean)
     : [];
   f.facts.hidden = !facts.length;
@@ -916,7 +940,7 @@ function renderFriend(state) {
   f.visits.hidden = !places.length;
   f.history.replaceChildren(
     ...(state.history.length
-      ? [h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, '📜 What it did lately'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))]
+      ? [h('details', { class: 'fold', open: opened.has('friend-history') || null, ontoggle: (e) => (e.target.open ? opened.add('friend-history') : opened.delete('friend-history')) }, h('summary', {}, 'Activity log'), h('ol', { class: 'recent' }, ...state.history.slice(0, 30).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))]
       : []),
   );
 }
@@ -949,7 +973,7 @@ function render(state) {
   $('devices').replaceChildren(
     ...(state.devices.length
       ? state.devices.map((d) => deviceCard(d, state.devices.filter((p) => p.login)))
-      : [h('p', { class: 'empty' }, 'Nothing kept yet. When someone plays while the keeper is online, their islands show up here.')]),
+      : [h('p', { class: 'empty' }, 'No players yet. Islands appear here once someone plays while the keeper is online.')]),
   );
 }
 
