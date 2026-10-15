@@ -394,6 +394,8 @@ export class UI {
     $('btn-me').onclick = () => this.meDialog();
     $('btn-pet').onclick = () => this.petDialog();
     $('btn-login').onclick = () => (handlers.login.who() ? this.myLoginDialog() : this.loginDialog());
+    $('gate-login').onclick = () => this.loginDialog();
+    $('gate-make').onclick = () => this.makeLoginDialog();
     $('btn-stickers').onclick = $('btn-level').onclick = () => this.stickersDialog();
     $('btn-shop').onclick = () => this.shopDialog();
     $('btn-ranking').onclick = () => this.rankingDialog(this.profile === this.isle ? 'isle' : 'home');
@@ -451,6 +453,14 @@ export class UI {
     chip.classList.toggle('on', Boolean(login?.who()));
     $('btn-ranking').hidden = !login?.available();
     $('btn-players').hidden = !login?.available();
+    // Nobody plays without a login: until you log in (or make one), the
+    // title screen has only the way to, and says so while there is no
+    // keeper to log in at.
+    const gated = Boolean(login?.required?.());
+    $('title').classList.toggle('gated', gated);
+    $('login-gate').hidden = !gated;
+    $('gate-away').hidden = !gated || Boolean(login?.available());
+    for (const id of ['gate-login', 'gate-make']) $(id).disabled = !login?.available();
   }
 
   // The 🌟 shared isle's own way in, there wherever the list of open

@@ -99,6 +99,8 @@ async function openPlayer(url, profile = {}, init = null) {
       window.matchMedia = (q) => (q.includes('any-pointer: fine') ? { matches: false, media: q, addEventListener() {}, removeEventListener() {} } : real(q));
     });
   }
+  // Nobody plays without a login; these pages play as the guest unless init says otherwise.
+  await page.evaluateOnNewDocument(() => (window.kidsWorldGuests = true));
   if (init) await page.evaluateOnNewDocument(init);
   await page.evaluateOnNewDocument((p) => {
     const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0 } };
@@ -2251,6 +2253,7 @@ test('an island you made is saved, under the name you typed and in the size you 
   const page = await context.newPage();
   page.on('pageerror', (error) => pageErrors.push(`saver: ${error.message}`));
   await page.setViewport({ width: 720, height: 480 });
+  await page.evaluateOnNewDocument(() => (window.kidsWorldGuests = true));
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(base + '?p2p=1');
   await page.waitForFunction(() => window.kidsWorld?.ui, { timeout: 60000 * SLOW });
@@ -2500,6 +2503,55 @@ test('a login made on one device logs in another: what each made comes along, th
   } finally {
     await tablet.browserContext().close();
     await phone.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('nobody plays without a login: the title screen has only the way to log in, and once logged in the islands are there', { skip }, async () => {
+  const noGuests = () => delete window.kidsWorldGuests;
+  const visible = (page, id) => page.evaluate((id) => document.getElementById(id).offsetParent !== null, id);
+  // No keeper to log in at: the page says so, and nothing can be played.
+  const alone = await openPlayer(`${base}?p2p=1&code=ABCDEF`, { name: 'Sunny Otter' }, noGuests);
+  try {
+    await until(alone, () => !document.getElementById('login-gate').hidden);
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'btn-stickers', 'btn-shop', 'btn-me', 'me-name']) assert.equal(await visible(alone, id), false, id);
+    assert.equal(await visible(alone, 'gate-away'), true);
+    assert.equal(await alone.$eval('#gate-login', (el) => el.disabled), true);
+    assert.equal(await visible(alone, 'btn-help'), true);
+    assert.equal(await alone.evaluate(() => window.kidsWorld.ui.modalOpen), false, 'an invitation waits for a login');
+  } finally {
+    await alone.browserContext().close();
+  }
+
+  // With a keeper: a login made from the title screen, and the islands are there.
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' }, noGuests);
+  try {
+    await until(page, () => !document.getElementById('login-gate').hidden && !document.getElementById('gate-login').disabled);
+    assert.equal(await visible(page, 'gate-away'), false);
+    assert.equal(await visible(page, 'btn-new'), false);
+    await clickButton(page, 'Make my login', '#login-gate');
+    await typeInto(page, 'Otter Fan 7', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    await until(page, () => document.getElementById('login-gate').hidden);
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'me-name']) assert.equal(await visible(page, id), true, id);
+
+    // Logged out, the title screen asks for a login again.
+    await clickButton(page, 'My login');
+    await reloadsAfter(page, () => clickButton(page, 'Log out', '#modal'));
+    await until(page, () => !document.getElementById('login-gate').hidden);
+    assert.equal(await visible(page, 'btn-new'), false);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });

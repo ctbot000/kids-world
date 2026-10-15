@@ -374,6 +374,41 @@ body.fullscreen .full-icon .leave {
   font-size: 1.05rem;
 }
 
+/* Not logged in: only the way to log in (and help, sound and full screen). */
+.login-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.login-gate[hidden] {
+  display: none;
+}
+
+@media (min-width: 900px) and (min-height: 600px) {
+  .gate-buttons {
+    grid-template-columns: repeat(2, 1fr);
+    width: min(600px, 100%);
+  }
+}
+
+.gate-away {
+  font-size: 1.05rem;
+  max-width: 600px;
+  border-radius: 20px;
+}
+
+.gate-buttons .big:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#title.gated :is(.me-name, #btn-level, #btn-me, #btn-pet, #btn-login, #tagline, #mode-switch, .title-bottom > .big-buttons, #btn-stickers, #btn-shop, #btn-ranking, #btn-players) {
+  display: none !important;
+}
+
 .small-buttons {
   display: flex;
   gap: 10px;

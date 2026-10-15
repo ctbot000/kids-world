@@ -34,6 +34,15 @@
   </div>
   </div>
   <div class="title-bottom">
+  <!-- Nobody plays without logging in: until you do, this is all there is. -->
+  <div class="login-gate" id="login-gate" hidden>
+    <p class="tagline">Log in to play!</p>
+    <div class="big-buttons gate-buttons">
+      <button class="big green" id="gate-login" type="button"><span class="emoji">🔑</span> Log in</button>
+      <button class="big blue" id="gate-make" type="button"><span class="emoji">✨</span> Make my login</button>
+    </div>
+    <p class="tagline gate-away" id="gate-away" hidden>Logging in needs the island keeper. It is not online yet — ask a grown-up to turn it on.</p>
+  </div>
   <div class="tabs mode-switch" id="mode-switch" role="tablist" aria-label="Which world" hidden>
     <button class="chip" id="mode-build" type="button" role="tab">🧱 Build</button>
     <button class="chip" id="mode-adventure" type="button" role="tab">⚔️ Adventure</button>

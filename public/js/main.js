@@ -626,7 +626,7 @@ const GREETINGS = {
   adopted: ['🧳', (name) => `Hi, ${name}! What you made on this device is yours now, on all your devices.`],
   made: ['🔑', () => 'Your login is ready! Log in on your other devices with your username and password.'],
   logout: ['👋', () => 'Logged out. See you soon!'],
-  gone: ['🔑', () => 'Your login was taken away at the island keeper, so you are playing as a guest now.'],
+  gone: ['🔑', () => 'Your login was taken away at the island keeper. Log in again, or make a new one, to play.'],
 };
 let reloadAtTitle = '';
 let lookTimer = 0;
@@ -699,6 +699,9 @@ function loginGone() {
 const loginHandlers = {
   available: () => Boolean(keeper.config),
   who: () => who,
+  // Nobody plays without logging in. Automated tests of everything else
+  // play as the guest, saying so before the page starts.
+  required: () => !who && window.kidsWorldGuests !== true,
   // The login's username, which only you see (in games you are your made-up name).
   username: () => keeper.login?.username || '',
   // Players who logged in on this device before, to pick from.
@@ -993,7 +996,8 @@ async function boot() {
   ui.showTitle(titleHandlers);
   greet();
   const code = normalizeCode(params.get('code'));
-  if (isValidCode(code)) ui.visitDialog(code);
+  // An invitation's link waits until you have logged in (it is still in the address).
+  if (isValidCode(code) && !loginHandlers.required()) ui.visitDialog(code);
   requestAnimationFrame(frame);
   present();
   keeper.start();
