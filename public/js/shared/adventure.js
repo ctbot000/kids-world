@@ -105,7 +105,7 @@ export function campCount(world, stage = 1) {
 
 // What is not the ground: trees (candy trees have trunks of white bricks).
 const TREE = new Uint8Array(256);
-for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11]]) TREE[id] = 1;
+for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.KATSURA_LEAVES, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11]]) TREE[id] = 1;
 
 // The height of the ground in every column, under any tree, and whether it
 // is under water: the sea (1), or a pond or ice above the sea (2).

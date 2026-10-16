@@ -118,6 +118,28 @@ export function pineTree(rng, snowy = false) {
   return c.list();
 }
 
+// A katsura tree (Cercidiphyllum): a few trunks from one foot, leaning
+// apart as they climb, under a tall rounded crown of gold heart leaves.
+export function katsuraTree(rng, big = false) {
+  const c = new Cells();
+  const h = big ? 6 : rng.int(4, 5);
+  for (let y = 0; y < h; y++) c.put(0, y, 0, B.WOOD);
+  // Two more trunks branch off low down, each its own way.
+  const turn = rng.int(0, 3);
+  for (const k of [0, 2]) {
+    const [dx, dz] = [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+    ][(turn + k) % 4];
+    for (let y = 2; y < h; y++) c.put(dx, y, dz, B.WOOD);
+  }
+  const r = big ? 3 : 2.3;
+  blob(c, 0, h + r * 0.55, 0, r, r * 1.4, r, B.KATSURA_LEAVES, rng, 0.2);
+  return c.list();
+}
+
 export function candyTree(rng) {
   const c = new Cells();
   const h = rng.int(4, 5);
@@ -132,6 +154,7 @@ export function grownTree(kind, seed) {
   if (kind === 'oak') return oakTree(rng);
   if (kind === 'pine') return pineTree(rng, false);
   if (kind === 'candy') return candyTree(rng);
+  if (kind === 'katsura') return katsuraTree(rng);
   if (kind?.startsWith('fruit-')) {
     const fruit = B.blockByKey(kind.slice(6));
     if (fruit) return fruitTree(rng, fruit.id, 3);
@@ -584,6 +607,10 @@ function bigTree() {
   return oakTree(new Rng(7), true);
 }
 
+function katsura() {
+  return katsuraTree(new Rng(13), true);
+}
+
 function pine() {
   return pineTree(new Rng(11), false);
 }
@@ -674,6 +701,7 @@ export const STAMPS = [
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
   { key: 'big-tree', name: 'Big Tree', icon: '🌳', cells: bigTree() },
   { key: 'pine', name: 'Pine Tree', icon: '🌲', cells: pine() },
+  { key: 'katsura', name: 'Katsura Tree', icon: '🍂', cells: katsura() },
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
   { key: 'bouncy-castle', name: 'Bouncy Castle', icon: '🤸', cells: bouncyCastle() },

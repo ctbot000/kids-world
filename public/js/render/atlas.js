@@ -162,6 +162,21 @@ function leaf(ctx, x, y, len, angle, color = '#56b947') {
   ctx.restore();
 }
 
+// A little heart-shaped leaf, point down, `size` its half-width.
+function heartLeaf(ctx, x, y, size, angle, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, size * 1.1);
+  ctx.bezierCurveTo(-size * 1.4, 0, -size * 0.9, -size * 1.2, 0, -size * 0.45);
+  ctx.bezierCurveTo(size * 0.9, -size * 1.2, size * 1.4, 0, 0, size * 1.1);
+  ctx.fill();
+  outline(ctx, 'rgba(140,70,20,0.45)', 1.2);
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- the farm's paintings
 // Crops are painted for planes a block wide, standing crossed in a #
 // (render/mesher.js crop): the bottom of the picture is the ground, and only
@@ -516,6 +531,16 @@ const PAINT = {
       ctx.lineTo(x, y - 3);
       ctx.lineTo(x + 5, y + 4);
       ctx.stroke();
+    }
+    bevel(ctx, 0.5);
+  },
+  // Little round hearts in gold and apricot, as a katsura's leaves turn.
+  'katsura-leaves'(ctx) {
+    fill(ctx, '#e9b440');
+    blobs(ctx, 64, '#f2c654', 12, 5, 9);
+    const r = speckleRandom(65);
+    for (let i = 0; i < 16; i++) {
+      heartLeaf(ctx, r() * TILE, r() * TILE, 4 + r() * 3, r() * Math.PI * 2, ['#f7d35c', '#f0a24a', '#e8834a', '#fbe27a'][i % 4]);
     }
     bevel(ctx, 0.5);
   },
@@ -1158,6 +1183,15 @@ const PAINT = {
       ctx.fill();
       outline(ctx, 'rgba(20,60,30,0.5)', 1.5);
     }
+  },
+  'katsura-sprout'(ctx) {
+    ctx.fillStyle = '#8b5a3c';
+    ellipse(ctx, 32, 60, 12, 4);
+    ctx.fill();
+    stem(ctx, 32, 60, 32, 30, '#7a5a3a', 3);
+    heartLeaf(ctx, 22, 34, 9, -0.6, '#f2c24e');
+    heartLeaf(ctx, 42, 30, 9, 0.6, '#f0a24a');
+    heartLeaf(ctx, 32, 22, 8, 0, '#f7d35c');
   },
   'candy-sprout'(ctx) {
     ctx.fillStyle = '#8b5a3c';

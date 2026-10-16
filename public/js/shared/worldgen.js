@@ -9,7 +9,7 @@ import * as B from './blocks.js';
 import { busesClearOf, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
-import { fruitTree, oakTree, pineTree, candyTree, placeTemplate } from './stamps.js';
+import { fruitTree, oakTree, pineTree, candyTree, katsuraTree, placeTemplate } from './stamps.js';
 import { World } from './world.js';
 
 export const THEMES = [
@@ -323,7 +323,13 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     else if (theme === 'candy') cells = rng.chance(0.3) ? fruitTree(rng, fruit, rng.int(2, 4)) : candyTree(rng);
     else if (high || (theme === 'sunny' && forest > 0.35 && rng.chance(0.5))) cells = pineTree(rng, false);
     else if (rng.chance(0.3)) cells = fruitTree(rng, fruit, rng.int(2, 4));
-    else cells = oakTree(rng, rng.chance(0.15));
+    else {
+      cells = oakTree(rng, rng.chance(0.15));
+      // Now and then a katsura stands in an oak's place, drawn from its own
+      // seed so the rest of the island comes out just as before.
+      const k = new Rng(Math.floor(hash2(seed ^ 0x6b617473, x, z) * 4294967296));
+      if (k.chance(0.15)) cells = katsuraTree(k, k.chance(0.2));
+    }
     trees.at(-1).cells = placeTemplate(cells, x, y, z, 0);
     place(trees.at(-1).cells);
   }
