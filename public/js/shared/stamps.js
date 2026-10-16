@@ -118,25 +118,79 @@ export function pineTree(rng, snowy = false) {
   return c.list();
 }
 
-// A katsura tree (Cercidiphyllum): a few trunks from one foot, leaning
-// apart as they climb, under a tall rounded crown of gold heart leaves.
+// A katsura tree (Cercidiphyllum) as one grows in the open: a few trunks
+// from one foot, leaning apart as they climb, with branches reaching up and
+// out into a broad, deep, rounded crown of leafy clumps — high enough to
+// walk under among the trunks. A young one is narrow and pointed, one or
+// two trunks with the crown nearly to the ground; `big` is an old giant.
 export function katsuraTree(rng, big = false) {
   const c = new Cells();
-  const h = big ? 6 : rng.int(4, 5);
-  for (let y = 0; y < h; y++) c.put(0, y, 0, B.WOOD);
-  // Two more trunks branch off low down, each its own way.
-  const turn = rng.int(0, 3);
-  for (const k of [0, 2]) {
-    const [dx, dz] = [
-      [1, 0],
-      [0, 1],
-      [-1, 0],
-      [0, -1],
-    ][(turn + k) % 4];
-    for (let y = 2; y < h; y++) c.put(dx, y, dz, B.WOOD);
+  const young = !big && rng.chance(0.3);
+  const h = big ? 10 : rng.int(7, 8);
+  const stems = big ? 4 : young ? rng.int(1, 2) : rng.int(3, 4);
+  const spread = big ? 3.2 : young ? 1 : 2.1;
+  const r = big ? 3.1 : 2.5;
+  // Wood from one cell to another a block at a time, the way that is
+  // furthest from done first, so a leaning trunk or a branch climbs on a
+  // slant, every piece touching the one before face to face.
+  const wood = (from, to) => {
+    const p = [...from];
+    const d = to.map((v, k) => Math.abs(v - from[k]));
+    c.put(p[0], p[1], p[2], B.KATSURA_WOOD);
+    while (p[0] !== to[0] || p[1] !== to[1] || p[2] !== to[2]) {
+      let k = -1;
+      for (let i = 0; i < 3; i++) if (p[i] !== to[i] && (k < 0 || Math.abs(to[i] - p[i]) / d[i] > Math.abs(to[k] - p[k]) / d[k])) k = i;
+      p[k] += Math.sign(to[k] - p[k]);
+      c.put(p[0], p[1], p[2], B.KATSURA_WOOD);
+    }
+  };
+  const turn = rng.next() * Math.PI * 2;
+  const clumps = [];
+  // A giant's foot spreads wide where its trunks meet the ground.
+  if (big) for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) c.put(x, 0, z, B.KATSURA_WOOD);
+  for (let i = 0; i < stems; i++) {
+    // The first trunk is the leader, tallest and most upright.
+    const a = turn + (i / stems) * Math.PI * 2 + rng.range(-0.35, 0.35);
+    const top = (i === 0 ? h : h - rng.int(1, 2)) - (young ? 2 : 0);
+    const out = (i === 0 ? (young ? 0 : stems > 2 ? 0.45 : 1) : 1) * spread * rng.range(0.85, 1.1);
+    const at = (y, far = 1) => {
+      const k = out * far * (y / top) ** 0.8;
+      return [Math.round(Math.cos(a) * k), Math.round(y), Math.round(Math.sin(a) * k)];
+    };
+    let last = [0, 0, 0];
+    for (let y = 1; y <= top; y++) {
+      const p = at(y);
+      wood(last, p);
+      last = p;
+    }
+    if (young) continue;
+    clumps.push([last[0] * 1.15, top - 0.3, last[2] * 1.15, r, r]);
+    // Further down the trunk the crown goes on out to the side...
+    const [sx, , sz] = at(top * 0.6, 1.7);
+    clumps.push([sx, top * 0.6 + 0.5, sz, r * 0.8, r * 0.55]);
+    // ...and a branch reaches up and out into it, or two on a giant.
+    for (let j = 0; j < (big ? 2 : 1); j++) {
+      const from = at(top * (0.45 + j * 0.2));
+      const b = a + (j === 0 ? 1 : -1) * rng.range(0.6, 1.1);
+      const reach = big ? 3.5 : 2.5;
+      const tip = [Math.round(from[0] + Math.cos(b) * reach), Math.round(from[1] + reach * 0.8), Math.round(from[2] + Math.sin(b) * reach)];
+      wood(from, tip);
+      clumps.push([tip[0], tip[1] + 0.3, tip[2], r * 0.85, r * 0.85]);
+    }
   }
-  const r = big ? 3 : 2.3;
-  blob(c, 0, h + r * 0.55, 0, r, r * 1.4, r, B.KATSURA_LEAVES, rng, 0.2);
+  if (young) {
+    // Narrowing tiers up the leader to a point.
+    const tiers = 4;
+    for (let j = 0; j < tiers; j++) {
+      const y = 2.8 + j * ((h - 1.8) / tiers);
+      const k = 2.7 * (1 - j / (tiers + 0.8));
+      clumps.push([0, y, 0, k, 1.7]);
+    }
+    clumps.push([0, h + 0.8, 0, 1.4, 1.4]);
+  } else {
+    clumps.push([0, h + 0.8, 0, r * 1.15, r * 0.95]);
+  }
+  for (const [x, y, z, rx, ry] of clumps) blob(c, x, y, z, rx, ry, rx, B.KATSURA_LEAVES, rng, big ? 0.14 : young ? 0.12 : 0.2);
   return c.list();
 }
 
@@ -607,8 +661,9 @@ function bigTree() {
   return oakTree(new Rng(7), true);
 }
 
+// An old giant, its foot a few steps in front of you so the crown is too.
 function katsura() {
-  return katsuraTree(new Rng(13), true);
+  return katsuraTree(new Rng(13), true).map(([x, y, z, id]) => [x, y, z + 6, id]);
 }
 
 function pine() {

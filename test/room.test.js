@@ -591,7 +591,7 @@ test('sprouts grow into trees and picked fruit grows back', () => {
   assert.equal(w.get(...apple), B.FRUIT_ITEMS[0], 'the apple grew back');
 });
 
-test('a katsura sprout grows into a katsura tree of gold heart leaves', () => {
+test('a katsura sprout grows into a katsura tree', () => {
   const { room, time } = makeRoom();
   const a = join(room);
   const w = room.world;
@@ -604,11 +604,10 @@ test('a katsura sprout grows into a katsura tree of gold heart leaves', () => {
     time.advance(1000);
     room.tick();
   }
-  assert.equal(w.get(x, y, z), B.WOOD, 'a tree grew');
+  assert.equal(w.get(x, y, z), B.KATSURA_WOOD, 'a tree grew');
   const grow = a.all('edit').find((m) => m.kind === 'grow');
   const ids = new Set(grow.cells.filter((_, i) => i % 4 === 3));
-  assert.ok(ids.has(B.KATSURA_LEAVES), 'with katsura leaves');
-  assert.ok(!ids.has(B.LEAVES), 'not an oak');
+  assert.deepEqual([...ids].sort(), [B.KATSURA_LEAVES, B.KATSURA_WOOD].sort(), 'a katsura, not an oak');
 });
 
 test('the clock and the weather move on, and the owner can stop the clock', () => {

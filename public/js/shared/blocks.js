@@ -60,9 +60,13 @@ export const SNOW = def(6, 'snow', { name: 'Snow', category: 'nature', tiles: { 
 export const WOOD = def(7, 'wood', { name: 'Tree Trunk', category: 'nature', tiles: { top: 'wood-top', side: 'wood-side' }, sound: 'wood' });
 export const LEAVES = def(8, 'leaves', { name: 'Leaves', category: 'nature', tiles: 'leaves', sound: 'leaves' });
 export const PINE_LEAVES = def(9, 'pine-leaves', { name: 'Pine Leaves', category: 'nature', tiles: 'pine-leaves', sound: 'leaves' });
-// A katsura tree's (Cercidiphyllum) little round heart-shaped leaves, gone
-// gold and apricot as they do in autumn.
-export const KATSURA_LEAVES = def(46, 'katsura-leaves', { name: 'Katsura Leaves', category: 'nature', tiles: 'katsura-leaves', sound: 'leaves' });
+// A katsura tree's (Cercidiphyllum): its little round heart-shaped leaves,
+// turned for autumn — gold all over, apricot and red in patches where the
+// sun reaches, still a little green underneath (`autumn`: the colours
+// render/mesher.js gives each corner) — and its grey-brown shaggy bark,
+// bark all round, as the trunks lean and climb in steps.
+export const KATSURA_LEAVES = def(46, 'katsura-leaves', { name: 'Katsura Leaves', category: 'nature', after: 48, tiles: 'katsura-leaves', sound: 'leaves', autumn: true });
+export const KATSURA_WOOD = def(48, 'katsura-wood', { name: 'Katsura Trunk', category: 'nature', after: 9, tiles: 'katsura-bark', sound: 'wood' });
 export const WATER = def(10, 'water', { name: 'Water', kind: 'water', category: 'nature', tiles: 'water', sound: 'water' });
 export const ICE = def(11, 'ice', { name: 'Ice', category: 'nature', tiles: 'ice', sound: 'glass' });
 // Volcano rock, dark and dusty: the ground of a volcano island
@@ -223,7 +227,7 @@ export const TALL_GRASS = def(55, 'tall-grass', { name: 'Tall Grass', kind: 'pla
 export const MUSHROOM = def(56, 'mushroom', { name: 'Mushroom', kind: 'plant', category: 'plants', tiles: 'mushroom', sound: 'plant' });
 export const OAK_SPROUT = def(57, 'oak-sprout', { name: 'Tree Sprout', kind: 'plant', category: 'plants', tiles: 'sprout', grows: 'oak', sound: 'plant' });
 export const PINE_SPROUT = def(58, 'pine-sprout', { name: 'Pine Sprout', kind: 'plant', category: 'plants', tiles: 'pine-sprout', grows: 'pine', sound: 'plant' });
-export const KATSURA_SPROUT = def(47, 'katsura-sprout', { name: 'Katsura Sprout', kind: 'plant', category: 'plants', tiles: 'katsura-sprout', grows: 'katsura', sound: 'plant' });
+export const KATSURA_SPROUT = def(47, 'katsura-sprout', { name: 'Katsura Sprout', kind: 'plant', category: 'plants', after: 58, tiles: 'katsura-sprout', grows: 'katsura', sound: 'plant' });
 export const GUMDROP = def(64, 'gumdrop', { name: 'Gumdrop', kind: 'plant', category: 'plants', tiles: 'gumdrop', sound: 'candy' });
 export const LOLLIPOP = def(65, 'lollipop', { name: 'Lollipop', kind: 'plant', category: 'plants', tiles: 'lollipop', sound: 'candy' });
 export const CANDY_SPROUT = def(66, 'candy-sprout', { name: 'Candy Sprout', kind: 'plant', category: 'plants', tiles: 'candy-sprout', grows: 'candy', sound: 'candy' });
@@ -372,7 +376,7 @@ for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
 export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(256);
-for (const id of [7, 8, 9, 24, 25, 46]) TREE_PART[id] = 1;
+for (const id of [7, 8, 9, 24, 25, 46, 48]) TREE_PART[id] = 1;
 // Tent cloth, what makes a tent.
 export const CLOTH = new Uint8Array(256);
 for (const id of CLOTHS) CLOTH[id] = 1;
@@ -416,6 +420,21 @@ export const CATEGORIES = [
   { key: 'farm', name: 'Farm', icon: '🌾' },
   { key: 'home', name: 'Home', icon: '🛋️' },
 ];
-export const blocksIn = (category) => defs.filter((d) => d && d.category === category).map((d) => d.id);
+// A tab's blocks in order of id, except that one with `after` comes right
+// after the block it names, to sit with its own kind (a katsura's).
+export const blocksIn = (category) => {
+  const all = defs.filter((d) => d && d.category === category);
+  const ids = all.filter((d) => d.after == null).map((d) => d.id);
+  const rest = all.filter((d) => d.after != null);
+  for (let pass = 0; rest.length && pass < rest.length + 1; pass++) {
+    for (let i = rest.length - 1; i >= 0; i--) {
+      const at = ids.indexOf(rest[i].after);
+      if (at < 0) continue;
+      ids.splice(at + 1, 0, rest[i].id);
+      rest.splice(i, 1);
+    }
+  }
+  return [...ids, ...rest.map((d) => d.id)];
+};
 
 export const SAPLING_FOR = Object.fromEntries(COLLECTABLES.filter((c) => c.sprout).map((c) => [c.key, c.sprout]));

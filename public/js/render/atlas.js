@@ -162,19 +162,51 @@ function leaf(ctx, x, y, len, angle, color = '#56b947') {
   ctx.restore();
 }
 
-// A little heart-shaped leaf, point down, `size` its half-width.
-function heartLeaf(ctx, x, y, size, angle, color) {
+// A katsura leaf: nearly round, notched into a heart where its stalk joins
+// and ending in a small blunt point, its veins fanning out from the notch.
+// `size` is its radius; the notch is up before `angle` turns it.
+function katsuraLeaf(ctx, x, y, size, angle, color, shadow = 'rgba(60,30,0,0.35)') {
+  const s = size;
+  const shape = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 0.5);
+    ctx.bezierCurveTo(-s * 0.35, -s * 1.05, -s * 1.15, -s * 0.8, -s, -s * 0.05);
+    ctx.bezierCurveTo(-s * 0.9, s * 0.55, -s * 0.35, s * 0.9, 0, s * 1.08);
+    ctx.bezierCurveTo(s * 0.35, s * 0.9, s * 0.9, s * 0.55, s, -s * 0.05);
+    ctx.bezierCurveTo(s * 1.15, -s * 0.8, s * 0.35, -s * 1.05, 0, -s * 0.5);
+  };
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, size * 1.1);
-  ctx.bezierCurveTo(-size * 1.4, 0, -size * 0.9, -size * 1.2, 0, -size * 0.45);
-  ctx.bezierCurveTo(size * 0.9, -size * 1.2, size * 1.4, 0, 0, size * 1.1);
+  // Its shadow on the leaves under it.
+  ctx.save();
+  ctx.translate(s * 0.18, s * 0.28);
+  shape();
+  ctx.fillStyle = shadow;
   ctx.fill();
-  outline(ctx, 'rgba(140,70,20,0.45)', 1.2);
   ctx.restore();
+  shape();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,50,0,0.22)';
+  ctx.lineWidth = Math.max(0.6, s * 0.08);
+  ctx.beginPath();
+  for (const a of [0, -0.75, 0.75]) {
+    ctx.moveTo(0, -s * 0.45);
+    ctx.lineTo(Math.sin(a) * s * 0.8, -s * 0.45 + Math.cos(a) * s * 1.3);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Something drawn again a tile over wherever it crosses an edge, so the
+// painting carries on into the next block's with no seam.
+function wrapped(x, y, reach, draw) {
+  for (const dx of [-TILE, 0, TILE]) {
+    for (const dy of [-TILE, 0, TILE]) {
+      if (x + dx > -reach && x + dx < TILE + reach && y + dy > -reach && y + dy < TILE + reach) draw(x + dx, y + dy);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- the farm's paintings
@@ -534,15 +566,65 @@ const PAINT = {
     }
     bevel(ctx, 0.5);
   },
-  // Little round hearts in gold and apricot, as a katsura's leaves turn.
+  // A katsura's leaves turned for autumn: little round hearts crowding over
+  // each other at every angle, gold and lemon and a few apricot, with the
+  // shade of the crown showing between them. The mesher tints each block's
+  // corners on top of this, so the crown turns in patches (mesher.js).
   'katsura-leaves'(ctx) {
-    fill(ctx, '#e9b440');
-    blobs(ctx, 64, '#f2c654', 12, 5, 9);
-    const r = speckleRandom(65);
-    for (let i = 0; i < 16; i++) {
-      heartLeaf(ctx, r() * TILE, r() * TILE, 4 + r() * 3, r() * Math.PI * 2, ['#f7d35c', '#f0a24a', '#e8834a', '#fbe27a'][i % 4]);
+    fill(ctx, '#9a6a1c');
+    const r = speckleRandom(66);
+    const colors = ['#f6cf3f', '#f2c033', '#fadc5c', '#eeb42e', '#f4c84a', '#e9a93a', '#f7d86a', '#e39a35'];
+    for (let i = 0; i < 74; i++) {
+      const x = r() * TILE;
+      const y = r() * TILE;
+      const size = 4 + r() * 3.2;
+      const angle = r() * Math.PI * 2;
+      const color = colors[Math.floor(r() * colors.length)];
+      wrapped(x, y, size * 1.6, (wx, wy) => katsuraLeaf(ctx, wx, wy, size, angle, color));
     }
-    bevel(ctx, 0.5);
+    bevel(ctx, 0.2);
+  },
+  // Katsura bark: grey-brown, in long shaggy plates between dark furrows,
+  // peeling in strips at their edges.
+  'katsura-bark'(ctx) {
+    fill(ctx, '#7c6c60');
+    const r = speckleRandom(67);
+    const wave = (x, y, k) => x + Math.sin((y / TILE) * Math.PI * 2 * k[0] + k[1]) * k[2];
+    for (let i = 0; i < 10; i++) {
+      const x = (i / 10) * TILE + r() * 2;
+      const w = 4 + r() * 3;
+      const k = [1 + Math.floor(r() * 2), r() * 6, 1 + r() * 1.5];
+      ctx.fillStyle = ['#8f7e70', '#998878', '#857568', '#a59585', '#8b7a69'][i % 5];
+      for (const dx of [0, TILE]) {
+        ctx.beginPath();
+        for (let y = 0; y <= TILE; y += 2) ctx.lineTo(wave(x, y, k) - dx, y);
+        for (let y = TILE; y >= 0; y -= 2) ctx.lineTo(wave(x + w, y, k) - dx, y);
+        ctx.fill();
+      }
+    }
+    ctx.strokeStyle = 'rgba(40,30,24,0.75)';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 8; i++) {
+      const x = r() * TILE;
+      const k = [1 + Math.floor(r() * 2), r() * 6, 1.5 + r() * 1.5];
+      for (const dx of [-TILE, 0, TILE]) {
+        ctx.beginPath();
+        for (let y = 0; y <= TILE; y += 2) ctx.lineTo(wave(x, y, k) + dx, y);
+        ctx.stroke();
+      }
+    }
+    for (let i = 0; i < 16; i++) {
+      const x = r() * TILE;
+      const y = r() * TILE;
+      const l = 6 + r() * 12;
+      wrapped(x, y, 4, (wx, wy) => {
+        ctx.fillStyle = 'rgba(48,36,28,0.55)';
+        ctx.fillRect(wx + 1.6, wy, 1.2, l);
+        ctx.fillStyle = r() < 0.5 ? '#ab9d8e' : '#a39181';
+        ctx.fillRect(wx, wy, 1.8, l);
+      });
+    }
+    bevel(ctx, 0.3);
   },
   'snowy-leaves'(ctx) {
     PAINT['pine-leaves'](ctx);
@@ -1184,14 +1266,24 @@ const PAINT = {
       outline(ctx, 'rgba(20,60,30,0.5)', 1.5);
     }
   },
+  // A katsura seedling: a thin red stalk with its little round leaves in
+  // pairs on long red stems, green with a red blush, one gone yellow.
   'katsura-sprout'(ctx) {
     ctx.fillStyle = '#8b5a3c';
     ellipse(ctx, 32, 60, 12, 4);
     ctx.fill();
-    stem(ctx, 32, 60, 32, 30, '#7a5a3a', 3);
-    heartLeaf(ctx, 22, 34, 9, -0.6, '#f2c24e');
-    heartLeaf(ctx, 42, 30, 9, 0.6, '#f0a24a');
-    heartLeaf(ctx, 32, 22, 8, 0, '#f7d35c');
+    stem(ctx, 32, 60, 32, 24, '#9c3b2e', 2.5);
+    for (const [y, side, len, size, color] of [
+      [44, -1, 11, 6.5, '#7fb446'],
+      [44, 1, 11, 6.5, '#e2c03c'],
+      [31, -1, 8, 5.5, '#8cc152'],
+      [31, 1, 8, 5.5, '#86bb4c'],
+      [22, 0, 0, 4.5, '#b4a24a'],
+    ]) {
+      const x = 32 + side * len;
+      stem(ctx, 32, y, x, y - 3, '#9c3b2e', 1.5);
+      katsuraLeaf(ctx, x, y - 3 - size * 0.3, size, side * 0.9 + Math.PI, color, 'rgba(0,0,0,0)');
+    }
   },
   'candy-sprout'(ctx) {
     ctx.fillStyle = '#8b5a3c';

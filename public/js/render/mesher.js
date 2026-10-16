@@ -18,6 +18,41 @@ import { CHUNK } from '../shared/world.js';
 
 export const WATER_TOP = 0.875;
 
+// Leaves turned for autumn (a block with `autumn`, a katsura's): a colour
+// for each corner from a smooth pattern through space, so the crown turns
+// in patches across its blocks rather than block by block — mostly gold as
+// painted, apricot to red in places, a little green left in others —
+// warmer on top, where the sun reaches, and greener underneath. Each block's
+// picture is also turned one of four ways, so no two neighbours match.
+const AUTUMN = new Uint8Array(256);
+for (const d of BLOCKS) if (d?.autumn) AUTUMN[d.id] = 1;
+const AUTUMN_STOPS = [
+  [0, [205, 232, 150]],
+  [0.18, [255, 255, 255]],
+  [0.6, [255, 255, 255]],
+  [0.8, [255, 214, 186]],
+  [1, [255, 156, 150]],
+];
+const fade = (t) => t * t * (3 - 2 * t);
+function smooth3(seed, x, y, z) {
+  const [x0, y0, z0] = [Math.floor(x), Math.floor(y), Math.floor(z)];
+  const [fx, fy, fz] = [fade(x - x0), fade(y - y0), fade(z - z0)];
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const plane = (y) => lerp(lerp(hash3(seed, x0, y, z0), hash3(seed, x0 + 1, y, z0), fx), lerp(hash3(seed, x0, y, z0 + 1), hash3(seed, x0 + 1, y, z0 + 1), fx), fz);
+  return lerp(plane(y0), plane(y0 + 1), fy);
+}
+export function autumnColour(x, y, z, up, out = [0, 0, 0]) {
+  const n = smooth3(23, x / 3.2, y / 3.2, z / 3.2) * 0.75 + smooth3(29, x / 1.3, y / 1.3, z / 1.3) * 0.25;
+  const t = Math.min(1, Math.max(0, 0.5 + (n - 0.5) * 2.2 + up * 0.14));
+  let i = 1;
+  while (i < AUTUMN_STOPS.length - 1 && AUTUMN_STOPS[i][0] < t) i++;
+  const [t0, a] = AUTUMN_STOPS[i - 1];
+  const [t1, b] = AUTUMN_STOPS[i];
+  const k = (t - t0) / (t1 - t0);
+  for (let c = 0; c < 3; c++) out[c] = Math.round(a[c] + (b[c] - a[c]) * k);
+  return out;
+}
+
 // How tall a crop stands at each stage (corn grows taller than you), and
 // how much of the wind it feels at the top (out of 255; a flower's is 255).
 const CROP_HEIGHTS = [0.3, 0.5, 0.78, 0.92];
@@ -187,11 +222,14 @@ export function meshChunk(world, light, visuals, cx, cz) {
 
   // mode: 'solid' (smooth light), 'glow' (always bright), 'water' or 'glass'
   // (flat light from the cell in front).
+  const turned = [0, 0, 0];
   function quad(part, x, y, z, f, layer, id, mode, flat = null, top = 1, surface = false) {
     const [bx, by, bz] = f.base;
     const tr = tint[id * 3];
     const tg = tint[id * 3 + 1];
     const tb = tint[id * 3 + 2];
+    const autumn = AUTUMN[id] === 1;
+    const flip = autumn ? Math.floor(hash3(19, x, y, z) * 4) : 0;
     const shade = Math.round(f.shade * 255);
     const v0 = part.verts;
     for (let k = 0; k < 4; k++) {
@@ -202,8 +240,9 @@ export function meshChunk(world, light, visuals, cx, cz) {
       const high = py === y + 1;
       if (high && top !== 1) py = y + top;
       part.pos.push(px, py, pz);
-      part.uvl.push(cu, 1 - cv, layer);
-      part.col.push(tr, tg, tb);
+      part.uvl.push(flip & 1 ? 1 - cu : cu, flip & 2 ? cv : 1 - cv, layer);
+      if (autumn) part.col.push(...autumnColour(px, py, pz, f.n[1], turned));
+      else part.col.push(tr, tg, tb);
       if (mode === 'glow') part.lit.push(255, 255, 255, shade);
       else if (mode === 'water') part.lit.push(flat[0] * 17, flat[1] * 17, 255, surface && high ? 255 : 0);
       else if (mode === 'glass') part.lit.push(flat[0] * 17, flat[1] * 17, 255, shade);
