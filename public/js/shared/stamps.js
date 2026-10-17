@@ -688,6 +688,80 @@ function videoArcade() {
   return c.list();
 }
 
+// A school: a red-brick schoolhouse with a wide door, windows down both
+// sides, a clock on its front gable and a bell in a little tower on the
+// roof, and inside one big classroom — a wood floor, three rows of school
+// desks facing a long chalkboard on the back wall (shared/school.js: walk
+// up to it for a class), the teacher's desk and chair, bookshelves, and
+// lamps hanging under the roof.
+function school() {
+  const c = new Cells();
+  c.box(-6, 0, 0, 6, 0, 10, B.PARQUET);
+  for (let y = 1; y <= 4; y++) {
+    for (let x = -6; x <= 6; x++) {
+      for (let z = 0; z <= 10; z++) {
+        const sideX = x === -6 || x === 6;
+        const sideZ = z === 0 || z === 10;
+        if (!sideX && !sideZ) {
+          c.put(x, y, z, B.AIR);
+          continue;
+        }
+        const corner = sideX && sideZ;
+        const window = (y === 2 || y === 3) && ((sideX && [3, 4, 6, 7].includes(z)) || (z === 0 && [-4, -3, 3, 4].includes(x)));
+        c.put(x, y, z, corner || y === 4 ? WHITE : window ? B.GLASS : RED);
+      }
+    }
+  }
+  // The way in, three wide, with a yellow sign over it.
+  for (let x = -1; x <= 1; x++) {
+    c.put(x, 1, 0, B.AIR);
+    c.put(x, 2, 0, B.AIR);
+    c.put(x, 3, 0, YELLOW);
+  }
+  // A low roof going up in steps two wide, the gables at front and back in
+  // brick.
+  for (let step = 0; step <= 3; step++) {
+    const y = 5 + step;
+    const lo = -7 + step * 2;
+    const hi = 7 - step * 2;
+    for (let x = lo; x <= hi; x++) {
+      for (let z = -1; z <= 11; z++) {
+        if (x <= lo + 1 || x >= hi - 1 || step === 3) c.put(x, y, z, CHARCOAL);
+        else if (z >= 0 && z <= 10) c.put(x, y, z, z === 0 || z === 10 ? RED : B.AIR);
+      }
+    }
+  }
+  // The clock on the front gable.
+  for (let x = -1; x <= 1; x++) c.put(x, 6, 0, WHITE);
+  c.put(0, 7, 0, WHITE);
+  c.put(0, 6, 0, CHARCOAL);
+  // The bell tower on the ridge: four white posts, the bell hanging
+  // between them, and a little red roof with a star on top.
+  for (const x of [-1, 1]) for (const z of [0, 2]) for (let y = 9; y <= 10; y++) c.put(x, y, z, WHITE);
+  c.put(0, 10, 1, YELLOW);
+  c.box(-1, 11, 0, 1, 11, 2, RED);
+  c.put(0, 12, 1, B.STAR_BLOCK);
+  // Lamps hanging under the roof.
+  for (const x of [-3, 3]) for (const z of [3, 7]) c.put(x, 5, z, B.LAMP);
+  // The chalkboard along the back wall, facing the class.
+  for (let x = -3; x <= 3; x++) c.put(x, 2, 9, B.CHALKBOARD);
+  // Three rows of desks facing it, an aisle up the middle.
+  for (const x of [-5, -3, -1, 1, 3, 5]) for (const z of [2, 4, 6]) c.put(x, 1, z, B.turnedTo(B.SCHOOL_DESK, 1));
+  // The teacher's desk, its chair behind it facing the class.
+  c.put(4, 1, 8, B.TABLE);
+  c.put(5, 1, 8, B.TABLE);
+  c.put(5, 1, 9, B.CHAIR);
+  c.put(4, 2, 8, B.POTTED_PLANT);
+  // Bookshelves on the left wall, a picture on the right, and plants.
+  for (const z of [8, 9]) c.put(-5, 1, z, B.turnedTo(B.BOOKSHELF, 0));
+  c.put(5, 3, 5, B.turnedTo(B.PICTURE, 2));
+  c.put(-5, 1, 1, B.POTTED_PLANT);
+  c.put(5, 1, 1, B.POTTED_PLANT);
+  // Flowers by the way in.
+  for (const x of [-3, 3]) c.put(x, 0, -1, B.TULIP);
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
@@ -712,6 +786,7 @@ export const STAMPS = [
   { key: 'picnic', name: 'Picnic', icon: '🧺', cells: picnic() },
   { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },
   { key: 'video-arcade', name: 'Video Arcade', icon: '🕹️', cells: videoArcade() },
+  { key: 'school', name: 'School', icon: '🏫', cells: school() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

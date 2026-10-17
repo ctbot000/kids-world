@@ -26,6 +26,7 @@ import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
+import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
@@ -1855,6 +1856,7 @@ export class UI {
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -2566,6 +2568,7 @@ export class UI {
     on('piano-open', () => this.pianoDialog());
     on('tv-open', () => this.tvDialog());
     on('station-open', () => this.stationDialog());
+    on('class-open', () => this.classDialog());
     on('onair', () => this.onAirNews());
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
@@ -3687,7 +3690,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -3754,21 +3757,21 @@ export class UI {
 
   // Play, beside an arcade machine or a piano next to you, Turn beside a
   // gashapon machine, Watch beside a TV, or Go live beside a broadcast
-  // station: the same button again.
+  // station, or Class beside a chalkboard: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -4533,6 +4536,51 @@ export class UI {
     $('next-stage').hidden = true;
   }
 
+  // ------------------------------------------------ school
+
+  // The classes at a chalkboard (game.js openClass, shared/school.js): one
+  // at elementary school Year 2 level and one at middle school Year 3, each
+  // a few questions, with the break before the next one counting down on a
+  // class just had.
+  classDialog() {
+    const g = this.game;
+    if (!g) return;
+    const levels = Object.values(QUIZ_LEVELS);
+    let timer = 0;
+    this.openModal(
+      (root) => {
+        const list = h('div', { class: 'class-list' });
+        const render = () => {
+          list.replaceChildren(
+            ...levels.map((l) => {
+              const wait = g.classBreak(l.key);
+              const s = Math.ceil(wait / 1000);
+              return h(
+                'button',
+                {
+                  class: `big ${l.key === 'senior' ? 'pink' : 'blue'}`,
+                  type: 'button',
+                  disabled: wait > 0,
+                  onclick: () => {
+                    this.sound.unlock();
+                    this.sound.play('ui');
+                    g.startClass(l.key);
+                  },
+                },
+                h('span', { class: 'emoji' }, l.icon),
+                h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🔔 Break: next class in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${CLASS_SIZE} questions · 🪙 ${quizCoins(1, l.key)} a right answer`)),
+              );
+            }),
+          );
+        };
+        root.append(h('h2', {}, '🏫 School'), h('p', {}, 'Take a seat — class is about to begin! Pick a class, and every right answer earns coins.'), list);
+        render();
+        timer = setInterval(render, 1000);
+      },
+      { narrow: true, onClose: () => clearInterval(timer) },
+    );
+  }
+
   // The quiz you are taking, in a window: where it has got to, the question
   // being asked with its answers to pick from, and after the last one, what
   // you got and what it earned. Kept up to date as you answer (renderQuiz).
@@ -4588,16 +4636,17 @@ export class UI {
     if (q.done && this.quizAt >= total) {
       const perfect = q.right === total;
       const coins = q.coins ?? quizCoins(q.right, q.level);
-      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && !g.quizOffer?.taken[l.key]);
+      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && (q.school ? !g.classBreak(l.key) : g.quizOffer && !g.quizOffer.taken[l.key]));
       els.box.replaceChildren(
         h('div', { class: `quiz-result${perfect ? ' perfect' : ''}` }, `${perfect ? '💯' : '🎓'} ${q.right} of ${total} right`),
         h(
           'p',
           { class: 'quiz-credit' },
           perfect ? (total === 1 ? 'Right! ' : 'Perfect, every one right! ') : q.right ? 'Well done! ' : '',
-          `Extra credit: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
+          `${q.school ? 'You earned' : 'Extra credit'}: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
         ),
-        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), ` The ${other.name} quiz`) : '',
+        q.school ? h('p', { class: 'muted' }, `🔔 The next ${QUIZ_LEVELS[q.level].name} class is after a ${Math.round(CLASS_BREAK_MS / 60_000)}-minute break.`) : '',
+        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); if (q.school) g.startClass(other.key); else g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), q.school ? ` The ${other.name} class` : ` The ${other.name} quiz`) : '',
         h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
       );
       return;

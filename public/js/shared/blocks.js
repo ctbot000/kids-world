@@ -188,6 +188,11 @@ export const WALL_TV = furniture(220, 'wall-tv', { name: 'Wall TV', color: '#2c2
 // A broadcast station (shared/station.js): a TV camera on a tripod. Walk
 // up, press Q and go live: your camera and microphone on every TV on the island.
 export const BROADCAST_STATION = furniture(224, 'broadcast-station', { name: 'Broadcast Station', color: '#4a4f5a', after: 220, sound: 'stone' });
+// School things (shared/school.js): a school desk with its chair, to sit
+// at, and a chalkboard that hangs on the wall (side by side, one long one):
+// walk up to it and press Q for a class. After the broadcast station.
+export const SCHOOL_DESK = furniture(228, 'school-desk', { name: 'School Desk', color: '#d9a066', after: 224, sound: 'wood' });
+export const CHALKBOARD = furniture(232, 'chalkboard', { name: 'Chalkboard', color: '#2f5d46', after: 228, solid: false, wall: true, sound: 'wood' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
@@ -452,7 +457,9 @@ export const blocksIn = (category) => {
   const all = defs.filter((d) => d && d.category === category);
   const ids = all.filter((d) => d.after == null).map((d) => d.id);
   const rest = all.filter((d) => d.after != null);
-  for (let pass = 0; rest.length && pass < rest.length + 1; pass++) {
+  // One pass for every one waiting, at most: a long chain of them, each after
+  // the one before, takes a pass each.
+  for (let pass = 0, passes = rest.length; rest.length && pass <= passes; pass++) {
     for (let i = rest.length - 1; i >= 0; i--) {
       const at = ids.indexOf(rest[i].after);
       if (at < 0) continue;

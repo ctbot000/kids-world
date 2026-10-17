@@ -1,4 +1,4 @@
-// Sitting on chairs and sofas, and lying in bed (curled up in a bed one
+// Sitting on chairs, sofas and school desks, and lying in bed (curled up in a bed one
 // block long, stretched out in a longer one). Walk up to one and press Q
 // (or the Sit button beside it): you sit facing the way it faces, or lie
 // down with your head at the head of the bed. Moving, jumping, Shift or Q
@@ -13,6 +13,7 @@ export const SEATS = {
   chair: { pose: 'sit', h: 0.54, at: [0.5, 0.52] },
   sofa: { pose: 'sit', h: 0.48, at: [0.5, 0.46] },
   bed: { pose: 'lie', h: 0.56 },
+  'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
 };
 
 // The four ways along the ground, as RAIL_DIRS.

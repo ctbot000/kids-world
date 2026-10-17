@@ -10,6 +10,7 @@ import { gashaponNear } from './shared/gashapon.js';
 import { pianoNear } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
+import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
@@ -227,6 +228,10 @@ export class Game extends EventTarget {
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
+    // The chalkboard beside you (shared/school.js), and when your last class
+    // of each level ended, for the break before the next one.
+    this.classTarget = null;
+    this.classEnded = { junior: 0, senior: 0 };
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -1791,7 +1796,8 @@ export class Game extends EventTarget {
     q.done = true;
     q.coins = quizCoins(q.right, q.level);
     q.xp = XP_FOR.quizzes.xp + q.right * XP_FOR.quizright.xp + (q.right === q.questions.length ? XP_FOR.quizperfect.xp : 0);
-    this.quizOffer.taken[q.level] = true;
+    if (q.school) this.classEnded[q.level] = performance.now();
+    else if (this.quizOffer) this.quizOffer.taken[q.level] = true;
     this.profile.count('quizzes');
     this.profile.count('quizright', q.right);
     if (q.right === q.questions.length) this.profile.count('quizperfect');
@@ -2148,6 +2154,30 @@ export class Game extends EventTarget {
     this.tvAt = null;
   }
 
+  // ------------------------------------------------ school
+
+  // Q (or the Class button) by a chalkboard: the classes to pick from open
+  // (shared/school.js).
+  openClass() {
+    if (!this.classTarget) return;
+    this.sound.play('ui');
+    this.emit('class-open');
+  }
+
+  // How long until a class of a level may begin (0: now).
+  classBreak(level) {
+    return breakLeft(this.classEnded[level], performance.now());
+  }
+
+  // A class begun at the chalkboard: a quiz of CLASS_SIZE questions, out of
+  // the quizzes' banks, unless that level's break is still on. Says 'quiz',
+  // which opens the window on it (ui.js).
+  startClass(level) {
+    if (!QUIZ_LEVELS[level] || this.classBreak(level) > 0) return;
+    this.quiz = { level, school: true, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, CLASS_SIZE), picks: [], right: 0, done: false };
+    this.emit('quiz');
+  }
+
   // ------------------------------------------------ broadcast stations
 
   // Q (or the Go live button) by a broadcast station: its window opens,
@@ -2387,6 +2417,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.stationTarget) {
       this.openStation();
+      return;
+    }
+    if (!id && this.classTarget) {
+      this.openClass();
       return;
     }
     if (!id) {
@@ -3520,6 +3554,7 @@ export class Game extends EventTarget {
     this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
     this.tvTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.dizzy && !on.flying && on.onGround ? tvNear(this.world, on) : null;
     this.stationTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.dizzy && !on.flying && on.onGround ? stationNear(this.world, on) : null;
+    this.classTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.dizzy && !on.flying && on.onGround ? chalkboardNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3963,6 +3998,7 @@ export class Game extends EventTarget {
     this.tvTarget = null;
     this.stationAt = null;
     this.stationTarget = null;
+    this.classTarget = null;
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

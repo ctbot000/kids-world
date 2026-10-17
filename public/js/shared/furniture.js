@@ -457,6 +457,57 @@ const MODELS = {
     return out;
   },
 
+  // A school desk (shared/school.js): a little wooden desk on a steel frame
+  // at the front, a book and a pencil on it, and its chair joined on behind,
+  // to sit at facing the desk.
+  'school-desk'() {
+    const out = [
+      box(0.06, 0.62, 0.04, 0.94, 0.68, 0.44, '#d9a066', 'planks'),
+      box(0.1, 0.5, 0.08, 0.9, 0.53, 0.4, STEEL, 'plain'),
+      // A book open on it, and a yellow pencil.
+      box(0.2, 0.68, 0.14, 0.48, 0.7, 0.34, WHITE, 'plain'),
+      box(0.32, 0.68, 0.14, 0.34, 0.705, 0.34, '#3a73d8', 'plain'),
+      box(0.6, 0.68, 0.22, 0.82, 0.7, 0.25, '#fcd535', 'plain'),
+      // The chair's seat and back, in red.
+      box(0.2, 0.42, 0.5, 0.8, 0.48, 0.9, '#e8453c', 'plain'),
+      box(0.2, 0.48, 0.88, 0.8, 0.92, 0.94, '#e8453c', 'plain'),
+      // The frame joining them, along the bottom.
+      box(0.1, 0, 0.2, 0.14, 0.04, 0.9, STEEL, 'plain'),
+      box(0.86, 0, 0.2, 0.9, 0.04, 0.9, STEEL, 'plain'),
+    ];
+    // The desk's legs, and the chair's.
+    for (const x of [0.1, 0.86]) out.push(box(x, 0.04, 0.22, x + 0.04, 0.62, 0.26, STEEL, 'plain'));
+    for (const x of [0.24, 0.72]) for (const z of [0.54, 0.84]) out.push(box(x, 0.04, z, x + 0.04, 0.42, z + 0.04, STEEL, 'plain'));
+    return out;
+  },
+
+  // A chalkboard (shared/school.js), hung on the wall behind it: green
+  // board in a wooden frame with a tray along the bottom, a few lines of
+  // chalk writing on it, a stick of chalk and a duster in the tray. Side by
+  // side they join into one long board, framed only at its two ends.
+  chalkboard(same) {
+    const l = same(-1, 0);
+    const r = same(1, 0);
+    const x0 = l ? 0 : 0.04;
+    const x1 = r ? 1 : 0.96;
+    const CHALK = '#f4f1e6';
+    const out = [
+      box(x0, 0.14, 0.95, x1, 0.96, 1, DARK_WOOD, 'planks'),
+      box(l ? 0 : 0.1, 0.2, 0.93, r ? 1 : 0.9, 0.9, 0.95, '#2f5d46', 'plain'),
+      // The tray along the bottom.
+      box(x0, 0.12, 0.86, x1, 0.16, 0.95, DARK_WOOD, 'planks'),
+      // The writing: three lines of chalk, each a few words.
+      box(l ? 0.06 : 0.18, 0.74, 0.925, 0.46, 0.76, 0.93, CHALK, 'plain'),
+      box(0.54, 0.74, 0.925, r ? 0.9 : 0.8, 0.76, 0.93, CHALK, 'plain'),
+      box(l ? 0.1 : 0.18, 0.56, 0.925, 0.62, 0.58, 0.93, CHALK, 'plain'),
+      box(l ? 0.04 : 0.18, 0.38, 0.925, 0.34, 0.4, 0.93, CHALK, 'plain'),
+      box(0.42, 0.38, 0.925, r ? 0.94 : 0.7, 0.4, 0.93, CHALK, 'plain'),
+    ];
+    // A stick of chalk and the duster in the tray, at the right-hand end.
+    if (!r) out.push(box(0.56, 0.16, 0.88, 0.66, 0.18, 0.9, CHALK, 'plain'), box(0.72, 0.16, 0.87, 0.88, 0.22, 0.93, '#8b5a3c', 'cloth'), box(0.72, 0.22, 0.87, 0.88, 0.23, 0.93, '#f29bc4', 'cloth'));
+    return out;
+  },
+
   // An upright piano (shared/piano.js): a tall cabinet of dark polished
   // wood, its keys sticking out in front between two cheeks, the music on
   // its stand, two legs at the front and three gold pedals.

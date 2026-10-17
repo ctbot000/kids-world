@@ -3785,6 +3785,14 @@ kbd {
   line-height: 1.2;
 }
 
+/* A chalkboard's classes, one big button each, a little apart. */
+.class-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 14px 0 6px;
+}
+
 .quiz-sub {
   font-size: 0.8rem;
   font-weight: 600;

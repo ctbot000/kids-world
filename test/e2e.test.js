@@ -12,10 +12,11 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
+import { CLASS_SIZE } from '../public/js/shared/school.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -3558,6 +3559,72 @@ test('a TV: Q by it opens its picture, ◀ ▶, a tap and the number keys flip t
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('.tv-name'));
   assert.equal(await channel(), `4 · ${CHANNELS[3].icon} ${CHANNELS[3].name}`);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a school: Q by a chalkboard opens the classes, a class of questions answered pays a coin for each right, and the next one of that kind is after a break', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A chalkboard on a wall beside the start, on level ground, and nothing
+  // rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && [z - 1, z, z + 1].some((zz) => room.world.top(x, zz) !== ground)) x++;
+    for (const y of [ground + 1, ground + 2, ground + 3]) room.natureCell([x, y, z + 1], room.world.get(x, ground, z + 1) || 1);
+    room.natureCell([x, ground + 2, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 2, z, id, coins: kw.profile.data.coins };
+  }, CHALKBOARD);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x + 0.5, y: at.y - 1, z: at.z - 0.6, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Class'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('School'));
+  await page.click('.class-list button:first-child');
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('Year 2') && document.querySelector('.quiz-answer'));
+  // Every answer right, then on to how it went.
+  for (let i = 0; i < CLASS_SIZE; i++) {
+    const right = await page.evaluate((i) => window.kidsWorld.game.quiz.questions[i].answer, i);
+    await page.click(`.quiz-answer:nth-child(${right + 1})`);
+    await until(page, () => document.querySelector('.quiz-verdict'));
+    await page.click('.quiz-box button.green');
+  }
+  await until(page, (n) => document.querySelector('.quiz-result')?.textContent.includes(`${n} of ${n} right`), CLASS_SIZE);
+  const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, stats: window.kidsWorld.profile.data.stats, stickers: window.kidsWorld.profile.data.stickers }));
+  assert.equal(after.coins, at.coins + CLASS_SIZE, 'a coin for each right answer');
+  assert.equal(after.stats.quizzes, 1);
+  assert.equal(after.stats.quizperfect, 1);
+  assert.ok(after.stickers['quiz-whiz'] && after.stickers['quiz-perfect']);
+  // The middle school class is there to take straight on; Year 2 has its break.
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.quiz-box button')].some((b) => b.textContent.includes('Middle School Year 3 class'))));
+  await page.click('.quiz-box button.green');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.keyboard.press('KeyQ');
+  await until(page, () => document.querySelector('.class-list button'));
+  assert.deepEqual(
+    await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break')])),
+    [
+      [true, true],
+      [false, false],
+    ],
+  );
   await page.keyboard.press('Escape');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();

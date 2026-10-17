@@ -12,7 +12,7 @@
 // long as they stay on the island — the 🎓 by the castle flag opens them —
 // until they have done both. Each quiz taken once, its question picked and its
 // answers shuffled out of a bank by chance (makeQuiz), so two quizzes are
-// seldom the same.
+// seldom the same. A class at school (school.js) asks from the same banks.
 import { Rng } from './rng.js';
 
 // The two quizzes, by their keys: what each is called and how it pays.
@@ -60,6 +60,16 @@ export const QUESTION_BANKS = {
     { q: 'What is half of 10?', a: ['5', '4', '6', '2'] },
     { q: 'Which number is the biggest?', a: ['21', '12', '18', '9'] },
     { q: 'What is 10 + 10?', a: ['20', '11', '100', '19'] },
+    { q: 'What is 9 − 3?', a: ['6', '5', '7', '12'] },
+    { q: 'What is 5 + 6?', a: ['11', '10', '12', '56'] },
+    { q: 'How many months are there in a year?', a: ['12', '10', '7', '24'] },
+    { q: 'Which is the opposite of “hot”?', a: ['Cold', 'Warm', 'Big', 'Wet'] },
+    { q: 'What is 3 × 2?', a: ['6', '5', '9', '32'] },
+    { q: 'Which animal can fly?', a: ['A bird', 'A fish', 'A pig', 'A dog'] },
+    { q: 'What do we call a baby cat?', a: ['A kitten', 'A puppy', 'A calf', 'A chick'] },
+    { q: 'How many minutes are there in an hour?', a: ['60', '100', '30', '24'] },
+    { q: 'Which word starts with the letter B?', a: ['Ball', 'Apple', 'Cat', 'Duck'] },
+    { q: 'Count by fives: 5, 10, 15, … what comes next?', a: ['20', '16', '25', '18'] },
   ],
   senior: [
     { q: 'Solve for x: 3x = 27', a: ['9', '3', '6', '81'] },
@@ -77,20 +87,30 @@ export const QUESTION_BANKS = {
     { q: 'What force pulls everything toward Earth?', a: ['Gravity', 'Magnetism', 'Friction', 'Electricity'] },
     { q: 'What is the value of π to two decimal places?', a: ['3.14', '3.41', '3.12', '3.31'] },
     { q: 'Which of these is a prime number?', a: ['17', '15', '21', '27'] },
+    { q: 'What is −3 × −4?', a: ['12', '−12', '−7', '7'] },
+    { q: 'What is the boiling point of water at sea level, in °C?', a: ['100', '90', '212', '50'] },
+    { q: 'Which part of a cell holds its DNA?', a: ['The nucleus', 'The cell wall', 'The membrane', 'The vacuole'] },
+    { q: 'What is 2 to the power of 5?', a: ['32', '10', '25', '64'] },
+    { q: 'How many degrees are there in the angles of a triangle, added up?', a: ['180', '90', '360', '270'] },
+    { q: 'Which is the smallest particle of an element that is still that element?', a: ['An atom', 'A molecule', 'A cell', 'A crystal'] },
+    { q: 'Solve for x: 2x + 5 = 17', a: ['6', '11', '7', '8.5'] },
+    { q: 'Which planet is known as the Red Planet?', a: ['Mars', 'Jupiter', 'Venus', 'Saturn'] },
+    { q: 'What is the mean of 4, 6 and 8?', a: ['6', '18', '4', '8'] },
+    { q: 'Light travels fastest through…', a: ['A vacuum', 'Water', 'Glass', 'Air'] },
   ],
 };
 
-// A quiz of a level, its questions picked out of the bank and shuffled, and
+// A quiz of a level, `size` questions picked out of the bank and shuffled, and
 // each one's answers shuffled with them: { level, questions: [{ q, choices,
 // answer }] }, answer the place in choices the right one landed. The same
 // seed makes the same quiz, so a page put right can say what was asked.
-export function makeQuiz(level, seed = 1) {
+export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
   const bank = QUESTION_BANKS[QUIZ_LEVELS[level]?.key];
   if (!bank) return { level, questions: [] };
   const rng = new Rng(seed);
   const picks = [];
   const left = [...bank.keys()];
-  for (let i = 0; i < Math.min(QUIZ_SIZE, bank.length); i++) {
+  for (let i = 0; i < Math.min(size, bank.length); i++) {
     const at = Math.floor(rng.next() * left.length);
     picks.push(bank[left.splice(at, 1)[0]]);
   }
