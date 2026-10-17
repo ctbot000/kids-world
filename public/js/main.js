@@ -554,15 +554,26 @@ async function openIslands() {
   return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
 }
 
+const CTB_TRIES = 4;
+const CTB_RETRY_MS = 3000;
+
 // The CTB island (server/ctb-office.js), straight from the link ?ctb: the
 // one island anyone can come to without logging in, to watch CTB's workers
 // at work. It is the open island marked watch; leaving it is the title screen.
-async function watchCtb() {
+// Peer to peer (as on GitHub Pages), the list is the keeper's: it waits for
+// the keeper client to have started (a request sent sooner is lost when its
+// start sets it idle), and asks again a few times while the keeper is still
+// being reached. started: keeper.start()'s promise.
+async function watchCtb(started) {
+  if (!serverMode) await started;
   let island = null;
-  try {
-    island = (await openIslands()).find((i) => i.watch);
-  } catch {
-    island = null;
+  for (let tries = 0; tries < CTB_TRIES && !island; tries++) {
+    if (tries) await new Promise((done) => setTimeout(done, CTB_RETRY_MS));
+    try {
+      island = (await openIslands()).find((i) => i.watch) ?? null;
+    } catch (error) {
+      if (error?.code === 'none') break;
+    }
   }
   if (!island) {
     ui.toast('🏢', 'The CTB island is not open right now. Try again later!', 'warn');
@@ -1021,11 +1032,11 @@ async function boot() {
   greet();
   const code = normalizeCode(params.get('code'));
   // An invitation's link waits until you have logged in (it is still in the address).
-  if (params.has('ctb')) watchCtb();
-  else if (isValidCode(code) && !loginHandlers.required()) ui.visitDialog(code);
+  if (isValidCode(code) && !loginHandlers.required() && !params.has('ctb')) ui.visitDialog(code);
   requestAnimationFrame(frame);
   present();
-  keeper.start();
+  const started = keeper.start();
+  if (params.has('ctb')) watchCtb(started);
 }
 
 boot();

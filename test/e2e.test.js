@@ -2722,6 +2722,33 @@ test('the ?ctb link opens the CTB island without a login, its workers at their d
   }
 });
 
+test('the ?ctb link opens the CTB island without a login peer to peer too, as on GitHub Pages, through the keeper’s list', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const office = await new Office({ rooms: games.rooms, keeper, rtc: keeper.rtc, server: keeper.server, iceServers: [], log: () => {} }).open(1);
+  const ticker = setInterval(() => {
+    for (const entry of games.rooms.values()) if (entry.room.online > 0) entry.room.tick();
+  }, 100);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}&ctb`, { name: 'Sunny Otter' }, () => delete window.kidsWorldGuests);
+  try {
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.mode), 'guest');
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
+    await until(page, () => [...window.kidsWorld.game.players.values()].some((p) => p.name === 'Ada 💼' && p.sitting));
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    clearInterval(ticker);
+    await office.close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('the ranking shows the players with a login to anyone, live: you marked once logged in, leaving it and coming back, and a friend climbing as they build', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
