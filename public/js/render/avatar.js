@@ -498,9 +498,45 @@ function ears(head, animal, fur) {
         e.userData.ear = side;
       }
       break;
+    case 'alien':
+      // Two antennae, each a thin stalk leaning out with a glowing bead on
+      // top; they bob as you go (see sway in update).
+      for (const side of [-1, 1]) {
+        const g = new THREE.Group();
+        g.position.set(side * 0.15, topY * 0.84, -0.02);
+        g.rotation.z = -side * 0.32;
+        g.add(mesh(capsule(0.016, 0.24), toon(darken(fur, 0.12)), 0, 0.13, 0));
+        g.add(mesh(sphere(1, 14, 10), toon('#fff07a', { emissive: 0.55 }), 0, 0.28, 0, 0.055));
+        g.userData.ear = side;
+        g.userData.side = side;
+        g.userData.rest = g.rotation.z;
+        add(g);
+      }
+      break;
     default:
       break;
   }
+}
+
+// An alien's eyes: big and dark and glossy, slanting up to the sides, with
+// a gleam in each.
+function alienEyes(head) {
+  const group = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const p = onFace(side * 0.135, 0.01, -0.012);
+    const eye = new THREE.Group();
+    eye.position.set(p.x, p.y, p.z);
+    eye.lookAt(p.clone().multiplyScalar(2));
+    const ball = mesh(sphere(1, 20, 14), toon('#1e1a2c'), 0, 0, 0, 0.112, 0.074, 0.032);
+    ball.rotation.z = side * 0.42;
+    eye.add(ball);
+    eye.add(mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.75 }), -0.022, 0.02, 0.026, 0.017, 0.014, 0.006));
+    eye.add(mesh(sphere(1, 8, 6), toon(WHITE, { emissive: 0.6 }), 0.026, -0.016, 0.025, 0.008, 0.007, 0.004));
+    group.add(eye);
+  }
+  group.userData.blink = true;
+  head.add(group);
+  return group;
 }
 
 function face(head, animal, fur) {
@@ -548,6 +584,12 @@ function face(head, animal, fur) {
     case 'fox':
       muzzle(head, WHITE);
       break;
+    case 'alien': {
+      const e = alienEyes(head);
+      smile(head, 0.04, -0.13);
+      blush(head);
+      return e;
+    }
     case 'koala': {
       const p = onFace(0, -0.04, -0.01);
       head.add(mesh(sphere(), toon('#4a4450'), p.x, p.y, p.z, 0.07, 0.09, 0.06));
@@ -1804,7 +1846,8 @@ export class Avatar {
       ears(skull, look.animal, fur);
       this.eyes = face(skull, look.animal, fur);
       this.lidShut = 0;
-      this.sway = [];
+      // An alien's antennae bob the way a ponytail swings.
+      this.sway = skull.children.filter((o) => o.userData.ear && o.userData.rest !== undefined);
     }
     this.hat = hat(skull, look.hat, shirt, person ? (look.hair === 'curly' ? 0.07 : 0.025) : 0, person);
     // Clothes from the shop, over all of it.

@@ -128,6 +128,7 @@ export const ANIMALS = [
   { key: 'pig', name: 'Piggy', icon: '🐷', fur: 'pink' },
   { key: 'mouse', name: 'Mouse', icon: '🐭', fur: 'gray' },
   { key: 'koala', name: 'Koala', icon: '🐨', fur: 'gray' },
+  { key: 'alien', name: 'Alien', icon: '👽', fur: 'lime' },
 ];
 export const FUR_COLORS = {
   white: '#f8f4ee',
@@ -142,6 +143,7 @@ export const FUR_COLORS = {
   sky: '#9fd4f5',
   yellow: '#f6dc74',
   charcoal: '#5b5f69',
+  lime: '#a6e070',
 };
 export const SHIRT_COLORS = TOY_BRICKS.map((id, i) => i).filter((i) => i !== 13); // not charcoal
 export const HATS = [

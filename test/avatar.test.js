@@ -43,6 +43,8 @@ test('every animal, kid and grown-up can be drawn in every pose', () => {
   // Bunches swing; bob and long hair cover the ears.
   const kid = (hair) => new Avatar({ animal: KID, fur: 'tan', shirt: 1, hat: 'none', skin: 'tan', hair, hairColor: 'black' });
   assert.deepEqual(['ponytail', 'pigtails', 'short'].map((hair) => kid(hair).sway.length), [1, 2, 0]);
+  // An alien's two antennae bob the same way; no other animal has any.
+  assert.deepEqual(['alien', 'bunny'].map((animal) => new Avatar({ animal, fur: 'lime', shirt: 1, hat: 'none' }).sway.length), [2, 0]);
   const meshes = (hair) => {
     let n = 0;
     kid(hair).skull.traverse((o) => (n += o.isMesh ? 1 : 0));
