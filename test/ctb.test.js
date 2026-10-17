@@ -19,7 +19,7 @@ import { PROTOCOL } from '../public/js/shared/room.js';
 import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
-import { deskSpots, ISLAND_NAME, Office, officeCells, workerName } from '../server/ctb-office.js';
+import { deskSpots, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
 import { changeSettings, Company, CtbControl, defaultSettings, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
@@ -332,6 +332,26 @@ test('the office on the CTB island: workers at their desks, answering children, 
   // Building is for the owner only.
   const me = heard.find((m) => m.t === 'welcome');
   assert.equal(me.settings.build, 'host');
+
+  // An office of an older kind is taken down and this one put up in its place,
+  // the workers at its desks.
+  await office.save();
+  const file = join(dir, 'ctb-island.json');
+  const older = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(older.office, OFFICE_VERSION);
+  const before = { x: office.site.x, y: office.site.base + 9, z: office.site.z };
+  room.world.set(before.x, before.y, before.z, B.STAR_BLOCK);
+  await office.save();
+  const saved = JSON.parse(await readFile(file, 'utf8'));
+  delete saved.office;
+  const rebuilt = new Office({ rooms: new Map(), file: join(dir, 'older.json'), log: () => {} });
+  await writeFile(join(dir, 'older.json'), JSON.stringify(saved));
+  await rebuilt.open(1);
+  after(() => rebuilt.close());
+  assert.equal(rebuilt.room.world.get(before.x, before.y, before.z), B.AIR, 'the old office is gone');
+  assert.equal(JSON.parse(await readFile(join(dir, 'older.json'), 'utf8')).office, OFFICE_VERSION);
+  assert.equal(B.BLOCKS[rebuilt.room.world.get(Math.floor(rebuilt.seats[0].x), Math.floor(rebuilt.seats[0].y), Math.floor(rebuilt.seats[0].z))].model, 'chair');
+  await rebuilt.close();
 
   // Fewer workers: the last ones leave; saved, it is the same island again.
   office.staff(1);
