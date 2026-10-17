@@ -272,12 +272,6 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   assert.deepEqual(p.labels, [LABELS.proposal, LABELS.approved]);
   await company.poll();
   assert.ok(p.labels.includes(LABELS.task) && !p.labels.includes(LABELS.proposal), 'approved: a task now');
-  // Only the local standby answering: no issue.
-  const primary = { model: 'glm' };
-  Object.assign(llm, { primary, using: { model: 'gemma3:4b' } });
-  assert.equal(await company.propose(company.workers[0]), null);
-  assert.equal(github.made.length, 1);
-  llm.using = primary;
   const q = await company.propose(company.workers[0]);
   await company.reject(q.number);
   assert.equal(github.issues.find((i) => i.number === q.number).open, false);

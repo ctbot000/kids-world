@@ -1,5 +1,6 @@
-// CTB: a company of workers run by language models — the AI friend's, Z.ai's
-// GLM models with the local Ollama as a standby (llm.js) — who do real work
+// CTB: a company of workers run by language models — Z.ai's GLM models
+// only (llm.js): the local Ollama the AI friend falls back to is too small
+// for real work, so with Z.ai away CTB is closed — who do real work
 // on this project. Their tasks are the project's GitHub issues labelled
 // "ctb" (ctb-github.js), added on the admin page or on GitHub, or proposed by
 // the workers themselves: a proposal is an issue first, and starts once it is
@@ -421,8 +422,6 @@ export class Company extends EventEmitter {
           { maxTokens: 2000, timeoutMs: 120000, temperature: 0.8 },
         )
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
-      // The small local standby's ideas are not worth an issue: wait for Z.ai.
-      if (this.llm.primary && this.llm.using !== this.llm.primary) throw new Error(`only the local standby (${this.llm.using?.model}) answered`);
       const title = String(idea?.title ?? '').trim().slice(0, TITLE_MAX);
       if (!title) throw new Error('the model proposed nothing');
       const body = proposalBody(idea, `Proposed by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);

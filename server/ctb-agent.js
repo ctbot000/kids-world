@@ -1,6 +1,6 @@
 // A CTB worker's hands (ctb.js): one task done on a copy of this project,
-// a git worktree of its own, by a language model — the AI friend's, Z.ai's
-// GLM with the local Ollama as a standby (llm.js) — that looks around, edits
+// a git worktree of its own, by a language model — one of Z.ai's GLM models
+// (llm.js), with no local standby — that looks around, edits
 // and runs tests one step at a time. Each step is one JSON answer naming a
 // tool (JSON mode, as the AI friend answers, so even a model with no tool
 // calling of its own can work): list, read, search, write, edit, test, diff,

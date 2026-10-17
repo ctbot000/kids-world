@@ -345,12 +345,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }),
   });
   // CTB, whose workers do real work on this project from its GitHub issues,
-  // with the AI friend's models (Z.ai's, the local Ollama as a standby) in
+  // with Z.ai's models only (no local standby: too small for real work), in
   // an island office of this server (see ctb.js). Its rooms are set below.
   const ctb = new CtbControl({
     dir: store.dir,
     repoDir: fileURLToPath(new URL('..', import.meta.url)),
-    llm: new Fallback(new Zai(), new Ollama()),
+    llm: new Zai(),
     keeper: keeper ?? null,
     rtc: keeper?.rtc ?? null,
     server: keeper?.server ?? null,
