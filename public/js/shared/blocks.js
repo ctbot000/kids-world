@@ -185,6 +185,9 @@ export const TV = furniture(129, 'tv', { name: 'TV', color: '#3a3f4a', light: 5,
 export const RETRO_TV = furniture(216, 'retro-tv', { name: 'Retro TV', color: '#a8703f', after: 129, light: 5, sound: 'wood' });
 // Hangs on a wall, like a picture.
 export const WALL_TV = furniture(220, 'wall-tv', { name: 'Wall TV', color: '#2c2f36', after: 216, solid: false, wall: true, light: 5, sound: 'glass' });
+// A broadcast station (shared/station.js): a TV camera on a tripod. Walk
+// up, press Q and go live: your camera and microphone on every TV on the island.
+export const BROADCAST_STATION = furniture(224, 'broadcast-station', { name: 'Broadcast Station', color: '#4a4f5a', after: 220, sound: 'stone' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

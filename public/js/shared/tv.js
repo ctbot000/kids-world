@@ -6,7 +6,9 @@
 //
 // It all happens on your own page: everyone watches what they like. And
 // while the keeper's admin page has something on air (broadcast.js), every
-// TV has one channel more after these, 📡 Live, the same on every TV.
+// TV has one channel more after these, 📡 Live, the same on every TV; and
+// while someone on the island is live from a broadcast station (station.js),
+// one more, 📹 On Air, their camera.
 import { BLOCKS } from './blocks.js';
 import { cellNear } from './arcade.js';
 
@@ -20,9 +22,11 @@ export const CHANNELS = [
 ];
 
 export const LIVE = { key: 'live', icon: '📡', name: 'Live' };
+export const ON_AIR = { key: 'onair', icon: '📹', name: 'On Air' };
 
-// The channels a TV has: the live one too while something is on air.
-export const channelsWith = (onAir) => (onAir ? [...CHANNELS, LIVE] : CHANNELS);
+// The channels a TV has: someone on the island on air from a broadcast
+// station (onAir), and the keeper's live one (live), as there are.
+export const channelsWith = (live, onAir = null) => (live || onAir ? [...CHANNELS, ...(onAir ? [ON_AIR] : []), ...(live ? [LIVE] : [])] : CHANNELS);
 
 // The channel a step (+1 or -1) along from channel i of n, round and round.
 export const nextChannel = (i, step, n = CHANNELS.length) => (((i + step) % n) + n) % n;

@@ -409,6 +409,54 @@ const MODELS = {
     return out;
   },
 
+  // A broadcast station (shared/station.js): a TV camera on a tripod, its
+  // lens to the front, its glass glowing blue with a glint, a viewfinder on its
+  // side, a handle and a microphone on top and the red ON AIR light.
+  'broadcast-station'() {
+    const BODY = '#4a4f5a';
+    const out = [
+      // The camera, its lens and the hood round the glass.
+      box(0.3, 0.62, 0.38, 0.7, 0.86, 0.84, BODY, 'plain'),
+      box(0.36, 0.64, 0.2, 0.64, 0.84, 0.38, BLACK, 'plain'),
+      box(0.33, 0.62, 0.14, 0.67, 0.86, 0.2, BLACK, 'plain'),
+      box(0.35, 0.64, 0.135, 0.65, 0.84, 0.14, '#5b616c', 'plain'),
+      box(0.4, 0.68, 0.13, 0.6, 0.8, 0.135, '#2f6fd6', 'glow'),
+      box(0.42, 0.75, 0.125, 0.47, 0.78, 0.13, '#e6f3ff', 'glow'),
+      box(0.3, 0.6, 0.84, 0.7, 0.88, 0.88, BLACK, 'plain'),
+      // The viewfinder on its arm, its little screen glowing.
+      box(0.7, 0.72, 0.46, 0.74, 0.76, 0.52, BLACK, 'plain'),
+      box(0.74, 0.68, 0.4, 0.8, 0.84, 0.62, BLACK, 'plain'),
+      box(0.8, 0.7, 0.42, 0.805, 0.82, 0.6, '#9fe3b8', 'glow'),
+      // The handle on two posts, a microphone along it to the front, and
+      // the ON AIR light.
+      box(0.46, 0.86, 0.48, 0.54, 0.92, 0.52, BLACK, 'plain'),
+      box(0.46, 0.86, 0.74, 0.54, 0.92, 0.78, BLACK, 'plain'),
+      box(0.46, 0.92, 0.46, 0.54, 0.96, 0.8, BLACK, 'plain'),
+      box(0.32, 0.88, 0.2, 0.38, 0.94, 0.56, '#9aa1ab', 'plain'),
+      box(0.31, 0.87, 0.16, 0.39, 0.95, 0.22, '#3d4048', 'plain'),
+      box(0.58, 0.86, 0.4, 0.66, 0.92, 0.46, '#ff3b30', 'glow'),
+      // The tripod head and its column.
+      box(0.4, 0.58, 0.46, 0.6, 0.62, 0.74, BLACK, 'plain'),
+      box(0.47, 0.3, 0.57, 0.53, 0.58, 0.63, STEEL, 'plain'),
+      box(0.44, 0.28, 0.54, 0.56, 0.34, 0.66, BLACK, 'plain'),
+    ];
+    // Three legs, each going out and down in steps from the column, with a foot.
+    for (const [dx, dz] of [
+      [-1, 0.6],
+      [1, 0.6],
+      [0, -1],
+    ]) {
+      for (let i = 0; i < 6; i++) {
+        const t = (i + 1) / 6;
+        const x = 0.5 + dx * t * 0.36 * (dz < 0 ? 0 : 1);
+        const z = 0.6 + (dz < 0 ? -t * 0.36 : t * 0.24);
+        const y = 0.3 - t * 0.3;
+        out.push(box(x - 0.025, y, z - 0.025, x + 0.025, y + 0.07, z + 0.025, STEEL, 'plain'));
+      }
+    }
+    return out;
+  },
+
   // An upright piano (shared/piano.js): a tall cabinet of dark polished
   // wood, its keys sticking out in front between two cheeks, the music on
   // its stand, two legs at the front and three gold pedals.

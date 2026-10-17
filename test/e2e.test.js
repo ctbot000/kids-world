@@ -12,7 +12,7 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
@@ -4056,5 +4056,143 @@ test('a problem is told of with a picture of the screen, and waits for the keepe
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a broadcast station: Go live puts your camera and microphone on a friend’s TV, on the 📹 On Air channel, until you stop', { skip }, async () => {
+  // No camera here: a canvas changing colour for one, and a tone for the microphone.
+  const fakeMedia = () => {
+    navigator.mediaDevices.getUserMedia = async (want) => {
+      const stream = new MediaStream();
+      if (want.video) {
+        const canvas = Object.assign(document.createElement('canvas'), { width: 320, height: 240 });
+        const ctx = canvas.getContext('2d');
+        let i = 0;
+        setInterval(() => {
+          ctx.fillStyle = i++ % 2 ? '#e8453c' : '#3a73d8';
+          ctx.fillRect(0, 0, 320, 240);
+        }, 100);
+        for (const t of canvas.captureStream(15).getVideoTracks()) stream.addTrack(t);
+      }
+      if (want.audio) {
+        const audio = new AudioContext();
+        await audio.resume().catch(() => {});
+        const tone = audio.createOscillator();
+        const out = audio.createMediaStreamDestination();
+        tone.connect(out);
+        tone.start();
+        for (const t of out.stream.getAudioTracks()) stream.addTrack(t);
+      }
+      return stream;
+    };
+  };
+  const host = await openPlayer(p2p(), { name: 'Happy Panda', look: { animal: 'panda' } }, fakeMedia);
+  try {
+    await makeIsland(host, { online: true, theme: 'Flat Land' });
+    const code = await host.evaluate(() => window.kidsWorld.game.code);
+    const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+    await clickButton(guest, 'go!', '#modal');
+    await inGame(guest);
+    await until(host, () => window.kidsWorld.game.players.size === 2);
+    // A broadcast station beside the start, a Retro TV a little way off, and nothing rideable near them.
+    const at = await host.evaluate(
+      (station, tv) => {
+        const kw = window.kidsWorld;
+        const room = kw.session.link.room;
+        const b = kw.game.me.body;
+        const z = Math.floor(b.z);
+        const ground = room.world.top(Math.floor(b.x), z);
+        let x = Math.floor(b.x) + 3;
+        while (x < Math.floor(b.x) + 40 && [x - 1, x, x + 5, x + 6].some((xx) => room.world.top(xx, z) !== ground)) x++;
+        room.natureCell([x, ground + 1, z], station);
+        room.natureCell([x + 6, ground + 1, z], tv);
+        for (const c of [...room.critters.list]) {
+          if (Math.hypot(c.x - x, c.z - z) < 20) {
+            room.critters.remove(c.id);
+            room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+          }
+        }
+        return { x, y: ground + 1, z, station, tv };
+      },
+      BROADCAST_STATION,
+      RETRO_TV,
+    );
+    const standBy = (page, x) =>
+      page.evaluate(
+        (at, x) => {
+          const kw = window.kidsWorld;
+          Object.assign(kw.game.me.body, { x: x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+          kw.game.sendMove(true);
+          for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+        },
+        at,
+        x,
+      );
+    // The friend at the TV, watching.
+    await until(guest, (at) => window.kidsWorld.game.world.get(at.x + 6, at.y, at.z) === at.tv && window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.station, at);
+    await standBy(guest, at.x + 6);
+    await until(guest, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Watch'));
+    await guest.keyboard.press('KeyQ');
+    await until(guest, () => document.querySelectorAll('.tv-channel').length === 5);
+    assert.equal(CHANNELS.length, 5);
+
+    // At the station: Go live opens your camera.
+    await standBy(host, at.x);
+    await until(host, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Go live'));
+    await host.keyboard.press('KeyQ');
+    await until(host, () => document.querySelector('#modal h2')?.textContent.includes('Broadcast Station') && document.querySelector('video.station-camera')?.videoWidth > 0);
+    assert.equal(await host.$eval('.station-tag', (el) => el.hidden), true, 'not on air yet');
+    await clickButton(host, 'Go live', '#modal');
+    await until(host, () => !document.querySelector('.station-tag').hidden);
+    assert.equal(await host.evaluate(() => window.kidsWorld.game.onAir?.name), 'Happy Panda');
+    assert.equal(await host.evaluate(() => window.kidsWorld.ui.sound.hushed), true, 'no island music under the show');
+
+    // The friend is told, and the TV has the 📹 On Air channel, with the camera's picture and sound.
+    await until(guest, () => document.querySelectorAll('.tv-channel').length === 6 && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Happy Panda is on air')));
+    await guest.keyboard.press('6');
+    await until(guest, () => document.querySelector('video.tv-live')?.videoWidth > 0, undefined, 45000 * SLOW);
+    assert.match(await guest.$eval('.tv-name', (el) => el.textContent), /^6 · 📹 On Air: Happy Panda$/);
+    await until(host, () => document.querySelector('.station-status').textContent.includes('1 TV is watching'));
+    const seen = await guest.evaluate(async () => {
+      const video = document.querySelector('video.tv-live');
+      const stream = video.srcObject;
+      const canvas = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const colours = new Set();
+      const audio = new AudioContext();
+      const analyser = audio.createAnalyser();
+      audio.createMediaStreamSource(stream).connect(analyser);
+      const data = new Float32Array(analyser.fftSize);
+      let loudest = 0;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        ctx.drawImage(video, 0, 0, 8, 8);
+        const [r, , b] = ctx.getImageData(4, 4, 1, 1).data;
+        colours.add(r > b ? 'red' : 'blue');
+        analyser.getFloatTimeDomainData(data);
+        loudest = Math.max(loudest, ...data.map(Math.abs));
+      }
+      await audio.close();
+      return { tracks: stream.getTracks().map((t) => t.kind).sort(), colours: [...colours].sort(), loudest };
+    });
+    assert.deepEqual(seen.tracks, ['audio', 'video']);
+    assert.deepEqual(seen.colours, ['blue', 'red'], 'the picture is the camera’s, moving');
+    assert.ok(seen.loudest > 0.05, `the microphone comes through: ${seen.loudest}`);
+
+    // Stop: off air, and the TV back to its own channels.
+    await clickButton(host, 'Stop', '#modal');
+    await until(host, () => document.querySelector('.station-tag').hidden && window.kidsWorld.game.onAir === null);
+    await until(guest, () => document.querySelectorAll('.tv-channel').length === 5 && !document.querySelector('.tv-live'));
+    assert.match(await guest.$eval('.tv-name', (el) => el.textContent), /^1 · /);
+    // Live again, and closing the window ends it too.
+    await clickButton(host, 'Go live', '#modal');
+    await until(guest, () => document.querySelectorAll('.tv-channel').length === 6);
+    await host.keyboard.press('Escape');
+    await until(host, () => document.getElementById('modal').hidden && window.kidsWorld.game.onAir === null);
+    await until(guest, () => document.querySelectorAll('.tv-channel').length === 5);
+    assert.equal(await host.evaluate(() => window.kidsWorld.ui.sound.hushed), false, 'and the music back');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await host.browserContext().close();
   }
 });

@@ -9,6 +9,7 @@ import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
 import { gashaponNear } from './shared/gashapon.js';
 import { pianoNear } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
+import { cleanOnAir, stationNear } from './shared/station.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -220,6 +221,11 @@ export class Game extends EventTarget {
     this.tvTarget = null;
     this.tvAt = null;
     this.tvChannel = 0;
+    // The broadcast station beside you, and the one you opened; and who is
+    // on air from one on this island (shared/station.js), or null.
+    this.stationTarget = null;
+    this.stationAt = null;
+    this.onAir = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -323,6 +329,9 @@ export class Game extends EventTarget {
         break;
       case 'piano':
         this.pianoHeard(msg);
+        break;
+      case 'onair':
+        this.setOnAir(msg.on);
         break;
       case 'swing': {
         const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
@@ -489,6 +498,7 @@ export class Game extends EventTarget {
     this.setArcade(msg.arcade ?? []);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
+    this.setOnAir(msg.onAir);
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
     this.renderer.view.yaw = Math.PI * 0.9;
     this.emit('welcome', { again });
@@ -2007,6 +2017,39 @@ export class Game extends EventTarget {
     this.tvAt = null;
   }
 
+  // ------------------------------------------------ broadcast stations
+
+  // Q (or the Go live button) by a broadcast station: its window opens,
+  // your camera in it (shared/station.js).
+  openStation() {
+    const t = this.stationTarget;
+    if (!t) return;
+    this.stationAt = t;
+    this.sound.play('ui');
+    this.emit('station-open');
+  }
+
+  // On air from the open station, your page the TV station under the peer
+  // id `station`; or off air (null).
+  goLive(station) {
+    const t = this.stationAt;
+    if (station && t) this.send({ t: 'onair', station, at: [t.x, t.y, t.z] });
+    else if (this.onAir?.pid === this.pid) this.send({ t: 'onair', off: true });
+  }
+
+  closeStation() {
+    this.goLive(null);
+    this.stationAt = null;
+  }
+
+  // Who the island says is on air now (or nobody).
+  setOnAir(raw) {
+    const on = cleanOnAir(raw);
+    if (on?.pid === this.onAir?.pid && on?.station === this.onAir?.station) return;
+    this.onAir = on;
+    this.emit('onair');
+  }
+
   // A friend playing a piano: heard when it is near, softer further away.
   pianoHeard(msg) {
     const [x, y, z] = msg.at;
@@ -2226,6 +2269,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.tvTarget) {
       this.openTv();
+      return;
+    }
+    if (!id && this.stationTarget) {
+      this.openStation();
       return;
     }
     if (!id) {
@@ -3358,6 +3405,7 @@ export class Game extends EventTarget {
     this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
     this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
     this.tvTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.dizzy && !on.flying && on.onGround ? tvNear(this.world, on) : null;
+    this.stationTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.dizzy && !on.flying && on.onGround ? stationNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3798,6 +3846,9 @@ export class Game extends EventTarget {
     this.pianoTarget = null;
     this.tvAt = null;
     this.tvTarget = null;
+    this.stationAt = null;
+    this.stationTarget = null;
+    this.setOnAir(null);
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

@@ -20,6 +20,10 @@ const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const STATION = /^kidsworld-tv-[0-9a-z]{8,32}$/;
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com', 'youtu.be']);
 
+// Whether a peer id is a TV station's (the admin page's, or a broadcast
+// station's on an island: station.js).
+export const isStationId = (id) => typeof id === 'string' && STATION.test(id);
+
 // A new TV station's peer id.
 export function stationId(random = Math.random) {
   let s = '';
@@ -78,7 +82,7 @@ export function cleanBroadcast(raw) {
     return { kind: 'youtube', id: raw.id, start, duration, title: cleanTitle(raw.title, 'A YouTube video') };
   }
   if (raw.kind === 'video') {
-    if (typeof raw.station !== 'string' || !STATION.test(raw.station)) return null;
+    if (!isStationId(raw.station)) return null;
     return { kind: 'video', station: raw.station, title: cleanTitle(raw.title, 'A video') };
   }
   return null;

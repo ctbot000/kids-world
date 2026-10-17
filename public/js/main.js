@@ -166,6 +166,8 @@ try {
 } catch (error) {
   signalError = error.message;
 }
+// Broadcast stations on islands, and the TVs watching them, signal as islands do.
+ui.islandPeerOptions = peerOptions;
 
 let serverMode = false;
 let session = null;
