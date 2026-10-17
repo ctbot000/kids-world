@@ -10,7 +10,8 @@
 // it is on, which its model answers, a line for it to say there, as its own
 // words, and its model log: what it asked the model, word for word, and what
 // came back; and the problems players told of, with a picture of their
-// screen, to mark done or delete. It reads /admin/api/state and /admin/api/friend every few
+// screen, to mark done or delete; and what is on every TV in the game
+// (tv.js). It reads /admin/api/state and /admin/api/friend every few
 // seconds — every moment, for a while, after something is said to it, so its
 // answer shows as it comes — and /admin/api/friend/llm too while
 // the model log is open.
@@ -24,6 +25,7 @@ import { passwordProblem, usernameProblem } from '/js/shared/keeper.js';
 import { World } from '/js/shared/world.js';
 import { CHAT_MAX } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
+import { refreshTv, setUpTv } from '/admin/tv.js';
 
 const REFRESH_MS = 5000;
 const REDRAW_MS = 60000;
@@ -962,6 +964,7 @@ let drawnAt = 0;
 
 function render(state) {
   renderStatus(state);
+  refreshTv(state?.keeper ?? null);
   if (!state) return;
   renderSummary(state);
   renderRecent(state);
@@ -1011,4 +1014,5 @@ async function refresh(now = false) {
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
+setUpTv();
 refresh();

@@ -20,6 +20,11 @@
 // invite you to their islands, which comes as an 'invite' event. It brings
 // that list, and sends your invitations (see shared/friends.js).
 //
+// And it hears what the keeper's admin page puts on every TV (see
+// shared/broadcast.js), as a 'tv' event, when this page connects and as it
+// changes; `tv` is what is on (with `zero`, the performance.now() it went on
+// air at), or null.
+//
 // It takes the problems players tell of to the keeper too (see report.js),
 // copies or not, kept in IndexedDB until the keeper has them.
 //
@@ -30,6 +35,7 @@ import { get, set } from '../vendor/idb-keyval.js';
 import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
+import { cleanBroadcast, sameBroadcast } from './shared/broadcast.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
 import { isBoardsOf } from './shared/ranking.js';
@@ -133,6 +139,8 @@ export class KeeperClient extends EventTarget {
     this.present = false;
     this.presentSent = null;
     this.presentTimer = 0;
+    // What the admin page has on every TV, or null.
+    this.tv = null;
     // Problem reports waiting for the keeper (see report), the oldest first.
     this.reports = [];
     this.reportsStored = Promise.resolve();
@@ -728,7 +736,7 @@ export class KeeperClient extends EventTarget {
         return;
       }
       talk.checked = true;
-      this.send({ t: 'me', device: this.data.device, ...(this.login ? { login: this.login } : {}) });
+      this.send({ t: 'me', device: this.data.device, tv: true, ...(this.login ? { login: this.login } : {}) });
       return;
     }
     if (msg.t === 'me' && this.state === 'connecting' && talk.checked) {
@@ -750,7 +758,13 @@ export class KeeperClient extends EventTarget {
         this.emit('needs-password');
       }
       this.setState('ready');
+      this.heardTv(msg.tv);
       this.flush();
+      return;
+    }
+    // What is on every TV now (or nothing): news, unasked.
+    if (msg.t === 'tv-news') {
+      if (this.state === 'ready') this.heardTv(msg.tv);
       return;
     }
     // News of the ranking, unasked: never the answer to what is waiting.
@@ -836,6 +850,16 @@ export class KeeperClient extends EventTarget {
     this.schedule(RETRY_MS[Math.min(this.failures++, RETRY_MS.length - 1)]);
   }
 
+  // What the keeper says is on every TV (shared/broadcast.js): a 'tv'
+  // event when it is something else than before.
+  heardTv(raw) {
+    const tv = cleanBroadcast(raw);
+    const at = Number.isFinite(raw?.at) && raw.at >= 0 ? raw.at : 0;
+    if (sameBroadcast(tv, this.tv)) return;
+    this.tv = tv ? { ...tv, zero: performance.now() - at } : null;
+    this.emit('tv', { tv: this.tv });
+  }
+
   // why: what anything you asked for, still waiting, fails with.
   hangUp(why = 'asleep') {
     clearTimeout(this.timer);
@@ -850,6 +874,8 @@ export class KeeperClient extends EventTarget {
     this.waiting = null;
     this.requests = [];
     for (const r of asked) r.reject(new KeeperProblem(why));
+    // Without the keeper, nobody would hear when a show is over.
+    this.heardTv(null);
     const conn = this.conn;
     const peer = this.peer;
     this.conn = null;

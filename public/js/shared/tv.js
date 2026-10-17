@@ -4,7 +4,9 @@
 // a show on each of a few channels (render/tv-shows.js draws them), to
 // flip through.
 //
-// It all happens on your own page: everyone watches what they like.
+// It all happens on your own page: everyone watches what they like. And
+// while the keeper's admin page has something on air (broadcast.js), every
+// TV has one channel more after these, 📡 Live, the same on every TV.
 import { BLOCKS } from './blocks.js';
 import { cellNear } from './arcade.js';
 
@@ -17,8 +19,13 @@ export const CHANNELS = [
   { key: 'dance', icon: '🪩', name: 'Dance Party' },
 ];
 
-// The channel a step (+1 or -1) along from channel i, round and round.
-export const nextChannel = (i, step) => (((i + step) % CHANNELS.length) + CHANNELS.length) % CHANNELS.length;
+export const LIVE = { key: 'live', icon: '📡', name: 'Live' };
+
+// The channels a TV has: the live one too while something is on air.
+export const channelsWith = (onAir) => (onAir ? [...CHANNELS, LIVE] : CHANNELS);
+
+// The channel a step (+1 or -1) along from channel i of n, round and round.
+export const nextChannel = (i, step, n = CHANNELS.length) => (((i + step) % n) + n) % n;
 
 const MODELS = { tv: 'TV', 'retro-tv': 'Retro TV', 'wall-tv': 'Wall TV' };
 

@@ -117,6 +117,8 @@ keeper.addEventListener('reported', (e) => {
 });
 // An invitation to a friend's island, while you are playing (see invited()).
 keeper.addEventListener('invite', (e) => invited(e.detail));
+// Something new on every TV, or nothing any more (see shared/broadcast.js).
+keeper.addEventListener('tv', (e) => ui.tvNews(e.detail.tv, keeper.peerOptions));
 for (const p of [profile, isle]) {
   for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
   p.addEventListener('count', () => keeper.counted());

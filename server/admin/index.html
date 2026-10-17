@@ -6,6 +6,7 @@
     <title>Kids World · Keeper admin</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/admin/admin.css" />
+    <script src="/vendor/peerjs.min.js" defer></script>
     <script type="module" src="/admin/admin.js"></script>
   </head>
   <body>
@@ -15,6 +16,10 @@
     </header>
     <main>
       <section id="summary" class="summary" aria-label="Summary"></section>
+      <section id="tv-section" hidden>
+        <h2>TV broadcast</h2>
+        <div id="tv" class="tv card"></div>
+      </section>
       <section id="reports-section" hidden>
         <h2>Problem reports <span id="reports-count" class="badge"></span></h2>
         <div id="reports" class="reports"></div>

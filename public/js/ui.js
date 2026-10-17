@@ -6,7 +6,8 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { GASHA_PRICE, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
-import { CHANNELS, nextChannel } from './shared/tv.js';
+import { CHANNELS, channelsWith, LIVE, nextChannel } from './shared/tv.js';
+import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
@@ -1844,7 +1845,7 @@ export class UI {
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
-          card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party!']),
+          card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets channel ' + (CHANNELS.length + 1) + ', 📡 Live.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
@@ -4071,10 +4072,21 @@ export class UI {
 
   // ------------------------------------------------ TVs
 
+  // Something new on every TV, from the keeper's admin page, or nothing any
+  // more (shared/broadcast.js): told while playing, and a TV being watched
+  // gets the 📡 Live channel, or loses it.
+  tvNews(tv, peerOptions) {
+    this.broadcast = tv;
+    this.tvPeerOptions = peerOptions;
+    if (tv && this.game) this.toast('📡', `On TV now: ${tv.title}! Watch it on any TV, on channel ${CHANNELS.length + 1}.`);
+    this.tvChanged?.();
+  }
+
   // The TV you pressed Watch at, in a window: its picture, the show on the
   // channel it is on (tv-shows.js), with a moment of static between
   // channels, and the channels to flip through with ◀ ▶, a tap on one, the
-  // arrow keys or the number keys.
+  // arrow keys or the number keys; and while something is on air, 📡 Live,
+  // the same on every TV (tv-live.js).
   tvDialog() {
     const g = this.game;
     const t = g?.tvAt;
@@ -4084,17 +4096,47 @@ export class UI {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const canvas = h('canvas', { class: 'tv-picture', width: W * dpr, height: H * dpr, role: 'img' });
     const ctx = canvas.getContext('2d');
+    const said = h('div', { class: 'tv-said', hidden: true });
+    const screen = h('div', { class: 'tv-screen' }, canvas, said);
     const name = h('div', { class: 'tv-name', 'aria-live': 'polite' });
     const chips = h('div', { class: 'tv-channels' });
-    let channel = g.tvChannel;
+    const hint = h('p', { class: 'muted' });
+    let channels = channelsWith(this.broadcast);
+    let channel = g.tvChannel < channels.length ? g.tvChannel : 0;
     let fuzz = 0;
     let frame = 0;
+    let live = null;
     const start = performance.now();
+    const say = (text) => {
+      said.textContent = text;
+      said.hidden = !text;
+    };
+    // The live show, while that is the channel and once the static is over.
+    const tune = () => {
+      const want = channels[channel] === LIVE && performance.now() >= fuzz ? this.broadcast : null;
+      if (live && live.tv === want) return;
+      live?.close();
+      live = null;
+      say('');
+      if (want) {
+        live = new LiveTv(want, this.tvPeerOptions, say);
+        screen.append(live.el);
+      }
+      // No island music over the show.
+      this.sound.hushMusic(Boolean(live));
+    };
     const show = () => {
-      const c = CHANNELS[channel];
-      name.textContent = `${channel + 1} · ${c.icon} ${c.name}`;
-      canvas.setAttribute('aria-label', `${c.name} on the TV`);
-      for (const b of chips.children) b.classList.toggle('on', Number(b.dataset.channel) === channel);
+      const c = channels[channel];
+      name.textContent = `${channel + 1} · ${c.icon} ${c === LIVE ? `Live: ${this.broadcast.title}` : c.name}`;
+      canvas.setAttribute('aria-label', `${c === LIVE ? this.broadcast.title : c.name} on the TV`);
+      chips.replaceChildren(
+        ...channels.map((c, i) => {
+          const b = h('button', { class: `tv-channel${i === channel ? ' on' : ''}${c === LIVE ? ' live' : ''}`, type: 'button', 'data-channel': String(i), 'aria-label': `Channel ${i + 1}, ${c === LIVE ? `Live: ${this.broadcast.title}` : c.name}` }, c.icon);
+          b.onclick = () => flip(i);
+          return b;
+        }),
+      );
+      hint.textContent = this.input.touchMode ? '' : `Flip channels with ← → or 1 to ${channels.length} on your keyboard too.`;
     };
     const flip = (i) => {
       if (i === channel) return;
@@ -4102,23 +4144,48 @@ export class UI {
       fuzz = performance.now() + 250;
       g.watchChannel(i);
       show();
+      tune();
+    };
+    // Something new on air (or nothing): the channels again, and off the
+    // live one if it is gone; a new show on it comes in with static.
+    this.tvChanged = () => {
+      const was = channels[channel];
+      channels = channelsWith(this.broadcast);
+      if (was === LIVE && !this.broadcast) {
+        channel = 0;
+        g.watchChannel(0);
+      }
+      if (channels[channel] === LIVE) fuzz = performance.now() + 250;
+      show();
+      tune();
     };
     const draw = (now) => {
       frame = requestAnimationFrame(draw);
       if (now < fuzz) {
+        live?.close();
+        live = null;
+        this.sound.hushMusic(false);
+        say('');
         drawStatic(ctx, canvas.width, canvas.height);
         return;
       }
+      if (channels[channel] === LIVE) {
+        if (!live) tune();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawShow(ctx, CHANNELS[channel].key, (now - start) / 1000, W, H, g.env);
+      drawShow(ctx, channels[channel].key, (now - start) / 1000, W, H, g.env);
     };
     const keydown = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const n = Number(e.key);
       let i = null;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') i = nextChannel(channel, 1);
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') i = nextChannel(channel, -1);
-      else if (Number.isInteger(n) && n >= 1 && n <= CHANNELS.length) i = n - 1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') i = nextChannel(channel, 1, channels.length);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') i = nextChannel(channel, -1, channels.length);
+      else if (Number.isInteger(n) && n >= 1 && n <= channels.length) i = n - 1;
       if (i === null) return;
       e.preventDefault();
       flip(i);
@@ -4127,17 +4194,10 @@ export class UI {
       (root) => {
         const prev = h('button', { class: 'tv-flip', type: 'button', 'aria-label': 'The channel before' }, '◀');
         const next = h('button', { class: 'tv-flip', type: 'button', 'aria-label': 'The next channel' }, '▶');
-        prev.onclick = () => flip(nextChannel(channel, -1));
-        next.onclick = () => flip(nextChannel(channel, 1));
-        chips.append(
-          ...CHANNELS.map((c, i) => {
-            const b = h('button', { class: 'tv-channel', type: 'button', 'data-channel': String(i), 'aria-label': `Channel ${i + 1}, ${c.name}` }, c.icon);
-            b.onclick = () => flip(i);
-            return b;
-          }),
-        );
+        prev.onclick = () => flip(nextChannel(channel, -1, channels.length));
+        next.onclick = () => flip(nextChannel(channel, 1, channels.length));
         show();
-        root.append(h('h2', {}, `📺 ${t.name}`), h('div', { class: 'tv-set' }, h('div', { class: 'tv-screen' }, canvas)), h('div', { class: 'tv-remote' }, prev, name, next), chips, this.input.touchMode ? '' : h('p', { class: 'muted' }, 'Flip channels with ← → or 1 to ' + CHANNELS.length + ' on your keyboard too.'));
+        root.append(h('h2', {}, `📺 ${t.name}`), h('div', { class: 'tv-set' }, screen), h('div', { class: 'tv-remote' }, prev, name, next), chips, hint);
         frame = requestAnimationFrame(draw);
         window.addEventListener('keydown', keydown);
       },
@@ -4146,6 +4206,9 @@ export class UI {
         onClose: () => {
           cancelAnimationFrame(frame);
           window.removeEventListener('keydown', keydown);
+          live?.close();
+          this.sound.hushMusic(false);
+          this.tvChanged = null;
           g.closeTv();
         },
       },

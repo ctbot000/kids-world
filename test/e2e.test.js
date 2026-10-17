@@ -16,6 +16,7 @@ import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GA
 import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
+import { youtubeAt } from '../public/js/shared/broadcast.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -2360,6 +2361,138 @@ test('the keeper keeps copies of your islands and of you, sent peer to peer; an 
     await eventually(async () => (await kept())?.profile.look.hat === hat);
     assert.deepEqual(pageErrors, []);
   } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a TV broadcast: the admin page puts a YouTube video and then a video on its computer on every TV, live, and takes it off again', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${games.address().port}`;
+  // Nothing goes to YouTube from a test: its player is made up, and its pages are blank.
+  const offline = async (page) => {
+    await page.setRequestInterception(true);
+    page.on('request', (req) => (/youtube/.test(new URL(req.url()).hostname) ? req.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><title>YouTube</title>' }) : req.continue()));
+  };
+  const context = await browser.createBrowserContext();
+  const admin = await context.newPage();
+  admin.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+  await offline(admin);
+  await admin.evaluateOnNewDocument(() => {
+    window.YT = {
+      Player: class {
+        constructor(el, options) {
+          setTimeout(() => options.events.onReady(), 50);
+        }
+        getVideoData() {
+          return { title: 'Island Songs' };
+        }
+        getDuration() {
+          return 200;
+        }
+      },
+    };
+  });
+  const page = await openPlayer(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter', look: { animal: 'otter' } }, null);
+  await offline(page);
+  try {
+    await admin.goto(`${origin}/admin/`);
+    await until(admin, () => !document.getElementById('tv-section').hidden && document.getElementById('tv-now').textContent.includes('Off air'));
+    await makeIsland(page, { online: false, theme: 'Flat Land' });
+    await until(page, () => window.kidsWorld.keeper.state === 'ready');
+    // A Retro TV beside the start, and its window open.
+    const at = await page.evaluate((id) => {
+      const kw = window.kidsWorld;
+      const room = kw.session.link.room;
+      const b = kw.game.me.body;
+      const z = Math.floor(b.z);
+      const ground = room.world.top(Math.floor(b.x), z);
+      let x = Math.floor(b.x) + 3;
+      while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+      room.natureCell([x, ground + 1, z], id);
+      for (const c of [...room.critters.list]) {
+        if (Math.hypot(c.x - x, c.z - z) < 16) {
+          room.critters.remove(c.id);
+          room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+        }
+      }
+      return { x, y: ground + 1, z, id };
+    }, RETRO_TV);
+    await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+    await page.evaluate((at) => {
+      const kw = window.kidsWorld;
+      Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+      for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+    }, at);
+    await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Watch'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => document.querySelectorAll('.tv-channel').length === 5);
+
+    // A YouTube link on air: told, a sixth channel, and on it the video from YouTube, where everyone else is in it.
+    await admin.type('#tv-link', 'https://youtu.be/dQw4w9WgXcQ?t=30');
+    await clickButton(admin, 'Put on TV', '.tv-form:last-child');
+    await until(admin, () => document.getElementById('tv-now').textContent.includes('On air') && document.getElementById('tv-now').textContent.includes('Island Songs'));
+    assert.deepEqual({ ...keeper.tv }, { kind: 'youtube', id: 'dQw4w9WgXcQ', start: 30, duration: 200, title: 'Island Songs' });
+    await until(page, () => document.querySelectorAll('.tv-channel').length === 6 && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Island Songs')));
+    await page.keyboard.press('6');
+    await until(page, () => document.querySelector('iframe.tv-live'));
+    assert.match(await page.$eval('.tv-name', (el) => el.textContent), /^6 · 📡 Live: Island Songs$/);
+    assert.equal(await page.evaluate(() => window.kidsWorld.ui.sound.hushed), true, 'no island music over the show');
+    const src = new URL(await page.$eval('iframe.tv-live', (el) => el.src));
+    assert.equal(src.pathname, '/embed/dQw4w9WgXcQ');
+    const since = Date.now() - keeper.tvSince;
+    assert.ok(Math.abs(Number(src.searchParams.get('start')) - youtubeAt(keeper.tv, since)) <= 2, `start ${src.searchParams.get('start')}`);
+
+    // A video on the admin page's computer: the page plays it, and the TV gets its picture and sound live.
+    const file = await admin.$('#tv-file');
+    await file.uploadFile(join(import.meta.dirname, 'fixtures', 'tv.webm'));
+    await clickButton(admin, 'Put on TV', '.tv-form:first-child');
+    await until(admin, () => document.getElementById('tv-now').textContent.includes('Video on this computer'));
+    assert.equal(keeper.tv.kind, 'video');
+    assert.equal(keeper.tv.title, 'tv');
+    await until(page, () => document.querySelector('video.tv-live')?.videoWidth > 0 && !document.querySelector('iframe.tv-live'), undefined, 45000 * SLOW);
+    assert.match(await page.$eval('.tv-name', (el) => el.textContent), /^6 · 📡 Live: tv$/);
+    await until(admin, () => document.getElementById('tv-viewers').textContent === '1 TV watching');
+    // Moving, and with sound: the test video's tone.
+    const heard = await page.evaluate(async () => {
+      const video = document.querySelector('video.tv-live');
+      const stream = video.srcObject;
+      const t0 = video.currentTime;
+      const audio = new AudioContext();
+      const analyser = audio.createAnalyser();
+      audio.createMediaStreamSource(stream).connect(analyser);
+      const data = new Float32Array(analyser.fftSize);
+      let loudest = 0;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        analyser.getFloatTimeDomainData(data);
+        loudest = Math.max(loudest, ...data.map(Math.abs));
+      }
+      await audio.close();
+      return { tracks: stream.getTracks().map((t) => t.kind).sort(), moved: video.currentTime > t0, loudest };
+    });
+    assert.deepEqual(heard.tracks, ['audio', 'video']);
+    assert.ok(heard.moved, 'the picture moves');
+    assert.ok(heard.loudest > 0.05, `the sound comes through: ${heard.loudest}`);
+    assert.deepEqual(await page.evaluate(() => [document.querySelector('video.tv-live').muted, document.querySelector('.tv-said').hidden]), [false, true], 'and is heard, no tap needed');
+    assert.equal(await admin.$eval('#tv-video', (v) => v.muted), true, 'though the admin page plays it muted');
+
+    // Taken off air: the TV goes back to its own channels.
+    await clickButton(admin, 'Take off air');
+    await until(admin, () => document.getElementById('tv-now').textContent.includes('Off air') && document.getElementById('tv-station').hidden);
+    assert.equal(keeper.tv, null);
+    await until(page, () => document.querySelectorAll('.tv-channel').length === 5 && !document.querySelector('.tv-live'));
+    assert.match(await page.$eval('.tv-name', (el) => el.textContent), /^1 · /);
+    assert.equal(await page.evaluate(() => window.kidsWorld.ui.sound.hushed), false, 'and the music back');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
     await page.browserContext().close();
     await keeper.stop();
     await games.shutdown();

@@ -65,8 +65,16 @@ export class Sound {
     if (music !== undefined) this.musicLevel = music;
     if (this.ctx) {
       this.sfx.gain.setTargetAtTime(this.sfxLevel * SFX_GAIN, this.ctx.currentTime, 0.05);
-      this.music.gain.setTargetAtTime(this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
+      this.music.gain.setTargetAtTime(this.hushed ? 0 : this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
     }
+  }
+
+  // The music quiet while something else plays (a live show on a TV), or
+  // back again.
+  hushMusic(on) {
+    if (this.hushed === on) return;
+    this.hushed = on;
+    this.setLevels({});
   }
 
   // ------------------------------------------------ building blocks

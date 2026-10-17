@@ -66,6 +66,7 @@ import {
   SIGN_ALGORITHM,
   toBase64Url,
 } from '../public/js/shared/keeper.js';
+import { cleanBroadcast } from '../public/js/shared/broadcast.js';
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
@@ -1216,6 +1217,8 @@ const RECENT = 40;
 // Changes to the ranking that come together go to the pages watching it
 // together, this long after the first.
 const RANKING_NEWS_MS = 1000;
+// A video on air comes off this long after its station (the admin page) last said it is there.
+const TV_STATION_MS = 30000;
 // Invitations: one to the same player every so often, and a few a minute.
 const INVITE_AGAIN_MS = 15000;
 const INVITES_PER_MINUTE = 10;
@@ -1250,6 +1253,12 @@ export class Keeper extends EventEmitter {
     // Islands this process hosts peer to peer (host.js), on the list of open
     // islands too: code → () => its listing, or null while it is not.
     this.hosted = new Map();
+    // What is on every TV (shared/broadcast.js), put there from the admin
+    // page, or null; since when, and when the admin page that is its TV
+    // station last said it is still there (see tvAlive).
+    this.tv = null;
+    this.tvSince = 0;
+    this.tvSeen = 0;
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -1289,7 +1298,36 @@ export class Keeper extends EventEmitter {
       islands: this.openIslands().length,
       online: this.onlinePlayers().size,
       recent: this.recent,
+      tv: this.tv ? { ...this.tv, since: this.tvSince } : null,
     };
+  }
+
+  // ------------------------------------------------ TV broadcasts
+
+  // Something on every TV (shared/broadcast.js), or nothing (null): the
+  // pages connected now hear at once, and the others when they connect.
+  // Returns what is on air.
+  setTv(raw) {
+    const tv = raw == null ? null : cleanBroadcast(raw);
+    if (raw != null && !tv) throw new KeepError('bad', 'That is not something to put on TV.');
+    this.tv = tv;
+    this.tvSince = this.tvSeen = this.now();
+    for (const conn of this.conns.values()) if (conn.tv && conn.folder && !conn.closed) this.reply(conn, { t: 'tv-news', tv: this.tvNow() });
+    return tv;
+  }
+
+  // The admin page playing a video for every TV is still there. A video
+  // whose station has not said so for a while comes off air (the page was
+  // closed); a YouTube video needs no station.
+  tvAlive() {
+    if (!this.tv) return false;
+    this.tvSeen = this.now();
+    return true;
+  }
+
+  // What is on air, for a page: with how long it has been, to be at the same place.
+  tvNow() {
+    return this.tv ? { ...this.tv, at: this.now() - this.tvSince } : null;
   }
 
   onSignal(msg) {
@@ -1478,7 +1516,9 @@ export class Keeper extends EventEmitter {
       this.from(conn, msg.device, ok ? player : null, ok ? token : null);
       const login = ok ? await this.store.readLogin(player) : null;
       const needsPassword = ok && login?.kind !== 'password';
-      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}) });
+      // A page that knows TV broadcasts hears what is on, now and as it changes.
+      conn.tv = msg.tv === true;
+      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}), ...(conn.tv ? { tv: this.tvNow() } : {}) });
       return;
     }
     const mine = (what) => {
@@ -1754,6 +1794,7 @@ export class Keeper extends EventEmitter {
 
   sweep() {
     const now = this.now();
+    if (this.tv?.kind === 'video' && now - this.tvSeen > TV_STATION_MS) this.setTv(null);
     for (const [me, sent] of this.invited) if (!sent.some((x) => now - x.at < 60000)) this.invited.delete(me);
     for (const conn of [...this.conns.values()]) {
       if ((!conn.dc?.isOpen() && now - conn.started > CONNECT_TIMEOUT_MS) || now - conn.lastSeen > IDLE_MS) this.drop(conn);

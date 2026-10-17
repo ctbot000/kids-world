@@ -14,7 +14,9 @@
 // model log: what it asked the model lately, word for word, and what came
 // back, and the tokens its models took a day at a time; and the problems
 // players told of, each with a picture of their screen, to look into, mark
-// done and delete. Only for this computer: requests from other
+// done and delete; and what is on every TV in the game (a YouTube video, or
+// a video on this computer, which the admin page itself plays to them: see
+// shared/broadcast.js). Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -27,6 +29,7 @@ const PAGES = {
   '/admin/': 'index.html',
   '/admin/admin.js': 'admin.js',
   '/admin/admin.css': 'admin.css',
+  '/admin/tv.js': 'tv.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -155,6 +158,25 @@ export function adminHandler({ store, keeper = null, friend = null, dataDir = st
         devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip4 && isPublicIp(d.ip4) ? d.ip4 : d.ip) }))),
         reports: await store.reports(),
       });
+      return true;
+    }
+    if (pathname === '/admin/api/tv' || pathname === '/admin/api/tv/alive') {
+      // PUT a broadcast on every TV, DELETE it, and POST /alive from the
+      // admin page playing a video to them, every few seconds while it does.
+      if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
+      else if (pathname === '/admin/api/tv/alive') {
+        if (req.method !== 'POST') res.writeHead(405, { Allow: 'POST' }).end();
+        else json(res, 200, { on: keeper.tvAlive() });
+      } else if (req.method === 'PUT') {
+        try {
+          json(res, 200, { tv: keeper.setTv(await readJson(req)) });
+        } catch (error) {
+          json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
+        }
+      } else if (req.method === 'DELETE') {
+        keeper.setTv(null);
+        json(res, 200, { tv: null });
+      } else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
       return true;
     }
     if (pathname === '/admin/api/friend' || pathname.startsWith('/admin/api/friend/')) {
