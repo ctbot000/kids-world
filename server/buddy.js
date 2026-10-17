@@ -183,18 +183,10 @@ Answer with JSON only: {"say": "...", "action": "...", "stamp": "..."}.`;
 }
 
 const between = ([lo, hi], random) => lo + (hi - lo) * random();
-// A child telling it something personal: a school, an address, a phone
-// number, an age, an email. The model is told to say kindly to keep it
-// secret, as a small one does not always notice by itself.
-const PERSONAL = /\b(my|our)\s+(school|address|phone|number|email|house is|home is)\b|\bi live (in|at|on)\b|\bi'?m \d{1,2}( years? old)?\b|\b\d{3}[-. ]?\d{3,4}[-. ]?\d{4}\b|@\w+\.\w|학교|주소|전화|번호|\d+ ?살|사는 ?곳|우리 ?집은|이메일/iu;
 // Goodbye, or "go away": to it, it goes home.
 const GOODBYE = /\b(bye|goodbye|see you|go away|go home|leave)\b|잘 ?가|안녕히|바이|빠이|가 ?줘|나가|그만 ?가/iu;
-// What it must never ask a child, whatever the model says.
-const PRYING = /(where do you live|your (real )?(name|address|school|phone|age|email|password)|how old are you|what school|몇 ?살|어디 ?살|주소|전화 ?번호|무슨 ?학교|어느 ?학교|이름이 ?뭐|비밀번호)/iu;
 
-export const isPersonal = (text) => PERSONAL.test(text);
 export const isGoodbye = (text) => GOODBYE.test(text);
-export const isPrying = (text) => PRYING.test(text) && /[?？]|뭐|어디|몇/u.test(text);
 
 // The real date and time now, in words for the model: children ask what time
 // or day it is, and the game's own quick day and night is not it. Said where
@@ -852,7 +844,7 @@ export class Visit extends EventEmitter {
     // (On its own island, it is they who go.)
     const bye = !this.home && isGoodbye(text) && (named || this.others().length === 1);
     clearTimeout(this.listenTimer);
-    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: entry.pid, why: '', personal: isPersonal(text), ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
+    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: entry.pid, why: '', ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
   }
 
   // Something happened worth a word: why says what, to whom it is (a pid or
@@ -1182,8 +1174,7 @@ export class Visit extends EventEmitter {
     }
     this.full = false;
     const name = tidySay(typeof choice.name === 'string' ? choice.name : '', this.name).slice(0, 40);
-    let say = tidySay(choice.say, this.name);
-    if (isPrying(say)) say = '';
+    const say = tidySay(choice.say, this.name);
     const title = buildTitle({ key: project.key, color, big });
     this.project = { key: project.key, color, big, title, name, icon: project.icon, site, layers: layersAt(this.world, cells, site), asked, next: 0, startedAt: now, layerAt: 0, tryingSince: now };
     this.buddy.log(`AI friend: started building ${title}${name ? `, “${name}”,` : ''} on its own island${say ? `: “${say}”` : ''}.`);
@@ -1339,7 +1330,6 @@ export class Visit extends EventEmitter {
     if (ask.why) lines.push(ask.why);
     else if (theirs) lines.push(`${theirs.name} just said: "${theirs.text}"`, `Answer ${to?.name ?? theirs.name}. Do not repeat what you said before.`);
     else lines.push(`Say something to ${to?.name ?? 'your friends'}.`);
-    if (ask.personal) lines.push('That was something personal. Do not repeat it: kindly tell them to keep things like that secret online.');
     if (ask.bye) lines.push('They are saying goodbye to you: say a friendly bye, and use action leave.');
     if (ask.admin) lines.push('"Admin" is not a player on the island: they are the person who looks after this server, trying you out from its page. Be yourself with them, as friendly as ever.');
     lines.push(`Write "say" in ${languageOf(theirs?.text ?? `${w.name} ${this.others().map((p) => p.name).join(' ')}`)}.`);
@@ -1349,8 +1339,7 @@ export class Visit extends EventEmitter {
   act(reply, ask) {
     if (this.ended) return;
     const now = this.now();
-    let say = tidySay(reply.say, this.name);
-    if (isPrying(say)) say = '';
+    const say = tidySay(reply.say, this.name);
     const action = ACTIONS.includes(reply.action) ? reply.action : 'none';
     const delay = say ? Math.min(3000, 400 + [...say].length * 30) + Math.max(0, this.saidAt + TALK_GAP_MS - now) : 0;
     setTimeout(() => this.safely(() => this.speak(say, action, reply, ask)), delay);
@@ -1451,7 +1440,7 @@ export class Visit extends EventEmitter {
     // A moment for the line to be finished, as with a player, then the model.
     const bye = !this.home && isGoodbye(text);
     clearTimeout(this.listenTimer);
-    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: 0, admin: true, personal: isPersonal(text), ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
+    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: 0, admin: true, ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
     return '';
   }
 

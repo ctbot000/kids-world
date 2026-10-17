@@ -20,7 +20,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
-import { Buddy, DEFAULT_NAME, isGoodbye, isPersonal, isPrying, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
+import { Buddy, DEFAULT_NAME, isGoodbye, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
 import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.js';
@@ -326,13 +326,9 @@ test('what it says is one tidy line, without its name in front, short enough for
   assert.equal(tidySay(42, DEFAULT_NAME), '');
 });
 
-test('it notices goodbyes and something personal said to it, never asks for anything personal, and answers in their language', () => {
+test('it notices goodbyes and answers in their language', () => {
   for (const text of ['bye Pip', 'Goodbye!', 'go away', '잘가 핍', '안녕히 가', '바이바이']) assert.ok(isGoodbye(text), text);
   for (const text of ['hi Pip', '안녕 핍', "let's build"]) assert.ok(!isGoodbye(text), text);
-  for (const text of ['my school is Hanbit', "I'm 9", 'I live in Seoul', 'call 010-1234-5678', '나는 9살이야', '우리 학교 이름은 한빛', '주소는 비밀']) assert.ok(isPersonal(text), text);
-  for (const text of ['I built a house', 'look at my puppy', '집 짓자']) assert.ok(!isPersonal(text), text);
-  for (const text of ['What school do you go to?', 'How old are you?', '몇 살이야?', '어디 살아?']) assert.ok(isPrying(text), text);
-  for (const text of ['Keep your school a secret!', "Let's build a house!", '학교 이름은 비밀로 해!']) assert.ok(!isPrying(text), text);
   assert.equal(languageOf('같이 놀자'), 'Korean');
   assert.equal(languageOf('hello'), 'English');
   assert.equal(languageOf('こんにちは'), 'the same language they wrote in');
@@ -418,7 +414,6 @@ test('the admin page saves its settings and applies them, shows where it is and 
   assert.equal((await chat(island.code, '   ')).status, 400);
   assert.equal((await chat(island.code, 'x'.repeat(121))).status, 400);
   assert.equal((await chat('999999', 'hello')).status, 404);
-  const asks = llm.asked.length;
   assert.equal((await chat(island.code, 'hi from the admin page')).status, 200);
   await eventually(() => minji.of('say').some((m) => m.pid === pid && m.text === 'Hello from your AI friend!'));
   assert.ok(!minji.of('say').some((m) => m.text === 'hi from the admin page'), 'the admin’s line is not said on the island');
@@ -429,12 +424,6 @@ test('the admin page saves its settings and applies them, shows where it is and 
   assert.deepEqual(state.visits[0].chat.at(-1), { name: DEFAULT_NAME, text: 'Hello from your AI friend!', mine: true });
   const { calls: askedNow } = await (await fetch(`${base}/llm`)).json();
   assert.equal(askedNow[0].about, 'what to say on “Maple Fields”, asked from the admin page');
-
-  // Something personal said to it from the page: the model is told not to repeat it.
-  assert.equal((await chat(island.code, 'my school is Hanbit')).status, 200);
-  await eventually(() => llm.asked.length > asks + 1);
-  assert.match(llm.asked.at(-1), /Admin: my school is Hanbit/);
-  assert.match(llm.asked.at(-1), /That was something personal\. Do not repeat it/);
 
   // Sent home from the island, and not back there by itself for a while.
   const home = (code) => fetch(`${base}/visits/${code}/home`, { method: 'POST', headers: { 'X-Kids-World-Admin': '1' } });
