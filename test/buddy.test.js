@@ -555,15 +555,19 @@ test('the tokens its models take are tallied a day at a time, saved, and shown o
   assert.deepEqual(s.periods.map((p) => p.key), ['today', 'week', 'month', 'all']);
   const [today, week, month, all] = s.periods;
   assert.deepEqual(today.rows, [
-    { name: 'Z.ai', model: 'glm-5.3-flash', answers: 1, promptTokens: 900, tokens: 40 },
-    { name: 'Ollama', model: 'gemma3:4b', answers: 1, promptTokens: 0, tokens: 0 },
+    { name: 'Z.ai', model: 'glm-5.3-flash', answers: 1, promptTokens: 900, tokens: 40, cost: (900 * 0.15 + 40 * 0.5) / 1e6 },
+    { name: 'Ollama', model: 'gemma3:4b', answers: 1, promptTokens: 0, tokens: 0, cost: 0 },
   ]);
   assert.deepEqual(week.total, today.total, 'ten days ago is not in the last 7');
-  assert.deepEqual(month.total, { answers: 4, promptTokens: 2400, tokens: 90 });
+  assert.deepEqual(month.total, { answers: 4, promptTokens: 2400, tokens: 90, cost: (1700 * 0.15 + 70 * 0.5) / 1e6, unpriced: false });
   assert.deepEqual(all.total, month.total);
   await usage.save();
   const again = await new TokenUsage(join(dir, USAGE_FILE), () => now).load();
   assert.deepEqual(again.summary(), s, 'kept after a restart');
+  usage.add([{ name: 'Z.ai', model: 'glm-9-made-up', promptTokens: 10, tokens: 1 }]);
+  const unknown = usage.summary().periods[0];
+  assert.equal(unknown.rows.find((r) => r.model === 'glm-9-made-up').cost, null, 'a model of unknown price');
+  assert.deepEqual([unknown.total.cost, unknown.total.unpriced], [today.total.cost, true], 'the total counts the known ones and says so');
 
   // Each answer the friend gets is counted, and the admin page sees it.
   const llm = { ...model(), url: 'http://127.0.0.1:11434', models: async () => [] };

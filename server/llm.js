@@ -19,6 +19,36 @@ export const DEFAULT_ZAI_MODEL = 'glm-5.3-flash';
 
 const TIMEOUT_MS = 30000;
 
+// Z.ai's list prices, US dollars per million tokens in (the prompt) and out,
+// from https://docs.z.ai/guides/overview/pricing (2026-10-17), for the admin
+// page's cost of each model. The cheaper price of a cached prompt is not
+// counted, so a cost is at most this much. Ollama runs locally at no cost.
+const ZAI_PRICES = {
+  'glm-5.3-flash': [0.15, 0.5],
+  'glm-5.3-flashx': [0.37, 1.25],
+  'glm-5.3': [1.4, 4.4],
+  'glm-5.2': [1.4, 4.4],
+  'glm-5.1': [1.4, 4.4],
+  'glm-5': [1, 3.2],
+  'glm-4.7': [0.6, 2.2],
+  'glm-4.6': [0.6, 2.2],
+  'glm-4.7-flashx': [0.07, 0.4],
+  'glm-4.5': [0.6, 2.2],
+  'glm-4.5-x': [2.2, 8.9],
+  'glm-4.5-air': [0.2, 1.1],
+  'glm-4.5-airx': [1.1, 4.5],
+  'glm-4-32b-0414-128k': [0.1, 0.1],
+  'glm-4.7-flash': [0, 0],
+  'glm-4.5-flash': [0, 0],
+};
+
+// What tokens of a model (by who serves it, as in spent) cost in US dollars,
+// or null when its price is not known.
+export function costOf(name, model, promptTokens, tokens) {
+  const price = name === 'Ollama' ? [0, 0] : name === 'Z.ai' ? ZAI_PRICES[model.toLowerCase()] : null;
+  return price ? (promptTokens * price[0] + tokens * price[1]) / 1e6 : null;
+}
+
 // The tokens one answer took, added to the trace's usage: one entry for each
 // model that answered (Z.ai's, then Ollama's when it fell back), counted on
 // the admin page whether or not the answer was any good.

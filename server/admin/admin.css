@@ -800,6 +800,11 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 
+.usage .cost {
+  color: var(--text);
+  font-weight: 500;
+}
+
 .usage .muted {
   font-size: 12px;
 }

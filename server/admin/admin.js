@@ -833,8 +833,20 @@ async function refreshLog() {
 // The tokens its models took (kept by the keeper, a day at a time): today,
 // the last 7 and 30 days and all of it, a row for each model and the totals,
 // each cell the tokens in all and, under it, how many went in (the prompt)
-// and came out, and in how many answers.
+// and came out, in how many answers, and what they cost.
 const PERIODS = { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', all: 'All' };
+
+// US dollars: cents for a dollar or more, down to a hundredth of a cent below.
+function dollars(n) {
+  if (n === 0) return 'Free';
+  if (n < 0.0001) return '< $0.0001';
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
+}
+
+function costLine(c) {
+  if (c.cost === null) return h('div', { class: 'cost muted' }, 'price unknown');
+  return h('div', { class: 'cost' }, c.unpriced ? `${dollars(c.cost)} + unknown` : dollars(c.cost));
+}
 
 function usageTable(usage) {
   if (!usage?.since) return [h('p', { class: 'muted' }, 'No token usage recorded yet.')];
@@ -842,7 +854,7 @@ function usageTable(usage) {
   const models = periods.at(-1).rows.map((r) => ({ name: r.name, model: r.model }));
   const cell = (c) =>
     c?.answers
-      ? h('td', {}, h('b', {}, num(c.promptTokens + c.tokens)), h('div', { class: 'muted' }, `${num(c.promptTokens)} in · ${num(c.tokens)} out`), h('div', { class: 'muted' }, plural(c.answers, 'answer', 'answers')))
+      ? h('td', {}, h('b', {}, num(c.promptTokens + c.tokens)), costLine(c), h('div', { class: 'muted' }, `${num(c.promptTokens)} in · ${num(c.tokens)} out`), h('div', { class: 'muted' }, plural(c.answers, 'answer', 'answers')))
       : h('td', { class: 'muted' }, '—');
   const row = (head, of) => h('tr', {}, h('th', { scope: 'row' }, head), ...periods.map((p) => cell(of(p))));
   return [
@@ -862,7 +874,7 @@ function usageTable(usage) {
         ),
       ),
     ),
-    h('p', { class: 'muted' }, 'As reported by each model. Ollama runs locally at no cost. Days follow this computer’s time zone.'),
+    h('p', { class: 'muted' }, 'Tokens as reported by each model; cost at Z.ai’s list prices, not counting its discount for cached prompts, so it is at most this. Ollama runs locally at no cost. Days follow this computer’s time zone.'),
   ];
 }
 

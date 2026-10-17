@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { isValidName, NAME_MAX } from '../public/js/shared/words.js';
 import { DEFAULT_NAME } from './buddy.js';
 import { KeepError } from './keeper.js';
-import { DEFAULT_ZAI_MODEL } from './llm.js';
+import { costOf, DEFAULT_ZAI_MODEL } from './llm.js';
 
 export const SETTINGS_FILE = 'ai-friend.json';
 export const HOME_FILE = 'ai-friend-island.json';
@@ -142,7 +142,9 @@ export class TokenUsage {
   }
 
   // What the admin page shows: today, the last 7 and 30 days (today among
-  // them) and every day kept, each a row per model and the totals.
+  // them) and every day kept, each a row per model and the totals, with what
+  // they cost in US dollars (null for a model of unknown price; the total
+  // then counts only the known ones, and says so with unpriced).
   summary() {
     const today = this.now();
     const kept = Object.keys(this.days).sort();
@@ -159,8 +161,12 @@ export class TokenUsage {
           row.tokens += r.tokens;
         }
       }
+      for (const row of rows) row.cost = costOf(row.name, row.model, row.promptTokens, row.tokens);
       rows.sort((a, b) => b.promptTokens + b.tokens - (a.promptTokens + a.tokens) || a.name.localeCompare(b.name) || a.model.localeCompare(b.model));
-      const total = rows.reduce((t, r) => ({ answers: t.answers + r.answers, promptTokens: t.promptTokens + r.promptTokens, tokens: t.tokens + r.tokens }), { answers: 0, promptTokens: 0, tokens: 0 });
+      const total = rows.reduce(
+        (t, r) => ({ answers: t.answers + r.answers, promptTokens: t.promptTokens + r.promptTokens, tokens: t.tokens + r.tokens, cost: t.cost + (r.cost ?? 0), unpriced: t.unpriced || r.cost === null }),
+        { answers: 0, promptTokens: 0, tokens: 0, cost: 0, unpriced: false },
+      );
       return { key, rows, total };
     };
     return { since: kept[0] ?? null, periods: [period('today', 1), period('week', 7), period('month', 30), period('all', 0)] };
