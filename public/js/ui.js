@@ -4241,7 +4241,7 @@ export class UI {
       (root) => {
         root.append(
           h('h2', {}, '🎓 Extra credit!'),
-          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — a few questions, and every answer you get right pays.` : 'You have done both of this island’s quizzes. Well done!'),
+          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — one question, and the right answer pays.` : 'You have done both of this island’s quizzes. Well done!'),
         );
         for (const l of levels) {
           const done = g.quizOffer.taken[l.key];
@@ -4263,7 +4263,7 @@ export class UI {
             ),
           );
         }
-        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE} questions each. Finish one and the other is still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${g.nextStage.stage}` : 'as long as you stay on the island'}.`));
+        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE === 1 ? 'One question' : `${QUIZ_SIZE} questions`} each. Finish one and the other is still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${g.nextStage.stage}` : 'as long as you stay on the island'}.`));
       },
       { narrow: true },
     );
@@ -4359,7 +4359,7 @@ export class UI {
       this.sound.play(q.right === total ? 'victory' : 'fanfare');
     }
     const i = Math.min(this.quizAt, q.picks.length);
-    const status = q.done && this.quizAt >= total ? `You got ${q.right} of ${total} right!` : `Question ${i + 1} of ${total} · ${q.right} right`;
+    const status = q.done && this.quizAt >= total ? `You got ${q.right} of ${total} right!` : total === 1 ? 'Pick the right answer' : `Question ${i + 1} of ${total} · ${q.right} right`;
     if (els.status.dataset.k !== status) {
       els.status.dataset.k = status;
       els.status.textContent = status;
@@ -4374,7 +4374,7 @@ export class UI {
         h(
           'p',
           { class: 'quiz-credit' },
-          perfect ? 'Perfect, every one right! ' : q.right ? 'Well done! ' : '',
+          perfect ? (total === 1 ? 'Right! ' : 'Perfect, every one right! ') : q.right ? 'Well done! ' : '',
           `Extra credit: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
         ),
         other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), ` The ${other.name} quiz`) : '',

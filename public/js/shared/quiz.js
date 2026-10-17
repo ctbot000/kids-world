@@ -1,8 +1,8 @@
 // Extra-credit quizzes: an adventure island conquered, the fireworks still
 // going, offers everyone who freed it a little school work for extra credit —
 // two quizzes to pick from, one at elementary school second-year level and
-// one at middle school third-year level, each a few questions with answers
-// to pick from. Every answer got right is extra credit: coins, XP and the
+// one at middle school third-year level, each a single question with
+// answers to pick from. An answer got right is extra credit: coins, XP and the
 // counts that earn stickers (stickers.js), on top of what freeing the island
 // already gave.
 //
@@ -10,9 +10,9 @@
 // hand in them, unlike the arcade's games): the island says it is won
 // (game.js islandWon), and whoever was there is offered the quizzes for as
 // long as they stay on the island — the 🎓 by the castle flag opens them —
-// until they have done both. Each quiz taken once, its questions picked and
-// shuffled out of a bank by chance (makeQuiz), so two quizzes are seldom the
-// same.
+// until they have done both. Each quiz taken once, its question picked and its
+// answers shuffled out of a bank by chance (makeQuiz), so two quizzes are
+// seldom the same.
 import { Rng } from './rng.js';
 
 // The two quizzes, by their keys: what each is called and how it pays.
@@ -21,19 +21,19 @@ export const QUIZ_LEVELS = {
     key: 'junior',
     icon: '🧒',
     name: 'Elementary School Year 2',
-    how: 'Five little questions, like in Year 2 of elementary school. Every one you get right is a coin!',
+    how: 'One little question, like in Year 2 of elementary school. Get it right for a coin!',
   },
   senior: {
     key: 'senior',
     icon: '🧑‍🎓',
     name: 'Middle School Year 3',
-    how: 'Five harder questions, like in Year 3 of middle school. Every one you get right is two coins!',
+    how: 'One harder question, like in Year 3 of middle school. Get it right for two coins!',
   },
 };
 
 // How many questions a quiz asks, out of its bank, and how long after the
 // island is won that it is offered (the fireworks get their moment first).
-export const QUIZ_SIZE = 5;
+export const QUIZ_SIZE = 1;
 export const WIN_OFFER_MS = 2600;
 
 // A coin for each answer right on the elementary quiz, two on the middle
