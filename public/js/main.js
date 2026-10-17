@@ -555,11 +555,14 @@ async function openIslands() {
 }
 
 const CTB_TRIES = 4;
+// The name someone not logged in last gave on the CTB island, on this device.
+const WATCH_NAME_KEY = 'kidsworld.watch-name';
 const CTB_RETRY_MS = 3000;
 
 // The CTB island (server/ctb-office.js), straight from the link ?ctb: the
 // one island anyone can come to without logging in, to watch CTB's workers
-// at work. It is the open island marked watch; leaving it is the title screen.
+// at work, under a name they type (logged in, their own). It is the open
+// island marked watch; leaving it is the title screen.
 // Peer to peer (as on GitHub Pages), the list is the keeper's: it waits for
 // the keeper client to have started (a request sent sooner is lost when its
 // start sets it idle), and asks again a few times while the keeper is still
@@ -579,7 +582,22 @@ async function watchCtb(started) {
     ui.toast('🏢', 'The CTB island is not open right now. Try again later!', 'warn');
     return;
   }
-  visitIsland(island.code);
+  if (!loginHandlers.required()) {
+    visitIsland(island.code);
+    return;
+  }
+  // Not logged in: a name of their own first, which this device remembers.
+  let typed = '';
+  try {
+    typed = localStorage.getItem(WATCH_NAME_KEY) ?? '';
+  } catch {}
+  ui.watchNameDialog(typed, (name) => {
+    try {
+      localStorage.setItem(WATCH_NAME_KEY, name);
+    } catch {}
+    profile.update({ name });
+    visitIsland(island.code);
+  });
 }
 
 // ------------------------------------------------ inviting players

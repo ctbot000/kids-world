@@ -835,6 +835,40 @@ export class UI {
     );
   }
 
+  // Before the CTB island from the link ?ctb, for someone not logged in: the
+  // name they go by there, which they must type (prefill: the one they typed
+  // last time on this device). go(name) once it is a name.
+  watchNameDialog(prefill, go) {
+    this.openModal(
+      (root) => {
+        const box = h('input', { type: 'text', class: 'text-input name-input', value: prefill, maxLength: NAME_MAX * 2, autocomplete: 'off', placeholder: 'Your name', 'aria-label': 'Your name' });
+        box.spellcheck = false;
+        const why = h('p', { class: 'muted', 'aria-live': 'polite' });
+        const done = () => {
+          const name = cleanName(box.value);
+          if (!isValidName(name) || [...name].length > NAME_MAX) {
+            this.sound.play('no');
+            why.textContent = name ? `A name has at most ${NAME_MAX} letters.` : 'Type your name first!';
+            box.focus();
+            return;
+          }
+          this.closeModal();
+          go(name);
+        };
+        box.addEventListener('keydown', (e) => e.key === 'Enter' && done());
+        root.append(
+          h('h2', {}, '🏢 Visit CTB'),
+          h('p', {}, 'CTB’s helpers make Kids World better at their desks on the CTB island. What is your name?'),
+          box,
+          why,
+          h('button', { class: 'big blue', type: 'button', onclick: done }, '🛶 Let’s go!'),
+        );
+        setTimeout(() => box.focus(), 50);
+      },
+      { narrow: true },
+    );
+  }
+
   myIslandsDialog() {
     // Logged in, anything new from your other devices shows up as it comes.
     this.handlers.login?.keeper.resync();

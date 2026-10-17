@@ -2709,7 +2709,16 @@ test('the ?ctb link opens the CTB island without a login, its workers at their d
   const office = await new Office({ rooms: server.rooms, log: () => {} }).open(2);
   const page = await openPlayer(`${base}?ctb`, { name: 'Sunny Otter' }, noGuests);
   try {
+    // Not logged in: a name first, typed — an empty one is refused.
+    await until(page, () => document.querySelector('#modal:not([hidden]) .name-input'));
+    assert.equal(await page.$eval('#modal .name-input', (el) => el.value), '');
+    await clickButton(page, 'Let’s go', '#modal');
+    await until(page, () => document.querySelector('#modal p.muted')?.textContent.includes('Type your name first'));
+    assert.equal(await page.evaluate(() => window.kidsWorld.session), null);
+    await page.type('#modal .name-input', 'Mina Kim');
+    await clickButton(page, 'Let’s go', '#modal');
     await inGame(page);
+    assert.ok([...office.room.players.values()].some((p) => p.online && p.name === 'Mina Kim'), 'on the island under the name typed');
     assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'CTB');
     await until(page, () => ['Ada 💼', 'Ben 💼'].every((n) => [...window.kidsWorld.game.players.values()].some((p) => p.name === n && p.sitting)));
@@ -2732,8 +2741,14 @@ test('the ?ctb link opens the CTB island without a login peer to peer too, as on
   const ticker = setInterval(() => {
     for (const entry of games.rooms.values()) if (entry.room.online > 0) entry.room.tick();
   }, 100);
-  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}&ctb`, { name: 'Sunny Otter' }, () => delete window.kidsWorldGuests);
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}&ctb`, { name: 'Sunny Otter' }, () => {
+    delete window.kidsWorldGuests;
+    localStorage.setItem('kidsworld.watch-name', 'Mina Kim');
+  });
   try {
+    // The name typed last time on this device is there already.
+    await until(page, () => document.querySelector('#modal:not([hidden]) .name-input')?.value === 'Mina Kim');
+    await clickButton(page, 'Let’s go', '#modal');
     await inGame(page);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.mode), 'guest');
     assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
