@@ -142,8 +142,8 @@ async function playFile(file, loop) {
   station.url = URL.createObjectURL(file);
   video.src = station.url;
   video.loop = loop;
-  // The TVs get the sound however loud it is here (Chrome and Firefox
-  // capture it before the page's own volume), so here it starts quiet.
+  // The TVs get the sound however loud it is here (Chrome captures it
+  // before the page's own volume), so here it starts quiet.
   video.muted = true;
   $('tv-station').hidden = false;
   await video.play();
