@@ -421,6 +421,17 @@ export class Sound {
         this.noise(0.35, { type: 'bandpass', freq: 700, sweep: 1600, q: 0.8, gain: 0.08, attack: 0.03 });
         for (let i = 0; i < 3; i++) this.tone(NOTE(86 + PENTA[i]), { at: 0.32 + i * 0.06, decay: 0.2, gain: 0.03 });
         break;
+      case 'roar':
+        // The volcano island's great dragon: a deep, rumbling roar.
+        this.tone(95 * r(), { type: 'sawtooth', attack: 0.08, decay: 0.9, gain: 0.07, slide: 150, slideTime: 0.35, vibrato: 18 });
+        this.tone(140 * r(), { type: 'square', attack: 0.1, decay: 0.7, gain: 0.025, slide: 90, slideTime: 0.6 });
+        this.noise(0.9, { type: 'bandpass', freq: 350, sweep: 900, q: 0.7, gain: 0.12, attack: 0.06 });
+        break;
+      case 'fire':
+        // Its fire: a long roaring whoosh of flames.
+        this.noise(1.2, { type: 'lowpass', freq: 500, sweep: 2600, gain: 0.22, attack: 0.08 });
+        this.noise(1.1, { at: 0.05, type: 'bandpass', freq: 1400, sweep: 700, q: 0.6, gain: 0.08 });
+        break;
       case 'duck':
         for (let i = 0; i < 2; i++) this.quack(i * 0.18);
         break;

@@ -159,7 +159,8 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 // have taken off, and for the weapons which of them you carry (pick: its
 // level, 1 for the first; without one, the best you have); the clothes you
 // have (in CLOTHES order) and the ones you have on ('' for none); and the
-// capsule toys from gashapon machines, how many of each (gashapon.js).
+// capsule toys from gashapon machines, how many of each (gashapon.js); and
+// how many times you have tamed a volcano island's dragon (dragon.js).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -174,8 +175,12 @@ export function cleanGear(raw) {
   out.clothes = CLOTHES.filter((c) => clothes.includes(c.key)).map((c) => c.key);
   out.outfit = out.clothes.includes(p.outfit) ? p.outfit : '';
   out.toys = cleanToys(p.toys);
+  out.tames = cleanTames(p.tames);
   return out;
 }
+
+export const TAMES_MAX = 999;
+export const cleanTames = (n) => (Number.isInteger(n) && n > 0 ? Math.min(TAMES_MAX, n) : 0);
 
 export const cleanCoins = (n) => (Number.isInteger(n) && n > 0 ? Math.min(COINS_MAX, n) : 0);
 

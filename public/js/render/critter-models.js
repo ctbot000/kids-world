@@ -1016,17 +1016,20 @@ function unicorn(id) {
 
 const reindeer = (id) => pony(id, 'reindeer');
 
-// Dragon coats, in fire colours: the coat, the dark of its spikes and horns,
-// and the brighter skin of its wings.
+// Dragon coats, in greens: the coat, the dark of its spikes and horns, and
+// the brighter skin of its wings.
 const DRAGONS = [
-  { coat: '#cd4f36', spike: '#7a2a18', wing: '#e8703f' },
-  { coat: '#a63a28', spike: '#5f1d10', wing: '#c95831' },
-  { coat: '#c96b2a', spike: '#7a3c12', wing: '#e8933f' },
-  { coat: '#8a3c3c', spike: '#4f1c1c', wing: '#b35555' },
+  { coat: '#3f9e4d', spike: '#1f5a2a', wing: '#6cc46a' },
+  { coat: '#2f8a5a', spike: '#17482f', wing: '#5fbf8a' },
+  { coat: '#5aa83a', spike: '#2d5c1a', wing: '#8fd06a' },
+  { coat: '#348c3c', spike: '#1a4a20', wing: '#7cc860' },
 ];
+// How much bigger than a pony's build the dragon is drawn (its ride box in
+// critters.js is as much bigger).
+const DRAGON_SCALE = 2.2;
 
-// The dragon of a volcano island: a big four-footed dragon on the same body
-// as the ponies (so it walks as they do), with a long neck, a horned head,
+// The dragon of a volcano island: a great green four-footed dragon on the
+// same body as the ponies (so it walks as they do), drawn DRAGON_SCALE times as big, with a long neck, a horned head,
 // spikes down its back, plates across its pale belly, a spaded tail — and
 // great wings, folded at its sides on the ground and beating in the air.
 function dragon(id) {
@@ -1066,6 +1069,18 @@ function dragon(id) {
   head.add(mesh(sphere(), coat, 0, -0.035, 0.22, 0.1, 0.08, 0.15));
   for (const side of [-1, 1]) head.add(mesh(sphere(), spike, side * 0.045, 0.015, 0.34, 0.018, 0.024, 0.016));
   head.add(mesh(torus(0.07, 0.012, Math.PI), toon('#7a2a2a'), 0, -0.075, 0.2).rotateX(Math.PI / 2 - 0.2));
+  // A lower jaw that drops open to breathe fire, a glow of it in its mouth,
+  // and where the flames come out (mouth, below).
+  const jaw = new THREE.Group();
+  jaw.position.set(0, -0.07, 0.12);
+  head.add(jaw);
+  jaw.add(mesh(sphere(), coat, 0, -0.015, 0.1, 0.08, 0.035, 0.13));
+  const glow = mesh(sphere(), new THREE.MeshBasicMaterial({ color: '#ffb23d' }), 0, -0.06, 0.2, 0.06, 0.035, 0.09);
+  glow.visible = false;
+  head.add(glow);
+  const tip = new THREE.Object3D();
+  tip.position.set(0, -0.08, 0.36);
+  head.add(tip);
   const eyes = sideEyes(head, 0.135, 0.07, 0.08, 0.032);
   // Little horns, and a fin of an ear behind them.
   for (const side of [-1, 1]) {
@@ -1105,6 +1120,8 @@ function dragon(id) {
   at.add(mesh(cone(0.09, 0.2, 4), spike, 0, 0, -0.3).rotateX(-Math.PI / 2));
 
   const s = saddle(pivot, R[1], 0.36, 0.32, -0.05, true);
+  body.scale.setScalar(DRAGON_SCALE);
+  const v = new THREE.Vector3();
   return {
     group: g,
     body,
@@ -1116,12 +1133,16 @@ function dragon(id) {
     legs,
     wings,
     bends,
+    jaw,
+    glow,
+    // Where its flames come out, in the world, as drawn now.
+    mouth: () => tip.getWorldPosition(v),
     ...s,
-    height: 1.7,
-    shadow: 0.7,
-    pick: 0.9,
-    center: 1.0,
-    seen: 130,
+    height: 1.7 * DRAGON_SCALE,
+    shadow: 0.7 * DRAGON_SCALE,
+    pick: 0.9 * DRAGON_SCALE,
+    center: 1.0 * DRAGON_SCALE,
+    seen: 200,
     gait: { len: 0.8, run: 4, happy: 'rear', graze: 0.45 },
   };
 }
@@ -1402,6 +1423,7 @@ export class CritterModel {
       this.trot(dt, state === 'fly' ? 'jump' : state, moving);
       if (state === 'sleep') this.eyes.scale.y = 0.12;
       if (this.wings) this.flap(dt, state);
+      if (this.jaw) this.breathe(state);
       return;
     }
     switch (this.type) {
@@ -1486,6 +1508,19 @@ export class CritterModel {
   // it, galloping (front legs, then back), jumping, swimming, grazing, lying
   // down asleep, and happy, each in its own way. The elephant's trunk sways,
   // curls up to its mouth, comes up to spray, and up out of the water.
+  // A dragon breathing fire: up on its haunches a little, its neck reaching
+  // out and its jaw wide, a glow in its mouth; otherwise its jaw shut.
+  breathe(state) {
+    const fire = state === 'fire';
+    this.jaw.rotation.x = fire ? 0.55 + Math.sin(this.time * 30) * 0.05 : 0;
+    this.glow.visible = fire;
+    if (!fire) return;
+    this.pivot.rotation.x = -0.12;
+    this.neck.rotation.set(-0.15, 0, 0);
+    this.head.rotation.x = this.headRest + 0.3;
+    for (const w of this.wings) w.rotation.z = w.userData.wing * (0.75 + Math.sin(this.time * 4) * 0.08);
+  }
+
   // A dragon's wings: folded up along its back at rest, a slow lazy stretch
   // now and then; out and beating when it flies, its legs tucked up under it.
   flap(dt, state) {

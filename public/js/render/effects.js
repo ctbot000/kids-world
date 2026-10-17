@@ -462,6 +462,20 @@ export class Effects {
     }
   }
 
+  // A dragon's fire (one frame of it: called every frame while it breathes):
+  // flames pouring out of its mouth at (x, y, z) the way yaw faces, spreading
+  // as they go, as far as reach, in a cone angle either side.
+  flames(x, y, z, yaw, reach = 9, angle = 0.5) {
+    const life = 0.55;
+    for (let i = 0; i < 5; i++) {
+      const a = yaw + (Math.random() * 2 - 1) * angle * 0.8;
+      const s = (reach / life) * (0.75 + Math.random() * 0.3);
+      const color = ['#fff3a0', '#ffd84d', '#ff9a3d', '#ff5a1f', '#e8401c'][Math.floor(Math.random() * 5)];
+      this.add('puff', x, y, z, { vx: Math.sin(a) * s, vy: -1.2 + Math.random() * 1.6, vz: Math.cos(a) * s, size: 0.35 + Math.random() * 0.25, life: life * (0.8 + Math.random() * 0.3), grow: 2.4, drag: 0.6, color });
+    }
+    if (Math.random() < 0.5) this.add('sparkle', x, y, z, { vx: Math.sin(yaw) * reach * 1.4, vy: Math.random() * 2, vz: Math.cos(yaw) * reach * 1.4, size: 0.18, life: 0.5, drag: 1, color: '#ffef9a' });
+  }
+
   dust(x, y, z) {
     for (let i = 0; i < 3; i++) {
       this.add('puff', x + (Math.random() - 0.5) * 0.4, y + 0.05, z + (Math.random() - 0.5) * 0.4, { vy: 0.4, size: 0.25, life: 0.4, grow: 0.8, color: '#ffffff' });

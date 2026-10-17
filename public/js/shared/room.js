@@ -24,7 +24,9 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { canRide, FIRE, hitDragon, isWild, stepDragons } from './dragon.js';
+import { underTent } from './tents.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
@@ -737,12 +739,9 @@ export class Room {
       }
       case 'invite': {
         if (!CRITTER_INFO[msg.type] || ![msg.x, msg.y, msg.z].every(finite)) return;
-        // A wild friend (the dragon) is its island's own: there is only the
-        // one, on the volcano island it was born on.
-        if (CRITTER_INFO[msg.type].wild) {
-          this.notice(conn, 'The dragon is the volcano island’s own — there is only one, and it stays there!', 'info');
-          return;
-        }
+        // A dragon comes only to those who have tamed a volcano island's
+        // dragon often enough (dragon.js TAMES_TO_INVITE: their page keeps
+        // count and only sends for one then), and tame: one of your own.
         // The shared isle's toy box stays shut: nothing is brought to it,
         // animal or vehicle — it has everything it means to have.
         if (this.shared) {
@@ -770,7 +769,8 @@ export class Room {
           this.notice(conn, roomy ? needsRoom(msg.type) : NEEDS_WATER[msg.type], 'info');
           return;
         }
-        const c = this.critters.add(msg.type, at.x, at.y, at.z, null, info.vehicle ? Math.atan2(p.s[0] - at.x, p.s[2] - at.z) : null);
+        const c = this.critters.add(msg.type, at.x, at.y, at.z, null, info.vehicle || info.wild ? Math.atan2(p.s[0] - at.x, p.s[2] - at.z) : null);
+        if (c && info.wild) c.tame = true;
         if (c) this.broadcast({ t: 'cadd', critter: { id: c.id, type: c.type, name: c.name }, s: this.critters.pack().find((r) => r[0] === c.id), by: p.id });
         this.changed();
         break;
@@ -787,8 +787,9 @@ export class Room {
           this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
           return;
         }
-        // The dragon stays: the volcano island would not be itself without it.
-        if (CRITTER_INFO[riding?.type]?.wild) {
+        // The island's own dragon stays: the volcano island would not be
+        // itself without it. (One brought tame from the toy box can go.)
+        if (isWild(riding)) {
           this.notice(conn, `${riding.name} the dragon is the island’s own — they stay!`, 'info');
           return;
         }
@@ -801,6 +802,11 @@ export class Room {
         const c = this.critters.get(msg.id);
         const r = c && CRITTER_INFO[c.type].ride;
         if (!r || c.rider === p.id || c.passengers?.includes(p.id)) return;
+        // A wild dragon has to be tamed first (dragon.js).
+        if (!canRide(c)) {
+          this.notice(conn, `${c.name} the dragon is wild! Bop it until it is tired out to tame it — and watch out for its fire!`, 'info');
+          return;
+        }
         // With someone driving, the others ride along, in the seats it has.
         const along = Boolean(c.rider);
         if (along && !seatsFor(c.type)) {
@@ -824,6 +830,9 @@ export class Room {
       }
       case 'off':
         this.unride(p.id);
+        break;
+      case 'hit':
+        this.hitDragon(p, msg);
         break;
       case 'trick': {
         // A spout from the whale, a spray from the elephant's trunk, or a honk.
@@ -1020,6 +1029,7 @@ export class Room {
     // A wave with nobody left to see it goes home, to come again on Start.
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
+    this.stepDragons(now, where);
     this.keepApart(where);
     // The volcano's own dangers and chores: lava burns whoever stands in it,
     // water boils away and ice melts, and HP comes back whatever took it.
@@ -1142,6 +1152,58 @@ export class Room {
       }
     }
     this.broadcast(msg);
+  }
+
+  // The wild dragons' fights (dragon.js): waking, the fire they breathe and
+  // whoever it burns, and going back to sleep or wild again. What it does
+  // as it goes shows in the animals' states (critters.js pack); each breath
+  // and its burns are told as they come.
+  stepDragons(now, where) {
+    if (!this.online || !this.critters.list.some(isWild)) return;
+    const riding = this.critters.aboard();
+    const people = [];
+    for (const [id, w] of where) {
+      const p = this.players.get(id);
+      people.push({ id, x: w.x, y: w.y, z: w.z, riding: riding.has(id), dizzy: (p.dizzyUntil ?? 0) > now, sheltered: underTent(this.world, w.x, w.y, w.z) });
+    }
+    const news = stepDragons(this.critters, people, now);
+    for (const c of news.woke) this.broadcast({ t: 'dragon', id: c.id, fx: 'wake' });
+    for (const { c, yaw } of news.fires) this.broadcast({ t: 'dragon', id: c.id, fx: 'fire', yaw: +yaw.toFixed(3), ms: FIRE.ms });
+    for (const { c, pid } of news.burns) {
+      const p = this.players.get(pid);
+      if (!p || now < (p.safeUntil ?? 0)) continue;
+      // Knight Armor or a Fire Suit (shop.js CLOTHES) takes half of it.
+      const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
+      this.knock(p, now, hpAfterBump(p.hp, half ? FIRE.bumps / 2 : FIRE.bumps), { t: 'bump', pid, id: c.id, fire: true, x: +c.x.toFixed(2), z: +c.z.toFixed(2) });
+    }
+    for (const c of news.slept) this.broadcast({ t: 'dragon', id: c.id, fx: 'sleep' });
+    for (const c of news.wild) this.broadcast({ t: 'dragon', id: c.id, fx: 'wild' });
+  }
+
+  // A bop at a wild dragon, from as far as an arm (or the toy weapon in it)
+  // reaches: hearts off it, and with the last it is tame, and everyone who
+  // bopped it in that fight has tamed it (their pages count it).
+  hitDragon(p, msg) {
+    const c = this.critters.get(msg.id);
+    const now = this.now();
+    if (!isWild(c) || (p.dizzyUntil ?? 0) > now || this.critters.aboard().has(p.id)) return;
+    const weapon = weaponOf(p.look?.weapon);
+    const r = CRITTER_INFO.dragon.ride;
+    const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
+    if (bopGap(at, { x: c.x, y: c.y, z: c.z, radius: r.radius, height: r.height }, ARM_REACH + (weapon?.reach ?? 0) + BOP_SLACK) === null) return;
+    const hit = hitDragon(c, p.id, now, weapon?.power ?? 1);
+    if (!hit || hit.wait) return;
+    this.broadcast({ t: 'dhit', id: c.id, by: p.id, hearts: hit.hearts, max: hit.max });
+    if (hit.tamed) {
+      for (const q of this.players.values()) if (q.online && q.hp < q.maxHp && hit.fighters.includes(q.id)) this.allWellFor(q);
+      this.broadcast({ t: 'tamed', id: c.id, by: hit.fighters, hero: p.id, name: c.name });
+    }
+  }
+
+  // All HP back for one player who just won a fight.
+  allWellFor(q) {
+    q.hp = q.maxHp;
+    this.sendToPid(q.id, { t: 'hp', ...this.hpOf(q) });
   }
 
   // Lava burns: standing in it takes twice a monster bump's HP off, again
@@ -1734,7 +1796,8 @@ export class Room {
     for (const c of Array.isArray(save.critters) ? save.critters.slice(0, this.critters.max) : []) {
       if (!CRITTER_INFO[c?.type] || ![c.x, c.y, c.z].every(finite)) continue;
       const w = this.world;
-      this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name, finite(c.yaw) ? c.yaw : null);
+      const added = this.critters.add(c.type, Math.min(w.W - 0.5, Math.max(0.5, c.x)), Math.min(w.H, Math.max(1, c.y)), Math.min(w.D - 0.5, Math.max(0.5, c.z)), c.name, finite(c.yaw) ? c.yaw : null);
+      if (added && c.tame === true && CRITTER_INFO[c.type].wild) added.tame = true;
     }
     // Animals that came to the islands since this one was saved move in, once.
     const v = Number(save.v) || 1;

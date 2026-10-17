@@ -25,6 +25,7 @@
 // it the way a rider moves an animal.
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
+import { fightOf, isWild, MOODS, packFight } from './dragon.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
@@ -87,14 +88,17 @@ export const CRITTER_INFO = {
   // quicker than anyone runs and nimble, hopping the little steps itself.
   // The jump button rings its bell.
   scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
-  // The dragon, the one dragon of a volcano island (worldgen.js): asleep on
-  // the volcano by day and night, wings folded, until someone climbs on.
-  // It flies like the helicopter and the balloon do (ride.air, riding.js):
-  // hold jump to lift off. wild: the island's own, never one to invite from
-  // the toy box or send away (room.js) — there is only the one.
+  // The dragon, the one dragon of a volcano island (worldgen.js): a great
+  // green dragon, twice as big as a pony and more, asleep on the volcano,
+  // wings folded, until someone comes near — then it wakes and breathes
+  // fire, until it is bopped tame (dragon.js). Tamed, it flies like the
+  // helicopter and the balloon do (ride.air, riding.js): hold jump to lift
+  // off. wild: the island's own, never sent away (room.js), and only to
+  // be brought from the toy box by those who have tamed it often enough
+  // (dragon.js TAMES_TO_INVITE) — one tame from the start (c.tame).
   dragon: {
     name: 'Dragon', icon: '🐲', speed: 1.1, swims: false, flies: false, big: true, wild: true, home: 20,
-    ride: { air: true, seat: 1.36, z: 0.05, radius: 0.6, height: 2.6, float: 0.95, spread: 0.85, reach: 0.9, walk: 4.5, run: 8, swim: 2.5, jump: 9, fly: 9, flyRun: 13, flyUp: 6.5, maxFall: 3 },
+    ride: { air: true, seat: 2.99, z: 0.11, radius: 1.3, height: 5.6, float: 2.1, spread: 0.45, reach: 1.25, walk: 5, run: 9, swim: 2.5, jump: 10, fly: 11, flyRun: 16, flyUp: 7.5, maxFall: 3 },
     names: ['Ember', 'Cinder', 'Blaze', 'Smoky', 'Pepper', 'Sooty', 'Toasty', 'Flame', 'Rusty', 'Magma'],
   },
 };
@@ -117,10 +121,10 @@ export const CRITTER_INFO = {
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
 // The animals, without the vehicles — and without the wild ones, which are
-// their island's own (the dragon), not anyone's to invite.
+// their island's own (the dragon), to invite only once tamed (dragon.js).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire'];
 export const MAX_CRITTERS = 64;
 
 // How many more animals a bigger island has than a cozy one (128 blocks
@@ -215,6 +219,8 @@ const ON_FLOWER = 0.86;
 const FL = Math.floor;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
+// A wild dragon stomping after someone: slower than you walk, so you can get away.
+const WILD_MOVE = { walk: 2.4, run: 2.4, swim: 1.5, jump: 9 };
 
 // The water's surface, as it is drawn: 7/8 of the way up its top cell (render/mesher.js).
 export const SURFACE = 0.875;
@@ -1218,6 +1224,10 @@ export class CritterSim {
     const info = CRITTER_INFO[c.type];
     const r = info.ride;
     const b = this.bodyOf(world, c);
+    if (isWild(c) && fightOf(c).mood !== 'tame') {
+      this.stepWild(world, c, b, dt);
+      return;
+    }
     // Ambling by itself; keeping up, along with someone.
     let move = { walk: info.speed, run: r.run * 0.7, swim: r.swim * 0.6, jump: r.jump };
     let go = false;
@@ -1285,6 +1295,35 @@ export class CritterSim {
     c.z = b.z;
     if (b.inWater && c.state !== 'happy') c.state = 'swim';
     else if (c.state === 'swim') c.state = 'walk';
+  }
+
+  // A wild dragon (dragon.js): asleep, stomping after whoever it is after
+  // (c.fight.chase), turning to face them, or standing to breathe fire.
+  stepWild(world, c, b, dt) {
+    const f = c.fight;
+    let mx = 0;
+    let mz = 0;
+    if (f.mood === 'asleep') c.state = 'sleep';
+    else if (f.windup || f.breath) c.state = 'fire';
+    else {
+      c.state = 'idle';
+      const to = f.chase;
+      const face = to ? (Number.isFinite(to.face) ? to.face : Math.atan2(to.x - b.x, to.z - b.z)) : null;
+      if (face !== null) {
+        const off = wrap(face - c.yaw);
+        c.yaw = wrap(c.yaw + clamp(off, -2.5 * dt, 2.5 * dt));
+        if (Number.isFinite(to.x) && !this.edgeAhead(world, c, b)) {
+          const k = Math.max(0, Math.cos(off));
+          mx = Math.sin(c.yaw) * k;
+          mz = Math.cos(c.yaw) * k;
+          c.state = 'walk';
+        }
+      }
+    }
+    stepBody(world, b, { mx, mz, run: false, jump: false }, dt, { move: WILD_MOVE });
+    c.x = b.x;
+    c.y = b.y;
+    c.z = b.z;
   }
 
   // Just ahead of a big animal: a drop of more than a block, or water for
@@ -2229,6 +2268,8 @@ export class CritterSim {
       Math.round(c.z * 100),
       Math.round((((c.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) * 100),
       STATES.indexOf(c.state),
+      // A dragon's fight (dragon.js): its mood, its hearts and how many it had.
+      ...(packFight(c) ?? []),
     ]);
   }
 
@@ -2237,7 +2278,7 @@ export class CritterSim {
   }
 
   save() {
-    return this.list.map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), yaw: +c.yaw.toFixed(2) }));
+    return this.list.map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), yaw: +c.yaw.toFixed(2), ...(c.tame ? { tame: true } : {}) }));
   }
 }
 
@@ -2251,5 +2292,7 @@ export function unpackCritter(row) {
     z: row[4] / 100,
     yaw: row[5] / 100,
     state: STATES[row[6]] ?? 'idle',
+    // A dragon's fight: { mood, hearts, max } (dragon.js), or null.
+    fight: row.length >= 10 ? { mood: MOODS[row[7]] ?? 'tame', hearts: row[8], max: Math.max(1, row[9]) } : null,
   };
 }

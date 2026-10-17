@@ -1815,6 +1815,10 @@ body.touch.playing #joystick {
   color: var(--ink-soft);
 }
 
+.choice.locked .emoji {
+  filter: grayscale(1) opacity(0.45);
+}
+
 .choice:disabled {
   opacity: 0.45;
   cursor: default;

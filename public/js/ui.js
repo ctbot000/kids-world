@@ -12,6 +12,7 @@ import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
+import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
@@ -1839,6 +1840,7 @@ export class UI {
           card('🐶', 'Your pet', ['Pick a puppy, a kitten, a parrot, a baby dragon or another pet in 🐾 My pet. It comes along to every island! Tap it to pet it, and wave or dance: it does tricks too.']),
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear or a unicorn, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
+          card('🐲', 'The dragon', ['Every 🌋 volcano island has a great green dragon, asleep near the crater. Go near and it wakes up and breathes fire: when it rears back, run out of the way it faces! Bop it (', h('kbd', {}, 'X'), ') until it is tired out and it is tame — walk up, tap Ride and hold jump to fly. Tame a dragon ' + TAMES_TO_INVITE + ' times and your own is in the toy box, to bring to any island.']),
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
@@ -2865,8 +2867,27 @@ export class UI {
           );
         } else if (current === 'animals' || current === 'vehicles') {
           const vehicles = current === 'vehicles';
+          // The dragon comes last, locked until you have tamed a volcano
+          // island's dragon TAMES_TO_INVITE times (dragon.js).
+          const tames = this.profile.data.gear.tames ?? 0;
+          const open = tames >= TAMES_TO_INVITE;
+          const locked = h(
+            'button',
+            {
+              class: 'choice locked',
+              type: 'button',
+              'aria-label': `Dragon, locked: tamed ${tames} of ${TAMES_TO_INVITE} times`,
+              onclick: () => {
+                this.sound.play('no');
+                this.toast('🔒', `Tame the wild dragon on a 🌋 volcano island ${TAMES_TO_INVITE} times to bring your own! You have tamed it ${tames} ${tames === 1 ? 'time' : 'times'}.`);
+              },
+            },
+            h('span', { class: 'emoji' }, '🐲'),
+            'Dragon',
+            h('small', {}, `🔒 ${tames}/${TAMES_TO_INVITE} tamed`),
+          );
           grid.replaceChildren(
-            ...(vehicles ? VEHICLES : ANIMAL_TYPES).map((type) =>
+            ...(vehicles ? VEHICLES : open ? [...ANIMAL_TYPES, 'dragon'] : ANIMAL_TYPES).map((type) =>
               h(
                 'button',
                 {
@@ -2885,6 +2906,7 @@ export class UI {
                 CRITTER_INFO[type].name,
               ),
             ),
+            ...(vehicles || open ? [] : [locked]),
           );
         } else {
           grid.replaceChildren(
@@ -4719,6 +4741,17 @@ export class UI {
         tag('quiz', spot.x, spot.y + 4.6, spot.z, 'quiz', () => [h('div', { class: 'label' }, '🎓 Extra credit quiz!')], 'quiz', () => this.quizOfferDialog());
       }
     }
+    // Over a wild dragon near you (dragon.js), its name and the hearts it has left.
+    if (me) {
+      for (const c of g.critters.values()) {
+        const f = c.fight;
+        if (c.type !== 'dragon' || !f || f.mood === 'tame') continue;
+        const p = c.model.group.position;
+        if (Math.hypot(p.x - me.x, p.z - me.z) > 40) continue;
+        const label = `🐲 ${c.name || 'Dragon'}${f.mood === 'asleep' ? ' 💤' : ''} · wild`;
+        tag(`dragon-${c.id}`, p.x, p.y + c.model.height + 0.6, p.z, `${label}|${f.hearts}|${f.max}`, () => [h('div', { class: 'label' }, label), bar(f.hearts / Math.max(1, f.max), 'king')]);
+      }
+    }
     // Over every other monster near you, a bar of the hearts it has left.
     if (me) {
       for (const e of g.monsters.values()) {
@@ -4746,7 +4779,8 @@ export class UI {
     const g = this.game;
     const me = g.me?.body;
     const el = $('btn-attack');
-    const near = Boolean(me) && !g.riding && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - me.x, m.y - me.y, m.z - me.z) < ATTACK_SHOW);
+    const close = (m, far = ATTACK_SHOW) => Math.hypot(m.x - me.x, m.y - me.y, m.z - me.z) < far;
+    const near = Boolean(me) && !g.riding && ([...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m)) || [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6)));
     if (el.hidden === near) el.hidden = !near;
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;

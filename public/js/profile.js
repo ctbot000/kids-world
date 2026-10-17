@@ -10,7 +10,7 @@ import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAM
 import { drawToy, GASHA_PRICE, TOY_MAX, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { CLOTHES, cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
+import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -208,6 +208,14 @@ export class Profile extends EventTarget {
     this.count('capsules');
     this.count('capsuletoys', toysFound(toys), { max: true });
     return { toy, shell, have: toys[toy.key] };
+  }
+
+  // A volcano island's dragon tamed (dragon.js), one more time. Returns how
+  // many times you have now.
+  tameDragon() {
+    this.data.gear.tames = cleanTames(this.data.gear.tames + 1);
+    this.shopped();
+    return this.data.gear.tames;
   }
 
   // One drunk (the island's half of it is game.js drink): out of your pocket.

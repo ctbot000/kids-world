@@ -10,6 +10,7 @@ import { gashaponNear } from './shared/gashapon.js';
 import { pianoNear } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
+import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -88,6 +89,8 @@ const FRONT = 0.34;
 const SWEEP = -0.17;
 // A monster bopped flashes white, on and off, this long.
 const FLASH_MS = 300;
+// A volcano island's own dragon, still wild (dragon.js): not to ride yet, but to bop.
+const wildDragon = (c) => c.type === 'dragon' && Boolean(c.fight) && c.fight.mood !== 'tame';
 const FLASH_BLINK = 75;
 // How each swing's slash looks (render/effects.js slash): its colour, how
 // high over the swinger's feet, and the hammer's coming down from overhead.
@@ -349,6 +352,15 @@ export class Game extends EventTarget {
       case 'ride':
         this.rideNews(msg);
         break;
+      case 'dragon':
+        this.dragonNews(msg);
+        break;
+      case 'dhit':
+        this.dragonHit(msg);
+        break;
+      case 'tamed':
+        this.dragonTamed(msg);
+        break;
       case 'pfx':
         // Your own taps showed at once (see touchPet).
         if (msg.by !== this.pid) this.petFx(msg);
@@ -481,7 +493,7 @@ export class Game extends EventTarget {
     const names = new Map(msg.critters.map((c) => [c.id, c]));
     for (const row of msg.pack) {
       const c = unpackCritter(row);
-      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0, passengers: names.get(c.id)?.passengers });
+      if (c) this.addCritter({ ...c, name: names.get(c.id)?.name ?? '', rider: names.get(c.id)?.rider ?? 0, passengers: names.get(c.id)?.passengers }).fight = c.fight;
     }
     for (const id of [...this.monsters.keys()]) this.dropMonster(id);
     this.monsterStates(msg.monsters ?? []);
@@ -651,6 +663,7 @@ export class Game extends EventTarget {
       seen.add(c.id);
       let entry = this.critters.get(c.id);
       if (!entry) entry = this.addCritter({ ...c, name: '' });
+      entry.fight = c.fight;
       entry.snaps.push({ t: now, x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state });
       if (entry.snaps.length > 8) entry.snaps.shift();
     }
@@ -661,6 +674,7 @@ export class Game extends EventTarget {
     const c = msg.s ? unpackCritter(msg.s) : null;
     if (!c || this.critters.has(c.id)) return;
     const entry = this.addCritter({ ...c, name: msg.critter.name });
+    entry.fight = c.fight;
     this.renderer.effects.sparkles(c.x, c.y + 0.4, c.z, 14);
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
@@ -1013,6 +1027,10 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
+    if (msg.fire && !this.toldFire) {
+      this.toldFire = true;
+      this.emit('toast', { icon: '🔥', text: 'Ouch, dragon fire! When it rears back, run out of the way it is facing — then bop it!' });
+    }
     if (msg.lava && !this.toldLava) {
       this.toldLava = true;
       this.emit('toast', { icon: '🔥', text: 'Hot, hot, hot! Get out of the lava — it burns a lot!' });
@@ -1147,6 +1165,93 @@ export class Game extends EventTarget {
     }
   }
 
+  // ------------------------------------------------ the dragon (dragon.js)
+
+  // A wild dragon woke up, breathed fire, went back to sleep or wild again.
+  dragonNews(msg) {
+    const c = this.critters.get(msg.id);
+    if (!c) return;
+    const p = c.model.group.position;
+    const near = this.near(p.x, p.y, p.z, 45);
+    if (msg.fx === 'fire') {
+      c.fireYaw = Number(msg.yaw) || 0;
+      c.fireUntil = performance.now() + (Number(msg.ms) || FIRE.ms);
+      if (near) this.sound.play('fire');
+    } else if (msg.fx === 'wake' && near) {
+      this.sound.play('roar');
+    }
+  }
+
+  // A wild dragon bopped: it flashes, and whoever bopped it hears how it is going.
+  dragonHit(msg) {
+    const c = this.critters.get(msg.id);
+    if (!c) return;
+    const now = performance.now();
+    if (msg.by !== this.pid) c.flashUntil = now + FLASH_MS;
+    if (c.fight && Number.isInteger(msg.hearts)) c.fight = { ...c.fight, mood: msg.hearts ? 'awake' : 'tame', hearts: msg.hearts };
+    const p = c.model.group.position;
+    if (this.near(p.x, p.y, p.z, 30)) {
+      this.renderer.effects.bang(p.x, p.y + CRITTER_INFO.dragon.ride.height * 0.7, p.z);
+      this.sound.play('bump');
+    }
+    if (msg.by === this.pid && msg.hearts && now > (this.toldDragonHit ?? 0)) {
+      this.toldDragonHit = now + 20000;
+      this.emit('toast', { icon: '🐲', text: `Bonk! ${msg.hearts} more ${msg.hearts === 1 ? 'heart' : 'hearts'} and ${c.name || 'the dragon'} is tired out. Watch out for its fire!` });
+    }
+  }
+
+  // A wild dragon bopped tame: everyone who helped has tamed it once more
+  // (kept in your gear), and after TAMES_TO_INVITE a dragon of your own
+  // comes from the toy box.
+  dragonTamed(msg) {
+    const c = this.critters.get(msg.id);
+    if (c) {
+      c.fight = { mood: 'tame', hearts: 0, max: c.fight?.max ?? DRAGON_HEARTS };
+      c.fireUntil = 0;
+      const p = c.model.group.position;
+      if (this.near(p.x, p.y, p.z, 60)) {
+        const top = p.y + CRITTER_INFO.dragon.ride.height;
+        this.renderer.effects.hearts(p.x, top, p.z, 8);
+        this.renderer.effects.sparkles(p.x, top - 1, p.z, 30, ['#7fe08c', '#ffffff', '#ffd84d']);
+        this.renderer.effects.firework(p.x, top + 2, p.z);
+        this.sound.play('victory');
+      }
+    }
+    const name = msg.name || 'the dragon';
+    if (!Array.isArray(msg.by) || !msg.by.includes(this.pid)) {
+      const hero = this.players.get(msg.hero)?.name;
+      if (hero) this.emit('toast', { icon: '🐲', text: `${hero} tamed ${name}! Anyone can ride it now.` });
+      return;
+    }
+    const n = this.profile.tameDragon();
+    const left = TAMES_TO_INVITE - n;
+    const text =
+      left > 0
+        ? `You tamed ${name}! Walk up and ride it. Tame a dragon ${left} more ${left === 1 ? 'time' : 'times'} to bring your own from the toy box (${n} of ${TAMES_TO_INVITE}).`
+        : left === 0
+          ? `You tamed ${name} — that’s ${TAMES_TO_INVITE} times! 🐲 A dragon of your own is in your toy box now: bring it to any island!`
+          : `You tamed ${name} again! That’s ${n} times. Walk up and ride it!`;
+    this.emit('toast', { icon: '🐲', text });
+  }
+
+  // Each frame, a dragon's flames while it breathes them, white flashes when
+  // bopped, and a word about a wild one the first time you come near it.
+  dragonFrame(c, s, now) {
+    const m = c.model;
+    const flash = now < (c.flashUntil ?? 0) && Math.floor((c.flashUntil - now) / FLASH_BLINK) % 2 === 0;
+    if (flash || c.flashed) flashModel(m.group, flash);
+    c.flashed = flash;
+    if (now < (c.fireUntil ?? 0) && m.group.visible && m.mouth) {
+      const at = m.mouth();
+      this.renderer.effects.flames(at.x, at.y, at.z, c.fireYaw ?? s.yaw, FIRE.reach, FIRE.angle);
+    }
+    const me = this.me?.body;
+    if (me && wildDragon(c) && !this.toldWild && Math.hypot(s.x - me.x, s.z - me.z) < 18) {
+      this.toldWild = true;
+      this.emit('toast', { icon: '🐲', text: `A wild dragon! Come close and it wakes up and breathes fire. Bop it (${this.touch ? '👊' : 'X'}) until it is tired out to tame it, then ride it!` });
+    }
+  }
+
   // Bopping a monster, or landing on it (on).
   bop(id, on = false) {
     this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
@@ -1209,7 +1314,7 @@ export class Game extends EventTarget {
   // flashes and squashes, a burst flies off it from where the blow met it,
   // and it hops back leaning away from the blow; the whack is as heavy as
   // the weapon (kind) is. Not King Grumble safe in his bubble: that bounces.
-  strike(hits, kind) {
+  strike(hits, kind, dragons = []) {
     const look = IMPACTS[kind] ?? IMPACTS.punch;
     const color = SLASHES[kind]?.color ?? SLASHES.punch.color;
     const now = performance.now();
@@ -1231,6 +1336,18 @@ export class Game extends EventTarget {
       // Where the blow met it: its near side, a little over half way up.
       const r = hit.size.radius * 0.8;
       this.renderer.effects.impact(m.x - (dx / d) * r, m.y + hit.size.height * 0.55, m.z - (dz / d) * r, dx / d, dz / d, color);
+      landed++;
+    }
+    for (const hit of dragons) {
+      const c = this.critters.get(hit.id);
+      if (!c) continue;
+      const m = c.model.group.position;
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      c.flashUntil = until + FLASH_MS;
+      const r = hit.size.radius * 0.8;
+      this.renderer.effects.impact(m.x - (dx / d) * r, m.y + hit.size.height * 0.35, m.z - (dz / d) * r, dx / d, dz / d, color);
       landed++;
     }
     if (!landed) return;
@@ -1279,6 +1396,23 @@ export class Game extends EventTarget {
       hits.push(hit);
       if (!best || gap < best.gap) best = hit;
     }
+    // A wild dragon in the sweep too (dragon.js): bopped tame.
+    const dragons = [];
+    for (const c of this.critters.values()) {
+      if (!wildDragon(c)) continue;
+      const m = c.model.group.position;
+      const r = CRITTER_INFO.dragon.ride;
+      const size = { radius: r.radius, height: r.height };
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, ...size }, reach);
+      if (gap === null) continue;
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster ? FRONT : SWEEP)) continue;
+      const hit = { id: c.id, gap, dx, dz, m, size, dragon: true };
+      dragons.push(hit);
+      if (!best || gap < best.gap) best = hit;
+    }
     // The blaster turns to aim at its one; a sweep goes the way you face,
     // turning only for one right up against you behind.
     const behind = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1) < SWEEP;
@@ -1300,11 +1434,14 @@ export class Game extends EventTarget {
         this.sound.play('blow');
       } else {
         this.slashFrom(this.players.get(this.pid)?.avatar);
-        if (hits.length) this.strike(hits, weapon?.key ?? 'punch');
+        if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
       }
       if (best) {
         this.bopSentAt = performance.now();
-        for (const hit of blaster ? [best] : hits) this.bop(hit.id);
+        for (const hit of blaster ? [best] : [...hits, ...dragons]) {
+          if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
+          else this.bop(hit.id);
+        }
       }
     }, lands * 1000);
     if (best) return best.id;
@@ -2200,7 +2337,7 @@ export class Game extends EventTarget {
     let near = Infinity;
     for (const c of this.critters.values()) {
       const r = CRITTER_INFO[c.type]?.ride;
-      if (!r || !this.canBoard(c) || !c.model.group.visible) continue;
+      if (!r || !this.canBoard(c) || !c.model.group.visible || wildDragon(c)) continue;
       const p = c.model.group.position;
       const d = Math.hypot(p.x - b.x, p.z - b.z) - r.radius;
       const up = b.y - p.y;
@@ -3680,6 +3817,7 @@ export class Game extends EventTarget {
         m.shadow.visible = false;
       }
       if (c.sprayUntil > now) this.spray(c, now);
+      if (c.type === 'dragon') this.dragonFrame(c, s, now);
       if (state === 'sleep' && !m.tiny && now > (c.zzzAt ?? 0)) {
         c.zzzAt = now + 1400 + Math.random() * 800;
         if (this.near(s.x, s.y, s.z, 30)) this.renderer.effects.zzz(s.x, s.y + m.height, s.z);
@@ -3692,7 +3830,7 @@ export class Game extends EventTarget {
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
       if (!info?.vehicle && state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
-        if (c.type !== 'butterfly') this.sound.play(c.type);
+        if (c.type !== 'butterfly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
       this.seaSights(c, s, state, now);

@@ -1,10 +1,10 @@
 // The volcano island: one theme of worldgen.js with a crater of lava in its
 // mountain, lakes of lava at its foot and a sea of lava round it — never a
 // drop of water or ice, which would only boil away — and the one dragon,
-// asleep on the volcano and nobody's to invite or send away. Lava is swum in
-// as water is, only slower (physics.js); monsters, like everyone, keep out
-// of it (monsters.js), and it burns hard (room.js), which melts ice put
-// upon it into water, and boils the water away.
+// asleep on the volcano, wild and nobody's to send away (dragon.test.js).
+// Lava is swum in as water is, only slower (physics.js); monsters, like
+// everyone, keep out of it (monsters.js), and it burns hard (room.js), which
+// melts ice put upon it into water, and boils the water away.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
@@ -91,7 +91,7 @@ test('every volcano island has exactly one dragon, asleep near the crater; no ot
   }
 });
 
-test('the dragon is nobody’s to invite or send away: it is not even in the toy box', () => {
+test('the dragon is wild: not among the animals anyone may invite (only those who tamed it, dragon.test.js)', () => {
   assert.ok(CRITTER_INFO.dragon.wild, 'wild');
   assert.ok(!ANIMAL_TYPES.includes('dragon'), 'not among the animals to invite');
 });
