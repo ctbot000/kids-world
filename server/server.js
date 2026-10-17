@@ -6,7 +6,8 @@
 // Started from the command line, it is also the keeper (see keeper.js) once
 // that is set up, with its admin pages at /admin/, and runs the AI friend
 // (buddy.js) on Z.ai's models with the local Ollama as a standby, with its
-// settings on the admin page, and its own island here. Usage:
+// settings on the admin page, and its own island here; and CTB, whose
+// workers turn the project's GitHub issues into pull requests (ctb.js). Usage:
 //   npm start                        # http://localhost:8747/
 //   npm start -- --host 0.0.0.0      # also reachable from other devices on the LAN
 //   npm start -- --port 8080         # or PORT=8080 npm start
@@ -24,6 +25,7 @@ import { SIZES, THEMES } from '../public/js/shared/worldgen.js';
 import { adminHandler } from './admin.js';
 import { PublicAdventure, RETIRED_KEEP_MS, shareTheIsle } from './adventure.js';
 import { Buddy } from './buddy.js';
+import { CtbControl } from './ctb.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
 import { Fallback, Ollama, Zai } from './llm.js';
@@ -342,7 +344,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         homeFile,
       }),
   });
-  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend }) });
+  // CTB, whose workers do real work on this project from its GitHub issues,
+  // with the AI friend's models (Z.ai's, the local Ollama as a standby) in
+  // an island office of this server (see ctb.js). Its rooms are set below.
+  const ctb = new CtbControl({
+    dir: store.dir,
+    repoDir: fileURLToPath(new URL('..', import.meta.url)),
+    llm: new Fallback(new Zai(), new Ollama()),
+    keeper: keeper ?? null,
+    rtc: keeper?.rtc ?? null,
+    server: keeper?.server ?? null,
+    iceServers: ICE_SERVERS,
+    friendModel: () => friend.settings.model,
+  });
+  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb }) });
+  ctb.rooms = server.rooms;
   // The shared isle hosted peer to peer too, so pages anywhere can conquer
   // it together (see shareTheIsle).
   const sharedIsle = keeper && server.publicAdventure ? shareTheIsle(keeper, server.publicAdventure, { log: (text) => console.log(text) }) : null;
@@ -354,7 +370,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (keeper) console.log(`Keeper: copies are kept in ${store.dir}; see them at http://localhost:${port}/admin/`);
   });
   await friend.start();
+  await ctb.start();
   const stop = async () => {
+    await ctb.stop();
     await friend.stop();
     sharedIsle?.();
     await keeper?.stop();

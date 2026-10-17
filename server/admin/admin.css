@@ -494,7 +494,8 @@ h2 .badge {
 select,
 button,
 .button,
-input[type='text'] {
+input[type='text'],
+input[type='number'] {
   height: 30px;
   padding: 0 10px;
   border: 1px solid var(--border-strong);
@@ -1090,4 +1091,40 @@ button.primary:hover {
   position: fixed;
   left: -9999px;
   top: 0;
+}
+
+/* CTB: the new-task form, the task board, proposals and pull requests. */
+.ctb-task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.ctb-task textarea {
+  font: 400 13px var(--font);
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.ctb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.ctb-list .badge {
+  margin-left: 4px;
+}
+
+.ctb-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }

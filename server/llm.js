@@ -100,24 +100,25 @@ export class Ollama {
   // is filled in with how it went, for the admin page's model log: when it
   // was sent (after the ones before it), the model's words as they came, and
   // Ollama's own counts and times.
-  chat(messages, schema, trace = null) {
-    const run = () => this.ask(messages, schema, trace);
+  chat(messages, schema, trace = null, opts = {}) {
+    const run = () => this.ask(messages, schema, trace, opts);
     const answer = this.queue.then(run, run);
     this.queue = answer.catch(() => {});
     return answer;
   }
 
-  async ask(messages, schema, trace = null) {
+  async ask(messages, schema, trace = null, opts = {}) {
+    const options = { ...OPTIONS, ...(opts.maxTokens ? { num_predict: opts.maxTokens } : {}), ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) };
     if (trace) {
       trace.sentAt = Date.now();
       trace.model = this.model;
-      trace.options = OPTIONS;
+      trace.options = options;
     }
     const res = await this.fetch(`${this.url}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: this.model, messages, stream: false, format: schema, keep_alive: '30m', options: OPTIONS }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({ model: this.model, messages, stream: false, format: schema, keep_alive: '30m', options }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Ollama answered ${res.status}`);
     const body = await res.json();
@@ -209,22 +210,25 @@ export class Zai {
 
   // The model's answer to messages ([{ role, content }]), as the object the
   // schema describes. Throws when there is none in time. trace, when given,
-  // is filled in for the admin page's model log, like Ollama's.
-  async chat(messages, schema, trace = null) {
+  // is filled in for the admin page's model log, like Ollama's. opts: longer
+  // answers and more time for them (maxTokens, timeoutMs), and temperature,
+  // for CTB's workers (ctb.js), who write code rather than one short line.
+  async chat(messages, schema, trace = null, opts = {}) {
     if (!this.key) throw new Error('Z.ai has no API key (ZAI_API_KEY)');
     const url = await this.pick();
     if (!url) throw new Error('Z.ai is not answering (or the API key is no good)');
+    const options = { ...ZAI_OPTIONS, ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}), ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) };
     if (trace) {
       trace.sentAt = Date.now();
       trace.model = this.model;
-      trace.options = ZAI_OPTIONS;
+      trace.options = options;
     }
     const said = [...messages, { role: 'system', content: `Answer with one JSON object only, nothing else, following this JSON schema exactly: ${JSON.stringify(schema)}` }];
     const res = await this.fetch(`${url}/chat/completions`, {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify({ model: this.model, messages: said, stream: false, temperature: ZAI_OPTIONS.temperature, max_tokens: ZAI_OPTIONS.max_tokens, response_format: { type: 'json_object' } }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({ model: this.model, messages: said, stream: false, temperature: options.temperature, max_tokens: options.max_tokens, response_format: { type: 'json_object' } }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(await this.trouble(res));
     const body = await res.json();
@@ -306,17 +310,17 @@ export class Fallback {
   // The first one's answer, or the local one's when it cannot (no key, no
   // internet, out of credit): the trace says why it changed, and the local
   // one's own trace is what remains, as its answer is what is used.
-  async chat(messages, schema, trace = null) {
+  async chat(messages, schema, trace = null, opts = {}) {
     let error;
     try {
-      const answer = await this.primary.chat(messages, schema, trace);
+      const answer = await this.primary.chat(messages, schema, trace, opts);
       this.using = this.primary;
       return answer;
     } catch (e) {
       error = e;
     }
     if (trace) trace.fellBack = error.message;
-    const answer = await this.local.chat(messages, schema, trace);
+    const answer = await this.local.chat(messages, schema, trace, opts);
     this.using = this.local;
     return answer;
   }

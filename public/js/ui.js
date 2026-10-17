@@ -1866,6 +1866,7 @@ export class UI {
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
+          card('🏢', 'CTB', ['On the CTB island, grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on!']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'L'), ' changes how you look, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('🎥', 'See through your eyes', ['Press 🎥 to look from behind you, through your own eyes, or from high in the sky. Zooming all the way in looks through your eyes too. Through your eyes, left and right turn you round.']),

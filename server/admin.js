@@ -16,7 +16,10 @@
 // players told of, each with a picture of their screen, to look into, mark
 // done and delete; and what is on every TV in the game (a YouTube video, or
 // a video on this computer, which the admin page itself plays to them: see
-// shared/broadcast.js). Only for this computer: requests from other
+// shared/broadcast.js); and CTB, the company whose workers do real work on
+// this project (ctb.js): its settings, its workers and what they are doing,
+// its task board (GitHub issues) with a form for a new task, the workers'
+// proposals to approve or turn down, and their pull requests. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -30,6 +33,7 @@ const PAGES = {
   '/admin/admin.js': 'admin.js',
   '/admin/admin.css': 'admin.css',
   '/admin/tv.js': 'tv.js',
+  '/admin/ctb.js': 'ctb.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -123,8 +127,40 @@ async function friendApiFor(friend, req, res, rest) {
   return problem ? json(res, 400, { error: problem }) : json(res, 200, { ok: true });
 }
 
+// CTB (ctb.js): GET what its workers are doing, PUT settings, POST /tasks
+// { title, body } for a new task (a GitHub issue), POST /proposals/<n>/approve
+// or /reject, POST /propose for a worker to propose a task now, and POST
+// /check to look at GitHub and the model again.
+async function ctbApiFor(ctb, req, res, rest) {
+  if (!ctb) return json(res, 404, { error: 'CTB does not run here.' });
+  try {
+    if (rest === '') {
+      if (req.method === 'GET') return json(res, 200, await ctb.status());
+      if (req.method !== 'PUT') return res.writeHead(405, { Allow: 'GET, PUT' }).end();
+      await ctb.change(await readJson(req));
+      return json(res, 200, await ctb.status());
+    }
+    if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+    if (rest === '/tasks') {
+      const body = await readJson(req, 64 * 1024);
+      return json(res, 200, await ctb.addTask(body?.title, body?.body));
+    }
+    if (rest === '/propose') return json(res, 200, await ctb.propose());
+    if (rest === '/check') {
+      await ctb.check();
+      return json(res, 200, await ctb.status());
+    }
+    const proposal = /^\/proposals\/(\d+)\/(approve|reject)$/.exec(rest);
+    if (!proposal) return json(res, 404, { error: 'Not found' });
+    await (proposal[2] === 'approve' ? ctb.approve(Number(proposal[1])) : ctb.reject(Number(proposal[1])));
+    return json(res, 200, { ok: true });
+  } catch (error) {
+    return json(res, error instanceof KeepError ? 400 : 500, { error: error.message });
+  }
+}
+
 // Returns a handler: (req, res, pathname) => true when it answered.
-export function adminHandler({ store, keeper = null, friend = null, dataDir = store.dir }) {
+export function adminHandler({ store, keeper = null, friend = null, ctb = null, dataDir = store.dir }) {
   const friendApi = (req, res, rest) => friendApiFor(friend, req, res, rest);
   return async function admin(req, res, pathname) {
     if (pathname !== '/admin' && !pathname.startsWith('/admin/')) return false;
@@ -177,6 +213,10 @@ export function adminHandler({ store, keeper = null, friend = null, dataDir = st
         keeper.setTv(null);
         json(res, 200, { tv: null });
       } else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
+      return true;
+    }
+    if (pathname === '/admin/api/ctb' || pathname.startsWith('/admin/api/ctb/')) {
+      await ctbApiFor(ctb, req, res, pathname.slice('/admin/api/ctb'.length));
       return true;
     }
     if (pathname === '/admin/api/friend' || pathname.startsWith('/admin/api/friend/')) {

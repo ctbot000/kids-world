@@ -223,6 +223,9 @@ test('the keeper lists the islands hosts tell it about, for as long as they stay
   assert.equal((await host.say({ t: 'open-island', island: { code: 'nope' } })).code, 'bad');
   await host.say({ t: 'open-island', island: listing('482753', { name: 'Bunny Bay', players: 5 }) });
   assert.equal((await anyone.say({ t: 'islands' })).islands[0].players, 5);
+  // A page's island is never the one to come to without logging in (the CTB island's mark).
+  await host.say({ t: 'open-island', island: { ...listing('482753', { name: 'Bunny Bay', players: 5 }), watch: true } });
+  assert.equal((await anyone.say({ t: 'islands' })).islands.some((i) => 'watch' in i), false);
 
   // The newest word about a code wins: one island a code.
   const reopened = await page(keeper, 'd4'.repeat(16));

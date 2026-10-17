@@ -989,6 +989,9 @@ export class Room {
       // The one public adventure island (whoever keeps it sets this, see
       // server/adventure.js): true while it is the one to conquer.
       public: this.public === true,
+      // An island anyone may come to straight from a link without logging
+      // in (whoever keeps it sets this): the CTB island (server/ctb-office.js).
+      ...(this.watchable === true ? { watch: true } : {}),
       // An adventure island: how many camps it has, how many are free, and whether all of it is.
       ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
       // A tower defense island: the wave it is on, of how many, and whether every one is done.

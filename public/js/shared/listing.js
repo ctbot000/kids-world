@@ -60,6 +60,7 @@ export function cleanListing(raw) {
     max,
     passcode: raw.passcode === true,
     public: raw.public === true,
+    ...(raw.watch === true ? { watch: true } : {}),
     ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true, stage: count(adventure.stage, 1, 9999) } } : {}),
     ...(defense ? { defense: { wave: count(defense.wave, 1, waves), waves, won: defense.won === true } } : {}),
   };

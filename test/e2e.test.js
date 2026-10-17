@@ -24,6 +24,7 @@ import { adminHandler } from '../server/admin.js';
 import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
 import { shareTheIsle } from '../server/adventure.js';
 import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOptions } from '../server/keeper.js';
+import { Office } from '../server/ctb-office.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -2692,6 +2693,32 @@ test('nobody plays without a login: the title screen has only the way to log in,
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('the ?ctb link opens the CTB island without a login, its workers at their desks, and says so when it is not open', { skip }, async () => {
+  const noGuests = () => delete window.kidsWorldGuests;
+  // Not open yet: the title screen says so, still asking for a login.
+  const early = await openPlayer(`${base}?ctb`, { name: 'Sunny Otter' }, noGuests);
+  try {
+    await until(early, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('The CTB island is not open right now')));
+    assert.equal(await early.evaluate(() => window.kidsWorld.session), null);
+  } finally {
+    await early.browserContext().close();
+  }
+  const office = await new Office({ rooms: server.rooms, log: () => {} }).open(2);
+  const page = await openPlayer(`${base}?ctb`, { name: 'Sunny Otter' }, noGuests);
+  try {
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'CTB');
+    await until(page, () => ['Ada 💼', 'Ben 💼'].every((n) => [...window.kidsWorld.game.players.values()].some((p) => p.name === n && p.sitting)));
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.settings.build), 'host', 'only the workers build there');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await office.close();
+    server.rooms.delete(office.room.code);
   }
 });
 

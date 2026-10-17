@@ -554,6 +554,23 @@ async function openIslands() {
   return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
 }
 
+// The CTB island (server/ctb-office.js), straight from the link ?ctb: the
+// one island anyone can come to without logging in, to watch CTB's workers
+// at work. It is the open island marked watch; leaving it is the title screen.
+async function watchCtb() {
+  let island = null;
+  try {
+    island = (await openIslands()).find((i) => i.watch);
+  } catch {
+    island = null;
+  }
+  if (!island) {
+    ui.toast('🏢', 'The CTB island is not open right now. Try again later!', 'warn');
+    return;
+  }
+  visitIsland(island.code);
+}
+
 // ------------------------------------------------ inviting players
 
 // Inviting a player from the players list to the island you are on: its
@@ -1004,7 +1021,8 @@ async function boot() {
   greet();
   const code = normalizeCode(params.get('code'));
   // An invitation's link waits until you have logged in (it is still in the address).
-  if (isValidCode(code) && !loginHandlers.required()) ui.visitDialog(code);
+  if (params.has('ctb')) watchCtb();
+  else if (isValidCode(code) && !loginHandlers.required()) ui.visitDialog(code);
   requestAnimationFrame(frame);
   present();
   keeper.start();

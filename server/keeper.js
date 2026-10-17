@@ -1660,6 +1660,9 @@ export class Keeper extends EventEmitter {
         // One island a connection; the newest word about a code wins.
         const island = cleanListing(msg.island);
         if (!island) throw new KeepError('bad', 'That is not an island to list.');
+        // Only an island of the keeper's own computer is one to come to
+        // without logging in (the CTB island): never a page's.
+        delete island.watch;
         for (const other of this.conns.values()) if (other !== conn && other.island?.code === island.code) other.island = null;
         conn.island = island;
         this.reply(conn, { t: 'kept', what: 'open-island', code: island.code });
