@@ -88,13 +88,10 @@ function hub(issues = []) {
     tasks: async () => issues.filter((i) => i.open && i.labels.includes(LABELS.task) && i.author === 'ctbot000'),
     proposals: async () => issues.filter((i) => i.open && i.labels.includes(LABELS.proposal)),
     create: async ({ title, body, labels }) => {
-      const issue = { number: ++next, title, body, labels: [...labels], author: 'ctbot000', assignees: [], open: true, url: `https://github.com/ctbot000/toy/issues/${next}` };
+      const issue = { number: ++next, title, body, labels: [...labels], author: 'ctbot000', open: true, url: `https://github.com/ctbot000/toy/issues/${next}` };
       issues.push(issue);
       made.push(issue);
       return { number: issue.number, url: issue.url };
-    },
-    assign: async (n) => {
-      issues.find((x) => x.number === n).assignees = ['ctbot000'];
     },
     label: async (n, { add = [], remove = [] }) => {
       const i = issues.find((x) => x.number === n);
@@ -113,7 +110,7 @@ function hub(issues = []) {
   return gh;
 }
 
-const issue = (number, title, body = '', labels = [LABELS.task], author = 'ctbot000') => ({ number, title, body, labels, author, assignees: [], open: true, url: `https://github.com/ctbot000/toy/issues/${number}` });
+const issue = (number, title, body = '', labels = [LABELS.task], author = 'ctbot000') => ({ number, title, body, labels, author, open: true, url: `https://github.com/ctbot000/toy/issues/${number}` });
 
 async function eventually(fn, timeout = 60000) {
   const end = Date.now() + timeout;
@@ -247,7 +244,7 @@ test('failing unit tests go back to the worker, and a task it cannot finish is m
   assert.equal(company.workers.filter((w) => w.issue).length, 0);
 });
 
-test('with nothing to do a worker proposes a task as an issue, which starts once assigned to the account, or is turned down', async () => {
+test('with nothing to do a worker proposes a task as an issue, which starts once labelled approved, or is turned down', async () => {
   const { dir, repo } = await project();
   const github = hub([]);
   const llm = scripted(() => ({ title: 'Add a rainbow slide', body: 'Kids love slides.' }));
@@ -258,21 +255,18 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   const p = github.made[0];
   assert.equal(p.title, 'Add a rainbow slide');
   assert.deepEqual(p.labels, [LABELS.proposal]);
-  assert.match(p.body, /^Kids love slides\.\n\n— proposed by Ada 💼, CTB \(stand-in\)\. Assign it to yourself to start it/);
+  assert.match(p.body, /^Kids love slides\.\n\n— proposed by Ada 💼, CTB \(stand-in\)\. Label it “ctb: approved” to start it/);
   assert.match(llm.sent[0].messages[1].content, /Recent changes:\nstart/);
   // Not again for proposeHours.
   await company.poll();
   assert.equal(github.made.length, 1);
-  // Not started until assigned to the account the workers run as.
-  await company.poll();
-  assert.deepEqual(p.labels, [LABELS.proposal]);
-  p.assignees = ['someone-else'];
+  // Not started until labelled approved.
   await company.poll();
   assert.deepEqual(p.labels, [LABELS.proposal]);
   await company.approve(p.number);
-  assert.deepEqual(p.assignees, ['ctbot000']);
+  assert.deepEqual(p.labels, [LABELS.proposal, LABELS.approved]);
   await company.poll();
-  assert.ok(p.labels.includes(LABELS.task) && !p.labels.includes(LABELS.proposal), 'assigned: a task now');
+  assert.ok(p.labels.includes(LABELS.task) && !p.labels.includes(LABELS.proposal), 'approved: a task now');
   const q = await company.propose(company.workers[0]);
   await company.reject(q.number);
   assert.equal(github.issues.find((i) => i.number === q.number).open, false);
@@ -378,7 +372,7 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   assert.equal(made.number, 101);
   assert.deepEqual(github.made[0].labels, [LABELS.task]);
   assert.equal((await post('/proposals/3/approve')).status, 200);
-  assert.deepEqual(github.issues[0].assignees, ['ctbot000']);
+  assert.ok(github.issues[0].labels.includes(LABELS.approved));
   await eventually(() => github.issues[0].labels.includes(LABELS.task) && !github.issues[0].labels.includes(LABELS.proposal));
   await eventually(async () => (await (await fetch(base)).json()).workers.filter((w) => w.issue).length === 2);
   state = await (await fetch(base)).json();

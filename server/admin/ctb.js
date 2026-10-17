@@ -25,7 +25,7 @@ function settingsForm(h) {
     h('label', {}, on, 'On'),
     h('label', {}, workers, 'workers'),
     h('label', {}, 'Model', model),
-    h('label', { title: 'With nothing to do, a worker proposes a task now and then: an issue labelled “ctb: proposal”, worked on once approved.' }, propose, 'Proposes tasks, every', hours, 'hours at most'),
+    h('label', { title: 'With nothing to do, a worker proposes a task now and then: an issue labelled “ctb: proposal”, worked on once labelled “ctb: approved” (Approve does that).' }, propose, 'Proposes tasks, every', hours, 'hours at most'),
     save,
     note,
   );

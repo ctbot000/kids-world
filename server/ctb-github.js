@@ -5,8 +5,9 @@
 // worker labels it "ctb: working" while on it, then "ctb: pr" once its pull
 // request is open, or "ctb: stuck" when it could not finish. A task a worker
 // proposes is an issue first, labelled "ctb: proposal", and waits there
-// until that same account assigns it to itself (on GitHub, or with Approve
-// on the admin page): the signal to start, when it becomes a "ctb" task.
+// until it is labelled "ctb: approved" (on GitHub, or with Approve on the
+// admin page; only the repository's own people can label an issue): the
+// signal to start, when it becomes a "ctb" task.
 import { execFile } from 'node:child_process';
 
 export const LABELS = {
@@ -15,6 +16,7 @@ export const LABELS = {
   pr: 'ctb: pr',
   stuck: 'ctb: stuck',
   proposal: 'ctb: proposal',
+  approved: 'ctb: approved',
 };
 const LABEL_LOOKS = {
   [LABELS.task]: ['1f6feb', 'A task for CTB’s workers'],
@@ -22,8 +24,9 @@ const LABEL_LOOKS = {
   [LABELS.pr]: ['0e8a16', 'A CTB worker opened a pull request for it'],
   [LABELS.stuck]: ['d93f0b', 'A CTB worker could not finish it'],
   [LABELS.proposal]: ['c5def5', 'A task a CTB worker proposes'],
+  [LABELS.approved]: ['5319e7', 'A proposal approved: CTB’s workers may start it'],
 };
-const FIELDS = 'number,title,body,labels,author,assignees,createdAt,url';
+const FIELDS = 'number,title,body,labels,author,createdAt,url';
 
 // gh, its answer as text; throws with what gh said when it fails.
 export function gh(args, { cwd, input = null, timeout = 60000 } = {}) {
@@ -37,7 +40,7 @@ export function gh(args, { cwd, input = null, timeout = 60000 } = {}) {
 }
 
 // An issue as the workers see it.
-const issueOf = (i) => ({ number: i.number, title: i.title, body: i.body ?? '', labels: (i.labels ?? []).map((l) => l.name), author: i.author?.login ?? '', assignees: (i.assignees ?? []).map((a) => a.login), createdAt: i.createdAt, url: i.url });
+const issueOf = (i) => ({ number: i.number, title: i.title, body: i.body ?? '', labels: (i.labels ?? []).map((l) => l.name), author: i.author?.login ?? '', createdAt: i.createdAt, url: i.url });
 
 export class GitHub {
   // repo: owner/name. run: gh itself, or a stand-in for tests.
@@ -94,11 +97,6 @@ export class GitHub {
     for (const l of add) args.push('--add-label', l);
     for (const l of remove) args.push('--remove-label', l);
     if (add.length || remove.length) await this.run(args);
-  }
-
-  // Assigned to the account gh is logged in as: a proposal's go-ahead.
-  async assign(number) {
-    await this.run(['issue', 'edit', String(number), '-R', this.repo, '--add-assignee', '@me']);
   }
 
   async comment(number, body) {

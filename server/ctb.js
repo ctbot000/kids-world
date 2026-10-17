@@ -2,9 +2,8 @@
 // GLM models with the local Ollama as a standby (llm.js) — who do real work
 // on this project. Their tasks are the project's GitHub issues labelled
 // "ctb" (ctb-github.js), added on the admin page or on GitHub, or proposed by
-// the workers themselves: a proposal is an issue first, and starts once the
-// account the workers run as assigns it to itself (Approve on the admin
-// page does that). A worker free for a task takes
+// the workers themselves: a proposal is an issue first, and starts once it is
+// labelled "ctb: approved" (Approve on the admin page does that). A worker free for a task takes
 // the oldest, works on it in a git worktree of its own on a branch
 // ctb/issue-<n> (ctb-agent.js: reading, editing and running tests, one step
 // at a time), runs the unit tests, and when they pass commits, pushes the
@@ -191,11 +190,11 @@ export class Company extends EventEmitter {
     this.polling = (async () => {
       if (this.problem !== '' && (await this.check())) return;
       await this.refresh();
-      // Proposals assigned to the account the workers run as: go.
-      const go = this.proposals.filter((p) => this.github.me && p.assignees?.includes(this.github.me));
+      // Proposals labelled approved: go.
+      const go = this.proposals.filter((p) => p.labels.includes(LABELS.approved));
       for (const p of go) {
         await this.github.label(p.number, { add: [LABELS.task], remove: [LABELS.proposal] });
-        this.log(`CTB: proposal #${p.number} was assigned, so it is a task now.`);
+        this.log(`CTB: proposal #${p.number} was approved, so it is a task now.`);
       }
       if (go.length) await this.refresh();
       const busy = new Set(this.workers.filter((w) => w.issue).map((w) => w.issue.number));
@@ -399,7 +398,7 @@ export class Company extends EventEmitter {
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
       const title = String(idea?.title ?? '').trim().slice(0, TITLE_MAX);
       if (!title) throw new Error('the model proposed nothing');
-      const made = await this.github.create({ title, body: `${String(idea.body ?? '').slice(0, BODY_MAX)}\n\n— proposed by ${w.name}, CTB (${this.model}). Assign it to yourself to start it (Approve on the admin page does that); close it to turn it down.`, labels: [LABELS.proposal] });
+      const made = await this.github.create({ title, body: `${String(idea.body ?? '').slice(0, BODY_MAX)}\n\n— proposed by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`, labels: [LABELS.proposal] });
       this.log(`CTB: ${w.name} proposed #${made.number} “${title}”.`);
       this.office?.say(w.k, `I have an idea: ${title}`);
       await this.refresh();
@@ -436,10 +435,9 @@ export class Company extends EventEmitter {
     return made;
   }
 
-  // A proposal assigned to the account the workers run as, which the next
-  // look at the board turns into a task.
+  // A proposal labelled approved, which the next look at the board turns into a task.
   async approve(number) {
-    await this.github.assign(number);
+    await this.github.label(number, { add: [LABELS.approved] });
     this.log(`CTB: proposal #${number} approved.`);
     await this.refresh();
     setTimeout(() => this.poll(), 200).unref?.();
