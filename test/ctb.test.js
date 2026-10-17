@@ -332,6 +332,35 @@ test('the office on the CTB island: workers at their desks, answering children, 
   await eventually(() => [...again.room.players.values()].some((p) => p.online && p.name === 'Ada 💼' && p.id === again.room.host));
 });
 
+test('a worker answers in Korean when spoken to in Korean, saying the same things as in English', () => {
+  const company = new Company({ llm: {}, github: {}, repoDir: '', workDir: '', settings: { ...defaultSettings({}), workers: 2, propose: false }, log: () => {} });
+  const say = (text, k = 0) => company.answer(k, 'Minji', text);
+  const ada = company.workers[0];
+  ada.issue = { number: 12, title: 'Fix the bus.' };
+
+  // What they are working on: the issue's number and title as they are.
+  assert.equal(say('Busy with anything?'), "Hi Minji! I'm working on #12: Fix the bus.");
+  assert.equal(say('지금 뭐 하는 중이에요?'), '안녕 Minji! 지금 #12번을 하고 있어요: Fix the bus.');
+  // What CTB is: Ada, the first worker, answers.
+  assert.equal(say('What is CTB?'), "Hi Minji! We're CTB. We make Kids World better: we fix bugs and add new things to this game!");
+  assert.equal(say('CTB는 어떤 팀이에요?'), '안녕 Minji! 우리는 CTB예요. 키즈 월드를 더 좋게 만들어요: 버그를 고치고 이 게임에 새로운 것을 더해요!');
+  // Between tasks, and the empty board.
+  ada.issue = null;
+  company.tasks = [issue(1), issue(2), issue(3)];
+  assert.equal(say('Any tasks for you?'), "Hi Minji! I'm between tasks. 3 on the board!");
+  assert.equal(say('할 일 있어요?'), '안녕 Minji! 지금은 다음 일을 기다리는 중이에요. 할 일 보드에 3개 있어요!');
+  company.tasks = [];
+  assert.equal(say('Anything to do?'), "Hi Minji! No tasks right now, so I'm thinking up new ideas.");
+  assert.equal(say('지금 뭐 해요?'), '안녕 Minji! 지금 할 일이 없어서 새로운 아이디어를 생각하고 있어요.');
+  // A desk with no worker on it.
+  assert.equal(say('Hello?', 3), "Hi Minji! I'm on a break.");
+  assert.equal(say('안녕하세요?', 3), '안녕 Minji! 지금은 쉬는 중이에요.');
+  // CTB closed.
+  company.settings.on = false;
+  assert.equal(say('Hello?'), 'Hi Minji! CTB is closed right now.');
+  assert.equal(say('안녕하세요?'), '안녕 Minji! CTB는 지금 문을 닫았어요.');
+});
+
 test('settings are checked, and the admin page adds tasks, approves proposals and shows the workers', async () => {
   assert.deepEqual(defaultSettings({}), { on: true, workers: 2, propose: true, proposeHours: 6, model: '' });
   assert.equal(defaultSettings({ KIDS_WORLD_CTB: 'off' }).on, false);
