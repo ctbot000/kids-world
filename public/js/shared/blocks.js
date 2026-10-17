@@ -180,7 +180,11 @@ export const BOOKSHELF = furniture(113, 'bookshelf', { name: 'Bookshelf', color:
 export const COUNTER = furniture(117, 'counter', { name: 'Kitchen Counter', color: '#f3efe6', sound: 'wood' });
 export const STOVE = furniture(121, 'stove', { name: 'Stove', color: '#e7e9ec', sound: 'stone' });
 export const FRIDGE = furniture(125, 'fridge', { name: 'Fridge', color: '#cfe7f5', sound: 'stone' });
-export const TV = furniture(129, 'tv', { name: 'TV', color: '#3a3f4a', sound: 'glass' });
+// TVs (shared/tv.js): walk up, press Q and watch. Their screens glow.
+export const TV = furniture(129, 'tv', { name: 'TV', color: '#3a3f4a', light: 5, sound: 'glass' });
+export const RETRO_TV = furniture(216, 'retro-tv', { name: 'Retro TV', color: '#a8703f', after: 129, light: 5, sound: 'wood' });
+// Hangs on a wall, like a picture.
+export const WALL_TV = furniture(220, 'wall-tv', { name: 'Wall TV', color: '#2c2f36', after: 216, solid: false, wall: true, light: 5, sound: 'glass' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

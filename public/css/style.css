@@ -4044,3 +4044,76 @@ kbd {
   background: var(--select);
   box-shadow: 0 2px 0 var(--sun-dark);
 }
+
+/* ------------------------------------------------ TVs */
+
+/* A TV's picture in its black frame, 16:9, a channel name between ◀ and ▶
+   under it, and a button for each channel. */
+.tv-set {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(#3a3f4a, #23252b);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.12), 0 4px 0 #17181c;
+}
+
+.tv-screen {
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+}
+
+.tv-picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.tv-remote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+
+.tv-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tv-flip,
+.tv-channel {
+  font: inherit;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--paper-2);
+  box-shadow: 0 2px 0 var(--line);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tv-flip {
+  min-width: 48px;
+  min-height: 44px;
+  font-size: 1.1rem;
+}
+
+.tv-channels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tv-channel {
+  min-width: 48px;
+  min-height: 44px;
+  font-size: 1.4rem;
+}
+
+.tv-channel.on {
+  background: var(--select);
+  box-shadow: 0 2px 0 var(--sun-dark);
+}

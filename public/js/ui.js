@@ -6,6 +6,8 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { GASHA_PRICE, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
+import { CHANNELS, nextChannel } from './shared/tv.js';
+import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -1842,6 +1844,7 @@ export class UI {
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
+          card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party!']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
@@ -2555,6 +2558,7 @@ export class UI {
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
     on('piano-open', () => this.pianoDialog());
+    on('tv-open', () => this.tvDialog());
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
@@ -3655,7 +3659,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -3720,22 +3724,22 @@ export class UI {
     el.hidden = false;
   }
 
-  // Play, beside an arcade machine or a piano next to you, or Turn beside a
-  // gashapon machine: the same button again.
+  // Play, beside an arcade machine or a piano next to you, Turn beside a
+  // gashapon machine, or Watch beside a TV: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -4060,6 +4064,89 @@ export class UI {
           window.removeEventListener('keydown', keydown);
           window.removeEventListener('keyup', keyup);
           g.closePiano();
+        },
+      },
+    );
+  }
+
+  // ------------------------------------------------ TVs
+
+  // The TV you pressed Watch at, in a window: its picture, the show on the
+  // channel it is on (tv-shows.js), with a moment of static between
+  // channels, and the channels to flip through with ◀ ▶, a tap on one, the
+  // arrow keys or the number keys.
+  tvDialog() {
+    const g = this.game;
+    const t = g?.tvAt;
+    if (!t) return;
+    const W = 320;
+    const H = 180;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const canvas = h('canvas', { class: 'tv-picture', width: W * dpr, height: H * dpr, role: 'img' });
+    const ctx = canvas.getContext('2d');
+    const name = h('div', { class: 'tv-name', 'aria-live': 'polite' });
+    const chips = h('div', { class: 'tv-channels' });
+    let channel = g.tvChannel;
+    let fuzz = 0;
+    let frame = 0;
+    const start = performance.now();
+    const show = () => {
+      const c = CHANNELS[channel];
+      name.textContent = `${channel + 1} · ${c.icon} ${c.name}`;
+      canvas.setAttribute('aria-label', `${c.name} on the TV`);
+      for (const b of chips.children) b.classList.toggle('on', Number(b.dataset.channel) === channel);
+    };
+    const flip = (i) => {
+      if (i === channel) return;
+      channel = i;
+      fuzz = performance.now() + 250;
+      g.watchChannel(i);
+      show();
+    };
+    const draw = (now) => {
+      frame = requestAnimationFrame(draw);
+      if (now < fuzz) {
+        drawStatic(ctx, canvas.width, canvas.height);
+        return;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawShow(ctx, CHANNELS[channel].key, (now - start) / 1000, W, H, g.env);
+    };
+    const keydown = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const n = Number(e.key);
+      let i = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') i = nextChannel(channel, 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') i = nextChannel(channel, -1);
+      else if (Number.isInteger(n) && n >= 1 && n <= CHANNELS.length) i = n - 1;
+      if (i === null) return;
+      e.preventDefault();
+      flip(i);
+    };
+    this.openModal(
+      (root) => {
+        const prev = h('button', { class: 'tv-flip', type: 'button', 'aria-label': 'The channel before' }, '◀');
+        const next = h('button', { class: 'tv-flip', type: 'button', 'aria-label': 'The next channel' }, '▶');
+        prev.onclick = () => flip(nextChannel(channel, -1));
+        next.onclick = () => flip(nextChannel(channel, 1));
+        chips.append(
+          ...CHANNELS.map((c, i) => {
+            const b = h('button', { class: 'tv-channel', type: 'button', 'data-channel': String(i), 'aria-label': `Channel ${i + 1}, ${c.name}` }, c.icon);
+            b.onclick = () => flip(i);
+            return b;
+          }),
+        );
+        show();
+        root.append(h('h2', {}, `📺 ${t.name}`), h('div', { class: 'tv-set' }, h('div', { class: 'tv-screen' }, canvas)), h('div', { class: 'tv-remote' }, prev, name, next), chips, this.input.touchMode ? '' : h('p', { class: 'muted' }, 'Flip channels with ← → or 1 to ' + CHANNELS.length + ' on your keyboard too.'));
+        frame = requestAnimationFrame(draw);
+        window.addEventListener('keydown', keydown);
+      },
+      {
+        seeThrough: true,
+        onClose: () => {
+          cancelAnimationFrame(frame);
+          window.removeEventListener('keydown', keydown);
+          g.closeTv();
         },
       },
     );

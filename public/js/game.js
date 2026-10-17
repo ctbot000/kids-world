@@ -8,6 +8,7 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
 import { gashaponNear } from './shared/gashapon.js';
 import { pianoNear } from './shared/piano.js';
+import { tvNear } from './shared/tv.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -214,6 +215,11 @@ export class Game extends EventTarget {
     // The piano beside you, and the one whose keyboard is open.
     this.pianoTarget = null;
     this.pianoAt = null;
+    // The TV beside you, the one being watched, and its channel (the last
+    // one watched, for the next TV too).
+    this.tvTarget = null;
+    this.tvAt = null;
+    this.tvChannel = 0;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -1977,6 +1983,30 @@ export class Game extends EventTarget {
     this.pianoAt = null;
   }
 
+  // ------------------------------------------------ TVs
+
+  // Q (or the Watch button) by a TV: its picture opens (shared/tv.js).
+  openTv() {
+    const t = this.tvTarget;
+    if (!t) return;
+    this.tvAt = t;
+    this.sound.play('ui');
+    this.emit('tv-open');
+  }
+
+  // Flipped to channel i on the TV being watched: counted for XP and the
+  // Channel Surfer sticker.
+  watchChannel(i) {
+    if (!this.tvAt || i === this.tvChannel) return;
+    this.tvChannel = i;
+    this.sound.play('ui');
+    this.profile.count('channels');
+  }
+
+  closeTv() {
+    this.tvAt = null;
+  }
+
   // A friend playing a piano: heard when it is near, softer further away.
   pianoHeard(msg) {
     const [x, y, z] = msg.at;
@@ -2192,6 +2222,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.pianoTarget) {
       this.openPiano();
+      return;
+    }
+    if (!id && this.tvTarget) {
+      this.openTv();
       return;
     }
     if (!id) {
@@ -3323,6 +3357,7 @@ export class Game extends EventTarget {
     this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
     this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
     this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
+    this.tvTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.dizzy && !on.flying && on.onGround ? tvNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3761,6 +3796,8 @@ export class Game extends EventTarget {
     this.gashaTarget = null;
     this.pianoAt = null;
     this.pianoTarget = null;
+    this.tvAt = null;
+    this.tvTarget = null;
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

@@ -147,12 +147,72 @@ const MODELS = {
     ];
   },
 
+  // A TV on its stand (shared/tv.js), a show on its glowing screen: a
+  // green hill under the sky with the sun over it, and a little red light.
   tv() {
     return [
       box(0.3, 0, 0.4, 0.7, 0.04, 0.62, BLACK, 'plain'),
       box(0.46, 0.04, 0.48, 0.54, 0.18, 0.55, BLACK, 'plain'),
       box(0.04, 0.16, 0.45, 0.96, 0.74, 0.56, BLACK, 'plain'),
       box(0.08, 0.2, 0.44, 0.92, 0.7, 0.45, '#6fc3ff', 'glow'),
+      box(0.08, 0.2, 0.435, 0.92, 0.34, 0.44, '#7ed36f', 'glow'),
+      box(0.3, 0.34, 0.435, 0.62, 0.4, 0.44, '#7ed36f', 'glow'),
+      box(0.7, 0.52, 0.435, 0.8, 0.62, 0.44, '#ffe066', 'glow'),
+      box(0.86, 0.17, 0.44, 0.89, 0.19, 0.45, '#ff5a4f', 'glow'),
+    ];
+  },
+
+  // A Retro TV (shared/tv.js): a wooden box on four short legs, its rounded
+  // screen in a grey frame glowing with a cartoon fish, two knobs and a
+  // speaker beside it, and rabbit-ear antennae on top, each going up in
+  // steps from a little dome.
+  'retro-tv'() {
+    const out = [
+      box(0.08, 0.12, 0.3, 0.92, 0.74, 0.86, '#a8703f', 'planks'),
+      box(0.14, 0.18, 0.28, 0.68, 0.68, 0.3, '#9aa1ab', 'plain'),
+      box(0.18, 0.22, 0.27, 0.64, 0.64, 0.28, '#8fe3c8', 'glow'),
+      box(0.16, 0.24, 0.272, 0.66, 0.62, 0.282, '#8fe3c8', 'glow'),
+      // The fish on the screen, with its tail and an eye.
+      box(0.32, 0.36, 0.265, 0.48, 0.48, 0.27, '#ff9a3c', 'glow'),
+      box(0.48, 0.34, 0.265, 0.54, 0.5, 0.27, '#ff9a3c', 'glow'),
+      box(0.35, 0.42, 0.26, 0.38, 0.45, 0.265, BLACK, 'plain'),
+      // Two knobs and the speaker's grille.
+      box(0.74, 0.54, 0.26, 0.84, 0.64, 0.3, '#e8e2d4', 'plain'),
+      box(0.74, 0.4, 0.26, 0.84, 0.5, 0.3, '#e8e2d4', 'plain'),
+      ...[0.2, 0.25, 0.3].map((y) => box(0.72, y, 0.29, 0.86, y + 0.025, 0.3, '#5e3a22', 'plain')),
+      // Four short legs.
+      ...[
+        [0.12, 0.34],
+        [0.82, 0.34],
+        [0.12, 0.76],
+        [0.82, 0.76],
+      ].map(([x, z]) => box(x, 0, z, x + 0.06, 0.12, z + 0.06, '#5e3a22', 'plain')),
+      // The antennae's dome.
+      box(0.42, 0.74, 0.52, 0.58, 0.8, 0.66, BLACK, 'plain'),
+    ];
+    for (let i = 0; i < 6; i++) {
+      const y = 0.8 + i * 0.045;
+      out.push(box(0.44 - i * 0.045, y, 0.58, 0.47 - i * 0.045, y + 0.05, 0.6, STEEL, 'plain'));
+      out.push(box(0.53 + i * 0.045, y, 0.58, 0.56 + i * 0.045, y + 0.05, 0.6, STEEL, 'plain'));
+    }
+    return out;
+  },
+
+  // A Wall TV (shared/tv.js), a thin black screen hung on the wall behind
+  // it, glowing with a little fish tank: blue water, sand, waving weed and
+  // two fish, and a red light under it.
+  'wall-tv'() {
+    return [
+      box(0.02, 0.18, 0.93, 0.98, 0.82, 1, BLACK, 'plain'),
+      box(0.06, 0.22, 0.92, 0.94, 0.78, 0.93, '#4fb3ff', 'glow'),
+      box(0.06, 0.22, 0.915, 0.94, 0.28, 0.92, '#f3d98b', 'glow'),
+      box(0.14, 0.28, 0.915, 0.18, 0.5, 0.92, '#4cc46a', 'glow'),
+      box(0.8, 0.28, 0.915, 0.84, 0.44, 0.92, '#4cc46a', 'glow'),
+      box(0.3, 0.52, 0.915, 0.44, 0.62, 0.92, '#ff9a3c', 'glow'),
+      box(0.26, 0.53, 0.915, 0.3, 0.61, 0.92, '#ff9a3c', 'glow'),
+      box(0.56, 0.36, 0.915, 0.68, 0.44, 0.92, '#fcd535', 'glow'),
+      box(0.68, 0.37, 0.915, 0.71, 0.43, 0.92, '#fcd535', 'glow'),
+      box(0.47, 0.19, 0.925, 0.53, 0.21, 0.93, '#ff5a4f', 'glow'),
     ];
   },
 
