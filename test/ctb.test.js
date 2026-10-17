@@ -20,7 +20,7 @@ import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
 import { deskSpots, ISLAND_NAME, Office, officeCells, workerName } from '../server/ctb-office.js';
-import { changeSettings, Company, CtbControl, defaultSettings, pullBody } from '../server/ctb.js';
+import { changeSettings, Company, CtbControl, defaultSettings, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
@@ -247,7 +247,7 @@ test('failing unit tests go back to the worker, and a task it cannot finish is m
 test('with nothing to do a worker proposes a task as an issue, which starts once labelled approved, or is turned down', async () => {
   const { dir, repo } = await project();
   const github = hub([]);
-  const llm = scripted(() => ({ title: 'Add a rainbow slide', body: 'Kids love slides.' }));
+  const llm = scripted(() => ({ title: 'Add a rainbow slide', tldr: 'A rainbow slide stamp, because kids love slides.', what: 'A stamp of a slide in rainbow bricks.\nIt goes in the toy box.', done: ['- It is in the toy box', 'Sliding down it works', '', 'a', 'b', 'c'] }));
   const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, proposeHours: 6 }, log: () => {} });
   await company.start();
   after(() => company.stop());
@@ -255,7 +255,12 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   const p = github.made[0];
   assert.equal(p.title, 'Add a rainbow slide');
   assert.deepEqual(p.labels, [LABELS.proposal]);
-  assert.match(p.body, /^Kids love slides\.\n\n— proposed by Ada 💼, CTB \(stand-in\)\. Label it “ctb: approved” to start it/);
+  // Short, in one shape, a TL;DR first.
+  assert.equal(
+    p.body,
+    '## TL;DR\n\nA rainbow slide stamp, because kids love slides.\n\n## What\n\nA stamp of a slide in rainbow bricks. It goes in the toy box.\n\n## Done when\n\n- It is in the toy box\n- Sliding down it works\n- a\n- b\n\n_Proposed by Ada 💼, CTB (stand-in). Label it “ctb: approved” to start it (Approve on the admin page does that); close it to turn it down._',
+  );
+  assert.equal(proposalBody({ title: 'x', what: 'y' }, 'z'), '', 'no TL;DR, no proposal');
   assert.match(llm.sent[0].messages[1].content, /Recent changes:\nstart/);
   // Not again for proposeHours.
   await company.poll();
@@ -267,6 +272,12 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   assert.deepEqual(p.labels, [LABELS.proposal, LABELS.approved]);
   await company.poll();
   assert.ok(p.labels.includes(LABELS.task) && !p.labels.includes(LABELS.proposal), 'approved: a task now');
+  // Only the local standby answering: no issue.
+  const primary = { model: 'glm' };
+  Object.assign(llm, { primary, using: { model: 'gemma3:4b' } });
+  assert.equal(await company.propose(company.workers[0]), null);
+  assert.equal(github.made.length, 1);
+  llm.using = primary;
   const q = await company.propose(company.workers[0]);
   await company.reject(q.number);
   assert.equal(github.issues.find((i) => i.number === q.number).open, false);

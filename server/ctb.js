@@ -82,6 +82,30 @@ export function sh(file, args, { cwd, timeout = 120000, env = process.env } = {}
   });
 }
 
+// What a worker's proposal says, as the model answers it.
+export const PROPOSAL_SCHEMA = {
+  type: 'object',
+  properties: { title: { type: 'string' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
+  required: ['title', 'tldr', 'what', 'done'],
+};
+// How long each part of a proposal may be: issues are kept short.
+const TLDR_MAX = 300;
+const WHAT_MAX = 700;
+const DONE_ITEMS = 4;
+const DONE_MAX = 200;
+
+// A proposal's issue, short and in the same shape every time: a TL;DR, what
+// to change, and how to tell it is done, then who proposed it. '' when the
+// model gave no TL;DR.
+export function proposalBody(idea, footer) {
+  const line = (v, max) => String(v ?? '').replace(/\s+/gu, ' ').trim().slice(0, max);
+  const tldr = line(idea?.tldr, TLDR_MAX);
+  if (!tldr) return '';
+  const what = line(idea?.what, WHAT_MAX);
+  const done = (Array.isArray(idea?.done) ? idea.done : []).map((d) => line(d, DONE_MAX).replace(/^[-*]\s*/, '')).filter(Boolean).slice(0, DONE_ITEMS);
+  return [`## TL;DR\n\n${tldr}`, what ? `## What\n\n${what}` : '', done.length ? `## Done when\n\n${done.map((d) => `- ${d}`).join('\n')}` : '', `_${footer}_`].filter(Boolean).join('\n\n');
+}
+
 const issueBrief = (i) => (i ? { number: i.number, title: i.title, url: i.url } : null);
 
 // A pull request's body: what was done, and that it closes the issue.
@@ -389,17 +413,21 @@ export class Company extends EventEmitter {
       const idea = await this.llm
         .chat(
           [
-            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a cozy 3D block-building island game for kids played together in the browser. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of something that exists, or a small new thing kids would enjoy. Not something already done or already proposed. Answer as JSON: {"title": a short imperative issue title, "body": the issue in Markdown — what, why, and how to tell it is done}.` },
+            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a cozy 3D block-building island game for kids played together in the browser. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of something that exists, or a small new thing kids would enjoy. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
             { role: 'user', content: `What the game has now:\n${features.slice(0, 12000)}\n\nRecent changes:\n${recent}\n\nOpen tasks and proposals:\n${open}` },
           ],
-          { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title', 'body'] },
+          PROPOSAL_SCHEMA,
           trace,
           { maxTokens: 2000, timeoutMs: 120000, temperature: 0.8 },
         )
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
+      // The small local standby's ideas are not worth an issue: wait for Z.ai.
+      if (this.llm.primary && this.llm.using !== this.llm.primary) throw new Error(`only the local standby (${this.llm.using?.model}) answered`);
       const title = String(idea?.title ?? '').trim().slice(0, TITLE_MAX);
       if (!title) throw new Error('the model proposed nothing');
-      const made = await this.github.create({ title, body: `${String(idea.body ?? '').slice(0, BODY_MAX)}\n\n— proposed by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`, labels: [LABELS.proposal] });
+      const body = proposalBody(idea, `Proposed by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);
+      if (!body) throw new Error('the model proposed nothing');
+      const made = await this.github.create({ title, body, labels: [LABELS.proposal] });
       this.log(`CTB: ${w.name} proposed #${made.number} “${title}”.`);
       this.office?.say(w.k, `I have an idea: ${title}`);
       await this.refresh();
