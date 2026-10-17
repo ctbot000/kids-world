@@ -282,7 +282,7 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const dir = await tempDir();
   const rooms = new Map();
   const answers = [];
-  const office = new Office({ rooms, file: join(dir, 'ctb-island.json'), log: () => {}, answer: (k, name, text) => (answers.push([k, name, text]), `Hi ${name}! I'm working on #12: Fix the bus.`), random: () => 0.5 });
+  const office = new Office({ rooms, file: join(dir, 'ctb-island.json'), log: () => {}, answer: (k, name, text) => (answers.push([k, name, text]), `Hi ${name}! I'm working on #12: Fix the bus.`), ignores: (name) => name === 'Pip 🤖', random: () => 0.5 });
   await office.open(3);
   after(() => office.close());
   const room = office.room;
@@ -301,6 +301,14 @@ test('the office on the CTB island: workers at their desks, answering children, 
   assert.equal(office.seats.length, deskSpots().length);
   assert.ok(officeCells().some(([, , , id]) => id === B.TV));
 
+  // The AI friend talking to them gets no answer: it would answer back, on and on.
+  const pip = { send: () => {} };
+  room.attach(pip);
+  room.receive(pip, { t: 'join', protocol: PROTOCOL, name: 'Pip 🤖', look: { animal: 'kid' } });
+  room.receive(pip, { t: 'say', text: 'Hi Ada! What are you making?' });
+  await new Promise((done) => setTimeout(done, 1500));
+  assert.deepEqual(answers, []);
+
   // A child comes, asks Ben what he is doing; only Ben answers.
   const heard = [];
   const conn = { send: (text) => heard.push(JSON.parse(text)) };
@@ -310,7 +318,7 @@ test('the office on the CTB island: workers at their desks, answering children, 
   await eventually(() => heard.some((m) => m.t === 'say' && m.name === 'Ben 💼'));
   assert.deepEqual(answers, [[1, 'Minji', 'Ben, what are you doing?']]);
   assert.equal(heard.find((m) => m.t === 'say' && m.name === 'Ben 💼').text, "Hi Minji! I'm working on #12: Fix the bus.");
-  assert.deepEqual(office.summary().visitors, ['Minji']);
+  assert.deepEqual(office.summary().visitors, ['Pip 🤖', 'Minji']);
   assert.equal(office.summary().url, 'https://ctbot000.github.io/kids-world/?ctb');
   // On the list of open islands as the one to come to without logging in (main.js ?ctb).
   assert.equal(room.listing().watch, true);

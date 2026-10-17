@@ -356,6 +356,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     server: keeper?.server ?? null,
     iceServers: ICE_SERVERS,
     friendModel: () => friend.settings.model,
+    // The AI friend, whom the workers never answer: it would answer them back.
+    friendName: () => friend.settings.name,
   });
   const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb }) });
   ctb.rooms = server.rooms;

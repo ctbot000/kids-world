@@ -203,7 +203,9 @@ class Clerk extends EventEmitter {
 // The island, its office and the workers on it. answer(k, name, text) gives
 // what worker k says back to a child (or '' for nothing).
 export class Office {
-  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', random = Math.random }) {
+  // ignores(name): someone the workers never answer — the AI friend, who
+  // would answer them back, and on and on.
+  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', ignores = () => false, random = Math.random }) {
     this.rooms = rooms;
     this.file = file;
     this.keeper = keeper;
@@ -212,6 +214,7 @@ export class Office {
     this.iceServers = iceServers;
     this.log = log;
     this.answer = answer;
+    this.ignores = ignores;
     this.random = random;
     this.room = null;
     this.token = '';
@@ -294,6 +297,7 @@ export class Office {
 
   // Something a child said: the worker named in it answers, or the first.
   heard(clerk, pid, name, text) {
+    if (this.ignores(name)) return;
     const lower = text.toLowerCase();
     const named = this.clerks.find((c) => lower.includes(STAFF[c.k].name.toLowerCase()));
     if ((named ?? this.clerks[0]) !== clerk) return;

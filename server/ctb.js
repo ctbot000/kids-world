@@ -475,7 +475,7 @@ export class Company extends EventEmitter {
 // CTB as the admin page runs it: its settings, saved in ctb.json, and its
 // island, workers and token tally. make* are for tests.
 export class CtbControl {
-  constructor({ dir, repoDir, llm, rooms = null, keeper = null, rtc = null, server = null, iceServers = [], friendModel = () => '', env = process.env, now = Date.now, github = null, makeOffice = null, git = undefined, log = (text) => console.log(text) }) {
+  constructor({ dir, repoDir, llm, rooms = null, keeper = null, rtc = null, server = null, iceServers = [], friendModel = () => '', friendName = () => '', env = process.env, now = Date.now, github = null, makeOffice = null, git = undefined, log = (text) => console.log(text) }) {
     this.file = join(dir, SETTINGS_FILE);
     this.usage = new TokenUsage(join(dir, USAGE_FILE), now);
     this.islandFile = join(dir, ISLAND_FILE);
@@ -488,6 +488,7 @@ export class CtbControl {
     this.server = server;
     this.iceServers = iceServers;
     this.friendModel = friendModel;
+    this.friendName = friendName;
     this.settings = defaultSettings(env);
     this.saved = false;
     this.github = github;
@@ -529,7 +530,7 @@ export class CtbControl {
     if (this.rooms) {
       const { Office } = await import('./ctb-office.js');
       const make = this.makeOffice ?? ((opts) => new Office(opts));
-      this.office = make({ rooms: this.rooms, file: this.islandFile, keeper: this.keeper, rtc: this.rtc, server: this.server, iceServers: this.iceServers, log: this.log, answer: (k, name, text) => this.company?.answer(k, name, text) ?? '' });
+      this.office = make({ rooms: this.rooms, file: this.islandFile, keeper: this.keeper, rtc: this.rtc, server: this.server, iceServers: this.iceServers, log: this.log, answer: (k, name, text) => this.company?.answer(k, name, text) ?? '', ignores: (name) => name === this.friendName() });
       await this.office.open(this.settings.workers);
       this.company.office = this.office;
     }
