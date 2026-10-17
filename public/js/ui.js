@@ -1848,7 +1848,7 @@ export class UI {
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets 📡 Live after those.']),
-          card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on the island, on the 📹 On Air channel! One friend at a time; close the window to stop.']),
+          card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
@@ -4084,18 +4084,18 @@ export class UI {
   tvNews(tv, peerOptions) {
     this.broadcast = tv;
     this.tvPeerOptions = peerOptions;
-    if (tv && this.game) this.toast('📡', `On TV now: ${tv.title}! Watch it on any TV, on channel ${channelsWith(tv, this.game.onAir).indexOf(LIVE) + 1}.`);
+    if (tv && this.game) this.toast('📡', `On TV now: ${tv.title}! Watch it on any TV, on channel ${channelsWith(tv, this.onAir).indexOf(LIVE) + 1}.`);
     this.tvChanged?.();
   }
 
-  // Someone on this island on air from a broadcast station now, or nobody
-  // any more (shared/station.js): told while playing, unless it is you, and
-  // a TV being watched gets the 🎥 On Air channel, or loses it.
-  onAirNews() {
-    const g = this.game;
-    const on = g?.onAir ?? null;
-    this.onAirShow = on ? onAirShow(on) : null;
-    if (on && on.pid !== g.pid) this.toast('📹', `${on.name || 'Someone'} is on air! Watch on any TV, on channel ${channelsWith(this.broadcast, on).indexOf(ON_AIR) + 1}.`);
+  // Someone on air from a broadcast station now, on every TV in the game,
+  // or nobody any more (shared/station.js, as the keeper tells of it): told
+  // while playing, unless it is you, and a TV being watched gets the 📹 On
+  // Air channel, or loses it.
+  onAirNews(onAir) {
+    this.onAir = onAir;
+    this.onAirShow = onAir ? onAirShow(onAir) : null;
+    if (onAir && this.game && onAir.station !== this.myStation) this.toast('📹', `${onAir.name} is on air! Watch on any TV, on channel ${channelsWith(this.broadcast, onAir).indexOf(ON_AIR) + 1}.`);
     this.tvChanged?.();
     this.stationChanged?.();
   }
@@ -4119,10 +4119,10 @@ export class UI {
     const name = h('div', { class: 'tv-name', 'aria-live': 'polite' });
     const chips = h('div', { class: 'tv-channels' });
     const hint = h('p', { class: 'muted' });
-    const channelList = () => channelsWith(this.broadcast, g.onAir);
+    const channelList = () => channelsWith(this.broadcast, this.onAir);
     // What a live channel shows: the keeper's broadcast, or someone's broadcast station here.
     const showOf = (c) => (c === LIVE ? this.broadcast : c === ON_AIR ? this.onAirShow : null);
-    const title = (c) => (c === LIVE ? `Live: ${this.broadcast.title}` : c === ON_AIR ? `On Air: ${g.onAir?.name || 'the island'}` : c.name);
+    const title = (c) => (c === LIVE ? `Live: ${this.broadcast.title}` : c === ON_AIR ? `On Air: ${this.onAir.name}` : c.name);
     let channels = channelList();
     let channel = g.tvChannel < channels.length ? g.tvChannel : 0;
     let fuzz = 0;
@@ -4141,7 +4141,7 @@ export class UI {
       live = null;
       say('');
       if (want) {
-        live = new LiveTv(want, want === this.broadcast ? this.tvPeerOptions : this.islandPeerOptions, say);
+        live = new LiveTv(want, this.keeper?.peerOptions ?? this.tvPeerOptions, say);
         screen.append(live.el);
       }
       // No island music over the show.
@@ -4243,10 +4243,11 @@ export class UI {
 
   // The broadcast station you pressed Go live at, in a window: your camera
   // in it as you look (your microphone too), and Go live, which makes this
-  // page the TV station, a PeerJS peer each TV on the island watching calls
-  // for the picture and the sound (shared/station.js). Off air again with
-  // Stop, by closing the window, or when the station is gone; and nobody
-  // else goes live while you are.
+  // page the TV station, a PeerJS peer each TV in the game watching calls
+  // for the picture and the sound, and tells the keeper, which tells every
+  // page (shared/station.js). Off air again with Stop, by closing the
+  // window, when the station is gone or the keeper is; and nobody else goes
+  // live while you are.
   stationDialog() {
     const g = this.game;
     const t = g?.stationAt;
@@ -4262,14 +4263,14 @@ export class UI {
     const st = { stream: null, peer: null, id: '', calls: new Set(), live: false, closed: false, check: 0, timer: 0 };
     const viewers = () => [...st.calls].filter((c) => c.open).length;
     const render = () => {
-      const live = Boolean(st.id) && g.onAir?.station === st.id;
+      const live = Boolean(st.id) && this.onAir?.station === st.id;
       tag.hidden = !live;
       go.textContent = st.id ? '⏹️ Stop' : '🔴 Go live';
       go.classList.toggle('primary', !st.id);
       go.disabled = !st.stream;
       if (live) {
         const n = viewers();
-        status.textContent = `You’re on air on every TV here! ${n === 1 ? '1 TV is' : `${n} TVs are`} watching.`;
+        status.textContent = `You’re on air on every TV, on every island! ${n === 1 ? '1 TV is' : `${n} TVs are`} watching.`;
       } else if (st.id) status.textContent = 'Going live…';
     };
     const offAir = (text) => {
@@ -4281,26 +4282,28 @@ export class UI {
       st.peer?.destroy();
       st.peer = null;
       st.id = '';
-      if (was) g.goLive(null);
+      this.myStation = '';
+      if (was) this.keeper?.goLive(null);
       this.sound.hushMusic(false);
       if (text !== undefined) status.textContent = text;
       if (!st.closed) render();
     };
     const goLive = () => {
-      if (typeof Peer === 'undefined') {
+      if (typeof Peer === 'undefined' || !this.keeper) {
         status.textContent = 'This browser can’t go live, sorry!';
         return;
       }
       const id = stationId();
-      const peer = new Peer(id, this.islandPeerOptions ?? {});
+      const peer = new Peer(id, this.keeper.peerOptions ?? {});
       st.peer = peer;
       st.id = id;
+      this.myStation = id;
       render();
       st.timer = setTimeout(() => {
         if (st.peer === peer && !st.live) offAir('Couldn’t go live just now. Try again!');
       }, 20000);
       peer.on('open', () => {
-        if (st.peer === peer) g.goLive(id);
+        if (st.peer === peer) this.keeper.goLive({ name: this.profile.name, station: id });
       });
       peer.on('error', () => {
         if (st.peer === peer && !peer.open) offAir('Couldn’t go live just now. Try again!');
@@ -4335,13 +4338,18 @@ export class UI {
     // nobody any more (the island let you go).
     this.stationChanged = () => {
       if (!st.id) return;
-      const on = g.onAir;
-      if (on && on.station !== st.id) offAir(`${on.name || 'Someone'} is on air already. Wait till they’re done!`);
+      const on = this.onAir;
+      if (on && on.station !== st.id) offAir(`${on.name} is on air already. Wait till they’re done!`);
       else if (!on && st.live) offAir('You’re off air.');
       else {
         st.live = Boolean(on);
         render();
       }
+    };
+    // The keeper could not be asked, or said no.
+    this.liveRefused = (code) => {
+      if (!st.id) return;
+      offAir(code === 'old' ? 'The island keeper needs an update before anyone can go live. Ask a grown-up!' : code === 'bad' ? 'Couldn’t go live just now. Try again!' : 'Going live needs the island keeper, and it can’t be reached right now. Try again later!');
     };
     const camera = async () => {
       const media = navigator.mediaDevices;
@@ -4372,7 +4380,7 @@ export class UI {
       video.play().catch(() => {});
       said.hidden = true;
       mic.hidden = !stream.getAudioTracks().length;
-      status.textContent = stream.getAudioTracks().length ? 'That’s you! Tap Go live to be on every TV on the island.' : 'That’s you, with no microphone. Tap Go live to be on every TV on the island.';
+      status.textContent = stream.getAudioTracks().length ? 'That’s you! Tap Go live to be on every TV, on every island.' : 'That’s you, with no microphone. Tap Go live to be on every TV, on every island.';
       render();
     };
     this.openModal(
@@ -4382,7 +4390,7 @@ export class UI {
           h('div', { class: 'tv-set' }, h('div', { class: 'tv-screen station-screen' }, video, said, tag)),
           status,
           h('div', { class: 'station-buttons' }, go, mic),
-          h('p', { class: 'muted' }, 'Everyone on this island can watch you on any TV, on the 📹 On Air channel, while you’re live. Closing this window ends it.'),
+          h('p', { class: 'muted' }, 'Everyone playing can watch you on any TV, on any island, on the 📹 On Air channel, while you’re live. Closing this window ends it.'),
         );
         camera();
       },
@@ -4391,6 +4399,7 @@ export class UI {
           st.closed = true;
           clearInterval(st.check);
           this.stationChanged = null;
+          this.liveRefused = null;
           offAir();
           for (const track of st.stream?.getTracks() ?? []) track.stop();
           video.srcObject = null;

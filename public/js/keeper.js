@@ -23,7 +23,9 @@
 // And it hears what the keeper's admin page puts on every TV (see
 // shared/broadcast.js), as a 'tv' event, when this page connects and as it
 // changes; `tv` is what is on (with `zero`, the performance.now() it went on
-// air at), or null.
+// air at), or null. Likewise who is on air from a broadcast station (see
+// shared/station.js), as an 'onair' event; and it puts you on air from one
+// (goLive), keeping the connection open while you are.
 //
 // It takes the problems players tell of to the keeper too (see report.js),
 // copies or not, kept in IndexedDB until the keeper has them.
@@ -36,6 +38,7 @@ import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
 import { cleanBroadcast, sameBroadcast } from './shared/broadcast.js';
+import { cleanOnAir, sameOnAir } from './shared/station.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
 import { isBoardsOf } from './shared/ranking.js';
@@ -141,6 +144,11 @@ export class KeeperClient extends EventTarget {
     this.presentTimer = 0;
     // What the admin page has on every TV, or null.
     this.tv = null;
+    // Who is on air from a broadcast station, on every TV, or null; and
+    // you, when you want to be ({ name, station }), and what was sent of it.
+    this.onAir = null;
+    this.live = null;
+    this.liveSent = '';
     // Problem reports waiting for the keeper (see report), the oldest first.
     this.reports = [];
     this.reportsStored = Promise.resolve();
@@ -275,6 +283,11 @@ export class KeeperClient extends EventTarget {
     if (this.login && (this.present ? this.presentSent !== true : this.presentSent === true)) {
       const on = this.present;
       return { msg: { t: 'online', on }, answer: () => (this.presentSent = on) };
+    }
+    // On air from a broadcast station, or off it again.
+    const live = this.live ? JSON.stringify(this.live) : '';
+    if (live !== this.liveSent) {
+      return { msg: this.live ? { t: 'onair', ...this.live } : { t: 'onair', off: true }, answer: (reply) => this.wentLive(live, reply) };
     }
     const listing = this.listing ? JSON.stringify(this.listing) : '';
     if (listing !== this.listingSent) {
@@ -493,6 +506,43 @@ export class KeeperClient extends EventTarget {
     }
     if (this.state === 'ready') this.flush();
     else if (island && !this.peer && !this.timer && this.state !== 'refused' && !this.halted) this.schedule(0);
+  }
+
+  // On air from a broadcast station (shared/station.js) as the TV station
+  // under the peer id `station`, by the name you go by ({ name, station }),
+  // or off air (null). The keeper says who is on air (an 'onair' event):
+  // you, or someone who was first (and you are not); a 'live-refused' event
+  // when it cannot be asked (with why, as a KeeperProblem's code).
+  goLive(want) {
+    this.live = cleanOnAir(want);
+    if (!this.live) {
+      if (this.state === 'ready') this.flush();
+      return;
+    }
+    if (!this.config || this.state === 'gone' || this.state === 'refused') {
+      this.live = null;
+      this.emit('live-refused', { code: 'asleep' });
+      return;
+    }
+    if (this.state === 'ready') this.flush();
+    else if (!this.peer && !this.timer && !this.halted) this.schedule(0);
+  }
+
+  wentLive(sent, reply) {
+    if (reply.t !== 'onair') {
+      // A keeper running older code, or one that said no.
+      if (this.live && JSON.stringify(this.live) === sent) this.live = null;
+      this.liveSent = '';
+      this.emit('live-refused', { code: reply.code === 'bad' ? 'old' : (reply.code ?? 'bad') });
+      return;
+    }
+    this.liveSent = sent;
+    // Someone else was on first.
+    if (sent && reply.on === false && this.live && JSON.stringify(this.live) === sent) {
+      this.live = null;
+      this.liveSent = '';
+    }
+    this.heardOnAir(reply.onAir);
   }
 
   // Logged in: you are playing now (on), as the page is on screen, or not.
@@ -736,7 +786,7 @@ export class KeeperClient extends EventTarget {
         return;
       }
       talk.checked = true;
-      this.send({ t: 'me', device: this.data.device, tv: true, ...(this.login ? { login: this.login } : {}) });
+      this.send({ t: 'me', device: this.data.device, tv: true, onair: true, ...(this.login ? { login: this.login } : {}) });
       return;
     }
     if (msg.t === 'me' && this.state === 'connecting' && talk.checked) {
@@ -759,7 +809,13 @@ export class KeeperClient extends EventTarget {
       }
       this.setState('ready');
       this.heardTv(msg.tv);
+      this.heardOnAir(msg.onAir);
       this.flush();
+      return;
+    }
+    // Who is on air from a broadcast station now (or nobody): news, unasked.
+    if (msg.t === 'onair-news') {
+      if (this.state === 'ready') this.heardOnAir(msg.onAir);
       return;
     }
     // What is on every TV now (or nothing): news, unasked.
@@ -809,7 +865,7 @@ export class KeeperClient extends EventTarget {
     if (!item) {
       // Watching the ranking, the connection stays open for its news; with
       // an island on the list, to keep it there; playing now, to be invited.
-      if (this.watching || this.listing || (this.login && this.present)) return;
+      if (this.watching || this.listing || this.live || (this.login && this.present)) return;
       this.idleTimer = setTimeout(() => {
         this.send({ t: 'bye' });
         this.hangUp();
@@ -842,7 +898,7 @@ export class KeeperClient extends EventTarget {
     // Copies are off: only something you asked for called the keeper, and
     // that has failed now. (Watching the ranking, or with an island on the
     // list, it is tried again.)
-    if (!this.enabled && !this.watching && !this.listing && !this.present && !this.reports.length) {
+    if (!this.enabled && !this.watching && !this.listing && !this.live && !this.present && !this.reports.length) {
       this.setState('off');
       return;
     }
@@ -860,6 +916,15 @@ export class KeeperClient extends EventTarget {
     this.emit('tv', { tv: this.tv });
   }
 
+  // Who the keeper says is on air from a broadcast station: an 'onair'
+  // event when it is someone else than before.
+  heardOnAir(raw) {
+    const onAir = cleanOnAir(raw);
+    if (sameOnAir(onAir, this.onAir)) return;
+    this.onAir = onAir;
+    this.emit('onair', { onAir });
+  }
+
   // why: what anything you asked for, still waiting, fails with.
   hangUp(why = 'asleep') {
     clearTimeout(this.timer);
@@ -874,8 +939,14 @@ export class KeeperClient extends EventTarget {
     this.waiting = null;
     this.requests = [];
     for (const r of asked) r.reject(new KeeperProblem(why));
-    // Without the keeper, nobody would hear when a show is over.
+    // Without the keeper, nobody would hear when a show is over. And the
+    // keeper takes you off air as the connection goes: off air you stay.
     this.heardTv(null);
+    this.heardOnAir(null);
+    const live = this.live;
+    this.live = null;
+    this.liveSent = '';
+    if (live) this.emit('live-refused', { code: why });
     const conn = this.conn;
     const peer = this.peer;
     this.conn = null;

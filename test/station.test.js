@@ -1,17 +1,25 @@
 // Broadcast stations: a TV camera on a tripod, furniture that turns, in the
 // Home tab after the TVs, its lens at the front; found beside you; who is on
 // air checked; the 📹 On Air channel on every TV while someone is; and the
-// island telling everyone who is on air, one at a time, until they stop or
-// leave.
+// keeper telling every page in the game who is on air, one at a time, until
+// they stop or their page goes.
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { stationId } from '../public/js/shared/broadcast.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
-import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { cleanOnAir, isBroadcastStation, onAirShow, stationNear } from '../public/js/shared/station.js';
+import { Reassembler, sendText } from '../public/js/shared/framing.js';
+import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
+import { cleanOnAir, isBroadcastStation, NAME_MAX, onAirShow, sameOnAir, stationNear } from '../public/js/shared/station.js';
 import { CHANNELS, channelsWith, LIVE, ON_AIR } from '../public/js/shared/tv.js';
 import { World } from '../public/js/shared/world.js';
+import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
+
+const dirs = [];
+after(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
 test('the Broadcast Station is furniture that turns, after the TVs in the Home tab, a camera on a tripod with its lens at the front', () => {
   const home = B.blocksIn('home');
@@ -45,75 +53,86 @@ test('the broadcast station beside you is found, and none further away', () => {
 
 test('who is on air is checked, and a TV plays their station', () => {
   const station = stationId();
-  assert.deepEqual(cleanOnAir({ pid: 2, name: 'Happy Panda', station, extra: 1 }), { pid: 2, name: 'Happy Panda', station });
-  for (const bad of [null, 'x', { pid: 0, station }, { pid: 1.5, station }, { pid: 2, station: 'kids-world-keeper' }, { pid: 2 }]) assert.equal(cleanOnAir(bad), null);
-  assert.deepEqual(onAirShow({ pid: 2, name: 'Happy Panda', station }), { kind: 'video', station, title: 'Happy Panda, live' });
+  assert.deepEqual(cleanOnAir({ name: 'Happy Panda', station, extra: 1 }), { name: 'Happy Panda', station });
+  assert.deepEqual(cleanOnAir({ station }), { name: 'Someone', station });
+  assert.equal([...cleanOnAir({ name: '🐼'.repeat(60), station }).name].length, NAME_MAX);
+  for (const bad of [null, 'x', { name: 'Happy Panda' }, { name: 'Happy Panda', station: 'kids-world-keeper' }]) assert.equal(cleanOnAir(bad), null);
+  assert.ok(sameOnAir({ name: 'a', station }, { name: 'b', station }) && sameOnAir(null, null) && !sameOnAir(null, { station }));
+  assert.deepEqual(onAirShow({ name: 'Happy Panda', station }), { kind: 'video', station, title: 'Happy Panda, live' });
 });
 
 test('every TV has the 📹 On Air channel while someone is on air, after its own and before the keeper’s 📡 Live', () => {
   assert.equal(channelsWith(null, null), CHANNELS);
-  assert.deepEqual(channelsWith(null, { pid: 1 }), [...CHANNELS, ON_AIR]);
-  assert.deepEqual(channelsWith({}, { pid: 1 }), [...CHANNELS, ON_AIR, LIVE]);
+  assert.deepEqual(channelsWith(null, { station: 'x' }), [...CHANNELS, ON_AIR]);
+  assert.deepEqual(channelsWith({}, { station: 'x' }), [...CHANNELS, ON_AIR, LIVE]);
   assert.deepEqual(channelsWith({}), [...CHANNELS, LIVE]);
 });
 
-test('the island tells everyone who is on air from a broadcast station: one at a time, from beside one, until they stop or leave', () => {
-  const room = new Room({ code: '123456', theme: 'sunny', name: 'Sunny Cove', seed: 42 });
-  const conn = (name) => {
-    const c = { inbox: [] };
-    c.send = (text) => c.inbox.push(JSON.parse(text));
-    c.close = () => {};
-    c.all = (t) => c.inbox.filter((m) => m.t === t);
-    room.attach(c);
-    room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat' } });
-    c.pid = c.inbox.find((m) => m.t === 'welcome').you;
-    return c;
+async function keeperWith() {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-station-'));
+  dirs.push(dir);
+  const store = await new KeeperStore(dir).open();
+  const keeper = new Keeper({ store, identity: await createIdentity(dir), log: () => {} });
+  await keeper.loadKey();
+  return keeper;
+}
+
+// A page connected to the keeper: what it says, and what it hears back.
+async function page(keeper, device, me = {}) {
+  const replies = [];
+  const pieces = new Reassembler();
+  const conn = keeper.connection({ id: `page-${Math.random()}`, peer: 'page', pc: { close() {} } });
+  conn.dc = {
+    isOpen: () => !conn.closed,
+    sendMessage: (piece) => {
+      const text = pieces.accept(piece);
+      if (text != null) replies.push(JSON.parse(text));
+    },
+    close() {},
   };
-  const a = conn('Happy Panda');
-  const b = conn('Brave Fox');
-  assert.equal(a.inbox.find((m) => m.t === 'welcome').onAir, null, 'nobody on air yet');
-  const p = room.players.get(a.pid);
-  const [x, z] = [Math.floor(p.s[0]) + 2, Math.floor(p.s[2])];
-  const y = room.world.top(x, z) + 1;
-  room.world.set(x, y, z, B.BROADCAST_STATION);
-  p.s = [x - 0.5, y, z + 0.5];
+  keeper.conns.set(conn.id, conn);
+  const say = async (msg) => {
+    const parts = [];
+    sendText({ send: (part) => parts.push(part) }, JSON.stringify(msg));
+    for (const part of parts) await keeper.receive(conn, part);
+    return replies.at(-1);
+  };
+  await say({ t: 'hello', v: KEEPER_VERSION, nonce: 'ab'.repeat(16) });
+  const hi = await say({ t: 'me', device, ...me });
+  return { conn, hi, say, news: () => replies.filter((r) => r.t === 'onair-news') };
+}
+
+test('the keeper tells every page that knows of broadcast stations who is on air: one at a time in the whole game, until they stop or their page goes', async () => {
+  const keeper = await keeperWith();
+  const old = await page(keeper, 'a1'.repeat(16), { tv: true });
+  const panda = await page(keeper, 'b2'.repeat(16), { tv: true, onair: true });
+  const fox = await page(keeper, 'c3'.repeat(16), { tv: true, onair: true });
+  assert.equal(panda.hi.onAir, null, 'nobody on air yet');
+  assert.equal('onAir' in old.hi, false, 'a page from before broadcast stations hears nothing of them');
+
   const station = stationId();
-
-  // Nothing that is not a station's id, at a station, from beside it.
-  for (const bad of [{ station: 'nope' }, { at: [x, y + 1, z] }, { at: [x, y] }, { at: 'here' }]) room.receive(a, { t: 'onair', station, at: [x, y, z], ...bad });
-  p.s = [x + 8, y, z];
-  room.receive(a, { t: 'onair', station, at: [x, y, z] });
-  assert.equal(b.all('onair').length, 0);
-  assert.equal(room.onAir, null);
-
-  // On air: everyone hears it, and a newcomer when they come.
-  p.s = [x - 0.5, y, z + 0.5];
-  room.receive(a, { t: 'onair', station, at: [x, y, z] });
-  const on = { pid: a.pid, name: 'Happy Panda', station };
-  assert.deepEqual(b.all('onair'), [{ t: 'onair', on }]);
-  assert.deepEqual(a.all('onair'), [{ t: 'onair', on }]);
-  const c = conn('Sunny Otter');
-  assert.deepEqual(c.inbox.find((m) => m.t === 'welcome').onAir, on);
+  assert.equal((await panda.say({ t: 'onair', station: 'nope', name: 'Happy Panda' })).t, 'error');
+  assert.deepEqual(await panda.say({ t: 'onair', station, name: '  Happy\u0000 Panda ' }), { t: 'onair', on: true, onAir: { name: 'Happy Panda', station } });
+  const on = { t: 'onair-news', onAir: { name: 'Happy Panda', station } };
+  assert.deepEqual(fox.news(), [on]);
+  assert.deepEqual(panda.news(), [on]);
+  assert.deepEqual(old.news(), [], 'not to a page that would take it for an answer');
+  assert.deepEqual((await page(keeper, 'd4'.repeat(16), { onair: true })).hi.onAir, on.onAir, 'and to a page as it connects');
+  assert.equal(keeper.status().onAir.station, station);
 
   // Nobody else while they are: told who is on instead.
-  const q = room.players.get(b.pid);
-  q.s = [x + 1.5, y, z + 0.5];
-  room.receive(b, { t: 'onair', station: stationId(), at: [x, y, z] });
-  assert.deepEqual(b.all('onair').at(-1), { t: 'onair', on });
-  assert.equal(c.all('onair').length, 0, 'and nobody else hears of it');
-  assert.equal(room.onAir.pid, a.pid);
+  assert.deepEqual(await fox.say({ t: 'onair', station: stationId(), name: 'Brave Fox' }), { t: 'onair', on: false, onAir: on.onAir });
+  assert.deepEqual(await fox.say({ t: 'onair', off: true }), { t: 'onair', on: false, onAir: on.onAir }, 'nor takes them off');
+  assert.equal(fox.news().length, 1);
 
-  // Only they go off air, and then someone else can go on.
-  room.receive(b, { t: 'onair', off: true });
-  assert.equal(room.onAir.pid, a.pid);
-  room.receive(a, { t: 'onair', off: true });
-  assert.deepEqual(c.all('onair'), [{ t: 'onair', on: null }]);
+  // Off air, and someone else can go on; whose page goes is off air too.
+  await panda.say({ t: 'onair', off: true });
+  assert.deepEqual(fox.news().at(-1), { t: 'onair-news', onAir: null });
   const other = stationId();
-  room.receive(b, { t: 'onair', station: other, at: [x, y, z] });
-  assert.deepEqual(c.all('onair').at(-1), { t: 'onair', on: { pid: b.pid, name: 'Brave Fox', station: other } });
-
-  // Leaving the island takes them off air.
-  room.receive(b, { t: 'leave' });
-  assert.deepEqual(c.all('onair').at(-1), { t: 'onair', on: null });
-  assert.equal(room.onAir, null);
+  assert.equal((await fox.say({ t: 'onair', station: other, name: 'Brave Fox' })).on, true);
+  assert.deepEqual(panda.news().at(-1), { t: 'onair-news', onAir: { name: 'Brave Fox', station: other } });
+  keeper.drop(fox.conn);
+  assert.deepEqual(panda.news().at(-1), { t: 'onair-news', onAir: null });
+  assert.equal(keeper.onAir, null);
+  await keeper.stop();
 });

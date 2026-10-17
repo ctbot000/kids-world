@@ -4059,7 +4059,7 @@ test('a problem is told of with a picture of the screen, and waits for the keepe
   }
 });
 
-test('a broadcast station: Go live puts your camera and microphone on a friend’s TV, on the 📹 On Air channel, until you stop', { skip }, async () => {
+test('a broadcast station: Go live puts your camera and microphone on a TV on another island, through the keeper, on the 📹 On Air channel, until you stop', { skip }, async () => {
   // No camera here: a canvas changing colour for one, and a tone for the microphone.
   const fakeMedia = () => {
     navigator.mediaDevices.getUserMedia = async (want) => {
@@ -4086,68 +4086,70 @@ test('a broadcast station: Go live puts your camera and microphone on a friend�
       return stream;
     };
   };
-  const host = await openPlayer(p2p(), { name: 'Happy Panda', look: { animal: 'panda' } }, fakeMedia);
-  try {
-    await makeIsland(host, { online: true, theme: 'Flat Land' });
-    const code = await host.evaluate(() => window.kidsWorld.game.code);
-    const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
-    await clickButton(guest, 'go!', '#modal');
-    await inGame(guest);
-    await until(host, () => window.kidsWorld.game.players.size === 2);
-    // A broadcast station beside the start, a Retro TV a little way off, and nothing rideable near them.
-    const at = await host.evaluate(
-      (station, tv) => {
-        const kw = window.kidsWorld;
-        const room = kw.session.link.room;
-        const b = kw.game.me.body;
-        const z = Math.floor(b.z);
-        const ground = room.world.top(Math.floor(b.x), z);
-        let x = Math.floor(b.x) + 3;
-        while (x < Math.floor(b.x) + 40 && [x - 1, x, x + 5, x + 6].some((xx) => room.world.top(xx, z) !== ground)) x++;
-        room.natureCell([x, ground + 1, z], station);
-        room.natureCell([x + 6, ground + 1, z], tv);
-        for (const c of [...room.critters.list]) {
-          if (Math.hypot(c.x - x, c.z - z) < 20) {
-            room.critters.remove(c.id);
-            room.broadcast({ t: 'cdel', id: c.id, by: 0 });
-          }
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const host = await openPlayer(url, { name: 'Happy Panda', look: { animal: 'panda' } }, fakeMedia);
+  const guest = await openPlayer(url, { name: 'Brave Fox' }, null);
+  // Each on an island of their own: a broadcast station on one, a Retro TV on the other, beside the start.
+  const put = (page, id) =>
+    page.evaluate((id) => {
+      const kw = window.kidsWorld;
+      const room = kw.session.link.room;
+      const b = kw.game.me.body;
+      const z = Math.floor(b.z);
+      const ground = room.world.top(Math.floor(b.x), z);
+      let x = Math.floor(b.x) + 3;
+      while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+      room.natureCell([x, ground + 1, z], id);
+      for (const c of [...room.critters.list]) {
+        if (Math.hypot(c.x - x, c.z - z) < 16) {
+          room.critters.remove(c.id);
+          room.broadcast({ t: 'cdel', id: c.id, by: 0 });
         }
-        return { x, y: ground + 1, z, station, tv };
-      },
-      BROADCAST_STATION,
-      RETRO_TV,
-    );
-    const standBy = (page, x) =>
-      page.evaluate(
-        (at, x) => {
-          const kw = window.kidsWorld;
-          Object.assign(kw.game.me.body, { x: x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
-          kw.game.sendMove(true);
-          for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
-        },
-        at,
-        x,
-      );
-    // The friend at the TV, watching.
-    await until(guest, (at) => window.kidsWorld.game.world.get(at.x + 6, at.y, at.z) === at.tv && window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.station, at);
-    await standBy(guest, at.x + 6);
+      }
+      return { x, y: ground + 1, z, id };
+    }, id);
+  try {
+    await makeIsland(host, { online: false, theme: 'Flat Land' });
+    await makeIsland(guest, { online: false, theme: 'Candy Island' });
+    await until(host, () => window.kidsWorld.keeper.state === 'ready');
+    await until(guest, () => window.kidsWorld.keeper.state === 'ready');
+    assert.notEqual(await host.evaluate(() => window.kidsWorld.game.code), await guest.evaluate(() => window.kidsWorld.game.code));
+    const at = await put(host, BROADCAST_STATION);
+    const tvAt = await put(guest, RETRO_TV);
+    const standBy = (page, at) =>
+      page.evaluate((at) => {
+        const kw = window.kidsWorld;
+        Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+        kw.game.sendMove(true);
+        for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+      }, at);
+    // The friend on the other island at the TV, watching.
+    await until(guest, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, tvAt);
+    await standBy(guest, tvAt);
     await until(guest, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Watch'));
     await guest.keyboard.press('KeyQ');
     await until(guest, () => document.querySelectorAll('.tv-channel').length === 5);
     assert.equal(CHANNELS.length, 5);
 
     // At the station: Go live opens your camera.
-    await standBy(host, at.x);
+    await until(host, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+    await standBy(host, at);
     await until(host, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Go live'));
     await host.keyboard.press('KeyQ');
     await until(host, () => document.querySelector('#modal h2')?.textContent.includes('Broadcast Station') && document.querySelector('video.station-camera')?.videoWidth > 0);
     assert.equal(await host.$eval('.station-tag', (el) => el.hidden), true, 'not on air yet');
     await clickButton(host, 'Go live', '#modal');
     await until(host, () => !document.querySelector('.station-tag').hidden);
-    assert.equal(await host.evaluate(() => window.kidsWorld.game.onAir?.name), 'Happy Panda');
+    assert.deepEqual({ name: keeper.onAir.name, station: keeper.onAir.station }, await host.evaluate(() => window.kidsWorld.ui.onAir));
+    assert.equal(keeper.onAir.name, 'Happy Panda');
     assert.equal(await host.evaluate(() => window.kidsWorld.ui.sound.hushed), true, 'no island music under the show');
 
-    // The friend is told, and the TV has the 📹 On Air channel, with the camera's picture and sound.
+    // The friend on the other island is told, and the TV has the 📹 On Air channel, with the camera's picture and sound.
     await until(guest, () => document.querySelectorAll('.tv-channel').length === 6 && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Happy Panda is on air')));
     await guest.keyboard.press('6');
     await until(guest, () => document.querySelector('video.tv-live')?.videoWidth > 0, undefined, 45000 * SLOW);
@@ -4181,18 +4183,23 @@ test('a broadcast station: Go live puts your camera and microphone on a friend�
 
     // Stop: off air, and the TV back to its own channels.
     await clickButton(host, 'Stop', '#modal');
-    await until(host, () => document.querySelector('.station-tag').hidden && window.kidsWorld.game.onAir === null);
+    await until(host, () => document.querySelector('.station-tag').hidden && window.kidsWorld.ui.onAir === null);
+    assert.equal(keeper.onAir, null);
     await until(guest, () => document.querySelectorAll('.tv-channel').length === 5 && !document.querySelector('.tv-live'));
     assert.match(await guest.$eval('.tv-name', (el) => el.textContent), /^1 · /);
     // Live again, and closing the window ends it too.
     await clickButton(host, 'Go live', '#modal');
     await until(guest, () => document.querySelectorAll('.tv-channel').length === 6);
     await host.keyboard.press('Escape');
-    await until(host, () => document.getElementById('modal').hidden && window.kidsWorld.game.onAir === null);
+    await until(host, () => document.getElementById('modal').hidden && window.kidsWorld.ui.onAir === null);
     await until(guest, () => document.querySelectorAll('.tv-channel').length === 5);
     assert.equal(await host.evaluate(() => window.kidsWorld.ui.sound.hushed), false, 'and the music back');
     assert.deepEqual(pageErrors, []);
   } finally {
     await host.browserContext().close();
+    await guest.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
   }
 });

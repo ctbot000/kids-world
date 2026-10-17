@@ -119,6 +119,11 @@ keeper.addEventListener('reported', (e) => {
 keeper.addEventListener('invite', (e) => invited(e.detail));
 // Something new on every TV, or nothing any more (see shared/broadcast.js).
 keeper.addEventListener('tv', (e) => ui.tvNews(e.detail.tv, keeper.peerOptions));
+// Someone on air from a broadcast station, or nobody any more; and going
+// live yourself, through the keeper (see shared/station.js).
+ui.keeper = keeper;
+keeper.addEventListener('onair', (e) => ui.onAirNews(e.detail.onAir));
+keeper.addEventListener('live-refused', (e) => ui.liveRefused?.(e.detail.code));
 for (const p of [profile, isle]) {
   for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
   p.addEventListener('count', () => keeper.counted());
@@ -166,8 +171,6 @@ try {
 } catch (error) {
   signalError = error.message;
 }
-// Broadcast stations on islands, and the TVs watching them, signal as islands do.
-ui.islandPeerOptions = peerOptions;
 
 let serverMode = false;
 let session = null;

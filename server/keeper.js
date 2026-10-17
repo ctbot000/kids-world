@@ -67,6 +67,7 @@ import {
   toBase64Url,
 } from '../public/js/shared/keeper.js';
 import { cleanBroadcast } from '../public/js/shared/broadcast.js';
+import { cleanOnAir, sameOnAir } from '../public/js/shared/station.js';
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
@@ -1259,6 +1260,10 @@ export class Keeper extends EventEmitter {
     this.tv = null;
     this.tvSince = 0;
     this.tvSeen = 0;
+    // Who is on air from a broadcast station (shared/station.js), on every
+    // TV in the game: { conn, name, station, since } of the page that is its
+    // TV station, or null.
+    this.onAir = null;
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -1299,6 +1304,7 @@ export class Keeper extends EventEmitter {
       online: this.onlinePlayers().size,
       recent: this.recent,
       tv: this.tv ? { ...this.tv, since: this.tvSince } : null,
+      onAir: this.onAir ? { name: this.onAir.name, station: this.onAir.station, since: this.onAir.since } : null,
     };
   }
 
@@ -1323,6 +1329,36 @@ export class Keeper extends EventEmitter {
     if (!this.tv) return false;
     this.tvSeen = this.now();
     return true;
+  }
+
+  // Someone on air from a broadcast station now (or nobody: null): every
+  // page that knows of them hears at once, and the others when they connect.
+  setOnAir(onAir) {
+    const same = sameOnAir(onAir, this.onAirNow());
+    // (The same show from a page connected again: only its connection is new.)
+    this.onAir = onAir;
+    if (same) return;
+    const news = { t: 'onair-news', onAir: this.onAirNow() };
+    for (const conn of this.conns.values()) if (conn.onAir && conn.folder && !conn.closed) this.reply(conn, news);
+  }
+
+  onAirNow() {
+    return this.onAir ? { name: this.onAir.name, station: this.onAir.station } : null;
+  }
+
+  // A page going live at a broadcast station, as the TV station under the
+  // peer id it gives, or off air (off): one at a time, so while someone
+  // else is on, the answer is who (on: false).
+  goLive(conn, msg) {
+    if (msg.off === true) {
+      if (this.onAir?.conn === conn) this.setOnAir(null);
+      return { on: false };
+    }
+    const want = cleanOnAir(msg);
+    if (!want) throw new KeepError('bad', 'That is not a TV station.');
+    if (this.onAir && this.onAir.conn !== conn && !this.onAir.conn.closed) return { on: false };
+    this.setOnAir({ conn, ...want, since: this.now() });
+    return { on: true };
   }
 
   // What is on air, for a page: with how long it has been, to be at the same place.
@@ -1518,7 +1554,9 @@ export class Keeper extends EventEmitter {
       const needsPassword = ok && login?.kind !== 'password';
       // A page that knows TV broadcasts hears what is on, now and as it changes.
       conn.tv = msg.tv === true;
-      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}), ...(conn.tv ? { tv: this.tvNow() } : {}) });
+      // And one that knows broadcast stations, who is on air from one.
+      conn.onAir = msg.onair === true;
+      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}), ...(conn.tv ? { tv: this.tvNow() } : {}), ...(conn.onAir ? { onAir: this.onAirNow() } : {}) });
       return;
     }
     const mine = (what) => {
@@ -1633,6 +1671,10 @@ export class Keeper extends EventEmitter {
         break;
       case 'islands':
         this.reply(conn, { t: 'islands', islands: this.openIslands() });
+        break;
+      case 'onair':
+        // Going live at a broadcast station (shared/station.js), or off air.
+        this.reply(conn, { t: 'onair', ...this.goLive(conn, msg), onAir: this.onAirNow() });
         break;
       case 'online':
         // A logged-in page on screen: playing right now, for as long as
@@ -1805,6 +1847,8 @@ export class Keeper extends EventEmitter {
     if (conn.closed) return;
     conn.closed = true;
     this.conns.delete(conn.id);
+    // Its page was the TV station of whoever is on air: off air.
+    if (this.onAir?.conn === conn) this.setOnAir(null);
     // Closing from inside one of its own callbacks is not allowed; do it next.
     setImmediate(() => {
       try {

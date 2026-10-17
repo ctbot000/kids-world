@@ -26,8 +26,6 @@ import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
-import { isStationId } from './broadcast.js';
-import { isBroadcastStation } from './station.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -172,9 +170,6 @@ export class Room {
     // The owner's song (song.js), in its pieces as they came, or null. Never
     // saved: it is the owner's page that keeps it and plays it again.
     this.song = null;
-    // Who is on air from a broadcast station (station.js): { pid, station }
-    // of their TV station, or null. Never saved either.
-    this.onAir = null;
     // The games going at the island's arcade machines (arcade.js), by their
     // machines' cells. Never saved either: an island opened again starts
     // with none.
@@ -302,7 +297,6 @@ export class Room {
     if (!p || this.connected(pid)) return;
     this.unride(pid);
     if (this.arcade.left(pid)) this.sendArcade();
-    if (this.onAir?.pid === pid) this.setOnAir(null);
     p.online = false;
     this.broadcast({ t: 'left', pid });
     if (this.host === pid) this.passHost();
@@ -392,10 +386,6 @@ export class Room {
         if (!isPiano(this.world.get(...msg.at))) break;
         if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
         this.broadcast({ t: 'piano', pid, n: msg.n, at: msg.at }, conn);
-        break;
-      // Going live at a broadcast station (station.js), or off air.
-      case 'onair':
-        this.goLive(conn, p, msg);
         break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
@@ -612,42 +602,11 @@ export class Room {
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
-      onAir: this.describeOnAir(),
       // An island everybody owns (the public adventure island).
       shared: this.shared === true,
       // A conquered stage of it: where everyone goes on to (server/adventure.js).
       ...(this.next ? { next: this.next } : {}),
     });
-  }
-
-  // ------------------------------------------------ on air
-
-  // Someone at a broadcast station going live, their page the TV station
-  // under the peer id `station`, or going off air (`off`). One at a time:
-  // anyone else is told who is on already, and their page stops.
-  goLive(conn, p, msg) {
-    if (msg.off === true) {
-      if (this.onAir?.pid === p.id) this.setOnAir(null);
-      return;
-    }
-    if (!isStationId(msg.station) || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
-    if (!isBroadcastStation(this.world.get(...msg.at))) return;
-    if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) return;
-    if (this.onAir && this.onAir.pid !== p.id && this.players.get(this.onAir.pid)?.online) {
-      this.sendTo(conn, { t: 'onair', on: this.describeOnAir() });
-      return;
-    }
-    this.setOnAir({ pid: p.id, station: msg.station });
-  }
-
-  setOnAir(onAir) {
-    this.onAir = onAir;
-    this.broadcast({ t: 'onair', on: this.describeOnAir() });
-  }
-
-  describeOnAir() {
-    const a = this.onAir;
-    return a ? { pid: a.pid, name: this.players.get(a.pid)?.name ?? '', station: a.station } : null;
   }
 
   move(conn, p, s) {
