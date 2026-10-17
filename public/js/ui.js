@@ -4,6 +4,7 @@
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
+import { GASHA_PRICE, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -1838,6 +1839,7 @@ export class UI {
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
+          card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
@@ -2549,6 +2551,7 @@ export class UI {
       this.renderShared();
     });
     on('arcade-open', () => this.arcadeDialog());
+    on('gasha-open', () => this.gashaDialog());
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
@@ -3649,7 +3652,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && g.arcadeTarget) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -3714,21 +3717,22 @@ export class UI {
     el.hidden = false;
   }
 
-  // Play, beside an arcade machine next to you: the same button again.
+  // Play, beside an arcade machine next to you, or Turn beside a gashapon
+  // machine: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = '🕹️ Play';
+    const label = t.game ? '🕹️ Play' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', `Play ${ARCADE_GAMES[t.game].name} at this machine`);
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -3841,6 +3845,117 @@ export class UI {
       els.play.dataset.k = String(phase);
       els.play.replaceChildren(phase === 2 ? '▶ Play again' : '▶ Play');
     }
+  }
+
+  // ------------------------------------------------ gashapon machines
+
+  // The gashapon machine you pressed Turn at, in a window: the machine with
+  // its handle, your coins, the capsule that comes out and the toy in it,
+  // and your collection of capsule toys, the ones still to find as ❓.
+  gashaDialog() {
+    const g = this.game;
+    if (!g?.gashaAt) return;
+    let busy = false;
+    const timers = [];
+    this.openModal(
+      (root) => {
+        const coins = h('div', { class: 'gasha-coins' });
+        const handle = h('div', { class: 'gasha-handle' });
+        const capsule = h('button', { class: 'gasha-capsule', type: 'button', 'aria-label': 'Open the capsule', hidden: true }, h('span', { class: 'gasha-top' }), h('span', { class: 'gasha-bottom' }), h('span', { class: 'gasha-toy' }));
+        const said = h('div', { class: 'gasha-said', 'aria-live': 'polite' }, 'Put in coins and turn the handle!');
+        const turn = h('button', { class: 'big green gasha-turn', type: 'button' }, `🎁 Turn the handle · 🪙 ${GASHA_PRICE}`);
+        const heading = h('h3', {});
+        const grid = h('div', { class: 'gasha-toys' });
+        const show = () => {
+          const p = g.profile.data;
+          const toys = p.gear.toys;
+          coins.textContent = `🪙 ${p.coins} ${p.coins === 1 ? 'coin' : 'coins'}`;
+          turn.disabled = busy || p.coins < GASHA_PRICE;
+          heading.textContent = `My capsule toys (${toysFound(toys)} of ${TOYS.length})`;
+          grid.replaceChildren(
+            ...TOYS.map((t) => {
+              const n = toys[t.key] ?? 0;
+              return h(
+                'div',
+                { class: `gasha-toy-card ${n ? rarityOf(t).key : 'missing'}`, title: n ? t.name : 'Still to find' },
+                h('span', { class: 'icon' }, n ? t.icon : '❓'),
+                h('span', { class: 'name' }, n ? t.name : '???'),
+                n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
+              );
+            }),
+          );
+          if (!busy && p.coins < GASHA_PRICE) said.textContent = `You need 🪙 ${GASHA_PRICE} coins. Sell treasures from your basket in the 🛒 shop!`;
+        };
+        // The capsule pops open, and what was in it is said.
+        let got = null;
+        const reveal = () => {
+          if (!got) return;
+          timers.forEach((t) => clearTimeout(t));
+          timers.length = 0;
+          capsule.hidden = false;
+          capsule.classList.add('open', rarityOf(got.toy).key);
+          this.sound.play(got.toy.rare ? 'fanfare' : 'pop');
+          const rare = got.toy.rare === 2 ? '🌟 Super rare! ' : got.toy.rare === 1 ? '✨ Rare! ' : '';
+          said.textContent = got.have === 1 ? `${rare}New! You got the ${got.toy.name}!` : `${rare}Another ${got.toy.name}! You have ${got.have} now.`;
+          got = null;
+          busy = false;
+          show();
+        };
+        turn.onclick = () => {
+          if (busy) return;
+          this.sound.unlock();
+          got = g.turnGashapon();
+          if (!got) {
+            show();
+            return;
+          }
+          busy = true;
+          capsule.hidden = true;
+          capsule.className = 'gasha-capsule';
+          capsule.style.setProperty('--shell', got.shell);
+          capsule.querySelector('.gasha-toy').textContent = got.toy.icon;
+          handle.classList.remove('turning');
+          void handle.offsetWidth;
+          handle.classList.add('turning');
+          said.textContent = 'Click, click, click…';
+          show();
+          // The capsule rolls out (tap it to open it sooner), and pops open.
+          timers.push(
+            setTimeout(() => {
+              capsule.hidden = false;
+              said.textContent = 'A capsule! Tap it open…';
+            }, 900),
+            setTimeout(reveal, 1900),
+          );
+        };
+        capsule.onclick = () => {
+          if (!capsule.hidden) reveal();
+        };
+        const machine = h(
+          'div',
+          { class: 'gasha-machine', 'aria-hidden': 'true' },
+          h('div', { class: 'gasha-globe' }, ...Array.from({ length: 14 }, (_, i) => h('span', { class: `gasha-ball b${i % 6}` }))),
+          h('div', { class: 'gasha-base' }, handle, h('div', { class: 'gasha-chute' })),
+        );
+        root.append(
+          h('h2', {}, '🎁 Gashapon'),
+          coins,
+          h('div', { class: 'gasha-stage' }, machine, capsule),
+          said,
+          turn,
+          heading,
+          grid,
+          h('p', { class: 'muted' }, `Every turn is 🪙 ${GASHA_PRICE} coins for a surprise toy: ${TOYS.length} to collect, some rare, and one very rare!`),
+        );
+        show();
+      },
+      {
+        onClose: () => {
+          timers.forEach((t) => clearTimeout(t));
+          g.closeGashapon();
+        },
+      },
+    );
   }
 
   // ------------------------------------------------ extra-credit quizzes

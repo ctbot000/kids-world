@@ -6,6 +6,7 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
+import { gashaponNear } from './shared/gashapon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -206,6 +207,9 @@ export class Game extends EventTarget {
     this.arcade = new Map();
     this.arcadeTarget = null;
     this.arcadeAt = null;
+    // The gashapon machine beside you, and the one whose window is open.
+    this.gashaTarget = null;
+    this.gashaAt = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -1902,6 +1906,36 @@ export class Game extends EventTarget {
     }
   }
 
+  // ------------------------------------------------ gashapon machines
+
+  // Q (or the Turn button) by a gashapon machine: its window opens.
+  openGashapon() {
+    const t = this.gashaTarget;
+    if (!t) return;
+    this.gashaAt = t;
+    this.sound.play('ui');
+    this.emit('gasha-open');
+  }
+
+  // The handle turned in its window (shared/gashapon.js): coins in, and a
+  // capsule toy out of the machine with a sparkle. Returns what came out,
+  // or null without the coins.
+  turnGashapon() {
+    const got = this.profile.turnGashapon();
+    if (!got) {
+      this.sound.play('no');
+      return null;
+    }
+    this.sound.play('gasha');
+    const t = this.gashaAt;
+    if (t) this.renderer.effects.sparkles(t.x + 0.5, t.y + 0.4, t.z + 0.5, got.toy.rare ? 14 : 8, got.toy.rare === 2 ? ['#ffd84d', '#fff3b0'] : [got.shell, '#ffffff']);
+    return got;
+  }
+
+  closeGashapon() {
+    this.gashaAt = null;
+  }
+
   // ------------------------------------------------ the video arcade
 
   // The games going at the island's arcade machines, as the island tells of
@@ -2091,6 +2125,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.arcadeTarget) {
       this.openArcade();
+      return;
+    }
+    if (!id && this.gashaTarget) {
+      this.openGashapon();
       return;
     }
     if (!id) {
@@ -3220,6 +3258,7 @@ export class Game extends EventTarget {
     const on = this.me.body;
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
     this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
+    this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3654,6 +3693,8 @@ export class Game extends EventTarget {
     this.arcade.clear();
     this.arcadeAt = null;
     this.arcadeTarget = null;
+    this.gashaAt = null;
+    this.gashaTarget = null;
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

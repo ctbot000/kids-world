@@ -8,6 +8,7 @@
 // go in the basket. Coins, potions and gear are yours, kept with your basket
 // (profile.js) and at the keeper (keeper.js).
 import { COLLECTABLES } from './blocks.js';
+import { cleanToys } from './gashapon.js';
 
 export const COINS_MAX = 99999;
 
@@ -157,7 +158,8 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 // Gear as kept: the level of each kind you have (0 for none), which you
 // have taken off, and for the weapons which of them you carry (pick: its
 // level, 1 for the first; without one, the best you have); the clothes you
-// have (in CLOTHES order) and the ones you have on ('' for none).
+// have (in CLOTHES order) and the ones you have on ('' for none); and the
+// capsule toys from gashapon machines, how many of each (gashapon.js).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -171,6 +173,7 @@ export function cleanGear(raw) {
   const clothes = Array.isArray(p.clothes) ? p.clothes : [];
   out.clothes = CLOTHES.filter((c) => clothes.includes(c.key)).map((c) => c.key);
   out.outfit = out.clothes.includes(p.outfit) ? p.outfit : '';
+  out.toys = cleanToys(p.toys);
   return out;
 }
 

@@ -65,6 +65,7 @@
 // in the hello, before that check; the keeper still answers them.
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
+import { addToys } from './gashapon.js';
 import { cleanCoins, cleanGear, cleanPotions, COINS_MAX } from './shop.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
@@ -227,7 +228,7 @@ export function mergeProfiles(mine, theirs) {
 // as there, once, when you say it was you: every sticker either has earned
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew is the higher of the two), and the
-// better gear of each kind, and the clothes of both.
+// better gear of each kind, and the clothes and capsule toys of both.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -240,6 +241,7 @@ export function addProgress(player, guest) {
   const gear = cleanGear(a.gear);
   for (const key of ['shoes', 'wings', 'weapon']) gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
   gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
+  gear.toys = addToys(gear.toys, b.gear.toys);
   return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear };
 }
 

@@ -283,6 +283,54 @@ const MODELS = {
     return out;
   },
 
+  // A gashapon, a capsule toy machine (shared/gashapon.js): a red stand
+  // with a coin slot, a big silver handle to turn and a chute the capsule
+  // rolls out of, under a glass globe full of capsules — each half
+  // coloured, half white — pressed up against the glass all round.
+  gashapon() {
+    const RED = '#e8453c';
+    const SHELLS = ['#f47fb8', '#62c4f5', '#fcd535', '#9bd44a', '#f59331', '#8c5bd6'];
+    const out = [
+      box(0.18, 0, 0.22, 0.82, 0.5, 0.82, RED, 'plain'),
+      box(0.16, 0, 0.2, 0.84, 0.04, 0.84, DARK_WOOD, 'planks'),
+      // The coin slot and the handle, sticking out to be turned.
+      box(0.36, 0.22, 0.2, 0.64, 0.46, 0.22, STEEL, 'plain'),
+      box(0.47, 0.38, 0.19, 0.53, 0.44, 0.2, BLACK, 'plain'),
+      box(0.44, 0.24, 0.13, 0.56, 0.36, 0.2, STEEL, 'plain'),
+      box(0.32, 0.27, 0.11, 0.68, 0.33, 0.15, WHITE, 'plain'),
+      // The chute, with a capsule waiting in it.
+      box(0.38, 0.05, 0.19, 0.62, 0.17, 0.22, BLACK, 'plain'),
+      box(0.45, 0.06, 0.18, 0.55, 0.11, 0.2, '#fcd535', 'plain'),
+      // The globe, rounded off at the top in steps, its silver rim and its
+      // red cap with a knob.
+      box(0.2, 0.5, 0.24, 0.8, 0.54, 0.8, STEEL, 'plain'),
+      box(0.22, 0.54, 0.26, 0.78, 0.84, 0.78, '#cfeeff', 'plain'),
+      box(0.27, 0.84, 0.31, 0.73, 0.92, 0.73, '#cfeeff', 'plain'),
+      box(0.31, 0.92, 0.35, 0.69, 0.97, 0.69, RED, 'plain'),
+      box(0.45, 0.97, 0.45, 0.55, 1.02, 0.55, '#fcd535', 'plain'),
+    ];
+    // The capsules against the glass, all round: each a coloured half on a
+    // white one.
+    const capsule = (x, y, z, across, c) => {
+      const s = 0.13;
+      const [x0, x1, z0, z1] = across ? [x, x + s, z, z + 0.02] : [x, x + 0.02, z, z + s];
+      out.push(box(x0, y, z0, x1, y + s / 2, z1, WHITE, 'plain'));
+      out.push(box(x0, y + s / 2, z0, x1, y + s, z1, c, 'plain'));
+    };
+    const rows = [[0.56, [0.25, 0.43, 0.61]], [0.7, [0.33, 0.52]]];
+    let i = 0;
+    for (const [y, xs] of rows) {
+      for (const u of xs) {
+        capsule(u, y, 0.245, true, SHELLS[i % SHELLS.length]);
+        capsule(1 - u - 0.13, y, 0.765, true, SHELLS[(i + 2) % SHELLS.length]);
+        capsule(0.205, y, u, false, SHELLS[(i + 4) % SHELLS.length]);
+        capsule(0.775, y, 1 - u - 0.13, false, SHELLS[(i + 1) % SHELLS.length]);
+        i++;
+      }
+    }
+    return out;
+  },
+
   // A scarecrow on its pole, taller than its cell like a grown-up: a red
   // shirt with a blue patch, its arms out along a crossbar with straw for
   // hands, straw poking out under it, a smiling pumpkin for a head and a

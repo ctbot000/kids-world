@@ -195,6 +195,9 @@ export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color:
 // light the room a little.
 export const ARCADE_BLOB = furniture(158, 'arcade-blob', { name: 'Bop-a-Blob Machine', color: '#8c5bd6', light: 7, sound: 'stone' });
 export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pairs Machine', color: '#2fc1b3', light: 7, sound: 'stone' });
+// A gashapon, a capsule toy machine (shared/gashapon.js): walk up, press Q
+// and turn its handle for a capsule toy. Beside the arcade machines.
+export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });

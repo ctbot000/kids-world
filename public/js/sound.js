@@ -228,6 +228,14 @@ export class Sound {
         this.tone(NOTE(88), { decay: 0.12, gain: 0.14, type: 'triangle' });
         this.tone(NOTE(93), { at: 0.07, decay: 0.3, gain: 0.14, type: 'triangle' });
         break;
+      // A gashapon's handle turned: a coin dropping in, the handle's
+      // ratchet clicking round, and a capsule thunking down the chute.
+      case 'gasha':
+        this.tone(1800, { decay: 0.08, gain: 0.08, slide: 1500 });
+        for (let i = 0; i < 5; i++) this.noise(0.03, { at: 0.18 + i * 0.11, type: 'bandpass', freq: 2400 * r(), q: 3, gain: 0.16 });
+        this.tone(170, { at: 0.8, decay: 0.16, gain: 0.25, slide: 110 });
+        this.tone(240, { at: 0.95, decay: 0.08, gain: 0.12, slide: 180 });
+        break;
       case 'ui':
         this.tone(900, { decay: 0.04, gain: 0.08 });
         break;

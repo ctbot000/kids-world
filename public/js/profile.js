@@ -7,6 +7,7 @@
 // a world of its own, so what you earn and carry there stays apart from all
 // this, and never goes to the keeper.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
+import { drawToy, GASHA_PRICE, TOY_MAX, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
 import { CLOTHES, cleanCoins, cleanGear, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
@@ -191,6 +192,22 @@ export class Profile extends EventTarget {
     this.data.basket[key] += SEED_PACK;
     this.shopped();
     return true;
+  }
+
+  // A turn of a gashapon machine's handle (shared/gashapon.js): the coins
+  // go in and a capsule toy comes out, into your collection. Returns { toy,
+  // shell, have } (have: how many of it you have now, 1 for a new one), or
+  // null without the coins. rand: for drawToy.
+  turnGashapon(rand = Math.random) {
+    if (this.data.coins < GASHA_PRICE) return null;
+    const { toy, shell } = drawToy(rand);
+    const toys = this.data.gear.toys;
+    this.data.coins -= GASHA_PRICE;
+    toys[toy.key] = Math.min(TOY_MAX, (toys[toy.key] ?? 0) + 1);
+    this.shopped();
+    this.count('capsules');
+    this.count('capsuletoys', toysFound(toys), { max: true });
+    return { toy, shell, have: toys[toy.key] };
   }
 
   // One drunk (the island's half of it is game.js drink): out of your pocket.

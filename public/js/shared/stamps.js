@@ -646,7 +646,8 @@ function teaParty() {
 // A video arcade: a little hall with a checked floor, a striped awning over
 // its open front and star-topped posts, lit inside, with three arcade
 // machines down each side facing in — Bop-a-Blob and Picture Pairs — for
-// friends to play together (shared/arcade.js).
+// friends to play together (shared/arcade.js), and three gashapon machines
+// at the back (shared/gashapon.js).
 function videoArcade() {
   const c = new Cells();
   // The floor: checked tiles inside, planks round the edge.
@@ -682,6 +683,8 @@ function videoArcade() {
     c.put(-5, 1, z, B.turnedTo(z === 5 ? B.ARCADE_PAIRS : B.ARCADE_BLOB, 0));
     c.put(5, 1, z, B.turnedTo(z === 5 ? B.ARCADE_BLOB : B.ARCADE_PAIRS, 2));
   }
+  // A row of gashapon machines against the back wall, facing the way in.
+  for (const x of [-1, 0, 1]) c.put(x, 1, 9, B.turnedTo(B.GASHAPON, 3));
   return c.list();
 }
 

@@ -12,7 +12,8 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -3234,6 +3235,58 @@ test('a video arcade: Q by a machine opens its game, blobs are bopped with taps,
     const s = window.kidsWorld.game.arcade.get(window.kidsWorld.game.arcadeAt.key);
     return s && s.d.filter((v) => v > 0).length >= 2;
   });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a gashapon: Q by the machine opens it, a turn of the handle takes coins and a capsule toy comes out into your collection', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A machine beside the start, on ground level with the cell beside it,
+  // and nothing rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, GASHAPON);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.profile.earn(12);
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Turn'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Gashapon'));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.gasha-toy-card.missing').length), 12, 'nothing found yet');
+  // A turn: the coins go in, a capsule rolls out, and a tap opens it.
+  await page.evaluate(() => document.querySelector('.gasha-turn').click());
+  await until(page, () => !document.querySelector('.gasha-capsule').hidden);
+  await page.evaluate(() => document.querySelector('.gasha-capsule').click());
+  await until(page, () => document.querySelector('.gasha-capsule').classList.contains('open') && document.querySelector('.gasha-said').textContent.includes('New!'));
+  const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, toys: window.kidsWorld.profile.data.gear.toys, missing: document.querySelectorAll('.gasha-toy-card.missing').length }));
+  assert.equal(after.coins, 12 - GASHA_PRICE);
+  assert.equal(Object.values(after.toys).reduce((a, b) => a + b, 0), 1);
+  assert.equal(after.missing, 11);
+  // One more turn is all the coins left pay for.
+  await page.evaluate(() => document.querySelector('.gasha-turn').click());
+  await until(page, (left) => window.kidsWorld.profile.data.coins === left && document.querySelector('.gasha-capsule').classList.contains('open'), 12 - 2 * GASHA_PRICE);
+  await until(page, () => document.querySelector('.gasha-turn').disabled && document.querySelector('.gasha-said').textContent.length > 0);
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['capsule-toy']), 'the sticker');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

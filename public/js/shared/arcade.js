@@ -65,7 +65,15 @@ export const keyOf = (x, y, z) => `${x},${y},${z}`;
 
 // The machine nearest a body standing beside it (or on it), within `reach`
 // blocks: { x, y, z, game, key } of its cell, or null.
-export function arcadeNear(world, body, reach = 2.2) {
+export const arcadeNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => {
+  const game = gameOfBlock(id);
+  return game ? { game } : null;
+}, reach);
+
+// The cell nearest a body standing beside it (or on it), within `reach`
+// blocks, of those `pick` says yes to (with what it says of the cell, an
+// object, or null for no): { x, y, z, key, ...what pick said }, or null.
+export function cellNear(world, body, pick, reach = 2.2) {
   const bx = Math.floor(body.x);
   const bz = Math.floor(body.z);
   const by = Math.floor(body.y + 0.05);
@@ -74,12 +82,12 @@ export function arcadeNear(world, body, reach = 2.2) {
   for (let x = bx - 2; x <= bx + 2; x++) {
     for (let z = bz - 2; z <= bz + 2; z++) {
       for (let y = by - 1; y <= by; y++) {
-        const game = gameOfBlock(world.get(x, y, z));
-        if (!game) continue;
+        const found = pick(world.get(x, y, z));
+        if (!found) continue;
         const d = Math.hypot(x + 0.5 - body.x, z + 0.5 - body.z);
         if (d < near) {
           near = d;
-          best = { x, y, z, game, key: keyOf(x, y, z) };
+          best = { x, y, z, ...found, key: keyOf(x, y, z) };
         }
       }
     }
