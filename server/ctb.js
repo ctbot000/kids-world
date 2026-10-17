@@ -17,6 +17,7 @@ import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { langOf } from '../public/js/shared/words.js';
 import { Agent, layoutOf, testEnv } from './ctb-agent.js';
 import { GitHub, LABELS, repoOf } from './ctb-github.js';
 import { MAX_WORKERS, STAFF, workerName } from './ctb-office.js';
@@ -412,15 +413,20 @@ export class Company extends EventEmitter {
     }
   }
 
-  // What a worker says when a child talks to them on the island.
+  // What a worker says when a child talks to them on the island. A line with
+  // Hangul in it (langOf) gets the same answer in Korean; the issue's number
+  // and title stay as they are.
   answer(k, name, text) {
     const w = this.workers[k];
-    if (!this.settings.on) return `Hi ${name}! CTB is closed right now.`;
-    if (k >= this.settings.workers) return `Hi ${name}! I'm on a break.`;
-    if (/\b(who|what).*(ctb|you)\b|\bctb\b/i.test(text) && k === 0) return `Hi ${name}! We're CTB. We make Kids World better: we fix bugs and add new things to this game!`;
-    if (w.issue) return `Hi ${name}! I'm working on #${w.issue.number}: ${w.issue.title}`;
+    const ko = langOf(text) === 'ko';
+    const hi = ko ? `안녕 ${name}!` : `Hi ${name}!`;
+    if (!this.settings.on) return `${hi} ${ko ? 'CTB는 지금 문을 닫았어요.' : 'CTB is closed right now.'}`;
+    if (k >= this.settings.workers) return `${hi} ${ko ? '지금은 쉬는 중이에요.' : "I'm on a break."}`;
+    if (/\b(who|what).*(ctb|you)\b|\bctb\b/i.test(text) && k === 0) return `${hi} ${ko ? '우리는 CTB예요. 키즈 월드를 더 좋게 만들어요: 버그를 고치고 이 게임에 새로운 것을 더해요!' : "We're CTB. We make Kids World better: we fix bugs and add new things to this game!"}`;
+    if (w.issue) return ko ? `${hi} 지금 #${w.issue.number}번을 하고 있어요: ${w.issue.title}` : `${hi} I'm working on #${w.issue.number}: ${w.issue.title}`;
     const waiting = this.tasks.length;
-    return waiting ? `Hi ${name}! I'm between tasks. ${waiting} on the board!` : `Hi ${name}! No tasks right now, so I'm thinking up new ideas.`;
+    if (ko) return waiting ? `${hi} 지금은 다음 일을 기다리는 중이에요. 할 일 보드에 ${waiting}개 있어요!` : `${hi} 지금 할 일이 없어서 새로운 아이디어를 생각하고 있어요.`;
+    return waiting ? `${hi} I'm between tasks. ${waiting} on the board!` : `${hi} No tasks right now, so I'm thinking up new ideas.`;
   }
 
   // A task from the admin page: a new issue on the board.
