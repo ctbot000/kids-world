@@ -3933,3 +3933,114 @@ kbd {
   display: block;
   margin: 12px auto 0;
 }
+
+/* ------------------------------------------------ pianos */
+
+/* A piano's keyboard: the white keys side by side filling the width, and
+   the black ones standing between them, shorter, each at the line after
+   the white key it follows (--at); the next key of a song glows. */
+.piano-said {
+  min-height: 1.6em;
+  margin: 4px 0 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.piano-wrap {
+  padding: 10px 10px 12px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(#3b2a24, #2a1d18);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.12), 0 4px 0 #1c1310;
+}
+
+.piano-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--whites), 1fr);
+  height: clamp(120px, 26vh, 190px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.piano-key {
+  font: inherit;
+  border: none;
+  padding: 0 0 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.piano-key.white {
+  margin: 0 1px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(#fffdf8, #f1e9da);
+  box-shadow: inset 0 -6px 0 #e2d6c0;
+  color: #9a8a74;
+}
+
+.piano-key.black {
+  position: absolute;
+  top: 0;
+  left: calc(100% / var(--whites) * var(--at) - 100% / var(--whites) * 0.3);
+  width: calc(100% / var(--whites) * 0.6);
+  height: 60%;
+  z-index: 1;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(#3a3d45, #17181c);
+  box-shadow: inset 0 -5px 0 #000;
+  color: #c9ced6;
+}
+
+.piano-letter {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.piano-key.next.white {
+  background: linear-gradient(#fff3b0, var(--sun));
+  box-shadow: inset 0 -6px 0 var(--sun-dark), 0 0 12px var(--sun);
+}
+
+.piano-key.next.black {
+  background: linear-gradient(#ffd84d, var(--sun-dark));
+  box-shadow: inset 0 -5px 0 #a87e00, 0 0 12px var(--sun);
+}
+
+.piano-key.down {
+  animation: piano-press 0.18s ease-out;
+}
+
+@keyframes piano-press {
+  from {
+    filter: brightness(0.82);
+    transform: translateY(3px);
+  }
+}
+
+.piano-songs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.piano-song {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--paper-2);
+  box-shadow: 0 2px 0 var(--line);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.piano-song.on {
+  background: var(--select);
+  box-shadow: 0 2px 0 var(--sun-dark);
+}

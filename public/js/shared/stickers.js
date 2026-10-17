@@ -59,6 +59,7 @@ export const STICKERS = [
   { key: 'blob-bopper', icon: '👾', name: 'Blob Bopper', text: 'Bop 50 blobs on Bop-a-Blob', test: (s) => s.blobpops >= 50 },
   { key: 'capsule-toy', icon: '🎁', name: 'Capsule Surprise', text: 'Turn a gashapon machine for a capsule toy', test: (s) => s.capsules >= 1 },
   { key: 'full-set', icon: '🐉', name: 'Full Set', text: 'Collect every capsule toy, the Golden Dragon too', test: (s) => s.capsuletoys >= TOYS.length },
+  { key: 'piano-star', icon: '🎹', name: 'Piano Star', text: 'Play a whole song on a piano', test: (s) => s.tunes >= 1 },
   { key: 'sharp-memory', icon: '🃏', name: 'Sharp Memory', text: 'Find 25 pairs on Picture Pairs', test: (s) => s.pairsfound >= 25 },
   { key: 'quiz-whiz', icon: '🧠', name: 'Quiz Whiz', text: 'Finish an extra-credit quiz on a conquered adventure island', test: (s) => s.quizzes >= 1 },
   { key: 'quiz-perfect', icon: '💯', name: 'Perfect Score', text: 'Get every answer right on an extra-credit quiz', test: (s) => s.quizperfect >= 1 },
@@ -68,4 +69,4 @@ export const STICKERS = [
   { key: 'bumper-crop', icon: '🌾', name: 'Bumper Crop', text: 'Pick 100 vegetables', test: (s) => s.harvested >= 100 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'notes', 'tunes', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];

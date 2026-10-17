@@ -64,6 +64,8 @@ export const XP_FOR = {
   pairsfound: { xp: 3, cap: 1000 },
   capsules: { xp: 2, cap: 500 },
   capsuletoys: { xp: 10 },
+  notes: { xp: 0.1, cap: 1000 },
+  tunes: { xp: 10, cap: 200 },
   quizzes: { xp: 10 },
   quizright: { xp: 5, cap: 5000 },
   quizperfect: { xp: 25 },

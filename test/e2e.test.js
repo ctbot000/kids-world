@@ -12,8 +12,9 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, CANDY_CANE, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
+import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
@@ -3287,6 +3288,70 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await until(page, (left) => window.kidsWorld.profile.data.coins === left && document.querySelector('.gasha-capsule').classList.contains('open'), 12 - 2 * GASHA_PRICE);
   await until(page, () => document.querySelector('.gasha-turn').disabled && document.querySelector('.gasha-said').textContent.length > 0);
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['capsule-toy']), 'the sticker');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a piano: Q by it opens its keyboard, a tap and a key both play and go to the island, and a song is followed to the end', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A grand piano beside the start, on ground level with the cell beside
+  // it, and nothing rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, GRAND_PIANO);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    // What goes to the island, to see the notes go.
+    kw.sent = [];
+    const send = kw.game.send.bind(kw.game);
+    kw.game.send = (msg) => {
+      if (msg.t === 'piano') kw.sent.push(msg);
+      return send(msg);
+    };
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Grand Piano'));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.piano-key').length), PIANO_KEYS.length);
+  // A tap on a key, and a key on the keyboard.
+  const keys = await page.$$('.piano-key');
+  await keys[4].click();
+  await page.keyboard.press('KeyZ');
+  await until(page, () => window.kidsWorld.sent.length >= 2);
+  const sent = await page.evaluate(() => window.kidsWorld.sent.map((m) => m.n));
+  assert.deepEqual(sent, [PIANO_KEYS[4].n, 60]);
+  assert.deepEqual(await page.evaluate(() => window.kidsWorld.sent[0].at), [at.x, at.y, at.z]);
+  // Mary Had a Little Lamb, the glowing key each time.
+  await page.evaluate(() => [...document.querySelectorAll('.piano-song')].find((b) => b.dataset.song === 'lamb').click());
+  for (const n of songOf('lamb').notes) {
+    const key = PIANO_KEYS.find((k) => k.n === n).key;
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.piano-key.next')].length), 1);
+    await page.keyboard.press(key === key.toUpperCase() ? key : `Key${key.toUpperCase()}`);
+  }
+  await until(page, () => document.querySelector('.piano-said').textContent.includes('You played') && window.kidsWorld.profile.data.stickers['piano-star']);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.tunes), 1);
+  assert.ok((await page.evaluate(() => window.kidsWorld.profile.data.stats.notes)) >= 2 + songOf('lamb').notes.length);
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.pianoAt === null);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

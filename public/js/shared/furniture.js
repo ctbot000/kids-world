@@ -23,6 +23,24 @@ const BOOKS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#8c5bd6', '#f59331',
 
 const box = (x0, y0, z0, x1, y1, z1, color, tile = 'plain') => [x0, y0, z0, x1, y1, z1, color, tile];
 
+// A piano's two octaves of keys, from x0 to x1 at height y, from z0 at the
+// front to z1: fifteen white keys with a gap between each, and the black
+// keys standing up between them, shorter. The low notes are on the left as
+// you face the piano (towards +x).
+function pianoKeys(x0, x1, y, z0, z1) {
+  const out = [];
+  const w = (x1 - x0) / 15;
+  const at = (i) => x1 - (i + 1) * w;
+  for (let i = 0; i < 15; i++) out.push(box(at(i) + 0.004, y, z0, at(i) + w - 0.004, y + 0.035, z1, WHITE, 'plain'));
+  // A black key after C, D, F, G and A in each octave.
+  for (let i = 0; i < 14; i++) {
+    if (![0, 1, 3, 4, 5].includes(i % 7)) continue;
+    const x = at(i) - w * 0.3;
+    out.push(box(x, y + 0.035, z0 + (z1 - z0) * 0.4, x + w * 0.6, y + 0.06, z1, BLACK, 'plain'));
+  }
+  return out;
+}
+
 const MODELS = {
   chair() {
     const out = [];
@@ -328,6 +346,76 @@ const MODELS = {
         i++;
       }
     }
+    return out;
+  },
+
+  // An upright piano (shared/piano.js): a tall cabinet of dark polished
+  // wood, its keys sticking out in front between two cheeks, the music on
+  // its stand, two legs at the front and three gold pedals.
+  piano() {
+    const CASE = '#3b2a24';
+    const out = [
+      box(0.04, 0.02, 0.56, 0.96, 0.96, 0.98, CASE, 'planks'),
+      box(0.02, 0.96, 0.52, 0.98, 1.01, 1, CASE, 'planks'),
+      box(0.04, 0, 0.54, 0.96, 0.06, 0.98, '#2a1d18', 'planks'),
+      // The keybed and the cheeks either side, the fallboard behind the
+      // keys and the music on its stand.
+      box(0.04, 0.44, 0.28, 0.96, 0.52, 0.56, CASE, 'planks'),
+      box(0.04, 0.52, 0.26, 0.1, 0.62, 0.56, CASE, 'planks'),
+      box(0.9, 0.52, 0.26, 0.96, 0.62, 0.56, CASE, 'planks'),
+      box(0.1, 0.52, 0.5, 0.9, 0.64, 0.56, CASE, 'planks'),
+      box(0.2, 0.64, 0.53, 0.8, 0.68, 0.56, '#2a1d18', 'planks'),
+      box(0.3, 0.68, 0.54, 0.7, 0.86, 0.555, WHITE, 'plain'),
+      // Two legs to the front and the pedals.
+      box(0.06, 0, 0.3, 0.12, 0.44, 0.36, CASE, 'planks'),
+      box(0.88, 0, 0.3, 0.94, 0.44, 0.36, CASE, 'planks'),
+      ...[0.4, 0.48, 0.56].map((x) => box(x, 0.06, 0.48, x + 0.04, 0.09, 0.56, '#f5c542', 'plain')),
+    ];
+    out.push(...pianoKeys(0.1, 0.9, 0.52, 0.29, 0.5));
+    return out;
+  },
+
+  // A grand piano (shared/piano.js), shiny black: its keys at the front,
+  // and behind them the body, straight on the left and curving in towards
+  // its tail on the right, on three legs, its lid propped open up to the
+  // right with the music on its stand.
+  'grand-piano'() {
+    const CASE = '#23252b';
+    const out = [];
+    // The body, a step narrower towards the tail on the curved side, with
+    // the gold frame and strings showing inside it.
+    const steps = [
+      [0.22, 0.46, 0.04],
+      [0.46, 0.62, 0.1],
+      [0.62, 0.76, 0.2],
+      [0.76, 0.88, 0.34],
+      [0.88, 0.98, 0.5],
+    ];
+    for (const [z0, z1, x0] of steps) {
+      out.push(box(x0, 0.42, z0, 0.96, 0.62, z1, CASE, 'plain'));
+      out.push(box(x0 + 0.04, 0.62, Math.max(0.3, z0), 0.92, 0.625, z1 - 0.03, '#d9a441', 'plain'));
+    }
+    // Three legs and the pedal lyre between the front two.
+    out.push(box(0.06, 0, 0.26, 0.12, 0.42, 0.32, CASE, 'plain'));
+    out.push(box(0.88, 0, 0.26, 0.94, 0.42, 0.32, CASE, 'plain'));
+    out.push(box(0.66, 0, 0.86, 0.72, 0.42, 0.92, CASE, 'plain'));
+    out.push(box(0.46, 0.04, 0.3, 0.54, 0.42, 0.34, CASE, 'plain'));
+    out.push(...[0.43, 0.48, 0.53].map((x) => box(x, 0.04, 0.26, x + 0.04, 0.07, 0.3, '#f5c542', 'plain')));
+    // The keys, in their slot at the front, between cheeks.
+    out.push(box(0.04, 0.42, 0.04, 0.96, 0.5, 0.22, CASE, 'plain'));
+    out.push(box(0.04, 0.5, 0.04, 0.08, 0.58, 0.24, CASE, 'plain'));
+    out.push(box(0.92, 0.5, 0.04, 0.96, 0.58, 0.24, CASE, 'plain'));
+    out.push(...pianoKeys(0.08, 0.92, 0.5, 0.05, 0.22));
+    // The music stand, with the music on it.
+    out.push(box(0.2, 0.62, 0.25, 0.8, 0.76, 0.28, CASE, 'plain'));
+    out.push(box(0.3, 0.65, 0.245, 0.7, 0.8, 0.25, WHITE, 'plain'));
+    // The lid, hinged along the straight side and propped up on a stick,
+    // rising in steps towards the curved side.
+    for (let i = 0; i < 11; i++) {
+      const x1 = 0.96 - i * 0.06;
+      out.push(box(x1 - 0.065, 0.64 + i * 0.04, 0.32, x1, 0.665 + i * 0.04, 0.96, CASE, 'plain'));
+    }
+    out.push(box(0.43, 0.62, 0.6, 0.45, 0.98, 0.62, '#1a1b20', 'plain'));
     return out;
   },
 

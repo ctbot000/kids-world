@@ -25,6 +25,7 @@ import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { isNote, isPiano } from './piano.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -377,6 +378,14 @@ export class Room {
       // it does: the bop it lands comes a moment later.
       case 'swing':
         this.broadcast({ t: 'swing', pid }, conn);
+        break;
+      // A key played on a piano (piano.js), by someone standing at it, for
+      // everyone else to hear from there.
+      case 'piano':
+        if (!isNote(msg.n) || !Array.isArray(msg.at) || !msg.at.every(Number.isInteger)) break;
+        if (!isPiano(this.world.get(...msg.at))) break;
+        if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
+        this.broadcast({ t: 'piano', pid, n: msg.n, at: msg.at }, conn);
         break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).

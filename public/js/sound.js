@@ -726,6 +726,20 @@ export class Sound {
     }
   }
 
+  // A piano key (MIDI note n), softer from further away (gain): a quick
+  // hammer strike that rings on, the high notes dying away sooner, with a
+  // little of the octave and the twelfth over it and a soft thump of the
+  // hammer; a grand rings a little longer.
+  piano(n, { gain = 1, grand = false } = {}) {
+    if (!this.ready) return;
+    const f = NOTE(n);
+    const ring = (grand ? 1.8 : 1.4) * 2 ** ((60 - n) / 24);
+    this.tone(f, { type: 'triangle', attack: 0.004, decay: ring, gain: 0.2 * gain });
+    this.tone(f * 2, { attack: 0.004, decay: ring * 0.5, gain: 0.07 * gain });
+    this.tone(f * 3, { attack: 0.004, decay: ring * 0.2, gain: 0.03 * gain });
+    this.noise(0.03, { type: 'bandpass', freq: f * 4, q: 1.5, gain: 0.04 * gain });
+  }
+
   // ------------------------------------------------ music and ambience
 
   setMood(mood, weather) {

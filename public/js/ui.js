@@ -5,6 +5,7 @@
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { GASHA_PRICE, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
+import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -1840,6 +1841,7 @@ export class UI {
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
+          card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
@@ -2552,6 +2554,7 @@ export class UI {
     });
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
+    on('piano-open', () => this.pianoDialog());
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
@@ -3652,7 +3655,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -3717,22 +3720,22 @@ export class UI {
     el.hidden = false;
   }
 
-  // Play, beside an arcade machine next to you, or Turn beside a gashapon
-  // machine: the same button again.
+  // Play, beside an arcade machine or a piano next to you, or Turn beside a
+  // gashapon machine: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -3953,6 +3956,110 @@ export class UI {
         onClose: () => {
           timers.forEach((t) => clearTimeout(t));
           g.closeGashapon();
+        },
+      },
+    );
+  }
+
+  // ------------------------------------------------ pianos
+
+  // The piano you pressed Play at, in a window: its keyboard, two octaves
+  // of keys to tap (or to play on your own keyboard, each key's letter on
+  // it), and songs to follow, the next key to play lit up until the song
+  // is done.
+  pianoDialog() {
+    const g = this.game;
+    const t = g?.pianoAt;
+    if (!t) return;
+    const touch = this.input.touchMode;
+    // The song being followed, and how far along it you are.
+    let song = null;
+    let at = 0;
+    const keyEls = new Map();
+    const said = h('div', { class: 'piano-said', 'aria-live': 'polite' }, 'Tap the keys to play!');
+    const songs = h('div', { class: 'piano-songs' });
+    const light = () => {
+      const next = song ? song.notes[at] : null;
+      for (const [n, el] of keyEls) el.classList.toggle('next', n === next);
+    };
+    const pick = (s) => {
+      song = song === s ? null : s;
+      at = 0;
+      for (const b of songs.children) b.classList.toggle('on', b.dataset.song === song?.key);
+      said.textContent = song ? `${song.icon} ${song.name}: play the glowing key!` : 'Tap the keys to play!';
+      light();
+    };
+    const play = (n) => {
+      this.sound.unlock();
+      g.playPiano(n);
+      const el = keyEls.get(n);
+      if (el) {
+        el.classList.remove('down');
+        void el.offsetWidth;
+        el.classList.add('down');
+      }
+      if (!song) return;
+      if (n !== song.notes[at]) return;
+      at++;
+      if (at < song.notes.length) {
+        said.textContent = `${song.icon} ${song.name}: ${at} of ${song.notes.length}`;
+      } else {
+        said.textContent = `🎉 You played ${song.name}!`;
+        g.playedTune();
+        song = null;
+        for (const b of songs.children) b.classList.remove('on');
+      }
+      light();
+    };
+    // Keys held down on a keyboard play once, not over and over.
+    const held = new Set();
+    const keydown = (e) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const n = noteOfKey(e.key);
+      if (n === null || held.has(n)) return;
+      e.preventDefault();
+      held.add(n);
+      play(n);
+    };
+    const keyup = (e) => held.delete(noteOfKey(e.key));
+    this.openModal(
+      (root) => {
+        const whites = PIANO_KEYS.filter((k) => !k.black);
+        const board = h('div', { class: 'piano-board', style: `--whites: ${whites.length}` });
+        let white = 0;
+        for (const k of PIANO_KEYS) {
+          const el = h(
+            'button',
+            { class: `piano-key ${k.black ? 'black' : 'white'}`, type: 'button', 'aria-label': `${k.name} ${Math.floor(k.n / 12) - 1}`, style: k.black ? `--at: ${white}` : '' },
+            touch ? '' : h('span', { class: 'piano-letter' }, k.key.toUpperCase()),
+          );
+          if (!k.black) white++;
+          // On pointer down, so a quick run of taps (and two fingers at
+          // once) all sound.
+          el.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            play(k.n);
+          });
+          keyEls.set(k.n, el);
+          board.append(el);
+        }
+        songs.append(
+          ...SONGS.map((s) => {
+            const b = h('button', { class: 'piano-song', type: 'button', 'data-song': s.key }, `${s.icon} ${s.name}`);
+            b.onclick = () => pick(songOf(s.key));
+            return b;
+          }),
+        );
+        root.append(h('h2', {}, t.grand ? '🎹 Grand Piano' : '🎹 Piano'), said, h('div', { class: 'piano-wrap' }, board), h('h3', {}, '🎵 Play a song'), songs, h('p', { class: 'muted' }, touch ? 'Friends nearby hear you play!' : 'Play with your keyboard too: Z X C V B N M for the low keys, Q W E R T Y U I for the high ones. Friends nearby hear you play!'));
+        window.addEventListener('keydown', keydown);
+        window.addEventListener('keyup', keyup);
+      },
+      {
+        seeThrough: true,
+        onClose: () => {
+          window.removeEventListener('keydown', keydown);
+          window.removeEventListener('keyup', keyup);
+          g.closePiano();
         },
       },
     );

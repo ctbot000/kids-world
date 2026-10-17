@@ -7,6 +7,7 @@
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
 import { gashaponNear } from './shared/gashapon.js';
+import { pianoNear } from './shared/piano.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -210,6 +211,9 @@ export class Game extends EventTarget {
     // The gashapon machine beside you, and the one whose window is open.
     this.gashaTarget = null;
     this.gashaAt = null;
+    // The piano beside you, and the one whose keyboard is open.
+    this.pianoTarget = null;
+    this.pianoAt = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -310,6 +314,9 @@ export class Game extends EventTarget {
         break;
       case 'emote':
         this.emoted(msg.pid, msg.e);
+        break;
+      case 'piano':
+        this.pianoHeard(msg);
         break;
       case 'swing': {
         const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
@@ -1936,6 +1943,58 @@ export class Game extends EventTarget {
     this.gashaAt = null;
   }
 
+  // ------------------------------------------------ pianos
+
+  // Q (or the Play button) by a piano: its keyboard opens.
+  openPiano() {
+    const t = this.pianoTarget;
+    if (!t) return;
+    this.pianoAt = t;
+    this.emit('piano-open');
+  }
+
+  // A key played (MIDI note n) on the open piano: heard at once, a note
+  // floats up from the piano, and it goes to the island for friends to
+  // hear (shared/piano.js).
+  playPiano(n) {
+    const t = this.pianoAt;
+    if (!t) return;
+    this.sound.piano(n, { grand: t.grand });
+    this.pianoFx(t, n);
+    this.send({ t: 'piano', n, at: [t.x, t.y, t.z] });
+    this.profile.count('notes');
+  }
+
+  // A song followed all the way through on the piano.
+  playedTune() {
+    this.profile.count('tunes');
+    this.sound.play('fanfare');
+    const t = this.pianoAt;
+    if (t) this.renderer.effects.sparkles(t.x + 0.5, t.y + 1.2, t.z + 0.5, 16);
+  }
+
+  closePiano() {
+    this.pianoAt = null;
+  }
+
+  // A friend playing a piano: heard when it is near, softer further away.
+  pianoHeard(msg) {
+    const [x, y, z] = msg.at;
+    if (!this.near(x + 0.5, y, z + 0.5, 32)) return;
+    const b = this.me.body;
+    const d = Math.hypot(b.x - x - 0.5, b.y - y, b.z - z - 0.5);
+    this.sound.piano(msg.n, { gain: Math.min(1, 4 / Math.max(4, d)), grand: B.BLOCKS[this.world.get(x, y, z)]?.model === 'grand-piano' });
+    this.pianoFx({ x, y, z }, msg.n);
+  }
+
+  // Now and then a little note floats up out of a piano being played.
+  pianoFx(t, n) {
+    const now = performance.now();
+    if (now - (this.pianoFxAt ?? 0) < 250) return;
+    this.pianoFxAt = now;
+    this.renderer.effects.notes(t.x + 0.5, t.y + 1 + (n - 60) / 48, t.z + 0.5);
+  }
+
   // ------------------------------------------------ the video arcade
 
   // The games going at the island's arcade machines, as the island tells of
@@ -2129,6 +2188,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.gashaTarget) {
       this.openGashapon();
+      return;
+    }
+    if (!id && this.pianoTarget) {
+      this.openPiano();
       return;
     }
     if (!id) {
@@ -3259,6 +3322,7 @@ export class Game extends EventTarget {
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
     this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
     this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
+    this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -3695,6 +3759,8 @@ export class Game extends EventTarget {
     this.arcadeTarget = null;
     this.gashaAt = null;
     this.gashaTarget = null;
+    this.pianoAt = null;
+    this.pianoTarget = null;
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

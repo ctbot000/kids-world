@@ -198,6 +198,9 @@ export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pair
 // A gashapon, a capsule toy machine (shared/gashapon.js): walk up, press Q
 // and turn its handle for a capsule toy. Beside the arcade machines.
 export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone' });
+// Pianos (shared/piano.js): walk up, press Q and play. After the gashapon.
+export const PIANO = furniture(208, 'piano', { name: 'Piano', color: '#3b2a24', after: 204, sound: 'wood' });
+export const GRAND_PIANO = furniture(212, 'grand-piano', { name: 'Grand Piano', color: '#23252b', after: 208, sound: 'wood' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });

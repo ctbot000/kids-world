@@ -1,0 +1,55 @@
+// Pianos: an upright piano and a grand piano (pieces of furniture,
+// blocks.js) to play. Walk up to one and its keyboard opens in a window:
+// two octaves of keys, from middle C up, to tap or to play on your own
+// keyboard, and a few songs to follow, the next key lit up each time.
+//
+// You hear your own notes at once, and they go to the island to be passed
+// on to everyone else (room.js), who hear them from your piano when they
+// are near it.
+import { BLOCKS } from './blocks.js';
+import { cellNear } from './arcade.js';
+
+// The keys, middle C (MIDI 60) to the C two octaves up, white and black:
+// each with its note's MIDI number, its name and the key on a computer
+// keyboard that plays it: the low octave along the Z row with its black
+// keys on the A row above, and the high one along the Q row with its black
+// keys on the number row, laid out like a piano's.
+export const LOW = 60;
+export const HIGH = 84;
+const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+const WHITE_KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i'];
+const BLACK_KEYS = { 61: 's', 63: 'd', 66: 'g', 68: 'h', 70: 'j', 73: '2', 75: '3', 78: '5', 80: '6', 82: '7' };
+export const KEYS = [];
+{
+  let white = 0;
+  for (let n = LOW; n <= HIGH; n++) {
+    const black = NAMES[n % 12].length > 1;
+    KEYS.push({ n, name: NAMES[n % 12], black, key: black ? BLACK_KEYS[n] : WHITE_KEYS[white++] });
+  }
+}
+
+// The key on a computer keyboard for each note, and the note for each key.
+export const noteOfKey = (key) => KEYS.find((k) => k.key === key?.toLowerCase())?.n ?? null;
+
+// Whether a note is one a piano here has: a whole number from LOW to HIGH.
+export const isNote = (n) => Number.isInteger(n) && n >= LOW && n <= HIGH;
+
+// Whether a block is a piano, upright or grand (any way it faces).
+export const isPiano = (id) => BLOCKS[id]?.model === 'piano' || BLOCKS[id]?.model === 'grand-piano';
+
+// The piano nearest a body standing beside it: { x, y, z, key, grand } of
+// its cell, or null.
+export const pianoNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => (isPiano(id) ? { grand: BLOCKS[id].model === 'grand-piano' } : null), reach);
+
+// Songs to follow: the notes of each tune, in order. The window lights the
+// next key to play, and a whole song played through counts.
+const tune = (s) => s.split(' ').map((x) => LOW + Number(x));
+export const SONGS = [
+  // C C G G A A G, F F E E D D C, and on.
+  { key: 'twinkle', icon: '⭐', name: 'Twinkle, Twinkle, Little Star', notes: tune('0 0 7 7 9 9 7 5 5 4 4 2 2 0 7 7 5 5 4 4 2 7 7 5 5 4 4 2 0 0 7 7 9 9 7 5 5 4 4 2 2 0') },
+  { key: 'lamb', icon: '🐑', name: 'Mary Had a Little Lamb', notes: tune('4 2 0 2 4 4 4 2 2 2 4 7 7 4 2 0 2 4 4 4 4 2 2 4 2 0') },
+  { key: 'joy', icon: '🎉', name: 'Ode to Joy', notes: tune('4 4 5 7 7 5 4 2 0 0 2 4 4 2 2 4 4 5 7 7 5 4 2 0 0 2 4 2 0 0') },
+  { key: 'birthday', icon: '🎂', name: 'Happy Birthday', notes: tune('7 7 9 7 12 11 7 7 9 7 14 12 7 7 19 16 12 11 9 17 17 16 12 14 12') },
+];
+
+export const songOf = (key) => SONGS.find((s) => s.key === key) ?? null;
