@@ -28,6 +28,8 @@ import { KeepError } from './keeper.js';
 export const SETTINGS_FILE = 'ctb.json';
 export const USAGE_FILE = 'ctb-usage.json';
 export const ISLAND_FILE = 'ctb-island.json';
+// When a worker last proposed a task, so a restart does not bring another at once.
+export const STATE_FILE = 'ctb-state.json';
 const POLL_MS = 2 * 60000;
 // The full unit tests before a pull request (the end-to-end ones are left
 // to the pre-push hook on main): how long they may take, and how many times
@@ -117,7 +119,7 @@ export function pullBody({ issue, summary, worker, model }) {
 // The workers and their work. llm: what they think with (llm.js), its model
 // picked by the settings or the AI friend's. office: the CTB island, or null.
 export class Company extends EventEmitter {
-  constructor({ llm, github, repoDir, workDir, office = null, settings, friendModel = () => '', log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {} }) {
+  constructor({ llm, github, repoDir, workDir, office = null, settings, friendModel = () => '', log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {}, proposedAt = 0, onProposed = () => {} }) {
     super();
     this.llm = llm;
     this.github = github;
@@ -142,7 +144,8 @@ export class Company extends EventEmitter {
     this.pulls = [];
     this.problem = null;
     this.polling = null;
-    this.proposedAt = 0;
+    this.proposedAt = proposedAt;
+    this.onProposed = onProposed;
     this.proposing = false;
     this.stopped = false;
     this.timer = null;
@@ -403,6 +406,7 @@ export class Company extends EventEmitter {
     if (this.proposing) return null;
     this.proposing = true;
     this.proposedAt = this.now();
+    this.onProposed(this.proposedAt);
     this.tell(w, 'Thinking of something to propose');
     try {
       const readme = await readFile(join(this.repoDir, 'README.md'), 'utf8').catch(() => '');
@@ -414,7 +418,7 @@ export class Company extends EventEmitter {
       const idea = await this.llm
         .chat(
           [
-            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a cozy 3D block-building island game for kids played together in the browser. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of something that exists, or a small new thing kids would enjoy. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
+            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a cozy 3D block-building island game for kids played together in the browser. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of one thing that exists, or one small new thing kids would enjoy. Narrow and specific: it changes one thing, named in the title (like "Make the bus honk when tapped" or "Show the pet's name over its head"), touching a few files at most. Never a summary, a recap, a log or a list of several things; never "improve X" or "update Y" without saying exactly what. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
             { role: 'user', content: `What the game has now:\n${features.slice(0, 12000)}\n\nRecent changes:\n${recent}\n\nOpen tasks and proposals:\n${open}` },
           ],
           PROPOSAL_SCHEMA,
@@ -424,6 +428,8 @@ export class Company extends EventEmitter {
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
       const title = String(idea?.title ?? '').trim().slice(0, TITLE_MAX);
       if (!title) throw new Error('the model proposed nothing');
+      // A proposal with no checks to tell it is done is too vague to file.
+      if (!Array.isArray(idea.done) || idea.done.filter((d) => String(d ?? '').trim()).length < 2) throw new Error(`“${title}” is too vague: no way to tell it is done`);
       const body = proposalBody(idea, `Proposed by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);
       if (!body) throw new Error('the model proposed nothing');
       const made = await this.github.create({ title, body, labels: [LABELS.proposal] });
@@ -510,6 +516,7 @@ export class CtbControl {
     this.file = join(dir, SETTINGS_FILE);
     this.usage = new TokenUsage(join(dir, USAGE_FILE), now);
     this.islandFile = join(dir, ISLAND_FILE);
+    this.stateFile = join(dir, STATE_FILE);
     this.workDir = join(dir, 'ctb-work');
     this.repoDir = repoDir;
     this.llm = llm;
@@ -556,6 +563,8 @@ export class CtbControl {
       friendModel: this.friendModel,
       log: this.log,
       onUsage: (entries) => this.usage.add(entries),
+      proposedAt: await this.readProposedAt(),
+      onProposed: (at) => this.saveProposedAt(at),
       ...(this.git ? { git: this.git } : {}),
     });
     if (this.rooms) {
@@ -566,6 +575,25 @@ export class CtbControl {
       this.company.office = this.office;
     }
     await this.company.start();
+  }
+
+  async readProposedAt() {
+    try {
+      const at = JSON.parse(await readFile(this.stateFile, 'utf8'))?.proposedAt;
+      return Number.isFinite(at) ? at : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  async saveProposedAt(at) {
+    try {
+      await mkdir(dirname(this.stateFile), { recursive: true });
+      await writeFile(`${this.stateFile}.tmp`, `${JSON.stringify({ proposedAt: at })}\n`);
+      await rename(`${this.stateFile}.tmp`, this.stateFile);
+    } catch (error) {
+      this.log(`CTB: could not save when it last proposed (${error.message}).`);
+    }
   }
 
   async close() {

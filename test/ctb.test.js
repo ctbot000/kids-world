@@ -247,7 +247,8 @@ test('failing unit tests go back to the worker, and a task it cannot finish is m
 test('with nothing to do a worker proposes a task as an issue, which starts once labelled approved, or is turned down', async () => {
   const { dir, repo } = await project();
   const github = hub([]);
-  const llm = scripted(() => ({ title: 'Add a rainbow slide', tldr: 'A rainbow slide stamp, because kids love slides.', what: 'A stamp of a slide in rainbow bricks.\nIt goes in the toy box.', done: ['- It is in the toy box', 'Sliding down it works', '', 'a', 'b', 'c'] }));
+  let vague = false;
+  const llm = scripted(() => vague ? { title: 'Improve the game', tldr: 'Make things better.', what: 'Many things.', done: ['It is better'] } : ({ title: 'Add a rainbow slide', tldr: 'A rainbow slide stamp, because kids love slides.', what: 'A stamp of a slide in rainbow bricks.\nIt goes in the toy box.', done: ['- It is in the toy box', 'Sliding down it works', '', 'a', 'b', 'c'] }));
   const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, proposeHours: 6 }, log: () => {} });
   await company.start();
   after(() => company.stop());
@@ -272,6 +273,11 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   assert.deepEqual(p.labels, [LABELS.proposal, LABELS.approved]);
   await company.poll();
   assert.ok(p.labels.includes(LABELS.task) && !p.labels.includes(LABELS.proposal), 'approved: a task now');
+  // Too vague to file: fewer than two checks for when it is done.
+  vague = true;
+  assert.equal(await company.propose(company.workers[0]), null);
+  assert.equal(github.made.length, 1);
+  vague = false;
   const q = await company.propose(company.workers[0]);
   await company.reject(q.number);
   assert.equal(github.issues.find((i) => i.number === q.number).open, false);
@@ -412,6 +418,11 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   state = await (await fetch(base)).json();
   assert.deepEqual(state.workers.map((w) => w.issue.number).sort((a, b) => a - b), [3, 101]);
   assert.match(state.workers[0].doing, /^#\d+: /);
+
+  // When a worker last proposed is kept, so a restart does not bring another proposal at once.
+  const { proposedAt } = JSON.parse(await readFile(join(store.dir, 'ctb-state.json'), 'utf8'));
+  assert.ok(Date.now() - proposedAt < 60000);
+  assert.equal(await ctb.readProposedAt(), proposedAt);
 
   // Settings: saved, and off closes the office.
   const res = await fetch(base, { method: 'PUT', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ on: false }) });
