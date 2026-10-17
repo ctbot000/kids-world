@@ -58,7 +58,7 @@ test('who is on air is checked, and a TV plays their station', () => {
   assert.equal([...cleanOnAir({ name: '🐼'.repeat(60), station }).name].length, NAME_MAX);
   for (const bad of [null, 'x', { name: 'Happy Panda' }, { name: 'Happy Panda', station: 'kids-world-keeper' }]) assert.equal(cleanOnAir(bad), null);
   assert.ok(sameOnAir({ name: 'a', station }, { name: 'b', station }) && sameOnAir(null, null) && !sameOnAir(null, { station }));
-  assert.deepEqual(onAirShow({ name: 'Happy Panda', station }), { kind: 'video', station, title: 'Happy Panda, live' });
+  assert.deepEqual(onAirShow({ name: 'Happy Panda', station }), { kind: 'video', station, title: 'Happy Panda, live', mirror: true });
 });
 
 test('every TV has the 📹 On Air channel while someone is on air, after its own and before the keeper’s 📡 Live', () => {

@@ -33,7 +33,8 @@ export class LiveTv {
       return;
     }
     this.el = document.createElement('video');
-    this.el.className = 'tv-live';
+    // A broadcast station's camera, the way round its broadcaster sees it.
+    this.el.className = tv.mirror ? 'tv-live mirror' : 'tv-live';
     this.el.playsInline = true;
     this.el.autoplay = true;
     this.tuneIn(peerOptions);

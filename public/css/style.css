@@ -4134,6 +4134,10 @@ kbd {
   object-fit: contain;
 }
 
+.tv-live.mirror {
+  transform: scaleX(-1);
+}
+
 .tv-said {
   position: absolute;
   left: 50%;

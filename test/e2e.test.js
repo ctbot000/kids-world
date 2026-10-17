@@ -4154,6 +4154,10 @@ test('a broadcast station: Go live puts your camera and microphone on a TV on an
     await guest.keyboard.press('6');
     await until(guest, () => document.querySelector('video.tv-live')?.videoWidth > 0, undefined, 45000 * SLOW);
     assert.match(await guest.$eval('.tv-name', (el) => el.textContent), /^6 · 📹 On Air: Happy Panda$/);
+    // The same way round as the broadcaster sees themselves at the station: like a mirror.
+    const mirrored = 'matrix(-1, 0, 0, 1, 0, 0)';
+    assert.equal(await host.$eval('video.station-camera', (el) => getComputedStyle(el).transform), mirrored);
+    assert.equal(await guest.$eval('video.tv-live', (el) => getComputedStyle(el).transform), mirrored);
     await until(host, () => document.querySelector('.station-status').textContent.includes('1 TV is watching'));
     const seen = await guest.evaluate(async () => {
       const video = document.querySelector('video.tv-live');

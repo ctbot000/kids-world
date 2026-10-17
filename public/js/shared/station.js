@@ -34,5 +34,6 @@ export function cleanOnAir(raw) {
 // Whether two are the same show.
 export const sameOnAir = (a, b) => (a && b ? a.station === b.station : a === b);
 
-// What a TV plays for someone on air (tv-live.js): their station, live.
-export const onAirShow = (onAir) => ({ kind: 'video', station: onAir.station, title: `${onAir.name}, live` });
+// What a TV plays for someone on air (tv-live.js): their station, live,
+// like a mirror, as they see themselves at the station.
+export const onAirShow = (onAir) => ({ kind: 'video', station: onAir.station, title: `${onAir.name}, live`, mirror: true });
