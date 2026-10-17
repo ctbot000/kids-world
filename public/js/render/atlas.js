@@ -1921,6 +1921,170 @@ const averageOf = (data) => {
   return n ? [r / n, g / n, b / n] : [255, 255, 255];
 };
 
+// ---------------------------------------------------------------- a real tree's leaves
+// The leaves of a real tree (render/katsura.js) are pictures of their own,
+// bigger than a block's, in their own texture: clusters of leaves on their
+// stalks along a twig, and leaves fallen on the ground. Painted gold, for
+// the mesher to tint each cluster its own autumn colour.
+export const FOLIAGE_TILE = 256;
+
+// A katsura leaf as it really is: nearly round, notched into a heart where
+// its red stalk joins, with a blunt tip, a scalloped edge and pale veins
+// fanning out from the notch, lighter in the middle. `s` is its radius; the
+// notch is at the top before `angle` turns it; `wide` below 1 curls it; a
+// `flat` one is only its shape in one colour (a shadow).
+function katsuraBlade(ctx, x, y, s, angle, color, wide = 1, flat = false) {
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, -0.42 * s);
+    ctx.bezierCurveTo(-0.3 * s, -1.0 * s, -1.12 * s, -0.78 * s, -1.02 * s, -0.05 * s);
+    ctx.bezierCurveTo(-0.95 * s, 0.5 * s, -0.4 * s, 0.88 * s, 0, 1.06 * s);
+    ctx.bezierCurveTo(0.4 * s, 0.88 * s, 0.95 * s, 0.5 * s, 1.02 * s, -0.05 * s);
+    ctx.bezierCurveTo(1.12 * s, -0.78 * s, 0.3 * s, -1.0 * s, 0, -0.42 * s);
+    ctx.closePath();
+  };
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(wide, 1);
+  path();
+  if (flat) {
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  const g = ctx.createRadialGradient(-0.2 * s, 0.05 * s, 0.1 * s, 0, 0.1 * s, 1.15 * s);
+  g.addColorStop(0, shade(color, 0.22));
+  g.addColorStop(0.55, color);
+  g.addColorStop(1, shade(color, -0.2));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.save();
+  path();
+  ctx.clip();
+  // The scalloped edge.
+  ctx.lineWidth = Math.max(1, s * 0.06);
+  ctx.strokeStyle = shade(color, -0.22);
+  ctx.setLineDash([s * 0.13, s * 0.07]);
+  path();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Faint veins from the notch: one down the middle and two pairs out to the sides.
+  ctx.strokeStyle = shade(color, 0.16);
+  ctx.lineWidth = Math.max(0.6, s * 0.028);
+  ctx.lineCap = 'round';
+  for (const a of [0, -0.6, 0.6, -1.15, 1.15]) {
+    const ex = Math.sin(a) * 0.92 * s;
+    const ey = -0.4 * s + Math.cos(a) * 1.3 * s;
+    ctx.beginPath();
+    ctx.moveTo(0, -0.4 * s);
+    ctx.quadraticCurveTo(ex * 0.25, (ey - 0.4 * s) * 0.5, ex, Math.min(ey, 0.95 * s));
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+const KATSURA_GOLDS = ['#f6cf3f', '#f2c033', '#f8d955', '#efb531', '#f4c84a', '#f7d86a', '#eaa83a', '#f1bd3c'];
+
+// Leaves on their stalks along a twig, fanning up and out from it.
+function katsuraCluster(seed) {
+  return (ctx) => {
+    const r = speckleRandom(seed);
+    const S = FOLIAGE_TILE;
+    const y0 = S * (0.78 + r() * 0.1);
+    const y1 = S * (0.52 + r() * 0.16);
+    const twig = (t) => [S * (0.06 + 0.88 * t), y0 + (y1 - y0) * t - Math.sin(t * Math.PI) * S * 0.05];
+    const leaves = [];
+    for (let i = 0; i < 18; i++) {
+      const t = (i + 0.3 + r() * 0.4) / 18;
+      const [px, py] = twig(t);
+      const a = -Math.PI / 2 + (r() - 0.5) * 2.7;
+      const stalk = S * (0.06 + r() * 0.08);
+      const size = S * (0.105 + r() * 0.05);
+      const nx = px + Math.cos(a) * stalk;
+      const ny = py + Math.sin(a) * stalk;
+      leaves.push({ px, py, nx, ny, a, size, color: KATSURA_GOLDS[Math.floor(r() * KATSURA_GOLDS.length)], wide: 0.85 + r() * 0.15 });
+    }
+    // The twig, and the leaves' stalks.
+    ctx.strokeStyle = '#6e5a4a';
+    ctx.lineWidth = S * 0.018;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let t = 0; t <= 1.001; t += 0.05) ctx.lineTo(...twig(t));
+    ctx.stroke();
+    ctx.strokeStyle = '#a1402f';
+    ctx.lineWidth = S * 0.008;
+    for (const l of leaves) {
+      ctx.beginPath();
+      ctx.moveTo(l.px, l.py);
+      ctx.lineTo(l.nx, l.ny);
+      ctx.stroke();
+    }
+    // Back ones first; each casts a little shade on the leaves under it.
+    leaves.sort((a, b) => a.ny - b.ny);
+    for (const l of leaves) {
+      const at = [l.nx + Math.cos(l.a) * l.size * 0.42, l.ny + Math.sin(l.a) * l.size * 0.42];
+      const turn = l.a - Math.PI / 2;
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      katsuraBlade(ctx, at[0] + S * 0.012, at[1] + S * 0.018, l.size, turn, 'rgba(90,50,0,0.35)', l.wide, true);
+      ctx.restore();
+      katsuraBlade(ctx, at[0], at[1], l.size, turn, l.color, l.wide);
+    }
+  };
+}
+
+// Fallen leaves lying every which way, some curled, a little browner.
+function katsuraLitter(ctx) {
+  const r = speckleRandom(91);
+  const S = FOLIAGE_TILE;
+  const browns = ['#e9b43a', '#dc9a36', '#e2a64a', '#c98a3a', '#efc24a', '#d77f3c'];
+  for (let i = 0; i < 16; i++) {
+    const size = S * (0.06 + r() * 0.03);
+    const x = size * 1.3 + r() * (S - size * 2.6);
+    const y = size * 1.3 + r() * (S - size * 2.6);
+    katsuraBlade(ctx, x, y, size, r() * Math.PI * 2, browns[Math.floor(r() * browns.length)], 0.6 + r() * 0.4);
+  }
+}
+
+const FOLIAGE = {
+  'katsura-cluster-0': katsuraCluster(81),
+  'katsura-cluster-1': katsuraCluster(82),
+  'katsura-cluster-2': katsuraCluster(83),
+  'katsura-litter': katsuraLitter,
+};
+
+// The foliage pictures as layers of their own texture. Where nothing is
+// painted the colour is the leaves' own, so their edges never darken as the
+// texture shrinks into the distance.
+function buildFoliage() {
+  const S = FOLIAGE_TILE;
+  const names = Object.keys(FOLIAGE);
+  const data = new Uint8Array(S * S * 4 * names.length);
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  names.forEach((name, i) => {
+    ctx.clearRect(0, 0, S, S);
+    ctx.save();
+    FOLIAGE[name](ctx);
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, S, S);
+    const [r, g, b] = averageOf(img.data);
+    for (let p = 0; p < img.data.length; p += 4) {
+      if (img.data[p + 3] > 0) continue;
+      img.data[p] = r;
+      img.data[p + 1] = g;
+      img.data[p + 2] = b;
+    }
+    data.set(img.data, i * S * S * 4);
+  });
+  return { data, size: S, count: names.length, layers: new Map(names.map((n, i) => [n, i])) };
+}
+
 // Paints every tile. Returns the raw layers plus lookup tables the mesher
 // uses: tile layer per block face, tint and stud colour per block.
 export function buildAtlas() {
@@ -1959,7 +2123,7 @@ export function buildAtlas() {
     const avg = averages.get(def.tiles.top) ?? [255, 255, 255];
     studTint.set(avg.map((v, k) => Math.min(255, (v * t[k]) / 255)), def.id * 3);
   }
-  return { data, count: names.length, layers, faceLayer, tint, studTint, images, averages };
+  return { data, count: names.length, layers, faceLayer, tint, studTint, images, averages, foliage: buildFoliage() };
 }
 
 // A little 3D block (or the flower itself) for the toy box and hotbar.

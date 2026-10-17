@@ -604,10 +604,10 @@ test('a katsura sprout grows into a katsura tree', () => {
     time.advance(1000);
     room.tick();
   }
-  assert.equal(w.get(x, y, z), B.KATSURA_WOOD, 'a tree grew');
+  assert.equal(w.get(x, y, z), B.KATSURA_TREE, 'a real katsura grew from the sprout');
+  assert.deepEqual([w.get(x, y + 1, z), w.get(x, y + 2, z)], [B.TREE_CORE, B.TREE_CORE], 'with a trunk to bump into');
   const grow = a.all('edit').find((m) => m.kind === 'grow');
-  const ids = new Set(grow.cells.filter((_, i) => i % 4 === 3));
-  assert.deepEqual([...ids].sort(), [B.KATSURA_LEAVES, B.KATSURA_WOOD].sort(), 'a katsura, not an oak');
+  assert.ok(!grow.cells.some((v, i) => i % 4 === 3 && (v === B.LEAVES || v === B.WOOD)), 'not an oak');
 });
 
 test('the clock and the weather move on, and the owner can stop the clock', () => {

@@ -325,10 +325,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     else if (rng.chance(0.3)) cells = fruitTree(rng, fruit, rng.int(2, 4));
     else {
       cells = oakTree(rng, rng.chance(0.15));
-      // Now and then a katsura stands in an oak's place, drawn from its own
-      // seed so the rest of the island comes out just as before.
-      const k = new Rng(Math.floor(hash2(seed ^ 0x6b617473, x, z) * 4294967296));
-      if (k.chance(0.15)) cells = katsuraTree(k);
+      trees.at(-1).oak = true;
     }
     trees.at(-1).cells = placeTemplate(cells, x, y, z, 0);
     place(trees.at(-1).cells);
@@ -346,6 +343,17 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     trees.push({ x, z, cells: placeTemplate(fruitTree(rng, fruit, 3), x, hi(x, z) + 1, z, 0) });
     orchard++;
     place(trees.at(-1).cells);
+  }
+  // Here and there an oak standing on its own, with room round it for a
+  // broad crown, is a real katsura tree instead — chosen by where it stands,
+  // so the rest of the island comes out just as before.
+  for (const t of trees) {
+    if (!t.oak || trees.some((o) => o !== t && Math.hypot(o.x - t.x, o.z - t.z) < 8)) continue;
+    if (hash2(seed ^ 0x6b617473, t.x, t.z) >= 0.4) continue;
+    for (const [x, y, z, id] of t.cells) if (world.get(x, y, z) === id) world.set(x, y, z, B.AIR);
+    t.cells = placeTemplate(katsuraTree(), t.x, hi(t.x, t.z) + 1, t.z, 0);
+    place(t.cells);
+    t.oak = false;
   }
 
   // ---------------------------------------------------------------- flowers and grass

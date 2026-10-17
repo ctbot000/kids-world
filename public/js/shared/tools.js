@@ -190,6 +190,17 @@ export function pickEdit(world, hit, size = 1) {
       }
     }
   }
+  // A real tree comes away whole: its foot and all of its trunk.
+  const seen = new Set(targets.map((t) => t.join()));
+  for (const [x, y, z] of [...targets]) {
+    if (B.KIND[world.get(x, y, z)] !== B.K_TREE) continue;
+    for (const dy of [1, -1]) {
+      for (let yy = y + dy; B.KIND[world.get(x, yy, z)] === B.K_TREE && !seen.has(`${x},${yy},${z}`); yy += dy) {
+        seen.add(`${x},${yy},${z}`);
+        targets.push([x, yy, z]);
+      }
+    }
+  }
   const collected = [];
   const holes = [];
   for (const [x, y, z] of targets) {
@@ -231,7 +242,7 @@ export function paintEdit(world, hit, id, size = 1) {
     const y = hit.y + dy;
     const z = hit.z + dz;
     const here = o.get(x, y, z);
-    if (!B.SOLID[here] || here === B.MAGIC_FLOOR || B.GEM_ROCK[here] || here === id) continue;
+    if (!B.SOLID[here] || here === B.MAGIC_FLOOR || B.GEM_ROCK[here] || B.KIND[here] === B.K_TREE || here === id) continue;
     if (size > 1) {
       // A big brush paints the surface, not the blocks buried behind it.
       const fx = x + hit.nx;

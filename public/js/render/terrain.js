@@ -3,9 +3,10 @@
 // shadows, sway the flowers, turn fruit to face you, ripple the water and
 // drift the lava.
 import * as THREE from '../../vendor/three.module.js';
+import { isTreeFoot } from '../shared/blocks.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
-import { meshChunk, WATER_TOP } from './mesher.js';
+import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
 import { TILE } from './atlas.js';
 
 const STUD_RADIUS = 0.25;
@@ -79,6 +80,9 @@ const SOLID_VERT = /* glsl */ `
 const SOLID_FRAG = /* glsl */ `
   precision highp sampler2DArray;
   uniform sampler2DArray atlas;
+  #ifdef FOLIAGE
+    uniform sampler2DArray foliage;
+  #endif
   varying vec3 vUvl;
   varying vec3 vTint;
   varying vec4 vLit;
@@ -86,7 +90,11 @@ const SOLID_FRAG = /* glsl */ `
   ${LIGHT_GLSL}
   void main() {
     nearFade(vDepth);
-    vec4 tex = texture(atlas, vUvl);
+    #ifdef FOLIAGE
+      vec4 tex = texture(foliage, vUvl);
+    #else
+      vec4 tex = texture(atlas, vUvl);
+    #endif
     #ifdef CUTOUT
       if (tex.a < 0.5) discard;
     #endif
@@ -333,9 +341,25 @@ export class Terrain {
     tex.anisotropy = 4;
     tex.needsUpdate = true;
     this.texture = tex;
+    // A real tree's leaves, in bigger pictures of their own (atlas.js FOLIAGE).
+    const f = atlas.foliage ?? { data: new Uint8Array(4), size: 1, count: 1 };
+    const leaves = new THREE.DataArrayTexture(f.data, f.size, f.size, f.count);
+    leaves.format = THREE.RGBAFormat;
+    leaves.type = THREE.UnsignedByteType;
+    leaves.colorSpace = THREE.SRGBColorSpace;
+    leaves.magFilter = THREE.LinearFilter;
+    leaves.minFilter = THREE.LinearMipmapLinearFilter;
+    leaves.generateMipmaps = true;
+    leaves.anisotropy = 4;
+    leaves.needsUpdate = true;
+    this.foliageTexture = leaves;
+    // Feet of real trees, by cell, as last meshed: taking one away changes
+    // the shade under its crown in the chunks round it too.
+    this.feet = new Set();
 
     this.uniforms = {
       atlas: { value: tex },
+      foliage: { value: leaves },
       uDaylight: { value: 1 },
       uSunColor: { value: new THREE.Color(1, 1, 1) },
       uLampColor: { value: new THREE.Color(1, 0.83, 0.58) },
@@ -353,6 +377,7 @@ export class Terrain {
     this.materials = {
       opaque: make(SOLID_VERT, SOLID_FRAG),
       plants: make(SOLID_VERT, SOLID_FRAG, { defines: { CUTOUT: 1, SWAY: 1 }, side: THREE.DoubleSide }),
+      foliage: make(SOLID_VERT, SOLID_FRAG, { defines: { CUTOUT: 1, SWAY: 1, FOLIAGE: 1 }, side: THREE.DoubleSide }),
       items: make(ITEM_VERT, ITEM_FRAG, { side: THREE.DoubleSide }),
       water: make(WATER_VERT, WATER_FRAG, { transparent: true, depthWrite: false, side: THREE.DoubleSide }),
       lava: make(LAVA_VERT, LAVA_FRAG),
@@ -457,6 +482,12 @@ export class Terrain {
       const cx = Math.floor(x / CHUNK);
       const cz = Math.floor(z / CHUNK);
       this.dirty.add(`${cx},${cz}`);
+      // A real tree put down or taken away: its crown's shade reaches further.
+      if (isTreeFoot(cells[i + 3]) || this.feet.has(`${x},${cells[i + 1]},${z}`)) {
+        for (let tx = Math.floor((x - TREE_REACH) / CHUNK); tx <= Math.floor((x + TREE_REACH) / CHUNK); tx++) {
+          for (let tz = Math.floor((z - TREE_REACH) / CHUNK); tz <= Math.floor((z + TREE_REACH) / CHUNK); tz++) this.dirty.add(`${tx},${tz}`);
+        }
+      }
       if (x % CHUNK === 0) this.dirty.add(`${cx - 1},${cz}`);
       if (x % CHUNK === CHUNK - 1) this.dirty.add(`${cx + 1},${cz}`);
       if (z % CHUNK === 0) this.dirty.add(`${cx},${cz - 1}`);
@@ -498,7 +529,8 @@ export class Terrain {
     const data = meshChunk(this.world, this.light, this.atlas, cx, cz);
     const group = new THREE.Group();
     group.name = `chunk ${key}`;
-    const chunk = { key, cx, cz, group, studs: null };
+    const chunk = { key, cx, cz, group, studs: null, feet: data.trees.map((c) => c.join()) };
+    for (const foot of chunk.feet) this.feet.add(foot);
     const H = this.world.H;
     const sphere = new THREE.Sphere(new THREE.Vector3((cx + 0.5) * CHUNK, H / 2, (cz + 0.5) * CHUNK), Math.hypot(CHUNK / 2, H / 2, CHUNK / 2) + 1);
     const add = (part, material, extra = null, order = 0) => {
@@ -519,6 +551,7 @@ export class Terrain {
     };
     add(data.opaque, this.materials.opaque);
     add(data.plants, this.materials.plants);
+    add(data.foliage, this.materials.foliage);
     add(data.items, this.materials.items, data.items.corner);
     add(data.water, this.materials.water, null, 2);
     add(data.lava, this.materials.lava, null, 2);
@@ -546,6 +579,7 @@ export class Terrain {
   }
 
   disposeChunk(chunk) {
+    for (const foot of chunk.feet ?? []) this.feet.delete(foot);
     this.group.remove(chunk.group);
     for (const mesh of chunk.group.children) mesh.geometry.dispose();
   }
@@ -577,6 +611,7 @@ export class Terrain {
     this.scene.remove(this.group);
     for (const m of Object.values(this.materials)) m.dispose();
     this.texture.dispose();
+    this.foliageTexture.dispose();
     this.studGeometry.dispose();
   }
 }

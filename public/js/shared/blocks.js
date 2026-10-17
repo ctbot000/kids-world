@@ -14,6 +14,10 @@
 //          jewels), drawn facing you
 //   furniture  a little model of boxes inside its cell (shared/furniture.js),
 //          most of them turned to face whoever put them down
+//   tree   a real tree, not made of blocks: its foot is the block a model of
+//          it grows from (render/katsura.js, drawn by render/mesher.js), and
+//          the cells of its trunk just above are solid but not drawn, to
+//          bump into. It lets the light through.
 
 export const AIR = 0;
 
@@ -40,7 +44,7 @@ function def(id, key, props) {
   };
   if (typeof d.tiles === 'string') d.tiles = { top: d.tiles, side: d.tiles, bottom: d.tiles };
   else if (d.tiles) d.tiles = { top: d.tiles.top, side: d.tiles.side ?? d.tiles.top, bottom: d.tiles.bottom ?? d.tiles.top };
-  d.solid = d.kind === 'solid' || d.kind === 'glass' || (d.kind === 'furniture' && d.solid !== false);
+  d.solid = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'tree' || (d.kind === 'furniture' && d.solid !== false);
   d.opaque = d.kind === 'solid';
   d.cube = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'water' || d.kind === 'lava';
   defs[id] = d;
@@ -67,6 +71,12 @@ export const PINE_LEAVES = def(9, 'pine-leaves', { name: 'Pine Leaves', category
 // bark all round, as the trunks lean and climb in steps.
 export const KATSURA_LEAVES = def(46, 'katsura-leaves', { name: 'Katsura Leaves', category: 'nature', after: 48, tiles: 'katsura-leaves', sound: 'leaves', autumn: true });
 export const KATSURA_WOOD = def(48, 'katsura-wood', { name: 'Katsura Trunk', category: 'nature', after: 9, tiles: 'katsura-bark', sound: 'wood' });
+// A real katsura tree: the foot it grows from, a giant's (the stamp's), and
+// the inside of a real tree's trunk above its foot (see `tree` above). The
+// tiles are only for the map and an icon: none of them is drawn as a block.
+export const KATSURA_TREE = def(49, 'katsura-tree', { name: 'Katsura Tree', kind: 'tree', model: 'katsura', tiles: 'katsura-leaves', sound: 'wood' });
+export const KATSURA_GIANT = def(67, 'katsura-giant', { name: 'Giant Katsura Tree', kind: 'tree', model: 'katsura', giant: true, tiles: 'katsura-leaves', sound: 'wood' });
+export const TREE_CORE = def(68, 'tree-core', { name: 'Tree Trunk', kind: 'tree', tiles: 'katsura-bark', sound: 'wood' });
 export const WATER = def(10, 'water', { name: 'Water', kind: 'water', category: 'nature', tiles: 'water', sound: 'water' });
 export const ICE = def(11, 'ice', { name: 'Ice', category: 'nature', tiles: 'ice', sound: 'glass' });
 // Volcano rock, dark and dusty: the ground of a volcano island
@@ -338,8 +348,8 @@ export const isKnown = (id) => Number.isInteger(id) && id >= 0 && id < 256 && de
 export const SOLID = new Uint8Array(256);
 export const OPAQUE = new Uint8Array(256);
 export const EMIT = new Uint8Array(256);
-export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture, 7 lava
-const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6, lava: 7 };
+export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture, 7 lava, 8 tree
+const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6, lava: 7, tree: 8 };
 for (const d of defs) {
   if (!d) continue;
   SOLID[d.id] = d.solid ? 1 : 0;
@@ -376,7 +386,7 @@ for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
 export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(256);
-for (const id of [7, 8, 9, 24, 25, 46, 48]) TREE_PART[id] = 1;
+for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68]) TREE_PART[id] = 1;
 // Tent cloth, what makes a tent.
 export const CLOTH = new Uint8Array(256);
 for (const id of CLOTHS) CLOTH[id] = 1;
@@ -389,6 +399,9 @@ export const K_PLANT = 4;
 export const K_ITEM = 5;
 export const K_FURNITURE = 6;
 export const K_LAVA = 7;
+export const K_TREE = 8;
+// The foot of a real tree, which its model grows from.
+export const isTreeFoot = (id) => KIND[id] === K_TREE && id !== TREE_CORE;
 
 // The block in the toy box a turned piece of furniture is one of.
 export const baseOf = (id) => defs[id]?.base ?? id;
