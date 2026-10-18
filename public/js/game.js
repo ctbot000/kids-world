@@ -53,6 +53,8 @@ export const HILL_MODES = [
 
 // How fast left and right turn you round looking through your own eyes (radians a second).
 const TURN_SPEED = 2.4;
+// How the camera looks arriving at an island with a view to show: nearly level, to take in a building.
+const ARRIVE_PITCH = -0.06;
 const INTERP_MS = 130;
 const CRITTER_INTERP_MS = 260;
 // A monster is drawn where it is now (see monsterNow): carried on from its
@@ -511,7 +513,13 @@ export class Game extends EventTarget {
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
-    this.renderer.view.yaw = Math.PI * 0.9;
+    // An island with a view to show turns you to it as you arrive.
+    const view = !again && Number.isFinite(spawn.yaw);
+    this.renderer.view.yaw = view ? spawn.yaw : Math.PI * 0.9;
+    if (view) {
+      this.renderer.view.pitch = ARRIVE_PITCH;
+      this.me.yaw = spawn.yaw + Math.PI;
+    }
     this.emit('welcome', { again });
     this.emit('players');
     this.emit('settings');

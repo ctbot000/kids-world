@@ -103,6 +103,9 @@ export function normalizeMeta(meta) {
       x: finite(spawn?.x, 0.5, W - 0.5, W / 2),
       y: finite(spawn?.y, 1, H, sea + 4),
       z: finite(spawn?.z, 0.5, D - 0.5, D / 2),
+      // The way to look on arriving, as a camera yaw, where an island has a
+      // view to show (the CTB island's office): none on most islands.
+      ...(Number.isFinite(spawn?.yaw) ? { yaw: spawn.yaw } : {}),
     },
   };
 }

@@ -17,10 +17,11 @@ import * as B from '../public/js/shared/blocks.js';
 import { cleanListing } from '../public/js/shared/listing.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
 import { placeTemplate } from '../public/js/shared/stamps.js';
+import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
-import { deskSpots, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
+import { deskSpots, GROUNDS, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
 import { changeSettings, Company, CtbControl, defaultSettings, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
@@ -305,13 +306,26 @@ test('the office on the CTB island: workers at their desks, answering children, 
     assert.equal(chair.model, 'chair');
   }
   assert.equal(office.seats.length, deskSpots().length);
-  // Visitors arrive on the plaza's paving before the doors, a few steps from them.
+  // Visitors arrive on the boulevard at the front of the grounds, turned to
+  // the doors at its end, with nothing but air between them and the building's top.
   const spawn = room.world.spawn;
   assert.equal(room.world.get(Math.floor(spawn.x), spawn.y - 1, Math.floor(spawn.z)), B.PEBBLES);
   assert.equal(room.world.get(Math.floor(spawn.x), spawn.y, Math.floor(spawn.z)), B.AIR);
   const [[doorX, doorY, doorZ]] = placeTemplate([[0, 1, 0, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
   assert.equal(room.world.get(doorX, doorY, doorZ), B.AIR, 'the doors are open');
-  assert.ok(Math.hypot(doorX + 0.5 - spawn.x, doorZ + 0.5 - spawn.z) <= 4.01);
+  assert.ok(Math.hypot(doorX + 0.5 - spawn.x, doorZ + 0.5 - spawn.z) > 25, 'far enough back to see it all');
+  // A camera's yaw looks along (-sin, -cos): at the doors.
+  const look = [-Math.sin(spawn.yaw), -Math.cos(spawn.yaw)];
+  const toDoor = [doorX + 0.5 - spawn.x, doorZ + 0.5 - spawn.z];
+  assert.ok((look[0] * toDoor[0] + look[1] * toDoor[1]) / Math.hypot(...toDoor) > 0.99);
+  // The way to look goes to pages with the island; an island without one has none.
+  assert.equal(World.decode(room.world.meta(), room.world.encode()).spawn.yaw, spawn.yaw);
+  assert.equal('yaw' in World.decode({ ...room.world.meta(), spawn: { x: 5, y: 30, z: 5 } }, room.world.encode()).spawn, false);
+  // No hill rises over the grounds.
+  const g = placeTemplate([[GROUNDS.x0, 0, GROUNDS.z0, 0], [GROUNDS.x1, 0, GROUNDS.z1, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
+  for (let x = Math.min(g[0][0], g[1][0]); x <= Math.max(g[0][0], g[1][0]); x++) {
+    for (let z = Math.min(g[0][2], g[1][2]); z <= Math.max(g[0][2], g[1][2]); z++) assert.ok(room.world.groundBelow(x, room.world.H - 1, z) < office.site.base + 25);
+  }
   assert.ok(officeCells().some(([, , , id]) => id === B.TV));
 
   // The AI friend talking to them gets no answer: it would answer back, on and on.
@@ -347,7 +361,9 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const file = join(dir, 'ctb-island.json');
   const older = JSON.parse(await readFile(file, 'utf8'));
   assert.equal(older.office, OFFICE_VERSION);
-  const before = { x: office.site.x, y: office.site.base + 9, z: office.site.z };
+  // Something left over the boulevard, which is open air once the office is up again.
+  const [[bx, by, bz]] = placeTemplate([[0, 10, -20, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
+  const before = { x: bx, y: by, z: bz };
   room.world.set(before.x, before.y, before.z, B.STAR_BLOCK);
   await office.save();
   const saved = JSON.parse(await readFile(file, 'utf8'));

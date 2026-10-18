@@ -2719,6 +2719,9 @@ test('the ?ctb link opens the CTB island without a login, its workers at their d
     await clickButton(page, 'Let’s go', '#modal');
     await inGame(page);
     assert.ok([...office.room.players.values()].some((p) => p.online && p.name === 'Mina Kim'), 'on the island under the name typed');
+    // Turned to the office as they arrive: the camera looks the way the island says.
+    const yaw = await page.evaluate(() => window.kidsWorld.renderer.view.yaw);
+    assert.ok(Math.abs(yaw - office.room.world.spawn.yaw) < 0.05, `camera yaw ${yaw}`);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'CTB');
     await until(page, () => ['Ada 💼', 'Ben 💼'].every((n) => [...window.kidsWorld.game.players.values()].some((p) => p.name === n && p.sitting)));
