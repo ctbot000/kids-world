@@ -9,10 +9,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { furnitureBoxes, modelBoxes } from '../public/js/shared/furniture.js';
-import { applyStroke, blankPicture, boardNear, cleanStroke, COLORS, decodePicture, encodePicture, isBlank, isBoard, MAX_POINTS, PICTURE_AT, PICTURE_H, PICTURE_W, pictureCorners } from '../public/js/shared/drawing.js';
+import { addToGallery, applyStroke, blankPicture, boardNear, cleanGallery, cleanStroke, COLORS, decodePicture, encodePicture, GALLERY_MAX, GALLERY_TEXT_MAX, isBlank, isBoard, joinGalleries, MAX_POINTS, PICTURE_AT, PICTURE_H, PICTURE_W, pictureCorners, removeFromGallery } from '../public/js/shared/drawing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
-import { KEPT_MAX, keptProfile } from '../public/js/shared/keeper.js';
+import { addProgress, KEPT_MAX, keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
@@ -184,4 +184,81 @@ test('strokes are counted, with the Little Artist sticker for 25, and the keeper
   assert.equal(keptProfile({ stickers: { 'a-new-one': 5 } }).stickers['a-new-one'], 5);
   const many = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`s${'x'.repeat(i % 20)}${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26) % 26)}`, 1]));
   assert.equal(Object.keys(keptProfile({ stats: many }).stats).length, KEPT_MAX);
+});
+
+// A picture with a line of colour c across row y.
+const picture = (c = 2, y = 10) => {
+  const px = blankPicture();
+  applyStroke(px, { k: 'line', c, r: 1, pts: [2, y, 60, y] });
+  return px;
+};
+
+test('a whole picture is put up on a board from a gallery, as one stroke the island passes on', () => {
+  const px = picture(5, 20);
+  const text = encodePicture(px);
+  assert.deepEqual(cleanStroke({ k: 'paste', px: text }), { k: 'paste', px: text });
+  for (const bad of [{ k: 'paste' }, { k: 'paste', px: 'nonsense' }, { k: 'paste', px: 42 }]) assert.equal(cleanStroke(bad), null);
+  const on = picture(2, 5);
+  applyStroke(on, cleanStroke({ k: 'paste', px: text }));
+  assert.deepEqual(on, px, 'the picture there before is gone');
+  const { room, a, b, x, y, z } = island();
+  room.receive(a, { t: 'draw', at: [x, y, z], s: { k: 'paste', px: text } });
+  assert.deepEqual(room.drawings.get(room.world.index(x, y, z)).px, px);
+  assert.equal(b.all('draw')[0].s.px, text);
+});
+
+test('a gallery keeps pictures newest first, each once, as many as fit, and only pictures', () => {
+  let g = cleanGallery(null);
+  assert.deepEqual(g, { items: [], changedAt: 0 });
+  assert.deepEqual(addToGallery(g, { px: blankPicture() }), { why: 'blank' });
+  const first = addToGallery(g, { px: picture(2), island: 'Sunny Cove', at: 1000, id: 'aaaaaaaa' });
+  g = first.gallery;
+  assert.deepEqual(g.items[0], { id: 'aaaaaaaa', px: encodePicture(picture(2)), at: 1000, island: 'Sunny Cove' });
+  assert.equal(g.changedAt, 1000);
+  assert.deepEqual(addToGallery(g, { px: picture(2) }), { why: 'same' }, 'the same picture just saved');
+  g = addToGallery(g, { px: picture(3), at: 2000, id: 'bbbbbbbb' }).gallery;
+  assert.deepEqual(g.items.map((it) => it.id), ['bbbbbbbb', 'aaaaaaaa'], 'newest first');
+  // Full at GALLERY_MAX pictures.
+  let full = g;
+  for (let i = 0; full.items.length < GALLERY_MAX; i++) full = addToGallery(full, { px: picture(i % 11 + 1, i % 40 + 2), at: 3000 + i }).gallery;
+  assert.equal(full.items.length, GALLERY_MAX);
+  assert.deepEqual(addToGallery(full, { px: picture(9, 45) }), { why: 'full' });
+  // Or full when its pictures are busy enough to fill GALLERY_TEXT_MAX.
+  const busy = blankPicture().map((_, i) => (i + Math.floor(i / PICTURE_W)) % (COLORS.length - 1) + 1);
+  let heavy = cleanGallery(null);
+  for (let i = 0; i < GALLERY_MAX; i++) {
+    const next = addToGallery(heavy, { px: busy.map((c, k) => (k === i ? 1 + (c % 5) : c)) });
+    if (!next.gallery) {
+      assert.equal(next.why, 'full');
+      break;
+    }
+    heavy = next.gallery;
+  }
+  assert.ok(heavy.items.reduce((n, it) => n + it.px.length, 0) <= GALLERY_TEXT_MAX);
+  assert.ok(heavy.items.length < GALLERY_MAX);
+  // Taken down.
+  const down = removeFromGallery(g, 'aaaaaaaa', 5000);
+  assert.deepEqual(down.items.map((it) => it.id), ['bbbbbbbb']);
+  assert.equal(down.changedAt, 5000);
+  // Only pictures, each once.
+  const it = g.items[0];
+  const messy = cleanGallery({ items: [it, it, { ...it, id: 'X!' }, { ...it, id: 'cccccccc', px: 'nonsense' }, { ...it, id: 'dddddddd', px: encodePicture(blankPicture()) }, 'oops', { ...it, id: 'eeeeeeee', island: 42, at: -5 }], changedAt: 'soon' });
+  assert.deepEqual(messy.items.map((x) => x.id), [it.id, 'eeeeeeee']);
+  assert.deepEqual([messy.items[1].island, messy.items[1].at, messy.changedAt], ['', 0, 0]);
+});
+
+test('the keeper keeps a gallery with the profile: the one changed last wins on another device, and a guest’s pictures join a login’s', () => {
+  const mine = addToGallery(null, { px: picture(2), at: 1000, id: 'aaaaaaaa' }).gallery;
+  const theirs = addToGallery(mine, { px: picture(3), at: 2000, id: 'bbbbbbbb' }).gallery;
+  assert.deepEqual(keptProfile({ gallery: theirs }).gallery, theirs);
+  assert.deepEqual(keptProfile({}).gallery, { items: [], changedAt: 0 });
+  assert.deepEqual(mergeProfiles({ gallery: mine }, { gallery: theirs }).gallery, theirs);
+  assert.deepEqual(mergeProfiles({ gallery: theirs }, { gallery: mine }).gallery, theirs);
+  // A picture taken down on one device stays down.
+  const down = removeFromGallery(theirs, 'aaaaaaaa', 3000);
+  assert.deepEqual(mergeProfiles({ gallery: theirs }, { gallery: down }).gallery.items.map((it) => it.id), ['bbbbbbbb']);
+  // A guest's pictures added to a login's: both, newest first, once each.
+  const guest = addToGallery(null, { px: picture(4), at: 1500, id: 'gggggggg' }).gallery;
+  assert.deepEqual(addProgress({ gallery: theirs }, { gallery: guest }).gallery.items.map((it) => it.id), ['bbbbbbbb', 'gggggggg', 'aaaaaaaa']);
+  assert.deepEqual(joinGalleries(theirs, theirs).items.length, 2);
 });

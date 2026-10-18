@@ -7,6 +7,7 @@
 // a world of its own, so what you earn and carry there stays apart from all
 // this, and never goes to the keeper.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
+import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.js';
 import { drawToy, GASHA_PRICE, TOY_MAX, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
@@ -39,6 +40,7 @@ function clean(raw) {
     gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
+    gallery: cleanGallery(p.gallery),
     tokens: p.tokens && typeof p.tokens === 'object' ? p.tokens : {},
     hotbar,
     seenHelp: p.seenHelp === true,
@@ -103,7 +105,25 @@ export class Profile extends EventTarget {
     this.store();
     this.dispatchEvent(new CustomEvent('change'));
     this.dispatchEvent(new CustomEvent('basket'));
+    this.dispatchEvent(new CustomEvent('gallery'));
     return true;
+  }
+
+  // Your gallery of drawings (shared/drawing.js). A picture saved: the
+  // picture in it, or { why } it is not ('same', 'full', 'blank').
+  saveDrawing(px, island) {
+    const { gallery, why } = addToGallery(this.data.gallery, { px, island });
+    if (!gallery) return { why };
+    this.data.gallery = gallery;
+    this.store();
+    this.dispatchEvent(new CustomEvent('gallery'));
+    return { picture: gallery.items[0] };
+  }
+
+  takeDownDrawing(id) {
+    this.data.gallery = removeFromGallery(this.data.gallery, id);
+    this.store();
+    this.dispatchEvent(new CustomEvent('gallery'));
   }
 
   setting(key, value) {

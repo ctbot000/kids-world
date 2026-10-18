@@ -66,6 +66,7 @@
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
 import { addToys } from './gashapon.js';
+import { cleanGallery, joinGalleries } from './drawing.js';
 import { cleanCoins, cleanGear, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
@@ -153,17 +154,18 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
   }
 }
 
-// What is kept of a profile: your name and look, your basket, coins,
-// potions and gear from the shop, what you have done and the stickers it
-// earned, and when your name, look, basket, coins, potions or gear last
-// changed. Never your tokens, which let you back into islands as yourself,
-// nor your settings. The page sends exactly this.
 // The most counts and stickers a profile keeps: plenty of room past the
 // game's own (stickers.js), so a new sticker or count needs no change here
 // and is kept even by a keeper running older code, while a made-up profile
 // stays small.
 export const KEPT_MAX = 256;
 
+// What is kept of a profile: your name and look, your basket, coins,
+// potions and gear from the shop, what you have done and the stickers it
+// earned, when your name, look, basket, coins, potions or gear last
+// changed, and your gallery of drawings (drawing.js). Never your tokens,
+// which let you back into islands as yourself, nor your settings. The page
+// sends exactly this.
 export function keptProfile(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const numbers = (source, pattern, max) => {
@@ -188,6 +190,7 @@ export function keptProfile(raw) {
     gear: cleanGear(p.gear),
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, KEPT_MAX),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, KEPT_MAX),
+    gallery: cleanGallery(p.gallery),
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
 }
@@ -251,15 +254,18 @@ export function mergeProfiles(mine, theirs) {
   for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
   const stats = { ...a.stats };
   for (const [key, n] of Object.entries(b.stats)) stats[key] = Math.max(stats[key] ?? 0, n);
-  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, gear: newer.gear, changedAt: newer.changedAt, stats, stickers };
+  // The gallery as it was last changed, on whichever device: a picture taken
+  // down on one stays down.
+  const gallery = b.gallery.changedAt > a.gallery.changedAt ? b.gallery : a.gallery;
+  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
 }
 
 // What you did as the guest on a device, added to the player you logged in
 // as there, once, when you say it was you: every sticker either has earned
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew is the higher of the two), and the
-// better gear of each kind, and the clothes and capsule toys of both, and
-// the dragons both tamed.
+// better gear of each kind, and the clothes and capsule toys of both, the
+// dragons both tamed, and the pictures in both galleries.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -274,7 +280,7 @@ export function addProgress(player, guest) {
   gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
-  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear };
+  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:

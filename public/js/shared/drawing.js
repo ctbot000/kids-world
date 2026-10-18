@@ -3,6 +3,10 @@
 // grid of PICTURE_W by PICTURE_H dots in a box of crayon colours, to draw on
 // with a fingertip or the mouse, fill and wipe clean.
 //
+// A picture can go into your own gallery, kept with you (profile.js) and,
+// with a login, on your other devices too through the keeper (keeper.js),
+// to look at again, save as a file, or put up on a board again.
+//
 // Every stroke goes to the island (room.js), which draws it on its own copy
 // of the picture and passes it on, so friends at the same board draw on it
 // together and everyone sees it on the board itself. The island keeps the
@@ -13,6 +17,7 @@ import { BLOCKS } from './blocks.js';
 import { cellNear } from './arcade.js';
 import { furniturePoint } from './furniture.js';
 import { base64ToBytes, bytesToBase64 } from './world.js';
+import { cleanIslandName } from './words.js';
 
 export const PICTURE_W = 64;
 export const PICTURE_H = 48;
@@ -81,6 +86,7 @@ export const isBlank = (px) => px.every((c) => c === 0);
 //   { k: 'line', c, r, pts: [x0, y0, x1, y1, ...] }  dots joined up with the brush
 //   { k: 'fill', c, x, y }                            the patch of one colour round a dot
 //   { k: 'clear' }                                    wiped clean
+//   { k: 'paste', px }                                a whole picture (as text) put up, from a gallery
 // A long line goes as several, each starting where the last left off.
 
 const dotIn = (x, y) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < PICTURE_W && y < PICTURE_H;
@@ -90,6 +96,7 @@ const colorIn = (c) => Number.isInteger(c) && c >= 0 && c < COLORS.length;
 export function cleanStroke(s) {
   if (!s || typeof s !== 'object') return null;
   if (s.k === 'clear') return { k: 'clear' };
+  if (s.k === 'paste') return decodePicture(s.px) ? { k: 'paste', px: s.px } : null;
   if (!colorIn(s.c)) return null;
   if (s.k === 'fill') return dotIn(s.x, s.y) ? { k: 'fill', c: s.c, x: s.x, y: s.y } : null;
   if (s.k !== 'line' || !Number.isInteger(s.r) || s.r < 0 || s.r > MAX_R) return null;
@@ -115,6 +122,10 @@ function dab(px, x, y, r, c) {
 export function applyStroke(px, s) {
   if (s.k === 'clear') {
     px.fill(0);
+    return;
+  }
+  if (s.k === 'paste') {
+    px.set(decodePicture(s.px));
     return;
   }
   if (s.k === 'fill') {
@@ -188,4 +199,59 @@ export function decodePicture(text) {
     at += run;
   }
   return at === SIZE ? px : null;
+}
+
+// ---------------------------------------------------------------- galleries
+// Your gallery: { items, changedAt }, the pictures newest first, each
+// { id, px (as text), at (when it was saved), island (where it was drawn) }.
+// A whole gallery of busy pictures still goes to the keeper in one go.
+export const GALLERY_MAX = 24;
+export const GALLERY_TEXT_MAX = 48_000;
+
+const isPictureId = (v) => typeof v === 'string' && /^[a-z0-9]{6,16}$/.test(v);
+const ID_LETTERS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+export const newPictureId = (random = Math.random) => Array.from({ length: 10 }, () => ID_LETTERS[Math.floor(random() * ID_LETTERS.length)]).join('');
+
+// A gallery as it came (from this device or the keeper), checked: only
+// pictures, each once, as many as fit.
+export function cleanGallery(raw) {
+  const items = [];
+  const ids = new Set();
+  let size = 0;
+  for (const it of Array.isArray(raw?.items) ? raw.items.slice(0, GALLERY_MAX) : []) {
+    if (!isPictureId(it?.id) || ids.has(it.id) || typeof it.px !== 'string' || size + it.px.length > GALLERY_TEXT_MAX) continue;
+    const px = decodePicture(it.px);
+    if (!px || isBlank(px)) continue;
+    ids.add(it.id);
+    size += it.px.length;
+    items.push({ id: it.id, px: it.px, at: Number.isFinite(it.at) && it.at > 0 ? it.at : 0, island: cleanIslandName(it.island) || '' });
+  }
+  return { items, changedAt: Number.isFinite(raw?.changedAt) && raw.changedAt > 0 ? raw.changedAt : 0 };
+}
+
+// A picture added to the front of a gallery: { gallery } with it, or
+// { why } — 'blank', 'same' (just like the newest one there) or 'full'.
+export function addToGallery(gallery, { px, island = '', at = Date.now(), id = newPictureId() }) {
+  const g = cleanGallery(gallery);
+  if (isBlank(px)) return { why: 'blank' };
+  const text = encodePicture(px);
+  if (g.items[0]?.px === text) return { why: 'same' };
+  const size = g.items.reduce((n, it) => n + it.px.length, 0);
+  if (g.items.length >= GALLERY_MAX || size + text.length > GALLERY_TEXT_MAX) return { why: 'full' };
+  return { gallery: { items: [{ id, px: text, at, island: cleanIslandName(island) || '' }, ...g.items], changedAt: at } };
+}
+
+// A gallery with one picture taken down.
+export function removeFromGallery(gallery, id, at = Date.now()) {
+  const g = cleanGallery(gallery);
+  return { items: g.items.filter((it) => it.id !== id), changedAt: at };
+}
+
+// Two galleries as one, newest first (a guest's pictures joining a login's).
+export function joinGalleries(a, b) {
+  const x = cleanGallery(a);
+  const y = cleanGallery(b);
+  const seen = new Set(x.items.map((it) => it.id));
+  const items = [...x.items, ...y.items.filter((it) => !seen.has(it.id))].sort((p, q) => q.at - p.at);
+  return cleanGallery({ items, changedAt: Math.max(x.changedAt, y.changedAt) });
 }

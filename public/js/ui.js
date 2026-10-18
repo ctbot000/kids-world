@@ -27,7 +27,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
-import { BRUSHES, COLORS as DRAW_COLORS, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
+import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { blockIcon } from './render/atlas.js';
@@ -1301,7 +1301,7 @@ export class UI {
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1896,7 +1896,7 @@ export class UI {
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
-          card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 💾 Save your picture, or 🖼️ put it in your photos! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
+          card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -4319,15 +4319,15 @@ export class UI {
     const t = g?.drawAt;
     if (!t) return;
     const key = `${t.x},${t.y},${t.z}`;
-    let color = 1;
-    let brush = BRUSHES[1];
-    // 'brush', 'fill' or 'eraser'.
-    let tool = 'brush';
+    // The colour, the brush and the tool ('brush', 'fill' or 'eraser'), as
+    // they were left last time.
+    let { color, brush, tool } = this.drawPicks ?? { color: 1, brush: BRUSHES[1], tool: 'brush' };
     const canvas = h('canvas', { class: 'draw-canvas', width: PICTURE_W, height: PICTURE_H, 'aria-label': 'The drawing board’s picture: draw on it' });
     const redraw = () => paint(canvas, g.drawingAt(t));
     const colors = h('div', { class: 'draw-colors', role: 'group', 'aria-label': 'Colours' });
     const tools = h('div', { class: 'draw-tools', role: 'group', 'aria-label': 'Brushes' });
     const mark = () => {
+      this.drawPicks = { color, brush, tool };
       for (const b of colors.children) b.classList.toggle('on', tool !== 'eraser' && Number(b.dataset.c) === color);
       for (const b of tools.children) b.classList.toggle('on', b.dataset.tool === tool && (tool !== 'brush' || b.dataset.r === String(brush.r)));
     };
@@ -4435,52 +4435,23 @@ export class UI {
     this.drawingChanged = (k) => {
       if (k === undefined || k === key) redraw();
     };
-    // The picture as a file, ten times as big, its dots kept sharp.
-    const pictureFile = () => {
-      const big = document.createElement('canvas');
-      big.width = PICTURE_W * 10;
-      big.height = PICTURE_H * 10;
-      const ctx = big.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(canvas, 0, 0, big.width, big.height);
-      const url = big.toDataURL('image/png');
-      const bytes = Uint8Array.from(atob(url.split(',')[1]), (c) => c.charCodeAt(0));
-      const name = `${(g.world?.name ?? 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-drawing.png`;
-      return { url, file: new File([bytes], name, { type: 'image/png' }) };
-    };
-    // Saved on this device as a file, or (where the device can share
-    // pictures, as phones and tablets do) to its photo gallery through the
-    // share sheet's Save Image.
-    const saveFile = () => {
-      const { url, file } = pictureFile();
-      const a = h('a', { href: url, download: file.name });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      this.sound.play('photo');
-      this.toast('💾', 'Your picture is saved!');
-    };
-    const canShare = (() => {
-      try {
-        return Boolean(navigator.canShare?.({ files: [new File([new Uint8Array(1)], 'a.png', { type: 'image/png' })] }));
-      } catch {
-        return false;
-      }
-    })();
-    const saveGallery = async () => {
-      const { file } = pictureFile();
-      try {
-        await navigator.share({ files: [file], title: 'My drawing' });
+    // Into your own gallery, to look at again (galleryDialog).
+    const keep = () => {
+      const { picture, why } = this.home.saveDrawing(g.drawingAt(t), g.world?.name);
+      if (picture) {
         this.sound.play('photo');
-      } catch (error) {
-        if (error?.name !== 'AbortError') saveFile();
+        this.toast('🖼️', 'Your picture is in your gallery!');
+      } else {
+        this.sound.play('no');
+        this.toast('🖼️', { same: 'That picture is in your gallery already.', full: `Your gallery is full (${GALLERY_MAX} pictures). Take one down to make room!`, blank: 'Draw something first!' }[why], 'warn');
       }
     };
     const saves = h(
       'div',
       { class: 'draw-saves' },
-      canShare ? h('button', { class: 'draw-tool save-gallery', type: 'button', onclick: saveGallery }, '🖼️ Save to Photos') : '',
-      h('button', { class: 'draw-tool save-file', type: 'button', onclick: saveFile }, '💾 Save picture'),
+      h('button', { class: 'draw-tool save-gallery', type: 'button', onclick: keep }, '🖼️ To my gallery'),
+      h('button', { class: 'draw-tool open-gallery', type: 'button', onclick: () => this.galleryDialog({ board: t }) }, '📂 My gallery'),
+      h('button', { class: 'draw-tool save-file', type: 'button', onclick: () => this.savePictureFile(g.drawingAt(t), g.world?.name) }, '💾 Save picture'),
     );
     this.openModal(
       (root) => {
@@ -4498,6 +4469,100 @@ export class UI {
           g.closeDrawing();
         },
       },
+    );
+  }
+
+  // A picture saved on this device as a PNG file, ten times as big, its
+  // dots kept sharp.
+  savePictureFile(px, island) {
+    const small = h('canvas', { width: PICTURE_W, height: PICTURE_H });
+    paint(small, px);
+    const big = h('canvas', { width: PICTURE_W * 10, height: PICTURE_H * 10 });
+    const ctx = big.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, big.width, big.height);
+    const a = h('a', { href: big.toDataURL('image/png'), download: `${(island || 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-drawing.png` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    this.sound.play('photo');
+    this.toast('💾', 'Your picture is saved!');
+  }
+
+  // Your gallery: the drawings you saved from drawing boards (profile.js),
+  // newest first, each to save as a file or take down — and, opened from a
+  // board, to put up on it again. Kept up to date as it changes (on another
+  // device too, with a login).
+  galleryDialog({ board = null } = {}) {
+    const p = this.home;
+    const g = this.game;
+    const grid = h('div', { class: 'gallery-grid' });
+    const title = h('h2', {});
+    const render = () => {
+      const items = p.data.gallery.items;
+      title.textContent = `🖼️ My gallery (${items.length} of ${GALLERY_MAX})`;
+      if (!items.length) {
+        grid.replaceChildren(h('p', { class: 'muted gallery-empty' }, 'No pictures yet! Draw on a drawing board (in the toy box’s 🛋️ Home tab) and tap 🖼️ To my gallery.'));
+        return;
+      }
+      grid.replaceChildren(
+        ...items.map((it) => {
+          const px = decodePicture(it.px);
+          const pic = h('canvas', { class: 'gallery-pic', width: PICTURE_W, height: PICTURE_H, role: 'img', 'aria-label': `A drawing${it.island ? ` from ${it.island}` : ''}` });
+          paint(pic, px);
+          const when = it.at ? new Date(it.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+          const down = h('button', { class: 'chip gallery-down', type: 'button', 'aria-label': 'Take this picture down' }, '🗑️');
+          down.onclick = () => {
+            if (!down.classList.contains('sure')) {
+              down.classList.add('sure');
+              down.textContent = '🗑️ Sure?';
+              setTimeout(() => {
+                if (!down.isConnected) return;
+                down.classList.remove('sure');
+                down.textContent = '🗑️';
+              }, 3000);
+              return;
+            }
+            this.sound.play('pop');
+            p.takeDownDrawing(it.id);
+          };
+          const putUp = () => {
+            if (!g || !isBoard(g.world?.get(board.x, board.y, board.z))) {
+              this.sound.play('no');
+              return;
+            }
+            g.drawAt = board;
+            const stroke = { k: 'paste', px: it.px };
+            g.drawStroke(stroke);
+            g.sendStroke(stroke);
+            this.sound.play('pop');
+            this.drawDialog();
+          };
+          return h(
+            'div',
+            { class: 'gallery-card', 'data-id': it.id },
+            pic,
+            h('span', { class: 'muted' }, [it.island, when].filter(Boolean).join(' · ')),
+            h(
+              'div',
+              { class: 'shop-buttons' },
+              board ? h('button', { class: 'chip gallery-put', type: 'button', onclick: putUp }, '🎨 Put it up') : null,
+              h('button', { class: 'chip gallery-file', type: 'button', 'aria-label': 'Save as a picture file', onclick: () => this.savePictureFile(px, it.island) }, '💾'),
+              down,
+            ),
+          );
+        }),
+      );
+    };
+    const changed = () => render();
+    this.openModal(
+      (root) => {
+        const back = board && g ? h('button', { class: 'chip', type: 'button', onclick: () => ((g.drawAt = board), this.drawDialog()) }, '🎨 Back to the board') : null;
+        root.append(h('div', { class: 'dialog-head' }, title, back), board ? h('p', { class: 'muted' }, 'Tap 🎨 Put it up to put a picture on this board again — for everyone to see!') : null, grid);
+        render();
+        p.addEventListener('gallery', changed);
+      },
+      { onClose: () => p.removeEventListener('gallery', changed) },
     );
   }
 

@@ -3630,7 +3630,7 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   await page.browserContext().close();
 });
 
-test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, it is saved as a file and to the photo gallery, wiping it clean and picking it up leave none', { skip }, async () => {
+test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, it is saved as a file and to your gallery, put up again from the gallery after wiping the board clean, picking the board up leaves no picture, and the gallery’s picture is taken down from ⭐ Stickers', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // A drawing board beside the start, on ground level with the cell beside
@@ -3664,13 +3664,11 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
     };
     // The island's own copy of the board's picture, at a dot.
     kw.islandDot = (x, y) => kw.session.link.room.drawings.get(kw.session.link.room.world.index(at.x, at.y, at.z))?.px[y * 64 + x] ?? 0;
-    // Pictures saved: as a file, and to the photo gallery through the share sheet.
+    // Pictures saved as files.
     kw.saved = [];
     HTMLAnchorElement.prototype.click = function () {
       if (this.download) kw.saved.push({ name: this.download, url: this.href });
     };
-    Object.defineProperty(navigator, 'canShare', { configurable: true, value: (d) => Boolean(d?.files?.length) });
-    Object.defineProperty(navigator, 'share', { configurable: true, value: async (d) => kw.saved.push({ name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }) });
     // The window's picture at a dot, as red, green and blue.
     kw.windowDot = (x, y) => [...document.querySelector('.draw-canvas').getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)];
     Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
@@ -3728,14 +3726,15 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
     room.receive(c, { t: 'draw', at: [at.x, at.y, at.z], s: { k: 'line', c: 7, r: 0, pts: [30, 30] } });
   }, at, PROTOCOL);
   await until(page, () => window.kidsWorld.windowDot(30, 30).join() === [0x3a, 0x73, 0xd8].join());
-  // Saved as a file, ten times as big, and to the photo gallery.
+  // Saved as a file, ten times as big, and to your gallery (once: the same
+  // picture again is in it already).
   await page.click('.draw-tool.save-file');
-  await page.click('.draw-tool.save-gallery');
-  await until(page, () => window.kidsWorld.saved.length === 2);
-  const [file, shared] = await page.evaluate(() => window.kidsWorld.saved);
+  await until(page, () => window.kidsWorld.saved.length === 1);
+  const [file] = await page.evaluate(() => window.kidsWorld.saved);
   assert.match(file.name, /-drawing\.png$/);
-  assert.equal(shared.name, file.name);
-  assert.equal(shared.type, 'image/png');
+  await page.click('.draw-tool.save-gallery');
+  await page.click('.draw-tool.save-gallery');
+  await until(page, () => window.kidsWorld.ui.home.data.gallery.items.length === 1 && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('already')));
   const size = await page.evaluate(async (url) => {
     const img = new Image();
     img.src = url;
@@ -3753,14 +3752,32 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
   assert.ok(await page.evaluate(() => window.kidsWorld.islandDot(2, 45) === 4), 'not at the first tap');
   await page.click('.draw-tool.wipe');
   await until(page, (key) => window.kidsWorld.session.link.room.drawings.size === 0 && !window.kidsWorld.renderer.drawings.shown.has(key), at.key);
+  // Put up again from the gallery: the whole picture back, for everyone.
+  await page.click('.draw-tool.open-gallery');
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('My gallery (1 of') && document.querySelectorAll('.gallery-card').length === 1);
+  await page.click('.gallery-put');
+  await until(page, (key) => document.querySelector('#modal h2').textContent.includes('Drawing Board') && window.kidsWorld.islandDot(2, 45) === 4 && window.kidsWorld.islandDot(24, 12) === 2 && window.kidsWorld.renderer.drawings.shown.has(key), at.key);
+  assert.deepEqual(await page.evaluate(() => window.kidsWorld.windowDot(30, 30)), [0x3a, 0x73, 0xd8]);
+  assert.ok(await page.evaluate(() => document.querySelector('.draw-color[data-c="4"]').classList.contains('on')), 'the colour picked before');
+  await until(page, () => Math.abs(document.querySelector('.draw-canvas').getBoundingClientRect().width - document.querySelector('.draw-canvas').offsetWidth) < 0.5);
+  box = await (await page.$('.draw-canvas')).boundingBox();
   // Drawn on again, closed, and the board picked up: its picture goes too.
+  await page.click('.draw-color[data-c="8"]');
   await page.click('.draw-tool[data-r="3"]');
   await page.mouse.click(...spot(20, 20));
-  await until(page, () => window.kidsWorld.islandDot(20, 20) === 4);
+  await until(page, () => window.kidsWorld.islandDot(20, 20) === 8);
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.drawAt === null);
   await page.evaluate((at) => window.kidsWorld.session.link.room.natureCell([at.x, at.y, at.z], 0), at);
   await until(page, (key) => window.kidsWorld.session.link.room.drawings.size === 0 && !window.kidsWorld.game.drawings.has(key) && !window.kidsWorld.renderer.drawings.shown.has(key), at.key);
+  // The gallery from ⭐ Stickers, and its picture taken down (two taps).
+  await page.evaluate(() => window.kidsWorld.ui.stickersDialog());
+  await page.evaluate(() => [...document.querySelectorAll('#modal button')].find((b) => b.textContent.includes('My gallery')).click());
+  await until(page, () => document.querySelectorAll('.gallery-card').length === 1 && !document.querySelector('.gallery-put'));
+  await page.click('.gallery-down');
+  assert.equal(await page.evaluate(() => window.kidsWorld.ui.home.data.gallery.items.length), 1, 'not at the first tap');
+  await page.click('.gallery-down');
+  await until(page, () => window.kidsWorld.ui.home.data.gallery.items.length === 0 && document.querySelector('.gallery-empty'));
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
