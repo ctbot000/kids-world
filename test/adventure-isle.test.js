@@ -17,7 +17,12 @@ import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { createGameServer } from '../server/server.js';
 
-function clock(start = Date.now()) {
+// A fake clock that starts at a set noon, not the real time: a test that
+// jumps to "midnight" means the next one, a full half day of its own away,
+// so islands retired a few minutes earlier are long past their while
+// whatever hour the tests run at (from real time, just before midnight they
+// were not).
+function clock(start = new Date(2026, 9, 11, 12).getTime()) {
   const c = { t: start };
   c.now = () => c.t;
   c.advance = (ms) => (c.t += ms);
