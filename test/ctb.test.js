@@ -21,7 +21,7 @@ import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
-import { deskSpots, GROUNDS, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
+import { deskSpots, GROUNDS, GUIDE, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
 import { changeSettings, Company, CtbControl, defaultSettings, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
@@ -289,7 +289,7 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const dir = await tempDir();
   const rooms = new Map();
   const answers = [];
-  const office = new Office({ rooms, file: join(dir, 'ctb-island.json'), log: () => {}, answer: (k, name, text) => (answers.push([k, name, text]), `Hi ${name}! I'm working on #12: Fix the bus.`), ignores: (name) => name === 'Pip 🤖', random: () => 0.5 });
+  const office = new Office({ rooms, file: join(dir, 'ctb-island.json'), log: () => {}, guideSpeed: 40, answer: (k, name, text) => (answers.push([k, name, text]), `Hi ${name}! I'm working on #12: Fix the bus.`), ignores: (name) => name === 'Pip 🤖', random: () => 0.5 });
   await office.open(3);
   after(() => office.close());
   const room = office.room;
@@ -336,6 +336,12 @@ test('the office on the CTB island: workers at their desks, answering children, 
   await new Promise((done) => setTimeout(done, 1500));
   assert.deepEqual(answers, []);
 
+  // The guide waits by the gate, and took none of CTB's own, nor the AI friend, for a guest.
+  const guide = () => [...room.players.values()].find((p) => p.name === GUIDE.name && p.online);
+  await eventually(() => guide()?.s);
+  assert.equal(office.guide.mode, 'idle');
+  assert.ok(room.chat.every((c) => c.name !== GUIDE.name), 'nobody greeted yet');
+
   // A child comes, asks Ben what he is doing; only Ben answers.
   const heard = [];
   const conn = { send: (text) => heard.push(JSON.parse(text)) };
@@ -344,6 +350,25 @@ test('the office on the CTB island: workers at their desks, answering children, 
   room.receive(conn, { t: 'say', text: 'Ben, what are you doing?' });
   await eventually(() => heard.some((m) => m.t === 'say' && m.name === 'Ben 💼'));
   assert.deepEqual(answers, [[1, 'Minji', 'Ben, what are you doing?']]);
+  // Grace greeted her by name, and leads her up the boulevard, waiting while
+  // she falls behind; followed, she goes all the way to the lobby.
+  assert.ok(heard.some((m) => m.t === 'say' && m.name === GUIDE.name && m.text.startsWith('Welcome to CTB, Minji!')));
+  await eventually(() => heard.some((m) => m.t === 'say' && m.name === GUIDE.name && m.text === 'This way! 🌷'));
+  const lobby = office.guide.at(GUIDE.route.at(-1));
+  for (let i = 0; i < 200 && office.guide.mode !== 'lobby'; i++) {
+    const s = guide().s;
+    room.receive(conn, { t: 'm', s: [s[0], s[1], s[2], 0, 1, 0] });
+    await new Promise((done) => setTimeout(done, 30));
+  }
+  assert.equal(office.guide.mode, 'lobby');
+  await eventually(() => Math.hypot(guide().s[0] - lobby.x, guide().s[2] - lobby.z) < 0.1);
+  assert.equal(room.world.get(Math.floor(lobby.x), Math.floor(guide().s[1]), Math.floor(lobby.z)), B.AIR, 'standing in the lobby, not in a wall');
+  await eventually(() => heard.some((m) => m.t === 'say' && m.name === GUIDE.name && m.text.startsWith('Here we are, Minji!')));
+  // Asked by name, she answers herself; the workers leave it to her.
+  const answered = answers.length;
+  room.receive(conn, { t: 'say', text: 'Grace, thank you!' });
+  await new Promise((done) => setTimeout(done, 300));
+  assert.equal(answers.length, answered);
   assert.equal(heard.find((m) => m.t === 'say' && m.name === 'Ben 💼').text, "Hi Minji! I'm working on #12: Fix the bus.");
   assert.deepEqual(office.summary().visitors, ['Pip 🤖', 'Minji']);
   assert.equal(office.summary().url, 'https://ctbot000.github.io/kids-world/?ctb');

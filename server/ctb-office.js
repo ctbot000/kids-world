@@ -328,12 +328,282 @@ class Clerk extends EventEmitter {
   }
 }
 
+// CTB's guide: she waits by the gate, and walks each guest who arrives up
+// the boulevard, round the fountain and into the lobby, pausing whenever
+// they fall behind, and introduces the team there; then she goes back to
+// the gate for the next. Her way, in the office's own cells (dx, dz).
+export const GUIDE = {
+  name: 'Grace 🌷',
+  call: 'grace',
+  look: { animal: 'grownup', skin: 'light', hair: 'long', hairColor: 'chestnut', face: 'none', shirt: 10, hat: 'flower', outfit: 'scarf' },
+  home: [2, -29],
+  route: [
+    [1, -27],
+    [0, -22],
+    [-5, -19],
+    [-7, -13],
+    [-5, -7],
+    [0, -4],
+    [0, -1],
+    [0, 1.6],
+  ],
+};
+const GUIDE_SPEED = 3.2;
+// How far behind a guest may fall before she waits for them, and how far ahead she goes again.
+const GUIDE_WAIT = 6;
+const GUIDE_GO = 3.5;
+const GUIDE_TICK_MS = 100;
+const GUIDE_LINGER_MS = 18000;
+const GUIDE_GREET_MS = 1500;
+const WALK = 1;
+const IDLE = 0;
+
+class Guide extends EventEmitter {
+  constructor({ office }) {
+    super();
+    this.office = office;
+    this.name = GUIDE.name;
+    this.look = cleanLook(GUIDE.look);
+    this.me = 0;
+    this.welcomed = false;
+    this.ended = false;
+    this.players = new Map();
+    // What she is doing: idle at the gate, greeting, leading a guest, at the lobby, or going back.
+    this.mode = 'idle';
+    this.guest = 0;
+    this.path = [];
+    this.step = 0;
+    this.pos = null;
+    this.yaw = 0;
+    this.waitSaidAt = 0;
+    this.until = 0;
+    this.link = new LocalLink(office.room);
+    this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look }));
+    this.link.on('message', (msg) => this.safely(() => this.handle(msg)));
+    this.link.on('close', () => {
+      this.ended = true;
+      clearInterval(this.ticker);
+    });
+  }
+
+  safely(fn) {
+    try {
+      fn();
+    } catch (error) {
+      this.office.log(`CTB: a mistake with the guide: ${error.stack ?? error}`);
+    }
+  }
+
+  // A point of the office's own (dx, dz: whole numbers the middles of its
+  // cells) on the island, standing on the ground there.
+  at([dx, dz]) {
+    const s = this.office.site;
+    const [[x, , z]] = placeTemplate([[0, 0, 0, 0]], s.x, s.base, s.z, s.facing);
+    const [[ax, , az]] = placeTemplate([[1, 0, 0, 0]], s.x, s.base, s.z, s.facing);
+    const [[bx, , bz]] = placeTemplate([[0, 0, 1, 0]], s.x, s.base, s.z, s.facing);
+    // The office's frame as world directions: dx along (ax - x, az - z), dz along (bx - x, bz - z).
+    const wx = x + 0.5 + (ax - x) * dx + (bx - x) * dz;
+    const wz = z + 0.5 + (az - z) * dx + (bz - z) * dz;
+    return { x: wx, y: this.groundAt(wx, wz), z: wz };
+  }
+
+  groundAt(x, z) {
+    const world = this.office.room.world;
+    return world.groundBelow(Math.floor(x), this.office.site.base + 4, Math.floor(z)) + 1;
+  }
+
+  handle(msg) {
+    switch (msg.t) {
+      case 'welcome': {
+        this.welcomed = true;
+        this.me = msg.you;
+        for (const p of msg.players ?? []) if (p.id !== this.me) this.players.set(p.id, { ...p });
+        this.goHome(true);
+        this.ticker = setInterval(() => this.safely(() => this.tick()), GUIDE_TICK_MS);
+        this.ticker.unref?.();
+        break;
+      }
+      case 'joined':
+        if (msg.player?.id && msg.player.id !== this.me) {
+          this.players.set(msg.player.id, { ...msg.player });
+          if (this.isGuest(msg.player)) this.arrived(msg.player);
+        }
+        break;
+      case 'left':
+        this.players.delete(msg.pid);
+        if (msg.pid === this.guest && this.mode !== 'idle') this.goHome();
+        break;
+      case 'm': {
+        const p = this.players.get(msg.p);
+        if (p) p.s = msg.s;
+        break;
+      }
+      case 'say':
+        if (msg.pid !== this.me && typeof msg.text === 'string' && msg.text.toLowerCase().includes(GUIDE.call)) this.askedBy(msg.pid, msg.name);
+        break;
+    }
+  }
+
+  // A guest: someone who is not one of CTB's own, nor the AI friend.
+  isGuest(p) {
+    // The workers by name too: one joining may not have its id known yet.
+    return !this.office.isClerk(p.id) && !STAFF.some((_, k) => workerName(k) === p.name) && !this.office.ignores(p.name ?? '');
+  }
+
+  arrived(p) {
+    if (this.mode === 'idle' || this.mode === 'back') {
+      this.guest = p.id;
+      this.mode = 'greeting';
+      this.until = Date.now() + GUIDE_GREET_MS;
+      this.say(`Welcome to CTB, ${p.name}! I'm Grace, your guide. Come with me — I'll show you our office!`);
+      this.emote('wave');
+    } else {
+      setTimeout(() => this.say(`Welcome, ${p.name}! Come along — we're on our way to the office!`), 2500).unref?.();
+    }
+  }
+
+  // Someone said her name: she offers a tour, or says where they are going.
+  askedBy(pid, name) {
+    const p = this.players.get(pid);
+    if (!p || !this.isGuest(p)) return;
+    if (this.mode === 'idle' || this.mode === 'back') {
+      this.guest = pid;
+      this.say(`Hi ${name}! Let me show you around CTB. Follow me!`);
+      this.lead();
+    } else this.say(`Hi ${name}! This way — the office is just ahead!`);
+  }
+
+  lead() {
+    this.mode = 'leading';
+    this.path = GUIDE.route.map((p) => this.at(p));
+    this.step = 0;
+  }
+
+  goHome(now = false) {
+    const home = this.at(GUIDE.home);
+    this.guest = 0;
+    if (now || !this.pos) {
+      this.pos = home;
+      this.mode = 'idle';
+      this.face(this.at([GUIDE.home[0], GUIDE.home[1] - 5]));
+      this.send(IDLE);
+      return;
+    }
+    // The way she came, back to the gate.
+    this.path = [...GUIDE.route].reverse().slice(1).map((p) => this.at(p)).concat([home]);
+    this.step = 0;
+    this.mode = 'back';
+  }
+
+  face(to) {
+    this.yaw = Math.atan2(to.x - this.pos.x, to.z - this.pos.z);
+  }
+
+  guestPos() {
+    const s = this.players.get(this.guest)?.s;
+    return s ? { x: s[0], y: s[1], z: s[2] } : null;
+  }
+
+  tick() {
+    if (!this.welcomed || this.ended || !this.pos) return;
+    const now = Date.now();
+    if (this.mode === 'greeting') {
+      const g = this.guestPos();
+      if (g) this.face(g);
+      this.send(IDLE);
+      if (now >= this.until) this.lead();
+      return;
+    }
+    if (this.mode === 'lobby') {
+      const g = this.guestPos();
+      if (g) this.face(g);
+      this.send(IDLE);
+      if (now >= this.until) this.goHome();
+      return;
+    }
+    if (this.mode !== 'leading' && this.mode !== 'back') return;
+    // Leading: wait for a guest who falls behind, facing them.
+    if (this.mode === 'leading') {
+      const g = this.guestPos();
+      const gap = g ? Math.hypot(g.x - this.pos.x, g.z - this.pos.z) : 0;
+      if (g && (gap > GUIDE_WAIT || (this.waiting && gap > GUIDE_GO))) {
+        this.waiting = true;
+        this.face(g);
+        this.send(IDLE);
+        if (now - this.waitSaidAt > 9000) {
+          this.waitSaidAt = now;
+          this.say('This way! 🌷');
+          this.emote('wave');
+        }
+        return;
+      }
+      this.waiting = false;
+    }
+    const target = this.path[this.step];
+    const dx = target.x - this.pos.x;
+    const dz = target.z - this.pos.z;
+    const d = Math.hypot(dx, dz);
+    const stride = (this.office.guideSpeed * GUIDE_TICK_MS) / 1000;
+    if (d <= stride) {
+      this.pos = { ...target };
+      this.step++;
+      if (this.step >= this.path.length) return this.reached();
+    } else {
+      this.pos = { x: this.pos.x + (dx / d) * stride, y: 0, z: this.pos.z + (dz / d) * stride };
+      this.pos.y = this.groundAt(this.pos.x, this.pos.z);
+      this.yaw = Math.atan2(dx, dz);
+    }
+    this.send(WALK);
+  }
+
+  reached() {
+    if (this.mode === 'back') {
+      this.mode = 'idle';
+      this.face(this.at([GUIDE.home[0], GUIDE.home[1] - 5]));
+      this.send(IDLE);
+      return;
+    }
+    const name = this.players.get(this.guest)?.name ?? 'friend';
+    this.mode = 'lobby';
+    this.until = Date.now() + GUIDE_LINGER_MS;
+    this.say(`Here we are, ${name}! That's our team at their desks — they make Kids World better every day. Say hi to them!`);
+    this.emote('cheer');
+    setTimeout(() => this.mode === 'lobby' && this.say('Got an idea for the game? Tap 💌 and our team will read it. Have fun!'), 6000).unref?.();
+  }
+
+  send(anim) {
+    if (!this.welcomed || this.ended) return;
+    const p = this.pos;
+    const yaw = ((this.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    this.link.send({ t: 'm', s: [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +yaw.toFixed(2), anim, 0] });
+  }
+
+  say(text) {
+    if (!this.welcomed || this.ended) return;
+    const clean = cleanChat(text.length > CHAT_MAX ? `${[...text].slice(0, CHAT_MAX - 1).join('')}…` : text);
+    if (clean) this.link.send({ t: 'say', text: clean });
+  }
+
+  emote(e) {
+    if (this.welcomed && !this.ended && EMOTE_KEYS.includes(e)) this.link.send({ t: 'emote', e });
+  }
+
+  leave() {
+    if (this.ended) return;
+    this.ended = true;
+    clearInterval(this.ticker);
+    this.link.send({ t: 'leave' });
+    setTimeout(() => this.link.close('closed'), 300).unref?.();
+  }
+}
+
 // The island, its office and the workers on it. answer(k, name, text) gives
 // what worker k says back to a child (or '' for nothing).
 export class Office {
   // ignores(name): someone the workers never answer — the AI friend, who
   // would answer them back, and on and on.
-  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', ignores = () => false, random = Math.random }) {
+  // guideSpeed: how fast the guide walks, blocks a second (quicker in tests).
+  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', ignores = () => false, random = Math.random, guideSpeed = GUIDE_SPEED }) {
     this.rooms = rooms;
     this.file = file;
     this.keeper = keeper;
@@ -343,6 +613,7 @@ export class Office {
     this.log = log;
     this.answer = answer;
     this.ignores = ignores;
+    this.guideSpeed = guideSpeed;
     this.random = random;
     this.room = null;
     this.token = '';
@@ -474,16 +745,29 @@ export class Office {
     const n = Math.max(1, Math.min(MAX_WORKERS, count));
     while (this.clerks.length > n) this.clerks.pop().leave();
     while (this.clerks.length < n) this.clerks.push(new Clerk({ office: this, k: this.clerks.length }));
+    // The guide is always there, whoever else is: once the first worker is
+    // in, as it owns the island (the first to come to an island does).
+    if (!this.guide && !this.guideComing) {
+      this.guideComing = true;
+      const first = this.clerks[0];
+      const come = () => {
+        if (this.room && !this.closed) this.guide = new Guide({ office: this });
+      };
+      if (first.welcomed) come();
+      else first.once('ready', come);
+    }
   }
 
   isClerk(pid) {
-    return this.clerks.some((c) => c.me === pid);
+    return this.clerks.some((c) => c.me === pid) || this.guide?.me === pid;
   }
 
   // Something a child said: the worker named in it answers, or the first.
   heard(clerk, pid, name, text) {
     if (this.ignores(name)) return;
     const lower = text.toLowerCase();
+    // Said to the guide: she answers it herself.
+    if (lower.includes(GUIDE.call)) return;
     const named = this.clerks.find((c) => lower.includes(STAFF[c.k].name.toLowerCase()));
     if ((named ?? this.clerks[0]) !== clerk) return;
     const now = Date.now();
@@ -557,7 +841,7 @@ export class Office {
   summary() {
     const room = this.room;
     if (!room) return null;
-    const clerks = new Set(this.clerks.map((c) => c.me));
+    const clerks = new Set([...this.clerks.map((c) => c.me), this.guide?.me]);
     return {
       code: room.code,
       name: room.world.name,
@@ -572,6 +856,9 @@ export class Office {
     clearInterval(this.timer);
     await this.save();
     for (const c of this.clerks) c.leave();
+    this.closed = true;
+    this.guide?.leave();
+    this.guide = null;
     this.clerks = [];
     if (this.room) this.keeper?.unlistIsland?.(this.room.code);
     this.host?.stop();
