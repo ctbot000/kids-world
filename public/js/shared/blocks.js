@@ -193,6 +193,9 @@ export const BROADCAST_STATION = furniture(224, 'broadcast-station', { name: 'Br
 // walk up to it and press Q for a class. After the broadcast station.
 export const SCHOOL_DESK = furniture(228, 'school-desk', { name: 'School Desk', color: '#d9a066', after: 224, sound: 'wood' });
 export const CHALKBOARD = furniture(232, 'chalkboard', { name: 'Chalkboard', color: '#2f5d46', after: 228, solid: false, wall: true, sound: 'wood' });
+// A drawing board (shared/drawing.js), a whiteboard on a stand: walk up,
+// press Q and draw on it, with friends too. After the chalkboard.
+export const DRAWING_BOARD = furniture(236, 'drawing-board', { name: 'Drawing Board', color: '#f7f5ef', after: 232, sound: 'wood' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

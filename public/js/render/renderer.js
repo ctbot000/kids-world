@@ -1,4 +1,5 @@
 // Puts the island on screen: the terrain, the sky, players and their pets, animals and monsters,
+// the pictures on drawing boards,
 // an adventure island's flags (and the stomps of King Grumble), the preview
 // of what a tool is about to do, and a camera that follows you around (and
 // never ends up inside a hill).
@@ -10,6 +11,7 @@ import { MAX_EDIT_CELLS } from '../shared/tools.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
+import { Drawings } from './drawings.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel } from './mosquito-model.js';
@@ -47,6 +49,7 @@ export class Renderer {
     this.terrain = new Terrain(this.scene, atlas);
     this.sky = new Sky(this.scene);
     this.effects = new Effects(this.scene);
+    this.drawings = new Drawings(this.scene, this.terrain);
     this.env = {};
 
     this.hemi = new THREE.HemisphereLight(0xdff2ff, 0x9fcf7f, 1.6);
@@ -496,6 +499,7 @@ export class Renderer {
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);
     this.effects.update(dt);
+    this.drawings.update();
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;

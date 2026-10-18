@@ -12,13 +12,14 @@ import { after, afterEach, before, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
+import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
-import { Room } from '../public/js/shared/room.js';
+import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
 import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
@@ -3625,6 +3626,114 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   assert.ok((await page.evaluate(() => window.kidsWorld.profile.data.stats.notes)) >= 2 + songOf('lamb').notes.length);
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.pianoAt === null);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, wiping it clean and picking it up leave none', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A drawing board beside the start, on ground level with the cell beside
+  // it, and nothing rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id, key: `${x},${ground + 1},${z}` };
+  }, DRAWING_BOARD);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    // What goes to the island, to see the strokes go.
+    kw.sent = [];
+    const send = kw.game.send.bind(kw.game);
+    kw.game.send = (msg) => {
+      if (msg.t === 'draw') kw.sent.push(msg);
+      return send(msg);
+    };
+    // The island's own copy of the board's picture, at a dot.
+    kw.islandDot = (x, y) => kw.session.link.room.drawings.get(kw.session.link.room.world.index(at.x, at.y, at.z))?.px[y * 64 + x] ?? 0;
+    // The window's picture at a dot, as red, green and blue.
+    kw.windowDot = (x, y) => [...document.querySelector('.draw-canvas').getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)];
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Draw'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Drawing Board'));
+  // Once the window has grown to its size.
+  await until(page, () => Math.abs(document.querySelector('.draw-canvas').getBoundingClientRect().width - document.querySelector('.draw-canvas').offsetWidth) < 0.5);
+  let box = await (await page.$('.draw-canvas')).boundingBox();
+  const spot = (x, y) => [box.x + ((x + 0.5) / PICTURE_W) * box.width, box.y + ((y + 0.5) / PICTURE_H) * box.height];
+  // A red line across with the mouse, the medium brush.
+  await page.click('.draw-color[data-c="2"]');
+  await page.mouse.move(...spot(8, 12));
+  await page.mouse.down();
+  for (let x = 10; x <= 40; x += 3) await page.mouse.move(...spot(x, 12));
+  await page.mouse.up();
+  await until(page, () => window.kidsWorld.islandDot(8, 12) === 2 && window.kidsWorld.islandDot(40, 12) === 2 && window.kidsWorld.islandDot(24, 13) === 2);
+  assert.equal(await page.evaluate(() => window.kidsWorld.islandDot(24, 16)), 0, 'only the line');
+  assert.ok(await page.evaluate(() => window.kidsWorld.sent.every((m) => m.s.k === 'line' && m.s.c === 2 && m.s.r === 1)));
+  assert.deepEqual(await page.evaluate(() => window.kidsWorld.windowDot(24, 12)), [0xe8, 0x45, 0x3c]);
+  // On the board itself, as everyone sees it.
+  assert.ok(await page.evaluate((key) => window.kidsWorld.renderer.drawings.shown.has(key) && window.kidsWorld.renderer.drawings.shown.get(key).mesh.parent !== null, at.key));
+  // A green line down with a finger, the thin brush, both picked with a
+  // finger too: the page goes over to touch, its window laid out again.
+  const tap = async (sel) => {
+    const b = await (await page.$(sel)).boundingBox();
+    await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+  };
+  await tap('.draw-color[data-c="5"]');
+  await tap('.draw-tool[data-r="0"]');
+  await until(page, () => document.querySelector('.draw-tool[data-r="0"]').classList.contains('on') && document.querySelector('.draw-color[data-c="5"]').classList.contains('on'));
+  box = await (await page.$('.draw-canvas')).boundingBox();
+  const finger = await page.touchscreen.touchStart(...spot(50, 5));
+  for (let y = 8; y <= 40; y += 4) await finger.move(...spot(50, y));
+  await finger.end();
+  await until(page, () => window.kidsWorld.islandDot(50, 5) === 5 && window.kidsWorld.islandDot(50, 40) === 5);
+  assert.equal(await page.evaluate(() => window.kidsWorld.islandDot(51, 20)), 0, 'thin');
+  // A yellow fill in the corner fills everything that was white.
+  await page.click('.draw-color[data-c="4"]');
+  await page.click('.draw-tool[data-tool="fill"]');
+  await page.mouse.click(...spot(2, 45));
+  await until(page, () => window.kidsWorld.islandDot(2, 45) === 4 && window.kidsWorld.islandDot(60, 2) === 4);
+  assert.equal(await page.evaluate(() => window.kidsWorld.islandDot(24, 12)), 2, 'the red line stays');
+  // A friend at the board draws a blue dot: it shows in the window.
+  await page.evaluate((at, protocol) => {
+    const room = window.kidsWorld.session.link.room;
+    const c = { send() {}, close() {} };
+    room.attach(c);
+    room.receive(c, { t: 'join', protocol, name: 'Friendly Fox', look: { animal: 'fox' } });
+    const friend = [...room.players.values()].find((p) => p.name.startsWith('Friendly Fox'));
+    friend.s = [at.x - 0.5, at.y, at.z - 1.5, 0, 0, 0];
+    room.receive(c, { t: 'draw', at: [at.x, at.y, at.z], s: { k: 'line', c: 7, r: 0, pts: [30, 30] } });
+  }, at, PROTOCOL);
+  await until(page, () => window.kidsWorld.windowDot(30, 30).join() === [0x3a, 0x73, 0xd8].join());
+  // Wiped clean: nothing on the board, here or at the island.
+  await page.click('.draw-tool.wipe');
+  assert.ok(await page.evaluate(() => window.kidsWorld.islandDot(2, 45) === 4), 'not at the first tap');
+  await page.click('.draw-tool.wipe');
+  await until(page, (key) => window.kidsWorld.session.link.room.drawings.size === 0 && !window.kidsWorld.renderer.drawings.shown.has(key), at.key);
+  // Drawn on again, closed, and the board picked up: its picture goes too.
+  await page.click('.draw-tool[data-r="3"]');
+  await page.mouse.click(...spot(20, 20));
+  await until(page, () => window.kidsWorld.islandDot(20, 20) === 4);
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.drawAt === null);
+  await page.evaluate((at) => window.kidsWorld.session.link.room.natureCell([at.x, at.y, at.z], 0), at);
+  await until(page, (key) => window.kidsWorld.session.link.room.drawings.size === 0 && !window.kidsWorld.game.drawings.has(key) && !window.kidsWorld.renderer.drawings.shown.has(key), at.key);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

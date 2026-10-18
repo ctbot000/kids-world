@@ -508,6 +508,28 @@ const MODELS = {
     return out;
   },
 
+  // A drawing board (shared/drawing.js): a whiteboard in a steel frame
+  // between two posts on feet, a tray along its bottom with three markers in
+  // it, and a crossbar low down. The picture drawn on it is laid over the
+  // white at PICTURE_AT (render/drawings.js).
+  'drawing-board'() {
+    return [
+      box(0.04, 0, 0.47, 0.09, 1.28, 0.53, STEEL, 'plain'),
+      box(0.91, 0, 0.47, 0.96, 1.28, 0.53, STEEL, 'plain'),
+      box(0.02, 0, 0.26, 0.11, 0.04, 0.74, BLACK, 'plain'),
+      box(0.89, 0, 0.26, 0.98, 0.04, 0.74, BLACK, 'plain'),
+      box(0.09, 0.14, 0.48, 0.91, 0.18, 0.52, STEEL, 'plain'),
+      // The board in its frame, white in front.
+      box(0.08, 0.54, 0.48, 0.92, 1.22, 0.53, STEEL, 'plain'),
+      box(0.1, 0.58, 0.47, 0.9, 1.18, 0.48, WHITE, 'plain'),
+      // The tray and its markers.
+      box(0.1, 0.5, 0.4, 0.9, 0.54, 0.48, STEEL, 'plain'),
+      box(0.2, 0.54, 0.42, 0.34, 0.57, 0.45, '#e8453c', 'plain'),
+      box(0.4, 0.54, 0.42, 0.54, 0.57, 0.45, '#3a73d8', 'plain'),
+      box(0.6, 0.54, 0.42, 0.74, 0.57, 0.45, '#35a852', 'plain'),
+    ];
+  },
+
   // An upright piano (shared/piano.js): a tall cabinet of dark polished
   // wood, its keys sticking out in front between two cheeks, the music on
   // its stand, two legs at the front and three gold pedals.
@@ -630,6 +652,14 @@ const turnsFor = (front) => (front + 1) % 4;
 // A point of the layout turned once: -z goes to +x.
 const turnPoint = (x, z) => [1 - z, x];
 const turnOffset = (dx, dz) => [-dz, dx];
+
+// A point (px, py, pz) of a piece of furniture's own layout, in the world,
+// for block `id` at cell (x, y, z), turned the way it faces.
+export function furniturePoint(id, x, y, z, px, py, pz) {
+  let [ax, az] = [px, pz];
+  for (let i = 0; i < turnsFor(BLOCKS[id]?.front ?? 3); i++) [ax, az] = turnPoint(ax, az);
+  return [x + ax, y + py, z + az];
+}
 
 // The boxes of the piece of furniture with block `id` at cell (x, y, z) of
 // the world, where `at(x, y, z)` gives the block in any cell: turned the way

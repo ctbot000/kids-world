@@ -28,6 +28,7 @@ import { canRide, FIRE, hitDragon, isWild, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
+import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isBoard, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -144,6 +145,9 @@ export class Room {
     // The crops growing and the farmland they grow in (see farm), by cell.
     this.crops = new Map();
     this.soil = new Map();
+    // The pictures on the island's drawing boards (drawing.js), by cell:
+    // { x, y, z, px }. Saved with the island.
+    this.drawings = new Map();
     this.counts = { shells: 0, stars: 0 };
     this.encoded = null;
     this.onUpdate = null;
@@ -246,6 +250,8 @@ export class Room {
       else if (B.CROP_OF[before]) this.crops.delete(k);
       if (B.SOIL[after]) this.tilled(x, y, z, after);
       else if (B.SOIL[before]) this.soil.delete(k);
+      // A drawing board picked up (or painted over): its picture goes with it.
+      if (isBoard(before) && !isBoard(after)) this.drawings.delete(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // Water or ice put down on a volcano island is not there to stay.
@@ -388,6 +394,9 @@ export class Room {
         if (!isPiano(this.world.get(...msg.at))) break;
         if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
         this.broadcast({ t: 'piano', pid, n: msg.n, at: msg.at }, conn);
+        break;
+      case 'draw':
+        this.draw(conn, p, msg);
         break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
@@ -603,6 +612,7 @@ export class Room {
       adventure: this.adventure?.describe() ?? null,
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
+      drawings: this.packDrawings(),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
       shared: this.shared === true,
@@ -1759,6 +1769,39 @@ export class Room {
     }
   }
 
+  // ------------------------------------------------ drawing boards
+
+  // A stroke on a drawing board (drawing.js), by someone standing at it:
+  // drawn on the island's copy of its picture and passed on to everyone
+  // else, who draw it on theirs.
+  draw(conn, p, msg) {
+    const at = msg.at;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isBoard(this.world.get(...at))) return;
+    if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
+    const stroke = cleanStroke(msg.s);
+    if (!stroke) return;
+    const k = this.world.index(...at);
+    let pic = this.drawings.get(k);
+    if (!pic) {
+      if (stroke.k === 'clear') return;
+      if (this.drawings.size >= MAX_PICTURES) {
+        this.notice(conn, 'This island has all the pictures it can keep. Wipe one clean to draw on another board!');
+        return;
+      }
+      pic = { x: at[0], y: at[1], z: at[2], px: blankPicture() };
+      this.drawings.set(k, pic);
+    }
+    applyStroke(pic.px, stroke);
+    if (isBlank(pic.px)) this.drawings.delete(k);
+    this.broadcast({ t: 'draw', pid: p.id, at, s: stroke }, conn);
+    this.changed();
+  }
+
+  // The pictures, as [x, y, z, text] each.
+  packDrawings() {
+    return [...this.drawings.values()].map((d) => [d.x, d.y, d.z, encodePicture(d.px)]);
+  }
+
   // ------------------------------------------------ saving
 
   exportSave() {
@@ -1786,6 +1829,7 @@ export class Room {
       tokens: [...this.tokens],
       ...(this.adventure ? { adventure: this.adventure.save() } : {}),
       ...(this.defense ? { defense: this.defense.save() } : {}),
+      ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
     };
   }
 
@@ -1815,6 +1859,13 @@ export class Room {
     if (v < 7) for (const f of placeVehicles(this.world, new Rng(seed ^ 0x4cf5ad43))) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     // Jewels too, deep in the rock where nothing anyone built can be.
     if (v < 6) hideGems(this.world, new Rng(seed ^ 0x2c1b3c6d), { open: false });
+    // The pictures, on the drawing boards still there.
+    for (const row of Array.isArray(save.drawings) ? save.drawings.slice(0, MAX_PICTURES) : []) {
+      if (!Array.isArray(row) || !row.slice(0, 3).every(Number.isInteger)) continue;
+      const [x, y, z, text] = row;
+      const px = decodePicture(text);
+      if (px && !isBlank(px) && isBoard(this.world.get(x, y, z))) this.drawings.set(this.world.index(x, y, z), { x, y, z, px });
+    }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
     this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);

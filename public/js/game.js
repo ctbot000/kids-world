@@ -5,12 +5,13 @@
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
-import { ARCADE_GAMES, arcadeNear } from './shared/arcade.js';
+import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
 import { gashaponNear } from './shared/gashapon.js';
 import { pianoNear } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
+import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, isBlank, isBoard } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
@@ -233,6 +234,11 @@ export class Game extends EventTarget {
     // The chalkboard beside you (shared/school.js), and when your last class
     // of each level ended, for the break before the next one.
     this.classTarget = null;
+    // The drawing board beside you, the one whose picture is open, and the
+    // pictures on the island's boards, by cell key (shared/drawing.js).
+    this.drawTarget = null;
+    this.drawAt = null;
+    this.drawings = new Map();
     this.classEnded = { junior: 0, senior: 0 };
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
@@ -334,6 +340,9 @@ export class Game extends EventTarget {
         break;
       case 'emote':
         this.emoted(msg.pid, msg.e);
+        break;
+      case 'draw':
+        this.drawHeard(msg);
         break;
       case 'piano':
         this.pianoHeard(msg);
@@ -510,6 +519,7 @@ export class Game extends EventTarget {
     this.setNextStage(msg.next ?? null);
     this.setDefense(msg.defense ?? null);
     this.setArcade(msg.arcade ?? []);
+    this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
@@ -2186,6 +2196,100 @@ export class Game extends EventTarget {
     this.emit('quiz');
   }
 
+  // ------------------------------------------------ drawing boards
+
+  // The pictures on the island's boards, as the island tells of them on
+  // arrival.
+  setDrawings(rows) {
+    this.drawings.clear();
+    this.renderer.drawings.clear();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (!Array.isArray(row)) continue;
+      const [x, y, z, text] = row;
+      const px = decodePicture(text);
+      if (px && isBoard(this.world.get(x, y, z))) this.showDrawing(x, y, z, px);
+    }
+    this.emit('drawing');
+  }
+
+  showDrawing(x, y, z, px) {
+    const key = keyOf(x, y, z);
+    if (isBlank(px)) {
+      this.drawings.delete(key);
+      this.renderer.drawings.remove(key);
+      return;
+    }
+    this.drawings.set(key, px);
+    this.renderer.drawings.show(key, this.world.get(x, y, z), x, y, z, px);
+  }
+
+  // The picture on a board, blank when nothing is drawn on it.
+  drawingAt(t) {
+    return this.drawings.get(keyOf(t.x, t.y, t.z)) ?? blankPicture();
+  }
+
+  // Q (or the Draw button) by a drawing board: its picture opens.
+  openDrawing() {
+    const t = this.drawTarget;
+    if (!t) return;
+    this.drawAt = t;
+    this.emit('draw-open');
+  }
+
+  // A stroke drawn on the open board, there at once. A line is drawn a bit
+  // at a time as the finger moves and sent a few bits together (sendStroke):
+  // drawn either way, it comes out the same.
+  drawStroke(raw) {
+    const t = this.drawAt;
+    const s = cleanStroke(raw);
+    if (!t || !s || !isBoard(this.world.get(t.x, t.y, t.z))) return;
+    const px = this.drawingAt(t);
+    applyStroke(px, s);
+    this.showDrawing(t.x, t.y, t.z, px);
+  }
+
+  // A stroke drawn on the open board, to the island for everyone else.
+  sendStroke(raw) {
+    const t = this.drawAt;
+    const s = cleanStroke(raw);
+    if (t && s) this.send({ t: 'draw', at: [t.x, t.y, t.z], s });
+  }
+
+  // A friend's stroke on a board.
+  drawHeard(msg) {
+    const s = cleanStroke(msg.s);
+    if (!s || !Array.isArray(msg.at)) return;
+    const [x, y, z] = msg.at;
+    if (!isBoard(this.world?.get(x, y, z))) return;
+    const t = { x, y, z };
+    const px = this.drawingAt(t);
+    applyStroke(px, s);
+    this.showDrawing(x, y, z, px);
+    this.emit('drawing', keyOf(x, y, z));
+  }
+
+  closeDrawing() {
+    this.drawAt = null;
+  }
+
+  // Blocks changed: a board picked up takes its picture with it, and one
+  // turned takes it round.
+  drawingsChanged(cells) {
+    if (!this.drawings.size || !cells) return;
+    for (let i = 0; i < cells.length; i += 4) {
+      const key = keyOf(cells[i], cells[i + 1], cells[i + 2]);
+      const px = this.drawings.get(key);
+      if (!px) continue;
+      if (isBoard(cells[i + 3])) {
+        this.renderer.drawings.show(key, cells[i + 3], cells[i], cells[i + 1], cells[i + 2], px);
+      } else {
+        this.drawings.delete(key);
+        this.renderer.drawings.remove(key);
+        this.emit('drawing', key);
+      }
+    }
+  }
+
   // ------------------------------------------------ broadcast stations
 
   // Q (or the Go live button) by a broadcast station: its window opens,
@@ -2429,6 +2533,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.classTarget) {
       this.openClass();
+      return;
+    }
+    if (!id && this.drawTarget) {
+      this.openDrawing();
       return;
     }
     if (!id) {
@@ -3018,6 +3126,7 @@ export class Game extends EventTarget {
   // Blocks of this copy of the world just changed: redraw them, and the map.
   changed(cells) {
     this.renderer.terrain.cellsChanged(cells);
+    this.drawingsChanged(cells);
     this.emit('cells', cells);
   }
 
@@ -3563,6 +3672,7 @@ export class Game extends EventTarget {
     this.tvTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.dizzy && !on.flying && on.onGround ? tvNear(this.world, on) : null;
     this.stationTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.dizzy && !on.flying && on.onGround ? stationNear(this.world, on) : null;
     this.classTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.dizzy && !on.flying && on.onGround ? chalkboardNear(this.world, on) : null;
+    this.drawTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.dizzy && !on.flying && on.onGround ? boardNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -4007,6 +4117,10 @@ export class Game extends EventTarget {
     this.stationAt = null;
     this.stationTarget = null;
     this.classTarget = null;
+    this.drawAt = null;
+    this.drawTarget = null;
+    this.drawings.clear();
+    this.renderer.drawings.clear();
     this.renderer.showPreview(null);
     this.renderer.showOutline(null);
     this.sound.setSong(null);

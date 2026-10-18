@@ -17,7 +17,7 @@ const STUD_DISTANCE = 56;
 // halfway between, and a tap goes through from there in (see Renderer.seeThrough).
 export const NEAR_FADE = [0.9, 2.6];
 
-const LIGHT_GLSL = /* glsl */ `
+export const LIGHT_GLSL = /* glsl */ `
   uniform float uDaylight;
   uniform vec3 uSunColor;
   uniform vec3 uLampColor;

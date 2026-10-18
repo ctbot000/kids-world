@@ -27,6 +27,8 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
+import { BRUSHES, COLORS as DRAW_COLORS, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
+import { paint } from './render/drawings.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
@@ -1894,6 +1896,7 @@ export class UI {
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
+          card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -2767,6 +2770,8 @@ export class UI {
     on('tv-open', () => this.tvDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
+    on('draw-open', () => this.drawDialog());
+    on('drawing', (e) => this.drawingChanged?.(e.detail));
     on('onair', () => this.onAirNews());
     on('arcade', () => this.renderArcade());
     on('quiz-offer', () => this.quizOfferDialog(true));
@@ -3891,7 +3896,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -3958,21 +3963,22 @@ export class UI {
 
   // Play, beside an arcade machine or a piano next to you, Turn beside a
   // gashapon machine, Watch beside a TV, or Go live beside a broadcast
-  // station, or Class beside a chalkboard: the same button again.
+  // station, Class beside a chalkboard, or Draw beside a drawing board: the
+  // same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -4297,6 +4303,150 @@ export class UI {
           window.removeEventListener('keydown', keydown);
           window.removeEventListener('keyup', keyup);
           g.closePiano();
+        },
+      },
+    );
+  }
+
+  // ------------------------------------------------ drawing boards
+
+  // The drawing board you pressed Draw at, in a window (shared/drawing.js):
+  // its picture to draw on with a finger or the mouse, the colours, the
+  // brushes, the fill and the eraser, and a button to wipe it clean. A
+  // friend's strokes on it show as they come.
+  drawDialog() {
+    const g = this.game;
+    const t = g?.drawAt;
+    if (!t) return;
+    const key = `${t.x},${t.y},${t.z}`;
+    let color = 1;
+    let brush = BRUSHES[1];
+    // 'brush', 'fill' or 'eraser'.
+    let tool = 'brush';
+    const canvas = h('canvas', { class: 'draw-canvas', width: PICTURE_W, height: PICTURE_H, 'aria-label': 'The drawing board’s picture: draw on it' });
+    const redraw = () => paint(canvas, g.drawingAt(t));
+    const colors = h('div', { class: 'draw-colors', role: 'group', 'aria-label': 'Colours' });
+    const tools = h('div', { class: 'draw-tools', role: 'group', 'aria-label': 'Brushes' });
+    const mark = () => {
+      for (const b of colors.children) b.classList.toggle('on', tool !== 'eraser' && Number(b.dataset.c) === color);
+      for (const b of tools.children) b.classList.toggle('on', b.dataset.tool === tool && (tool !== 'brush' || b.dataset.r === String(brush.r)));
+    };
+    // White, the board's own colour, goes last.
+    colors.append(
+      ...[...DRAW_COLORS.keys()].slice(1).concat(0).map((c) =>
+        h('button', {
+          class: 'draw-color',
+          type: 'button',
+          'data-c': c,
+          'aria-label': DRAW_COLORS[c].name,
+          style: `--c: ${DRAW_COLORS[c].hex}`,
+          onclick: () => {
+            color = c;
+            if (tool === 'eraser') tool = 'brush';
+            mark();
+          },
+        }),
+      ),
+    );
+    const toolButton = (name, label, icon, extra, pick) => h('button', { class: 'draw-tool', type: 'button', 'data-tool': name, 'aria-label': label, ...extra, onclick: () => (pick(), mark()) }, icon);
+    let wipeTimer = 0;
+    const wipe = h('button', { class: 'draw-tool wipe', type: 'button' }, '🗑️ Wipe clean');
+    wipe.onclick = () => {
+      if (!wipe.classList.contains('sure')) {
+        wipe.classList.add('sure');
+        wipe.textContent = '🗑️ Sure? Tap again';
+        wipeTimer = setTimeout(() => {
+          wipe.classList.remove('sure');
+          wipe.textContent = '🗑️ Wipe clean';
+        }, 3000);
+        return;
+      }
+      clearTimeout(wipeTimer);
+      wipe.classList.remove('sure');
+      wipe.textContent = '🗑️ Wipe clean';
+      this.sound.play('pop');
+      g.drawStroke({ k: 'clear' });
+      g.sendStroke({ k: 'clear' });
+      redraw();
+    };
+    tools.append(
+      ...BRUSHES.map((b) => toolButton('brush', `${b.name} brush`, h('span', { class: 'draw-dot', style: `--d: ${6 + b.r * 5}px` }), { 'data-r': b.r }, () => ((tool = 'brush'), (brush = b)))),
+      toolButton('fill', 'Fill', '🪣', {}, () => (tool = 'fill')),
+      toolButton('eraser', 'Eraser', '🧽', {}, () => (tool = 'eraser')),
+      wipe,
+    );
+    // The dot of the picture under a pointer.
+    const dotAt = (e) => {
+      const r = canvas.getBoundingClientRect();
+      const x = Math.floor(((e.clientX - r.left) / r.width) * PICTURE_W);
+      const y = Math.floor(((e.clientY - r.top) / r.height) * PICTURE_H);
+      return [Math.min(PICTURE_W - 1, Math.max(0, x)), Math.min(PICTURE_H - 1, Math.max(0, y))];
+    };
+    // The line being drawn: drawn at once as the pointer moves, and sent a
+    // few dots at a time, each bit starting where the last one stopped.
+    let line = null;
+    let sendTimer = 0;
+    const send = () => {
+      if (!line || line.pts.length < 2 || line.sent === line.pts.length) return;
+      g.sendStroke({ k: 'line', c: line.c, r: line.r, pts: line.pts });
+      line.pts = line.pts.slice(-2);
+      line.sent = 2;
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      if (line || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      e.preventDefault();
+      this.sound.unlock();
+      const [x, y] = dotAt(e);
+      if (tool === 'fill') {
+        const s = { k: 'fill', c: color, x, y };
+        g.drawStroke(s);
+        g.sendStroke(s);
+        this.sound.play('pop');
+        redraw();
+        return;
+      }
+      canvas.setPointerCapture?.(e.pointerId);
+      line = { id: e.pointerId, c: tool === 'eraser' ? 0 : color, r: tool === 'eraser' ? 2 : brush.r, pts: [x, y], sent: 0 };
+      g.drawStroke({ k: 'line', c: line.c, r: line.r, pts: [x, y] });
+      redraw();
+      sendTimer = setInterval(send, 60);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!line || e.pointerId !== line.id) return;
+      e.preventDefault();
+      const [x, y] = dotAt(e);
+      const n = line.pts.length;
+      if (line.pts[n - 2] === x && line.pts[n - 1] === y) return;
+      g.drawStroke({ k: 'line', c: line.c, r: line.r, pts: [line.pts[n - 2], line.pts[n - 1], x, y] });
+      line.pts.push(x, y);
+      if (line.pts.length >= MAX_POINTS * 2) send();
+      redraw();
+    });
+    const end = (e) => {
+      if (!line || e.pointerId !== line.id) return;
+      send();
+      clearInterval(sendTimer);
+      line = null;
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    this.drawingChanged = (k) => {
+      if (k === undefined || k === key) redraw();
+    };
+    this.openModal(
+      (root) => {
+        root.append(h('h2', {}, '🎨 Drawing Board'), h('div', { class: 'draw-wrap' }, canvas), colors, tools, h('p', { class: 'muted' }, 'Friends at this board draw with you, and everyone sees your picture on the board!'));
+        mark();
+        redraw();
+      },
+      {
+        onClose: () => {
+          if (line) send();
+          clearInterval(sendTimer);
+          clearTimeout(wipeTimer);
+          line = null;
+          this.drawingChanged = null;
+          g.closeDrawing();
         },
       },
     );
