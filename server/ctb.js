@@ -125,8 +125,15 @@ const issueBrief = (i) => (i ? { number: i.number, title: i.title, url: i.url } 
 
 // A pull request's body: what was done, and that it closes the issue.
 export function pullBody({ issue, summary, worker, model }) {
-  return `${summary.trim() || 'Done as the issue asks.'}\n\nCloses #${issue.number}.\n\n— ${worker}, CTB (${model})`;
+  const credit = creditIn(issue.body);
+  return `${summary.trim() || 'Done as the issue asks.'}\n\nCloses #${issue.number}.${credit ? `\n\n💡 An idea from **${credit}**, playing Kids World — thank you!` : ''}\n\n— ${worker}, CTB (${model})`;
 }
+
+// A name as plain text in GitHub's Markdown: no formatting, links or @mentions.
+export const mdText = (text) => String(text).replace(/[\\`*_[\]{}()#+\-.!|<>~@]/g, (c) => `\\${c}`);
+
+// The player an issue credits for its idea (as proposalBody's footer says it), or ''.
+export const creditIn = (body) => /💡 An idea from \*\*(.+?)\*\*/u.exec(String(body ?? ''))?.[1] ?? '';
 
 // The workers and their work. llm: what they think with (llm.js), its model
 // picked by the settings or the AI friend's. office: the CTB island, or null.
@@ -514,7 +521,10 @@ export class Company extends EventEmitter {
       let issue = null;
       if (answer.accept) {
         const title = String(answer.title ?? '').trim().slice(0, TITLE_MAX);
-        const body = proposalBody(answer, `Sent as an idea by a player in the game, and accepted by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);
+        // Credited to the player by the name they play under (never their
+        // username, which they log in with), carried on to the pull request.
+        const name = mdText(String(wish.name || '').trim() || 'a player');
+        const body = proposalBody(answer, `💡 An idea from **${name}**, playing Kids World — thank you! Accepted by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);
         if (!title || !body) throw new Error('the model said yes but wrote no issue');
         issue = await this.github.create({ title, body, labels: [LABELS.proposal, LABELS.request] });
         this.log(`CTB: ${w.name} took a player's idea as #${issue.number} “${title}”.`);

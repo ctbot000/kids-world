@@ -1775,7 +1775,9 @@ export class Keeper extends EventEmitter {
         this.reply(conn, { t: 'kept', what: 'invite', to: msg.to });
         break;
       case 'report': {
-        // A problem a player told of, with a picture of their screen.
+        // A problem a player told of, with a picture of their screen: logged
+        // in, so the grown-ups know who to thank and to ask.
+        mine('tell of a problem');
         const { id, player } = await this.store.keepReport(conn.folder, msg.report);
         this.reply(conn, { t: 'kept', what: 'report', id });
         this.note({ device: conn.folder, what: 'report', player });

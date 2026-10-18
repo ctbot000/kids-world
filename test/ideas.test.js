@@ -11,7 +11,7 @@ import { after, test } from 'node:test';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { cleanWish, KEEPER_VERSION, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
 import { LABELS } from '../server/ctb-github.js';
-import { Company, defaultSettings } from '../server/ctb.js';
+import { Company, creditIn, defaultSettings, mdText, pullBody } from '../server/ctb.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 
 const dirs = [];
@@ -67,10 +67,12 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
   const heard = [];
   keeper.on('wish', (w) => heard.push(w));
 
-  // Nobody sends one without logging in.
+  // Nobody sends one without logging in, nor tells of a problem.
   const guest = await page(keeper, GUEST, '11');
   assert.match((await guest.say({ t: 'wish', text: 'More ponies!' })).text, /Log in/);
   assert.match((await guest.say({ t: 'wishes' })).text, /Log in/);
+  assert.match((await guest.say({ t: 'report', report: { text: 'The pony is stuck' } })).text, /Log in to tell of a problem/);
+  assert.deepEqual(await store.reports(), []);
 
   const tablet = await page(keeper, TABLET, '22');
   await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter', look: { animal: 'cat' } } });
@@ -84,6 +86,10 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
     return tablet.say({ t: 'wish', text });
   };
   const kept = await wish('  A   rainbow\nslide!  ');
+  // Logged in, a problem is kept, under their name.
+  const told = await tablet.say({ t: 'report', report: { text: 'The pony is stuck', about: { name: 'Sunny Otter' } } });
+  assert.equal(told.what, 'report');
+  assert.equal((await store.reports())[0].username, 'Otter Fan');
   assert.equal(kept.what, 'wish');
   assert.deepEqual(Object.keys(kept.wish).sort(), ['answeredAt', 'at', 'by', 'id', 'reply', 'state', 'text'], 'never who sent it');
   assert.equal(kept.wish.text, 'A rainbow slide!');
@@ -202,8 +208,15 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   assert.equal(github.made[0].title, 'Add a rainbow slide stamp');
   assert.deepEqual(github.made[0].labels, [LABELS.proposal, LABELS.request]);
   assert.match(github.made[0].body, /^## TL;DR\n\nA rainbow slide kids can slide down\./);
-  assert.match(github.made[0].body, /Sent as an idea by a player in the game, and accepted by Ada 💼/);
-  assert.doesNotMatch(github.made[0].body, /Sunny Otter|Otter Fan/);
+  // Credited to the player by the name they play under, never their username.
+  assert.match(github.made[0].body, /💡 An idea from \*\*Sunny Otter\*\*, playing Kids World — thank you! Accepted by Ada 💼/);
+  assert.doesNotMatch(github.made[0].body, /Otter Fan/);
+  assert.equal(creditIn(github.made[0].body), 'Sunny Otter');
+  // The pull request that makes it credits them too.
+  assert.match(pullBody({ issue: { number: 41, body: github.made[0].body }, summary: 'Added it.', worker: 'Ben 💼', model: 'glm' }), /Closes #41\.\n\n💡 An idea from \*\*Sunny Otter\*\*, playing Kids World — thank you!/);
+  assert.doesNotMatch(pullBody({ issue: { number: 3, body: 'A task.' }, summary: 'Done.', worker: 'Ben 💼', model: 'glm' }), /An idea from/);
+  // A name says nothing but itself on GitHub: no formatting, links or @mentions.
+  assert.equal(mdText('Sunny @Otter_1 [x](y)'), 'Sunny \\@Otter\\_1 \\[x\\]\\(y\\)');
   // The player heard both answers; the workers said so on the island, naming nobody.
   assert.deepEqual(
     tablet.news().map((n) => n.wish.state),

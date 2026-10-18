@@ -2775,7 +2775,7 @@ test('the ?ctb link opens the CTB island without a login peer to peer too, as on
   }
 });
 
-test('an idea for the game, sent from 💌 on the title screen, is read by a CTB worker, and its answer comes back to the player', { skip }, async () => {
+test('an idea for the game, sent from 💌 on the title screen once logged in, is read by a CTB worker, and its answer comes back to the player', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
   const keeper = await keeperOnline(identity, dir);
@@ -2795,14 +2795,15 @@ test('an idea for the game, sent from 💌 on the title screen, is read by a CTB
   const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' }, () => delete window.kidsWorldGuests);
   try {
     await until(page, () => !document.getElementById('login-gate').hidden && !document.getElementById('gate-login').disabled);
-    // 💌 is on the title screen even before logging in: a problem needs no login.
-    await until(page, () => document.getElementById('btn-feedback').offsetParent !== null);
+    // Before logging in, no 💌: ideas and problems need a login.
+    assert.equal(await page.$eval('#btn-feedback', (b) => b.hidden), true);
     await clickButton(page, 'Make my login', '#login-gate');
     await typeInto(page, 'Otter Fan 8', 'rocket-apple7', 'rocket-apple7');
     await clickButton(page, 'Make my login', '#modal');
     await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
     await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
     await until(page, () => window.kidsWorld.keeper.state === 'ready');
+    await until(page, () => document.getElementById('btn-feedback').offsetParent !== null);
 
     // From 💌 on the title screen: ideas or problems, then the ideas window, an
     // empty idea refused, then one sent. (Help and Settings have it too.)
@@ -4187,7 +4188,7 @@ test('a conquered stage of the shared isle goes on to the next stage by itself',
   }
 });
 
-test('a problem is told of with a picture of the screen, and waits for the keeper when it is away', { skip }, async () => {
+test('a problem is told of with a picture of the screen, logged in, and waits for the keeper when it is away', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
   let keeper = await keeperOnline(identity, dir);
@@ -4195,6 +4196,19 @@ test('a problem is told of with a picture of the screen, and waits for the keepe
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
   const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Bug Finder' });
   try {
+    // Logged out, there is no way to tell of a problem: it needs a login.
+    await until(page, () => window.kidsWorld.keeper.config);
+    await page.evaluate(() => window.kidsWorld.ui.helpDialog());
+    assert.equal(await page.$eval('#modal', (m) => m.textContent.includes('Something went wrong')), false);
+    assert.equal(await page.$eval('#btn-feedback', (b) => b.hidden), true);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    // A login of their own, under the same name.
+    await page.evaluate(() => window.kidsWorld.ui.makeLoginDialog());
+    await typeInto(page, 'Bug Finder', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    await until(page, () => window.kidsWorld.keeper.state === 'ready' && !document.getElementById('btn-feedback').hidden);
     await makeIsland(page, { online: false, theme: 'Flat Land', name: 'Buggy Bay' });
     // From How to play: the dialog closes, the picture is taken, and what you write goes with it.
     await page.click('#btn-help-hud');
@@ -4207,6 +4221,7 @@ test('a problem is told of with a picture of the screen, and waits for the keepe
     const [report] = await keeper.store.reports();
     assert.equal(report.text, 'The bunny fell through the floor!');
     assert.equal(report.player, 'Bug Finder');
+    assert.equal(report.username, 'Bug Finder');
     assert.equal(report.about.where, 'island');
     assert.equal(report.about.island.name, 'Buggy Bay');
     assert.equal(report.about.island.kind, 'build');

@@ -2269,12 +2269,19 @@ export class UI {
 
   // The button to tell of a problem, where there is an island keeper to tell.
   reportButton(kind = 'chip report-button') {
-    if (!this.reportKeeper()?.config) return null;
+    if (!this.canTellUs()) return null;
     return h('button', { class: kind, type: 'button', onclick: () => this.reportDialog() }, '🐞 Something went wrong?');
   }
 
   reportKeeper() {
     return this.gameHandlers?.keeper ?? this.handlers?.login?.keeper ?? null;
+  }
+
+  // Ideas and problems go to the keeper from a player logged in, so whoever
+  // reads them knows who to thank (an idea taken is credited to them on
+  // GitHub) and who to ask.
+  canTellUs() {
+    return Boolean(this.reportKeeper()?.config && this.handlers?.login?.who?.());
   }
 
   // Something went wrong: what you write goes to the grown-ups who run the
@@ -2283,7 +2290,7 @@ export class UI {
   // were, and what went wrong in the page lately (see report.js).
   async reportDialog() {
     const keeper = this.reportKeeper();
-    if (!keeper?.config) return;
+    if (!this.canTellUs()) return;
     this.closeModal();
     this.loading('📷 Taking a picture of your screen…');
     // The dialog that closed is off the screen by the next frame.
@@ -2361,18 +2368,17 @@ export class UI {
   // ------------------------------------------------ ideas for the game
 
   // 💌 on the title screen and in a game (in the top bar where it has room,
-  // and in 💬 everywhere: see sayDialog), wherever there is an island
-  // keeper to take an idea or a problem (the logged-out title screen too: a
-  // problem needs no login).
+  // and in 💬 everywhere: see sayDialog), for a player logged in where there
+  // is an island keeper to take an idea or a problem.
   renderFeedback() {
-    const on = Boolean(this.reportKeeper()?.config);
+    const on = this.canTellUs();
     for (const id of ['btn-feedback', 'btn-feedback-hud']) $(id).hidden = !on;
   }
 
   // 💌 Ideas & problems: one tap to tell the grown-ups an idea for the game
   // (CTB's helpers read it and write back) or that something went wrong.
   feedbackDialog() {
-    if (!this.reportKeeper()?.config) return;
+    if (!this.canTellUs()) return;
     this.openModal(
       (root) => {
         root.append(
@@ -2393,7 +2399,7 @@ export class UI {
   // The button to send CTB's workers an idea for the game, where there is an
   // island keeper to take it.
   ideaButton(kind = 'chip report-button') {
-    if (!this.reportKeeper()?.config) return null;
+    if (!this.canTellUs()) return null;
     return h('button', { class: kind, type: 'button', onclick: () => this.ideasDialog() }, '💡 An idea for the game?');
   }
 
@@ -3159,7 +3165,7 @@ export class UI {
         root.append(
           h('h2', {}, '💬 Say something'),
           // Telling the grown-ups, rather than the island: ideas and problems, first so it is never scrolled away.
-          this.reportKeeper()?.config ? h('button', { class: 'chip feedback-chip', type: 'button', onclick: () => this.feedbackDialog() }, '💌 An idea, or something went wrong?') : null,
+          this.canTellUs() ? h('button', { class: 'chip feedback-chip', type: 'button', onclick: () => this.feedbackDialog() }, '💌 An idea, or something went wrong?') : null,
           history,
           h(
             'form',
