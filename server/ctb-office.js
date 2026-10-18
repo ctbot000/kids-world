@@ -33,6 +33,8 @@ const SIT = 8;
 const SAVE_MS = 5 * 60000;
 // Answering children: one worker at a time, and not too often.
 const ANSWER_GAP_MS = 6000;
+// Where visitors arrive: on the plaza's paving, this far before the doors.
+const ARRIVE_DZ = -4;
 // How high over an old office's floor is cleared when a new one goes up.
 const CLEAR_HEIGHT = 20;
 
@@ -337,6 +339,7 @@ export class Office {
       this.site = null;
     }
     if (!this.site) this.build();
+    this.arriveAtDoors();
     this.seats = this.seatsAt(this.site);
     this.log(`CTB: ${kept?.code === room.code ? 'back on' : 'made'} the island "${room.world.name}" (code ${room.code}).`);
     this.share();
@@ -354,6 +357,15 @@ export class Office {
     const site = findSite(world, reachOf(cells), { random: this.random }) ?? { x: Math.floor(world.spawn.x), z: Math.floor(world.spawn.z) + 14, r: reachOf(cells), base: world.groundBelow(Math.floor(world.spawn.x), world.H - 1, Math.floor(world.spawn.z) + 14) + 1, facing: 0 };
     for (const layer of layersAt(world, cells, site)) applyCells(world, layer);
     this.site = site;
+  }
+
+  // Everyone comes to the island on the plaza, on the paving before the
+  // doors, rather than wherever the island began: from there it is a few
+  // steps in, over no hill or water.
+  arriveAtDoors() {
+    const s = this.site;
+    const [[x, , z]] = placeTemplate([[0, 0, ARRIVE_DZ, 0]], s.x, s.base, s.z, s.facing);
+    this.room.world.spawn = { x: x + 0.5, y: s.base, z: z + 0.5 };
   }
 
   // Everything over the ground where an office stood, cleared away.

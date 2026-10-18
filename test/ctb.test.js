@@ -16,6 +16,7 @@ import { after, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { cleanListing } from '../public/js/shared/listing.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
+import { placeTemplate } from '../public/js/shared/stamps.js';
 import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
@@ -304,6 +305,13 @@ test('the office on the CTB island: workers at their desks, answering children, 
     assert.equal(chair.model, 'chair');
   }
   assert.equal(office.seats.length, deskSpots().length);
+  // Visitors arrive on the plaza's paving before the doors, a few steps from them.
+  const spawn = room.world.spawn;
+  assert.equal(room.world.get(Math.floor(spawn.x), spawn.y - 1, Math.floor(spawn.z)), B.PEBBLES);
+  assert.equal(room.world.get(Math.floor(spawn.x), spawn.y, Math.floor(spawn.z)), B.AIR);
+  const [[doorX, doorY, doorZ]] = placeTemplate([[0, 1, 0, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
+  assert.equal(room.world.get(doorX, doorY, doorZ), B.AIR, 'the doors are open');
+  assert.ok(Math.hypot(doorX + 0.5 - spawn.x, doorZ + 0.5 - spawn.z) <= 4.01);
   assert.ok(officeCells().some(([, , , id]) => id === B.TV));
 
   // The AI friend talking to them gets no answer: it would answer back, on and on.
