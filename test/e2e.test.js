@@ -3630,7 +3630,7 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   await page.browserContext().close();
 });
 
-test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, wiping it clean and picking it up leave none', { skip }, async () => {
+test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, it is saved as a file and to the photo gallery, wiping it clean and picking it up leave none', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // A drawing board beside the start, on ground level with the cell beside
@@ -3664,6 +3664,13 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
     };
     // The island's own copy of the board's picture, at a dot.
     kw.islandDot = (x, y) => kw.session.link.room.drawings.get(kw.session.link.room.world.index(at.x, at.y, at.z))?.px[y * 64 + x] ?? 0;
+    // Pictures saved: as a file, and to the photo gallery through the share sheet.
+    kw.saved = [];
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) kw.saved.push({ name: this.download, url: this.href });
+    };
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: (d) => Boolean(d?.files?.length) });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (d) => kw.saved.push({ name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }) });
     // The window's picture at a dot, as red, green and blue.
     kw.windowDot = (x, y) => [...document.querySelector('.draw-canvas').getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)];
     Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
@@ -3721,6 +3728,26 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
     room.receive(c, { t: 'draw', at: [at.x, at.y, at.z], s: { k: 'line', c: 7, r: 0, pts: [30, 30] } });
   }, at, PROTOCOL);
   await until(page, () => window.kidsWorld.windowDot(30, 30).join() === [0x3a, 0x73, 0xd8].join());
+  // Saved as a file, ten times as big, and to the photo gallery.
+  await page.click('.draw-tool.save-file');
+  await page.click('.draw-tool.save-gallery');
+  await until(page, () => window.kidsWorld.saved.length === 2);
+  const [file, shared] = await page.evaluate(() => window.kidsWorld.saved);
+  assert.match(file.name, /-drawing\.png$/);
+  assert.equal(shared.name, file.name);
+  assert.equal(shared.type, 'image/png');
+  const size = await page.evaluate(async (url) => {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const c = document.createElement('canvas');
+    [c.width, c.height] = [img.width, img.height];
+    c.getContext('2d').drawImage(img, 0, 0);
+    return [img.width, img.height, [...c.getContext('2d').getImageData(305, 305, 1, 1).data.slice(0, 3)]];
+  }, file.url);
+  assert.deepEqual(size, [PICTURE_W * 10, PICTURE_H * 10, [0x3a, 0x73, 0xd8]]);
+  // Two lines and a fill, counted.
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.strokes), 3);
   // Wiped clean: nothing on the board, here or at the island.
   await page.click('.draw-tool.wipe');
   assert.ok(await page.evaluate(() => window.kidsWorld.islandDot(2, 45) === 4), 'not at the first tap');

@@ -4305,12 +4305,20 @@ kbd {
 }
 
 .draw-colors,
-.draw-tools {
+.draw-bar,
+.draw-tools,
+.draw-saves {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
   margin-top: 10px;
+}
+
+/* The brushes and the save buttons share a row where there is room. */
+.draw-bar > .draw-tools,
+.draw-bar > .draw-saves {
+  margin-top: 0;
 }
 
 .draw-color {
@@ -4348,7 +4356,9 @@ kbd {
   background: var(--sun);
 }
 
-.draw-tool.wipe {
+.draw-tool.wipe,
+.draw-tool.save-file,
+.draw-tool.save-gallery {
   font-size: 0.95rem;
 }
 

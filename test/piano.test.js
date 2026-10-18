@@ -11,6 +11,7 @@ import { HIGH, isNote, isPiano, KEYS, LOW, noteOfKey, pianoNear, SONGS } from '.
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { KEPT_MAX } from '../public/js/shared/keeper.js';
 import { World } from '../public/js/shared/world.js';
 
 test('the upright and the grand piano are furniture that turns, in the Home tab after the gashapon machine, keys at the front', () => {
@@ -108,5 +109,5 @@ test('notes and songs are counted, with the Piano Star sticker for a whole song'
   }
   const star = STICKERS.find((s) => s.key === 'piano-star');
   assert.ok(star.test({ tunes: 1 }) && !star.test({ tunes: 0 }));
-  assert.ok(STICKERS.length <= 64 && STAT_KEYS.length <= 64, 'within what the keeper keeps');
+  assert.ok(STICKERS.length <= KEPT_MAX && STAT_KEYS.length <= KEPT_MAX, 'within what the keeper keeps');
 });

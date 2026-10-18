@@ -12,6 +12,9 @@ import { furnitureBoxes, modelBoxes } from '../public/js/shared/furniture.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, COLORS, decodePicture, encodePicture, isBlank, isBoard, MAX_POINTS, PICTURE_AT, PICTURE_H, PICTURE_W, pictureCorners } from '../public/js/shared/drawing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
+import { KEPT_MAX, keptProfile } from '../public/js/shared/keeper.js';
+import { XP_FOR } from '../public/js/shared/levels.js';
+import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
 const at = (px, x, y) => px[y * PICTURE_W + x];
 
@@ -167,4 +170,18 @@ test('newcomers are told of the pictures, the island keeps them when saved, and 
   room.world.set(x, y, z, B.AIR);
   assert.equal(room.drawings.size, 0);
   assert.equal(room.exportSave().drawings, undefined, 'none saved');
+});
+
+test('strokes are counted, with the Little Artist sticker for 25, and the keeper keeps every count and sticker with room to spare', () => {
+  assert.ok(STAT_KEYS.includes('strokes') && XP_FOR.strokes);
+  const artist = STICKERS.find((s) => s.key === 'little-artist');
+  assert.ok(artist.test({ strokes: 25 }) && !artist.test({ strokes: 24 }));
+  const kept = keptProfile({ stats: Object.fromEntries(STAT_KEYS.map((k) => [k, 1])), stickers: Object.fromEntries(STICKERS.map((s) => [s.key, 1])) });
+  assert.deepEqual(Object.keys(kept.stats), STAT_KEYS, 'every count');
+  assert.equal(Object.keys(kept.stickers).length, STICKERS.length, 'every sticker');
+  assert.ok(STICKERS.length * 2 <= KEPT_MAX && STAT_KEYS.length * 2 <= KEPT_MAX, 'room for as many again');
+  // One that came after this keeper's code is kept too; a made-up profile stays small.
+  assert.equal(keptProfile({ stickers: { 'a-new-one': 5 } }).stickers['a-new-one'], 5);
+  const many = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`s${'x'.repeat(i % 20)}${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26) % 26)}`, 1]));
+  assert.equal(Object.keys(keptProfile({ stats: many }).stats).length, KEPT_MAX);
 });

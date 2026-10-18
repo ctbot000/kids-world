@@ -2268,6 +2268,12 @@ export class Game extends EventTarget {
     this.emit('drawing', keyOf(x, y, z));
   }
 
+  // A line finished or a patch filled on the board: counted, for XP and the
+  // Little Artist sticker.
+  drew() {
+    this.profile.count('strokes');
+  }
+
   closeDrawing() {
     this.drawAt = null;
   }

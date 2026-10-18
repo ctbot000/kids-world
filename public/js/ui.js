@@ -1896,7 +1896,7 @@ export class UI {
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
-          card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
+          card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 💾 Save your picture, or 🖼️ put it in your photos! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -4401,6 +4401,7 @@ export class UI {
         const s = { k: 'fill', c: color, x, y };
         g.drawStroke(s);
         g.sendStroke(s);
+        g.drew();
         this.sound.play('pop');
         redraw();
         return;
@@ -4427,15 +4428,63 @@ export class UI {
       send();
       clearInterval(sendTimer);
       line = null;
+      g.drew();
     };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     this.drawingChanged = (k) => {
       if (k === undefined || k === key) redraw();
     };
+    // The picture as a file, ten times as big, its dots kept sharp.
+    const pictureFile = () => {
+      const big = document.createElement('canvas');
+      big.width = PICTURE_W * 10;
+      big.height = PICTURE_H * 10;
+      const ctx = big.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(canvas, 0, 0, big.width, big.height);
+      const url = big.toDataURL('image/png');
+      const bytes = Uint8Array.from(atob(url.split(',')[1]), (c) => c.charCodeAt(0));
+      const name = `${(g.world?.name ?? 'island').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-drawing.png`;
+      return { url, file: new File([bytes], name, { type: 'image/png' }) };
+    };
+    // Saved on this device as a file, or (where the device can share
+    // pictures, as phones and tablets do) to its photo gallery through the
+    // share sheet's Save Image.
+    const saveFile = () => {
+      const { url, file } = pictureFile();
+      const a = h('a', { href: url, download: file.name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      this.sound.play('photo');
+      this.toast('💾', 'Your picture is saved!');
+    };
+    const canShare = (() => {
+      try {
+        return Boolean(navigator.canShare?.({ files: [new File([new Uint8Array(1)], 'a.png', { type: 'image/png' })] }));
+      } catch {
+        return false;
+      }
+    })();
+    const saveGallery = async () => {
+      const { file } = pictureFile();
+      try {
+        await navigator.share({ files: [file], title: 'My drawing' });
+        this.sound.play('photo');
+      } catch (error) {
+        if (error?.name !== 'AbortError') saveFile();
+      }
+    };
+    const saves = h(
+      'div',
+      { class: 'draw-saves' },
+      canShare ? h('button', { class: 'draw-tool save-gallery', type: 'button', onclick: saveGallery }, '🖼️ Save to Photos') : '',
+      h('button', { class: 'draw-tool save-file', type: 'button', onclick: saveFile }, '💾 Save picture'),
+    );
     this.openModal(
       (root) => {
-        root.append(h('h2', {}, '🎨 Drawing Board'), h('div', { class: 'draw-wrap' }, canvas), colors, tools, h('p', { class: 'muted' }, 'Friends at this board draw with you, and everyone sees your picture on the board!'));
+        root.append(h('h2', {}, '🎨 Drawing Board'), h('div', { class: 'draw-wrap' }, canvas), colors, h('div', { class: 'draw-bar' }, tools, saves), h('p', { class: 'muted' }, 'Friends at this board draw with you, and everyone sees your picture on the board!'));
         mark();
         redraw();
       },

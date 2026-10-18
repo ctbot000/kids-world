@@ -13,6 +13,7 @@ import { addProgress, keptProfile, mergeProfiles } from '../public/js/shared/kee
 import { cleanGear } from '../public/js/shared/shop.js';
 import { stampByKey } from '../public/js/shared/stamps.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { KEPT_MAX } from '../public/js/shared/keeper.js';
 import { World } from '../public/js/shared/world.js';
 
 test('a gashapon machine is furniture that turns, a globe of capsules on a stand, in the Home tab after the arcade machines', () => {
@@ -131,5 +132,5 @@ test('two stickers for capsule toys, on counts the game keeps', () => {
   const full = STICKERS.find((s) => s.key === 'full-set');
   assert.ok(first.test({ capsules: 1 }) && !first.test({ capsules: 0 }));
   assert.ok(full.test({ capsuletoys: TOYS.length }) && !full.test({ capsuletoys: TOYS.length - 1 }));
-  assert.ok(STICKERS.length <= 64 && STAT_KEYS.length <= 64, 'within what the keeper keeps');
+  assert.ok(STICKERS.length <= KEPT_MAX && STAT_KEYS.length <= KEPT_MAX, 'within what the keeper keeps');
 });

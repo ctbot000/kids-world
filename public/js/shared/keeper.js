@@ -158,6 +158,12 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
 // earned, and when your name, look, basket, coins, potions or gear last
 // changed. Never your tokens, which let you back into islands as yourself,
 // nor your settings. The page sends exactly this.
+// The most counts and stickers a profile keeps: plenty of room past the
+// game's own (stickers.js), so a new sticker or count needs no change here
+// and is kept even by a keeper running older code, while a made-up profile
+// stays small.
+export const KEPT_MAX = 256;
+
 export function keptProfile(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const numbers = (source, pattern, max) => {
@@ -180,8 +186,8 @@ export function keptProfile(raw) {
     coins: cleanCoins(p.coins),
     potions: cleanPotions(p.potions),
     gear: cleanGear(p.gear),
-    stats: numbers(p.stats, /^[a-z]{1,24}$/i, 64),
-    stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, 64),
+    stats: numbers(p.stats, /^[a-z]{1,24}$/i, KEPT_MAX),
+    stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, KEPT_MAX),
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
 }
