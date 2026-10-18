@@ -1,36 +1,56 @@
-// Soft cartoon materials shared by everyone and everything that moves: light
-// that rolls smoothly from a gentle shade into full light, never down to
-// black, like a picture book painted in soft gouache.
+// Toy materials shared by everyone and everything that moves: glossy vinyl,
+// like a toy photographed under a studio's soft lights, the room's light
+// shining back off it, and the sky's light catching its edges so it stands
+// out from the ground. (`toon` keeps the name it had when they were flat
+// cartoon paint.)
 import * as THREE from '../../vendor/three.module.js';
 
-let gradient = null;
 const cache = new Map();
 
-// How lit a surface is (0 to 1) for how much it faces the light, from facing
-// away (0) to facing it (1): the shade, then an eased turn into the light.
-export function shading(x) {
-  const k = Math.min(1, Math.max(0, (x - 0.28) / 0.5));
-  return 0.5 + 0.5 * k * k * (3 - 2 * k);
+// What lights all the toys at once, set by the renderer each frame: how much
+// of the studio's light they give back (less at night), and the rim of sky
+// light round their edges, how strong and what colour.
+export const toyLight = {
+  studio: { value: 1 },
+  rim: { value: 0.25 },
+  rimColor: { value: new THREE.Color(1, 0.97, 0.9) },
+};
+// The studio's light (an environment map), once the renderer has made it.
+let studio = null;
+
+// three's physical material, with the studio's light scaled by toyLight and
+// the rim light added. A copy (clone) is one too, with the same shader.
+export class ToyMaterial extends THREE.MeshPhysicalMaterial {
+  onBeforeCompile(shader) {
+    shader.uniforms.uStudio = toyLight.studio;
+    shader.uniforms.uRim = toyLight.rim;
+    shader.uniforms.uRimColor = toyLight.rimColor;
+    shader.fragmentShader = `uniform float uStudio;\nuniform float uRim;\nuniform vec3 uRimColor;\n${shader.fragmentShader}`
+      .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replaceAll('* envMapIntensity', '* envMapIntensity * uStudio'))
+      .replace(
+        '#include <opaque_fragment>',
+        `float toyRim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.6);
+        outgoingLight += uRimColor * uRim * toyRim * mix(vec3(1.0), diffuseColor.rgb, 0.5);
+        #include <opaque_fragment>`,
+      );
+  }
 }
 
-function gradientMap() {
-  if (gradient) return gradient;
-  const n = 32;
-  const data = new Uint8Array(n);
-  for (let i = 0; i < n; i++) data[i] = Math.round(shading(i / (n - 1)) * 255);
-  gradient = new THREE.DataTexture(data, n, 1, THREE.RedFormat);
-  gradient.minFilter = THREE.LinearFilter;
-  gradient.magFilter = THREE.LinearFilter;
-  gradient.generateMipmaps = false;
-  gradient.needsUpdate = true;
-  return gradient;
+// How a part takes the light, by what it is: see-through jelly is wet and
+// glossy, the darkest parts (eyes, noses, mouths, black hair) shine, and the
+// rest is satin vinyl.
+export function finish(color, transparent = false, opacity = 1) {
+  if (transparent && opacity < 0.95) return { roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.4 };
+  const c = new THREE.Color(color);
+  if (c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722 < 0.035) return { roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.3 };
+  return { roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.22, envMapIntensity: 0.8 };
 }
 
 export function toon(color, { emissive = 0, transparent = false, opacity = 1, side = THREE.FrontSide } = {}) {
   const key = `${color}|${emissive}|${transparent}|${opacity}|${side}`;
   let m = cache.get(key);
   if (!m) {
-    m = new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), transparent, opacity, side });
+    m = new ToyMaterial({ color, transparent, opacity, side, metalness: 0, envMap: studio, ...finish(color, transparent, opacity) });
     if (emissive) {
       m.emissive = new THREE.Color(color);
       m.emissiveIntensity = emissive;
@@ -38,6 +58,15 @@ export function toon(color, { emissive = 0, transparent = false, opacity = 1, si
     cache.set(key, m);
   }
   return m;
+}
+
+// The studio's light, for every toy there is and every one to come.
+export function setStudio(texture) {
+  studio = texture;
+  for (const m of cache.values()) {
+    m.envMap = texture;
+    m.needsUpdate = true;
+  }
 }
 
 // Something bopped flashes white for a moment, as in a Zelda game.

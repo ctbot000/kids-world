@@ -487,9 +487,6 @@ export class PetModel {
     this.vy = 0;
     this.last = null;
     this.setCollar(collarColor);
-    this.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = false;
-    });
     const shadow = blobShadow((this.kind === 'hamster' || this.bird ? 0.16 : 0.22) * 1.25, 0.2);
     this.shadow = shadow;
   }

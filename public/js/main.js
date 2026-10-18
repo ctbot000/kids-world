@@ -9,6 +9,7 @@ import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { Profile } from './profile.js';
+import { canStepDown, RUNGS, startRung } from './quality.js';
 import { watchErrors } from './report.js';
 import { Sound } from './sound.js';
 import { forgetSong as forgetSongOf, keepSong, loadSong } from './songs.js';
@@ -192,24 +193,44 @@ let serverMode = false;
 let session = null;
 const demo = { world: null, avatar: null, pet: null, t: 0, pose: null };
 
-// Quality steps down by itself on devices that struggle: first fewer pixels,
-// then no studs and a shorter view.
-const perf = { frames: 0, since: performance.now(), level: 0 };
+// How finished the picture is (quality.js): the rung of its ladder it is on,
+// for the choice in Settings it started from. On a device that struggles it
+// steps down by itself, a rung at a time. settle: the next few seconds (a
+// change being made, an island starting) do not count.
+const perf = { frames: 0, since: performance.now(), choice: null, rung: 0, settle: true };
+
+// What kind of device this is, to start it on the right rung.
+function device() {
+  return {
+    fine: window.matchMedia?.('(any-pointer: fine)').matches ?? true,
+    shortSide: Math.min(screen.width, screen.height),
+    software: renderer.software,
+  };
+}
 
 function applySettings() {
+  const choice = profile.settings.quality;
+  if (choice !== perf.choice) {
+    perf.choice = choice;
+    perf.rung = startRung(choice, device());
+  }
+  perf.settle = true;
+  const rung = RUNGS[perf.rung];
   const touch = input.touchMode;
   const dpr = window.devicePixelRatio || 1;
   renderer.setQuality({
-    studs: profile.settings.studs && perf.level < 2,
-    pixelRatio: perf.level >= 1 ? 1 : Math.min(dpr, touch ? 1.5 : 2),
-    far: perf.level >= 2 ? 110 : 150,
+    level: rung.level,
+    studs: profile.settings.studs && rung.studs,
+    pixelRatio: rung.sharp ? Math.min(dpr, touch ? 1.5 : 2) : 1,
+    far: rung.studs ? 150 : 110,
   });
 }
 
 function watchPerformance(now) {
-  if (document.hidden || perf.level >= 2) {
+  if (document.hidden || !session?.started || !canStepDown(perf.choice, perf.rung)) {
     perf.frames = 0;
     perf.since = now;
+    perf.settle = true;
     return;
   }
   perf.frames++;
@@ -218,8 +239,9 @@ function watchPerformance(now) {
   const fps = perf.frames / secs;
   perf.frames = 0;
   perf.since = now;
-  if (fps < 26 && session?.started) {
-    perf.level++;
+  if (perf.settle) perf.settle = false;
+  else if (fps < 26) {
+    perf.rung++;
     applySettings();
   }
 }

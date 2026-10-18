@@ -1,7 +1,7 @@
 // The blocky world on the GPU: one group of meshes per 16x16 chunk, rebuilt
 // when blocks change, with shaders that mix sunlight, lamp light and corner
-// shadows, sway the flowers, turn fruit to face you, ripple the water and
-// drift the lava.
+// shadows (and the shadows of everything that moves), sway the flowers, turn
+// fruit to face you, ripple the water and drift the lava.
 import * as THREE from '../../vendor/three.module.js';
 import { isTreeFoot } from '../shared/blocks.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
@@ -28,11 +28,13 @@ export const LIGHT_GLSL = /* glsl */ `
   uniform float uTime;
   float curve(float level) { return pow(0.8, (1.0 - level) * 15.0); }
   vec3 decode(vec3 c) { return pow(c, vec3(2.2)); }
-  vec3 lightOf(float sky, float lamp) {
-    vec3 sun = uSunColor * curve(sky) * uDaylight;
+  // sunlit: how much of the sun gets through (see SHADOW_FRAG).
+  vec3 lightOf(float sky, float lamp, float sunlit) {
+    vec3 sun = uSunColor * curve(sky) * uDaylight * sunlit;
     vec3 bulb = uLampColor * pow(curve(lamp), 1.25);
     return max(max(sun, bulb), uAmbient);
   }
+  vec3 lightOf(float sky, float lamp) { return lightOf(sky, lamp, 1.0); }
   vec3 fogged(vec3 col, float depth) {
     return mix(col, uFogColor, smoothstep(uFogNear, uFogFar, depth));
   }
@@ -52,7 +54,44 @@ export const LIGHT_GLSL = /* glsl */ `
   }
 `;
 
+// The shadows of everything that moves (players, pets, animals, monsters),
+// cast by the sun onto the ground round you, at the better picture qualities
+// (see Renderer.setQuality). three's own shadow chunks: the vertex shader sets
+// worldPosition and mvPosition, then SHADOW_VERT; the fragment shader asks
+// sunlit() how much sun gets through.
+const SHADOW_VERT_PARS = /* glsl */ `
+  #include <common>
+  #include <shadowmap_pars_vertex>
+  varying vec3 vWorld;
+`;
+const SHADOW_VERT = /* glsl */ `
+  vWorld = worldPosition.xyz;
+  #include <shadowmap_vertex>
+`;
+const SHADOW_FRAG = /* glsl */ `
+  #include <common>
+  #include <packing>
+  #include <lights_pars_begin>
+  #include <shadowmap_pars_fragment>
+  #include <shadowmask_pars_fragment>
+  uniform vec3 uShadowFocus;
+  uniform float uShadowReach;
+  varying vec3 vWorld;
+  // 1 in full sun; a shadow lets a little over half through, and shadows fade
+  // out before the edge of the ground they are drawn on.
+  float sunlit() {
+    #ifdef USE_SHADOWMAP
+      float edge = smoothstep(uShadowReach * 0.7, uShadowReach, distance(vWorld.xz, uShadowFocus.xz));
+      if (edge >= 1.0) return 1.0;
+      return mix(mix(0.55, 1.0, getShadowMask()), 1.0, edge);
+    #else
+      return 1.0;
+    #endif
+  }
+`;
+
 const SOLID_VERT = /* glsl */ `
+  ${SHADOW_VERT_PARS}
   attribute vec3 uvl;
   attribute vec3 tint;
   attribute vec4 lit;
@@ -68,12 +107,14 @@ const SOLID_VERT = /* glsl */ `
       p.x += sin(t) * 0.07 * lit.w;
       p.z += cos(t * 0.8) * 0.05 * lit.w;
     #endif
-    vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_Position = projectionMatrix * mv;
+    vec4 worldPosition = modelMatrix * vec4(p, 1.0);
+    vec4 mvPosition = viewMatrix * worldPosition;
+    gl_Position = projectionMatrix * mvPosition;
+    ${SHADOW_VERT}
     vUvl = uvl;
     vTint = tint;
     vLit = lit;
-    vDepth = -mv.z;
+    vDepth = -mvPosition.z;
   }
 `;
 
@@ -88,6 +129,7 @@ const SOLID_FRAG = /* glsl */ `
   varying vec4 vLit;
   varying float vDepth;
   ${LIGHT_GLSL}
+  ${SHADOW_FRAG}
   void main() {
     nearFade(vDepth);
     #ifdef FOLIAGE
@@ -105,7 +147,7 @@ const SOLID_FRAG = /* glsl */ `
     #else
       float shade = vLit.w;
     #endif
-    vec3 col = base * lightOf(vLit.x, vLit.y) * ao * shade;
+    vec3 col = base * lightOf(vLit.x, vLit.y, sunlit()) * ao * shade;
     #ifdef GLASS
       gl_FragColor = vec4(fogged(col, vDepth), tex.a);
     #else
@@ -251,6 +293,7 @@ const LAVA_FRAG = /* glsl */ `
 `;
 
 const STUD_VERT = /* glsl */ `
+  ${SHADOW_VERT_PARS}
   attribute vec3 offset;
   attribute vec3 tint;
   attribute vec2 slit;
@@ -259,13 +302,16 @@ const STUD_VERT = /* glsl */ `
   varying float vShade;
   varying float vDepth;
   void main() {
-    vec4 mv = modelViewMatrix * vec4(position + offset, 1.0);
-    gl_Position = projectionMatrix * mv;
+    vec4 worldPosition = modelMatrix * vec4(position + offset, 1.0);
+    vec4 mvPosition = viewMatrix * worldPosition;
+    gl_Position = projectionMatrix * mvPosition;
+    vec3 transformedNormal = normalMatrix * normal;
+    ${SHADOW_VERT}
     vTint = tint;
     vLit = slit;
     vec3 L = normalize(vec3(0.35, 1.0, 0.55));
     vShade = normal.y > 0.5 ? 1.0 : 0.62 + 0.3 * max(dot(normal, L), 0.0) + 0.1 * normal.z;
-    vDepth = -mv.z;
+    vDepth = -mvPosition.z;
   }
 `;
 
@@ -275,9 +321,10 @@ const STUD_FRAG = /* glsl */ `
   varying float vShade;
   varying float vDepth;
   ${LIGHT_GLSL}
+  ${SHADOW_FRAG}
   void main() {
     nearFade(vDepth);
-    vec3 col = decode(vTint) * lightOf(vLit.x, vLit.y) * vShade;
+    vec3 col = decode(vTint) * lightOf(vLit.x, vLit.y, sunlit()) * vShade;
     gl_FragColor = vec4(fogged(col, vDepth), 1.0);
     #include <colorspace_fragment>
   }
@@ -371,18 +418,24 @@ export class Terrain {
       uWaterLayer: { value: atlas.layers.get('water') ?? 0 },
       uLavaLayer: { value: atlas.layers.get('lava') ?? 0 },
       uNearFade: { value: 1 },
+      // Where shadows are drawn: round this point, out to this far.
+      uShadowFocus: { value: new THREE.Vector3() },
+      uShadowReach: { value: 12 },
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
     };
     const make = (vertexShader, fragmentShader, extra = {}) =>
       new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader, fragmentShader, ...extra });
+    // Lit by three's lights too: the sun, for its shadows.
+    const sunny = { lights: true };
     this.materials = {
-      opaque: make(SOLID_VERT, SOLID_FRAG),
-      plants: make(SOLID_VERT, SOLID_FRAG, { defines: { CUTOUT: 1, SWAY: 1 }, side: THREE.DoubleSide }),
-      foliage: make(SOLID_VERT, SOLID_FRAG, { defines: { CUTOUT: 1, SWAY: 1, FOLIAGE: 1 }, side: THREE.DoubleSide }),
+      opaque: make(SOLID_VERT, SOLID_FRAG, sunny),
+      plants: make(SOLID_VERT, SOLID_FRAG, { ...sunny, defines: { CUTOUT: 1, SWAY: 1 }, side: THREE.DoubleSide }),
+      foliage: make(SOLID_VERT, SOLID_FRAG, { ...sunny, defines: { CUTOUT: 1, SWAY: 1, FOLIAGE: 1 }, side: THREE.DoubleSide }),
       items: make(ITEM_VERT, ITEM_FRAG, { side: THREE.DoubleSide }),
       water: make(WATER_VERT, WATER_FRAG, { transparent: true, depthWrite: false, side: THREE.DoubleSide }),
       lava: make(LAVA_VERT, LAVA_FRAG),
-      glass: make(SOLID_VERT, SOLID_FRAG, { defines: { GLASS: 1 }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
-      studs: make(STUD_VERT, STUD_FRAG),
+      glass: make(SOLID_VERT, SOLID_FRAG, { ...sunny, defines: { GLASS: 1 }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+      studs: make(STUD_VERT, STUD_FRAG, sunny),
     };
     this.studGeometry = studShape();
   }
@@ -546,6 +599,7 @@ export class Terrain {
       const mesh = new THREE.Mesh(g, material);
       mesh.renderOrder = order;
       mesh.matrixAutoUpdate = false;
+      mesh.receiveShadow = material.lights;
       group.add(mesh);
       return mesh;
     };
@@ -570,6 +624,7 @@ export class Terrain {
       g.boundingSphere = sphere;
       const mesh = new THREE.Mesh(g, this.materials.studs);
       mesh.matrixAutoUpdate = false;
+      mesh.receiveShadow = true;
       mesh.visible = this.studsOn;
       group.add(mesh);
       chunk.studs = mesh;
@@ -594,8 +649,11 @@ export class Terrain {
     }
   }
 
-  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time, nearFade = true }) {
+  // shadowFocus, shadowReach: where the shadows of what moves are drawn.
+  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time, nearFade = true, shadowFocus = null, shadowReach = 12 }) {
     const u = this.uniforms;
+    if (shadowFocus) u.uShadowFocus.value.copy(shadowFocus);
+    u.uShadowReach.value = shadowReach;
     u.uNearFade.value = nearFade ? 1 : 0;
     u.uDaylight.value = daylight;
     u.uSunColor.value.copy(sun);

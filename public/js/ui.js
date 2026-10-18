@@ -39,6 +39,7 @@ import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
 import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
+import { QUALITY_CHOICES } from './quality.js';
 import { recentErrors, screenshot } from './report.js';
 
 // The ideas whose answers this device has shown already (see wishAnswered).
@@ -86,6 +87,8 @@ function lineIcon(name) {
 // The camera's ways of looking (render/renderer.js VIEWS), in words and pictures.
 const VIEW_NAMES = { behind: 'from behind you', eyes: 'through your eyes', sky: 'from the sky' };
 const VIEW_ICONS = { behind: '🧍', eyes: '👀', sky: '☁️' };
+// How finished the picture is (quality.js), in words.
+const QUALITY_WORDS = { auto: '✨ Auto', high: '🌟 Best', medium: '👍 Good', low: '⚡ Fast' };
 const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 
 // What the island rule for monsters means (shared/monsters.js).
@@ -1911,6 +1914,7 @@ export class UI {
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'L'), ' changes how you look, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('🎥', 'See through your eyes', ['Press 🎥 to look from behind you, through your own eyes, or from high in the sky. Zooming all the way in looks through your eyes too. Through your eyes, left and right turn you round.']),
+          card('🖼️', 'Picture', ['🖼️ Picture in ⚙️ Settings picks how much the game draws: 🌟 Best gives everyone a shadow and makes faraway things soft, like a photo of toys; ⚡ Fast keeps a slow phone quick. ✨ Auto picks for your device, and goes easier by itself if the game gets slow.']),
           this.fullMode === 'toggle' ? card(lineIcon('full'), 'Full screen', ['The ', lineIcon('full'), ' button fills the whole screen with your island. It is in ⚙️ Settings too.']) : null,
           this.fullMode === 'home-screen' ? card(lineIcon('full'), 'Full screen', ['Add Kids World to the Home Screen and open it from there.']) : null,
         ),
@@ -3546,6 +3550,25 @@ export class UI {
     return h('div', { class: 'setting' }, h('b', {}, '🎥 Look'), row);
   }
 
+  // How finished the picture is (quality.js): Auto, or one picked outright.
+  qualitySetting() {
+    const p = this.profile;
+    const row = h('div', { class: 'row' });
+    const draw = () =>
+      row.replaceChildren(
+        ...QUALITY_CHOICES.map((key) =>
+          h('button', { class: `chip${(p.settings.quality ?? 'auto') === key ? ' on' : ''}`, type: 'button', 'data-quality': key, onclick: () => {
+            this.sound.play('ui');
+            p.setting('quality', key);
+            this.gameHandlers.applySettings();
+            draw();
+          } }, QUALITY_WORDS[key]),
+        ),
+      );
+    draw();
+    return h('div', { class: 'setting' }, h('b', {}, '🖼️ Picture'), row);
+  }
+
   settingsDialog() {
     const g = this.game;
     const handlers = this.gameHandlers;
@@ -3576,6 +3599,7 @@ export class UI {
           this.renderMap();
         }),
         this.viewSetting(),
+        this.qualitySetting(),
       );
       if (handlers.keeper?.config && handlers.login?.who()) {
         // Logged in, copies always go: that is what the login is for.

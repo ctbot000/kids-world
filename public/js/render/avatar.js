@@ -1863,9 +1863,6 @@ export class Avatar {
     this.lieLift = Math.max(back, (person ? PR[2] * 1.08 : HR[2]) * H.k - H.z);
     // How far down you sink swimming, leaning forward, to have your head just out of the water.
     this.swimDrop = B.hip + H.y * Math.cos(SWIM_LEAN) - SWIM_HEAD;
-    this.root.traverse((o) => {
-      if (o.isMesh) o.castShadow = false;
-    });
   }
 
   // A swing at a monster, with whatever is in hand (see SWINGS). Returns how

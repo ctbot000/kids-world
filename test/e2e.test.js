@@ -98,7 +98,9 @@ async function openPlayer(url, profile = {}, init = null) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   page.on('pageerror', (error) => pageErrors.push(`${profile.name ?? 'player'}: ${error.message}`));
-  // Small pages without studs keep software rendering (CI has no GPU) quick enough.
+  // Small pages without studs, on the plainest picture (no shadows or soft
+  // focus to draw), keep software rendering (CI has no GPU) quick enough.
+  // profile.settings changes these.
   await page.setViewport({ width: 720, height: 480 });
   if (process.env.E2E_NO_MOUSE) {
     // Like a CI machine with no mouse: the page thinks it is on a touch screen.
@@ -111,7 +113,7 @@ async function openPlayer(url, profile = {}, init = null) {
   await page.evaluateOnNewDocument(() => (window.kidsWorldGuests = true));
   if (init) await page.evaluateOnNewDocument(init);
   await page.evaluateOnNewDocument((p) => {
-    const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0 } };
+    const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
     localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
   }, profile);
   page.setDefaultNavigationTimeout(60000 * SLOW);
@@ -427,6 +429,83 @@ test('the 🎥 button and L step the camera from behind you to your own eyes, to
   await page.click('#modal [data-view="sky"]');
   await settled('sky');
   await until(page, () => document.querySelector('#modal [data-view="sky"]').classList.contains('on'));
+  await page.keyboard.press('Escape');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('🖼️ Picture in Settings: Best casts shadows, shades where things meet and softens what is out of focus, Good and Fast give those up, and Auto picks for the device', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Shiny Otter', settings: { quality: 'high' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  const state = () =>
+    page.evaluate(() => {
+      const kw = window.kidsWorld;
+      const r = kw.renderer;
+      return {
+        level: r.level,
+        post: r.post ? { samples: r.post.scene.samples, passes: r.post.passes.length } : null,
+        focus: Boolean(r.focusPass),
+        shadows: r.gl.shadowMap.enabled && r.sun.castShadow,
+        saved: kw.profile.settings.quality,
+        on: document.querySelector('#modal [data-quality].on')?.dataset.quality ?? null,
+      };
+    });
+  // A photo of the island as drawn: a real picture, not one flat colour (a
+  // broken pass draws black).
+  const photo = () =>
+    page.evaluate(async () => {
+      const img = new Image();
+      img.src = window.kidsWorld.renderer.photo();
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      const colours = new Set();
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4 * 211) {
+        colours.add(`${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4}`);
+        sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+        n++;
+      }
+      return { colours: colours.size, light: sum / n };
+    });
+  const looksRight = (p, what) => assert.ok(p.colours > 12 && p.light > 50 && p.light < 245, `${what}: ${JSON.stringify(p)}`);
+  // Best: drawn into a multisampled picture of its own, shaded where things
+  // meet, soft out of focus, and you cast a shadow.
+  assert.deepEqual(await state(), { level: 'high', post: { samples: 4, passes: 3 }, focus: true, shadows: true, saved: 'high', on: null });
+  await until(page, () => {
+    let casting = 0;
+    window.kidsWorld.renderer.entities.traverse((o) => o.isMesh && o.castShadow && casting++);
+    return casting > 0;
+  });
+  looksRight(await photo(), 'best');
+  await page.click('#btn-settings');
+  await page.waitForSelector('#modal [data-quality="high"].on');
+  // Good: no soft focus and edges smoothed afterwards, but still shadows and
+  // shading where things meet.
+  await page.click('#modal [data-quality="medium"]');
+  await until(page, () => window.kidsWorld.renderer.level === 'medium');
+  assert.deepEqual(await state(), { level: 'medium', post: { samples: 0, passes: 3 }, focus: false, shadows: true, saved: 'medium', on: 'medium' });
+  looksRight(await photo(), 'good');
+  // Fast: straight onto the screen, no shadows.
+  await page.click('#modal [data-quality="low"]');
+  await until(page, () => window.kidsWorld.renderer.level === 'low');
+  assert.deepEqual(await state(), { level: 'low', post: null, focus: false, shadows: false, saved: 'low', on: 'low' });
+  looksRight(await photo(), 'fast');
+  // Auto: what suits this kind of device (a computer, a tablet, a phone, or no GPU).
+  const suits = await page.evaluate(async () => {
+    const { RUNGS, startRung } = await import('/js/quality.js');
+    const device = { fine: window.matchMedia('(any-pointer: fine)').matches, shortSide: Math.min(screen.width, screen.height), software: window.kidsWorld.renderer.software };
+    return RUNGS[startRung('auto', device)].level;
+  });
+  await page.click('#modal [data-quality="auto"]');
+  await until(page, (level) => window.kidsWorld.renderer.level === level, suits);
+  assert.equal((await state()).saved, 'auto');
+  assert.equal((await state()).on, 'auto');
   await page.keyboard.press('Escape');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();

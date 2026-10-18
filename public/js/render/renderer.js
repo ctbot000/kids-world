@@ -2,8 +2,17 @@
 // the pictures on drawing boards,
 // an adventure island's flags (and the stomps of King Grumble), the preview
 // of what a tool is about to do, and a camera that follows you around (and
-// never ends up inside a hill).
+// never ends up inside a hill). Everything that moves is a glossy toy under a
+// studio's light (render/toon.js); at the better picture qualities it casts
+// shadows on the ground, everything is shaded where it meets something, and
+// what the camera is not looking at goes soft, as in a photo of a toy (see
+// QUALITY).
 import * as THREE from '../../vendor/three.module.js';
+import { RoomEnvironment } from '../../vendor/three-addons/environments/RoomEnvironment.js';
+import { FXAAPass } from '../../vendor/three-addons/postprocessing/FXAAPass.js';
+import { GTAOPass } from '../../vendor/three-addons/postprocessing/GTAOPass.js';
+import { OutputPass } from '../../vendor/three-addons/postprocessing/OutputPass.js';
+import { ShaderPass } from '../../vendor/three-addons/postprocessing/ShaderPass.js';
 import { OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
 import { STOMP } from '../shared/monsters.js';
 import { raycast } from '../shared/raycast.js';
@@ -19,6 +28,7 @@ import { PetModel, petSeat } from './pet-models.js';
 import { SpiderModel } from './spider-model.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
+import { setStudio, toyLight } from './toon.js';
 
 // All of the biggest edit there can be, a huge tent on a hillside say.
 const MAX_PREVIEW = MAX_EDIT_CELLS;
@@ -33,6 +43,85 @@ export const VIEWS = {
 const tmpV = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const tmpC = new THREE.Color();
+const tmpX = new THREE.Vector3();
+const tmpY = new THREE.Vector3();
+const tmpZ = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const WHITE = new THREE.Color(1, 1, 1);
+
+// How finished each picture is, best first: drawn into a picture of its own
+// (post) of at most this many pixels (fewer pixels per CSS pixel on a big,
+// sharp screen), multisampled this many times for smooth edges (or smoothed
+// afterwards, FXAA); shaded where things meet (ambient occlusion, worked out
+// on at most this many pixels and spread over the picture, with this many
+// samples); soft out of focus (dof); and with the shadows of what moves on a
+// map this many texels across. The lowest draws straight to the screen with
+// none of it: still glossy toys.
+export const QUALITY = {
+  high: { post: true, pixels: 4.2e6, samples: 4, ao: 1.2e6, aoSamples: 12, dof: true, shadows: 2048 },
+  medium: { post: true, pixels: 2.6e6, samples: 0, ao: 0.4e6, aoSamples: 8, dof: false, shadows: 1024 },
+  low: { post: false, pixels: Infinity, samples: 0, ao: 0, aoSamples: 0, dof: false, shadows: 0 },
+};
+// Shadows are drawn this far round you, either way, fading out before the edge.
+const SHADOW_EXTENT = 13;
+
+// A camera's shallow focus, as in a photo of a toy up close: what is well
+// nearer or further than `focus` (along the view) goes soft, the more so the
+// further off it is. From the depth of the scene as drawn, so the studs
+// (placed in their own shader) blur where they are. A sample counts where its
+// own blur reaches this pixel, so nothing sharp bleeds into the soft behind it.
+function focusPass(depth) {
+  return new ShaderPass(
+    new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: depth },
+        cameraNear: { value: 0.1 },
+        cameraFar: { value: 1000 },
+        focus: { value: 8 },
+        maxBlur: { value: 6 },
+        strength: { value: 1.1 },
+        resolution: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: /* glsl */ `
+        #include <packing>
+        uniform sampler2D tDiffuse;
+        uniform sampler2D tDepth;
+        uniform float cameraNear;
+        uniform float cameraFar;
+        uniform float focus;
+        uniform float maxBlur;
+        uniform float strength;
+        uniform vec2 resolution;
+        varying vec2 vUv;
+        float zAt(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar); }
+        float blurAt(float z) { return maxBlur * clamp((abs(z - focus) / z - 0.12) * strength, 0.0, 1.0); }
+        void main() {
+          float zc = zAt(vUv);
+          float cc = blurAt(zc);
+          vec3 sum = texture2D(tDiffuse, vUv).rgb;
+          // In focus: as it is (what is just in front of it hardly ever blurs over it).
+          if (cc < 0.5) {
+            gl_FragColor = vec4(sum, 1.0);
+            return;
+          }
+          float weights = 1.0;
+          for (int i = 0; i < 24; i++) {
+            float r = sqrt((float(i) + 0.5) / 24.0) * maxBlur;
+            float a = float(i) * 2.39996323;
+            vec2 uv = vUv + vec2(cos(a), sin(a)) * r / resolution;
+            float zs = zAt(uv);
+            float reach = zs < zc ? blurAt(zs) : min(blurAt(zs), cc);
+            float w = smoothstep(r - 1.0, r + 0.5, reach);
+            sum += texture2D(tDiffuse, uv).rgb * w;
+            weights += w;
+          }
+          gl_FragColor = vec4(sum / weights, 1.0);
+        }`,
+    }),
+  );
+}
 
 export class Renderer {
   constructor(canvas, atlas) {
@@ -43,6 +132,13 @@ export class Renderer {
     gl.outputColorSpace = THREE.SRGBColorSpace;
     gl.toneMapping = THREE.NoToneMapping;
     this.gl = gl;
+    // Whether this browser draws without a GPU (a software renderer): it
+    // starts on the plainest picture (see quality.js). Chrome names the GPU
+    // only through the debug extension, which Firefox no longer needs.
+    const ctx = gl.getContext();
+    const name = String(ctx.getParameter(ctx.RENDERER));
+    const debug = /^(webkit webgl|mozilla)$/i.test(name) ? ctx.getExtension('WEBGL_debug_renderer_info') : null;
+    this.software = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(`${name} ${debug ? ctx.getParameter(debug.UNMASKED_RENDERER_WEBGL) : ''}`);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.08, 1500);
     this.camera.position.set(0, 40, 40);
@@ -55,6 +151,21 @@ export class Renderer {
     this.hemi = new THREE.HemisphereLight(0xdff2ff, 0x9fcf7f, 1.6);
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
     this.scene.add(this.hemi, this.sun, this.sun.target);
+    // The soft studio light the toys reflect (render/toon.js).
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const room = new RoomEnvironment();
+    this.studio = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    setStudio(this.studio);
+    gl.shadowMap.type = THREE.PCFShadowMap;
+    this.finish = QUALITY.low;
+    // The pixel ratio asked for (setQuality), before a quality's own limit.
+    this.ratio = gl.getPixelRatio();
+    // How dark the round blob under each foot is (fainter under a real shadow),
+    // and when to look again for parts that cast shadows.
+    this.blob = 1;
+    this.sweepIn = 0;
 
     this.entities = new THREE.Group();
     this.entities.name = 'entities';
@@ -106,19 +217,140 @@ export class Renderer {
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
     if (w < 2 || h < 2) return;
+    this.gl.setPixelRatio(Math.max(1, Math.min(this.ratio, Math.sqrt(this.finish.pixels / (w * h)))));
     this.gl.setSize(w, h, false);
     this.camera.aspect = w / h;
     // Keep a sensible sideways view on tall, narrow screens.
     const wide = 2 * Math.atan(Math.tan((62 * Math.PI) / 360) / this.camera.aspect) * (180 / Math.PI);
     this.camera.fov = Math.min(80, Math.max(58, wide));
     this.camera.updateProjectionMatrix();
+    const post = this.post;
+    if (post) {
+      const { width, height } = this.canvas;
+      for (const target of [post.scene, post.ping, post.pong]) target.setSize(width, height);
+      for (const pass of post.passes) pass.setSize(width, height);
+    }
   }
 
-  setQuality({ studs = true, pixelRatio = null, far = null } = {}) {
+  // level: how finished the picture is (a key of QUALITY); then the cheaper
+  // things to give up after that: the studs, sharpness, how far you see.
+  setQuality({ level = 'low', studs = true, pixelRatio = null, far = null } = {}) {
     this.terrain.studsOn = studs;
-    if (pixelRatio) this.gl.setPixelRatio(pixelRatio);
+    if (pixelRatio) this.ratio = pixelRatio;
     if (far) this.fogFar = far;
+    if (level !== this.level && QUALITY[level]) {
+      this.level = level;
+      this.finish = QUALITY[level];
+      this.buildFinish();
+    }
     this.resize();
+  }
+
+  // The passes each picture goes through at this quality.
+  buildFinish() {
+    const q = this.finish;
+    const gl = this.gl;
+    this.disposePost();
+    // The sun's shadows, cast by what moves (castShadows) onto the ground
+    // (render/terrain.js) and onto each other.
+    gl.shadowMap.enabled = q.shadows > 0;
+    this.sun.castShadow = q.shadows > 0;
+    this.blob = q.shadows ? 0.6 : 1;
+    this.sweepIn = 0;
+    if (q.shadows) {
+      const shadow = this.sun.shadow;
+      if (shadow.mapSize.x !== q.shadows) {
+        shadow.mapSize.set(q.shadows, q.shadows);
+        shadow.map?.dispose();
+        shadow.map = null;
+      }
+      Object.assign(shadow.camera, { left: -SHADOW_EXTENT, right: SHADOW_EXTENT, top: SHADOW_EXTENT, bottom: -SHADOW_EXTENT, near: 1, far: 120 });
+      shadow.camera.updateProjectionMatrix();
+      const texel = (2 * SHADOW_EXTENT) / q.shadows;
+      shadow.bias = -0.0005;
+      shadow.normalBias = 1.5 * texel;
+      shadow.radius = 2;
+    }
+    if (!q.post) return;
+    // The scene is drawn into a picture of its own, with its depth for the
+    // passes after it, and room for the bright glints of glossy toys where
+    // the GPU can; then each pass draws into one of two plain pictures by
+    // turns, and the last onto the screen. Only the scene's picture is
+    // multisampled: they take a lot of the GPU's memory.
+    const ext = gl.extensions;
+    const type = ext.has('EXT_color_buffer_half_float') || ext.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const scene = new THREE.WebGLRenderTarget(1, 1, { type, samples: q.samples, depthTexture: new THREE.DepthTexture(1, 1) });
+    const ping = new THREE.WebGLRenderTarget(1, 1, { type, depthBuffer: false });
+    const post = { scene, ping, pong: ping.clone(), passes: [] };
+    if (q.ao) {
+      // Made without a depth texture, then given the scene's: its own
+      // normal pass would redraw the terrain without its shaders (black), and
+      // three r186's constructor throws when handed one (fixed in r187).
+      const ao = new GTAOPass(this.scene, this.camera, 1, 1);
+      ao.setGBuffer(scene.depthTexture);
+      const sizeAo = ao.setSize.bind(ao);
+      ao.setSize = (w, h) => {
+        const k = Math.min(1, Math.sqrt(q.ao / (w * h)));
+        sizeAo(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+      };
+      ao.updateGtaoMaterial({ radius: 0.8, distanceExponent: 1.6, thickness: 1.5, scale: 1.6, samples: q.aoSamples, distanceFallOff: 1 });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+      post.passes.push(ao);
+    }
+    if (q.dof) {
+      this.focusPass = focusPass(scene.depthTexture);
+      post.passes.push(this.focusPass);
+    }
+    // Into the screen's colours; edges not multisampled are smoothed after
+    // that, where FXAA expects them.
+    post.passes.push(new OutputPass());
+    if (!q.samples) post.passes.push(new FXAAPass());
+    this.post = post;
+  }
+
+  disposePost() {
+    const post = this.post;
+    if (!post) return;
+    for (const pass of post.passes) pass.dispose();
+    for (const target of [post.scene, post.ping, post.pong]) target.dispose();
+    post.scene.depthTexture.dispose();
+    this.post = null;
+    this.focusPass = null;
+  }
+
+  // Draws the picture as it is now, at the quality there is.
+  draw() {
+    const gl = this.gl;
+    const post = this.post;
+    if (!post) {
+      gl.render(this.scene, this.camera);
+      return;
+    }
+    gl.setRenderTarget(post.scene);
+    gl.render(this.scene, this.camera);
+    const passes = post.passes.filter((pass) => pass.enabled);
+    let read = post.scene;
+    passes.forEach((pass, i) => {
+      pass.renderToScreen = i === passes.length - 1;
+      const write = read === post.ping ? post.pong : post.ping;
+      pass.render(gl, write, read, 0, false);
+      if (pass.needsSwap) read = write;
+    });
+    gl.setRenderTarget(null);
+  }
+
+  // Every part of what moves casts a shadow at the qualities that draw them,
+  // but the see-through ones and the round blobs under feet. Parts come and
+  // go (a hat, a sword, a model swapped), so frame() looks again now and then.
+  castShadows() {
+    const on = this.finish.shadows > 0;
+    this.entities.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = o.userData.unflash ?? o.material;
+      const solid = !m.isMeshBasicMaterial && !(m.transparent && m.opacity < 0.6);
+      o.castShadow = on && solid;
+      o.receiveShadow = on && !m.isMeshBasicMaterial;
+    });
   }
 
   // ------------------------------------------------ players and animals
@@ -247,7 +479,7 @@ export class Renderer {
     const low = sun ? (1 - Math.min(1, Math.abs(sun.y))) * Math.min(1, Math.hypot(sun.x, sun.z) * 2) : 0;
     const fade = scale * Math.max(0.4, 1 - h * 0.18);
     shadow.scale.set(fade * (1 + 0.3 * low), fade, 1);
-    shadow.material.opacity = 0.22 * Math.max(0.2, 1 - h * 0.25) * (0.35 + 0.65 * (this.env.daylight ?? 1));
+    shadow.material.opacity = 0.22 * this.blob * Math.max(0.2, 1 - h * 0.25) * (0.35 + 0.65 * (this.env.daylight ?? 1));
   }
 
   // ------------------------------------------------ camera
@@ -291,7 +523,7 @@ export class Renderer {
     const shown = [this.preview.visible, this.outline.visible];
     this.preview.visible = false;
     this.outline.visible = false;
-    this.gl.render(this.scene, this.camera);
+    this.draw();
     // Read it back in the same task, before the frame is handed to the screen and cleared.
     const url = this.canvas.toDataURL('image/png');
     [this.preview.visible, this.outline.visible] = shown;
@@ -479,6 +711,8 @@ export class Renderer {
       time: this.time,
       // Looking through your own eyes, nothing near should dissolve.
       nearFade: this.nearFade,
+      shadowFocus: state.focus,
+      shadowReach: SHADOW_EXTENT * 0.95,
     });
     this.sky.setWeather(state.weather);
     this.focus.x = state.focus.x;
@@ -490,11 +724,33 @@ export class Renderer {
     // Lights for the players and animals follow the sun.
     this.sun.color.copy(env.sun);
     this.sun.intensity = 0.8 + 1.6 * env.day;
-    this.sun.position.copy(state.focus).addScaledVector(env.day > 0.15 ? env.sunDir : env.moonDir, 50);
-    this.sun.target.position.copy(state.focus);
+    this.aimSun(state.focus, env.day > 0.15 ? env.sunDir : env.moonDir);
     this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 0.98, 0.94), 0.5);
     this.hemi.groundColor.setRGB(0.55, 0.62, 0.45).multiplyScalar(0.5 + 0.5 * env.day);
     this.hemi.intensity = 1.05 + 0.65 * env.day;
+    // The toys give back less of the studio's light at night, and the light
+    // round their edges takes the sky's colour.
+    toyLight.studio.value = 0.3 + 0.7 * env.day;
+    toyLight.rim.value = 0.08 + 0.17 * env.day;
+    toyLight.rimColor.value.copy(env.top).lerp(WHITE, 0.55);
+    if (this.finish.shadows) {
+      this.sweepIn -= dt;
+      if (this.sweepIn <= 0) {
+        this.sweepIn = 0.5;
+        this.castShadows();
+      }
+    }
+    // In focus: what the camera looks at (you), but everything when it looks
+    // through your own eyes.
+    if (this.focusPass) {
+      const u = this.focusPass.uniforms;
+      this.focusPass.enabled = this.nearFade;
+      u.focus.value = this.camDist ?? 8;
+      u.cameraNear.value = this.camera.near;
+      u.cameraFar.value = this.camera.far;
+      u.resolution.value.set(this.canvas.width, this.canvas.height);
+      u.maxBlur.value = Math.min(8, Math.max(2.5, this.canvas.height * 0.005));
+    }
 
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);
@@ -504,7 +760,7 @@ export class Renderer {
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;
     if (this.drawing) {
-      this.gl.render(this.scene, this.camera);
+      this.draw();
     } else {
       // All that render() changes besides the picture.
       this.scene.updateMatrixWorld();
@@ -512,7 +768,31 @@ export class Renderer {
     }
   }
 
+  // The sun (or the moon) shines on what is round focus, from dir. With
+  // shadows, its aim moves in whole texels of the shadow map, so the shadows
+  // of things standing still hold still as you walk.
+  aimSun(focus, dir) {
+    const target = tmpV.copy(focus);
+    const size = this.finish.shadows;
+    if (size) {
+      const texel = (2 * SHADOW_EXTENT) / size;
+      // The shadow camera's own axes, as lookAt makes them.
+      tmpZ.copy(dir).normalize();
+      tmpX.crossVectors(UP, tmpZ);
+      if (tmpX.lengthSq() < 1e-8) tmpX.set(1, 0, 0);
+      tmpX.normalize();
+      tmpY.crossVectors(tmpZ, tmpX);
+      const x = target.dot(tmpX);
+      const y = target.dot(tmpY);
+      target.addScaledVector(tmpX, Math.round(x / texel) * texel - x).addScaledVector(tmpY, Math.round(y / texel) * texel - y);
+    }
+    this.sun.target.position.copy(target);
+    this.sun.position.copy(target).addScaledVector(dir, 50);
+  }
+
   dispose() {
+    this.disposePost();
+    this.studio.dispose();
     this.terrain.dispose();
     this.gl.dispose();
   }
