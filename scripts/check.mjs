@@ -14,9 +14,15 @@ const root = git('rev-parse', '--show-toplevel');
 const commit = git('rev-parse', '--verify', `${process.argv[2] ?? 'HEAD'}^{commit}`);
 const dir = mkdtempSync(join(tmpdir(), 'kids-world-check-'));
 
+// The tests get none of the GIT_ variables git sets for the hook. Pushed from
+// a worktree, GIT_DIR is that worktree's own git folder, by its full path: a
+// test's `git init` in a folder of its own would then set up the real
+// repository again, as bare, and its `git config` would write there.
+const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+
 function run(label, args, env = {}) {
   console.log(`\n▶ ${label}`);
-  const { status } = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit', env: { ...process.env, ...env } });
+  const { status } = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit', env: { ...clean, ...env } });
   if (status !== 0) throw new Error(`${label}: failed`);
 }
 
