@@ -412,6 +412,7 @@ export class UI {
     $('btn-ranking').onclick = () => this.rankingDialog(this.profile === this.isle ? 'isle' : 'home');
     $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
+    $('btn-feedback').onclick = () => this.feedbackDialog();
     $('btn-sound').onclick = () => this.soundDialog();
   }
 
@@ -467,6 +468,7 @@ export class UI {
     // Nobody plays without a login: until you log in (or make one), the
     // title screen has only the way to, and says so while there is no
     // keeper to log in at.
+    this.renderFeedback();
     const gated = Boolean(login?.required?.());
     $('title').classList.toggle('gated', gated);
     $('login-gate').hidden = !gated;
@@ -2358,6 +2360,36 @@ export class UI {
 
   // ------------------------------------------------ ideas for the game
 
+  // 💌 on the title screen and in a game (in the top bar where it has room,
+  // and in 💬 everywhere: see sayDialog), wherever there is an island
+  // keeper to take an idea or a problem (the logged-out title screen too: a
+  // problem needs no login).
+  renderFeedback() {
+    const on = Boolean(this.reportKeeper()?.config);
+    for (const id of ['btn-feedback', 'btn-feedback-hud']) $(id).hidden = !on;
+  }
+
+  // 💌 Ideas & problems: one tap to tell the grown-ups an idea for the game
+  // (CTB's helpers read it and write back) or that something went wrong.
+  feedbackDialog() {
+    if (!this.reportKeeper()?.config) return;
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '💌 Tell us!'),
+          h('p', {}, 'Have an idea that would make Kids World even better, or did something go wrong?'),
+          h(
+            'div',
+            { class: 'feedback-choices' },
+            h('button', { class: 'big yellow', type: 'button', onclick: () => this.ideasDialog() }, h('span', { class: 'emoji' }, '💡'), ' I have an idea!'),
+            h('button', { class: 'big blue', type: 'button', onclick: () => this.reportDialog() }, h('span', { class: 'emoji' }, '🐞'), ' Something went wrong'),
+          ),
+        );
+      },
+      { narrow: true },
+    );
+  }
+
   // The button to send CTB's workers an idea for the game, where there is an
   // island keeper to take it.
   ideaButton(kind = 'chip report-button') {
@@ -2643,6 +2675,8 @@ export class UI {
     $('btn-photo').onclick = () => this.takePhoto();
     $('btn-settings').onclick = () => this.settingsDialog();
     $('btn-help-hud').onclick = () => this.helpDialog();
+    $('btn-feedback-hud').onclick = () => this.feedbackDialog();
+    this.renderFeedback();
     $('btn-stickers-hud').onclick = () => this.stickersDialog();
     $('btn-shop-hud').onclick = () => this.shopDialog();
     $('island-badge').onclick = () => this.inviteDialog();
@@ -3124,6 +3158,8 @@ export class UI {
         };
         root.append(
           h('h2', {}, '💬 Say something'),
+          // Telling the grown-ups, rather than the island: ideas and problems, first so it is never scrolled away.
+          this.reportKeeper()?.config ? h('button', { class: 'chip feedback-chip', type: 'button', onclick: () => this.feedbackDialog() }, '💌 An idea, or something went wrong?') : null,
           history,
           h(
             'form',

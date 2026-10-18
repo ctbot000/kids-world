@@ -1441,6 +1441,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Fox' });
   await makeIsland(page, { online: false });
   await hideRideButton(page);
+  // 💌 shows wherever there is an island keeper; these pages have none, so it is shown by hand, to lay out as it does then.
+  await page.evaluate(() => (document.getElementById('btn-feedback-hud').hidden = false));
   // The bop button is shown or hidden by the test (on touch screens it shows while a monster is about).
   await page.evaluate(() => (window.kidsWorld.ui.attackButton = () => {}));
   // 768×1024 and 375×500 are exactly 3:4, as most iPads held upright are: upright, with the touch
@@ -1596,6 +1598,8 @@ test('the little map and the hotbar fit beside every other button, on screens of
 test('every tool fits across an upright phone, and the row below still lines up with it', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Neat Hen' });
   await makeIsland(page, { online: false });
+  // 💌 shows wherever there is an island keeper; these pages have none, so it is shown by hand, to lay out as it does then.
+  await page.evaluate(() => (document.getElementById('btn-feedback-hud').hidden = false));
   for (const [width, height] of [[320, 568], [320, 460], [360, 640], [375, 667], [375, 548], [390, 844], [430, 932]]) {
     await page.setViewport({ width, height });
     const seen = await page.evaluate(() => {
@@ -1877,6 +1881,8 @@ test('the whole island code shows beside the top buttons, and a long connection 
   const page = await openPlayer(base, { name: 'Tiny Owl' });
   await makeIsland(page, { online: true });
   await hideRideButton(page);
+  // 💌 shows wherever there is an island keeper; these pages have none, so it is shown by hand, to lay out as it does then.
+  await page.evaluate(() => (document.getElementById('btn-feedback-hud').hidden = false));
   const messages = [
     ['reconnecting', 'Lost the island for a moment. Reconnecting…'],
     ['failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.'],
@@ -1907,6 +1913,7 @@ test('the whole island code shows beside the top buttons, and a long connection 
     [720, 600, false, [], true],
     [560, 640, false, [], true],
     [1000, 600, true],
+    [1024, 768, true],
     [1280, 800, true],
   ]) {
     await page.setViewport({ width, height });
@@ -2768,7 +2775,7 @@ test('the ?ctb link opens the CTB island without a login peer to peer too, as on
   }
 });
 
-test('an idea for the game, sent from Help, is read by a CTB worker, and its answer comes back to the player', { skip }, async () => {
+test('an idea for the game, sent from 💌 on the title screen, is read by a CTB worker, and its answer comes back to the player', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
   const keeper = await keeperOnline(identity, dir);
@@ -2788,6 +2795,8 @@ test('an idea for the game, sent from Help, is read by a CTB worker, and its ans
   const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' }, () => delete window.kidsWorldGuests);
   try {
     await until(page, () => !document.getElementById('login-gate').hidden && !document.getElementById('gate-login').disabled);
+    // 💌 is on the title screen even before logging in: a problem needs no login.
+    await until(page, () => document.getElementById('btn-feedback').offsetParent !== null);
     await clickButton(page, 'Make my login', '#login-gate');
     await typeInto(page, 'Otter Fan 8', 'rocket-apple7', 'rocket-apple7');
     await clickButton(page, 'Make my login', '#modal');
@@ -2795,9 +2804,12 @@ test('an idea for the game, sent from Help, is read by a CTB worker, and its ans
     await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
     await until(page, () => window.kidsWorld.keeper.state === 'ready');
 
-    // From Help: the ideas window, an empty idea refused, then one sent.
-    await page.evaluate(() => window.kidsWorld.ui.helpDialog());
-    await clickButton(page, 'An idea for the game', '#modal');
+    // From 💌 on the title screen: ideas or problems, then the ideas window, an
+    // empty idea refused, then one sent. (Help and Settings have it too.)
+    await clickButton(page, 'Ideas & problems', '#title');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Tell us'));
+    assert.ok(await page.$eval('#modal', (m) => m.textContent.includes('Something went wrong')));
+    await clickButton(page, 'I have an idea', '#modal');
     await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Ideas for Kids World'));
     await clickButton(page, 'Send my idea', '#modal');
     await until(page, () => document.querySelector('#modal .login-note:not([hidden])')?.textContent.includes('Write your idea first'));

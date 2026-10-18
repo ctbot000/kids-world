@@ -2748,6 +2748,15 @@ kbd {
   }
 }
 
+/* 💌 Ideas & problems in the top bar only where it has room beside the
+   island's code and a long connection message (not on an iPad held
+   sideways); everywhere, it is in 💬 too (ui.js sayDialog). */
+@media (max-width: 1099px), (max-height: 479px) {
+  #btn-feedback-hud {
+    display: none;
+  }
+}
+
 /* Narrow phones held upright: the island's name and code need the room,
    so the top bar packs tighter and full screen is in Settings instead. */
 @media (max-width: 479px) {
@@ -3906,6 +3915,19 @@ kbd {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
+}
+
+/* 💌 in the 💬 window, under its title. */
+.feedback-chip {
+  margin: -4px 0 10px;
+}
+
+/* 💌 Ideas & problems (ui.js feedbackDialog): two big ways on. */
+.feedback-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 /* Ideas for the game (ui.js ideasDialog): each one sent, and its answer. */
