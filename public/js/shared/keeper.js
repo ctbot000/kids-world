@@ -77,6 +77,30 @@ export const MAX_TEXT = 4 * 1024 * 1024;
 export const MAX_PARTS = Math.ceil(MAX_TEXT / CHUNK);
 // What a player writes about a problem, at most (see report.js).
 export const REPORT_TEXT_MAX = 1000;
+// An idea for the game a player sends CTB's workers (server/ctb.js): at most
+// this long, this many an hour, and this many waiting for an answer at once.
+export const WISH_TEXT_MAX = 500;
+export const WISHES_AN_HOUR = 3;
+export const WISHES_WAITING = 5;
+export const WISH_STATES = ['waiting', 'accepted', 'declined'];
+
+// An idea as a page shows it, from the keeper: { id, at, text, state, by,
+// reply, answeredAt }, or null. by is the worker who read it; reply what
+// they said back.
+export function cleanWish(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !/^\d{13}-[0-9a-f]{8}$/.test(raw.id)) return null;
+  const text = typeof raw.text === 'string' ? raw.text.slice(0, WISH_TEXT_MAX) : '';
+  if (!text) return null;
+  return {
+    id: raw.id,
+    at: Number.isFinite(raw.at) ? raw.at : 0,
+    text,
+    state: WISH_STATES.includes(raw.state) ? raw.state : 'waiting',
+    by: typeof raw.by === 'string' ? raw.by.slice(0, 40) : '',
+    reply: typeof raw.reply === 'string' ? raw.reply.slice(0, 400) : '',
+    answeredAt: Number.isFinite(raw.answeredAt) ? raw.answeredAt : 0,
+  };
+}
 
 export const SIGN_ALGORITHM = { name: 'ECDSA', hash: 'SHA-256' };
 export const KEY_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' };

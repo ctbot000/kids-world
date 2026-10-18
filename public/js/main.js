@@ -115,6 +115,22 @@ keeper.addEventListener('reported', (e) => {
   if (e.detail.t === 'kept') ui.toast('🐞', 'The grown-ups got your note. Thank you!');
   else if (e.detail.code === 'wait') ui.toast('🐞', 'The grown-ups have lots of your notes already. They will look soon!');
 });
+// A CTB helper's answer to an idea you sent (see ui.ideasDialog), as it
+// comes; and once you are back, the answers that came while you were away.
+keeper.addEventListener('wish', (e) => ui.wishAnswered(e.detail));
+let wishesChecked = false;
+keeper.addEventListener('status', async (e) => {
+  if (wishesChecked || e.detail.state !== 'ready' || !who) return;
+  wishesChecked = true;
+  try {
+    const seen = ui.wishesSeen();
+    const fresh = (await keeper.wishes()).filter((w) => w.state !== 'waiting' && !seen.has(w.id));
+    for (const w of fresh.slice(0, 2)) ui.wishAnswered(w);
+    ui.markWishesSeen(fresh);
+  } catch {
+    // A keeper from before ideas, or away again: next time.
+  }
+});
 // An invitation to a friend's island, while you are playing (see invited()).
 keeper.addEventListener('invite', (e) => invited(e.detail));
 // Something new on every TV, or nothing any more (see shared/broadcast.js).

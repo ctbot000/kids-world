@@ -4,7 +4,11 @@
 // on this project. Their tasks are the project's GitHub issues labelled
 // "ctb" (ctb-github.js), added on the admin page or on GitHub, or proposed by
 // the workers themselves: a proposal is an issue first, and starts once it is
-// labelled "ctb: approved" (Approve on the admin page does that). A worker free for a task takes
+// labelled "ctb: approved" (Approve on the admin page does that). Players
+// send ideas for the game from the game itself (the keeper keeps them): a
+// worker reads each one, says yes or no to the player, kindly and in their
+// own language, and files one it takes as a proposal (labelled "ctb:
+// request" too), which waits for approval like the workers' own. A worker free for a task takes
 // the oldest, works on it in a git worktree of its own on a branch
 // ctb/issue-<n> (ctb-agent.js: reading, editing and running tests, one step
 // at a time), runs the unit tests, and when they pass commits, pushes the
@@ -19,6 +23,7 @@ import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { langOf } from '../public/js/shared/words.js';
+import { WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
 import { Agent, layoutOf, testEnv } from './ctb-agent.js';
 import { GitHub, LABELS, repoOf } from './ctb-github.js';
 import { MAX_WORKERS, STAFF, workerName } from './ctb-office.js';
@@ -85,6 +90,13 @@ export function sh(file, args, { cwd, timeout = 120000, env = process.env } = {}
   });
 }
 
+// A worker's answer to a player's idea, as the model gives it.
+export const WISH_SCHEMA = {
+  type: 'object',
+  properties: { accept: { type: 'boolean' }, reply: { type: 'string' }, title: { type: 'string' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
+  required: ['accept', 'reply'],
+};
+
 // What a worker's proposal says, as the model answers it.
 export const PROPOSAL_SCHEMA = {
   type: 'object',
@@ -119,7 +131,7 @@ export function pullBody({ issue, summary, worker, model }) {
 // The workers and their work. llm: what they think with (llm.js), its model
 // picked by the settings or the AI friend's. office: the CTB island, or null.
 export class Company extends EventEmitter {
-  constructor({ llm, github, repoDir, workDir, office = null, settings, friendModel = () => '', log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {}, proposedAt = 0, onProposed = () => {} }) {
+  constructor({ llm, github, repoDir, workDir, office = null, settings, friendModel = () => '', log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {}, proposedAt = 0, onProposed = () => {}, wishes = null }) {
     super();
     this.llm = llm;
     this.github = github;
@@ -146,6 +158,10 @@ export class Company extends EventEmitter {
     this.polling = null;
     this.proposedAt = proposedAt;
     this.onProposed = onProposed;
+    // Players' ideas, at the keeper: { list(), answer(id, answer) }, or null.
+    this.wishes = wishes;
+    this.reviewing = null;
+    this.reviewer = 0;
     this.proposing = false;
     this.stopped = false;
     this.timer = null;
@@ -232,6 +248,7 @@ export class Company extends EventEmitter {
         if (w.issue || !open.length) continue;
         this.work(w, open.shift());
       }
+      this.reviewWishes();
       const idle = this.workers.slice(0, this.settings.workers).every((w) => !w.issue);
       if (idle && !open.length && this.settings.propose && this.now() - this.proposedAt >= this.settings.proposeHours * 3600000 && this.proposals.length < MAX_PROPOSALS) {
         // Not waited for: a slow model must not hold up the board.
@@ -446,6 +463,72 @@ export class Company extends EventEmitter {
     }
   }
 
+  // Players' ideas waiting for an answer, read one after another, the
+  // oldest first, each by the next worker in turn (busy or not: reading one
+  // takes a moment). One the model or GitHub fails on waits for next time.
+  reviewWishes() {
+    if (!this.wishes || this.reviewing || this.stopped || !this.settings.on || this.problem) return this.reviewing;
+    this.reviewing = (async () => {
+      const waiting = (await this.wishes.list()).filter((w) => w.state === 'waiting').sort((a, b) => a.at - b.at);
+      for (const wish of waiting) {
+        if (this.stopped || this.problem) break;
+        const w = this.workers[this.reviewer++ % Math.max(1, this.settings.workers)];
+        try {
+          await this.reviewWish(w, wish);
+        } catch (error) {
+          this.log(`CTB: ${w.name} could not answer an idea yet (${error.message}).`);
+          break;
+        }
+      }
+    })()
+      .catch((error) => this.log(`CTB: a mistake reading ideas: ${error.message}`))
+      .finally(() => {
+        this.reviewing = null;
+      });
+    return this.reviewing;
+  }
+
+  // One idea read by one worker: yes or no, said back to the player, and a
+  // proposal filed for a yes.
+  async reviewWish(w, wish) {
+    const doing = w.doing;
+    this.tell(w, 'Reading an idea from a player');
+    try {
+      const readme = await readFile(join(this.repoDir, 'README.md'), 'utf8').catch(() => '');
+      const features = /## What you can do\s*\n([\s\S]*?)\n## /.exec(readme)?.[1] ?? readme.slice(0, 6000);
+      const trace = {};
+      this.llm.model = this.model;
+      const answer = await this.llm
+        .chat(
+          [
+            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a cozy 3D block-building island game for kids (about 5 to 12) played together in the browser. A child playing the game sent an idea for it. Decide whether CTB takes it on. Say yes to an idea that fits the game, is kind and fun for kids, and could be built — perhaps as a small first version of it. Say no to one the game already has, one that is not about the game, one that is unkind, scary or not for kids, or one far too big to build. Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be ready, and do not promise it will be built exactly so. For a yes, also write the GitHub issue for the engineers, in English: one specific change, named in a short imperative title, a TL;DR of one or two sentences, what to change in at most three short sentences, and two to four short checks that tell it is done. Answer as JSON: {"accept": true or false, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
+            { role: 'user', content: `What the game has now:\n${features.slice(0, 12000)}\n\nThe child's idea:\n${String(wish.text).slice(0, WISH_TEXT_MAX)}` },
+          ],
+          WISH_SCHEMA,
+          trace,
+          { maxTokens: 2000, timeoutMs: 120000, temperature: 0.4 },
+        )
+        .finally(() => trace.usage?.length && this.onUsage(trace.usage));
+      const reply = String(answer?.reply ?? '').replace(/\s+/gu, ' ').trim().slice(0, 300);
+      if (!reply || typeof answer.accept !== 'boolean') throw new Error('the model gave no answer to say');
+      let issue = null;
+      if (answer.accept) {
+        const title = String(answer.title ?? '').trim().slice(0, TITLE_MAX);
+        const body = proposalBody(answer, `Sent as an idea by a player in the game, and accepted by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`);
+        if (!title || !body) throw new Error('the model said yes but wrote no issue');
+        issue = await this.github.create({ title, body, labels: [LABELS.proposal, LABELS.request] });
+        this.log(`CTB: ${w.name} took a player's idea as #${issue.number} “${title}”.`);
+      } else {
+        this.log(`CTB: ${w.name} turned down a player's idea.`);
+      }
+      await this.wishes.answer(wish.id, { state: answer.accept ? 'accepted' : 'declined', by: w.name, reply, ...(issue ? { issue: { number: issue.number, url: issue.url } } : {}) });
+      this.office?.say(w.k, answer.accept ? 'I just read a great idea from a player — we are taking it on!' : 'I just read an idea from a player and wrote back to them.');
+      if (issue) await this.refresh();
+    } finally {
+      this.tell(w, doing);
+    }
+  }
+
   // What a worker says when a child talks to them on the island. A line with
   // Hangul in it (langOf) gets the same answer in Korean; the issue's number
   // and title stay as they are.
@@ -565,6 +648,8 @@ export class CtbControl {
       onUsage: (entries) => this.usage.add(entries),
       proposedAt: await this.readProposedAt(),
       onProposed: (at) => this.saveProposedAt(at),
+      // Players' ideas, kept by the keeper, and its way to answer them.
+      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a) } : null,
       ...(this.git ? { git: this.git } : {}),
     });
     if (this.rooms) {
@@ -575,6 +660,9 @@ export class CtbControl {
       this.company.office = this.office;
     }
     await this.company.start();
+    // A new idea from a player is read at once, not at the next look at the board.
+    this.onWish = () => this.company?.reviewWishes();
+    this.keeper?.on?.('wish', this.onWish);
   }
 
   async readProposedAt() {
@@ -597,6 +685,8 @@ export class CtbControl {
   }
 
   async close() {
+    if (this.onWish) this.keeper?.off?.('wish', this.onWish);
+    this.onWish = null;
     const c = this.company;
     this.company = null;
     await c?.stop();
@@ -635,6 +725,8 @@ export class CtbControl {
       island: this.office?.summary() ?? null,
       ...(this.company ? this.company.status() : { repo: this.github?.repo ?? '', problem: '', workers: [], tasks: [], proposals: [], pulls: [], history: [] }),
       usage: this.usage.summary(),
+      // Players' ideas lately, from the keeper, each with its answer.
+      ideas: this.keeper?.store ? (await this.keeper.store.wishes()).slice(0, 30).map((w) => ({ at: w.at, name: w.name, username: w.username, text: w.text, state: w.state, by: w.by, reply: w.reply, issue: w.issue ?? null })) : [],
     };
   }
 

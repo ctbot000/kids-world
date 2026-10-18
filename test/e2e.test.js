@@ -25,6 +25,7 @@ import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
 import { shareTheIsle } from '../server/adventure.js';
 import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOptions } from '../server/keeper.js';
 import { Office } from '../server/ctb-office.js';
+import { Company, defaultSettings } from '../server/ctb.js';
 import { createGameServer } from '../server/server.js';
 
 const CHROME = [
@@ -2761,6 +2762,58 @@ test('the ?ctb link opens the CTB island without a login peer to peer too, as on
     await page.browserContext().close();
     clearInterval(ticker);
     await office.close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('an idea for the game, sent from Help, is read by a CTB worker, and its answer comes back to the player', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const filed = [];
+  const company = new Company({
+    llm: { model: 'stand-in', problem: async () => '', models: async () => [], chat: async () => ({ accept: true, reply: 'Yes! A rainbow slide sounds super fun.', title: 'Add a rainbow slide stamp', tldr: 'A slide in rainbow bricks.', what: 'A stamp.', done: ['It is in the toy box', 'You can slide down it'] }) },
+    github: { repo: 'x/y', create: async (issue) => (filed.push(issue), { number: 7, url: 'https://github.com/x/y/issues/7' }) },
+    repoDir: dir,
+    workDir: dir,
+    settings: { ...defaultSettings({}), workers: 1, propose: false },
+    log: () => {},
+    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a) },
+  });
+  company.problem = '';
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' }, () => delete window.kidsWorldGuests);
+  try {
+    await until(page, () => !document.getElementById('login-gate').hidden && !document.getElementById('gate-login').disabled);
+    await clickButton(page, 'Make my login', '#login-gate');
+    await typeInto(page, 'Otter Fan 8', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    await until(page, () => window.kidsWorld.keeper.state === 'ready');
+
+    // From Help: the ideas window, an empty idea refused, then one sent.
+    await page.evaluate(() => window.kidsWorld.ui.helpDialog());
+    await clickButton(page, 'An idea for the game', '#modal');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Ideas for Kids World'));
+    await clickButton(page, 'Send my idea', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note:not([hidden])')?.textContent.includes('Write your idea first'));
+    await page.type('#modal textarea', 'A rainbow slide!');
+    await clickButton(page, 'Send my idea', '#modal');
+    await until(page, () => document.querySelector('#modal .ideas')?.textContent.includes('Waiting for a CTB helper'));
+    assert.equal((await keeper.store.wishes())[0].text, 'A rainbow slide!');
+
+    // A worker reads it: the answer comes as a toast and into the list, and a yes is filed.
+    await company.reviewWishes();
+    await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Ada 💼 read your idea: Yes! A rainbow slide sounds super fun.')));
+    await until(page, () => document.querySelector('#modal .idea.accepted')?.textContent.includes('✅ Ada 💼: Yes! A rainbow slide sounds super fun.'));
+    assert.equal(filed.length, 1);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });

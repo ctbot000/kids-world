@@ -3908,6 +3908,35 @@ kbd {
   font-size: 0.95rem;
 }
 
+/* Ideas for the game (ui.js ideasDialog): each one sent, and its answer. */
+.ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.idea {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.idea.accepted {
+  background: #e3f6e4;
+}
+
+.idea-text {
+  margin: 0 0 4px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.idea-answer {
+  overflow-wrap: anywhere;
+}
+
 /* Telling of a problem (ui.js reportDialog). */
 .report-text {
   display: block;

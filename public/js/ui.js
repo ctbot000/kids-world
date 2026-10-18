@@ -19,7 +19,7 @@ import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
 import { CLOTHES, GEAR, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
-import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem } from './shared/keeper.js';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -39,6 +39,8 @@ import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
 import { recentErrors, screenshot } from './report.js';
 
+// The ideas whose answers this device has shown already (see wishAnswered).
+const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
 const $ = (id) => document.getElementById(id);
 
 // "just now", "5 minutes ago", "on 10/3/2026".
@@ -1900,7 +1902,7 @@ export class UI {
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
-          card('🏢', 'CTB', ['On the CTB island, grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on!']),
+          card('🏢', 'CTB', ['On the CTB island, grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on! Got an idea for the game? Send it to them with 💡 below, and one of them writes back.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'L'), ' changes how you look, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('🎥', 'See through your eyes', ['Press 🎥 to look from behind you, through your own eyes, or from high in the sky. Zooming all the way in looks through your eyes too. Through your eyes, left and right turn you round.']),
@@ -1915,6 +1917,7 @@ export class UI {
             : 'Everything stays on this device. Friends see your name, how you look and the phrases you pick.',
         ),
         this.reportButton(),
+        this.ideaButton(),
       );
     });
   }
@@ -2351,6 +2354,126 @@ export class UI {
       },
       { narrow: true },
     );
+  }
+
+  // ------------------------------------------------ ideas for the game
+
+  // The button to send CTB's workers an idea for the game, where there is an
+  // island keeper to take it.
+  ideaButton(kind = 'chip report-button') {
+    if (!this.reportKeeper()?.config) return null;
+    return h('button', { class: kind, type: 'button', onclick: () => this.ideasDialog() }, '💡 An idea for the game?');
+  }
+
+  // Your ideas for Kids World: a box to write a new one in (logged in), and
+  // the ones you sent, each with what the CTB helper who read it wrote back.
+  // An answer that comes while it is open shows at once (see wishAnswered).
+  ideasDialog() {
+    const keeper = this.reportKeeper();
+    if (!keeper?.config) return;
+    const loggedIn = Boolean(this.handlers?.login?.who?.());
+    this.openModal(
+      (root) => {
+        const list = h('div', { class: 'ideas' }, h('p', { class: 'muted' }, 'Looking for your ideas…'));
+        const refresh = async () => {
+          if (!loggedIn) return;
+          try {
+            const wishes = await keeper.wishes();
+            this.markWishesSeen(wishes);
+            list.replaceChildren(...(wishes.length ? wishes.map((w) => this.ideaCard(w)) : [h('p', { class: 'muted' }, 'No ideas yet. What would you love to see?')]));
+          } catch {
+            list.replaceChildren(h('p', { class: 'muted' }, '🙈 The island keeper is away, so your ideas cannot be shown right now.'));
+          }
+        };
+        this.ideasRefresh = refresh;
+        const text = h('textarea', { class: 'text-input report-text', rows: 3, maxLength: WISH_TEXT_MAX, placeholder: 'What would make Kids World even more fun?', 'aria-label': 'Your idea' });
+        const note = h('p', { class: 'login-note warn', 'aria-live': 'polite', hidden: true });
+        const say = (words) => {
+          note.hidden = false;
+          note.textContent = words;
+        };
+        const send = h(
+          'button',
+          {
+            class: 'big green',
+            type: 'button',
+            onclick: async () => {
+              const words = text.value.trim();
+              if (!words) {
+                say('✏️ Write your idea first.');
+                text.focus();
+                return;
+              }
+              send.disabled = true;
+              try {
+                await keeper.wish(words);
+                text.value = '';
+                note.hidden = true;
+                this.sound.play('sticker');
+                this.toast('💡', 'Thank you! A CTB helper will read your idea and write back to you here.');
+                await refresh();
+              } catch (error) {
+                say(error?.code === 'wait' ? `⏳ ${error.message}` : error?.code === 'none' || error?.code === 'away' ? '🙈 The island keeper is away. Try again later!' : `🙈 ${error?.message || 'That did not work. Try again later!'}`);
+              } finally {
+                send.disabled = false;
+              }
+            },
+          },
+          '💡 Send my idea',
+        );
+        root.append(
+          h('h2', {}, '💡 Ideas for Kids World'),
+          h('p', {}, 'Tell the helpers at CTB what you would love to see in Kids World. One of them reads your idea and writes back to you!'),
+          ...(loggedIn ? [text, note, h('div', { class: 'row', style: 'margin-top:12px' }, send)] : [h('p', { class: 'login-note warn' }, '🔑 Log in to send an idea.')]),
+          loggedIn ? h('h3', { style: 'margin-top:16px' }, 'Your ideas') : null,
+          loggedIn ? list : null,
+        );
+        refresh();
+        if (loggedIn) setTimeout(() => text.focus(), 60);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          this.ideasRefresh = null;
+        },
+      },
+    );
+  }
+
+  // One of your ideas, and its answer once a helper has read it.
+  ideaCard(w) {
+    const status =
+      w.state === 'waiting'
+        ? h('div', { class: 'muted' }, '⏳ Waiting for a CTB helper to read it')
+        : h('div', { class: `idea-answer ${w.state}` }, h('b', {}, w.state === 'accepted' ? `✅ ${w.by}: ` : `💭 ${w.by}: `), h('span', { lang: langOf(w.reply) || undefined }, w.reply));
+    return h('div', { class: `idea ${w.state}` }, h('p', { class: 'idea-text', lang: langOf(w.text) || undefined }, `“${w.text}”`), status);
+  }
+
+  // A helper's answer to an idea of yours: said in a toast, and shown in the
+  // ideas window if it is open.
+  wishAnswered(wish) {
+    if (wish.state === 'waiting') return;
+    this.markWishesSeen([wish]);
+    this.toast(wish.state === 'accepted' ? '✅' : '💭', `${wish.by} read your idea: ${wish.reply}`);
+    this.ideasRefresh?.();
+  }
+
+  // Answers already shown on this device, so each is told once.
+  wishesSeen() {
+    try {
+      const seen = JSON.parse(localStorage.getItem(WISHES_SEEN_KEY) ?? '[]');
+      return new Set(Array.isArray(seen) ? seen : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  markWishesSeen(wishes) {
+    const seen = this.wishesSeen();
+    for (const w of wishes) if (w.state !== 'waiting') seen.add(w.id);
+    try {
+      localStorage.setItem(WISHES_SEEN_KEY, JSON.stringify([...seen].slice(-100)));
+    } catch {}
   }
 
   // Who and where you were, for a problem report: your name, the screen, the device, and the
@@ -3499,6 +3622,7 @@ export class UI {
           h('button', { class: 'chip', type: 'button', onclick: () => this.meDialog() }, '🎨 Change me'),
           h('button', { class: 'chip', type: 'button', onclick: () => this.petDialog() }, '🐾 My pet'),
           this.reportButton('chip'),
+          this.ideaButton('chip'),
           h(
             'button',
             {

@@ -17,6 +17,7 @@ export const LABELS = {
   stuck: 'ctb: stuck',
   proposal: 'ctb: proposal',
   approved: 'ctb: approved',
+  request: 'ctb: request',
 };
 const LABEL_LOOKS = {
   [LABELS.task]: ['1f6feb', 'A task for CTB’s workers'],
@@ -25,6 +26,7 @@ const LABEL_LOOKS = {
   [LABELS.stuck]: ['d93f0b', 'A CTB worker could not finish it'],
   [LABELS.proposal]: ['c5def5', 'A task a CTB worker proposes'],
   [LABELS.approved]: ['5319e7', 'A proposal approved: CTB’s workers may start it'],
+  [LABELS.request]: ['f9d0c4', 'An idea a player sent in the game, accepted by a CTB worker'],
 };
 const FIELDS = 'number,title,body,labels,author,createdAt,url';
 

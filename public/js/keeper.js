@@ -42,7 +42,7 @@ import { cleanOnAir, sameOnAir } from './shared/station.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
 import { isBoardsOf } from './shared/ranking.js';
-import { isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
+import { cleanWish, isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
 const FIRST_TRY_MS = 3000;
 // The first retry is soon, for a blip; after that the keeper is probably off.
@@ -591,6 +591,19 @@ export class KeeperClient extends EventTarget {
   // The list of open islands, from the keeper. Resolves with the listings;
   // rejects with a KeeperProblem when the keeper could not be asked, or
   // does not know the list yet (bad).
+  // Logged in: an idea for the game, for CTB's workers to read (server/ctb.js).
+  // Resolves with the idea as kept; rejects with a KeeperProblem.
+  async wish(text) {
+    const reply = await this.request({ t: 'wish', text });
+    return cleanWish(reply.wish);
+  }
+
+  // Logged in: your ideas, the newest first, each with its answer once read.
+  async wishes() {
+    const reply = await this.request({ t: 'wishes' });
+    return (Array.isArray(reply.wishes) ? reply.wishes : []).map(cleanWish).filter(Boolean);
+  }
+
   async openIslands() {
     const reply = await this.request({ t: 'islands' });
     return (Array.isArray(reply.islands) ? reply.islands : []).map(cleanListing).filter(Boolean);
@@ -826,6 +839,12 @@ export class KeeperClient extends EventTarget {
     // News of the ranking, unasked: never the answer to what is waiting.
     if (msg.t === 'ranking-news') {
       if (this.state === 'ready') this.watchedAs({ ...msg, t: 'ranking' });
+      return;
+    }
+    // A worker's answer to an idea of yours, unasked.
+    if (msg.t === 'wish-news') {
+      const wish = cleanWish(msg.wish);
+      if (this.state === 'ready' && wish) this.emit('wish', wish);
       return;
     }
     // An invitation, from a player the keeper knows: { from: { id, name, look }, island }.

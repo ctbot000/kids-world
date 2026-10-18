@@ -120,8 +120,8 @@ export function setUpCtb(helpers) {
     if (!state) return;
     if (!view) {
       const settings = settingsForm(h);
-      view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), workers: h('div', { class: 'visits' }), board: h('div'), proposals: h('div'), pulls: h('div'), usage: h('div', { class: 'usage-section' }), history: h('div') };
-      document.getElementById('ctb').replaceChildren(view.line, settings.form, view.island, view.workers, h('h3', {}, 'New task'), taskForm(h), view.board, view.proposals, view.pulls, view.usage, view.history);
+      view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), workers: h('div', { class: 'visits' }), board: h('div'), proposals: h('div'), ideas: h('div'), pulls: h('div'), usage: h('div', { class: 'usage-section' }), history: h('div') };
+      document.getElementById('ctb').replaceChildren(view.line, settings.form, view.island, view.workers, h('h3', {}, 'New task'), taskForm(h), view.board, view.proposals, view.ideas, view.pulls, view.usage, view.history);
     }
     view.settings.fill(state);
     const [cls, words] = !state.running ? ['off', 'Off'] : state.problem ? ['wait', `Closed: ${state.problem}`] : ['on', `Open on ${state.repo} · ${state.model}`];
@@ -145,6 +145,28 @@ export function setUpCtb(helpers) {
       state.proposals.length
         ? h('ul', { class: 'ctb-list' }, ...state.proposals.map((p) => h('li', {}, link(p), ` ${p.title} `, h('button', { type: 'button', onclick: () => act(`/proposals/${p.number}/approve`) }, 'Approve'), ' ', h('button', { type: 'button', class: 'danger quiet', onclick: () => act(`/proposals/${p.number}/reject`, `Turn down #${p.number}? The issue is closed.`) }, 'Turn down'), fold(`ctb-proposal-${p.number}`, 'What it says', h('pre', { class: 'ctb-body' }, p.body)))))
         : h('p', { class: 'muted' }, 'No proposals waiting.'),
+    );
+    const IDEA = { waiting: ['waiting', 'warn'], accepted: ['accepted', 'ok'], declined: ['declined', ''] };
+    view.ideas.replaceChildren(
+      h('h3', {}, 'Players’ ideas ', h('span', { class: 'badge' }, String(state.ideas?.length ?? 0))),
+      state.ideas?.length
+        ? h(
+            'ul',
+            { class: 'ctb-list' },
+            ...state.ideas.map((i) =>
+              h(
+                'li',
+                {},
+                h('span', { class: `badge ${IDEA[i.state][1]}` }, IDEA[i.state][0]),
+                ' ',
+                h('b', {}, i.name || i.username || 'A player'),
+                h('span', { class: 'muted' }, ` · ${ago(i.at)}`),
+                h('div', {}, `“${i.text}”`),
+                i.state !== 'waiting' ? h('div', { class: 'muted' }, `${i.by}: ${i.reply}`, i.issue ? [' · ', link(i.issue)] : null) : null,
+              ),
+            ),
+          )
+        : h('p', { class: 'muted' }, 'No ideas from players yet. They send them from 💡 in the game’s help and settings.'),
     );
     view.pulls.replaceChildren(
       h('h3', {}, 'Pull requests'),

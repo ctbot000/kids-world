@@ -17,6 +17,8 @@
 //   <data>/reports/<id>.json                        a problem a player told of: what they wrote,
 //                                                   who, and what the page knew of where they were
 //   <data>/reports/<id>.jpg                         and the picture of their screen, if it came
+//   <data>/wishes/<id>.json                         an idea for the game a player sent CTB's
+//                                                   workers, and their answer (see server/ctb.js)
 //
 // <device> is a hash of the secret device key, so a page can only ever add
 // to its own copies. A login turns that folder into a player: other devices
@@ -55,6 +57,9 @@ import {
   MAX_TEXT,
   OLDEST_VERSION,
   REPORT_TEXT_MAX,
+  WISH_TEXT_MAX,
+  WISHES_AN_HOUR,
+  WISHES_WAITING,
   cleanPassword,
   cleanUsername,
   PASSWORD_MAX,
@@ -318,6 +323,8 @@ export class KeeperStore extends EventEmitter {
     this.checking = Promise.resolve();
     // Problem reports lately, per folder, for the limit on them.
     this.reportTimes = new Map();
+    // Ideas sent lately, per player, for the limit on them.
+    this.wishTimes = new Map();
   }
 
   // Counts what is kept already, and gives logins from before usernames one.
@@ -998,6 +1005,68 @@ export class KeeperStore extends EventEmitter {
     }
     return true;
   }
+
+  // ------------------------------------------------ ideas for the game
+
+  // Keeps a player's idea for CTB's workers to read: the idea as kept, with
+  // who sent it ({ id, at, player, name, username, text, state: 'waiting' }).
+  keepWish(player, raw) {
+    if (!isDeviceId(player)) return Promise.reject(new KeepError('bad', 'Log in to send an idea.'));
+    const text = shortText(raw, WISH_TEXT_MAX).replace(/\s+/gu, ' ');
+    if (!text) return Promise.reject(new KeepError('bad', 'Write your idea first.'));
+    const now = this.now();
+    const times = (this.wishTimes.get(player) ?? []).filter((t) => now - t < HOUR_MS);
+    if (times.length >= WISHES_AN_HOUR) return Promise.reject(new KeepError('wait', 'That is a lot of ideas! Send another one later.'));
+    return this.serial(async () => {
+      const mine = (await this.wishes()).filter((w) => w.player === player && w.state === 'waiting');
+      if (mine.length >= WISHES_WAITING) throw new KeepError('wait', 'Your other ideas are still being read. Wait for an answer first!');
+      times.push(now);
+      this.wishTimes.set(player, times);
+      if (this.wishTimes.size > 1000) this.wishTimes.delete(this.wishTimes.keys().next().value);
+      const record = (await readJson(this.path(player, 'device.json'))) ?? {};
+      const login = await this.readLogin(player);
+      const wish = { id: `${now}-${randomHex(4)}`, at: now, player, name: record.profile?.name ?? '', username: login?.username ?? '', text, state: 'waiting', by: '', reply: '', answeredAt: 0 };
+      const json = JSON.stringify(wish);
+      this.room(json.length);
+      const folder = join(this.dir, 'wishes');
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      await this.write(join(folder, `${wish.id}.json`), json);
+      const ids = (await readdir(folder)).filter((f) => f.endsWith('.json') && isReportId(f.slice(0, -5))).sort();
+      for (const old of ids.slice(0, Math.max(0, ids.length - WISHES_KEPT))) await rm(join(folder, old), { force: true });
+      return wish;
+    });
+  }
+
+  // Every idea kept, the newest first.
+  async wishes() {
+    const folder = join(this.dir, 'wishes');
+    const out = [];
+    for (const f of await readdir(folder).catch(() => [])) {
+      if (!f.endsWith('.json') || !isReportId(f.slice(0, -5))) continue;
+      const wish = await readJson(join(folder, f));
+      if (wish) out.push(wish);
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }
+
+  // A player's own ideas, the newest first.
+  async wishesOf(player) {
+    return (await this.wishes()).filter((w) => w.player === player).slice(0, WISHES_SHOWN);
+  }
+
+  // A worker's answer to an idea: { state, by, reply, issue }. The idea as
+  // kept now, or null when there is no such idea.
+  answerWish(id, answer) {
+    if (!isReportId(id)) return Promise.resolve(null);
+    return this.serial(async () => {
+      const file = join(this.dir, 'wishes', `${id}.json`);
+      const wish = await readJson(file);
+      if (!wish) return null;
+      const next = { ...wish, state: answer.state, by: shortText(answer.by, 40), reply: shortText(answer.reply, 400), answeredAt: this.now(), ...(answer.issue ? { issue: answer.issue } : {}) };
+      await this.write(file, JSON.stringify(next));
+      return next;
+    });
+  }
 }
 
 // ---------------------------------------------------------------- problem reports
@@ -1009,8 +1078,14 @@ const REPORT_PICTURE_MAX = 3 * 1024 * 1024;
 // Kept: the newest this many, and from one folder, this many an hour.
 const REPORTS_KEPT = 200;
 const REPORTS_AN_HOUR = 6;
+// Ideas kept at most (the oldest go), and how many of a player's the page sees.
+const WISHES_KEPT = 1000;
+const WISHES_SHOWN = 20;
 const isReportId = (v) => typeof v === 'string' && /^\d{13}-[0-9a-f]{8}$/.test(v);
 const shortText = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max) : '');
+
+// An idea as its sender's page sees it: never who sent it, nor the issue.
+const wishForPage = (w) => ({ id: w.id, at: w.at, text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt });
 
 export function cleanReport(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -1706,6 +1781,17 @@ export class Keeper extends EventEmitter {
         this.note({ device: conn.folder, what: 'report', player });
         break;
       }
+      case 'wish': {
+        // An idea for the game, for CTB's workers to read and answer.
+        const wish = await this.store.keepWish(mine('send an idea'), msg.text);
+        this.reply(conn, { t: 'kept', what: 'wish', wish: wishForPage(wish) });
+        this.note({ device: conn.player, what: 'wish', player: wish.name });
+        this.emit('wish', wish);
+        break;
+      }
+      case 'wishes':
+        this.reply(conn, { t: 'wishes', wishes: (await this.store.wishesOf(mine('see your ideas'))).map(wishForPage) });
+        break;
       case 'bye':
         this.drop(conn);
         break;
@@ -1713,6 +1799,15 @@ export class Keeper extends EventEmitter {
         this.unknown(msg.t);
         throw new KeepError('bad', 'The keeper does not know that message.');
     }
+  }
+
+  // A worker's answer to an idea: kept, and told to the pages of the player
+  // who sent it that are open now. The idea as kept, or null.
+  async answerWish(id, answer) {
+    const wish = await this.store.answerWish(id, answer);
+    if (!wish) return null;
+    for (const page of this.conns.values()) if (page.player === wish.player && !page.closed) this.reply(page, { t: 'wish-news', wish: wishForPage(wish) });
+    return wish;
   }
 
   // The players with a login who are playing right now: their pages are
