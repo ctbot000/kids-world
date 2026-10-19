@@ -4415,3 +4415,21 @@ kbd {
   grid-column: 1 / -1;
   text-align: center;
 }
+
+/* Opened from the Home Screen on an iPhone or iPad, the page starts under the
+   see-through status bar, yet 100% (and so inset: 0) still leaves the status
+   bar's height out, an empty strip along the bottom. 100vh is the whole
+   screen there (WebKit bug 254868). In a browser tab it is not, so only here. */
+@media (display-mode: standalone) {
+  html,
+  body,
+  #world,
+  #hud,
+  .screen,
+  .modal,
+  #flash,
+  .loading {
+    height: 100vh;
+    bottom: auto;
+  }
+}
