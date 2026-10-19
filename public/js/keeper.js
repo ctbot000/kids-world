@@ -34,6 +34,7 @@
 // refused, gone (the login this page was using was removed).
 
 import { get, set } from '../vendor/idb-keyval.js';
+import { hurried } from './hurry.js';
 import { signalingOptions } from './net.js';
 import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
@@ -44,9 +45,9 @@ import { cleanListing } from './shared/listing.js';
 import { isBoardsOf } from './shared/ranking.js';
 import { cleanWish, isDeviceKey, isPeerId, isPublicKey, keptProfile, KEEPER_VERSION, KEY_ALGORITHM, planSync, randomHex, verifySignature } from './shared/keeper.js';
 
-const FIRST_TRY_MS = 3000;
+const FIRST_TRY_MS = hurried(3000);
 // The first retry is soon, for a blip; after that the keeper is probably off.
-const RETRY_MS = [5000, 30000, 60000, 120000, 300000, 600000];
+const RETRY_MS = [hurried(5000), 30000, 60000, 120000, 300000, 600000];
 const REFUSED_RETRY_MS = 30 * 60000;
 const CONNECT_TIMEOUT_MS = 25000;
 const REPLY_TIMEOUT_MS = 60000;
@@ -55,7 +56,7 @@ const IDLE_MS = 60000;
 // changed, a copy every few minutes is plenty. Logged in, you are in the
 // ranking, which others watch live: every few seconds.
 const PROFILE_EVERY_MS = 3 * 60000;
-const STATS_EVERY_MS = 5000;
+const STATS_EVERY_MS = hurried(5000);
 // Watching the ranking, it is asked for again this often, which also keeps
 // the connection from looking idle at the keeper.
 const WATCH_AGAIN_MS = 90000;

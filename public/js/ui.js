@@ -35,6 +35,7 @@ import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
 import { hairIcon } from './hair-icons.js';
+import { hurried } from './hurry.js';
 import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
 import { load, save } from './storage.js';
@@ -390,6 +391,17 @@ export class UI {
     return !$('modal').hidden;
   }
 
+  // Puts the focus in a dialog's first box a moment after it opens, unless a
+  // box in it has the focus already. On a busy device that moment can come
+  // late, after another box was picked and typing in it had begun, and the
+  // rest of what was typed went into the first box: a password into the
+  // username, the numbers of a code into the one already filled.
+  focusSoon(box, ms) {
+    setTimeout(() => {
+      if (!$('modal-body').contains(document.activeElement)) box?.focus();
+    }, ms);
+  }
+
   // ------------------------------------------------ title screen
 
   showTitle(handlers) {
@@ -735,7 +747,7 @@ export class UI {
           h('p', { class: 'muted', style: 'margin-top:12px' }, 'Your friend finds the code at the top of their screen.'),
         );
         if (this.handlers.listAvailable?.()) root.append(this.openIslandList());
-        setTimeout(() => digits.boxes[prefill.length >= 6 ? 5 : prefill.length]?.focus(), 50);
+        this.focusSoon(digits.boxes[prefill.length >= 6 ? 5 : prefill.length], 50);
       },
       { narrow: true },
     );
@@ -795,7 +807,7 @@ export class UI {
     const ask = async () => {
       if (started && !list.isConnected) return;
       started = true;
-      let again = 5000;
+      let again = hurried(5000);
       try {
         const islands = await this.handlers.openIslands();
         if (list.isConnected) draw(islands);
@@ -838,7 +850,7 @@ export class UI {
           digits.row,
           h('button', { class: 'big blue', type: 'button', onclick: done }, '🛶 Let’s go!'),
         );
-        setTimeout(() => digits.boxes[0]?.focus(), 50);
+        this.focusSoon(digits.boxes[0], 50);
       },
       { narrow: true },
     );
@@ -1804,7 +1816,7 @@ export class UI {
         const ask = async () => {
           if (started && !list.isConnected) return;
           started = true;
-          let again = 5000;
+          let again = hurried(5000);
           try {
             reply = await keeper.players();
             if (!list.isConnected) return;
@@ -2092,7 +2104,7 @@ export class UI {
           ),
         );
         root.append(h('h2', {}, '🔑 Log in'), h('p', {}, 'Play as yourself, with your look, stickers and islands from your other devices.'), body, foot);
-        setTimeout(() => user.input.focus(), 60);
+        this.focusSoon(user.input, 60);
       },
       { narrow: true },
     );
@@ -2199,7 +2211,7 @@ export class UI {
             form,
           ].filter(Boolean),
         );
-        setTimeout(() => (user ?? box).input.focus(), 60);
+        this.focusSoon((user ?? box).input, 60);
       },
       {
         narrow: true,

@@ -13,10 +13,14 @@ import { generate } from '../public/js/shared/worldgen.js';
 const FLYERS = ['bird', 'owl', 'bee', 'seagull', 'butterfly'];
 const FL = Math.floor;
 
+// An island with its flying friends on it. Only them: everything else there
+// (the animals on the ground and in the sea, and the vehicles) took most of
+// the time to step, and only ever changes how the dice fall for the flyers,
+// or now and then keeps one off a seat.
 function island(theme, seed) {
   const { world, critters } = generate({ seed, theme });
   const sim = new CritterSim(seed);
-  for (const c of critters) sim.add(c.type, c.x, c.y, c.z);
+  for (const c of critters) if (CRITTER_INFO[c.type].flies) sim.add(c.type, c.x, c.y, c.z);
   return { world, sim };
 }
 

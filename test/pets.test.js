@@ -92,15 +92,14 @@ test('a pet follows a player about for ten minutes on every kind of island, neve
     for (const seed of [7, 4242]) {
       const { world } = generate({ seed, theme });
       const s = world.spawn;
-      for (const kind of KINDS) {
+      // Your walk about the island goes as its dice do, and they are the same
+      // for every kind of pet with a name as long (a puppy and a bunny, say):
+      // those all follow you on it together, none of them minding the others,
+      // so each walk is only walked once.
+      for (const [walk, kinds] of Map.groupBy(KINDS, (kind) => seed * 31 + kind.length)) {
         const me = makeBody(s.x, s.y, s.z);
-        const pet = makePet(kind, s.x + 1, s.y, s.z, { seed });
-        const rng = new Rng(seed * 31 + kind.length);
-        const where = `${theme} island ${seed}, a ${kind}`;
-        let pops = 0;
-        let far = 0;
-        let inside = 0;
-        const states = new Set();
+        const rng = new Rng(walk);
+        const pets = kinds.map((kind) => ({ pet: makePet(kind, s.x + 1, s.y, s.z, { seed }), where: `${theme} island ${seed}, a ${kind}`, pops: 0, far: 0, inside: 0, states: new Set() }));
         let input = { mx: 0, mz: 0 };
         let next = 0;
         let yaw = 0;
@@ -115,20 +114,26 @@ test('a pet follows a player about for ten minutes on every kind of island, neve
           stepBody(world, me, { ...input, jump: me.inWater && rng.chance(0.3) }, DT);
           const speed = Math.hypot(me.vx, me.vz);
           if (speed > 0.3) yaw = Math.atan2(me.vx, me.vz);
-          const ev = stepPet(world, pet, ownerOf(me, yaw), DT, { night: t % 600 > 480 });
-          if (ev.popped) pops++;
-          states.add(petPose(pet));
-          for (const v of [pet.x, pet.y, pet.z, pet.yaw]) assert.ok(Number.isFinite(v), `${where}: somewhere`);
-          if (Math.hypot(pet.x - me.x, pet.z - me.z) > 8) far += DT;
-          const walking = !pet.info.flies || pet.mode === 'land';
-          if (walking && bodyOverlapsSolid(world, pet.body)) inside += DT;
-          if (!walking && pet.mode === 'fly') assert.ok(!B.SOLID[world.get(Math.floor(pet.x), Math.floor(pet.y + 0.1), Math.floor(pet.z))], `${where}: never flies into a block`);
+          const owner = ownerOf(me, yaw);
+          for (const p of pets) {
+            const { pet, where } = p;
+            const ev = stepPet(world, pet, owner, DT, { night: t % 600 > 480 });
+            if (ev.popped) p.pops++;
+            p.states.add(petPose(pet));
+            for (const v of [pet.x, pet.y, pet.z, pet.yaw]) assert.ok(Number.isFinite(v), `${where}: somewhere`);
+            if (Math.hypot(pet.x - me.x, pet.z - me.z) > 8) p.far += DT;
+            const walking = !pet.info.flies || pet.mode === 'land';
+            if (walking && bodyOverlapsSolid(world, pet.body)) p.inside += DT;
+            if (!walking && pet.mode === 'fly') assert.ok(!B.SOLID[world.get(Math.floor(pet.x), Math.floor(pet.y + 0.1), Math.floor(pet.z))], `${where}: never flies into a block`);
+          }
         }
-        assert.ok(inside < 0.1, `${where}: in a block for ${inside.toFixed(2)}s`);
-        assert.ok(far < 15, `${where}: far behind for ${far.toFixed(1)}s`);
-        assert.ok(pops <= 8, `${where}: popped over ${pops} times`);
-        if (pet.info.flies) assert.ok(states.has('fly') && (states.has('perch') || states.has('sit')), `${where}: flies about and settles: ${[...states]}`);
-        else assert.ok(['walk', 'sit'].every((st) => states.has(st)), `${where}: walks and sits: ${[...states]}`);
+        for (const { pet, where, pops, far, inside, states } of pets) {
+          assert.ok(inside < 0.1, `${where}: in a block for ${inside.toFixed(2)}s`);
+          assert.ok(far < 15, `${where}: far behind for ${far.toFixed(1)}s`);
+          assert.ok(pops <= 8, `${where}: popped over ${pops} times`);
+          if (pet.info.flies) assert.ok(states.has('fly') && (states.has('perch') || states.has('sit')), `${where}: flies about and settles: ${[...states]}`);
+          else assert.ok(['walk', 'sit'].every((st) => states.has(st)), `${where}: walks and sits: ${[...states]}`);
+        }
       }
     }
   }

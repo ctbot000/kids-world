@@ -5,6 +5,7 @@ import { buildAtlas } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { Renderer } from './render/renderer.js';
 import { Game } from './game.js';
+import { hurried } from './hurry.js';
 import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
@@ -502,7 +503,7 @@ function saveIsland() {
 }
 setInterval(() => {
   if (session?.dirty) saveIsland();
-}, 15000);
+}, hurried(15000));
 
 // The island you host peer to peer is on the keeper's list of open islands
 // while friends can visit it: how many are on it, whether it has a passcode
@@ -512,7 +513,7 @@ function updateListing() {
   const open = link && session.started && link.online && link.state === 'online';
   keeper.setListing(open ? link.room.listing() : null);
 }
-setInterval(updateListing, 3000);
+setInterval(updateListing, hurried(3000));
 window.addEventListener('pagehide', () => saveIsland());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveIsland();
@@ -595,7 +596,7 @@ async function openIslands() {
 const CTB_TRIES = 4;
 // The name someone not logged in last gave on the CTB island, on this device.
 const WATCH_NAME_KEY = 'kidsworld.watch-name';
-const CTB_RETRY_MS = 3000;
+const CTB_RETRY_MS = hurried(3000);
 
 // The CTB island (server/ctb-office.js), straight from the link ?ctb: the
 // one island anyone can come to without logging in, to watch CTB's workers

@@ -2,7 +2,7 @@
 // here they take minutes, there a quarter of an hour). They run on a clean
 // copy of the commit being pushed, not the working tree, which other work in
 // this checkout may be changing; the end-to-end tests run twice, with a mouse
-// and without one, as on a touch screen.
+// and without one, as on a touch screen, all at once (scripts/test.mjs).
 // Run by hand: npm run check [-- <commit>]
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
@@ -30,8 +30,7 @@ try {
   execFileSync('sh', ['-c', `git -C "$1" archive "$2" | tar -x -C "$3"`, 'sh', root, commit, dir], { stdio: 'inherit' });
   symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
   console.log(`Testing ${commit.slice(0, 7)} in ${dir}`);
-  run('all the tests, with a mouse', ['--test', '--test-timeout=180000', '--test-force-exit']);
-  run('the end-to-end tests with no mouse, as on a touch screen', ['--test', '--test-timeout=180000', '--test-force-exit', 'test/e2e.test.js'], { E2E_NO_MOUSE: '1' });
+  run('all the tests, the end-to-end ones both with a mouse and with none, as on a touch screen', ['scripts/test.mjs', '--touch']);
   console.log(`\n✔ ${commit.slice(0, 7)} passes`);
 } catch (error) {
   console.error(`\n✖ ${error.message}`);

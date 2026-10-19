@@ -20,7 +20,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
-import { Buddy, DEFAULT_NAME, isGoodbye, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
+import { ALONE_MS, Buddy, BYE_MS, DEFAULT_NAME, isGoodbye, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
 import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.js';
@@ -72,8 +72,11 @@ function child(room, name = 'Minji', look = { animal: 'bunny', pet: { kind: 'pup
   return { conn, heard, me, say: (msg) => room.receive(conn, msg), of: (t) => heard.filter((m) => m.t === t) };
 }
 
+// Its pauses in talking a tenth as long as a child sees them, so a test
+// waits for what it says and does, not for it to type.
+const PAUSES = 0.1;
 function friend(options) {
-  const buddy = new Buddy({ log: () => {}, wander: false, tickMs: 20, ...options });
+  const buddy = new Buddy({ log: () => {}, wander: false, tickMs: 20, pauses: PAUSES, ...options });
   buddies.push(buddy);
   return buddy;
 }
@@ -196,7 +199,8 @@ test('it goes home when asked or left alone, and stays away from an island whose
   const { room, rooms, island } = server();
   const minji = child(room);
   const llm = model((prompt) => (prompt.includes('Minji: bye Pip') ? { say: 'Bye bye! See you!', action: 'leave', stamp: 'none' } : { say: '', action: 'none', stamp: 'none' }));
-  const buddy = friend({ llm, rooms, wander: true });
+  let later = 0;
+  const buddy = friend({ llm, rooms, wander: true, now: () => Date.now() + later });
   await buddy.start();
   buddy.invited(island, 'Minji');
   await eventually(() => buddyIn(room));
@@ -218,7 +222,9 @@ test('it goes home when asked or left alone, and stays away from an island whose
   assert.ok(buddy.avoid.get(island.code) > Date.now() + 20 * 3600000);
   assert.equal(buddy.wanderOnce(), null);
 
-  // By itself to the loneliest open island, and home once everyone has gone.
+  // By itself to the loneliest open island, and home once everyone has gone:
+  // not straight away, but once it has waited a while alone for someone to
+  // come (its clock moved on past that here).
   const other = server({ code: '111222', name: 'Candy Cove', theme: 'candy' });
   rooms.set(other.room.code, { room: other.room });
   const joon = child(other.room, 'Joon');
@@ -226,7 +232,11 @@ test('it goes home when asked or left alone, and stays away from an island whose
   assert.equal(visit?.island.code, '111222');
   await eventually(() => buddyIn(other.room));
   other.room.detach(joon.conn);
-  await eventually(() => buddy.visits.size === 0, 25000);
+  await eventually(() => visit.aloneSince);
+  await new Promise((done) => setTimeout(done, 200));
+  assert.equal(buddy.visits.size, 1, 'not straight away');
+  later += ALONE_MS;
+  await eventually(() => buddy.visits.size === 0);
 });
 
 test('it never comes to the shared isle, Adventure Isle — invited, by itself, or once it is conquered', async () => {
@@ -461,6 +471,7 @@ test('it keeps an island of its own, builds there what the model picks a layer a
   const llm = model((prompt) => {
     if (prompt.includes('Things you can build')) return { thing: 'rocket', color: 'teal', size: 'small', name: 'Star Zoomer', say: 'I am building a rocket! 🚀' };
     if (prompt.includes('Minji: build a castle')) return { say: 'A castle? Yes!', action: 'build', stamp: 'none' };
+    if (prompt.includes('Minji just said: "bye Pip"')) return { say: 'Bye Minji! See you!', action: 'leave', stamp: 'none' };
     return { say: 'Hi Minji! Welcome to my island!', action: 'wave', stamp: 'none' };
   });
   const rooms = new Map();
@@ -496,8 +507,11 @@ test('it keeps an island of its own, builds there what the model picks a layer a
   // A friend comes, is greeted, says bye without sending it off its own island, and asks for a build.
   const minji = child(room);
   await eventually(() => minji.of('say').some((m) => m.pid === pip.id && m.text.startsWith('Hi Minji')));
+  // Its answer said (a bye, with leaving as what to do), and twice the moment
+  // it would wait before going gone by: it is still there.
   minji.say({ t: 'say', text: 'bye Pip' });
-  await new Promise((done) => setTimeout(done, 3500));
+  await eventually(() => minji.of('say').some((m) => m.pid === pip.id && m.text === 'Bye Minji! See you!'));
+  await new Promise((done) => setTimeout(done, 2 * BYE_MS * PAUSES));
   assert.ok(buddyIn(room), 'still on its own island');
   minji.say({ t: 'say', text: 'build a castle' });
   await eventually(() => llm.asked.some((p) => p.includes('A friend asked you to build something')));

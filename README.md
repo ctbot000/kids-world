@@ -208,7 +208,9 @@ The terminal says `AI friend: Pip 🤖 is awake` (or why it is asleep: then it i
 npm test
 ```
 
-CI runs no tests (there they took a quarter of an hour; here they take a few minutes). They run before every push to `main` instead: `npm install` turns on a pre-push hook (`.githooks/`) that tests the commit being pushed, on a clean copy of it, and stops the push if anything fails. The end-to-end tests run twice there, with a mouse and without one, as on a touch screen. The same by hand, for `HEAD` or any commit:
+`npm test` (`scripts/test.mjs`) runs every test file at once, as many at a time as the computer has cores for, and shares the end-to-end tests out between six processes, three at a time, each with a browser and servers of its own; whatever took longest last time starts first. A file that passes gets a line, one that fails everything it printed, and a failed end-to-end test the command to run it again by itself. `npm test -- --touch` runs the end-to-end tests a second time with no mouse, as on a touch screen; with files or flags (`npm test -- test/sea.test.js`), it is plain `node --test` on just those. Running more at once is slower, not faster: a Mac has only a few performance cores, and on the rest a test runs several times as slowly, long enough for anything timed on the wall clock to run out.
+
+CI runs no tests (there they took a quarter of an hour; here, all of them with a mouse and without one, about two and a half minutes). They run before every push to `main` instead: `npm install` turns on a pre-push hook (`.githooks/`) that tests the commit being pushed, on a clean copy of it, and stops the push if anything fails. The end-to-end tests run twice there, with a mouse and without one, as on a touch screen. The same by hand, for `HEAD` or any commit:
 
 ```bash
 npm run check
@@ -268,7 +270,8 @@ npm run check
   CI=1 E2E_NO_MOUSE=1 taskpolicy -c background npm test
   ```
 
-- Every page a test opened is closed after it, passed or failed. A page left open keeps drawing its island in software, and the tests after it would take about three times as long, long enough to time out.
+- Every page a test opened is closed after it, passed or failed. A page left open keeps drawing its island in software, and the tests after it would take about three times as long, long enough to time out. An error in a page fails the test it came in, and only that one.
+- The pages the end-to-end tests open are in a hurry (`window.kidsWorldHurry`, `public/js/hurry.js`): the waits a player never notices, before the keeper is first called, between saves of the island and between asking for a list again, are a tenth as long. A dialog popping in is finished at once before a click, instead of waited for.
 
 ## Project layout
 

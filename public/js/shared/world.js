@@ -114,10 +114,8 @@ export function normalizeMeta(meta) {
 // Runs of equal bytes as (block, length) pairs, the length as a varint, then
 // base64. The cells are read layer by layer (y slowest), so the solid stone
 // deep down and the empty sky above each come out as a handful of long runs.
-
-function* layerOrder(W, H, D) {
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) yield (x * D + z) * H + y;
-}
+// Both ways walk the cells in plain loops: a generator handing them out one by
+// one made encoding or decoding an island three to seven times as slow.
 
 export function encodeBlocks(blocks, W, H, D) {
   const out = [];
@@ -133,14 +131,18 @@ export function encodeBlocks(blocks, W, H, D) {
     }
     out.push(n);
   };
-  for (const i of layerOrder(W, H, D)) {
-    const id = blocks[i];
-    if (id === prev) {
-      run++;
-    } else {
-      flush();
-      prev = id;
-      run = 1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      for (let z = 0; z < D; z++) {
+        const id = blocks[(x * D + z) * H + y];
+        if (id === prev) {
+          run++;
+        } else {
+          flush();
+          prev = id;
+          run = 1;
+        }
+      }
     }
   }
   flush();
@@ -152,7 +154,10 @@ export function decodeBlocks(data, W, H, D) {
   const size = W * H * D;
   const bytes = base64ToBytes(data);
   const blocks = new Uint8Array(size);
-  const order = layerOrder(W, H, D);
+  // The next cell to fill, layer by layer as encodeBlocks read them.
+  let x = 0;
+  let y = 0;
+  let z = 0;
   let at = 0;
   let i = 0;
   while (i < bytes.length) {
@@ -169,7 +174,14 @@ export function decodeBlocks(data, W, H, D) {
     }
     if (run < 1 || at + run > size) throw new Error('The island data does not fit this island.');
     const id = isKnown(raw) ? raw : AIR;
-    for (let k = 0; k < run; k++) blocks[order.next().value] = id;
+    for (let k = 0; k < run; k++) {
+      blocks[(x * D + z) * H + y] = id;
+      if (++z < D) continue;
+      z = 0;
+      if (++x < W) continue;
+      x = 0;
+      y++;
+    }
     at += run;
   }
   if (at !== size) throw new Error('The island data is incomplete.');

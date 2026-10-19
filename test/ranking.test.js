@@ -460,10 +460,14 @@ test('a page watching the ranking hears of every change it would see, a moment l
   assert.deepEqual(builders(news()[0]), [['Minji', 50]]);
   // Only what she did changed: news for the ranking, nothing for the admin pages.
   assert.ok(!keeper.recent.some((e) => e.what === 'profile'));
-  // Many changes at once are one piece of news.
+  // Many changes at once are one piece of news. (The keeper waits as long
+  // as it does for players for them here: on a busy computer the second can
+  // take longer than this test's moment to come after the first.)
+  keeper.rankingNewsMs = 1000;
   await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 60 } } });
   await tablet.say({ t: 'profile', profile: { ...playing, stats: { placed: 70 } } });
   await until(() => news().length === 2);
+  keeper.rankingNewsMs = 200;
   await delay(400);
   assert.equal(news().length, 2);
   assert.deepEqual(builders(news()[1]), [['Minji', 70]]);
@@ -487,11 +491,12 @@ test('a page watching the ranking hears of every change it would see, a moment l
   assert.deepEqual(builders(news()[3]), [['Brave Fox', 999]]);
   assert.equal(tablet.replies.findLast((r) => r.t === 'ranking-news').shown, false);
 
-  // Stopped watching: no more news.
+  // Stopped watching: no more news. The tablet, watching still, is told
+  // after the watcher would be (its page came second), so once it is, the
+  // watcher would have been too.
   assert.deepEqual(await watcher.say({ t: 'unwatch' }), { t: 'kept', what: 'unwatch' });
   await tablet.say({ t: 'ranked', on: true });
   await until(() => tablet.replies.filter((r) => r.t === 'ranking-news').length === 2);
-  await delay(400);
   assert.equal(news().length, 4);
   await keeper.stop();
 });

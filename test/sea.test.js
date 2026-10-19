@@ -12,13 +12,20 @@ import { generate } from '../public/js/shared/worldgen.js';
 
 const SEA = ['fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus'];
 const SWIMMERS = ['fish', 'dolphin', 'whale', 'octopus'];
+const POLAR = ['penguin', 'seal'];
 const FL = Math.floor;
 const depth = (w) => (w ? w.top - w.floor : 0);
 
-function island(theme, seed) {
+// An island and its animals: all of them, or only the kinds a test watches.
+// The sea's animals, penguins and seals keep to themselves: the others only
+// take their turns at the dice, and now and then a spot in the water one of
+// them would have swum to. Without the others, those there throw other
+// numbers, but go about as ever, and a test spends its time on them instead
+// of on everyone else.
+function island(theme, seed, kinds = CRITTER_TYPES) {
   const { world, critters } = generate({ seed, theme });
   const sim = new CritterSim(seed);
-  for (const c of critters) sim.add(c.type, c.x, c.y, c.z);
+  for (const c of critters) if (kinds.includes(c.type)) sim.add(c.type, c.x, c.y, c.z);
   return { world, sim, critters };
 }
 
@@ -71,7 +78,7 @@ test('swimmers never leave the water, crabs never go deeper than its edge, and n
     ['candy', 1],
     ['flat', 999],
   ]) {
-    const { world, sim } = island(theme, seed);
+    const { world, sim } = island(theme, seed, SEA);
     run(world, sim, 20, (c, night, t) => {
       if (!SEA.includes(c.type)) return;
       const where = `${theme}: a ${c.type} at ${c.x.toFixed(2)},${c.y.toFixed(2)},${c.z.toFixed(2)} after ${t.toFixed(1)}s`;
@@ -88,7 +95,7 @@ test('swimmers never leave the water, crabs never go deeper than its edge, and n
 });
 
 test('dolphins leap out of the sea, the whale blows water, and fish jump now and then', () => {
-  const { world, sim } = island('sunny', 4242);
+  const { world, sim } = island('sunny', 4242, SEA);
   const leaps = new Map();
   let spouts = 0;
   let fishJumps = 0;
@@ -110,7 +117,7 @@ test('dolphins leap out of the sea, the whale blows water, and fish jump now and
 });
 
 test('at night the sea goes to sleep', () => {
-  const { world, sim } = island('sunny', 4242);
+  const { world, sim } = island('sunny', 4242, SEA);
   const awake = new Map();
   run(world, sim, 10, (c, night, t) => {
     // A minute after dusk, everyone has settled.
@@ -209,7 +216,7 @@ test('snowy islands have a little colony of penguins and some seals on the shore
 
 test('penguins and seals go from the shore into the sea and back, dive under it, and never get into a block', () => {
   for (const seed of [4242, 1, 77]) {
-    const { world, sim } = island('snowy', seed);
+    const { world, sim } = island('snowy', seed, POLAR);
     const tally = { penguin: { land: 0, sea: 0, steps: 0, dives: 0, slides: 0, leaps: 0 }, seal: { land: 0, sea: 0, steps: 0, dives: 0, slides: 0, leaps: 0 } };
     run(world, sim, 10, (c, night, t) => {
       if (c.type !== 'penguin' && c.type !== 'seal') return;
@@ -247,7 +254,7 @@ test('at night penguins and seals come ashore to sleep, on any snowy island', ()
   // enough to climb out.
   for (let i = 0; i < 16; i++) {
     const seed = i * 37 + 3;
-    const { world, sim } = island('snowy', seed);
+    const { world, sim } = island('snowy', seed, POLAR);
     let asleep = 0;
     let steps = 0;
     const awake = new Map();

@@ -23,10 +23,14 @@ const isIn = (o, group) => {
 
 const FL = Math.floor;
 
-function island(theme, seed) {
+// An island and its animals: all of them, or only the kinds a test watches.
+// The big animals throw dice of their own, and nothing the others do gets in
+// their way: with only them there, they go exactly the same way, and a test
+// watching them need not spend its time on everyone else.
+function island(theme, seed, kinds = CRITTER_TYPES) {
   const { world, critters } = generate({ seed, theme });
   const sim = new CritterSim(seed);
-  for (const c of critters) sim.add(c.type, c.x, c.y, c.z);
+  for (const c of critters) if (kinds.includes(c.type)) sim.add(c.type, c.x, c.y, c.z);
   return { world, sim, critters };
 }
 
@@ -104,7 +108,7 @@ test('big animals get about for twenty minutes without getting into anything, wa
     ['sunny', 123],
     ['snowy', 8],
   ]) {
-    const { world, sim } = island(theme, seed);
+    const { world, sim } = island(theme, seed, BIG);
     const big = sim.list.filter((c) => BIG.includes(c.type));
     const seen = new Map(big.map((c) => [c.id, { x: c.x, z: c.z, far: 0, wet: 0, moved: 0, lx: c.x, lz: c.z }]));
     let night = 0;

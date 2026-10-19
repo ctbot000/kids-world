@@ -9,7 +9,7 @@ import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody, unstick } from '../p
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, buildEdit, growEdit, hillEdit, paintEdit, pickEdit, stampEdit, validCells } from '../public/js/shared/tools.js';
-import { decodeBlocks, encodeBlocks, World } from '../public/js/shared/world.js';
+import { base64ToBytes, decodeBlocks, encodeBlocks, World } from '../public/js/shared/world.js';
 import { generate, sizeSide } from '../public/js/shared/worldgen.js';
 
 // A small flat test world: magic floor, stone up to y=4, grass at y=5.
@@ -48,6 +48,14 @@ test('the world encodes and decodes exactly', () => {
   const odd = new Uint8Array(8 * 8 * 8);
   odd[5] = 250;
   assert.equal(decodeBlocks(encodeBlocks(odd, 8, 8, 8), 8, 8, 8)[5], B.AIR);
+  // Saved islands have their cells layer by layer (y slowest), then along x,
+  // then z, so that order must never change: here each cell of a lopsided
+  // little world holds a block of its own, and the runs come out in that order.
+  const cells = Uint8Array.from({ length: 2 * 2 * 3 }, (_, i) => i + 1);
+  const little = encodeBlocks(cells, 2, 2, 3);
+  const runs = base64ToBytes(little);
+  assert.deepEqual([...runs.filter((_, i) => i % 2 === 0)], [1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12]);
+  assert.deepEqual(decodeBlocks(little, 2, 2, 3), cells);
 });
 
 test('generation is deterministic and makes a sensible island, of every size', () => {

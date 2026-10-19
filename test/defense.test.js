@@ -331,6 +331,11 @@ test('the towers, the wave and the bricks are kept when saved, and the island is
 // do not all go on one pad), or a careful one who keeps half back.
 function playGame({ theme, size, seed, spend = 1 }) {
   const { room, time } = defenseRoom(seed, size, theme);
+  // Without the island's animals: they step out of a marching monster's
+  // way, never the other way round, their randomness is their own, and the
+  // towers only look at monsters, so every wave goes just as it would with
+  // them, without all the time it takes to move them about.
+  room.critters.list.length = 0;
   const a = join(room);
   const def = room.defense;
   const covers = (p, l) => (l ? def.route.filter((r) => Math.hypot(r.x - p.x, r.z - p.z) <= TOWER[l].range).length * TOWER[l].power * (1000 / TOWER[l].every) : 0);

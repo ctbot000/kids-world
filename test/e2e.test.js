@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, afterEach, before, test } from 'node:test';
+import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
@@ -41,6 +41,15 @@ const CHROME = [
 ].find((path) => path && existsSync(path));
 
 const skip = CHROME ? false : 'Chrome not found; set CHROME_PATH';
+
+// E2E_SHARD=k/n runs every nth test, from the kth on (counting from 0), so
+// that n processes, each with a browser and servers of its own, can share the
+// tests out between them (npm test does). Without it, every test runs. (A test
+// shared out is reported at the line below, not at its own: npm test says how
+// to run a failed one by itself.)
+const [shard, shards] = (process.env.E2E_SHARD ?? '0/1').split('/').map(Number);
+let tests = 0;
+const test = shards > 1 ? (...args) => (tests++ % shards === shard ? eachTest(...args) : undefined) : eachTest;
 
 let browser;
 let server;
@@ -81,6 +90,11 @@ afterEach(async () => {
   for (const context of browser?.browserContexts() ?? []) {
     if (context !== browser.defaultBrowserContext()) await context.close().catch(() => {});
   }
+  // A page's error fails the test it came in, and only that one: one that
+  // came after the test's own look at them, or in a test that has none, would
+  // otherwise fail whichever test happened to run next (with the tests shared
+  // out among several runs, a different one each time), and every one after.
+  if (pageErrors.length) throw new Error(`errors in the pages: ${pageErrors.splice(0).join('; ')}`);
 });
 
 after(async () => {
@@ -111,6 +125,9 @@ async function openPlayer(url, profile = {}, init = null) {
   }
   // Nobody plays without a login; these pages play as the guest unless init says otherwise.
   await page.evaluateOnNewDocument(() => (window.kidsWorldGuests = true));
+  // And in a hurry: the seconds a player never notices, before the keeper is first called,
+  // between saves and between asking for a list again, are a tenth as long (see hurry.js).
+  await page.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
   if (init) await page.evaluateOnNewDocument(init);
   await page.evaluateOnNewDocument((p) => {
     const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
@@ -206,20 +223,18 @@ async function chatLines(page) {
 
 // Puppeteer aims a click where something is when it looks, and a dialog popping
 // in grows before the press lands, onto whatever is next to it there. This
-// waits until something, and everything it is in, has stopped moving.
+// puts something, and everything it is in, where it comes to rest, finishing
+// at once whatever is still popping in rather than waiting a quarter of a
+// second for it: the page never waits on the end of an animation, so only
+// the picture skips ahead.
 async function landed(page, element) {
-  // In front first: a page behind another gets no frames, so nothing on it would stop.
+  // In front first: Puppeteer's click never returns on a page behind another.
   await page.bringToFront();
-  await page.waitForFunction(
-    (el) => {
-      for (; el; el = el.parentElement) {
-        if (el.getAnimations().some((a) => a.playState !== 'finished' && a.effect.getTiming().iterations !== Infinity)) return false;
-      }
-      return true;
-    },
-    { timeout: 15000 * SLOW },
-    element,
-  );
+  await page.evaluate((el) => {
+    for (; el; el = el.parentElement) {
+      for (const a of el.getAnimations()) if (a.playState !== 'finished' && a.effect.getTiming().iterations !== Infinity) a.finish();
+    }
+  }, element);
 }
 
 async function clickButton(page, text, scope = 'body') {
@@ -348,6 +363,15 @@ async function aimAt(page, cell) {
   const seen = await inView(page, [cell]);
   assert.ok(seen, `cell ${JSON.stringify(cell)} can be seen`);
   return seen.at;
+}
+
+// Holds a key down for the steps that follow. On a busy computer the key can
+// reach the page after the next evaluate does, and the steps then go by
+// without it, the key held only through the frames after them (a walk into a
+// tent fell short so); so this waits until the page has it.
+async function hold(page, code) {
+  await page.keyboard.down(code);
+  await until(page, (code) => window.kidsWorld.input.keys.has(code), code);
 }
 
 const blockAt = (page, c) => page.evaluate((c) => window.kidsWorld.game.world.get(c.x, c.y, c.z), c);
@@ -835,7 +859,7 @@ test('a pony beside you is got on with the Ride button, ridden about, and got of
   await until(page, () => document.getElementById('ride').textContent.includes('Get off'));
   // Ridden about: it goes where you go, there and on the island.
   const from = await page.evaluate((id) => ({ ...window.kidsWorld.session.link.room.critters.get(id) }), id);
-  await page.keyboard.down('KeyW');
+  await hold(page, 'KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 90));
   await page.keyboard.up('KeyW');
   await until(
@@ -891,7 +915,7 @@ test('a digger beside you is driven with the Drive button: it digs a tunnel thro
   await until(page, (id) => window.kidsWorld.game.riding?.id === id && window.kidsWorld.session.link.room.critters.get(id).rider === window.kidsWorld.game.pid, id);
   await until(page, () => document.getElementById('ride').textContent.includes('Get out') && [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('You are driving')));
   // On into the stone: a tunnel, and the ruby in the basket.
-  await page.keyboard.down('KeyW');
+  await hold(page, 'KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 240));
   await page.keyboard.up('KeyW');
   await until(page, (c) => window.kidsWorld.session.link.room.world.get(c.x, c.y, c.z) === 0 && window.kidsWorld.profile.basket.ruby === 1, ruby);
@@ -932,7 +956,7 @@ test('a kick scooter beside you is driven with the Drive button: quicker than yo
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('You are driving')));
   // Standing on the deck, going quicker than you run.
   const from = await page.evaluate(() => ({ ...window.kidsWorld.game.riding.body }));
-  await page.keyboard.down('KeyW');
+  await hold(page, 'KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 90));
   const gone = await page.evaluate((from) => {
     const kw = window.kidsWorld;
@@ -951,7 +975,7 @@ test('a kick scooter beside you is driven with the Drive button: quicker than yo
   assert.ok(Math.abs(gone.feet - 0.2) < 0.05, `feet on the deck, at +${gone.feet.toFixed(2)}`);
   assert.ok(gone.speed > 5, `quicker than you run, at ${gone.speed.toFixed(1)}`);
   // Jump rings the bell: the trick goes to the island and back for everyone.
-  await page.keyboard.down('Space');
+  await hold(page, 'Space');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 5));
   await page.keyboard.up('Space');
   await until(page, (id) => window.kidsWorld.game.critters.get(id)?.model.trick > 0, id);
@@ -981,13 +1005,13 @@ test('on an elevator pad, Space rides up to the pad above and Shift back down, w
   const low = pad.y + 1;
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('An elevator!')));
-  await page.keyboard.down('Space');
+  await hold(page, 'Space');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
   await page.keyboard.up('Space');
   const up = await page.evaluate(() => ({ y: window.kidsWorld.game.me.body.y, sticker: Boolean(window.kidsWorld.profile.data.stickers['going-up']) }));
   assert.equal(up.y, low + 7, 'on the pad above');
   assert.ok(up.sticker, 'a sticker for the ride');
-  await page.keyboard.down('ShiftLeft');
+  await hold(page, 'ShiftLeft');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
   await page.keyboard.up('ShiftLeft');
   assert.equal(await page.evaluate(() => window.kidsWorld.game.me.body.y), low, 'back on the pad below');
@@ -1018,7 +1042,7 @@ test('on a trampoline, Space held bounces you higher and higher and a press of S
   // ten seconds, seen every quarter of a second (each step draws a frame,
   // slow on a software GPU).
   await page.evaluate(() => (window.kidsWorld.profile.data.stats.bounces = 17));
-  await page.keyboard.down('Space');
+  await hold(page, 'Space');
   const tops = await page.evaluate(() => {
     const kw = window.kidsWorld;
     const seen = [];
@@ -1086,7 +1110,7 @@ test('a huge circus tent put down from the toy box with a click is walked into t
     kw.renderer.view.yaw = Math.atan2(-t.f[0], -t.f[1]);
     kw.step(1 / 60, 5);
   }, tent);
-  await page.keyboard.down('KeyW');
+  await hold(page, 'KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
   await page.keyboard.up('KeyW');
   const inside = await page.evaluate((t) => {
@@ -1176,7 +1200,7 @@ test('beside a sofa the Sit button sits you on it, the island sees you sitting, 
   await until(page, () => [...window.kidsWorld.session.link.room.players.values()].some((p) => p.s?.[4] === 8));
   await until(page, () => window.kidsWorld.profile.data.stickers.comfy);
   // A step forward gets you up, in front of the sofa.
-  await page.keyboard.down('KeyW');
+  await hold(page, 'KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 3));
   await page.keyboard.up('KeyW');
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
@@ -2447,6 +2471,7 @@ test('the keeper keeps copies of your islands and of you, sent peer to peer; an 
     keeper = await keeperOnline(identity, join(dir, 'real'));
     const again = await page.browserContext().newPage();
     again.on('pageerror', (error) => pageErrors.push(`again: ${error.message}`));
+    await again.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
     await again.goto(page.url());
     await eventually(async () => (await kept())?.profile.look.hat === hat);
     assert.deepEqual(pageErrors, []);

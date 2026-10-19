@@ -54,16 +54,26 @@ test('every animal, kid and grown-up can be drawn in every pose', () => {
 });
 
 test("a flying friend on someone's head sits on top of their hair or their hat", () => {
-  // The highest point of the head (or hat) under the middle of a bird sitting there.
+  // The highest point of the head (or hat) under the middle of a bird sitting
+  // there: straight down onto every part, at the middle and round it. Most
+  // parts are the same shape in the same place look after look (an animal's
+  // head under every hat, a kid's under every hat and hair style, whatever
+  // their colours), and as high as they were the first time, so each is only
+  // looked at once.
+  const rays = [];
+  for (const r of [0, 0.025, 0.05]) {
+    for (let i = 0; i < (r ? 12 : 1); i++) rays.push(new THREE.Raycaster(new THREE.Vector3(Math.cos((i * Math.PI) / 6) * r, 5, Math.sin((i * Math.PI) / 6) * r), new THREE.Vector3(0, -1, 0)));
+  }
+  const tops = new Map();
   const top = (avatar) => {
     avatar.root.updateMatrixWorld(true);
     let best = -Infinity;
-    for (const r of [0, 0.025, 0.05]) {
-      for (let i = 0; i < (r ? 12 : 1); i++) {
-        const ray = new THREE.Raycaster(new THREE.Vector3(Math.cos((i * Math.PI) / 6) * r, 5, Math.sin((i * Math.PI) / 6) * r), new THREE.Vector3(0, -1, 0));
-        best = Math.max(best, ray.intersectObject(avatar.root, true)[0]?.point.y ?? -Infinity);
-      }
-    }
+    avatar.root.traverse((o) => {
+      if (!o.isMesh) return;
+      const part = `${o.geometry.uuid} ${o.material.side} ${o.matrixWorld.elements}`;
+      if (!tops.has(part)) tops.set(part, Math.max(...rays.map((ray) => ray.intersectObject(o, false)[0]?.point.y ?? -Infinity)));
+      best = Math.max(best, tops.get(part));
+    });
     return best;
   };
   // A bow sits to one side, where the bird does not.

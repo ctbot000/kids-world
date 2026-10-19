@@ -332,8 +332,11 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const pip = { send: () => {} };
   room.attach(pip);
   room.receive(pip, { t: 'join', protocol: PROTOCOL, name: 'Pip 🤖', look: { animal: 'kid' } });
+  // The workers hear what is said straight after the island passes it on
+  // (dialer.js LocalLink), and would answer as they hear it.
   room.receive(pip, { t: 'say', text: 'Hi Ada! What are you making?' });
-  await new Promise((done) => setTimeout(done, 1500));
+  assert.ok(room.chat.some((c) => c.name === 'Pip 🤖'), 'said on the island');
+  await new Promise((done) => setImmediate(done));
   assert.deepEqual(answers, []);
 
   // The guide waits by the gate, and took none of CTB's own, nor the AI friend, for a guest.
@@ -364,10 +367,13 @@ test('the office on the CTB island: workers at their desks, answering children, 
   await eventually(() => Math.hypot(guide().s[0] - lobby.x, guide().s[2] - lobby.z) < 0.1);
   assert.equal(room.world.get(Math.floor(lobby.x), Math.floor(guide().s[1]), Math.floor(lobby.z)), B.AIR, 'standing in the lobby, not in a wall');
   await eventually(() => heard.some((m) => m.t === 'say' && m.name === GUIDE.name && m.text.startsWith('Here we are, Minji!')));
-  // Asked by name, she answers herself; the workers leave it to her.
+  // Asked by name, she answers herself; the workers leave it to her, even
+  // long enough after Ben's answer for one of them to answer again.
   const answered = answers.length;
+  office.answeredAt = 0;
   room.receive(conn, { t: 'say', text: 'Grace, thank you!' });
-  await new Promise((done) => setTimeout(done, 300));
+  // She came after them, so she hears it after them: once she answers, they have heard it too.
+  await eventually(() => heard.some((m) => m.t === 'say' && m.name === GUIDE.name && m.text.startsWith('Hi Minji!')));
   assert.equal(answers.length, answered);
   assert.equal(heard.find((m) => m.t === 'say' && m.name === 'Ben 💼').text, "Hi Minji! I'm working on #12: Fix the bus.");
   assert.deepEqual(office.summary().visitors, ['Pip 🤖', 'Minji']);

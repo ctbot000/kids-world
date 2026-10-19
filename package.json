@@ -9,7 +9,7 @@
     "vendor": "node scripts/vendor.mjs",
     "icon": "node scripts/icon.mjs",
     "keeper-setup": "node scripts/keeper-setup.mjs",
-    "test": "node --test --test-timeout=180000 --test-force-exit",
+    "test": "node scripts/test.mjs",
     "check": "node scripts/check.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },

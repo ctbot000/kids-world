@@ -83,9 +83,11 @@ const GUARD = 7;
 const BOP_MS = 450;
 const HELP_MS = 1000;
 // Talking: a moment's wait for more before answering, never two lines in a
-// row too fast, and something to say now and then when it is quiet.
+// row too fast, and something to say now and then when it is quiet. After
+// its goodbye, a moment for it to be seen before it goes.
 const LISTEN_MS = 1300;
 const TALK_GAP_MS = 2500;
+export const BYE_MS = 2500;
 const QUIET_MS = [100000, 170000];
 const BUILD_GAP_MS = 20000;
 const PET_GAP_MS = 40000;
@@ -95,7 +97,7 @@ const INVITED_STAY_MS = 40 * 60000;
 const WANDER_STAY_MS = [12 * 60000, 20 * 60000];
 const STAY_MORE_MS = 5 * 60000;
 const MOST_STAY_MS = 60 * 60000;
-const ALONE_MS = 15000;
+export const ALONE_MS = 15000;
 const CHAT_KEEP = 14;
 // After a visit, not back to that island (by itself) for this long.
 const AGAIN_MS = { kicked: 24 * 3600000, asked: 2 * 3600000, 'sent home': 2 * 3600000, refused: 3600000 };
@@ -224,7 +226,9 @@ export class Buddy extends EventEmitter {
   // for the players list and the list of open islands. rooms: the dedicated
   // server's rooms. rtc: node-datachannel, to visit islands peer to peer.
   // home: whether it keeps an island of its own on this server, saved in homeFile.
-  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS }) {
+  // pauses: how long its pauses in talking are (listening for more, typing,
+  // the moment before it goes), as a part of the real ones; tests shorten them.
+  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS, pauses = 1 }) {
     super();
     this.llm = llm;
     this.keeper = keeper;
@@ -257,6 +261,7 @@ export class Buddy extends EventEmitter {
     this.tickMs = tickMs;
     this.layerMs = layerMs;
     this.firstBuildMs = firstBuildMs;
+    this.pauses = pauses;
     this.id = friendId('kids-world ai friend');
     this.ready = false;
     // What keeps it from talking ('' for nothing), once known.
@@ -844,7 +849,7 @@ export class Visit extends EventEmitter {
     // (On its own island, it is they who go.)
     const bye = !this.home && isGoodbye(text) && (named || this.others().length === 1);
     clearTimeout(this.listenTimer);
-    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: entry.pid, why: '', ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
+    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: entry.pid, why: '', ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS * this.buddy.pauses);
   }
 
   // Something happened worth a word: why says what, to whom it is (a pid or
@@ -1341,7 +1346,7 @@ export class Visit extends EventEmitter {
     const now = this.now();
     const say = tidySay(reply.say, this.name);
     const action = ACTIONS.includes(reply.action) ? reply.action : 'none';
-    const delay = say ? Math.min(3000, 400 + [...say].length * 30) + Math.max(0, this.saidAt + TALK_GAP_MS - now) : 0;
+    const delay = say ? (Math.min(3000, 400 + [...say].length * 30) + Math.max(0, this.saidAt + TALK_GAP_MS - now)) * this.buddy.pauses : 0;
     setTimeout(() => this.safely(() => this.speak(say, action, reply, ask)), delay);
   }
 
@@ -1355,7 +1360,7 @@ export class Visit extends EventEmitter {
     // On its own island it stays: a goodbye is a wave.
     if (this.home && action === 'leave') action = 'wave';
     if (ask.then === 'leave' || action === 'leave') {
-      setTimeout(() => this.safely(() => this.end(ask.bye || action === 'leave' ? 'asked' : 'time')), 2500);
+      setTimeout(() => this.safely(() => this.end(ask.bye || action === 'leave' ? 'asked' : 'time')), BYE_MS * this.buddy.pauses);
       if (action !== 'leave') this.emote('wave');
       return;
     }
@@ -1440,7 +1445,7 @@ export class Visit extends EventEmitter {
     // A moment for the line to be finished, as with a player, then the model.
     const bye = !this.home && isGoodbye(text);
     clearTimeout(this.listenTimer);
-    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: 0, admin: true, ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS);
+    this.listenTimer = setTimeout(() => this.safely(() => this.think({ to: 0, admin: true, ...(bye ? { then: 'leave', bye: true } : {}) })), LISTEN_MS * this.buddy.pauses);
     return '';
   }
 

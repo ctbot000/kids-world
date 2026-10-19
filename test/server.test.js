@@ -25,6 +25,21 @@ after(async () => {
   await server.shutdown();
 });
 
+// How long a test waits for the server before it gives up: only a failing
+// test waits that long. A computer busy with the whole suite at once can take
+// seconds to make a huge island, or to answer at all.
+const PATIENCE_MS = 30000;
+
+async function eventually(fn, timeout = PATIENCE_MS) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const value = await fn();
+    if (value) return value;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${fn}`);
+    await new Promise((done) => setTimeout(done, 25));
+  }
+}
+
 // A WebSocket client that keeps a copy of the world, like the browser does.
 class Client {
   constructor() {
@@ -58,7 +73,7 @@ class Client {
   }
 
   // Resolves with the first message (old or new) matching pred, and consumes it.
-  next(pred, timeout = 3000) {
+  next(pred, timeout = PATIENCE_MS) {
     return new Promise((done, fail) => {
       const check = () => {
         const index = this.inbox.findIndex(pred);
@@ -160,7 +175,7 @@ test('two friends make and visit an island and build together', async () => {
   const moved = await a.next((m) => m.t === 'm');
   assert.equal(moved.p, b.you);
   // The animals are on the move.
-  assert.ok((await b.next((m) => m.t === 'c', 2000)).c.length > 0);
+  assert.ok((await b.next((m) => m.t === 'c')).c.length > 0);
 
   await a.close();
   await b.close();
@@ -261,7 +276,7 @@ function maskedFrame(text, { fin = true, opcode = 1, mask = true } = {}) {
   return Buffer.concat([Buffer.from(header), mask ? key : Buffer.alloc(0), body]);
 }
 
-function readAll(socket, until, timeout = 3000) {
+function readAll(socket, until, timeout = PATIENCE_MS) {
   return new Promise((done, fail) => {
     let data = Buffer.alloc(0);
     const timer = setTimeout(() => fail(new Error(`timed out with ${data.length} bytes`)), timeout);
@@ -351,10 +366,10 @@ test('the open islands are listed, those with a passcode marked, and only the ri
   assert.equal(friend.first.passcode, undefined, 'only the owner hears it');
   assert.equal((await listed()).find((i) => i.code === b.code).players, 2);
 
-  // Nobody on an island: off the list (it is kept a while, for them to come back).
+  // Nobody on an island: off the list once the server hears they have gone
+  // (it is kept a while, for them to come back).
   await a.close();
-  await new Promise((done) => setTimeout(done, 200));
-  assert.equal((await listed()).some((i) => i.code === a.code), false);
+  await eventually(async () => !(await listed()).some((i) => i.code === a.code));
   await friend.close();
   await b.close();
   await c.close();
