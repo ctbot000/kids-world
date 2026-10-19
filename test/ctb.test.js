@@ -285,6 +285,17 @@ test('with nothing to do a worker proposes a task as an issue, which starts once
   assert.equal(github.issues.find((i) => i.number === q.number).open, false);
 });
 
+test('the workers weigh ideas against everything the game has, not only the start of it', async () => {
+  const repoDir = await tempDir();
+  const far = `- ${'Build with bricks. '.repeat(1500)}\n- **Monsters** to bop with 👊, and a dragon to tame.`;
+  await writeFile(join(repoDir, 'README.md'), `# Kids World\n\n## What you can do\n\n${far}\n\n## Controls\n\nKeys.\n`);
+  const company = new Company({ llm: {}, github: {}, repoDir, workDir: await tempDir(), settings: defaultSettings({}), log: () => {} });
+  const features = await company.features();
+  assert.ok(features.length > 20000);
+  assert.match(features, /\*\*Monsters\*\* to bop/);
+  assert.doesNotMatch(features, /Controls/);
+});
+
 test('the office on the CTB island: workers at their desks, answering children, who cannot build there', async () => {
   const dir = await tempDir();
   const rooms = new Map();

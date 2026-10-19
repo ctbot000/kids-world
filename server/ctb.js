@@ -36,6 +36,13 @@ export const ISLAND_FILE = 'ctb-island.json';
 // When a worker last proposed a task, so a restart does not bring another at once.
 export const STATE_FILE = 'ctb-state.json';
 const POLL_MS = 2 * 60000;
+// The most of the README's "What you can do" a model is given (about 25,000
+// tokens; the section is about 47,000 characters now).
+const FEATURES_MAX = 100000;
+// The tokens a model may take answering an idea or proposing one, its
+// thinking included: weighing all of that, GLM thinks past 2,000 and is cut
+// off before it answers.
+const THINK_TOKENS = 8000;
 // The full unit tests before a pull request (the end-to-end ones are left
 // to the pre-push hook on main): how long they may take, and how many times
 // a worker goes back to fix them.
@@ -425,6 +432,15 @@ export class Company extends EventEmitter {
     return this.github.pullRequest({ branch, title: result.title, body: pullBody({ issue, summary: result.summary, worker: w.name, model }) });
   }
 
+  // What the game has now, as the README's "What you can do" tells it, for
+  // the model to weigh an idea against: all of it, as cutting it short left
+  // out everything past the first quarter (monsters, hearts, bopping, taming
+  // a dragon), and a worker told a child the game had no fighting.
+  async features() {
+    const readme = await readFile(join(this.repoDir, 'README.md'), 'utf8').catch(() => '');
+    return (/## What you can do\s*\n([\s\S]*?)\n## /.exec(readme)?.[1] ?? readme).slice(0, FEATURES_MAX);
+  }
+
   // A worker's idea for the project, as an issue waiting for approval.
   async propose(w) {
     if (this.proposing) return null;
@@ -433,8 +449,7 @@ export class Company extends EventEmitter {
     this.onProposed(this.proposedAt);
     this.tell(w, 'Thinking of something to propose');
     try {
-      const readme = await readFile(join(this.repoDir, 'README.md'), 'utf8').catch(() => '');
-      const features = /## What you can do\s*\n([\s\S]*?)\n## /.exec(readme)?.[1] ?? readme.slice(0, 6000);
+      const features = await this.features();
       const recent = await this.git(['log', '--format=%s', '-n', '25', 'origin/main'], { cwd: this.repoDir }).catch(() => '');
       const open = [...this.tasks, ...this.proposals].map((i) => `#${i.number} ${i.title}`).join('\n') || '(none)';
       const trace = {};
@@ -442,12 +457,12 @@ export class Company extends EventEmitter {
       const idea = await this.llm
         .chat(
           [
-            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a cozy 3D block-building island game for kids played together in the browser. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of one thing that exists, or one small new thing kids would enjoy. Narrow and specific: it changes one thing, named in the title (like "Make the bus honk when tapped" or "Show the pet's name over its head"), touching a few files at most. Never a summary, a recap, a log or a list of several things; never "improve X" or "update Y" without saying exactly what. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
-            { role: 'user', content: `What the game has now:\n${features.slice(0, 12000)}\n\nRecent changes:\n${recent}\n\nOpen tasks and proposals:\n${open}` },
+            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a 3D block-building island game for kids played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of one thing that exists, or one small new thing kids would enjoy. Narrow and specific: it changes one thing, named in the title (like "Make the bus honk when tapped" or "Show the pet's name over its head"), touching a few files at most. Never a summary, a recap, a log or a list of several things; never "improve X" or "update Y" without saying exactly what. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
+            { role: 'user', content: `What the game has now:\n${features}\n\nRecent changes:\n${recent}\n\nOpen tasks and proposals:\n${open}` },
           ],
           PROPOSAL_SCHEMA,
           trace,
-          { maxTokens: 2000, timeoutMs: 120000, temperature: 0.8 },
+          { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.8 },
         )
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
       const title = String(idea?.title ?? '').trim().slice(0, TITLE_MAX);
@@ -501,19 +516,18 @@ export class Company extends EventEmitter {
     const doing = w.doing;
     this.tell(w, 'Reading an idea from a player');
     try {
-      const readme = await readFile(join(this.repoDir, 'README.md'), 'utf8').catch(() => '');
-      const features = /## What you can do\s*\n([\s\S]*?)\n## /.exec(readme)?.[1] ?? readme.slice(0, 6000);
+      const features = await this.features();
       const trace = {};
       this.llm.model = this.model;
       const answer = await this.llm
         .chat(
           [
-            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a cozy 3D block-building island game for kids (about 5 to 12) played together in the browser. A child playing the game sent an idea for it. Decide whether CTB takes it on. Say yes to an idea that fits the game, is kind and fun for kids, and could be built — perhaps as a small first version of it. Say no to one the game already has, one that is not about the game, one that is unkind, scary or not for kids, or one far too big to build. Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be ready, and do not promise it will be built exactly so. For a yes, also write the GitHub issue for the engineers, in English: one specific change, named in a short imperative title, a TL;DR of one or two sentences, what to change in at most three short sentences, and two to four short checks that tell it is done. Answer as JSON: {"accept": true or false, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
-            { role: 'user', content: `What the game has now:\n${features.slice(0, 12000)}\n\nThe child's idea:\n${String(wish.text).slice(0, WISH_TEXT_MAX)}` },
+            { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game sent an idea for it. Decide whether CTB takes it on. Say yes to an idea that fits the game, is kind and fun for kids, and could be built — perhaps as a small first version of it. Read what the game has now first, all of it, and never tell the child the game has no such thing when it does; an idea that grows something the game has (more of it, stronger, for more animals) is a new idea, not one it has. Say no to one the game already has exactly so (and tell the child where to find it), one that is not about the game, one that is unkind, scary or not for kids, or one far too big to build. Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be ready, and do not promise it will be built exactly so. For a yes, also write the GitHub issue for the engineers, in English: one specific change, named in a short imperative title, a TL;DR of one or two sentences, what to change in at most three short sentences (naming what in the game it builds on, when it builds on something), and two to four short checks that tell it is done. Answer as JSON: {"accept": true or false, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
+            { role: 'user', content: `What the game has now:\n${features}\n\nThe child's idea:\n${String(wish.text).slice(0, WISH_TEXT_MAX)}` },
           ],
           WISH_SCHEMA,
           trace,
-          { maxTokens: 2000, timeoutMs: 120000, temperature: 0.4 },
+          { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.4 },
         )
         .finally(() => trace.usage?.length && this.onUsage(trace.usage));
       const reply = String(answer?.reply ?? '').replace(/\s+/gu, ' ').trim().slice(0, 300);
