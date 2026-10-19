@@ -150,6 +150,10 @@ async function until(page, fn, arg, timeout = 30000 * SLOW) {
         link: window.kidsWorld.session?.link.state,
         started: window.kidsWorld.session?.started,
         toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent),
+        // An open dialog: what it says of how it is going, and what is in its boxes.
+        dialog: document.getElementById('modal').hidden
+          ? undefined
+          : { note: document.querySelector('#modal .login-note')?.textContent, boxes: [...document.querySelectorAll('#modal input')].map((b) => b.value) },
       }))
       .catch(() => null);
     error.message += ` while waiting for ${String(fn).slice(0, 160)}; page: ${JSON.stringify(state)}`;
@@ -1293,11 +1297,15 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   // tree, a flower or a tuft of grass can be anywhere), with you in it and a
   // monster three steps in front of you, held still (giggling never bumps),
   // and none other coming out. On flat land the ground is under the start.
+  // And nothing else on the island to bump into: its animals and the car, bus
+  // and digger parked by the start all go, as any of them in the clearing
+  // pushes the monsters and you about.
   const spot = await page.evaluate(() => {
     const room = window.kidsWorld.session.link.room;
     const w = room.world;
     room.monsters.clear();
     room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
     const x = Math.floor(w.spawn.x) + 14;
     const y = Math.floor(w.spawn.y);
     const z = Math.floor(w.spawn.z);
@@ -1311,6 +1319,7 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   });
   const { x, y, z } = spot;
   await change(spot.cells);
+  await until(page, () => window.kidsWorld.game.critters.size === 0);
   const id = await page.evaluate(({ x, y, z }) => {
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
@@ -1388,9 +1397,25 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await page.keyboard.press('KeyX');
   await until(page, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 2 && document.body.textContent.includes('2 more bops'), full);
   // On a touch screen the 👊 button is there while a monster is about, and does the same (once
-  // the monster, knocked back, is in reach again).
+  // the monster, knocked back, is in reach again). It is put back where it was bopped, so only
+  // once the game has drawn it hopping back: a picture not drawn again since the bop shows it
+  // there already, and the knock back would come after. And with its two hearts held: a monster
+  // left alone a while gets them all back, and on a busy computer the steps to the next bop can
+  // take that long.
+  await until(
+    page,
+    (id) => {
+      const entry = window.kidsWorld.game.monsters.get(id);
+      return !entry.kick && !entry.recoil;
+    },
+    full,
+  );
   await page.evaluate(
-    ({ id, x, y, z }) => Object.assign(window.kidsWorld.session.link.room.monsters.get(id).body, { x: x + 0.5, y, z: z - 2.5, vx: 0, vy: 0, vz: 0 }),
+    ({ id, x, y, z }) => {
+      const m = window.kidsWorld.session.link.room.monsters.get(id);
+      Object.assign(m.body, { x: x + 0.5, y, z: z - 2.5, vx: 0, vy: 0, vz: 0 });
+      Object.assign(m, { hearts: 2, hitAt: 0 });
+    },
     { id: full, ...spot },
   );
   await until(page, ({ id, z }) => Math.abs(window.kidsWorld.game.monsters.get(id).model.group.position.z - (z - 2.5)) < 0.05, { id: full, z: spot.z });
@@ -1438,11 +1463,19 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
     'the swing and both monsters stopped dead as it landed',
   );
   await page.evaluate((ids) => ids.forEach((id) => window.kidsWorld.session.link.room.monsters.remove(id)), pair);
-  // One right beside you takes some HP, and knocks you back.
+  // One right beside you bumps you: it takes some HP, and knocks you back. One bump, as the
+  // island gives it, from one held still: on a busy computer the island, going by the clock,
+  // would bump you again and again (and send you home) while the page, a frame now and then,
+  // had hardly moved you. And your HP held where the bump left it, for the potion below: it
+  // comes back by itself a few seconds after a bump.
   const from = await page.evaluate(() => {
     const kw = window.kidsWorld;
+    const room = kw.session.link.room;
     const b = kw.game.me.body;
-    kw.session.link.room.monsters.add(kw.session.link.room.world, b.x, b.y, b.z - 0.5);
+    const m = room.monsters.add(room.world, b.x, b.y, b.z - 0.5);
+    m.giggle = Infinity;
+    room.hurt(kw.game.pid, m, room.now());
+    room.players.get(kw.game.pid).healAt = Infinity;
     return { x: b.x, z: b.z };
   });
   await until(page, () => window.kidsWorld.game.hp === 80 && document.querySelector('#hearts .hp-num')?.textContent === '80/100');
