@@ -2542,6 +2542,7 @@ export class UI {
       page: `${location.origin}${location.pathname}`,
       agent: navigator.userAgent,
       screen: `${innerWidth}×${innerHeight} @${Math.round(devicePixelRatio * 100) / 100}x`,
+      layout: layoutFacts(),
       touch: Boolean(this.input.touchMode),
       where: g ? 'island' : 'title',
       island: g?.world
@@ -5408,4 +5409,33 @@ export class UI {
     const clock = $('clock');
     if (clock.textContent !== `${sky}${weather}`) clock.replaceChildren(sky, weather ? h('span', { class: 'weather' }, weather) : '');
   }
+}
+
+// How the page sits on the screen, for a problem report: what a browser
+// reports wrongly shows up here, such as the strip the Home Screen game on an
+// iPad leaves along the bottom (the window, the page, 100vh and the world
+// against the screen and the notch and status bar's insets).
+function layoutFacts() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:100vh;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.append(probe);
+  const cs = getComputedStyle(probe);
+  const px = (v) => Math.round(parseFloat(v) || 0);
+  const vh = Math.round(probe.getBoundingClientRect().height) - px(cs.paddingTop) - px(cs.paddingBottom);
+  const insets = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(px).join(' ');
+  probe.remove();
+  const vv = globalThis.visualViewport;
+  const world = document.getElementById('world')?.getBoundingClientRect();
+  const app = navigator.standalone === true ? 'yes' : navigator.standalone === false ? 'no' : '?';
+  return [
+    `home screen ${app}, standalone ${matchMedia('(display-mode: standalone)').matches ? 'yes' : 'no'}`,
+    `screen ${screen.width}×${screen.height}`,
+    `page ${document.documentElement.clientWidth}×${document.documentElement.clientHeight}`,
+    vv ? `visual ${Math.round(vv.width)}×${Math.round(vv.height)}+${Math.round(vv.offsetTop)}` : null,
+    `100vh ${vh}`,
+    `insets ${insets}`,
+    world ? `world ${Math.round(world.top)}..${Math.round(world.bottom)}` : null,
+  ]
+    .filter(Boolean)
+    .join('; ');
 }

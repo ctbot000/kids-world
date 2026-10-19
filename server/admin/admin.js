@@ -164,6 +164,7 @@ function reportCard(r) {
         isl ? h('span', {}, `Island ${isl.name || '(unnamed)'}${isl.code ? ` · ${prettyCode(isl.code)}` : ''}${isl.kind ? ` · ${isl.kind}` : ''}${isl.theme ? ` · ${isl.theme}` : ''} · ${plural(isl.players, 'player', 'players')} · ${isl.host ? 'host' : 'guest'}${isl.online ? `, ${isl.online}` : ''}`) : null,
         a.screen ? h('span', {}, `Screen ${a.screen}${a.touch ? ', touch' : ''}`) : null,
       ),
+      a.layout ? h('div', { class: 'muted agent' }, `Layout: ${a.layout}`) : null,
       a.agent ? h('div', { class: 'muted agent' }, a.agent, a.page ? ` · ${a.page}` : '') : null,
       a.errors?.length ? h('details', { class: 'errors' }, h('summary', {}, `${plural(a.errors.length, 'recent page error', 'recent page errors')}`), h('pre', {}, a.errors.join('\n'))) : null,
     ),

@@ -1102,6 +1102,7 @@ export function cleanReport(raw) {
     page: shortText(a.page, 200),
     agent: shortText(a.agent, 300),
     screen: shortText(a.screen, 40),
+    layout: shortText(a.layout, 300),
     touch: a.touch === true,
     where: shortText(a.where, 40),
     island: island
