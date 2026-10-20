@@ -171,6 +171,39 @@ test('the agent works only inside its worktree: reading, searching, editing and 
   assert.ok(results.some((r) => /-export const add = \(a, b\) => a - b;/.test(r)), 'the diff');
 });
 
+test('the agent keeps what it read in view, says so when asked again, and is pushed to make the change', async () => {
+  const { repo } = await project();
+  const read = { thought: 'read it', tool: 'read', path: 'add.js', from: 1, to: 5 };
+  const llm = scripted([
+    read,
+    ...Array.from({ length: 10 }, (_, k) => ({ thought: `look ${k}`, tool: 'list', path: '' })),
+    { ...read, thought: 'again' },
+    { thought: 'fix', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' },
+    { ...read, thought: 'after the edit' },
+    { thought: 'more', tool: 'list', path: '' },
+  ]);
+  const task = { number: 7, title: 'add subtracts', body: 'Fix it.' };
+  const agent = new Agent({ llm, root: repo, name: 'Ada', task, maxSteps: 30 });
+  const result = await agent.run();
+  assert.equal(result.ok, false);
+  const results = agent.messages.filter((m) => m.role === 'user' && m.result).map((m) => m.content);
+  assert.match(results[0], /export const add/, 'kept whole past ten newer results');
+  assert.match(results[0], /\(Step 1 of 30\.\)$/);
+  assert.match(results[10], /\(Step 11 of 30\.\)$/);
+  assert.match(results[11], /You read these lines at step 1, and they are still above/);
+  assert.match(results[11], /Step 12 of 30, and nothing changed yet: stop looking around and make the change now/);
+  assert.match(results[13], /^Result of read:\nadd\.js \(lines 1-2 of 2\)\n1\texport const add = \(a, b\) => a \+ b;/, 'read again once the file changed');
+  assert.match(results[14], /\(Step 15 of 30\.\)$/, 'no push once something changed');
+
+  // Still only looking past most of its steps: refused, and told to finish near the end.
+  const idle = new Agent({ llm: scripted(Array.from({ length: 8 }, () => ({ thought: 'look', tool: 'list', path: '' }))), root: repo, name: 'Ada', task, maxSteps: 10 });
+  await idle.run();
+  const said = idle.messages.filter((m) => m.role === 'user' && m.result).map((m) => m.content);
+  assert.match(said[5], /^Result of list:\nREADME\.md/);
+  assert.match(said[6], /^Result of list:\nNo more looking around until you have changed something/);
+  assert.match(said[6], /Step 7 of 10: 3 left\. Finish now with done, or give_up/);
+});
+
 test('a task becomes a branch, a commit and a pull request once all the unit tests pass', async () => {
   const { dir, origin, repo } = await project();
   const github = hub([issue(5, 'add subtracts', 'It should add.'), issue(6, 'by someone else', '', [LABELS.task], 'stranger')]);

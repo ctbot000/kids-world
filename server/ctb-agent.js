@@ -31,12 +31,27 @@ export const STEP_SCHEMA = {
   required: ['thought', 'tool'],
 };
 
-export const MAX_STEPS = 60;
+// Steps for one task. A change across a few big files took a worker more
+// than 60 just to read its way round them.
+export const MAX_STEPS = 100;
+// With nothing changed yet, the share of the steps after which a worker is
+// told to make the change, and after which looking around (list, read,
+// search) is refused until it does: told to, a worker still went on with
+// "a few final reads" for twenty steps.
+const NUDGE_AT = 0.4;
+const LOOK_UNTIL = 0.6;
+const LOOKING = new Set(['list', 'read', 'search']);
+// The model's failures in a row (an empty answer now and then) a task survives.
+const FAILURES = 5;
 // How much of a tool's result the model sees, and how much of the older ones.
 const RESULT_MAX = 12000;
 const OLD_RESULT_MAX = 400;
-// The newest results kept whole; older ones are cut short, to keep the prompt small.
-const KEEP_WHOLE = 10;
+// The newest results kept whole, up to this many characters in all (about
+// 45,000 tokens); older ones are cut short, to keep the prompt a manageable
+// size. Keeping only the newest ten whole, a worker on a change across a few
+// big files forgot what it had read, read it again, and ran out of steps
+// without one edit.
+const KEEP_CHARS = 160000;
 const READ_LINES = 300;
 const SEARCH_HITS = 80;
 const TEST_MS = 6 * 60000;
@@ -47,7 +62,7 @@ export const LLM_OPTS = { maxTokens: 16000, timeoutMs: 5 * 60000, temperature: 0
 // The project's rules for whoever works on it, as the system prompt says them.
 export function systemPrompt({ name, company = 'CTB', project = 'kids-world', layout = '' }) {
   return [
-    `You are ${name}, a software engineer at ${company}, a company that builds ${project}: a cozy 3D block-building island game for kids, played together in the browser (three.js, plain ES modules, no build step; a Node server in server/; tests with node:test in test/).`,
+    `You are ${name}, a software engineer at ${company}, a company that builds ${project}: a 3D block-building island game for kids, played together in the browser, with pets and animals to ride and adventures with monsters to bop (three.js, plain ES modules, no build step; a Node server in server/; tests with node:test in test/).`,
     'You are given one task, a GitHub issue. Do it by changing the code in your working copy, then finish. You work one step at a time: every answer is one JSON object naming one tool and its arguments, with a short thought first.',
     'Tools:',
     '- list {path}: the files and folders in a folder ("" for the top).',
@@ -59,7 +74,7 @@ export function systemPrompt({ name, company = 'CTB', project = 'kids-world', la
     '- diff {}: what you have changed so far.',
     '- done {title, summary}: finished. title is the pull request title (short, imperative); summary says what you changed and how you tested it, in Markdown.',
     '- give_up {summary}: the task cannot be done (unclear, too big, or impossible); say why.',
-    'Rules: read the code around a change before making it, and match its style, naming and comment density (comments in plain words saying what and why). Keep the change focused on the task. Never edit package-lock.json, public/vendor/ or public/keeper.json. If the change is visible to players, update README.md where it describes that part of the game. Do not finish before the tests you ran pass.',
+    'What you read stays above, so read each part of a file once and go back to it there. Rules: read the code around a change before making it, and match its style, naming and comment density (comments in plain words saying what and why). Keep the change focused on the task. Never edit package-lock.json, public/vendor/ or public/keeper.json. If the change is visible to players, update README.md where it describes that part of the game. Do not finish before the tests you ran pass.',
     layout ? `The project's layout, from its README:\n${layout}` : '',
   ]
     .filter(Boolean)
@@ -130,6 +145,8 @@ export class Agent {
     ];
     this.steps = 0;
     this.changed = new Set();
+    // Reads whose lines are still in view: { path, start, end, step, message }.
+    this.reads = [];
   }
 
   // The model's next step, the tokens it took counted.
@@ -145,10 +162,39 @@ export class Agent {
 
   // Older results cut short, so the prompt stays a manageable size.
   shorten() {
-    const results = this.messages.filter((m) => m.role === 'user' && m.result);
-    for (const m of results.slice(0, -KEEP_WHOLE)) {
-      if (m.content.length > OLD_RESULT_MAX) m.content = `${m.content.slice(0, OLD_RESULT_MAX)}\n… (older result cut short; read it again if you need it)`;
+    let kept = 0;
+    for (const m of this.messages.filter((m) => m.role === 'user' && m.result).reverse()) {
+      kept += m.content.length;
+      if (kept > KEEP_CHARS && m.content.length > OLD_RESULT_MAX && !m.cut) {
+        m.content = `${m.content.slice(0, OLD_RESULT_MAX)}\n… (older result cut short; read it again if you need it)`;
+        m.cut = true;
+      }
     }
+  }
+
+  // A read of lines still in view, whole, from an earlier read (and the file
+  // not changed since): which step that was, or 0.
+  seenAt(path, from, to) {
+    const want = this.span(path, from, to);
+    return this.reads.find((r) => !r.message.cut && r.path === want.path && r.start <= want.start && r.end >= want.end)?.step ?? 0;
+  }
+
+  // The file and lines a read asks for, as read() takes them (the end
+  // unknown until it is read: what it asks for at most).
+  span(path, from, to) {
+    const rel = String(path ?? '').trim().replace(/^(\.\/)+/, '');
+    const start = Math.max(1, Number.isInteger(from) ? from : 1);
+    return { path: rel, start, end: Math.min(Number.isInteger(to) && to >= start ? to : start + READ_LINES - 1, start + READ_LINES - 1) };
+  }
+
+  // What a result says after it: the step, and a push to get on with it
+  // once NUDGE_AT of the steps are gone with nothing changed, or to finish
+  // near the end.
+  footer() {
+    const left = this.maxSteps - this.steps;
+    if (left <= 5) return `\n(Step ${this.steps} of ${this.maxSteps}: ${left} left. Finish now with done, or give_up and say why.)`;
+    if (!this.changed.size && this.steps >= this.maxSteps * NUDGE_AT) return `\n(Step ${this.steps} of ${this.maxSteps}, and nothing changed yet: stop looking around and make the change now, a small first version if need be.)`;
+    return `\n(Step ${this.steps} of ${this.maxSteps}.)`;
   }
 
   async run() {
@@ -159,7 +205,7 @@ export class Agent {
       try {
         step = await this.next();
       } catch (error) {
-        if (++failures >= 3) return { ok: false, why: `the model failed: ${error.message}`, steps: this.steps };
+        if (++failures >= FAILURES) return { ok: false, why: `the model failed: ${error.message}`, steps: this.steps };
         continue;
       }
       failures = 0;
@@ -179,12 +225,24 @@ export class Agent {
       }
       if (step.tool === 'give_up') return { ok: false, why: String(step.summary || 'gave up'), steps: this.steps };
       let result;
+      const seen = step.tool === 'read' ? this.seenAt(step.path, step.from, step.to) : 0;
+      const enough = LOOKING.has(step.tool) && !this.changed.size && this.steps > this.maxSteps * LOOK_UNTIL;
       try {
-        result = await this.use(step);
+        if (enough) result = 'No more looking around until you have changed something: you have read enough. Make the change now with edit or write, a small first version if need be, from what is above; or give_up and say why.';
+        else if (seen) result = `You read these lines at step ${seen}, and they are still above, whole and unchanged: use them there instead of reading them again.`;
+        else result = await this.use(step);
       } catch (error) {
         result = `Error: ${error.message}`;
       }
-      this.messages.push({ role: 'user', content: `Result of ${step.tool}:\n${cut(result, RESULT_MAX)}`, result: true });
+      const message = { role: 'user', content: `Result of ${step.tool}:\n${cut(result, RESULT_MAX)}${this.footer()}`, result: true };
+      this.messages.push(message);
+      if (['write', 'edit'].includes(step.tool)) {
+        const rel = this.span(step.path).path;
+        this.reads = this.reads.filter((r) => r.path !== rel);
+      }
+      // Lines read up to the file's end cover any read further down it too.
+      const lines = !seen && !enough && step.tool === 'read' && /^.* \(lines (\d+)-(\d+) of (\d+)\)\n/.exec(result);
+      if (lines && result.length <= RESULT_MAX) this.reads.push({ ...this.span(step.path), start: Number(lines[1]), end: lines[2] === lines[3] ? Infinity : Number(lines[2]), step: this.steps, message });
       this.shorten();
     }
     return { ok: false, why: `ran out of steps (${this.maxSteps})`, steps: this.steps };
