@@ -2,7 +2,7 @@
 // and iPhones and iPads, which can only get it by opening the game from the Home Screen.
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { fullscreenMode, isFullscreen, setFullscreen } from '../public/js/fullscreen.js';
+import { fitHomeScreenApp, fullscreenMode, isFullscreen, setFullscreen } from '../public/js/fullscreen.js';
 
 const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
 
@@ -103,4 +103,41 @@ test('a refused request is a rejected promise, never a throw', async () => {
   pretend({ document: old.doc });
   await assert.rejects(setFullscreen(true), /not allowed/);
   assert.equal(isFullscreen(), false);
+});
+
+// The Home Screen game on an iPad Pro 11": its page under the status bar is
+// 802 tall on an 834-tall screen, short by the bar's 32 points.
+function homeScreenGap({ standalone = true, inner = [1194, 802], top = 32 } = {}) {
+  const set = {};
+  const probe = { style: {}, remove() {} };
+  pretend({
+    document: { createElement: () => probe, body: { append() {} }, documentElement: { style: { setProperty: (k, v) => (set[k] = v) } } },
+    navigator: { standalone },
+  });
+  const was = { ...globalThis };
+  Object.assign(globalThis, {
+    getComputedStyle: () => ({ paddingTop: `${top}px` }),
+    innerWidth: inner[0],
+    innerHeight: inner[1],
+    screen: { width: 834, height: 1194 },
+    addEventListener() {},
+  });
+  try {
+    fitHomeScreenApp();
+  } finally {
+    for (const k of ['getComputedStyle', 'innerWidth', 'innerHeight', 'screen', 'addEventListener']) {
+      if (k in was) globalThis[k] = was[k];
+      else delete globalThis[k];
+    }
+  }
+  return set['--app-gap'];
+}
+
+test('the Home Screen game grows by the status bar it is short of, and only there', () => {
+  assert.equal(homeScreenGap(), '32px');
+  assert.equal(homeScreenGap({ inner: [834, 1162] }), '32px', 'held upright too');
+  assert.equal(homeScreenGap({ inner: [1194, 834] }), '0px', 'once WebKit gets it right');
+  assert.equal(homeScreenGap({ inner: [700, 802] }), '0px', 'a window beside another app');
+  assert.equal(homeScreenGap({ top: 0 }), '0px', 'no status bar over it');
+  assert.equal(homeScreenGap({ standalone: false }), undefined, 'a browser tab is left alone');
 });

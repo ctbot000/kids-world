@@ -4417,19 +4417,17 @@ kbd {
 }
 
 /* Opened from the Home Screen on an iPhone or iPad, the page starts under the
-   see-through status bar, yet 100% (and so inset: 0) still leaves the status
-   bar's height out, an empty strip along the bottom. 100vh is the whole
-   screen there (WebKit bug 254868). In a browser tab it is not, so only here. */
-@media (display-mode: standalone) {
-  html,
-  body,
-  #world,
-  #hud,
-  .screen,
-  .modal,
-  #flash,
-  .loading {
-    height: 100vh;
-    bottom: auto;
-  }
+   see-through status bar, yet 100% (and so inset: 0) leaves the status bar's
+   height out, an empty strip along the bottom. --app-gap is that height,
+   measured by fitHomeScreenApp() in fullscreen.js, and nothing anywhere else.
+   The body is 100% of the page, which has grown by it already. */
+html,
+#world,
+#hud,
+.screen,
+.modal,
+#flash,
+.loading {
+  height: calc(100% + var(--app-gap, 0px));
+  bottom: auto;
 }

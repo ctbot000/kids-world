@@ -5,6 +5,7 @@ import { buildAtlas } from './render/atlas.js';
 import { shirtColor } from './render/avatar.js';
 import { Renderer } from './render/renderer.js';
 import { Game } from './game.js';
+import { fitHomeScreenApp } from './fullscreen.js';
 import { hurried } from './hurry.js';
 import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
@@ -27,6 +28,7 @@ import { generate, SIZES } from './shared/worldgen.js';
 
 // What goes wrong in the page from here on goes along with a problem report.
 watchErrors();
+fitHomeScreenApp();
 
 const params = new URLSearchParams(location.search);
 // Who is playing: the player logged in on this device, with their own things

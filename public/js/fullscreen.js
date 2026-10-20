@@ -50,3 +50,30 @@ export function onFullscreenChange(fn) {
   d.addEventListener('fullscreenchange', fn);
   d.addEventListener('webkitfullscreenchange', fn);
 }
+
+// The Home Screen game on an iPhone or iPad starts under the see-through
+// status bar, yet the page stays that bar's height short (WebKit bug 254868):
+// an empty strip along the bottom. 100vh is shorter still, and display-mode:
+// standalone does not match there, so the page measures the gap and grows by
+// it through --app-gap, which comes to nothing once WebKit gets it right. Only
+// a window as wide as the screen, not one beside another app.
+export function fitHomeScreenApp() {
+  const d = doc();
+  if (globalThis.navigator?.standalone !== true) return;
+  const probe = d.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
+  const fit = () => {
+    d.body.append(probe);
+    const top = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    const { width, height } = globalThis.screen;
+    const landscape = innerWidth > innerHeight;
+    const across = landscape ? Math.max(width, height) : Math.min(width, height);
+    const tall = landscape ? Math.min(width, height) : Math.max(width, height);
+    const gap = top > 0 && Math.abs(innerWidth - across) < 1 && Math.abs(tall - innerHeight - top) < 1 ? top : 0;
+    d.documentElement.style.setProperty('--app-gap', `${gap}px`);
+  };
+  fit();
+  // Before anything else resizes to the page, which this changes.
+  addEventListener('resize', fit);
+}
