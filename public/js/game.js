@@ -7,7 +7,7 @@
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
 import { gashaponNear } from './shared/gashapon.js';
-import { pianoNear } from './shared/piano.js';
+import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
@@ -1062,8 +1062,12 @@ export class Game extends EventTarget {
     this.sound.play('bump');
     const b = this.me?.body;
     if (!b) return;
-    // Knocked out of your seat.
+    // Knocked out of your seat, or off the piano bench.
     if (this.seat) this.standUp();
+    if (this.pianoAt) {
+      this.emit('piano-gone');
+      this.closePiano();
+    }
     this.renderer.effects.bang(b.x, b.y + 1.7, b.z);
     if (msg.home) {
       this.goHome(msg.at, this.adventure ? 'Out of HP! Back to the nearest safe place, where no monster goes.' : 'Out of HP! Back to the start of the island, where no monster goes.');
@@ -1096,6 +1100,10 @@ export class Game extends EventTarget {
   // Back to a safe place (at, as [x, y, z]; or the start of the island), and
   // on your feet with all your HP.
   goHome(at, text) {
+    if (this.pianoAt) {
+      this.pianoAt = null;
+      this.emit('piano-gone');
+    }
     if (this.riding) this.dismount();
     if (this.aboard) this.hopOff();
     const b = this.me.body;
@@ -2117,11 +2125,51 @@ export class Game extends EventTarget {
   // ------------------------------------------------ pianos
 
   // Q (or the Play button) by a piano: its keyboard opens.
+  // You sit down on the bench in front of its keys, facing it, hands on
+  // the keys (render/avatar.js ANIM.piano), and stay there till it closes.
   openPiano() {
     const t = this.pianoTarget;
-    if (!t) return;
+    const seat = t && pianoSeat(this.world, t.x, t.y, t.z);
+    if (!seat) return;
+    const b = this.me.body;
+    if (b.flying) {
+      b.flying = false;
+      this.emit('fly', false);
+    }
     this.pianoAt = t;
+    this.atPiano(seat);
+    this.sound.play('place', { kind: 'wood' });
     this.emit('piano-open');
+    this.emit('ride');
+  }
+
+  // On the bench at the piano being played, and seen to be (sent at once).
+  atPiano(seat) {
+    const me = this.me;
+    Object.assign(me.body, { x: seat.x, y: seat.y, z: seat.z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
+    me.yaw = seat.yaw;
+    me.speed = 0;
+    me.anim = ANIM.piano;
+  }
+
+  // At the piano, staying put; if the piano goes (someone picked it up),
+  // its keyboard closes.
+  stayAtPiano(dt) {
+    const t = this.pianoAt;
+    const seat = pianoSeat(this.world, t.x, t.y, t.z);
+    if (!seat) {
+      this.emit('piano-gone');
+      this.closePiano();
+      return;
+    }
+    this.atPiano(seat);
+    const a = this.players.get(this.pid)?.avatar;
+    if (a) {
+      a.root.position.set(seat.x, seat.y, seat.z);
+      a.root.rotation.y = seat.yaw;
+      a.update(dt, ANIM.piano, 0);
+      a.shadow.visible = false;
+    }
   }
 
   // A key played (MIDI note n) on the open piano: heard at once, a note
@@ -2131,6 +2179,7 @@ export class Game extends EventTarget {
     const t = this.pianoAt;
     if (!t) return;
     this.sound.piano(n, { grand: t.grand });
+    this.players.get(this.pid)?.avatar?.pianoNote(n);
     this.pianoFx(t, n);
     this.send({ t: 'piano', n, at: [t.x, t.y, t.z] });
     this.profile.count('notes');
@@ -2144,8 +2193,16 @@ export class Game extends EventTarget {
     if (t) this.renderer.effects.sparkles(t.x + 0.5, t.y + 1.2, t.z + 0.5, 16);
   }
 
+  // Up off the bench, standing where it was.
   closePiano() {
+    const t = this.pianoAt;
+    if (!t) return;
     this.pianoAt = null;
+    const b = this.me.body;
+    Object.assign(b, { y: b.y - BENCH_H, vx: 0, vy: 0, vz: 0, onGround: false });
+    unstick(this.world, b);
+    this.me.anim = ANIM.idle;
+    this.emit('ride');
   }
 
   // ------------------------------------------------ TVs
@@ -2319,6 +2376,7 @@ export class Game extends EventTarget {
     const b = this.me.body;
     const d = Math.hypot(b.x - x - 0.5, b.y - y, b.z - z - 0.5);
     this.sound.piano(msg.n, { gain: Math.min(1, 4 / Math.max(4, d)), grand: B.BLOCKS[this.world.get(x, y, z)]?.model === 'grand-piano' });
+    this.players.get(msg.pid)?.avatar?.pianoNote(msg.n);
     this.pianoFx({ x, y, z }, msg.n);
   }
 
@@ -3704,7 +3762,7 @@ export class Game extends EventTarget {
       v.dist += (this.pose.dist - v.dist) * Math.min(1, dt * 4);
     }
     // Sitting or lying down, your eyes are lower than your hips are high.
-    this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : b);
+    this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : this.pianoAt ? { x: b.x, y: b.y - BENCH_H, z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z } });
     this.observe();
@@ -3761,6 +3819,10 @@ export class Game extends EventTarget {
   moveMe(dt, input) {
     if (this.seat) {
       this.stayInSeat(dt, input);
+      return;
+    }
+    if (this.pianoAt) {
+      this.stayAtPiano(dt);
       return;
     }
     const me = this.me;
@@ -3924,7 +3986,7 @@ export class Game extends EventTarget {
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
-      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl) a.shadow.visible = false;
+      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl || s.anim === ANIM.piano) a.shadow.visible = false;
     }
     for (const p of this.players.values()) {
       if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;

@@ -2,12 +2,12 @@
 // after the gashapon machine; their keys, two octaves from middle C, each
 // with a letter on a keyboard; found beside you; the songs to follow; a key
 // played passed on by the island to everyone else, from someone at the
-// piano only; and the Piano Star sticker.
+// piano only; where you sit to play; and the Piano Star sticker.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
-import { HIGH, isNote, isPiano, KEYS, LOW, noteOfKey, pianoNear, SONGS } from '../public/js/shared/piano.js';
+import { BENCH_H, HIGH, isNote, isPiano, KEYS, LOW, noteOfKey, pianoNear, pianoSeat, SONGS } from '../public/js/shared/piano.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
@@ -72,6 +72,31 @@ test('the piano beside you is found, and none further away', () => {
   assert.equal(pianoNear(w, { x: 8.5, y: 9, z: 7 }), null, 'up above it');
   w.set(8, 5, 8, B.PIANO);
   assert.equal(pianoNear(w, { x: 8.5, y: 5, z: 6.8 }).grand, false);
+});
+
+test('you sit to play on a bench in front of the keys, facing the piano, further out at a grand', () => {
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  // Turned each way: in front of it, out of its cell, facing back at it.
+  for (let k = 0; k < 4; k++) {
+    for (const id of [B.PIANO, B.GRAND_PIANO]) {
+      w.set(8, 5, 8, B.turnedTo(id, k));
+      const s = pianoSeat(w, 8, 5, 8);
+      const [fx, fz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][k];
+      const out = (s.x - 8.5) * fx + (s.z - 8.5) * fz;
+      assert.ok(out > 0.5 && out < 1.1, `${k}: in front, ${out}`);
+      assert.ok(Math.abs((s.x - 8.5) * fz - (s.z - 8.5) * fx) < 1e-9, 'in the middle of it');
+      assert.equal(s.y, 5 + BENCH_H, 'on the bench');
+      // Facing it: an avatar faces (sin yaw, cos yaw).
+      assert.ok(Math.abs(Math.sin(s.yaw) + fx) < 1e-9 && Math.abs(Math.cos(s.yaw) + fz) < 1e-9, `${k}: facing it`);
+    }
+    w.set(8, 5, 8, B.turnedTo(B.PIANO, k));
+    const up = pianoSeat(w, 8, 5, 8);
+    w.set(8, 5, 8, B.turnedTo(B.GRAND_PIANO, k));
+    const grand = pianoSeat(w, 8, 5, 8);
+    assert.ok(Math.hypot(grand.x - 8.5, grand.z - 8.5) > Math.hypot(up.x - 8.5, up.z - 8.5), 'further out at a grand, its keys sticking out more');
+  }
+  w.set(8, 5, 8, B.CHAIR);
+  assert.equal(pianoSeat(w, 8, 5, 8), null);
 });
 
 test('a key played at a piano is passed to everyone else, and nothing else is', () => {

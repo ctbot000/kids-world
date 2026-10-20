@@ -53,3 +53,28 @@ export const SONGS = [
 ];
 
 export const songOf = (key) => SONGS.find((s) => s.key === key) ?? null;
+
+// How high the piano bench is that you sit on to play (render/avatar.js
+// draws it under you), and how far in front of the piano's middle you sit:
+// the grand's keys stick out further, so you sit further out.
+export const BENCH_H = 0.4;
+const SIT_OUT = { piano: 0.78, 'grand-piano': 0.95 };
+
+// The four ways along the ground, as RAIL_DIRS.
+const DIRS = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
+
+// Where you sit to play the piano in cell (x, y, z): on the bench in front
+// of its keys, facing it: { x, y, z, yaw } (an avatar faces +z at yaw 0),
+// the root at the top of the bench; or null if it is no piano.
+export function pianoSeat(world, x, y, z) {
+  const def = BLOCKS[world.get(x, y, z)];
+  if (!isPiano(def?.id)) return null;
+  const [fx, fz] = DIRS[def.front];
+  const out = SIT_OUT[def.model];
+  return { x: x + 0.5 + fx * out, y: y + BENCH_H, z: z + 0.5 + fz * out, yaw: Math.atan2(-fx, -fz) };
+}

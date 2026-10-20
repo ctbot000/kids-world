@@ -8,6 +8,7 @@
 // emotes (wave, dance, cheer...).
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
+import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
@@ -240,8 +241,10 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // sit: on a chair or a sofa, the root at the seat; lie: in bed, on your
 // back, the root at your feet and your head behind you; curl: in a bed one
 // block long, curled up on your side with your knees up, made just small
-// enough to fit in it, the root in the middle of the bed (shared/seats.js).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10 };
+// enough to fit in it, the root in the middle of the bed (shared/seats.js);
+// piano: on a piano bench (drawn under you) playing the piano in front of
+// you, the root at the top of the bench (shared/piano.js pianoSeat).
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11 };
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -1698,6 +1701,20 @@ const handShape = (size, side) =>
     return bake(parts.map(({ g, m }) => ({ g, m: new THREE.Matrix4().makeScale(size, size, size).multiply(m) })));
   });
 
+// The bench you sit on at the piano, its padded top where the root is and
+// its four legs down to the floor: a little wider than you, of the same dark
+// wood as the piano, with a red cushion.
+function pianoBench() {
+  const g = new THREE.Group();
+  const wood = toon('#3b2a24');
+  g.add(mesh(roundedBox(0.56, 0.06, 0.32, 0.02), wood, 0, -0.05, -0.02));
+  g.add(mesh(roundedBox(0.5, 0.04, 0.27, 0.018), toon('#c0392b'), 0, -0.01, -0.02));
+  for (const x of [-0.24, 0.24]) {
+    for (const z of [-0.15, 0.11]) g.add(mesh(cylinder(0.02, 0.016, BENCH_H - 0.07, 8), wood, x, -0.075 - (BENCH_H - 0.07) / 2, z));
+  }
+  return g;
+}
+
 export class Avatar {
   constructor(look, { name = '' } = {}) {
     this.root = new THREE.Group();
@@ -1713,6 +1730,15 @@ export class Avatar {
     // On an animal: how far round it the legs reach (see shared/critters.js).
     this.ride = null;
     this.setLook(look);
+    // At the piano: each hand where on the keys it is (0 the lowest key, 1
+    // the highest; the left plays below the high C, the right from it) and
+    // when it last struck one; and the bench under you, there only while
+    // you play (so nothing measuring you counts it otherwise).
+    this.keys = [
+      { u: 0.3, to: 0.3, at: -Infinity },
+      { u: 0.7, to: 0.7, at: -Infinity },
+    ];
+    this.bench = pianoBench();
     // A soft round shadow under the feet.
     const shadow = blobShadow(0.42);
     shadow.position.y = 0.02;
@@ -1873,6 +1899,15 @@ export class Avatar {
     return swing.secs * swing.strike;
   }
 
+  // A key struck on the piano being played (MIDI note n): the hand on that
+  // side of the keyboard moves over to it and strikes it.
+  pianoNote(n) {
+    const u = Math.max(0, Math.min(1, (n - LOW) / (HIGH - LOW)));
+    const hand = this.keys[u < 0.5 ? 0 : 1];
+    hand.to = u;
+    hand.at = this.time;
+  }
+
   playEmote(key) {
     this.emote = key;
     this.emoteAt = this.time;
@@ -1983,6 +2018,36 @@ export class Avatar {
       headTilt = Math.sin(t * 0.7) * 0.06;
       headNod = Math.sin(t * 0.45) * 0.05;
       legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
+    } else if (anim === ANIM.piano) {
+      // On the bench, leaning in to the keys, both hands on them: each glides
+      // over to the key it plays next and strikes it, the wrist dropping and
+      // springing back up, and the shoulders turn a little after the hand
+      // that played last; the fingers ripple while you are playing, and the
+      // head sways with the music. The left hand is on this side (+x), the
+      // low notes' end as you face the piano.
+      bob = -(B.hip - SIT_HIPS);
+      lean = 0.16;
+      const [lo, hi] = this.keys;
+      const glide = Math.min(1, dt * 14);
+      lo.u += (lo.to - lo.u) * glide;
+      hi.u += (hi.to - hi.u) * glide;
+      const press = (k) => Math.max(0, 1 - (t - k.at) / 0.2) ** 2;
+      const pl = press(lo);
+      const ph2 = press(hi);
+      const playing = t - Math.max(lo.at, hi.at) < 1.5;
+      const ripple = playing ? 0.03 : 0.012;
+      // How far out each arm reaches along the keys, from the middle.
+      armRaiseR = -0.08 + (0.5 - lo.u) * 0.95;
+      armRaiseL = -0.08 + (hi.u - 0.5) * 0.95;
+      armFwdR = -1.02 + 0.12 * pl + Math.sin(t * 11) * ripple;
+      armFwdL = -1.02 + 0.12 * ph2 + Math.sin(t * 11 + 1.7) * ripple;
+      bendR = 0.62 - 0.12 * pl;
+      bendL = 0.62 - 0.12 * ph2;
+      const last = lo.at > hi.at ? lo.u : hi.u;
+      twist = playing ? (0.5 - last) * 0.35 : 0;
+      headTilt = playing ? Math.sin(t * 2.2) * 0.08 : Math.sin(t * 0.7) * 0.04;
+      headNod = 0.18 + (pl + ph2) * 0.03;
+      legs = [[-1.42, -0.1, 1.35, 0], [-1.42, 0.1, 1.35, 0]];
     } else if (anim === ANIM.curl) {
       // Hugging your knees, chin tucked in, breathing slowly.
       armRaiseL = armRaiseR = -0.05;
@@ -2130,7 +2195,11 @@ export class Avatar {
     }
 
     const curled = anim === ANIM.curl;
-    const sitting = anim === ANIM.sit || curled;
+    const sitting = anim === ANIM.sit || anim === ANIM.piano || curled;
+    if ((anim === ANIM.piano) !== (this.bench.parent === this.root)) {
+      if (anim === ANIM.piano) this.root.add(this.bench);
+      else this.bench.removeFromParent();
+    }
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);

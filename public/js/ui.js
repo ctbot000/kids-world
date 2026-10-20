@@ -2784,6 +2784,8 @@ export class UI {
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
     on('piano-open', () => this.pianoDialog());
+    // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
+    on('piano-gone', () => this.modalOpen && $('modal').querySelector('.piano-board') && this.closeModal());
     on('tv-open', () => this.tvDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());

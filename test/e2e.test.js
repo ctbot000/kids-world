@@ -3743,12 +3743,26 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Grand Piano'));
   assert.equal(await page.evaluate(() => document.querySelectorAll('.piano-key').length), PIANO_KEYS.length);
+  // Sat on the bench in front of its keys, facing it, playing (ANIM.piano).
+  const sat = await page.evaluate((at) => {
+    for (let i = 0; i < 5; i++) window.kidsWorld.step(1 / 60, 1);
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    return { anim: g.me.anim, up: b.y - at.y, out: Math.hypot(b.x - at.x - 0.5, b.z - at.z - 0.5), bench: g.players.get(g.pid).avatar.bench.parent !== null };
+  }, at);
+  assert.equal(sat.anim, 11);
+  assert.ok(sat.up > 0.3 && sat.up < 0.5 && sat.out > 0.5 && sat.out < 1.1 && sat.bench, JSON.stringify(sat));
   // A tap on a key, and a key on the keyboard.
   const keys = await page.$$('.piano-key');
   await keys[4].click();
   await page.keyboard.press('KeyZ');
   await until(page, () => window.kidsWorld.sent.length >= 2);
   const sent = await page.evaluate(() => window.kidsWorld.sent.map((m) => m.n));
+  // The hands strike the keys: the left the low ones.
+  assert.ok(await page.evaluate(() => {
+    const keys = window.kidsWorld.game.players.get(window.kidsWorld.game.pid).avatar.keys;
+    return keys[0].at > 0 && keys[0].to === 0;
+  }), 'the left hand played middle C');
   assert.deepEqual(sent, [PIANO_KEYS[4].n, 60]);
   assert.deepEqual(await page.evaluate(() => window.kidsWorld.sent[0].at), [at.x, at.y, at.z]);
   // Mary Had a Little Lamb, the glowing key each time.
@@ -3763,6 +3777,12 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   assert.ok((await page.evaluate(() => window.kidsWorld.profile.data.stats.notes)) >= 2 + songOf('lamb').notes.length);
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.pianoAt === null);
+  // Up off the bench, standing on the ground in front of the piano.
+  await page.evaluate(() => {
+    for (let i = 0; i < 30; i++) window.kidsWorld.step(1 / 60, 1);
+  });
+  const stood = await page.evaluate((at) => ({ anim: window.kidsWorld.game.me.anim, y: window.kidsWorld.game.me.body.y - at.y, bench: window.kidsWorld.game.players.get(window.kidsWorld.game.pid).avatar.bench.parent !== null }), at);
+  assert.ok(stood.anim !== 11 && Math.abs(stood.y) < 0.05 && !stood.bench, JSON.stringify(stood));
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
