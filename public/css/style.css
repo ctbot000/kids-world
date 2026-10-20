@@ -4417,16 +4417,11 @@ kbd {
 }
 
 /* Opened from the Home Screen on an iPhone or iPad, the page starts under the
-   see-through status bar, yet what fixed things fill leaves the status bar's
-   height out, an empty strip along the bottom. --app-gap is that height,
+   see-through status bar, yet stays the status bar's height short, and fixed
+   things with it: an empty strip along the bottom. --app-gap is that height,
    measured by fitHomeScreenApp() in fullscreen.js, and nothing anywhere else.
-   Not the page itself: grown, it takes what fixed things fill along with it. */
-#world,
-#hud,
-.screen,
-.modal,
-#flash,
-.loading {
+   Only the page grows by it: fixed things then reach the bottom along with it,
+   and grown themselves they would not show past the strip anyway. */
+html {
   height: calc(100% + var(--app-gap, 0px));
-  bottom: auto;
 }
