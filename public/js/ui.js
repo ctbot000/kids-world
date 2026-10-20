@@ -5426,6 +5426,8 @@ function layoutFacts() {
   probe.remove();
   const vv = globalThis.visualViewport;
   const world = document.getElementById('world')?.getBoundingClientRect();
+  const titleEl = document.getElementById('title');
+  const title = titleEl && !titleEl.hidden ? titleEl.getBoundingClientRect() : null;
   const app = navigator.standalone === true ? 'yes' : navigator.standalone === false ? 'no' : '?';
   return [
     `home screen ${app}, standalone ${matchMedia('(display-mode: standalone)').matches ? 'yes' : 'no'}`,
@@ -5435,6 +5437,8 @@ function layoutFacts() {
     `100vh ${vh}`,
     `insets ${insets}`,
     world ? `world ${Math.round(world.top)}..${Math.round(world.bottom)}` : null,
+    title ? `title ${Math.round(title.top)}..${Math.round(title.bottom)}` : null,
+    `gap ${getComputedStyle(document.documentElement).getPropertyValue('--app-gap').trim() || 'none'}`,
   ]
     .filter(Boolean)
     .join('; ');

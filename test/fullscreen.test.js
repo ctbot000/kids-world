@@ -105,11 +105,11 @@ test('a refused request is a rejected promise, never a throw', async () => {
   assert.equal(isFullscreen(), false);
 });
 
-// The Home Screen game on an iPad Pro 11": its page under the status bar is
-// 802 tall on an 834-tall screen, short by the bar's 32 points.
+// The Home Screen game on an iPad Pro 11": what fixed things fill under the
+// status bar is 802 tall on an 834-tall screen, short by the bar's 32 points.
 function homeScreenGap({ standalone = true, inner = [1194, 802], top = 32 } = {}) {
   const set = {};
-  const probe = { style: {}, remove() {} };
+  const probe = { style: {}, remove() {}, getBoundingClientRect: () => ({ width: inner[0], height: inner[1] }) };
   pretend({
     document: { createElement: () => probe, body: { append() {} }, documentElement: { style: { setProperty: (k, v) => (set[k] = v) } } },
     navigator: { standalone },
@@ -117,15 +117,13 @@ function homeScreenGap({ standalone = true, inner = [1194, 802], top = 32 } = {}
   const was = { ...globalThis };
   Object.assign(globalThis, {
     getComputedStyle: () => ({ paddingTop: `${top}px` }),
-    innerWidth: inner[0],
-    innerHeight: inner[1],
     screen: { width: 834, height: 1194 },
     addEventListener() {},
   });
   try {
     fitHomeScreenApp();
   } finally {
-    for (const k of ['getComputedStyle', 'innerWidth', 'innerHeight', 'screen', 'addEventListener']) {
+    for (const k of ['getComputedStyle', 'screen', 'addEventListener']) {
       if (k in was) globalThis[k] = was[k];
       else delete globalThis[k];
     }

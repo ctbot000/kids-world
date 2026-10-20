@@ -52,25 +52,28 @@ export function onFullscreenChange(fn) {
 }
 
 // The Home Screen game on an iPhone or iPad starts under the see-through
-// status bar, yet the page stays that bar's height short (WebKit bug 254868):
-// an empty strip along the bottom. 100vh is shorter still, and display-mode:
-// standalone does not match there, so the page measures the gap and grows by
-// it through --app-gap, which comes to nothing once WebKit gets it right. Only
-// a window as wide as the screen, not one beside another app.
+// status bar, yet what fixed things fill stays that bar's height short (WebKit
+// bug 254868): an empty strip along the bottom. 100vh is shorter still, and
+// display-mode: standalone does not match there, so the page measures the gap
+// and the full-screen layers grow by it through --app-gap, which comes to
+// nothing once WebKit gets it right. Only a window as wide as the screen, not
+// one beside another app. The page itself is left be: grown, it takes what
+// fixed things fill along with it, and they get the gap twice.
 export function fitHomeScreenApp() {
   const d = doc();
   if (globalThis.navigator?.standalone !== true) return;
   const probe = d.createElement('div');
-  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
+  probe.style.cssText = 'position:fixed;left:0;right:0;top:0;bottom:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
   const fit = () => {
     d.body.append(probe);
     const top = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    const box = probe.getBoundingClientRect();
     probe.remove();
     const { width, height } = globalThis.screen;
-    const landscape = innerWidth > innerHeight;
+    const landscape = box.width > box.height;
     const across = landscape ? Math.max(width, height) : Math.min(width, height);
     const tall = landscape ? Math.min(width, height) : Math.max(width, height);
-    const gap = top > 0 && Math.abs(innerWidth - across) < 1 && Math.abs(tall - innerHeight - top) < 1 ? top : 0;
+    const gap = top > 0 && Math.abs(box.width - across) < 1 && Math.abs(tall - box.height - top) < 1 ? top : 0;
     d.documentElement.style.setProperty('--app-gap', `${gap}px`);
   };
   fit();
