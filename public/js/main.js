@@ -148,15 +148,16 @@ for (const p of [profile, isle]) {
   for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
   p.addEventListener('count', () => keeper.counted());
 }
-// A toy weapon (or clothes) bought, put on or taken off in the shop: friends on the
-// island see it in your hand, and the island lets it reach further. A new
-// level (here, or from another device of yours) shows on your name tag.
-// On the shared isle, the weapon and the level are the isle's own.
+// A toy weapon (or clothes) bought in the shop, put on or taken off in the
+// backpack: friends on the island see it in your hand, and the island lets
+// it reach further; on the title, you are dressed in it there. A new level
+// (here, or from another device of yours) shows on your name tag. On the
+// shared isle, the weapon and the level are the isle's own.
 let weaponSent = '';
 let outfitSent = '';
 let levelSent = 0;
 const sendGear = () => {
-  const p = session?.game?.profile ?? profile;
+  const p = session?.game?.profile ?? ui.profile;
   const weapon = wornWeapon(p.data.gear)?.key ?? '';
   const outfit = wornOutfit(p.data.gear)?.key ?? '';
   const level = p.progress.level;
@@ -164,7 +165,8 @@ const sendGear = () => {
   weaponSent = weapon;
   outfitSent = outfit;
   levelSent = level;
-  session?.game?.send({ t: 'look', look: p.shownLook, name: profile.name });
+  if (session?.game) session.game.send({ t: 'look', look: p.shownLook, name: profile.name });
+  else if (demo.world) showDemoAvatar();
 };
 for (const p of [profile, isle]) {
   for (const type of ['basket', 'level', 'change']) p.addEventListener(type, sendGear);
@@ -270,10 +272,13 @@ function startDemo() {
   renderer.view.pitch = 0.22;
 }
 
+// You as you are dressed, with the toy weapon and clothes of the world the
+// title shows (your own, or Adventure Isle's).
 function showDemoAvatar() {
+  if (!demo.world) return;
   renderer.removeAvatar(-1);
   const s = demo.world.spawn;
-  const a = renderer.addAvatar(-1, profile.look, profile.name);
+  const a = renderer.addAvatar(-1, lookWithGear(profile.look, ui.profile.data.gear), profile.name);
   a.root.position.set(s.x, s.y, s.z);
   a.playEmote('wave');
   demo.avatar = a;

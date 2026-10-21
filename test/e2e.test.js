@@ -1504,14 +1504,31 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
 
 test('the shop sells, the 🎒 backpack is where you put things on and take them off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Badger' });
+  // On the title, the backpack turns you round to see how you look, and
+  // what you put away goes from your hand.
+  const titleWeapon = () => page.evaluate(() => window.kidsWorld.renderer.avatars.get(-1)?.look.weapon ?? '');
+  await page.evaluate(() => {
+    window.kidsWorld.profile.earn(40);
+    window.kidsWorld.profile.buy('weapon');
+  });
+  await until(page, () => window.kidsWorld.renderer.avatars.get(-1)?.look.weapon === 'sword');
+  await page.click('#btn-backpack');
+  await until(page, () => document.body.classList.contains('posing') && document.getElementById('modal').classList.contains('see-through'));
+  await clickButton(page, '🙌 Put away', '#modal');
+  await until(page, () => window.kidsWorld.renderer.avatars.get(-1) && !window.kidsWorld.renderer.avatars.get(-1).look.weapon);
+  await clickButton(page, '✋ Hold it', '#modal');
+  await until(page, () => window.kidsWorld.renderer.avatars.get(-1)?.look.weapon === 'sword');
+  assert.equal(await titleWeapon(), 'sword');
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && !document.body.classList.contains('posing'));
   await makeIsland(page, { online: false });
   const gear = () => page.evaluate(() => window.kidsWorld.profile.data.gear);
+  const mine = () => page.evaluate(() => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look ?? {});
   await page.evaluate(() => window.kidsWorld.profile.earn(400));
   // Bought in the shop, and on you straight away; but no putting on or
   // taking off there.
   await page.click('#btn-shop-hud');
   await clickButton(page, 'Buy 👟', '#modal');
-  await clickButton(page, 'Buy 🗡️', '#modal');
   await clickButton(page, 'Upgrade to 🫧', '#modal');
   await clickButton(page, 'Buy 🧣', '#modal');
   await until(page, () => {
@@ -1534,8 +1551,16 @@ test('the shop sells, the 🎒 backpack is where you put things on and take them
   await until(page, () => window.kidsWorld.profile.data.gear.off.weapon === true);
   await clickButton(page, '🙌 Take off', '#modal .shop-card:nth-child(4)');
   await until(page, () => window.kidsWorld.profile.data.gear.outfit === '');
+  // Each change shows on you at once, the camera turned to you.
+  assert.ok(await page.evaluate(() => document.body.classList.contains('posing')));
+  await until(page, () => {
+    const look = window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look;
+    return look && !look.outfit && !look.weapon;
+  });
   await clickButton(page, '👕 Put on', '#modal .shop-card:nth-child(4)');
   await until(page, () => window.kidsWorld.profile.data.gear.outfit === 'scarf' && document.querySelector('#modal .shop-card:nth-child(4) b').textContent === 'Cozy Scarf ✅');
+  await until(page, () => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look.outfit === 'scarf');
+  assert.equal((await mine()).weapon, undefined, 'the weapon put away stays away');
   assert.equal((await gear()).shoes, 1, 'taken off is still yours');
   // I opens it on the island too, a potion in it to drink.
   await page.keyboard.press('Escape');

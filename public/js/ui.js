@@ -535,6 +535,8 @@ export class UI {
       this.profile = p;
       this.levelKey = '';
       this.renderLevel();
+      // You on the title, dressed in that world's gear.
+      this.handlers?.lookChanged?.();
     }
   }
 
@@ -1576,7 +1578,7 @@ export class UI {
           ...[
             h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
-            h('p', { class: 'muted' }, 'Put on what you like: friends see it on you. One set of clothes at a time, and one toy weapon in your hand.'),
+            h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             list,
           ].filter(Boolean),
         );
@@ -1584,8 +1586,18 @@ export class UI {
         onChange = draw;
         p.addEventListener('basket', onChange);
       },
-      { onClose: () => p.removeEventListener('basket', onChange) },
+      // See-through, the camera turned to you as in "Change me", so each
+      // thing put on or taken off shows on you (main.js sendGear).
+      {
+        seeThrough: true,
+        pose: true,
+        onClose: () => {
+          p.removeEventListener('basket', onChange);
+          this.handlers.lookDone?.();
+        },
+      },
     );
+    this.handlers.lookOpen?.();
   }
 
   // The ranking of the players with a login, from the island keeper, live:
@@ -1966,7 +1978,7 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion.']),
+          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion. You see yourself as you change.']),
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
