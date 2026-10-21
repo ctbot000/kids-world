@@ -1105,6 +1105,9 @@ export function cleanReport(raw) {
     layout: shortText(a.layout, 300),
     touch: a.touch === true,
     where: shortText(a.where, 40),
+    // Where the picture came from: the screen as it was, or one the player
+    // picked from their device (a phone's gallery, say).
+    picture: jpeg ? (a.picture === 'chosen' ? 'chosen' : 'screen') : '',
     island: island
       ? {
           name: shortText(island.name, 60),

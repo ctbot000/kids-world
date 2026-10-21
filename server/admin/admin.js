@@ -151,16 +151,17 @@ function reportCard(r) {
   return h(
     'article',
     { class: `report card${r.seen ? ' seen' : ''}` },
-    picture ? h('a', { class: 'shot', href: picture, target: '_blank', rel: 'noopener' }, h('img', { src: picture, alt: `${who}’s screen`, loading: 'lazy' })) : null,
+    picture ? h('a', { class: 'shot', href: picture, target: '_blank', rel: 'noopener' }, h('img', { src: picture, alt: a.picture === 'chosen' ? `A picture ${who} picked` : `${who}’s screen`, loading: 'lazy' })) : null,
     h(
       'div',
       { class: 'body' },
       h('header', { class: 'who' }, h('div', { class: 'name' }, h('h3', {}, who, r.username && r.username !== who ? h('span', { class: 'muted' }, ` (${r.username})`) : null), h('div', { class: 'muted' }, ago(r.at))), seen, h('button', { class: 'danger quiet', type: 'button', onclick: () => remove(`reports/${r.id}`, `Delete ${who}’s report? This cannot be undone.`) }, 'Delete')),
-      r.text ? h('p', { class: 'said' }, r.text) : h('p', { class: 'muted' }, 'No description, screenshot only.'),
+      r.text ? h('p', { class: 'said' }, r.text) : h('p', { class: 'muted' }, a.picture === 'chosen' ? 'No description, picture only.' : 'No description, screenshot only.'),
       h(
         'div',
         { class: 'facts' },
         a.where === 'title' ? h('span', {}, 'Title screen') : null,
+        a.picture === 'chosen' ? h('span', {}, 'Picture from their device, not a screenshot') : null,
         isl ? h('span', {}, `Island ${isl.name || '(unnamed)'}${isl.code ? ` · ${prettyCode(isl.code)}` : ''}${isl.kind ? ` · ${isl.kind}` : ''}${isl.theme ? ` · ${isl.theme}` : ''} · ${plural(isl.players, 'player', 'players')} · ${isl.host ? 'host' : 'guest'}${isl.online ? `, ${isl.online}` : ''}`) : null,
         a.screen ? h('span', {}, `Screen ${a.screen}${a.touch ? ', touch' : ''}`) : null,
       ),

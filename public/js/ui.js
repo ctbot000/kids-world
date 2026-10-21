@@ -41,7 +41,7 @@ import { MiniMap } from './minimap.js';
 import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
 import { QUALITY_CHOICES } from './quality.js';
-import { recentErrors, screenshot } from './report.js';
+import { pictureFrom, recentErrors, screenshot } from './report.js';
 
 // The ideas whose answers this device has shown already (see wishAnswered).
 const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
@@ -2305,8 +2305,10 @@ export class UI {
 
   // Something went wrong: what you write goes to the grown-ups who run the
   // island keeper, with a picture of your screen as it was (the dialog this
-  // came from closes first, and the picture can stay behind), where you
-  // were, and what went wrong in the page lately (see report.js).
+  // came from closes first, and the picture can stay behind) or one you pick
+  // instead (a screenshot from your phone's gallery, which shows what the
+  // game's own picture cannot), where you were, and what went wrong in the
+  // page lately (see report.js).
   async reportDialog() {
     const keeper = this.reportKeeper();
     if (!this.canTellUs()) return;
@@ -2325,15 +2327,49 @@ export class UI {
     this.openModal(
       (root) => {
         let withPicture = Boolean(picture);
+        // Where the picture came from: the screen, or picked from the device.
+        let chosen = false;
         const text = h('textarea', { class: 'text-input report-text', rows: 4, maxLength: REPORT_TEXT_MAX, placeholder: 'What happened? What did you think would happen?', 'aria-label': 'What went wrong' });
         const note = h('p', { class: 'login-note warn', 'aria-live': 'polite', hidden: true });
-        const shot = picture ? h('img', { class: 'report-shot', src: picture, alt: 'A picture of your screen' }) : null;
-        const sw = h('button', { class: 'switch on', type: 'button', role: 'switch', 'aria-checked': 'true', 'aria-label': 'Send the picture too' });
+        const shot = h('img', { class: 'report-shot', src: picture || null, alt: 'A picture of your screen', hidden: !picture });
+        const sw = h('button', { class: 'switch on', type: 'button', role: 'switch', 'aria-checked': 'true', 'aria-label': 'Send the picture too', hidden: !picture });
+        const showPicture = (on) => {
+          withPicture = on;
+          sw.classList.toggle('on', on);
+          sw.setAttribute('aria-checked', String(on));
+          shot.classList.toggle('off', !on);
+        };
         sw.onclick = () => {
-          withPicture = !withPicture;
-          sw.classList.toggle('on', withPicture);
-          sw.setAttribute('aria-checked', String(withPicture));
-          shot.classList.toggle('off', !withPicture);
+          showPicture(!withPicture);
+          this.sound.play('ui');
+        };
+        const label = h('b', {}, picture ? '📷 Send this picture too' : '📷 No picture yet');
+        const detail = h('div', { class: 'muted' }, picture ? 'It shows them what your screen looked like.' : 'Add one to show them what went wrong.');
+        // A picture of your own: from a phone's gallery (where its own
+        // screenshots are), or any picture on a computer.
+        const file = h('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': 'Pick a picture' });
+        const pick = h('button', { class: 'chip report-pick', type: 'button', onclick: () => file.click() }, picture ? '🖼️ Use another picture' : '🖼️ Add a picture');
+        file.onchange = async () => {
+          const f = file.files?.[0];
+          file.value = '';
+          if (!f) return;
+          try {
+            picture = await pictureFrom(f);
+          } catch {
+            note.hidden = false;
+            note.textContent = '🙈 That picture could not be opened. Try another one.';
+            return;
+          }
+          chosen = true;
+          note.hidden = true;
+          shot.src = picture;
+          shot.alt = 'The picture you picked';
+          shot.hidden = false;
+          sw.hidden = false;
+          label.textContent = '🖼️ Send your picture';
+          detail.textContent = 'The one you picked, instead of the game’s.';
+          pick.textContent = '🖼️ Pick another picture';
+          showPicture(true);
           this.sound.play('ui');
         };
         const send = h(
@@ -2349,7 +2385,7 @@ export class UI {
                 text.focus();
                 return;
               }
-              if (!keeper.report({ text: words, picture: withPicture ? picture : null, about })) {
+              if (!keeper.report({ text: words, picture: withPicture ? picture : null, about: { ...about, picture: chosen ? 'chosen' : 'screen' } })) {
                 note.hidden = false;
                 note.textContent = '🙈 There is no island keeper to tell right now.';
                 return;
@@ -2365,15 +2401,8 @@ export class UI {
           h('h2', {}, '🐞 Something went wrong?'),
           h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it.'),
           text,
-          shot
-            ? h(
-                'div',
-                { class: 'setting report-picture' },
-                shot,
-                h('div', {}, h('b', {}, '📷 Send this picture too'), h('div', { class: 'muted' }, 'It shows them what your screen looked like.')),
-                sw,
-              )
-            : null,
+          h('div', { class: 'setting report-picture' }, shot, h('div', {}, label, detail), sw),
+          h('div', { class: 'row' }, pick, file),
           note,
           h('div', { class: 'row', style: 'margin-top:12px' }, send),
           h('p', { class: 'muted', style: 'margin-top:10px' }, 'Your name, the island you are on and what kind of device you have go along too. Never write your password here.'),

@@ -4537,6 +4537,7 @@ test('a problem is told of with a picture of the screen, logged in, and waits fo
     assert.equal(report.about.island.kind, 'build');
     assert.equal(report.about.island.host, true);
     assert.ok(report.picture);
+    assert.equal(report.about.picture, 'screen');
     // The island with its buttons on top: a JPEG as big as the page, and not one colour all over.
     const jpeg = await readFile(await keeper.store.reportPicture(report.id));
     assert.deepEqual([...jpeg.subarray(0, 3)], [0xff, 0xd8, 0xff]);
@@ -4558,6 +4559,29 @@ test('a problem is told of with a picture of the screen, logged in, and waits fo
     assert.equal(look.height, 480);
     assert.notDeepEqual(look.hotbar, look.middle, 'the hotbar is drawn over the island');
 
+    // A picture of their own instead, from a phone's gallery, say: it goes in place of the game's.
+    await page.click('#btn-help-hud');
+    await clickButton(page, 'Something went wrong?', '#modal');
+    await page.waitForSelector('#modal .report-text', { visible: true, timeout: 30000 * SLOW });
+    const screenShot = await page.$eval('#modal .report-shot', (img) => img.src);
+    const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 15000 * SLOW }), clickButton(page, 'Use another picture', '#modal')]);
+    await chooser.accept([new URL('../public/apple-touch-icon.png', import.meta.url).pathname]);
+    await until(page, (before) => document.querySelector('#modal .report-shot').src !== before, screenShot);
+    assert.ok(await page.$eval('#modal .report-picture', (row) => row.textContent.includes('Send your picture')));
+    await page.type('#modal .report-text', 'Here is what my phone saw');
+    await clickButton(page, 'Send', '#modal');
+    await eventually(async () => (await keeper.store.reports()).length === 2);
+    const [picked] = await keeper.store.reports();
+    assert.equal(picked.text, 'Here is what my phone saw');
+    assert.equal(picked.about.picture, 'chosen');
+    const pickedSize = await page.evaluate(async (url) => {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return [img.width, img.height];
+    }, `data:image/jpeg;base64,${(await readFile(await keeper.store.reportPicture(picked.id))).toString('base64')}`);
+    assert.deepEqual(pickedSize, [180, 180], 'the picture picked, as a JPEG, not the screen');
+
     // The keeper is away: the next one waits in the page, over a reload, until it is back.
     await keeper.stop();
     await until(page, () => window.kidsWorld.keeper.state !== 'ready');
@@ -4573,7 +4597,7 @@ test('a problem is told of with a picture of the screen, logged in, and waits fo
     await page.reload();
     await page.waitForFunction(() => window.kidsWorld?.keeper.reports.length === 1, { timeout: 30000 * SLOW });
     keeper = await keeperOnline(identity, dir);
-    await eventually(async () => (await keeper.store.reports()).length === 2, 60000 * SLOW);
+    await eventually(async () => (await keeper.store.reports()).length === 3, 60000 * SLOW);
     const [later] = await keeper.store.reports();
     assert.equal(later.text, 'It went dark');
     assert.equal(later.picture, false);

@@ -247,6 +247,9 @@ test('a problem report is tidied: words, a JPEG and where they were, nothing els
   assert.equal(report.secret, undefined);
   assert.equal(report.about.token, undefined);
   assert.equal(report.about.name, 'Sunny Otter');
+  assert.equal(report.about.picture, 'screen', 'unless the page says the player picked it');
+  assert.equal(cleanReport({ picture: JPEG, about: { picture: 'chosen' } }).about.picture, 'chosen');
+  assert.equal(cleanReport({ text: 'no picture', about: { picture: 'chosen' } }).about.picture, '');
   assert.equal(report.about.layout.length, 300, 'how the page sat on the screen, cut short');
   assert.deepEqual({ ...report.about.island }, { name: 'Maple Fields', code: '', kind: '', theme: '', players: 999, host: true, online: '' });
   assert.deepEqual(report.about.errors, Array.from({ length: 10 }, (_, i) => `error ${i + 10}`), 'the latest ten errors');

@@ -38,6 +38,29 @@ const loadImage = (url) =>
     img.src = url;
   });
 
+// A picture the player picked (from a phone's gallery, say: the screenshot
+// the game takes cannot see everything, like what the browser itself drew),
+// as a JPEG data URL no bigger than the game's own, turned the way the photo
+// is meant to be seen. Rejects when the browser cannot read it.
+export async function pictureFrom(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(1, WIDEST / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext('2d');
+    // A see-through picture on white, as JPEG has no see-through.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', QUALITY);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // The screen as a JPEG data URL: the island (from the renderer, while one is
 // shown) with the page's buttons on top. Whichever half cannot be drawn is
 // left out, so there is always a picture.
