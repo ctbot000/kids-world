@@ -1007,6 +1007,9 @@ input
       case 'KeyZ':
         g.undo();
         return true;
+      case 'KeyI':
+        ui.backpackDialog();
+        return true;
       case 'KeyH':
         ui.helpDialog();
         return true;

@@ -426,6 +426,7 @@ export class UI {
     $('gate-make').onclick = () => this.makeLoginDialog();
     $('btn-stickers').onclick = $('btn-level').onclick = () => this.stickersDialog();
     $('btn-shop').onclick = () => this.shopDialog();
+    $('btn-backpack').onclick = () => this.backpackDialog();
     $('btn-ranking').onclick = () => this.rankingDialog(this.profile === this.isle ? 'isle' : 'home');
     $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
@@ -1316,7 +1317,7 @@ export class UI {
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1376,7 +1377,6 @@ export class UI {
               const level = p.data.gear[g.key];
               const owned = level ? g.levels[level - 1] : null;
               const next = nextLevel(p.data.gear, g.key);
-              const on = wearing(p.data.gear, g.key) > 0;
               const buy = () => {
                 if (!p.buy(g.key)) {
                   this.sound.play('no');
@@ -1396,31 +1396,10 @@ export class UI {
                 h(
                   'div',
                   { class: 'shop-buttons' },
-                  owned
-                    ? button(on ? '🙌 Take off' : '👕 Put on', () => {
-                        p.wear(g.key, !on);
-                        this.sound.play('ui');
-                      })
-                    : null,
                   next
                     ? button(`${owned ? 'Upgrade to' : 'Buy'} ${next.icon} ${next.name} (🪙 ${next.price})`, buy, p.data.coins < next.price)
                     : h('span', { class: 'muted' }, '🏅 The best there is!'),
                 ),
-                // Any of the weapons you own can be the one in your hand:
-                // carry whichever you like, and flip through them on the
-                // island with N (or the button by the bop button).
-                g.key === 'weapon' && level > 1
-                  ? h(
-                      'div',
-                      { class: 'shop-buttons' },
-                      ...WEAPONS.slice(0, level).map((w, i) =>
-                        button(`${w.icon} ${w.name}${wornWeapon(p.data.gear)?.key === w.key ? ' ✅' : ''}`, () => {
-                          p.pickWeapon(i + 1);
-                          this.sound.play('ui');
-                        }),
-                      ),
-                    )
-                  : null,
                 next && p.data.coins < next.price ? h('span', { class: 'muted' }, `${next.price - p.data.coins} more coins to go!`) : null,
               );
             }),
@@ -1430,21 +1409,17 @@ export class UI {
           clothes.replaceChildren(
             ...CLOTHES.map((c) => {
               const owned = p.data.gear.clothes.includes(c.key);
-              const on = p.data.gear.outfit === c.key;
               return h(
                 'div',
                 { class: `shop-card gear${owned ? '' : ' locked'}` },
                 h('span', { class: 'emoji' }, c.icon),
-                h('b', {}, `${c.name}${on ? ' ✅' : ''}`),
+                h('b', {}, c.name),
                 h('span', { class: 'muted' }, `${c.power ? '✨ ' : ''}${c.does}`),
                 h(
                   'div',
                   { class: 'shop-buttons' },
                   owned
-                    ? button(on ? '🙌 Take off' : '👕 Put on', () => {
-                        p.putOn(on ? '' : c.key);
-                        this.sound.play('ui');
-                      })
+                    ? h('span', { class: 'muted' }, '✅ In your 🎒 backpack')
                     : button(`Buy ${c.icon} (🪙 ${c.price})`, () => {
                         if (!p.buyClothes(c.key)) {
                           this.sound.play('no');
@@ -1517,27 +1492,99 @@ export class UI {
             );
           }
         };
+        // append() writes a null out as "null": only what is there.
         root.append(
-          h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins),
-          p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures, potions and gear are the isle’s, apart from yours everywhere else.') : null,
-          h('h3', {}, 'Sell your treasures'),
-          sell,
-          h('h3', {}, 'Gear'),
-          gear,
-          h('h3', {}, '👕 Clothes'),
-          h('p', { class: 'muted' }, 'Wear one at a time over your t-shirt: friends see it on you. The ✨ ones give you a power while you have them on.'),
-          clothes,
-          h('h3', {}, '🧪 Potions'),
-          potions,
-          farming ? h('h3', {}, '🌱 Vegetables to plant') : null,
-          farming ? h('p', { class: 'muted' }, 'Plant them on farmland (or grass) and water them: every ripe one you pick gives you two!') : null,
-          farming ? seeds : null,
+          ...[
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins, h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')),
+            p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures, potions and gear are the isle’s, apart from yours everywhere else.') : null,
+            h('p', { class: 'muted' }, 'What you buy goes in your 🎒 backpack, and on you straight away: put things on and take them off there.'),
+            h('h3', {}, 'Sell your treasures'),
+            sell,
+            h('h3', {}, 'Gear'),
+            gear,
+            h('h3', {}, '👕 Clothes'),
+            h('p', { class: 'muted' }, 'Worn one at a time over your t-shirt: friends see it on you. The ✨ ones give you a power while you have them on.'),
+            clothes,
+            h('h3', {}, '🧪 Potions'),
+            potions,
+            farming ? h('h3', {}, '🌱 Vegetables to plant') : null,
+            farming ? h('p', { class: 'muted' }, 'Plant them on farmland (or grass) and water them: every ripe one you pick gives you two!') : null,
+            farming ? seeds : null,
+          ].filter(Boolean),
         );
         draw();
         onBasket = draw;
         p.addEventListener('basket', onBasket);
       },
       { onClose: () => p.removeEventListener('basket', onBasket) },
+    );
+  }
+
+  // Your backpack: everything you have bought in the shop, to put on and
+  // take off — running shoes, flying gear, which toy weapon is in your hand,
+  // clothes — and your HP potions, to drink on an island. Redrawn as what
+  // you have changes (N on the island, a potion drunk, the shop).
+  backpackDialog() {
+    const p = this.profile;
+    let onChange = null;
+    this.openModal(
+      (root) => {
+        const list = h('div', { class: 'grid shop-grid gear-grid' });
+        const button = (text, onclick) => h('button', { class: 'chip', type: 'button', onclick }, text);
+        const card = (icon, name, does, on, action) =>
+          h('div', { class: 'shop-card gear' }, h('span', { class: 'emoji' }, icon), h('b', {}, `${name}${on ? ' ✅' : ''}`), h('span', { class: 'muted' }, does), h('div', { class: 'shop-buttons' }, action));
+        const tap = (text, change) =>
+          button(text, () => {
+            change();
+            this.sound.play('ui');
+          });
+        const draw = () => {
+          const gear = p.data.gear;
+          const cards = [];
+          for (const g of GEAR) {
+            const level = gear[g.key];
+            if (!level) continue;
+            if (g.key === 'weapon') {
+              // Any of the weapons you own can be the one in your hand; on
+              // the island, N (or the button by the bop button) flips
+              // through them too.
+              const held = wornWeapon(gear);
+              WEAPONS.slice(0, level).forEach((w, i) => {
+                const on = held?.key === w.key;
+                cards.push(card(w.icon, w.name, w.does, on, on ? tap('🙌 Put away', () => p.wear('weapon', false)) : tap('✋ Hold it', () => p.pickWeapon(i + 1))));
+              });
+              continue;
+            }
+            const owned = g.levels[level - 1];
+            const on = wearing(gear, g.key) > 0;
+            cards.push(card(owned.icon, owned.name, `${levelDoes(owned)} ${g.about}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.wear(g.key, !on))));
+          }
+          for (const c of CLOTHES) {
+            if (!gear.clothes.includes(c.key)) continue;
+            const on = gear.outfit === c.key;
+            cards.push(card(c.icon, c.name, `${c.power ? '✨ ' : ''}${c.does}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.putOn(on ? '' : c.key))));
+          }
+          if (p.data.potions > 0) {
+            const game = this.game?.world ? this.game : null;
+            cards.push(card(POTION.icon, `${POTION.name} × ${p.data.potions}`, POTION.does, false, game ? button('😋 Drink one', () => game.drink()) : h('span', { class: 'muted' }, 'Drink one on an island.')));
+          }
+          list.replaceChildren(
+            ...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!')]),
+          );
+        };
+        root.append(
+          ...[
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
+            p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
+            h('p', { class: 'muted' }, 'Put on what you like: friends see it on you. One set of clothes at a time, and one toy weapon in your hand.'),
+            list,
+          ].filter(Boolean),
+        );
+        draw();
+        onChange = draw;
+        p.addEventListener('basket', onChange);
+      },
+      { onClose: () => p.removeEventListener('basket', onChange) },
     );
   }
 
@@ -1919,6 +1966,7 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
+          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion.']),
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
@@ -2734,6 +2782,7 @@ export class UI {
     this.renderFeedback();
     $('btn-stickers-hud').onclick = () => this.stickersDialog();
     $('btn-shop-hud').onclick = () => this.shopDialog();
+    $('btn-backpack-hud').onclick = () => this.backpackDialog();
     $('island-badge').onclick = () => this.inviteDialog();
     $('btn-say').onclick = () => this.sayDialog();
     $('btn-emote').onclick = () => this.emoteDialog();

@@ -405,7 +405,7 @@ body.fullscreen .full-icon .leave {
   cursor: default;
 }
 
-#title.gated :is(.me-name, #btn-level, #btn-me, #btn-pet, #btn-login, #tagline, #mode-switch, .title-bottom > .big-buttons, #btn-stickers, #btn-shop, #btn-ranking, #btn-players) {
+#title.gated :is(.me-name, #btn-level, #btn-me, #btn-pet, #btn-login, #tagline, #mode-switch, .title-bottom > .big-buttons, #btn-stickers, #btn-shop, #btn-backpack, #btn-ranking, #btn-players) {
   display: none !important;
 }
 
@@ -2130,10 +2130,11 @@ body.touch.playing #joystick {
   grid-column: 1 / -1;
 }
 
-/* On a phone held upright the island's code needs the room: the shop is in
-   ⭐ Stickers there. */
+/* On a phone held upright the island's code needs the room: the shop and
+   the backpack are in ⭐ Stickers there. */
 @media (max-width: 399px) {
-  #btn-shop-hud {
+  #btn-shop-hud,
+  #btn-backpack-hud {
     display: none;
   }
 }
@@ -2750,9 +2751,11 @@ kbd {
 
 /* 💌 Ideas & problems in the top bar only where it has room beside the
    island's code and a long connection message (not on an iPad held
-   sideways); everywhere, it is in 💬 too (ui.js sayDialog). */
+   sideways); everywhere, it is in 💬 too (ui.js sayDialog). 🎒 Backpack
+   likewise: elsewhere it is in ⭐ Stickers and the 🛒 shop (and on I). */
 @media (max-width: 1099px), (max-height: 479px) {
-  #btn-feedback-hud {
+  #btn-feedback-hud,
+  #btn-backpack-hud {
     display: none;
   }
 }

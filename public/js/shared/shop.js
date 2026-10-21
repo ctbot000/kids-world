@@ -4,9 +4,10 @@
 // looks and some with a power. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
 // wear the best you have (the weapon you pick of them), and can take it
-// off. HP potions are used up when you drink them, and vegetables to plant
-// go in the basket. Coins, potions and gear are yours, kept with your basket
-// (profile.js) and at the keeper (keeper.js).
+// off in your backpack (ui.js backpackDialog). HP potions are used up when
+// you drink them, and vegetables to plant go in the basket. Coins, potions
+// and gear are yours, kept with your basket (profile.js) and at the keeper
+// (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 import { cleanToys } from './gashapon.js';
 
@@ -68,8 +69,8 @@ export const GEAR = [
     // power: the hearts a bop takes; reach: how much further than an arm it
     // reaches (monsters.js ARM_REACH); king: how many times over King
     // Grumble feels a bop. Any you have can be the one in your hand — carry
-    // whichever you like (profile.js pickWeapon, ui.js): a long reach or a
-    // hard hit, by what you are popping.
+    // whichever you like (profile.js pickWeapon, ui.js backpackDialog): a
+    // long reach or a hard hit, by what you are popping.
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, does: 'Two bubbles pop a monster, a few steps in front of you.' },

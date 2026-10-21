@@ -1502,6 +1502,51 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   await page.browserContext().close();
 });
 
+test('the shop sells, the 🎒 backpack is where you put things on and take them off', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Badger' });
+  await makeIsland(page, { online: false });
+  const gear = () => page.evaluate(() => window.kidsWorld.profile.data.gear);
+  await page.evaluate(() => window.kidsWorld.profile.earn(400));
+  // Bought in the shop, and on you straight away; but no putting on or
+  // taking off there.
+  await page.click('#btn-shop-hud');
+  await clickButton(page, 'Buy 👟', '#modal');
+  await clickButton(page, 'Buy 🗡️', '#modal');
+  await clickButton(page, 'Upgrade to 🫧', '#modal');
+  await clickButton(page, 'Buy 🧣', '#modal');
+  await until(page, () => {
+    const g = window.kidsWorld.profile.data.gear;
+    return g.shoes === 1 && g.weapon === 2 && g.outfit === 'scarf';
+  });
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#modal button')].some((b) => /Take off|Put on/.test(b.textContent))), false, 'nothing to put on in the shop');
+  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('In your 🎒 backpack')));
+  // The shop's 🎒 Backpack opens it, with all of it in.
+  await clickButton(page, '🎒 Backpack', '#modal');
+  await until(page, () => document.querySelector('#modal h2')?.textContent === '🎒 Backpack');
+  const names = await page.evaluate(() => [...document.querySelectorAll('#modal .shop-card b')].map((b) => b.textContent));
+  assert.deepEqual(names, ['Bouncy Sneakers ✅', 'Foam Sword', 'Bubble Blaster ✅', 'Cozy Scarf ✅']);
+  // Taking off and putting on, each as it says.
+  await clickButton(page, '🙌 Take off', '#modal .shop-card:nth-child(1)');
+  await until(page, () => window.kidsWorld.profile.data.gear.off.shoes === true);
+  await clickButton(page, '✋ Hold it', '#modal .shop-card:nth-child(2)');
+  await until(page, () => window.kidsWorld.profile.data.gear.pick.weapon === 1);
+  await clickButton(page, '🙌 Put away', '#modal .shop-card:nth-child(2)');
+  await until(page, () => window.kidsWorld.profile.data.gear.off.weapon === true);
+  await clickButton(page, '🙌 Take off', '#modal .shop-card:nth-child(4)');
+  await until(page, () => window.kidsWorld.profile.data.gear.outfit === '');
+  await clickButton(page, '👕 Put on', '#modal .shop-card:nth-child(4)');
+  await until(page, () => window.kidsWorld.profile.data.gear.outfit === 'scarf' && document.querySelector('#modal .shop-card:nth-child(4) b').textContent === 'Cozy Scarf ✅');
+  assert.equal((await gear()).shoes, 1, 'taken off is still yours');
+  // I opens it on the island too, a potion in it to drink.
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.evaluate(() => window.kidsWorld.profile.buyPotion());
+  await page.keyboard.press('KeyI');
+  await until(page, () => document.querySelector('#modal h2')?.textContent === '🎒 Backpack' && document.querySelector('#modal').textContent.includes('HP Potion × 1'));
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('the little map shows the island and what you build; it opens the big map and can be switched off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Clever Duck' });
   await makeIsland(page, { online: false });
@@ -2800,7 +2845,7 @@ test('nobody plays without a login: the title screen has only the way to log in,
   const alone = await openPlayer(`${base}?p2p=1&code=ABCDEF`, { name: 'Sunny Otter' }, noGuests);
   try {
     await until(alone, () => !document.getElementById('login-gate').hidden);
-    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'btn-stickers', 'btn-shop', 'btn-me', 'me-name']) assert.equal(await visible(alone, id), false, id);
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'btn-stickers', 'btn-shop', 'btn-backpack', 'btn-me', 'me-name']) assert.equal(await visible(alone, id), false, id);
     assert.equal(await visible(alone, 'gate-away'), true);
     assert.equal(await alone.$eval('#gate-login', (el) => el.disabled), true);
     assert.equal(await visible(alone, 'btn-help'), true);

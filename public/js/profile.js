@@ -265,8 +265,8 @@ export class Profile extends EventTarget {
   }
 
   // The next of your weapons round: for the button by the bop button (and
-  // its key, N), flipping through them as it is pressed. With one taken off
-  // in the shop, it is that one back into your hand.
+  // its key, N), flipping through them as it is pressed. With one put away
+  // in the backpack, it is that one back into your hand.
   nextWeapon() {
     const have = this.data.gear.weapon;
     if (have < 2) return null;
