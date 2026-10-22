@@ -19,9 +19,12 @@
 //   <data>/reports/<id>.jpg                         and the picture of their screen, if it came
 //   <data>/wishes/<id>.json                         an idea for the game a player sent CTB's
 //                                                   workers, and their answer (see server/ctb.js)
+//   <data>/visitors.json                            the pages that came by with no login: when,
+//                                                   how often, from where and on what browser
 //
 // <device> is a hash of the secret device key, so a page can only ever add
-// to its own copies. A login turns that folder into a player: other devices
+// to its own copies, and only once logged in: from a page with no login, the
+// keeper keeps nothing but that it came by (its visitors' log). A login turns that folder into a player: other devices
 // that log in with its username and password get a token that files their copies
 // there too, and brings its islands back to them; a device's copies from
 // before it logged in can join them (adoptDevice). It also keeps the list of
@@ -325,6 +328,8 @@ export class KeeperStore extends EventEmitter {
     this.reportTimes = new Map();
     // Ideas sent lately, per player, for the limit on them.
     this.wishTimes = new Map();
+    // The visitors' log, once read (see visitors).
+    this.visitorList = null;
   }
 
   // Counts what is kept already, and gives logins from before usernames one.
@@ -424,7 +429,7 @@ export class KeeperStore extends EventEmitter {
     return this.serial(async () => {
       if (!this.addresses.has(device)) return;
       const old = await readJson(this.path(device, 'device.json'));
-      if (!old) return;
+      if (!old) return this.visitorAddress(device);
       if (old.ip === ip && (old.ip4 ?? null) === ip4) this.addresses.delete(device);
       else await this.seen(device, {});
     });
@@ -1006,6 +1011,70 @@ export class KeeperStore extends EventEmitter {
     return true;
   }
 
+  // ------------------------------------------------ visitors
+
+  // The pages that came by with no login, for the admin pages, the latest
+  // first: [{ device, firstSeen, lastSeen, visits, about, ip, ip4 }], one
+  // for each device, at most VISITORS_KEPT. Nothing of theirs is kept, only
+  // that they came, from where and on what.
+  async visitors() {
+    if (!this.visitorList) {
+      const list = await readJson(join(this.dir, 'visitors.json'));
+      this.visitorList ??= (Array.isArray(list) ? list : []).filter((v) => isDeviceId(v?.device));
+    }
+    return this.visitorList;
+  }
+
+  // A page with no login came by (see Keeper.handle): about is what its page
+  // said of itself (see cleanVisit).
+  noteVisit(device, about) {
+    if (!isDeviceId(device)) return Promise.reject(new KeepError('bad', 'That is not a device.'));
+    return this.serial(async () => {
+      const list = await this.visitors();
+      const now = this.now();
+      const at = list.findIndex((v) => v.device === device);
+      const old = at >= 0 ? list.splice(at, 1)[0] : { device, firstSeen: now, visits: 0 };
+      list.unshift({ ...old, lastSeen: now, visits: old.visits + 1, about: cleanVisit(about) });
+      list.length = Math.min(list.length, VISITORS_KEPT);
+      await (this.addressOfVisitor(list[0]) || this.writeVisitors());
+    });
+  }
+
+  // In the queue already: a visitor's address, noted before or after its
+  // visit, into its entry.
+  async visitorAddress(device) {
+    const entry = (await this.visitors()).find((v) => v.device === device);
+    if (entry) await this.addressOfVisitor(entry);
+  }
+
+  // Writes the visitors' log, with the address noted for this entry, if any
+  // (else false, and nothing is written).
+  addressOfVisitor(entry) {
+    const noted = this.addresses.get(entry.device);
+    if (!noted) return false;
+    this.addresses.delete(entry.device);
+    entry.ip = noted.ip;
+    if (noted.ip4) entry.ip4 = noted.ip4;
+    else delete entry.ip4;
+    return this.writeVisitors();
+  }
+
+  // Empties the visitors' log.
+  clearVisitors() {
+    return this.serial(async () => {
+      this.visitorList = [];
+      await this.writeVisitors();
+    });
+  }
+
+  // Through a temporary file, as copies are; not counted as what is kept.
+  async writeVisitors() {
+    const file = join(this.dir, 'visitors.json');
+    await mkdir(this.dir, { recursive: true, mode: 0o700 });
+    await writeFile(`${file}.tmp`, JSON.stringify(this.visitorList ?? []));
+    await rename(`${file}.tmp`, file);
+  }
+
   // ------------------------------------------------ ideas for the game
 
   // Keeps a player's idea for CTB's workers to read: the idea as kept, with
@@ -1083,6 +1152,14 @@ const WISHES_KEPT = 1000;
 const WISHES_SHOWN = 20;
 const isReportId = (v) => typeof v === 'string' && /^\d{13}-[0-9a-f]{8}$/.test(v);
 const shortText = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max) : '');
+
+// The visitors' log keeps this many devices, the latest; what a page says of
+// itself as it comes by (see KeeperClient's visitAbout) is tidied the same way.
+const VISITORS_KEPT = 500;
+export function cleanVisit(raw) {
+  const a = raw && typeof raw === 'object' ? raw : {};
+  return { page: shortText(a.page, 200), agent: shortText(a.agent, 300), screen: shortText(a.screen, 40), touch: a.touch === true, language: shortText(a.language, 20) };
+}
 
 // An idea as its sender's page sees it: never who sent it, nor the issue.
 const wishForPage = (w) => ({ id: w.id, at: w.at, text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt });
@@ -1647,13 +1724,16 @@ export class Keeper extends EventEmitter {
       throw new KeepError('old', 'Reload the page: logins take a password now.');
     }
     switch (msg.t) {
+      // Copies only from a page logged in: nothing is kept of the others.
       case 'island': {
+        mine('keep islands');
         const { device, savedAt, name, player, stale } = await this.store.keepIslandIn(conn.folder, msg.id, msg.save, { newerOnly: Boolean(conn.player) });
         this.reply(conn, { t: 'kept', what: 'island', id: msg.id, savedAt, ...(stale ? { stale } : {}) });
         if (!stale) this.note({ device, what: 'island', id: msg.id, island: name, player });
         break;
       }
       case 'profile': {
+        mine('keep what you have');
         const { device, player, onlyStats } = await this.store.keepProfileIn(conn.folder, msg.profile);
         this.reply(conn, { t: 'kept', what: 'profile' });
         // Not every few seconds while a player with a login plays.
@@ -1663,9 +1743,20 @@ export class Keeper extends EventEmitter {
       case 'adventure': {
         // The isle's own world of you (the shared isle is a world of its
         // own), kept beside your profile the same way.
+        mine('keep what you have');
         const { device, player, onlyStats } = await this.store.keepAdventureIn(conn.folder, msg.profile);
         this.reply(conn, { t: 'kept', what: 'adventure' });
         if (!onlyStats) this.note({ device, what: 'adventure', player });
+        break;
+      }
+      case 'visit': {
+        // A page with no login came by, once: for the visitors' log, and
+        // nothing more. (Logged in, it is a player, on the players list.)
+        if (!conn.player) {
+          await this.store.noteVisit(conn.folder, msg.about);
+          this.note({ device: conn.folder, what: 'visit', player: '' });
+        }
+        this.reply(conn, { t: 'kept', what: 'visit' });
         break;
       }
       case 'login': {

@@ -937,6 +937,42 @@ input[type='checkbox'] {
   color: var(--danger);
 }
 
+/* ------------------------------------------------------------ visitors */
+
+.visitors-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.visitors-head p {
+  margin: 0;
+}
+
+.visitor-list {
+  padding: 4px 16px;
+}
+
+.recent li.visitor {
+  display: block;
+  padding: 10px 0;
+}
+
+.visitor-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.visitor .agent {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
 /* ------------------------------------------------------------ reports */
 
 .reports {

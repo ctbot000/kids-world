@@ -2529,7 +2529,7 @@ async function keeperOnline(identity, dir) {
   return keeper;
 }
 
-test('the keeper keeps copies of your islands and of you, sent peer to peer; an impostor gets nothing', { skip }, async () => {
+test('the keeper keeps copies of your islands and of you, sent peer to peer, once logged in; an impostor gets nothing', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(join(dir, 'real'));
   let keeper = await keeperOnline(identity, join(dir, 'real'));
@@ -2538,9 +2538,21 @@ test('the keeper keeps copies of your islands and of you, sent peer to peer; an 
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
   const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' });
   try {
-    // A new island is saved at once, and a copy goes to the keeper, with you.
-    await makeIsland(page, { online: false, theme: 'Flat Land' });
+    // Not logged in, nothing is kept: the keeper only logs that a visitor came by,
+    // with the names in the page's address but not what they say.
     const device = KeeperStore.deviceId(await page.evaluate(() => window.kidsWorld.keeper.data.device));
+    await eventually(async () => (await keeper.store.visitors()).some((v) => v.device === device));
+    const [visitor] = await keeper.store.visitors();
+    assert.match(visitor.about.page, /\/\?p2p&signal$/);
+    assert.match(visitor.about.agent, /Chrome/);
+    assert.deepEqual(await keeper.store.devices(), []);
+    // A login, then a new island, saved at once: a copy goes to the keeper, with you.
+    await page.evaluate(() => window.kidsWorld.ui.makeLoginDialog());
+    await typeInto(page, 'Sunny Otter', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    await makeIsland(page, { online: false, theme: 'Flat Land' });
     const kept = async () => (await keeper.store.devices()).find((d) => d.id === device);
     await eventually(async () => (await kept())?.islands.length === 1 && Boolean((await kept()).profile));
     assert.equal((await kept()).profile.name, 'Sunny Otter');
@@ -2788,8 +2800,10 @@ test('a login made on one device logs in another: what each made comes along, th
     await makeIsland(phone, { online: false, theme: 'Flat Land' });
     const own = await phone.evaluate(() => window.kidsWorld.game.world.name);
     await leave(phone);
+    // Not logged in, the keeper keeps none of it: the phone is only a visitor there.
     const guestDevice = KeeperStore.deviceId(await phone.evaluate(() => window.kidsWorld.keeper.data.device));
-    await eventually(async () => (await keeper.store.devices()).some((d) => d.id === guestDevice && d.islands.length === 1));
+    await eventually(async () => (await keeper.store.visitors()).some((v) => v.device === guestDevice));
+    assert.ok(!(await keeper.store.devices()).some((d) => d.id === guestDevice));
 
     // It logs in with the username, in any case, and the password (a wrong one first).
     await clickButton(phone, 'Log in');
@@ -2805,7 +2819,8 @@ test('a login made on one device logs in another: what each made comes along, th
     assert.equal(await phone.evaluate(() => window.kidsWorld.keeper.login.username), username);
     assert.deepEqual(await phone.evaluate(() => window.kidsWorld.profile.look), look);
     const kept = async () => (await keeper.store.list(player)).islands.map((i) => i.name).sort();
-    assert.deepEqual(await kept(), [name, own].sort(), 'the keeper moved the phone’s copies into the login');
+    // The phone's island, its own now, goes to the keeper from there.
+    await eventually(async () => JSON.stringify(await kept()) === JSON.stringify([name, own].sort()));
     assert.ok(!(await keeper.store.devices()).some((d) => d.id === guestDevice));
 
     // Both islands are on the phone; it opens the tablet's as its owner and builds on it.
@@ -3221,6 +3236,20 @@ test('the admin page shows each player, their login and their islands, folded aw
     await page.click('.isle-world > summary');
     assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /12 monsters popped/);
     assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /1 King Grumble popped/);
+
+    // The visitors' log, a tab of its own: pages that came by with no login, no players.
+    await store.noteVisit(KeeperStore.deviceId('a7'.repeat(16)), { agent: 'Mozilla/5.0 (iPad)', screen: '1024×768 @2x', touch: true, language: 'ko-KR', page: 'http://x/?ctb' });
+    await page.reload();
+    await until(page, () => document.getElementById('visitors-count').textContent === '1');
+    await page.click('#tab-visitors');
+    assert.equal(await page.evaluate(() => location.hash), '#visitors');
+    await until(page, () => document.querySelector('.visitor')?.checkVisibility());
+    const row = await page.$eval('.visitor', (el) => el.textContent);
+    for (const bit of ['1 visit', 'Screen 1024×768 @2x, touch', 'ko-KR', 'http://x/?ctb', 'Mozilla/5.0 (iPad)']) assert.ok(row.includes(bit), bit);
+    assert.equal(await page.$$eval('.device h3', (els) => els.length), 1, 'still one player');
+    await clickButton(page, 'Clear log');
+    await until(page, () => document.querySelector('#visitors .empty'));
+    assert.deepEqual(await store.visitors(), []);
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();

@@ -313,21 +313,43 @@ test('the protocol: no secret before the keeper has signed, then logging in, bri
   assert.equal(await check(nonce, hello.sig), true);
   assert.equal(tablet.conn.folder, null, 'nobody yet');
   assert.deepEqual(await tablet.say({ t: 'me', device: TABLET }), { t: 'me' });
-  assert.equal((await tablet.say({ t: 'island', id: ISLAND, save: island(B.GLASS) })).t, 'kept');
-  // Not logged in, it can send, but not take anything back.
+  // Not logged in, nothing is kept, nor taken back: it only comes by, in the visitors' log.
+  for (const copy of [{ t: 'island', id: ISLAND, save: island(B.GLASS) }, { t: 'profile', profile: { name: 'Sunny Otter' } }, { t: 'adventure', profile: { name: 'Sunny Otter' } }]) {
+    assert.match((await tablet.say(copy)).text, /^Log in to keep/);
+  }
   assert.equal((await tablet.say({ t: 'list' })).code, 'bad');
+  assert.deepEqual(await store.devices(), []);
+  assert.deepEqual(await tablet.say({ t: 'visit', about: { page: 'http://x/?ctb', agent: 'Tablet', screen: '800×600 @2x', touch: true, language: 'ko-KR', secret: 'dropped' } }), { t: 'kept', what: 'visit' });
+  const [visitor] = await store.visitors();
+  assert.equal(visitor.device, KeeperStore.deviceId(TABLET));
+  assert.equal(visitor.visits, 1);
+  assert.deepEqual(visitor.about, { page: 'http://x/?ctb', agent: 'Tablet', screen: '800×600 @2x', touch: true, language: 'ko-KR' });
+  assert.deepEqual(await store.devices(), [], 'and is no player');
   const made = await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter', look: { animal: 'fox' } } });
   assert.equal(made.t, 'login');
   assert.equal(made.player, KeeperStore.deviceId(TABLET));
   assert.equal(made.username, 'Otter Fan');
   assert.match(made.token, /^[0-9a-f]{32}$/);
 
-  // The phone, played on before as Happy Panda, with an island of its own.
+  // The tablet's island, sent now it is logged in.
+  assert.equal((await tablet.say({ t: 'island', id: ISLAND, save: island(B.GLASS) })).t, 'kept');
+
+  // The phone, played on as Happy Panda before logins were needed, with an island of its own.
+  await store.keepProfileIn(KeeperStore.deviceId(PHONE), { name: 'Happy Panda', stickers: { swimmer: 7 }, stats: { swims: 3 } });
+  await store.keepIslandIn(KeeperStore.deviceId(PHONE), 'ffffffffffff', island(B.PLANKS));
   const phone = await page(keeper);
   await phone.say({ t: 'hello', v: KEEPER_VERSION, nonce: 'e5'.repeat(16) });
   await phone.say({ t: 'me', device: PHONE });
-  await phone.say({ t: 'profile', profile: { name: 'Happy Panda', stickers: { swimmer: 7 }, stats: { swims: 3 } } });
-  await phone.say({ t: 'island', id: 'ffffffffffff', save: island(B.PLANKS) });
+  // It came by again: the same visitor, twice now.
+  await phone.say({ t: 'visit', about: {} });
+  await phone.say({ t: 'visit', about: {} });
+  assert.deepEqual(
+    (await store.visitors()).map((v) => [v.device, v.visits]),
+    [
+      [KeeperStore.deviceId(PHONE), 2],
+      [KeeperStore.deviceId(TABLET), 1],
+    ],
+  );
   // A wrong password, then the right one; then it has the tablet's island.
   assert.equal((await phone.say({ t: 'login', username: 'otter fan', password: OTHER_PASSWORD })).code, 'wrong');
   const login = await phone.say({ t: 'login', username: 'otter fan', password: PASSWORD });
@@ -403,8 +425,9 @@ test('pages from before logins still say who they are in their hello, and are an
   const bytes = Uint8Array.from(atob(hello.sig.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
   assert.equal(await crypto.subtle.verify(SIGN_ALGORITHM, key, bytes, challenge(identity.peer, nonce, 1)), true);
   assert.equal(await check(nonce, hello.sig), false, 'not over version 2’s');
-  assert.equal((await old.say({ t: 'island', id: ISLAND, save: island() })).t, 'kept');
-  assert.equal((await store.devices())[0].id, KeeperStore.deviceId(TABLET));
+  // With no login, what it sends is not kept: the error ends its trying.
+  assert.equal((await old.say({ t: 'island', id: ISLAND, save: island() })).code, 'bad');
+  assert.deepEqual(await store.devices(), []);
 });
 
 test('a login made with secret pictures, before passwords, gets one from a device still logged in, or from the admin pages', async () => {

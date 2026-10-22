@@ -14,7 +14,8 @@
 // model log: what it asked the model lately, word for word, and what came
 // back, and the tokens its models took a day at a time; and the problems
 // players told of, each with a picture of their screen, to look into, mark
-// done and delete; and what is on every TV in the game (a YouTube video, or
+// done and delete; the visitors' log, of the pages that came by with no
+// login (when, how often, from where and on what), to clear; and what is on every TV in the game (a YouTube video, or
 // a video on this computer, which the admin page itself plays to them: see
 // shared/broadcast.js); and CTB, the company whose workers do real work on
 // this project (ctb.js): its settings, its workers and what they are doing,
@@ -194,7 +195,17 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
         // An IPv6 address's IPv4 one, where there is one, places it better.
         devices: await Promise.all((await store.devices()).map(async (d) => ({ ...d, place: await place(d.ip4 && isPublicIp(d.ip4) ? d.ip4 : d.ip) }))),
         reports: await store.reports(),
+        visitors: await Promise.all((await store.visitors()).map(async (v) => ({ ...v, place: await place(v.ip4 && isPublicIp(v.ip4) ? v.ip4 : v.ip) }))),
       });
+      return true;
+    }
+    if (pathname === '/admin/api/visitors') {
+      // DELETE empties the visitors' log.
+      if (req.method !== 'DELETE') res.writeHead(405, { Allow: 'DELETE' }).end();
+      else {
+        await store.clearVisitors();
+        json(res, 200, { ok: true });
+      }
       return true;
     }
     if (pathname === '/admin/api/tv' || pathname === '/admin/api/tv/alive') {

@@ -10,7 +10,8 @@
 // it is on, which its model answers, a line for it to say there, as its own
 // words, and its model log: what it asked the model, word for word, and what
 // came back; and the problems players told of, with a picture of their
-// screen, to mark done or delete; and what is on every TV in the game
+// screen, to mark done or delete; the visitors' log, of the pages that came
+// by with no login, to clear; and what is on every TV in the game
 // (tv.js); and CTB, whose workers do real work on the project (ctb.js). It reads /admin/api/state and /admin/api/friend every few
 // seconds — every moment, for a while, after something is said to it, so its
 // answer shows as it comes — and /admin/api/friend/llm too while
@@ -190,6 +191,46 @@ function renderReports(state) {
       ...(open.length ? open.map(reportCard) : [h('p', { class: 'empty' }, 'No open reports.')]),
       done.length ? h('details', { class: 'done-reports' }, h('summary', {}, `Resolved (${done.length})`), ...done.map(reportCard)) : null,
     ].filter(Boolean),
+  );
+}
+
+// ---------------------------------------------------------------- visitors
+
+// The pages that came by with no login: nothing of theirs is kept, only when
+// they came, how often, from where and on what. One row a device, the latest
+// first.
+function visitorRow(v) {
+  const a = v.about ?? {};
+  return h(
+    'li',
+    { class: 'visitor' },
+    h('div', { class: 'visitor-head' }, h('b', {}, `Visitor ${v.device.slice(0, 6)}`), h('span', { class: 'muted' }, `${plural(v.visits, 'visit', 'visits')} · last ${ago(v.lastSeen)} · first ${at.format(v.firstSeen)}`)),
+    whereFrom(v),
+    a.screen || a.language || a.page ? h('div', { class: 'muted' }, [a.screen ? `Screen ${a.screen}${a.touch ? ', touch' : ''}` : '', a.language, a.page].filter(Boolean).join(' · ')) : null,
+    a.agent ? h('div', { class: 'muted agent' }, a.agent) : null,
+  );
+}
+
+let visitorsShown = '';
+function renderVisitors(state) {
+  const visitors = state.visitors ?? [];
+  const today = visitors.filter((v) => Date.now() - v.lastSeen < 24 * 3600000).length;
+  $('visitors-count').textContent = visitors.length || '';
+  const key = JSON.stringify(visitors);
+  if (key === visitorsShown) return;
+  visitorsShown = key;
+  $('visitors').replaceChildren(
+    ...(visitors.length
+      ? [
+          h(
+            'div',
+            { class: 'visitors-head' },
+            h('p', { class: 'muted' }, `${plural(visitors.length, 'device', 'devices')} came by without logging in, ${today} in the last 24 hours. Nothing of theirs is kept, only this log.`),
+            h('button', { class: 'danger quiet', type: 'button', onclick: () => remove('visitors', 'Clear the visitors’ log?') }, 'Clear log'),
+          ),
+          h('ol', { class: 'recent visitor-list card' }, ...visitors.map(visitorRow)),
+        ]
+      : [h('p', { class: 'empty' }, 'No visitors yet. A page that comes by without logging in shows up here.')]),
   );
 }
 
@@ -373,13 +414,14 @@ const DID = {
   adopt: (e) => ` brought ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what they did'} from before into their login`,
   invite: (e) => ` invited ${e.to || 'a player'} to “${e.island}”`,
   report: () => ' told of a problem',
+  visit: () => ' came by without logging in',
 };
 
 function renderRecent(state) {
   const recent = state.keeper?.recent ?? [];
   $('recent-section').hidden = recent.length === 0;
   $('recent').replaceChildren(
-    ...recent.slice(0, 8).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', h('b', {}, e.player || 'A player'), (DID[e.what] ?? DID.profile)(e))),
+    ...recent.slice(0, 8).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', h('b', {}, e.player || (e.what === 'visit' ? 'A visitor' : 'A player')), (DID[e.what] ?? DID.profile)(e))),
   );
 }
 
@@ -985,6 +1027,7 @@ function render(state) {
   renderSummary(state);
   renderRecent(state);
   renderReports(state);
+  renderVisitors(state);
   const key = JSON.stringify(state.devices);
   if (editing || (key === shown && Date.now() - drawnAt < REDRAW_MS)) return;
   shown = key;
@@ -1024,7 +1067,7 @@ async function refresh(now = false) {
   } catch {
     state = null;
   }
-  if (now) shown = reportsShown = '';
+  if (now) shown = reportsShown = visitorsShown = '';
   render(state);
   await refreshFriend();
   await ctb.refresh();

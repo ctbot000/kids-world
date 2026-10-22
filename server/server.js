@@ -301,6 +301,7 @@ async function startKeeper(store) {
     adopt: (e, who) => `moved ${e.islands ? (e.islands === 1 ? 'an island' : `${e.islands} islands`) : 'what a device did'} from before into ${who || 'a player'}'s login`,
     report: (e, who) => `got a problem report from ${who || 'a player'}: see it at /admin/`,
     wish: (e, who) => `got an idea for the game from ${who || 'a player'}, for CTB's workers to read`,
+    visit: () => 'a visitor came by without a login (see /admin/#visitors)',
   };
   keeper.on('kept', (e) => console.log(`Keeper: ${(said[e.what] ?? said.profile)(e, e.player)}`));
   try {

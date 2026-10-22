@@ -16,6 +16,7 @@
       <nav class="tabs" role="tablist" aria-label="Admin sections">
         <button type="button" role="tab" id="tab-overview" aria-controls="overview">Overview</button>
         <button type="button" role="tab" id="tab-players" aria-controls="players">Players <span id="devices-count" class="badge"></span></button>
+        <button type="button" role="tab" id="tab-visitors" aria-controls="visitors-section">Visitors <span id="visitors-count" class="badge"></span></button>
         <button type="button" role="tab" id="tab-reports" aria-controls="reports-section" hidden>Problem reports <span id="reports-count" class="badge"></span></button>
         <button type="button" role="tab" id="tab-tv" aria-controls="tv-section" hidden>TV broadcast</button>
         <button type="button" role="tab" id="tab-friend" aria-controls="friend-section" hidden>AI friend</button>
@@ -32,6 +33,9 @@
       </section>
       <section id="players" role="tabpanel" aria-labelledby="tab-players">
         <div id="devices" class="devices"></div>
+      </section>
+      <section id="visitors-section" role="tabpanel" aria-labelledby="tab-visitors">
+        <div id="visitors" class="visitors"></div>
       </section>
       <section id="reports-section" role="tabpanel" aria-labelledby="tab-reports" hidden>
         <div id="reports" class="reports"></div>

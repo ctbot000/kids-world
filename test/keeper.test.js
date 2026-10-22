@@ -146,6 +146,40 @@ test('where a device was last seen from is kept in its record, once it has one',
   assert.equal((await store.devices())[0].ip, '192.168.0.5');
 });
 
+test('the visitors’ log: a device with no login, when it came, how often and from where, the latest first, until cleared', async () => {
+  const time = clock();
+  const dir = await tempDir();
+  const store = await new KeeperStore(dir, time).open();
+  const tablet = KeeperStore.deviceId(KEY);
+  const phone = KeeperStore.deviceId(OTHER);
+  // Its address noted before it says it came, and after.
+  await store.noteAddress(tablet, '8.8.8.8');
+  await store.noteVisit(tablet, { agent: 'Tablet', screen: 'x'.repeat(99), extra: 'dropped' });
+  await store.noteVisit(phone, null);
+  await store.noteAddress(phone, '2a00:1450:4001::1', '211.234.10.1');
+  time.nextDay();
+  await store.noteVisit(tablet, { agent: 'Tablet' });
+  const list = await store.visitors();
+  assert.deepEqual(
+    list.map((v) => [v.device, v.visits, v.ip, v.ip4]),
+    [
+      [tablet, 2, '8.8.8.8', undefined],
+      [phone, 1, '2a00:1450:4001::1', '211.234.10.1'],
+    ],
+  );
+  assert.equal(list[0].lastSeen, time.now());
+  assert.ok(list[0].firstSeen < list[0].lastSeen);
+  assert.deepEqual(list[0].about, { page: '', agent: 'Tablet', screen: '', touch: false, language: '' });
+  assert.deepEqual(await store.devices(), [], 'visitors are no players');
+  assert.equal(store.bytes, 0, 'nor what is kept');
+  // Read back by a keeper started again; then cleared.
+  const again = await new KeeperStore(dir, time).open();
+  assert.deepEqual((await again.visitors()).map((v) => v.device), [tablet, phone]);
+  await again.clearVisitors();
+  assert.deepEqual(await new KeeperStore(dir, time).open().then((s) => s.visitors()), []);
+  await assert.rejects(store.noteVisit('nope', {}), KeepError);
+});
+
 test('a profile is kept without the tokens that let a player back into islands, or their settings', async () => {
   const store = await new KeeperStore(await tempDir()).open();
   const sent = {
@@ -329,6 +363,15 @@ test('the admin pages list, download and delete copies, for this computer only',
     assert.equal(both.place.country, 'KR');
     await store.noteAddress(device, '192.168.0.5');
     assert.deepEqual((await (await fetch(`${base}/admin/api/state`)).json()).devices[0].place, { local: 'network' });
+    // The visitors' log, placed the same way, and cleared.
+    await store.noteVisit(KeeperStore.deviceId(OTHER), { agent: 'Phone' });
+    await store.noteAddress(KeeperStore.deviceId(OTHER), '8.8.8.8');
+    const [visitor] = (await (await fetch(`${base}/admin/api/state`)).json()).visitors;
+    assert.equal(visitor.about.agent, 'Phone');
+    assert.equal(visitor.place.country, 'US');
+    assert.equal((await fetch(`${base}/admin/api/visitors`, { method: 'DELETE' })).status, 403);
+    assert.equal((await fetch(`${base}/admin/api/visitors`, { method: 'DELETE', headers: { 'X-Kids-World-Admin': '1' } })).status, 200);
+    assert.deepEqual((await (await fetch(`${base}/admin/api/state`)).json()).visitors, []);
 
     const file = await fetch(`${base}/admin/api/devices/${device}/islands/${ISLAND}?download`);
     assert.match(file.headers.get('content-disposition'), /^attachment; filename="maple-fields-\d{4}-\d{2}-\d{2}\.kidsworld\.json"$/);

@@ -1,9 +1,10 @@
 // Sends copies of this browser's islands and of who you are to the keeper, a
-// computer that keeps them whenever it is online (see shared/keeper.js and
+// computer that keeps them whenever it is online, once you are logged in (see shared/keeper.js and
 // server/keeper.js). It is reached peer to peer, like a friend's island, under
 // the peer id in keeper.json, and has to prove it holds that file's key before
 // anything is sent. Nothing waits on it: while it is away, copies wait here
-// and go the next time both are on.
+// and go the next time both are on. Not logged in, nothing of yours is sent:
+// the keeper only hears that someone came by, once a page (its visitors' log).
 //
 // It also logs you in and out there. Logged in, it brings back what your
 // other devices sent, too: your look, stickers and basket, merged with yours
@@ -52,10 +53,9 @@ const REFUSED_RETRY_MS = 30 * 60000;
 const CONNECT_TIMEOUT_MS = 25000;
 const REPLY_TIMEOUT_MS = 60000;
 const IDLE_MS = 60000;
-// What you have done changes with every step: when nothing else about you
-// changed, a copy every few minutes is plenty. Logged in, you are in the
-// ranking, which others watch live: every few seconds.
-const PROFILE_EVERY_MS = 3 * 60000;
+// What you have done changes with every step: you are in the ranking, which
+// others watch live, so when nothing else about you changed, a copy every few
+// seconds.
 const STATS_EVERY_MS = hurried(5000);
 // Watching the ranking, it is asked for again this often, which also keeps
 // the connection from looking idle at the keeper.
@@ -88,6 +88,20 @@ export class KeeperProblem extends Error {
 function ownerToken(save) {
   const tokens = Array.isArray(save?.tokens) ? save.tokens : [];
   return tokens.find((t) => Array.isArray(t) && t[1] === save.host && typeof t[0] === 'string')?.[0] ?? '';
+}
+
+// What the keeper's visitors' log says of a page that came by with no login:
+// where (the names in its address, never what they say, as an island's code
+// or passcode can be there), on what browser, screen and language.
+function visitAbout() {
+  const names = [...new URLSearchParams(location.search).keys()];
+  return {
+    page: `${location.origin}${location.pathname}${names.length ? `?${names.join('&')}` : ''}`,
+    agent: navigator.userAgent,
+    screen: `${innerWidth}×${innerHeight} @${Math.round(devicePixelRatio * 100) / 100}x`,
+    touch: matchMedia('(pointer: coarse)').matches,
+    language: navigator.language ?? '',
+  };
 }
 
 export class KeeperClient extends EventTarget {
@@ -150,6 +164,8 @@ export class KeeperClient extends EventTarget {
     this.onAir = null;
     this.live = null;
     this.liveSent = '';
+    // Not logged in: whether the keeper heard this page came by.
+    this.visited = false;
     // Problem reports waiting for the keeper (see report), the oldest first.
     this.reports = [];
     this.reportsStored = Promise.resolve();
@@ -294,23 +310,25 @@ export class KeeperClient extends EventTarget {
     if (listing !== this.listingSent) {
       return { msg: this.listing ? { t: 'open-island', island: this.listing } : { t: 'close-island' }, answer: () => (this.listingSent = listing) };
     }
-    // A problem a player told of, copies or not.
-    const report = this.reports[0];
+    // A problem a player told of, copies or not: logged in, as the keeper
+    // takes them from nobody else.
+    const report = this.login ? this.reports[0] : null;
     if (report) return { msg: { t: 'report', report }, answer: (reply) => this.reported(report, reply) };
     if (!this.enabled) return null;
-    if (this.login) {
-      if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
-      const id = this.toFetch[0];
-      if (id) return { msg: { t: 'fetch', id }, answer: (reply) => this.fetched(id, reply) };
-      const [gone, at] = Object.entries(this.data.forgets)[0] ?? [];
-      if (gone) return this.copy({ t: 'forget', id: gone, at }, () => delete this.data.forgets[gone]);
-    }
+    // Not logged in, nothing is kept: the keeper only hears that someone came
+    // by, once a page. (A keeper running older code says it does not know this.)
+    if (!this.login) return this.visited ? null : { msg: { t: 'visit', about: visitAbout() }, answer: () => (this.visited = true) };
+    if (!this.listed) return { msg: { t: 'list' }, answer: (reply) => this.listedAs(reply) };
+    const id = this.toFetch[0];
+    if (id) return { msg: { t: 'fetch', id }, answer: (reply) => this.fetched(id, reply) };
+    const [gone, at] = Object.entries(this.data.forgets)[0] ?? [];
+    if (gone) return this.copy({ t: 'forget', id: gone, at }, () => delete this.data.forgets[gone]);
     const kept = keptProfile(this.profile.data);
     const profile = JSON.stringify(kept);
     if (profile !== this.data.profile) {
       const before = this.data.profile ? JSON.parse(this.data.profile) : {};
       const onlyStats = JSON.stringify({ ...kept, stats: 0 }) === JSON.stringify({ ...before, stats: 0 });
-      if (!onlyStats || Date.now() - this.profileSentAt >= (this.login ? STATS_EVERY_MS : PROFILE_EVERY_MS)) {
+      if (!onlyStats || Date.now() - this.profileSentAt >= STATS_EVERY_MS) {
         return this.copy({ t: 'profile', profile: kept }, () => (this.data.profile = profile));
       }
     }
@@ -322,7 +340,7 @@ export class KeeperClient extends EventTarget {
       if (adventure !== this.data.adventure) {
         const before = this.data.adventure ? JSON.parse(this.data.adventure) : {};
         const onlyStats = JSON.stringify({ ...keptIsle, stats: 0 }) === JSON.stringify({ ...before, stats: 0 });
-        if (!onlyStats || Date.now() - this.adventureSentAt >= (this.login ? STATS_EVERY_MS : PROFILE_EVERY_MS)) {
+        if (!onlyStats || Date.now() - this.adventureSentAt >= STATS_EVERY_MS) {
           return this.copy({ t: 'adventure', profile: keptIsle }, () => (this.data.adventure = adventure));
         }
       }
@@ -463,7 +481,7 @@ export class KeeperClient extends EventTarget {
   // reload) until the keeper has it, and a 'reported' event says so. False
   // when there is no keeper to tell.
   report(report) {
-    if (!this.config || this.state === 'gone') return false;
+    if (!this.config || !this.login || this.state === 'gone') return false;
     this.reports = [...this.reports, report].slice(-REPORTS_WAITING);
     this.storeReports();
     this.halted = false;
