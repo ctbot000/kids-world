@@ -2101,8 +2101,11 @@ export class Avatar {
       armRaiseL = armRaiseR = REST_RAISE + Math.sin(t * 2) * 0.015;
     }
 
-    // Emotes play over the pose for a few seconds.
+    // Emotes play over the pose for a few seconds. With a toy weapon in the
+    // right hand, the left one waves and goes to your heart or your tummy,
+    // the weapon kept down at your side; arms up, it points up along the arm.
     let hop = 0;
+    const armed = Boolean(this.weapon);
     if (this.emote) {
       const e = t - this.emoteAt;
       const done = e > (this.emote === 'dance' ? 3.2 : 2.2);
@@ -2110,6 +2113,13 @@ export class Avatar {
       else {
         switch (this.emote) {
           case 'wave':
+            if (armed) {
+              armRaiseL = 2.55;
+              armFwdL = Math.sin(e * 12) * 0.3;
+              bendL = 0.45;
+              headTilt = -0.15;
+              break;
+            }
             armRaiseR = 2.55;
             armFwdR = Math.sin(e * 12) * 0.3;
             bendR = 0.45;
@@ -2133,15 +2143,23 @@ export class Avatar {
           case 'hearts':
             // Hands together over the heart.
             headTilt = Math.sin(e * 3) * 0.2;
-            armFwdL = armFwdR = -0.55;
-            armRaiseL = armRaiseR = -0.28;
-            bendL = bendR = 1.65;
+            armFwdL = -0.55;
+            armRaiseL = -0.28;
+            bendL = 1.65;
+            if (armed) break;
+            armFwdR = -0.55;
+            armRaiseR = -0.28;
+            bendR = 1.65;
             break;
           case 'clap': {
             const c = Math.abs(Math.sin(e * 10));
-            armFwdL = armFwdR = -0.85;
-            armRaiseL = armRaiseR = -0.3 * c - 0.02;
-            bendL = bendR = 0.95;
+            armFwdL = -0.85;
+            armRaiseL = -0.3 * c - 0.02;
+            bendL = 0.95;
+            if (armed) break;
+            armFwdR = -0.85;
+            armRaiseR = -0.3 * c - 0.02;
+            bendR = 0.95;
             break;
           }
           case 'sleepy':
@@ -2152,9 +2170,13 @@ export class Avatar {
             // Head back, hands on your tummy, shaking with it.
             headNod = -0.3;
             bob = Math.abs(Math.sin(e * 16)) * 0.03;
-            armFwdL = armFwdR = -0.35;
-            armRaiseL = armRaiseR = -0.12;
-            bendL = bendR = 1.5;
+            armFwdL = -0.35;
+            armRaiseL = -0.12;
+            bendL = 1.5;
+            if (armed) break;
+            armFwdR = -0.35;
+            armRaiseR = -0.12;
+            bendR = 1.5;
             break;
           case 'surprise':
             hop = Math.max(0, Math.sin(Math.min(e, 0.6) * 5.2)) * 0.18;
@@ -2235,8 +2257,13 @@ export class Avatar {
     this.body.scale.setScalar(1);
     if (lying) this.body.position.y += this.lieLift;
     this.torso.rotation.set(lean, twist, 0);
-    // What is in hand keeps the angle it would have with the arm straight.
-    if (this.weapon) this.weapon.rotation.x = Math.PI / 2 + wrist + bendR;
+    // What is in hand keeps the angle it would have with the arm straight;
+    // with the arm raised high in an emote it turns to point up along it.
+    if (this.weapon) {
+      const held = Math.PI / 2 + wrist + bendR;
+      const up = this.emote ? Math.max(0, Math.min(1, (armRaiseR - 1.3) / 1.0)) : 0;
+      this.weapon.rotation.x = held + (Math.PI - held) * up;
+    }
     // The head keeps looking ahead as the shoulders turn.
     this.head.rotation.set(headNod, -twist * 0.8, headTilt);
     if (this.tail) this.tail.rotation.y = Math.sin(t * (moving ? 10 : 3)) * 0.3;

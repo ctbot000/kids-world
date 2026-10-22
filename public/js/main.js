@@ -329,7 +329,13 @@ function demoFrame(dt) {
     v.pitch += (0.22 - v.pitch) * Math.min(1, dt * 2);
     v.yaw += dt * 0.06;
     if (a) a.root.rotation.y = v.yaw;
-    if (a && demo.t % 7 < dt) a.playEmote(['wave', 'dance', 'cheer', 'hearts'][Math.floor(demo.t / 7) % 4]);
+    if (a && demo.t % 7 < dt) {
+      // With a toy weapon, a practice swing to show it off instead of hands
+      // on the heart.
+      const show = ['wave', 'dance', 'cheer', a.weapon ? 'swing' : 'hearts'][Math.floor(demo.t / 7) % 4];
+      if (show === 'swing') a.swing();
+      else a.playEmote(show);
+    }
   }
   if (a) {
     a.update(dt, 0, 0);

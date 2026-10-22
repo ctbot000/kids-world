@@ -53,6 +53,28 @@ test('every animal, kid and grown-up can be drawn in every pose', () => {
   assert.ok(new Set(HAIRS.map((h) => meshes(h.key))).size > 4, 'the hair styles are made differently');
 });
 
+test('a toy weapon in hand: the other hand waves and goes to your heart, and arms up hold it up to the sky', () => {
+  const at = (o, y = 0) => o.localToWorld(new THREE.Vector3(0, y, 0)).y;
+  const pose = (weapon, emote) => {
+    const a = new Avatar({ animal: 'bunny', fur: 'white', shirt: 1, hat: 'none', ...(weapon ? { weapon } : {}) });
+    a.playEmote(emote);
+    for (let i = 0; i < 4; i++) a.update(0.15, ANIM.idle, 0);
+    a.root.updateMatrixWorld(true);
+    // The hands, and the far end of what is in the right one.
+    return { left: at(a.hands[0]), right: at(a.hands[1]), tip: a.weapon ? at(a.weapon, 0.45) : null };
+  };
+  const bare = pose(null, 'wave');
+  assert.ok(bare.right > bare.left + 0.5, 'without one, the right hand waves');
+  for (const weapon of ['sword', 'blaster', 'hammer', 'lavablade']) {
+    const wave = pose(weapon, 'wave');
+    assert.ok(wave.left > wave.right + 0.5, `${weapon}: the left hand waves`);
+    const hearts = pose(weapon, 'hearts');
+    assert.ok(hearts.tip < hearts.left, `${weapon}: kept down while the left hand is on your heart`);
+    const cheer = pose(weapon, 'cheer');
+    assert.ok(cheer.tip > cheer.right + 0.2, `${weapon}: held up to the sky`);
+  }
+});
+
 test("a flying friend on someone's head sits on top of their hair or their hat", () => {
   // The highest point of the head (or hat) under the middle of a bird sitting
   // there: straight down onto every part, at the middle and round it. Most
