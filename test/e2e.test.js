@@ -2625,8 +2625,9 @@ test('a TV broadcast: the admin page puts a YouTube video and then a video on it
   const page = await openPlayer(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter', look: { animal: 'otter' } }, null);
   await offline(page);
   try {
-    await admin.goto(`${origin}/admin/`);
-    await until(admin, () => !document.getElementById('tv-section').hidden && document.getElementById('tv-now').textContent.includes('Off air'));
+    // Its tab, from the address: there once the keeper is, which shows the TV part.
+    await admin.goto(`${origin}/admin/#tv`);
+    await until(admin, () => document.getElementById('tab-tv').ariaSelected === 'true' && document.getElementById('tv-section').checkVisibility() && document.getElementById('tv-now').textContent.includes('Off air'));
     await makeIsland(page, { online: false, theme: 'Flat Land' });
     await until(page, () => window.kidsWorld.keeper.state === 'ready');
     // A Retro TV beside the start, and its window open.
@@ -3178,6 +3179,10 @@ test('the admin page shows each player, their login and their islands, folded aw
   try {
     await page.goto(`http://127.0.0.1:${games.address().port}/admin/`);
     await until(page, () => document.querySelector('.device h3')?.textContent === 'Brave Fox');
+    // The players are a tab of their own, away from the overview until picked.
+    assert.equal(await page.$eval('.device', (d) => d.checkVisibility()), false);
+    await page.click('#tab-players');
+    assert.equal(await page.evaluate(() => location.hash), '#players');
     // The islands are folded away, with no maps drawn, until opened.
     assert.equal(await page.$eval('.fold > summary', (el) => el.textContent), '1 island');
     assert.equal(await page.$('.island'), null);

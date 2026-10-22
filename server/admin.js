@@ -34,6 +34,7 @@ const PAGES = {
   '/admin/admin.css': 'admin.css',
   '/admin/tv.js': 'tv.js',
   '/admin/ctb.js': 'ctb.js',
+  '/admin/tabs.js': 'tabs.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);

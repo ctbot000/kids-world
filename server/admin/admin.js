@@ -1,4 +1,4 @@
-// The keeper's admin page: who has sent copies, their islands seen from above
+// The keeper's admin page, a tab for each part (tabs.js): who has sent copies, their islands seen from above
 // (drawn with the game's own map code), and downloads or deletes, and their
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
@@ -26,6 +26,7 @@ import { World } from '/js/shared/world.js';
 import { CHAT_MAX } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 import { setUpCtb } from '/admin/ctb.js';
+import { setUpTabs } from '/admin/tabs.js';
 import { refreshTv, setUpTv } from '/admin/tv.js';
 
 const REFRESH_MS = 5000;
@@ -1030,6 +1031,7 @@ async function refresh(now = false) {
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
+setUpTabs();
 setUpTv();
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened });
 refresh();

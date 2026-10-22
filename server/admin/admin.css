@@ -100,8 +100,60 @@ main {
   padding: 20px 16px 64px;
 }
 
-main > section + section {
+main > [role='tabpanel']:not(.active) {
+  display: none;
+}
+
+#recent-section {
   margin-top: 32px;
+}
+
+/* ------------------------------------------------------------ tabs */
+
+/* A row of its own under the title, scrolling sideways on a narrow screen,
+   the picked tab underlined on the header's bottom border. */
+.tabs {
+  display: flex;
+  flex-basis: 100%;
+  gap: 4px;
+  margin: 0 -10px -13px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs [role='tab'] {
+  flex: none;
+  gap: 6px;
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.tabs [role='tab'][hidden] {
+  display: none;
+}
+
+.tabs [role='tab']:hover {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.tabs [role='tab'][aria-selected='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.tabs [role='tab']:focus-visible {
+  outline-offset: -2px;
+}
+
+.tabs .badge:empty {
+  display: none;
 }
 
 h2 {
