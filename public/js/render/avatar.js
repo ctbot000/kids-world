@@ -346,6 +346,123 @@ const sneakerTrim = (size) =>
     ].map(({ g, m }) => ({ g, m: new THREE.Matrix4().makeScale(size, size, size).multiply(m) }))),
   );
 
+// Running shoes from the shop (shared/shop.js), in place of the sneakers
+// that match the shirt: their colours (upper, sole, trim), and what else is
+// on them — a lightning bolt on each side, or a rocket boot's cuff and the
+// nozzle at its heel, which blazes as you run.
+const SHOES = {
+  bouncy: { upper: '#36c5f0', sole: '#ffe14d', trim: '#ffffff' },
+  zoomy: { upper: '#ffd23f', sole: '#ffffff', trim: '#ff7a1a', bolt: '#ff7a1a' },
+  rocket: { upper: '#e8453c', sole: '#d9dde3', trim: '#ffffff', rocket: true },
+};
+
+// A lightning bolt, flat, facing +x: the mark on a Zoomy Sneaker's side.
+const boltShape = () =>
+  geo('shoe-bolt', () => {
+    const s = new THREE.Shape();
+    [[0.022, 0.026], [-0.012, 0.003], [0.006, 0.003], [-0.022, -0.026], [0.012, -0.003], [-0.006, -0.003]].forEach(([z, y], i) => (i ? s.lineTo(z, y) : s.moveTo(z, y)));
+    const g = new THREE.ExtrudeGeometry(s, { depth: 0.004, bevelEnabled: false });
+    g.rotateY(Math.PI / 2);
+    return g;
+  });
+
+// A flame: a glowing cone pointing down from its top (y 0), to scale by how
+// hard it blazes.
+function flame(r, len) {
+  const g = new THREE.Group();
+  g.add(mesh(cone(r, len, 12), toon('#ffb52e', { emissive: 0.9 }), 0, -len / 2, 0).rotateX(Math.PI));
+  g.add(mesh(cone(r * 0.55, len * 0.6, 10), toon('#fff3a3', { emissive: 1 }), 0, -len * 0.3, 0).rotateX(Math.PI));
+  return g;
+}
+
+// What else a pair of shoes has on each foot (the knee's group, the sole
+// at -knee): returns the flames, if any.
+function shoeExtras(knee, kind, B, side) {
+  const s = SHOES[kind];
+  const f = B.foot;
+  const y = -B.knee;
+  const flames = [];
+  if (s.bolt) knee.add(mesh(boltShape(), toon(s.bolt, { emissive: 0.3 }), side * 0.039 * f, y + 0.045 * f, 0.02 * f, side, 1, 1));
+  if (s.rocket) {
+    // A silver cuff round the ankle, and a nozzle at the heel.
+    knee.add(mesh(torus(0.042 * f, 0.012 * f), toon(s.sole), 0, y + 0.085 * f, 0.005 * f).rotateX(Math.PI / 2));
+    knee.add(mesh(cylinder(0.018 * f, 0.026 * f, 0.04 * f, 12), toon('#8a919c'), 0, y + 0.045 * f, -0.062 * f).rotateX(-0.5));
+    const fire = flame(0.022 * f, 0.12 * f);
+    fire.position.set(0, y + 0.03 * f, -0.07 * f);
+    fire.rotation.x = -0.5;
+    knee.add(fire);
+    flames.push(fire);
+  }
+  return flames;
+}
+
+// Flying gear from the shop on your back, over a cape or a robe: feathered
+// wings, a fairy's see-through ones, or a jet pack with two flames. Returns
+// { sides: [left, right] wing groups that flap, sweep: how far back they
+// fold, flaps: how fast they beat flying, flames }.
+function wingsOn(av, kind, B, caped) {
+  const k = B.hip / BUILDS.kid.hip;
+  const y = B.shoulder[0] - 0.06 * k;
+  const back = (B.shirt.find(([ry]) => ry >= y) ?? B.shirt[B.shirt.length - 1])[3];
+  const g = new THREE.Group();
+  // Over a cape or a robe, far enough out to be outside it.
+  g.position.set(0, y, -back - (caped ? 0.1 : 0.025) * k);
+  av.torso.add(g);
+  const out = { sides: [], sweep: 0.35, flaps: 9, flames: [] };
+  if (kind === 'jetpack') {
+    g.add(mesh(roundedBox(0.15 * k, 0.17 * k, 0.04 * k), toon('#5b6573'), 0, -0.04 * k, 0.005 * k));
+    for (const side of [-1, 1]) {
+      const x = side * 0.058 * k;
+      g.add(mesh(cylinder(0.042 * k, 0.042 * k, 0.2 * k, 16), toon('#d9dde3'), x, -0.03 * k, -0.04 * k));
+      g.add(mesh(cone(0.042 * k, 0.07 * k, 16), toon('#e8453c'), x, 0.105 * k, -0.04 * k));
+      g.add(mesh(cylinder(0.03 * k, 0.04 * k, 0.035 * k, 14), toon('#3d434c'), x, -0.145 * k, -0.04 * k));
+      const fire = flame(0.032 * k, 0.2 * k);
+      fire.position.set(x, -0.16 * k, -0.04 * k);
+      g.add(fire);
+      out.flames.push(fire);
+    }
+    return out;
+  }
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Group();
+    wing.position.x = side * 0.035 * k;
+    g.add(wing);
+    out.sides.push(wing);
+    if (kind === 'feather') {
+      // Five white feathers fanned out and up, longest at the top, from a
+      // soft rounded shoulder of the wing.
+      const white = toon('#fbfaf5');
+      const tip = toon('#d8e6f5');
+      const base = mesh(sphere(1, 16, 12), white, side * 0.07 * k, 0.03 * k, 0, 0.085 * k, 0.05 * k, 0.025 * k);
+      base.rotation.z = side * -0.5;
+      wing.add(base);
+      for (let i = 0; i < 5; i++) {
+        const len = (0.17 + i * 0.035) * k;
+        const a = 1.6 - i * 0.25;
+        const dir = new THREE.Vector3(side * Math.sin(a), Math.cos(a) * 0.9 - 0.25, -0.05);
+        const f = mesh(capsule(0.028 * k, len, 4, 10), i === 4 ? tip : white);
+        f.scale.z = 0.32;
+        f.quaternion.setFromUnitVectors(UP, dir.clone().normalize());
+        f.position.copy(dir.normalize().multiplyScalar(len / 2 + 0.02 * k));
+        wing.add(f);
+      }
+    } else {
+      // Two see-through lobes, a big one up and a small one down, with a
+      // little sparkle where they meet.
+      out.sweep = 0.25;
+      out.flaps = 16;
+      const film = toon('#c9b6ff', { transparent: true, opacity: 0.55, emissive: 0.25 });
+      const low = toon('#a8e6ff', { transparent: true, opacity: 0.55, emissive: 0.25 });
+      const up = mesh(sphere(1, 18, 12), film, side * 0.12 * k, 0.09 * k, 0, 0.13 * k, 0.085 * k, 0.008);
+      up.rotation.z = side * -0.55;
+      const down = mesh(sphere(1, 16, 10), low, side * 0.085 * k, -0.06 * k, 0, 0.08 * k, 0.055 * k, 0.008);
+      down.rotation.z = side * 0.6;
+      wing.add(up, down, mesh(sphere(1, 10, 8), toon('#fff3a3', { emissive: 0.8 }), side * 0.012 * k, 0, 0, 0.016 * k));
+    }
+  }
+  return out;
+}
+
 // A five-pointed star, a little thick, facing +z: the badge on a t-shirt.
 const starShape = () =>
   geo('star-badge', () => {
@@ -1774,7 +1891,10 @@ export class Avatar {
     const pantsMat = toon(pants);
     const seam = toon(darken(pants, 0.18));
     // Legs: a thigh from the hip, then the knee and the shin down to a
-    // sneaker (a frog's legs are its skin, and its feet bare).
+    // sneaker (a frog's legs are its skin, and its feet bare), or the
+    // running shoes from the shop (on a frog too).
+    const shoes = SHOES[look.shoes] ?? null;
+    this.flames = [];
     this.legs = [];
     this.knees = [];
     for (const side of [-1, 1]) {
@@ -1785,9 +1905,10 @@ export class Avatar {
       knee.position.y = B.knee - B.hip;
       knee.add(mesh(shinShape(B), pantsMat));
       if (!frog) knee.add(mesh(torus(B.shin[2] + 0.001, 0.0105), seam, 0, B.hem - B.knee + 0.011, 0).rotateX(Math.PI / 2));
-      knee.add(mesh(sneakerSole(B.foot), toon(frog ? darken(fur, 0.25) : '#f6f1ea'), 0, -B.knee, 0));
-      knee.add(mesh(sneakerUpper(B.foot), toon(frog ? darken(fur, 0.1) : shoeFor(shirt)), 0, -B.knee, 0));
-      if (!frog) knee.add(mesh(sneakerTrim(B.foot), toon('#ffffff'), 0, -B.knee, 0));
+      knee.add(mesh(sneakerSole(B.foot), toon(shoes?.sole ?? (frog ? darken(fur, 0.25) : '#f6f1ea')), 0, -B.knee, 0));
+      knee.add(mesh(sneakerUpper(B.foot), toon(shoes?.upper ?? (frog ? darken(fur, 0.1) : shoeFor(shirt))), 0, -B.knee, 0));
+      if (shoes || !frog) knee.add(mesh(sneakerTrim(B.foot), toon(shoes?.trim ?? '#ffffff'), 0, -B.knee, 0));
+      if (shoes) this.flames.push(...shoeExtras(knee, look.shoes, B, side));
       leg.add(knee);
       body.add(leg);
       this.legs.push(leg);
@@ -1878,6 +1999,12 @@ export class Avatar {
     this.hat = hat(skull, look.hat, shirt, person ? (look.hair === 'curly' ? 0.07 : 0.025) : 0, person);
     // Clothes from the shop, over all of it.
     this.outfit = look.outfit ? dressUp(this, look.outfit, B) : null;
+    // Flying gear on your back, over the clothes.
+    const caped = look.outfit === 'cape' || look.outfit === 'robe';
+    this.wings = look.wings ? wingsOn(this, look.wings, B, caped) : null;
+    // Under wings or a jet pack, a cape or a robe flies out less, to keep
+    // clear of them.
+    if (this.wings && caped && this.outfit) this.outfit = { ...this.outfit, flap: this.outfit.flap * 0.35 };
     const back = B.seat.reduce((most, ring) => Math.max(most, ring[3]), 0);
     this.tail = tail(this.torso, look.animal, fur, new THREE.Vector3(0, -0.02, -back + 0.01));
     // A cape or a robe hangs over a tail, which would poke through it.
@@ -2277,6 +2404,23 @@ export class Avatar {
       part.rotation.x += (target - part.rotation.x) * Math.min(1, dt * 8);
     }
     // A ponytail swings to and fro, pigtails from side to side; more on the move.
+    // Wings beat flying and stir standing; a jet pack blazes flying, rocket
+    // boots running or flying, and both only flicker otherwise.
+    const flying = anim === ANIM.fly;
+    if (this.wings) {
+      const w = this.wings;
+      const beat = flying ? Math.sin(t * w.flaps) * 0.55 - 0.15 : Math.sin(t * 2) * 0.06;
+      w.sides.forEach((wing, i) => (wing.rotation.y = (i ? 1 : -1) * (w.sweep + beat)));
+      for (const f of w.flames) {
+        f.visible = flying;
+        if (flying) f.scale.setScalar(1 + Math.sin(t * 40 + f.position.x * 50) * 0.15);
+      }
+    }
+    const blaze = flying ? 1 : Math.min(1, Math.max(0, (speed - 4) / 4));
+    for (const f of this.flames) {
+      f.visible = blaze > 0.05;
+      f.scale.setScalar(Math.max(0.001, blaze * (1 + Math.sin(t * 45 + f.position.x * 60) * 0.18)));
+    }
     for (const b of this.sway) {
       const { side, rest } = b.userData;
       const swing = Math.sin(t * (moving ? 9 : 2.2) + side) * (moving ? 0.2 : 0.05);

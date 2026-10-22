@@ -75,6 +75,39 @@ test('a toy weapon in hand: the other hand waves and goes to your heart, and arm
   }
 });
 
+test('running shoes and flying gear show: their own shoes, wings that beat flying, flames from a jet pack flying and rocket boots running', () => {
+  const look = { animal: KID, fur: 'tan', shirt: 1, hat: 'none', skin: 'tan', hair: 'short', hairColor: 'black' };
+  const colours = (a) => {
+    const seen = new Set();
+    a.knees[0].traverse((o) => o.isMesh && seen.add(o.material.color.getHexString()));
+    return [...seen].sort().join();
+  };
+  const plain = new Avatar(look);
+  const kinds = ['bouncy', 'zoomy', 'rocket'].map((shoes) => colours(new Avatar({ ...look, shoes })));
+  assert.equal(new Set([colours(plain), ...kinds]).size, 4, 'each pair its own colours');
+  assert.equal(plain.wings, null);
+  for (const wings of ['feather', 'fairy', 'jetpack']) {
+    for (const outfit of [undefined, 'cape']) {
+      const a = new Avatar({ ...look, wings, ...(outfit ? { outfit } : {}) });
+      assert.ok(a.wings, wings);
+      a.update(0.1, ANIM.idle, 0);
+      const resting = a.wings.sides.map((w) => w.rotation.y);
+      assert.ok(a.wings.flames.every((f) => !f.visible), `${wings}: no flames standing`);
+      for (let i = 0; i < 5; i++) a.update(0.037, ANIM.fly, 6);
+      assert.ok(a.wings.flames.every((f) => f.visible), `${wings}: flames flying`);
+      if (wings !== 'jetpack') assert.notDeepEqual(a.wings.sides.map((w) => w.rotation.y), resting, `${wings}: they beat flying`);
+      a.root.updateMatrixWorld(true);
+      a.root.traverse((o) => o.isMesh && assert.ok(o.matrixWorld.elements.every(Number.isFinite), wings));
+    }
+  }
+  const boots = new Avatar({ ...look, shoes: 'rocket' });
+  assert.equal(boots.flames.length, 2);
+  boots.update(0.1, ANIM.walk, 2);
+  assert.ok(boots.flames.every((f) => !f.visible), 'walking, no flames');
+  boots.update(0.1, ANIM.run, 9);
+  assert.ok(boots.flames.every((f) => f.visible), 'running, flames');
+});
+
 test("a flying friend on someone's head sits on top of their hair or their hat", () => {
   // The highest point of the head (or hat) under the middle of a bird sitting
   // there: straight down onto every part, at the middle and round it. Most

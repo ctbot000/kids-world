@@ -39,7 +39,8 @@ export const SELL_PRICES = {
 
 export const sellPrice = (key) => SELL_PRICES[key] ?? 0;
 
-// Each level: its name, icon, price and how much faster it makes you
+// Each level: its key (how friends see it on you: a look's shoes or wings,
+// render/avatar.js), name, icon, price and how much faster it makes you
 // (1.25: a quarter faster).
 export const GEAR = [
   {
@@ -47,9 +48,9 @@ export const GEAR = [
     name: 'Running shoes',
     about: 'Walk, run and swim faster.',
     levels: [
-      { name: 'Bouncy Sneakers', icon: '👟', price: 20, boost: 1.2 },
-      { name: 'Zoomy Sneakers', icon: '⚡', price: 60, boost: 1.4 },
-      { name: 'Rocket Boots', icon: '🚀', price: 150, boost: 1.65 },
+      { key: 'bouncy', name: 'Bouncy Sneakers', icon: '👟', price: 20, boost: 1.2 },
+      { key: 'zoomy', name: 'Zoomy Sneakers', icon: '⚡', price: 60, boost: 1.4 },
+      { key: 'rocket', name: 'Rocket Boots', icon: '🚀', price: 150, boost: 1.65 },
     ],
   },
   {
@@ -57,9 +58,9 @@ export const GEAR = [
     name: 'Flying gear',
     about: 'Fly faster, up and down too.',
     levels: [
-      { name: 'Feather Wings', icon: '🪶', price: 30, boost: 1.25 },
-      { name: 'Fairy Wings', icon: '🧚', price: 80, boost: 1.5 },
-      { name: 'Jet Pack', icon: '🛩️', price: 200, boost: 1.8 },
+      { key: 'feather', name: 'Feather Wings', icon: '🪶', price: 30, boost: 1.25 },
+      { key: 'fairy', name: 'Fairy Wings', icon: '🧚', price: 80, boost: 1.5 },
+      { key: 'jetpack', name: 'Jet Pack', icon: '🛩️', price: 200, boost: 1.8 },
     ],
   },
   {
@@ -134,14 +135,33 @@ export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1
 export const WEAPONS = GEAR.find((g) => g.key === 'weapon').levels;
 export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 
-// Your look as the island sees it: with the weapon you have on, if any, and
-// your level (levels.js), if given.
+// Your look as the island sees it: with the weapon, clothes, shoes and wings
+// you have on, if any (by key: friends see them on you), and your level
+// (levels.js), if given.
 export function lookWithGear(look, gear, level = 0) {
-  const { weapon: _, level: __, outfit: ___, ...rest } = look ?? {};
+  const { weapon: _, level: __, outfit: ___, shoes: ____, wings: _____, ...rest } = look ?? {};
   const worn = wornWeapon(gear);
   const outfit = wornOutfit(gear);
-  return { ...rest, ...(worn ? { weapon: worn.key } : {}), ...(outfit ? { outfit: outfit.key } : {}), ...(level ? { level } : {}) };
+  const shoes = wornLevel(gear, 'shoes');
+  const wings = wornLevel(gear, 'wings');
+  return {
+    ...rest,
+    ...(worn ? { weapon: worn.key } : {}),
+    ...(outfit ? { outfit: outfit.key } : {}),
+    ...(shoes ? { shoes: shoes.key } : {}),
+    ...(wings ? { wings: wings.key } : {}),
+    ...(level ? { level } : {}),
+  };
 }
+
+// The running shoes or flying gear you have on (kind: 'shoes' or 'wings'),
+// or null; and one of them by key, for a look.
+const wornLevel = (gear, kind) => {
+  const level = wearing(gear, kind);
+  return level ? gearKind(kind).levels[level - 1] : null;
+};
+export const shoesOf = (key) => GEAR[0].levels.find((l) => l.key === key) ?? null;
+export const wingsOf = (key) => GEAR[1].levels.find((l) => l.key === key) ?? null;
 
 // The weapon you have on: the one you have chosen to carry of those you own
 // (pick, by its level), or the best you have. Null with none, or it taken off.

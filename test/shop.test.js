@@ -354,3 +354,17 @@ test('every swing starts and ends as the avatar stands, moves smoothly between, 
     assert.ok(Math.abs(av.swing() - swing.secs * swing.strike) < 1e-9, `${kind} says when it lands`);
   }
 });
+
+test('the running shoes and flying gear you have on are in the look the island sees, and only real ones', () => {
+  const look = { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' };
+  assert.deepEqual(GEAR.slice(0, 2).map((g) => g.levels.map((l) => l.key)), [['bouncy', 'zoomy', 'rocket'], ['feather', 'fairy', 'jetpack']]);
+  const shown = lookWithGear(look, cleanGear({ shoes: 3, wings: 2 }));
+  assert.equal(shown.shoes, 'rocket');
+  assert.equal(shown.wings, 'fairy');
+  const off = lookWithGear({ ...look, shoes: 'rocket', wings: 'fairy' }, cleanGear({ shoes: 3, wings: 2, off: { shoes: true, wings: true } }));
+  assert.equal(off.shoes, undefined, 'taken off');
+  assert.equal(off.wings, undefined, 'taken off');
+  assert.equal(lookWithGear({ ...look, shoes: 'rocket' }, cleanGear({})).shoes, undefined, 'not bought');
+  assert.deepEqual([cleanLook({ ...look, shoes: 'zoomy', wings: 'jetpack' }).shoes, cleanLook({ ...look, shoes: 'zoomy', wings: 'jetpack' }).wings], ['zoomy', 'jetpack']);
+  assert.deepEqual([cleanLook({ ...look, shoes: 'flippers', wings: 3 }).shoes, cleanLook({ ...look, shoes: 'flippers', wings: 3 }).wings], [undefined, undefined]);
+});

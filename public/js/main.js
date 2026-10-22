@@ -22,7 +22,7 @@ import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
 import { makePet, placePet, petPose, stepPet } from './shared/pets.js';
-import { lookWithGear, wornOutfit, wornWeapon } from './shared/shop.js';
+import { lookWithGear } from './shared/shop.js';
 import { lookHair, lookTall } from './shared/words.js';
 import { generate, SIZES } from './shared/worldgen.js';
 
@@ -153,18 +153,14 @@ for (const p of [profile, isle]) {
 // it reach further; on the title, you are dressed in it there. A new level
 // (here, or from another device of yours) shows on your name tag. On the
 // shared isle, the weapon and the level are the isle's own.
-let weaponSent = '';
-let outfitSent = '';
-let levelSent = 0;
+let gearSent = '';
 const sendGear = () => {
   const p = session?.game?.profile ?? ui.profile;
-  const weapon = wornWeapon(p.data.gear)?.key ?? '';
-  const outfit = wornOutfit(p.data.gear)?.key ?? '';
-  const level = p.progress.level;
-  if (weapon === weaponSent && outfit === outfitSent && level === levelSent) return;
-  weaponSent = weapon;
-  outfitSent = outfit;
-  levelSent = level;
+  // What shows of it: weapon, clothes, shoes, wings and level.
+  const { weapon = '', outfit = '', shoes = '', wings = '', level = 0 } = p.shownLook;
+  const shown = [weapon, outfit, shoes, wings, level].join('|');
+  if (shown === gearSent) return;
+  gearSent = shown;
   if (session?.game) session.game.send({ t: 'look', look: p.shownLook, name: profile.name });
   else if (demo.world) showDemoAvatar();
 };
@@ -434,9 +430,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
     // the isle's things, not yours (see useProfile) — and the island hears
     // your look as the isle has it, its own level and gear in your hands.
     game.useProfile(game.shared ? isle : profile);
-    weaponSent = '';
-    outfitSent = '';
-    levelSent = 0;
+    gearSent = '';
     sendGear();
     if (!session.started) {
       session.started = true;

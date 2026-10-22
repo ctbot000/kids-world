@@ -1543,8 +1543,13 @@ test('the shop sells, the 🎒 backpack is where you put things on and take them
   const names = await page.evaluate(() => [...document.querySelectorAll('#modal .shop-card b')].map((b) => b.textContent));
   assert.deepEqual(names, ['Bouncy Sneakers ✅', 'Foam Sword', 'Bubble Blaster ✅', 'Cozy Scarf ✅']);
   // Taking off and putting on, each as it says.
+  await until(page, () => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look.shoes === 'bouncy');
   await clickButton(page, '🙌 Take off', '#modal .shop-card:nth-child(1)');
   await until(page, () => window.kidsWorld.profile.data.gear.off.shoes === true);
+  await until(page, () => {
+    const look = window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look;
+    return look && !look.shoes;
+  });
   await clickButton(page, '✋ Hold it', '#modal .shop-card:nth-child(2)');
   await until(page, () => window.kidsWorld.profile.data.gear.pick.weapon === 1);
   await clickButton(page, '🙌 Put away', '#modal .shop-card:nth-child(2)');
