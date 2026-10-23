@@ -600,6 +600,14 @@ const MODELS = {
     return out;
   },
 
+  // The Monster Gashapon's boxes, for its picture: the gashapon's, in a
+  // purple cabinet and cap with a slime-green band (render/gashapon-model.js
+  // draws it for real).
+  'monster-gashapon'() {
+    const COLOURS = { '#e8453c': '#5b2a86', '#fcd535': '#8ee05a' };
+    return MODELS.gashapon().map((b) => (COLOURS[b[6]] ? [...b.slice(0, 6), COLOURS[b[6]], b[7]] : b));
+  },
+
   // A scarecrow on its pole, taller than its cell like a grown-up: a red
   // shirt with a blue patch, its arms out along a crossbar with straw for
   // hands, straw poking out under it, a smiling pumpkin for a head and a

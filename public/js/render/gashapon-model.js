@@ -33,11 +33,29 @@ export const FINISH = {
   ...Object.fromEntries(SHELLS.map((c, i) => [`shell${i}`, { color: c, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1 }])),
 };
 
+// The Monster Gashapon (blocks.js MONSTER_GASHAPON) is the same machine in
+// a monster's colours: a purple cabinet and cap with a band of slime green,
+// two horns on its cap, capsules in the monsters' own colours, and a beam
+// of light up from it to find it by.
+export const MONSTER_SHELLS = ['#9b6bff', '#e2536a', '#8ee05a', '#ffa53d', '#5fc7e6', '#3a3d45'];
+const MONSTER_FINISH = {
+  red: { ...FINISH.red, color: '#5b2a86' },
+  yellow: { ...FINISH.yellow, color: '#8ee05a' },
+  white: { ...FINISH.white, color: '#2b2d33' },
+  horn: { color: '#fff1d0', roughness: 0.3, clearcoat: 0.6, envMapIntensity: 0.8 },
+  beam: { basic: true, color: '#c9a6ff', transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide },
+  ...Object.fromEntries(MONSTER_SHELLS.map((c, i) => [`shell${i}`, { ...FINISH[`shell${i}`], color: c }])),
+};
+
 // Materials for every part, each made by `make` from its settings (three's
-// physical material by default).
-export function gashaponMaterials(make = (f) => new THREE.MeshPhysicalMaterial({ metalness: 0, ...f })) {
+// physical material by default; a `basic` one, the beam, is never lit).
+// style: 'monster' for the Monster Gashapon's.
+export function gashaponMaterials(make = (f) => new THREE.MeshPhysicalMaterial({ metalness: 0, ...f }), style = 'capsule') {
   const out = {};
-  for (const [k, f] of Object.entries(FINISH)) out[k] = make(f);
+  for (const [k, f] of Object.entries(style === 'monster' ? { ...FINISH, ...MONSTER_FINISH } : FINISH)) {
+    const { basic, ...rest } = f;
+    out[k] = basic ? new THREE.MeshBasicMaterial(rest) : make(rest);
+  }
   return out;
 }
 
@@ -144,11 +162,12 @@ export function capsuleHalf() {
   return halfShape;
 }
 
-let shapes = null;
-// The machine's shapes, by material, made once: { red: geometry, ... }, and
-// the handle's on their own, to turn (about z, at HANDLE).
-export function gashaponShapes() {
-  if (shapes) return shapes;
+const shapes = {};
+// The machine's shapes, by material, made once for each style: { red:
+// geometry, ... }, and the handle's on their own, to turn (about z, at
+// HANDLE).
+export function gashaponShapes(style = 'capsule') {
+  if (shapes[style]) return shapes[style];
   const parts = {};
   const put = (kind, g, m) => (parts[kind] ??= []).push({ g, m });
   // The plinth and the cabinet.
@@ -181,6 +200,15 @@ export function gashaponShapes() {
     put(`shell${shell}`, capsuleHalf(), m);
     put('clear', capsuleHalf(), m.clone().multiply(new THREE.Matrix4().makeRotationX(Math.PI)));
   }
+  // The Monster Gashapon's horns, curving up out of its cap, and its beam.
+  if (style === 'monster') {
+    for (const side of [-1, 1]) {
+      put('horn', new THREE.ConeGeometry(0.045, 0.16, 12), at(side * 0.12, 1.04, 0, 0, 0, -side * 0.5));
+      put('horn', new THREE.ConeGeometry(0.03, 0.1, 10), at(side * 0.18, 1.12, 0, 0, 0, -side * 1.0));
+    }
+    const beam = new THREE.CylinderGeometry(0.14, 0.2, BEAM, 20, 1, true);
+    put('beam', beam, at(0, 1.05 + BEAM / 2, 0));
+  }
   // The handle: a chrome bar across the boss, a knob at each end, and a
   // red grip in the middle — turned as a whole.
   const handle = [];
@@ -190,20 +218,23 @@ export function gashaponShapes() {
   handle.push({ kind: 'red', g: new THREE.CylinderGeometry(0.022, 0.022, 0.03, 18), m: at(0, 0, -0.05, Math.PI / 2) });
   const handleParts = {};
   for (const { kind, g, m } of handle) (handleParts[kind] ??= []).push({ g, m });
-  shapes = {
+  shapes[style] = {
     body: Object.fromEntries(Object.entries(parts).map(([k, list]) => [k, bake(list)])),
     handle: Object.fromEntries(Object.entries(handleParts).map(([k, list]) => [k, bake(list)])),
   };
-  return shapes;
+  return shapes[style];
 }
 
+// How tall the Monster Gashapon's beam of light goes up.
+export const BEAM = 9;
+
 // Drawn last of all, so what is behind the glass shows through it.
-const ORDER = { glassBack: 1, clear: 2, glass: 3, smoke: 3 };
+const ORDER = { glassBack: 1, clear: 2, glass: 3, smoke: 3, beam: 4 };
 
 // A whole machine: a group of meshes in the materials given
 // (gashaponMaterials), its handle in group.userData.handle, to turn.
-export function gashaponModel(materials) {
-  const s = gashaponShapes();
+export function gashaponModel(materials, style = 'capsule') {
+  const s = gashaponShapes(style);
   const group = new THREE.Group();
   group.name = 'gashapon';
   for (const [k, g] of Object.entries(s.body)) {

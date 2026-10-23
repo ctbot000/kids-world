@@ -7,6 +7,7 @@
 // physical material settings on top, such as metalness), so whoever shows
 // a toy lights it in its own WebGL context.
 import * as THREE from '../../vendor/three.module.js';
+import { monsterFigure } from './monster-figures.js';
 
 const g = {
   sphere: new THREE.SphereGeometry(1, 28, 20),
@@ -383,8 +384,10 @@ const TOYS = {
   },
 };
 
-// The figure of a toy by its key, or null.
+// The figure of a toy by its key, or null; a monster figure's (one of the
+// Monster Gashapon's) is the real monster (monster-figures.js).
 export function toyFigure(key, mat) {
+  if (key.startsWith('m-')) return monsterFigure(key);
   const make = TOYS[key];
   if (!make) return null;
   const t = new THREE.Group();

@@ -4,7 +4,7 @@
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
-import { GASHA_PRICE, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
+import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
 import { stationId } from './shared/broadcast.js';
@@ -1572,7 +1572,7 @@ export class UI {
           }
           // The capsule toys you have from gashapon machines, most rare first.
           const have = TOYS.filter((t) => (gear.toys[t.key] ?? 0) > 0).sort((a, b) => b.rare - a.rare);
-          const empty = have.length
+          const empty = have.length || MONSTER_FIGURES.some((t) => (gear.toys[t.key] ?? 0) > 0)
             ? 'Nothing from the 🛒 shop in here yet: sell treasures from your basket there, and buy shoes, wings, toy weapons, clothes and potions!'
             : 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!';
           list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, empty)]));
@@ -1580,9 +1580,17 @@ export class UI {
           toys.replaceChildren(
             ...(have.length ? have.map((t) => this.toyCard(t, gear.toys[t.key])) : [h('p', { class: 'muted shop-empty' }, 'No capsule toys yet. Turn a 🎁 gashapon machine for one: you find them in the toy box\'s 🛋️ Home tab and at the 🕹️ Video Arcade.')]),
           );
+          // And the monster figures, from the Monster Gashapon.
+          const figs = MONSTER_FIGURES.filter((t) => (gear.toys[t.key] ?? 0) > 0).sort((a, b) => b.rare - a.rare);
+          figsHead.textContent = `👾 Monster figures (${figs.length} of ${MONSTER_FIGURES.length})`;
+          monsterFigs.replaceChildren(
+            ...(figs.length ? figs.map((t) => this.toyCard(t, gear.toys[t.key])) : [h('p', { class: 'muted shop-empty' }, 'No monster figures yet. On an adventure island a 👾 Monster Gashapon turns up now and then: follow its beam of light to it!')]),
+          );
         };
         const toysHead = h('h3', { class: 'backpack-toys-head' });
         const toys = h('div', { class: 'gasha-toys backpack-toys' });
+        const figsHead = h('h3', { class: 'backpack-toys-head' });
+        const monsterFigs = h('div', { class: 'gasha-toys backpack-toys backpack-figures' });
         this.loadToyPictures(() => {
           if (this.modalOpen && toys.isConnected) draw();
         });
@@ -1594,6 +1602,8 @@ export class UI {
             list,
             toysHead,
             toys,
+            figsHead,
+            monsterFigs,
           ].filter(Boolean),
         );
         draw();
@@ -1983,7 +1993,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
-          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up.']),
+          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. Now and then a 👾 Monster Gashapon turns up: follow its beam of light, and turn it for a figure of a real monster — on a higher stage of Adventure Isle, a rare one is likelier!']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
@@ -2887,6 +2897,7 @@ export class UI {
     });
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
+    on('gasha-gone', () => this.gashaShow?.());
     on('piano-open', () => this.pianoDialog());
     // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
     on('piano-gone', () => this.modalOpen && $('modal').querySelector('.piano-board') && this.closeModal());
@@ -4116,12 +4127,12 @@ export class UI {
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -4240,10 +4251,17 @@ export class UI {
 
   // The gashapon machine you pressed Turn at, in a window: the machine with
   // its handle, your coins, the capsule that comes out and the toy in it,
-  // and your collection of capsule toys, the ones still to find as ❓.
+  // and your collection of capsule toys, the ones still to find as closed
+  // capsules. The Monster Gashapon's is the same, with its monster figures,
+  // its own price and the odds of a rare one at the island's stage.
   gashaDialog() {
     const g = this.game;
     if (!g?.gashaAt) return;
+    const monster = Boolean(g.gashaAt.monster);
+    const stageNow = g.gashaStage();
+    const kit = monster
+      ? { list: MONSTER_FIGURES, price: MONSTER_PRICE, title: '👾 Monster Gashapon', button: '👾 Turn the handle', mine: 'My monster figures' }
+      : { list: TOYS, price: GASHA_PRICE, title: '🎁 Gashapon', button: '🎁 Turn the handle', mine: 'My capsule toys' };
     let busy = false;
     const timers = [];
     // The capsule out of the machine and not yet open: what is in it, kept
@@ -4269,7 +4287,7 @@ export class UI {
           h('span', { class: 'gasha-top' }),
         );
         const said = h('div', { class: 'gasha-said', 'aria-live': 'polite' }, 'Put in coins and turn the handle!');
-        const turn = h('button', { class: 'big green gasha-turn', type: 'button' }, `🎁 Turn the handle · 🪙 ${GASHA_PRICE}`);
+        const turn = h('button', { class: 'big green gasha-turn', type: 'button' }, `${kit.button} · 🪙 ${kit.price}`);
         const heading = h('h3', {});
         const grid = h('div', { class: 'gasha-toys' });
         const show = () => {
@@ -4277,17 +4295,20 @@ export class UI {
           const toys = { ...p.gear.toys };
           if (got) toys[got.toy.key] = (toys[got.toy.key] ?? 1) - 1;
           coins.textContent = `🪙 ${p.coins} ${p.coins === 1 ? 'coin' : 'coins'}`;
-          turn.disabled = busy || p.coins < GASHA_PRICE;
-          heading.textContent = `My capsule toys (${toysFound(toys)} of ${TOYS.length})`;
+          const gone = monster && !g.gashaHere();
+          turn.disabled = busy || gone || p.coins < kit.price;
+          heading.textContent = `${kit.mine} (${toysFound(toys, kit.list)} of ${kit.list.length})`;
           grid.replaceChildren(
-            ...TOYS.map((t) => {
+            ...kit.list.map((t) => {
               const n = toys[t.key] ?? 0;
               return this.toyCard(t, n, { fresh: t.key === fresh });
             }),
           );
           fresh = '';
-          if (!busy && p.coins < GASHA_PRICE) said.textContent = `You need 🪙 ${GASHA_PRICE} coins. Sell treasures from your basket in the 🛒 shop!`;
+          if (!busy && gone) said.textContent = 'The Monster Gashapon has gone! It will turn up again somewhere else.';
+          else if (!busy && p.coins < kit.price) said.textContent = `You need 🪙 ${kit.price} coins. Sell treasures from your basket in the 🛒 shop!`;
         };
+        this.gashaShow = show;
         const later = (ms, fn) => timers.push(setTimeout(fn, ms));
         const stop = () => {
           timers.forEach((t) => clearTimeout(t));
@@ -4304,8 +4325,9 @@ export class UI {
           capsule.classList.add('open', rarityOf(toy).key);
           stage3d?.open(rarityOf(toy).key);
           this.sound.play(toy.rare ? 'fanfare' : 'pop');
-          said.textContent = got.have === 1 ? `${rare}New! You got the ${toy.name}!` : `${rare}Another ${toy.name}! You have ${got.have} now.`;
-          g.openCapsule();
+          const name = monster ? `${toy.name} figure` : toy.name;
+          said.textContent = got.have === 1 ? `${rare}New! You got the ${name}!` : `${rare}Another ${name}! You have ${got.have} now.`;
+          g.openCapsule(monster);
           later(600, () => {
             fresh = toy.key;
             busy = false;
@@ -4362,30 +4384,27 @@ export class UI {
         import('./render/gasha-stage.js')
           .then(({ GashaStage, toyPortraits }) => {
             if (closed) return;
-            stage3d = new GashaStage(canvas);
+            stage3d = new GashaStage(canvas, monster ? 'monster' : 'capsule');
             stage.classList.add('three');
-            this.toyPictures ??= toyPortraits(TOYS.map((t) => t.key));
+            this.toyPictures ??= toyPortraits(ALL_TOYS.map((t) => t.key));
             show();
           })
           .catch(() => canvas.remove());
-        root.append(
-          h('h2', {}, '🎁 Gashapon'),
-          coins,
-          stage,
-          said,
-          turn,
-          heading,
-          grid,
-          h('p', { class: 'muted' }, `Every turn is 🪙 ${GASHA_PRICE} coins for a surprise toy: ${TOYS.length} to collect, ★ common, ★★ rare and ★★★ super rare!`),
-        );
+        // The Monster Gashapon's odds of a rare figure, better on a higher stage.
+        const odds = rarityOdds(kit.list, stageNow).map((o) => `${Math.round(o * 100)}%`);
+        const about = monster
+          ? `Every turn is 🪙 ${kit.price} coins for one of ${kit.list.length} monster figures. ${stageNow > 1 ? `On stage ${stageNow}` : 'Here'} the odds are ★ ${odds[0]} · ★★ ${odds[1]} · ★★★ ${odds[2]} — the higher the stage, the better the chance of a rare one!`
+          : `Every turn is 🪙 ${kit.price} coins for a surprise toy: ${kit.list.length} to collect, ★ common, ★★ rare and ★★★ super rare!`;
+        root.append(h('h2', {}, kit.title), coins, stage, said, turn, heading, grid, h('p', { class: 'muted gasha-about' }, about));
         show();
       },
       {
         onClose: () => {
           timers.forEach((t) => clearTimeout(t));
-          if (got) g.openCapsule();
+          if (got) g.openCapsule(monster);
           got = null;
           closed = true;
+          this.gashaShow = null;
           stage3d?.dispose();
           stage3d = null;
           g.closeGashapon();
@@ -4404,7 +4423,7 @@ export class UI {
     const r = rarityOf(t);
     return h(
       'div',
-      { class: `gasha-toy-card ${n ? r.key : 'missing'}${fresh ? ' fresh' : ''}`, title: n ? `${t.name} (${r.name})` : `A ${r.name.toLowerCase()} toy still to find` },
+      { class: `gasha-toy-card ${n ? r.key : 'missing'}${fresh ? ' fresh' : ''}`, title: n ? `${t.name} (${r.name})` : `A ${r.name.toLowerCase()} ${t.monster ? 'monster figure' : 'toy'} still to find` },
       pic ? h('img', { class: 'figure', src: pic, alt: n ? t.name : 'A capsule still to open', draggable: false }) : h('span', { class: 'icon' }, n ? t.icon : '❓'),
       h('span', { class: 'name' }, n ? t.name : '???'),
       h('span', { class: `rarity ${r.key}`, 'aria-label': r.name }, h('span', { class: 'stars' }, r.stars), ` ${r.name}`),
@@ -4418,7 +4437,7 @@ export class UI {
     if (this.toyPictures) return done();
     import('./render/gasha-stage.js')
       .then(({ toyPortraits }) => {
-        this.toyPictures = toyPortraits(TOYS.map((t) => t.key));
+        this.toyPictures = toyPortraits(ALL_TOYS.map((t) => t.key));
         done();
       })
       .catch(() => {});

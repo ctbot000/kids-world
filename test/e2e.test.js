@@ -12,8 +12,8 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
-import { GASHA_PRICE, TOYS } from '../public/js/shared/gashapon.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
@@ -3823,6 +3823,68 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
     const have = Object.keys(window.kidsWorld.profile.data.gear.toys);
     return cards.length === have.length && cards.every((c) => c.querySelector('img.figure') && c.querySelector('.rarity')) && have.every((k) => cards.some((c) => c.textContent.includes(names[k])));
   }, Object.fromEntries(TOYS.map((t) => [t.key, t.name])));
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobody can pick it up, and its window knows when it has gone', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // The island puts one down beside the start (as it does on an adventure
+  // island now and then), with nothing rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.gashaNews({ t: 'gasha', x, y: ground + 1, z, id });
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, MONSTER_GASHAPON);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Monster Gashapon turned up')));
+  // Nobody picks it up: it is put back at once.
+  await page.evaluate((at) => window.kidsWorld.game.edit('pick', [at.x, at.y, at.z, 0], { undoable: false }), at);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id && window.kidsWorld.session.link.room.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.profile.earn(25);
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('👾 Turn'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Monster Gashapon'));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.gasha-toy-card.missing').length), MONSTER_FIGURES.length, 'every figure still to find');
+  assert.ok(await page.evaluate(() => document.querySelector('.gasha-about').textContent.includes('odds')));
+  // A turn: the coins go in, and the capsule opened has a monster figure in it.
+  await page.evaluate(() => document.querySelector('.gasha-turn').click());
+  await until(page, () => !document.querySelector('.gasha-capsule').hidden);
+  await page.evaluate(() => document.querySelector('.gasha-capsule').click());
+  await until(page, () => document.querySelector('.gasha-said').textContent.includes('figure!'));
+  await until(page, (n) => document.querySelectorAll('.gasha-toy-card.missing').length === n - 1 && document.querySelector('.gasha-toy-card.fresh'), MONSTER_FIGURES.length);
+  const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, toys: Object.keys(window.kidsWorld.profile.data.gear.toys) }));
+  assert.equal(after.coins, 25 - MONSTER_PRICE);
+  assert.equal(after.toys.length, 1);
+  assert.ok(after.toys[0].startsWith('m-'), 'a monster figure');
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['monster-figure']), 'the sticker');
+  // The island takes it away: the window says so, and turns no more.
+  await page.evaluate((at) => window.kidsWorld.session.link.room.gashaNews({ t: 'gasha-gone', ...at }), at);
+  await until(page, () => document.querySelector('.gasha-said').textContent.includes('has gone') && document.querySelector('.gasha-turn').disabled);
+  // The figure is in the backpack too.
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await until(page, () => document.querySelectorAll('.backpack-figures .gasha-toy-card').length === 1);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

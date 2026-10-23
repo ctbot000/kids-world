@@ -6,7 +6,7 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
-import { gashaponNear } from './shared/gashapon.js';
+import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
@@ -18,7 +18,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, HIT_MS, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -125,7 +125,15 @@ const TOUGH_TOLD = {
   spiky: { icon: '🦔', text: 'A Spiky! Don’t jump on it, ouch! Bop it four times instead.' },
   mosquito: { icon: '🦟', text: 'A giant mosquito! It darts at you out of the air, so don’t try to jump on it — swat it instead: two bops and it’s off!' },
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
+  knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
+  golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
 };
+
+// Which way (dx, dz) points, in words: north is -z (the map's top).
+function compass(dx, dz) {
+  const a = Math.atan2(dx, -dz);
+  return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(a / (Math.PI / 4)) & 7];
+}
 
 const lerpAngle = (a, b, t) => {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -395,6 +403,9 @@ export class Game extends EventTarget {
         break;
       case 'adv':
         this.adventureNews(msg);
+        break;
+      case 'gasha':
+        this.gashaNews(msg);
         break;
       case 'freed':
         this.campFreed(msg);
@@ -1130,7 +1141,7 @@ export class Game extends EventTarget {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
-      if (entry?.kind === 'big') fx.sparkles(p.x, p.y + 0.9, p.z, 30, ['#ff8fa3', '#ffffff', '#ffd84d']);
+      if (entry?.kind === 'big' || entry?.kind === 'knight' || entry?.kind === 'golem') fx.sparkles(p.x, p.y + 0.9, p.z, 30, entry.kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : entry.kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
       if (entry?.kind === 'king') {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
@@ -1145,7 +1156,7 @@ export class Game extends EventTarget {
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
       const xp = XP_FOR.popped.xp;
-      if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, entry?.kind === 'king' || entry?.kind === 'big' ? 7 : 4);
+      if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
       if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
@@ -1501,7 +1512,7 @@ export class Game extends EventTarget {
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
-      entry.stomped = entry.kind === 'king' || entry.kind === 'big' || this.defense ? now + 500 : Infinity;
+      entry.stomped = isHeavy(entry.kind) || entry.kind === 'knight' || this.defense ? now + 500 : Infinity;
       this.bop(entry.id, true);
       b.vy = 9;
       this.sound.play('jump');
@@ -1562,7 +1573,7 @@ export class Game extends EventTarget {
     if (recoil) {
       const k = (performance.now() - recoil.at) / 1000 / RECOIL_SECS;
       if (k >= 1) entry.recoil = null;
-      else if (k > 0) y += KICK_HOP * (entry.kind === 'king' ? 0 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
+      else if (k > 0) y += KICK_HOP * (entry.kind === 'king' ? 0 : entry.kind === 'golem' ? 0.2 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
     }
     // Never inside you: right up against you at the most.
     const me = this.me?.body;
@@ -1617,7 +1628,7 @@ export class Game extends EventTarget {
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
       const king = entry.kind === 'king';
-      const big = king || entry.kind === 'big';
+      const big = isHeavy(entry.kind);
       // King Grumble dazed from a stomp: stars round his crown, and the first
       // time you see it near, how to make the most of it.
       if (king && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
@@ -2107,7 +2118,12 @@ export class Game extends EventTarget {
   // capsule toy out of the machine with a sparkle. Returns what came out,
   // or null without the coins.
   turnGashapon() {
-    const got = this.profile.turnGashapon(Math.random, { later: true });
+    const monster = Boolean(this.gashaAt?.monster);
+    if (monster && !this.gashaHere()) {
+      this.sound.play('no');
+      return null;
+    }
+    const got = this.profile.turnGashapon(Math.random, { later: true, monster, stage: this.gashaStage() });
     if (!got) {
       this.sound.play('no');
       return null;
@@ -2120,8 +2136,39 @@ export class Game extends EventTarget {
 
   // The capsule out of it opened (or its window closed before it was):
   // counted, with any sticker it earns.
-  openCapsule() {
-    this.profile.openCapsule();
+  openCapsule(monster = false) {
+    this.profile.openCapsule(monster);
+  }
+
+  // The adventure island's stage, for the Monster Gashapon's odds (1 on any
+  // island but the public one's higher stages).
+  gashaStage() {
+    return this.adventure?.stage ?? 1;
+  }
+
+  // Whether the machine whose window is open is still there (the Monster
+  // Gashapon goes after a while).
+  gashaHere() {
+    const t = this.gashaAt;
+    return Boolean(t) && isGashapon(this.world.get(t.x, t.y, t.z));
+  }
+
+  // The Monster Gashapon turned up somewhere on the island, or went: told
+  // to everyone, with a sparkle where it is if it is near.
+  gashaNews(msg) {
+    const { x, y, z } = msg;
+    if (![x, y, z].every(Number.isInteger)) return;
+    if (msg.gone) {
+      if (this.gashaAt && this.gashaAt.x === x && this.gashaAt.y === y && this.gashaAt.z === z) this.emit('gasha-gone');
+      this.emit('toast', { icon: '👾', text: 'The Monster Gashapon has gone! It will turn up again somewhere else.' });
+      return;
+    }
+    const me = this.me?.body;
+    const far = me ? Math.hypot(me.x - x - 0.5, me.z - z - 0.5) : 0;
+    const way = me ? compass(x + 0.5 - me.x, z + 0.5 - me.z) : '';
+    this.emit('toast', { icon: '👾', text: `A Monster Gashapon turned up${me ? ` ${Math.round(far)} steps ${way} of you` : ''}! Follow the light to it for a monster figure, before it goes.` });
+    this.sound.play('fanfare');
+    if (this.near(x + 0.5, y, z + 0.5, 60)) this.renderer.effects.sparkles(x + 0.5, y + 1.2, z + 0.5, 30, ['#b18cff', '#7fe08c', '#ffffff']);
   }
 
   closeGashapon() {

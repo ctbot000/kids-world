@@ -654,9 +654,15 @@ export class Terrain {
   // A real model of a piece of furniture, by what it is, in materials made
   // once for the island's light.
   realModel(kind) {
-    if (kind !== 'gashapon') return null;
-    this.gashaponMaterials ??= gashaponMaterials(toyMaterial);
-    return gashaponModel(this.gashaponMaterials);
+    if (kind === 'gashapon') {
+      this.gashaponMaterials ??= gashaponMaterials(toyMaterial);
+      return gashaponModel(this.gashaponMaterials);
+    }
+    if (kind === 'monster-gashapon') {
+      this.monsterGashaMaterials ??= gashaponMaterials(toyMaterial, 'monster');
+      return gashaponModel(this.monsterGashaMaterials, 'monster');
+    }
+    return null;
   }
 
   disposeChunk(chunk) {

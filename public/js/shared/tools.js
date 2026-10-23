@@ -205,7 +205,7 @@ export function pickEdit(world, hit, size = 1) {
   const holes = [];
   for (const [x, y, z] of targets) {
     const id = o.get(x, y, z);
-    if (id === B.AIR || id === B.WATER || id === B.MAGIC_FLOOR || !world.inBounds(x, y, z)) continue;
+    if (id === B.AIR || id === B.WATER || id === B.MAGIC_FLOOR || B.BLOCKS[id]?.islandOnly || !world.inBounds(x, y, z)) continue;
     if (o.set(x, y, z, B.AIR)) {
       holes.push([x, y, z]);
       if (B.block(id).collect) collected.push(id);
@@ -439,6 +439,9 @@ export function validCells(world, cells) {
     const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
     if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z) || !B.isKnown(id)) return null;
     if (!world.inBounds(x, y, z) || y === 0 || id === B.MAGIC_FLOOR) return null;
+    // What only the island itself puts down (the Monster Gashapon) nobody
+    // else does (and Room.edit keeps anyone from changing it).
+    if (B.BLOCKS[id]?.islandOnly) return null;
   }
   return cells;
 }

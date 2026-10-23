@@ -31,6 +31,7 @@
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
 import { campDistance, DAZED_HIT, SAFE_RADIUS } from './monsters.js';
+import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
 
 // A camp's fence goes round this far from its flag; King Grumble's castle
@@ -73,6 +74,30 @@ export const helpHp = (max) => Math.round(max * HELP_SHARE);
 // tenth longer to raise each stage (up to twice as long). Past those the
 // stages go on as hard as they ever get, so none is ever hopeless.
 export const STAGE_CAMPS = 4;
+// And on the stages after the first, tougher monsters among each camp's
+// guards (monsters.js), more of them and tougher the higher the stage: a
+// Spiky from stage 2, a Grumble Knight from 3, a Big Bruiser from 4, a
+// Stone Golem from 5, then another Knight at 7, another Golem at 9 and a
+// Giant Spider at 11. They take the place of blobs, so a camp keeps as many
+// guards as before (and its mosquito); with fewer guards than that, the
+// toughest go first.
+export const STAGE_TOUGH = [
+  [2, 'spiky'],
+  [3, 'knight'],
+  [4, 'big'],
+  [5, 'golem'],
+  [7, 'knight'],
+  [9, 'golem'],
+  [11, 'spider'],
+];
+// The kinds among a camp's guards at a stage, toughest first.
+export const toughGuards = (stage) => {
+  const s = cleanStage(stage);
+  const rank = { golem: 0, knight: 1, big: 2, spider: 3, spiky: 4 };
+  return STAGE_TOUGH.filter(([from]) => s >= from)
+    .map(([, kind]) => kind)
+    .sort((a, b) => rank[a] - rank[b]);
+};
 export const STAGE_GUARDS = 8;
 export const STAGE_KING = 4;
 export const STAGE_RAISE = 2;
@@ -395,6 +420,12 @@ export class AdventureSim {
     });
     this.won = Boolean(won) || (this.camps.length > 0 && this.camps.every((c) => c.freed));
     this.king = noKing();
+    // The Monster Gashapon (stepGasha): where it is ({ x, y, z, until }) or
+    // null, when it turns up next (0: not yet counting), and randomness of
+    // its own, so the rest goes just as it did before there was one.
+    this.gasha = null;
+    this.gashaNext = 0;
+    this.gashaRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
   }
 
   // Whether there is anything left to free.
@@ -507,9 +538,10 @@ export class AdventureSim {
   }
 
   // A camp's monster hopping out: somewhere in the camp, not right beside anyone.
-  // One of them is a mosquito, hanging over the camp on the wing.
+  // One of them is a mosquito, hanging over the camp on the wing; on the
+  // higher stages, tougher ones come next (toughGuards), and blobs after.
   addGuard(world, c, people, monsters) {
-    const bug = monsters.list.filter((m) => m.camp === c.id && m.kind === 'mosquito').length < 1 ? 'mosquito' : 'blob';
+    const bug = this.guardKind(c, monsters);
     for (let tries = 0; tries < 30; tries++) {
       const a = this.rng.range(-Math.PI, Math.PI);
       const d = this.rng.range(2.5, Math.max(3, c.r - 2.5));
@@ -521,6 +553,20 @@ export class AdventureSim {
       return monsters.add(world, x, y, z, { camp: c.id, kind: bug });
     }
     return monsters.add(world, c.x + 2.5, c.y, c.z, { camp: c.id, kind: bug });
+  }
+
+  // Which kind a camp needs next: its mosquito, then whichever of the
+  // stage's tough ones it is missing, then a blob.
+  guardKind(c, monsters) {
+    const here = monsters.list.filter((m) => m.camp === c.id).map((m) => m.kind);
+    if (!here.includes('mosquito')) return 'mosquito';
+    const have = new Map();
+    for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
+    for (const k of toughGuards(this.stage)) {
+      if ((have.get(k) ?? 0) > 0) have.set(k, have.get(k) - 1);
+      else return k;
+    }
+    return 'blob';
   }
 
   // A camp awake: its popped monsters coming back, and its flag going up
@@ -588,6 +634,63 @@ export class AdventureSim {
     }
   }
 
+  // The Monster Gashapon, now and then: with someone on the island it turns
+  // up a while later (MONSTER_GASHA.first) near one of them, stays a while
+  // and goes, and turns up again later somewhere else (MONSTER_GASHA.again).
+  // With nobody about, the wait starts again when someone comes. Returns
+  // what happened, for the room to make happen and tell everyone:
+  //   { t: 'gasha', x, y, z, id } it turned up (id: the block, turned to
+  //   face whoever it turned up for), { t: 'gasha-gone', x, y, z } it went.
+  stepGasha(world, now, people) {
+    const g = this.gasha;
+    const range = ([lo, hi]) => this.gashaRng.range(lo, hi);
+    if (g) {
+      if (now < g.until && isMonsterGashapon(world.get(g.x, g.y, g.z))) return [];
+      this.gasha = null;
+      this.gashaNext = now + range(MONSTER_GASHA.again);
+      return [{ t: 'gasha-gone', x: g.x, y: g.y, z: g.z }];
+    }
+    if (!people.length) {
+      this.gashaNext = 0;
+      return [];
+    }
+    if (!this.gashaNext) this.gashaNext = now + range(MONSTER_GASHA.first);
+    if (now < this.gashaNext) return [];
+    const spot = this.gashaSpot(world, people);
+    if (!spot) {
+      this.gashaNext = now + 10000;
+      return [];
+    }
+    this.gasha = { x: spot.x, y: spot.y, z: spot.z, until: now + MONSTER_GASHA.stay };
+    return [{ t: 'gasha', ...spot }];
+  }
+
+  // Where the Monster Gashapon turns up: a little way off from one of the
+  // people on the island, on open ground (not in the water, in a camp still
+  // to free, or right beside anyone), facing them. Null when no spot will do.
+  gashaSpot(world, people) {
+    const rng = this.gashaRng;
+    for (let tries = 0; tries < 40; tries++) {
+      const p = people[Math.floor(rng.next() * people.length)];
+      const a = rng.range(-Math.PI, Math.PI);
+      const d = rng.range(...MONSTER_GASHA.near);
+      const x = FL(p.x + Math.cos(a) * d);
+      const z = FL(p.z + Math.sin(a) * d);
+      const y = standHeight(world, x + 0.5, z + 0.5, p.y + 3);
+      if (y === null || Math.abs(y - p.y) > 4) continue;
+      const under = world.get(x, y - 1, z);
+      if (!B.SOLID[under] || B.TREE_PART[under] || B.CLOTH[under] || B.KIND[under] === B.K_FURNITURE) continue;
+      if (world.get(x, y, z) !== B.AIR || world.get(x, y + 1, z) !== B.AIR) continue;
+      if (this.camps.some((c) => !c.freed && campDistance(c, x + 0.5, z + 0.5) <= c.r + 2)) continue;
+      if (people.some((q) => Math.hypot(q.x - x - 0.5, q.z - z - 0.5) < 3)) continue;
+      const dx = p.x - x - 0.5;
+      const dz = p.z - z - 0.5;
+      const front = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 0 : 2) : dz > 0 ? 1 : 3;
+      return { x, y, z, id: B.turnedTo(B.MONSTER_GASHAPON, front) };
+    }
+    return null;
+  }
+
   // One of a camp's monsters popped (or gone by itself): back it comes in a
   // while, while the camp is not free. King Grumble's helpers do not.
   guardGone(m, now) {
@@ -644,8 +747,10 @@ export class AdventureSim {
     };
   }
 
+  // (The Monster Gashapon goes when the island is put away: where it stood
+  // is kept only so that load can take it away.)
   save() {
-    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won, stage: this.stage };
+    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won, stage: this.stage, ...(this.gasha ? { gasha: [this.gasha.x, this.gasha.y, this.gasha.z] } : {}) };
   }
 
   // An adventure as saved, checked, or null for none.
@@ -658,6 +763,11 @@ export class AdventureSim {
       if (![c.x, c.y, c.z, c.r].every(Number.isFinite)) continue;
       if (c.x < 0 || c.z < 0 || c.x > world.W || c.z > world.D || c.y < 1 || c.y > world.H || c.r < 2 || c.r > 20) continue;
       camps.push({ id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true });
+    }
+    // A Monster Gashapon still there when the island was put away has gone.
+    if (Array.isArray(raw.gasha) && raw.gasha.length === 3 && raw.gasha.every(Number.isInteger)) {
+      const [x, y, z] = raw.gasha;
+      if (world.inBounds(x, y, z) && isMonsterGashapon(world.get(x, y, z))) world.set(x, y, z, B.AIR);
     }
     return camps.length ? new AdventureSim({ camps, won: raw.won === true, stage: cleanStage(raw.stage) }, seed) : null;
   }

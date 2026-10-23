@@ -1,7 +1,7 @@
 // The stickers you earn for what you do, and the things the game counts
 // that earn them. Shared, so the keeper can tell real stickers from made-up
 // ones when it ranks players (see ranking.js).
-import { TOYS } from './gashapon.js';
+import { MONSTER_FIGURES, TOYS } from './gashapon.js';
 import { CHANNELS } from './tv.js';
 
 export const STICKERS = [
@@ -72,6 +72,8 @@ export const STICKERS = [
   { key: 'blob-champion', icon: '🥇', name: 'Blob Champion', text: 'Bop 1,000 blobs on Bop-a-Blob', test: (s) => s.blobpops >= 1000 },
   { key: 'capsule-toy', icon: '🎁', name: 'Capsule Surprise', text: 'Turn a gashapon machine for a capsule toy', test: (s) => s.capsules >= 1 },
   { key: 'full-set', icon: '🐉', name: 'Full Set', text: 'Collect every capsule toy, the super rare ones too', test: (s) => s.capsuletoys >= TOYS.length },
+  { key: 'monster-figure', icon: '👾', name: 'Monster Catcher', text: 'Get a monster figure out of a Monster Gashapon on an adventure island', test: (s) => s.monsterfigs >= 1 },
+  { key: 'monster-collector', icon: '👑', name: 'Monster Collector', text: 'Collect every monster figure, King Grumble too', test: (s) => s.monstertoys >= MONSTER_FIGURES.length },
   { key: 'channel-surfer', icon: '📺', name: 'Channel Surfer', text: `Flip through ${CHANNELS.length} channels on a TV`, test: (s) => s.channels >= CHANNELS.length },
   { key: 'little-artist', icon: '🎨', name: 'Little Artist', text: 'Draw 25 strokes on a drawing board', test: (s) => s.strokes >= 25 },
   { key: 'piano-star', icon: '🎹', name: 'Piano Star', text: 'Play a whole song on a piano', test: (s) => s.tunes >= 1 },
@@ -88,4 +90,4 @@ export const STICKERS = [
   { key: 'harvest-champion', icon: '🏅', name: 'Harvest Champion', text: 'Pick 1,000 vegetables', test: (s) => s.harvested >= 1000 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'notes', 'tunes', 'channels', 'strokes', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'notes', 'tunes', 'channels', 'strokes', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];

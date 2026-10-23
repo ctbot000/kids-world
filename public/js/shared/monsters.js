@@ -28,6 +28,14 @@
 // each landing, so two jumps see it off — or four bops. It keeps to the
 // ground, out of the water and the safe places like the others.
 //
+// And on the higher stages of the public adventure island, two tougher
+// still keep the camps (adventure.js): a Grumble Knight, a blob in a steel
+// helmet with a shield, that bumps twice as much HP off you, takes eight
+// bops and only gives up two hearts to a landing on its helmet, and when
+// cross comes after you nearly as quick as you run; and a Stone Golem, a
+// great lump of mossy rock nearly twice your height, slow, that bumps three
+// times as much HP off you and takes twelve bops (a landing, two).
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -106,6 +114,10 @@ export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
 // A giant spider: wider than a Big Bruiser is round but only up to your
 // middle, skittering about on its eight legs.
 export const SPIDER_BODY = { radius: 0.55, height: 0.95 };
+// A Grumble Knight: a blob a little bigger than most, its helmet on top.
+export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
+// A Stone Golem: taller than a player and wider than a Big Bruiser.
+export const GOLEM_BODY = { radius: 0.85, height: 1.75 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -172,6 +184,11 @@ export const KINDS = {
   // walk (never as quick as you run); cross as quick as the others get. A
   // landing on its back takes two of its four hearts.
   spider: { hearts: 4, bump: 1, land: 2, move: { walk: 2.4, run: 5.2, jump: 8 }, cross: { walk: 2.4, run: 6.5, jump: 8 } },
+  // A Grumble Knight marches about steadily, and cross is nearly as quick
+  // as you run (6.6 against 7). Its helmet takes the worst of a landing.
+  knight: { hearts: 8, bump: 2, land: 2, move: { walk: 1.8, run: 4.6, jump: 8 }, cross: { walk: 1.8, run: 6.6, jump: 8 } },
+  // A Stone Golem lumbers, slower than a Big Bruiser, but bumps the hardest.
+  golem: { hearts: 12, bump: 3, land: 2, move: { walk: 1.2, run: 3.2, jump: 9 }, cross: { walk: 1.2, run: 4.4, jump: 9 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs. A giant
@@ -188,9 +205,11 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY })[kind] ?? MONSTER_BODY;
+// The heavy ones: a bigger knock when they bump you, and a bigger pop.
+export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem';
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));

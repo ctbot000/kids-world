@@ -3,14 +3,24 @@
 // eyes glowing at night. A purple one on a sunny island, a frosty blue one
 // on a snowy one, and a sour green one on a candy one. A Big Bruiser is one
 // as tall as a player, deep red, with two horns; a Spiky a blob in orange
-// with a crest of spikes on its back.
+// with a crest of spikes on its back; a Grumble Knight a green blob in
+// a silver helmet with a red plume, a round shield on one side and a little
+// sword on the other; and a Stone Golem a great mossy lump of grey rock,
+// nearly twice a player's height, with stones stuck all over it and eyes
+// that glow like embers.
 import * as THREE from '../../vendor/three.module.js';
-import { blobShadow, cone, mesh, onSurface, sphere, toon } from './toon.js';
+import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
-const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'] };
-const KIND_SCALE = { big: 1.62, spiky: 1.07 };
+const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'] };
+const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25 };
+// A helmet's dome, a cap of moss, and a stone.
+const DOME = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+const CAP = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.4);
+const ROCK = new THREE.DodecahedronGeometry(1, 0);
+// Kinds that are not jelly: solid all through.
+const SOLID_KIND = { golem: true };
 const R = 0.42;
 const H = 0.36;
 
@@ -26,8 +36,9 @@ export class MonsterModel {
     const b = this.body;
     // A see-through jelly round a softer layer, round a darker middle, with
     // bubbles rising through it.
-    b.add(mesh(sphere(), toon(skin, { transparent: true, opacity: 0.82 }), 0, H, 0, R, H, R));
-    b.add(mesh(sphere(), toon(skin, { transparent: true, opacity: 0.5 }), 0, H * 0.95, 0, R * 0.8, H * 0.8, R * 0.8));
+    const jelly = (o) => (SOLID_KIND[kind] ? toon(skin) : toon(skin, { transparent: true, opacity: o }));
+    b.add(mesh(sphere(), jelly(0.82), 0, H, 0, R, H, R));
+    if (!SOLID_KIND[kind]) b.add(mesh(sphere(), jelly(0.5), 0, H * 0.95, 0, R * 0.8, H * 0.8, R * 0.8));
     b.add(mesh(sphere(), toon(core), 0, H * 0.85, -0.04, R * 0.55, H * 0.5, R * 0.55));
     b.add(mesh(sphere(1, 10, 8), toon('#ffffff', { emissive: 0.4, transparent: true, opacity: 0.7 }), -0.16, H * 1.6, 0.2, 0.07, 0.04, 0.05));
     for (const [x, y, z, r] of [
@@ -38,7 +49,7 @@ export class MonsterModel {
       b.add(mesh(sphere(1, 8, 6), toon('#ffffff', { transparent: true, opacity: 0.35 }), x, y, z, r));
     }
     // Little jelly feet under it.
-    for (const side of [-1, 1]) b.add(mesh(sphere(1, 12, 8), toon(skin, { transparent: true, opacity: 0.82 }), side * 0.16, 0.03, 0.05, 0.09, 0.045, 0.1));
+    for (const side of [-1, 1]) b.add(mesh(sphere(1, 12, 8), jelly(0.82), side * 0.16, 0.03, 0.05, 0.09, 0.045, 0.1));
     // Eyes, which glow at night.
     this.eyeWhite = toon('#fff7d6');
     this.eyeGlow = toon('#fff27a', { emissive: 0.9 });
@@ -97,6 +108,53 @@ export class MonsterModel {
       };
       for (const [el, len] of [[1.3, 0.15], [0.95, 0.19], [0.6, 0.21], [0.25, 0.17]]) add(Math.PI, el, len);
       for (let i = 0; i < 8; i++) add(Math.PI * (0.35 + (1.3 * i) / 7), 0.35, i % 2 ? 0.11 : 0.145);
+    }
+    // A Grumble Knight's helmet, plume, shield and sword.
+    if (kind === 'knight') {
+      const steel = toon('#d3d9e2');
+      b.add(mesh(DOME, steel, 0, H * 1.45, 0, R * 0.92, H * 0.62, R * 0.92));
+      b.add(mesh(cylinder(R * 0.93, R * 0.93, 0.05, 24), steel, 0, H * 1.45, 0));
+      // The visor's slit over the eyes, and a ridge over the top.
+      b.add(mesh(cylinder(0.02, 0.02, R * 1.6, 8), toon('#2b2530'), 0, H * 1.62, 0.02).rotateZ(Math.PI / 2));
+      b.add(mesh(sphere(1, 12, 8), steel, 0, H * 1.7, 0, 0.03, 0.24, 0.3));
+      for (let i = 0; i < 4; i++) b.add(mesh(sphere(1, 10, 8), toon('#e8453c'), 0, H * 2.02 + i * 0.01, -0.12 + i * 0.07, 0.05, 0.08, 0.06));
+      const shield = new THREE.Group();
+      shield.position.set(-R * 1.02, H * 0.95, 0.06);
+      shield.rotation.y = -Math.PI / 2 + 0.3;
+      shield.add(mesh(cylinder(0.2, 0.2, 0.04, 24), toon('#3a73d8'), 0, 0, 0).rotateX(Math.PI / 2));
+      shield.add(mesh(cylinder(0.08, 0.08, 0.05, 16), toon('#ffd23f'), 0, 0, 0.01).rotateX(Math.PI / 2));
+      shield.add(mesh(torus(0.2, 0.018), steel, 0, 0, 0));
+      b.add(shield);
+      const sword = new THREE.Group();
+      sword.position.set(R * 1.02, H * 0.8, 0.12);
+      sword.rotation.z = -0.35;
+      sword.add(mesh(cylinder(0.022, 0.022, 0.12, 8), toon('#8b5a3c'), 0, -0.06, 0));
+      sword.add(mesh(cylinder(0.012, 0.012, 0.16, 8), toon('#ffd23f'), 0, 0.01, 0).rotateZ(Math.PI / 2));
+      sword.add(mesh(cylinder(0.018, 0.028, 0.34, 6), steel, 0, 0.18, 0));
+      b.add(sword);
+    }
+    // A Stone Golem: stones stuck all over it, moss on top, and ember eyes.
+    if (kind === 'golem') {
+      const stones = ['#a2a7b0', '#767b85', '#b4b0a6'];
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.4;
+        const el = -0.2 + ((i * 0.37) % 1.2);
+        if (Math.cos(a) > 0.6 && el > 0 && el < 0.7) continue;
+        const x = R * Math.cos(el) * Math.sin(a);
+        const y = H + H * Math.sin(el);
+        const z = R * Math.cos(el) * Math.cos(a);
+        const s = mesh(ROCK, toon(stones[i % 3]), x * 1.02, y, z * 1.02, 0.07 + (i % 3) * 0.02);
+        s.rotation.set(i, i * 2, 0);
+        b.add(s);
+      }
+      b.add(mesh(CAP, toon('#5f9e4a'), 0, H, 0, R * 1.04, H * 1.04, R * 1.04));
+      for (const side of [-1, 1]) {
+        b.add(mesh(sphere(1, 12, 8), toon(skin), side * R * 0.95, H * 0.85, 0.05, 0.13, 0.16, 0.13));
+        b.add(mesh(ROCK, toon('#6d727c'), side * R * 1.05, H * 0.5, 0.1, 0.12));
+      }
+      this.eyeWhite = toon('#ffb13b', { emissive: 0.7 });
+      this.eyeGlow = toon('#ff7a1a', { emissive: 1 });
+      for (const eye of this.eyes) eye.material = this.eyeWhite;
     }
     this.height = H * 2 * k;
     this.center = H * k;

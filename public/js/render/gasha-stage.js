@@ -11,7 +11,8 @@
 import * as THREE from '../../vendor/three.module.js';
 import { RoomEnvironment } from '../../vendor/three-addons/environments/RoomEnvironment.js';
 import { toyFigure } from './capsule-toys.js';
-import { CAPSULE_R, CHUTE, capsuleModel, gashaponMaterials, gashaponModel, HANDLE, SHELLS } from './gashapon-model.js';
+import { shownBox } from './monster-figures.js';
+import { CHUTE, capsuleModel, gashaponMaterials, gashaponModel } from './gashapon-model.js';
 
 // Where a capsule comes to rest, and how big the toy stands there.
 const REST = new THREE.Vector3(-0.5, 0, -0.5);
@@ -69,10 +70,27 @@ function rayTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// A figure made with the island's materials (a monster's, toon.js) lit
+// here instead: each of them swapped for a copy that takes this context's
+// light (the scene's environment), made once each in `cache`.
+function localize(obj, cache) {
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.material?.envMap) return;
+    let m = cache.get(o.material);
+    if (!m) {
+      m = o.material.clone();
+      m.envMap = null;
+      cache.set(o.material, m);
+    }
+    o.material = m;
+  });
+  return obj;
+}
+
 export class GashaStage {
-  // canvas: the dialog's. Throws if WebGL cannot be had (the window then
-  // keeps its flat picture).
-  constructor(canvas) {
+  // canvas: the dialog's; style: 'monster' for the Monster Gashapon. Throws
+  // if WebGL cannot be had (the window then keeps its flat picture).
+  constructor(canvas, style = 'capsule') {
     this.canvas = canvas;
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
     this.gl.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -95,8 +113,9 @@ export class GashaStage {
     this.look = new THREE.Vector3(-0.24, 0.4, -0.22);
     this.camera.lookAt(this.look);
 
-    this.materials = gashaponMaterials();
+    this.materials = gashaponMaterials(undefined, style);
     this.toyMats = new Map();
+    this.localMats = new Map();
     // The table it stands on, and soft shadows under it and the capsule.
     const blob = blobTexture();
     const shadow = (w, d) => {
@@ -110,7 +129,7 @@ export class GashaStage {
     shadow(1.15, 1.15);
     this.capShadow = shadow(0.2, 0.2);
     this.capShadow.visible = false;
-    this.machine = gashaponModel(this.materials);
+    this.machine = gashaponModel(this.materials, style);
     this.scene.add(this.machine);
 
     this.rays = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: rayTexture(), transparent: true, depthWrite: false, color: RAYS.common }));
@@ -148,18 +167,18 @@ export class GashaStage {
   }
 
   // A capsule out of the chute, with `toyKey` inside, in a shell of colour
-  // `shell` (one of SHELLS, or any colour).
+  // `shell` (any colour: a rare one's purple, a super rare one's gold).
   drop(shell, toyKey) {
     this.clear();
-    let i = SHELLS.indexOf(shell);
-    if (i < 0) i = 0;
     const r = 0.1;
-    this.capsule = capsuleModel(this.materials, i, r);
+    const lid = this.mat(shell, { roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1 });
+    this.capsule = capsuleModel({ ...this.materials, shell0: lid }, 0, r);
     this.capsule.position.set(CHUTE.x, CHUTE.y, CHUTE.z);
     this.scene.add(this.capsule);
     // The toy, small and folded away inside the capsule until it opens.
     this.toy = toyFigure(toyKey, (c, e) => this.mat(c, e));
     if (this.toy) {
+      localize(this.toy, this.localMats);
       this.toy.scale.setScalar(r * 1.3);
       this.toy.position.set(0, -r * 0.55, 0);
       this.capsule.add(this.toy);
@@ -368,7 +387,7 @@ export class GashaStage {
     this.scene.traverse((o) => {
       if (o.isMesh && !o.userData.shared) o.geometry?.dispose();
     });
-    for (const m of [...Object.values(this.materials), ...this.toyMats.values()]) {
+    for (const m of [...Object.values(this.materials), ...this.toyMats.values(), ...this.localMats.values()]) {
       m.userData.faded?.dispose();
       m.dispose();
     }
@@ -419,6 +438,7 @@ export function toyPortraits(keys, size = 160) {
       return mats.get(k);
     };
     const capsuleMats = gashaponMaterials();
+    const local = new Map();
     for (const k of want) {
       let model;
       if (k === MYSTERY) {
@@ -428,11 +448,12 @@ export function toyPortraits(keys, size = 160) {
       } else {
         model = toyFigure(k, mat);
         if (!model) continue;
+        localize(model, local);
         model.rotation.y = -0.45;
       }
       scene.add(model);
       // Framed to fit, whatever its shape, seen a little from above.
-      const box = new THREE.Box3().setFromObject(model);
+      const box = shownBox(model);
       const mid = box.getCenter(new THREE.Vector3());
       const r = box.getSize(new THREE.Vector3()).length() / 2;
       const d = (r / Math.sin(THREE.MathUtils.degToRad(13))) * (k === MYSTERY ? 0.8 : 0.92);
@@ -443,7 +464,7 @@ export function toyPortraits(keys, size = 160) {
       portraits.set(k, gl.domElement.toDataURL('image/png'));
       scene.remove(model);
     }
-    for (const m of [...mats.values(), ...Object.values(capsuleMats)]) m.dispose();
+    for (const m of [...mats.values(), ...Object.values(capsuleMats), ...local.values()]) m.dispose();
     env.dispose();
     gl.dispose();
     gl.forceContextLoss();

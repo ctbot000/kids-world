@@ -166,7 +166,8 @@ function furniture(id, key, props) {
         front: turns ? (3 + k) % 4 : 3,
         base: id,
         ...props,
-        category: k === 0 ? (props.category ?? 'home') : null,
+        // category: false keeps it out of the toy box.
+        category: k === 0 && props.category !== false ? (props.category ?? 'home') : null,
       }),
     );
   }
@@ -215,6 +216,11 @@ export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pair
 // `real`: drawn as a real model (render/gashapon-model.js), not its boxes,
 // which only make its picture in the toy box.
 export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone', real: 'gashapon' });
+// The Monster Gashapon: a gashapon of monster figures that turns up on its
+// own now and then on adventure islands and goes again (adventure.js). Only
+// the island puts it down or takes it away (`islandOnly`: nobody picks it
+// up or builds over it), and it is not in the toy box.
+export const MONSTER_GASHAPON = furniture(240, 'monster-gashapon', { name: 'Monster Gashapon', color: '#5b2a86', category: false, light: 8, sound: 'stone', real: 'monster-gashapon', islandOnly: true });
 // Pianos (shared/piano.js): walk up, press Q and play. After the gashapon.
 export const PIANO = furniture(208, 'piano', { name: 'Piano', color: '#3b2a24', after: 204, sound: 'wood' });
 export const GRAND_PIANO = furniture(212, 'grand-piano', { name: 'Grand Piano', color: '#23252b', after: 208, sound: 'wood' });

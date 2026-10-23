@@ -26,7 +26,8 @@ import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, isWild, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
-import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { isMonsterGashapon } from './gashapon.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isBoard, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
@@ -647,6 +648,14 @@ export class Room {
     }
     const n = cells.length / 4;
     const expect = Array.isArray(msg.expect) && msg.expect.length === n ? msg.expect : null;
+    // What only the island puts down (the Monster Gashapon) nobody picks up
+    // or builds over: the whole edit is put back as it was.
+    let islandOnly = false;
+    for (let i = 0; i < cells.length && !islandOnly; i += 4) islandOnly = Boolean(B.BLOCKS[this.world.get(cells[i], cells[i + 1], cells[i + 2])]?.islandOnly);
+    if (islandOnly) {
+      this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
+      return;
+    }
     // The shared isle is nobody's to build on: it stays as it was made, for
     // everyone who comes, so nothing is picked up or collected either.
     if (this.shared) {
@@ -1043,6 +1052,7 @@ export class Room {
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.stepDragons(now, where);
+    if (this.adventure) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
     this.keepApart(where);
     // The volcano's own dangers and chores: lava burns whoever stands in it,
     // water boils away and ice melts, and HP comes back whatever took it.
@@ -1136,7 +1146,7 @@ export class Room {
     if (!p) return;
     const b = monster.body;
     const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2) };
-    if (monster.kind === 'king' || monster.kind === 'big') msg.big = true;
+    if (isHeavy(monster.kind)) msg.big = true;
     if (monster.kind === 'spiky') msg.spiky = true;
     if (stomp) msg.stomp = true;
     const bumps = monster.kind === 'king' ? 1 : kindOf(monster.kind).bump;
@@ -1533,6 +1543,19 @@ export class Room {
       this.allWell();
     }
     this.changed();
+  }
+
+  // The Monster Gashapon turned up (or went), as the adventure says: put
+  // down (or taken away) by the island, and everyone told.
+  gashaNews(news) {
+    const { x, y, z } = news;
+    if (news.t === 'gasha') {
+      this.natureCell([x, y, z], news.id);
+      this.broadcast({ t: 'gasha', x, y, z });
+    } else {
+      if (isMonsterGashapon(this.world.get(x, y, z))) this.natureCell([x, y, z], B.AIR);
+      this.broadcast({ t: 'gasha', x, y, z, gone: true });
+    }
   }
 
   // The gloomy ground round a camp back to the island's own, with flowers.

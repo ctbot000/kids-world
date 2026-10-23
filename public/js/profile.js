@@ -8,7 +8,7 @@
 // this, and never goes to the keeper.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
 import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.js';
-import { drawToy, GASHA_PRICE, TOY_MAX, toysFound } from './shared/gashapon.js';
+import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
 import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
@@ -219,30 +219,31 @@ export class Profile extends EventTarget {
   // shell, have } (have: how many of it you have now, 1 for a new one), or
   // null without the coins. rand: for drawToy. later: counted (and its
   // stickers handed out) only once the capsule is opened, openCapsule, so
-  // no sticker gives away what is inside.
-  turnGashapon(rand = Math.random, { later = false } = {}) {
-    if (this.data.coins < GASHA_PRICE) return null;
-    const { toy, shell } = drawToy(rand);
+  // no sticker gives away what is inside. monster: the Monster Gashapon's
+  // turn, for one of its figures (MONSTER_FIGURES, at its own price), the
+  // rare ones likelier the higher the adventure island's stage.
+  turnGashapon(rand = Math.random, { later = false, monster = false, stage = 1 } = {}) {
+    const price = monster ? MONSTER_PRICE : GASHA_PRICE;
+    if (this.data.coins < price) return null;
+    const { toy, shell } = drawToy(rand, { list: monster ? MONSTER_FIGURES : TOYS, stage });
     const toys = this.data.gear.toys;
-    this.data.coins -= GASHA_PRICE;
+    this.data.coins -= price;
     toys[toy.key] = Math.min(TOY_MAX, (toys[toy.key] ?? 0) + 1);
     this.shopped();
-    if (!later) this.openCapsule();
+    if (!later) this.openCapsule(monster);
     return { toy, shell, have: toys[toy.key] };
   }
 
-  // A capsule opened: one more turned, and the toys you have counted.
-  openCapsule() {
+  // A capsule opened: one more turned, and the toys (or monster figures)
+  // you have counted.
+  openCapsule(monster = false) {
+    if (monster) {
+      this.count('monsterfigs');
+      this.count('monstertoys', toysFound(this.data.gear.toys, MONSTER_FIGURES), { max: true });
+      return;
+    }
     this.count('capsules');
     this.count('capsuletoys', toysFound(this.data.gear.toys), { max: true });
-  }
-
-  // A volcano island's dragon tamed (dragon.js), one more time. Returns how
-  // many times you have now.
-  tameDragon() {
-    this.data.gear.tames = cleanTames(this.data.gear.tames + 1);
-    this.shopped();
-    return this.data.gear.tames;
   }
 
   // One drunk (the island's half of it is game.js drink): out of your pocket.

@@ -64,9 +64,9 @@ function step(sim, world, ms, people, night = false) {
   return bumps;
 }
 
-test('a giant spider is a monster, on the end of the kinds', () => {
+test('a giant spider is a monster, after the kinds before it', () => {
   assert.equal(MONSTER_KINDS.indexOf('spider'), 5, 'new kinds go on the end: the wire sends the index');
-  assert.equal(MONSTER_KINDS.at(-1), 'spider');
+  assert.deepEqual(MONSTER_KINDS.slice(0, 6), ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider'], 'the kinds before it keep their places');
   const sim = new MonsterSim(1);
   const w = meadow();
   const m = sim.add(w, 20.5, 11, 20.5, { kind: 'spider' });
