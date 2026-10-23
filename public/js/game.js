@@ -2107,7 +2107,7 @@ export class Game extends EventTarget {
   // capsule toy out of the machine with a sparkle. Returns what came out,
   // or null without the coins.
   turnGashapon() {
-    const got = this.profile.turnGashapon();
+    const got = this.profile.turnGashapon(Math.random, { later: true });
     if (!got) {
       this.sound.play('no');
       return null;
@@ -2116,6 +2116,12 @@ export class Game extends EventTarget {
     const t = this.gashaAt;
     if (t) this.renderer.effects.sparkles(t.x + 0.5, t.y + 0.4, t.z + 0.5, got.toy.rare ? 14 : 8, got.toy.rare === 2 ? ['#ffd84d', '#fff3b0'] : [got.shell, '#ffffff']);
     return got;
+  }
+
+  // The capsule out of it opened (or its window closed before it was):
+  // counted, with any sticker it earns.
+  openCapsule() {
+    this.profile.openCapsule();
   }
 
   closeGashapon() {

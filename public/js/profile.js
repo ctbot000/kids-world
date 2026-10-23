@@ -217,17 +217,24 @@ export class Profile extends EventTarget {
   // A turn of a gashapon machine's handle (shared/gashapon.js): the coins
   // go in and a capsule toy comes out, into your collection. Returns { toy,
   // shell, have } (have: how many of it you have now, 1 for a new one), or
-  // null without the coins. rand: for drawToy.
-  turnGashapon(rand = Math.random) {
+  // null without the coins. rand: for drawToy. later: counted (and its
+  // stickers handed out) only once the capsule is opened, openCapsule, so
+  // no sticker gives away what is inside.
+  turnGashapon(rand = Math.random, { later = false } = {}) {
     if (this.data.coins < GASHA_PRICE) return null;
     const { toy, shell } = drawToy(rand);
     const toys = this.data.gear.toys;
     this.data.coins -= GASHA_PRICE;
     toys[toy.key] = Math.min(TOY_MAX, (toys[toy.key] ?? 0) + 1);
     this.shopped();
-    this.count('capsules');
-    this.count('capsuletoys', toysFound(toys), { max: true });
+    if (!later) this.openCapsule();
     return { toy, shell, have: toys[toy.key] };
+  }
+
+  // A capsule opened: one more turned, and the toys you have counted.
+  openCapsule() {
+    this.count('capsules');
+    this.count('capsuletoys', toysFound(this.data.gear.toys), { max: true });
   }
 
   // A volcano island's dragon tamed (dragon.js), one more time. Returns how

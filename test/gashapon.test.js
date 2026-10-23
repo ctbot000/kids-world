@@ -120,6 +120,13 @@ test('turning the handle takes the coins and puts a toy in your collection, with
     }
     assert.equal(toysFound(p.data.gear.toys), TOYS.length);
     assert.ok(earned.includes('full-set'));
+    // From the machine's window, a turn counts only once its capsule opens,
+    // so no sticker gives away what is inside first.
+    const turned = p.data.stats.capsules;
+    assert.ok(p.turnGashapon(() => 0, { later: true }));
+    assert.equal(p.data.stats.capsules, turned, 'not yet');
+    p.openCapsule();
+    assert.equal(p.data.stats.capsules, turned + 1);
     assert.deepEqual(new Profile().data.gear.toys, p.data.gear.toys, 'kept');
   } finally {
     delete globalThis.localStorage;

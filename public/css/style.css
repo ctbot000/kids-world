@@ -3616,44 +3616,83 @@ kbd {
   background: #2c2f36;
 }
 
-/* The capsule that rolls out: its two halves, which spring apart to show
-   the toy inside, with a glow for a rare one. */
-.gasha-capsule {
+/* Where the capsule lands, beside the chute, with a shadow under it. */
+.gasha-tray {
   position: relative;
-  width: 76px;
-  height: 76px;
+  display: grid;
+  place-items: end center;
+  width: 120px;
+  height: 150px;
+}
+
+.gasha-tray::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 70px;
+  height: 10px;
+  margin-left: -35px;
+  border-radius: 50%;
+  background: rgba(61, 46, 79, 0.14);
+}
+
+/* The capsule: a glossy coloured lid on a white cup, with the toy and a
+   burst of light waiting inside. It drops out and bounces, wobbles until
+   it is tapped, then the lid flies off, the cup falls away and the toy
+   jumps out, a rare one in a lavender burst and the very rare in gold. */
+.gasha-capsule {
+  --ray: #ffe39a;
+  position: relative;
+  z-index: 1;
+  width: 84px;
+  height: 84px;
   margin-bottom: 4px;
   padding: 0;
   border: none;
   background: none;
   cursor: pointer;
-  animation: gasha-roll 0.5s cubic-bezier(0.3, 1.4, 0.5, 1);
+  overflow: visible;
 }
 
 .gasha-capsule[hidden] {
   display: none;
 }
 
+.gasha-capsule.dropping {
+  animation: gasha-drop 0.7s ease-in forwards;
+}
+
+.gasha-capsule.ready {
+  animation: gasha-wobble 1.3s ease-in-out infinite;
+}
+
 .gasha-top,
 .gasha-bottom {
   position: absolute;
   left: 0;
-  width: 76px;
-  height: 38px;
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.12);
-  transition: transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.35s;
+  width: 84px;
+  height: 42px;
+  box-sizing: border-box;
 }
 
 .gasha-top {
   top: 0;
-  border-radius: 38px 38px 0 0;
-  background: var(--shell, #f47fb8);
+  border-radius: 42px 42px 0 0;
+  background:
+    radial-gradient(circle at 30% 34%, rgba(255, 255, 255, 0.85) 0 9%, rgba(255, 255, 255, 0) 10%),
+    radial-gradient(circle at 50% 110%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.14) 100%),
+    var(--shell, #f47fb8);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.16);
+  transform-origin: 20% 100%;
 }
 
 .gasha-bottom {
   bottom: 0;
-  border-radius: 0 0 38px 38px;
-  background: #fffaf0;
+  border: 2px solid rgba(61, 46, 79, 0.16);
+  border-top: none;
+  border-radius: 0 0 42px 42px;
+  background: linear-gradient(180deg, #ffffff, #ece3d2);
 }
 
 .gasha-toy {
@@ -3661,40 +3700,180 @@ kbd {
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: 2.8rem;
+  font-size: 5.2rem;
   line-height: 1;
   opacity: 0;
-  transform: scale(0.3);
-  transition: transform 0.35s cubic-bezier(0.3, 1.8, 0.5, 1) 0.1s, opacity 0.2s 0.1s;
+}
+
+.gasha-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 170px;
+  height: 170px;
+  margin: -85px 0 0 -85px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--ray) 0 18%, rgba(255, 255, 255, 0) 62%),
+    repeating-conic-gradient(var(--ray) 0 10deg, rgba(255, 255, 255, 0) 10deg 30deg);
+  -webkit-mask: radial-gradient(circle, #000 35%, transparent 70%);
+  mask: radial-gradient(circle, #000 35%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gasha-capsule.rare {
+  --ray: #d4c2ff;
+}
+
+.gasha-capsule.super {
+  --ray: #ffd84d;
+}
+
+.gasha-capsule.open {
+  cursor: default;
 }
 
 .gasha-capsule.open .gasha-top {
-  transform: translate(-14px, -26px) rotate(-30deg);
-  opacity: 0.85;
+  animation: gasha-lid 0.6s cubic-bezier(0.3, 0, 0.6, 1) forwards;
 }
 
 .gasha-capsule.open .gasha-bottom {
-  transform: translate(10px, 18px) rotate(14deg);
-  opacity: 0.85;
+  animation: gasha-cup 0.5s ease-in 0.12s forwards;
 }
 
 .gasha-capsule.open .gasha-toy {
-  opacity: 1;
-  transform: scale(1);
+  animation:
+    gasha-toy-out 0.7s cubic-bezier(0.3, 1.5, 0.5, 1) 0.1s forwards,
+    gasha-float 2.4s ease-in-out 0.8s infinite;
+}
+
+.gasha-capsule.open .gasha-burst {
+  animation:
+    gasha-burst 0.8s ease-out forwards,
+    gasha-spin 9s linear infinite;
 }
 
 .gasha-capsule.open.rare .gasha-toy {
-  filter: drop-shadow(0 0 8px #c3a9f2);
+  filter: drop-shadow(0 0 8px #b79cff);
 }
 
 .gasha-capsule.open.super .gasha-toy {
   filter: drop-shadow(0 0 10px #fcd535);
 }
 
-@keyframes gasha-roll {
-  from {
-    transform: translate(-60px, -10px) rotate(-200deg);
+/* Out of the chute: falling in a spin, then bouncing, twice. */
+@keyframes gasha-drop {
+  0% {
+    transform: translate(-80px, -40px) rotate(-260deg) scale(0.55);
     opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  55% {
+    transform: translate(0, 0) rotate(0) scale(1, 1);
+    animation-timing-function: ease-out;
+  }
+  62% {
+    transform: translate(0, 0) scale(1.12, 0.88);
+    animation-timing-function: ease-out;
+  }
+  76% {
+    transform: translate(0, -18px) scale(0.97, 1.03);
+    animation-timing-function: ease-in;
+  }
+  88% {
+    transform: translate(0, 0) scale(1.05, 0.95);
+  }
+  94% {
+    transform: translate(0, -4px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Waiting to be opened: a little wiggle now and then. */
+@keyframes gasha-wobble {
+  0%,
+  45%,
+  100% {
+    transform: none;
+  }
+  9% {
+    transform: rotate(-9deg);
+  }
+  18% {
+    transform: rotate(8deg);
+  }
+  27% {
+    transform: rotate(-5deg);
+  }
+  36% {
+    transform: rotate(2deg);
+  }
+}
+
+/* The lid pops up and flips away; the cup drops and is gone. */
+@keyframes gasha-lid {
+  0% {
+    transform: none;
+  }
+  25% {
+    transform: translateY(-10px) rotate(-8deg);
+  }
+  100% {
+    transform: translate(-46px, -64px) rotate(-120deg) scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes gasha-cup {
+  to {
+    transform: translateY(30px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+@keyframes gasha-toy-out {
+  0% {
+    transform: translateY(16px) scale(0.2);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(-16px) scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes gasha-float {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes gasha-burst {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+}
+
+@keyframes gasha-spin {
+  to {
+    rotate: 360deg;
   }
 }
 
@@ -3761,14 +3940,40 @@ kbd {
   color: #3d2e4f;
 }
 
+.gasha-toy-card.fresh {
+  animation: gasha-card 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+  outline: 3px solid var(--sun);
+  outline-offset: -3px;
+}
+
+@keyframes gasha-card {
+  from {
+    transform: scale(0.6);
+  }
+}
+
 .gasha-toy-card.missing {
   opacity: 0.5;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .gasha-handle.turning,
-  .gasha-capsule {
+  .gasha-capsule.dropping,
+  .gasha-capsule.ready,
+  .gasha-toy-card.fresh,
+  .gasha-capsule.open .gasha-burst {
     animation: none;
+  }
+
+  .gasha-capsule.open .gasha-toy {
+    animation: none;
+    opacity: 1;
+  }
+
+  .gasha-capsule.open .gasha-top,
+  .gasha-capsule.open .gasha-bottom {
+    animation: none;
+    opacity: 0;
   }
 }
 

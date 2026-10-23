@@ -4232,18 +4232,32 @@ export class UI {
     if (!g?.gashaAt) return;
     let busy = false;
     const timers = [];
+    // The capsule out of the machine and not yet open: what is in it, kept
+    // out of the collection below until you see it.
+    let got = null;
+    // The toy just found, to make its card pop in the collection.
+    let fresh = '';
     this.openModal(
       (root) => {
         const coins = h('div', { class: 'gasha-coins' });
         const handle = h('div', { class: 'gasha-handle' });
-        const capsule = h('button', { class: 'gasha-capsule', type: 'button', 'aria-label': 'Open the capsule', hidden: true }, h('span', { class: 'gasha-top' }), h('span', { class: 'gasha-bottom' }), h('span', { class: 'gasha-toy' }));
+        const toyEl = h('span', { class: 'gasha-toy' });
+        const capsule = h(
+          'button',
+          { class: 'gasha-capsule', type: 'button', 'aria-label': 'Open the capsule', hidden: true },
+          h('span', { class: 'gasha-burst' }),
+          toyEl,
+          h('span', { class: 'gasha-bottom' }),
+          h('span', { class: 'gasha-top' }),
+        );
         const said = h('div', { class: 'gasha-said', 'aria-live': 'polite' }, 'Put in coins and turn the handle!');
         const turn = h('button', { class: 'big green gasha-turn', type: 'button' }, `🎁 Turn the handle · 🪙 ${GASHA_PRICE}`);
         const heading = h('h3', {});
         const grid = h('div', { class: 'gasha-toys' });
         const show = () => {
           const p = g.profile.data;
-          const toys = p.gear.toys;
+          const toys = { ...p.gear.toys };
+          if (got) toys[got.toy.key] = (toys[got.toy.key] ?? 1) - 1;
           coins.textContent = `🪙 ${p.coins} ${p.coins === 1 ? 'coin' : 'coins'}`;
           turn.disabled = busy || p.coins < GASHA_PRICE;
           heading.textContent = `My capsule toys (${toysFound(toys)} of ${TOYS.length})`;
@@ -4252,33 +4266,44 @@ export class UI {
               const n = toys[t.key] ?? 0;
               return h(
                 'div',
-                { class: `gasha-toy-card ${n ? rarityOf(t).key : 'missing'}`, title: n ? t.name : 'Still to find' },
+                { class: `gasha-toy-card ${n ? rarityOf(t).key : 'missing'}${t.key === fresh ? ' fresh' : ''}`, title: n ? t.name : 'Still to find' },
                 h('span', { class: 'icon' }, n ? t.icon : '❓'),
                 h('span', { class: 'name' }, n ? t.name : '???'),
                 n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
               );
             }),
           );
+          fresh = '';
           if (!busy && p.coins < GASHA_PRICE) said.textContent = `You need 🪙 ${GASHA_PRICE} coins. Sell treasures from your basket in the 🛒 shop!`;
         };
-        // The capsule pops open, and what was in it is said.
-        let got = null;
-        const reveal = () => {
-          if (!got) return;
+        const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+        const stop = () => {
           timers.forEach((t) => clearTimeout(t));
           timers.length = 0;
-          capsule.hidden = false;
-          capsule.classList.add('open', rarityOf(got.toy).key);
-          this.sound.play(got.toy.rare ? 'fanfare' : 'pop');
-          const rare = got.toy.rare === 2 ? '🌟 Super rare! ' : got.toy.rare === 1 ? '✨ Rare! ' : '';
-          said.textContent = got.have === 1 ? `${rare}New! You got the ${got.toy.name}!` : `${rare}Another ${got.toy.name}! You have ${got.have} now.`;
+        };
+        // The capsule pops open: its lid flies off, the toy jumps out in a
+        // burst of light, and only then does it join the collection.
+        const reveal = () => {
+          if (!got) return;
+          stop();
+          const toy = got.toy;
+          const rare = toy.rare === 2 ? '🌟 Super rare! ' : toy.rare === 1 ? '✨ Rare! ' : '';
+          capsule.classList.remove('ready');
+          capsule.classList.add('open', rarityOf(toy).key);
+          this.sound.play(toy.rare ? 'fanfare' : 'pop');
+          said.textContent = got.have === 1 ? `${rare}New! You got the ${toy.name}!` : `${rare}Another ${toy.name}! You have ${got.have} now.`;
+          g.openCapsule();
+          later(600, () => {
+            fresh = toy.key;
+            busy = false;
+            show();
+          });
           got = null;
-          busy = false;
-          show();
         };
         turn.onclick = () => {
           if (busy) return;
           this.sound.unlock();
+          stop();
           got = g.turnGashapon();
           if (!got) {
             show();
@@ -4288,20 +4313,24 @@ export class UI {
           capsule.hidden = true;
           capsule.className = 'gasha-capsule';
           capsule.style.setProperty('--shell', got.shell);
-          capsule.querySelector('.gasha-toy').textContent = got.toy.icon;
+          toyEl.textContent = got.toy.icon;
           handle.classList.remove('turning');
           void handle.offsetWidth;
           handle.classList.add('turning');
           said.textContent = 'Click, click, click…';
           show();
-          // The capsule rolls out (tap it to open it sooner), and pops open.
-          timers.push(
-            setTimeout(() => {
-              capsule.hidden = false;
-              said.textContent = 'A capsule! Tap it open…';
-            }, 900),
-            setTimeout(reveal, 1900),
-          );
+          // It drops out of the chute and bounces, then wobbles, waiting to
+          // be tapped open (or opening by itself after a while).
+          later(800, () => {
+            capsule.hidden = false;
+            capsule.classList.add('dropping');
+            this.sound.play('place', { kind: 'brick' });
+          });
+          later(1500, () => {
+            capsule.classList.replace('dropping', 'ready');
+            said.textContent = 'A capsule! Tap it open!';
+          });
+          later(4000, reveal);
         };
         capsule.onclick = () => {
           if (!capsule.hidden) reveal();
@@ -4315,7 +4344,7 @@ export class UI {
         root.append(
           h('h2', {}, '🎁 Gashapon'),
           coins,
-          h('div', { class: 'gasha-stage' }, machine, capsule),
+          h('div', { class: 'gasha-stage' }, machine, h('div', { class: 'gasha-tray' }, capsule)),
           said,
           turn,
           heading,
@@ -4327,6 +4356,8 @@ export class UI {
       {
         onClose: () => {
           timers.forEach((t) => clearTimeout(t));
+          if (got) g.openCapsule();
+          got = null;
           g.closeGashapon();
         },
       },
