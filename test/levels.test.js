@@ -130,3 +130,34 @@ test('the ranking has a board for XP', () => {
   );
   assert.deepEqual(board.you, { rank: 2, score: 10 });
 });
+
+test('harder stickers come only long after their easy ones, each at its own count', () => {
+  const tiers = [
+    ['master-builder', 'mega-builder', 'placed', 10000],
+    ['painter', 'master-painter', 'painted', 500],
+    ['fruit-picker', 'orchard-keeper', 'fruit', 500],
+    ['gem-miner', 'treasure-hunter', 'gems', 100],
+    ['diamond', 'diamond-hoard', 'diamonds', 10],
+    ['animal-friend', 'animal-whisperer', 'petted', 500],
+    ['explorer', 'globetrotter', 'steps', 50000],
+    ['monster-popper', 'monster-master', 'popped', 500],
+    ['flag-raiser', 'camp-liberator', 'freed', 50],
+    ['island-hero', 'grumble-buster', 'kings', 10],
+    ['star-keeper', 'fortress-guard', 'defended', 5],
+    ['blob-bopper', 'blob-champion', 'blobpops', 1000],
+    ['piano-star', 'concert-pianist', 'tunes', 25],
+    ['sharp-memory', 'memory-master', 'pairsfound', 500],
+    ['quiz-perfect', 'brainiac', 'quizperfect', 10],
+    ['bumper-crop', 'harvest-champion', 'harvested', 1000],
+  ];
+  const byKey = new Map(STICKERS.map((s, i) => [s.key, { ...s, i }]));
+  assert.equal(byKey.size, STICKERS.length, 'every key is its own');
+  for (const [easy, hard, stat, n] of tiers) {
+    const e = byKey.get(easy);
+    const h = byKey.get(hard);
+    assert.ok(e && h && STAT_KEYS.includes(stat), hard);
+    assert.equal(h.i, e.i + 1, `${hard} sits right after ${easy}`);
+    assert.ok(e.test({ [stat]: n - 1 }) && !h.test({ [stat]: n - 1 }), `${hard} not yet at ${n - 1}`);
+    assert.ok(h.test({ [stat]: n }), `${hard} at ${n}`);
+  }
+});
