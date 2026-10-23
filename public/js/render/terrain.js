@@ -3,10 +3,12 @@
 // shadows (and the shadows of everything that moves), sway the flowers, turn
 // fruit to face you, ripple the water and drift the lava.
 import * as THREE from '../../vendor/three.module.js';
-import { isTreeFoot } from '../shared/blocks.js';
+import { BLOCKS, isTreeFoot } from '../shared/blocks.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
 import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
+import { gashaponMaterials, gashaponModel } from './gashapon-model.js';
+import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
 
 const STUD_RADIUS = 0.25;
@@ -363,6 +365,10 @@ function studShape(segments = 12) {
   return g;
 }
 
+// A model's turn about y to face the way a furniture block does (its
+// `front`, numbered as RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z), from facing -z.
+const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
+
 export class Terrain {
   constructor(scene, atlas) {
     this.scene = scene;
@@ -629,14 +635,35 @@ export class Terrain {
       group.add(mesh);
       chunk.studs = mesh;
     }
+    // Furniture drawn as real models (a gashapon), each turned to face the
+    // way it does.
+    for (const [x, y, z, id] of data.reals) {
+      const model = this.realModel(BLOCKS[id].real);
+      if (!model) continue;
+      model.position.set(x + 0.5, y, z + 0.5);
+      model.rotation.y = FACING[BLOCKS[id].front] ?? 0;
+      model.updateMatrixWorld(true);
+      model.matrixAutoUpdate = false;
+      model.traverse((o) => (o.matrixAutoUpdate = false));
+      group.add(model);
+    }
     this.group.add(group);
     this.chunks.set(key, chunk);
+  }
+
+  // A real model of a piece of furniture, by what it is, in materials made
+  // once for the island's light.
+  realModel(kind) {
+    if (kind !== 'gashapon') return null;
+    this.gashaponMaterials ??= gashaponMaterials(toyMaterial);
+    return gashaponModel(this.gashaponMaterials);
   }
 
   disposeChunk(chunk) {
     for (const foot of chunk.feet ?? []) this.feet.delete(foot);
     this.group.remove(chunk.group);
-    for (const mesh of chunk.group.children) mesh.geometry.dispose();
+    // A real model's shapes are shared by all of them, and kept.
+    for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
   }
 
   // Chunks lost in the fog are skipped, and studs are only worth drawing close up.

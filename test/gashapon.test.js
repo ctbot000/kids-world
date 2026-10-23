@@ -141,3 +141,56 @@ test('two stickers for capsule toys, on counts the game keeps', () => {
   assert.ok(full.test({ capsuletoys: TOYS.length }) && !full.test({ capsuletoys: TOYS.length - 1 }));
   assert.ok(STICKERS.length <= KEPT_MAX && STAT_KEYS.length <= KEPT_MAX, 'within what the keeper keeps');
 });
+
+test('on the island a machine is drawn as a real model: the mesher leaves its boxes out and says where it stands', async () => {
+  const { LightMap } = await import('../public/js/shared/light.js');
+  const { meshChunk } = await import('../public/js/render/mesher.js');
+  const visuals = { faceLayer: new Int16Array(256 * 3), tint: new Uint8Array(256 * 3).fill(255), studTint: new Uint8Array(256 * 3).fill(200) };
+  const mesh = (w) => {
+    const light = new LightMap(w);
+    light.computeAll();
+    return meshChunk(w, light, visuals, 0, 0);
+  };
+  const bare = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  w.set(5, 3, 6, B.turnedTo(B.GASHAPON, 1));
+  const out = mesh(w);
+  assert.deepEqual(out.reals, [[5, 3, 6, B.turnedTo(B.GASHAPON, 1)]]);
+  assert.equal(out.opaque.idx.length, mesh(bare).opaque.idx.length, 'no boxes for it');
+  // Other furniture is still boxes.
+  w.set(9, 3, 6, B.CHAIR);
+  const chair = mesh(w);
+  assert.equal(chair.reals.length, 1);
+  assert.ok(chair.opaque.idx.length > out.opaque.idx.length);
+});
+
+test('the real machine fits its cell, a globe of capsules on a cabinet with a handle that turns', async () => {
+  const THREE = await import('../public/vendor/three.module.js');
+  const { CAPSULE_R, GLOBE, gashaponMaterials, gashaponModel, packCapsules } = await import('../public/js/render/gashapon-model.js');
+  const model = gashaponModel(gashaponMaterials());
+  const box = new THREE.Box3().setFromObject(model);
+  assert.ok(box.min.x >= -0.5 && box.max.x <= 0.5 && box.min.z >= -0.5 && box.max.z <= 0.5, 'inside its cell');
+  assert.ok(box.min.y >= 0 && box.max.y <= 1.08, 'about a block tall');
+  assert.ok(model.userData.handle?.children.length, 'a handle to turn');
+  // The capsules are all inside the globe, none overlapping.
+  const caps = packCapsules();
+  assert.ok(caps.length >= 20);
+  for (const [x, y, z] of caps) assert.ok(Math.hypot(x, y - GLOBE.y, z) + CAPSULE_R <= GLOBE.r, 'in the globe');
+  for (let i = 0; i < caps.length; i++) {
+    for (let j = i + 1; j < caps.length; j++) assert.ok(Math.hypot(caps[i][0] - caps[j][0], caps[i][1] - caps[j][1], caps[i][2] - caps[j][2]) >= 2 * CAPSULE_R * 0.97);
+  }
+});
+
+test('every capsule toy has a 3D figure, about a unit tall, standing on the ground', async () => {
+  const THREE = await import('../public/vendor/three.module.js');
+  const { toyFigure } = await import('../public/js/render/capsule-toys.js');
+  const mat = (color) => new THREE.MeshPhysicalMaterial({ color });
+  for (const t of TOYS) {
+    const fig = toyFigure(t.key, mat);
+    assert.ok(fig, t.key);
+    const box = new THREE.Box3().setFromObject(fig);
+    assert.ok(box.min.y > -0.05 && box.min.y < 0.1, `${t.key} stands on the ground`);
+    assert.ok(box.max.y > 0.4 && box.max.y < 1.2, `${t.key} is about a unit tall`);
+  }
+  assert.equal(toyFigure('tutu', mat), null);
+});

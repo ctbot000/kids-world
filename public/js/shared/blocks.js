@@ -211,8 +211,10 @@ export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color:
 export const ARCADE_BLOB = furniture(158, 'arcade-blob', { name: 'Bop-a-Blob Machine', color: '#8c5bd6', light: 7, sound: 'stone' });
 export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pairs Machine', color: '#2fc1b3', light: 7, sound: 'stone' });
 // A gashapon, a capsule toy machine (shared/gashapon.js): walk up, press Q
-// and turn its handle for a capsule toy. Beside the arcade machines.
-export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone' });
+// and turn its handle for a capsule toy. Beside the arcade machines. It is
+// `real`: drawn as a real model (render/gashapon-model.js), not its boxes,
+// which only make its picture in the toy box.
+export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone', real: 'gashapon' });
 // Pianos (shared/piano.js): walk up, press Q and play. After the gashapon.
 export const PIANO = furniture(208, 'piano', { name: 'Piano', color: '#3b2a24', after: 204, sound: 'wood' });
 export const GRAND_PIANO = furniture(212, 'grand-piano', { name: 'Grand Piano', color: '#23252b', after: 208, sound: 'wood' });

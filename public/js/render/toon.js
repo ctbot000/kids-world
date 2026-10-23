@@ -60,10 +60,19 @@ export function toon(color, { emissive = 0, transparent = false, opacity = 1, si
   return m;
 }
 
+// A toy material made to measure (three's physical material settings), lit
+// by the studio like the rest.
+const made = new Set();
+export function toyMaterial(params) {
+  const m = new ToyMaterial({ metalness: 0, ...params, envMap: studio });
+  made.add(m);
+  return m;
+}
+
 // The studio's light, for every toy there is and every one to come.
 export function setStudio(texture) {
   studio = texture;
-  for (const m of cache.values()) {
+  for (const m of [...cache.values(), ...made]) {
     m.envMap = texture;
     m.needsUpdate = true;
   }

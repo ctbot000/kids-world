@@ -3518,6 +3518,7 @@ kbd {
 }
 
 .gasha-stage {
+  position: relative;
   display: flex;
   gap: 18px;
   align-items: flex-end;
@@ -3614,6 +3615,53 @@ kbd {
   margin-left: -17px;
   border-radius: 6px 6px 2px 2px;
   background: #2c2f36;
+}
+
+/* The machine in 3D (render/gasha-stage.js), once it is up: it takes the
+   flat one's place, and the capsule's button lies over all of it,
+   unseen, so a tap anywhere on it opens the capsule. */
+.gasha-3d {
+  display: none;
+  width: 100%;
+  height: 240px;
+}
+
+.gasha-stage.three {
+  display: block;
+  min-height: 0;
+}
+
+.gasha-stage.three .gasha-3d {
+  display: block;
+}
+
+.gasha-stage.three .gasha-machine {
+  display: none;
+}
+
+.gasha-stage.three .gasha-tray {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+.gasha-stage.three .gasha-tray::after {
+  display: none;
+}
+
+.gasha-stage.three .gasha-capsule {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  animation: none;
+}
+
+.gasha-stage.three .gasha-capsule.open {
+  pointer-events: none;
 }
 
 /* Where the capsule lands, beside the chute, with a shadow under it. */

@@ -4237,6 +4237,10 @@ export class UI {
     let got = null;
     // The toy just found, to make its card pop in the collection.
     let fresh = '';
+    // The machine in 3D (render/gasha-stage.js), once it is up: without
+    // WebGL, the flat one stays.
+    let stage3d = null;
+    let closed = false;
     this.openModal(
       (root) => {
         const coins = h('div', { class: 'gasha-coins' });
@@ -4290,6 +4294,7 @@ export class UI {
           const rare = toy.rare === 2 ? '🌟 Super rare! ' : toy.rare === 1 ? '✨ Rare! ' : '';
           capsule.classList.remove('ready');
           capsule.classList.add('open', rarityOf(toy).key);
+          stage3d?.open(rarityOf(toy).key);
           this.sound.play(toy.rare ? 'fanfare' : 'pop');
           said.textContent = got.have === 1 ? `${rare}New! You got the ${toy.name}!` : `${rare}Another ${toy.name}! You have ${got.have} now.`;
           g.openCapsule();
@@ -4313,6 +4318,7 @@ export class UI {
           capsule.hidden = true;
           capsule.className = 'gasha-capsule';
           capsule.style.setProperty('--shell', got.shell);
+          const drawn = got;
           toyEl.textContent = got.toy.icon;
           handle.classList.remove('turning');
           void handle.offsetWidth;
@@ -4321,16 +4327,18 @@ export class UI {
           show();
           // It drops out of the chute and bounces, then wobbles, waiting to
           // be tapped open (or opening by itself after a while).
+          stage3d?.turn();
           later(800, () => {
             capsule.hidden = false;
             capsule.classList.add('dropping');
+            stage3d?.drop(drawn.shell, drawn.toy.key);
             this.sound.play('place', { kind: 'brick' });
           });
-          later(1500, () => {
+          later(stage3d ? 2200 : 1500, () => {
             capsule.classList.replace('dropping', 'ready');
             said.textContent = 'A capsule! Tap it open!';
           });
-          later(4000, reveal);
+          later(stage3d ? 4800 : 4000, reveal);
         };
         capsule.onclick = () => {
           if (!capsule.hidden) reveal();
@@ -4341,10 +4349,19 @@ export class UI {
           h('div', { class: 'gasha-globe' }, ...Array.from({ length: 14 }, (_, i) => h('span', { class: `gasha-ball b${i % 6}` }))),
           h('div', { class: 'gasha-base' }, handle, h('div', { class: 'gasha-chute' })),
         );
+        const canvas = h('canvas', { class: 'gasha-3d', 'aria-hidden': 'true' });
+        const stage = h('div', { class: 'gasha-stage' }, machine, h('div', { class: 'gasha-tray' }, capsule), canvas);
+        import('./render/gasha-stage.js')
+          .then(({ GashaStage }) => {
+            if (closed) return;
+            stage3d = new GashaStage(canvas);
+            stage.classList.add('three');
+          })
+          .catch(() => canvas.remove());
         root.append(
           h('h2', {}, '🎁 Gashapon'),
           coins,
-          h('div', { class: 'gasha-stage' }, machine, h('div', { class: 'gasha-tray' }, capsule)),
+          stage,
           said,
           turn,
           heading,
@@ -4358,6 +4375,9 @@ export class UI {
           timers.forEach((t) => clearTimeout(t));
           if (got) g.openCapsule();
           got = null;
+          closed = true;
+          stage3d?.dispose();
+          stage3d = null;
           g.closeGashapon();
         },
       },

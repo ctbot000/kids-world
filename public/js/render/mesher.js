@@ -173,6 +173,9 @@ export function meshChunk(world, light, visuals, cx, cz) {
   const z1 = Math.min(D, z0 + CHUNK);
 
   const opaque = new Part();
+  // Furniture drawn as a real model, not boxes (a gashapon's): [x, y, z, id]
+  // of each, for render/terrain.js to put its model in.
+  const reals = [];
   const foliage = new Part();
   const water = new Part();
   const lava = new Part();
@@ -368,7 +371,8 @@ export function meshChunk(world, light, visuals, cx, cz) {
         } else if (kind === K_ITEM) {
           item(items, x, y, z, id);
         } else if (kind === K_FURNITURE) {
-          furniture(opaque, x, y, z, id);
+          if (BLOCKS[id].real) reals.push([x, y, z, id]);
+          else furniture(opaque, x, y, z, id);
         }
       }
     }
@@ -710,6 +714,7 @@ export function meshChunk(world, light, visuals, cx, cz) {
     cx,
     cz,
     trees: feet.map((t) => t.cell),
+    reals,
     foliage: foliage.out(),
     opaque: opaque.out(),
     water: water.out(),
