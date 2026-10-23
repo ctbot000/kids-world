@@ -71,12 +71,13 @@ export const GEAR = [
     // reaches (monsters.js ARM_REACH); king: how many times over King
     // Grumble feels a bop. Any you have can be the one in your hand — carry
     // whichever you like (profile.js pickWeapon, ui.js backpackDialog): a
-    // long reach or a hard hit, by what you are popping.
+    // long reach or a hard hit, by what you are popping. uses: how many
+    // swings that land it lasts before it breaks (see wear, below).
     levels: [
-      { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
-      { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, does: 'Two bubbles pop a monster, a few steps in front of you.' },
-      { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, does: 'One bop pops a monster right in front of you, and King Grumble feels every bop twice.' },
-      { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, does: 'One bop pops any monster from a step away, and King Grumble feels every bop three times over.' },
+      { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, uses: 60, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
+      { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, uses: 80, does: 'Two bubbles pop a monster, a few steps in front of you.' },
+      { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, uses: 100, does: 'One bop pops a monster right in front of you, and King Grumble feels every bop twice.' },
+      { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, uses: 120, does: 'One bop pops any monster from a step away, and King Grumble feels every bop three times over.' },
     ],
   },
 ];
@@ -163,15 +164,28 @@ const wornLevel = (gear, kind) => {
 export const shoesOf = (key) => GEAR[0].levels.find((l) => l.key === key) ?? null;
 export const wingsOf = (key) => GEAR[1].levels.find((l) => l.key === key) ?? null;
 
+// Toy weapons wear out: each swing that lands wears the one in your hand a
+// little (gear.wear, by its key: the swings used), and after its uses it
+// breaks. A broken one stays yours, but cannot be held until the shop fixes
+// it (fixPrice), for less than a new one would cost.
+export const usesLeft = (gear, w) => Math.max(0, w.uses - (gear?.wear?.[w.key] ?? 0));
+export const isBroken = (gear, w) => usesLeft(gear, w) === 0;
+export const fixPrice = (gear, w) => {
+  const used = w.uses - usesLeft(gear, w);
+  return used ? Math.max(1, Math.ceil(((w.price / 2) * used) / w.uses)) : 0;
+};
+
 // The weapon you have on: the one you have chosen to carry of those you own
-// (pick, by its level), or the best you have. Null with none, or it taken off.
+// (pick, by its level), or the best you have — the best not broken, when
+// that one is. Null with none, them all broken, or it taken off.
 export const wornWeapon = (gear) => {
   if (gear?.off?.weapon) return null;
   const have = gear?.weapon ?? 0;
   if (!have) return null;
   const pick = gear?.pick?.weapon;
   const level = Number.isInteger(pick) && pick >= 1 && pick <= have ? pick : have;
-  return WEAPONS[level - 1];
+  if (!isBroken(gear, WEAPONS[level - 1])) return WEAPONS[level - 1];
+  return WEAPONS.slice(0, have).findLast((w) => !isBroken(gear, w)) ?? null;
 };
 
 export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
@@ -180,8 +194,9 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 // have taken off, and for the weapons which of them you carry (pick: its
 // level, 1 for the first; without one, the best you have); the clothes you
 // have (in CLOTHES order) and the ones you have on ('' for none); and the
-// capsule toys from gashapon machines, how many of each (gashapon.js); and
-// how many times you have tamed a volcano island's dragon (dragon.js).
+// capsule toys from gashapon machines, how many of each (gashapon.js); how
+// worn each weapon you own is (wear); and how many times you have tamed a
+// volcano island's dragon (dragon.js).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -192,6 +207,11 @@ export function cleanGear(raw) {
   }
   const pick = Number.isInteger(p.pick?.weapon) ? p.pick.weapon : 0;
   out.pick.weapon = pick >= 1 && pick <= out.weapon ? pick : 0;
+  out.wear = {};
+  for (const w of WEAPONS.slice(0, out.weapon)) {
+    const n = p.wear?.[w.key];
+    if (Number.isInteger(n) && n > 0) out.wear[w.key] = Math.min(w.uses, n);
+  }
   const clothes = Array.isArray(p.clothes) ? p.clothes : [];
   out.clothes = CLOTHES.filter((c) => clothes.includes(c.key)).map((c) => c.key);
   out.outfit = out.clothes.includes(p.outfit) ? p.outfit : '';

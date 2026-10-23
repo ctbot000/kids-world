@@ -15,7 +15,7 @@ import { makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { AdventureSim } from '../public/js/shared/adventure.js';
 import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { cleanCoins, cleanGear, COINS_MAX, GEAR, gearMove, lookWithGear, nextLevel, sale, sellPrice, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
+import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, isBroken, lookWithGear, nextLevel, sale, sellPrice, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
 import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
 import { World } from '../public/js/shared/world.js';
@@ -65,9 +65,9 @@ test('each level of gear costs more and makes you faster than the one before', (
 });
 
 test('gear and coins are tidied: no levels that do not exist, no made-up kinds, no silly sums', () => {
-  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', toys: {}, tames: 0 });
-  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, weapon: 0, clothes: [], outfit: '', toys: {}, tames: 0 });
-  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
   // A chosen weapon is kept, and only one of those owned: anything else
   // falls back to the best (wornWeapon).
   assert.equal(cleanGear({ weapon: 2, pick: { weapon: 1 } }).pick.weapon, 1);
@@ -168,7 +168,7 @@ test('coins and gear are kept at the keeper, from the device that changed them l
   const theirs = { name: 'Sunny Otter', coins: 3, gear: { shoes: 2, wings: 1, off: { wings: true } }, changedAt: 200 };
   const kept = keptProfile({ ...theirs, coins: 1e12 });
   assert.equal(kept.coins, COINS_MAX);
-  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, weapon: 0, clothes: [], outfit: '', toys: {}, tames: 0 });
+  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
   const merged = mergeProfiles(mine, theirs);
   assert.equal(merged.coins, 3);
   assert.equal(merged.gear.shoes, 2);
@@ -367,4 +367,52 @@ test('the running shoes and flying gear you have on are in the look the island s
   assert.equal(lookWithGear({ ...look, shoes: 'rocket' }, cleanGear({})).shoes, undefined, 'not bought');
   assert.deepEqual([cleanLook({ ...look, shoes: 'zoomy', wings: 'jetpack' }).shoes, cleanLook({ ...look, shoes: 'zoomy', wings: 'jetpack' }).wings], ['zoomy', 'jetpack']);
   assert.deepEqual([cleanLook({ ...look, shoes: 'flippers', wings: 3 }).shoes, cleanLook({ ...look, shoes: 'flippers', wings: 3 }).wings], [undefined, undefined]);
+});
+
+test('weapons wear out as they bop, break, and are fixed in the shop for less than a new one', async () => {
+  // Kept tidy: only weapons you own, never more worn than broken.
+  assert.deepEqual(cleanGear({ weapon: 2, wear: { sword: 5, blaster: 999, hammer: 3, lavablade: -1 } }).wear, { sword: 5, blaster: WEAPONS[1].uses });
+  assert.deepEqual(cleanGear({ weapon: 1, wear: { sword: 1.5 } }).wear, {});
+  for (const w of WEAPONS) {
+    assert.ok(Number.isInteger(w.uses) && w.uses > 0);
+    assert.equal(fixPrice({ weapon: 4 }, w), 0, 'nothing to fix on a new one');
+    assert.ok(fixPrice({ weapon: 4, wear: { [w.key]: w.uses } }, w) < w.price, `fixing the ${w.name} costs less than buying it`);
+  }
+  // A broken pick falls back to the best not broken; all broken, a fist.
+  const [sword, blaster, hammer] = WEAPONS;
+  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1 }, wear: { sword: sword.uses }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 3, pick: {}, wear: { hammer: hammer.uses }, off: {} }).key, 'blaster');
+  assert.equal(wornWeapon({ weapon: 2, pick: {}, wear: { sword: sword.uses, blaster: blaster.uses }, off: {} }), null);
+  assert.equal(lookWithGear({ animal: 'fox' }, { weapon: 1, wear: { sword: sword.uses }, off: {} }).weapon, undefined, 'friends see no broken sword');
+
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const p = new Profile();
+    p.data.gear = cleanGear({});
+    assert.equal(p.useWeapon(), null, 'a fist never wears out');
+    p.earn(1000);
+    p.buy('weapon');
+    p.buy('weapon');
+    p.pickWeapon(1);
+    for (let i = 1; i < sword.uses; i++) assert.equal(p.useWeapon().left, sword.uses - i);
+    assert.deepEqual(p.useWeapon(), { weapon: sword, left: 0 }, 'it breaks');
+    assert.ok(isBroken(p.data.gear, sword));
+    assert.equal(wornWeapon(p.data.gear).key, 'blaster', 'the next best into your hand');
+    assert.equal(p.pickWeapon(1), null, 'a broken one cannot be held');
+    assert.equal(p.nextWeapon(), null, 'nor flipped to');
+    const coins = p.data.coins;
+    assert.equal(p.fixWeapon('blaster'), false, 'nothing to fix');
+    assert.equal(p.fixWeapon('hammer'), false, 'not yours');
+    assert.equal(p.fixWeapon('sword'), true);
+    assert.equal(p.data.coins, coins - sword.price / 2);
+    assert.equal(usesLeft(p.data.gear, sword), sword.uses);
+    assert.equal(p.pickWeapon(1).key, 'sword');
+    // Kept on this device.
+    p.useWeapon();
+    assert.equal(new Profile().data.gear.wear.sword, 1);
+  } finally {
+    delete globalThis.localStorage;
+  }
 });

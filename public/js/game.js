@@ -91,6 +91,9 @@ const BUBBLE_SECS = 4.5;
 // monster it passes, as far round as this either side (the cosine of 100°).
 const FRONT = 0.34;
 const SWEEP = -0.17;
+// A weapon this many swings from breaking says so.
+const WEAR_WARN = 10;
+
 // A monster bopped flashes white, on and off, this long.
 const FLASH_MS = 300;
 // A volcano island's own dragon, still wild (dragon.js): not to ride yet, but to bop.
@@ -1484,6 +1487,7 @@ export class Game extends EventTarget {
           if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
           else this.bop(hit.id);
         }
+        this.wearOut();
       }
     }, lands * 1000);
     if (best) return best.id;
@@ -1494,6 +1498,22 @@ export class Game extends EventTarget {
       this.emit('toast', { icon: weapon?.icon ?? '👊', text: blaster ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
     }
     return null;
+  }
+
+  // A swing that landed wears the weapon in your hand (shop.js usesLeft):
+  // a word when it is nearly worn out, and when it breaks — out of your
+  // hand, the next best you have in it (or your fist) — till the shop fixes it.
+  wearOut() {
+    const used = this.profile.useWeapon();
+    if (!used) return;
+    const { weapon, left } = used;
+    if (!left) {
+      this.sound.play('no');
+      const next = wornWeapon(this.profile.data.gear);
+      this.emit('toast', { icon: '💔', text: `Your ${weapon.name} broke! ${next ? `${next.icon} ${next.name} in hand. ` : ''}Fix it in the 🛒 shop.` });
+    } else if (left === WEAR_WARN) {
+      this.emit('toast', { icon: weapon.icon, text: `Your ${weapon.name} is wearing out: ${left} more bops. Fix it in the 🛒 shop!` });
+    }
   }
 
   // Landing on a monster pops it, and bounces you up.

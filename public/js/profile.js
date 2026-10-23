@@ -11,7 +11,7 @@ import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.
 import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, WEAPONS, wornWeapon } from './shared/shop.js';
+import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, fixPrice, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -164,6 +164,7 @@ export class Profile extends EventTarget {
     this.data.coins -= next.price;
     this.data.gear[kind] = next.level;
     delete this.data.gear.off[kind];
+    if (kind === 'weapon') delete this.data.gear.wear[next.key];
     // A new weapon goes straight into your hand (choose another any time).
     if (kind === 'weapon') this.data.gear.pick.weapon = next.level;
     this.shopped();
@@ -264,8 +265,10 @@ export class Profile extends EventTarget {
   // Which of the weapons you own is in your hand (level: 1 for the first,
   // the Foam Sword). Any you like — a long reach or a hard hit — and friends
   // see it in your hand at once. Returns the weapon, or null.
+  // A broken one cannot be picked until it is fixed.
   pickWeapon(level) {
     if (!Number.isInteger(level) || level < 1 || level > this.data.gear.weapon) return null;
+    if (isBroken(this.data.gear, WEAPONS[level - 1])) return null;
     this.data.gear.pick.weapon = level;
     delete this.data.gear.off.weapon;
     this.shopped();
@@ -275,12 +278,50 @@ export class Profile extends EventTarget {
   // The next of your weapons round: for the button by the bop button (and
   // its key, N), flipping through them as it is pressed. With one put away
   // in the backpack, it is that one back into your hand.
+  // Broken ones are skipped.
   nextWeapon() {
-    const have = this.data.gear.weapon;
+    const g = this.data.gear;
+    const have = g.weapon;
     if (have < 2) return null;
-    const worn = wornWeapon(this.data.gear);
-    if (!worn) return this.pickWeapon(this.data.gear.pick.weapon || have);
-    return this.pickWeapon((WEAPONS.indexOf(worn) + 1) % have + 1);
+    const worn = wornWeapon(g);
+    if (!worn) {
+      // Put away: back into your hand (the pick, or the best not broken).
+      if (!g.off.weapon) return null;
+      this.wear('weapon', true);
+      return wornWeapon(g);
+    }
+    const from = WEAPONS.indexOf(worn);
+    for (let i = 1; i < have; i++) {
+      const level = ((from + i) % have) + 1;
+      if (!isBroken(g, WEAPONS[level - 1])) return this.pickWeapon(level);
+    }
+    return null;
+  }
+
+  // A swing that landed, with the weapon in your hand: it wears a little.
+  // Returns { weapon, left } (left: swings it has left; 0, it just broke),
+  // or null with no weapon in hand.
+  useWeapon() {
+    const g = this.data.gear;
+    const weapon = wornWeapon(g);
+    if (!weapon) return null;
+    g.wear[weapon.key] = (g.wear[weapon.key] ?? 0) + 1;
+    this.shopped();
+    return { weapon, left: usesLeft(g, weapon) };
+  }
+
+  // A worn or broken weapon fixed in the shop (shop.js fixPrice): as good
+  // as new. A broken one you had picked is back in your hand.
+  fixWeapon(key) {
+    const w = weaponOf(key);
+    const g = this.data.gear;
+    if (!w || WEAPONS.indexOf(w) >= g.weapon) return false;
+    const price = fixPrice(g, w);
+    if (!price || this.data.coins < price) return false;
+    this.data.coins -= price;
+    delete g.wear[key];
+    this.shopped();
+    return true;
   }
 
   shopped() {

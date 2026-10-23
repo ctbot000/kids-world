@@ -17,7 +17,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { CLOTHES, GEAR, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
+import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1349,6 +1349,32 @@ export class UI {
         // Nothing is planted on the shared isle: no vegetables for sale there.
         const farming = p !== this.isle;
         const button = (text, onclick, disabled = false) => h('button', { class: 'chip', type: 'button', disabled, onclick }, text);
+        // Weapons wear out as they bop (shop.js usesLeft): any worn one
+        // fixed as good as new, for less than it cost.
+        const fixes = () => {
+          const worn = WEAPONS.slice(0, p.data.gear.weapon).filter((w) => fixPrice(p.data.gear, w));
+          if (!worn.length) return null;
+          return h(
+            'div',
+            { class: 'shop-buttons' },
+            ...worn.map((w) => {
+              const price = fixPrice(p.data.gear, w);
+              const broken = isBroken(p.data.gear, w);
+              return button(
+                `🔧 Fix ${w.icon} ${broken ? '(broken)' : `(${usesLeft(p.data.gear, w)}/${w.uses})`} 🪙 ${price}`,
+                () => {
+                  if (!p.fixWeapon(w.key)) {
+                    this.sound.play('no');
+                    return;
+                  }
+                  this.sound.play('fanfare');
+                  this.toast(w.icon, `Your ${w.name} is as good as new!`);
+                },
+                p.data.coins < price,
+              );
+            }),
+          );
+        };
         const draw = () => {
           coins.textContent = `🪙 ${p.data.coins.toLocaleString()}`;
           const b = p.basket;
@@ -1403,6 +1429,7 @@ export class UI {
                     : h('span', { class: 'muted' }, '🏅 The best there is!'),
                 ),
                 next && p.data.coins < next.price ? h('span', { class: 'muted' }, `${next.price - p.data.coins} more coins to go!`) : null,
+                g.key === 'weapon' ? fixes() : null,
               );
             }),
           );
@@ -1551,9 +1578,13 @@ export class UI {
               // the island, N (or the button by the bop button) flips
               // through them too.
               const held = wornWeapon(gear);
+              // A broken one waits for the shop to fix it.
               WEAPONS.slice(0, level).forEach((w, i) => {
                 const on = held?.key === w.key;
-                cards.push(card(w.icon, w.name, w.does, on, on ? tap('🙌 Put away', () => p.wear('weapon', false)) : tap('✋ Hold it', () => p.pickWeapon(i + 1))));
+                const left = usesLeft(gear, w);
+                const does = left ? `${w.does} 💪 ${left} of ${w.uses} bops left.` : `💔 Broken! Fix it in the 🛒 shop.`;
+                const action = !left ? null : on ? tap('🙌 Put away', () => p.wear('weapon', false)) : tap('✋ Hold it', () => p.pickWeapon(i + 1));
+                cards.push(card(w.icon, w.name, does, on, action));
               });
               continue;
             }
@@ -1990,7 +2021,7 @@ export class UI {
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. Now and then a 👾 Monster Gashapon turns up: follow its beam of light, and turn it for a figure of a real monster — on a higher stage of Adventure Isle, a rare one is likelier!']),
