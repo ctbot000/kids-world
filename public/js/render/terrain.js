@@ -8,6 +8,7 @@ import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
 import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
 import { gashaponMaterials, gashaponModel } from './gashapon-model.js';
+import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
 
@@ -588,7 +589,7 @@ export class Terrain {
     const data = meshChunk(this.world, this.light, this.atlas, cx, cz);
     const group = new THREE.Group();
     group.name = `chunk ${key}`;
-    const chunk = { key, cx, cz, group, studs: null, feet: data.trees.map((c) => c.join()) };
+    const chunk = { key, cx, cz, group, studs: null, movers: [], feet: data.trees.map((c) => c.join()) };
     for (const foot of chunk.feet) this.feet.add(foot);
     const H = this.world.H;
     const sphere = new THREE.Sphere(new THREE.Vector3((cx + 0.5) * CHUNK, H / 2, (cz + 0.5) * CHUNK), Math.hypot(CHUNK / 2, H / 2, CHUNK / 2) + 1);
@@ -646,6 +647,8 @@ export class Terrain {
       model.matrixAutoUpdate = false;
       model.traverse((o) => (o.matrixAutoUpdate = false));
       group.add(model);
+      // A fan's blades go round, each fan at a time of its own.
+      if (model.userData.spin) chunk.movers.push({ model, phase: (x * 7.3 + z * 3.1 + y) % 10 });
     }
     this.group.add(group);
     this.chunks.set(key, chunk);
@@ -662,6 +665,10 @@ export class Terrain {
       this.monsterGashaMaterials ??= gashaponMaterials(toyMaterial, 'monster');
       return gashaponModel(this.monsterGashaMaterials, 'monster');
     }
+    if (kind === 'electric-fan' || kind === 'ceiling-fan') {
+      this.fanMaterials ??= fanMaterials(toyMaterial);
+      return fanModel(this.fanMaterials, kind);
+    }
     return null;
   }
 
@@ -670,6 +677,26 @@ export class Terrain {
     this.group.remove(chunk.group);
     // A real model's shapes are shared by all of them, and kept.
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
+  }
+
+  // The blades of the fans in sight go round, and an electric fan's head
+  // sweeps from side to side.
+  animate(time) {
+    for (const chunk of this.chunks.values()) {
+      if (!chunk.group.visible) continue;
+      for (const { model, phase } of chunk.movers) {
+        const t = time + phase;
+        for (const { part, axis, speed } of model.userData.spin) {
+          part.rotation[axis] = (t * speed) % (Math.PI * 2);
+          part.updateMatrix();
+        }
+        const sway = model.userData.sway;
+        if (sway) {
+          sway.rotation.y = swayAt(t);
+          sway.updateMatrix();
+        }
+      }
+    }
   }
 
   // Chunks lost in the fog are skipped, and studs are only worth drawing close up.

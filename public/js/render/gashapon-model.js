@@ -62,7 +62,7 @@ export function gashaponMaterials(make = (f) => new THREE.MeshPhysicalMaterial({
 // ------------------------------------------------------------- shapes
 
 // Many shapes, each placed by a matrix, as one (indexed or not).
-function bake(parts) {
+export function bake(parts) {
   let count = 0;
   let indices = 0;
   for (const { g } of parts) {
@@ -97,13 +97,13 @@ function bake(parts) {
   return out;
 }
 
-const at = (x, y, z, rx = 0, ry = 0, rz = 0, s = 1, sy = s, sz = s) =>
+export const at = (x, y, z, rx = 0, ry = 0, rz = 0, s = 1, sy = s, sz = s) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(s, sy, sz));
 
 // A box with rounded edges and corners, w x h x d, centred on the origin:
 // an outline r in from each side, rounded off at its corners, with a bevel
 // of r all round it (which grows the outline back out by r).
-function roundedBox(w, h, d, r, segs = 4) {
+export function roundedBox(w, h, d, r, segs = 4) {
   const s = new THREE.Shape();
   const x = w / 2 - r;
   const y = h / 2 - r;
@@ -123,7 +123,7 @@ function roundedBox(w, h, d, r, segs = 4) {
   return g;
 }
 
-const lathe = (pts, segs = 40) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), segs);
+export const lathe = (pts, segs = 40) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), segs);
 
 // The machine's measures.
 export const GLOBE = { y: 0.755, r: 0.245 };

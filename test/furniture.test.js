@@ -246,3 +246,44 @@ test('sitting down to tea with a friend earns Tea Party', () => {
   assert.equal(sticker.test(stats(0)), false);
   assert.equal(sticker.test(stats(1)), true);
 });
+
+test('fans: an electric fan that turns and a ceiling fan to walk under that lights the room, after the potted plant, drawn as real models', async () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.POTTED_PLANT) + 1], B.ELECTRIC_FAN, 'right after the potted plant');
+  assert.equal(home[home.indexOf(B.ELECTRIC_FAN) + 1], B.CEILING_FAN);
+  assert.ok(B.block(B.ELECTRIC_FAN).turns && B.SOLID[B.ELECTRIC_FAN] === 1);
+  assert.ok(!B.block(B.CEILING_FAN).turns && B.SOLID[B.CEILING_FAN] === 0, 'walked under');
+  assert.ok(B.block(B.CEILING_FAN).light > 0);
+  for (const id of [B.ELECTRIC_FAN, B.CEILING_FAN]) {
+    for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(id)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+  }
+  // The ceiling fan hangs from the top of its cell, clear of a head below.
+  assert.ok(Math.min(...modelBoxes(B.CEILING_FAN).map((b) => b[1])) >= 0.45);
+
+  const THREE = await import('../public/vendor/three.module.js');
+  const { fanMaterials, fanModel, swayAt } = await import('../public/js/render/fan-model.js');
+  const size = (kind) => new THREE.Box3().setFromObject(fanModel(fanMaterials(), kind));
+  const fan = size('electric-fan');
+  assert.ok(fan.min.y >= 0 && fan.max.y <= 1.05 && fan.min.x >= -0.5 && fan.max.x <= 0.5 && fan.min.z >= -0.5 && fan.max.z <= 0.5, 'a fan fits its cell');
+  const ceiling = size('ceiling-fan');
+  assert.ok(ceiling.max.y <= 1.001 && ceiling.min.y >= 0.4, 'up under the ceiling');
+  assert.ok(ceiling.max.x > 0.6, 'its blades reach out past its cell');
+  // What goes round, and what sweeps from side to side.
+  const electric = fanModel(fanMaterials(), 'electric-fan');
+  assert.equal(electric.userData.spin.length, 1);
+  assert.ok(electric.userData.sway);
+  assert.ok(fanModel(fanMaterials(), 'ceiling-fan').userData.spin[0].part.children.length);
+  assert.ok(!fanModel(fanMaterials(), 'ceiling-fan').userData.sway, 'a ceiling fan does not sweep');
+  for (let t = 0; t < 20; t += 0.5) assert.ok(Math.abs(swayAt(t)) <= 0.7);
+
+  // The mesher leaves their boxes out and says where they stand.
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  w.set(5, 3, 6, B.turnedTo(B.ELECTRIC_FAN, 2));
+  w.set(8, 6, 8, B.CEILING_FAN);
+  const light = new LightMap(w);
+  light.computeAll();
+  const visuals = { faceLayer: new Int16Array(256 * 3), tint: new Uint8Array(256 * 3).fill(255), studTint: new Uint8Array(256 * 3).fill(200) };
+  const out = meshChunk(w, light, visuals, 0, 0);
+  assert.deepEqual(out.reals, [[5, 3, 6, B.turnedTo(B.ELECTRIC_FAN, 2)], [8, 6, 8, B.CEILING_FAN]]);
+  assert.ok(light.lampAt(8, 5, 8) > 0, 'the ceiling fan lights the room under it');
+});

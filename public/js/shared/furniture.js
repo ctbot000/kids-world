@@ -279,6 +279,43 @@ const MODELS = {
     ];
   },
 
+  // The fans' boxes, for their pictures (render/fan-model.js draws them for
+  // real). An electric fan: a mint base and a white pole up to its round
+  // head, the blades in a chrome cage facing the front, a motor behind.
+  'electric-fan'() {
+    const out = [
+      box(0.3, 0, 0.3, 0.7, 0.08, 0.74, '#7fd8c4', 'plain'),
+      box(0.47, 0.08, 0.49, 0.53, 0.6, 0.55, WHITE, 'plain'),
+      box(0.43, 0.64, 0.5, 0.57, 0.8, 0.68, '#7fd8c4', 'plain'),
+    ];
+    // The cage, a ring of boxes round it, and the blades across it.
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const x = 0.5 + Math.cos(a) * 0.24;
+      const y = 0.72 + Math.sin(a) * 0.24;
+      out.push(box(x - 0.025, y - 0.025, 0.38, x + 0.025, y + 0.025, 0.5, STEEL, 'plain'));
+    }
+    out.push(box(0.28, 0.69, 0.43, 0.72, 0.75, 0.45, '#a6ecdc', 'plain'));
+    out.push(box(0.47, 0.5, 0.43, 0.53, 0.94, 0.45, '#a6ecdc', 'plain'));
+    out.push(box(0.45, 0.67, 0.4, 0.55, 0.77, 0.43, WHITE, 'plain'));
+    return out;
+  },
+
+  // A ceiling fan: a cup on the ceiling and a rod down to its motor, four
+  // wooden blades out from it, and its bowl of light underneath.
+  'ceiling-fan'() {
+    return [
+      box(0.42, 0.95, 0.42, 0.58, 1, 0.58, WHITE, 'plain'),
+      box(0.48, 0.76, 0.48, 0.52, 0.95, 0.52, '#e0b04c', 'plain'),
+      box(0.39, 0.6, 0.39, 0.61, 0.76, 0.61, WHITE, 'plain'),
+      box(0, 0.63, 0.44, 0.39, 0.65, 0.56, '#b9784a', 'planks'),
+      box(0.61, 0.63, 0.44, 1, 0.65, 0.56, '#b9784a', 'planks'),
+      box(0.44, 0.63, 0, 0.56, 0.65, 0.39, '#b9784a', 'planks'),
+      box(0.44, 0.63, 0.61, 0.56, 0.65, 1, '#b9784a', 'planks'),
+      box(0.41, 0.5, 0.41, 0.59, 0.6, 0.59, '#fff3c4', 'glow'),
+    ];
+  },
+
   // A table laid for tea: a white cloth with a pink skirt over one leg, and
   // on it a teapot (its spout to the right, facing whoever put it down), a
   // cup on a saucer at each side and a little plate of cookies in front.

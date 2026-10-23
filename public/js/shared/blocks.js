@@ -203,6 +203,12 @@ export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c
 export const TABLE = furniture(141, 'table', { name: 'Table', color: '#c98a52', turns: false, sound: 'wood' });
 export const FLOOR_LAMP = furniture(142, 'floor-lamp', { name: 'Floor Lamp', color: '#fbe7a1', turns: false, light: 14, sound: 'glass' });
 export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant', color: '#4caf50', turns: false, sound: 'plant' });
+// Fans, their blades going round: an Electric Fan on a stand, its head
+// sweeping from side to side, and a Ceiling Fan with a light under it, to
+// put up against a ceiling (you walk under it). Both `real`, drawn as real
+// models (render/fan-model.js). After the potted plant.
+export const ELECTRIC_FAN = furniture(244, 'electric-fan', { name: 'Electric Fan', color: '#7fd8c4', after: 143, sound: 'stone', real: 'electric-fan' });
+export const CEILING_FAN = furniture(248, 'ceiling-fan', { name: 'Ceiling Fan', color: '#b9784a', after: 244, turns: false, solid: false, light: 12, sound: 'wood', real: 'ceiling-fan' });
 // A little table set for tea: a cloth, a teapot, cups and a plate of cookies
 // (shared/furniture.js). Pull chairs up to it and sit down to tea together.
 export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });
