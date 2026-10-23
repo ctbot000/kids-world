@@ -1570,16 +1570,30 @@ export class UI {
             const game = this.game?.world ? this.game : null;
             cards.push(card(POTION.icon, `${POTION.name} × ${p.data.potions}`, POTION.does, false, game ? button('😋 Drink one', () => game.drink()) : h('span', { class: 'muted' }, 'Drink one on an island.')));
           }
-          list.replaceChildren(
-            ...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!')]),
+          // The capsule toys you have from gashapon machines, most rare first.
+          const have = TOYS.filter((t) => (gear.toys[t.key] ?? 0) > 0).sort((a, b) => b.rare - a.rare);
+          const empty = have.length
+            ? 'Nothing from the 🛒 shop in here yet: sell treasures from your basket there, and buy shoes, wings, toy weapons, clothes and potions!'
+            : 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!';
+          list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, empty)]));
+          toysHead.textContent = `🎁 Capsule toys (${have.length} of ${TOYS.length})`;
+          toys.replaceChildren(
+            ...(have.length ? have.map((t) => this.toyCard(t, gear.toys[t.key])) : [h('p', { class: 'muted shop-empty' }, 'No capsule toys yet. Turn a 🎁 gashapon machine for one: you find them in the toy box\'s 🛋️ Home tab and at the 🕹️ Video Arcade.')]),
           );
         };
+        const toysHead = h('h3', { class: 'backpack-toys-head' });
+        const toys = h('div', { class: 'gasha-toys backpack-toys' });
+        this.loadToyPictures(() => {
+          if (this.modalOpen && toys.isConnected) draw();
+        });
         root.append(
           ...[
             h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             list,
+            toysHead,
+            toys,
           ].filter(Boolean),
         );
         draw();
@@ -1962,7 +1976,7 @@ export class UI {
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
-          card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — some are rare, and one is very rare.']),
+          card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in your 🎒 backpack.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
@@ -1978,7 +1992,7 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells and star pieces to put them in your basket. Plant fruit to grow a tree!']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion. You see yourself as you change.']),
+          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, drink a 🧪 potion, and see your 🎁 capsule toys from gashapon machines. You see yourself as you change.']),
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
@@ -4241,9 +4255,6 @@ export class UI {
     // WebGL, the flat one stays.
     let stage3d = null;
     let closed = false;
-    // The toys' pictures in 3D (render/gasha-stage.js toyPortraits), once
-    // made: until then (or without WebGL), their emoji.
-    let pictures = null;
     this.openModal(
       (root) => {
         const coins = h('div', { class: 'gasha-coins' });
@@ -4271,14 +4282,7 @@ export class UI {
           grid.replaceChildren(
             ...TOYS.map((t) => {
               const n = toys[t.key] ?? 0;
-              const pic = pictures?.[n ? t.key : 'mystery'];
-              return h(
-                'div',
-                { class: `gasha-toy-card ${n ? rarityOf(t).key : 'missing'}${t.key === fresh ? ' fresh' : ''}`, title: n ? t.name : 'Still to find' },
-                pic ? h('img', { class: 'figure', src: pic, alt: n ? t.name : 'A capsule still to open', draggable: false }) : h('span', { class: 'icon' }, n ? t.icon : '❓'),
-                h('span', { class: 'name' }, n ? t.name : '???'),
-                n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
-              );
+              return this.toyCard(t, n, { fresh: t.key === fresh });
             }),
           );
           fresh = '';
@@ -4360,7 +4364,7 @@ export class UI {
             if (closed) return;
             stage3d = new GashaStage(canvas);
             stage.classList.add('three');
-            pictures = toyPortraits(TOYS.map((t) => t.key));
+            this.toyPictures ??= toyPortraits(TOYS.map((t) => t.key));
             show();
           })
           .catch(() => canvas.remove());
@@ -4372,7 +4376,7 @@ export class UI {
           turn,
           heading,
           grid,
-          h('p', { class: 'muted' }, `Every turn is 🪙 ${GASHA_PRICE} coins for a surprise toy: ${TOYS.length} to collect, some rare, and one very rare!`),
+          h('p', { class: 'muted' }, `Every turn is 🪙 ${GASHA_PRICE} coins for a surprise toy: ${TOYS.length} to collect, ★ common, ★★ rare and ★★★ super rare!`),
         );
         show();
       },
@@ -4388,6 +4392,36 @@ export class UI {
         },
       },
     );
+  }
+
+  // A capsule toy's card (shared/gashapon.js), for the gashapon's window and
+  // the backpack: its figure in 3D once the pictures are made (and its
+  // emoji till then, or without WebGL), its name, how rare it is and how
+  // many you have — or, with none of it yet, a closed capsule, ??? and how
+  // rare the one still to find is. fresh: just found, so it pops.
+  toyCard(t, n, { fresh = false } = {}) {
+    const pic = this.toyPictures?.[n ? t.key : 'mystery'];
+    const r = rarityOf(t);
+    return h(
+      'div',
+      { class: `gasha-toy-card ${n ? r.key : 'missing'}${fresh ? ' fresh' : ''}`, title: n ? `${t.name} (${r.name})` : `A ${r.name.toLowerCase()} toy still to find` },
+      pic ? h('img', { class: 'figure', src: pic, alt: n ? t.name : 'A capsule still to open', draggable: false }) : h('span', { class: 'icon' }, n ? t.icon : '❓'),
+      h('span', { class: 'name' }, n ? t.name : '???'),
+      h('span', { class: `rarity ${r.key}`, 'aria-label': r.name }, h('span', { class: 'stars' }, r.stars), ` ${r.name}`),
+      n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
+    );
+  }
+
+  // The toys' pictures in 3D (render/gasha-stage.js), made once and kept:
+  // then `done`. Without WebGL there are none, and the emoji stay.
+  loadToyPictures(done) {
+    if (this.toyPictures) return done();
+    import('./render/gasha-stage.js')
+      .then(({ toyPortraits }) => {
+        this.toyPictures = toyPortraits(TOYS.map((t) => t.key));
+        done();
+      })
+      .catch(() => {});
   }
 
   // ------------------------------------------------ pianos

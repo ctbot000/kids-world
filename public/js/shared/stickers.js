@@ -71,7 +71,7 @@ export const STICKERS = [
   { key: 'blob-bopper', icon: '👾', name: 'Blob Bopper', text: 'Bop 50 blobs on Bop-a-Blob', test: (s) => s.blobpops >= 50 },
   { key: 'blob-champion', icon: '🥇', name: 'Blob Champion', text: 'Bop 1,000 blobs on Bop-a-Blob', test: (s) => s.blobpops >= 1000 },
   { key: 'capsule-toy', icon: '🎁', name: 'Capsule Surprise', text: 'Turn a gashapon machine for a capsule toy', test: (s) => s.capsules >= 1 },
-  { key: 'full-set', icon: '🐉', name: 'Full Set', text: 'Collect every capsule toy, the Golden Dragon too', test: (s) => s.capsuletoys >= TOYS.length },
+  { key: 'full-set', icon: '🐉', name: 'Full Set', text: 'Collect every capsule toy, the super rare ones too', test: (s) => s.capsuletoys >= TOYS.length },
   { key: 'channel-surfer', icon: '📺', name: 'Channel Surfer', text: `Flip through ${CHANNELS.length} channels on a TV`, test: (s) => s.channels >= CHANNELS.length },
   { key: 'little-artist', icon: '🎨', name: 'Little Artist', text: 'Draw 25 strokes on a drawing board', test: (s) => s.strokes >= 25 },
   { key: 'piano-star', icon: '🎹', name: 'Piano Star', text: 'Play a whole song on a piano', test: (s) => s.tunes >= 1 },

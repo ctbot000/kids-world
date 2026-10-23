@@ -263,6 +263,124 @@ const TOYS = {
     part(t, mat, g.cone, '#e8453c', [0, 0.18, 0.66], [0.06, 0.1, 0.02], [Math.PI / 2, 0, 0]);
     for (let i = 0; i < 4; i++) part(t, mat, g.cone, '#e8453c', [0, 0.62 - i * 0.07, 0.0 + i * 0.12], [0.04, 0.08, 0.04], [0.6 + i * 0.2, 0, 0]);
   },
+
+  penguin(t, mat) {
+    const C = '#2b3442';
+    part(t, mat, g.sphere, C, [0, 0.4, 0.02], [0.26, 0.36, 0.24]);
+    part(t, mat, g.sphere, WHITE, [0, 0.38, -0.08], [0.2, 0.3, 0.17]);
+    part(t, mat, g.sphere, C, [0, 0.76, 0], 0.18);
+    part(t, mat, g.sphere, WHITE, [0, 0.74, -0.08], [0.13, 0.12, 0.11]);
+    eyes(t, mat, 0.78, -0.17, 0.06, 0.035);
+    cheeks(t, mat, 0.7, -0.17, 0.1, 0.03);
+    part(t, mat, g.cone, '#ffa62b', [0, 0.71, -0.21], [0.04, 0.08, 0.03], [-Math.PI / 2, 0, 0]);
+    for (const sx of [-1, 1]) {
+      part(t, mat, g.sphere, C, [sx * 0.26, 0.42, 0.02], [0.05, 0.2, 0.1], [0, 0, sx * 0.35]);
+      part(t, mat, g.sphere, '#ffa62b', [sx * 0.1, 0.03, -0.06], [0.08, 0.03, 0.11]);
+    }
+    part(t, mat, g.cyl, '#e8453c', [0, 0.6, 0], [0.19, 0.05, 0.19]);
+    part(t, mat, g.box, '#e8453c', [0.12, 0.5, -0.12], [0.06, 0.16, 0.02], [0, 0, 0.2]);
+  },
+
+  luckycat(t, mat) {
+    const C = '#fbf8f1';
+    part(t, mat, g.sphere, C, [0, 0.32, 0], [0.27, 0.3, 0.24]);
+    part(t, mat, g.sphere, C, [0, 0.72, -0.02], [0.24, 0.21, 0.21]);
+    for (const sx of [-1, 1]) {
+      part(t, mat, g.cone, C, [sx * 0.14, 0.92, -0.02], [0.07, 0.12, 0.05], [0, 0, -sx * 0.25]);
+      part(t, mat, g.cone, '#ff9db8', [sx * 0.14, 0.91, -0.045], [0.04, 0.08, 0.02], [0, 0, -sx * 0.25]);
+      // Eyes shut in a smile.
+      part(t, mat, g.torus, EYE, [sx * 0.08, 0.74, -0.2], [0.035, 0.03, 0.02]);
+    }
+    cheeks(t, mat, 0.67, -0.19, 0.14);
+    part(t, mat, g.sphere, '#ff9db8', [0, 0.69, -0.21], [0.022, 0.016, 0.015]);
+    // The paw raised to beckon luck, and a gold coin held to the chest.
+    part(t, mat, g.sphere, C, [0.2, 0.68, -0.12], [0.07, 0.11, 0.07], [0, 0, -0.3]);
+    part(t, mat, g.sphere, C, [-0.16, 0.34, -0.2], [0.07, 0.07, 0.06]);
+    part(t, mat, g.cyl, '#f5c542', [-0.06, 0.34, -0.23], [0.11, 0.02, 0.11], [Math.PI / 2, 0, 0], { metalness: 0.5, roughness: 0.25, emissive: new THREE.Color('#a87a10'), emissiveIntensity: 0.35 });
+    part(t, mat, g.cyl, '#e8453c', [0, 0.53, 0], [0.2, 0.035, 0.18]);
+    part(t, mat, g.sphere, '#f5c542', [0, 0.49, -0.18], 0.035, undefined, { metalness: 0.85, roughness: 0.2 });
+    part(t, mat, g.sphere, '#f59331', [0.12, 0.42, 0.16], [0.1, 0.1, 0.06]);
+  },
+
+  turtle(t, mat) {
+    const SHELL = '#3f9d58';
+    const SKIN = '#9bd46a';
+    part(t, mat, g.sphere, SHELL, [0, 0.24, 0.04], [0.34, 0.24, 0.36]);
+    part(t, mat, g.cyl, '#e2c393', [0, 0.1, 0.04], [0.34, 0.05, 0.36]);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      part(t, mat, g.sphere, '#2f7d45', [Math.sin(a) * 0.17, 0.36, 0.04 + Math.cos(a) * 0.18], [0.08, 0.04, 0.08]);
+    }
+    part(t, mat, g.sphere, '#2f7d45', [0, 0.46, 0.04], [0.1, 0.04, 0.1]);
+    part(t, mat, g.sphere, SKIN, [0, 0.3, -0.38], [0.14, 0.13, 0.14]);
+    eyes(t, mat, 0.34, -0.5, 0.06, 0.03);
+    cheeks(t, mat, 0.28, -0.5, 0.09, 0.025);
+    for (const [x, z] of [[-0.25, -0.18], [0.25, -0.18], [-0.24, 0.28], [0.24, 0.28]]) part(t, mat, g.sphere, SKIN, [x, 0.08, z], [0.09, 0.06, 0.09]);
+    part(t, mat, g.cone, SKIN, [0, 0.14, 0.42], [0.04, 0.1, 0.04], [Math.PI / 2, 0, 0]);
+  },
+
+  fox(t, mat) {
+    const C = '#f2833a';
+    part(t, mat, g.sphere, C, [0, 0.32, 0.04], [0.23, 0.27, 0.24]);
+    part(t, mat, g.sphere, WHITE, [0, 0.3, -0.12], [0.14, 0.18, 0.1]);
+    part(t, mat, g.sphere, C, [0, 0.7, -0.04], [0.22, 0.19, 0.2]);
+    part(t, mat, g.cone, C, [0, 0.64, -0.24], [0.08, 0.14, 0.07], [-Math.PI / 2, 0, 0]);
+    part(t, mat, g.sphere, WHITE, [0, 0.62, -0.2], [0.1, 0.06, 0.08]);
+    part(t, mat, g.sphere, EYE, [0, 0.65, -0.31], 0.022);
+    eyes(t, mat, 0.74, -0.18, 0.08, 0.035);
+    for (const sx of [-1, 1]) {
+      part(t, mat, g.cone, C, [sx * 0.12, 0.92, -0.02], [0.07, 0.15, 0.05], [0, 0, -sx * 0.2]);
+      part(t, mat, g.cone, EYE, [sx * 0.125, 0.99, -0.02], [0.03, 0.05, 0.03], [0, 0, -sx * 0.2]);
+      part(t, mat, g.sphere, '#3a2a30', [sx * 0.11, 0.05, -0.06], [0.07, 0.05, 0.1]);
+    }
+    // A big bushy tail curled round to the side, white at the tip.
+    part(t, mat, g.sphere, C, [0.2, 0.28, 0.28], [0.12, 0.22, 0.12], [0.6, 0, -0.5]);
+    part(t, mat, g.sphere, WHITE, [0.3, 0.46, 0.38], [0.08, 0.09, 0.08]);
+  },
+
+  phoenix(t, mat) {
+    const SHINE = { metalness: 0.3, roughness: 0.2, clearcoat: 1 };
+    const FIRE = ['#ff4d4d', '#ff8a3d', '#ffd23f', '#9bd44a', '#62c4f5', '#b56ad8'];
+    part(t, mat, g.sphere, '#ff6a3d', [0, 0.42, 0.04], [0.2, 0.24, 0.24], undefined, SHINE);
+    part(t, mat, g.sphere, '#ffb13b', [0, 0.38, -0.12], [0.13, 0.17, 0.1], undefined, SHINE);
+    part(t, mat, g.sphere, '#ff6a3d', [0, 0.74, -0.08], 0.15, undefined, SHINE);
+    part(t, mat, g.cone, '#ffd23f', [0, 0.71, -0.25], [0.04, 0.09, 0.03], [-Math.PI / 2 - 0.3, 0, 0], { metalness: 0.7, roughness: 0.2 });
+    eyes(t, mat, 0.78, -0.2, 0.06, 0.03);
+    // A crest of rainbow feathers, wings swept up, and a long tail of them.
+    for (let i = 0; i < 3; i++) part(t, mat, g.cone, FIRE[i * 2], [(i - 1) * 0.05, 0.94, -0.04 + i * 0.02], [0.025, 0.14, 0.025], [0.3, 0, (i - 1) * 0.4], { emissive: new THREE.Color(FIRE[i * 2]), emissiveIntensity: 0.4 });
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 5; i++) {
+        const c = FIRE[i % FIRE.length];
+        part(t, mat, g.sphere, c, [sx * (0.2 + i * 0.05), 0.55 + i * 0.07, 0.08], [0.04, 0.16, 0.02], [0, sx * 0.3, sx * (0.9 - i * 0.15)], { emissive: new THREE.Color(c), emissiveIntensity: 0.35 });
+      }
+      part(t, mat, g.cone, '#ffd23f', [sx * 0.07, 0.1, -0.02], [0.025, 0.2, 0.025], undefined, { metalness: 0.7, roughness: 0.2 });
+    }
+    for (let i = 0; i < 6; i++) {
+      const c = FIRE[i];
+      part(t, mat, g.sphere, c, [(i - 2.5) * 0.045, 0.22 - i * 0.012, 0.32 + Math.abs(i - 2.5) * 0.03], [0.03, 0.03, 0.2], [0.8, (i - 2.5) * 0.18, 0], { emissive: new THREE.Color(c), emissiveIntensity: 0.35 });
+    }
+  },
+
+  jellyfish(t, mat) {
+    const GLOW = { transparent: true, opacity: 0.78, roughness: 0.05, clearcoat: 1, emissive: new THREE.Color('#9b7bff'), emissiveIntensity: 0.35 };
+    const bell = new THREE.LatheGeometry(
+      [[0.0, 0.5], [0.2, 0.5], [0.3, 0.54], [0.31, 0.64], [0.26, 0.78], [0.15, 0.88], [0.0, 0.91]].map(([x, y]) => new THREE.Vector2(x, y)),
+      36,
+    );
+    part(t, mat, bell, '#c9b6ff', [0, 0, 0], 1, undefined, GLOW);
+    part(t, mat, g.sphere, '#ffd84d', [0, 0.68, 0], [0.12, 0.1, 0.12], undefined, { emissive: new THREE.Color('#ffd84d'), emissiveIntensity: 0.9 });
+    eyes(t, mat, 0.66, -0.29, 0.09, 0.04);
+    cheeks(t, mat, 0.6, -0.29, 0.16);
+    // Ribbons trailing down, swaying in curls.
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const c = ['#f9a8d4', '#c4b5fd', '#93c5fd'][i % 3];
+      for (let j = 0; j < 4; j++) {
+        part(t, mat, g.sphere, c, [Math.sin(a) * 0.2 + Math.sin(j * 1.3 + a) * 0.04, 0.44 - j * 0.11, Math.cos(a) * 0.2], [0.03, 0.06, 0.03], undefined, { transparent: true, opacity: 0.85, emissive: new THREE.Color(c), emissiveIntensity: 0.3 });
+      }
+    }
+    for (const [x, y, z] of [[0.12, 0.84, -0.18], [-0.16, 0.76, -0.2], [0.2, 0.62, -0.22]]) part(t, mat, g.sphere, '#ffffff', [x, y, z], 0.018, undefined, { emissive: new THREE.Color('#ffffff'), emissiveIntensity: 1 });
+  },
 };
 
 // The figure of a toy by its key, or null.

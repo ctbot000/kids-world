@@ -13,7 +13,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
 import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
-import { GASHA_PRICE } from '../public/js/shared/gashapon.js';
+import { GASHA_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
@@ -3793,25 +3793,36 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Turn'));
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Gashapon'));
-  assert.equal(await page.evaluate(() => document.querySelectorAll('.gasha-toy-card.missing').length), 12, 'nothing found yet');
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.gasha-toy-card.missing').length), TOYS.length, 'nothing found yet');
+  // Every card says how rare its toy is, found or not.
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.gasha-toy-card .rarity.super').length), TOYS.filter((t) => t.rare === 2).length);
   // A turn: the coins go in, a capsule rolls out, and a tap opens it.
   await page.evaluate(() => document.querySelector('.gasha-turn').click());
   await until(page, () => !document.querySelector('.gasha-capsule').hidden);
   await page.evaluate(() => document.querySelector('.gasha-capsule').click());
   await until(page, () => document.querySelector('.gasha-capsule').classList.contains('open') && document.querySelector('.gasha-said').textContent.includes('New!'));
   // The toy joins the collection once it is out of its capsule.
-  await until(page, () => document.querySelectorAll('.gasha-toy-card.missing').length === 11 && document.querySelector('.gasha-toy-card.fresh'));
+  await until(page, () => document.querySelectorAll('.gasha-toy-card.missing').length === 17 && document.querySelector('.gasha-toy-card.fresh'));
   // Its card shows the toy's figure in 3D, and the ones still to find a closed capsule.
-  await until(page, () => document.querySelector('.gasha-toy-card:not(.missing) img.figure')?.src.startsWith('data:image/png') && document.querySelectorAll('.gasha-toy-card.missing img.figure').length === 11);
+  await until(page, () => document.querySelector('.gasha-toy-card:not(.missing) img.figure')?.src.startsWith('data:image/png') && document.querySelectorAll('.gasha-toy-card.missing img.figure').length === 17);
   const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, toys: window.kidsWorld.profile.data.gear.toys, missing: document.querySelectorAll('.gasha-toy-card.missing').length }));
   assert.equal(after.coins, 12 - GASHA_PRICE);
   assert.equal(Object.values(after.toys).reduce((a, b) => a + b, 0), 1);
-  assert.equal(after.missing, 11);
+  assert.equal(after.missing, TOYS.length - 1);
   // One more turn is all the coins left pay for.
   await page.evaluate(() => document.querySelector('.gasha-turn').click());
   await until(page, (left) => window.kidsWorld.profile.data.coins === left && document.querySelector('.gasha-capsule').classList.contains('open'), 12 - 2 * GASHA_PRICE);
   await until(page, () => document.querySelector('.gasha-turn').disabled && document.querySelector('.gasha-said').textContent.length > 0);
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['capsule-toy']), 'the sticker');
+  // Your toys are in your backpack too, with their figures and how rare they are.
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await until(page, (names) => {
+    const cards = [...document.querySelectorAll('.backpack-toys .gasha-toy-card')];
+    const have = Object.keys(window.kidsWorld.profile.data.gear.toys);
+    return cards.length === have.length && cards.every((c) => c.querySelector('img.figure') && c.querySelector('.rarity')) && have.every((k) => cards.some((c) => c.textContent.includes(names[k])));
+  }, Object.fromEntries(TOYS.map((t) => [t.key, t.name])));
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

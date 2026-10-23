@@ -1,8 +1,8 @@
 // Gashapon: capsule toy machines (a piece of furniture, blocks.js) with a
 // glass globe full of coloured capsules. Walk up to one, put in a few
 // 🪙 coins and turn the handle: a capsule rolls out, and inside it is one
-// of the little capsule toys below — most of them easy to get, a few rare,
-// and one very rare. The toys are yours, kept with your gear (shop.js
+// of the little capsule toys below — most of them easy to get, some rare,
+// and a few super rare. The toys are yours, kept with your gear (shop.js
 // cleanGear, as gear.toys: how many of each you have), so your collection
 // goes everywhere with you, and a second of one you have is counted too.
 //
@@ -18,11 +18,12 @@ export const GASHA_PRICE = 5;
 export const TOY_MAX = 99;
 
 // How likely each rarity is, against the others: a common toy comes out
-// most turns, a rare one now and then, and the very rare one seldom.
+// most turns, a rare one now and then, and a super rare one seldom. stars:
+// how a toy's card shows how rare it is.
 export const RARITIES = [
-  { key: 'common', name: 'Common', weight: 10, shells: ['#f47fb8', '#62c4f5', '#fcd535', '#9bd44a', '#f59331'] },
-  { key: 'rare', name: 'Rare', weight: 4, shells: ['#8c5bd6'] },
-  { key: 'super', name: 'Super rare', weight: 1, shells: ['#f5c542'] },
+  { key: 'common', name: 'Common', stars: '★', weight: 10, shells: ['#f47fb8', '#62c4f5', '#fcd535', '#9bd44a', '#f59331'] },
+  { key: 'rare', name: 'Rare', stars: '★★', weight: 4, shells: ['#8c5bd6'] },
+  { key: 'super', name: 'Super rare', stars: '★★★', weight: 1, shells: ['#f5c542'] },
 ];
 
 // The capsule toys, in the order the collection shows them.
@@ -38,7 +39,13 @@ export const TOYS = [
   { key: 'unicorn', icon: '🦄', name: 'Sparkle Unicorn', rare: 1 },
   { key: 'whale', icon: '🐳', name: 'Splashy Whale', rare: 1 },
   { key: 'ufo', icon: '🛸', name: 'Flying Saucer', rare: 1 },
+  { key: 'penguin', icon: '🐧', name: 'Waddle Penguin', rare: 1 },
+  { key: 'luckycat', icon: '🐱', name: 'Lucky Cat', rare: 1 },
+  { key: 'turtle', icon: '🐢', name: 'Sea Turtle', rare: 1 },
+  { key: 'fox', icon: '🦊', name: 'Little Fox', rare: 1 },
   { key: 'dragon', icon: '🐉', name: 'Golden Dragon', rare: 2 },
+  { key: 'phoenix', icon: '🐦‍🔥', name: 'Rainbow Phoenix', rare: 2 },
+  { key: 'jellyfish', icon: '🪼', name: 'Starlight Jellyfish', rare: 2 },
 ];
 
 export const toyOf = (key) => TOYS.find((t) => t.key === key) ?? null;

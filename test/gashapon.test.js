@@ -54,11 +54,12 @@ test('the machine beside you is found, and none further away', () => {
   assert.equal(gashaponNear(w, { x: 8.5, y: 9, z: 7 }), null, 'up above it');
 });
 
-test('a turn draws every toy, common ones most often and the very rare one seldom', () => {
-  assert.equal(TOYS.length, 12);
+test('a turn draws every toy, common ones most often and the super rare ones seldom', () => {
+  assert.equal(TOYS.length, 18);
   assert.equal(new Set(TOYS.map((t) => t.key)).size, TOYS.length);
   assert.deepEqual(RARITIES.map((r) => r.key), ['common', 'rare', 'super']);
-  assert.equal(TOYS.filter((t) => t.rare === 2).length, 1, 'one very rare toy');
+  assert.deepEqual([0, 1, 2].map((r) => TOYS.filter((t) => t.rare === r).length), [8, 7, 3], 'eight common, seven rare, three super rare');
+  assert.ok(RARITIES.every((r, i) => r.stars === '★'.repeat(i + 1)), 'a star more for each');
   // Walking rand from 0 to 1 draws each toy as often as its weight.
   const seen = new Map();
   const N = 10000;
@@ -72,7 +73,7 @@ test('a turn draws every toy, common ones most often and the very rare one seldo
   const total = TOYS.reduce((n, t) => n + RARITIES[t.rare].weight, 0);
   for (const t of TOYS) assert.ok(Math.abs(seen.get(t.key) / N - RARITIES[t.rare].weight / total) < 0.002, t.key);
   assert.ok(seen.get('dragon') < seen.get('unicorn') && seen.get('unicorn') < seen.get('dino'));
-  assert.equal(drawToy(() => 0.999999).toy.key, 'dragon');
+  assert.equal(drawToy(() => 0.999999).toy.key, TOYS[TOYS.length - 1].key);
 });
 
 test('capsule toys are kept with your gear: tidied, merged from the newer device and added up for a guest', () => {

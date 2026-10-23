@@ -3983,6 +3983,44 @@ kbd {
   line-height: 1.15;
 }
 
+/* How rare a toy is: one star for common, two in lavender for rare, three
+   in gold for super rare. */
+.gasha-toy-card .rarity {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(61, 46, 79, 0.08);
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.gasha-toy-card .rarity .stars {
+  color: #c9a227;
+  letter-spacing: -1px;
+}
+
+.gasha-toy-card .rarity.rare {
+  background: #8c5bd6;
+  color: #ffffff;
+}
+
+.gasha-toy-card .rarity.rare .stars {
+  color: #ffe39a;
+}
+
+.gasha-toy-card .rarity.super {
+  background: linear-gradient(90deg, #f5b81c, #ffd84d, #f5b81c);
+  color: #5a3d00;
+  box-shadow: 0 0 8px rgba(255, 196, 40, 0.6);
+}
+
+.gasha-toy-card .rarity.super .stars {
+  color: #ffffff;
+  text-shadow: 0 0 3px rgba(160, 100, 0, 0.6);
+}
+
 .gasha-toy-card .count {
   position: absolute;
   top: 4px;
