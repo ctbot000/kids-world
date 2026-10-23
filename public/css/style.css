@@ -3959,6 +3959,19 @@ kbd {
   text-align: center;
 }
 
+/* A toy's figure, rendered in 3D (render/gasha-stage.js toyPortraits). */
+.gasha-toy-card .figure {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gasha-toy-card.missing .figure {
+  opacity: 0.85;
+}
+
 .gasha-toy-card .icon {
   font-size: 1.9rem;
   line-height: 1.1;
@@ -4001,7 +4014,12 @@ kbd {
 }
 
 .gasha-toy-card.missing {
-  opacity: 0.5;
+  opacity: 0.6;
+}
+
+.gasha-toy-card.missing:has(.figure) {
+  opacity: 1;
+  color: var(--ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {

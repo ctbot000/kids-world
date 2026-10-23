@@ -4241,6 +4241,9 @@ export class UI {
     // WebGL, the flat one stays.
     let stage3d = null;
     let closed = false;
+    // The toys' pictures in 3D (render/gasha-stage.js toyPortraits), once
+    // made: until then (or without WebGL), their emoji.
+    let pictures = null;
     this.openModal(
       (root) => {
         const coins = h('div', { class: 'gasha-coins' });
@@ -4268,10 +4271,11 @@ export class UI {
           grid.replaceChildren(
             ...TOYS.map((t) => {
               const n = toys[t.key] ?? 0;
+              const pic = pictures?.[n ? t.key : 'mystery'];
               return h(
                 'div',
                 { class: `gasha-toy-card ${n ? rarityOf(t).key : 'missing'}${t.key === fresh ? ' fresh' : ''}`, title: n ? t.name : 'Still to find' },
-                h('span', { class: 'icon' }, n ? t.icon : '❓'),
+                pic ? h('img', { class: 'figure', src: pic, alt: n ? t.name : 'A capsule still to open', draggable: false }) : h('span', { class: 'icon' }, n ? t.icon : '❓'),
                 h('span', { class: 'name' }, n ? t.name : '???'),
                 n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
               );
@@ -4352,10 +4356,12 @@ export class UI {
         const canvas = h('canvas', { class: 'gasha-3d', 'aria-hidden': 'true' });
         const stage = h('div', { class: 'gasha-stage' }, machine, h('div', { class: 'gasha-tray' }, capsule), canvas);
         import('./render/gasha-stage.js')
-          .then(({ GashaStage }) => {
+          .then(({ GashaStage, toyPortraits }) => {
             if (closed) return;
             stage3d = new GashaStage(canvas);
             stage.classList.add('three');
+            pictures = toyPortraits(TOYS.map((t) => t.key));
+            show();
           })
           .catch(() => canvas.remove());
         root.append(

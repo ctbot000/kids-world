@@ -3801,6 +3801,8 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await until(page, () => document.querySelector('.gasha-capsule').classList.contains('open') && document.querySelector('.gasha-said').textContent.includes('New!'));
   // The toy joins the collection once it is out of its capsule.
   await until(page, () => document.querySelectorAll('.gasha-toy-card.missing').length === 11 && document.querySelector('.gasha-toy-card.fresh'));
+  // Its card shows the toy's figure in 3D, and the ones still to find a closed capsule.
+  await until(page, () => document.querySelector('.gasha-toy-card:not(.missing) img.figure')?.src.startsWith('data:image/png') && document.querySelectorAll('.gasha-toy-card.missing img.figure').length === 11);
   const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, toys: window.kidsWorld.profile.data.gear.toys, missing: document.querySelectorAll('.gasha-toy-card.missing').length }));
   assert.equal(after.coins, 12 - GASHA_PRICE);
   assert.equal(Object.values(after.toys).reduce((a, b) => a + b, 0), 1);

@@ -377,3 +377,76 @@ export class GashaStage {
     this.gl.forceContextLoss();
   }
 }
+
+// Pictures of the toy figures for the collection, each rendered once in 3D
+// in the window's light, three-quarters on, and kept for as long as the
+// page is open: { [toy key]: data URL }, with MYSTERY for one still to
+// find (a closed capsule). Without WebGL, an empty list.
+export const MYSTERY = 'mystery';
+const portraits = new Map();
+export function toyPortraits(keys, size = 160) {
+  const want = [...keys, MYSTERY].filter((k) => !portraits.has(k));
+  if (want.length) {
+    let gl;
+    try {
+      const canvas = document.createElement('canvas');
+      gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    } catch {
+      return Object.fromEntries(portraits);
+    }
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    gl.setPixelRatio(ratio);
+    gl.setSize(size, size, false);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.05;
+    const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const room = new RoomEnvironment();
+    const env = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    scene.environment = env;
+    scene.add(new THREE.HemisphereLight(0xfff6ea, 0xd8c8b0, 1.1));
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(-1.2, 2.2, -1.6);
+    scene.add(key);
+    const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 50);
+    const mats = new Map();
+    const mat = (color, extra = {}) => {
+      const k = `${color}|${JSON.stringify(extra, (_, v) => (v?.isColor ? `#${v.getHexString()}` : v))}`;
+      if (!mats.has(k)) mats.set(k, new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12, envMapIntensity: 0.9, ...extra }));
+      return mats.get(k);
+    };
+    const capsuleMats = gashaponMaterials();
+    for (const k of want) {
+      let model;
+      if (k === MYSTERY) {
+        // A closed capsule, grey-lidded, lying a little tipped over.
+        model = capsuleModel({ ...capsuleMats, shell0: mat('#a9b1bc', { roughness: 0.18, clearcoat: 1 }), clear: mat('#e9edf2', { roughness: 0.15, clearcoat: 1 }) }, 0, 0.3);
+        model.rotation.set(-0.35, 0.6, 0.25);
+      } else {
+        model = toyFigure(k, mat);
+        if (!model) continue;
+        model.rotation.y = -0.45;
+      }
+      scene.add(model);
+      // Framed to fit, whatever its shape, seen a little from above.
+      const box = new THREE.Box3().setFromObject(model);
+      const mid = box.getCenter(new THREE.Vector3());
+      const r = box.getSize(new THREE.Vector3()).length() / 2;
+      const d = (r / Math.sin(THREE.MathUtils.degToRad(13))) * (k === MYSTERY ? 0.8 : 0.92);
+      camera.position.set(mid.x, mid.y + d * 0.28, mid.z - d * 0.96);
+      camera.lookAt(mid);
+      camera.updateProjectionMatrix();
+      gl.render(scene, camera);
+      portraits.set(k, gl.domElement.toDataURL('image/png'));
+      scene.remove(model);
+    }
+    for (const m of [...mats.values(), ...Object.values(capsuleMats)]) m.dispose();
+    env.dispose();
+    gl.dispose();
+    gl.forceContextLoss();
+  }
+  return Object.fromEntries(portraits);
+}
