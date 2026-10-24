@@ -45,8 +45,10 @@ test('the world encodes and decodes exactly', () => {
   assert.ok(data.length < 120000, `encoded island is ${data.length} characters`);
   assert.throws(() => decodeBlocks(data.slice(0, 100), world.W, world.H, world.D));
   // Unknown block ids decode as air rather than failing.
+  const unknown = [...Array(256).keys()].findLast((id) => !B.isKnown(id));
+  assert.ok(unknown > 0, 'a block id still unused');
   const odd = new Uint8Array(8 * 8 * 8);
-  odd[5] = 250;
+  odd[5] = unknown;
   assert.equal(decodeBlocks(encodeBlocks(odd, 8, 8, 8), 8, 8, 8)[5], B.AIR);
   // Saved islands have their cells layer by layer (y slowest), then along x,
   // then z, so that order must never change: here each cell of a lopsided

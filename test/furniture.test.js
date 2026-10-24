@@ -287,3 +287,36 @@ test('fans: an electric fan that turns and a ceiling fan to walk under that ligh
   assert.deepEqual(out.reals, [[5, 3, 6, B.turnedTo(B.ELECTRIC_FAN, 2)], [8, 6, 8, B.CEILING_FAN]]);
   assert.ok(light.lampAt(8, 5, 8) > 0, 'the ceiling fan lights the room under it');
 });
+
+test('fish tanks: a fish tank with a lamp and a fish bowl after the fans, drawn as real models with fish swimming', async () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.CEILING_FAN) + 1], B.FISH_TANK, 'right after the ceiling fan');
+  assert.equal(home[home.indexOf(B.FISH_TANK) + 1], B.FISH_BOWL);
+  for (const id of [B.FISH_TANK, B.FISH_BOWL]) {
+    assert.ok(B.SOLID[id] === 1 && B.block(id).real);
+    for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(id)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+  }
+  assert.ok(B.block(B.FISH_TANK).light > 0, 'its lamp lights the room');
+
+  const THREE = await import('../public/vendor/three.module.js');
+  const { tankMaterials, tankModel, TANK } = await import('../public/js/render/fishtank-model.js');
+  for (const kind of ['fish-tank', 'fish-bowl']) {
+    const model = tankModel(tankMaterials(), kind);
+    const size = new THREE.Box3().setFromObject(model);
+    assert.ok(size.min.y > -1e-6 && size.max.y <= 1 && size.min.x >= -0.5 && size.max.x <= 0.5 && size.min.z >= -0.5 && size.max.z <= 0.5, `a ${kind} fits its cell`);
+    // Its fish move, and stay in the water.
+    const fish = model.children.filter((o) => o.userData.tail);
+    assert.ok(fish.length >= 2);
+    const before = fish.map((f) => f.position.clone());
+    for (let t = 0; t < 30; t += 0.37) {
+      model.userData.tick(t);
+      model.updateMatrixWorld(true);
+      for (const f of fish) {
+        const b = new THREE.Box3().setFromObject(f);
+        if (kind === 'fish-tank') assert.ok(b.min.y > TANK.y0 - 0.02 && b.max.y < TANK.y1 && Math.abs(b.min.x) < 0.44 && Math.abs(b.max.x) < 0.44 && Math.abs(b.min.z) < 0.27 && Math.abs(b.max.z) < 0.27, 'a fish in its tank');
+        else assert.ok(b.max.y < 0.72 && b.min.y > 0.38 && Math.hypot(f.position.x, f.position.z) < 0.15, 'a goldfish in its bowl');
+      }
+    }
+    assert.ok(fish.some((f, i) => f.position.distanceTo(before[i]) > 0.05), 'the fish swim');
+  }
+});

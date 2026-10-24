@@ -209,6 +209,12 @@ export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant
 // models (render/fan-model.js). After the potted plant.
 export const ELECTRIC_FAN = furniture(244, 'electric-fan', { name: 'Electric Fan', color: '#7fd8c4', after: 143, sound: 'stone', real: 'electric-fan' });
 export const CEILING_FAN = furniture(248, 'ceiling-fan', { name: 'Ceiling Fan', color: '#b9784a', after: 244, turns: false, solid: false, light: 12, sound: 'wood', real: 'ceiling-fan' });
+// Fish tanks, their fish swimming round: a Fish Tank on a wooden cabinet,
+// with a castle, water plants and bubbles in it and a lamp in its lid, and
+// a round Fish Bowl of goldfish on a stand. Both `real`, drawn as real
+// models (render/fishtank-model.js). After the fans.
+export const FISH_TANK = furniture(249, 'fish-tank', { name: 'Fish Tank', color: '#5fc4f0', after: 248, turns: false, light: 7, sound: 'glass', real: 'fish-tank' });
+export const FISH_BOWL = furniture(250, 'fish-bowl', { name: 'Fish Bowl', color: '#ff8a2a', after: 249, turns: false, sound: 'glass', real: 'fish-bowl' });
 // A little table set for tea: a cloth, a teapot, cups and a plate of cookies
 // (shared/furniture.js). Pull chairs up to it and sit down to tea together.
 export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });
