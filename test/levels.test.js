@@ -131,7 +131,7 @@ test('the ranking has a board for XP', () => {
   assert.deepEqual(board.you, { rank: 2, score: 10 });
 });
 
-test('harder stickers come only long after their easy ones, each at its own count', () => {
+test('harder stickers, and legendary ones after them, come only long after the easier ones, each at its own count', () => {
   const tiers = [
     ['master-builder', 'mega-builder', 'placed', 10000],
     ['painter', 'master-painter', 'painted', 500],
@@ -149,6 +149,23 @@ test('harder stickers come only long after their easy ones, each at its own coun
     ['sharp-memory', 'memory-master', 'pairsfound', 500],
     ['quiz-perfect', 'brainiac', 'quizperfect', 10],
     ['bumper-crop', 'harvest-champion', 'harvested', 1000],
+    // and the legends, ten times further again
+    ['mega-builder', 'legendary-builder', 'placed', 100000],
+    ['master-painter', 'paint-legend', 'painted', 5000],
+    ['orchard-keeper', 'fruit-legend', 'fruit', 5000],
+    ['treasure-hunter', 'jewel-legend', 'gems', 1000],
+    ['diamond-hoard', 'diamond-mountain', 'diamonds', 100],
+    ['animal-whisperer', 'creature-keeper', 'petted', 5000],
+    ['globetrotter', 'world-walker', 'steps', 500000],
+    ['monster-master', 'monster-legend', 'popped', 5000],
+    ['camp-liberator', 'freedom-legend', 'freed', 500],
+    ['grumble-buster', 'king-of-kings', 'kings', 100],
+    ['fortress-guard', 'unbreakable', 'defended', 50],
+    ['blob-champion', 'blob-legend', 'blobpops', 10000],
+    ['concert-pianist', 'maestro', 'tunes', 200],
+    ['memory-master', 'perfect-recall', 'pairsfound', 5000],
+    ['brainiac', 'genius', 'quizperfect', 100],
+    ['harvest-champion', 'farm-tycoon', 'harvested', 10000],
   ];
   const byKey = new Map(STICKERS.map((s, i) => [s.key, { ...s, i }]));
   assert.equal(byKey.size, STICKERS.length, 'every key is its own');
