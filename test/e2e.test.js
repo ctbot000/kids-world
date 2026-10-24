@@ -3462,6 +3462,12 @@ test('an island open to friends is on everyone’s list of open islands, through
     await clickButton(guest, '🛶 Visit', '#modal .open-islands');
     await inGame(guest);
     await until(host, () => window.kidsWorld.game.players.size === 2);
+    // Everyone by name in the top bar (shown on wide screens), and in the island window, which a tap on them opens.
+    assert.deepEqual(await host.$$eval('#friends .who', (els) => els.map((el) => el.textContent)), ['Sunny Otter', 'Brave Fox']);
+    await host.$eval('#friends', (el) => el.click());
+    await until(host, () => document.querySelectorAll('#modal .here-now .friend').length === 2);
+    assert.deepEqual(await host.$$eval('#modal .here-now .who', (els) => els.map((el) => el.textContent)), ['⭐1 Sunny Otter 🏝️ (you)', '⭐1 Brave Fox']);
+    await host.$eval('#modal-close', (el) => el.click());
 
     // Closed to friends: off the list, for everyone.
     await guest.evaluate(() => window.kidsWorld.ui.gameHandlers.leave());

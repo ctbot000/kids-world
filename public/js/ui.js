@@ -267,6 +267,7 @@ export class UI {
     new ResizeObserver(() => {
       document.documentElement.style.setProperty('--bottom-height', `${$('bottom').offsetHeight}px`);
     }).observe($('bottom'));
+    new ResizeObserver(() => this.fitFriends()).observe($('friends'));
     // Chat lines keep to the room the stylesheet gives the chat log between
     // the buttons above and below it, which changes with them: a line that no
     // longer fits whole goes, and as the newest is at the bottom, the oldest go
@@ -2888,7 +2889,7 @@ export class UI {
     $('btn-stickers-hud').onclick = () => this.stickersDialog();
     $('btn-shop-hud').onclick = () => this.shopDialog();
     $('btn-backpack-hud').onclick = () => this.backpackDialog();
-    $('island-badge').onclick = () => this.inviteDialog();
+    $('island-badge').onclick = $('friends').onclick = () => this.inviteDialog();
     $('btn-say').onclick = () => this.sayDialog();
     $('btn-emote').onclick = () => this.emoteDialog();
     const hold = (el, key) => {
@@ -3603,6 +3604,22 @@ export class UI {
       (root) => {
         root.append(h('h2', {}, `🏝️ ${g.world?.name ?? 'Island'}`));
         if (g.shared) root.append(h('p', { class: 'muted' }, '🌟 Everyone’s island: anybody can come, and the more of you there are, the sooner it is free.'));
+        // Everyone here by name, first: on phones, the only place to see who is.
+        root.append(
+          h('h3', {}, `👫 Here now (${g.players.size})`),
+          h(
+            'div',
+            { class: 'here-now' },
+            ...[...g.players.values()].map((p) =>
+              h(
+                'span',
+                { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}` },
+                h('span', { class: 'face' }, lookIcon(p.look)),
+                h('span', { class: 'who', lang: langOf(p.name) || undefined }, levelTag(p.look), p.name, p.id === g.host ? ' 🏝️' : '', p.id === g.pid ? h('span', { class: 'muted' }, ' (you)') : ''),
+              ),
+            ),
+          ),
+        );
         if (g.shared) {
           // Anyone comes with 🌟 Adventure Isle on the title screen.
         } else if (handlers.canInvite()) {
@@ -3682,7 +3699,6 @@ export class UI {
             def.state === 'won' ? '' : h('p', { class: 'muted' }, 'Stand by a wooden pad beside the road to build a tower there, and again to make it bigger. Pop monsters for more bricks!'),
           );
         }
-        root.append(h('p', { class: 'muted', style: 'margin-top:12px' }, `${g.players.size} ${g.players.size === 1 ? 'player' : 'players'} here now.`));
         // Players with a login, to invite one who is playing now.
         if (this.handlers?.login?.available()) {
           root.append(h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.playersDialog() }, '👫 Invite a player')));
@@ -4184,9 +4200,23 @@ export class UI {
     if (!g) return;
     $('friends').replaceChildren(
       ...[...g.players.values()].map((p) =>
-        h('span', { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}`, title: p.name }, lookIcon(p.look)),
+        h(
+          'span',
+          { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}`, title: p.name },
+          h('span', { class: 'face' }, lookIcon(p.look)),
+          h('span', { class: 'who', lang: langOf(p.name) || undefined }, p.name),
+        ),
       ),
     );
+    this.fitFriends();
+  }
+
+  // Names beside the faces in the top bar while they all fit; just the
+  // faces when they do not.
+  fitFriends() {
+    const el = $('friends');
+    el.classList.remove('crowded');
+    el.classList.toggle('crowded', el.scrollWidth > el.clientWidth + 1);
   }
 
   chatLine(msg) {

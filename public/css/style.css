@@ -560,25 +560,69 @@ body.fullscreen .full-icon .leave {
   display: none;
 }
 
+/* A button: tapped, the island window with everyone by name. */
 .friends {
   display: flex;
   gap: 4px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
 }
 
+/* Everyone on the island, face and name in their shirt colour. With more
+   than the top bar has room for, just the faces (.crowded, ui.js
+   fitFriends): the island window has everyone by name. */
 .friend {
-  display: grid;
-  place-items: center;
-  width: 38px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   height: 38px;
-  border-radius: 50%;
+  padding: 0 12px 0 4px;
+  border-radius: 999px;
   background: white;
   border: 3px solid var(--c, white);
-  font-size: 1.2rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   flex: none;
+}
+
+.friends.crowded .friend {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
+.friends.crowded .who {
+  display: none;
+}
+
+.friend .face {
+  flex: none;
+  width: 26px;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+.friend .who {
+  min-width: 0;
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+/* In the island window, all of them, wrapping onto more rows. */
+.here-now {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.here-now .friend .who {
+  max-width: 14em;
 }
 
 .top-buttons {
