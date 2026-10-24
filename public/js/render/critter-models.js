@@ -7,6 +7,7 @@
 // one big animal that flies, is a monster now: mosquito-model.js.)
 import * as THREE from '../../vendor/three.module.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { dragon as realDragon } from './dragon-model.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 import { RIDE_BUILDERS } from './ride-models.js';
 
@@ -1017,136 +1018,9 @@ function unicorn(id) {
 
 const reindeer = (id) => pony(id, 'reindeer');
 
-// Dragon coats, in greens: the coat, the dark of its spikes and horns, and
-// the brighter skin of its wings.
-const DRAGONS = [
-  { coat: '#3f9e4d', spike: '#1f5a2a', wing: '#6cc46a' },
-  { coat: '#2f8a5a', spike: '#17482f', wing: '#5fbf8a' },
-  { coat: '#5aa83a', spike: '#2d5c1a', wing: '#8fd06a' },
-  { coat: '#348c3c', spike: '#1a4a20', wing: '#7cc860' },
-];
-// How much bigger than a pony's build the dragon is drawn (its ride box in
-// critters.js is as much bigger).
-const DRAGON_SCALE = 2.2;
-
-// The dragon of a volcano island: a great green four-footed dragon on the
-// same body as the ponies (so it walks as they do), drawn DRAGON_SCALE times as big, with a long neck, a horned head,
-// spikes down its back, plates across its pale belly, a spaded tail — and
-// great wings, folded at its sides on the ground and beating in the air.
-function dragon(id) {
-  const k = DRAGONS[id % DRAGONS.length];
-  const coat = toon(k.coat);
-  const spike = toon(k.spike);
-  const belly = '#ffe6b3';
-  const { g, body, pivot } = bigRig(0.92);
-  const R = [0.42, 0.38, 0.72];
-  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
-  pivot.add(mesh(sphere(), coat, 0, 0.02, 0.42, 0.34, 0.34, 0.36));
-  pivot.add(mesh(sphere(), coat, 0, 0.03, -0.42, 0.36, 0.34, 0.36));
-  // Pale plates across its belly.
-  pivot.add(mesh(sphere(), toon(belly), 0, -0.16, 0.05, 0.28, 0.18, 0.58));
-  for (let i = 0; i < 5; i++) {
-    const z = 0.4 - i * 0.2;
-    pivot.add(mesh(torus(0.24 - Math.abs(z) * 0.08, 0.02, Math.PI), toon('#e2c186'), 0, -0.2, z).rotateX(Math.PI / 2 + 0.45));
-  }
-  const legs = fourLegs(pivot, { x: 0.24, front: 0.42, back: -0.42, hip: -0.24, len: 0.66, r: 0.1, color: k.coat, paw: belly });
-
-  const neck = new THREE.Group();
-  neck.position.set(0, 0.18, 0.56);
-  pivot.add(neck);
-  const n = new THREE.Group();
-  n.rotation.x = 0.75;
-  neck.add(n);
-  n.add(mesh(lathe([[0, -0.1], [0.17, -0.06], [0.19, 0.1], [0.16, 0.28], [0.12, 0.42], [0, 0.46]], 20), coat, 0, 0, 0, 1, 1, 1.15));
-  // A ruff of spikes where the neck meets the shoulders.
-  for (const side of [-1, 1]) n.add(mesh(cone(0.045, 0.14, 6), spike, side * 0.14, 0.02, -0.06).rotateZ(-side * 0.6));
-
-  const head = new THREE.Group();
-  head.position.set(0, 0.42, 0.05);
-  head.rotation.x = -0.55;
-  n.add(head);
-  head.add(mesh(sphere(), coat, 0, 0, 0.04, 0.17, 0.15, 0.22));
-  // A long snout with nostrils, and a smile under it.
-  head.add(mesh(sphere(), coat, 0, -0.035, 0.22, 0.1, 0.08, 0.15));
-  for (const side of [-1, 1]) head.add(mesh(sphere(), spike, side * 0.045, 0.015, 0.34, 0.018, 0.024, 0.016));
-  head.add(mesh(torus(0.07, 0.012, Math.PI), toon('#7a2a2a'), 0, -0.075, 0.2).rotateX(Math.PI / 2 - 0.2));
-  // A lower jaw that drops open to breathe fire, a glow of it in its mouth,
-  // and where the flames come out (mouth, below).
-  const jaw = new THREE.Group();
-  jaw.position.set(0, -0.07, 0.12);
-  head.add(jaw);
-  jaw.add(mesh(sphere(), coat, 0, -0.015, 0.1, 0.08, 0.035, 0.13));
-  const glow = mesh(sphere(), new THREE.MeshBasicMaterial({ color: '#ffb23d' }), 0, -0.06, 0.2, 0.06, 0.035, 0.09);
-  glow.visible = false;
-  head.add(glow);
-  const tip = new THREE.Object3D();
-  tip.position.set(0, -0.08, 0.36);
-  head.add(tip);
-  const eyes = sideEyes(head, 0.135, 0.07, 0.08, 0.032);
-  // Little horns, and a fin of an ear behind them.
-  for (const side of [-1, 1]) {
-    const horn = mesh(cone(0.035, 0.17, 8), toon('#fff3d6'), side * 0.09, 0.17, -0.05);
-    horn.rotation.set(-0.4, 0, -side * 0.35);
-    head.add(horn);
-    const fin = mesh(sphere(1, 10, 8), toon(k.wing), side * 0.13, 0.06, -0.16, 0.015, 0.09, 0.07);
-    fin.rotation.z = side * 0.25;
-    head.add(fin);
-  }
-  // Smoke-dark brows make it look asleep.
-  for (const side of [-1, 1]) head.add(mesh(capsule(0.012, 0.07, 4, 6), spike, side * 0.13, 0.115, 0.05).rotateZ(Math.PI / 2 - side * 0.15));
-
-  // Spikes down its shoulders and rump, clear of the saddle between them,
-  // and down its tail.
-  for (const [i, z] of [0.5, 0.35, -0.42, -0.54, -0.66].entries()) pivot.add(mesh(cone(0.05, 0.16 - i * 0.012, 6), spike, 0, R[1] * 0.98 - i * 0.012, z));
-
-  // Wings at its shoulders (render/critter-models.js wingPair), folded up
-  // along its back on the ground and beating in the air (see update below).
-  const wings = wingPair(pivot, { x: 0.16, y: 0.3, z: 0.3, length: 0.95, width: 0.44, thick: 0.028, color: k.wing, tip: k.spike });
-
-  // A long tail in bends that sway, with a spade at the end.
-  const tail = new THREE.Group();
-  tail.position.set(0, 0.14, -0.72);
-  pivot.add(tail);
-  let at = tail;
-  const bends = [];
-  for (let i = 0; i < 3; i++) {
-    const b = new THREE.Group();
-    if (i) b.position.z = -0.24;
-    b.add(mesh(capsule(0.11 - i * 0.026, 0.18), coat, 0, 0, -0.12).rotateX(Math.PI / 2));
-    b.add(mesh(cone(0.05, 0.12, 6), spike, 0, 0.07, -0.1).rotateX(-0.3));
-    at.add(b);
-    bends.push(b);
-    at = b;
-  }
-  at.add(mesh(cone(0.09, 0.2, 4), spike, 0, 0, -0.3).rotateX(-Math.PI / 2));
-
-  const s = saddle(pivot, R[1], 0.36, 0.32, -0.05, true);
-  body.scale.setScalar(DRAGON_SCALE);
-  const v = new THREE.Vector3();
-  return {
-    group: g,
-    body,
-    pivot,
-    neck,
-    head,
-    eyes,
-    tail,
-    legs,
-    wings,
-    bends,
-    jaw,
-    glow,
-    // Where its flames come out, in the world, as drawn now.
-    mouth: () => tip.getWorldPosition(v),
-    ...s,
-    height: 1.7 * DRAGON_SCALE,
-    shadow: 0.7 * DRAGON_SCALE,
-    pick: 0.9 * DRAGON_SCALE,
-    center: 1.0 * DRAGON_SCALE,
-    seen: 200,
-    gait: { len: 0.8, run: 4, happy: 'rear', graze: 0.45 },
-  };
-}
+// The dragon of a volcano island (render/dragon-model.js), on the big
+// animals' rig.
+const dragon = (id) => realDragon(id, { bigRig });
 
 function cow(id) {
   const { g, body, pivot } = bigRig(0.8);
@@ -1519,7 +1393,6 @@ export class CritterModel {
     this.pivot.rotation.x = -0.12;
     this.neck.rotation.set(-0.15, 0, 0);
     this.head.rotation.x = this.headRest + 0.3;
-    for (const w of this.wings) w.rotation.z = w.userData.wing * (0.75 + Math.sin(this.time * 4) * 0.08);
   }
 
   // A dragon's wings: folded up along its back at rest, a slow lazy stretch
@@ -1527,11 +1400,16 @@ export class CritterModel {
   flap(dt, state) {
     const t = this.time;
     const flying = state === 'fly';
-    for (const w of this.wings) {
-      const side = w.userData.wing;
-      const beat = Math.sin(t * 6.5);
-      const spread = flying ? 0.2 + beat * 0.5 : 1.2 + Math.sin(t * 1.1) * 0.06;
-      w.rotation.set(flying ? beat * 0.12 : 0, 0, side * spread);
+    // A dragon's bat-like wings fold and beat their own way (dragon-model.js).
+    if (this.flapWings) {
+      this.flapWings(this, state);
+    } else {
+      for (const w of this.wings) {
+        const side = w.userData.wing;
+        const beat = Math.sin(t * 6.5);
+        const spread = flying ? 0.2 + beat * 0.5 : 1.2 + Math.sin(t * 1.1) * 0.06;
+        w.rotation.set(flying ? beat * 0.12 : 0, 0, side * spread);
+      }
     }
     if (this.bends) {
       const sway = Math.sin(t * (flying ? 5 : 1.2)) * (flying ? 0.3 : 0.12);
