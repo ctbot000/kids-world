@@ -828,6 +828,54 @@ body.fullscreen .full-icon .leave {
   font-weight: 600;
 }
 
+/* Hide and seek: the count, the time left and who is found, over the hotbar. */
+.hideseek-bar .found {
+  color: #7b4fd0;
+}
+
+/* The seeker's eyes shut while everyone hides: the island covered, the count big. */
+.blindfold {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Low enough to stay clear of the toasts down from the top. */
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 16px max(16vh, 40px);
+  background: radial-gradient(circle at 50% 65%, #4a3a63, #1d1530 75%);
+  color: white;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.blindfold[hidden] {
+  display: none;
+}
+
+.blindfold-icon {
+  font-size: 5rem;
+  animation: peek 2s ease-in-out infinite;
+}
+
+.blindfold-count {
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.blindfold-text {
+  font-size: 1.2rem;
+  opacity: 0.85;
+}
+
+@keyframes peek {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+
 /* Build and Start: like Ride, in the island's sky blue; greyed when the bricks are short. */
 .defend-button {
   background: #8fd8ff;

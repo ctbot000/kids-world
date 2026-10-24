@@ -168,6 +168,30 @@ test('it walks after its friend facing the way it goes, and flies to one far awa
   assert.ok(flew, 'flew there');
 });
 
+test('at hide and seek it hides where it is instead of following its friend, and goes along again once the round is over', async () => {
+  const { room, rooms, island } = server();
+  const minji = child(room);
+  const buddy = friend({ llm: model(), rooms });
+  await buddy.start();
+  buddy.invited(island, 'Minji');
+  const pip = await eventually(() => buddyIn(room));
+  const me = room.players.get(minji.me);
+  const spawn = room.world.spawn;
+  const goTo = (dx, dz) => minji.say({ t: 'm', s: [spawn.x + dx, room.world.top(Math.floor(spawn.x + dx), Math.floor(spawn.z + dz)) + 1, spawn.z + dz, 0, 0, 0] });
+  goTo(6, 0);
+  await eventually(() => away(pip, me) < 4.5);
+  // Minji is it: Pip stays put while she walks off.
+  minji.say({ t: 'hideseek', op: 'start' });
+  assert.deepEqual(room.hideseek.round.hiders, [pip.id]);
+  const hid = [...pip.s];
+  goTo(-14, 0);
+  await new Promise((done) => setTimeout(done, 1500));
+  assert.ok(Math.hypot(pip.s[0] - hid[0], pip.s[2] - hid[2]) < 1, 'still where it hid');
+  // The round stopped: it comes along again.
+  minji.say({ t: 'hideseek', op: 'stop' });
+  await eventually(() => away(pip, me) < 4.5);
+});
+
 test('it helps a dizzy friend up, and bops a monster coming at one', async () => {
   const { room, rooms, island } = server({ adventure: true, theme: 'sunny', seed: 5 });
   const minji = child(room);

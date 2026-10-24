@@ -6,6 +6,7 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
+import { cleanRound } from './shared/hideseek.js';
 import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
@@ -229,6 +230,10 @@ export class Game extends EventTarget {
     this.arcade = new Map();
     this.arcadeTarget = null;
     this.arcadeAt = null;
+    // A round of hide and seek on the island (shared/hideseek.js), or null,
+    // and when it was told of, to count its time down from.
+    this.hideseek = null;
+    this.hsAt = 0;
     // The gashapon machine beside you, and the one whose window is open.
     this.gashaTarget = null;
     this.gashaAt = null;
@@ -465,6 +470,12 @@ export class Game extends EventTarget {
       case 'arcfx':
         this.arcadeFx(msg);
         break;
+      case 'hs':
+        this.setHideSeek(msg.s);
+        break;
+      case 'hsfx':
+        this.hideSeekFx(msg);
+        break;
       case 'home':
         this.cameHome(msg);
         break;
@@ -540,6 +551,7 @@ export class Game extends EventTarget {
     this.setNextStage(msg.next ?? null);
     this.setDefense(msg.defense ?? null);
     this.setArcade(msg.arcade ?? []);
+    this.setHideSeek(msg.hideseek ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
@@ -932,8 +944,9 @@ export class Game extends EventTarget {
       m.group.position.set(at.x, at.y, at.z);
       m.group.rotation.y = at.yaw;
       // Far off, too small to see; and looking through your own eyes, a
-      // parrot on your head would sit on them.
-      m.group.visible = Math.hypot(at.x - cam.x, at.y - cam.y, at.z - cam.z) < m.seen && !(pet.pid === this.pid && sim.mode === 'perch' && this.renderer.camDist <= 1.3);
+      // parrot on your head would sit on them. A friend hiding from you at
+      // hide and seek hides with their pet: it would give them away.
+      m.group.visible = Math.hypot(at.x - cam.x, at.y - cam.y, at.z - cam.z) < m.seen && !(pet.pid === this.pid && sim.mode === 'perch' && this.renderer.camDist <= 1.3) && !this.hiddenFromMe(pet.pid);
       if (m.group.visible) {
         m.update(dt, petPose(sim));
         this.renderer.placeShadow(m.shadow, at.x, at.y, at.z, 1);
@@ -2627,6 +2640,105 @@ export class Game extends EventTarget {
     }
   }
 
+  // ------------------------------------------------ hide and seek
+
+  // The round as the island tells of it, each time it changes.
+  setHideSeek(raw) {
+    const was = this.hideseek;
+    this.hideseek = cleanRound(raw);
+    this.hsAt = performance.now();
+    // Eyes shut to count: off whatever you were riding or driving, and
+    // out of any window, to stand still where you are.
+    if (this.counting && !(was?.phase === 'hide' && was.seeker === this.pid)) {
+      if (this.riding) this.getOff();
+      else if (this.aboard) this.getOut();
+    }
+    this.emit('hideseek');
+  }
+
+  // You, counting with your eyes shut while everyone else hides.
+  get counting() {
+    const r = this.hideseek;
+    return r?.phase === 'hide' && r.seeker === this.pid;
+  }
+
+  // The seconds left of the count, or of the seeking.
+  hideSeekLeft() {
+    const r = this.hideseek;
+    return r ? Math.max(0, Math.ceil((r.left - (performance.now() - this.hsAt)) / 1000)) : 0;
+  }
+
+  // Whether a friend is hiding from you, the seeker: their name tag, their
+  // pet and their dot on the maps are not shown, so they hide for real.
+  hiddenFromMe(pid) {
+    const r = this.hideseek;
+    return Boolean(r) && r.phase !== 'done' && r.seeker === this.pid && pid !== this.pid && r.hiders.includes(pid) && !r.found.includes(pid);
+  }
+
+  // 🙈 I'll be it! — a round with everyone else on the island hiding.
+  hideSeekStart() {
+    this.send({ t: 'hideseek', op: 'start' });
+    this.sound.play('ui');
+  }
+
+  // 🏳️ Stop the round (the seeker, or the island's owner).
+  hideSeekStop() {
+    this.send({ t: 'hideseek', op: 'stop' });
+  }
+
+  // What just happened in the round: it started, the count was over,
+  // someone was found, or it was over. Whoever played earns their counts
+  // of it at the end, and a few coins: the seeker for each friend found,
+  // and a hider never found for staying hidden.
+  hideSeekFx(msg) {
+    const name = (pid) => (pid === this.pid ? 'You' : (this.players.get(pid)?.name ?? 'A friend'));
+    const toast = (icon, text) => this.emit('toast', { icon, text });
+    switch (msg.f) {
+      case 'start':
+        this.sound.play('fanfare');
+        if (msg.seeker === this.pid) toast('🙈', 'You are it! Eyes shut — count to 20 while everyone hides…');
+        else toast('🙈', `${name(msg.seeker)} is it! Run and hide, quick!`);
+        break;
+      case 'seek':
+        this.sound.play('ding');
+        toast('🔍', this.hideseek?.seeker === this.pid ? 'Ready or not, here you come! Find everyone!' : `Ready or not, ${name(this.hideseek?.seeker)} is coming!`);
+        break;
+      case 'found': {
+        this.sound.play(msg.pid === this.pid || msg.by === this.pid ? 'boing' : 'pop');
+        if (msg.by === this.pid) this.profile.count('seekfound');
+        const p = this.players.get(msg.pid);
+        const at = p?.me ? this.me.body : p?.avatar?.root.position;
+        if (at) this.renderer.effects.bang(at.x, at.y + 2.2, at.z);
+        if (msg.pid === this.pid) toast('👀', `${name(msg.by)} found you!`);
+        else toast('👀', `${name(msg.by)} found ${name(msg.pid)}!`);
+        break;
+      }
+      case 'end': {
+        const mine = msg.seeker === this.pid || msg.found.includes(this.pid) || msg.hidden.includes(this.pid);
+        if (mine && msg.why !== 'stopped') this.profile.count('hideseek');
+        let coins = 0;
+        if (msg.seeker === this.pid) coins = msg.found.length;
+        else if (msg.hidden.includes(this.pid) && !msg.why) {
+          this.profile.count('hidden');
+          coins = 3;
+        }
+        if (coins && !msg.why) this.profile.earn(coins);
+        const pay = coins && !msg.why ? ` 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}!` : '';
+        if (mine) this.sound.play(msg.hidden.includes(this.pid) || (msg.seeker === this.pid && !msg.hidden.length) ? 'victory' : 'fanfare');
+        let text;
+        if (msg.why === 'stopped') text = 'Hide and seek was stopped. Play again any time!';
+        else if (msg.why === 'seeker') text = 'The seeker went home, so hide and seek is over.';
+        else if (msg.why === 'hiders') text = 'Nobody is left to find, so hide and seek is over.';
+        else if (!msg.hidden.length) text = `${name(msg.seeker)} found everyone!${pay}`;
+        else text = `Time's up! Never found: ${msg.hidden.map(name).join(', ')}.${pay}`;
+        toast('🙈', text);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   // ------------------------------------------------ riding
 
   // Someone got on an animal, or off it (pid 0).
@@ -2696,7 +2808,7 @@ export class Game extends EventTarget {
 
   // Q, or the Ride button: on the animal beside you, or off the one you are on.
   toggleRide() {
-    if (this.dizzy) return;
+    if (this.dizzy || this.counting) return;
     if (this.aboard) {
       this.getOut();
       return;
@@ -3972,8 +4084,8 @@ export class Game extends EventTarget {
     const me = this.me;
     const b = me.body;
     const w = this.world;
-    // Sitting dizzy, you go nowhere.
-    const still = this.dizzy;
+    // Sitting dizzy, you go nowhere; nor do you, eyes shut, counting to hide and seek.
+    const still = this.dizzy || this.counting;
     const move = this.steer(still ? { x: 0, y: 0 } : input.readMove(), dt);
     const yaw = this.renderer.view.yaw;
     // Forward is away from the camera.
@@ -4320,6 +4432,7 @@ export class Game extends EventTarget {
     this.arcade.clear();
     this.arcadeAt = null;
     this.arcadeTarget = null;
+    this.hideseek = null;
     this.gashaAt = null;
     this.gashaTarget = null;
     this.pianoAt = null;

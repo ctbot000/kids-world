@@ -14,6 +14,7 @@
 import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_REACH, helpHp } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
+import { HideSeekSim } from './hideseek.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
@@ -182,6 +183,9 @@ export class Room {
     // with none.
     this.arcade = null;
     this.arcSent = '';
+    // A round of hide and seek (hideseek.js), never saved either.
+    this.hideseek = new HideSeekSim();
+    this.hsSent = '';
 
     if (save) {
       this.loadSave(save);
@@ -306,6 +310,7 @@ export class Room {
     if (!p || this.connected(pid)) return;
     this.unride(pid);
     if (this.arcade.left(pid)) this.sendArcade();
+    this.hideSeekLeft(pid);
     p.online = false;
     this.broadcast({ t: 'left', pid });
     if (this.host === pid) this.passHost();
@@ -435,6 +440,9 @@ export class Room {
         break;
       case 'arcade':
         this.arcadeOp(conn, p, msg);
+        break;
+      case 'hideseek':
+        this.hideSeekOp(conn, p, msg);
         break;
       case 'leave':
         this.clients.delete(conn);
@@ -613,6 +621,7 @@ export class Room {
       adventure: this.adventure?.describe() ?? null,
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
+      hideseek: this.hideseek.pack(this.now()),
       drawings: this.packDrawings(),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
@@ -933,6 +942,7 @@ export class Room {
         }
         this.unride(target.id);
         if (this.arcade.left(target.id)) this.sendArcade();
+        this.hideSeekLeft(target.id);
         this.kicked.add(target.id);
         for (const [token, owner] of this.tokens) if (owner === target.id) this.tokens.delete(token);
         target.online = false;
@@ -1059,6 +1069,11 @@ export class Room {
     this.stepLava(now);
     this.stepMelts(now);
     this.healUp(now);
+    // A round of hide and seek, as it goes.
+    if (this.hideseek.round) {
+      for (const fx of this.hideseek.step(this.world, now, where)) this.broadcast({ t: 'hsfx', ...fx });
+      this.sendHideSeek();
+    }
     // The games at the arcade machines, as they go.
     if (this.arcade.sessions.size) {
       for (const fx of this.arcade.step(now)) this.broadcast({ t: 'arcfx', ...fx });
@@ -1494,6 +1509,48 @@ export class Room {
       for (const fx of this.arcade.flip(key, msg.i, p.id, now)) this.broadcast({ t: 'arcfx', ...fx });
       this.sendArcade();
     }
+  }
+
+  // ------------------------------------------------ hide and seek
+
+  // 🙈 I'll be it! from anyone on the island (a round with everyone else on
+  // it hiding), or 🏳️ Stop from the seeker or the island's owner.
+  hideSeekOp(conn, p, msg) {
+    const now = this.now();
+    if (msg.op === 'start') {
+      const ids = this.onlinePlayers().map((q) => q.id);
+      const res = this.hideseek.start(p.id, ids, now);
+      if (res.why === 'alone') this.notice(conn, 'Hide and seek needs a friend on the island to hide!', 'info');
+      else if (res.why === 'busy') this.notice(conn, 'A round of hide and seek is going already!', 'info');
+      if (!res.ok) return;
+      this.broadcast({ t: 'hsfx', f: 'start', seeker: p.id });
+      this.sendHideSeek();
+      return;
+    }
+    if (msg.op === 'stop') {
+      const r = this.hideseek.round;
+      if (!this.hideseek.playing || (r.seeker !== p.id && p.id !== this.host)) return;
+      this.broadcast({ t: 'hsfx', ...this.hideseek.end(now, 'stopped') });
+      this.sendHideSeek();
+    }
+  }
+
+  // Someone gone from the island, out of a round of hide and seek.
+  hideSeekLeft(pid) {
+    const fx = this.hideseek.left(pid, this.now());
+    if (!fx.length) return;
+    for (const f of fx) this.broadcast({ t: 'hsfx', ...f });
+    this.sendHideSeek();
+  }
+
+  // The round to everyone, as it changes (a new phase, someone found): each
+  // page counts its time down by itself from there.
+  sendHideSeek() {
+    const pack = this.hideseek.pack(this.now());
+    const text = JSON.stringify(pack && { ...pack, left: 0 });
+    if (text === this.hsSent) return;
+    this.hsSent = text;
+    this.broadcast({ t: 'hs', s: pack });
   }
 
   // A machine gone (picked up, say): its game goes with it.

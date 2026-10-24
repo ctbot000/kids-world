@@ -3770,6 +3770,107 @@ test('a video arcade: Q by a machine opens its game, blobs are bopped with taps,
   await page.browserContext().close();
 });
 
+test('hide and seek: 🙈 I’ll be it! shuts the seeker’s eyes while a friend hides from their name tag and map, then coming close finds them', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  await makeIsland(host, { online: true, theme: 'Flat Land' });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // Puts a page's player down on the ground at x, z, and tells the island.
+  const putAt = (page, x, z) =>
+    page.evaluate(
+      ([x, z]) => {
+        const g = window.kidsWorld.game;
+        Object.assign(g.me.body, { x, z, y: g.world.top(Math.floor(x), Math.floor(z)) + 1, vx: 0, vy: 0, vz: 0 });
+        g.sendMove?.(true);
+      },
+      [x, z],
+    );
+  const start = await host.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, z: window.kidsWorld.game.me.body.z }));
+  // Every toast kept, for a loaded page can draw too seldom to catch one before it goes.
+  const keepToasts = (page) =>
+    page.evaluate(() => {
+      const ui = window.kidsWorld.ui;
+      const toast = ui.toast.bind(ui);
+      window.toasted = [];
+      ui.toast = (icon, text, kind) => {
+        window.toasted.push(text);
+        toast(icon, text, kind);
+      };
+    });
+  await keepToasts(host);
+  await keepToasts(guest);
+  // Open ground where the friend hides and the seeker finds them: on a
+  // random island a tree there would stand them on its crown, or between them.
+  const ground = await host.evaluate((s) => {
+    const room = window.kidsWorld.session.link.room;
+    const y0 = Math.floor(window.kidsWorld.game.me.body.y);
+    for (let x = Math.floor(s.x) + 8; x <= Math.floor(s.x) + 14; x++) {
+      for (let z = Math.floor(s.z) + 4; z <= Math.floor(s.z) + 8; z++) {
+        for (let y = y0; y < y0 + 16; y++) if (room.world.get(x, y, z) !== 0) room.natureCell([x, y, z], 0);
+      }
+    }
+    return y0;
+  }, start);
+  await until(guest, ([s, y0]) => window.kidsWorld.game.world.get(Math.floor(s.x) + 12, y0, Math.floor(s.z) + 6) === 0, [start, ground]);
+  // 😊 has hide and seek: the host is it.
+  await host.click('#btn-emote');
+  await clickButton(host, 'be it', '#modal');
+  await until(host, () => !document.getElementById('blindfold').hidden && window.kidsWorld.game.counting);
+  await until(guest, () => !document.getElementById('hideseek').hidden && document.getElementById('hideseek').textContent.includes('Hide!'));
+  assert.match(await host.$eval('#blindfold-count', (el) => el.textContent), /^\d+$/);
+  // The friend runs off to hide: their name tag, pet and map dot are not the seeker's to see.
+  await putAt(guest, start.x + 12, start.z + 6);
+  await until(host, () => {
+    const g = window.kidsWorld.game;
+    const friend = [...g.players.values()].find((p) => !p.me);
+    return friend && g.hiddenFromMe(friend.id) && Math.abs(friend.avatar.root.position.x - g.me.body.x) > 8;
+  });
+  // Counting, the seeker goes nowhere. (Measured with the friend gone, who
+  // came in on the same spot and could still be nudging them aside.)
+  const before = await host.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, z: window.kidsWorld.game.me.body.z }));
+  await hold(host, 'KeyW');
+  await delay(600);
+  await host.keyboard.up('KeyW');
+  const after = await host.evaluate(() => ({ x: window.kidsWorld.game.me.body.x, z: window.kidsWorld.game.me.body.z }));
+  assert.ok(Math.hypot(after.x - before.x, after.z - before.z) < 0.05, `eyes shut, standing still: ${JSON.stringify({ before, after })}`);
+  // The count over, a moment sooner than twenty seconds.
+  await host.evaluate(() => (window.kidsWorld.session.link.room.hideseek.round.until = 0));
+  await until(host, () => document.getElementById('blindfold').hidden && window.kidsWorld.game.hideseek?.phase === 'seek');
+  await until(host, () => document.getElementById('hideseek').textContent.includes('0/1'));
+  // Turns the seeker's camera to face the friend.
+  const face = () =>
+    host.evaluate(() => {
+      const g = window.kidsWorld.game;
+      const friend = [...g.players.values()].find((p) => !p.me).avatar.root.position;
+      g.renderer.view.yaw = Math.atan2(-(friend.x - g.me.body.x), -(friend.z - g.me.body.z));
+    });
+  await face();
+  await until(host, () => {
+    const g = window.kidsWorld.game;
+    const f = [...g.players.values()].find((p) => !p.me).avatar.root.position;
+    return g.renderer.project(f.x, f.y + 1.8, f.z).visible;
+  });
+  // No name over the hiding friend, though they are in view.
+  assert.equal(await host.evaluate(() => [...document.querySelectorAll('#overlays .tag .name')].length), 0, 'no name tag gives them away');
+  // Walking up to them finds them: the round is over, the seeker winning, and both hear.
+  const coins = await host.evaluate(() => window.kidsWorld.game.profile.data.coins);
+  await putAt(host, start.x + 10.5, start.z + 6);
+  await until(host, () => window.kidsWorld.game.hideseek?.phase === 'done');
+  await until(guest, () => window.toasted.some((t) => t.includes('found you')));
+  await until(host, () => window.toasted.some((t) => t.includes('found everyone')));
+  assert.equal(await host.evaluate(() => window.kidsWorld.game.profile.data.coins), coins + 1, 'a coin for the friend found');
+  assert.ok(await host.evaluate(() => window.kidsWorld.game.profile.data.stickers['hide-and-seek']), 'the Ready or Not sticker');
+  assert.equal(await host.evaluate(() => window.kidsWorld.game.profile.data.stats.seekfound), 1);
+  // Found, the friend's name tag is back.
+  await face();
+  await until(host, () => document.querySelectorAll('#overlays .tag .name').length === 1);
+  await host.close();
+  await guest.close();
+});
+
 test('a gashapon: Q by the machine opens it, a turn of the handle takes coins and a capsule toy comes out into your collection', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

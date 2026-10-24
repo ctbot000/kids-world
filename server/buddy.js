@@ -769,6 +769,13 @@ export class Visit extends EventEmitter {
       case 'won':
         this.event('The whole island is safe: you and your friends won! Celebrate!', 0, 'dance');
         break;
+      // Hide and seek (shared/hideseek.js): it hides by keeping still where
+      // it is, for following a friend would give them away; once the round
+      // is over it goes along with them again.
+      case 'hsfx':
+        if (msg.f === 'start' && msg.seeker !== this.me) this.mode = 'stay';
+        else if (msg.f === 'end') this.mode = 'follow';
+        break;
       default:
         break;
     }

@@ -2019,6 +2019,7 @@ export class UI {
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
+          card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in your 🎒 backpack.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
@@ -2965,6 +2966,10 @@ export class UI {
     on('drawing', (e) => this.drawingChanged?.(e.detail));
     on('onair', () => this.onAirNews());
     on('arcade', () => this.renderArcade());
+    on('hideseek', () => {
+      this.renderHideSeek();
+      if (this.modalOpen && $('modal').querySelector('.hideseek-part')) this.drawHideSeekPart?.();
+    });
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
     on('next-stage', () => this.nextStageNews());
@@ -2997,6 +3002,8 @@ export class UI {
     $('ride').hidden = true;
     $('defend').hidden = true;
     $('defense').hidden = true;
+    $('hideseek').hidden = true;
+    $('blindfold').hidden = true;
     this.stopNextStage();
     document.body.classList.remove('playing');
     for (const el of this.tags.values()) el.remove();
@@ -3491,10 +3498,77 @@ export class UI {
               ),
             ),
           ),
+          this.hideSeekPart(),
         );
       },
       { narrow: true, seeThrough: true },
     );
+  }
+
+  // Hide and seek, in the island's window: 🙈 I'll be it! to start a round
+  // with everyone else on the island hiding, or how the round is going,
+  // and 🏳️ Stop for the seeker and the island's owner. It redraws itself as
+  // the round changes.
+  hideSeekPart() {
+    const part = h('div', { class: 'hideseek-part' });
+    const draw = () => {
+      const g = this.game;
+      if (!g) return;
+      const r = g.hideseek;
+      const friends = [...g.players.values()].filter((p) => p.id !== g.pid).length;
+      const rows = [h('h3', {}, '🙈 Hide and seek')];
+      if (!r || r.phase === 'done') {
+        rows.push(
+          h('p', { class: 'muted' }, 'Whoever is it shuts their eyes and counts to 20 while everyone else hides, then has 3 minutes to find them all. Come close with nothing in the way and you are found!'),
+          friends
+            ? h(
+                'div',
+                { class: 'row', style: 'justify-content:center' },
+                h(
+                  'button',
+                  {
+                    class: 'big green hideseek-start',
+                    type: 'button',
+                    onclick: () => {
+                      g.hideSeekStart();
+                      this.closeModal();
+                    },
+                  },
+                  h('span', { class: 'emoji' }, '🙈'),
+                  ' I’ll be it!',
+                ),
+              )
+            : h('p', { class: 'muted' }, 'You need a friend on the island to play. Invite one!'),
+        );
+      } else {
+        const hiding = r.hiders.filter((pid) => !r.found.includes(pid)).length;
+        const who = r.seeker === g.pid ? 'You are' : `${g.players.get(r.seeker)?.name ?? 'A friend'} is`;
+        rows.push(h('p', {}, r.phase === 'hide' ? `${who} counting while everyone hides.` : `${who} looking: ${r.found.length} found, ${hiding} still hiding.`));
+        if (r.seeker === g.pid || g.pid === g.host)
+          rows.push(
+            h(
+              'div',
+              { class: 'row', style: 'justify-content:center' },
+              h(
+                'button',
+                {
+                  class: 'chip hideseek-stop',
+                  type: 'button',
+                  onclick: () => {
+                    g.hideSeekStop();
+                    this.closeModal();
+                  },
+                },
+                '🏳️ Stop the round',
+              ),
+            ),
+          );
+      }
+      part.replaceChildren(...rows);
+    };
+    this.drawHideSeekPart = draw;
+    draw();
+    return part;
   }
 
   inviteDialog() {
@@ -3539,6 +3613,7 @@ export class UI {
           root.append(h('p', { class: 'muted' }, '🔒 This island has a passcode.'));
         }
         if (g.song) root.append(h('p', { class: 'muted song-line' }, '🎵 The island song: ', h('b', { lang: langOf(g.song.name) || undefined }, g.song.name)));
+        root.append(this.hideSeekPart());
         const adv = g.adventure;
         if (adv) {
           const camps = [...adv.camps.values()];
@@ -4010,6 +4085,36 @@ export class UI {
     const text = `🧪 ${n}`;
     if (el.textContent !== text) el.textContent = text;
     el.setAttribute('aria-label', `Drink an HP potion (${n} left)`);
+  }
+
+  // A round of hide and seek: over the hotbar, the count or the time left
+  // and how many are found; the seeker, counting, sees only the count.
+  // Called every frame, so it changes only what changed.
+  renderHideSeek() {
+    const g = this.game;
+    const r = g?.hideseek;
+    const el = $('hideseek');
+    const fold = $('blindfold');
+    const left = g ? g.hideSeekLeft() : 0;
+    const counting = Boolean(g?.counting);
+    if (fold.hidden === counting) fold.hidden = !counting;
+    if (counting && $('blindfold-count').textContent !== String(left)) $('blindfold-count').textContent = String(left);
+    const key = r ? `${r.phase}|${r.seeker}|${r.hiders.join()}|${r.found.join()}|${left}` : '';
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.hidden = !r;
+    if (!r) return;
+    const name = (pid) => (pid === g.pid ? 'You' : (g.players.get(pid)?.name ?? 'A friend'));
+    const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    const found = h('span', { class: 'found' }, `👀 ${r.found.length}/${r.hiders.length}`);
+    const me = r.seeker === g.pid ? 'seeker' : r.found.includes(g.pid) ? 'found' : r.hiders.includes(g.pid) ? 'hider' : 'watching';
+    if (r.phase === 'hide') {
+      el.replaceChildren(h('span', {}, `🙈 ${name(r.seeker)} ${r.seeker === g.pid ? 'are' : 'is'} counting: ${left}`), h('span', { class: 'muted' }, me === 'hider' ? 'Hide!' : 'Shh…'));
+    } else if (r.phase === 'seek') {
+      el.replaceChildren(h('span', {}, `🔍 ${clock}`), found, h('span', { class: 'muted' }, { seeker: 'Find them!', found: 'Found!', hider: 'Stay hidden!', watching: `${name(r.seeker)} is it` }[me]));
+    } else {
+      el.replaceChildren(h('span', {}, '🙈 Hide and seek is over'), found);
+    }
   }
 
   // On a tower defense island: the wave, the Star Stone's hearts and the
@@ -5758,7 +5863,8 @@ export class UI {
       if (!p.avatar) continue;
       const pos = p.avatar.root.position;
       const far = me ? Math.hypot(pos.x - me.x, pos.z - me.z) : 0;
-      const showName = p.id !== g.pid && far < 45;
+      // Not for a friend hiding from you at hide and seek, seen through walls.
+      const showName = p.id !== g.pid && far < 45 && !g.hiddenFromMe(p.id);
       if (!showName && !p.bubble) continue;
       const scr = r.project(pos.x, pos.y + 1.72 + p.avatar.tall, pos.z);
       if (!scr.visible) continue;
@@ -5786,6 +5892,7 @@ export class UI {
         this.tags.delete(pid);
       }
     }
+    this.renderHideSeek();
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);

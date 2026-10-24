@@ -319,7 +319,8 @@ export class MiniMap {
 
     // Friends: a dot in their T-shirt colour, and on the big map their animal (or kid) and name too.
     for (const p of g.players.values()) {
-      if (p.me || !p.avatar) continue;
+      // A friend hiding from you at hide and seek is not given away here.
+      if (p.me || !p.avatar || g.hiddenFromMe?.(p.id)) continue;
       const pos = p.avatar.root.position;
       const x = X(pos.x);
       const y = Y(pos.z);
