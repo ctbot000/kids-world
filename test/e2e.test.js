@@ -252,15 +252,25 @@ async function landed(page, element) {
   }, element);
 }
 
+// A list redrawn between finding the button and clicking it (the open
+// islands, refreshed from the keeper; the backpack, once its pictures are
+// in) leaves the one found out of the page: then the new one is clicked.
 async function clickButton(page, text, scope = 'body') {
-  const handle = await page.waitForFunction(
-    (text, scope) => [...document.querySelector(scope).querySelectorAll('button')].find((b) => b.textContent.includes(text) && !b.disabled && b.offsetParent !== null),
-    { timeout: 15000 * SLOW },
-    text,
-    scope,
-  );
-  await landed(page, handle);
-  await handle.asElement().click();
+  for (let tries = 3; ; tries--) {
+    const handle = await page.waitForFunction(
+      (text, scope) => [...document.querySelector(scope).querySelectorAll('button')].find((b) => b.textContent.includes(text) && !b.disabled && b.offsetParent !== null),
+      { timeout: 15000 * SLOW },
+      text,
+      scope,
+    );
+    try {
+      await landed(page, handle);
+      await handle.asElement().click();
+      return;
+    } catch (e) {
+      if (tries <= 1 || !/not clickable|detached/i.test(e.message)) throw e;
+    }
+  }
 }
 
 // A switch in a dialog, once the dialog has landed.

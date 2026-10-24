@@ -775,7 +775,13 @@ export class UI {
       this.closeModal();
       this.handlers.visit(it.code);
     };
+    // Drawn again only when something in it changed: buttons swapped for
+    // the same ones would lose a tap made just then.
+    let shown = '';
     const draw = (islands) => {
+      const now = JSON.stringify(islands);
+      if (now === shown) return;
+      shown = now;
       note.hidden = islands.length > 0;
       note.textContent = 'No islands are open right now. Make one, and it shows up here for everyone!';
       list.replaceChildren(
@@ -821,6 +827,7 @@ export class UI {
       } catch (error) {
         again = 30000;
         if (!list.isConnected) return;
+        shown = '';
         list.replaceChildren();
         note.hidden = false;
         if (error?.code === 'bad') note.textContent = '🛠️ The island keeper needs an update before it can show open islands. Ask a grown-up to update it!';
