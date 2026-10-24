@@ -48,8 +48,9 @@ function joined(world, x, y, z, def, dx, dz) {
 const yawFacing = (front) => Math.atan2(DIRS[front][0], DIRS[front][1]);
 
 // The seat nearest a body standing beside it (or on it), within `reach`
-// blocks: { x, y, z } of its cell, or null.
-export function seatNear(world, body, reach = 1.6) {
+// blocks: { x, y, z } of its cell, or null. taken(x, y, z): whether someone
+// else is already in the seat in that cell, so it is passed over.
+export function seatNear(world, body, reach = 1.6, taken = () => false) {
   const bx = Math.floor(body.x);
   const bz = Math.floor(body.z);
   const by = Math.floor(body.y + 0.05);
@@ -58,7 +59,7 @@ export function seatNear(world, body, reach = 1.6) {
   for (let x = bx - 2; x <= bx + 2; x++) {
     for (let z = bz - 2; z <= bz + 2; z++) {
       for (let y = by - 1; y <= by; y++) {
-        if (!seatOf(world.get(x, y, z))) continue;
+        if (!seatOf(world.get(x, y, z)) || taken(x, y, z)) continue;
         const d = Math.hypot(x + 0.5 - body.x, z + 0.5 - body.z);
         if (d < near) {
           near = d;

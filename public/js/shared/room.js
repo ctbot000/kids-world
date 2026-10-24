@@ -169,6 +169,10 @@ export class Room {
     // The pictures on the island's drawing boards (drawing.js), by cell:
     // { x, y, z, px }. Saved with the island.
     this.drawings = new Map();
+    // What the computers on some desks show (whoever keeps the island sets
+    // this, as the CTB island's office does with its workers' real work):
+    // [{ x, y, z, name, issue, doing, steps, since }], or null for none.
+    this.screens = null;
     this.counts = { shells: 0, stars: 0 };
     this.encoded = null;
     this.onUpdate = null;
@@ -667,6 +671,7 @@ export class Room {
       hideseek: this.hideseek.pack(this.now()),
       go: this.go.pack(),
       drawings: this.packDrawings(),
+      ...(this.screens ? { screens: this.screens } : {}),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
       shared: this.shared === true,
@@ -1973,6 +1978,12 @@ export class Room {
   }
 
   // The pictures, as [x, y, z, text] each.
+  // New screens for the island's computers (see this.screens), told to everyone there.
+  setScreens(list) {
+    this.screens = Array.isArray(list) && list.length ? list : null;
+    this.broadcast({ t: 'screens', s: this.screens ?? [] });
+  }
+
   packDrawings() {
     return [...this.drawings.values()].map((d) => [d.x, d.y, d.z, encodePicture(d.px)]);
   }

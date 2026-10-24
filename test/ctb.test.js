@@ -215,7 +215,8 @@ test('a task becomes a branch, a commit and a pull request once all the unit tes
   ]);
   const usage = [];
   const said = [];
-  const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, propose: false }, log: () => {}, onUsage: (u) => usage.push(...u), office: { say: (k, text) => said.push([k, text]), emote: () => {} } });
+  const screens = [];
+  const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, propose: false }, log: () => {}, onUsage: (u) => usage.push(...u), office: { say: (k, text) => said.push([k, text]), emote: () => {}, showScreens: (list) => screens.push(list) } });
   await company.start();
   after(() => company.stop());
   await eventually(() => github.pullsMade.length === 1 && !company.workers[0].issue);
@@ -246,6 +247,14 @@ test('a task becomes a branch, a commit and a pull request once all the unit tes
   assert.equal(status.workers[0].done, 1);
   assert.equal(status.workers[0].last.url, 'https://github.com/ctbot000/toy/pull/501');
   assert.ok(status.workers[0].steps.some((s) => s.what === 'editing add.js'));
+  // Ada's computer on the island showed her real work as she went: the
+  // task, each step and what she thought, and nothing once she was done.
+  const working = screens.find((list) => list[0].steps.some((t) => t.what === 'editing add.js'));
+  assert.deepEqual(working[0].issue, { n: 5, title: 'add subtracts' });
+  assert.equal(working[0].name, 'Ada 💼');
+  assert.equal(working[0].steps.find((t) => t.what === 'editing add.js').thought, 'fix');
+  assert.ok(working[0].since > 0);
+  assert.equal(screens.at(-1)[0].issue, null);
 });
 
 test('failing unit tests go back to the worker, and a task it cannot finish is marked stuck with why', async () => {
@@ -542,6 +551,18 @@ test('the office on the CTB island: workers at their desks, answering children, 
     for (let z = Math.min(g[0][2], g[1][2]); z <= Math.max(g[0][2], g[1][2]); z++) assert.ok(room.world.groundBelow(x, room.world.H - 1, z) < office.site.base + 25);
   }
   assert.ok(officeCells().some(([, , , id]) => id === B.COMPUTER));
+  // What the workers' computers show goes to everyone on the island: each
+  // on the computer on the table in front of its worker, facing them.
+  office.showScreens([{ name: 'Ada 💼', issue: { n: 12, title: 'Fix the bus' }, doing: '#12: reading bus.js', steps: [], since: 1 }, null, { name: 'Cleo 💼', issue: null, doing: 'At their desk', steps: [], since: 0 }, { name: 'Dev 💼' }]);
+  assert.deepEqual(room.screens.map((s) => s.name), ['Ada 💼', 'Cleo 💼'], 'only the desks someone sits at');
+  for (const s of room.screens) {
+    const seat = office.seats[s.name === 'Ada 💼' ? 0 : 2];
+    const id = room.world.get(s.x, s.y, s.z);
+    assert.equal(B.block(id).model, 'computer');
+    assert.ok(Math.hypot(s.x + 0.5 - seat.x, s.z + 0.5 - seat.z) < 1.1, 'right in front of their chair');
+    const [fx, fz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][B.block(id).front];
+    assert.ok(fx * (seat.x - s.x - 0.5) + fz * (seat.z - s.z - 0.5) > 0.5, 'facing them');
+  }
 
   // The AI friend talking to them gets no answer: it would answer back, on and on.
   const pip = { send: () => {} };

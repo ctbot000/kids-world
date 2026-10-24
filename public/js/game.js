@@ -11,6 +11,7 @@ import { cleanRound } from './shared/hideseek.js';
 import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
+import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
@@ -255,6 +256,11 @@ export class Game extends EventTarget {
     this.tvTarget = null;
     this.tvAt = null;
     this.tvChannel = 0;
+    // What the island's computers show, by cell (shared/screens.js), the
+    // computer beside you to look at, and the one being looked at.
+    this.screens = new Map();
+    this.screenTarget = null;
+    this.screenAt = null;
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -486,6 +492,9 @@ export class Game extends EventTarget {
       case 'go':
         this.setGo(msg.s);
         break;
+      case 'screens':
+        this.setScreens(msg.s);
+        break;
       case 'gofx':
         this.goFx(msg);
         break;
@@ -571,6 +580,7 @@ export class Game extends EventTarget {
     this.setDefense(msg.defense ?? null);
     this.setArcade(msg.arcade ?? []);
     this.setGo(msg.go ?? []);
+    this.setScreens(msg.screens ?? []);
     this.setHideSeek(msg.hideseek ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
@@ -2493,6 +2503,49 @@ export class Game extends EventTarget {
     this.study = null;
   }
 
+  // ------------------------------------------------ computers' screens
+
+  // What the island's computers show, as the island tells of it (the CTB
+  // island's workers' real work), drawn on their screens for everyone.
+  setScreens(list) {
+    const before = this.screens;
+    this.screens = cleanScreens(list);
+    for (const [k, sc] of this.screens) {
+      const id = this.world?.get(sc.x, sc.y, sc.z);
+      if (isComputer(id)) this.renderer.screens.show(k, sc, id);
+      else this.screens.delete(k);
+    }
+    for (const k of before.keys()) if (!this.screens.has(k)) this.renderer.screens.remove(k);
+    if (this.screenAt) this.screenAt = this.screens.get(this.screenAt.key) ? this.screenAt : null;
+    this.emit('screens');
+  }
+
+  // Q (or the Look button) by a computer with a screen: it opens big.
+  openScreen() {
+    const t = this.screenTarget;
+    if (!t) return;
+    this.screenAt = t;
+    this.sound.play('ui');
+    this.emit('screen-open');
+  }
+
+  closeScreen() {
+    this.screenAt = null;
+  }
+
+  // Whether someone else is already sitting (or lying) in the seat in cell
+  // (x, y, z): it is theirs until they get up.
+  seatTaken(x, y, z) {
+    const pose = seatPose(this.world, x, y, z);
+    if (!pose) return false;
+    for (const p of this.players.values()) {
+      if (p.me || !p.inSeat || !p.avatar) continue;
+      const a = p.avatar.root.position;
+      if (Math.hypot(a.x - pose.x, a.z - pose.z) < 0.5 && Math.abs(a.y - pose.y) < 0.8) return true;
+    }
+    return false;
+  }
+
   // ------------------------------------------------ Go boards
 
   // The games of Go going at the island's boards, as the island tells of
@@ -3022,6 +3075,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.goTarget) {
       this.openGo();
+      return;
+    }
+    if (!id && this.screenTarget) {
+      this.openScreen();
       return;
     }
     if (!id) {
@@ -4162,7 +4219,7 @@ export class Game extends EventTarget {
     else this.moveMe(dt, input);
     this.rideTarget = this.findRideable();
     const on = this.me.body;
-    this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on) : null;
+    this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on, undefined, (x, y, z) => this.seatTaken(x, y, z)) : null;
     this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
     this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
     this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
@@ -4172,6 +4229,7 @@ export class Game extends EventTarget {
     this.drawTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.dizzy && !on.flying && on.onGround ? boardNear(this.world, on) : null;
     this.stoveTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? stoveNear(this.world, on) : null;
     this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
+    this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -4417,6 +4475,8 @@ export class Game extends EventTarget {
       p.seated = s.anim === ANIM.ride;
       // Sitting on a chair or a sofa (not lying in bed): tea party company.
       p.sitting = s.anim === ANIM.sit;
+      // In a seat at all, sitting or lying: nobody else can sit there.
+      p.inSeat = s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl;
       const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id || c.passengers.includes(p.id)) : null;
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
@@ -4630,6 +4690,10 @@ export class Game extends EventTarget {
     this.goAt = null;
     this.goTarget = null;
     this.renderer.goBoards.clear();
+    this.screens.clear();
+    this.screenAt = null;
+    this.screenTarget = null;
+    this.renderer.screens.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();
     this.renderer.showPreview(null);

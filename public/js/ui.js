@@ -8,6 +8,8 @@ import { BLACK, GAMES as BOARD_GAMES, gameOf, lessonsOf, NO_MOVE, placeName, WHI
 import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
+import { sinceText } from './shared/screens.js';
+import { paintScreen, TOOL_COLORS } from './render/screens.js';
 import { stationId } from './shared/broadcast.js';
 import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
@@ -2979,6 +2981,8 @@ export class UI {
     // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
     on('piano-gone', () => this.modalOpen && $('modal').querySelector('.piano-board') && this.closeModal());
     on('tv-open', () => this.tvDialog());
+    on('screen-open', () => this.screenDialog());
+    on('screens', () => this.screenChanged?.());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
     on('cook-open', () => this.cookDialog());
@@ -4289,7 +4293,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget || g.screenTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4362,18 +4366,18 @@ export class UI {
   // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -5285,6 +5289,53 @@ export class UI {
   // channels, and the channels to flip through with ◀ ▶, a tap on one, the
   // arrow keys or the number keys; and while something is on air, 📡 Live,
   // the same on every TV (tv-live.js).
+  // A computer's screen, big (shared/screens.js): whose it is, their task,
+  // what they are doing and their last steps, each with what they thought,
+  // newest first, kept up to date while it is open.
+  screenDialog() {
+    const g = this.game;
+    if (!g?.screenAt) return;
+    const canvas = h('canvas', { class: 'screen-picture', width: 512, height: 332, role: 'img' });
+    const since = h('p', { class: 'muted screen-since' });
+    const steps = h('ol', { class: 'screen-steps' });
+    const title = h('h2', {});
+    const show = () => {
+      const sc = g.screens.get(g.screenAt?.key);
+      if (!sc) {
+        this.closeModal();
+        return;
+      }
+      title.textContent = `💻 ${sc.name}`;
+      paintScreen(canvas, sc);
+      canvas.setAttribute('aria-label', sc.issue ? `${sc.name}'s screen: task #${sc.issue.n}, ${sc.issue.title}. ${sc.doing}` : `${sc.name}'s screen: ${sc.doing}`);
+      since.textContent = sc.issue ? `Working on #${sc.issue.n} for ${sinceText(sc.since)}.` : 'No task right now.';
+      steps.replaceChildren(
+        ...[...sc.steps].reverse().map((t) =>
+          h(
+            'li',
+            { class: 'screen-step' },
+            h('div', { class: 'screen-what' }, h('span', { class: 'screen-dot', style: `background:${TOOL_COLORS[t.tool] ?? '#e9eef6'}` }), `Step ${t.n}: ${t.what}`),
+            t.thought ? h('div', { class: 'screen-thought' }, t.thought) : '',
+          ),
+        ),
+      );
+    };
+    this.screenChanged = show;
+    this.openModal(
+      (root) => {
+        root.append(title, h('div', { class: 'screen-set' }, canvas), since, steps);
+        show();
+      },
+      {
+        seeThrough: true,
+        onClose: () => {
+          this.screenChanged = null;
+          g.closeScreen();
+        },
+      },
+    );
+  }
+
   tvDialog() {
     const g = this.game;
     const t = g?.tvAt;
