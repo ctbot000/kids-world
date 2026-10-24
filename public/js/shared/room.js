@@ -15,6 +15,7 @@ import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_REACH, helpHp } fro
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
+import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, isFixed, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
@@ -38,7 +39,8 @@ import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidNa
 // The most HP someone has, from the level on their look.
 const hpFor = (p) => maxHp(cleanLevel(p.look?.level) || 1);
 
-export const PROTOCOL = 1;
+// 2: block ids take two bytes (world.js FORMAT).
+export const PROTOCOL = 2;
 
 // A player's name as sent: any name as typed, tidied, or '' for an empty,
 // invisible or overlong one. (Two players of one name on an island get a
@@ -203,6 +205,9 @@ export class Room {
     // A round of hide and seek (hideseek.js), never saved either.
     this.hideseek = new HideSeekSim();
     this.hsSent = '';
+    // The games of Go at the island's Go boards (go.js), never saved either.
+    this.go = new GoSim();
+    this.goSent = '';
 
     if (save) {
       this.loadSave(save);
@@ -276,6 +281,8 @@ export class Room {
       if (isBoard(before) && !isBoard(after)) this.drawings.delete(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
+      // A Go board picked up: its game goes with it.
+      if (isGoBoard(before) && !isGoBoard(after) && this.go.removeAt(x, y, z)) this.sendGo();
       // Water or ice put down on a volcano island is not there to stay.
       if (volcano) {
         if (after === B.WATER) this.melts.set(k, { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
@@ -327,6 +334,7 @@ export class Room {
     if (!p || this.connected(pid)) return;
     this.unride(pid);
     if (this.arcade.left(pid)) this.sendArcade();
+    if (this.go.left(pid)) this.sendGo();
     this.hideSeekLeft(pid);
     p.online = false;
     this.broadcast({ t: 'left', pid });
@@ -467,6 +475,9 @@ export class Room {
       case 'hideseek':
         this.hideSeekOp(conn, p, msg);
         break;
+      case 'go':
+        this.goOp(conn, p, msg);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -535,9 +546,10 @@ export class Room {
       p.hp = p.maxHp = hpFor(p);
       p.dizzyUntil = 0;
       p.name = this.uniqueName(wanted, p.id);
+      p.ai = msg.ai === true;
     } else {
       const spawn = this.world.spawn;
-      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], ...(who ? { who } : {}) };
+      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], ...(who ? { who } : {}), ...(msg.ai === true ? { ai: true } : {}) };
       p.hp = p.maxHp = hpFor(p);
       this.players.set(p.id, p);
       this.prunePlayers();
@@ -626,7 +638,7 @@ export class Room {
   }
 
   describePlayer(p) {
-    return { id: p.id, name: p.name, look: p.look, s: p.s, ...((p.dizzyUntil ?? 0) > this.now() ? { dizzy: true } : {}) };
+    return { id: p.id, name: p.name, look: p.look, s: p.s, ...((p.dizzyUntil ?? 0) > this.now() ? { dizzy: true } : {}), ...(p.ai ? { ai: true } : {}) };
   }
 
   sendWelcome(conn, c) {
@@ -653,6 +665,7 @@ export class Room {
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
       hideseek: this.hideseek.pack(this.now()),
+      go: this.go.pack(),
       drawings: this.packDrawings(),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
@@ -980,6 +993,7 @@ export class Room {
         }
         this.unride(target.id);
         if (this.arcade.left(target.id)) this.sendArcade();
+        if (this.go.left(target.id)) this.sendGo();
         this.hideSeekLeft(target.id);
         this.kicked.add(target.id);
         for (const [token, owner] of this.tokens) if (owner === target.id) this.tokens.delete(token);
@@ -1589,6 +1603,48 @@ export class Room {
     if (text === this.hsSent) return;
     this.hsSent = text;
     this.broadcast({ t: 'hs', s: pack });
+  }
+
+  // ------------------------------------------------ Go
+
+  // At a Go board: sitting down to play (a new game, or the empty seat of
+  // one), a fresh board, calling the AI friend over, a stone, a pass,
+  // giving up, or getting up. Anyone near the board, as for the arcade; a
+  // stone that cannot go there is told of in a 'gofx' 'no', for the page to
+  // say why (and the AI friend to explain).
+  goOp(conn, p, msg) {
+    if (![msg.x, msg.y, msg.z].every(Number.isInteger) || !isGoBoard(this.world.get(msg.x, msg.y, msg.z))) return;
+    const k = keyOf(msg.x, msg.y, msg.z);
+    if (msg.op === 'leave') {
+      if (this.go.leave(k, p.id)) this.sendGo();
+      return;
+    }
+    if (Math.hypot(p.s[0] - msg.x - 0.5, p.s[2] - msg.z - 0.5) > GO_REACH + 1 || Math.abs(p.s[1] - msg.y) > 4) return;
+    let fx = [];
+    if (msg.op === 'sit') fx = this.go.sit(msg.x, msg.y, msg.z, p.id, p.ai === true);
+    else if (msg.op === 'new') fx = this.go.restart(k, p.id, msg.n);
+    else if (msg.op === 'call') {
+      if (!this.onlinePlayers().some((q) => q.ai)) {
+        this.notice(conn, 'The AI friend is not on this island right now. 💌 Invite it from 👫 Players, then ask again!', 'info');
+        return;
+      }
+      fx = this.go.call(k, p.id);
+    } else if (msg.op === 'move') {
+      const res = this.go.move(k, p.id, msg.i);
+      fx = Array.isArray(res) ? res : [{ k, f: 'no', by: p.id, i: msg.i, why: res.why }];
+    } else if (msg.op === 'pass') fx = this.go.pass(k, p.id);
+    else if (msg.op === 'resign') fx = this.go.resign(k, p.id);
+    for (const f of fx) this.broadcast({ t: 'gofx', ...f });
+    this.sendGo();
+  }
+
+  // The games of Go, to everyone, as they change.
+  sendGo() {
+    const pack = this.go.pack();
+    const text = JSON.stringify(pack);
+    if (text === this.goSent) return;
+    this.goSent = text;
+    this.broadcast({ t: 'go', s: pack });
   }
 
   // A machine gone (picked up, say): its game goes with it.

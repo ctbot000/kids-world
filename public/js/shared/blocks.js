@@ -1,5 +1,5 @@
 // Every kind of block in the world, as data. The id is what the world stores
-// (one byte per cell); everything else — how it looks, sounds, collides and
+// (two bytes per cell, under BLOCK_IDS); everything else — how it looks, sounds, collides and
 // lights up — hangs off the definition.
 //
 // kinds:
@@ -20,6 +20,9 @@
 //          bump into. It lets the light through.
 
 export const AIR = 0;
+// How many ids there can be: every table indexed by a block's id is this long.
+// The first 256 are all taken (one byte was all an island had before).
+export const BLOCK_IDS = 1024;
 
 const defs = [];
 const byKey = {};
@@ -204,6 +207,10 @@ export const DRAWING_BOARD = furniture(236, 'drawing-board', { name: 'Drawing Bo
 // desk lamp that lights up and a chair to sit at, like the school desk's.
 // The last four free ids, none of them in a row. After the drawing board.
 export const STUDY_DESK = furniture(69, 'study-desk', { name: 'Study Desk', color: '#c98a52', after: 236, faces: [69, 78, 79, 255], light: 8, sound: 'wood' });
+// A Go board (shared/go.js), a thick wooden board on four short feet: walk
+// up, press Q and play Go on it, with a friend or the AI friend. The first
+// id past one byte. After the study desk.
+export const GO_BOARD = furniture(256, 'go-board', { name: 'Go Board', color: '#e2b866', after: 69, turns: false, sound: 'wood' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
@@ -397,13 +404,13 @@ export const COLLECTABLES = [
 export const BLOCKS = defs;
 export const blockByKey = (key) => byKey[key] ?? null;
 export const block = (id) => defs[id] ?? defs[0];
-export const isKnown = (id) => Number.isInteger(id) && id >= 0 && id < 256 && defs[id] !== undefined;
+export const isKnown = (id) => Number.isInteger(id) && id >= 0 && id < BLOCK_IDS && defs[id] !== undefined;
 
 // Lookup tables, so hot loops (meshing, physics, light) avoid property access.
-export const SOLID = new Uint8Array(256);
-export const OPAQUE = new Uint8Array(256);
-export const EMIT = new Uint8Array(256);
-export const KIND = new Uint8Array(256); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture, 7 lava, 8 tree
+export const SOLID = new Uint8Array(BLOCK_IDS);
+export const OPAQUE = new Uint8Array(BLOCK_IDS);
+export const EMIT = new Uint8Array(BLOCK_IDS);
+export const KIND = new Uint8Array(BLOCK_IDS); // 0 air, 1 solid, 2 glass, 3 water, 4 plant, 5 item, 6 furniture, 7 lava, 8 tree
 const KIND_CODE = { air: 0, solid: 1, glass: 2, water: 3, plant: 4, item: 5, furniture: 6, lava: 7, tree: 8 };
 for (const d of defs) {
   if (!d) continue;
@@ -413,19 +420,19 @@ for (const d of defs) {
   KIND[d.id] = KIND_CODE[d.kind];
 }
 // Natural ground, which the hills tool shapes (farmland is ground too).
-export const TERRAIN = new Uint8Array(256);
+export const TERRAIN = new Uint8Array(BLOCK_IDS);
 for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, ...GEM_ROCKS]) TERRAIN[id] = 1;
 // Farmland, dry (1) or watered (2): what crops grow in.
-export const SOIL = new Uint8Array(256);
+export const SOIL = new Uint8Array(BLOCK_IDS);
 SOIL[FARMLAND] = 1;
 SOIL[WET_FARMLAND] = 2;
 // Ground that planting a vegetable on turns over into farmland.
-export const TILLS = new Uint8Array(256);
+export const TILLS = new Uint8Array(BLOCK_IDS);
 for (const id of [GRASS, DIRT, SNOW, FROSTING, BASALT]) TILLS[id] = 1;
 // Which crop a block is a stage of (its index in CROPS, plus one; 0 for
 // anything else), and which stage.
-export const CROP_OF = new Uint8Array(256);
-export const STAGE_OF = new Uint8Array(256);
+export const CROP_OF = new Uint8Array(BLOCK_IDS);
+export const STAGE_OF = new Uint8Array(BLOCK_IDS);
 CROP_STAGES.forEach((stages, i) => stages.forEach((id, s) => ((CROP_OF[id] = i + 1), (STAGE_OF[id] = s))));
 export const isCrop = (id) => CROP_OF[id] > 0;
 export const isRipe = (id) => CROP_OF[id] > 0 && STAGE_OF[id] === RIPE;
@@ -435,15 +442,15 @@ export const cropByKey = (key) => CROPS.find((c) => c.key === key) ?? null;
 export const FOODS = [...FRUITS.map(([key]) => key), ...CROPS.map((c) => c.key)];
 export const isFood = (key) => FOODS.includes(key);
 // Gem rocks, which a tap digs a jewel out of.
-export const GEM_ROCK = new Uint8Array(256);
+export const GEM_ROCK = new Uint8Array(BLOCK_IDS);
 for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
 // Jewels, dug or put down, and gem rocks: what counts as finding a jewel.
 export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
-export const TREE_PART = new Uint8Array(256);
+export const TREE_PART = new Uint8Array(BLOCK_IDS);
 for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68]) TREE_PART[id] = 1;
 // Tent cloth, what makes a tent.
-export const CLOTH = new Uint8Array(256);
+export const CLOTH = new Uint8Array(BLOCK_IDS);
 for (const id of CLOTHS) CLOTH[id] = 1;
 
 export const K_AIR = 0;

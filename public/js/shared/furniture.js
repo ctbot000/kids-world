@@ -679,6 +679,25 @@ const MODELS = {
     ];
   },
 
+  // A Go board (shared/go.js): a thick block of golden wood on four short
+  // feet, its top ruled into a nine-by-nine grid with the star points
+  // marked. A game's own lines and stones are drawn over it
+  // (render/go-boards.js).
+  'go-board'() {
+    const KAYA = '#e2b866';
+    const out = [
+      box(0.06, 0.2, 0.06, 0.94, 0.46, 0.94, KAYA, 'planks'),
+      ...[0.14, 0.86].flatMap((x) => [0.14, 0.86].map((z) => box(x - 0.06, 0, z - 0.06, x + 0.06, 0.2, z + 0.06, DARK_WOOD, 'planks'))),
+    ];
+    for (let k = 0; k < 9; k++) {
+      const at = 0.14 + k * 0.09;
+      out.push(box(at - 0.004, 0.46, 0.14, at + 0.004, 0.462, 0.86, BLACK, 'plain'));
+      out.push(box(0.14, 0.46, at - 0.004, 0.86, 0.462, at + 0.004, BLACK, 'plain'));
+    }
+    for (const [a, b] of [[2, 2], [2, 6], [6, 2], [6, 6], [4, 4]]) out.push(box(0.13 + a * 0.09, 0.46, 0.13 + b * 0.09, 0.15 + a * 0.09, 0.463, 0.15 + b * 0.09, BLACK, 'plain'));
+    return out;
+  },
+
   // An upright piano (shared/piano.js): a tall cabinet of dark polished
   // wood, its keys sticking out in front between two cheeks, the music on
   // its stand, two legs at the front and three gold pedals.

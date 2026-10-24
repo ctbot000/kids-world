@@ -1,4 +1,4 @@
-// The world is a box of cells, one byte each: which block is there. Cells are
+// The world is a box of cells, two bytes each: which block is there. Cells are
 // stored column by column (y runs fastest), which keeps a column's blocks
 // together and makes the run-length encoding of a whole island tiny.
 import { AIR, MAGIC_FLOOR, SOLID, isKnown } from './blocks.js';
@@ -16,7 +16,7 @@ export class World {
     this.seed = seed;
     this.name = name;
     this.spawn = spawn ?? { x: W / 2 + 0.5, y: sea + 4, z: D / 2 + 0.5 };
-    this.blocks = blocks ?? new Uint8Array(W * H * D);
+    this.blocks = blocks ?? new Uint16Array(W * H * D);
     this.chunksX = Math.ceil(W / CHUNK);
     this.chunksZ = Math.ceil(D / CHUNK);
     // Called as onSet(x, y, z, before, after) for every change.
@@ -111,25 +111,30 @@ export function normalizeMeta(meta) {
 }
 
 // ---------------------------------------------------------------- encoding
-// Runs of equal bytes as (block, length) pairs, the length as a varint, then
-// base64. The cells are read layer by layer (y slowest), so the solid stone
+// Runs of equal cells as (block, length) pairs, both as varints, then base64,
+// after FORMAT. An island saved before block ids outgrew a byte has no FORMAT
+// in front and its block as one byte, and is still read. The cells are read layer by layer (y slowest), so the solid stone
 // deep down and the empty sky above each come out as a handful of long runs.
 // Both ways walk the cells in plain loops: a generator handing them out one by
 // one made encoding or decoding an island three to seven times as slow.
+
+export const FORMAT = 'w2:';
 
 export function encodeBlocks(blocks, W, H, D) {
   const out = [];
   let prev = -1;
   let run = 0;
-  const flush = () => {
-    if (run === 0) return;
-    out.push(prev);
-    let n = run;
+  const varint = (n) => {
     while (n >= 0x80) {
       out.push((n & 0x7f) | 0x80);
       n >>>= 7;
     }
     out.push(n);
+  };
+  const flush = () => {
+    if (run === 0) return;
+    varint(prev);
+    varint(run);
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -146,14 +151,27 @@ export function encodeBlocks(blocks, W, H, D) {
     }
   }
   flush();
-  return bytesToBase64(Uint8Array.from(out));
+  return FORMAT + bytesToBase64(Uint8Array.from(out));
 }
 
 export function decodeBlocks(data, W, H, D) {
   if (typeof data !== 'string') throw new Error('The island data is missing.');
   const size = W * H * D;
-  const bytes = base64ToBytes(data);
-  const blocks = new Uint8Array(size);
+  const wide = data.startsWith(FORMAT);
+  const bytes = base64ToBytes(wide ? data.slice(FORMAT.length) : data);
+  const blocks = new Uint16Array(size);
+  const varint = () => {
+    let n = 0;
+    let shift = 0;
+    for (;;) {
+      if (i >= bytes.length) throw new Error('The island data is cut short.');
+      const b = bytes[i++];
+      n += (b & 0x7f) * 2 ** shift;
+      if (!(b & 0x80)) return n;
+      shift += 7;
+      if (shift > 35) throw new Error('The island data is damaged.');
+    }
+  };
   // The next cell to fill, layer by layer as encodeBlocks read them.
   let x = 0;
   let y = 0;
@@ -161,17 +179,8 @@ export function decodeBlocks(data, W, H, D) {
   let at = 0;
   let i = 0;
   while (i < bytes.length) {
-    const raw = bytes[i++];
-    let run = 0;
-    let shift = 0;
-    for (;;) {
-      if (i >= bytes.length) throw new Error('The island data is cut short.');
-      const b = bytes[i++];
-      run += (b & 0x7f) * 2 ** shift;
-      if (!(b & 0x80)) break;
-      shift += 7;
-      if (shift > 35) throw new Error('The island data is damaged.');
-    }
+    const raw = wide ? varint() : bytes[i++];
+    const run = varint();
     if (run < 1 || at + run > size) throw new Error('The island data does not fit this island.');
     const id = isKnown(raw) ? raw : AIR;
     for (let k = 0; k < run; k++) {

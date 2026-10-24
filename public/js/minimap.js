@@ -48,9 +48,9 @@ export class MapImage {
     this.tint = tint;
     const n = world.W * world.D;
     this.rgba = new Uint8ClampedArray(n * 4);
-    this.top = new Uint8Array(n); // what you see from above
+    this.top = new Uint16Array(n); // what you see from above
     this.height = new Int16Array(n);
-    this.under = new Uint8Array(n); // what you see through the water
+    this.under = new Uint16Array(n); // what you see through the water
     this.depth = new Uint8Array(n);
     this.dirty = new Uint8Array(n);
     this.queue = [];

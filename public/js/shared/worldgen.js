@@ -531,12 +531,12 @@ function gemRock(r) {
 
 // The rock deep down that jewels hide in: stone, or chocolate on a candy
 // island, or the basalt of a volcano.
-const DEEP = new Uint8Array(256);
+const DEEP = new Uint8Array(B.BLOCK_IDS);
 DEEP[B.STONE] = 1;
 DEEP[B.CHOCOLATE] = 1;
 DEEP[B.BASALT] = 1;
-const ROCKY = new Uint8Array(256);
-for (let id = 0; id < 256; id++) if (B.TERRAIN[id]) ROCKY[id] = 1;
+const ROCKY = new Uint8Array(B.BLOCK_IDS);
+for (let id = 0; id < B.BLOCK_IDS; id++) if (B.TERRAIN[id]) ROCKY[id] = 1;
 ROCKY[B.MAGIC_FLOOR] = 1;
 
 // Deep rock with rock on every side, so a jewel put there changes nothing

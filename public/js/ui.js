@@ -4,6 +4,7 @@
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
+import { BLACK, LESSONS, NO_MOVE, placeName, SIZES as GO_SIZES, WHITE } from './shared/go.js';
 import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
@@ -2041,6 +2042,7 @@ export class UI {
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
+          card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right four times and you know it by heart! Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -2940,7 +2942,11 @@ export class UI {
       game.defend();
     };
     const on = (type, fn) => game.addEventListener(type, fn);
-    on('players', () => this.renderFriends());
+    on('players', () => {
+      this.renderFriends();
+      // Who is at a Go board, and whether the AI friend is here to call.
+      this.renderGo();
+    });
     on('settings', () => {
       this.renderIsland();
       this.renderHp();
@@ -2975,6 +2981,9 @@ export class UI {
     on('study-open', () => this.studyDialog());
     on('study', () => this.studyNews());
     on('draw-open', () => this.drawDialog());
+    on('go-open', () => this.goDialog());
+    on('go', () => this.renderGo());
+    on('gofx', (e) => this.goHeard(e.detail));
     on('drawing', (e) => this.drawingChanged?.(e.detail));
     on('onair', () => this.onAirNews());
     on('arcade', () => this.renderArcade());
@@ -4224,7 +4233,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4297,18 +4306,18 @@ export class UI {
   // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -4421,6 +4430,181 @@ export class UI {
       els.play.dataset.k = String(phase);
       els.play.replaceChildren(phase === 2 ? '▶ Play again' : '▶ Play');
     }
+  }
+
+  // ------------------------------------------------ Go boards
+
+  // The Go board you sat down at, in a window: how the game is going, the
+  // board to tap a stone onto, who plays which colour, Pass and Give up, a
+  // fresh board of any size, 🤖 Play with the AI friend, and 📖 How to play,
+  // the rules a step at a time. Kept up to date as the island tells of the
+  // game (renderGo); a tip over the board says what just happened.
+  goDialog() {
+    const g = this.game;
+    if (!g?.goAt) return;
+    this.goEls = null;
+    this.goTip = '';
+    this.openModal(
+      (root) => {
+        const board = h('div', { class: 'go-board', role: 'grid', 'aria-label': 'The Go board' });
+        const status = h('div', { class: 'go-status', role: 'status' });
+        const tip = h('div', { class: 'go-tip', hidden: true });
+        const players = h('div', { class: 'go-players' });
+        const pass = h('button', { class: 'chip', type: 'button', onclick: () => g.goSend('pass') }, '✋ Pass');
+        const resign = h('button', { class: 'chip', type: 'button', onclick: () => g.goSend('resign') }, '🏳️ Give up');
+        const call = h('button', { class: 'big green go-call', type: 'button', onclick: () => g.goSend('call') }, '🤖 Play with the AI friend');
+        const sizes = GO_SIZES.map((n) => h('button', { class: 'chip go-size', type: 'button', 'data-n': n, onclick: () => g.goSend('new', { n }) }, `${n}×${n}`));
+        const lessons = h('div', { class: 'go-lessons', hidden: true });
+        const how = h('button', { class: 'chip', type: 'button', 'aria-expanded': 'false', onclick: () => this.goLesson(lessons.hidden ? 0 : -1) }, '📖 How to play');
+        this.goEls = { board, status, tip, players, pass, resign, call, sizes, lessons, how, n: 0, cells: [] };
+        root.append(
+          h('h2', {}, '⚫ Go ⚪'),
+          status,
+          tip,
+          board,
+          players,
+          h('div', { class: 'go-row' }, pass, resign, how),
+          call,
+          h('div', { class: 'go-row go-new' }, h('span', { class: 'muted' }, 'New game:'), ...sizes),
+          lessons,
+        );
+      },
+      { onClose: () => {
+        this.goEls = null;
+        g.closeGo();
+      } },
+    );
+    this.renderGo();
+  }
+
+  // The AI friend on this island, or null.
+  goFriend() {
+    for (const p of this.game?.players.values() ?? []) if (p.ai) return p;
+    return null;
+  }
+
+  renderGo() {
+    const g = this.game;
+    const els = this.goEls;
+    if (!g?.goAt || !els || !this.modalOpen) return;
+    const s = g.goGame;
+    const name = (pid) => (pid === g.pid ? 'You' : (g.players.get(pid)?.name ?? 'A friend'));
+    const mine = s ? (s.p[0] === g.pid ? BLACK : s.p[1] === g.pid ? WHITE : null) : null;
+    const friend = this.goFriend();
+    // How it is going.
+    let status = 'Sitting down…';
+    if (s?.over) {
+      const o = s.over;
+      const won = o.win === 'draw' ? 'It is a draw!' : o.win === mine ? 'You win! 🎉' : mine ? `${name(s.p[o.win === BLACK ? 0 : 1])} wins!` : `${o.win === BLACK ? '⚫ Black' : '⚪ White'} wins!`;
+      status = o.why === 'resign' ? `${won} (the other side gave up)` : `⚫ ${o.b} · ⚪ ${o.w} — ${won}`;
+    } else if (s && !s.p[1]) status = s.call ? `Waiting for ${friend?.name ?? 'the AI friend'} to come and play…` : 'Waiting for someone to play white…';
+    else if (s && !s.p[0]) status = 'Waiting for someone to play black…';
+    else if (s) status = s.t === mine ? `Your turn — you are ${mine === BLACK ? '⚫ black' : '⚪ white'}` : `${name(s.p[s.t === BLACK ? 0 : 1])}'s turn${mine ? '' : ` (${s.t === BLACK ? '⚫' : '⚪'})`}`;
+    if (els.status.textContent !== status) els.status.textContent = status;
+    els.tip.hidden = !this.goTip;
+    if (els.tip.textContent !== this.goTip) els.tip.textContent = this.goTip;
+    // The board, made again for a new size.
+    const n = s?.n ?? 5;
+    if (els.n !== n) {
+      els.n = n;
+      els.board.style.setProperty('--n', n);
+      els.cells = [];
+      const cells = [];
+      for (let i = 0; i < n * n; i++) {
+        const r = Math.floor(i / n);
+        const c = i % n;
+        const el = h('button', { class: `go-pt${r === 0 ? ' top' : ''}${r === n - 1 ? ' bottom' : ''}${c === 0 ? ' left' : ''}${c === n - 1 ? ' right' : ''}`, type: 'button', 'aria-label': placeName(n, i), onclick: () => {
+          this.sound.unlock();
+          g.goSend('move', { i });
+        } });
+        els.cells.push(el);
+        cells.push(el);
+      }
+      els.board.replaceChildren(...cells);
+    }
+    const myTurn = Boolean(s && !s.over && mine && s.t === mine && s.p[0] && s.p[1]);
+    els.board.classList.toggle('my-turn', myTurn);
+    for (let i = 0; i < els.cells.length; i++) {
+      const el = els.cells[i];
+      const v = s?.b[i] ?? '.';
+      const k = `${v}${s?.last === i ? '!' : ''}`;
+      if (el.dataset.k !== k) {
+        el.dataset.k = k;
+        el.replaceChildren(...(v === '.' ? [] : [h('span', { class: `go-stone ${v === BLACK ? 'black' : 'white'}${s.last === i ? ' last' : ''}` })]));
+        el.setAttribute('aria-label', `${placeName(n, i)}${v === BLACK ? ', black' : v === WHITE ? ', white' : ''}`);
+      }
+      el.disabled = !myTurn || v !== '.';
+    }
+    // Who plays which colour, and how many stones each has taken.
+    const seats = s ? [0, 1].map((k) => {
+      const c = k === 0 ? BLACK : WHITE;
+      const who = s.p[k] ? name(s.p[k]) : '…';
+      return h('span', { class: `chip go-player${!s.over && s.t === c && s.p[0] && s.p[1] ? ' turn' : ''}` }, `${c === BLACK ? '⚫' : '⚪'} ${who}${s.cap[c] ? ` · took ${s.cap[c]}` : ''}`);
+    }) : [];
+    const pk = JSON.stringify(seats.map((e) => e.textContent + e.className));
+    if (els.players.dataset.k !== pk) {
+      els.players.dataset.k = pk;
+      els.players.replaceChildren(...seats);
+    }
+    els.pass.disabled = !myTurn;
+    els.resign.disabled = !(s && !s.over && mine && s.p[0] && s.p[1]);
+    // Calling the AI friend over, for black waiting for someone to play.
+    els.call.hidden = !(s && !s.over && mine === BLACK && !s.p[1] && !s.call);
+    const callText = `🤖 Play with ${friend?.name ?? 'the AI friend'}`;
+    if (els.call.textContent !== callText) els.call.textContent = callText;
+    for (const b of els.sizes) b.classList.toggle('on', Number(b.dataset.n) === n);
+    for (const b of els.sizes) b.disabled = !mine;
+  }
+
+  // What just happened at a board, as the tip over yours: why a stone could
+  // not go where you tapped, stones in danger or taken, a pass, the count.
+  goHeard(msg) {
+    const g = this.game;
+    if (!g?.goAt || msg?.k !== g.goAt.key) return;
+    const s = g.goGame;
+    const mine = s ? (s.p[0] === g.pid ? BLACK : s.p[1] === g.pid ? WHITE : null) : null;
+    const name = (pid) => (pid === g.pid ? 'You' : (g.players.get(pid)?.name ?? 'A friend'));
+    const stones = (k) => (k === 1 ? 'stone' : 'stones');
+    let tip = null;
+    if (msg.f === 'no' && msg.by === g.pid) tip = `🙅 ${NO_MOVE[msg.why] ?? NO_MOVE.taken}`;
+    else if (msg.f === 'move' && msg.took) tip = msg.by === g.pid ? `🎉 You captured ${msg.took} ${stones(msg.took)}!` : mine ? `😮 ${name(msg.by)} captured ${msg.took} of your ${stones(msg.took)}!` : `${name(msg.by)} captured ${msg.took} ${stones(msg.took)}.`;
+    else if (msg.f === 'atari' && mine) tip = msg.c === mine ? `⚠️ Your ${msg.n === 1 ? 'stone' : `${msg.n} stones`} at ${placeName(s?.n ?? 5, msg.i)} ${msg.n === 1 ? 'has' : 'have'} one breathing space left! Save ${msg.n === 1 ? 'it' : 'them'}, or ${msg.n === 1 ? 'it' : 'they'} will be captured.` : `👀 ${msg.n === 1 ? 'That stone has' : `Those ${msg.n} stones have`} one breathing space left: you can capture ${msg.n === 1 ? 'it' : 'them'}!`;
+    // A tip stays until you play.
+    else if (msg.f === 'move' && msg.by === g.pid) tip = '';
+    else if (msg.f === 'pass') tip = msg.by === g.pid ? '✋ You passed.' : `✋ ${name(msg.by)} passed. Pass too to end the game and count, or keep playing.`;
+    else if (msg.f === 'end') tip = msg.why === 'score' ? `🧮 Counted: your stones, and the empty places only your stones surround. ⚫ ${msg.b} · ⚪ ${msg.w}.` : '';
+    else if (msg.f === 'new') tip = '';
+    if (tip === null) return;
+    // (A stone in danger is told of just after the move that did it.)
+    this.goTip = tip;
+    this.renderGo();
+  }
+
+  // 📖 How to play: lesson k of the rules (or closed, for -1), each with a
+  // little board to show it.
+  goLesson(k) {
+    const els = this.goEls;
+    if (!els) return;
+    els.lessons.hidden = k < 0;
+    els.how.setAttribute('aria-expanded', String(k >= 0));
+    if (k < 0) return;
+    const l = LESSONS[k];
+    const n = l.board.length;
+    const mini = h('div', { class: 'go-board mini', style: `--n: ${n}`, 'aria-hidden': 'true' });
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const v = l.board[r][c];
+        mini.append(h('div', { class: `go-pt${r === 0 ? ' top' : ''}${r === n - 1 ? ' bottom' : ''}${c === 0 ? ' left' : ''}${c === n - 1 ? ' right' : ''}` }, v === 'b' || v === 'w' ? h('span', { class: `go-stone ${v === 'b' ? 'black' : 'white'}` }) : v === 'o' ? h('span', { class: 'go-mark breath' }) : v === 'x' ? h('span', { class: 'go-mark nope' }, '✕') : null));
+      }
+    }
+    const back = h('button', { class: 'chip', type: 'button', disabled: k === 0, onclick: () => this.goLesson(k - 1) }, '◀ Back');
+    const next = k < LESSONS.length - 1 ? h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(k + 1) }, 'Next ▶') : h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(-1) }, '✔ Got it!');
+    els.lessons.replaceChildren(
+      h('h3', {}, `${k + 1}. ${l.title}`),
+      h('div', { class: 'go-lesson' }, mini, h('p', {}, l.text)),
+      h('div', { class: 'go-row' }, back, h('span', { class: 'muted' }, `${k + 1} of ${LESSONS.length}`), next),
+    );
+    els.lessons.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }
 
   // ------------------------------------------------ gashapon machines

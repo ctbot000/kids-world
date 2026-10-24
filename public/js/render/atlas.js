@@ -1,7 +1,7 @@
 // Every block face, flower and fruit is painted here with Canvas 2D when the
 // game starts — no image files. Tiles go into one texture array (one layer
 // per tile), and the same paintings make the icons in the toy box.
-import { BLOCKS, GEMS, KIND, K_FURNITURE, K_ITEM, K_PLANT } from '../shared/blocks.js';
+import { BLOCK_IDS, BLOCKS, GEMS, KIND, K_FURNITURE, K_ITEM, K_PLANT } from '../shared/blocks.js';
 import { modelBoxes } from '../shared/furniture.js';
 
 export const TILE = 64;
@@ -2110,9 +2110,9 @@ export function buildAtlas() {
     images.set(name, canvas.toDataURL());
   });
 
-  const faceLayer = new Int16Array(256 * 3).fill(0);
-  const tint = new Uint8Array(256 * 3).fill(255);
-  const studTint = new Uint8Array(256 * 3).fill(255);
+  const faceLayer = new Int16Array(BLOCK_IDS * 3).fill(0);
+  const tint = new Uint8Array(BLOCK_IDS * 3).fill(255);
+  const studTint = new Uint8Array(BLOCK_IDS * 3).fill(255);
   for (const def of BLOCKS) {
     if (!def?.tiles) continue;
     ['top', 'side', 'bottom'].forEach((face, f) => {

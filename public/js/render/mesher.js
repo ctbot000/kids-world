@@ -3,7 +3,7 @@
 // pictures for flowers, camera-facing pictures for fruit and shells, water
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
-import { AIR, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_TREE, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, CROP_OF, CROPS, FRUIT_ITEMS, GEM_ITEMS, KATSURA_GIANT, RAIL, RIPE, SHELL, STAGE_OF, STAR_PIECE, STONE, SUNFLOWER, TREE_CORE } from '../shared/blocks.js';
+import { AIR, BLOCK_IDS, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_TREE, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, CROP_OF, CROPS, FRUIT_ITEMS, GEM_ITEMS, KATSURA_GIANT, RAIL, RIPE, SHELL, STAGE_OF, STAR_PIECE, STONE, SUNFLOWER, TREE_CORE } from '../shared/blocks.js';
 
 // The four ways along the ground, as shared/riding.js numbers them.
 const RAIL_DIRS = [
@@ -47,7 +47,7 @@ export const WATER_TOP = 0.875;
 // painted, apricot to red in places, a little green left in others —
 // warmer on top, where the sun reaches, and greener underneath. Each block's
 // picture is also turned one of four ways, so no two neighbours match.
-const AUTUMN = new Uint8Array(256);
+const AUTUMN = new Uint8Array(BLOCK_IDS);
 for (const d of BLOCKS) if (d?.autumn) AUTUMN[d.id] = 1;
 const AUTUMN_STOPS = [
   [0, [226, 244, 168]],

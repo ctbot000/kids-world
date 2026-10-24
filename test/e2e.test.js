@@ -12,7 +12,7 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
@@ -4208,6 +4208,99 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   });
   const stood = await page.evaluate((at) => ({ anim: window.kidsWorld.game.me.anim, y: window.kidsWorld.game.me.body.y - at.y, bench: window.kidsWorld.game.players.get(window.kidsWorld.game.pid).avatar.bench.parent !== null }), at);
   assert.ok(stood.anim !== 11 && Math.abs(stood.y) < 0.05 && !stood.bench, JSON.stringify(stood));
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a Go board: Q by it sits you down as black, the AI friend called over plays white, a capture is cheered, two passes count the game, How to play steps through the rules, and closing it clears the board', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A Go board beside the start, on ground level with the cell beside it,
+  // and nothing rideable near it to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground || room.world.top(x + 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, GO_BOARD);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 60; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play Go'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Go'));
+  await until(page, () => window.kidsWorld.game.goGame?.p[0] === window.kidsWorld.game.pid);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.go-board .go-pt').length), 25);
+  assert.match(await page.evaluate(() => document.querySelector('.go-status').textContent), /Waiting for someone to play white/);
+  // The AI friend comes to the island (a stand-in, told what happens), and
+  // is called over: it sits down as white.
+  await page.evaluate((at, protocol) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const heard = [];
+    const c = { send: (text) => heard.push(JSON.parse(text)), close() {} };
+    room.attach(c);
+    room.receive(c, { t: 'join', protocol, name: 'Pip 🤖', look: { animal: 'kid' }, ai: true });
+    const pip = [...room.players.values()].find((p) => p.ai);
+    pip.s = [at.x + 1.5, at.y, at.z + 0.5, 0, 0, 0];
+    kw.pip = { play: (op, extra = {}) => room.receive(c, { t: 'go', op, x: at.x, y: at.y, z: at.z, ...extra }), heard };
+  }, at, PROTOCOL);
+  await until(page, () => !document.querySelector('.go-call').hidden && document.querySelector('.go-call').textContent.includes('Pip'));
+  await page.click('.go-call');
+  await until(page, () => window.kidsWorld.game.goGame?.call === true);
+  assert.match(await page.evaluate(() => document.querySelector('.go-status').textContent), /Waiting for Pip/);
+  await page.evaluate(() => window.kidsWorld.pip.play('sit'));
+  await until(page, () => document.querySelector('.go-status').textContent.includes('Your turn'));
+  // A stone in the middle, tapped, and on the board in the world too.
+  const tap = (i) => page.evaluate((i) => document.querySelectorAll('.go-board .go-pt')[i].click(), i);
+  await tap(12);
+  await until(page, () => window.kidsWorld.game.goGame?.b[12] === 'b' && document.querySelectorAll('.go-board .go-pt')[12].querySelector('.go-stone.black'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.renderer.goBoards.shown.size), 1);
+  // Not black's turn: the board waits.
+  assert.ok(await page.evaluate(() => document.querySelectorAll('.go-board .go-pt')[0].disabled));
+  // White plays above it; black surrounds it and takes it.
+  for (const [black, white] of [[null, 7], [6, 0], [8, 4]]) {
+    if (black !== null) await tap(black);
+    if (black !== null) await until(page, (i) => window.kidsWorld.game.goGame?.b[i] === 'b', black);
+    await page.evaluate((i) => window.kidsWorld.pip.play('move', { i }), white);
+    await until(page, (i) => window.kidsWorld.game.goGame?.b[i] === 'w', white);
+  }
+  await until(page, () => /one breathing space left: you can capture it/.test(document.querySelector('.go-tip').textContent));
+  await tap(2);
+  await until(page, () => window.kidsWorld.game.goGame?.b[7] === '.' && /You captured 1 stone/.test(document.querySelector('.go-tip').textContent));
+  assert.deepEqual(await page.evaluate(() => window.kidsWorld.game.goGame.cap), { b: 1, w: 0 });
+  // Two passes: the game is counted.
+  await page.evaluate(() => window.kidsWorld.pip.play('pass'));
+  await until(page, () => /passed/.test(document.querySelector('.go-tip').textContent) && !document.querySelector('.go-row .chip').disabled);
+  await page.evaluate(() => [...document.querySelectorAll('.go-row .chip')].find((b) => b.textContent.includes('Pass')).click());
+  await until(page, () => window.kidsWorld.game.goGame?.over && /⚫ \d+ · ⚪ \d+ — /.test(document.querySelector('.go-status').textContent));
+  await until(page, () => window.kidsWorld.profile.data.stats.gogames === 1 && window.kidsWorld.profile.data.stickers['go-player']);
+  // The AI friend heard all of it, to teach from.
+  const fx = await page.evaluate(() => window.kidsWorld.pip.heard.filter((m) => m.t === 'gofx').map((m) => m.f));
+  for (const f of ['call', 'sit', 'move', 'atari', 'pass', 'end']) assert.ok(fx.includes(f), `it heard ${f}`);
+  // How to play: the rules a step at a time.
+  await page.evaluate(() => [...document.querySelectorAll('.go-row .chip')].find((b) => b.textContent.includes('How to play')).click());
+  await until(page, () => !document.querySelector('.go-lessons').hidden && document.querySelector('.go-lessons h3').textContent === '1. Take turns');
+  await page.evaluate(() => [...document.querySelectorAll('.go-lessons .chip')].find((b) => b.textContent.includes('Next')).click());
+  await until(page, () => document.querySelector('.go-lessons h3').textContent === '2. Breathing spaces' && document.querySelectorAll('.go-lessons .go-mark.breath').length === 4);
+  // Closing it gets you up: with only the AI friend left, the board clears.
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.goGames.size === 0 && window.kidsWorld.game.renderer.goBoards.shown.size === 0);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

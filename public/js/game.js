@@ -6,6 +6,7 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
+import { goBoardNear, isGoBoard } from './shared/go.js';
 import { cleanRound } from './shared/hideseek.js';
 import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
@@ -232,6 +233,11 @@ export class Game extends EventTarget {
     this.arcade = new Map();
     this.arcadeTarget = null;
     this.arcadeAt = null;
+    // The games of Go at the island's Go boards (shared/go.js), by their
+    // boards' cell keys, the board you are by, and the one you play at.
+    this.goGames = new Map();
+    this.goTarget = null;
+    this.goAt = null;
     // A round of hide and seek on the island (shared/hideseek.js), or null,
     // and when it was told of, to count its time down from.
     this.hideseek = null;
@@ -475,6 +481,12 @@ export class Game extends EventTarget {
       case 'arcfx':
         this.arcadeFx(msg);
         break;
+      case 'go':
+        this.setGo(msg.s);
+        break;
+      case 'gofx':
+        this.goFx(msg);
+        break;
       case 'hs':
         this.setHideSeek(msg.s);
         break;
@@ -556,6 +568,7 @@ export class Game extends EventTarget {
     this.setNextStage(msg.next ?? null);
     this.setDefense(msg.defense ?? null);
     this.setArcade(msg.arcade ?? []);
+    this.setGo(msg.go ?? []);
     this.setHideSeek(msg.hideseek ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
@@ -644,7 +657,7 @@ export class Game extends EventTarget {
     }
     const old = this.players.get(p.id);
     if (old?.avatar) this.renderer.removeAvatar(p.id);
-    const player = { id: p.id, name: p.name, look: p.look, snaps: [], avatar: this.renderer.addAvatar(p.id, p.look, p.name), anim: 0, bubble: null, dizzy: p.dizzy === true };
+    const player = { id: p.id, name: p.name, look: p.look, snaps: [], avatar: this.renderer.addAvatar(p.id, p.look, p.name), anim: 0, bubble: null, dizzy: p.dizzy === true, ai: p.ai === true };
     this.players.set(p.id, player);
     if (p.s) {
       this.remoteMove(p.id, p.s, true);
@@ -2478,6 +2491,76 @@ export class Game extends EventTarget {
     this.study = null;
   }
 
+  // ------------------------------------------------ Go boards
+
+  // The games of Go going at the island's boards, as the island tells of
+  // them (shared/go.js packs them), drawn on their boards for everyone.
+  setGo(list) {
+    const before = this.goGames;
+    this.goGames = new Map();
+    for (const g of Array.isArray(list) ? list : []) {
+      if (!g || typeof g.k !== 'string' || !isGoBoard(this.world?.get(g.x, g.y, g.z))) continue;
+      this.goGames.set(g.k, g);
+      this.renderer.goBoards.show(g.k, g);
+    }
+    for (const k of before.keys()) if (!this.goGames.has(k)) this.renderer.goBoards.remove(k);
+    this.emit('go');
+  }
+
+  // Q (or the Play button) by a Go board: you sit down to play at it (a new
+  // game if none is going there), and its window opens.
+  openGo() {
+    const t = this.goTarget;
+    if (!t) return;
+    this.goAt = t;
+    this.goSend('sit');
+    this.sound.play('open');
+    this.emit('go-open');
+  }
+
+  // Something done at the board you play at: a stone at place i, a pass, a
+  // fresh board of size n, calling the AI friend over, or giving up.
+  goSend(op, extra = {}) {
+    const t = this.goAt;
+    if (t) this.send({ t: 'go', op, x: t.x, y: t.y, z: t.z, ...extra });
+  }
+
+  // The window closed: you get up from the board.
+  closeGo() {
+    const t = this.goAt;
+    this.goAt = null;
+    if (t) this.send({ t: 'go', op: 'leave', x: t.x, y: t.y, z: t.z });
+  }
+
+  // The game at the board you play at, or null.
+  get goGame() {
+    return this.goAt ? (this.goGames.get(this.goAt.key) ?? null) : null;
+  }
+
+  // What just happened at a board: a stone's click, a capture's pop, and at
+  // the end of a game you played, counted for XP and the Go stickers.
+  goFx(msg) {
+    const mine = this.goAt?.key === msg.k;
+    if (msg.f === 'move') {
+      const g = this.goGames.get(msg.k);
+      if (mine || (g && Math.hypot(g.x + 0.5 - this.me.body.x, g.z + 0.5 - this.me.body.z) < 8)) {
+        this.sound.play('place', { kind: 'stone' });
+        if (msg.took) this.sound.play('pop');
+      }
+    } else if (msg.f === 'no' && msg.by === this.pid) {
+      this.sound.play('no');
+    } else if (msg.f === 'end' && Array.isArray(msg.p)) {
+      const seat = msg.p.indexOf(this.pid);
+      if (seat >= 0) {
+        this.profile.count('gogames');
+        const won = msg.win === (seat === 0 ? 'b' : 'w');
+        if (won) this.profile.count('gowins');
+        this.sound.play(won ? 'fanfare' : 'ding');
+      }
+    }
+    this.emit('gofx', msg);
+  }
+
   // ------------------------------------------------ drawing boards
 
   // The pictures on the island's boards, as the island tells of them on
@@ -2931,6 +3014,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.drawTarget) {
       this.openDrawing();
+      return;
+    }
+    if (!id && this.goTarget) {
+      this.openGo();
       return;
     }
     if (!id) {
@@ -4080,6 +4167,7 @@ export class Game extends EventTarget {
     this.classTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.dizzy && !on.flying && on.onGround ? chalkboardNear(this.world, on) : null;
     this.drawTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.dizzy && !on.flying && on.onGround ? boardNear(this.world, on) : null;
     this.stoveTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? stoveNear(this.world, on) : null;
+    this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -4534,6 +4622,10 @@ export class Game extends EventTarget {
     this.study = null;
     this.drawAt = null;
     this.drawTarget = null;
+    this.goGames.clear();
+    this.goAt = null;
+    this.goTarget = null;
+    this.renderer.goBoards.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();
     this.renderer.showPreview(null);

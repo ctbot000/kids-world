@@ -9,7 +9,7 @@ import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody, unstick } from '../p
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, buildEdit, growEdit, hillEdit, paintEdit, pickEdit, stampEdit, validCells } from '../public/js/shared/tools.js';
-import { base64ToBytes, decodeBlocks, encodeBlocks, World } from '../public/js/shared/world.js';
+import { base64ToBytes, bytesToBase64, decodeBlocks, encodeBlocks, FORMAT, World } from '../public/js/shared/world.js';
 import { generate, sizeSide } from '../public/js/shared/worldgen.js';
 
 // A small flat test world: magic floor, stone up to y=4, grass at y=5.
@@ -44,17 +44,25 @@ test('the world encodes and decodes exactly', () => {
   assert.deepEqual(back.blocks, world.blocks);
   assert.ok(data.length < 120000, `encoded island is ${data.length} characters`);
   assert.throws(() => decodeBlocks(data.slice(0, 100), world.W, world.H, world.D));
-  // Every block id is taken since the study desk took the last four, so
-  // none is left over to decode as air (world.js would, for an unknown one).
-  assert.ok([...Array(256).keys()].every((id) => B.isKnown(id)), 'every block id is used');
+  // The first 256 ids are all taken, the most one byte held: an island
+  // saved before ids took two bytes still decodes, a byte to a block.
+  assert.ok([...Array(256).keys()].every((id) => B.isKnown(id)), 'every one-byte block id is used');
+  assert.ok(!B.isKnown(B.BLOCK_IDS));
+  const legacy = decodeBlocks(bytesToBase64(Uint8Array.from([255, 2, B.GRASS, 10])), 2, 2, 3);
+  assert.deepEqual([legacy[0], legacy[2]], [255, 255]);
+  assert.equal(legacy.filter((id) => id === B.GRASS).length, 10);
   // Saved islands have their cells layer by layer (y slowest), then along x,
   // then z, so that order must never change: here each cell of a lopsided
   // little world holds a block of its own, and the runs come out in that order.
-  const cells = Uint8Array.from({ length: 2 * 2 * 3 }, (_, i) => i + 1);
+  const cells = Uint16Array.from({ length: 2 * 2 * 3 }, (_, i) => i + 1);
   const little = encodeBlocks(cells, 2, 2, 3);
-  const runs = base64ToBytes(little);
+  assert.ok(little.startsWith(FORMAT));
+  const runs = base64ToBytes(little.slice(FORMAT.length));
   assert.deepEqual([...runs.filter((_, i) => i % 2 === 0)], [1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12]);
   assert.deepEqual(decodeBlocks(little, 2, 2, 3), cells);
+  // Ids past a byte go round too.
+  const wide = Uint16Array.from({ length: 12 }, (_, i) => (i < 6 ? B.GO_BOARD : B.AIR));
+  assert.deepEqual(decodeBlocks(encodeBlocks(wide, 2, 2, 3), 2, 2, 3), wide);
 });
 
 test('generation is deterministic and makes a sensible island, of every size', () => {
