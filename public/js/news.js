@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'fun-park', date: '2026-10-24', icon: '🎡', title: 'Fun park islands', text: 'Make a Fun Park Island: a roller coaster, a Ferris wheel and a merry-go-round to ride!' },
   { id: 'skates', date: '2026-10-24', icon: '🛼', title: 'Roller skates', text: 'Buy Roller Skates in the 🛒 shop: push off, let go and glide!' },
   { id: 'study-desk', date: '2026-10-24', icon: '📚', title: 'Study desks', text: 'Sit at a Study Desk for adding, times tables, spelling and more, and learn them by heart!' },
   { id: 'hide-and-seek', date: '2026-10-24', icon: '🙈', title: 'Hide and seek', text: 'Play hide and seek with your friends: tap 😊 or the island\'s name, then 🙈 I\'ll be it!' },

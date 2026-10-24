@@ -23,6 +23,11 @@
 // friends to ride along (ride.seats); and a helicopter and a hot-air balloon
 // that fly. They park where they were left, and someone driving one moves
 // it the way a rider moves an animal.
+//
+// And a fun park island's own rides (fixed: they stay where they were
+// built, and nobody drives them): a merry-go-round and a Ferris wheel. They
+// turn by themselves, by the clock (spinAt), and everyone who hops on rides
+// along in one of their seats (spinSeat).
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
 import { fightOf, isWild, MOODS, packFight } from './dragon.js';
@@ -31,11 +36,16 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
 const ICY = new Set([B.SNOW, B.ICE, B.SAND, B.PEBBLES, B.STONE]);
+// n seats evenly round a circle of radius r, the first straight ahead.
+function ring(n, r) {
+  return Array.from({ length: n }, (_, i) => [Math.sin((i / n) * Math.PI * 2) * r, Math.cos((i / n) * Math.PI * 2) * r].map((v) => +v.toFixed(3)));
+}
+
 export const CRITTER_INFO = {
   bunny: { name: 'Bunny', icon: '🐰', speed: 2.4, swims: false, flies: false, names: ['Bun-Bun', 'Hoppy', 'Clover', 'Cotton', 'Nibbles', 'Snowball', 'Button', 'Biscuit', 'Mochi', 'Pudding'] },
   chick: { name: 'Chick', icon: '🐤', speed: 1.5, swims: false, flies: false, names: ['Peep', 'Sunny', 'Pip', 'Chirpy', 'Lemon', 'Buttercup', 'Goldie', 'Sprout', 'Honey', 'Popcorn'] },
@@ -101,6 +111,14 @@ export const CRITTER_INFO = {
     ride: { air: true, seat: 2.99, z: 0.11, radius: 1.3, height: 5.6, float: 2.1, spread: 0.45, reach: 1.25, walk: 5, run: 9, swim: 2.5, jump: 10, fly: 11, flyRun: 16, flyUp: 7.5, maxFall: 3 },
     names: ['Ember', 'Cinder', 'Blaze', 'Smoky', 'Pepper', 'Sooty', 'Toasty', 'Flame', 'Rusty', 'Magma'],
   },
+  // A fun park island's rides (vehicle: 'ride', fixed: the island's own, not
+  // in the toy box, never sent away). spin: how fast it turns, in radians a
+  // second. The merry-go-round's seats are its horses, in a ring round its
+  // middle (as seats always are, [across, forward]), going up and down as it
+  // turns (bob); the Ferris wheel's (wheel) are its cabins, hanging from a
+  // wheel `r` round its hub, `hub` high, `hang` under the rim.
+  carousel: { name: 'Merry-Go-Round', icon: '🎠', speed: 0, swims: false, flies: false, vehicle: 'ride', fixed: true, ride: { spin: 0.55, bob: 0.22, seat: 1.05, radius: 3.5, height: 4.8, float: 0, spread: 0.6, reach: 0.9, seats: ring(8, 2.45) }, names: ['Twirly', 'Merry', 'Whirligig', 'Galloping Gertie', 'Round-and-Round', 'Calliope', 'Carousella', 'Dizzy Daisy'] },
+  ferris: { name: 'Ferris Wheel', icon: '🎡', speed: 0, swims: false, flies: false, vehicle: 'ride', fixed: true, ride: { spin: 0.16, wheel: { r: 6, hub: 8.2, hang: 1.7 }, seat: 0.55, radius: 1.9, height: 15, float: 0, spread: 0.12, reach: 1.3, seats: ring(8, 6) }, names: ['Big Wheel', 'Skyview', 'Loop-de-Loop', 'Starwheel', 'Up-and-Over', 'Cloudnine', 'Sunwheel', 'Hightop'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -119,7 +137,10 @@ export const CRITTER_INFO = {
 // (a kick scooter), their feet on the deck, seat the height of their hips
 // over it.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
-export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle);
+// What the toy box has to drive (not a fun park's rides, built where they are).
+export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].fixed);
+// A fun park's rides, which stay where they were built.
+export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // The animals, without the vehicles — and without the wild ones, which are
 // their island's own (the dragon), to invite only once tamed (dragon.js).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild);
@@ -193,10 +214,41 @@ export const HIPS = 0.25;
 // vehicle with seats for friends (0 is the driver's; see ride.seats).
 export function riderAt(type, m, seat = 0) {
   const r = CRITTER_INFO[type].ride;
+  if (r.spin) return spinSeat(type, m, Math.max(0, seat - 1), m.spin ?? spinAt(type));
   const [across, z] = seat > 0 && r.seats?.[seat - 1] ? r.seats[seat - 1] : [0, r.z ?? 0];
   const sin = Math.sin(m.yaw);
   const cos = Math.cos(m.yaw);
   return { x: m.x + sin * z + cos * across, y: m.y + r.seat - HIPS, z: m.z + cos * z - sin * across, yaw: m.yaw };
+}
+
+// How far round a ride that turns has gone (radians), by the clock: the
+// same on every page, near enough, with nothing sent for it.
+export function spinAt(type, ms = Date.now()) {
+  const rate = CRITTER_INFO[type]?.ride?.spin ?? 0;
+  return ((ms / 1000) * rate) % (Math.PI * 2);
+}
+
+// How far up a merry-go-round's horse i is, at spin: each its own way.
+export const horseBob = (r, i, spin) => r.bob * (1 + Math.sin(spin * 4 + i * 2.1)) * 0.5;
+
+// Where someone riding in seat i (0 on) of a ride at m = { x, y, z, yaw }
+// is, its turn `spin` along: on a merry-go-round's horse as it goes round
+// (facing the way it goes), or in a Ferris wheel's cabin, on the wheel
+// across the way the ride faces (and facing out of it, at the view).
+export function spinSeat(type, m, i, spin) {
+  const r = CRITTER_INFO[type].ride;
+  const sin = Math.sin(m.yaw);
+  const cos = Math.cos(m.yaw);
+  if (r.wheel) {
+    const a = spin + (i / r.seats.length) * Math.PI * 2;
+    const across = Math.cos(a) * r.wheel.r;
+    return { x: m.x + cos * across, y: m.y + r.wheel.hub + Math.sin(a) * r.wheel.r - r.wheel.hang + r.seat - HIPS, z: m.z - sin * across, yaw: m.yaw };
+  }
+  const [across, z] = r.seats[i] ?? r.seats[0];
+  const s = Math.sin(m.yaw + spin);
+  const c = Math.cos(m.yaw + spin);
+  const angle = Math.atan2(across, z) + m.yaw + spin;
+  return { x: m.x + s * z + c * across, y: m.y + r.seat + horseBob(r, i, spin) - HIPS, z: m.z + c * z - s * across, yaw: angle + Math.PI / 2 };
 }
 
 // How many friends a vehicle takes along, besides its driver.
@@ -681,10 +733,11 @@ export function placeScooters(world, rng, others = []) {
   return out;
 }
 
-export function placeVehicles(world, rng, mines = []) {
+// others: what else to keep clear of, as { x, z, r } (a fun park's rides).
+export function placeVehicles(world, rng, mines = [], others = []) {
   const out = [];
   const spawn = world.spawn;
-  const taken = (x, z, d) => out.some((o) => Math.hypot(o.x - x, o.z - z) < d);
+  const taken = (x, z, d) => out.some((o) => Math.hypot(o.x - x, o.z - z) < d) || others.some((o) => Math.hypot(o.x - x, o.z - z) < d + o.r);
   const open = (type, near) => {
     for (let tries = 0; tries < spots(world, 600); tries++) {
       const a = rng.next() * Math.PI * 2;
@@ -1130,12 +1183,13 @@ export class CritterSim {
 
   // Someone hops on to ride along, in the first free seat: which seat (1 on,
   // as riderAt counts them), or 0 if it has none free. Not if they drive it.
-  board(id, pid) {
+  // order: the seats (0 on) to try first, if some are better than others.
+  board(id, pid, order = null) {
     const c = this.get(id);
     if (!c?.passengers || c.rider === pid) return 0;
     const had = c.passengers.indexOf(pid);
     if (had >= 0) return had + 1;
-    const i = c.passengers.indexOf(0);
+    const i = (order ?? c.passengers.map((_, k) => k)).find((k) => c.passengers[k] === 0) ?? -1;
     if (i < 0) return 0;
     c.passengers[i] = pid;
     return i + 1;
@@ -1179,6 +1233,8 @@ export class CritterSim {
   // Honked at (petted), it honks back for a moment.
   stepVehicle(world, c, dt, now) {
     c.state = c.happyUntil > now ? 'happy' : 'idle';
+    // A fun park's ride stands where it was built (and turns by the clock).
+    if (CRITTER_INFO[c.type].fixed) return;
     if (CRITTER_INFO[c.type].vehicle === 'sea') {
       const w = waterColumn(world, c.x, c.z);
       if (w) {

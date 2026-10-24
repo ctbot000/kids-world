@@ -352,7 +352,8 @@ test("the host puts a ridden animal under its rider, as they say where they are"
 });
 
 test('each rider sits on the saddle, on the top of the back', () => {
-  for (const type of CRITTER_TYPES.filter((t) => CRITTER_INFO[t].ride)) {
+  // (Not a fun park's rides, which nobody drives: park.test.js.)
+  for (const type of CRITTER_TYPES.filter((t) => CRITTER_INFO[t].ride && !CRITTER_INFO[t].fixed)) {
     const r = CRITTER_INFO[type].ride;
     const m = new CritterModel(type, 2, 'sunny');
     m.time = 0;

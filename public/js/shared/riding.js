@@ -255,7 +255,8 @@ function roll(world, ride, input, dt) {
     const [dx, dz] = DIRS[rail.d];
     const along = len > 0.3 ? (dx * input.mx + dz * input.mz) / len : 0;
     if (along < -0.3) rail.v -= 9 * dt;
-    else if (len > 0.3) rail.v = Math.min(top, rail.v + 6 * dt);
+    // (Pushing never holds back a cart already going faster, down a slope.)
+    else if (len > 0.3) rail.v = rail.v < top ? Math.min(top, rail.v + 6 * dt) : rail.v - 0.8 * dt;
     else rail.v = Math.max(0, rail.v - 0.8 * dt);
     // Faster down a slope, slower up one.
     rail.v -= (rail.next.y - rail.y) * 7 * dt;
@@ -370,12 +371,16 @@ export function getOffAt(world, ride) {
   const fx = Math.sin(ride.yaw);
   const fz = Math.cos(ride.yaw);
   const out = r.radius + 0.5;
-  for (const [dx, dz] of [
+  const ways = [
     [-fz, fx],
     [fz, -fx],
     [-fx, -fz],
     [fx, fz],
-  ]) {
+  ];
+  // Off a fun park's ride, out in front of it (a Ferris wheel's left and
+  // right are under its wheel).
+  if (r.spin) ways.unshift(ways.pop());
+  for (const [dx, dz] of ways) {
     for (const k of [1, 1.5]) {
       const x = b.x + dx * out * k;
       const z = b.z + dz * out * k;

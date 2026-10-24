@@ -326,7 +326,8 @@ test("every pet's model can be drawn in every coat and every pose, in its owner'
 
 test('a pet riding along sits on the back of the animal or in the vehicle, behind its rider', () => {
   const up = new THREE.Vector3(0, 1, 0);
-  for (const type of CRITTER_TYPES.filter((t) => CRITTER_INFO[t].ride)) {
+  // (Nobody drives a fun park's ride, so no pet rides behind its driver.)
+  for (const type of CRITTER_TYPES.filter((t) => CRITTER_INFO[t].ride && !CRITTER_INFO[t].fixed)) {
     const mount = new CritterModel(type, 0);
     mount.group.position.set(10, 5, 10);
     mount.group.rotation.y = 0.7;

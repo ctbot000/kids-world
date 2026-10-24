@@ -2025,6 +2025,7 @@ export class UI {
           card('🚗', 'Vehicles', ['Walk up to the car, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. More are in the toy box.']),
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
+          card('🎡', 'Fun park', ['A 🎡 Fun Park Island has a roller coaster, a Ferris wheel and a merry-go-round. Walk up to the Ferris wheel or the merry-go-round and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to go round and round with your friends. Get in a roller coaster car at its station and push ahead to climb the hill, then whoosh down the drop!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
@@ -4237,8 +4238,9 @@ export class UI {
     }
     const info = CRITTER_INFO[c.type];
     const touch = this.input.touchMode;
-    // With someone at the wheel, the others hop on to ride along.
-    const verb = info.vehicle ? (c.rider ? 'Hop on' : 'Drive') : 'Ride';
+    // With someone at the wheel, the others hop on to ride along, as
+    // everyone does on a fun park's rides.
+    const verb = info.vehicle ? (c.rider || info.fixed ? 'Hop on' : 'Drive') : 'Ride';
     const label = on ? (info.vehicle ? '👋 Get out' : '👋 Get off') : `${info.icon} ${verb}`;
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
@@ -4246,7 +4248,8 @@ export class UI {
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
       el.setAttribute('aria-label', on ? label.slice(3) : `${verb} ${c.name || info.name}`);
     }
-    const scr = r.project(at.x, at.y + (on ? 1 : c.model.center), at.z);
+    // (By a fun park's ride, down where you get on, not up by its middle.)
+    const scr = r.project(at.x, at.y + (on ? 1 : info.fixed ? 1.6 : c.model.center), at.z);
     if (!scr.visible && !on) {
       el.hidden = true;
       return;

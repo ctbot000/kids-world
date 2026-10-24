@@ -8,6 +8,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, onSurface, sphere, toon, torus } from './toon.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
+import { RIDE_BUILDERS } from './ride-models.js';
 
 const BLACK = '#2b2530';
 const WHITE = '#ffffff';
@@ -1369,7 +1370,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {

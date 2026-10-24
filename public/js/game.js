@@ -3136,7 +3136,9 @@ export class Game extends EventTarget {
     const driver = this.players.get(entry.rider);
     const who = driver ? `${driver.name || 'A friend'} is driving.` : 'Nobody is driving yet.';
     const how = this.touch ? 'Tap 👋 Get out to get out.' : 'Press Q to get out.';
-    this.emit('toast', { icon: info.icon, text: `All aboard ${name}! ${who} Jump to honk. ${how}` });
+    // A fun park's ride goes round by itself.
+    if (info.fixed) this.emit('toast', { icon: info.icon, text: `All aboard the ${info.name}! Round and round you go. ${how}` });
+    else this.emit('toast', { icon: info.icon, text: `All aboard ${name}! ${who} Jump to honk. ${how}` });
     if (driver) this.profile.count('along');
     this.emit('ride');
   }
@@ -3245,6 +3247,13 @@ export class Game extends EventTarget {
     // Down (Shift, or ⬇️) dives at sea (and gets off on land: see pressDown).
     const ev = stepRide(this.world, ride, { mx: fx * move.y + -fz * move.x, mz: fz * move.y + fx * move.x, jump: input.jump, down: input.down, run: input.run }, dt);
     const r = ride.body;
+    // Rolling along rails, the camera swings round behind you the way you
+    // are going, as on a roller coaster: pushing ahead keeps you going ahead.
+    if (ride.rail?.next && ride.rail.v > 0.5) {
+      const heading = Math.atan2(ride.rail.next.x - ride.rail.x, ride.rail.next.z - ride.rail.z) + Math.PI;
+      const v = this.renderer.view;
+      v.yaw += (heading - v.yaw - Math.PI * 2 * Math.floor((heading - v.yaw + Math.PI) / (Math.PI * 2))) * Math.min(1, dt * 2.5);
+    }
     // On land and off the rails, it steps out of whatever it walked into too.
     if (!ride.r.sea && !ride.rail) keepApart(this.world, r, this.standing(`c${ride.id}`), `c${ride.id}`);
     const seat = riderAt(ride.type, { x: r.x, y: r.y, z: r.z, yaw: ride.yaw });

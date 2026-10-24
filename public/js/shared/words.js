@@ -48,13 +48,14 @@ export const ISLAND_WORDS = {
   snowy: ['Snowflake', 'Frosty', 'Mitten', 'Twinkle', 'Winter', 'Icicle', 'Cocoa', 'Snowball', 'Pinecone', 'Starlight', 'Snuggle', 'Aurora'],
   candy: ['Candy', 'Sugar', 'Gumdrop', 'Lollipop', 'Marshmallow', 'Cupcake', 'Sprinkle', 'Bubblegum', 'Toffee', 'Jellybean', 'Cookie', 'Sherbet'],
   volcano: ['Ember', 'Cinder', 'Lava', 'Magma', 'Smoky', 'Ash', 'Pepper', 'Flame', 'Toasty', 'Crater', 'Ruby', 'Spark'],
+  park: ['Funland', 'Jolly', 'Whirly', 'Carnival', 'Popcorn', 'Lollipop', 'Ticket', 'Giggle', 'Wonder', 'Rollercoaster', 'Confetti', 'Merry'],
   flat: ['Builder', 'Brick', 'Meadow', 'Sunny', 'Happy', 'Grassy', 'Wide', 'Clover', 'Daisy', 'Breezy', 'Maple', 'Buttercup'],
 };
 export const ISLAND_PLACES = ['Island', 'Cove', 'Bay', 'Isle', 'Meadow', 'Hills', 'Harbor', 'Beach', 'Valley', 'Garden', 'Village', 'Park'];
 
 export function randomIslandName(theme = 'sunny', random = Math.random) {
   const words = ISLAND_WORDS[theme] ?? ISLAND_WORDS.sunny;
-  const place = theme === 'flat' ? pick(['Meadow', 'Park', 'Fields', 'Village', 'Plains'], random) : pick(ISLAND_PLACES, random);
+  const place = theme === 'flat' ? pick(['Meadow', 'Park', 'Fields', 'Village', 'Plains'], random) : theme === 'park' ? pick(['Park', 'Island', 'Fair', 'Land', 'Pier', 'Isle'], random) : pick(ISLAND_PLACES, random);
   return `${pick(words, random)} ${place}`;
 }
 

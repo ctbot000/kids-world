@@ -2,9 +2,11 @@
 // trees (some of them fruit trees of the island's own fruit), flowers,
 // seashells, jewels in the rock and a mine into each mountain, animal
 // friends, and a spot for everyone to arrive at; on an adventure island, the
-// grumpy monsters' camps and King Grumble's castle too.
+// grumpy monsters' camps and King Grumble's castle too; on a fun park
+// island, the park in the middle (park.js).
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
+import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
 import * as B from './blocks.js';
 import { busesClearOf, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
@@ -17,6 +19,7 @@ export const THEMES = [
   { key: 'snowy', name: 'Snowy Island', icon: '❄️', blurb: 'Snow, pine trees and frozen ponds' },
   { key: 'candy', name: 'Candy Island', icon: '🍭', blurb: 'Frosting hills and lollipop trees' },
   { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
+  { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -66,7 +69,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- shape
   const mAngle = rng.next() * Math.PI * 2;
-  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : rng.range(0.18, 0.3) * W;
+  // On a fun park island, out past the park.
+  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : theme === 'park' ? rng.range(0.34, 0.4) * W : rng.range(0.18, 0.3) * W;
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
   const mHeight = theme === 'snowy' ? 24 : theme === 'volcano' ? 26 : 18;
@@ -79,10 +83,12 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     const a = rng.next() * Math.PI * 2;
     const r = rng.range(0.1, 0.32) * W;
     const m = { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, height: mHeight * rng.range(0.7, 1) };
-    if (Math.hypot(m.x - cx, m.z - cz) < 16 || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
+    if (Math.hypot(m.x - cx, m.z - cz) < (theme === 'park' ? PARK_HALF + 24 : 16) || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
     mountains.push(m);
   }
   const nearMountain = (x, z, r) => mountains.some((m) => Math.hypot(x - m.x, z - m.z) < r);
+  const parkLevel = sea + 4;
+  const park = theme === 'park' ? { cx: Math.floor(cx), cz: Math.floor(cz) } : null;
   for (let x = 0; x < W; x++) {
     for (let z = 0; z < D; z++) {
       let h;
@@ -104,6 +110,11 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
         // Soft beaches: land just above the sea is pulled down to it.
         if (h > sea && h < sea + 2.2 && mask < 0.55) h = sea + (h - sea) * 0.6;
       }
+      // A fun park island's park is flat, the land easing into it round it.
+      if (theme === 'park') {
+        const edge = Math.max(Math.abs(x + 0.5 - cx), Math.abs(z + 0.5 - cz)) - PARK_HALF - 1;
+        h = parkLevel + (h - parkLevel) * smoothstep(0, PARK_BLEND, edge);
+      }
       heights[x * D + z] = Math.max(2, Math.min(H - 12, Math.round(h)));
     }
   }
@@ -120,7 +131,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       const r = rng.range(3.2, 4.8);
       const h0 = hi(px, pz);
       if (h0 < sea + 2 || h0 > sea + 6) continue;
-      if (nearMountain(px, pz, 22) || Math.hypot(px - cx, pz - cz) < 8) continue;
+      if (nearMountain(px, pz, 22) || Math.hypot(px - cx, pz - cz) < 8 || inPark(park, px, pz, Math.ceil(r) + 6)) continue;
       if (ponds.some((p) => Math.hypot(p.x - px, p.z - pz) < p.r + r + 8)) continue;
       ponds.push({ x: px, z: pz, r, level: h0 - 1 });
     }
@@ -273,18 +284,22 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   }
 
+  // ---------------------------------------------------------------- the park
+  // On a fun park island, the park in the middle, with its own way in.
+  const built = park ? buildPark(world, { ...park, level: parkLevel, pal }) : null;
+
   // ---------------------------------------------------------------- spawn
   const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);
   const isLand = (x, z) => {
     const h = hi(x, z);
-    return h > sea && world.get(x, h, z) === pal.top && world.get(x, h + 1, z) === B.AIR && !overLava(x, z);
+    return h > sea && world.get(x, h, z) === pal.top && world.get(x, h + 1, z) === B.AIR && !overLava(x, z) && !inPark(park, x, z);
   };
   const flatAround = (x, z, r) => {
     const h = hi(x, z);
     for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (!isLand(x + dx, z + dz) || Math.abs(hi(x + dx, z + dz) - h) > 0) return false;
     return true;
   };
-  let spawn = null;
+  let spawn = built ? { x: Math.floor(built.spawn.x), z: Math.floor(built.spawn.z) } : null;
   for (let ring = 0; ring < 40 && !spawn; ring++) {
     for (let a = 0; a < 16 && !spawn; a++) {
       const x = Math.round(cx + Math.cos((a / 16) * Math.PI * 2) * ring);
@@ -293,7 +308,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
   }
   spawn ??= { x: Math.round(cx), z: Math.round(cz) };
-  world.spawn = { x: spawn.x + 0.5, y: hi(spawn.x, spawn.z) + 1, z: spawn.z + 0.5 };
+  world.spawn = built ? { ...built.spawn } : { x: spawn.x + 0.5, y: hi(spawn.x, spawn.z) + 1, z: spawn.z + 0.5 };
   const nearSpawn = (x, z, r) => Math.hypot(x - spawn.x, z - spawn.z) < r;
 
   // ---------------------------------------------------------------- trees
@@ -415,7 +430,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     }
     return null;
   };
-  const onLand = (x, z) => isLand(x, z) || (world.get(x, hi(x, z), z) === pal.top && B.KIND[world.get(x, hi(x, z) + 1, z)] === B.K_PLANT);
+  const onLand = (x, z) => isLand(x, z) || (world.get(x, hi(x, z), z) === pal.top && B.KIND[world.get(x, hi(x, z) + 1, z)] === B.K_PLANT && !inPark(park, x, z));
   // A volcano island keeps a few hardy bunnies, chicks and sheep; nothing
   // flies in the smoke but the odd bird, and nothing lives in the lava sea.
   const counts = scaleCounts(
@@ -441,6 +456,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   critters.push(...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng), ...placeBig(world, rng));
   // The one dragon, asleep on the volcano (critters.js).
   if (theme === 'volcano') critters.push(...placeDragon(world, rng, mountains[0]));
+  // The park's rides, and the roller coaster's cars.
+  if (built) critters.push(...built.rides);
 
   // ---------------------------------------------------------------- jewels and mines
   // Last, from randomness of their own, so the rest of the island comes out
@@ -451,7 +468,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- vehicles
   // Last, from their own randomness too.
-  const vehicles = placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines);
+  const parkClear = built?.clear ?? [];
+  const vehicles = placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines, parkClear);
   critters.push(...vehicles);
 
   // ---------------------------------------------------------------- adventure
@@ -478,17 +496,17 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // ---------------------------------------------------------------- riding together
   // After all that, so it all comes out just as before them: a bus and a
   // ferry, clear of everything else, with dice of their own.
-  const buses = placeBuses(world, new Rng(seed ^ 0x3243f6a8), busesClearOf(vehicles, camps, road));
+  const buses = placeBuses(world, new Rng(seed ^ 0x3243f6a8), [...busesClearOf(vehicles, camps, road), ...parkClear]);
   critters.push(...buses);
 
   // ---------------------------------------------------------------- flying
   // And after those, the same way: a helicopter and a hot-air balloon.
-  const aircraft = placeAircraft(world, new Rng(seed ^ 0x13198a2e), busesClearOf([...vehicles, ...buses], camps, road));
+  const aircraft = placeAircraft(world, new Rng(seed ^ 0x13198a2e), [...busesClearOf([...vehicles, ...buses], camps, road), ...parkClear]);
   critters.push(...aircraft);
 
   // ---------------------------------------------------------------- kicking along
   // And after those, the same way: a kick scooter by where everyone comes in.
-  critters.push(...placeScooters(world, new Rng(seed ^ 0x85ebca6b), busesClearOf([...vehicles, ...buses, ...aircraft], camps, road)));
+  critters.push(...placeScooters(world, new Rng(seed ^ 0x85ebca6b), [...busesClearOf([...vehicles, ...buses, ...aircraft], camps, road), ...parkClear]));
 
   return { world, critters, fruit, mines, camps, defense: road };
 }

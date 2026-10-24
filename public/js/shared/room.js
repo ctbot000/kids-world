@@ -16,7 +16,7 @@ import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, isFixed, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -118,6 +118,18 @@ function cleanSettings(raw, base = defaultSettings()) {
 }
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+
+// A fun park ride's seats (0 on), the nearest to someone standing at s
+// first, where they are on it now: the cabin at the bottom of a Ferris
+// wheel, the horse going by on a merry-go-round.
+function nearestSeats(c, s) {
+  const spin = spinAt(c.type);
+  const far = (i) => {
+    const at = spinSeat(c.type, c, i, spin);
+    return Math.hypot(at.x - s[0], at.y - s[1], at.z - s[2]);
+  };
+  return c.passengers.map((_, i) => [i, far(i)]).sort((a, b) => a[1] - b[1]).map(([i]) => i);
+}
 // Who a logged-in player is, as their pages tell an island (see main.js).
 export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 
@@ -766,7 +778,8 @@ export class Room {
         break;
       }
       case 'invite': {
-        if (!CRITTER_INFO[msg.type] || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // A fun park's rides are built with it, not brought.
+        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || ![msg.x, msg.y, msg.z].every(finite)) return;
         // A dragon comes only to those who have tamed a volcano island's
         // dragon often enough (dragon.js TAMES_TO_INVITE: their page keeps
         // count and only sends for one then), and tame: one of your own.
@@ -821,6 +834,11 @@ export class Room {
           this.notice(conn, `${riding.name} the dragon is the island’s own — they stay!`, 'info');
           return;
         }
+        // Nor do a fun park's rides, built where they stand.
+        if (riding && isFixed(riding.type)) {
+          this.notice(conn, `The ${CRITTER_INFO[riding.type].name} is part of the fun park — it stays!`, 'info');
+          return;
+        }
         const c = this.critters.remove(msg.id);
         if (c) this.broadcast({ t: 'cdel', id: c.id, by: p.id });
         this.changed();
@@ -835,8 +853,9 @@ export class Room {
           this.notice(conn, `${c.name} the dragon is wild! Bop it until it is tired out to tame it — and watch out for its fire!`, 'info');
           return;
         }
-        // With someone driving, the others ride along, in the seats it has.
-        const along = Boolean(c.rider);
+        // With someone driving, the others ride along, in the seats it has;
+        // and on a fun park's ride, which nobody drives, everyone does.
+        const along = Boolean(c.rider) || isFixed(c.type);
         if (along && !seatsFor(c.type)) {
           this.notice(conn, `Someone is already riding ${c.name}!`, 'info');
           return;
@@ -848,7 +867,7 @@ export class Room {
         // Close enough to climb on (with some room for being a little behind).
         if (Math.hypot(c.x - p.s[0], c.z - p.s[2]) > r.radius + 4 || Math.abs(c.y - p.s[1]) > 5) return;
         this.unride(p.id);
-        const seat = along ? this.critters.board(c.id, p.id) : 0;
+        const seat = along ? this.critters.board(c.id, p.id, isFixed(c.type) ? nearestSeats(c, p.s) : null) : 0;
         if (!along) this.critters.ride(c.id, p.id);
         // Up on its back at once, until they say where they are.
         const at = riderAt(c.type, c, seat);

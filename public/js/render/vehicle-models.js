@@ -22,7 +22,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const box = () => geo('box', () => new THREE.BoxGeometry(1, 1, 1));
 
 // A box from (x0, y0, z0) to (x1, y1, z1).
-function block(parent, material, x0, y0, z0, x1, y1, z1) {
+export function block(parent, material, x0, y0, z0, x1, y1, z1) {
   const m = mesh(box(), material, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0);
   parent.add(m);
   return m;
@@ -76,7 +76,7 @@ function lampEyes(parent, x, y, z, r, glow) {
 // The parts every vehicle has: its group, a body that bounces, an empty
 // head (CritterModel turns one), the seat's own material, and a light that
 // glows brighter when it honks.
-function rig(lamp = '#fff4b8') {
+export function rig(lamp = '#fff4b8') {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
@@ -414,7 +414,7 @@ function ferry(id) {
 }
 
 // A rod from a to b ([x, y, z] each), r thick.
-function rod(parent, material, a, b, r) {
+export function rod(parent, material, a, b, r) {
   const from = new THREE.Vector3(...a);
   const to = new THREE.Vector3(...b);
   const m = mesh(cylinder(r, r, 1, 6), material);
@@ -585,6 +585,8 @@ export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, bus, fer
 export function drive(m, dt, state, moving, air = 0) {
   const t = m.time;
   const b = m.body;
+  // A fun park's ride turns by itself (ride-models.js).
+  m.animate?.();
   m.trick = Math.max(0, m.trick - dt);
   const go = moving ? m.hs : 0;
   for (const w of m.wheels ?? []) w.rotation.x += (go * dt) / w.userData.r;

@@ -1010,6 +1010,51 @@ test('a kick scooter beside you is driven with the Drive button: quicker than yo
   await page.browserContext().close();
 });
 
+test('on a fun park island, the merry-go-round beside you is hopped on with the Hop on button, carries you round, and Q gets you off', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Fun Park Island' });
+  // Stand just outside the merry-go-round, looking at it.
+  const id = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const c = kw.session.link.room.critters.list.find((o) => o.type === 'carousel');
+    Object.assign(kw.game.me.body, { x: c.x, y: c.y, z: c.z + 4.3, vx: 0, vy: 0, vz: 0 });
+    kw.renderer.view.yaw = 0;
+    kw.game.sendMove(true);
+    return c.id;
+  });
+  await until(page, (id) => window.kidsWorld.game.rideTarget === id && !document.getElementById('ride').hidden, id);
+  assert.match(await page.$eval('#ride', (el) => el.textContent), /🎠 Hop on/);
+  await page.click('#ride');
+  // On a horse, nobody driving: everyone rides along.
+  await until(page, (id) => window.kidsWorld.game.aboard?.id === id && window.kidsWorld.session.link.room.critters.get(id).passengers.includes(window.kidsWorld.game.pid), id);
+  assert.equal(await page.evaluate((id) => window.kidsWorld.session.link.room.critters.get(id).rider, id), 0);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('All aboard the Merry-Go-Round')));
+  // Round it goes, by itself, with you on it.
+  const where = () =>
+    page.evaluate((id) => {
+      const kw = window.kidsWorld;
+      const c = kw.session.link.room.critters.get(id);
+      const b = kw.game.me.body;
+      return { x: b.x, z: b.z, r: Math.hypot(b.x - c.x, b.z - c.z), up: b.y - c.y };
+    }, id);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 30));
+  const a = await where();
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 5));
+  const b = await where();
+  for (const at of [a, b]) {
+    assert.ok(Math.abs(at.r - 2.45) < 0.05, `on the ring of horses (${at.r.toFixed(2)} out)`);
+    assert.ok(at.up > 0.5 && at.up < 1.1, `up on a horse (${at.up.toFixed(2)})`);
+  }
+  assert.ok(Math.hypot(b.x - a.x, b.z - a.z) > 1, 'carried round');
+  await page.keyboard.press('KeyQ');
+  await until(page, (id) => !window.kidsWorld.game.aboard && !window.kidsWorld.session.link.room.critters.get(id).passengers.includes(window.kidsWorld.game.pid), id);
+  const off = await where();
+  assert.ok(off.r > 3.5, `off beside it (${off.r.toFixed(2)} out)`);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on an elevator pad, Space rides up to the pad above and Shift back down, with a hint and a sticker', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

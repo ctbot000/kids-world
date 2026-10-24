@@ -96,7 +96,7 @@ export function normalizeMeta(meta) {
     H,
     D,
     sea,
-    theme: ['sunny', 'snowy', 'candy', 'volcano', 'flat'].includes(meta?.theme) ? meta.theme : 'sunny',
+    theme: ['sunny', 'snowy', 'candy', 'volcano', 'park', 'flat'].includes(meta?.theme) ? meta.theme : 'sunny',
     seed: Number.isInteger(meta?.seed) ? meta.seed >>> 0 : 1,
     name: cleanIslandName(meta?.name) || 'My Island',
     spawn: {
