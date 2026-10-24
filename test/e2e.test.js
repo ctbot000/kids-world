@@ -1173,9 +1173,13 @@ test('a huge circus tent put down from the toy box with a click is walked into t
   await until(page, ({ t, pole }) => window.kidsWorld.game.world.get(Math.floor(t.mid.x), t.y, Math.floor(t.mid.z)) === pole, { t: tent, pole: CANDY_CANE });
   const cloth = await page.evaluate((cloth) => window.kidsWorld.game.world.blocks.filter((id) => cloth[id]).length, [...CLOTH]);
   assert.ok(cloth > 600, `${cloth} blocks of tent cloth`);
-  // In front of its porch, walking straight in, past the way in and the benches to the ring.
-  await page.evaluate((t) => {
+  // In front of its porch, walking straight in, past the way in and the benches to the ring
+  // (with no big animal or vehicle of the random island standing in the way).
+  await page.evaluate(async (t) => {
     const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const { BIG, VEHICLES } = await import('/js/shared/critters.js');
+    for (const c of [...room.critters.list]) if (BIG.includes(c.type) || VEHICLES.includes(c.type)) room.critters.remove(c.id);
     Object.assign(kw.game.me.body, { x: t.x, y: t.y, z: t.z, vx: 0, vy: 0, vz: 0 });
     kw.renderer.view.yaw = Math.atan2(-t.f[0], -t.f[1]);
     kw.step(1 / 60, 5);
