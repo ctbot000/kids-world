@@ -19,11 +19,12 @@
 // folder; the tokens the workers' models take are tallied beside them in
 // ctb-usage.json. Before any are saved, KIDS_WORLD_CTB=off turns it off.
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { langOf } from '../public/js/shared/words.js';
-import { WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
+import { USERNAME_MAX, usernameKey, WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
 import { Agent, layoutOf, testEnv } from './ctb-agent.js';
 import { GitHub, LABELS, repoOf } from './ctb-github.js';
 import { MAX_WORKERS, STAFF, workerName } from './ctb-office.js';
@@ -56,8 +57,11 @@ const MODEL_NAME = /^[\w.:/-]{0,100}$/;
 const TITLE_MAX = 200;
 const BODY_MAX = 20000;
 
+// Who a login is to the islands it joins, as its pages say (main.js islandWho).
+export const islandWho = (player) => createHash('sha256').update(`kids-world island player ${player}`).digest('hex');
+
 export function defaultSettings(env = process.env) {
-  return { on: env.KIDS_WORLD_CTB !== 'off', workers: 2, propose: true, proposeHours: 6, model: '' };
+  return { on: env.KIDS_WORLD_CTB !== 'off', workers: 2, propose: true, proposeHours: 6, model: '', owner: env.KIDS_WORLD_CTB_OWNER ?? 'izeye' };
 }
 
 export function changeSettings(settings, change) {
@@ -76,6 +80,11 @@ export function changeSettings(settings, change) {
   if ('proposeHours' in change) {
     if (!Number.isInteger(change.proposeHours) || change.proposeHours < 1 || change.proposeHours > 168) throw new KeepError('bad-settings', 'Proposals come every 1 to 168 hours.');
     next.proposeHours = change.proposeHours;
+  }
+  if ('owner' in change) {
+    // The CTB island's owner, by their username ('' for nobody).
+    if (typeof change.owner !== 'string' || [...change.owner.trim()].length > USERNAME_MAX) throw new KeepError('bad-settings', 'That is not a username.');
+    next.owner = change.owner.trim();
   }
   if ('model' in change) {
     if (typeof change.model !== 'string' || !MODEL_NAME.test(change.model)) throw new KeepError('bad-settings', 'That is not a model name.');
@@ -679,7 +688,7 @@ export class CtbControl {
     if (this.rooms) {
       const { Office } = await import('./ctb-office.js');
       const make = this.makeOffice ?? ((opts) => new Office(opts));
-      this.office = make({ rooms: this.rooms, file: this.islandFile, keeper: this.keeper, rtc: this.rtc, server: this.server, iceServers: this.iceServers, log: this.log, answer: (k, name, text) => this.company?.answer(k, name, text) ?? '', ignores: (name) => name === this.friendName() });
+      this.office = make({ rooms: this.rooms, file: this.islandFile, keeper: this.keeper, rtc: this.rtc, server: this.server, iceServers: this.iceServers, log: this.log, answer: (k, name, text) => this.company?.answer(k, name, text) ?? '', ignores: (name) => name === this.friendName(), ownerWho: await this.ownerWho() });
       await this.office.open(this.settings.workers);
       this.company.office = this.office;
     }
@@ -687,6 +696,21 @@ export class CtbControl {
     // A new idea from a player is read at once, not at the next look at the board.
     this.onWish = () => this.company?.reviewWishes();
     this.keeper?.on?.('wish', this.onWish);
+  }
+
+  // The island's owner as their pages tell islands who they are (main.js
+  // islandWho): a hash of their login's folder at the keeper, found by
+  // their username. '' when there is no such login (or no keeper).
+  async ownerWho() {
+    const name = this.settings.owner;
+    if (!name || !this.keeper?.store) return '';
+    const key = usernameKey(name);
+    const found = (await this.keeper.store.logins()).find((l) => usernameKey(l.login.username ?? '') === key);
+    if (!found) {
+      this.log(`CTB: there is no login "${name}" to own the island; nobody owns it.`);
+      return '';
+    }
+    return islandWho(found.device);
   }
 
   async readProposedAt() {
@@ -733,6 +757,7 @@ export class CtbControl {
       this.company.settings = next;
       this.office?.staff(next.workers);
       if (next.model !== before.model) await this.company.check();
+      if (next.owner !== before.owner) this.office?.setOwner(await this.ownerWho());
       this.company.poll();
     }
     return next;

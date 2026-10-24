@@ -22,7 +22,7 @@ import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
 import { deskSpots, GROUNDS, GUIDE, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
-import { changeSettings, Company, CtbControl, defaultSettings, proposalBody, pullBody } from '../server/ctb.js';
+import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
@@ -341,7 +341,7 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const workers = () => [...room.players.values()].filter((p) => p.online && p.name.endsWith('💼'));
   await eventually(() => workers().length === 3 && workers().every((p) => p.s[4] === 8));
   assert.deepEqual(workers().map((p) => p.name), ['Ada 💼', 'Ben 💼', 'Cleo 💼']);
-  assert.equal(room.host, workers()[0].id, 'the first worker owns the island');
+  assert.equal(room.host, 0, 'no worker owns the island: one login does, and it is not here');
   // Each sits on a chair of the office, facing its TV.
   for (const [k, p] of workers().entries()) {
     const seat = office.seats[k];
@@ -429,6 +429,24 @@ test('the office on the CTB island: workers at their desks, answering children, 
   // Building is for the owner only.
   const me = heard.find((m) => m.t === 'welcome');
   assert.equal(me.settings.build, 'host');
+  // Its owner is one login: their page, coming, owns it at once; nobody
+  // else ever does, and with them gone it has no owner.
+  const IZEYE = 'ab'.repeat(32);
+  office.setOwner(IZEYE);
+  const owner = { send: (text) => heard.push(JSON.parse(text)) };
+  room.attach(owner);
+  room.receive(owner, { t: 'join', protocol: PROTOCOL, name: 'izeye', look: { animal: 'fox' }, who: IZEYE });
+  const izeye = [...room.players.values()].find((p) => p.name === 'izeye');
+  assert.equal(room.host, izeye.id);
+  assert.ok(heard.some((m) => m.t === 'host' && m.pid === izeye.id), 'the others hear who owns it now');
+  const sneaky = { send: () => {} };
+  room.attach(sneaky);
+  room.receive(sneaky, { t: 'join', protocol: PROTOCOL, name: 'Sneaky', look: { animal: 'cat' }, who: 'cd'.repeat(32) });
+  assert.equal(room.host, izeye.id);
+  room.detach(owner);
+  room.leave(izeye.id);
+  assert.equal(room.host, 0, 'away, nobody owns it — not a worker, not a visitor');
+  room.detach(sneaky);
 
   // An office of an older kind is taken down and this one put up in its place,
   // the workers at its desks.
@@ -461,7 +479,8 @@ test('the office on the CTB island: workers at their desks, answering children, 
   after(() => again.close());
   assert.equal(again.room.code, room.code);
   assert.deepEqual(again.site, office.site);
-  await eventually(() => [...again.room.players.values()].some((p) => p.online && p.name === 'Ada 💼' && p.id === again.room.host));
+  await eventually(() => [...again.room.players.values()].some((p) => p.online && p.name === 'Ada 💼'));
+  assert.equal(again.room.host, 0, 'the old island’s owner, a worker, owns it no more');
 });
 
 test('a worker answers in Korean when spoken to in Korean, saying the same things as in English', () => {
@@ -494,17 +513,26 @@ test('a worker answers in Korean when spoken to in Korean, saying the same thing
 });
 
 test('settings are checked, and the admin page adds tasks, approves proposals and shows the workers', async () => {
-  assert.deepEqual(defaultSettings({}), { on: true, workers: 2, propose: true, proposeHours: 6, model: '' });
+  assert.deepEqual(defaultSettings({}), { on: true, workers: 2, propose: true, proposeHours: 6, model: '', owner: 'izeye' });
+  assert.equal(defaultSettings({ KIDS_WORLD_CTB_OWNER: 'otter' }).owner, 'otter');
+  assert.throws(() => changeSettings(defaultSettings({}), { owner: 'x'.repeat(40) }), /not a username/);
   assert.equal(defaultSettings({ KIDS_WORLD_CTB: 'off' }).on, false);
   assert.throws(() => changeSettings(defaultSettings({}), { workers: 9 }), /1 to 4 workers/);
   assert.throws(() => changeSettings(defaultSettings({}), { model: 'a b' }), /not a model name/);
-  assert.deepEqual(changeSettings(defaultSettings({}), { workers: 3, model: 'glm-5.3' }), { on: true, workers: 3, propose: true, proposeHours: 6, model: 'glm-5.3' });
+  assert.deepEqual(changeSettings(defaultSettings({}), { workers: 3, model: 'glm-5.3' }), { on: true, workers: 3, propose: true, proposeHours: 6, model: 'glm-5.3', owner: 'izeye' });
   assert.equal(repoOf('https://github.com/ctbot000/kids-world.git'), 'ctbot000/kids-world');
   assert.equal(repoOf('git@github.com:ctbot000/kids-world'), 'ctbot000/kids-world');
   assert.equal(repoOf('https://example.com/x/y.git'), '');
 
   const { dir, repo } = await project();
   const store = await new KeeperStore(join(dir, 'keep')).open();
+  // The island's owner, found by their username at the keeper, as their pages tell islands who they are.
+  const izeye = KeeperStore.deviceId('f1'.repeat(16));
+  await store.makeLogin(izeye, 'rocket-apple7', { name: 'Ize' }, { username: 'IZEYE' });
+  const owned = new CtbControl({ dir: store.dir, repoDir: repo, llm: scripted([]), keeper: { store }, env: {}, log: () => {} });
+  assert.equal(await owned.ownerWho(), islandWho(izeye));
+  owned.settings.owner = 'nobody here';
+  assert.equal(await owned.ownerWho(), '');
   const github = hub([issue(3, 'a proposal', 'An idea.', [LABELS.proposal])]);
   // Busy thinking forever, so nothing is done with the tasks.
   const llm = { ...scripted([]), chat: () => new Promise(() => {}) };

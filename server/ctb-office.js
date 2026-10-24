@@ -5,8 +5,10 @@
 // joins one (dialer.js LocalLink), sitting at their desk and saying what they
 // are working on — which is real work on this project: GitHub issues turned
 // into pull requests. Children can visit, look round and ask them what they
-// are doing; only the office's owner (the first worker) builds there, so the
-// office stays as it is. It is saved in the keeper's data folder
+// are doing. The island's owner is one login, set on the admin page (izeye
+// unless changed): only they build there, so the office stays as it is, and
+// while they are away nobody owns it — never a worker, a visitor or the AI
+// friend, which does not come here at all. It is saved in the keeper's data folder
 // (ctb-island.json), and with the keeper online hosted peer to peer too
 // (host.js) and on its list of open islands, as the AI friend's own island is.
 // It is the one island a page opens without anyone logging in, from the link
@@ -33,6 +35,8 @@ const SIT = 8;
 const SAVE_MS = 5 * 60000;
 // Answering children: one worker at a time, and not too often.
 const ANSWER_GAP_MS = 6000;
+// An owner no page can be (a login's hash is 64 hex digits): the island has none.
+const NOBODY = 'nobody';
 // Where visitors arrive: on the plaza's paving, this far before the doors.
 const ARRIVE_DZ = -31;
 // How far before the grounds the land is cleared, for the view arriving.
@@ -261,7 +265,7 @@ export function deskSpots() {
 }
 
 // One worker on the island: a player sitting at their desk, saying what they
-// are doing. The first one owns the island (its token is kept with it).
+// are doing. The first one's token is kept with the island, so it comes back as itself.
 class Clerk extends EventEmitter {
   constructor({ office, k }) {
     super();
@@ -603,7 +607,9 @@ export class Office {
   // ignores(name): someone the workers never answer — the AI friend, who
   // would answer them back, and on and on.
   // guideSpeed: how fast the guide walks, blocks a second (quicker in tests).
-  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', ignores = () => false, random = Math.random, guideSpeed = GUIDE_SPEED }) {
+  // ownerWho: the island's owner, as the hash a login's pages tell islands
+  // (shared/room.js ownerWho); '' for none, when nobody owns it.
+  constructor({ rooms, file = null, keeper = null, rtc = null, server = null, iceServers = [], log = (text) => console.log(text), answer = () => '', ignores = () => false, random = Math.random, guideSpeed = GUIDE_SPEED, ownerWho = '' }) {
     this.rooms = rooms;
     this.file = file;
     this.keeper = keeper;
@@ -614,6 +620,7 @@ export class Office {
     this.answer = answer;
     this.ignores = ignores;
     this.guideSpeed = guideSpeed;
+    this.ownerWho = ownerWho;
     this.random = random;
     this.room = null;
     this.token = '';
@@ -649,6 +656,7 @@ export class Office {
     // Anyone may come and see it from a link, logged in or not (main.js ?ctb).
     room.watchable = true;
     this.room = room;
+    this.setOwner(this.ownerWho);
     this.token = kept?.code === room.code && typeof kept.token === 'string' ? kept.token : '';
     this.site = !fresh && kept?.code === room.code && kept.site ? kept.site : null;
     // An office from before this one comes down, and this one goes up.
@@ -704,6 +712,22 @@ export class Office {
     this.site = site;
   }
 
+  // Its owner: one login, never a worker or a visitor (who owned it before
+  // stops). With them away, nobody owns it, so nobody but them builds there.
+  setOwner(who) {
+    this.ownerWho = who;
+    const room = this.room;
+    if (!room) return;
+    room.ownerWho = who || NOBODY;
+    const owner = [...room.players.values()].find((p) => p.who && p.who === who && p.online);
+    const host = owner?.id ?? 0;
+    room.reservedHost = 0;
+    if (room.host !== host) {
+      room.host = host;
+      room.broadcast({ t: 'host', pid: host });
+    }
+  }
+
   // Everyone comes to the island at the front of the grounds, at the end of
   // the boulevard, turned to the office: the whole building, "CTB" on its
   // roof, the fountain and the flags before it, at first sight. From there
@@ -740,13 +764,12 @@ export class Office {
     return chairs.map(([x, y, z]) => seatPose(this.room.world, x, y, z)).filter(Boolean);
   }
 
-  // As many workers at their desks as there are now, the first always (it owns the island).
+  // As many workers at their desks as there are now, the first always.
   staff(count) {
     const n = Math.max(1, Math.min(MAX_WORKERS, count));
     while (this.clerks.length > n) this.clerks.pop().leave();
     while (this.clerks.length < n) this.clerks.push(new Clerk({ office: this, k: this.clerks.length }));
-    // The guide is always there, whoever else is: once the first worker is
-    // in, as it owns the island (the first to come to an island does).
+    // The guide is always there, whoever else is: once the first worker is in.
     if (!this.guide && !this.guideComing) {
       this.guideComing = true;
       const first = this.clerks[0];

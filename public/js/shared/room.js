@@ -154,6 +154,11 @@ export class Room {
     this.nextPid = 1;
     this.host = 0;
     this.reservedHost = 0;
+    // An island owned by one login (whoever keeps it sets this, as the CTB
+    // island's keeper does): only a player whose page says it is that login
+    // (isWho, the hash every page of a login sends) is ever its owner, and
+    // with them away it has none. '' for an island like any other.
+    this.ownerWho = '';
     this.growth = new Map();
     this.regrow = new Map();
     // The crops growing and the farmland they grow in (see farm), by cell.
@@ -330,6 +335,12 @@ export class Room {
   }
 
   passHost() {
+    // An island owned by one login has no owner while they are away.
+    if (this.ownerWho) {
+      this.host = 0;
+      this.broadcast({ t: 'host', pid: 0 });
+      return;
+    }
     const next = this.onlinePlayers().sort((a, b) => a.id - b.id)[0];
     if (!next) return;
     this.host = next.id;
@@ -538,8 +549,16 @@ export class Room {
     if (p.id === this.reservedHost) this.reservedHost = 0;
     // A shared island has no owner: nobody becomes its host, so its rules
     // stay as they are and nobody can close it or passcode it.
-    if (!this.shared && (!this.host || (!this.players.get(this.host)?.online && !this.reservedHost))) this.host = p.id;
+    const before = this.host;
+    if (this.ownerWho) {
+      if (who && who === this.ownerWho) this.host = p.id;
+    } else if (!this.shared && (!this.host || (!this.players.get(this.host)?.online && !this.reservedHost))) this.host = p.id;
     this.broadcast({ t: 'joined', player: this.describePlayer(p) });
+    // Its owner coming back to it takes it over from whoever had it.
+    if (this.ownerWho && this.host !== before) {
+      this.broadcast({ t: 'host', pid: this.host }, conn);
+      this.dropHalfSong();
+    }
     c.pid = p.id;
     c.token = token;
     this.sendWelcome(conn, c);

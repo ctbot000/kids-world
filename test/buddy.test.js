@@ -307,6 +307,22 @@ test('it never comes to the shared isle, Adventure Isle — invited, by itself, 
   assert.equal(buddy.visits.size, 0);
 });
 
+test('it never comes to the CTB island, the CTB team’s office — invited or by itself', async () => {
+  const ctb = server({ code: '333444', name: 'CTB', theme: 'sunny' });
+  ctb.room.watchable = true;
+  child(ctb.room, 'Minji');
+  const rooms = new Map([[ctb.room.code, { room: ctb.room }]]);
+  const buddy = friend({ llm: model(), rooms });
+  await buddy.start();
+  // Invited there (on this server, or by a page that knows it only by its name), it says why not.
+  assert.match(buddy.invited({ ...ctb.island, code: ctb.room.code }, 'Minji'), /doesn't visit the CTB island/);
+  assert.match(buddy.invited({ code: '654321', name: 'CTB', theme: 'sunny', size: 'small', server: false }, 'Minji'), /CTB island/);
+  assert.match(buddy.invited({ code: '654321', name: 'Somewhere', theme: 'sunny', size: 'small', server: false, watch: true }, 'Minji'), /CTB island/);
+  // By itself, it does not drop in either.
+  assert.equal(buddy.wanderOnce(), null);
+  assert.equal(buddy.visits.size, 0);
+});
+
 test('the keeper lists it as playing now while it can come, and passes invitations on to it', async () => {
   const dir = await tempDir();
   const store = await new KeeperStore(dir).open();

@@ -17,6 +17,8 @@ function settingsForm(h) {
   const model = h('select', { 'aria-label': 'Their model' });
   const propose = h('input', { type: 'checkbox' });
   const hours = h('input', { type: 'number', min: 1, max: 168, 'aria-label': 'Hours between proposals', style: 'width:4.5em' });
+  const owner = h('input', { type: 'text', autocomplete: 'off', maxlength: 32, placeholder: 'nobody', 'aria-label': 'The CTB island’s owner (a username)', style: 'width:9em' });
+  owner.spellcheck = false;
   const save = h('button', { type: 'submit', disabled: true }, 'Save');
   const note = h('span', { class: 'muted', 'aria-live': 'polite' });
   const form = h(
@@ -26,6 +28,7 @@ function settingsForm(h) {
     h('label', {}, workers, 'workers'),
     h('label', {}, 'Model', model),
     h('label', { title: 'With nothing to do, a worker proposes a task now and then: an issue labelled “ctb: proposal”, worked on once labelled “ctb: approved” (Approve does that).' }, propose, 'Proposes tasks, every', hours, 'hours at most'),
+    h('label', { title: 'The one login who owns the CTB island: only they build there and set its rules. Away, nobody owns it.' }, 'Island owner', owner),
     save,
     note,
   );
@@ -40,7 +43,7 @@ function settingsForm(h) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     save.disabled = true;
-    const res = await send('', 'PUT', { on: on.checked, workers: Number(workers.value), model: model.value, propose: propose.checked, proposeHours: Number(hours.value) });
+    const res = await send('', 'PUT', { on: on.checked, workers: Number(workers.value), model: model.value, propose: propose.checked, proposeHours: Number(hours.value), owner: owner.value });
     if (!res.ok) {
       save.disabled = false;
       note.textContent = (await res.json().catch(() => null))?.error ?? 'That did not work. Is the keeper still running?';
@@ -56,6 +59,7 @@ function settingsForm(h) {
     on.checked = s.on;
     propose.checked = s.propose;
     hours.value = String(s.proposeHours);
+    owner.value = s.owner ?? '';
     workers.replaceChildren(...Array.from({ length: state.maxWorkers }, (_, k) => h('option', { value: k + 1 }, k + 1)));
     workers.value = String(s.workers);
     const models = state.models.includes(s.model) || !s.model ? state.models : [s.model, ...state.models];

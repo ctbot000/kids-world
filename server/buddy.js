@@ -51,6 +51,7 @@ import { applyCells, stampEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 import { CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTE_KEYS, langOf, PHRASES, STICKERS } from '../public/js/shared/words.js';
 import { PUBLIC_ISLAND_NAME } from './adventure.js';
+import { ISLAND_NAME as CTB_ISLAND_NAME } from './ctb-office.js';
 import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKey, projectCells, reachOf } from './builds.js';
 import { LocalLink, PeerLink } from './dialer.js';
 import { PeerHost } from './host.js';
@@ -470,10 +471,21 @@ export class Buddy extends EventEmitter {
     return island.public === true || island.name === PUBLIC_ISLAND_NAME;
   }
 
+  // Whether an island is the CTB island (ctb-office.js), CTB's own office,
+  // where the friend never goes, invited or not: it is the workers' place,
+  // and its guide and workers would only talk round and round with it. An
+  // island of this server says so itself; one from the keeper's list is
+  // marked as the one to watch; a page's invitation knows it only by name.
+  isCtbIsle(island) {
+    if (island.server) return Boolean(this.rooms?.get(island.code)?.room?.watchable);
+    return island.watch === true || island.name === CTB_ISLAND_NAME;
+  }
+
   // An invitation (cleanInvite's island) from a player: '' when it comes, or
   // why it cannot, for the keeper to say.
   invited(island, from) {
     if (!this.ready) return `${this.name} is asleep right now.`;
+    if (this.isCtbIsle(island)) return `${this.name} doesn't visit the CTB island — that's where the CTB team works!`;
     if (this.isSharedIsle(island)) return `${this.name} leaves 🌟 ${PUBLIC_ISLAND_NAME} to everyone — that island is everybody’s adventure!`;
     if (this.visits.has(island.code) || island.code === this.home?.island.code) return '';
     if (this.visits.size >= this.maxVisits) return `${this.name} is playing on other islands right now. Try again later!`;
@@ -499,7 +511,7 @@ export class Buddy extends EventEmitter {
     if (!this.ready || this.visits.size >= this.maxVisits - 1) return null;
     const now = this.now();
     for (const [code, until] of this.avoid) if (until <= now) this.avoid.delete(code);
-    const open = this.openIslands().filter((i) => i.players >= 1 && i.players < i.max && !i.passcode && !this.visits.has(i.code) && i.code !== this.home?.island.code && !this.avoid.has(i.code) && !this.isSharedIsle(i) && this.canReach(i));
+    const open = this.openIslands().filter((i) => i.players >= 1 && i.players < i.max && !i.passcode && !this.visits.has(i.code) && i.code !== this.home?.island.code && !this.avoid.has(i.code) && !this.isSharedIsle(i) && !this.isCtbIsle(i) && this.canReach(i));
     if (!open.length) return null;
     const fewest = Math.min(...open.map((i) => i.players));
     const lonely = open.filter((i) => i.players === fewest);
