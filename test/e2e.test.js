@@ -1174,10 +1174,19 @@ test('a huge circus tent put down from the toy box with a click is walked into t
   const cloth = await page.evaluate((cloth) => window.kidsWorld.game.world.blocks.filter((id) => cloth[id]).length, [...CLOTH]);
   assert.ok(cloth > 600, `${cloth} blocks of tent cloth`);
   // In front of its porch, walking straight in, past the way in and the benches to the ring
-  // (with no big animal or vehicle of the random island standing in the way).
+  // (with no big animal or vehicle of the random island standing in the way),
+  // by day all the while: the hint is only for daytime, and a slow page can
+  // still be walking when the island's evening comes. What the toasts say is
+  // kept as they come: one is gone in four seconds, sooner than a slow page
+  // gets round to looking.
   await page.evaluate(async (t) => {
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
+    room.settings.day = 'day';
+    room.env.time = 0.35;
+    room.broadcast(room.envMessage());
+    kw.toasted = [];
+    kw.game.addEventListener('toast', (e) => kw.toasted.push(e.detail.text));
     const { BIG, VEHICLES } = await import('/js/shared/critters.js');
     for (const c of [...room.critters.list]) if (BIG.includes(c.type) || VEHICLES.includes(c.type)) room.critters.remove(c.id);
     Object.assign(kw.game.me.body, { x: t.x, y: t.y, z: t.z, vx: 0, vy: 0, vz: 0 });
@@ -1192,7 +1201,7 @@ test('a huge circus tent put down from the toy box with a click is walked into t
     return { from: Math.hypot(b.x - t.mid.x, b.z - t.mid.z), on: b.y - t.y, past: (b.x - t.x) * t.f[0] + (b.z - t.z) * t.f[1] };
   }, tent);
   assert.ok(inside.past > 6 && inside.from < 9 && Math.abs(inside.on) < 0.01, `walked in: ${JSON.stringify(inside)}`);
-  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A tent!')));
+  await until(page, () => window.kidsWorld.toasted.some((t) => t.includes('A tent!')));
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.campouts), 0, 'no camp out by day');
   // Night falls: a camp out, once.
   await page.evaluate(() => {
@@ -1202,7 +1211,7 @@ test('a huge circus tent put down from the toy box with a click is walked into t
     room.broadcast(room.envMessage());
   });
   await until(page, () => window.kidsWorld.profile.data.stickers['camp-out']);
-  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A camp out!')));
+  await until(page, () => window.kidsWorld.toasted.some((t) => t.includes('A camp out!')));
   await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.campouts), 1, 'once a night');
   assert.deepEqual(pageErrors, []);
