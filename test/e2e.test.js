@@ -1588,6 +1588,74 @@ test('the shop sells, the 🎒 backpack is where you put things on and take them
   await page.browserContext().close();
 });
 
+test('🛼 roller skates: bought in the shop, on in place of your shoes, and you glide on when you let go', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Rolling Otter' });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  const mine = () => page.evaluate(() => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look ?? {});
+  await page.evaluate(() => {
+    window.kidsWorld.profile.earn(200);
+    window.kidsWorld.profile.buy('shoes');
+  });
+  await until(page, () => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look.shoes === 'bouncy');
+  await page.click('#btn-shop-hud');
+  await clickButton(page, 'Buy 🛼', '#modal');
+  await until(page, () => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look.skates === 'roller');
+  assert.equal((await mine()).shoes, undefined, 'skates in place of the shoes');
+  assert.ok(await page.evaluate(() => window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid).wheels.length === 8));
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  // Push off, let go, and roll on: down a lane the island clears of trees
+  // (towards its middle), nobody about.
+  await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const b = kw.game.me.body;
+    const bx = Math.floor(b.x);
+    const by = Math.floor(b.y + 0.01);
+    const bz = Math.floor(b.z);
+    const dz = b.z > kw.game.world.D / 2 ? -1 : 1;
+    for (let d = -1; d <= 20; d++) {
+      for (let x = bx - 2; x <= bx + 2; x++) {
+        room.natureCell([x, by - 1, bz + d * dz], B.GRASS);
+        for (let y = by; y < by + 6; y++) room.natureCell([x, y, bz + d * dz], B.AIR);
+      }
+    }
+    kw.renderer.view.yaw = dz < 0 ? 0 : Math.PI;
+  });
+  await until(page, () => {
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const dz = b.z > g.world.D / 2 ? -1 : 1;
+    return !g.world.get(Math.floor(b.x), Math.floor(b.y + 0.01), Math.floor(b.z) + 20 * dz);
+  });
+  const speed = () => page.evaluate(() => Math.hypot(window.kidsWorld.game.me.body.vx, window.kidsWorld.game.me.body.vz));
+  await hold(page, 'KeyW');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 60));
+  assert.ok((await speed()) > 5, 'up to speed');
+  await page.keyboard.up('KeyW');
+  await until(page, () => !window.kidsWorld.input.keys.has('KeyW'));
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 6));
+  assert.ok((await speed()) > 1, 'still rolling after letting go');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 180));
+  assert.equal(await speed(), 0, 'and then stopped');
+  // In the backpack, the shoes back on take the skates off.
+  await page.keyboard.press('KeyI');
+  // Drawn again once the capsule toys' pictures are in: its buttons are new then.
+  await until(page, () => document.querySelector('#modal h2')?.textContent === '🎒 Backpack' && window.kidsWorld.ui.toyPictures);
+  const names = await page.evaluate(() => [...document.querySelectorAll('#modal .shop-card b')].map((b) => b.textContent));
+  assert.deepEqual(names, ['Bouncy Sneakers', 'Roller Skates ✅']);
+  await clickButton(page, '👕 Put on', '#modal .shop-card:nth-child(1)');
+  await until(page, () => {
+    const look = window.kidsWorld.renderer.avatars.get(window.kidsWorld.game.pid)?.look;
+    return look?.shoes === 'bouncy' && !look.skates;
+  });
+  assert.equal(await page.evaluate(() => document.querySelector('#modal .shop-card:nth-child(2) b').textContent), 'Roller Skates');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('the little map shows the island and what you build; it opens the big map and can be switched off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Clever Duck' });
   await makeIsland(page, { online: false });

@@ -3,7 +3,7 @@
 // host tidies and checks everything it receives.
 import { TOY_BRICKS } from './blocks.js';
 import { cleanLevel } from './levels.js';
-import { outfitOf, shoesOf, weaponOf, wingsOf } from './shop.js';
+import { outfitOf, shoesOf, skatesOf, weaponOf, wingsOf } from './shop.js';
 
 export const NAME_WORDS = [
   'Happy', 'Sunny', 'Bouncy', 'Sparkly', 'Cozy', 'Jolly', 'Brave', 'Clever', 'Giggly', 'Fluffy',
@@ -258,6 +258,8 @@ export function cleanLook(look, random = Math.random) {
   // Running shoes and flying gear from the shop, on your feet and your back.
   if (shoesOf(look?.shoes)) clean.shoes = look.shoes;
   if (wingsOf(look?.wings)) clean.wings = look.wings;
+  // Or roller skates, in place of the shoes.
+  if (skatesOf(look?.skates)) clean.skates = look.skates;
   // Your level, on your name tag (see levels.js).
   if (cleanLevel(look?.level)) clean.level = look.level;
   const pet = cleanPet(look?.pet);

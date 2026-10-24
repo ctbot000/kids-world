@@ -396,6 +396,40 @@ function shoeExtras(knee, kind, B, side) {
   return flames;
 }
 
+// Roller skates from the shop (shared/shop.js), in place of shoes: a boot
+// (upper, sole and laces as a sneaker's), a silver plate under it on four
+// wheels, and a rubber stopper at the toe. Light-up Skates' wheels each
+// glow a colour of the rainbow.
+const SKATES = {
+  roller: { upper: '#ff7eb6', sole: '#ffffff', trim: '#ffffff', wheels: ['#ffe14d'], stopper: '#e8453c' },
+  glowy: { upper: '#7a5cff', sole: '#e9e4ff', trim: '#ffe14d', wheels: ['#ff5a5a', '#ffb52e', '#4fd67a', '#36c5f0'], stopper: '#ff7eb6', glow: true },
+};
+// How far the wheels lift you, a kid's (times the foot's size).
+const SKATE_LIFT = 0.052;
+const WHEEL_R = 0.022;
+
+// The plate, wheels and stopper on one foot (the knee's group, the sole at
+// -knee): returns the wheels, to roll.
+function skateParts(knee, kind, B) {
+  const s = SKATES[kind];
+  const f = B.foot;
+  const y = -B.knee;
+  const plateY = y - 0.008 * f;
+  knee.add(mesh(roundedBox(0.06 * f, 0.012 * f, 0.19 * f, 0.004 * f), toon('#c8ccd3'), 0, plateY, 0.052 * f));
+  const wheels = [];
+  [-0.012, 0.118].forEach((z, i) =>
+    [-1, 1].forEach((side, j) => {
+      const colour = s.wheels[(i * 2 + j) % s.wheels.length];
+      const wheel = mesh(cylinder(WHEEL_R * f, WHEEL_R * f, 0.018 * f, 16), toon(colour, { emissive: s.glow ? 0.8 : 0 }), side * 0.033 * f, plateY - 0.022 * f, z * f);
+      wheel.rotation.z = Math.PI / 2;
+      knee.add(wheel);
+      wheels.push(wheel);
+    }),
+  );
+  knee.add(mesh(sphere(1, 14, 10), toon(s.stopper), 0, y - 0.004 * f, 0.162 * f, 0.016 * f, 0.016 * f, 0.016 * f));
+  return wheels;
+}
+
 // Flying gear from the shop on your back, over a cape or a robe: feathered
 // wings, a fairy's see-through ones, or a jet pack with two flames. Returns
 // { sides: [left, right] wing groups that flap, sweep: how far back they
@@ -1893,8 +1927,11 @@ export class Avatar {
     // Legs: a thigh from the hip, then the knee and the shin down to a
     // sneaker (a frog's legs are its skin, and its feet bare), or the
     // running shoes from the shop (on a frog too).
-    const shoes = SHOES[look.shoes] ?? null;
+    const skates = SKATES[look.skates] ?? null;
+    const shoes = skates ?? SHOES[look.shoes] ?? null;
     this.flames = [];
+    this.wheels = [];
+    this.skateLift = skates ? SKATE_LIFT * B.foot : 0;
     this.legs = [];
     this.knees = [];
     for (const side of [-1, 1]) {
@@ -1908,7 +1945,8 @@ export class Avatar {
       knee.add(mesh(sneakerSole(B.foot), toon(shoes?.sole ?? (frog ? darken(fur, 0.25) : '#f6f1ea')), 0, -B.knee, 0));
       knee.add(mesh(sneakerUpper(B.foot), toon(shoes?.upper ?? (frog ? darken(fur, 0.1) : shoeFor(shirt))), 0, -B.knee, 0));
       if (shoes || !frog) knee.add(mesh(sneakerTrim(B.foot), toon(shoes?.trim ?? '#ffffff'), 0, -B.knee, 0));
-      if (shoes) this.flames.push(...shoeExtras(knee, look.shoes, B, side));
+      if (skates) this.wheels.push(...skateParts(knee, look.skates, B));
+      else if (shoes) this.flames.push(...shoeExtras(knee, look.shoes, B, side));
       leg.add(knee);
       body.add(leg);
       this.legs.push(leg);
@@ -2050,7 +2088,8 @@ export class Avatar {
     const moving = anim === ANIM.walk || anim === ANIM.run;
     const running = anim === ANIM.run;
     const riding = anim === ANIM.ride;
-    const rate = moving ? 3.2 + speed * 1.6 : 0;
+    // On skates, long slow pushes: you glide most of the way.
+    const rate = moving ? (this.skateLift ? 2.2 + speed * 0.45 : 3.2 + speed * 1.6) : 0;
     this.phase += dt * rate;
     const ph = this.phase;
     const s = Math.sin(ph);
@@ -2096,6 +2135,22 @@ export class Avatar {
       bob = running ? Math.abs(s) * 0.045 - 0.025 : (Math.abs(Math.cos(ph)) - 0.6) * 0.022;
       lean = running ? 0.17 : 0.05;
       twist = s * (running ? 0.1 : 0.07);
+      if (this.skateLift) {
+        // On skates, a push off to the side and back with each foot in
+        // turn, gliding on the other, knees bent and leaning in, the arms
+        // swinging wide across.
+        const pushes = [Math.max(0, s), Math.max(0, -s)];
+        legs = pushes.map((u, i) => {
+          const out = (i ? 1 : -1) * (0.06 + 0.4 * u);
+          return [-0.28 + 0.6 * u, out, 0.6 - 0.4 * u, -out * 0.6];
+        });
+        armSwing = -s * 0.5;
+        armRaiseL = armRaiseR = REST_RAISE + 0.25;
+        bendL = bendR = 0.35;
+        bob = -0.03 + Math.abs(s) * 0.01;
+        lean = 0.22;
+        twist = s * 0.15;
+      }
     } else if (anim === ANIM.air) {
       // Up in a jump, knees tucked, arms out for balance.
       legSwing = 0.3;
@@ -2383,6 +2438,13 @@ export class Avatar {
     this.body.position.z = 0;
     this.body.scale.setScalar(1);
     if (lying) this.body.position.y += this.lieLift;
+    // Skates stand you up on their wheels, which roll as you go (not in a
+    // seat, a bed or the water).
+    else if (this.skateLift && !sitting && !curled && !riding && anim !== ANIM.swim) {
+      this.body.position.y += this.skateLift;
+      const roll = (speed * dt) / (WHEEL_R * B.foot);
+      if (anim !== ANIM.air && anim !== ANIM.fly) for (const w of this.wheels) w.rotation.x += roll;
+    }
     this.torso.rotation.set(lean, twist, 0);
     // What is in hand keeps the angle it would have with the arm straight;
     // with the arm raised high in an emote it turns to point up along it.

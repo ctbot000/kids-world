@@ -108,6 +108,42 @@ test('running shoes and flying gear show: their own shoes, wings that beat flyin
   assert.ok(boots.flames.every((f) => f.visible), 'running, flames');
 });
 
+test('roller skates: wheels under a boot of their own colours, which stand you up on them, roll as you go and push you along side to side', () => {
+  const look = { animal: KID, fur: 'tan', shirt: 1, hat: 'none', skin: 'tan', hair: 'short', hairColor: 'black' };
+  const plain = new Avatar(look);
+  assert.equal(plain.wheels.length, 0);
+  assert.equal(plain.skateLift, 0);
+  const kinds = ['roller', 'glowy'].map((skates) => new Avatar({ ...look, skates }));
+  for (const a of kinds) {
+    assert.equal(a.wheels.length, 8, 'four wheels a foot');
+    assert.ok(a.skateLift > 0.03);
+  }
+  // Glowing wheels on the Light-up Skates only.
+  assert.ok(kinds[1].wheels.every((w) => w.material.emissiveIntensity > 0 && w.material.emissive.getHex() !== 0));
+  assert.ok(kinds[0].wheels.every((w) => !w.material.emissive || w.material.emissive.getHex() === 0));
+  assert.notEqual(kinds[0].wheels[0].material.color.getHexString(), kinds[1].wheels[0].material.color.getHexString());
+  // Skates win over shoes.
+  assert.equal(new Avatar({ ...look, skates: 'roller', shoes: 'rocket' }).flames.length, 0);
+  // Up on the wheels standing: the lowest wheel just touches the ground.
+  const a = kinds[0];
+  a.update(0.1, ANIM.idle, 0);
+  a.root.updateMatrixWorld(true);
+  const lowest = Math.min(...a.wheels.map((w) => new THREE.Box3().setFromObject(w).min.y));
+  assert.ok(Math.abs(lowest) < 0.012, `lowest wheel at ${lowest}`);
+  // Rolling and pushing out to the side as you go; sitting, down off them.
+  const spun = a.wheels[0].rotation.x;
+  for (let i = 0; i < 30; i++) a.update(1 / 30, ANIM.run, 8);
+  assert.notEqual(a.wheels[0].rotation.x, spun, 'the wheels roll');
+  let out = 0;
+  for (let i = 0; i < 60; i++) {
+    a.update(1 / 60, ANIM.run, 8);
+    out = Math.max(out, Math.abs(a.legs[0].rotation.z), Math.abs(a.legs[1].rotation.z));
+  }
+  assert.ok(out > 0.3, `a leg pushes out ${out}`);
+  a.update(0.1, ANIM.sit, 0);
+  assert.ok(a.body.position.y < a.skateLift / 2, 'not up on wheels in a seat');
+});
+
 test("a flying friend on someone's head sits on top of their hair or their hat", () => {
   // The highest point of the head (or hat) under the middle of a bird sitting
   // there: straight down onto every part, at the middle and round it. Most

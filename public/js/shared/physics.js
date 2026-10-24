@@ -230,7 +230,10 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
     mz /= len;
   }
   const speed = b.flying ? move.fly : b.inLava ? move.swim * 0.5 : b.inWater ? move.swim : input.run ? move.run : move.walk;
-  const accel = (b.flying || b.onGround || inLiquid ? move.groundAccel : move.airAccel) * dt;
+  // On roller skates (move.glide, shop.js SKATE_GLIDE), the ground is
+  // slippery: you build up speed and roll on when you let go.
+  const glide = move.glide && b.onGround && !b.flying && !inLiquid ? move.glide : null;
+  const accel = (glide ? (mx || mz ? glide.push : glide.coast) : b.flying || b.onGround || inLiquid ? move.groundAccel : move.airAccel) * dt;
   b.vx = approach(b.vx, mx * speed, accel);
   b.vz = approach(b.vz, mz * speed, accel);
 

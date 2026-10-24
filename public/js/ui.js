@@ -1336,7 +1336,7 @@ export class UI {
   }
 
   // The shop: sell what is in your basket for coins, and buy running shoes,
-  // flying gear, toy weapons, clothes and HP potions with them (shop.js).
+  // flying gear, roller skates, toy weapons, clothes and HP potions with them (shop.js).
   // Redrawn as your basket changes, so what you find while it is open shows
   // up to sell.
   shopDialog() {
@@ -1415,7 +1415,7 @@ export class UI {
                   return;
                 }
                 this.sound.play('fanfare');
-                const now = { shoes: "You're running faster now.", wings: "You're flying faster now.", weapon: 'Walk up to a monster and bop it with the button (or X)!' }[g.key];
+                const now = { shoes: "You're running faster now.", wings: "You're flying faster now.", skates: 'Push off and glide! They go on in place of your shoes.', weapon: 'Walk up to a monster and bop it with the button (or X)!' }[g.key];
                 this.toast(next.icon, `You got the ${next.name}! ${now}`);
               };
               return h(
@@ -1554,7 +1554,7 @@ export class UI {
   }
 
   // Your backpack: everything you have bought in the shop, to put on and
-  // take off — running shoes, flying gear, which toy weapon is in your hand,
+  // take off — running shoes, flying gear, roller skates, which toy weapon is in your hand,
   // clothes — and your HP potions, to drink on an island. Redrawn as what
   // you have changes (N on the island, a potion drunk, the shop).
   backpackDialog() {
@@ -2041,7 +2041,7 @@ export class UI {
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
           card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, drink a 🧪 potion, and see your 🎁 capsule toys from gashapon machines. You see yourself as you change.']),
-          card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
+          card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, 🛼 roller skates to glide, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
           card('🏢', 'CTB', ['On the CTB island, Grace 🌷 meets you at the gate and shows you to the office, where grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on! Got an idea for the game? Send it to them with 💡 below, and one of them writes back.']),

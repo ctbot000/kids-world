@@ -1,6 +1,7 @@
 // The shop: sell what is in your basket for coins, and spend the coins on
 // gear: running shoes for your feet (walking, running and swimming), flying
-// gear for the sky, toy weapons for popping monsters, and clothes, some for
+// gear for the sky, roller skates to glide over the ground on (in place of
+// the shoes), toy weapons for popping monsters, and clothes, some for
 // looks and some with a power. Each kind of gear
 // comes in levels, bought one after another, each better than the last; you
 // wear the best you have (the weapon you pick of them), and can take it
@@ -61,6 +62,17 @@ export const GEAR = [
       { key: 'feather', name: 'Feather Wings', icon: '🪶', price: 30, boost: 1.25 },
       { key: 'fairy', name: 'Fairy Wings', icon: '🧚', price: 80, boost: 1.5 },
       { key: 'jetpack', name: 'Jet Pack', icon: '🛩️', price: 200, boost: 1.8 },
+    ],
+  },
+  {
+    // On your feet in place of running shoes: faster than any of them over
+    // the ground, but no help in the water, and you glide (see SKATE_GLIDE).
+    key: 'skates',
+    name: 'Roller skates',
+    about: 'Glide over the ground, rolling on when you let go.',
+    levels: [
+      { key: 'roller', name: 'Roller Skates', icon: '🛼', price: 70, boost: 1.5 },
+      { key: 'glowy', name: 'Light-up Skates', icon: '🌈', price: 180, boost: 1.8 },
     ],
   },
   {
@@ -136,20 +148,22 @@ export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1
 export const WEAPONS = GEAR.find((g) => g.key === 'weapon').levels;
 export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 
-// Your look as the island sees it: with the weapon, clothes, shoes and wings
-// you have on, if any (by key: friends see them on you), and your level
-// (levels.js), if given.
+// Your look as the island sees it: with the weapon, clothes, shoes (or
+// skates) and wings you have on, if any (by key: friends see them on you),
+// and your level (levels.js), if given.
 export function lookWithGear(look, gear, level = 0) {
-  const { weapon: _, level: __, outfit: ___, shoes: ____, wings: _____, ...rest } = look ?? {};
+  const { weapon: _, level: __, outfit: ___, shoes: ____, wings: _____, skates: ______, ...rest } = look ?? {};
   const worn = wornWeapon(gear);
   const outfit = wornOutfit(gear);
-  const shoes = wornLevel(gear, 'shoes');
+  const skates = wornLevel(gear, 'skates');
+  const shoes = skates ? null : wornLevel(gear, 'shoes');
   const wings = wornLevel(gear, 'wings');
   return {
     ...rest,
     ...(worn ? { weapon: worn.key } : {}),
     ...(outfit ? { outfit: outfit.key } : {}),
     ...(shoes ? { shoes: shoes.key } : {}),
+    ...(skates ? { skates: skates.key } : {}),
     ...(wings ? { wings: wings.key } : {}),
     ...(level ? { level } : {}),
   };
@@ -163,6 +177,7 @@ const wornLevel = (gear, kind) => {
 };
 export const shoesOf = (key) => GEAR[0].levels.find((l) => l.key === key) ?? null;
 export const wingsOf = (key) => GEAR[1].levels.find((l) => l.key === key) ?? null;
+export const skatesOf = (key) => GEAR[2].levels.find((l) => l.key === key) ?? null;
 
 // Toy weapons wear out: each swing that lands wears the one in your hand a
 // little (gear.wear, by its key: the swings used), and after its uses it
@@ -233,15 +248,31 @@ const boost = (gear, key) => {
   return level ? gearKind(key).levels[level - 1].boost : 1;
 };
 
+// On roller skates you speed up gently as you push (push, in blocks a
+// second each second) and roll on when you let go, slowing gently (coast)
+// — on the ground only: in the air, the water and the sky as ever.
+export const SKATE_GLIDE = { push: 16, coast: 4 };
+
 // Speeds for physics.js (stepBody's options.move) with the gear worn, or
 // null with none, to go as fast as anyone.
-// The Hero Cape jumps higher, too.
+// Skates on, shoes are not: they are as fast as the skates on the ground,
+// and swim as anyone does. The Hero Cape jumps higher, too.
 export function gearMove(gear, base) {
-  const feet = boost(gear, 'shoes');
+  const skates = boost(gear, 'skates');
+  const feet = skates > 1 ? skates : boost(gear, 'shoes');
+  const swim = skates > 1 ? 1 : feet;
   const sky = boost(gear, 'wings');
   const jump = wornOutfit(gear)?.jump;
   if (feet === 1 && sky === 1 && !jump) return null;
-  return { walk: base.walk * feet, run: base.run * feet, swim: base.swim * feet, fly: base.fly * sky, flyUp: base.flyUp * sky, ...(jump ? { jump } : {}) };
+  return {
+    walk: base.walk * feet,
+    run: base.run * feet,
+    swim: base.swim * swim,
+    fly: base.fly * sky,
+    flyUp: base.flyUp * sky,
+    ...(jump ? { jump } : {}),
+    ...(skates > 1 ? { glide: SKATE_GLIDE } : {}),
+  };
 }
 
 // Selling n of a basket's key: the coins it brings, or 0 when it cannot be

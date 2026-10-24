@@ -15,7 +15,7 @@ import { makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { AdventureSim } from '../public/js/shared/adventure.js';
 import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, isBroken, lookWithGear, nextLevel, sale, sellPrice, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
+import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, SKATE_GLIDE, isBroken, lookWithGear, nextLevel, sale, sellPrice, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
 import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
 import { World } from '../public/js/shared/world.js';
@@ -35,13 +35,13 @@ function meadow(W = 120, D = 120) {
   return w;
 }
 
-// How far a body goes along x in a second, from (10, y, z).
-function distance(gear, { y = 6, z = 20, flying = false, run = false, up = false } = {}) {
+// How far a body goes along x in a second (or secs), from (10, y, z).
+function distance(gear, { y = 6, z = 20, flying = false, run = false, up = false, secs = 1 } = {}) {
   const w = meadow();
   const b = makeBody(10, y, z);
   b.flying = flying;
   const move = gearMove(gear, MOVE) ?? undefined;
-  for (let i = 0; i < 60; i++) stepBody(w, b, { mx: up ? 0 : 1, mz: 0, run, jump: up }, DT, { move });
+  for (let i = 0; i < 60 * secs; i++) stepBody(w, b, { mx: up ? 0 : 1, mz: 0, run, jump: up }, DT, { move });
   return up ? b.y - y : b.x - 10;
 }
 
@@ -65,9 +65,9 @@ test('each level of gear costs more and makes you faster than the one before', (
 });
 
 test('gear and coins are tidied: no levels that do not exist, no made-up kinds, no silly sums', () => {
-  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
-  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
-  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear(null), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear({ shoes: 99, wings: -1, cape: 2, off: { shoes: true, cape: true, wings: 'yes' } }), { off: { shoes: true }, pick: { weapon: 0 }, shoes: GEAR[0].levels.length, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(cleanGear({ shoes: 1.5 }), { off: {}, pick: { weapon: 0 }, shoes: 0, wings: 0, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
   // A chosen weapon is kept, and only one of those owned: anything else
   // falls back to the best (wornWeapon).
   assert.equal(cleanGear({ weapon: 2, pick: { weapon: 1 } }).pick.weapon, 1);
@@ -168,7 +168,7 @@ test('coins and gear are kept at the keeper, from the device that changed them l
   const theirs = { name: 'Sunny Otter', coins: 3, gear: { shoes: 2, wings: 1, off: { wings: true } }, changedAt: 200 };
   const kept = keptProfile({ ...theirs, coins: 1e12 });
   assert.equal(kept.coins, COINS_MAX);
-  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
+  assert.deepEqual(kept.gear, { off: { wings: true }, pick: { weapon: 0 }, shoes: 2, wings: 1, skates: 0, weapon: 0, clothes: [], outfit: '', wear: {}, toys: {}, tames: 0 });
   const merged = mergeProfiles(mine, theirs);
   assert.equal(merged.coins, 3);
   assert.equal(merged.gear.shoes, 2);
@@ -412,6 +412,71 @@ test('weapons wear out as they bop, break, and are fixed in the shop for less th
     // Kept on this device.
     p.useWeapon();
     assert.equal(new Profile().data.gear.wear.sword, 1);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('roller skates glide: faster than any shoes over the ground once going, rolling on when let go, and no help swimming', () => {
+  const none = { shoes: 0, wings: 0, skates: 0, off: {} };
+  const skates = GEAR[2];
+  assert.equal(skates.key, 'skates');
+  const best = { ...none, skates: skates.levels.length };
+  const rocket = { ...none, shoes: GEAR[0].levels.length };
+  assert.ok(skates.levels.at(-1).boost > GEAR[0].levels.at(-1).boost, 'the best skates beat the best shoes');
+  assert.deepEqual(gearMove(best, MOVE).glide, SKATE_GLIDE);
+  assert.equal(gearMove(rocket, MOVE).glide, undefined);
+  // Slow to start, faster over a long way.
+  assert.ok(distance(best, { secs: 0.25 }) < distance(rocket, { secs: 0.25 }), 'a push takes building up');
+  assert.ok(distance(best, { secs: 5 }) > distance(rocket, { secs: 5 }) + 2, 'and then you fly along');
+  // Let go, you roll on: further than on foot, and you do stop.
+  const coast = (gear) => {
+    const w = meadow();
+    const b = makeBody(10, 6, 20);
+    const move = gearMove(gear, MOVE) ?? undefined;
+    for (let i = 0; i < 180; i++) stepBody(w, b, { mx: 1, mz: 0 }, DT, { move });
+    const from = b.x;
+    for (let i = 0; i < 300; i++) stepBody(w, b, { mx: 0, mz: 0 }, DT, { move });
+    return { rolled: b.x - from, still: Math.hypot(b.vx, b.vz) };
+  };
+  const rolled = coast(best);
+  assert.ok(rolled.rolled > 3 && rolled.still === 0, `rolls on ${rolled.rolled} and stops`);
+  assert.ok(coast(rocket).rolled < 1, 'shoes stop at once');
+  // In the water skates are no help, and the shoes they replaced neither.
+  const swim = distance(none, { y: 3.2, z: 110 });
+  assert.equal(distance(best, { y: 3.2, z: 110 }), swim);
+  assert.equal(distance({ ...rocket, skates: 1 }, { y: 3.2, z: 110 }), swim, 'skates on, shoes are not');
+  // Taken off, as fast as anyone.
+  assert.equal(gearMove({ ...best, off: { skates: true } }, MOVE), null);
+});
+
+test('skates go on your feet in place of shoes: in the look, and put on one at a time', async () => {
+  const look = { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' };
+  assert.deepEqual(GEAR[2].levels.map((l) => l.key), ['roller', 'glowy']);
+  const both = lookWithGear(look, cleanGear({ shoes: 3, skates: 2 }));
+  assert.equal(both.skates, 'glowy');
+  assert.equal(both.shoes, undefined, 'skates win');
+  assert.equal(lookWithGear(look, cleanGear({ shoes: 3, skates: 2, off: { skates: true } })).shoes, 'rocket');
+  assert.equal(lookWithGear({ ...look, skates: 'roller' }, cleanGear({})).skates, undefined, 'not bought');
+  assert.equal(cleanLook({ ...look, skates: 'roller' }).skates, 'roller');
+  assert.equal(cleanLook({ ...look, skates: 'ice' }).skates, undefined);
+  assert.equal(addProgress({ gear: { skates: 1 } }, { gear: { skates: 2 } }).gear.skates, 2);
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const p = new Profile();
+    p.data.coins = 1000;
+    assert.equal(p.buy('shoes'), true);
+    assert.equal(p.buy('skates'), true);
+    assert.equal(wearing(p.data.gear, 'skates'), 1, 'new skates go straight on');
+    assert.equal(wearing(p.data.gear, 'shoes'), 0, 'and the shoes come off');
+    p.wear('shoes', true);
+    assert.deepEqual([wearing(p.data.gear, 'shoes'), wearing(p.data.gear, 'skates')], [1, 0]);
+    p.wear('skates', true);
+    assert.deepEqual([wearing(p.data.gear, 'shoes'), wearing(p.data.gear, 'skates')], [0, 1]);
+    p.wear('skates', false);
+    assert.deepEqual([wearing(p.data.gear, 'shoes'), wearing(p.data.gear, 'skates')], [0, 0], 'taking skates off leaves you in socks');
   } finally {
     delete globalThis.localStorage;
   }

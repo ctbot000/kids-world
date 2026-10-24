@@ -164,6 +164,9 @@ export class Profile extends EventTarget {
     this.data.coins -= next.price;
     this.data.gear[kind] = next.level;
     delete this.data.gear.off[kind];
+    // New skates go on in place of your shoes, and new shoes of your skates.
+    const other = { shoes: 'skates', skates: 'shoes' }[kind];
+    if (other && this.data.gear[other]) this.data.gear.off[other] = true;
     if (kind === 'weapon') delete this.data.gear.wear[next.key];
     // A new weapon goes straight into your hand (choose another any time).
     if (kind === 'weapon') this.data.gear.pick.weapon = next.level;
@@ -255,10 +258,14 @@ export class Profile extends EventTarget {
     return true;
   }
 
+  // Skates go on your feet in place of running shoes: putting one on takes
+  // the other off.
   wear(kind, on) {
     if (!this.data.gear[kind]) return;
     if (on) delete this.data.gear.off[kind];
     else this.data.gear.off[kind] = true;
+    const other = { shoes: 'skates', skates: 'shoes' }[kind];
+    if (on && other && this.data.gear[other]) this.data.gear.off[other] = true;
     this.shopped();
   }
 

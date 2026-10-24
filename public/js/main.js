@@ -157,9 +157,9 @@ for (const p of [profile, isle]) {
 let gearSent = '';
 const sendGear = () => {
   const p = session?.game?.profile ?? ui.profile;
-  // What shows of it: weapon, clothes, shoes, wings and level.
-  const { weapon = '', outfit = '', shoes = '', wings = '', level = 0 } = p.shownLook;
-  const shown = [weapon, outfit, shoes, wings, level].join('|');
+  // What shows of it: weapon, clothes, shoes or skates, wings and level.
+  const { weapon = '', outfit = '', shoes = '', skates = '', wings = '', level = 0 } = p.shownLook;
+  const shown = [weapon, outfit, shoes, skates, wings, level].join('|');
   if (shown === gearSent) return;
   gearSent = shown;
   if (session?.game) session.game.send({ t: 'look', look: p.shownLook, name: profile.name });

@@ -277,7 +277,7 @@ export function addProgress(player, guest) {
   const basket = {};
   for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
   const gear = cleanGear(a.gear);
-  for (const key of ['shoes', 'wings', 'weapon']) gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
+  for (const key of ['shoes', 'wings', 'skates', 'weapon']) gear[key] = Math.max(gear[key], b.gear[key] ?? 0);
   gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
