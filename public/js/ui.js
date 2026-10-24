@@ -37,6 +37,7 @@ import { shirtColor } from './render/avatar.js';
 import { fullscreenMode, isFullscreen, onFullscreenChange, setFullscreen } from './fullscreen.js';
 import { hairIcon } from './hair-icons.js';
 import { hurried } from './hurry.js';
+import { NEWS } from './news.js';
 import { HILL_MODES, TOOLS } from './game.js';
 import { MiniMap } from './minimap.js';
 import { load, save } from './storage.js';
@@ -431,6 +432,7 @@ export class UI {
     $('btn-ranking').onclick = () => this.rankingDialog(this.profile === this.isle ? 'isle' : 'home');
     $('btn-players').onclick = () => this.playersDialog();
     $('btn-help').onclick = () => this.helpDialog();
+    $('btn-news').onclick = () => this.newsDialog();
     $('btn-feedback').onclick = () => this.feedbackDialog();
     $('btn-sound').onclick = () => this.soundDialog();
   }
@@ -2056,6 +2058,26 @@ export class UI {
         ),
         this.reportButton(),
         this.ideaButton(),
+      );
+    });
+  }
+
+  // 📰 What's new: the updates given (the ones since you last played, when
+  // it opens by itself), or every one in the list.
+  newsDialog(news = NEWS) {
+    const fresh = news !== NEWS;
+    const when = (date) => new Date(`${date}T12:00:00+09:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    this.openModal((root) => {
+      root.append(
+        h('h2', {}, fresh ? '📰 What\'s new since you last played' : '📰 What\'s new'),
+        h(
+          'div',
+          { class: 'news-list' },
+          ...news.map((n) =>
+            h('div', { class: 'help-card news-card', 'data-news': n.id }, h('span', { class: 'emoji' }, n.icon), h('div', {}, h('b', {}, n.title), h('span', { class: 'news-date muted' }, when(n.date)), h('div', { class: 'muted' }, n.text))),
+          ),
+        ),
+        h('button', { class: 'big green', type: 'button', style: 'margin-top:16px', onclick: () => this.closeModal() }, '👍 Let\'s play!'),
       );
     });
   }

@@ -2435,6 +2435,16 @@ body.touch.playing #joystick {
   font-size: 1.8rem;
 }
 
+.news-list {
+  display: grid;
+  gap: 10px;
+}
+
+.news-date {
+  margin-left: 8px;
+  font-size: 0.85rem;
+}
+
 .steps {
   margin: 10px 0 14px;
   padding-left: 1.6em;

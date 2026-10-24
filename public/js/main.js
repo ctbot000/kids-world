@@ -10,6 +10,7 @@ import { hurried } from './hurry.js';
 import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
+import { latestNews, newsSince } from './news.js';
 import { Profile } from './profile.js';
 import { canStepDown, RUNGS, startRung } from './quality.js';
 import { watchErrors } from './report.js';
@@ -751,6 +752,22 @@ function greet() {
   if (icon) setTimeout(() => ui.toast(icon, text(profile.name)), 400);
 }
 
+// The most updates the window opens with by itself.
+const NEWS_MAX = 10;
+
+// 📰 What's new since you last played on this device, by itself once a page.
+// Someone who has never played has nothing to catch up on: it is all new. A
+// player new to this device goes by what was seen here before they logged
+// in, which was most likely them.
+function showNews() {
+  if (loginHandlers.required() || ui.modalOpen) return;
+  const seen = storage.load('seenNews', null) ?? storage.loadFor(null, 'seenNews', null);
+  storage.save('seenNews', latestNews());
+  if (seen === null && !profile.data.seenHelp) return;
+  const news = newsSince(seen).slice(0, NEWS_MAX);
+  if (news.length) ui.newsDialog(news);
+}
+
 // Logged in somewhere else: this device plays as them from now on, with
 // their own things here if they played here before, else what the keeper
 // has of them (keeping this device's settings). adopt: the guest's things
@@ -1100,6 +1117,7 @@ async function boot() {
   const code = normalizeCode(params.get('code'));
   // An invitation's link waits until you have logged in (it is still in the address).
   if (isValidCode(code) && !loginHandlers.required() && !params.has('ctb')) ui.visitDialog(code);
+  else if (!params.has('ctb')) showNews();
   requestAnimationFrame(frame);
   present();
   const started = keeper.start();

@@ -16,6 +16,7 @@ import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, C
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
+import { latestNews, NEWS } from '../public/js/news.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
 import { RECIPES } from '../public/js/shared/cooking.js';
 import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
@@ -130,10 +131,18 @@ async function openPlayer(url, profile = {}, init = null) {
   // between saves and between asking for a list again, are a tenth as long (see hurry.js).
   await page.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
   if (init) await page.evaluateOnNewDocument(init);
-  await page.evaluateOnNewDocument((p) => {
-    const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
-    localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
-  }, profile);
+  // These players have seen every update too, unless profile.seenNews says
+  // the newest one they saw (null: none).
+  const { seenNews = latestNews(), ...rest } = profile;
+  await page.evaluateOnNewDocument(
+    (p, seen) => {
+      const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
+      localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
+      if (seen !== null && localStorage.getItem('kidsworld.seenNews') === null) localStorage.setItem('kidsworld.seenNews', JSON.stringify(seen));
+    },
+    rest,
+    seenNews,
+  );
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(url);
   await page.waitForFunction(() => window.kidsWorld?.ui, { timeout: 60000 * SLOW });
@@ -5014,5 +5023,30 @@ test('a broadcast station: Go live puts your camera and microphone on a TV on an
     await keeper.stop();
     await games.shutdown();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('📰 What\'s new opens by itself with the updates since you last played, once, and the chip shows them all', { skip }, async () => {
+  const seen = NEWS[3].id;
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', seenNews: seen });
+  try {
+    await until(page, () => window.kidsWorld.ui.modalOpen && document.querySelector('#modal .news-list'));
+    const shown = await page.$$eval('#modal [data-news]', (cards) => cards.map((c) => c.dataset.news));
+    assert.deepEqual(shown, NEWS.slice(0, 3).map((n) => n.id), 'only the ones after the newest seen, newest first');
+    assert.match(await page.$eval('#modal h2', (el) => el.textContent), /since you last played/);
+    await clickButton(page, "👍 Let's play!", '#modal');
+    await until(page, () => !window.kidsWorld.ui.modalOpen);
+    // Seen now: coming back opens nothing.
+    await page.reload();
+    await page.waitForFunction(() => window.kidsWorld?.ui && !document.getElementById('title').hidden);
+    await delay(500);
+    assert.equal(await page.evaluate(() => window.kidsWorld.ui.modalOpen), false);
+    // The chip has every update.
+    await page.click('#btn-news');
+    await until(page, () => document.querySelector('#modal .news-list'));
+    assert.equal(await page.$$eval('#modal [data-news]', (cards) => cards.length), NEWS.length);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
   }
 });
