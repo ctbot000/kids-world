@@ -541,7 +541,7 @@ test('the office on the CTB island: workers at their desks, answering children, 
   for (let x = Math.min(g[0][0], g[1][0]); x <= Math.max(g[0][0], g[1][0]); x++) {
     for (let z = Math.min(g[0][2], g[1][2]); z <= Math.max(g[0][2], g[1][2]); z++) assert.ok(room.world.groundBelow(x, room.world.H - 1, z) < office.site.base + 25);
   }
-  assert.ok(officeCells().some(([, , , id]) => id === B.TV));
+  assert.ok(officeCells().some(([, , , id]) => id === B.COMPUTER));
 
   // The AI friend talking to them gets no answer: it would answer back, on and on.
   const pip = { send: () => {} };

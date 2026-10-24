@@ -211,6 +211,9 @@ export const STUDY_DESK = furniture(69, 'study-desk', { name: 'Study Desk', colo
 // up, press Q and play Go on it, with a friend or the AI friend. The first
 // id past one byte. After the study desk.
 export const GO_BOARD = furniture(256, 'go-board', { name: 'Go Board', color: '#e2b866', after: 69, turns: false, sound: 'wood' });
+// A desk computer: a screen on a stand glowing with code, a keyboard and
+// a mouse, as CTB's workers have on their desks. After the Go board.
+export const COMPUTER = furniture(257, 'computer', { name: 'Computer', color: '#2c2f36', after: 256, light: 5, sound: 'glass' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

@@ -367,3 +367,11 @@ test('clocks: a cuckoo clock for the wall and a tower clock after the fish tanks
   cuckoo.userData.tick(3, (12 + 1 / 60) / 24);
   assert.ok(bird.visible && bird.position.z < 0.33, 'and pops out of its door on the hour');
 });
+
+test('a computer after the Go board, glowing, its picture inside its cell', () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.GO_BOARD) + 1], B.COMPUTER, 'right after the Go board');
+  assert.ok(B.SOLID[B.COMPUTER] === 1 && B.block(B.COMPUTER).light > 0);
+  assert.deepEqual(B.block(B.COMPUTER).faces, [257, 258, 259, 260], 'it turns, on four ids in a row');
+  for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.COMPUTER)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1);
+});
