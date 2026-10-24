@@ -73,6 +73,8 @@ export const XP_FOR = {
   quizzes: { xp: 10 },
   quizright: { xp: 5, cap: 5000 },
   quizperfect: { xp: 25 },
+  dishes: { xp: 15 },
+  cookright: { xp: 3, cap: 5000 },
   photos: { xp: 5, cap: 100 },
   sown: { xp: 2 },
   harvested: { xp: 1 },

@@ -762,6 +762,63 @@ function school() {
   return c.list();
 }
 
+// A cooking school: a white building with an orange roof and a big chef's
+// hat on it, and inside one kitchen classroom on checked tiles — two rows of
+// cooking stations (a stove, a counter, a stove) each side of an aisle, all
+// facing the teacher's kitchen along the back wall (counters, a stove and a
+// fridge), with lamps overhead. Walk up to any stove for a cooking class
+// (shared/cooking.js).
+function cookingSchool() {
+  const c = new Cells();
+  c.box(-5, 0, 0, 5, 0, 9, B.CHECKER_FLOOR);
+  for (let y = 1; y <= 4; y++) {
+    for (let x = -5; x <= 5; x++) {
+      for (let z = 0; z <= 9; z++) {
+        const sideX = x === -5 || x === 5;
+        const sideZ = z === 0 || z === 9;
+        if (!sideX && !sideZ) {
+          c.put(x, y, z, B.AIR);
+          continue;
+        }
+        const corner = sideX && sideZ;
+        const window = (y === 2 || y === 3) && ((sideX && [2, 3, 5, 6].includes(z)) || (z === 0 && [-3, -2, 2, 3].includes(x)));
+        c.put(x, y, z, corner ? ORANGE : y === 4 ? RED : window ? B.GLASS : WHITE);
+      }
+    }
+  }
+  // The way in, three wide, a red-and-white awning over it.
+  for (let x = -1; x <= 1; x++) {
+    c.put(x, 1, 0, B.AIR);
+    c.put(x, 2, 0, B.AIR);
+    c.put(x, 3, -1, x === 0 ? WHITE : RED);
+  }
+  // A flat orange roof, and on it a big white chef's hat.
+  c.box(-6, 5, -1, 6, 5, 10, ORANGE);
+  c.box(-1, 6, 3, 1, 7, 5, WHITE);
+  c.box(-2, 8, 2, 2, 9, 6, WHITE);
+  c.box(-1, 10, 3, 1, 10, 5, WHITE);
+  // The teacher's kitchen along the back wall: counters, a stove in the
+  // middle and a fridge, all facing the class.
+  for (const x of [-4, -3, -2, -1, 1, 2, 3]) c.put(x, 1, 8, B.COUNTER);
+  c.put(0, 1, 8, B.STOVE);
+  c.put(4, 1, 8, B.FRIDGE);
+  c.put(-4, 2, 8, B.POTTED_PLANT);
+  // Two rows of cooking stations, each side of the aisle, facing the
+  // teacher: a stove, a counter, a stove.
+  for (const z of [3, 5]) {
+    for (const side of [-1, 1]) {
+      c.put(side * 4, 1, z, B.STOVE);
+      c.put(side * 3, 1, z, B.COUNTER);
+      c.put(side * 2, 1, z, B.STOVE);
+    }
+  }
+  // Lamps overhead.
+  for (const x of [-3, 3]) for (const z of [2, 6]) c.put(x, 4, z, B.LAMP);
+  // Flowers by the way in.
+  for (const x of [-3, 3]) c.put(x, 0, -1, B.TULIP);
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
@@ -787,6 +844,7 @@ export const STAMPS = [
   { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },
   { key: 'video-arcade', name: 'Video Arcade', icon: '🕹️', cells: videoArcade() },
   { key: 'school', name: 'School', icon: '🏫', cells: school() },
+  { key: 'cooking-school', name: 'Cooking School', icon: '🍳', cells: cookingSchool() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

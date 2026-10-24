@@ -27,6 +27,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
+import { COOK_BREAK_MS, cookCoins, RECIPES, recipeByKey } from './shared/cooking.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
@@ -2027,6 +2028,7 @@ export class UI {
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. Now and then a 👾 Monster Gashapon turns up: follow its beam of light, and turn it for a figure of a real monster — on a higher stage of Adventure Isle, a rare one is likelier!']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
+          card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -2935,6 +2937,8 @@ export class UI {
     on('tv-open', () => this.tvDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
+    on('cook-open', () => this.cookDialog());
+    on('cooking', () => this.cookingNews());
     on('draw-open', () => this.drawDialog());
     on('drawing', (e) => this.drawingChanged?.(e.detail));
     on('onair', () => this.onAirNews());
@@ -4081,7 +4085,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4148,22 +4152,22 @@ export class UI {
 
   // Play, beside an arcade machine or a piano next to you, Turn beside a
   // gashapon machine, Watch beside a TV, or Go live beside a broadcast
-  // station, Class beside a chalkboard, or Draw beside a drawing board: the
-  // same button again.
+  // station, Class beside a chalkboard, Draw beside a drawing board, or Cook
+  // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -5314,6 +5318,152 @@ export class UI {
       },
       { narrow: true, onClose: () => clearInterval(timer) },
     );
+  }
+
+  // ------------------------------------------------ cooking classes
+
+  // The recipes at a stove (game.js openCooking, shared/cooking.js), one big
+  // button each, the break before cooking one again counting down on a
+  // recipe just made.
+  cookDialog() {
+    const g = this.game;
+    if (!g) return;
+    let timer = 0;
+    this.openModal(
+      (root) => {
+        const list = h('div', { class: 'recipe-list' });
+        const render = () => {
+          list.replaceChildren(
+            ...RECIPES.map((r, i) => {
+              const wait = g.cookBreak(r.key);
+              const s = Math.ceil(wait / 1000);
+              return h(
+                'button',
+                {
+                  class: `big ${['blue', 'pink', 'green'][i % 3]}`,
+                  type: 'button',
+                  disabled: wait > 0,
+                  'data-recipe': r.key,
+                  onclick: () => {
+                    this.sound.unlock();
+                    this.sound.play('ui');
+                    g.startCooking(r.key);
+                  },
+                },
+                h('span', { class: 'emoji' }, r.icon),
+                h('span', { class: 'quiz-level' }, h('span', {}, r.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🧽 Washing up: ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${r.steps.length} steps · 🪙 up to ${cookCoins(r.steps.length)}`)),
+              );
+            }),
+          );
+        };
+        root.append(h('h2', {}, '🍳 Cooking Class'), h('p', {}, 'Aprons on! Pick a recipe, then tap each step in the right order. Every step right first time earns a coin.'), list);
+        render();
+        timer = setInterval(render, 1000);
+      },
+      { onClose: () => clearInterval(timer) },
+    );
+  }
+
+  // The cooking class going changed: its window opened on a new one, or
+  // brought up to date.
+  cookingNews() {
+    const c = this.game?.cooking;
+    if (!c) return;
+    if (this.cookEls?.cooking !== c) this.cookingDialog();
+    else this.renderCooking();
+  }
+
+  // The cooking class, in a window: the steps done so far, a pan with what
+  // has gone in, and the steps to pick the next one from; at the end, the
+  // dish made and what it earned.
+  cookingDialog() {
+    const g = this.game;
+    const c = g?.cooking;
+    if (!c) return;
+    const recipe = recipeByKey(c.recipe);
+    this.cookEls = null;
+    this.openModal(
+      (root) => {
+        const status = h('div', { class: 'quiz-status' });
+        const box = h('div', { class: 'cook-box' });
+        this.cookEls = { cooking: c, status, box, wrong: new Set(), step: 0 };
+        root.append(h('h2', {}, `${recipe.icon} ${recipe.name}`), status, box);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          this.cookEls = null;
+          if (g.cooking === c) g.closeCooking();
+        },
+      },
+    );
+    this.renderCooking();
+  }
+
+  renderCooking() {
+    const g = this.game;
+    const c = g?.cooking;
+    const els = this.cookEls;
+    if (!c || els?.cooking !== c || !this.modalOpen) return;
+    const recipe = recipeByKey(c.recipe);
+    const total = c.asks.length;
+    if (els.step !== c.step) {
+      els.step = c.step;
+      els.wrong.clear();
+    }
+    const status = c.done ? `Ready! ${c.right} of ${total} steps right first time` : `Step ${c.step + 1} of ${total} · What comes next?`;
+    if (els.status.dataset.k !== status) {
+      els.status.dataset.k = status;
+      els.status.textContent = status;
+    }
+    const done = recipe.steps.slice(0, c.step);
+    const steps = h('ol', { class: 'cook-steps' }, done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`)));
+    if (c.done) {
+      if (!els.served) {
+        els.served = true;
+        this.sound.play(c.right === total ? 'victory' : 'fanfare');
+      }
+      const other = RECIPES.find((r) => r.key !== c.recipe && !g.cookBreak(r.key));
+      els.box.replaceChildren(
+        h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, recipe.icon),
+        h('div', { class: `quiz-result${c.right === total ? ' perfect' : ''}` }, `${c.right === total ? '🌟' : '🧑‍🍳'} Your ${recipe.name}${recipe.name.endsWith('s') ? ' are' : ' is'} ready!`),
+        h('p', { class: 'quiz-credit' }, c.right === total ? 'Every step right first time! ' : 'Yummy! ', `You earned: 🪙 ${c.coins} ${c.coins === 1 ? 'coin' : 'coins'}`, c.xp ? ` and ⭐ ${c.xp} XP` : ''),
+        steps,
+        h('p', { class: 'muted' }, `🧽 The ${recipe.name} can be made again after a ${Math.round(COOK_BREAK_MS / 60_000)}-minute wash-up.`),
+        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); this.closeModal(); this.cookDialog(); } }, h('span', { class: 'emoji' }, '📖'), ' Cook something else') : '',
+        h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
+      );
+      return;
+    }
+    const ask = c.asks[c.step];
+    const pan = h('div', { class: 'cook-pan', 'aria-label': done.length ? `In the pan: ${done.map((st) => st.icon).join(' ')}` : 'An empty pan' }, done.length ? done.map((st) => h('span', {}, st.icon)) : h('span', { class: 'muted' }, '🍳'));
+    const answers = h(
+      'div',
+      { class: 'quiz-answers', role: 'group', 'aria-label': 'Steps' },
+      ask.choices.map((choice, at) =>
+        h(
+          'button',
+          {
+            class: `quiz-answer cook-step${els.wrong.has(at) ? ' wrong' : ''}`,
+            type: 'button',
+            disabled: els.wrong.has(at),
+            onclick: () => {
+              this.sound.unlock();
+              const right = g.cookPick(at);
+              if (right === true) this.sound.play('collect');
+              else if (right === false) {
+                els.wrong.add(at);
+                this.sound.play('no');
+                this.renderCooking();
+              }
+            },
+          },
+          h('span', { class: 'emoji' }, choice.icon),
+          ` ${choice.text}`,
+        ),
+      ),
+    );
+    els.box.replaceChildren(steps, pan, answers, els.wrong.size ? h('p', { class: 'quiz-verdict' }, '🙈 Not yet! Which step comes before that one?') : '');
   }
 
   // The quiz you are taking, in a window: where it has got to, the question

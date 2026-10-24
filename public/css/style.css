@@ -4106,6 +4106,65 @@ kbd {
   line-height: 1.2;
 }
 
+/* A stove's recipes, two to a row where there is room. */
+.recipe-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  margin: 14px 0 6px;
+}
+
+/* A cooking class: the steps done, a pan with what has gone in, and at the
+   end the dish, big. */
+.cook-steps {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.cook-pan {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  min-height: 64px;
+  margin: 4px auto 14px;
+  max-width: 240px;
+  border: 6px solid #4a4f57;
+  border-radius: 50%;
+  background: #6b717a;
+  font-size: 2rem;
+}
+
+.cook-step {
+  text-align: left;
+}
+
+.cook-dish {
+  font-size: 5rem;
+  line-height: 1.1;
+  text-align: center;
+  animation: cook-dish-pop 0.5s ease-out;
+}
+
+@keyframes cook-dish-pop {
+  from {
+    transform: scale(0.3) rotate(-20deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cook-dish {
+    animation: none;
+  }
+}
+
 /* A chalkboard's classes, one big button each, a little apart. */
 .class-list {
   display: flex;

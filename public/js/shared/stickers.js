@@ -83,6 +83,8 @@ export const STICKERS = [
   { key: 'quiz-whiz', icon: '🧠', name: 'Quiz Whiz', text: 'Finish a class at school, or an extra-credit quiz on a conquered adventure island', test: (s) => s.quizzes >= 1 },
   { key: 'quiz-perfect', icon: '💯', name: 'Perfect Score', text: 'Get every answer right in a class at school or on an extra-credit quiz', test: (s) => s.quizperfect >= 1 },
   { key: 'brainiac', icon: '🎓', name: 'Brainiac', text: 'Get every answer right 10 times, in classes or extra-credit quizzes', test: (s) => s.quizperfect >= 10 },
+  { key: 'little-chef', icon: '🧑‍🍳', name: 'Little Chef', text: 'Cook a dish in a cooking class at a stove', test: (s) => s.dishes >= 1 },
+  { key: 'master-chef', icon: '🎂', name: 'Master Chef', text: 'Cook 25 dishes in cooking classes', test: (s) => s.dishes >= 25 },
   { key: 'photographer', icon: '📸', name: 'Photographer', text: 'Take 5 photos', test: (s) => s.photos >= 5 },
   { key: 'little-farmer', icon: '🧑‍🌾', name: 'Little Farmer', text: 'Pick a vegetable you grew', test: (s) => s.harvested >= 1 },
   { key: 'splish-splash', icon: '🚿', name: 'Splish Splash', text: 'Water farmland with the watering can', test: (s) => s.watered >= 1 },
@@ -90,4 +92,4 @@ export const STICKERS = [
   { key: 'harvest-champion', icon: '🏅', name: 'Harvest Champion', text: 'Pick 1,000 vegetables', test: (s) => s.harvested >= 1000 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'notes', 'tunes', 'channels', 'strokes', 'quizzes', 'quizright', 'quizperfect', 'photos', 'sown', 'harvested', 'watered'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'notes', 'tunes', 'channels', 'strokes', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'photos', 'sown', 'harvested', 'watered'];

@@ -12,11 +12,12 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
+import { RECIPES } from '../public/js/shared/cooking.js';
 import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
@@ -4254,6 +4255,75 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   await until(page, () => document.querySelector('.class-list button'));
   assert.deepEqual(
     await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break')])),
+    [
+      [true, true],
+      [false, false],
+    ],
+  );
+  await page.keyboard.press('Escape');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a cooking class: Q by a stove opens the recipes, its steps tapped in order make the dish, a wrong one only says not yet, and the recipe is after a wash-up', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A stove on level ground beside the start, and nothing rideable near it
+  // to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && [z - 1, z, z + 1].some((zz) => room.world.top(x, zz) !== ground)) x++;
+    room.natureCell([x, ground + 1, z + 1], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z: z + 1, id, coins: kw.profile.data.coins };
+  }, STOVE);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x + 0.5, y: at.y, z: at.z - 0.6, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Cook'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Cooking Class'));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.recipe-list button').length), RECIPES.length);
+  const recipe = RECIPES[0];
+  await page.click(`.recipe-list button[data-recipe="${recipe.key}"]`);
+  await until(page, (name) => document.querySelector('#modal h2').textContent.includes(name) && document.querySelector('.cook-step'), recipe.name);
+  // A wrong step first: not yet, and that one put by.
+  const first = await page.evaluate(() => window.kidsWorld.game.cooking.asks[0]);
+  const wrong = first.answer === 0 ? 1 : 0;
+  await page.click(`.cook-step:nth-child(${wrong + 1})`);
+  await until(page, () => document.querySelector('.quiz-verdict')?.textContent.includes('Not yet'));
+  assert.ok(await page.evaluate((n) => document.querySelector(`.cook-step:nth-child(${n})`).disabled, wrong + 1));
+  // Then every step right, each going into the pan.
+  for (let i = 0; i < recipe.steps.length; i++) {
+    const right = await page.evaluate((i) => window.kidsWorld.game.cooking.asks[i].answer, i);
+    await page.click(`.cook-step:nth-child(${right + 1})`);
+    if (i < recipe.steps.length - 1) await until(page, (n) => document.querySelectorAll('.cook-pan span').length === n && !document.querySelector('.quiz-verdict'), i + 1);
+  }
+  await until(page, () => document.querySelector('.cook-dish') && document.querySelector('.quiz-result')?.textContent.includes('ready'));
+  const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, stats: window.kidsWorld.profile.data.stats, stickers: window.kidsWorld.profile.data.stickers }));
+  assert.equal(after.coins, at.coins + recipe.steps.length - 1, 'a coin for each step right first time');
+  assert.equal(after.stats.dishes, 1);
+  assert.equal(after.stats.cookright, recipe.steps.length - 1);
+  assert.ok(after.stickers['little-chef']);
+  // Something else to cook straight on; this recipe has its wash-up.
+  await page.click('.cook-box button.blue');
+  await until(page, () => document.querySelector('.recipe-list button'));
+  assert.deepEqual(
+    await page.evaluate(() => [...document.querySelectorAll('.recipe-list button')].slice(0, 2).map((b) => [b.disabled, b.textContent.includes('Washing up')])),
     [
       [true, true],
       [false, false],

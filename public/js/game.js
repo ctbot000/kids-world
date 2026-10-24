@@ -11,6 +11,7 @@ import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
+import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, isBlank, isBoard } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
@@ -251,6 +252,12 @@ export class Game extends EventTarget {
     this.drawAt = null;
     this.drawings = new Map();
     this.classEnded = { junior: 0, senior: 0 };
+    // The stove beside you (shared/cooking.js), when you last cooked each
+    // recipe, for the break before the next time, and the cooking class
+    // going: { recipe, asks, step, misses, right, done, coins, xp }.
+    this.stoveTarget = null;
+    this.cookEnded = {};
+    this.cooking = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -2326,6 +2333,65 @@ export class Game extends EventTarget {
     this.emit('quiz');
   }
 
+  // ------------------------------------------------ cooking classes
+
+  // Q (or the Cook button) by a stove: the recipes to pick from open
+  // (shared/cooking.js).
+  openCooking() {
+    if (!this.stoveTarget) return;
+    this.sound.play('ui');
+    this.emit('cook-open');
+  }
+
+  // How long until a recipe may be cooked again (0: now).
+  cookBreak(key) {
+    return cookBreakLeft(this.cookEnded[key] ?? 0, performance.now());
+  }
+
+  // A cooking class begun: the recipe's steps to put in order, unless its
+  // break is still on. Says 'cooking', which opens the window on it (ui.js).
+  startCooking(key) {
+    if (!recipeByKey(key) || this.cookBreak(key) > 0) return;
+    const lesson = makeLesson(key, (Math.random() * 2 ** 31) | 0);
+    this.cooking = { ...lesson, step: 0, misses: lesson.asks.map(() => 0), right: 0, done: false };
+    this.emit('cooking');
+  }
+
+  // A step picked as the one that comes next: true when it was (on to the
+  // step after it, and with the last one the dish made, its coins and XP
+  // yours), false when not (try again), undefined for no step to take.
+  cookPick(i) {
+    const c = this.cooking;
+    if (!c || c.done) return;
+    const ask = c.asks[c.step];
+    if (!ask || !Number.isInteger(i) || i < 0 || i >= ask.choices.length) return;
+    if (i !== ask.answer) {
+      c.misses[c.step]++;
+      this.emit('cooking');
+      return false;
+    }
+    if (!c.misses[c.step]) c.right++;
+    c.step++;
+    if (c.step === c.asks.length) {
+      c.done = true;
+      c.coins = cookCoins(c.right);
+      c.xp = XP_FOR.dishes.xp + c.right * XP_FOR.cookright.xp;
+      this.cookEnded[c.recipe] = performance.now();
+      this.profile.count('dishes');
+      this.profile.count('cookright', c.right);
+      if (c.coins) this.profile.earn(c.coins);
+      const b = this.me?.body;
+      if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: c.xp });
+    }
+    this.emit('cooking');
+    return true;
+  }
+
+  // The cooking window closed: a class half done simply goes.
+  closeCooking() {
+    this.cooking = null;
+  }
+
   // ------------------------------------------------ drawing boards
 
   // The pictures on the island's boards, as the island tells of them on
@@ -2670,6 +2736,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.classTarget) {
       this.openClass();
+      return;
+    }
+    if (!id && this.stoveTarget) {
+      this.openCooking();
       return;
     }
     if (!id && this.drawTarget) {
@@ -3810,6 +3880,7 @@ export class Game extends EventTarget {
     this.stationTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.dizzy && !on.flying && on.onGround ? stationNear(this.world, on) : null;
     this.classTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.dizzy && !on.flying && on.onGround ? chalkboardNear(this.world, on) : null;
     this.drawTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.dizzy && !on.flying && on.onGround ? boardNear(this.world, on) : null;
+    this.stoveTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? stoveNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -4258,6 +4329,8 @@ export class Game extends EventTarget {
     this.stationAt = null;
     this.stationTarget = null;
     this.classTarget = null;
+    this.stoveTarget = null;
+    this.cooking = null;
     this.drawAt = null;
     this.drawTarget = null;
     this.drawings.clear();
