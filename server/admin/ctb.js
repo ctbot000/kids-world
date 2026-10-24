@@ -124,7 +124,7 @@ function runsPanel({ h, ago, time, opened }) {
   const filters = h('div', { class: 'run-filters', role: 'group', 'aria-label': 'Whose runs' });
   const list = h('ol', { class: 'run-list' });
   const viewer = h('div', { class: 'run-view', hidden: true, 'aria-live': 'polite' });
-  const el = h('div', { id: 'ctb-runs' }, h('h3', {}, '🔍 Model runs'), h('p', { class: 'muted' }, 'Every talk a worker had with its model, newest first: a task step by step, an idea read, a proposal. Open one to see what the model was given, what it thought and answered, and what each answer cost.'), filters, list, viewer);
+  const el = h('section', { id: 'ctb-runs', class: 'card ctb-card' }, h('h3', {}, '🔍 Model runs'), h('p', { class: 'muted' }, 'Every talk a worker had with its model, newest first: a task step by step, an idea read, a proposal. Open one to see what the model was given, what it thought and answered, and what each answer cost.'), filters, list, viewer);
   let runs = [];
   let filter = null;
   let shown = null;
@@ -282,7 +282,8 @@ export function setUpCtb(helpers) {
     return h(
       'article',
       { class: 'visit' },
-      h('h4', {}, w.name, w.issue ? h('span', { class: 'muted' }, ' · ', link(w.issue), ` ${w.issue.title}`) : null, ' ', h('button', { type: 'button', class: 'quiet small', title: `${w.name}'s talks with the model, the newest open`, onclick: () => runs.pick(k, { latest: true }) }, '🔍 Model runs')),
+      h('div', { class: 'ctb-worker-head' }, h('h4', {}, w.name), h('button', { type: 'button', class: 'quiet small', title: `${w.name}'s talks with the model, the newest open`, onclick: () => runs.pick(k, { latest: true }) }, '🔍 Model runs')),
+      w.issue ? h('div', { class: 'ctb-worker-issue' }, link(w.issue), ` ${w.issue.title}`) : null,
       h('div', {}, h('b', {}, w.doing), w.issue ? h('span', { class: 'muted' }, ` · since ${ago(w.startedAt)}`) : null),
       h('div', { class: 'muted' }, `${plural(w.done, 'pull request', 'pull requests')} opened, stuck ${plural(w.stuck, 'time', 'times')}`, w.last ? [' · last: ', link(w.last.issue), ' ', w.last.ok ? h('a', { href: w.last.url, target: '_blank', rel: 'noopener' }, 'pull request') : `stuck: ${String(w.last.why).split('\n')[0]}`] : null),
       w.steps.length ? fold(`ctb-steps-${w.name}`, `Steps (${w.steps.length})`, h('ol', { class: 'recent' }, ...w.steps.map((s) => h('li', {}, h('time', {}, time.format(s.at)), ' ', h('b', {}, `${s.n}. ${s.what}`), s.thought ? h('div', { class: 'muted' }, s.thought) : null)))) : null,
@@ -295,13 +296,26 @@ export function setUpCtb(helpers) {
     if (!state) return;
     if (!view) {
       const settings = settingsForm(h);
-      view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), workers: h('div', { class: 'visits' }), board: h('div'), proposals: h('div'), ideas: h('div'), pulls: h('div'), usage: h('div', { class: 'usage-section' }), history: h('div') };
-      document.getElementById('ctb').replaceChildren(view.line, settings.form, view.island, view.workers, runs.el, h('h3', {}, 'New task'), taskForm(h), view.board, view.proposals, view.ideas, view.pulls, view.usage, view.history);
+      // One card a part, the work going on first and the forms after it.
+      const card = (attrs, ...children) => h('section', { ...attrs, class: `card ctb-card ${attrs.class ?? ''}`.trim() }, ...children);
+      view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), count: h('span', { class: 'badge' }), workers: h('div', { class: 'visits' }), board: card({}), proposals: card({}), ideas: card({}), pulls: card({}), usage: card({ class: 'usage-section' }), history: card({}) };
+      view.crew = card({}, h('h3', {}, 'Workers ', view.count), view.workers);
+      document.getElementById('ctb').replaceChildren(
+        card({}, view.line, settings.form, view.island),
+        view.crew,
+        view.board,
+        h('div', { class: 'ctb-row' }, view.proposals, view.ideas, view.pulls),
+        card({}, h('h3', {}, 'New task'), taskForm(h)),
+        runs.el,
+        view.usage,
+        view.history,
+      );
     }
     view.settings.fill(state);
     const [cls, words] = !state.running ? ['off', 'Off'] : state.problem ? ['wait', `Closed: ${state.problem}`] : ['on', `Open on ${state.repo} · ${state.model}`];
     view.line.replaceChildren(h('span', { class: `status ${cls}`, role: 'status' }, words), state.running ? h('button', { type: 'button', onclick: () => act('/check') }, 'Check now') : '');
     const isl = state.island;
+    view.island.hidden = !isl;
     view.island.replaceChildren(
       ...(isl
         ? [`Their island “${isl.name}”, code ${isl.code}${isl.shared === 'online' ? ', open to everyone peer to peer' : ''}`, isl.visitors.length ? ` · visiting: ${isl.visitors.join(', ')}` : ' · no visitors', '. Anyone can watch them, no login needed: ', h('a', { href: isl.url, target: '_blank', rel: 'noopener' }, isl.url), ' (here: ', h('a', { href: '/?ctb', target: '_blank', rel: 'noopener' }, '/?ctb'), ').']
@@ -309,12 +323,13 @@ export function setUpCtb(helpers) {
     );
     view.workers.replaceChildren(...state.workers.map((w, k) => workerCard(w, k)));
     runs.update(state);
-    view.workers.hidden = !state.workers.length;
+    view.count.textContent = String(state.workers.length);
+    view.crew.hidden = !state.workers.length;
     view.board.replaceChildren(
       h('h3', {}, 'Task board ', h('span', { class: 'badge' }, String(state.tasks.length))),
       state.tasks.length
         ? h('ul', { class: 'ctb-list' }, ...state.tasks.map((t) => h('li', {}, link(t), ` ${t.title} `, ...t.labels.filter((l) => l !== 'ctb').map((l) => h('span', { class: `badge ${LABEL_LOOK[l] ?? ''}` }, l.replace(/^ctb: /, ''))))))
-        : h('p', { class: 'muted' }, `No open tasks. Add one above, or label an issue on GitHub “ctb” (it must be written by the account gh is logged in as).`),
+        : h('p', { class: 'muted' }, `No open tasks. Add one below, or label an issue on GitHub “ctb” (it must be written by the account gh is logged in as).`),
     );
     view.proposals.replaceChildren(
       h('h3', {}, 'Proposals ', h('span', { class: 'badge' }, String(state.proposals.length)), ' ', state.running && !state.problem ? h('button', { type: 'button', disabled: state.proposing || null, onclick: () => act('/propose') }, state.proposing ? 'Thinking…' : 'Propose one now') : ''),
@@ -353,6 +368,7 @@ export function setUpCtb(helpers) {
       view.usage.dataset.key = usageKey;
       view.usage.replaceChildren(...usageTable(state.usage));
     }
+    view.history.hidden = !state.history.length;
     view.history.replaceChildren(...(state.history.length ? [fold('ctb-history', 'Activity log', h('ol', { class: 'recent' }, ...state.history.slice(0, 40).map((e) => h('li', {}, h('time', {}, time.format(e.at)), ' ', e.text))))] : []));
   }
 
