@@ -5180,6 +5180,8 @@ test('the shared isle is on the keeper’s list of open islands too, hosted peer
     await inGame(page);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Adventure Isle');
     assert.equal(await page.evaluate(() => window.kidsWorld.game.shared), true);
+    // Its stage, in the badge at the top, stage 1 too.
+    assert.equal(await page.$eval('#island-stage', (el) => (el.hidden ? '' : el.textContent)), '🌟 Stage 1');
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -5234,6 +5236,7 @@ test('a conquered stage of the shared isle goes on to the next stage by itself',
     await until(page, (code) => window.kidsWorld.game?.code === code && window.kidsWorld.session?.started, second.code);
     await inGame(page);
     assert.equal(await page.evaluate(() => window.kidsWorld.game.adventure.stage), 2);
+    assert.equal(await page.$eval('#island-stage', (el) => (el.hidden ? '' : el.textContent)), '🌟 Stage 2');
     assert.equal(await page.$eval('#next-stage', (el) => el.hidden), true);
     assert.deepEqual(pageErrors, []);
   } finally {

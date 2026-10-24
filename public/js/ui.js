@@ -2961,7 +2961,10 @@ export class UI {
         this.toast('🎵', `Now playing: ${song.name}`);
       }
     });
-    on('adventure', () => this.renderHp());
+    on('adventure', () => {
+      this.renderHp();
+      this.renderIsland();
+    });
     on('defense', () => this.renderDefense());
     on('dizzy', () => this.renderHp());
     on('welcome', () => {
@@ -4055,7 +4058,13 @@ export class UI {
     const g = this.game;
     if (!g?.world) return;
     $('island-name').textContent = `${THEME_ICON[g.world.theme] ?? '🏝️'} ${g.world.name}`;
-    $('island-code').textContent = this.gameHandlers?.canInvite() ? `Code ${prettyCode(g.code)}` : 'Playing alone';
+    $('island-code').replaceChildren(...(this.gameHandlers?.canInvite() ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
+    // The adventure island's stage, bright beside its code (as in 👫 Players:
+    // the shared isle always, any other island only past stage 1).
+    const adv = g.adventure;
+    const stage = $('island-stage');
+    stage.hidden = !(adv && (g.shared || adv.stage > 1));
+    stage.replaceChildren(...(stage.hidden ? [] : ['🌟 ', h('span', { class: 'word' }, 'Stage '), String(adv.stage)]));
   }
 
   // Your HP, shown while the island has monsters (or camps to free): the
