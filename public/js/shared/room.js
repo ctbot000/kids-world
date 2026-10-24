@@ -880,9 +880,15 @@ export class Room {
         const c = this.critters.get(msg.id);
         const r = c && CRITTER_INFO[c.type].ride;
         if (!r || c.rider === p.id || c.passengers?.includes(p.id)) return;
-        // A wild dragon has to be tamed first (dragon.js).
+        // A wild dragon has to be tamed first (dragon.js), and a tired one
+        // (its ride-hearts gone, see stepRides) needs a moment to catch its
+        // breath before anyone climbs on again.
         if (!canRide(c)) {
           this.notice(conn, `${c.name} the dragon is wild! Bop it until it is tired out to tame it — and watch out for its fire!`, 'info');
+          return;
+        }
+        if (c.type === 'dragon' && (rideOf(c).restUntil ?? 0) > now) {
+          this.notice(conn, `${c.name} is worn out! Let it catch its breath a moment.`, 'info');
           return;
         }
         // With someone driving, the others ride along, in the seats it has;
@@ -1365,8 +1371,13 @@ export class Room {
   // while the dragon rests, too tired to ride, for a short while.
   stepRides(now) {
     for (const c of this.critters.list) {
-      if (c.type !== 'dragon' || !c.rider || !c.ride) continue;
-      const ride = c.ride;
+      // Only a rideable dragon has ride-hearts (a wild one's fight has its
+      // own), and a resting one goes on resting with nobody on its back.
+      if (c.type !== 'dragon' || !canRide(c)) continue;
+      const ride = rideOf(c);
+      // Its hearts only matter under a rider — unless it is resting off the
+      // bumps it took with one aboard (then it finishes its rest below).
+      if (!c.rider && !ride.restUntil) continue;
       if (ride.restUntil) {
         if (now < ride.restUntil) continue;
         // The rest was the recovery: all its hearts back, and it can be ridden.
