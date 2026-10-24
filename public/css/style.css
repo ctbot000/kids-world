@@ -1858,6 +1858,14 @@ body.touch.playing #joystick {
   width: min(460px, 100%);
 }
 
+/* Filled in after it opens: grows downward from near the top, so nothing
+   above what comes in moves (centred, it would rise by half of it). */
+.panel.fills {
+  align-self: start;
+  margin-top: min(6vh, 56px);
+  max-height: calc(min(88vh, 900px, 100%) - min(6vh, 56px));
+}
+
 .panel.side {
   align-self: end;
   justify-self: end;

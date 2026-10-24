@@ -360,7 +360,10 @@ export class UI {
 
   // pose: you are choosing how you look, so on a narrow screen everything
   // else makes way for you above the dialog.
-  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false } = {}) {
+  // fills: what the dialog shows comes in after it opens (from the island
+  // keeper), so it opens from the top and grows downward: the tabs and
+  // buttons above stay where a finger is about to tap them.
+  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false, fills = false } = {}) {
     // Opening a dialog over another closes that one first, so what it changed
     // goes back: the camera that turned to you, the big map being drawn. Before
     // building, as the new dialog may set the same things up again.
@@ -372,6 +375,7 @@ export class UI {
     build(body);
     const panel = $('modal').querySelector('.panel');
     panel.classList.toggle('narrow', narrow);
+    panel.classList.toggle('fills', fills);
     $('modal').classList.toggle('see-through', seeThrough);
     document.body.classList.toggle('posing', pose);
     $('modal').hidden = false;
@@ -1836,6 +1840,7 @@ export class UI {
         ask(on);
       },
       {
+        fills: true,
         onClose: () => {
           keeper.removeEventListener('ranking', onNews);
           keeper.removeEventListener('status', onStatus);
@@ -1960,7 +1965,7 @@ export class UI {
         note.say('🔎', 'Asking the island keeper…');
         setTimeout(ask, 0);
       },
-      { narrow: true },
+      { narrow: true, fills: true },
     );
   }
 

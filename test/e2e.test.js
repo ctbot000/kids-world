@@ -3259,8 +3259,21 @@ test('the ranking shows the players with a login to anyone, live: you marked onc
   const levels = () => page.$$eval('#modal .rank-row .tag-level', (els) => els.map((el) => el.textContent.trim()));
   try {
     // A guest sees it from the title screen, and is told how to be in it.
+    // The keeper's answer comes as a board is tapped, and the tab stays where
+    // the finger aimed: the dialog grows downward as the rows come in.
+    const ranking = keeper.store.ranking.bind(keeper.store);
+    let answer;
+    const answered = new Promise((done) => (answer = done));
+    keeper.store.ranking = async (...args) => (await answered, ranking(...args));
     await clickButton(page, 'Ranking');
-    await clickButton(page, 'Builders', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Asking the island keeper'));
+    const builders = await page.evaluateHandle(() => [...document.querySelectorAll('#modal button')].find((b) => b.textContent.includes('Builders')));
+    await landed(page, builders);
+    const aimed = await builders.boundingBox();
+    answer();
+    keeper.store.ranking = ranking;
+    await until(page, () => document.querySelector('#modal .rank-row'));
+    await page.mouse.click(aimed.x + aimed.width / 2, aimed.y + aimed.height / 2);
     await until(page, () => document.querySelectorAll('#modal .rank-row').length === 2);
     assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
     assert.deepEqual(await levels(), ['⭐2', '⭐1'], 'each row says their level');
