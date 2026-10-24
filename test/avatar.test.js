@@ -230,3 +230,50 @@ test("a grown-up: a kid's skin and hair, a face of their own, and taller", () =>
   };
   assert.equal(new Set(FACES.map((f) => parts(f.key))).size, FACES.length);
 });
+
+test('at the piano, jointed hands play palm down with fingers arched, the finger that struck pushing down, and the resting hands and what is in hand come back after', () => {
+  const a = new Avatar({ animal: KID, fur: 'tan', shirt: 1, hat: 'none', skin: 'tan', hair: 'short', hairColor: 'black', weapon: 'sword' });
+  const meshes = () => {
+    let n = 0;
+    a.root.traverse((o) => o.isMesh && n++);
+    return n;
+  };
+  a.update(0.1, ANIM.idle, 0);
+  const resting = meshes();
+  assert.ok(a.weapon?.parent, 'a sword in hand');
+  a.update(0.1, ANIM.piano, 0);
+  for (const hand of a.hands) {
+    assert.equal(hand.userData.rest.parent, null, 'the resting hand put away');
+    assert.equal(hand.userData.piano.group.parent, hand, 'the playing hand on');
+  }
+  assert.equal(a.weapon.parent, null, 'the sword put away to play');
+  // Palm down: the palm's own down (-z) points at the floor, the fingers
+  // forward of the wrist and curled down under the knuckles.
+  a.root.updateMatrixWorld(true);
+  for (const hand of a.hands) {
+    const { group, fingers } = hand.userData.piano;
+    const down = new THREE.Vector3(0, 0, -1).transformDirection(group.matrixWorld);
+    assert.ok(down.y < -0.9, `palm down (${down.y.toFixed(2)})`);
+    const knuckle = fingers[1].knuckle.getWorldPosition(new THREE.Vector3());
+    const tip = fingers[1].joint.localToWorld(new THREE.Vector3(0, -0.02, 0));
+    assert.ok(tip.y < knuckle.y - 0.02, 'the fingertip below its knuckle');
+    assert.ok(tip.z > hand.getWorldPosition(new THREE.Vector3()).z, 'and out in front of the wrist');
+  }
+  // A key struck by the low hand's middle finger: it pushes down, the others do not.
+  const tipY = (f) => {
+    a.root.updateMatrixWorld(true);
+    return a.hands[1].userData.piano.fingers[f].joint.localToWorld(new THREE.Vector3(0, -0.02, 0)).y;
+  };
+  const before = tipY(1);
+  a.pianoNote(62);
+  a.update(1 / 60, ANIM.piano, 0);
+  const palm = a.hands[1].getWorldPosition(new THREE.Vector3()).y;
+  assert.equal(a.keys[0].finger, 2);
+  assert.ok(tipY(1) < before - 0.005 && tipY(1) - palm < -0.03, 'the middle finger pushes down');
+  // Up from the piano: as before, nothing of it left on you.
+  a.update(0.1, ANIM.idle, 0);
+  for (const hand of a.hands) assert.equal(hand.userData.rest.parent, hand);
+  assert.equal(a.weapon.parent, a.hands[1]);
+  assert.equal(meshes(), resting);
+  a.dispose();
+});

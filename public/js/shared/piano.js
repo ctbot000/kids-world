@@ -58,7 +58,7 @@ export const songOf = (key) => SONGS.find((s) => s.key === key) ?? null;
 // draws it under you), and how far in front of the piano's middle you sit:
 // the grand's keys stick out further, so you sit further out.
 export const BENCH_H = 0.4;
-const SIT_OUT = { piano: 0.78, 'grand-piano': 0.95 };
+const SIT_OUT = { piano: 0.68, 'grand-piano': 0.9 };
 
 // The four ways along the ground, as RAIL_DIRS.
 const DIRS = [

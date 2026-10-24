@@ -750,11 +750,12 @@ const MODELS = {
     out.push(box(0.66, 0, 0.86, 0.72, 0.42, 0.92, CASE, 'plain'));
     out.push(box(0.46, 0.04, 0.3, 0.54, 0.42, 0.34, CASE, 'plain'));
     out.push(...[0.43, 0.48, 0.53].map((x) => box(x, 0.04, 0.26, x + 0.04, 0.07, 0.3, '#f5c542', 'plain')));
-    // The keys, in their slot at the front, between cheeks.
-    out.push(box(0.04, 0.42, 0.04, 0.96, 0.5, 0.22, CASE, 'plain'));
-    out.push(box(0.04, 0.5, 0.04, 0.08, 0.58, 0.24, CASE, 'plain'));
-    out.push(box(0.92, 0.5, 0.04, 0.96, 0.58, 0.24, CASE, 'plain'));
-    out.push(...pianoKeys(0.08, 0.92, 0.5, 0.05, 0.22));
+    // The keys, in their slot at the front, between cheeks: as high as an
+    // upright's, so the same hands play both.
+    out.push(box(0.04, 0.42, 0.04, 0.96, 0.52, 0.22, CASE, 'plain'));
+    out.push(box(0.04, 0.52, 0.04, 0.08, 0.6, 0.24, CASE, 'plain'));
+    out.push(box(0.92, 0.52, 0.04, 0.96, 0.6, 0.24, CASE, 'plain'));
+    out.push(...pianoKeys(0.08, 0.92, 0.52, 0.05, 0.22));
     // The music stand, with the music on it.
     out.push(box(0.2, 0.62, 0.25, 0.8, 0.76, 0.28, CASE, 'plain'));
     out.push(box(0.3, 0.65, 0.245, 0.7, 0.8, 0.25, WHITE, 'plain'));

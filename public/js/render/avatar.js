@@ -1852,6 +1852,46 @@ const handShape = (size, side) =>
     return bake(parts.map(({ g, m }) => ({ g, m: new THREE.Matrix4().makeScale(size, size, size).multiply(m) })));
   });
 
+// A hand as it plays the piano, palm down and jointed (handShape is one
+// piece, its fingers straight along the arm): a palm and four fingers
+// along -y, each in two parts that curl down (to -z) at the knuckle and at
+// the middle joint, arched over the keys, and the thumb under the inner side
+// (towards the middle of you, -side). Laid out as handShape is, in the
+// hand's own place at the end of the forearm, and as big.
+function pianoHand(size, side, skin) {
+  const g = new THREE.Group();
+  g.scale.setScalar(size);
+  // The palm, broad and flat, from the wrist out to the knuckles, and the
+  // wrist joining it to the forearm.
+  g.add(mesh(roundedBox(0.05, 0.054, 0.022, 0.0095), skin, -side * 0.002, -0.037, 0));
+  g.add(mesh(sphere(1, 12, 8), skin, 0, -0.008, 0, 0.019, 0.014, 0.012));
+  const fingers = [];
+  // From the thumb's side: across, how long, how thick (as handShape's
+  // lengths), each splayed out a little from the middle of the hand.
+  for (const [x, len, r] of [[0.0215, 0.038, 0.0064], [0.0072, 0.043, 0.0066], [-0.0072, 0.04, 0.0064], [-0.0215, 0.032, 0.0058]]) {
+    const knuckle = new THREE.Group();
+    knuckle.position.set(-side * x, -0.064, 0.002);
+    knuckle.rotation.order = 'ZXY';
+    knuckle.rotation.z = -side * x * 3;
+    const a = len * 0.55;
+    const b = len * 0.45;
+    knuckle.add(mesh(capsule(r * 1.12, a, 4, 8), skin, 0, -a / 2, 0));
+    const joint = new THREE.Group();
+    joint.position.y = -a;
+    joint.add(mesh(capsule(r * 1.05, b, 4, 8), skin, 0, -b / 2, 0));
+    knuckle.add(joint);
+    g.add(knuckle);
+    fingers.push({ knuckle, joint });
+  }
+  // The thumb, reaching forward and down along the inner side.
+  const thumb = new THREE.Group();
+  thumb.position.set(-side * 0.028, -0.03, -0.004);
+  thumb.rotation.z = side * 0.35;
+  thumb.add(mesh(capsule(0.0072, 0.024, 4, 8), skin, 0, -0.019, 0));
+  g.add(thumb);
+  return { group: g, fingers, thumb };
+}
+
 // The bench you sit on at the piano, its padded top where the root is and
 // its four legs down to the floor: a little wider than you, of the same dark
 // wood as the piano, with a red cushion.
@@ -1886,8 +1926,8 @@ export class Avatar {
     // when it last struck one; and the bench under you, there only while
     // you play (so nothing measuring you counts it otherwise).
     this.keys = [
-      { u: 0.3, to: 0.3, at: -Infinity },
-      { u: 0.7, to: 0.7, at: -Infinity },
+      { u: 0.3, to: 0.3, at: -Infinity, finger: 2 },
+      { u: 0.7, to: 0.7, at: -Infinity, finger: 2 },
     ];
     this.bench = pianoBench();
     // A soft round shadow under the feet.
@@ -1994,7 +2034,10 @@ export class Avatar {
       elbow.add(mesh(forearmShape(B), skin));
       const hand = new THREE.Group();
       hand.position.y = -B.arm[1];
-      hand.add(mesh(handShape(B.hand, side), skin));
+      const rest = mesh(handShape(B.hand, side), skin);
+      hand.add(rest);
+      hand.userData.rest = rest;
+      hand.userData.piano = pianoHand(B.hand, side, skin);
       elbow.add(hand);
       arm.add(elbow);
       this.torso.add(arm);
@@ -2003,6 +2046,7 @@ export class Avatar {
       this.hands.push(hand);
     }
     // A toy weapon in the right hand, its grip in the palm.
+    this.handsPlaying = false;
     this.weapon = look.weapon ? weapon(look.weapon) : null;
     this.weaponKind = this.weapon ? look.weapon : null;
     if (this.weapon) {
@@ -2071,6 +2115,8 @@ export class Avatar {
     const hand = this.keys[u < 0.5 ? 0 : 1];
     hand.to = u;
     hand.at = this.time;
+    // The thumb (0) to the little finger (4), as the tune walks along.
+    hand.finger = (n - LOW) % 5;
   }
 
   playEmote(key) {
@@ -2221,10 +2267,10 @@ export class Avatar {
       // How far out each arm reaches along the keys, from the middle.
       armRaiseR = -0.08 + (0.5 - lo.u) * 0.95;
       armRaiseL = -0.08 + (hi.u - 0.5) * 0.95;
-      armFwdR = -1.02 + 0.12 * pl + Math.sin(t * 11) * ripple;
-      armFwdL = -1.02 + 0.12 * ph2 + Math.sin(t * 11 + 1.7) * ripple;
-      bendR = 0.62 - 0.12 * pl;
-      bendL = 0.62 - 0.12 * ph2;
+      armFwdR = -0.94 + 0.05 * pl + Math.sin(t * 11) * ripple * 0.4;
+      armFwdL = -0.94 + 0.05 * ph2 + Math.sin(t * 11 + 1.7) * ripple * 0.4;
+      bendR = 0.62 - 0.05 * pl;
+      bendL = 0.62 - 0.05 * ph2;
       const last = lo.at > hi.at ? lo.u : hi.u;
       twist = playing ? (0.5 - last) * 0.35 : 0;
       headTilt = playing ? Math.sin(t * 2.2) * 0.08 : Math.sin(t * 0.7) * 0.04;
@@ -2404,6 +2450,7 @@ export class Avatar {
       if (anim === ANIM.piano) this.root.add(this.bench);
       else this.bench.removeFromParent();
     }
+    this.playHands(anim === ANIM.piano, lean, [armFwdL, armFwdR], [bendL, bendR], t);
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);
@@ -2504,6 +2551,57 @@ export class Avatar {
       if (this.lidShut) this.eyes.rotation.x = closed ? this.lidShut : 0;
       else this.eyes.scale.y = closed ? 0.12 : 1;
       if (this.blinkAt < 0) this.blinkAt = 2.5 + Math.random() * 3;
+    }
+  }
+
+  // At the piano, the jointed playing hands in place of the resting ones
+  // (and whatever is in hand put away), there only while playing so nothing
+  // measuring you counts them otherwise: each held palm down, level with
+  // the keys whatever the arm does, the fingers arched over them; the
+  // finger that struck last pushes down into its key and springs back, the
+  // others lifting a little, and between notes they ripple.
+  playHands(playing, lean, fwd, bend, t) {
+    if (playing !== this.handsPlaying) {
+      this.handsPlaying = playing;
+      for (const hand of this.hands) {
+        const { rest, piano } = hand.userData;
+        if (playing) {
+          rest.removeFromParent();
+          hand.add(piano.group);
+        } else {
+          piano.group.removeFromParent();
+          hand.add(rest);
+        }
+      }
+      if (this.weapon) {
+        if (playing) this.weapon.removeFromParent();
+        else this.hands[1].add(this.weapon);
+      }
+    }
+    if (!playing) return;
+    // The arms are this.keys' other way round: arms[1] (+x) plays the low keys.
+    for (let i = 0; i < 2; i++) {
+      const { group, fingers, thumb } = this.hands[i].userData.piano;
+      const k = this.keys[1 - i];
+      // Pitched so its fingers point forward and a little down, wherever the
+      // forearm points (the torso's lean, the shoulder, the elbow).
+      group.rotation.x = -(Math.PI / 2 - 0.2) - (lean + fwd[i] - bend[i]);
+      const since = t - k.at;
+      const strike = Math.max(0, 1 - since / 0.22) ** 1.5;
+      const busy = since < 1.5;
+      for (let f = 0; f < 5; f++) {
+        const struck = f === k.finger ? strike : 0;
+        const ripple = busy ? Math.sin(t * 9 + f * 1.3 + i) * 0.08 : 0;
+        // The struck finger pushes down from the knuckle, its end
+        // straightening a little to press the key rather than curl back.
+        const curl = 0.55 + ripple + struck * 0.5 - (f !== k.finger ? strike * 0.15 : 0);
+        if (f === 0) {
+          thumb.rotation.x = 0.9 + ripple * 0.5 + struck * 0.5;
+          continue;
+        }
+        fingers[f - 1].knuckle.rotation.x = curl;
+        fingers[f - 1].joint.rotation.x = 0.97 + ripple * 0.4 - struck * 0.35;
+      }
     }
   }
 
