@@ -151,20 +151,23 @@ export const WALLPAPERS = [
 // can face (`front`, numbered as RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z); only
 // the first, facing -z, is in the toy box, and putting it down turns it to
 // face you. `color` is its main colour, for the map. It is solid unless it
-// says not, but never opaque: light and the view pass round it.
+// says not, but never opaque: light and the view pass round it. With no
+// four free in a row, `faces` gives the four ids of one that turns.
 export const FURNITURE = [];
-function furniture(id, key, props) {
+function furniture(id, key, { faces, ...props }) {
   const turns = props.turns !== false;
+  faces ??= turns ? [id, id + 1, id + 2, id + 3] : [id];
   const ids = [];
-  for (let k = 0; k < (turns ? 4 : 1); k++) {
+  for (let k = 0; k < faces.length; k++) {
     ids.push(
-      def(id + k, k === 0 ? key : `${key}-${k}`, {
+      def(faces[k], k === 0 ? key : `${key}-${k}`, {
         kind: 'furniture',
         tiles: 'plain',
         model: key,
         turns,
         front: turns ? (3 + k) % 4 : 3,
         base: id,
+        faces,
         ...props,
         // category: false keeps it out of the toy box.
         category: k === 0 && props.category !== false ? (props.category ?? 'home') : null,
@@ -197,6 +200,10 @@ export const CHALKBOARD = furniture(232, 'chalkboard', { name: 'Chalkboard', col
 // A drawing board (shared/drawing.js), a whiteboard on a stand: walk up,
 // press Q and draw on it, with friends too. After the chalkboard.
 export const DRAWING_BOARD = furniture(236, 'drawing-board', { name: 'Drawing Board', color: '#f7f5ef', after: 232, sound: 'wood' });
+// A study desk for doing homework at home: drawers, a shelf of books, a
+// desk lamp that lights up and a chair to sit at, like the school desk's.
+// The last four free ids, none of them in a row. After the drawing board.
+export const STUDY_DESK = furniture(69, 'study-desk', { name: 'Study Desk', color: '#c98a52', after: 236, faces: [69, 78, 79, 255], light: 8, sound: 'wood' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
@@ -458,7 +465,7 @@ export const baseOf = (id) => defs[id]?.base ?? id;
 export const turnedTo = (id, front) => {
   const d = defs[id];
   if (!d?.turns) return id;
-  return d.base + ((((front - 3) % 4) + 4) % 4);
+  return d.faces[(((front - 3) % 4) + 4) % 4];
 };
 
 export const isSolid = (id) => SOLID[id] === 1;

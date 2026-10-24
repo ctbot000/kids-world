@@ -122,3 +122,28 @@ test('a class is a few questions out of a quiz bank, and the next of its level i
   assert.equal(breakLeft(1000, 1000 + CLASS_BREAK_MS), 0, 'the break over');
   assert.equal(breakLeft(1000, 1000 + CLASS_BREAK_MS / 2), CLASS_BREAK_MS / 2);
 });
+
+test('the Study Desk turns on four scattered ids, after the drawing board, a lit seat facing its desk', () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.DRAWING_BOARD) + 1], B.STUDY_DESK, 'right after the drawing board');
+  assert.deepEqual([0, 1, 2, 3].map((f) => B.turnedTo(B.STUDY_DESK, f)), [78, 79, 255, 69]);
+  for (const f of [0, 1, 2, 3]) {
+    const id = B.turnedTo(B.STUDY_DESK, f);
+    assert.equal(B.BLOCKS[id].front, f);
+    assert.equal(B.baseOf(id), B.STUDY_DESK);
+    assert.equal(B.turnedTo(id, 3), B.STUDY_DESK, 'and turns back again');
+    assert.ok(B.SOLID[id] && B.block(id).light > 0, 'solid, its lamp lit');
+    assert.equal(B.block(id).category, f === 3 ? 'home' : null, 'only the first is in the toy box');
+  }
+  for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.STUDY_DESK)) {
+    assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'inside its cell');
+    assert.ok(x1 > x0 && y1 > y0 && z1 > z0);
+  }
+  assert.ok(modelBoxes(B.STUDY_DESK).some((b) => b[7] === 'glow'), 'a glowing lamp');
+  // You sit on its chair behind the desk, facing the desk, as at school.
+  const w = new World({ W: 8, H: 8, D: 8, sea: 1 });
+  w.set(4, 2, 4, B.turnedTo(B.STUDY_DESK, 1));
+  const pose = seatPose(w, 4, 2, 4);
+  assert.equal(pose.pose, 'sit');
+  assert.ok(pose.z < 4.5 && Math.abs(pose.yaw) < 1e-9);
+});

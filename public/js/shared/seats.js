@@ -1,9 +1,10 @@
-// Sitting on chairs, sofas and school desks, and lying in bed (curled up in a bed one
-// block long, stretched out in a longer one). Walk up to one and press Q
-// (or the Sit button beside it): you sit facing the way it faces, or lie
-// down with your head at the head of the bed. Moving, jumping, Shift or Q
-// gets you up again, in front of it. Friends see you sit (render/avatar.js
-// ANIM.sit and ANIM.lie, sent with where you are like any other pose).
+// Sitting on chairs, sofas and school and study desks, and lying in bed
+// (curled up in a bed one block long, stretched out in a longer one).
+// Walk up to one and press Q (or the Sit button beside it): you sit facing
+// the way it faces, or lie down with your head at the head of the bed.
+// Moving, jumping, Shift or Q gets you up again, in front of it. Friends
+// see you sit (render/avatar.js ANIM.sit and ANIM.lie, sent with where you
+// are like any other pose).
 import { BLOCKS } from './blocks.js';
 
 // For each kind of seat: lie down or sit, and for sitting how high the seat
@@ -14,6 +15,7 @@ export const SEATS = {
   sofa: { pose: 'sit', h: 0.48, at: [0.5, 0.46] },
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
+  'study-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
 };
 
 // The four ways along the ground, as RAIL_DIRS.

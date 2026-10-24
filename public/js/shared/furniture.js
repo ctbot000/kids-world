@@ -578,6 +578,58 @@ const MODELS = {
     return out;
   },
 
+  // A study desk to do homework at: a wooden top on a leg and a stack of
+  // drawers, a shelf along its back with books on it, a desk lamp glowing
+  // over an open notebook, a cup of pencils, and a chair on one leg pulled
+  // up to it (shared/seats.js), the same height as the school desk's.
+  'study-desk'() {
+    const out = [
+      box(0.04, 0.62, 0.02, 0.96, 0.67, 0.5, WOOD, 'planks'),
+      // A leg at the left, and the drawers at the right with their knobs.
+      box(0.06, 0, 0.04, 0.12, 0.62, 0.46, WOOD, 'planks'),
+      box(0.62, 0, 0.04, 0.94, 0.62, 0.46, WOOD, 'planks'),
+      // The shelf along its back, books standing on it.
+      box(0.04, 0.67, 0.02, 0.08, 0.98, 0.12, DARK_WOOD, 'planks'),
+      box(0.92, 0.67, 0.02, 0.96, 0.98, 0.12, DARK_WOOD, 'planks'),
+      box(0.04, 0.84, 0.02, 0.96, 0.87, 0.14, DARK_WOOD, 'planks'),
+      box(0.04, 0.98, 0.02, 0.96, 1, 0.14, DARK_WOOD, 'planks'),
+      // An open notebook with a line of writing, and a pencil beside it.
+      box(0.32, 0.67, 0.22, 0.6, 0.68, 0.4, WHITE, 'plain'),
+      box(0.455, 0.67, 0.22, 0.465, 0.685, 0.4, '#3a73d8', 'plain'),
+      box(0.36, 0.68, 0.26, 0.44, 0.685, 0.27, '#9aa3b0', 'plain'),
+      box(0.36, 0.68, 0.3, 0.42, 0.685, 0.31, '#9aa3b0', 'plain'),
+      box(0.5, 0.68, 0.26, 0.57, 0.685, 0.27, '#9aa3b0', 'plain'),
+      box(0.63, 0.67, 0.34, 0.65, 0.69, 0.48, '#fcd535', 'plain'),
+      // A cup of pencils at the right.
+      box(0.8, 0.67, 0.22, 0.88, 0.77, 0.3, '#2fc1b3', 'plain'),
+      box(0.82, 0.77, 0.24, 0.83, 0.84, 0.25, '#e8453c', 'plain'),
+      box(0.845, 0.77, 0.26, 0.855, 0.82, 0.27, '#fcd535', 'plain'),
+      box(0.86, 0.77, 0.23, 0.87, 0.83, 0.24, '#35a852', 'plain'),
+      // The desk lamp at the left: a base, an arm and its glowing shade.
+      box(0.12, 0.67, 0.18, 0.24, 0.69, 0.3, '#3a73d8', 'plain'),
+      box(0.17, 0.69, 0.23, 0.19, 0.92, 0.25, '#3a73d8', 'plain'),
+      box(0.17, 0.9, 0.25, 0.3, 0.92, 0.27, '#3a73d8', 'plain'),
+      box(0.24, 0.82, 0.2, 0.36, 0.9, 0.32, '#fcd535', 'plain'),
+      box(0.25, 0.8, 0.21, 0.35, 0.82, 0.31, '#fff3b0', 'glow'),
+      // The chair: a cushioned seat and back on one leg and a round foot.
+      box(0.25, 0.42, 0.52, 0.75, 0.48, 0.9, '#5b8fd9', 'cloth'),
+      box(0.25, 0.48, 0.88, 0.75, 0.9, 0.94, '#5b8fd9', 'cloth'),
+      box(0.47, 0.04, 0.68, 0.53, 0.42, 0.74, STEEL, 'plain'),
+      box(0.3, 0, 0.53, 0.7, 0.04, 0.89, STEEL, 'plain'),
+    ];
+    // The drawers' fronts and knobs.
+    for (const y of [0.04, 0.24, 0.44]) {
+      out.push(box(0.64, y, 0.035, 0.92, y + 0.16, 0.04, DARK_WOOD, 'planks'));
+      out.push(box(0.75, y + 0.07, 0.025, 0.81, y + 0.1, 0.035, '#e0b04c', 'plain'));
+    }
+    // Books on the shelf, leaning a little apart.
+    for (let i = 0; i < 7; i++) {
+      const x = 0.1 + i * 0.07 + (i > 3 ? 0.2 : 0);
+      out.push(box(x, 0.87, 0.03, x + 0.055, 0.95 + (i % 3) * 0.01, 0.13, BOOKS[i], 'plain'));
+    }
+    return out;
+  },
+
   // A chalkboard (shared/school.js), hung on the wall behind it: green
   // board in a wooden frame with a tray along the bottom, a few lines of
   // chalk writing on it, a stick of chalk and a duster in the tray. Side by

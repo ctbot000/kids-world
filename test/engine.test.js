@@ -44,12 +44,9 @@ test('the world encodes and decodes exactly', () => {
   assert.deepEqual(back.blocks, world.blocks);
   assert.ok(data.length < 120000, `encoded island is ${data.length} characters`);
   assert.throws(() => decodeBlocks(data.slice(0, 100), world.W, world.H, world.D));
-  // Unknown block ids decode as air rather than failing.
-  const unknown = [...Array(256).keys()].findLast((id) => !B.isKnown(id));
-  assert.ok(unknown > 0, 'a block id still unused');
-  const odd = new Uint8Array(8 * 8 * 8);
-  odd[5] = unknown;
-  assert.equal(decodeBlocks(encodeBlocks(odd, 8, 8, 8), 8, 8, 8)[5], B.AIR);
+  // Every block id is taken since the study desk took the last four, so
+  // none is left over to decode as air (world.js would, for an unknown one).
+  assert.ok([...Array(256).keys()].every((id) => B.isKnown(id)), 'every block id is used');
   // Saved islands have their cells layer by layer (y slowest), then along x,
   // then z, so that order must never change: here each cell of a lopsided
   // little world holds a block of its own, and the runs come out in that order.
