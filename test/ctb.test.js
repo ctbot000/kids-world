@@ -333,6 +333,37 @@ test('a task not finished keeps its work on its branch, the next try carries on 
   assert.deepEqual(company.status().workers[0].steps.length > 0, true);
 });
 
+test('a try out of steps leaves a note with its work, and the next try is taken at once, a few times before it is stuck', async () => {
+  const { dir, origin, repo } = await project();
+  const github = hub([issue(16, 'add a multiply', 'And fix add.'), issue(17, 'never ends', '')]);
+  const tasks = [];
+  const llm = scripted((messages) => {
+    const task = messages[1].content;
+    const last = messages.at(-1).content;
+    if (last.startsWith('You are out of steps.')) return { summary: task.includes('#16') ? 'Done: mul.js. Left: fix add in add.js.' : 'Nothing much.' };
+    const n = messages.filter((m) => m.role === 'assistant').length;
+    if (n === 0) tasks.push(task);
+    if (task.includes('#17')) return n === 0 ? { thought: 'a file', tool: 'write', path: `try-${tasks.filter((t) => t.includes('#17')).length}.txt`, content: 'x\n' } : { thought: 'look', tool: 'list', path: '' };
+    if (!task.includes('An earlier try')) return n === 0 ? { thought: 'mul first', tool: 'write', path: 'mul.js', content: 'export const mul = (a, b) => a * b;\n' } : { thought: 'look', tool: 'list', path: '' };
+    if (n === 0) return { thought: 'fix add', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' };
+    return { thought: 'done', tool: 'done', title: 'Add mul and fix add', summary: 'Both.' };
+  });
+  const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, propose: false }, log: () => {} });
+  await company.start();
+  after(() => company.stop());
+  await eventually(() => github.pullsMade.length === 1 && github.issues[1].labels.includes(LABELS.stuck) && !company.workers[0].issue, 120000);
+
+  // #16: out of steps once, carried on at once with its note, and finished.
+  assert.ok(!github.issues[0].labels.includes(LABELS.stuck));
+  assert.ok(github.comments.some((c) => c.n === 16 && /ran out of steps on this, try 1 of 3:\n\nran out of steps \(100\)\n\nDone: mul\.js\. Left: fix add in add\.js\.\n\nThe work so far is kept on the branch `ctb\/issue-16`, and the next try carries on from it now\./.test(c.body)));
+  assert.match(tasks.find((t) => t.includes('#16') && t.includes('An earlier try')), /What that try said when it stopped:\n\nran out of steps \(100\)\n\nDone: mul\.js\. Left: fix add in add\.js\./);
+  assert.equal(git(origin, 'diff', '--name-only', 'main', 'ctb/issue-16'), 'add.js\nmul.js');
+  // #17: three tries out of steps, then stuck for a person to look at, all three tries' work kept.
+  assert.equal(tasks.filter((t) => t.includes('#17')).length, 3);
+  assert.equal(git(origin, 'log', '--format=%s', 'main..ctb/issue-17'), 'Work so far on #17\nWork so far on #17\nWork so far on #17');
+  assert.ok(github.comments.some((c) => c.n === 17 && /could not finish this:\n\nran out of steps \(100\)\n\nNothing much\./.test(c.body)));
+});
+
 test('a task a restart cuts off carries on where it was, worktree and conversation and all', async () => {
   const { dir, origin, repo } = await project();
   const github = hub([issue(14, 'add a multiply', 'And fix add.')]);

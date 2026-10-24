@@ -53,6 +53,9 @@ const GATE_ROUNDS = 2;
 const GATE_STEPS = 20;
 // How many run logs the admin page lists.
 const RUNS_SHOWN = 40;
+// How many more tries a task that ran out of steps gets at once, carrying
+// on from the work kept, before it is marked stuck for a person to look at.
+export const CARRY_ONS = 2;
 // The subject of a commit keeping a task's unfinished work on its branch.
 const KEPT_SUBJECT = 'Work so far on';
 const MAX_PROPOSALS = 3;
@@ -380,7 +383,13 @@ export class Company extends EventEmitter {
         agent.maxSteps = agent.steps + GATE_STEPS;
         result = await agent.run();
       }
-      if (!result.ok) throw Object.assign(new Error(result.why), { stuck: true, steps: result.steps });
+      if (!result.ok && result.outOfSteps) {
+        // A note for the next try, kept with the work.
+        this.tell(w, `#${n}: writing down where it got to`);
+        const note = await agent.handoff();
+        if (note) result.why = `${result.why}\n\n${note}`;
+      }
+      if (!result.ok) throw Object.assign(new Error(result.why), { stuck: true, steps: result.steps, outOfSteps: Boolean(result.outOfSteps) });
       this.tell(w, `#${n}: opening a pull request`);
       const url = await this.publish({ dir, branch, issue, result, w, model });
       await this.github.label(n, { add: [LABELS.pr], remove: [LABELS.working] });
@@ -395,6 +404,16 @@ export class Company extends EventEmitter {
       outcome = { ok: false, why: error.message };
       // What it changed is kept on its branch, for the next try to carry on from.
       kept = this.stopped ? false : await this.keep({ dir, branch, issue, w, why: error.message }).catch((e) => (this.log(`CTB: the work on #${n} could not be kept (${e.message}).`), false));
+      // Out of steps with work kept: the next try is taken at once, a few times.
+      const tries = kept ? await this.tries(dir, n) : 0;
+      if (!this.stopped && error.outOfSteps && kept && tries <= CARRY_ONS) {
+        outcome.why = `${error.message}\n\n(Carried on in the next try, ${tries + 1} of ${CARRY_ONS + 1}.)`;
+        this.log(`CTB: ${w.name} ran out of steps on #${n}; the next try carries on (${tries + 1} of ${CARRY_ONS + 1}).`);
+        this.tell(w, `#${n}: out of steps, carrying on`, `#${n} is big! I'll carry on with it.`);
+        await this.github.label(n, { remove: [LABELS.working] }).catch(() => {});
+        await this.github.comment(n, `${w.name} at CTB ran out of steps on this, try ${tries} of ${CARRY_ONS + 1}:\n\n${error.message}\n\nThe work so far is kept on the branch \`${branch}\`, and the next try carries on from it now.`).catch(() => {});
+        return;
+      }
       this.log(`CTB: ${w.name} could not finish #${n}: ${error.message.split('\n')[0]}`);
       this.tell(w, `Stuck on #${n}`, `I got stuck on #${n}. A grown-up will have a look.`);
       if (!this.stopped) {
@@ -496,6 +515,12 @@ export class Company extends EventEmitter {
     await this.git(['push', '--quiet', '--force', 'origin', `HEAD:refs/heads/${branch}`], { cwd: dir });
     this.log(`CTB: ${w.name}'s work on #${issue.number} is kept on ${branch}.`);
     return true;
+  }
+
+  // How many tries at task n kept their work on its branch (this one too).
+  async tries(dir, n) {
+    const subjects = (await this.git(['log', '--format=%s', 'origin/main..HEAD'], { cwd: dir }).catch(() => '')).split('\n');
+    return subjects.filter((l) => l === `${KEPT_SUBJECT} #${n}`).length;
   }
 
   // What is changed in a worktree and not committed, but its node_modules.
