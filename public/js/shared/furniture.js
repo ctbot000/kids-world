@@ -617,10 +617,10 @@ const MODELS = {
       box(0.47, 0.04, 0.68, 0.53, 0.42, 0.74, STEEL, 'plain'),
       box(0.3, 0, 0.53, 0.7, 0.04, 0.89, STEEL, 'plain'),
     ];
-    // The drawers' fronts and knobs.
+    // The drawers' fronts and knobs, on the chair's side, to open sitting down.
     for (const y of [0.04, 0.24, 0.44]) {
-      out.push(box(0.64, y, 0.035, 0.92, y + 0.16, 0.04, DARK_WOOD, 'planks'));
-      out.push(box(0.75, y + 0.07, 0.025, 0.81, y + 0.1, 0.035, '#e0b04c', 'plain'));
+      out.push(box(0.64, y, 0.46, 0.92, y + 0.16, 0.465, DARK_WOOD, 'planks'));
+      out.push(box(0.75, y + 0.07, 0.465, 0.81, y + 0.1, 0.475, '#e0b04c', 'plain'));
     }
     // Books on the shelf, leaning a little apart.
     for (let i = 0; i < 7; i++) {

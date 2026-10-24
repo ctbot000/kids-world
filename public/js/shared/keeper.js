@@ -263,16 +263,17 @@ export function mergeProfiles(mine, theirs) {
 // What you did as the guest on a device, added to the player you logged in
 // as there, once, when you say it was you: every sticker either has earned
 // (dated the earlier day), the two baskets, their coins and what each has
-// done added up (the highest you flew is the higher of the two), and the
-// better gear of each kind, and the clothes and capsule toys of both, the
-// dragons both tamed, and the pictures in both galleries.
+// done added up (the highest you flew, and the facts known by heart, the
+// higher of the two), and the better gear of each kind, and the clothes
+// and capsule toys of both, the dragons both tamed, and the pictures in
+// both galleries.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
   const stickers = { ...a.stickers };
   for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
   const stats = { ...a.stats };
-  for (const [key, n] of Object.entries(b.stats)) stats[key] = key === 'highest' ? Math.max(stats[key] ?? 0, n) : (stats[key] ?? 0) + n;
+  for (const [key, n] of Object.entries(b.stats)) stats[key] = key === 'highest' || key === 'byheart' ? Math.max(stats[key] ?? 0, n) : (stats[key] ?? 0) + n;
   const basket = {};
   for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
   const gear = cleanGear(a.gear);

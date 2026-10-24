@@ -13,6 +13,8 @@ import { tvNear } from './shared/tv.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
+import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
+import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, isBlank, isBoard } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
@@ -263,6 +265,9 @@ export class Game extends EventTarget {
     this.stoveTarget = null;
     this.cookEnded = {};
     this.cooking = null;
+    // The study going at a study desk (shared/study.js): { book, asks, at,
+    // shown, missed, right, done, learnt, xp }.
+    this.study = null;
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
@@ -2405,6 +2410,74 @@ export class Game extends EventTarget {
     this.cooking = null;
   }
 
+  // ------------------------------------------------ studying
+
+  // Whether you are sitting at a study desk.
+  get atStudyDesk() {
+    const c = this.seat;
+    return !!c && isStudyDesk(this.world.get(c.x, c.y, c.z));
+  }
+
+  // Your notebook (shared/study.js), what you know of each workbook, kept on
+  // this device for whoever is playing (storage.js).
+  get notebook() {
+    return cleanNotebook(load('notebook', {}));
+  }
+
+  // Sitting at a study desk (or the Study button there): your workbooks open.
+  openStudy() {
+    if (!this.atStudyDesk) return;
+    this.sound.play('ui');
+    this.emit('study-open');
+  }
+
+  // A study of a workbook begun. Says 'study', which opens the window on it
+  // (ui.js).
+  startStudy(book) {
+    if (!workbookByKey(book) || !this.atStudyDesk) return;
+    this.study = { ...makeStudy(book, this.notebook, (Math.random() * 2 ** 31) | 0), learnt: 0, xp: 0 };
+    this.emit('study');
+  }
+
+  // A new fact read on its card: on to being asked it.
+  studySeen() {
+    const s = this.study;
+    if (!s || s.done || !s.asks[s.at]?.learn || s.shown) return;
+    s.shown = true;
+    this.emit('study');
+  }
+
+  // An answer typed: { right, fact }, or undefined for nothing to answer.
+  // With the last one the study is filed in your notebook, and what you
+  // learnt counts for XP and stickers.
+  studyAnswer(text) {
+    const s = this.study;
+    if (!s || s.done) return;
+    const ask = s.asks[s.at];
+    if (ask?.learn && !s.shown) return;
+    const got = answerStudy(s, text);
+    if (!got) return;
+    if (s.done) {
+      const notebook = this.notebook;
+      s.learnt = fileStudy(notebook, s);
+      save('notebook', notebook);
+      s.byHeart = allByHeart(notebook);
+      s.xp = XP_FOR.studies.xp + s.right * XP_FOR.studyright.xp;
+      this.profile.count('studies');
+      this.profile.count('studyright', s.right);
+      this.profile.count('byheart', s.byHeart, { max: true });
+      const b = this.me?.body;
+      if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: s.xp });
+    }
+    this.emit('study');
+    return got;
+  }
+
+  // The study window closed: a study half done simply goes, unfiled.
+  closeStudy() {
+    this.study = null;
+  }
+
   // ------------------------------------------------ drawing boards
 
   // The pictures on the island's boards, as the island tells of them on
@@ -2818,7 +2891,9 @@ export class Game extends EventTarget {
       return;
     }
     if (this.seat) {
-      this.standUp();
+      // At a study desk Q opens your workbooks; walking gets you up.
+      if (this.atStudyDesk) this.openStudy();
+      else this.standUp();
       return;
     }
     const id = this.rideTarget;
@@ -2881,11 +2956,14 @@ export class Game extends EventTarget {
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0 });
     this.sound.play('place', { kind: 'cloth' });
     this.profile.count('sat');
+    // At a study desk your workbooks open as you sit down.
+    if (isStudyDesk(this.world.get(cell.x, cell.y, cell.z))) this.emit('study-open');
     if (!this.toldSeat) {
       this.toldSeat = true;
       const name = B.block(this.world.get(cell.x, cell.y, cell.z)).name.toLowerCase();
-      const how = this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
-      this.emit('toast', { icon: pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit on the ${name}. ${how} to get up.` });
+      // At a study desk Q (and the button) open your workbooks instead.
+      const how = isStudyDesk(this.world.get(cell.x, cell.y, cell.z)) ? 'Walk' : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
+      this.emit('toast', { icon: pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(this.world.get(cell.x, cell.y, cell.z)) ? 'at' : 'on'} the ${name}. ${how} to get up.` });
     }
     this.emit('ride');
   }
@@ -4444,6 +4522,7 @@ export class Game extends EventTarget {
     this.classTarget = null;
     this.stoveTarget = null;
     this.cooking = null;
+    this.study = null;
     this.drawAt = null;
     this.drawTarget = null;
     this.drawings.clear();

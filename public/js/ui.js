@@ -28,6 +28,7 @@ import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, RECIPES, recipeByKey } from './shared/cooking.js';
+import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
@@ -2032,6 +2033,7 @@ export class UI {
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
+          card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right four times and you know it by heart! Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -2962,6 +2964,8 @@ export class UI {
     on('class-open', () => this.classDialog());
     on('cook-open', () => this.cookDialog());
     on('cooking', () => this.cookingNews());
+    on('study-open', () => this.studyDialog());
+    on('study', () => this.studyNews());
     on('draw-open', () => this.drawDialog());
     on('drawing', (e) => this.drawingChanged?.(e.detail));
     on('onair', () => this.onAirNews());
@@ -4260,7 +4264,7 @@ export class UI {
       return;
     }
     const touch = this.input.touchMode;
-    const label = g.seat ? '👋 Get up' : seat.pose === 'lie' ? '🛏️ Lie down' : '🪑 Sit';
+    const label = g.seat ? (g.atStudyDesk ? '📚 Study' : '👋 Get up') : seat.pose === 'lie' ? '🛏️ Lie down' : '🪑 Sit';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
@@ -5489,6 +5493,239 @@ export class UI {
       },
       { onClose: () => clearInterval(timer) },
     );
+  }
+
+  // ------------------------------------------------ studying
+
+  // Your workbooks at a study desk (game.js openStudy, shared/study.js), one
+  // big button each, with how many of its facts you know by heart.
+  studyDialog() {
+    const g = this.game;
+    if (!g) return;
+    const notebook = g.notebook;
+    this.openModal(
+      (root) => {
+        const list = h(
+          'div',
+          { class: 'recipe-list' },
+          WORKBOOKS.map((w, i) => {
+            const p = workbookProgress(notebook, w.key);
+            return h(
+              'button',
+              {
+                class: `big ${['blue', 'pink', 'green'][i % 3]} workbook`,
+                type: 'button',
+                'data-book': w.key,
+                onclick: () => {
+                  this.sound.unlock();
+                  this.sound.play('ui');
+                  g.startStudy(w.key);
+                },
+              },
+              h('span', { class: 'emoji' }, w.icon),
+              h(
+                'span',
+                { class: 'quiz-level' },
+                h('span', {}, w.name),
+                h('span', { class: 'quiz-sub' }, w.how),
+                h('span', { class: 'study-meter', role: 'img', 'aria-label': `${p.byHeart} of ${p.total} known by heart` }, h('span', { style: `width: ${(100 * p.byHeart) / p.total}%` })),
+                h('span', { class: 'quiz-sub' }, `💡 ${p.byHeart} of ${p.total} by heart`),
+              ),
+            );
+          }),
+        );
+        root.append(
+          h('h2', {}, '📚 Study time'),
+          h('p', {}, `Pick a workbook. New facts are shown to you first, then you type the answers. Get a fact right ${BY_HEART} times and you know it by heart!`),
+          list,
+        );
+      },
+      {},
+    );
+  }
+
+  // The study going changed: its window opened on a new one, or brought up
+  // to date.
+  studyNews() {
+    const s = this.game?.study;
+    if (!s) return;
+    if (this.studyEls?.study !== s) this.studyingDialog();
+    else this.renderStudy();
+  }
+
+  // A word said out loud, for spelling (when the browser can speak).
+  sayWord(word) {
+    try {
+      const synth = globalThis.speechSynthesis;
+      if (!synth || !globalThis.SpeechSynthesisUtterance) return;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = 'en-US';
+      u.rate = 0.8;
+      synth.speak(u);
+    } catch {
+      // no voice: the picture and the sentence still tell the word
+    }
+  }
+
+  // A study, in a window: a new fact on its card, the question being asked
+  // with a box to type the answer in, a miss with the right answer and a way
+  // to work it out, and at the end how it went.
+  studyingDialog() {
+    const g = this.game;
+    const s = g?.study;
+    if (!s) return;
+    const book = workbookByKey(s.book);
+    this.studyEls = null;
+    this.openModal(
+      (root) => {
+        const status = h('div', { class: 'quiz-status' });
+        const box = h('div', { class: 'study-box' });
+        this.studyEls = { study: s, status, box, miss: null, said: -1, cheer: '' };
+        root.append(h('h2', {}, `${book.icon} ${book.name}`), status, box);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          this.studyEls = null;
+          if (g.study === s) g.closeStudy();
+        },
+      },
+    );
+    this.renderStudy();
+  }
+
+  renderStudy() {
+    const g = this.game;
+    const s = g?.study;
+    const els = this.studyEls;
+    if (!s || els?.study !== s || !this.modalOpen) return;
+    const book = workbookByKey(s.book);
+    const total = factsOf(s.book).length;
+    // A fact shown with its answer, as on a card.
+    const solved = (fact) => (book.words ? h('div', { class: 'study-q' }, h('span', { class: 'study-picture', 'aria-hidden': 'true' }, fact.picture), ` ${fact.answer}`) : h('div', { class: 'study-q' }, fact.q.replace('?', fact.answer)));
+    const button = (label, cls, fn) => h('button', { class: `big ${cls}`, type: 'button', onclick: fn }, label);
+    const setStatus = (text) => {
+      if (els.status.dataset.k === text) return;
+      els.status.dataset.k = text;
+      els.status.textContent = text;
+    };
+
+    if (els.miss) {
+      const { fact } = els.miss;
+      setStatus('Not quite!');
+      const ok = button('OK, next', 'blue', () => {
+        this.sound.play('ui');
+        els.miss = null;
+        this.renderStudy();
+      });
+      els.box.replaceChildren(h('p', { class: 'quiz-verdict' }, `🙈 The answer is ${fact.answer}:`), solved(fact), h('p', { class: 'study-hint' }, `💡 ${fact.hint}`), h('p', { class: 'muted' }, 'It will come back again soon, so you can get it right.'), ok);
+      this.focusSoon(ok, 50);
+      return;
+    }
+
+    if (s.done) {
+      if (!els.cheered) {
+        els.cheered = true;
+        this.sound.play(s.missed.length ? 'fanfare' : 'victory');
+      }
+      const asked = s.asks.filter((a) => !a.again).length;
+      const p = workbookProgress(g.notebook, s.book);
+      setStatus(`Done! ${s.right} of ${asked} right first time`);
+      els.box.replaceChildren(
+        h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, s.missed.length ? '📚' : '🌟'),
+        h('div', { class: `quiz-result${s.missed.length ? '' : ' perfect'}` }, s.missed.length ? 'Good studying!' : 'Every one right first time!'),
+        h('p', { class: 'quiz-credit' }, s.learnt ? `💡 ${s.learnt} more by heart! ` : '', `You know ${p.byHeart} of ${p.total} by heart.`, s.xp ? ` You earned ⭐ ${s.xp} XP.` : ''),
+        s.missed.length ? h('p', { class: 'study-hint' }, '📝 To practise: ', s.asks.filter((a) => !a.again && s.missed.includes(a.fact.key)).map((a) => (book.words ? a.fact.answer : a.fact.q.replace('?', a.fact.answer))).join(', ')) : '',
+        h('div', { class: 'study-meter big', role: 'img', 'aria-label': `${p.byHeart} of ${total} known by heart` }, h('span', { style: `width: ${(100 * p.byHeart) / total}%` })),
+        button('🔁 Study again', 'blue', () => {
+          this.sound.play('ui');
+          g.startStudy(s.book);
+        }),
+        button('📖 Another workbook', 'pink', () => {
+          this.sound.play('ui');
+          this.closeModal();
+          this.studyDialog();
+        }),
+        button('Done', 'green', () => this.closeModal()),
+      );
+      return;
+    }
+
+    const ask = s.asks[s.at];
+    const { fact } = ask;
+    const where = `${s.at + 1} of ${s.asks.length}`;
+    if (ask.learn && !s.shown) {
+      setStatus(`${where} · New!`);
+      const got = button('👍 Got it', 'green', () => {
+        this.sound.play('ui');
+        g.studySeen();
+      });
+      if (book.words && els.said !== s.at) {
+        els.said = s.at;
+        this.sayWord(fact.say);
+      }
+      els.box.replaceChildren(
+        h('p', {}, book.words ? '📖 A new word to learn:' : '📖 A new fact to learn:'),
+        solved(fact),
+        book.words ? h('p', { class: 'study-sentence' }, fact.q.replace('___', fact.answer)) : '',
+        h('p', { class: 'study-hint' }, `💡 ${fact.hint}`),
+        book.words ? button('🔊 Hear it', 'blue', () => this.sayWord(fact.say)) : '',
+        got,
+      );
+      this.focusSoon(got, 50);
+      return;
+    }
+
+    setStatus(`${els.cheer}${where}${ask.again ? ' · Try this one again' : ''}`);
+    const input = h('input', {
+      type: 'text',
+      class: 'text-input study-input',
+      autocomplete: 'off',
+      autocapitalize: 'off',
+      spellcheck: false,
+      inputmode: book.words ? 'text' : 'numeric',
+      maxLength: 20,
+      'aria-label': 'Your answer',
+      placeholder: book.words ? 'Spell the word' : '?',
+    });
+    const check = () => {
+      if (!input.value.trim()) {
+        input.focus();
+        return;
+      }
+      this.sound.unlock();
+      const got = g.studyAnswer(input.value);
+      if (!got) return;
+      // The window is already on the next one: say how this one went.
+      els.cheer = got.right ? '✅ Right! · ' : '';
+      if (got.right) this.sound.play('collect');
+      else {
+        this.sound.play('no');
+        els.miss = got;
+      }
+      this.renderStudy();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        check();
+      }
+    };
+    if (book.words && els.said !== s.at) {
+      els.said = s.at;
+      this.sayWord(fact.say);
+    }
+    els.box.replaceChildren(
+      book.words
+        ? h('div', { class: 'study-q' }, h('span', { class: 'study-picture', 'aria-hidden': 'true' }, fact.picture))
+        : h('div', { class: 'study-q' }, fact.q),
+      book.words ? h('p', { class: 'study-sentence' }, fact.q) : '',
+      book.words ? button('🔊 Hear it', 'blue', () => this.sayWord(fact.say)) : '',
+      h('form', { class: 'study-answer', onsubmit: (e) => (e.preventDefault(), check()) }, input, h('button', { class: 'big green', type: 'submit' }, 'Check')),
+      h('p', { class: 'muted' }, `💡 ${workbookProgress(g.notebook, s.book).byHeart} of ${total} by heart · a fact is by heart after ${BY_HEART} times right`),
+    );
+    this.focusSoon(input, 50);
   }
 
   // The cooking class going changed: its window opened on a new one, or

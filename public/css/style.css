@@ -4223,6 +4223,91 @@ kbd {
   }
 }
 
+/* Studying at a study desk: how much of a workbook is known by heart, the
+   fact being asked big, a box to type the answer in, and a hint. */
+.study-meter {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 6px 0 2px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.15);
+}
+
+.study-meter > span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 4px;
+  background: #ffd84a;
+}
+
+.study-meter.big {
+  height: 14px;
+  margin: 4px 0 14px;
+  background: var(--line);
+}
+
+.study-meter.big > span {
+  background: var(--grass);
+}
+
+.study-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+
+.study-box p {
+  margin: 0;
+}
+
+.study-q {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.study-picture {
+  font-size: 4rem;
+}
+
+.study-sentence {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.study-hint {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.study-answer {
+  display: flex;
+  gap: 8px;
+}
+
+.study-answer .big {
+  flex: none;
+  width: auto;
+  margin: 0;
+  padding-inline: 22px;
+}
+
+.study-answer .study-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* A chalkboard's classes, one big button each, a little apart. */
 .class-list {
   display: flex;

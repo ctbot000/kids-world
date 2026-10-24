@@ -78,6 +78,10 @@ export const XP_FOR = {
   quizperfect: { xp: 25 },
   dishes: { xp: 15 },
   cookright: { xp: 3, cap: 5000 },
+  studies: { xp: 10 },
+  studyright: { xp: 2, cap: 5000 },
+  // Facts known by heart (shared/study.js), the most there have ever been.
+  byheart: { xp: 5 },
   photos: { xp: 5, cap: 100 },
   sown: { xp: 2 },
   harvested: { xp: 1 },

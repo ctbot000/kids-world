@@ -122,7 +122,7 @@ export function forgetPlayer(player) {
 // island. Returns false, with everything put back, if the browser refused.
 export function moveGuestTo(player) {
   const islands = read(`${PREFIX}islands`, []);
-  const keys = ['profile', 'adventure', 'keeper', 'islands', ...(Array.isArray(islands) ? islands : []).filter((i) => typeof i?.id === 'string').map((i) => `island.${i.id}`)];
+  const keys = ['profile', 'adventure', 'keeper', 'notebook', 'islands', ...(Array.isArray(islands) ? islands : []).filter((i) => typeof i?.id === 'string').map((i) => `island.${i.id}`)];
   const moved = [];
   const to = PREFIX + spaceOf(player);
   for (const key of keys) {
