@@ -3145,6 +3145,41 @@ test('the ?ctb link opens the CTB island without a login, its workers at their d
   }
 });
 
+test('🏢 CTB on the title screen goes to the CTB island, which is not among 🧱 Build’s open islands', { skip }, async () => {
+  const office = await new Office({ rooms: server.rooms, log: () => {} }).open(2);
+  const page = await openPlayer(base, { name: 'Sunny Otter' });
+  try {
+    await until(page, () => !document.getElementById('mode-switch').hidden && !document.getElementById('mode-ctb').hidden);
+    // 🧱 Build's list of open islands leaves it out.
+    await clickButton(page, '🧱 Build');
+    await clickButton(page, 'Visit a friend');
+    await until(page, () => document.querySelector('#modal .open-note')?.hidden === false || document.querySelector('#modal .island-item'));
+    assert.equal(await page.$eval('#modal', (el) => [...el.querySelectorAll('.island-item b')].some((b) => b.textContent === 'CTB')), false, 'not among the open islands');
+    await page.keyboard.press('Escape');
+    await until(page, () => !window.kidsWorld.ui.modalOpen);
+    await clickButton(page, '🏢 CTB');
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'btn-isle']) assert.equal(await page.$eval(`#${id}`, (el) => el.hidden), true, id);
+    assert.match(await page.$eval('#tagline', (el) => el.textContent), /CTB/);
+    await clickButton(page, 'Visit CTB');
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
+    // Back at the title, on 🏢 CTB.
+    await page.click('#btn-settings');
+    await clickButton(page, 'Leave island', '#modal');
+    await until(page, () => !document.getElementById('title').hidden);
+    assert.equal(await page.$eval('#mode-ctb', (el) => el.classList.contains('on')), true, 'the world you played in');
+    assert.equal(await page.$eval('#btn-ctb', (el) => el.hidden), false);
+    await clickButton(page, '🧱 Build');
+    assert.equal(await page.$eval('#btn-ctb', (el) => el.hidden), true, 'CTB is on its own side');
+    assert.equal(await page.$eval('#btn-new', (el) => el.hidden), false);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await office.close();
+    server.rooms.delete(office.room.code);
+  }
+});
+
 test('the ?ctb link opens the CTB island without a login peer to peer too, as on GitHub Pages, through the keeper’s list', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);

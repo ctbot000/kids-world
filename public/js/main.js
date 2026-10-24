@@ -602,6 +602,8 @@ async function openIslands() {
 }
 
 const CTB_TRIES = 4;
+// keeper.start()'s promise, once boot has called it.
+let keeperStarted = Promise.resolve();
 // The name someone not logged in last gave on the CTB island, on this device.
 const WATCH_NAME_KEY = 'kidsworld.watch-name';
 const CTB_RETRY_MS = hurried(3000);
@@ -629,6 +631,8 @@ async function watchCtb(started) {
     ui.toast('🏢', 'The CTB island is not open right now. Try again later!', 'warn');
     return;
   }
+  // Back at the title, 🏢 CTB.
+  ui.ctbCode = island.code;
   if (!loginHandlers.required()) {
     visitIsland(island.code);
     return;
@@ -882,6 +886,8 @@ const titleHandlers = {
     ui.visitDialog();
     ui.toast('😴', 'The shared isle is not on the list right now. Try again in a moment!', 'warn');
   },
+  // 🏢 The CTB island, straight from the title screen.
+  ctb: () => watchCtb(keeperStarted),
   visitedBefore,
   islands: () => storage.listIslands(),
   open: (id) => openIsland(id),
@@ -1120,8 +1126,8 @@ async function boot() {
   else if (!params.has('ctb')) showNews();
   requestAnimationFrame(frame);
   present();
-  const started = keeper.start();
-  if (params.has('ctb')) watchCtb(started);
+  keeperStarted = keeper.start();
+  if (params.has('ctb')) watchCtb(keeperStarted);
 }
 
 boot();

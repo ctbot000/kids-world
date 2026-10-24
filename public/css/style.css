@@ -357,8 +357,9 @@ body.fullscreen .full-icon .leave {
   }
 }
 
-/* Build or Adventure on the title screen: your worlds, each with its own
-   level, stickers, shop and ranking (the shared isle's apart from the rest). */
+/* Build, Adventure or CTB on the title screen: your worlds, each with its
+   own level, stickers, shop and ranking (the shared isle's apart from the
+   rest), and the CTB island. */
 .mode-switch {
   justify-content: center;
   margin-bottom: 0;
@@ -367,6 +368,14 @@ body.fullscreen .full-icon .leave {
 .mode-switch .chip {
   font-size: 1.1rem;
   padding: 10px 20px;
+}
+
+/* All three in one row on a phone. */
+@media (max-width: 480px) {
+  .mode-switch .chip {
+    font-size: 1rem;
+    padding: 9px 12px;
+  }
 }
 
 .isle-away {
