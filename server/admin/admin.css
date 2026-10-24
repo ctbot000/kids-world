@@ -1181,7 +1181,69 @@ button.primary:hover {
   top: 0;
 }
 
-/* CTB: the new-task form, the task board, proposals and pull requests. */
+/* CTB: a card a part, proposals, ideas and pull requests side by side
+   where there is room. */
+.ctb {
+  display: grid;
+  gap: 16px;
+}
+
+.ctb [hidden] {
+  display: none;
+}
+
+.ctb p {
+  margin: 0;
+}
+
+.ctb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.ctb-card > h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.ctb-card.usage-section h3,
+.ctb-card > .fold {
+  margin: 0;
+}
+
+.ctb-card > h3 + p {
+  margin-top: -6px;
+}
+
+.ctb-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.ctb-worker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ctb-worker-head h4 {
+  white-space: nowrap;
+}
+
+.ctb-worker-issue {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
 .ctb-task {
   display: flex;
   flex-direction: column;
@@ -1202,9 +1264,20 @@ button.primary:hover {
 .ctb-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  margin: 0;
   padding-left: 0;
   list-style: none;
+}
+
+.ctb-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.ctb-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .ctb-list .badge {
@@ -1223,7 +1296,6 @@ button.primary:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 8px 0;
 }
 
 button.chip {

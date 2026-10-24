@@ -41,6 +41,10 @@ function summarize(events) {
     ok: end ? end.ok : null,
     why: end?.why ?? '',
     url: end?.url ?? '',
+    // Stopped by the server stopping (a restart), not by how it went: a
+    // task carries on from it next time (ctb.js).
+    stopped: Boolean(end?.stopped),
+    resumed: start.resumed ?? '',
     // The steps taken: the last answered (a done or give_up has no result).
     steps: calls.reduce((n, c) => (c.error ? n : Math.max(n, c.step ?? 0)), 0),
     calls: calls.length,
@@ -93,8 +97,8 @@ export class Run {
     return this.add({ type: 'note', text: clip(text) });
   }
 
-  end({ ok, why = '', url = '' }) {
-    return this.add({ type: 'end', ok, why: clip(why), url });
+  end({ ok, why = '', url = '', stopped = false }) {
+    return this.add({ type: 'end', ok, why: clip(why), url, ...(stopped ? { stopped: true } : {}) });
   }
 }
 
@@ -109,12 +113,20 @@ export class Runs {
     this.open = new Map();
   }
 
-  // The summaries of the runs already on disk.
+  // The summaries of the runs already on disk. One with no end was cut off
+  // by the server stopping (the keeper's computer, or a restart, which does
+  // not wait for a worker): it ends as stopped.
   async load() {
     const files = (await readdir(this.dir).catch(() => [])).filter((f) => f.endsWith('.jsonl')).sort();
     for (const f of files) {
       const events = await this.events(f.slice(0, -'.jsonl'.length)).catch(() => null);
-      if (events?.length && events[0].type === 'start') this.index.set(events[0].id, summarize(events));
+      if (!events?.length || events[0].type !== 'start') continue;
+      if (!events.some((e) => e.type === 'end')) {
+        const end = { at: events.at(-1).at, type: 'end', ok: false, why: 'The server stopped in the middle of it.', url: '', stopped: true };
+        await appendFile(join(this.dir, f), `${JSON.stringify(end)}\n`).catch(() => {});
+        events.push(end);
+      }
+      this.index.set(events[0].id, summarize(events));
     }
     return this;
   }

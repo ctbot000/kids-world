@@ -41,6 +41,10 @@ export const MAX_STEPS = 100;
 const NUDGE_AT = 0.4;
 const LOOK_UNTIL = 0.6;
 const LOOKING = new Set(['list', 'read', 'search']);
+// What a worker out of steps is asked for, for the next try to carry on from.
+const HANDOFF = 'You are out of steps. What you have changed is kept, and the next try carries on from it, starting with only the task and what you write now. Write that note: what is done (files and what each change does), what is left to do, and anything to check or fix first (a test not yet run, an edit that may be wrong). Plain, short lines, at most 15. Answer as JSON: {"summary": the note}.';
+export const HANDOFF_SCHEMA = { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] };
+const HANDOFF_MAX = 3000;
 // The model's failures in a row (an empty answer now and then) a task survives.
 const FAILURES = 5;
 // How much of a tool's result the model sees, and how much of the older ones.
@@ -174,6 +178,21 @@ export class Agent {
     }
   }
 
+  // Carries on where a run a restart stopped left off: its steps and their
+  // results (its run log's step events, ctb-runs.js), back in the
+  // conversation, as if it had never stopped. How many steps that was.
+  resume(steps) {
+    for (const e of steps) {
+      if (e.step?.tool !== 'gate') {
+        this.messages.push({ role: 'assistant', content: JSON.stringify(e.step ?? null) });
+        this.steps++;
+      }
+      this.messages.push({ role: 'user', content: e.result, result: true });
+    }
+    this.shorten();
+    return this.steps;
+  }
+
   // A result for the model, also told to onResult.
   tell(step, content, extra = {}) {
     const message = { role: 'user', content, result: true, ...extra };
@@ -267,7 +286,26 @@ export class Agent {
       if (lines && result.length <= RESULT_MAX) this.reads.push({ ...this.span(step.path), start: Number(lines[1]), end: lines[2] === lines[3] ? Infinity : Number(lines[2]), step: this.steps, message });
       this.shorten();
     }
-    return { ok: false, why: `ran out of steps (${this.maxSteps})`, steps: this.steps };
+    return { ok: false, why: `ran out of steps (${this.maxSteps})`, outOfSteps: true, steps: this.steps };
+  }
+
+  // Out of steps: a note from the model for whoever carries on — what is
+  // done, what is left, what to check first. '' when it gives none.
+  async handoff() {
+    const trace = {};
+    const t0 = Date.now();
+    let error = null;
+    try {
+      const messages = [...this.messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: HANDOFF }];
+      const answer = await this.llm.chat(messages, HANDOFF_SCHEMA, trace, LLM_OPTS);
+      return String(answer?.summary ?? '').trim().slice(0, HANDOFF_MAX);
+    } catch (e) {
+      error = e;
+      return '';
+    } finally {
+      if (trace.usage?.length) this.onUsage(trace.usage);
+      this.onCall({ step: 0, ms: Date.now() - t0, trace, error });
+    }
   }
 
   // What a tool gives back, in words for the model.
