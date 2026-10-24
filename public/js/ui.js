@@ -4107,13 +4107,20 @@ export class UI {
     }
     const { hp, maxHp } = g;
     const share = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
+    // A dragon under you has hearts of its own, by yours: monster bumps take
+    // those (game.js rideHeartsNews), never your HP.
+    const ride = g.riding?.type === 'dragon' ? g.critters.get(g.riding.id) : null;
+    const dragon = ride ? { hp: ride.rideHearts ?? 0, max: ride.rideMax ?? 0 } : null;
+    const dragonBar = dragon ? h('span', { class: `hp-bar dragon${dragon.hp <= dragon.max * 0.25 ? ' low' : ''}` }, h('span', { style: `width: ${((Math.max(0, dragon.hp) / Math.max(1, dragon.max)) * 100).toFixed(1)}%` })) : '';
     const camps = adv ? [...adv.camps.values()].filter((c) => c.kind === 'camp') : [];
     const freed = camps.filter((c) => c.freed).length;
-    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
+    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${dragon ? `, dragon ${dragon.hp} of ${dragon.max}` : ''}${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
     el.replaceChildren(
       h('span', { class: 'hp-label' }, '❤️ HP'),
       h('span', { class: `hp-bar${share <= 0.25 ? ' low' : share <= 0.5 ? ' half' : ''}` }, h('span', { style: `width: ${(share * 100).toFixed(1)}%` })),
       h('span', { class: 'hp-num' }, `${hp}/${maxHp}`),
+      dragon ? h('span', { class: 'hp-label' }, '🐲') : '',
+      dragonBar,
       adv ? h('span', { class: 'camps' }, `🚩 ${freed}/${camps.length}`) : '',
     );
     if (hp < (this.hpShown ?? Infinity)) {
