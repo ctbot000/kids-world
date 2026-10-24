@@ -132,10 +132,20 @@ async function friendApiFor(friend, req, res, rest) {
 // CTB (ctb.js): GET what its workers are doing, PUT settings, POST /tasks
 // { title, body } for a new task (a GitHub issue), POST /proposals/<n>/approve
 // or /reject, POST /propose for a worker to propose a task now, and POST
-// /check to look at GitHub and the model again.
+// /check to look at GitHub and the model again. GET /runs/<id> is one of
+// the workers' run logs (ctb-runs.js) whole, and /runs/<id>.txt the same as
+// a plain-text transcript, to download.
 async function ctbApiFor(ctb, req, res, rest) {
   if (!ctb) return json(res, 404, { error: 'CTB does not run here.' });
   try {
+    if (rest.startsWith('/runs/')) {
+      if (req.method !== 'GET') return res.writeHead(405, { Allow: 'GET' }).end();
+      const run = /^\/runs\/([\w-]+?)(\.txt)?$/.exec(rest);
+      const found = run && (await ctb.run(run[1], { text: Boolean(run[2]) }));
+      if (!found) return json(res, 404, { error: 'No such run.' });
+      if (!run[2]) return json(res, 200, found);
+      return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Disposition': `attachment; filename="ctb-run-${run[1]}.txt"` }).end(found);
+    }
     if (rest === '') {
       if (req.method === 'GET') return json(res, 200, await ctb.status());
       if (req.method !== 'PUT') return res.writeHead(405, { Allow: 'GET, PUT' }).end();

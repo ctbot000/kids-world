@@ -73,7 +73,7 @@ export function systemPrompt({ name, company = 'CTB', project = 'kids-world', la
     '- test {path}: run one test file with node --test, such as test/school.test.js. Run the tests for what you changed, and add or update tests for new behaviour.',
     '- diff {}: what you have changed so far.',
     '- done {title, summary}: finished. title is the pull request title (short, imperative); summary says what you changed and how you tested it, in Markdown.',
-    '- give_up {summary}: the task cannot be done (unclear, too big, or impossible); say why.',
+    '- give_up {summary}: the task cannot be done at all (unclear, or impossible); say why. Not for running short of steps: when they run out, what you have changed is kept, and the next try carries on from it.',
     'What you read stays above, so read each part of a file once and go back to it there. Rules: read the code around a change before making it, and match its style, naming and comment density (comments in plain words saying what and why). Keep the change focused on the task. Never edit package-lock.json, public/vendor/ or public/keeper.json. If the change is visible to players, update README.md where it describes that part of the game. Do not finish before the tests you ran pass.',
     layout ? `The project's layout, from its README:\n${layout}` : '',
   ]
@@ -127,9 +127,14 @@ const tail = (text, max) => (text.length <= max ? text : `… (${text.length - m
 
 // One task, worked through: run() resolves to { ok, title, summary, steps }
 // (ok false with why on giving up, running out of steps, or the model
-// failing). onStep is told of each step, for the island and the admin page.
+// failing). onStep is told of each step, for the island and the admin page;
+// onCall of each answer from the model ({ step, ms, trace, error }) and
+// onResult of each result it is given (n, step, the words), for the run log
+// (ctb-runs.js). Work kept from an earlier try: base, the commit the changes
+// are counted from (main as it was), changed, the files changed since, and
+// earlier, what that try said of it.
 export class Agent {
-  constructor({ llm, root, name, task, layout = '', maxSteps = MAX_STEPS, onStep = () => {}, onUsage = () => {}, node = process.execPath, stopped = () => false }) {
+  constructor({ llm, root, name, task, layout = '', maxSteps = MAX_STEPS, onStep = () => {}, onUsage = () => {}, onCall = () => {}, onResult = () => {}, node = process.execPath, stopped = () => false, base = 'HEAD', changed = [], earlier = '' }) {
     this.llm = llm;
     this.root = root;
     this.name = name;
@@ -137,14 +142,17 @@ export class Agent {
     this.maxSteps = maxSteps;
     this.onStep = onStep;
     this.onUsage = onUsage;
+    this.onCall = onCall;
+    this.onResult = onResult;
+    this.base = base;
     this.node = node;
     this.stopped = stopped;
     this.messages = [
       { role: 'system', content: systemPrompt({ name, layout }) },
-      { role: 'user', content: `Your task, GitHub issue #${task.number}: ${task.title}\n\n${task.body || '(no description)'}` },
+      { role: 'user', content: `Your task, GitHub issue #${task.number}: ${task.title}\n\n${task.body || '(no description)'}${changed.length ? `\n\nAn earlier try at this did not finish, and its work is already in your working copy (diff shows it): ${changed.join(', ')}. Carry on from it rather than starting over.${earlier ? ` What that try said when it stopped:\n\n${earlier}` : ''}` : ''}` },
     ];
     this.steps = 0;
-    this.changed = new Set();
+    this.changed = new Set(changed);
     // Reads whose lines are still in view: { path, start, end, step, message }.
     this.reads = [];
   }
@@ -152,12 +160,26 @@ export class Agent {
   // The model's next step, the tokens it took counted.
   async next() {
     const trace = {};
+    const t0 = Date.now();
+    let error = null;
     try {
       const messages = this.messages.map(({ role, content }) => ({ role, content }));
       return await this.llm.chat(messages, STEP_SCHEMA, trace, LLM_OPTS);
+    } catch (e) {
+      error = e;
+      throw e;
     } finally {
       if (trace.usage?.length) this.onUsage(trace.usage);
+      this.onCall({ step: this.steps + 1, ms: Date.now() - t0, trace, error });
     }
+  }
+
+  // A result for the model, also told to onResult.
+  tell(step, content, extra = {}) {
+    const message = { role: 'user', content, result: true, ...extra };
+    this.messages.push(message);
+    this.onResult(this.steps, step, content);
+    return message;
   }
 
   // Older results cut short, so the prompt stays a manageable size.
@@ -192,7 +214,7 @@ export class Agent {
   // near the end.
   footer() {
     const left = this.maxSteps - this.steps;
-    if (left <= 5) return `\n(Step ${this.steps} of ${this.maxSteps}: ${left} left. Finish now with done, or give_up and say why.)`;
+    if (left <= 5) return `\n(Step ${this.steps} of ${this.maxSteps}: ${left} left. Finish with done if the change is whole and its tests pass; if not, use them on it: what you have changed is kept, and the next try carries on from it.)`;
     if (!this.changed.size && this.steps >= this.maxSteps * NUDGE_AT) return `\n(Step ${this.steps} of ${this.maxSteps}, and nothing changed yet: stop looking around and make the change now, a small first version if need be.)`;
     return `\n(Step ${this.steps} of ${this.maxSteps}.)`;
   }
@@ -211,14 +233,15 @@ export class Agent {
       failures = 0;
       this.steps++;
       if (!step || typeof step !== 'object' || !TOOLS.includes(step.tool)) {
-        this.messages.push({ role: 'assistant', content: JSON.stringify(step ?? null) }, { role: 'user', content: `That is not a step: answer with one JSON object whose tool is one of ${TOOLS.join(', ')}.`, result: true });
+        this.messages.push({ role: 'assistant', content: JSON.stringify(step ?? null) });
+        this.tell(step, `That is not a step: answer with one JSON object whose tool is one of ${TOOLS.join(', ')}.`);
         continue;
       }
       this.messages.push({ role: 'assistant', content: JSON.stringify(step) });
       this.onStep(step, this.steps);
       if (step.tool === 'done') {
         if (!this.changed.size) {
-          this.messages.push({ role: 'user', content: 'You have changed nothing yet. Make the change first, or give_up if it cannot be done.', result: true });
+          this.tell(step, 'You have changed nothing yet. Make the change first, or give_up if it cannot be done.');
           continue;
         }
         return { ok: true, title: String(step.title || this.task.title).slice(0, 120), summary: String(step.summary || ''), steps: this.steps, changed: [...this.changed] };
@@ -234,8 +257,7 @@ export class Agent {
       } catch (error) {
         result = `Error: ${error.message}`;
       }
-      const message = { role: 'user', content: `Result of ${step.tool}:\n${cut(result, RESULT_MAX)}${this.footer()}`, result: true };
-      this.messages.push(message);
+      const message = this.tell(step, `Result of ${step.tool}:\n${cut(result, RESULT_MAX)}${this.footer()}`);
       if (['write', 'edit'].includes(step.tool)) {
         const rel = this.span(step.path).path;
         this.reads = this.reads.filter((r) => r.path !== rel);
@@ -334,8 +356,8 @@ export class Agent {
   }
 
   async diff() {
-    const { out } = await run('git', ['diff', '--stat'], { cwd: this.root });
-    const { out: full } = await run('git', ['diff'], { cwd: this.root });
+    const { out } = await run('git', ['diff', '--stat', this.base], { cwd: this.root });
+    const { out: full } = await run('git', ['diff', this.base], { cwd: this.root });
     const { out: added } = await run('git', ['ls-files', '--others', '--exclude-standard'], { cwd: this.root });
     const said = `${out}${added.trim() ? `New files:\n${added}` : ''}\n${full}`;
     return said.trim() ? said : 'No changes.';

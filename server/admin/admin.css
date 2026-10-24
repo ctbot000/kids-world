@@ -1216,3 +1216,154 @@ button.primary:hover {
   overflow-wrap: anywhere;
   font-size: 12px;
 }
+
+/* CTB's model runs: a list to pick from, one worker's or everyone's, and
+   the run picked, answer by answer. */
+.run-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+button.chip {
+  height: 26px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+button.chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.run-list li {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.run-list li.picked {
+  background: var(--accent-soft);
+}
+
+.run-list .muted {
+  font-size: 12px;
+}
+
+button.link {
+  display: inline;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+button.link:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+.run-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.run-top h4 {
+  margin: 0 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.run-call {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.run-call.failed {
+  border-color: var(--danger);
+}
+
+.run-call .fold {
+  margin-top: 6px;
+}
+
+.run-head {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.run-head code {
+  font: 12px var(--mono);
+}
+
+.run-thought {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.run-error {
+  margin-top: 4px;
+  color: var(--danger);
+}
+
+.run-note {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  overflow-wrap: anywhere;
+}
+
+.run-note.ok {
+  background: var(--ok-soft);
+}
+
+.run-note.bad {
+  background: var(--danger-soft);
+}
+
+.run-note time {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.run-text {
+  max-height: 420px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: 12px/1.45 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

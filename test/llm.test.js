@@ -16,14 +16,16 @@ test('the Z.ai client asks with the answer shape in words, and reads its JSON', 
   const sent = [];
   const fetch = async (url, init = {}) => {
     if (init.body) sent.push({ url, headers: init.headers, body: JSON.parse(init.body) });
-    return new Response(JSON.stringify({ choices: [{ message: { content: 'Sure! {"say":"Hi!"}' } }], usage: { prompt_tokens: 90, completion_tokens: 8 } }));
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'Sure! {"say":"Hi!"}', reasoning_content: 'They said hi.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 90, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 64 }, completion_tokens_details: { reasoning_tokens: 3 } } }));
   };
   const llm = new Zai({ urls: ['https://z.test/v4'], model: 'glm-5.3-flash', key: 'a key', fetch });
   const trace = {};
   assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA, trace), { say: 'Hi!' });
   assert.equal(trace.model, 'glm-5.3-flash');
   assert.equal(trace.raw, 'Sure! {"say":"Hi!"}');
-  assert.deepEqual(trace.zai, { promptTokens: 90, tokens: 8 });
+  assert.deepEqual(trace.zai, { promptTokens: 90, tokens: 8, cachedTokens: 64, reasoningTokens: 3 });
+  assert.equal(trace.reasoning, 'They said hi.', 'its thinking, for CTB’s run logs');
+  assert.equal(trace.finish, 'stop');
   assert.deepEqual(trace.usage, [{ name: 'Z.ai', model: 'glm-5.3-flash', promptTokens: 90, tokens: 8 }], 'its tokens, for the tally');
   assert.ok(trace.sentAt > 0);
   assert.equal(sent[0].body.max_tokens, 1, 'one tiny question looks for its endpoint first');

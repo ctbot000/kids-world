@@ -235,7 +235,10 @@ export class Zai {
     const words = body.choices?.[0]?.message?.content ?? '';
     if (trace) {
       trace.raw = words;
-      trace.zai = { promptTokens: body.usage?.prompt_tokens ?? null, tokens: body.usage?.completion_tokens ?? null };
+      // The model's thinking and why it stopped, for CTB's run logs.
+      trace.reasoning = body.choices?.[0]?.message?.reasoning_content ?? '';
+      trace.finish = body.choices?.[0]?.finish_reason ?? '';
+      trace.zai = { promptTokens: body.usage?.prompt_tokens ?? null, tokens: body.usage?.completion_tokens ?? null, cachedTokens: body.usage?.prompt_tokens_details?.cached_tokens ?? null, reasoningTokens: body.usage?.completion_tokens_details?.reasoning_tokens ?? null };
       spent(trace, this, body.usage?.prompt_tokens, body.usage?.completion_tokens);
     }
     return this.read(words);

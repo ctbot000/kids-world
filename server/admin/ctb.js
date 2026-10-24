@@ -2,8 +2,12 @@
 // what each is doing step by step, its task board (the project's GitHub
 // issues labelled "ctb") with a form for a new task, the workers' proposals
 // to approve or turn down, their pull requests, the tokens their models took
-// and what happened lately. Read from /admin/api/ctb on every refresh; the
-// forms are made once, so a refresh never wipes what is being typed.
+// and what happened lately; and every talk each worker had with its model
+// (its run logs, ctb-runs.js), to see why one went wrong: what the model was
+// given, what it thought and answered, what each answer cost and took, and
+// a transcript to download or copy for another model to read. Read from
+// /admin/api/ctb on every refresh; the forms are made once, so a refresh
+// never wipes what is being typed, and an open run is fetched by itself.
 
 const LABEL_LOOK = { 'ctb: working': 'warn', 'ctb: pr': 'ok', 'ctb: stuck': 'bad' };
 const send = (path, method, body) => fetch(`/admin/api/ctb${path}`, { method, cache: 'no-store', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -95,6 +99,170 @@ function taskForm(h) {
   return form;
 }
 
+const KIND = { task: '🛠️ Task', idea: '💡 Idea', proposal: '📝 Proposal' };
+const num = new Intl.NumberFormat();
+const RUN_POLL_MS = 4000;
+const took = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s` : `${(ms / 1000).toFixed(1)} s`);
+
+// The step in a model's answer, as JSON, or null.
+function stepIn(raw) {
+  const text = String(raw ?? '');
+  for (const words of [text, text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)]) {
+    try {
+      const v = JSON.parse(words);
+      if (v && typeof v === 'object') return v;
+    } catch {}
+  }
+  return null;
+}
+
+// The workers' run logs: a list, one worker's or everyone's, and the run
+// picked, step by step, fetched again every few seconds while it goes on.
+function runsPanel({ h, ago, time, opened }) {
+  const fold = (key, summary, ...children) => h('details', { class: 'fold', open: opened.has(key) || null, ontoggle: (e) => (e.target.open ? opened.add(key) : opened.delete(key)) }, h('summary', {}, summary), ...children);
+  const text = (t) => h('pre', { class: 'run-text' }, t);
+  const filters = h('div', { class: 'run-filters', role: 'group', 'aria-label': 'Whose runs' });
+  const list = h('ol', { class: 'run-list' });
+  const viewer = h('div', { class: 'run-view', hidden: true, 'aria-live': 'polite' });
+  const el = h('div', { id: 'ctb-runs' }, h('h3', {}, '🔍 Model runs'), h('p', { class: 'muted' }, 'Every talk a worker had with its model, newest first: a task step by step, an idea read, a proposal. Open one to see what the model was given, what it thought and answered, and what each answer cost.'), filters, list, viewer);
+  let runs = [];
+  let filter = null;
+  let shown = null;
+  let timer = 0;
+
+  const status = (s) => (!s.endedAt ? h('span', { class: 'badge warn' }, 'running') : s.ok ? h('span', { class: 'badge ok' }, 'done') : h('span', { class: 'badge bad' }, 'not done'));
+  const label = (s) => (s.issue ? `#${s.issue.number} ${s.issue.title}` : s.title);
+
+  function renderList() {
+    const names = [...new Map(runs.map((r) => [r.k, r.worker])).entries()].sort((a, b) => a[0] - b[0]);
+    filters.replaceChildren(
+      ...[[null, 'Everyone'], ...names].map(([k, name]) => h('button', { type: 'button', class: `chip${filter === k ? ' on' : ''}`, 'aria-pressed': String(filter === k), onclick: () => pick(k) }, name)),
+    );
+    const mine = runs.filter((r) => filter === null || r.k === filter);
+    list.replaceChildren(
+      ...(mine.length
+        ? mine.map((r) =>
+            h(
+              'li',
+              { class: r.id === shown ? 'picked' : null },
+              h('button', { type: 'button', class: 'link', onclick: () => open(r.id) }, status(r), ' ', KIND[r.kind] ?? r.kind, ' · ', h('b', {}, r.worker), ' · ', label(r)),
+              h('div', { class: 'muted' }, `${ago(r.at)} · ${took((r.endedAt || r.last) - r.at)} · ${r.kind === 'task' ? `${r.steps} steps · ` : ''}${r.calls} ${r.calls === 1 ? 'answer' : 'answers'}${r.failed ? `, ${r.failed} failed` : ''} · ${num.format(r.promptTokens)} tokens in, ${num.format(r.tokens)} out`),
+            ),
+          )
+        : [h('li', { class: 'muted' }, 'None yet.')]),
+    );
+  }
+
+  function pick(k, { latest = false } = {}) {
+    filter = k;
+    renderList();
+    const first = runs.find((r) => k === null || r.k === k);
+    if (latest && first) open(first.id);
+    else if (latest) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function open(id) {
+    clearTimeout(timer);
+    if (shown !== id) viewer.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+    shown = id;
+    viewer.hidden = false;
+    renderList();
+    let run = null;
+    try {
+      const res = await fetch(`/admin/api/ctb/runs/${id}`, { cache: 'no-store' });
+      if (res.ok) run = await res.json();
+    } catch {}
+    if (shown !== id) return;
+    if (!run) {
+      viewer.replaceChildren(h('p', { class: 'muted' }, 'That run is gone (only the newest are kept).'));
+      return;
+    }
+    renderRun(run);
+    if (!run.summary.endedAt) timer = setTimeout(() => shown === id && open(id), RUN_POLL_MS);
+  }
+
+  function close() {
+    clearTimeout(timer);
+    shown = null;
+    viewer.hidden = true;
+    viewer.replaceChildren();
+    renderList();
+  }
+
+  async function copy(id, button) {
+    try {
+      const res = await fetch(`/admin/api/ctb/runs/${id}.txt`, { cache: 'no-store' });
+      await navigator.clipboard.writeText(await res.text());
+      button.textContent = 'Copied';
+    } catch {
+      button.textContent = 'Could not copy';
+    }
+    setTimeout(() => (button.textContent = 'Copy transcript'), 2000);
+  }
+
+  function renderRun({ summary: s, events }) {
+    const key = (k) => `run-${s.id}-${k}`;
+    const cards = [];
+    let card = null;
+    for (const [i, e] of events.entries()) {
+      if (e.type === 'start') {
+        cards.push(...e.messages.map((m, j) => fold(key(`m${j}`), `${m.role === 'system' ? 'System prompt' : 'First message'} (${num.format(m.content.length)} characters)`, text(m.content))));
+      } else if (e.type === 'call') {
+        const step = stepIn(e.raw);
+        const u = e.usage;
+        const what = step?.tool ? [h('b', {}, step.tool), step.path || step.query ? h('code', {}, ` ${step.path || ''}${step.query ? ` “${step.query}”` : ''}${step.from ? ` ${step.from}-${step.to ?? ''}` : ''}`) : ''] : s.kind === 'task' ? h('b', {}, 'no step') : h('b', {}, 'answer');
+        card = h(
+          'article',
+          { class: `run-call${e.error ? ' failed' : ''}`, 'data-step': e.step || null },
+          h(
+            'div',
+            { class: 'run-head' },
+            e.step ? h('span', { class: 'badge' }, `step ${e.step}`) : null,
+            ' ',
+            what,
+            e.error ? h('span', { class: 'badge bad' }, 'failed') : null,
+            h('span', { class: 'muted' }, ` · ${time.format(e.at)} · ${took(e.ms)}${u ? ` · ${num.format(u.prompt ?? 0)} in (${num.format(u.cached ?? 0)} cached) · ${num.format(u.completion ?? 0)} out (${num.format(u.reasoning ?? 0)} thinking)` : ''} · stop: ${e.finish || '?'}`),
+          ),
+          e.error ? h('div', { class: 'run-error' }, e.error) : null,
+          step?.thought ? h('div', { class: 'run-thought' }, step.thought) : null,
+          e.reasoning ? fold(key(`r${i}`), `Its thinking (${num.format(e.reasoning.length)} characters)`, text(e.reasoning)) : null,
+          fold(key(`a${i}`), e.raw ? `Its answer as it came (${num.format(e.raw.length)} characters)` : 'Its answer: empty', text(e.raw || '(nothing)')),
+        );
+        cards.push(card);
+      } else if (e.type === 'step') {
+        const into = card && Number(card.dataset.step) === e.n ? card : null;
+        const f = fold(key(`s${i}`), `What it was given back (${num.format(e.result.length)} characters)`, text(e.result));
+        if (into) into.append(f);
+        else cards.push(h('article', { class: 'run-call' }, h('div', { class: 'run-head' }, h('b', {}, e.step?.tool ?? 'result')), f));
+      } else if (e.type === 'note') {
+        cards.push(h('div', { class: 'run-note' }, h('time', {}, time.format(e.at)), ' ', e.text.length > 600 ? [e.text.slice(0, 200), fold(key(`n${i}`), 'All of it', text(e.text))] : e.text));
+      } else if (e.type === 'end') {
+        cards.push(h('div', { class: `run-note ${e.ok ? 'ok' : 'bad'}` }, h('time', {}, time.format(e.at)), ' ', h('b', {}, e.ok ? 'Done. ' : 'Not done. '), e.why, e.url ? [' ', h('a', { href: e.url, target: '_blank', rel: 'noopener' }, e.url)] : null));
+      }
+    }
+    const copyButton = h('button', { type: 'button', onclick: (ev) => copy(s.id, ev.currentTarget) }, 'Copy transcript');
+    viewer.replaceChildren(
+      h(
+        'div',
+        { class: 'run-top' },
+        h('h4', {}, KIND[s.kind] ?? s.kind, ' · ', s.worker, ' · ', s.issue ? h('a', { href: s.issue.url, target: '_blank', rel: 'noopener' }, label(s)) : label(s), ' ', status(s)),
+        h('div', { class: 'muted' }, `${s.model} · started ${ago(s.at)} · ${took((s.endedAt || s.last) - s.at)} · ${s.kind === 'task' ? `${s.steps} steps · ` : ''}${s.calls} answers${s.failed ? ` (${s.failed} failed)` : ''} · ${num.format(s.promptTokens)} tokens in, ${num.format(s.tokens)} out${s.endedAt ? '' : ' · still going, updated every few seconds'}`),
+        h('div', { class: 'run-actions' }, h('a', { class: 'button', href: `/admin/api/ctb/runs/${s.id}.txt`, download: `ctb-run-${s.id}.txt` }, 'Download transcript'), ' ', copyButton, ' ', h('button', { type: 'button', class: 'quiet', onclick: close }, 'Close')),
+      ),
+      ...cards,
+    );
+  }
+
+  return {
+    el,
+    update(state) {
+      runs = state.runs ?? [];
+      renderList();
+    },
+    pick,
+  };
+}
+
 async function act(path, question = '') {
   if (question && !confirm(question)) return;
   const res = await send(path, 'POST');
@@ -107,11 +275,13 @@ export function setUpCtb(helpers) {
   const link = (i) => h('a', { href: i.url, target: '_blank', rel: 'noopener' }, `#${i.number}`);
   const fold = (key, summary, ...children) => h('details', { class: 'fold', open: opened.has(key) || null, ontoggle: (e) => (e.target.open ? opened.add(key) : opened.delete(key)) }, h('summary', {}, summary), ...children);
 
-  function workerCard(w) {
+  const runs = runsPanel(helpers);
+
+  function workerCard(w, k) {
     return h(
       'article',
       { class: 'visit' },
-      h('h4', {}, w.name, w.issue ? h('span', { class: 'muted' }, ' · ', link(w.issue), ` ${w.issue.title}`) : null),
+      h('h4', {}, w.name, w.issue ? h('span', { class: 'muted' }, ' · ', link(w.issue), ` ${w.issue.title}`) : null, ' ', h('button', { type: 'button', class: 'quiet small', title: `${w.name}'s talks with the model, the newest open`, onclick: () => runs.pick(k, { latest: true }) }, '🔍 Model runs')),
       h('div', {}, h('b', {}, w.doing), w.issue ? h('span', { class: 'muted' }, ` · since ${ago(w.startedAt)}`) : null),
       h('div', { class: 'muted' }, `${plural(w.done, 'pull request', 'pull requests')} opened, stuck ${plural(w.stuck, 'time', 'times')}`, w.last ? [' · last: ', link(w.last.issue), ' ', w.last.ok ? h('a', { href: w.last.url, target: '_blank', rel: 'noopener' }, 'pull request') : `stuck: ${String(w.last.why).split('\n')[0]}`] : null),
       w.steps.length ? fold(`ctb-steps-${w.name}`, `Steps (${w.steps.length})`, h('ol', { class: 'recent' }, ...w.steps.map((s) => h('li', {}, h('time', {}, time.format(s.at)), ' ', h('b', {}, `${s.n}. ${s.what}`), s.thought ? h('div', { class: 'muted' }, s.thought) : null)))) : null,
@@ -125,7 +295,7 @@ export function setUpCtb(helpers) {
     if (!view) {
       const settings = settingsForm(h);
       view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), workers: h('div', { class: 'visits' }), board: h('div'), proposals: h('div'), ideas: h('div'), pulls: h('div'), usage: h('div', { class: 'usage-section' }), history: h('div') };
-      document.getElementById('ctb').replaceChildren(view.line, settings.form, view.island, view.workers, h('h3', {}, 'New task'), taskForm(h), view.board, view.proposals, view.ideas, view.pulls, view.usage, view.history);
+      document.getElementById('ctb').replaceChildren(view.line, settings.form, view.island, view.workers, runs.el, h('h3', {}, 'New task'), taskForm(h), view.board, view.proposals, view.ideas, view.pulls, view.usage, view.history);
     }
     view.settings.fill(state);
     const [cls, words] = !state.running ? ['off', 'Off'] : state.problem ? ['wait', `Closed: ${state.problem}`] : ['on', `Open on ${state.repo} · ${state.model}`];
@@ -136,7 +306,8 @@ export function setUpCtb(helpers) {
         ? [`Their island “${isl.name}”, code ${isl.code}${isl.shared === 'online' ? ', open to everyone peer to peer' : ''}`, isl.visitors.length ? ` · visiting: ${isl.visitors.join(', ')}` : ' · no visitors', '. Anyone can watch them, no login needed: ', h('a', { href: isl.url, target: '_blank', rel: 'noopener' }, isl.url), ' (here: ', h('a', { href: '/?ctb', target: '_blank', rel: 'noopener' }, '/?ctb'), ').']
         : []),
     );
-    view.workers.replaceChildren(...state.workers.map(workerCard));
+    view.workers.replaceChildren(...state.workers.map((w, k) => workerCard(w, k)));
+    runs.update(state);
     view.workers.hidden = !state.workers.length;
     view.board.replaceChildren(
       h('h3', {}, 'Task board ', h('span', { class: 'badge' }, String(state.tasks.length))),

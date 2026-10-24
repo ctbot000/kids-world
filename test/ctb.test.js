@@ -9,7 +9,7 @@
 // repositories made for each test.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -22,6 +22,7 @@ import { adminHandler } from '../server/admin.js';
 import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
 import { deskSpots, GROUNDS, GUIDE, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
+import { RUNS_DIR, Runs, transcript } from '../server/ctb-runs.js';
 import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
@@ -201,7 +202,7 @@ test('the agent keeps what it read in view, says so when asked again, and is pus
   const said = idle.messages.filter((m) => m.role === 'user' && m.result).map((m) => m.content);
   assert.match(said[5], /^Result of list:\nREADME\.md/);
   assert.match(said[6], /^Result of list:\nNo more looking around until you have changed something/);
-  assert.match(said[6], /Step 7 of 10: 3 left\. Finish now with done, or give_up/);
+  assert.match(said[6], /Step 7 of 10: 3 left\. Finish with done if the change is whole and its tests pass; if not, use them on it: what you have changed is kept/);
 });
 
 test('a task becomes a branch, a commit and a pull request once all the unit tests pass', async () => {
@@ -277,6 +278,97 @@ test('failing unit tests go back to the worker, and a task it cannot finish is m
   // A stuck task is not taken again until the label comes off.
   await company.poll();
   assert.equal(company.workers.filter((w) => w.issue).length, 0);
+});
+
+test('a task not finished keeps its work on its branch, the next try carries on from it, and each try is a run log', async () => {
+  const { dir, origin, repo } = await project();
+  const github = hub([issue(12, 'add a multiply', 'And fix add.')]);
+  const tries = [];
+  const llm = scripted((messages) => {
+    const task = messages[1].content;
+    const again = task.includes('An earlier try at this did not finish');
+    const n = messages.filter((m) => m.role === 'assistant').length;
+    if (n === 0) tries.push(task);
+    if (!again) return n === 0 ? { thought: 'mul first', tool: 'write', path: 'mul.js', content: 'export const mul = (a, b) => a * b;\n' } : { thought: 'out of time', tool: 'give_up', summary: 'mul.js is written; add is still to fix.' };
+    if (n === 0) return { thought: 'fix add', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' };
+    if (n === 1) return { thought: 'look over', tool: 'diff' };
+    return { thought: 'done', tool: 'done', title: 'Add mul and fix add', summary: 'Both.' };
+  });
+  const runs = await new Runs({ dir: await tempDir() }).load();
+  const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, propose: false }, log: () => {}, runs });
+  await company.start();
+  after(() => company.stop());
+  await eventually(() => github.issues[0].labels.includes(LABELS.stuck) && !company.workers[0].issue);
+  assert.ok(github.comments.some((c) => /mul\.js is written; add is still to fix\.\n\nThe work so far is kept on the branch `ctb\/issue-12`, and the next try carries on from it\./.test(c.body)));
+  assert.equal(git(origin, 'log', '-1', '--format=%an|%s|%b', 'ctb/issue-12'), 'Ada (CTB)|Work so far on #12|mul.js is written; add is still to fix.');
+  assert.equal(git(origin, 'show', 'ctb/issue-12:mul.js'), 'export const mul = (a, b) => a * b;');
+  assert.equal(github.pullsMade.length, 0, 'no pull request for unfinished work');
+
+  // Main moves on meanwhile; the label comes off, and the next try starts from the kept work, main merged in.
+  await writeFile(join(repo, 'README.md'), '# Toy, moved on\n\n## Project layout\n\n```\nadd.js   adds\n```\n');
+  git(repo, 'commit', '--quiet', '-am', 'moved on');
+  git(repo, 'push', '--quiet', 'origin', 'main');
+  github.issues[0].labels = [LABELS.task];
+  await company.poll();
+  await eventually(() => github.pullsMade.length === 1 && !company.workers[0].issue);
+  assert.match(tries[1], /An earlier try at this did not finish, and its work is already in your working copy \(diff shows it\): mul\.js\. Carry on from it rather than starting over\. What that try said when it stopped:\n\nmul\.js is written; add is still to fix\./);
+  assert.equal(git(origin, 'diff', '--name-only', 'main', 'ctb/issue-12'), 'add.js\nmul.js', 'both tries’ work, and main as it is now');
+  assert.equal(git(origin, 'show', 'ctb/issue-12:add.js'), 'export const add = (a, b) => a + b;');
+
+  // Both tries in the run logs, newest first, everything the model was given and answered.
+  const [second, first] = runs.list(0);
+  assert.equal(first.kind, 'task');
+  assert.equal(first.ok, false);
+  assert.equal(first.why, 'mul.js is written; add is still to fix.');
+  assert.equal(second.ok, true);
+  assert.equal(second.url, 'https://github.com/ctbot000/toy/pull/501');
+  assert.deepEqual([first.steps, second.steps], [2, 3]);
+  const run = await runs.read(second.id);
+  assert.equal(run.events[0].messages[1].content, tries[1]);
+  assert.ok(run.events.some((e) => e.type === 'note' && /Carrying on from work kept from an earlier try: mul\.js\./.test(e.text)));
+  const diff = run.events.find((e) => e.type === 'step' && e.step.tool === 'diff');
+  assert.match(diff.result, /^Result of diff:\n[\s\S]*mul\.js[\s\S]*\+export const add = \(a, b\) => a \+ b;/, 'the diff counts the kept work too');
+  assert.equal(run.events.filter((e) => e.type === 'call').length, 3);
+  assert.match(transcript(run), /===== step 2: diff — result given to the model =====/);
+  assert.deepEqual(company.status().workers[0].steps.length > 0, true);
+});
+
+test('run logs: written as they go, read back after a restart, the newest kept, and a transcript of each', async () => {
+  const dir = await tempDir();
+  let now = 1000;
+  const runs = new Runs({ dir, now: () => now, kept: 2 });
+  const a = await runs.start({ kind: 'idea', k: 1, worker: 'Ben 💼', model: 'glm', title: 'An idea: a slide', messages: [{ role: 'system', content: 'Be kind.' }, { role: 'user', content: 'A slide!' }] });
+  await a.call({ ms: 1500, trace: { model: 'glm', raw: '{"accept":true}', reasoning: 'A slide is fun.', finish: 'stop', zai: { promptTokens: 90, tokens: 20, cachedTokens: 64, reasoningTokens: 12 } } });
+  now = 2000;
+  await a.end({ ok: true, why: 'Accepted, as #3' });
+  const b = await runs.start({ kind: 'task', k: 0, worker: 'Ada 💼', model: 'glm', issue: { number: 4, title: 'Fix it', url: 'u' }, messages: [] });
+  await b.call({ step: 1, ms: 10, trace: { raw: '' }, error: new Error('Z.ai said nothing it could read') });
+  assert.deepEqual(runs.list().map((r) => r.id), [b.summary.id, a.summary.id], 'newest first');
+  assert.equal(runs.list(1).length, 1);
+  assert.equal(runs.list(1)[0].endedAt, 2000);
+  assert.equal(b.summary.failed, 1);
+  assert.equal(b.summary.endedAt, 0, 'still going');
+
+  // After a restart: from the files, an unfinished last line left out.
+  await appendFile(join(dir, RUNS_DIR, `${a.summary.id}.jsonl`), '{"type":"no');
+  const again = await new Runs({ dir, kept: 2 }).load();
+  const read = await again.read(a.summary.id);
+  assert.deepEqual(read.events.map((e) => e.type), ['start', 'call', 'end']);
+  assert.deepEqual(read.summary, { ...runs.list(1)[0] });
+  assert.equal(read.summary.promptTokens, 90);
+  assert.equal(await again.read('../keeper'), null, 'only run ids');
+  const text = transcript(read);
+  assert.match(text, /^CTB run .*: idea by Ben 💼 with glm/);
+  assert.match(text, /===== system message =====\nBe kind\./);
+  assert.match(text, /1\.5 s, finish: stop, tokens: 90 prompt \(64 cached\), 20 completion \(12 reasoning\) =====\n--- thinking ---\nA slide is fun\.\n--- answer ---\n\{"accept":true\}/);
+  assert.match(transcript(await again.read(b.summary.id)), /FAILED: Z\.ai said nothing it could read =====\n--- answer ---\n\(empty\)/);
+
+  // Past the newest two: the oldest goes, file and all; one still going stays.
+  now = 3000;
+  await b.end({ ok: false, why: 'stopped' });
+  await runs.start({ kind: 'proposal', k: 2, worker: 'Cleo 💼', model: 'glm', messages: [] });
+  assert.equal(runs.list().length, 2);
+  assert.equal(await runs.read(a.summary.id), null);
 });
 
 test('with nothing to do a worker proposes a task as an issue, which starts once labelled approved, or is turned down', async () => {
@@ -565,6 +657,19 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   state = await (await fetch(base)).json();
   assert.deepEqual(state.workers.map((w) => w.issue.number).sort((a, b) => a - b), [3, 101]);
   assert.match(state.workers[0].doing, /^#\d+: /);
+
+  // Each worker's talks with the model, as run logs: listed, read whole, and as a transcript to download.
+  const live = await eventually(async () => (await (await fetch(base)).json()).runs.find((r) => r.kind === 'task' && r.k === 0));
+  assert.equal(live.worker, 'Ada 💼');
+  assert.equal(live.endedAt, 0, 'still going');
+  const run = await (await fetch(`${base}/runs/${live.id}`)).json();
+  assert.equal(run.summary.id, live.id);
+  assert.match(run.events[0].messages[0].content, /You are Ada, a software engineer at CTB/);
+  const txt = await fetch(`${base}/runs/${live.id}.txt`);
+  assert.match(txt.headers.get('content-disposition'), /attachment; filename="ctb-run-.*\.txt"/);
+  assert.match(await txt.text(), /===== system message =====\nYou are Ada/);
+  assert.equal((await fetch(`${base}/runs/nope`)).status, 404);
+  assert.equal((await fetch(`${base}/runs/..%2Fctb`)).status, 404);
 
   // When a worker last proposed is kept, so a restart does not bring another proposal at once.
   const { proposedAt } = JSON.parse(await readFile(join(store.dir, 'ctb-state.json'), 'utf8'));
