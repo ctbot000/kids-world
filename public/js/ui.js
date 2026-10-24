@@ -4,7 +4,7 @@
 // buttons, pictures first, few words.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
-import { BLACK, LESSONS, NO_MOVE, placeName, SIZES as GO_SIZES, WHITE } from './shared/go.js';
+import { BLACK, GAMES as BOARD_GAMES, gameOf, lessonsOf, NO_MOVE, placeName, WHITE } from './shared/go.js';
 import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
@@ -2043,6 +2043,7 @@ export class UI {
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
+          card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right four times and you know it by heart! Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -4435,10 +4436,11 @@ export class UI {
   // ------------------------------------------------ Go boards
 
   // The Go board you sat down at, in a window: how the game is going, the
-  // board to tap a stone onto, who plays which colour, Pass and Give up, a
-  // fresh board of any size, 🤖 Play with the AI friend, and 📖 How to play,
-  // the rules a step at a time. Kept up to date as the island tells of the
-  // game (renderGo); a tip over the board says what just happened.
+  // board to tap a stone onto, who plays which colour, Pass (at Go) and Give
+  // up, a fresh board of either game, Go or Gomoku, of any of its sizes, 🤖
+  // Play with the AI friend, and 📖 How to play, the game's rules a step at a
+  // time. Kept up to date as the island tells of the game (renderGo); a tip
+  // over the board says what just happened.
   goDialog() {
     const g = this.game;
     if (!g?.goAt) return;
@@ -4453,19 +4455,25 @@ export class UI {
         const pass = h('button', { class: 'chip', type: 'button', onclick: () => g.goSend('pass') }, '✋ Pass');
         const resign = h('button', { class: 'chip', type: 'button', onclick: () => g.goSend('resign') }, '🏳️ Give up');
         const call = h('button', { class: 'big green go-call', type: 'button', onclick: () => g.goSend('call') }, '🤖 Play with the AI friend');
-        const sizes = GO_SIZES.map((n) => h('button', { class: 'chip go-size', type: 'button', 'data-n': n, onclick: () => g.goSend('new', { n }) }, `${n}×${n}`));
+        const kinds = Object.values(BOARD_GAMES).map((game) => h('button', { class: 'chip go-kind', type: 'button', 'data-kind': game.key, onclick: () => {
+          g.goKind = game.key;
+          g.goSend('new', { kind: game.key });
+        } }, `${game.icon} ${game.name}`));
+        const sizes = h('div', { class: 'go-row go-new' });
         const lessons = h('div', { class: 'go-lessons', hidden: true });
         const how = h('button', { class: 'chip', type: 'button', 'aria-expanded': 'false', onclick: () => this.goLesson(lessons.hidden ? 0 : -1) }, '📖 How to play');
-        this.goEls = { board, status, tip, players, pass, resign, call, sizes, lessons, how, n: 0, cells: [] };
+        const title = h('h2', {}, '⚫ Go ⚪');
+        this.goEls = { title, board, status, tip, players, pass, resign, call, kinds, sizes, lessons, how, n: 0, kind: '', cells: [] };
         root.append(
-          h('h2', {}, '⚫ Go ⚪'),
+          title,
           status,
           tip,
           board,
           players,
           h('div', { class: 'go-row' }, pass, resign, how),
           call,
-          h('div', { class: 'go-row go-new' }, h('span', { class: 'muted' }, 'New game:'), ...sizes),
+          h('div', { class: 'go-row go-new' }, h('span', { class: 'muted' }, 'Play:'), ...kinds),
+          sizes,
           lessons,
         );
       },
@@ -4493,7 +4501,22 @@ export class UI {
     const friend = this.goFriend();
     // How it is going.
     let status = 'Sitting down…';
-    if (s?.over) {
+    const kind = s?.kind ?? g.goKind;
+    const gomoku = kind === 'gomoku';
+    if (els.kind !== kind) {
+      // The other game: its name, its sizes and its lessons.
+      els.kind = kind;
+      const game = gameOf(kind);
+      els.title.textContent = `⚫ ${game.name} ⚪`;
+      els.board.setAttribute('aria-label', `The ${game.name} board`);
+      els.sizes.replaceChildren(h('span', { class: 'muted' }, 'New board:'), ...game.sizes.map((n) => h('button', { class: 'chip go-size', type: 'button', 'data-n': n, onclick: () => g.goSend('new', { n }) }, `${n}×${n}`)));
+      if (!els.lessons.hidden) this.goLesson(0);
+    }
+    if (s?.over && gomoku) {
+      const o = s.over;
+      const won = o.win === 'draw' ? 'It is a draw!' : o.win === mine ? 'You win! 🎉' : mine ? `${name(s.p[o.win === BLACK ? 0 : 1])} wins!` : `${o.win === BLACK ? '⚫ Black' : '⚪ White'} wins!`;
+      status = o.why === 'five' ? `Five in a row — ${won}` : o.why === 'full' ? 'The board is full — a draw!' : `${won} (the other side gave up)`;
+    } else if (s?.over) {
       const o = s.over;
       const won = o.win === 'draw' ? 'It is a draw!' : o.win === mine ? 'You win! 🎉' : mine ? `${name(s.p[o.win === BLACK ? 0 : 1])} wins!` : `${o.win === BLACK ? '⚫ Black' : '⚪ White'} wins!`;
       status = o.why === 'resign' ? `${won} (the other side gave up)` : `⚫ ${o.b} · ⚪ ${o.w} — ${won}`;
@@ -4504,7 +4527,7 @@ export class UI {
     els.tip.hidden = !this.goTip;
     if (els.tip.textContent !== this.goTip) els.tip.textContent = this.goTip;
     // The board, made again for a new size.
-    const n = s?.n ?? 5;
+    const n = s?.n ?? gameOf(kind).size;
     if (els.n !== n) {
       els.n = n;
       els.board.style.setProperty('--n', n);
@@ -4527,10 +4550,11 @@ export class UI {
     for (let i = 0; i < els.cells.length; i++) {
       const el = els.cells[i];
       const v = s?.b[i] ?? '.';
-      const k = `${v}${s?.last === i ? '!' : ''}`;
+      const won = s?.over?.line?.includes(i) ?? false;
+      const k = `${v}${s?.last === i ? '!' : ''}${won ? '*' : ''}`;
       if (el.dataset.k !== k) {
         el.dataset.k = k;
-        el.replaceChildren(...(v === '.' ? [] : [h('span', { class: `go-stone ${v === BLACK ? 'black' : 'white'}${s.last === i ? ' last' : ''}` })]));
+        el.replaceChildren(...(v === '.' ? [] : [h('span', { class: `go-stone ${v === BLACK ? 'black' : 'white'}${s.last === i ? ' last' : ''}${won ? ' win' : ''}` })]));
         el.setAttribute('aria-label', `${placeName(n, i)}${v === BLACK ? ', black' : v === WHITE ? ', white' : ''}`);
       }
       el.disabled = !myTurn || v !== '.';
@@ -4547,13 +4571,20 @@ export class UI {
       els.players.replaceChildren(...seats);
     }
     els.pass.disabled = !myTurn;
+    els.pass.hidden = gomoku;
     els.resign.disabled = !(s && !s.over && mine && s.p[0] && s.p[1]);
     // Calling the AI friend over, for black waiting for someone to play.
     els.call.hidden = !(s && !s.over && mine === BLACK && !s.p[1] && !s.call);
     const callText = `🤖 Play with ${friend?.name ?? 'the AI friend'}`;
     if (els.call.textContent !== callText) els.call.textContent = callText;
-    for (const b of els.sizes) b.classList.toggle('on', Number(b.dataset.n) === n);
-    for (const b of els.sizes) b.disabled = !mine;
+    for (const b of els.sizes.querySelectorAll('.go-size')) {
+      b.classList.toggle('on', Number(b.dataset.n) === n);
+      b.disabled = !mine;
+    }
+    for (const b of els.kinds) {
+      b.classList.toggle('on', b.dataset.kind === kind);
+      b.disabled = !mine;
+    }
   }
 
   // What just happened at a board, as the tip over yours: why a stone could
@@ -4572,6 +4603,10 @@ export class UI {
     // A tip stays until you play.
     else if (msg.f === 'move' && msg.by === g.pid) tip = '';
     else if (msg.f === 'pass') tip = msg.by === g.pid ? '✋ You passed.' : `✋ ${name(msg.by)} passed. Pass too to end the game and count, or keep playing.`;
+    else if (msg.f === 'row' && mine) {
+      const what = msg.len === 4 ? 'four in a row' : 'three in a row, both ends open';
+      tip = msg.c === mine ? `⭐ You have ${what}! ${msg.len === 4 ? 'One more for five!' : 'Make it an open four!'}` : `⚠️ ${name(msg.by ?? s?.p[msg.c === BLACK ? 0 : 1])} has ${what}: block ${msg.len === 4 ? 'it now' : 'an end'}!`;
+    } else if (msg.f === 'end' && msg.kind === 'gomoku') tip = msg.why === 'five' ? (msg.win === mine ? '🎉 Five in a row!' : '🖐️ Five in a row: that is the game.') : '';
     else if (msg.f === 'end') tip = msg.why === 'score' ? `🧮 Counted: your stones, and the empty places only your stones surround. ⚫ ${msg.b} · ⚪ ${msg.w}.` : '';
     else if (msg.f === 'new') tip = '';
     if (tip === null) return;
@@ -4588,7 +4623,8 @@ export class UI {
     els.lessons.hidden = k < 0;
     els.how.setAttribute('aria-expanded', String(k >= 0));
     if (k < 0) return;
-    const l = LESSONS[k];
+    const lessons = lessonsOf(this.game?.goGame?.kind ?? this.game?.goKind);
+    const l = lessons[k];
     const n = l.board.length;
     const mini = h('div', { class: 'go-board mini', style: `--n: ${n}`, 'aria-hidden': 'true' });
     for (let r = 0; r < n; r++) {
@@ -4598,11 +4634,11 @@ export class UI {
       }
     }
     const back = h('button', { class: 'chip', type: 'button', disabled: k === 0, onclick: () => this.goLesson(k - 1) }, '◀ Back');
-    const next = k < LESSONS.length - 1 ? h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(k + 1) }, 'Next ▶') : h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(-1) }, '✔ Got it!');
+    const next = k < lessons.length - 1 ? h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(k + 1) }, 'Next ▶') : h('button', { class: 'chip', type: 'button', onclick: () => this.goLesson(-1) }, '✔ Got it!');
     els.lessons.replaceChildren(
       h('h3', {}, `${k + 1}. ${l.title}`),
       h('div', { class: 'go-lesson' }, mini, h('p', {}, l.text)),
-      h('div', { class: 'go-row' }, back, h('span', { class: 'muted' }, `${k + 1} of ${LESSONS.length}`), next),
+      h('div', { class: 'go-row' }, back, h('span', { class: 'muted' }, `${k + 1} of ${lessons.length}`), next),
     );
     els.lessons.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }

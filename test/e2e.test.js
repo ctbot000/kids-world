@@ -4314,6 +4314,76 @@ test('a Go board: Q by it sits you down as black, the AI friend called over play
   await page.browserContext().close();
 });
 
+test('Gomoku at a Go board: switched to from Go, a 15×15 board, the AI friend called over, an open three told of, and five in a row wins with a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A Go board beside the start, a stand-in AI friend by it, and you at it.
+  const at = await page.evaluate((id, protocol) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground || room.world.top(x + 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    const c = { send() {}, close() {} };
+    room.attach(c);
+    room.receive(c, { t: 'join', protocol, name: 'Pip 🤖', look: { animal: 'kid' }, ai: true });
+    [...room.players.values()].find((p) => p.ai).s = [x + 1.5, ground + 1, z + 0.5, 0, 0, 0];
+    kw.pip = (op, extra = {}) => room.receive(c, { t: 'go', op, x, y: ground + 1, z, ...extra });
+    return { x, y: ground + 1, z, id };
+  }, GO_BOARD, PROTOCOL);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 60; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play Go'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.goGame?.kind === 'go');
+  await page.evaluate(() => document.querySelector('.go-kind[data-kind="gomoku"]').click());
+  await until(page, () => window.kidsWorld.game.goGame?.kind === 'gomoku' && document.querySelectorAll('.go-board .go-pt').length === 225);
+  assert.equal(await page.evaluate(() => document.querySelector('#modal h2').textContent), '⚫ Gomoku ⚪');
+  assert.ok(await page.evaluate(() => document.querySelector('.go-row .chip').hidden), 'no Pass at Gomoku');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.go-size')].map((b) => b.textContent)), ['9×9', '13×13', '15×15']);
+  await page.click('.go-call');
+  await until(page, () => window.kidsWorld.game.goGame?.call === true);
+  await page.evaluate(() => window.kidsWorld.pip('sit'));
+  await until(page, () => document.querySelector('.go-status').textContent.includes('Your turn'));
+  // Black across the middle, Pip well away; three with both ends open is told of.
+  const tap = (i) => page.evaluate((i) => document.querySelectorAll('.go-board .go-pt')[i].click(), i);
+  const row = [108, 109, 110, 111, 112];
+  for (const [k, i] of row.entries()) {
+    await tap(i);
+    await until(page, (i) => window.kidsWorld.game.goGame?.b[i] === 'b', i);
+    if (k === 2) await until(page, () => /You have three in a row/.test(document.querySelector('.go-tip').textContent));
+    if (k < 4) {
+      await page.evaluate((j) => window.kidsWorld.pip('move', { i: j }), k);
+      await until(page, (j) => window.kidsWorld.game.goGame?.b[j] === 'w', k);
+    }
+  }
+  await until(page, () => /Five in a row — You win/.test(document.querySelector('.go-status').textContent) && document.querySelectorAll('.go-stone.win').length === 5);
+  await until(page, () => window.kidsWorld.profile.data.stats.gomokuwins === 1 && window.kidsWorld.profile.data.stickers['five-in-a-row']);
+  // How to play is Gomoku's.
+  await page.evaluate(() => [...document.querySelectorAll('.go-row .chip')].find((b) => b.textContent.includes('How to play')).click());
+  await until(page, () => document.querySelector('.go-lessons h3')?.textContent === '1. Five in a row');
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.goGames.size === 0);
+  // The next board you sit down at starts on Gomoku.
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.goKind), 'gomoku');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a drawing board: Q by it opens its picture, a line drawn with the mouse and one with a finger, a fill and a friend’s stroke all show on it and on the board, it is saved as a file and to your gallery, put up again from the gallery after wiping the board clean, picking the board up leaves no picture, and the gallery’s picture is taken down from ⭐ Stickers', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

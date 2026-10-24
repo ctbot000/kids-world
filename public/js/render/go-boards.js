@@ -1,4 +1,4 @@
-// The games of Go on the island's Go boards (shared/go.js): each a little
+// The games of Go and Gomoku on the island's Go boards (shared/go.js): each a little
 // canvas of the game's lines and stones laid over its board's wood, lit like
 // the blocks round it, as drawings.js lays pictures over drawing boards, so
 // everyone sees the game going.
@@ -128,7 +128,8 @@ export function paintGo(canvas, g) {
   }
   ctx.stroke();
   const mid = (n - 1) / 2;
-  const stars = n >= 9 ? [[2, 2], [2, n - 3], [n - 3, 2], [n - 3, n - 3], [mid, mid]] : [[mid, mid]];
+  const e = n >= 13 ? 3 : 2;
+  const stars = n >= 9 ? [[e, e], [e, n - 1 - e], [n - 1 - e, e], [n - 1 - e, n - 1 - e], [mid, mid]] : [[mid, mid]];
   ctx.fillStyle = '#3a2a1c';
   for (const [r, c] of stars) {
     ctx.beginPath();

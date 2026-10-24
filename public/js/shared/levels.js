@@ -75,6 +75,8 @@ export const XP_FOR = {
   strokes: { xp: 0.5, cap: 400 },
   gogames: { xp: 10, cap: 200 },
   gowins: { xp: 20, cap: 200 },
+  gomokugames: { xp: 5, cap: 200 },
+  gomokuwins: { xp: 10, cap: 200 },
   quizzes: { xp: 10 },
   quizright: { xp: 5, cap: 5000 },
   quizperfect: { xp: 25 },

@@ -1607,8 +1607,8 @@ export class Room {
 
   // ------------------------------------------------ Go
 
-  // At a Go board: sitting down to play (a new game, or the empty seat of
-  // one), a fresh board, calling the AI friend over, a stone, a pass,
+  // At a Go board: sitting down to play (a new game of Go or Gomoku, or the
+  // empty seat of one), a fresh board (of either game), calling the AI friend over, a stone, a pass,
   // giving up, or getting up. Anyone near the board, as for the arcade; a
   // stone that cannot go there is told of in a 'gofx' 'no', for the page to
   // say why (and the AI friend to explain).
@@ -1621,8 +1621,9 @@ export class Room {
     }
     if (Math.hypot(p.s[0] - msg.x - 0.5, p.s[2] - msg.z - 0.5) > GO_REACH + 1 || Math.abs(p.s[1] - msg.y) > 4) return;
     let fx = [];
-    if (msg.op === 'sit') fx = this.go.sit(msg.x, msg.y, msg.z, p.id, p.ai === true);
-    else if (msg.op === 'new') fx = this.go.restart(k, p.id, msg.n);
+    const kind = msg.kind === 'gomoku' ? 'gomoku' : 'go';
+    if (msg.op === 'sit') fx = this.go.sit(msg.x, msg.y, msg.z, p.id, p.ai === true, kind);
+    else if (msg.op === 'new') fx = this.go.restart(k, p.id, msg.n, msg.kind === undefined ? null : kind);
     else if (msg.op === 'call') {
       if (!this.onlinePlayers().some((q) => q.ai)) {
         this.notice(conn, 'The AI friend is not on this island right now. 💌 Invite it from 👫 Players, then ask again!', 'info');

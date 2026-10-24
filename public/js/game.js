@@ -238,6 +238,8 @@ export class Game extends EventTarget {
     this.goGames = new Map();
     this.goTarget = null;
     this.goAt = null;
+    // The game picked last at a board, to sit down to next: 'go' or 'gomoku'.
+    this.goKind = 'go';
     // A round of hide and seek on the island (shared/hideseek.js), or null,
     // and when it was told of, to count its time down from.
     this.hideseek = null;
@@ -2513,7 +2515,7 @@ export class Game extends EventTarget {
     const t = this.goTarget;
     if (!t) return;
     this.goAt = t;
-    this.goSend('sit');
+    this.goSend('sit', { kind: this.goKind });
     this.sound.play('open');
     this.emit('go-open');
   }
@@ -2538,7 +2540,8 @@ export class Game extends EventTarget {
   }
 
   // What just happened at a board: a stone's click, a capture's pop, and at
-  // the end of a game you played, counted for XP and the Go stickers.
+  // the end of a game you played, counted for XP and the Go and Gomoku
+  // stickers.
   goFx(msg) {
     const mine = this.goAt?.key === msg.k;
     if (msg.f === 'move') {
@@ -2552,9 +2555,10 @@ export class Game extends EventTarget {
     } else if (msg.f === 'end' && Array.isArray(msg.p)) {
       const seat = msg.p.indexOf(this.pid);
       if (seat >= 0) {
-        this.profile.count('gogames');
+        const gomoku = msg.kind === 'gomoku';
+        this.profile.count(gomoku ? 'gomokugames' : 'gogames');
         const won = msg.win === (seat === 0 ? 'b' : 'w');
-        if (won) this.profile.count('gowins');
+        if (won) this.profile.count(gomoku ? 'gomokuwins' : 'gowins');
         this.sound.play(won ? 'fanfare' : 'ding');
       }
     }

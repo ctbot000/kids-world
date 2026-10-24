@@ -10,6 +10,11 @@
 //
 // Small boards only, to learn on: 5×5, 7×7 and 9×9.
 //
+// Gomoku (오목) is played at the same boards with the same stones: black
+// and white take turns, black first, and the first to get five (or more) in
+// a row — across, down or slanting — wins; nothing is ever captured. A board
+// filled up with no five is a draw. On 9×9, 13×13 and 15×15 boards.
+//
 // The host runs the games (GoSim, from room.js) as it runs the arcade's, and
 // tells every page how they are going ('go') and what just happened
 // ('gofx'). Anyone at a board can sit down to play it; a second player joins
@@ -20,8 +25,16 @@
 import { BLOCKS } from './blocks.js';
 import { cellNear, keyOf } from './arcade.js';
 
-export const SIZES = [5, 7, 9];
-export const DEFAULT_SIZE = 5;
+// The games a board plays, each with its sizes and the one it starts on.
+export const GAMES = {
+  go: { key: 'go', name: 'Go', icon: '⚫', sizes: [5, 7, 9], size: 5 },
+  gomoku: { key: 'gomoku', name: 'Gomoku', icon: '⭕', sizes: [9, 13, 15], size: 15 },
+};
+export const gameOf = (kind) => GAMES[kind] ?? GAMES.go;
+export const SIZES = GAMES.go.sizes;
+export const DEFAULT_SIZE = GAMES.go.size;
+// How many in a row win at Gomoku.
+export const ROW = 5;
 // How near a board you must stand to play at it.
 export const REACH = 3.5;
 // Black, white, and nobody's.
@@ -129,7 +142,7 @@ export function score(board, n) {
 // right, skipping I as Go boards do) and a number for the row (from the
 // bottom), like "C3".
 export function placeName(n, i) {
-  const letters = 'ABCDEFGHJ';
+  const letters = 'ABCDEFGHJKLMNOP';
   return `${letters[i % n]}${n - Math.floor(i / n)}`;
 }
 
@@ -236,6 +249,126 @@ export function pickMove(game, c, random = Math.random) {
   return best;
 }
 
+// ---------------------------------------------------------------- Gomoku
+
+// The four ways a row can go: across, down and the two slants.
+const DIRS = [
+  [0, 1],
+  [1, 0],
+  [1, 1],
+  [1, -1],
+];
+
+// The row of c's stones through i one way (dr, dc), as if c's stone were at
+// i: its places, and how many of its two ends are open (empty, on the board).
+export function rowAt(board, n, i, c, [dr, dc]) {
+  const r0 = Math.floor(i / n);
+  const c0 = i % n;
+  const places = [i];
+  let open = 0;
+  for (const s of [1, -1]) {
+    let r = r0 + dr * s;
+    let col = c0 + dc * s;
+    while (r >= 0 && col >= 0 && r < n && col < n && board[r * n + col] === c) {
+      places.push(r * n + col);
+      r += dr * s;
+      col += dc * s;
+    }
+    if (r >= 0 && col >= 0 && r < n && col < n && board[r * n + col] === EMPTY) open++;
+  }
+  return { places, open };
+}
+
+// Five or more in a row through i for the stone there: its places, or null.
+export function fiveAt(board, n, i) {
+  const c = board[i];
+  if (c !== BLACK && c !== WHITE) return null;
+  for (const d of DIRS) {
+    const row = rowAt(board, n, i, c, d);
+    if (row.places.length >= ROW) return row.places.sort((a, b) => a - b);
+  }
+  return null;
+}
+
+// The longest row the stone at i makes that is worth a word: { len, open }
+// for four in a row (open at either end) or three open at both, or null.
+export function threatAt(board, n, i) {
+  const c = board[i];
+  let best = null;
+  for (const d of DIRS) {
+    const { places, open } = rowAt(board, n, i, c, d);
+    const len = places.length;
+    if (len >= ROW) return null;
+    if ((len === 4 && open > 0) || (len === 3 && open === 2)) {
+      if (!best || len > best.len || (len === best.len && open > best.open)) best = { len, open };
+    }
+  }
+  return best;
+}
+
+// What a row of len with `open` ends is worth to whoever makes it.
+function rowWorth(len, open) {
+  if (len >= ROW) return 1e6;
+  if (open === 0) return 0;
+  if (len === 4) return open === 2 ? 5e4 : 4000;
+  if (len === 3) return open === 2 ? 3000 : 150;
+  if (len === 2) return open === 2 ? 80 : 10;
+  return open;
+}
+
+// How good a stone at i is for c: what it makes for c, and what it stops
+// the other side making there.
+export function gomokuValue(board, n, i, c, random = Math.random) {
+  if (board[i] !== EMPTY) return -Infinity;
+  let attack = 0;
+  let defense = 0;
+  for (const d of DIRS) {
+    const mine = rowAt(board, n, i, c, d);
+    attack += rowWorth(mine.places.length, mine.open);
+    const theirs = rowAt(board, n, i, other(c), d);
+    let stop = rowWorth(theirs.places.length, theirs.open);
+    // Now and then it misses an open three coming, so a child can win.
+    if (theirs.places.length === 3 && theirs.open === 2 && random() < 0.35) stop = 60;
+    defense += stop;
+  }
+  return attack + defense * 0.9;
+}
+
+// The AI friend's move at Gomoku: a place near the stones already down (the
+// middle first), or -1 for a full board.
+export function pickGomoku(game, c, random = Math.random) {
+  const { n, b: board } = game;
+  const mid = Math.floor((n * n) / 2);
+  if (board[mid] === EMPTY && ![...board].some((s) => s !== EMPTY)) return mid;
+  let best = -1;
+  let bestV = -Infinity;
+  for (let i = 0; i < n * n; i++) {
+    if (board[i] !== EMPTY) continue;
+    const r = Math.floor(i / n);
+    const col = i % n;
+    let near = false;
+    for (let dr = -2; dr <= 2 && !near; dr++) for (let dc = -2; dc <= 2 && !near; dc++) {
+      const rr = r + dr;
+      const cc = col + dc;
+      if (rr >= 0 && cc >= 0 && rr < n && cc < n && board[rr * n + cc] !== EMPTY) near = true;
+    }
+    if (!near) continue;
+    const v = gomokuValue(board, n, i, c, random) * (1 + random() * 0.15) + random() * 5;
+    if (v > bestV) {
+      bestV = v;
+      best = i;
+    }
+  }
+  if (best < 0 && board[mid] === EMPTY) return mid;
+  if (best < 0) best = board.indexOf(EMPTY);
+  return best;
+}
+
+// The AI friend's move, at whichever game: a place, or -1 to pass.
+export function pickFor(game, c, random = Math.random) {
+  return game.kind === 'gomoku' ? pickGomoku(game, c, random) : pickMove(game, c, random);
+}
+
 // ---------------------------------------------------------------- teaching
 // The rules in steps, as the window's 📖 How to play shows them and the AI
 // friend teaches them as you play, each with a little picture: a board's
@@ -273,6 +406,29 @@ export const LESSONS = [
   },
 ];
 
+// Gomoku's rules, the same way ('o' marks where to play).
+export const GOMOKU_LESSONS = [
+  {
+    key: 'five',
+    title: 'Five in a row',
+    text: 'Take turns putting one stone on a crossing, black first. The first to get five stones in a row wins: across, down or slanting!',
+    board: ['.......', '.......', '.bbbbb.', '..www..', '...w...', '.......', '.......'],
+  },
+  {
+    key: 'block',
+    title: 'Block it!',
+    text: 'Watch your friend\'s stones too. Three in a row with both ends open is dangerous: put your stone on one end to block it.',
+    board: ['.......', '.......', '.owww..', '...b...', '..b....', '.......', '.......'],
+  },
+  {
+    key: 'four',
+    title: 'Open four',
+    text: 'Four in a row with both ends open cannot be stopped: block one end and the other wins. Make one of your own, and block theirs at three!',
+    board: ['.......', '.......', '.obbbbo', '.w.w...', '..w....', '.......', '.......'],
+  },
+];
+export const lessonsOf = (kind) => (kind === 'gomoku' ? GOMOKU_LESSONS : LESSONS);
+
 // What a try that did not go on the board was, in words.
 export const NO_MOVE = {
   taken: 'There is a stone there already.',
@@ -290,14 +446,16 @@ export class GoSim {
     // ([black pid, white pid], 0 for an empty seat), cap ({ b, w }: stones
     // each has taken), ko, last (the last stone, or -1), passes (in a row),
     // m (moves played), over (null, or { b, w, win, why }), call (the AI
-    // friend asked for), ai (its pid, sitting as white, or 0) }.
+    // friend asked for), ai (its pid, sitting as white, or 0), kind ('go'
+    // or 'gomoku') }; over has the five's places, `line`, at Gomoku.
     this.games = new Map();
   }
 
   // A new game at a board, with whoever sat at it as black.
-  start(x, y, z, pid, n = DEFAULT_SIZE, white = 0) {
+  start(x, y, z, pid, n = DEFAULT_SIZE, white = 0, kind = 'go') {
     const k = keyOf(x, y, z);
-    const g = { k, x, y, z, n: SIZES.includes(n) ? n : DEFAULT_SIZE, b: '', t: BLACK, p: [pid, white], cap: { b: 0, w: 0 }, ko: -1, last: -1, passes: 0, m: 0, over: null, call: false, ai: 0 };
+    const game = gameOf(kind);
+    const g = { k, x, y, z, kind: game.key, n: game.sizes.includes(n) ? n : game.size, b: '', t: BLACK, p: [pid, white], cap: { b: 0, w: 0 }, ko: -1, last: -1, passes: 0, m: 0, over: null, call: false, ai: 0 };
     g.b = emptyBoard(g.n);
     this.games.set(k, g);
     return g;
@@ -312,7 +470,7 @@ export class GoSim {
   // Sitting down at a board: a new game if none is going there, or the
   // empty seat of one that is. The AI friend (`ai`) sits only where it was
   // called, as white. [fx] of what happened.
-  sit(x, y, z, pid, ai = false) {
+  sit(x, y, z, pid, ai = false, kind = 'go') {
     const k = keyOf(x, y, z);
     const g = this.games.get(k);
     if (ai) {
@@ -323,7 +481,7 @@ export class GoSim {
       return [{ k, f: 'sit', by: pid, c: WHITE, ai: true }];
     }
     if (!g) {
-      this.start(x, y, z, pid);
+      this.start(x, y, z, pid, undefined, 0, kind);
       return [{ k, f: 'sit', by: pid, c: BLACK }];
     }
     if (this.colorOf(g, pid)) return [];
@@ -338,14 +496,16 @@ export class GoSim {
     return !g.p.some((pid) => pid && pid !== g.ai);
   }
 
-  // A fresh board at size n, for a player at it (the same two playing).
-  restart(k, pid, n) {
+  // A fresh board at size n, for a player at it (the same two playing), of
+  // the same game or the other one.
+  restart(k, pid, n, kind = null) {
     const g = this.games.get(k);
     if (!g || !this.colorOf(g, pid)) return [];
-    const fresh = this.start(g.x, g.y, g.z, g.p[0], SIZES.includes(n) ? n : g.n, g.p[1]);
+    const game = gameOf(kind ?? g.kind);
+    const fresh = this.start(g.x, g.y, g.z, g.p[0], game.sizes.includes(n) ? n : game.key === g.kind ? g.n : game.size, g.p[1], game.key);
     fresh.call = g.call;
     fresh.ai = g.ai;
-    return [{ k, f: 'new', by: pid, n: fresh.n }];
+    return [{ k, f: 'new', by: pid, n: fresh.n, kind: fresh.kind }];
   }
 
   // 🤖 Play with Pip: the AI friend asked to come and play white.
@@ -364,6 +524,7 @@ export class GoSim {
     const c = this.colorOf(g, pid);
     if (!c) return [];
     if (c !== g.t || !g.p[0] || !g.p[1]) return { why: 'turn' };
+    if (g.kind === 'gomoku') return this.moveGomoku(g, pid, c, i);
     const res = tryMove(g.b, g.n, i, c, g.ko);
     if (res.why) return { why: res.why };
     g.b = res.board;
@@ -385,9 +546,29 @@ export class GoSim {
     return fx;
   }
 
+  // A stone at Gomoku: five in a row wins, a full board is a draw, and four
+  // in a row (or an open three) is told of, to look out for.
+  moveGomoku(g, pid, c, i) {
+    if (!Number.isInteger(i) || i < 0 || i >= g.n * g.n) return { why: 'off' };
+    if (g.b[i] !== EMPTY) return { why: 'taken' };
+    g.b = g.b.slice(0, i) + c + g.b.slice(i + 1);
+    g.last = i;
+    g.m++;
+    g.t = other(c);
+    const fx = [{ k: g.k, f: 'move', by: pid, c, i, took: 0 }];
+    const line = fiveAt(g.b, g.n, i);
+    if (line) fx.push(this.finish(g, 'five', c, line));
+    else if (!g.b.includes(EMPTY)) fx.push(this.finish(g, 'full', 'draw'));
+    else {
+      const threat = threatAt(g.b, g.n, i);
+      if (threat) fx.push({ k: g.k, f: 'row', c, i, ...threat });
+    }
+    return fx;
+  }
+
   pass(k, pid) {
     const g = this.games.get(k);
-    if (!g || g.over) return [];
+    if (!g || g.over || g.kind === 'gomoku') return [];
     const c = this.colorOf(g, pid);
     if (!c || c !== g.t || !g.p[1]) return [];
     g.passes++;
@@ -407,11 +588,15 @@ export class GoSim {
     return [this.finish(g, 'resign', other(c))];
   }
 
-  finish(g, why, winner = null) {
+  finish(g, why, winner = null, line = null) {
+    if (g.kind === 'gomoku') {
+      g.over = { win: winner, why, ...(line ? { line } : {}) };
+      return { k: g.k, f: 'end', kind: g.kind, ...g.over, p: [...g.p] };
+    }
     const s = score(g.b, g.n);
     const win = winner ?? (s.b > s.w ? BLACK : s.w > s.b ? WHITE : 'draw');
     g.over = { b: s.b, w: s.w, win, why };
-    return { k: g.k, f: 'end', ...g.over, p: [...g.p] };
+    return { k: g.k, f: 'end', kind: g.kind, ...g.over, p: [...g.p] };
   }
 
   // Someone gone from the island, or up from a board: out of their seat,
@@ -448,6 +633,6 @@ export class GoSim {
 
   // Every game, as the pages and the AI friend get them.
   pack() {
-    return [...this.games.values()].map((g) => ({ k: g.k, x: g.x, y: g.y, z: g.z, n: g.n, b: g.b, t: g.t, p: [...g.p], cap: { ...g.cap }, ko: g.ko, last: g.last, passes: g.passes, m: g.m, over: g.over, call: g.call, ai: g.ai }));
+    return [...this.games.values()].map((g) => ({ k: g.k, kind: g.kind, x: g.x, y: g.y, z: g.z, n: g.n, b: g.b, t: g.t, p: [...g.p], cap: { ...g.cap }, ko: g.ko, last: g.last, passes: g.passes, m: g.m, over: g.over, call: g.call, ai: g.ai }));
   }
 }

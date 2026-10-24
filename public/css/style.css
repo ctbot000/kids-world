@@ -3712,6 +3712,11 @@ button.go-pt {
   }
 }
 
+/* Gomoku's five in a row, once it is made. */
+.go-stone.win {
+  box-shadow: 0 0 0 3px var(--sun), 0 0 10px 3px rgba(255, 210, 63, 0.8);
+}
+
 /* In a lesson: a breathing space, and a place not to play. */
 .go-mark.breath {
   width: 40%;

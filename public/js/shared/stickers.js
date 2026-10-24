@@ -82,6 +82,8 @@ export const STICKERS = [
   { key: 'go-player', icon: '⚫', name: 'Go Player', text: 'Play a whole game of Go at a Go board', test: (s) => s.gogames >= 1 },
   { key: 'go-winner', icon: '⚪', name: 'Go Winner', text: 'Win a game of Go', test: (s) => s.gowins >= 1 },
   { key: 'go-master', icon: '🏯', name: 'Go Master', text: 'Win 10 games of Go', test: (s) => s.gowins >= 10 },
+  { key: 'five-in-a-row', icon: '⭕', name: 'Five in a Row', text: 'Win a game of Gomoku at a Go board', test: (s) => s.gomokuwins >= 1 },
+  { key: 'gomoku-champ', icon: '🎖️', name: 'Gomoku Champ', text: 'Win 10 games of Gomoku', test: (s) => s.gomokuwins >= 10 },
   { key: 'piano-star', icon: '🎹', name: 'Piano Star', text: 'Play a whole song on a piano', test: (s) => s.tunes >= 1 },
   { key: 'concert-pianist', icon: '🎼', name: 'Concert Pianist', text: 'Play 25 whole songs on a piano', test: (s) => s.tunes >= 25 },
   { key: 'sharp-memory', icon: '🃏', name: 'Sharp Memory', text: 'Find 25 pairs on Picture Pairs', test: (s) => s.pairsfound >= 25 },
@@ -101,4 +103,4 @@ export const STICKERS = [
   { key: 'harvest-champion', icon: '🏅', name: 'Harvest Champion', text: 'Pick 1,000 vegetables', test: (s) => s.harvested >= 1000 },
 ];
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered'];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'bounces', 'campouts', 'freed', 'helped', 'kings', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'gomokugames', 'gomokuwins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered'];

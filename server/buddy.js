@@ -7,8 +7,9 @@
 // room of this dedicated server: dialer.js), walks and flies after a friend
 // with the game's physics, helps dizzy friends up, bops monsters that come at
 // them, puts down a stamp when asked, pets their pets, waves and dances,
-// and plays Go with a child who asks it to at a Go board, teaching the rules
-// as they play (shared/go.js picks its moves; the model says the lessons).
+// and plays Go or Gomoku with a child who asks it to at a Go board, teaching
+// the rules as they play (shared/go.js picks its moves; the model says the
+// lessons).
 //
 // Where it goes:
 //   - invited: it is on the keeper's players list (playing now while it can
@@ -43,7 +44,7 @@ import { dirname } from 'node:path';
 import * as B from '../public/js/shared/blocks.js';
 import { generateCode } from '../public/js/shared/codes.js';
 import { HELP_REACH } from '../public/js/shared/adventure.js';
-import { BLACK, LESSONS, NO_MOVE, pickMove, placeName, REACH as GO_REACH, WHITE } from '../public/js/shared/go.js';
+import { BLACK, gameOf, lessonsOf, NO_MOVE, pickFor, placeName, REACH as GO_REACH, WHITE } from '../public/js/shared/go.js';
 import { critterBox, CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { isNight } from '../public/js/shared/env.js';
 import { MONSTER_KINDS } from '../public/js/shared/monsters.js';
@@ -189,7 +190,7 @@ Rules, always:
 You can do one thing with each answer ("action"): follow (go with the friend), stay (wait here), wave, dance, cheer, hearts, clap, laugh, surprise, sleepy, build (put down a stamp next to you, named in "stamp": ${STAMP_KEYS.join(', ')}), pet (pet the friend's pet), leave (go home: when they say bye or goodbye, or want you to go). Otherwise "none". "stamp" is "none" unless you build.
 By yourself you also pop monsters that come at your friends and help dizzy friends up.
 
-Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A fun park island has a roller coaster (get in a car at its station and push ahead), a Ferris wheel and a merry-go-round (walk up and press Q to hop on; they go round by themselves). A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, vegetables, shells and jewels from your basket for coins, for running shoes, wings, roller skates (Roller Skates and Light-up Skates: on in place of shoes, faster on the ground, gliding on when you let go), toy weapons, clothes (a Cozy Scarf and a Royal Robe just for looks; a Hero Cape jumps higher, Knight Armor halves monster bumps, a Fire Suit swims in lava without burning), HP potions (Y drinks one, filling HP up at once) and vegetables to plant. Farming: plant a carrot, strawberry, tomato, corn, pumpkin or watermelon from your basket on grass or farmland, water it with the watering can from the toy box's Farm tab (rain waters it too) to grow it twice as fast, and tap it when it is ripe to pick two. Jump on a monster, or swing at it with X up close: a swing sweeps round in front of you and bops every monster it passes. A gashapon machine (Q beside it) takes 5 coins for a capsule toy; there are 18 to collect: 8 common, 7 rare and 3 super rare (the Golden Dragon, the Rainbow Phoenix and the Starlight Jellyfish). They are kept in the backpack. A piano or a grand piano (Home tab, Q beside it) plays: tap the keys, or pick a song and play the glowing key each time. A TV, a Retro TV or a Wall TV (Home tab, Q beside it) has five channels to watch: fish, a bunny, a rocket, the island's weather and a dance party. A Broadcast Station (Home tab, Q beside it, then Go live) puts your own camera and microphone on every TV on every island, on the On Air channel. The School stamp is a schoolhouse with a classroom of desks; at a chalkboard (Home tab too, Q beside it, then Class) you pick a class, Year 2 of elementary school or Year 3 of middle school, and answer three questions for coins. At a stove (Home tab, or the Cooking School stamp, Q beside it, then Cook) there is a cooking class: pick a recipe (pancakes, pizza, salad, cookies, veggie soup, a sandwich) and tap its steps in the right order, a coin for each right first time. Sit down at a Study Desk (Home tab) and your workbooks open: adding, taking away, times tables, sharing and spelling. New facts are shown first, then you type the answers; a miss shows the answer and a way to work it out, and each fact got right four times is known by heart. A Go Board (Home tab, Q beside it, then Play Go) plays Go on a small board, 5×5, 7×7 or 9×9: black and white take turns putting stones on the crossings, a stone or group with no breathing spaces (liberties) left is captured, and at the end you count your stones and the places you surround; with a friend, or with you: tap 🤖 Play with ${name} and you come over, play white and teach the rules as you go. A Drawing Board (Home tab, Q beside it, then Draw) is a whiteboard to draw a picture on, with friends too, and everyone sees it on the board; To my gallery keeps the picture in your own gallery (My gallery, at a board or in Stickers), to put up on a board again. On a volcano island a big wild green dragon sleeps by the crater: go near and it wakes and breathes fire (run out of the way it faces when it rears back); bop it with X until it is tired out to tame it, then ride it and hold jump to fly; tame a dragon 10 times and your own dragon is in the toy box's Animals tab. On an adventure island, pop a camp's monsters and stand by its flag to free it. Now and then a Monster Gashapon turns up there with a beam of light: 10 coins for a figure of a real monster (10 of them; King Grumble and the Stone Golem are the rarest, likelier on higher stages of Adventure Isle). Higher stages bring tougher monsters: a Grumble Knight (helmet and shield, eight bops) and a Stone Golem (huge and strong, twelve bops). The CTB island is an office where Grace, CTB's guide, meets visitors at the gate and walks them in, and CTB's helpers (Ada, Ben, Cleo and Dev) sit at their desks making Kids World better, fixing things and adding new ones; anyone can visit it and ask them what they are working on, and a child logged in can send them an idea for the game with 💡 An idea for the game? in Help or Settings: one of them reads it and writes back. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
+Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A fun park island has a roller coaster (get in a car at its station and push ahead), a Ferris wheel and a merry-go-round (walk up and press Q to hop on; they go round by themselves). A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, vegetables, shells and jewels from your basket for coins, for running shoes, wings, roller skates (Roller Skates and Light-up Skates: on in place of shoes, faster on the ground, gliding on when you let go), toy weapons, clothes (a Cozy Scarf and a Royal Robe just for looks; a Hero Cape jumps higher, Knight Armor halves monster bumps, a Fire Suit swims in lava without burning), HP potions (Y drinks one, filling HP up at once) and vegetables to plant. Farming: plant a carrot, strawberry, tomato, corn, pumpkin or watermelon from your basket on grass or farmland, water it with the watering can from the toy box's Farm tab (rain waters it too) to grow it twice as fast, and tap it when it is ripe to pick two. Jump on a monster, or swing at it with X up close: a swing sweeps round in front of you and bops every monster it passes. A gashapon machine (Q beside it) takes 5 coins for a capsule toy; there are 18 to collect: 8 common, 7 rare and 3 super rare (the Golden Dragon, the Rainbow Phoenix and the Starlight Jellyfish). They are kept in the backpack. A piano or a grand piano (Home tab, Q beside it) plays: tap the keys, or pick a song and play the glowing key each time. A TV, a Retro TV or a Wall TV (Home tab, Q beside it) has five channels to watch: fish, a bunny, a rocket, the island's weather and a dance party. A Broadcast Station (Home tab, Q beside it, then Go live) puts your own camera and microphone on every TV on every island, on the On Air channel. The School stamp is a schoolhouse with a classroom of desks; at a chalkboard (Home tab too, Q beside it, then Class) you pick a class, Year 2 of elementary school or Year 3 of middle school, and answer three questions for coins. At a stove (Home tab, or the Cooking School stamp, Q beside it, then Cook) there is a cooking class: pick a recipe (pancakes, pizza, salad, cookies, veggie soup, a sandwich) and tap its steps in the right order, a coin for each right first time. Sit down at a Study Desk (Home tab) and your workbooks open: adding, taking away, times tables, sharing and spelling. New facts are shown first, then you type the answers; a miss shows the answer and a way to work it out, and each fact got right four times is known by heart. A Go Board (Home tab, Q beside it, then Play Go) plays Go or Gomoku. Gomoku (five in a row) is on a 9×9, 13×13 or 15×15 board: take turns, and the first to get five stones in a row across, down or slanting wins; block three with both ends open. Go is on a small board, 5×5, 7×7 or 9×9: black and white take turns putting stones on the crossings, a stone or group with no breathing spaces (liberties) left is captured, and at the end you count your stones and the places you surround; with a friend, or with you: tap 🤖 Play with ${name} and you come over, play white and teach the rules as you go. A Drawing Board (Home tab, Q beside it, then Draw) is a whiteboard to draw a picture on, with friends too, and everyone sees it on the board; To my gallery keeps the picture in your own gallery (My gallery, at a board or in Stickers), to put up on a board again. On a volcano island a big wild green dragon sleeps by the crater: go near and it wakes and breathes fire (run out of the way it faces when it rears back); bop it with X until it is tired out to tame it, then ride it and hold jump to fly; tame a dragon 10 times and your own dragon is in the toy box's Animals tab. On an adventure island, pop a camp's monsters and stand by its flag to free it. Now and then a Monster Gashapon turns up there with a beam of light: 10 coins for a figure of a real monster (10 of them; King Grumble and the Stone Golem are the rarest, likelier on higher stages of Adventure Isle). Higher stages bring tougher monsters: a Grumble Knight (helmet and shield, eight bops) and a Stone Golem (huge and strong, twelve bops). The CTB island is an office where Grace, CTB's guide, meets visitors at the gate and walks them in, and CTB's helpers (Ada, Ben, Cleo and Dev) sit at their desks making Kids World better, fixing things and adding new ones; anyone can visit it and ask them what they are working on, and a child logged in can send them an idea for the game with 💡 An idea for the game? in Help or Settings: one of them reads it and writes back. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
 
 Answer with JSON only: {"say": "...", "action": "...", "stamp": "..."}.`;
 }
@@ -1470,18 +1471,18 @@ export class Visit extends EventEmitter {
     const spot = { x: cx + (from[0] / d) * GO_STAND, y: g.y, z: cz + (from[1] / d) * GO_STAND };
     const near = Math.hypot(b.x - cx, b.z - cz) <= GO_REACH && Math.abs(b.y - g.y) < 3;
     if (g.p[1] !== this.me) {
-      this.doing = `Going over to play Go with ${name}`;
+      this.doing = `Going over to play ${gameOf(g.kind).name} with ${name}`;
       if (near && now - this.goSitAt > 1000) {
         this.goSitAt = now;
         this.link.send({ t: 'go', op: 'sit', x: g.x, y: g.y, z: g.z });
       }
     } else if (g.over) {
-      this.doing = `Playing Go with ${name}: the game is over`;
+      this.doing = `Playing ${gameOf(g.kind).name} with ${name}: the game is over`;
     } else {
-      this.doing = `Playing Go with ${name} on a ${g.n}×${g.n} board`;
+      this.doing = `Playing ${gameOf(g.kind).name} with ${name} on a ${g.n}×${g.n} board`;
       if (near && g.t === WHITE && this.goMoveAt && now >= this.goMoveAt) {
         this.goMoveAt = now + GO_THINK_MS * this.buddy.pauses;
-        const i = pickMove(g, WHITE, this.random);
+        const i = pickFor(g, WHITE, this.random);
         this.link.send(i < 0 ? { t: 'go', op: 'pass', x: g.x, y: g.y, z: g.z } : { t: 'go', op: 'move', x: g.x, y: g.y, z: g.z, i });
       }
     }
@@ -1490,19 +1491,22 @@ export class Visit extends EventEmitter {
 
   // What happened at its game, to teach from: the rules a step at a time as
   // the game goes, a stone of the child's in danger, stones taken, a stone
-  // that could not go where they tried, a pass, and how it ended.
+  // that could not go where they tried, a pass, and how it ended; at Gomoku,
+  // a row of four (or an open three) to block or to finish.
   goFx(msg) {
     const g = this.goGames.find((x) => x.k === msg.k);
     if (!g || msg.k !== this.goKey || (g.p[1] !== this.me && !(msg.f === 'sit' && msg.by === this.me))) return;
     const kid = g.p[0];
     const name = this.players.get(kid)?.name ?? 'your friend';
     const now = this.now();
+    const kind = msg.f === 'new' && msg.kind ? msg.kind : g.kind;
+    const game = gameOf(kind).name;
     const lesson = (key, lead) => {
-      if (this.goTaught.has(key)) return false;
-      this.goTaught.add(key);
-      const l = LESSONS.find((x) => x.key === key);
+      if (this.goTaught.has(`${kind}:${key}`)) return false;
+      this.goTaught.add(`${kind}:${key}`);
+      const l = lessonsOf(kind).find((x) => x.key === key);
       this.goSaidAt = now;
-      this.event(`${lead} Teach ${name} this rule of Go now, in your own short, friendly words: ${l.text}`, kid);
+      this.event(`${lead} Teach ${name} this rule of ${game} now, in your own short, friendly words: ${l.text}`, kid);
       return true;
     };
     const say = (why, emote = '', always = false) => {
@@ -1510,15 +1514,23 @@ export class Visit extends EventEmitter {
       this.goSaidAt = now;
       this.event(why, kid, emote);
     };
-    const about = `You are playing Go with ${name} on a ${g.n}×${g.n} board: they are black, you are white.`;
+    const about = `You are playing ${game} with ${name} on a ${msg.f === 'new' ? msg.n : g.n}×${msg.f === 'new' ? msg.n : g.n} board: they are black, you are white.`;
+    const gomoku = kind === 'gomoku';
     switch (msg.f) {
       case 'sit':
-        if (!lesson('turns', `You just sat down to play Go with ${name}, who asked you to: they are black and go first, you are white. Say you will teach them as you play.`)) say(`${about} You just sat down to play again. Say it is their turn first.`, 'wave');
+        if (!lesson(gomoku ? 'five' : 'turns', `You just sat down to play ${game} with ${name}, who asked you to: they are black and go first, you are white. Say you will teach them as you play.`)) say(`${about} You just sat down to play again. Say it is their turn first.`, 'wave');
         break;
       case 'new':
-        say(`${about} ${name} started a new game on a ${msg.n}×${msg.n} board. Say good luck: black goes first.`);
+        if (lesson(gomoku ? 'five' : 'turns', `${about} ${name} just started a new game of ${game}.`)) break;
+        say(`${about} ${name} started a new game of ${game}. Say good luck: black goes first.`);
         break;
       case 'move':
+        if (gomoku) {
+          // (g is the game as it was before this move.)
+          if (msg.by === kid && g.m >= 4 && lesson('block', about)) break;
+          if (msg.by === kid && g.m >= 10) lesson('four', about);
+          break;
+        }
         if (msg.by === kid) {
           if (msg.took) say(`${about} ${name} just captured ${msg.took} of your stones by filling their last breathing space! Cheer for them and say how they did it.`, 'clap');
           // (g is the game as it was before this move.)
@@ -1539,13 +1551,19 @@ export class Visit extends EventEmitter {
         // (The page lets a stone go only where it might: this is worth a word.)
         say(`${about} ${name} just tried to put a stone where it cannot go: ${NO_MOVE[msg.why] ?? NO_MOVE.taken} Explain it simply.`, '', true);
         break;
+      case 'row': {
+        const what = msg.len === 4 ? 'four stones in a row' : 'three stones in a row with both ends open';
+        if (msg.c === WHITE) say(`${about} You just made ${what}. As a kind teacher, warn ${name}: ${msg.len === 4 ? 'block the open end now, or you get five and win' : 'put a stone on one end to block it, before it becomes an open four'}.`, '', msg.len === 4);
+        else say(`${about} ${name} just made ${what}! Cheer, and give a hint: ${msg.len === 4 ? 'one more stone on the open end makes five' : 'make it four with both ends open and you cannot be stopped'}.`, 'clap');
+        break;
+      }
       case 'pass':
         if (msg.by === kid) say(`${about} ${name} just passed: they think nothing more helps. Say that if you pass too the game ends, and you count each side's stones and the empty places only it surrounds.`);
         break;
       case 'end': {
         this.goSaidAt = now;
         const won = msg.win === WHITE ? 'you won' : msg.win === BLACK ? `${name} won` : 'it is a draw';
-        const how = msg.why === 'resign' ? `${msg.win === WHITE ? name : 'you'} gave up` : `counting stones and surrounded places, black has ${msg.b} and white has ${msg.w}`;
+        const how = msg.why === 'resign' ? `${msg.win === WHITE ? name : 'you'} gave up` : msg.why === 'five' ? `${msg.win === WHITE ? 'you' : name} got five in a row` : msg.why === 'full' ? 'the board is full with no five in a row' : `counting stones and surrounded places, black has ${msg.b} and white has ${msg.w}`;
         this.event(`${about} The game just ended: ${how}, so ${won}. ${msg.win === BLACK ? 'Cheer for them!' : 'Be a kind winner: say what they did well.'} Say they can play again with a fresh board (New game).`, kid, msg.win === BLACK ? 'cheer' : 'clap');
         break;
       }
