@@ -174,6 +174,21 @@ export class Agent {
     }
   }
 
+  // Carries on where a run a restart stopped left off: its steps and their
+  // results (its run log's step events, ctb-runs.js), back in the
+  // conversation, as if it had never stopped. How many steps that was.
+  resume(steps) {
+    for (const e of steps) {
+      if (e.step?.tool !== 'gate') {
+        this.messages.push({ role: 'assistant', content: JSON.stringify(e.step ?? null) });
+        this.steps++;
+      }
+      this.messages.push({ role: 'user', content: e.result, result: true });
+    }
+    this.shorten();
+    return this.steps;
+  }
+
   // A result for the model, also told to onResult.
   tell(step, content, extra = {}) {
     const message = { role: 'user', content, result: true, ...extra };

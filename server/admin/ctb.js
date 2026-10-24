@@ -130,7 +130,7 @@ function runsPanel({ h, ago, time, opened }) {
   let shown = null;
   let timer = 0;
 
-  const status = (s) => (!s.endedAt ? h('span', { class: 'badge warn' }, 'running') : s.ok ? h('span', { class: 'badge ok' }, 'done') : h('span', { class: 'badge bad' }, 'not done'));
+  const status = (s) => (!s.endedAt ? h('span', { class: 'badge warn' }, 'running') : s.ok ? h('span', { class: 'badge ok' }, 'done') : s.stopped ? h('span', { class: 'badge', title: 'The server stopped (a restart) in the middle of it; the next try carries on from here.' }, 'cut off') : h('span', { class: 'badge bad' }, 'not done'));
   const label = (s) => (s.issue ? `#${s.issue.number} ${s.issue.title}` : s.title);
 
   function renderList() {
@@ -247,6 +247,7 @@ function runsPanel({ h, ago, time, opened }) {
         { class: 'run-top' },
         h('h4', {}, KIND[s.kind] ?? s.kind, ' · ', s.worker, ' · ', s.issue ? h('a', { href: s.issue.url, target: '_blank', rel: 'noopener' }, label(s)) : label(s), ' ', status(s)),
         h('div', { class: 'muted' }, `${s.model} · started ${ago(s.at)} · ${took((s.endedAt || s.last) - s.at)} · ${s.kind === 'task' ? `${s.steps} steps · ` : ''}${s.calls} answers${s.failed ? ` (${s.failed} failed)` : ''} · ${num.format(s.promptTokens)} tokens in, ${num.format(s.tokens)} out${s.endedAt ? '' : ' · still going, updated every few seconds'}`),
+        s.resumed ? h('div', { class: 'muted' }, 'Carries on from ', h('button', { type: 'button', class: 'link', onclick: () => open(s.resumed) }, 'the run a restart cut off'), ': its steps were given back to the model.') : null,
         h('div', { class: 'run-actions' }, h('a', { class: 'button', href: `/admin/api/ctb/runs/${s.id}.txt`, download: `ctb-run-${s.id}.txt` }, 'Download transcript'), ' ', copyButton, ' ', h('button', { type: 'button', class: 'quiet', onclick: close }, 'Close')),
       ),
       ...cards,

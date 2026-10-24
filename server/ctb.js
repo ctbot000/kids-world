@@ -334,7 +334,13 @@ export class Company extends EventEmitter {
     try {
       await this.github.label(n, { add: [LABELS.working] });
       await this.github.comment(n, `${w.name} at CTB is on it, with ${model}.`);
-      const earlier = await this.checkout(dir, branch);
+      // Cut off by a restart last time: carried on, worktree and all.
+      let resumed = await this.interrupted(n, dir);
+      let earlier = resumed ? await this.reopen(dir).catch(() => null) : null;
+      if (!earlier) {
+        resumed = null;
+        earlier = await this.checkout(dir, branch);
+      }
       this.llm.model = model;
       const agent = new Agent({
         llm: this.llm,
@@ -343,15 +349,21 @@ export class Company extends EventEmitter {
         task: issue,
         layout: await layoutOf(dir),
         node: this.node,
-        ...earlier,
+        ...(resumed ? { base: earlier.base } : earlier),
         onStep: (step, k) => this.step(w, step, k),
         onUsage: (entries) => this.onUsage(entries),
         onCall: (call) => run?.call(call),
         onResult: (k, step, content) => run?.step(k, step, content),
         stopped: () => this.stopped,
       });
-      run = await this.startRun({ kind: 'task', w, model, issue, messages: agent.messages });
-      if (earlier.changed.length) run?.note(`Carrying on from work kept from an earlier try: ${earlier.changed.join(', ')}.`);
+      if (resumed) {
+        if (resumed.task) agent.messages[1].content = resumed.task;
+        agent.changed = new Set(earlier.changed);
+        agent.resume(resumed.steps);
+      }
+      run = await this.startRun({ kind: 'task', w, model, issue, messages: agent.messages.slice(0, 2), resumed: resumed?.id });
+      if (resumed) run?.note(`Carrying on from run ${resumed.id}, which the server stopping cut off: its ${agent.steps} steps are given back to the model, and its working copy is as it left it${earlier.changed.length ? ` (changed: ${earlier.changed.join(', ')})` : ''}.`);
+      else if (earlier.changed.length) run?.note(`Carrying on from work kept from an earlier try: ${earlier.changed.join(', ')}.`);
       if (earlier.fresh) run?.note(earlier.fresh);
       let result = await agent.run();
       // The unit tests, all of them, before a pull request: a failure goes
@@ -382,7 +394,7 @@ export class Company extends EventEmitter {
       w.stuck++;
       outcome = { ok: false, why: error.message };
       // What it changed is kept on its branch, for the next try to carry on from.
-      kept = await this.keep({ dir, branch, issue, w, why: error.message }).catch((e) => (this.log(`CTB: the work on #${n} could not be kept (${e.message}).`), false));
+      kept = this.stopped ? false : await this.keep({ dir, branch, issue, w, why: error.message }).catch((e) => (this.log(`CTB: the work on #${n} could not be kept (${e.message}).`), false));
       this.log(`CTB: ${w.name} could not finish #${n}: ${error.message.split('\n')[0]}`);
       this.tell(w, `Stuck on #${n}`, `I got stuck on #${n}. A grown-up will have a look.`);
       if (!this.stopped) {
@@ -392,13 +404,45 @@ export class Company extends EventEmitter {
         await this.github.label(n, { remove: [LABELS.working] }).catch(() => {});
       }
     } finally {
-      await run?.end(outcome ?? { ok: false, why: 'stopped' });
-      await this.cleanUp(dir, branch);
+      // Stopped, its worktree stays for the next start to carry on in.
+      await run?.end(this.stopped ? { ok: false, why: 'The server stopped in the middle of it.', stopped: true } : (outcome ?? { ok: false, why: 'stopped' }));
+      if (!this.stopped) await this.cleanUp(dir, branch);
       w.issue = null;
       w.last = { issue: issueBrief(issue), at: this.now(), ...outcome };
       this.tell(w, 'At their desk');
       if (!this.stopped) setTimeout(() => this.poll(), 1000).unref?.();
     }
+  }
+
+  // The run of task n a restart cut off last, if its worktree is still
+  // there: { id, task (its first message), steps (its step events, and
+  // those of the runs it carried on from) }, or null.
+  async interrupted(n, dir) {
+    if (!this.runs || !(await stat(dir).catch(() => null))) return null;
+    const last = this.runs.list().find((r) => r.kind === 'task' && r.issue?.number === n);
+    if (!last?.stopped) return null;
+    const run = await this.runs.read(last.id);
+    if (!run) return null;
+    return { id: last.id, task: run.events[0].messages?.[1]?.content ?? '', steps: await this.stepsOf(last.id) };
+  }
+
+  // A run's step events, after those of the runs it carried on from.
+  async stepsOf(id, depth = 0) {
+    const run = await this.runs.read(id);
+    if (!run) return [];
+    const before = run.events[0].resumed && depth < 20 ? await this.stepsOf(run.events[0].resumed, depth + 1) : [];
+    return [...before, ...run.events.filter((e) => e.type === 'step')];
+  }
+
+  // A worktree left by a run a restart cut off, as it is: what it changed
+  // since it left main ({ base, changed }).
+  reopen(dir) {
+    return this.serial(async () => {
+      await this.git(['fetch', '--quiet', 'origin', 'main'], { cwd: this.repoDir }).catch(() => {});
+      const base = (await this.git(['merge-base', 'HEAD', 'origin/main'], { cwd: dir })).trim();
+      const changed = [...(await this.git(['diff', '--name-only', base], { cwd: dir })).split('\n'), ...(await this.git(['ls-files', '--others', '--exclude-standard'], { cwd: dir })).split('\n')];
+      return { base, changed: [...new Set(changed)].filter((p) => p && p !== 'node_modules' && !p.startsWith('node_modules/')) };
+    });
   }
 
   // A worktree on the branch, with this checkout's node_modules for the
@@ -522,9 +566,9 @@ export class Company extends EventEmitter {
 
   // A run log for a worker's talk with its model (ctb-runs.js), or null
   // without them or when one cannot be started.
-  async startRun({ kind, w, model, issue = null, title = '', messages }) {
+  async startRun({ kind, w, model, issue = null, title = '', messages, resumed = '' }) {
     if (!this.runs) return null;
-    return this.runs.start({ kind, k: w.k, worker: w.name, model, issue: issueBrief(issue), title: title || issue?.title || '', messages }).catch((error) => {
+    return this.runs.start({ kind, k: w.k, worker: w.name, model, issue: issueBrief(issue), title: title || issue?.title || '', messages, ...(resumed ? { resumed } : {}) }).catch((error) => {
       this.log(`CTB: a run log could not be started (${error.message}).`);
       return null;
     });

@@ -333,6 +333,54 @@ test('a task not finished keeps its work on its branch, the next try carries on 
   assert.deepEqual(company.status().workers[0].steps.length > 0, true);
 });
 
+test('a task a restart cuts off carries on where it was, worktree and conversation and all', async () => {
+  const { dir, origin, repo } = await project();
+  const github = hub([issue(14, 'add a multiply', 'And fix add.')]);
+  const logs = await tempDir();
+  const settings = { ...defaultSettings({}), workers: 1, propose: false };
+  // Before the restart: mul.js written, then the server stops while the model thinks.
+  let thinking = false;
+  const before = scripted((messages) => {
+    const n = messages.filter((m) => m.role === 'assistant').length;
+    if (n === 0) return { thought: 'mul first', tool: 'write', path: 'mul.js', content: 'export const mul = (a, b) => a * b;\n' };
+    if (n === 1) return { thought: 'look', tool: 'list', path: '' };
+    thinking = true;
+    return new Promise(() => {});
+  });
+  const a = new Company({ llm: before, github, repoDir: repo, workDir: join(dir, 'work'), settings, log: () => {}, runs: await new Runs({ dir: logs }).load() });
+  await a.start();
+  await eventually(() => thinking);
+  await a.stop();
+
+  // After it: a new server, its run logs read again, and the task taken again.
+  let given = null;
+  const after_ = scripted((messages) => {
+    const n = messages.filter((m) => m.role === 'assistant').length;
+    if (n === 2) {
+      given = messages;
+      return { thought: 'now add', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' };
+    }
+    return { thought: 'done', tool: 'done', title: 'Add mul and fix add', summary: 'Both.' };
+  });
+  const runs = await new Runs({ dir: logs }).load();
+  const [cut] = runs.list(0);
+  assert.equal(cut.stopped, true, 'cut off, so ended as stopped');
+  const b = new Company({ llm: after_, github, repoDir: repo, workDir: join(dir, 'work'), settings, log: () => {}, runs });
+  await b.start();
+  after(() => b.stop());
+  await eventually(() => github.pullsMade.length === 1 && !b.workers[0].issue);
+  // The model had its two steps back, as it took them, with their results.
+  assert.deepEqual(given.filter((m) => m.role === 'assistant').map((m) => JSON.parse(m.content).tool), ['write', 'list']);
+  assert.match(given[3].content, /^Result of write:\nWrote mul\.js/);
+  assert.equal(git(origin, 'diff', '--name-only', 'main', 'ctb/issue-14'), 'add.js\nmul.js', 'mul.js from before the restart, add.js after');
+  const [resumed] = runs.list(0);
+  assert.equal(resumed.resumed, cut.id);
+  assert.equal(resumed.ok, true);
+  const run = await runs.read(resumed.id);
+  assert.ok(run.events.some((e) => e.type === 'note' && /Carrying on from run .*, which the server stopping cut off: its 2 steps are given back to the model, and its working copy is as it left it \(changed: mul\.js\)\./.test(e.text)));
+  assert.equal(run.events.find((e) => e.type === 'call').step, 3, 'counting on from where it was');
+});
+
 test('run logs: written as they go, read back after a restart, the newest kept, and a transcript of each', async () => {
   const dir = await tempDir();
   let now = 1000;
