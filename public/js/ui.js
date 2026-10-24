@@ -3603,7 +3603,9 @@ export class UI {
       (root) => {
         root.append(h('h2', {}, `🏝️ ${g.world?.name ?? 'Island'}`));
         if (g.shared) root.append(h('p', { class: 'muted' }, '🌟 Everyone’s island: anybody can come, and the more of you there are, the sooner it is free.'));
-        if (handlers.canInvite()) {
+        if (g.shared) {
+          // Anyone comes with 🌟 Adventure Isle on the title screen.
+        } else if (handlers.canInvite()) {
           const link = handlers.inviteLink();
           root.append(
             h('p', {}, 'Tell your friends this code. They choose “Visit a friend” and type it in:'),
@@ -4058,9 +4060,13 @@ export class UI {
     const g = this.game;
     if (!g?.world) return;
     $('island-name').textContent = `${THEME_ICON[g.world.theme] ?? '🏝️'} ${g.world.name}`;
-    $('island-code').replaceChildren(...(this.gameHandlers?.canInvite() ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
-    // The adventure island's stage, bright beside its code (as in 👫 Players:
-    // the shared isle always, any other island only past stage 1).
+    // The shared isle is open to everyone from the title screen: no code to
+    // tell anybody.
+    const code = $('island-code');
+    code.hidden = g.shared;
+    code.replaceChildren(...(g.shared ? [] : this.gameHandlers?.canInvite() ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
+    // The adventure island's stage, bright where its code goes (as in 👫
+    // Players: the shared isle always, any other island only past stage 1).
     const adv = g.adventure;
     const stage = $('island-stage');
     stage.hidden = !(adv && (g.shared || adv.stage > 1));

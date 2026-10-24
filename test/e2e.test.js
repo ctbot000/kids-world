@@ -5182,6 +5182,7 @@ test('the shared isle is on the keeper’s list of open islands too, hosted peer
     assert.equal(await page.evaluate(() => window.kidsWorld.game.shared), true);
     // Its stage, in the badge at the top, stage 1 too.
     assert.equal(await page.$eval('#island-stage', (el) => (el.hidden ? '' : el.textContent)), '🌟 Stage 1');
+    assert.equal(await page.$eval('#island-code', (el) => el.hidden), true, 'no code: anyone can come');
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();

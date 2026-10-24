@@ -506,13 +506,17 @@ body.fullscreen .full-icon .leave {
   box-shadow: 0 1px 4px rgba(35, 24, 58, 0.25);
 }
 
-/* Narrow phones: just 🌟 and the number, and the code without its word, so
-   the code's digits keep their room. */
+/* Narrow phones, with a code beside the stage: just 🌟 and the number, and
+   the code without its word, so the code's digits keep their room. */
 @media (max-width: 479px) {
-  .island-stage .word,
+  .island-line:has(> .island-code:not([hidden])) .island-stage .word,
   .island-line:has(> .island-stage:not([hidden])) .island-code .word {
     display: none;
   }
+}
+
+.island-code[hidden] {
+  display: none;
 }
 
 .island-stage[hidden] {
