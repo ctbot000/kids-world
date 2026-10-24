@@ -215,6 +215,13 @@ export const CEILING_FAN = furniture(248, 'ceiling-fan', { name: 'Ceiling Fan', 
 // models (render/fishtank-model.js). After the fans.
 export const FISH_TANK = furniture(249, 'fish-tank', { name: 'Fish Tank', color: '#5fc4f0', after: 248, turns: false, light: 7, sound: 'glass', real: 'fish-tank' });
 export const FISH_BOWL = furniture(250, 'fish-bowl', { name: 'Fish Bowl', color: '#ff8a2a', after: 249, turns: false, sound: 'glass', real: 'fish-bowl' });
+// Clocks, their hands telling the island's time of day: a Cuckoo Clock that
+// hangs on a wall, its pendulum swinging and a bird popping out on the
+// hour, and a Tower Clock, a stone block with a lit face on each side for
+// the top of a clock tower (77 is a gap never used). Both `real`, drawn as
+// real models (render/clock-model.js). After the fish tanks.
+export const CUCKOO_CLOCK = furniture(251, 'cuckoo-clock', { name: 'Cuckoo Clock', color: '#9a6238', after: 250, solid: false, wall: true, sound: 'wood', real: 'cuckoo-clock' });
+export const TOWER_CLOCK = furniture(77, 'tower-clock', { name: 'Tower Clock', color: '#eadcc0', after: 251, turns: false, light: 6, sound: 'stone', real: 'tower-clock' });
 // A little table set for tea: a cloth, a teapot, cups and a plate of cookies
 // (shared/furniture.js). Pull chairs up to it and sit down to tea together.
 export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });

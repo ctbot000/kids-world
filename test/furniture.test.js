@@ -320,3 +320,50 @@ test('fish tanks: a fish tank with a lamp and a fish bowl after the fans, drawn 
     assert.ok(fish.some((f, i) => f.position.distanceTo(before[i]) > 0.05), 'the fish swim');
   }
 });
+
+test('clocks: a cuckoo clock for the wall and a tower clock after the fish tanks, their hands telling the island time', async () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.FISH_BOWL) + 1], B.CUCKOO_CLOCK, 'right after the fish bowl');
+  assert.equal(home[home.indexOf(B.CUCKOO_CLOCK) + 1], B.TOWER_CLOCK);
+  assert.ok(B.block(B.CUCKOO_CLOCK).wall && B.SOLID[B.CUCKOO_CLOCK] === 0, 'hangs on a wall');
+  assert.ok(B.SOLID[B.TOWER_CLOCK] === 1 && B.block(B.TOWER_CLOCK).light > 0, 'a lit block to build a tower with');
+  for (const id of [B.CUCKOO_CLOCK, B.TOWER_CLOCK]) {
+    assert.ok(B.block(id).real);
+    for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(id)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+  }
+
+  const THREE = await import('../public/vendor/three.module.js');
+  const { clockMaterials, clockModel, handsAt, cuckooAt } = await import('../public/js/render/clock-model.js');
+  // Midnight and noon at twelve, six in the morning at six, 3:30 in the afternoon.
+  assert.deepEqual(handsAt(0), { hour: 0, minute: 0 });
+  assert.deepEqual(handsAt(0.5), { hour: 0, minute: 0 });
+  assert.deepEqual(handsAt(0.25), { hour: 0.5, minute: 0 });
+  const half = handsAt(15.5 / 24);
+  assert.ok(Math.abs(half.hour - 3.5 / 12) < 1e-9 && Math.abs(half.minute - 0.5) < 1e-9);
+  // The cuckoo comes out just after the hour, and only then.
+  assert.ok(cuckooAt((12 + 1 / 60) / 24) > 0.5);
+  assert.equal(cuckooAt((12 + 30 / 60) / 24), 0);
+  assert.equal(cuckooAt((11 + 59 / 60) / 24), 0);
+
+  for (const kind of ['cuckoo-clock', 'tower-clock']) {
+    const model = clockModel(clockMaterials(), kind);
+    const size = new THREE.Box3().setFromObject(model);
+    assert.ok(size.min.y > -1e-6 && size.max.y <= 1 + 1e-6 && size.min.x >= -0.5 - 1e-6 && size.max.x <= 0.5 + 1e-6 && size.min.z >= -0.5 - 1e-6 && size.max.z <= 0.5 + 1e-6, `a ${kind} fits its cell`);
+    // Its hands follow the time of day, on every face.
+    assert.equal(model.userData.hands.length, kind === 'tower-clock' ? 4 : 1);
+    model.userData.tick(0, 15.5 / 24);
+    for (const [hour, minute] of model.userData.hands) {
+      assert.ok(Math.abs(hour.rotation.z - (3.5 / 12) * Math.PI * 2) < 1e-9 && Math.abs(minute.rotation.z - Math.PI) < 1e-9);
+      // Turned clockwise: at half past, the minute hand's tip points down.
+      minute.updateMatrixWorld(true);
+      const tip = new THREE.Box3().setFromObject(minute);
+      assert.ok(tip.min.y < hour.position.y - 0.05);
+    }
+  }
+  const cuckoo = clockModel(clockMaterials(), 'cuckoo-clock');
+  const bird = cuckoo.userData.bird;
+  cuckoo.userData.tick(3, (10 + 10 / 60) / 24);
+  assert.equal(bird.visible, false, 'the bird stays in between the hours');
+  cuckoo.userData.tick(3, (12 + 1 / 60) / 24);
+  assert.ok(bird.visible && bird.position.z < 0.33, 'and pops out of its door on the hour');
+});

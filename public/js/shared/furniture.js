@@ -346,6 +346,36 @@ const MODELS = {
     ];
   },
 
+  // The clocks' boxes, for their pictures (render/clock-model.js draws
+  // them for real). A cuckoo clock on the wall: a wooden house, its roof,
+  // a round face and a pendulum and weights hanging under it.
+  'cuckoo-clock'() {
+    return [
+      box(0.29, 0.41, 0.84, 0.71, 0.83, 1, '#9a6238', 'planks'),
+      box(0.26, 0.39, 0.8, 0.74, 0.43, 1, DARK_WOOD, 'planks'),
+      box(0.27, 0.83, 0.79, 0.73, 0.9, 1, DARK_WOOD, 'planks'),
+      box(0.37, 0.9, 0.79, 0.63, 0.97, 1, DARK_WOOD, 'planks'),
+      box(0.39, 0.49, 0.83, 0.61, 0.71, 0.84, '#fbf6e6', 'plain'),
+      box(0.49, 0.58, 0.825, 0.51, 0.69, 0.83, BLACK, 'plain'),
+      box(0.49, 0.59, 0.825, 0.57, 0.61, 0.83, BLACK, 'plain'),
+      box(0.495, 0.18, 0.855, 0.505, 0.41, 0.865, '#e0b04c', 'plain'),
+      box(0.46, 0.13, 0.85, 0.54, 0.2, 0.87, '#e0b04c', 'plain'),
+      box(0.36, 0.08, 0.92, 0.4, 0.2, 0.96, DARK_WOOD, 'planks'),
+      box(0.6, 0.08, 0.92, 0.64, 0.2, 0.96, DARK_WOOD, 'planks'),
+    ];
+  },
+
+  // A tower clock: a stone block, a band round its foot and top, and a lit
+  // face with its hands on each side.
+  'tower-clock'() {
+    const out = [box(0.02, 0.02, 0.02, 0.98, 0.98, 0.98, '#eadcc0', 'plain'), box(0, 0, 0, 1, 0.07, 1, '#6c7a96', 'plain'), box(0, 0.93, 0, 1, 1, 1, '#6c7a96', 'plain')];
+    for (const [x0, z0, x1, z1] of [[0.17, 0.005, 0.83, 0.02], [0.17, 0.98, 0.83, 1], [0, 0.17, 0.02, 0.83], [0.98, 0.17, 1, 0.83]]) {
+      out.push(box(x0, 0.17, z0, x1, 0.83, z1, '#fff7dc', 'glow'));
+    }
+    out.push(box(0.49, 0.5, 0, 0.51, 0.78, 0.005, BLACK, 'plain'), box(0.49, 0.49, 0, 0.7, 0.51, 0.005, BLACK, 'plain'));
+    return out;
+  },
+
   // A table laid for tea: a white cloth with a pink skirt over one leg, and
   // on it a teapot (its spout to the right, facing whoever put it down), a
   // cup on a saucer at each side and a little plate of cookies in front.

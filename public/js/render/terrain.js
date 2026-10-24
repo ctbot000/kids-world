@@ -10,6 +10,7 @@ import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
 import { gashaponMaterials, gashaponModel } from './gashapon-model.js';
 import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { tankMaterials, tankModel } from './fishtank-model.js';
+import { clockMaterials, clockModel } from './clock-model.js';
 import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
 
@@ -648,7 +649,8 @@ export class Terrain {
       model.matrixAutoUpdate = false;
       model.traverse((o) => (o.matrixAutoUpdate = false));
       group.add(model);
-      // A fan's blades go round and a tank's fish swim, each at a time of its own.
+      // A fan's blades go round, a tank's fish swim and a clock's pendulum
+      // swings, each at a time of its own.
       if (model.userData.spin || model.userData.tick) chunk.movers.push({ model, phase: (x * 7.3 + z * 3.1 + y) % 10 });
     }
     this.group.add(group);
@@ -674,6 +676,10 @@ export class Terrain {
       this.tankMaterials ??= tankMaterials(toyMaterial);
       return tankModel(this.tankMaterials, kind);
     }
+    if (kind === 'cuckoo-clock' || kind === 'tower-clock') {
+      this.clockMaterials ??= clockMaterials(toyMaterial);
+      return clockModel(this.clockMaterials, kind);
+    }
     return null;
   }
 
@@ -685,13 +691,14 @@ export class Terrain {
   }
 
   // The blades of the fans in sight go round, an electric fan's head
-  // sweeps from side to side, and fish swim round their tanks.
-  animate(time) {
+  // sweeps from side to side, fish swim round their tanks and clocks tell
+  // the island's time of day, `day` (env.js).
+  animate(time, day = 0.5) {
     for (const chunk of this.chunks.values()) {
       if (!chunk.group.visible) continue;
       for (const { model, phase } of chunk.movers) {
         const t = time + phase;
-        model.userData.tick?.(t);
+        model.userData.tick?.(t, day);
         for (const { part, axis, speed } of model.userData.spin ?? []) {
           part.rotation[axis] = (t * speed) % (Math.PI * 2);
           part.updateMatrix();

@@ -754,7 +754,7 @@ export class Renderer {
 
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);
-    this.terrain.animate(this.time);
+    this.terrain.animate(this.time, state.time);
     this.effects.update(dt);
     this.drawings.update();
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
