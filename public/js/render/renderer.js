@@ -14,11 +14,13 @@ import { GTAOPass } from '../../vendor/three-addons/postprocessing/GTAOPass.js';
 import { OutputPass } from '../../vendor/three-addons/postprocessing/OutputPass.js';
 import { ShaderPass } from '../../vendor/three-addons/postprocessing/ShaderPass.js';
 import { OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
+import { headTop } from '../shared/critters.js';
 import { STOMP } from '../shared/monsters.js';
 import { raycast } from '../shared/raycast.js';
 import { MAX_EDIT_CELLS } from '../shared/tools.js';
+import { lookHair, lookTall } from '../shared/words.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
-import { Avatar } from './avatar.js';
+import { ANIM, Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
 import { GoBoards } from './go-boards.js';
@@ -365,6 +367,61 @@ export class Renderer {
     this.entities.add(a.root, a.shadow);
     this.avatars.set(pid, a);
     return a;
+  }
+
+  // A little picture of someone's head as their avatar has it (fur, skin,
+  // hair, hat and all), for the lists of players: a PNG data URL, lit as by
+  // day whatever the time on the island, made once for each look.
+  face(look) {
+    const key = JSON.stringify(look ?? {});
+    let url = this.faces?.get(key);
+    if (url) return url;
+    this.faces ??= new Map();
+    const SIZE = 96;
+    if (!this.faceKit) {
+      const scene = new THREE.Scene();
+      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+      sun.position.set(1.5, 3, 4);
+      scene.add(new THREE.HemisphereLight(0xdff2ff, 0x9fcf7f, 1.6), sun);
+      const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { samples: 4 });
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = SIZE;
+      this.faceKit = { scene, camera: new THREE.PerspectiveCamera(30, 1, 0.05, 20), target, canvas, pixels: new Uint8Array(SIZE * SIZE * 4) };
+    }
+    const { scene, camera, target, canvas, pixels } = this.faceKit;
+    const a = new Avatar(look);
+    a.update(0, ANIM.idle, 0);
+    scene.add(a.root);
+    // Framed from the chin to just over the hat, seen a little from above.
+    const top = headTop(look?.hat, lookHair(look), lookTall(look));
+    const mid = top - 0.16;
+    camera.position.set(0, mid + 0.06, 1.05);
+    camera.lookAt(0, mid, 0);
+    const day = [toyLight.studio.value, toyLight.rim.value, toyLight.rimColor.value.clone()];
+    toyLight.studio.value = 1;
+    toyLight.rim.value = 0.25;
+    toyLight.rimColor.value.set(1, 0.97, 0.9);
+    const gl = this.gl;
+    const was = { target: gl.getRenderTarget(), color: gl.getClearColor(new THREE.Color()), alpha: gl.getClearAlpha() };
+    gl.setRenderTarget(target);
+    gl.setClearColor(0x000000, 0);
+    gl.clear();
+    gl.render(scene, camera);
+    gl.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
+    gl.setRenderTarget(was.target);
+    gl.setClearColor(was.color, was.alpha);
+    [toyLight.studio.value, toyLight.rim.value] = day;
+    toyLight.rimColor.value.copy(day[2]);
+    a.dispose();
+    // Read back bottom row first: turned the right way up.
+    const ctx = canvas.getContext('2d');
+    const image = ctx.createImageData(SIZE, SIZE);
+    for (let y = 0; y < SIZE; y++) image.data.set(pixels.subarray((SIZE - 1 - y) * SIZE * 4, (SIZE - y) * SIZE * 4), y * SIZE * 4);
+    ctx.putImageData(image, 0, 0);
+    url = canvas.toDataURL('image/png');
+    this.faces.set(key, url);
+    return url;
   }
 
   removeAvatar(pid) {

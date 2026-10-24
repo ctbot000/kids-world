@@ -3614,7 +3614,7 @@ export class UI {
               h(
                 'span',
                 { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}` },
-                h('span', { class: 'face' }, lookIcon(p.look)),
+                this.faceOf(p.look),
                 h('span', { class: 'who', lang: langOf(p.name) || undefined }, levelTag(p.look), p.name, p.id === g.host ? ' 🏝️' : '', p.id === g.pid ? h('span', { class: 'muted' }, ' (you)') : ''),
               ),
             ),
@@ -4203,12 +4203,22 @@ export class UI {
         h(
           'span',
           { class: 'friend', style: `--c:${shirtColor(p.look.shirt)}`, title: p.name },
-          h('span', { class: 'face' }, lookIcon(p.look)),
+          this.faceOf(p.look),
           h('span', { class: 'who', lang: langOf(p.name) || undefined }, p.name),
         ),
       ),
     );
     this.fitFriends();
+  }
+
+  // Someone's face as their avatar has it, drawn by the renderer; their
+  // animal or a person as an emoji where it cannot draw one.
+  faceOf(look) {
+    let url = null;
+    try {
+      url = this.game?.renderer?.face(look);
+    } catch {}
+    return url ? h('img', { class: 'face', src: url, alt: '' }) : h('span', { class: 'face' }, lookIcon(look));
   }
 
   // Names beside the faces in the top bar while they all fit; just the

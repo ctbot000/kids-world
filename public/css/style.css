@@ -603,6 +603,16 @@ body.fullscreen .full-icon .leave {
   font-size: 1.2rem;
 }
 
+/* A picture of the avatar's head, bigger than the emoji it stands for, on
+   a disc of their shirt colour: white fur stands out on the white chip. */
+.friend img.face {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c, white) 45%, white);
+  object-fit: contain;
+}
+
 .friend .who {
   min-width: 0;
   max-width: 10em;
