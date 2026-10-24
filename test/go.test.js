@@ -348,7 +348,8 @@ test('called over, the AI friend walks up, sits down as white, plays its moves a
   room.receive(kid, { t: 'go', op: 'call', ...at });
   const g = () => room.go.games.get(`${x},${y},${z}`);
   await eventually(() => g()?.p[1] === pip.id);
-  assert.ok(Math.hypot(pip.s[0] - x - 0.5, pip.s[2] - z - 0.5) < 3.5, 'beside the board');
+  // Beside the board (where the island saw it last may lag a step behind).
+  await eventually(() => Math.hypot(pip.s[0] - x - 0.5, pip.s[2] - z - 0.5) < 2);
   await eventually(() => llm.asked.some((p) => /Black and white take turns/.test(p)));
   // Minji plays; it answers with a stone of its own.
   room.receive(kid, { t: 'go', op: 'move', ...at, i: 6 });
