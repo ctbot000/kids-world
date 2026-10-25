@@ -753,6 +753,11 @@ export class Game extends EventTarget {
       let entry = this.critters.get(c.id);
       if (!entry) entry = this.addCritter({ ...c, name: '' });
       entry.fight = c.fight;
+      // A ridden dragon's own hearts ride along in its fight (dragon.js packFight).
+      if (c.fight?.rideHearts != null) {
+        entry.rideHearts = c.fight.rideHearts;
+        entry.rideMax = RIDE_HEARTS;
+      }
       entry.snaps.push({ t: now, x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state });
       if (entry.snaps.length > 8) entry.snaps.shift();
     }
@@ -764,6 +769,11 @@ export class Game extends EventTarget {
     if (!c || this.critters.has(c.id)) return;
     const entry = this.addCritter({ ...c, name: msg.critter.name });
     entry.fight = c.fight;
+    // A ridden dragon's own hearts ride along in its fight (dragon.js packFight).
+    if (c.fight?.rideHearts != null) {
+      entry.rideHearts = c.fight.rideHearts;
+      entry.rideMax = RIDE_HEARTS;
+    }
     this.renderer.effects.sparkles(c.x, c.y + 0.4, c.z, 14);
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
@@ -1272,6 +1282,9 @@ export class Game extends EventTarget {
     const p = c.model.group.position;
     const near = this.near(p.x, p.y, p.z, 45);
     if (msg.fx === 'fire') {
+      // Its own rider lit the flames and heard the whoosh at once (breath);
+      // the island's word is for everyone else.
+      if (this.riding?.id === c.id) return;
       c.fireYaw = Number(msg.yaw) || 0;
       c.fireUntil = performance.now() + (Number(msg.ms) || FIRE.ms);
       if (near) this.sound.play('fire');
@@ -1561,24 +1574,29 @@ export class Game extends EventTarget {
   // dragon's flames show (dragonFrame). Returns the ride, or null — nothing
   // at all when the breath is not ready yet.
   breath() {
-    const c = this.riding;
-    if (!c || c.type !== 'dragon') return null;
+    const ride = this.riding;
+    if (!ride || ride.type !== 'dragon') return null;
     const now = performance.now();
     if (now - (this.breathAt ?? -Infinity) < RIDE_FIRE.every) return null;
     this.breathAt = now;
-    this.send({ t: 'critter', op: 'fire', id: c.id });
-    // The flames and the whoosh right away; the island's word comes to
+    this.send({ t: 'critter', op: 'fire', id: ride.id });
+    // The flames and the whoosh right away, on its entry — that is what
+    // mountPose and dragonFrame read — and the island's word comes to
     // everyone else as a 'dragon' fx (dragonNews), as for a wild one.
-    c.fireYaw = this.me.yaw;
-    c.fireUntil = now + RIDE_FIRE.ms;
+    const c = this.critters.get(ride.id);
+    if (c) {
+      c.fireYaw = this.me.yaw;
+      c.fireUntil = now + RIDE_FIRE.ms;
+    }
     this.sound.play('fire');
-    return c;
+    return ride;
   }
 
   // A swing that landed wears the weapon in your hand (shop.js usesLeft):
   // a word when it is nearly worn out, and when it breaks — out of your
   // hand, the next best you have in it (or your fist) — till the shop fixes it.
-  wearOut() {    const used = this.profile.useWeapon();
+  wearOut() {
+    const used = this.profile.useWeapon();
     if (!used) return;
     const { weapon, left } = used;
     if (!left) {

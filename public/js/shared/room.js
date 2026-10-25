@@ -1332,7 +1332,8 @@ export class Room {
   // A bop at a wild dragon, from as far as an arm (or the toy weapon in it)
   // reaches: hearts off it, and with the last it is tame, and everyone who
   // bopped it in that fight has tamed it (their pages count it).
-  hitDragon(p, msg) {    const c = this.critters.get(msg.id);
+  hitDragon(p, msg) {
+    const c = this.critters.get(msg.id);
     const now = this.now();
     if (!isWild(c) || (p.dizzyUntil ?? 0) > now || this.critters.aboard().has(p.id)) return;
     const weapon = weaponOf(p.look?.weapon);

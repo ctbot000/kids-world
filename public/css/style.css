@@ -911,6 +911,11 @@ body.fullscreen .full-icon .leave {
   transition: width 0.25s;
 }
 
+/* The dragon under you has hearts of its own: ember orange, red as they run out. */
+.hearts .hp-bar.dragon > span {
+  background: #f2913c;
+}
+
 .hearts .hp-bar.half > span {
   background: #f2b233;
 }

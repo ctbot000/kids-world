@@ -2983,6 +2983,8 @@ export class UI {
     });
     on('defense', () => this.renderDefense());
     on('dizzy', () => this.renderHp());
+    // On and off a dragon's back: its own hearts by yours (renderHp).
+    on('ride', () => this.renderHp());
     on('welcome', () => {
       this.renderDefense();
       this.renderShared();
@@ -6434,7 +6436,13 @@ export class UI {
     const me = g.me?.body;
     const el = $('btn-attack');
     const close = (m, far = ATTACK_SHOW) => Math.hypot(m.x - me.x, m.y - me.y, m.z - me.z) < far;
-    const near = Boolean(me) && !g.riding && ([...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m)) || [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6)));
+    // A monster about shows the bop button — on foot, or on a dragon's back,
+    // where it breathes fire at them (game.js breath). A wild dragon near
+    // shows it too, but only on foot: from a tame dragon's back there is no
+    // bopping dragons.
+    const monsterNear = Boolean(me) && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m));
+    const wildNear = Boolean(me) && !g.riding && [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6));
+    const near = monsterNear || wildNear;
     if (el.hidden === near) el.hidden = !near;
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;
