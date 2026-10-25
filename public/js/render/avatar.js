@@ -245,9 +245,15 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
 export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13 };
-// How often someone on a coffee break takes a sip, and how long a sip takes (s).
-const SIP_EVERY = 6.5;
+// How long someone on a coffee break waits between sips, at least and at
+// most, each wait picked at random so no two people sip together; and how
+// long a sip takes (s).
+const SIP_GAP = [3, 10];
 const SIP_TIME = 2.4;
+// When the last sip on this page began (performance.now(), ms): someone
+// about to sip while another is still drinking waits a moment, so people
+// on a break together take turns rather than drinking as one.
+let lastSip = -Infinity;
 // A coffee mug's radius and height, for a hand of size 1.
 const MUG_R = 0.027;
 const MUG_H = 0.062;
@@ -1950,6 +1956,11 @@ export class Avatar {
       { u: 0.7, to: 0.7, at: -Infinity, finger: 2 },
     ];
     this.bench = pianoBench();
+    // Each one's own place in idle rhythms (typing and its pauses), so
+    // people side by side are never in step; and when their next sip is.
+    this.quirk = Math.random() * 1000;
+    this.sipAt = null;
+    this.sipping = false;
     // The mug in hand on a coffee break, there only then.
     this.mug = null;
     // A soft round shadow under the feet.
@@ -2308,17 +2319,18 @@ export class Avatar {
       // pause to read the screen, the head bent to it all the while.
       bob = -(B.hip - SIT_HIPS);
       lean = 0.12;
-      const busy = Math.sin(t * 0.9) + Math.sin(t * 0.37 + 1) > -1.1;
-      const tapL = busy ? Math.max(0, Math.sin(t * 17)) ** 2 : 0;
-      const tapR = busy ? Math.max(0, Math.sin(t * 19.5 + 1.3)) ** 2 : 0;
+      const q = t + this.quirk;
+      const busy = Math.sin(q * 0.9) + Math.sin(q * 0.37 + 1) > -1.1;
+      const tapL = busy ? Math.max(0, Math.sin(q * 17)) ** 2 : 0;
+      const tapR = busy ? Math.max(0, Math.sin(q * 19.5 + 1.3)) ** 2 : 0;
       armRaiseL = armRaiseR = -0.1;
       armFwdL = -0.85 + tapL * 0.08;
       armFwdR = -0.85 + tapR * 0.08;
       bendL = 0.9 - tapL * 0.1;
       bendR = 0.9 - tapR * 0.1;
       twist = busy ? (tapR - tapL) * 0.03 : 0;
-      headNod = 0.16 + (busy ? 0 : Math.sin(t * 0.8) * 0.03);
-      headTilt = busy ? Math.sin(t * 1.3) * 0.025 : Math.sin(t * 0.6) * 0.07;
+      headNod = 0.16 + (busy ? 0 : Math.sin(q * 0.8) * 0.03);
+      headTilt = busy ? Math.sin(q * 1.3) * 0.025 : Math.sin(q * 0.6) * 0.07;
       legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
     } else if (anim === ANIM.coffee) {
       // On a break, sat back with a mug of coffee: held in front of you,
@@ -2326,8 +2338,23 @@ export class Avatar {
       // as you drink; the other hand rests in the lap.
       bob = -(B.hip - SIT_HIPS);
       lean = -0.06;
-      const c = t % SIP_EVERY;
-      const up = c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
+      // The first sip some while after sitting down; each after it a random wait after the last.
+      const wait = () => SIP_GAP[0] + Math.random() * (SIP_GAP[1] - SIP_GAP[0]);
+      if (this.sipAt === null) this.sipAt = t + Math.random() * SIP_GAP[1];
+      else if (t > this.sipAt + SIP_TIME) {
+        this.sipAt = t + wait();
+        this.sipping = false;
+      }
+      if (!this.sipping && t >= this.sipAt) {
+        const now = performance.now();
+        if (now - lastSip < SIP_TIME * 1000) this.sipAt = t + 0.5 + Math.random() * 2;
+        else {
+          lastSip = now;
+          this.sipping = true;
+        }
+      }
+      const c = t - this.sipAt;
+      const up = this.sipping && c >= 0 && c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
       this.sip = up * up * (3 - 2 * up);
       armRaiseL = 0;
       armFwdL = -0.3;
@@ -2335,7 +2362,7 @@ export class Avatar {
       // The right hand round the mug, wherever it is (see holdMug).
       [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo(this.mugGrip(this.sip));
       headNod = 0.04 - this.sip * 0.14;
-      headTilt = this.sip ? 0 : Math.sin(t * 0.7) * 0.06;
+      headTilt = this.sip ? 0 : Math.sin((t + this.quirk) * 0.7) * 0.06;
       legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
     } else if (anim === ANIM.curl) {
       // Hugging your knees, chin tucked in, breathing slowly.
