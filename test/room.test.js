@@ -687,3 +687,36 @@ test('a flood of messages is rate limited', () => {
   for (let i = 0; i < 1000; i++) room.receive(a, { t: 'emote', e: 'wave' });
   assert.ok(b.all('emote').length < 400, `${b.all('emote').length} emotes got through`);
 });
+
+test('fireflies come out over the flowers at night and go home at dawn, the same for everyone', () => {
+  const { room } = makeRoom();
+  const a = join(room);
+  const w = room.world;
+  // Nightfall: a few fireflies rise, told to everyone by the island itself.
+  room.env.time = 0.9;
+  room.tick();
+  const adds = a.all('cadd').filter((m) => m.critter.type === 'firefly');
+  assert.ok(adds.length > 0, `${adds.length} fireflies came out`);
+  assert.ok(adds.every((m) => m.by === 0), 'the island itself let them out');
+  assert.ok(adds.every((m) => unpackCritter(m.s).type === 'firefly'));
+  const low = (m) => {
+    const c = unpackCritter(m.s);
+    return c.y < w.top(Math.floor(c.x), Math.floor(c.z)) + 3.5 && c.y > w.top(Math.floor(c.x), Math.floor(c.z));
+  };
+  assert.ok(adds.every(low), 'they stay low, over the ground');
+  assert.ok(adds.length <= 20, `at most about twenty (${adds.length})`);
+  const ids = new Set(room.fireflies);
+  assert.equal(room.critters.list.filter((c) => c.type === 'firefly').length, adds.length);
+  // Someone arriving in the night sees them too.
+  const b = join(room, { name: 'Brave Otter' });
+  const seen = b.last('welcome').critters.filter((c) => c.type === 'firefly');
+  assert.equal(seen.length, adds.length, 'a night newcomer sees the same fireflies');
+  // Daybreak: every one of them goes home, and everyone hears it.
+  room.env.time = 0.5;
+  room.tick();
+  const byes = a.all('cdel');
+  assert.ok(byes.length >= adds.length, 'they all went home');
+  assert.ok(byes.every((m) => ids.has(m.id)), 'only the fireflies went');
+  assert.equal(room.critters.list.filter((c) => c.type === 'firefly').length, 0);
+  assert.ok(!room.exportSave().critters.some((c) => c.type === 'firefly'), 'and none are saved with the island');
+});

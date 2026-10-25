@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, perchAt, scaleCounts, skyline } from '../public/js/shared/critters.js';
+import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline } from '../public/js/shared/critters.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
@@ -292,4 +292,44 @@ test('every flying model beats both wings together, up and down alike', () => {
   const butterfly = new CritterModel('butterfly', 1);
   butterfly.update(0.1, 'idle', false, 0);
   for (const w of butterfly.wings) assert.ok(new THREE.Vector3(w.userData.wing * 0.1, 0, 0).applyEuler(w.rotation).y > 0.06);
+});
+
+test('a firefly has a lantern that pulses awake and goes dark asleep, and it is never in the toy box', () => {
+  const firefly = new CritterModel('firefly', 3);
+  assert.ok(firefly.lantern, 'it has a lantern to pulse');
+  // Awake: the glow breathes — bigger at its brightest than at its dimmest.
+  const seen = new Set();
+  for (let i = 0; i < 600; i++) {
+    firefly.update(0.05, 'fly', false, 2);
+    seen.add(+firefly.lantern.scale.x.toFixed(2));
+  }
+  assert.ok(seen.size >= 4, `the lantern swells and fades (${seen.size} sizes)`);
+  assert.ok(Math.max(...seen) > 1.1 && Math.min(...seen) < 0.9, 'it gets properly bright and properly dim');
+  // Asleep by day: winks out, and stays out.
+  firefly.update(0.05, 'sleep', false, 0);
+  const dark = firefly.lantern.scale.x;
+  for (let i = 0; i < 20; i++) {
+    firefly.update(0.05, 'sleep', false, 0);
+    assert.equal(firefly.lantern.scale.x, dark, 'the lantern stays dark');
+  }
+  assert.ok(dark < Math.min(...seen), 'asleep is dimmer than its dimest waking blink');
+});
+
+test('fireflies are critters of their own, but not animals anyone can invite', () => {
+  assert.ok(CRITTER_INFO.firefly.flies && CRITTER_INFO.firefly.nocturnal, 'a nocturnal flyer');
+  assert.ok(ANIMAL_TYPES.includes('bunny') && !ANIMAL_TYPES.includes('firefly'), 'no firefly in the toy box');
+});
+
+test('fireflies have a cap of their own, and never take a seat an animal could have', () => {
+  const sim = new CritterSim(7);
+  // The island full of animals, as a busy one can be.
+  sim.max = MAX_CRITTERS;
+  for (let i = 0; i < MAX_CRITTERS; i++) assert.ok(sim.add('bunny', 5, 6, 5), 'animal moved in');
+  assert.equal(sim.add('bunny', 5, 6, 5), null, 'no room for another animal');
+  // Even so, the night's fireflies still come out — up to their own cap.
+  for (let i = 0; i < MAX_FIREFLIES; i++) assert.ok(sim.add('firefly', 5, 6, 5), 'a firefly came out anyway');
+  assert.equal(sim.add('firefly', 5, 6, 5), null, `no more than ${MAX_FIREFLIES} fireflies`);
+  assert.equal(sim.list.filter((c) => c.type === 'firefly').length, MAX_FIREFLIES);
+  // And they are never written into the island.
+  assert.ok(!sim.save().some((c) => c.type === 'firefly'), 'the save has no fireflies');
 });
