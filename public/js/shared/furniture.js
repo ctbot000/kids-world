@@ -432,6 +432,28 @@ const MODELS = {
     return out;
   },
 
+  // A pet's bed (shared/pets.js): a round basket of woven bands with a soft
+  // pink cushion in it and a little pillow at the back, for a pet to curl up
+  // in at night.
+  'pet-bed'() {
+    const out = [];
+    // The basket, a ring of little bands round and round, two courses high
+    // and leaning out a little at the top.
+    for (const [y0, y1, r] of [[0, 0.11, 0.34], [0.11, 0.22, 0.38]]) {
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        const x = 0.5 + Math.cos(a) * r;
+        const z = 0.5 + Math.sin(a) * r;
+        out.push(box(x - 0.05, y0, z - 0.05, x + 0.05, y1, z + 0.05, i % 2 ? DARK_WOOD : WOOD, 'planks'));
+      }
+    }
+    // The cushion, a soft round pad just under the basket's rim, and the
+    // pillow at the back.
+    out.push(box(0.18, 0.14, 0.18, 0.82, 0.26, 0.82, '#f7b6cf', 'cloth'));
+    out.push(box(0.3, 0.26, 0.6, 0.7, 0.36, 0.78, '#ffe1ee', 'cloth'));
+    return out;
+  },
+
   // An arcade machine, its screen glowing in the dark: a joystick and two
   // buttons under a screen showing the game it runs (shared/arcade.js), and
   // a lit marquee over it. This one runs Bop-a-Blob, with a blob on it.

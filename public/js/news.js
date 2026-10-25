@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'pet-bed', date: '2026-10-26', icon: '🛏️', title: 'Pet beds', text: 'Put a Pet Bed down from the toy box\'s 🛋️ Home tab, and at night your pet walks over, curls up in it and sleeps!' },
   { id: 'ctb-tab', date: '2026-10-25', icon: '🏢', title: 'Visit CTB', text: 'Tap 🏢 CTB on the title screen to visit CTB\'s helpers at their desks.' },
   { id: 'computer', date: '2026-10-25', icon: '💻', title: 'Computers', text: 'A Computer in the toy box\'s 🛋️ Home tab, glowing with code like the ones at CTB.' },
   { id: 'gomoku', date: '2026-10-24', icon: '⭕', title: 'Gomoku', text: 'Five in a row at any Go board: tap ⭕ Gomoku, and play a friend or Pip!' },

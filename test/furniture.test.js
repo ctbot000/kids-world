@@ -375,3 +375,23 @@ test('a computer after the Go board, glowing, its picture inside its cell', () =
   assert.deepEqual(B.block(B.COMPUTER).faces, [257, 258, 259, 260], 'it turns, on four ids in a row');
   for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.COMPUTER)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1);
 });
+
+test('a pet bed after the tea table, a low basket a pet can get into', () => {
+  const home = B.blocksIn('home');
+  assert.ok(home.includes(B.PET_BED), 'in the toy box\'s Home tab');
+  assert.ok(B.block(B.PET_BED).turns, 'it turns to face whoever puts it down');
+  assert.ok(B.SOLID[B.PET_BED] === 0, 'not solid: a pet curls up in it, and you step over it');
+  assert.equal(B.KIND[B.PET_BED], B.K_FURNITURE);
+  const boxes = modelBoxes(B.PET_BED);
+  for (const [x0, y0, z0, x1, y1, z1] of boxes) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+  // A rim round a cushion in the middle, low enough to climb into.
+  assert.ok(Math.max(...boxes.map((b) => b[4])) <= 0.5, 'a low bed');
+  const cushion = boxes.find(([x0, , z0, x1, , z1]) => x0 < 0.3 && z0 < 0.3 && x1 > 0.7 && z1 > 0.7);
+  assert.ok(cushion && cushion[1] < cushion[4], 'a cushion to sleep on');
+  // Turned every way, its boxes stay in their cell.
+  for (let front = 0; front < 4; front++) {
+    for (const [x0, , z0, x1, , z1] of furnitureBoxes(B.turnedTo(B.PET_BED, front), 5, 6, 5, () => B.AIR)) {
+      assert.ok(x0 >= 5 && x1 <= 6 && z0 >= 5 && z1 <= 6 && x0 < x1 && z0 < z1);
+    }
+  }
+});

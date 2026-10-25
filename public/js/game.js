@@ -988,7 +988,9 @@ export class Game extends EventTarget {
       if (!owner) continue;
       const sim = pet.sim;
       const ev = stepPet(this.world, sim, owner, dt, { night });
-      if (!sim.info.flies && sim.mode !== 'ride' && keepApart(this.world, sim.body, this.standing(`pet${pet.pid}`), `pet${pet.pid}`)) [sim.x, sim.z] = [sim.body.x, sim.body.z];
+      // Curled up in its bed it stays put: nothing shoves it out.
+      const abed = sim.mode === 'bed' && sim.state === 'sleep';
+      if (!abed && !sim.info.flies && sim.mode !== 'ride' && keepApart(this.world, sim.body, this.standing(`pet${pet.pid}`), `pet${pet.pid}`)) [sim.x, sim.z] = [sim.body.x, sim.body.z];
       const m = pet.model;
       const seat = sim.mode === 'ride' ? this.petMount(pet.pid) : null;
       if (ev.boarded) pet.hop = { t: 0, x: m.group.position.x, y: m.group.position.y, z: m.group.position.z };

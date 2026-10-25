@@ -166,6 +166,72 @@ test('a pet sits beside you when you stop, looking up at you, lies down after a 
   }
 });
 
+test('at night a pet goes to its pet bed to sleep, and gets up when you walk off or morning comes', () => {
+  const world = meadow();
+  // A pet bed a little way off, on the grass.
+  world.set(18, 6, 24, B.PET_BED);
+  const me = makeBody(24.5, 6, 24.5);
+  const pet = makePet('puppy', 23.5, 6, 24.5);
+  together(world, me, pet, { mx: 0, mz: 0 }, 1);
+  // Night: off to the bed it goes, and there it curls up asleep.
+  let walked = false;
+  together(world, me, pet, { mx: 0, mz: 0 }, 12, { night: true, look: (p) => (walked ||= p.state === 'walk') });
+  assert.ok(walked, 'it walked to the bed');
+  assert.equal(pet.state, 'sleep', 'asleep in the bed');
+  assert.equal(pet.mode, 'bed', 'in bed');
+  assert.ok(Math.abs(pet.x - 18.5) < 0.35 && Math.abs(pet.z - 24.5) < 0.35, `curled up in it, at ${pet.x.toFixed(2)}, ${pet.z.toFixed(2)}`);
+  assert.ok(pet.y > 6.01 && pet.y < 6.3, `up on the cushion, at ${pet.y.toFixed(2)}`);
+  // You walk off: up and after you, out of the bed.
+  together(world, me, pet, { mx: 1, mz: 0 }, 1, { night: true });
+  assert.notEqual(pet.mode, 'bed', 'out of the bed');
+  assert.ok(['walk', 'run'].includes(pet.state), `after you: ${pet.state}`);
+  assert.ok(Math.hypot(pet.x - 18.5, pet.z - 24.5) > 0.5, 'out from the bed');
+  // Asleep there again, then morning: up and about, back beside you.
+  together(world, me, pet, { mx: 0, mz: 0 }, 14, { night: true, look: () => {} });
+  assert.equal(pet.state, 'sleep', 'asleep again');
+  together(world, me, pet, { mx: 0, mz: 0 }, 1);
+  assert.notEqual(pet.state, 'sleep', 'up when morning comes');
+  // Night with no bed about: it sleeps on the spot as always.
+  world.set(18, 6, 24, B.AIR);
+  const other = makePet('kitten', 26.5, 6, 24.5);
+  together(world, me, other, { mx: 0, mz: 0 }, 4, { night: true });
+  assert.equal(other.state, 'sleep', 'no bed: asleep where it is');
+  assert.ok(Math.hypot(other.x - me.x, other.z - me.z) < 2.6, 'beside you');
+});
+
+test('a pet stays asleep in a bed a few blocks off all night, and gives up on one behind a wall', () => {
+  const world = meadow();
+  // A bed nine blocks off: there it sleeps all night, never popped back
+  // over to you for being away from you.
+  world.set(15, 6, 24, B.PET_BED);
+  const me = makeBody(24.5, 6, 24.5);
+  const pet = makePet('puppy', 23.5, 6, 24.5);
+  together(world, me, pet, { mx: 0, mz: 0 }, 1);
+  together(world, me, pet, { mx: 0, mz: 0 }, 5, { night: true });
+  let popped = '';
+  let woke = false;
+  together(world, me, pet, { mx: 0, mz: 0 }, 30, { night: true, look: (p, ev) => {
+    if (ev.popped) popped = ev.popped;
+    woke ||= p.state !== 'sleep';
+  } });
+  assert.equal(popped, '', `never popped out of its bed: ${popped}`);
+  assert.ok(!woke, 'asleep all night');
+  assert.ok(Math.abs(pet.x - 15.5) < 0.35 && Math.abs(pet.z - 24.5) < 0.35, `in the bed, at ${pet.x.toFixed(2)}, ${pet.z.toFixed(2)}`);
+  // A bed walled off: stuck at the wall, it gives that bed up and sleeps
+  // beside you instead, not popping back and forth.
+  world.set(15, 6, 24, B.AIR);
+  world.set(19, 6, 24, B.PET_BED);
+  for (let x = 18; x <= 20; x++) for (let z = 21; z <= 27; z++) for (let y = 6; y <= 9; y++) if (x !== 19 || z !== 24) world.set(x, y, z, B.STONE);
+  for (let y = 7; y <= 9; y++) world.set(19, y, 24, B.STONE);
+  const other = makePet('kitten', 23.5, 6, 24.5);
+  together(world, me, other, { mx: 0, mz: 0 }, 1);
+  let pops = 0;
+  together(world, me, other, { mx: 0, mz: 0 }, 20, { night: true, look: (p, ev) => (pops += ev.popped ? 1 : 0) });
+  assert.ok(pops <= 1, `gave up on it, popped ${pops} times`);
+  assert.equal(other.state, 'sleep', 'asleep');
+  assert.ok(Math.hypot(other.x - me.x, other.z - me.z) < 2.6, 'beside you');
+});
+
 test('a pet waits under you while you fly, and pops over to you when you go a long way at once or up where it cannot follow', () => {
   const world = meadow();
   const me = makeBody(24.5, 6, 24.5);

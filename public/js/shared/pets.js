@@ -18,6 +18,29 @@ import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
 
+// A pet bed (PET_BED in blocks.js) to sleep in: the nearest one within
+// BED_RANGE of (x, z), at (x, y, z) just inside its cell, or null. Called
+// at most once in a while (BED_REMEMBER) for each pet, not every step.
+function bedNear(world, x, z) {
+  let best = null;
+  let bestD = BED_RANGE;
+  const R = Math.ceil(BED_RANGE);
+  for (let bx = Math.max(0, Math.floor(x - R)); bx <= Math.min(world.W - 1, Math.floor(x + R)); bx++) {
+    for (let bz = Math.max(0, Math.floor(z - R)); bz <= Math.min(world.D - 1, Math.floor(z + R)); bz++) {
+      let at = -1;
+      for (let y = 0; y < world.H && at < 0; y++) if (world.get(bx, y, bz) === B.PET_BED) at = y;
+      if (at >= 0) {
+        const d = Math.hypot(bx + 0.5 - x, bz + 0.5 - z);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: bx + 0.5, y: at, z: bz + 0.5 };
+        }
+      }
+    }
+  }
+  return best;
+}
+
 // How each kind gets about: the box it fills (radius, height) and how high
 // over its feet the top of the water is when it swims (float); how fast it
 // walks and runs. A flyer flies at up to fly, and keeps hover over your feet.
@@ -51,6 +74,15 @@ const TRAIL = 80;
 const LIE_AFTER = 14;
 const SLEEP_AFTER = 45;
 const NIGHT_SLEEP = 3;
+// Bedtime: at night, with a pet bed (PET_BED in blocks.js) on the island,
+// it goes to the nearest one within this far and curls up in it, instead of
+// sleeping on the spot. Where the beds are is looked for anew once in a
+// while, not at every step.
+const BED_RANGE = 10;
+const BED_REMEMBER = 1;
+// A bed it got stuck on its way to (a wall in the way) is given up on for
+// this long, and it sleeps beside you instead.
+const BED_GIVE_UP = 30;
 
 // What a pet does when its owner does something (an emote), and how long
 // each trick takes.
@@ -75,8 +107,9 @@ export function makePet(kind, x, y, z, { yaw = 0, seed = 1 } = {}) {
     y,
     z,
     yaw,
-    // follow, rest (beside you), ride (along with you), and for a flyer fly,
-    // perch (on your head) and land (on the ground).
+    // follow, rest (beside you), ride (along with you), bed (in its pet bed
+    // at night), and for a flyer fly, perch (on your head) and land (on the
+    // ground).
     mode: 'rest',
     state: 'sit',
     // Your trail, for it to follow; how long you have stood still, and it
@@ -98,6 +131,10 @@ export function makePet(kind, x, y, z, { yaw = 0, seed = 1 } = {}) {
     glanceAt: 2,
     orbit: 0,
     time: 0,
+    // The bed it is off to, or sleeps in, at night (a pet bed found near
+    // you), looked for anew once in a while.
+    bed: null,
+    bedLeft: 0,
     rng: new Rng(seed),
   };
 }
@@ -189,13 +226,18 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   // flying, nor in the water, where it waits below you or swims about).
   const above = !owner.flying && !owner.swimming && Math.abs(dy) > 2.2;
   if (d > POP || pet.stuck > STUCK) {
+    if (pet.mode === 'bed') {
+      pet.bed = null;
+      pet.bedLeft = BED_GIVE_UP;
+    }
     popTo(world, pet, owner, ev, d > POP ? 'far' : 'stuck');
     return;
   }
   // Somewhere it cannot get any nearer to you, standing still, for a while:
-  // over to you. (Behind you on the move it only keeps up.)
+  // over to you. (Behind you on the move it only keeps up, and off to its
+  // bed, or asleep in it, it is meant to be away from you.)
   const away = d + (above ? Math.abs(dy) : 0);
-  if (away > NEAR && pet.still > 0.5) {
+  if (away > NEAR && pet.still > 0.5 && pet.mode !== 'bed') {
     if (away < pet.best - 0.3) {
       pet.best = away;
       pet.lost = 0;
@@ -230,27 +272,58 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   }
   let target = null;
   let fast = false;
-  if (!tricking && going && !(owner.flying && d < NEAR)) {
-    pet.mode = 'follow';
-    pet.rest = 0;
-    target = trailTarget(pet, owner);
-    fast = d > RUN_AT || owner.speed > 5.5;
-  } else if (!tricking && !owner.moving) {
-    // Settling beside you: on whichever side it is already, or in front
-    // of you to pose.
-    if (pet.mode === 'follow') {
-      pet.mode = 'rest';
-      pet.settle = 0;
-      const sx = Math.cos(owner.yaw);
-      const sz = -Math.sin(owner.yaw);
-      pet.side = (b.x - owner.x) * sx + (b.z - owner.z) * sz >= 0 ? 1 : -1;
+  // Bedtime: at night, with a pet bed (PET_BED in blocks.js) about and you
+  // settled, it walks to the nearest one and curls up in it instead of
+  // sleeping at your feet — up again when you walk off, or morning comes.
+  // Which beds are about is looked for anew once in a while, not each step.
+  pet.bedLeft -= dt;
+  if (night && !owner.moving && pet.bedLeft <= 0) {
+    pet.bed = bedNear(world, owner.x, owner.z);
+    pet.bedLeft = BED_REMEMBER;
+  }
+  const bedtime = night && !owner.moving && !posing && !tricking && pet.bed && Math.abs(pet.bed.y - b.y) < 1.2;
+  if (bedtime) {
+    pet.mode = 'bed';
+    target = pet.bed;
+    // There: curled up on the cushion, looking out towards you, asleep.
+    if (Math.hypot(pet.bed.x - b.x, pet.bed.z - b.z) < 0.3) {
+      Object.assign(b, { x: pet.bed.x, z: pet.bed.z, y: pet.bed.y + 0.12, vx: 0, vy: 0, vz: 0 });
+      pet.rest += dt;
+      pet.state = 'sleep';
+      pet.yaw = turn(pet.yaw, Math.atan2(owner.x - b.x, owner.z - b.z), dt * 4);
+      pet.x = b.x;
+      pet.y = b.y;
+      pet.z = b.z;
+      return ev;
     }
-    pet.settle = (pet.settle ?? 0) + dt;
-    const spot = posing ? poseSpot(owner) : heelSpot(owner, pet.side);
-    // (Posing, it shuffles over as you turn about.)
-    if (Math.hypot(spot.x - b.x, spot.z - b.z) > 0.25 && (posing || pet.settle < 2)) target = spot;
-  } else if (!tricking) {
-    pet.mode = 'follow';
+  } else {
+    if (pet.mode === 'bed') {
+      // You walked off, or morning came: up and after you again.
+      pet.mode = 'follow';
+      pet.rest = 0;
+    }
+    if (!tricking && going && !(owner.flying && d < NEAR)) {
+      pet.mode = 'follow';
+      pet.rest = 0;
+      target = trailTarget(pet, owner);
+      fast = d > RUN_AT || owner.speed > 5.5;
+    } else if (!tricking && !owner.moving) {
+      // Settling beside you: on whichever side it is already, or in front
+      // of you to pose.
+      if (pet.mode === 'follow') {
+        pet.mode = 'rest';
+        pet.settle = 0;
+        const sx = Math.cos(owner.yaw);
+        const sz = -Math.sin(owner.yaw);
+        pet.side = (b.x - owner.x) * sx + (b.z - owner.z) * sz >= 0 ? 1 : -1;
+      }
+      pet.settle = (pet.settle ?? 0) + dt;
+      const spot = posing ? poseSpot(owner) : heelSpot(owner, pet.side);
+      // (Posing, it shuffles over as you turn about.)
+      if (Math.hypot(spot.x - b.x, spot.z - b.z) > 0.25 && (posing || pet.settle < 2)) target = spot;
+    } else if (!tricking) {
+      pet.mode = 'follow';
+    }
   }
   move(world, pet, owner, target, fast, dt, ev);
   // What it is doing, for the page to show.

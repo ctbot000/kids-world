@@ -242,6 +242,10 @@ export const TOWER_CLOCK = furniture(77, 'tower-clock', { name: 'Tower Clock', c
 // A little table set for tea: a cloth, a teapot, cups and a plate of cookies
 // (shared/furniture.js). Pull chairs up to it and sit down to tea together.
 export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color: '#f29bc4', sound: 'wood' });
+// A pet's bed, a round basket with a soft cushion in it (shared/pets.js):
+// at night your pet walks to the nearest one and curls up in it. Not solid,
+// so a pet can get into it and you can step over it. After the tea table.
+export const PET_BED = furniture(262, 'pet-bed', { name: 'Pet Bed', color: '#f7b6cf', after: 154, solid: false, sound: 'cloth' });
 // Arcade machines, each running a mini-game everyone at it plays together
 // (shared/arcade.js): walk up and press Q to play. Their screens glow and
 // light the room a little.
