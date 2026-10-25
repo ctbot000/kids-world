@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { furnitureBoxes, modelBoxes } from '../public/js/shared/furniture.js';
+import { furnitureBoxes, furnitureDrop, modelBoxes } from '../public/js/shared/furniture.js';
 import { LightMap } from '../public/js/shared/light.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { meshChunk } from '../public/js/render/mesher.js';
@@ -374,6 +374,17 @@ test('a computer after the Go board, glowing, its picture inside its cell', () =
   assert.ok(B.SOLID[B.COMPUTER] === 1 && B.block(B.COMPUTER).light > 0);
   assert.deepEqual(B.block(B.COMPUTER).faces, [257, 258, 259, 260], 'it turns, on four ids in a row');
   for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.COMPUTER)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1);
+});
+
+test('a computer on a table stands on its top, its keyboard keys and all', () => {
+  const C = B.turnedTo(B.COMPUTER, 3);
+  const on = (below) => furnitureBoxes(C, 0, 2, 0, (x, y, z) => (y === 1 ? below : y === 2 && !x && !z ? C : B.AIR));
+  const low = (boxes) => Math.min(...boxes.map((b) => b[1]));
+  const table = furnitureBoxes(B.TABLE, 0, 1, 0, (x, y, z) => (y === 1 && !x && !z ? B.TABLE : B.AIR));
+  assert.equal(low(on(B.TABLE)), Math.max(...table.map((b) => b[4])), 'down on the table top');
+  assert.equal(low(on(B.AIR)), 2, 'on the floor of its cell otherwise');
+  assert.equal(furnitureDrop(B.TV, B.TABLE), 0, 'only what stands on tables');
+  assert.ok(modelBoxes(B.COMPUTER).length > 50, 'a key for each finger to tap');
 });
 
 test('a pet bed after the tea table, a low basket a pet can get into', () => {
