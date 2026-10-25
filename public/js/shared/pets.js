@@ -80,6 +80,9 @@ const NIGHT_SLEEP = 3;
 // while, not at every step.
 const BED_RANGE = 10;
 const BED_REMEMBER = 1;
+// A bed it got stuck on its way to (a wall in the way) is given up on for
+// this long, and it sleeps beside you instead.
+const BED_GIVE_UP = 30;
 
 // What a pet does when its owner does something (an emote), and how long
 // each trick takes.
@@ -223,13 +226,18 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   // flying, nor in the water, where it waits below you or swims about).
   const above = !owner.flying && !owner.swimming && Math.abs(dy) > 2.2;
   if (d > POP || pet.stuck > STUCK) {
+    if (pet.mode === 'bed') {
+      pet.bed = null;
+      pet.bedLeft = BED_GIVE_UP;
+    }
     popTo(world, pet, owner, ev, d > POP ? 'far' : 'stuck');
     return;
   }
   // Somewhere it cannot get any nearer to you, standing still, for a while:
-  // over to you. (Behind you on the move it only keeps up.)
+  // over to you. (Behind you on the move it only keeps up, and off to its
+  // bed, or asleep in it, it is meant to be away from you.)
   const away = d + (above ? Math.abs(dy) : 0);
-  if (away > NEAR && pet.still > 0.5) {
+  if (away > NEAR && pet.still > 0.5 && pet.mode !== 'bed') {
     if (away < pet.best - 0.3) {
       pet.best = away;
       pet.lost = 0;

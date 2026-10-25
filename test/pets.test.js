@@ -199,6 +199,39 @@ test('at night a pet goes to its pet bed to sleep, and gets up when you walk off
   assert.ok(Math.hypot(other.x - me.x, other.z - me.z) < 2.6, 'beside you');
 });
 
+test('a pet stays asleep in a bed a few blocks off all night, and gives up on one behind a wall', () => {
+  const world = meadow();
+  // A bed nine blocks off: there it sleeps all night, never popped back
+  // over to you for being away from you.
+  world.set(15, 6, 24, B.PET_BED);
+  const me = makeBody(24.5, 6, 24.5);
+  const pet = makePet('puppy', 23.5, 6, 24.5);
+  together(world, me, pet, { mx: 0, mz: 0 }, 1);
+  together(world, me, pet, { mx: 0, mz: 0 }, 5, { night: true });
+  let popped = '';
+  let woke = false;
+  together(world, me, pet, { mx: 0, mz: 0 }, 30, { night: true, look: (p, ev) => {
+    if (ev.popped) popped = ev.popped;
+    woke ||= p.state !== 'sleep';
+  } });
+  assert.equal(popped, '', `never popped out of its bed: ${popped}`);
+  assert.ok(!woke, 'asleep all night');
+  assert.ok(Math.abs(pet.x - 15.5) < 0.35 && Math.abs(pet.z - 24.5) < 0.35, `in the bed, at ${pet.x.toFixed(2)}, ${pet.z.toFixed(2)}`);
+  // A bed walled off: stuck at the wall, it gives that bed up and sleeps
+  // beside you instead, not popping back and forth.
+  world.set(15, 6, 24, B.AIR);
+  world.set(19, 6, 24, B.PET_BED);
+  for (let x = 18; x <= 20; x++) for (let z = 21; z <= 27; z++) for (let y = 6; y <= 9; y++) if (x !== 19 || z !== 24) world.set(x, y, z, B.STONE);
+  for (let y = 7; y <= 9; y++) world.set(19, y, 24, B.STONE);
+  const other = makePet('kitten', 23.5, 6, 24.5);
+  together(world, me, other, { mx: 0, mz: 0 }, 1);
+  let pops = 0;
+  together(world, me, other, { mx: 0, mz: 0 }, 20, { night: true, look: (p, ev) => (pops += ev.popped ? 1 : 0) });
+  assert.ok(pops <= 1, `gave up on it, popped ${pops} times`);
+  assert.equal(other.state, 'sleep', 'asleep');
+  assert.ok(Math.hypot(other.x - me.x, other.z - me.z) < 2.6, 'beside you');
+});
+
 test('a pet waits under you while you fly, and pops over to you when you go a long way at once or up where it cannot follow', () => {
   const world = meadow();
   const me = makeBody(24.5, 6, 24.5);
