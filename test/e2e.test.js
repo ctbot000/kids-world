@@ -2668,6 +2668,19 @@ async function eventually(fn, timeout = 30000 * SLOW) {
   }
 }
 
+// Ideas and problems come from level 5 on Adventure Isle: camps freed there
+// (50 XP each) take a page's player to it, and the copy to the keeper.
+async function playIsleToTellUs(page, keeper) {
+  const player = await page.evaluate(() => {
+    const isle = window.kidsWorld.isle;
+    isle.update({ stats: { ...isle.data.stats, freed: 24 } });
+    // Counts go to the keeper now and then, as any count does.
+    isle.dispatchEvent(new CustomEvent('count'));
+    return window.kidsWorld.keeper.login.player;
+  });
+  await eventually(async () => (await keeper.store.isleLevel(player)) >= 5);
+}
+
 // A keeper in this process, online through the local PeerServer.
 async function keeperOnline(identity, dir) {
   const store = await new KeeperStore(dir).open();
@@ -3299,6 +3312,16 @@ test('an idea for the game, sent from 💌 on the title screen once logged in, i
     await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
     await until(page, () => window.kidsWorld.keeper.state === 'ready');
     await until(page, () => document.getElementById('btn-feedback').offsetParent !== null);
+
+    // Below level 5 on Adventure Isle, 💌 says so, and there is no box to write an idea in.
+    await clickButton(page, 'Ideas & problems', '#title');
+    await until(page, () => document.querySelector('#modal .tell-us-locked')?.textContent.includes('level 5'));
+    await clickButton(page, 'I have an idea', '#modal');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Ideas for Kids World'));
+    assert.equal(await page.$('#modal textarea'), null);
+    assert.ok(await page.$eval('#modal .tell-us-locked', (p) => p.textContent.includes('You are level 1 there')));
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    await playIsleToTellUs(page, keeper);
 
     // From 💌 on the title screen: ideas or problems, then the ideas window, an
     // empty idea refused, then one sent. (Help and Settings have it too.)
@@ -5411,6 +5434,7 @@ test('a problem is told of with a picture of the screen, logged in, and waits fo
     await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
     await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
     await until(page, () => window.kidsWorld.keeper.state === 'ready' && !document.getElementById('btn-feedback').hidden);
+    await playIsleToTellUs(page, keeper);
     await makeIsland(page, { online: false, theme: 'Flat Land', name: 'Buggy Bay' });
     // From How to play: the dialog closes, the picture is taken, and what you write goes with it.
     await page.click('#btn-help-hud');

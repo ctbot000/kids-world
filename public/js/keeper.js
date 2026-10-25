@@ -496,10 +496,10 @@ export class KeeperClient extends EventTarget {
     return true;
   }
 
-  // The keeper's answer to a report: kept, or never to be (bad, or too many
-  // lately), else it goes again later.
+  // The keeper's answer to a report: kept, or never to be (bad, too many
+  // lately, or from below TELL_US_LEVEL), else it goes again later.
   reported(report, reply) {
-    if (reply.t === 'error' && reply.code !== 'bad' && reply.code !== 'wait') {
+    if (reply.t === 'error' && reply.code !== 'bad' && reply.code !== 'wait' && reply.code !== 'level') {
       this.away();
       return;
     }

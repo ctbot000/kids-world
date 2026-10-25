@@ -83,6 +83,10 @@ export const REPORT_TEXT_MAX = 1000;
 export const WISH_TEXT_MAX = 500;
 export const WISHES_AN_HOUR = 3;
 export const WISHES_WAITING = 5;
+// Ideas and problem reports come from players who have played a while: at
+// least this level in Adventure Isle's own world (the shared isle's XP, see
+// levels.js), checked by the page and again by the keeper.
+export const TELL_US_LEVEL = 5;
 export const WISH_STATES = ['waiting', 'accepted', 'declined'];
 // Where an accepted idea has got to since, as its issue on GitHub tells it
 // (server/ctb.js stageOf): waiting for a grown-up to pick it, picked, being

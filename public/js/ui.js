@@ -22,7 +22,7 @@ import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
 import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
-import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -2506,6 +2506,18 @@ export class UI {
     return Boolean(this.reportKeeper()?.config && this.handlers?.login?.who?.());
   }
 
+  // Whether you have played enough of Adventure Isle to send an idea or tell
+  // of a problem (the keeper checks it again): TELL_US_LEVEL in its own world.
+  isleLevelToTellUs() {
+    return (this.isle?.progress.level ?? 1) >= TELL_US_LEVEL;
+  }
+
+  // What 💌, 💡 and 🐞 say until then.
+  tellUsLocked() {
+    const level = this.isle?.progress.level ?? 1;
+    return h('p', { class: 'login-note warn tell-us-locked' }, `🔒 Reach ⭐ level ${TELL_US_LEVEL} on 🌟 Adventure Isle to send ideas and tell of problems. You are level ${level} there now — off you go!`);
+  }
+
   // Something went wrong: what you write goes to the grown-ups who run the
   // island keeper, with a picture of your screen as it was (the dialog this
   // came from closes first, and the picture can stay behind) or one you pick
@@ -2515,6 +2527,10 @@ export class UI {
   async reportDialog() {
     const keeper = this.reportKeeper();
     if (!this.canTellUs()) return;
+    if (!this.isleLevelToTellUs()) {
+      this.openModal((root) => root.append(h('h2', {}, '🐞 Something went wrong?'), this.tellUsLocked()), { narrow: true });
+      return;
+    }
     this.closeModal();
     this.loading('📷 Taking a picture of your screen…');
     // The dialog that closed is off the screen by the next frame.
@@ -2635,6 +2651,7 @@ export class UI {
         root.append(
           h('h2', {}, '💌 Tell us!'),
           h('p', {}, 'Have an idea that would make Kids World even better, or did something go wrong?'),
+          this.isleLevelToTellUs() ? null : this.tellUsLocked(),
           h(
             'div',
             { class: 'feedback-choices' },
@@ -2661,6 +2678,7 @@ export class UI {
     const keeper = this.reportKeeper();
     if (!keeper?.config) return;
     const loggedIn = Boolean(this.handlers?.login?.who?.());
+    const unlocked = this.isleLevelToTellUs();
     this.openModal(
       (root) => {
         const list = h('div', { class: 'ideas' }, h('p', { class: 'muted' }, 'Looking for your ideas…'));
@@ -2713,12 +2731,12 @@ export class UI {
         root.append(
           h('h2', {}, '💡 Ideas for Kids World'),
           h('p', {}, 'Tell the helpers at CTB what you would love to see in Kids World. One of them reads your idea and writes back to you!'),
-          ...(loggedIn ? [text, note, h('div', { class: 'row', style: 'margin-top:12px' }, send)] : [h('p', { class: 'login-note warn' }, '🔑 Log in to send an idea.')]),
+          ...(!loggedIn ? [h('p', { class: 'login-note warn' }, '🔑 Log in to send an idea.')] : unlocked ? [text, note, h('div', { class: 'row', style: 'margin-top:12px' }, send)] : [this.tellUsLocked()]),
           loggedIn ? h('h3', { style: 'margin-top:16px' }, 'Your ideas') : null,
           loggedIn ? list : null,
         );
         refresh();
-        if (loggedIn) setTimeout(() => text.focus(), 60);
+        if (loggedIn && unlocked) setTimeout(() => text.focus(), 60);
       },
       {
         narrow: true,

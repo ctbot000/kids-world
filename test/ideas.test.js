@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
-import { cleanWish, KEEPER_VERSION, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
+import { cleanWish, KEEPER_VERSION, TELL_US_LEVEL, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
+import { levelFor } from '../public/js/shared/levels.js';
 import { LABELS } from '../server/ctb-github.js';
 import { Company, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
@@ -54,6 +55,11 @@ async function page(keeper, device, nonce) {
   return { conn, replies, say, news: () => replies.filter((r) => r.t === 'wish-news') };
 }
 
+// Camps freed on Adventure Isle, 50 XP each: 24 of them is level 5 there,
+// enough to send ideas and tell of problems.
+const FREED_TO_TELL_US = 24;
+const playIsle = (page, name, freed = FREED_TO_TELL_US) => page.say({ t: 'adventure', profile: { name, stats: { freed } } });
+
 async function keeperWith(clock) {
   const dir = await tempDir();
   const now = () => clock.t;
@@ -80,6 +86,18 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
   await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter', look: { animal: 'cat' } } });
   const other = await page(keeper, PHONE, '33');
   await other.say({ t: 'make-login', username: 'Brave Fox', password: PASSWORD, profile: { name: 'Brave Fox' } });
+
+  // Logged in, but not far enough on Adventure Isle yet: neither is kept.
+  assert.equal(levelFor(50 * FREED_TO_TELL_US), TELL_US_LEVEL);
+  const early = await tablet.say({ t: 'wish', text: 'More ponies!' });
+  assert.equal(early.code, 'level');
+  assert.match(early.text, /Reach level 5 on Adventure Isle to send an idea/);
+  await playIsle(tablet, 'Sunny Otter', FREED_TO_TELL_US - 1);
+  assert.equal((await tablet.say({ t: 'report', report: { text: 'The pony is stuck' } })).code, 'level', 'level 4 is not enough');
+  assert.deepEqual(await store.reports(), []);
+  assert.deepEqual(await store.wishes(), []);
+  await playIsle(tablet, 'Sunny Otter');
+  await playIsle(other, 'Brave Fox');
 
   assert.match((await tablet.say({ t: 'wish', text: '   ' })).text, /Write your idea/);
   // Each a second after the last, so the newest first is one order.
@@ -160,6 +178,7 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   const { keeper } = await keeperWith(clock);
   const tablet = await page(keeper, TABLET, '22');
   await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter' } });
+  await playIsle(tablet, 'Sunny Otter');
   const send = async (text) => {
     clock.t += 1000;
     return (await tablet.say({ t: 'wish', text })).wish;

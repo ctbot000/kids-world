@@ -66,6 +66,7 @@ import {
   WISH_TEXT_MAX,
   WISHES_AN_HOUR,
   WISHES_WAITING,
+  TELL_US_LEVEL,
   cleanPassword,
   cleanUsername,
   PASSWORD_MAX,
@@ -922,6 +923,12 @@ export class KeeperStore extends EventEmitter {
   }
 
   // ------------------------------------------------ problem reports
+
+  // A player's level in Adventure Isle's own world: 1 before they played there.
+  async isleLevel(player) {
+    const isle = (await readJson(this.path(player, 'device.json')))?.adventure?.profile;
+    return isle ? progressOf(isle.stats, isle.stickers).level : 1;
+  }
 
   // Keeps a problem report from this folder: { id, player }.
   keepReport(device, raw) {
@@ -1941,7 +1948,7 @@ export class Keeper extends EventEmitter {
       case 'report': {
         // A problem a player told of, with a picture of their screen: logged
         // in, so the grown-ups know who to thank and to ask.
-        mine('tell of a problem');
+        await this.needIsleLevel(mine('tell of a problem'), 'tell of a problem');
         const { id, player } = await this.store.keepReport(conn.folder, msg.report);
         this.reply(conn, { t: 'kept', what: 'report', id });
         this.note({ device: conn.folder, what: 'report', player });
@@ -1949,7 +1956,7 @@ export class Keeper extends EventEmitter {
       }
       case 'wish': {
         // An idea for the game, for CTB's workers to read and answer.
-        const wish = await this.store.keepWish(mine('send an idea'), msg.text);
+        const wish = await this.store.keepWish(await this.needIsleLevel(mine('send an idea'), 'send an idea'), msg.text);
         this.reply(conn, { t: 'kept', what: 'wish', wish: wishForPage(wish) });
         this.note({ device: conn.player, what: 'wish', player: wish.name });
         this.emit('wish', wish);
@@ -2005,6 +2012,14 @@ export class Keeper extends EventEmitter {
     // The AI friend, when this computer runs one: playing now while it can come.
     if (this.buddy) players.push(this.buddy.listing());
     return { players: sortPlayers(players), shown: all.find((p) => p.id === me)?.findable ?? true };
+  }
+
+  // The player, once they are at TELL_US_LEVEL on Adventure Isle: ideas and
+  // problems come from players who have played a while.
+  async needIsleLevel(player, what) {
+    const level = await this.store.isleLevel(player);
+    if (level < TELL_US_LEVEL) throw new KeepError('level', `Reach level ${TELL_US_LEVEL} on Adventure Isle to ${what}.`, { level, need: TELL_US_LEVEL });
+    return player;
   }
 
   // An invitation from player `me` to their island, for the pages of the
