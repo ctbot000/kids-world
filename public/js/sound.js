@@ -579,8 +579,11 @@ export class Sound {
       case 'digger':
       case 'minecart':
       case 'scooter':
-      case 'sled':
         this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
+        this.play('honk', { type: name });
+        break;
+      // A sled has no engine to start: just its whistle.
+      case 'sled':
         this.play('honk', { type: name });
         break;
       case 'honk':
