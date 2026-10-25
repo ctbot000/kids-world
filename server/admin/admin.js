@@ -404,6 +404,40 @@ function renderSummary(state) {
   );
 }
 
+// Screen time (shared/lock.js): every player locked at once, or unlocked,
+// as the keeper tells every page connected to it.
+let lockShown = '';
+function renderLock(k) {
+  const el = $('lock');
+  el.hidden = !k;
+  if (!k) return;
+  const key = JSON.stringify([k.lock, k.lockable]);
+  if (key === lockShown) return;
+  lockShown = key;
+  const set = async (on) => {
+    if (on && !confirm('Lock every player now? Their game is covered until you unlock it.')) return;
+    const res = await api('lock', { method: on ? 'PUT' : 'DELETE', headers: { 'X-Kids-World-Admin': '1' } });
+    if (!res.ok) alert('That did not work. Is the keeper still running?');
+    refresh(true);
+  };
+  el.classList.toggle('on', Boolean(k.lock));
+  el.replaceChildren(
+    h(
+      'div',
+      { class: 'lock-text' },
+      h('b', {}, k.lock ? 'Screen time: every player is locked' : 'Screen time: players can play'),
+      h(
+        'span',
+        { class: 'muted' },
+        k.lock
+          ? `Since ${time.format(k.lock.since)} · ${plural(k.lockable, 'page', 'pages')} connected now, and every page that connects, show "Screen time is over".`
+          : `Locking covers the game on every page connected to the keeper (${plural(k.lockable, 'page', 'pages')} now) and every page that connects later, until you unlock it.`,
+      ),
+    ),
+    k.lock ? h('button', { type: 'submit', onclick: () => set(false) }, 'Unlock all players') : h('button', { type: 'button', class: 'danger', onclick: () => set(true) }, 'Lock all players'),
+  );
+}
+
 const DID = {
   island: (e) => ` sent “${e.island}”`,
   profile: () => ' sent their profile',
@@ -1023,6 +1057,7 @@ let drawnAt = 0;
 function render(state) {
   renderStatus(state);
   refreshTv(state?.keeper ?? null);
+  renderLock(state?.keeper ?? null);
   if (!state) return;
   renderSummary(state);
   renderRecent(state);
@@ -1067,7 +1102,7 @@ async function refresh(now = false) {
   } catch {
     state = null;
   }
-  if (now) shown = reportsShown = visitorsShown = '';
+  if (now) shown = reportsShown = visitorsShown = lockShown = '';
   render(state);
   await refreshFriend();
   await ctb.refresh();

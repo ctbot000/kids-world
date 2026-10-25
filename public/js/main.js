@@ -9,6 +9,7 @@ import { fitHomeScreenApp } from './fullscreen.js';
 import { hurried } from './hurry.js';
 import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
+import { LockScreen } from './lock-screen.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { latestNews, newsSince } from './news.js';
 import { Profile } from './profile.js';
@@ -140,6 +141,11 @@ keeper.addEventListener('status', async (e) => {
 keeper.addEventListener('invite', (e) => invited(e.detail));
 // Something new on every TV, or nothing any more (see shared/broadcast.js).
 keeper.addEventListener('tv', (e) => ui.tvNews(e.detail.tv, keeper.peerOptions));
+// Screen time: every player locked from the keeper's admin page, or not any
+// more (see shared/lock.js). Locked when the page last heard, locked it opens.
+const lockScreen = new LockScreen(sound);
+lockScreen.show(keeper.lock);
+keeper.addEventListener('lock', (e) => lockScreen.show(e.detail.lock));
 // Someone on air from a broadcast station, or nobody any more; and going
 // live yourself, through the keeper (see shared/station.js).
 ui.keeper = keeper;

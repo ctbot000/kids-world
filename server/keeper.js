@@ -36,6 +36,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual, webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { BlockList, isIP } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -77,6 +78,7 @@ import {
   toBase64Url,
 } from '../public/js/shared/keeper.js';
 import { cleanBroadcast } from '../public/js/shared/broadcast.js';
+import { cleanLock } from '../public/js/shared/lock.js';
 import { cleanOnAir, sameOnAir } from '../public/js/shared/station.js';
 import { cleanInvite, isFriendId, sortPlayers } from '../public/js/shared/friends.js';
 import { progressOf } from '../public/js/shared/levels.js';
@@ -1437,6 +1439,9 @@ export class Keeper extends EventEmitter {
     // TV in the game: { conn, name, station, since } of the page that is its
     // TV station, or null.
     this.onAir = null;
+    // Screen time (shared/lock.js): every player locked, from the admin
+    // page, or null. Kept in the data folder, so a restart keeps it.
+    this.lock = this.readLock();
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
   }
@@ -1478,7 +1483,37 @@ export class Keeper extends EventEmitter {
       recent: this.recent,
       tv: this.tv ? { ...this.tv, since: this.tvSince } : null,
       onAir: this.onAir ? { name: this.onAir.name, station: this.onAir.station, since: this.onAir.since } : null,
+      lock: this.lock,
+      // The pages that would cover the game as it is locked.
+      lockable: [...this.conns.values()].filter((c) => c.lock && c.folder && !c.closed).length,
     };
+  }
+
+  // ------------------------------------------------ screen time
+
+  get lockFile() {
+    return join(this.store.dir, 'lock.json');
+  }
+
+  readLock() {
+    try {
+      return cleanLock(JSON.parse(readFileSync(this.lockFile, 'utf8')));
+    } catch {
+      return null;
+    }
+  }
+
+  // Every player locked (on), or unlocked: the pages connected now hear at
+  // once, and the others when they connect. Returns the lock.
+  async setLock(on) {
+    if (Boolean(on) !== Boolean(this.lock)) {
+      this.lock = on ? { since: this.now() } : null;
+      if (this.lock) await writeFile(this.lockFile, JSON.stringify(this.lock));
+      else await rm(this.lockFile, { force: true });
+      this.log(this.lock ? 'Screen time: every player is locked.' : 'Screen time: every player is unlocked.');
+      for (const conn of this.conns.values()) if (conn.lock && conn.folder && !conn.closed) this.reply(conn, { t: 'lock-news', lock: this.lock });
+    }
+    return this.lock;
   }
 
   // ------------------------------------------------ TV broadcasts
@@ -1729,7 +1764,16 @@ export class Keeper extends EventEmitter {
       conn.tv = msg.tv === true;
       // And one that knows broadcast stations, who is on air from one.
       conn.onAir = msg.onair === true;
-      this.reply(conn, { t: 'me', ...(ok ? { player, username: login?.username ?? '' } : {}), ...(needsPassword ? { needsPassword } : {}), ...(conn.tv ? { tv: this.tvNow() } : {}), ...(conn.onAir ? { onAir: this.onAirNow() } : {}) });
+      // And one that knows screen time, whether it is locked.
+      conn.lock = msg.lock === true;
+      this.reply(conn, {
+        t: 'me',
+        ...(ok ? { player, username: login?.username ?? '' } : {}),
+        ...(needsPassword ? { needsPassword } : {}),
+        ...(conn.tv ? { tv: this.tvNow() } : {}),
+        ...(conn.onAir ? { onAir: this.onAirNow() } : {}),
+        ...(conn.lock ? { lock: this.lock } : {}),
+      });
       return;
     }
     const mine = (what) => {

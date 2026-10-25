@@ -37,9 +37,10 @@
 import { get, set } from '../vendor/idb-keyval.js';
 import { hurried } from './hurry.js';
 import { signalingOptions } from './net.js';
-import { load, save, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
+import { load, save, loadLock, saveLock, listIslands, loadIsland, storeIsland, forgetIsland, MAX_ISLANDS } from './storage.js';
 import { Reassembler, sendText } from './shared/framing.js';
 import { cleanBroadcast, sameBroadcast } from './shared/broadcast.js';
+import { cleanLock } from './shared/lock.js';
 import { cleanOnAir, sameOnAir } from './shared/station.js';
 import { cleanInvite, isFriendId } from './shared/friends.js';
 import { cleanListing } from './shared/listing.js';
@@ -164,6 +165,10 @@ export class KeeperClient extends EventTarget {
     this.onAir = null;
     this.live = null;
     this.liveSent = '';
+    // Screen time (shared/lock.js): every player locked from the admin page,
+    // or null. The last word heard stays, over a reload and while the keeper
+    // is away, until the keeper says otherwise.
+    this.lock = cleanLock(loadLock());
     // Not logged in: whether the keeper heard this page came by.
     this.visited = false;
     // Problem reports waiting for the keeper (see report), the oldest first.
@@ -243,7 +248,8 @@ export class KeeperClient extends EventTarget {
       if (!document.hidden) this.resync();
     });
     this.setState(this.enabled ? 'idle' : 'off');
-    if ((this.enabled || this.reports.length) && this.pending()) this.schedule(this.login ? 0 : FIRST_TRY_MS);
+    // Locked for screen time, it asks at once whether that is over yet.
+    if (this.lock || ((this.enabled || this.reports.length) && this.pending())) this.schedule(this.login || this.lock ? 0 : FIRST_TRY_MS);
   }
 
   setEnabled(on) {
@@ -280,7 +286,7 @@ export class KeeperClient extends EventTarget {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = 0;
-      if (this.pending()) this.connect();
+      if (this.pending() || this.lock) this.connect();
       else if (this.state !== 'off') this.setState(this.enabled ? 'idle' : 'off');
     }, ms);
   }
@@ -818,7 +824,7 @@ export class KeeperClient extends EventTarget {
         return;
       }
       talk.checked = true;
-      this.send({ t: 'me', device: this.data.device, tv: true, onair: true, ...(this.login ? { login: this.login } : {}) });
+      this.send({ t: 'me', device: this.data.device, tv: true, onair: true, lock: true, ...(this.login ? { login: this.login } : {}) });
       return;
     }
     if (msg.t === 'me' && this.state === 'connecting' && talk.checked) {
@@ -842,12 +848,18 @@ export class KeeperClient extends EventTarget {
       this.setState('ready');
       this.heardTv(msg.tv);
       this.heardOnAir(msg.onAir);
+      this.heardLock(msg.lock);
       this.flush();
       return;
     }
     // Who is on air from a broadcast station now (or nobody): news, unasked.
     if (msg.t === 'onair-news') {
       if (this.state === 'ready') this.heardOnAir(msg.onAir);
+      return;
+    }
+    // Every player locked now, or not any more: news, unasked.
+    if (msg.t === 'lock-news') {
+      if (this.state === 'ready') this.heardLock(msg.lock);
       return;
     }
     // What is on every TV now (or nothing): news, unasked.
@@ -902,8 +914,9 @@ export class KeeperClient extends EventTarget {
     const item = this.requests.shift() ?? this.next();
     if (!item) {
       // Watching the ranking, the connection stays open for its news; with
-      // an island on the list, to keep it there; playing now, to be invited.
-      if (this.watching || this.listing || this.live || (this.login && this.present)) return;
+      // an island on the list, to keep it there; playing now, to be invited;
+      // locked for screen time, to hear when it is over.
+      if (this.watching || this.listing || this.live || this.lock || (this.login && this.present)) return;
       this.idleTimer = setTimeout(() => {
         this.send({ t: 'bye' });
         this.hangUp();
@@ -936,7 +949,7 @@ export class KeeperClient extends EventTarget {
     // Copies are off: only something you asked for called the keeper, and
     // that has failed now. (Watching the ranking, or with an island on the
     // list, it is tried again.)
-    if (!this.enabled && !this.watching && !this.listing && !this.live && !this.present && !this.reports.length) {
+    if (!this.enabled && !this.watching && !this.listing && !this.live && !this.lock && !this.present && !this.reports.length) {
       this.setState('off');
       return;
     }
@@ -961,6 +974,17 @@ export class KeeperClient extends EventTarget {
     if (sameOnAir(onAir, this.onAir)) return;
     this.onAir = onAir;
     this.emit('onair', { onAir });
+  }
+
+  // Whether the keeper says every player is locked: a 'lock' event when
+  // that changes. A keeper from before screen time says nothing of it.
+  heardLock(raw) {
+    if (raw === undefined) return;
+    const lock = cleanLock(raw);
+    if (Boolean(lock) === Boolean(this.lock)) return;
+    this.lock = lock;
+    saveLock(lock);
+    this.emit('lock', { lock });
   }
 
   // why: what anything you asked for, still waiting, fails with.

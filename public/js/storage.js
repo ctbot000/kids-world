@@ -97,6 +97,15 @@ export function saveWho(who) {
   else erase(`${PREFIX}who`);
 }
 
+// Screen time (shared/lock.js), as the keeper last said: the device's, not
+// one player's, so logging in as someone else does not unlock it.
+export const loadLock = () => read(`${PREFIX}lock`, null);
+
+export function saveLock(lock) {
+  if (lock) write(`${PREFIX}lock`, lock);
+  else erase(`${PREFIX}lock`);
+}
+
 // The players who have logged in on this device, to pick from next time:
 // [{ player, username, name, look }], the latest first.
 export function knownPlayers() {

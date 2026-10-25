@@ -5389,3 +5389,39 @@ button.go-pt {
 html {
   height: calc(100% + var(--app-gap, 0px));
 }
+
+/* Screen time is over (lock-screen.js): over everything, dialogs too. */
+#screen-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+  background: radial-gradient(circle at 50% 35%, #3b4f8f, #1a2147 70%);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#screen-lock .screen-lock-icon {
+  font-size: clamp(64px, 18vmin, 128px);
+  line-height: 1;
+}
+
+#screen-lock h2 {
+  margin: 8px 0 0;
+  font-size: clamp(28px, 7vmin, 48px);
+  font-weight: 700;
+}
+
+#screen-lock p {
+  margin: 0;
+  max-width: 28em;
+  font-size: clamp(16px, 3.6vmin, 22px);
+  opacity: 0.85;
+}

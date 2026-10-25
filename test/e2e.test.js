@@ -2884,6 +2884,48 @@ test('a TV broadcast: the admin page puts a YouTube video and then a video on it
   }
 });
 
+test('screen time: the admin page locks every player, a page reloaded stays locked and takes no keys, and unlocking lets them play again', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${games.address().port}`;
+  const context = await browser.createBrowserContext();
+  const admin = await context.newPage();
+  admin.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+  admin.on('dialog', (dialog) => dialog.accept());
+  const page = await openPlayer(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter', look: { animal: 'otter' } }, null);
+  try {
+    await makeIsland(page, { online: false, theme: 'Flat Land' });
+    await until(page, () => window.kidsWorld.keeper.state === 'ready');
+    await admin.goto(`${origin}/admin/`);
+    await until(admin, () => document.getElementById('lock').textContent.includes('players can play') && document.getElementById('lock').textContent.includes('1 page now'));
+
+    await clickButton(admin, 'Lock all players', '#lock');
+    await until(page, () => document.getElementById('screen-lock')?.checkVisibility());
+    assert.ok(keeper.lock.since > 0);
+    await until(admin, () => document.getElementById('lock').textContent.includes('every player is locked'));
+    await page.keyboard.press('KeyE');
+    assert.equal(await page.evaluate(() => window.kidsWorld.ui.modalOpen), false, 'no toy box while locked');
+
+    // A reload is locked from the start, before the keeper says so again.
+    await page.reload();
+    await until(page, () => document.getElementById('screen-lock')?.checkVisibility());
+    await until(page, () => window.kidsWorld.keeper.state === 'ready');
+
+    await clickButton(admin, 'Unlock all players', '#lock');
+    await until(page, () => !document.getElementById('screen-lock'));
+    assert.equal(keeper.lock, null);
+  } finally {
+    await context.close();
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 // Types into the dialog's boxes (username, password, the password again), in order, once it has landed.
 async function typeInto(page, ...values) {
   await page.waitForSelector('#modal .password-box input', { timeout: 15000 * SLOW });

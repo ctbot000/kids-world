@@ -17,7 +17,8 @@
 // done and delete; the visitors' log, of the pages that came by with no
 // login (when, how often, from where and on what), to clear; and what is on every TV in the game (a YouTube video, or
 // a video on this computer, which the admin page itself plays to them: see
-// shared/broadcast.js); and CTB, the company whose workers do real work on
+// shared/broadcast.js); screen time, every player locked at once (see
+// shared/lock.js); and CTB, the company whose workers do real work on
 // this project (ctb.js): its settings, its workers and what they are doing,
 // its task board (GitHub issues) with a form for a new task, the workers'
 // proposals to approve or turn down, and their pull requests. Only for this computer: requests from other
@@ -235,6 +236,13 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
         keeper.setTv(null);
         json(res, 200, { tv: null });
       } else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
+      return true;
+    }
+    if (pathname === '/admin/api/lock') {
+      // Screen time: PUT locks every player, DELETE unlocks them.
+      if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
+      else if (req.method === 'PUT' || req.method === 'DELETE') json(res, 200, { lock: await keeper.setLock(req.method === 'PUT') });
+      else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
       return true;
     }
     if (pathname === '/admin/api/ctb' || pathname.startsWith('/admin/api/ctb/')) {

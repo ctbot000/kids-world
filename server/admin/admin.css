@@ -285,6 +285,35 @@ h2 .badge {
   text-transform: none;
 }
 
+/* ------------------------------------------------------------ screen time */
+
+.lock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+}
+
+.lock[hidden] {
+  display: none;
+}
+
+.lock.on {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.lock-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
 /* ------------------------------------------------------------ summary */
 
 .summary {
