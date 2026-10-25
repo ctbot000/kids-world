@@ -217,6 +217,18 @@ export function proposalBody(idea, footer, { request = false } = {}) {
 const issueBrief = (i) => (i ? { number: i.number, title: i.title, url: i.url } : null);
 
 // A pull request's body: what was done, and that it closes the issue.
+// Whether a file a worker added is no part of the change, to be left out of
+// its pull request: an empty one (with no tool to delete a file, a worker
+// empties it instead), or one in test/ or at the top whose name says it was
+// a scratch or a debugging try (test/_dog_debug.test.js, scratch-sled.mjs).
+const STRAY_NAME = /^_|(^|[-_.])(scratch|debug|tmp|temp|wip|probe)([-_.]|$)/iu;
+export function strayFile(path, text) {
+  if (!String(text).trim()) return true;
+  const parts = path.split('/');
+  const name = parts.at(-1);
+  return (parts.length === 1 || (parts.length === 2 && parts[0] === 'test')) && STRAY_NAME.test(name);
+}
+
 export function pullBody({ issue, summary, worker, model }) {
   const credit = creditIn(issue.body);
   return `${summary.trim() || 'Done as the issue asks.'}\n\nCloses #${issue.number}.${credit ? `\n\n💡 An idea from **${credit}**, playing Kids World — thank you!` : ''}\n\n— ${worker}, CTB (${model})`;
@@ -651,9 +663,31 @@ export class Company extends EventEmitter {
     }
   }
 
+  // New files the worker left behind that are no part of the change (see
+  // strayFile), deleted from the working copy before it is committed, so a
+  // pull request never carries them: their paths. Ones an earlier try kept
+  // on the branch go too.
+  async dropStrays(dir) {
+    const lines = (text) => text.split('\n').filter(Boolean);
+    const added = new Set([
+      ...lines(await this.git(['diff', '--name-only', '--diff-filter=A', 'origin/main'], { cwd: dir }).catch(() => '')),
+      ...lines(await this.git(['ls-files', '--others', '--exclude-standard'], { cwd: dir }).catch(() => '')),
+    ]);
+    const dropped = [];
+    for (const path of added) {
+      const text = await readFile(join(dir, path), 'utf8').catch(() => null);
+      if (text === null || !strayFile(path, text)) continue;
+      await rm(join(dir, path), { force: true });
+      dropped.push(path);
+    }
+    return dropped;
+  }
+
   // Committed as the worker, pushed, and a pull request opened: its URL.
   async publish({ dir, branch, issue, result, w, model }) {
     const email = (await this.git(['config', 'user.email'], { cwd: this.repoDir }).catch(() => '')).trim() || 'ctb@localhost';
+    const strays = await this.dropStrays(dir);
+    if (strays.length) this.log(`CTB: left out of the pull request for #${issue.number}: ${strays.join(', ')}.`);
     const paths = await this.changedPaths(dir);
     // Work kept from an earlier try is committed already.
     const ahead = Number((await this.git(['rev-list', '--count', 'origin/main..HEAD'], { cwd: dir })).trim()) || 0;

@@ -23,7 +23,7 @@ import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
 import { deskSpots, GROUNDS, GUIDE, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
 import { RUNS_DIR, Runs, transcript } from '../server/ctb-runs.js';
-import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody, scoreFrom } from '../server/ctb.js';
+import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody, scoreFrom, strayFile } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
@@ -210,6 +210,11 @@ test('a task becomes a branch, a commit and a pull request once all the unit tes
   const github = hub([issue(5, 'add subtracts', 'It should add.'), issue(6, 'by someone else', '', [LABELS.task], 'stranger')]);
   const llm = scripted([
     { thought: 'fix', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' },
+    // Two tries at something along the way, left behind: one emptied when
+    // done with, one named for debugging.
+    { thought: 'try', tool: 'write', path: 'test/scratch-add.test.js', content: "import { test } from 'node:test';\ntest('x', () => {});\n" },
+    { thought: 'done with it', tool: 'write', path: 'test/scratch-add.test.js', content: '' },
+    { thought: 'try', tool: 'write', path: 'test/_add_debug.test.js', content: "import { test } from 'node:test';\ntest('y', () => {});\n" },
     { thought: 'test', tool: 'test', path: 'test/add.test.js' },
     { thought: 'done', tool: 'done', title: 'Make add add', summary: 'add() subtracted; now it adds. Ran test/add.test.js.' },
   ]);
@@ -234,7 +239,7 @@ test('a task becomes a branch, a commit and a pull request once all the unit tes
   assert.equal(git(origin, 'log', '-1', '--format=%an <%ae>|%s|%b', 'ctb/issue-5'), 'Ada (CTB) <ctb@example.com>|Make add add|add() subtracted; now it adds. Ran test/add.test.js.\n\nCloses #5.');
   assert.equal(git(origin, 'show', 'ctb/issue-5:add.js'), 'export const add = (a, b) => a + b;');
   assert.equal(git(origin, 'show', 'main:add.js'), 'export const add = (a, b) => a - b;');
-  assert.equal(git(origin, 'diff', '--name-only', 'main', 'ctb/issue-5'), 'add.js', 'node_modules and nothing else left out');
+  assert.equal(git(origin, 'diff', '--name-only', 'main', 'ctb/issue-5'), 'add.js', 'node_modules, the scratch and the debugging test left out');
   // The worktree and the local branch are gone; the checkout is as it was.
   assert.equal(await stat(join(dir, 'work', 'issue-5')).catch(() => null), null);
   assert.equal(git(repo, 'branch', '--list', 'ctb/*'), '');
@@ -255,6 +260,14 @@ test('a task becomes a branch, a commit and a pull request once all the unit tes
   assert.equal(working[0].steps.find((t) => t.what === 'editing add.js').thought, 'fix');
   assert.ok(working[0].since > 0);
   assert.equal(screens.at(-1)[0].issue, null);
+});
+
+test('a file a worker added is left out of its pull request when empty, or named as a scratch or a debugging try', () => {
+  for (const path of ['test/_dog_debug.test.js', 'test/scratch-sled.test.js', 'test/sled.scratch.test.js', 'scratch.mjs', 'debug-pets.mjs', 'test/tmp.test.js', 'test/wip-sled.test.js', 'probe.mjs']) assert.ok(strayFile(path, 'test()'), path);
+  for (const path of ['public/js/x.js', 'test/sled.test.js', 'README.md']) assert.ok(strayFile(path, '  \n'), `${path}: empty`);
+  // A real file, even one whose name has those words inside it, or one
+  // somewhere else (the game might have its own debug panel one day).
+  for (const path of ['test/sled.test.js', 'test/debugger-ui.test.js', 'test/temple.test.js', 'public/js/debug.js', 'server/scratchpad.js', 'test/fixtures/debug.json']) assert.ok(!strayFile(path, 'export {};'), path);
 });
 
 test('failing unit tests go back to the worker, and a task it cannot finish is marked stuck with why', async () => {
