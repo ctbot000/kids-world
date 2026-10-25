@@ -250,13 +250,11 @@ export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6
 // long a sip takes (s).
 const SIP_GAP = [3, 10];
 const SIP_TIME = 2.4;
-// When the last sip on this page began (performance.now(), ms): someone
-// about to sip while another is still drinking waits a moment, so people
-// on a break together take turns rather than drinking as one.
-let lastSip = -Infinity;
 // A coffee mug's radius and height, for a hand of size 1.
 const MUG_R = 0.027;
 const MUG_H = 0.062;
+// Where the hole in its handle is, out from its middle.
+const MUG_HOLE = MUG_R * 1.4;
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -1904,22 +1902,42 @@ function pianoHand(size, side, skin) {
   return { group: g, fingers, thumb };
 }
 
+// A mug of coffee, for a break at a desk, at a hand's size of 1 (it is held
+// in the hand, and scaled with it), its handle on its +x side: a ring
+// standing up (a torus lies in its own xy plane), its hole at MUG_HOLE.
+function coffeeMug() {
+  const g = new THREE.Group();
+  const cup = toon('#f4f1ea');
+  g.add(mesh(cylinder(MUG_R, MUG_R * 0.9, MUG_H, 14), cup, 0, 0, 0));
+  g.add(mesh(cylinder(MUG_R * 0.88, MUG_R * 0.88, 0.004, 14), toon('#5b3a24'), 0, MUG_H / 2 - 0.006, 0));
+  g.add(mesh(torus(MUG_R * 0.45, 0.0055), cup, MUG_HOLE, 0, 0));
+  g.add(mesh(cylinder(MUG_R * 1.01, MUG_R * 1.01, MUG_H * 0.25, 14), toon('#1f8a8a'), 0, -MUG_H * 0.1, 0));
+  return g;
+}
+
+// How the right hand holds a mug, in the mug's own frame at a hand's size
+// of 1: the index finger hooked through the handle from behind, the others
+// curled under it, the thumb on top and the palm towards the mug, the hand
+// pitched up a little (the wrist below and behind the handle). q: the
+// jointed hand's turn (its fingers lie along its -y, its palm faces -z,
+// the thumb's side -x); wrist: where its wrist is; mug, mugQ: the mug's
+// place and turn in the hand.
+const GRIP = (() => {
+  const a = 0.5;
+  const q = new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -Math.cos(a), Math.sin(a)), new THREE.Vector3(0, -Math.sin(a), -Math.cos(a)), new THREE.Vector3(1, 0, 0)),
+  );
+  // The index finger's knuckle (pianoHand's), just behind the handle's hole.
+  const knuckle = new THREE.Vector3(-0.0215, -0.064, 0.002).applyQuaternion(q);
+  const wrist = new THREE.Vector3(MUG_HOLE, 0.002, -0.006).sub(knuckle);
+  const mugQ = q.clone().invert();
+  return { q, wrist, mugQ, mug: wrist.clone().negate().applyQuaternion(mugQ) };
+})();
+const scratch = { q: new THREE.Quaternion(), q2: new THREE.Quaternion(), e: new THREE.Euler(), v: new THREE.Vector3() };
+
 // The bench you sit on at the piano, its padded top where the root is and
 // its four legs down to the floor: a little wider than you, of the same dark
 // wood as the piano, with a red cushion.
-// A mug of coffee, for a break at a desk, its handle on its +x side.
-function coffeeMug(h) {
-  const g = new THREE.Group();
-  const cup = toon('#f4f1ea');
-  const r = MUG_R * h;
-  const tall = MUG_H * h;
-  g.add(mesh(cylinder(r, r * 0.9, tall, 14), cup, 0, 0, 0));
-  g.add(mesh(cylinder(r * 0.88, r * 0.88, 0.004, 14), toon('#5b3a24'), 0, tall / 2 - 0.006 * h, 0));
-  // The handle: a ring standing up on the side (a torus lies in its own xy plane).
-  g.add(mesh(torus(r * 0.5, 0.006 * h), cup, r * 1.05, 0, 0));
-  g.add(mesh(cylinder(r * 1.01, r * 1.01, tall * 0.25, 14), toon('#1f8a8a'), 0, -tall * 0.1, 0));
-  return g;
-}
 
 function pianoBench() {
   const g = new THREE.Group();
@@ -1960,7 +1978,6 @@ export class Avatar {
     // people side by side are never in step; and when their next sip is.
     this.quirk = Math.random() * 1000;
     this.sipAt = null;
-    this.sipping = false;
     // The mug in hand on a coffee break, there only then.
     this.mug = null;
     // A soft round shadow under the feet.
@@ -2073,6 +2090,17 @@ export class Avatar {
       hand.add(rest);
       hand.userData.rest = rest;
       hand.userData.piano = pianoHand(B.hand, side, skin);
+      // The right one's hold on a coffee mug: the same jointed hand, curled (see GRIP).
+      if (side === 1) {
+        const grip = pianoHand(B.hand, side, skin);
+        grip.fingers.forEach(({ knuckle, joint }, i) => {
+          knuckle.rotation.x = i ? 1.45 : 1.2;
+          joint.rotation.x = i ? 1.35 : 1.5;
+        });
+        grip.thumb.rotation.x = 0.35;
+        grip.thumb.rotation.z = 0.15;
+        hand.userData.grip = grip;
+      }
       elbow.add(hand);
       arm.add(elbow);
       this.torso.add(arm);
@@ -2341,26 +2369,20 @@ export class Avatar {
       // The first sip some while after sitting down; each after it a random wait after the last.
       const wait = () => SIP_GAP[0] + Math.random() * (SIP_GAP[1] - SIP_GAP[0]);
       if (this.sipAt === null) this.sipAt = t + Math.random() * SIP_GAP[1];
-      else if (t > this.sipAt + SIP_TIME) {
-        this.sipAt = t + wait();
-        this.sipping = false;
-      }
-      if (!this.sipping && t >= this.sipAt) {
-        const now = performance.now();
-        if (now - lastSip < SIP_TIME * 1000) this.sipAt = t + 0.5 + Math.random() * 2;
-        else {
-          lastSip = now;
-          this.sipping = true;
-        }
-      }
+      else if (t > this.sipAt + SIP_TIME) this.sipAt = t + wait();
       const c = t - this.sipAt;
-      const up = this.sipping && c >= 0 && c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
+      const up = c >= 0 && c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
       this.sip = up * up * (3 - 2 * up);
       armRaiseL = 0;
       armFwdL = -0.3;
       bendL = 0.85;
-      // The right hand round the mug, wherever it is (see holdMug).
-      [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo(this.mugGrip(this.sip));
+      // The mug turned a little, its handle out to the right and forward,
+      // more so at the lips, and tipped up to drink; the right hand holding
+      // it reaches to where its wrist must be (see holdMug).
+      const sip = this.sip;
+      this.mugQ = new THREE.Quaternion().setFromEuler(scratch.e.set(-lean - Math.max(0, sip - 0.5) * 1.5, -0.35 - sip * 0.35, 0));
+      const wrist = scratch.v.copy(GRIP.wrist).multiplyScalar(B.hand).applyQuaternion(this.mugQ).add(this.mugAt(sip));
+      [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo(wrist.toArray());
       headNod = 0.04 - this.sip * 0.14;
       headTilt = this.sip ? 0 : Math.sin((t + this.quirk) * 0.7) * 0.06;
       legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
@@ -2539,7 +2561,6 @@ export class Avatar {
       else this.bench.removeFromParent();
     }
     this.playHands(anim === ANIM.piano, lean, [armFwdL, armFwdR], [bendL, bendR], t);
-    this.holdMug(anim === ANIM.coffee, lean);
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);
@@ -2566,6 +2587,7 @@ export class Avatar {
     armR.rotation.set(-armSwing + armFwdR, armTwistR, armRaiseR);
     elbowL.rotation.x = -bendL;
     elbowR.rotation.x = -bendR;
+    this.holdMug(anim === ANIM.coffee);
     this.body.position.y = bob + hop + dip;
     // In bed, the whole of you tips back about your feet, face up, and sinks
     // to lie on your back.
@@ -2694,24 +2716,36 @@ export class Avatar {
     }
   }
 
-  // On a coffee break, a mug held in front of the chest, and lifted to the
-  // lips for a sip (this.sip, 0 to 1), tipping up as you drink: it is
-  // placed on the torso, kept upright against its lean, and the right hand
-  // reaches round it (mugGrip, reachTo); a weapon is put away meanwhile.
-  holdMug(holding, lean) {
-    if (holding !== (this.mug?.parent === this.torso)) {
+  // On a coffee break, the right hand holding a mug (GRIP) in place of
+  // the resting one, and a weapon put away meanwhile: the mug's turn on the
+  // torso (this.mugQ, upright against its lean and tipped as you sip) is
+  // the hand's to keep, so the hand turns at the wrist from wherever the
+  // arm has brought it.
+  holdMug(holding) {
+    const hand = this.hands[1];
+    const { rest, grip } = hand.userData;
+    if (!grip) return;
+    if (holding !== (this.mug?.parent === grip.group)) {
       if (holding) {
-        this.mug ??= coffeeMug(this.build.hand);
-        this.torso.add(this.mug);
+        this.mug ??= coffeeMug();
+        this.mug.position.copy(GRIP.mug);
+        this.mug.quaternion.copy(GRIP.mugQ);
+        grip.group.add(this.mug);
+        rest.removeFromParent();
+        hand.add(grip.group);
         this.weapon?.removeFromParent();
       } else {
-        this.mug.removeFromParent();
-        if (this.weapon && !this.handsPlaying) this.hands[1].add(this.weapon);
+        grip.group.removeFromParent();
+        if (!this.handsPlaying) {
+          hand.add(rest);
+          if (this.weapon) hand.add(this.weapon);
+        }
       }
     }
     if (!holding) return;
-    this.mug.position.fromArray(this.mugAt(this.sip));
-    this.mug.rotation.x = -lean - Math.max(0, this.sip - 0.5) * 1.6;
+    // The hand's turn on the torso, from the shoulder and the elbow, undone.
+    const arm = scratch.q.setFromEuler(this.arms[1].rotation).multiply(scratch.q2.setFromEuler(this.elbows[1].rotation));
+    grip.group.quaternion.copy(arm.invert()).multiply(this.mugQ).multiply(GRIP.q);
   }
 
   // Where the mug is, on the torso: before the chest, at the lips, or on its way between.
@@ -2724,14 +2758,7 @@ export class Avatar {
     // Brought up in an arc, out clear of the chest on the way.
     const at = held.map((v, i) => v + (lips[i] - v) * sip);
     at[2] += Math.sin(sip * Math.PI) * 0.05 * k;
-    return at;
-  }
-
-  // Where the right wrist is to hold it: beside it, on the handle's side.
-  mugGrip(sip) {
-    const k = this.build.arm[0] / 0.3;
-    const [x, y, z] = this.mugAt(sip);
-    return [x + MUG_R * this.build.hand + 0.03 * k, y - 0.05 * k, z - 0.005];
+    return new THREE.Vector3(...at);
   }
 
   // The right arm's angles to put its wrist at a point on the torso: [the
