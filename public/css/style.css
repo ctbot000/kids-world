@@ -4825,6 +4825,53 @@ button.go-pt {
   overflow-wrap: anywhere;
 }
 
+.idea.dropped {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.idea-score {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #fff3c4;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* An accepted idea's way into the game: each step, the one it is at now. */
+.idea-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.idea-steps li {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 0.55;
+}
+
+.idea-steps li.done {
+  opacity: 1;
+}
+
+.idea-steps li.now {
+  opacity: 1;
+  background: #4caf50;
+  color: #fff;
+  font-weight: 700;
+}
+
+.idea-stage {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
 /* Telling of a problem (ui.js reportDialog). */
 .report-text {
   display: block;

@@ -1,8 +1,10 @@
 // Ideas for the game: a logged-in player sends one from the game, the keeper
 // keeps it (so many an hour, so many waiting), a CTB worker reads it and says
 // yes or no, the answer goes to the pages of that player alone, and a yes is
-// filed as a proposal on GitHub without the player's name. The protocol is
-// driven without WebRTC; GitHub and the model are stand-ins.
+// filed as a proposal on GitHub without the player's name. Each answer is
+// scored, and the player hears each step an accepted idea takes after (picked,
+// built, checked, in the game). The protocol is driven without WebRTC;
+// GitHub and the model are stand-ins.
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,7 +13,7 @@ import { after, test } from 'node:test';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { cleanWish, KEEPER_VERSION, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
 import { LABELS } from '../server/ctb-github.js';
-import { Company, creditIn, defaultSettings, mdText, pullBody } from '../server/ctb.js';
+import { Company, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 
 const dirs = [];
@@ -91,7 +93,7 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
   assert.equal(told.what, 'report');
   assert.equal((await store.reports())[0].username, 'Otter Fan');
   assert.equal(kept.what, 'wish');
-  assert.deepEqual(Object.keys(kept.wish).sort(), ['answeredAt', 'at', 'by', 'id', 'reply', 'state', 'text'], 'never who sent it');
+  assert.deepEqual(Object.keys(kept.wish).sort(), ['answeredAt', 'at', 'by', 'id', 'reply', 'score', 'stage', 'stageAt', 'state', 'text'], 'never who sent it');
   assert.equal(kept.wish.text, 'A rainbow slide!');
   assert.equal(kept.wish.state, 'waiting');
   assert.equal(heard.length, 1);
@@ -114,10 +116,19 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
   assert.deepEqual((await other.say({ t: 'wishes' })).wishes, []);
 
   // An answer: kept, and told to that player's pages, not another's.
-  const answered = await keeper.answerWish(kept.wish.id, { state: 'accepted', by: 'Ada 💼', reply: 'Yes! A rainbow slide sounds super fun.', issue: { number: 9, url: 'https://github.com/x/y/issues/9' } });
+  const answered = await keeper.answerWish(kept.wish.id, { state: 'accepted', by: 'Ada 💼', reply: 'Yes! A rainbow slide sounds super fun.', score: 81.6, issue: { number: 9, url: 'https://github.com/x/y/issues/9' } });
   assert.equal(answered.issue.number, 9);
   assert.equal(tablet.news().length, 1);
-  assert.deepEqual(tablet.news()[0].wish, { ...kept.wish, state: 'accepted', by: 'Ada 💼', reply: 'Yes! A rainbow slide sounds super fun.', answeredAt: clock.t });
+  assert.deepEqual(tablet.news()[0].wish, { ...kept.wish, state: 'accepted', by: 'Ada 💼', reply: 'Yes! A rainbow slide sounds super fun.', answeredAt: clock.t, score: 82 });
+  assert.equal(other.news().length, 0);
+  // Each step it takes since is kept and told to that player too, once.
+  clock.t += 1000;
+  assert.equal((await keeper.stageWish(kept.wish.id, 'building')).stage, 'building');
+  assert.equal(await keeper.stageWish(kept.wish.id, 'building'), null, 'no news when it is there already');
+  assert.equal(await keeper.stageWish(kept.wish.id, 'flying'), null);
+  assert.equal(tablet.news().length, 2);
+  assert.deepEqual(tablet.news()[1].wish, { ...tablet.news()[0].wish, stage: 'building', stageAt: clock.t });
+  assert.deepEqual(cleanWish(tablet.news()[1].wish), tablet.news()[1].wish);
   assert.equal(other.news().length, 0);
   assert.equal((await store.wishes()).find((w) => w.id === kept.wish.id).state, 'accepted');
   assert.equal(await keeper.answerWish('1234567890123-00000000', { state: 'declined', by: 'x', reply: 'y' }), null);
@@ -127,6 +138,7 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
 // GitHub as the workers see it, in memory.
 function hub() {
   const made = [];
+  const issues = new Map();
   return {
     repo: 'ctbot000/toy',
     made,
@@ -134,6 +146,8 @@ function hub() {
     tasks: async () => [],
     proposals: async () => [],
     pulls: async () => [],
+    requests: async () => [...issues.values()],
+    issues,
     create: async ({ title, body, labels }) => {
       made.push({ title, body, labels });
       return { number: 40 + made.length, url: `https://github.com/ctbot000/toy/issues/${40 + made.length}` };
@@ -164,8 +178,8 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
       trace.usage = [{ name: 'Z.ai', model: 'stand-in', promptTokens: 5, tokens: 5 }];
       const idea = messages.at(-1).content.split("The child's idea:\n")[1];
       asked.push({ idea, system: messages[0].content, schema });
-      if (idea.startsWith('A rainbow')) return { accept: true, reply: 'Yes! We love that idea.', title: 'Add a rainbow slide stamp', tldr: 'A rainbow slide kids can slide down.', what: 'A stamp of a slide in rainbow bricks.', done: ['It is in the toy box', 'Sliding down it works'] };
-      if (idea.startsWith('숙제')) return { accept: false, reply: '그건 게임 밖의 일이라 할 수 없어요. 미안해요!', title: '', tldr: '', what: '', done: [] };
+      if (idea.startsWith('A rainbow')) return { accept: true, score: 77, reply: 'Yes! We love that idea.', title: 'Add a rainbow slide stamp', tldr: 'A rainbow slide kids can slide down.', what: 'A stamp of a slide in rainbow bricks.', done: ['It is in the toy box', 'Sliding down it works'] };
+      if (idea.startsWith('숙제')) return { accept: false, score: '12', reply: '그건 게임 밖의 일이라 할 수 없어요. 미안해요!', title: '', tldr: '', what: '', done: [] };
       if (fail) throw new Error('Z.ai is busy');
       return { accept: false, reply: 'We have fireworks already!' };
     },
@@ -180,7 +194,7 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
     settings: { ...defaultSettings({}), workers: 2, propose: false },
     log: () => {},
     office: { say: (k, text) => said.push([k, text]), emote: () => {} },
-    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a) },
+    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a), stage: (id, stage) => keeper.stageWish(id, stage) },
   });
   company.problem = '';
   await company.reviewWishes();
@@ -193,12 +207,18 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   assert.match(asked[0].system, /^You are Ada/);
   assert.match(asked[1].system, /^You are Ben/);
   assert.match(asked[0].system, /in the language the child wrote in/);
+  assert.match(asked[0].system, /Score the idea from 0 to 100/);
+  assert.ok(asked[0].schema.required.includes('score'));
   const kept = await keeper.store.wishes();
   const of = (w) => kept.find((k) => k.id === w.id);
   assert.equal(of(yes).state, 'accepted');
   assert.equal(of(yes).by, 'Ada 💼');
   assert.equal(of(yes).reply, 'Yes! We love that idea.');
   assert.deepEqual(of(yes).issue, { number: 41, url: 'https://github.com/ctbot000/toy/issues/41' });
+  // Each scored by the worker who read it, a yes or a no; the player sees it.
+  assert.equal(of(yes).score, 77);
+  assert.equal(of(no).score, 12, 'a score given as text');
+  assert.match(github.made[0].body, /\*\*Score: 77\/100\*\*/);
   assert.equal(of(no).state, 'declined');
   assert.equal(of(no).reply, '그건 게임 밖의 일이라 할 수 없어요. 미안해요!');
   assert.equal(of(later).state, 'waiting');
@@ -229,4 +249,40 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   fail = false;
   await company.reviewWishes();
   assert.equal((await keeper.store.wishes()).find((w) => w.id === later.id).state, 'declined');
+  assert.equal((await keeper.store.wishes()).find((w) => w.id === later.id).score, null, 'no score given');
+
+  // From then on the player hears each step their idea takes on GitHub, once
+  // each, and only forward: picked, built, checked, in the game.
+  const steps = () => tablet.news().filter((n) => n.wish.id === yes.id && n.wish.stage).map((n) => n.wish.stage);
+  const issue = (labels, closed = false, completed = false) => github.issues.set(41, { number: 41, labels, closed, completed });
+  issue([LABELS.proposal, LABELS.request]);
+  await company.followWishes();
+  assert.deepEqual(steps(), ['proposed']);
+  issue([LABELS.task, LABELS.approved, LABELS.request]);
+  await company.followWishes();
+  await company.followWishes();
+  issue([LABELS.task, LABELS.approved, LABELS.request, LABELS.working]);
+  await company.followWishes();
+  // Between two tries, a moment without "working": not told as picked again.
+  issue([LABELS.task, LABELS.approved, LABELS.request]);
+  await company.followWishes();
+  issue([LABELS.task, LABELS.approved, LABELS.request, LABELS.stuck]);
+  await company.followWishes();
+  issue([LABELS.task, LABELS.approved, LABELS.request, LABELS.working]);
+  await company.followWishes();
+  issue([LABELS.task, LABELS.approved, LABELS.request, LABELS.pr]);
+  await company.followWishes();
+  issue([LABELS.task, LABELS.approved, LABELS.request, LABELS.pr], true, true);
+  await company.followWishes();
+  assert.deepEqual(steps(), ['proposed', 'approved', 'building', 'stuck', 'building', 'checking', 'done']);
+  // Done with, it is not looked up again.
+  let asks = 0;
+  github.requests = async () => (asks++, []);
+  await company.followWishes();
+  assert.equal(asks, 0);
+
+  // Turned down on GitHub: not picked.
+  assert.equal(stageOf({ closed: true, completed: false, labels: [LABELS.proposal] }), 'dropped');
+  assert.equal(newsOf('proposed', 'dropped'), true);
+  assert.equal(newsOf('done', 'dropped'), false);
 });

@@ -86,6 +86,14 @@ export class GitHub {
     return (await this.list(LABELS.proposal)).filter((i) => !this.me || i.author === this.me).sort((a, b) => a.number - b.number);
   }
 
+  // Players' ideas filed as issues, open or closed, as their news needs
+  // them: { number, closed, completed (closed as done, not turned down),
+  // labels }.
+  async requests(limit = 200) {
+    const out = await this.run(['issue', 'list', '-R', this.repo, '--state', 'all', '--label', LABELS.request, '--limit', String(limit), '--json', 'number,state,stateReason,labels']);
+    return JSON.parse(out).map((i) => ({ number: i.number, closed: i.state === 'CLOSED', completed: i.state === 'CLOSED' && i.stateReason !== 'NOT_PLANNED', labels: (i.labels ?? []).map((l) => l.name) }));
+  }
+
   // A new issue's number.
   async create({ title, body, labels }) {
     const args = ['issue', 'create', '-R', this.repo, '--title', title, '--body-file', '-'];

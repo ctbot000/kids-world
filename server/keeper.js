@@ -60,6 +60,8 @@ import {
   MAX_TEXT,
   OLDEST_VERSION,
   REPORT_TEXT_MAX,
+  cleanScore,
+  WISH_STAGES,
   WISH_TEXT_MAX,
   WISHES_AN_HOUR,
   WISHES_WAITING,
@@ -1131,7 +1133,22 @@ export class KeeperStore extends EventEmitter {
       const file = join(this.dir, 'wishes', `${id}.json`);
       const wish = await readJson(file);
       if (!wish) return null;
-      const next = { ...wish, state: answer.state, by: shortText(answer.by, 40), reply: shortText(answer.reply, 400), answeredAt: this.now(), ...(answer.issue ? { issue: answer.issue } : {}) };
+      const next = { ...wish, state: answer.state, by: shortText(answer.by, 40), reply: shortText(answer.reply, 400), answeredAt: this.now(), score: cleanScore(answer.score), ...(answer.issue ? { issue: answer.issue } : {}) };
+      await this.write(file, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  // News of an accepted idea: where it has got to (a WISH_STAGES stage).
+  // The idea as kept now, or null when there is no such idea or it was there
+  // already.
+  stageWish(id, stage) {
+    if (!isReportId(id) || !WISH_STAGES.includes(stage)) return Promise.resolve(null);
+    return this.serial(async () => {
+      const file = join(this.dir, 'wishes', `${id}.json`);
+      const wish = await readJson(file);
+      if (!wish || wish.stage === stage) return null;
+      const next = { ...wish, stage, stageAt: this.now() };
       await this.write(file, JSON.stringify(next));
       return next;
     });
@@ -1162,7 +1179,7 @@ export function cleanVisit(raw) {
 }
 
 // An idea as its sender's page sees it: never who sent it, nor the issue.
-const wishForPage = (w) => ({ id: w.id, at: w.at, text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt });
+const wishForPage = (w) => ({ id: w.id, at: w.at, text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt, score: w.score ?? null, stage: w.stage ?? '', stageAt: w.stageAt ?? 0 });
 
 export function cleanReport(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -1902,9 +1919,20 @@ export class Keeper extends EventEmitter {
   // who sent it that are open now. The idea as kept, or null.
   async answerWish(id, answer) {
     const wish = await this.store.answerWish(id, answer);
-    if (!wish) return null;
-    for (const page of this.conns.values()) if (page.player === wish.player && !page.closed) this.reply(page, { t: 'wish-news', wish: wishForPage(wish) });
+    if (wish) this.tellWish(wish);
     return wish;
+  }
+
+  // News of where an accepted idea has got to, kept and told the same way.
+  // The idea as kept, or null when that was its stage already.
+  async stageWish(id, stage) {
+    const wish = await this.store.stageWish(id, stage);
+    if (wish) this.tellWish(wish);
+    return wish;
+  }
+
+  tellWish(wish) {
+    for (const page of this.conns.values()) if (page.player === wish.player && !page.closed) this.reply(page, { t: 'wish-news', wish: wishForPage(wish) });
   }
 
   // The players with a login who are playing right now: their pages are

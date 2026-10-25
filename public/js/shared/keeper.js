@@ -84,10 +84,16 @@ export const WISH_TEXT_MAX = 500;
 export const WISHES_AN_HOUR = 3;
 export const WISHES_WAITING = 5;
 export const WISH_STATES = ['waiting', 'accepted', 'declined'];
+// Where an accepted idea has got to since, as its issue on GitHub tells it
+// (server/ctb.js stageOf): waiting for a grown-up to pick it, picked, being
+// built, built and being checked, in the game; or not picked, or the
+// workers stuck on it. '' before any news.
+export const WISH_STAGES = ['proposed', 'approved', 'building', 'stuck', 'checking', 'done', 'dropped'];
 
 // An idea as a page shows it, from the keeper: { id, at, text, state, by,
-// reply, answeredAt }, or null. by is the worker who read it; reply what
-// they said back.
+// reply, answeredAt, score, stage, stageAt }, or null. by is the worker who
+// read it; reply what they said back; score how good the worker thought it,
+// 0 to 100 (null before it was read).
 export function cleanWish(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !/^\d{13}-[0-9a-f]{8}$/.test(raw.id)) return null;
   const text = typeof raw.text === 'string' ? raw.text.slice(0, WISH_TEXT_MAX) : '';
@@ -100,8 +106,14 @@ export function cleanWish(raw) {
     by: typeof raw.by === 'string' ? raw.by.slice(0, 40) : '',
     reply: typeof raw.reply === 'string' ? raw.reply.slice(0, 400) : '',
     answeredAt: Number.isFinite(raw.answeredAt) ? raw.answeredAt : 0,
+    score: cleanScore(raw.score),
+    stage: WISH_STAGES.includes(raw.stage) ? raw.stage : '',
+    stageAt: Number.isFinite(raw.stageAt) ? raw.stageAt : 0,
   };
 }
+
+// A score out of 100, a whole number, or null.
+export const cleanScore = (v) => (Number.isFinite(v) ? Math.round(Math.min(100, Math.max(0, v))) : null);
 
 export const SIGN_ALGORITHM = { name: 'ECDSA', hash: 'SHA-256' };
 export const KEY_ALGORITHM = { name: 'ECDSA', namedCurve: 'P-256' };

@@ -352,6 +352,8 @@ export function setUpCtb(helpers) {
                 ' ',
                 h('b', {}, i.name || i.username || 'A player'),
                 h('span', { class: 'muted' }, ` · ${ago(i.at)}`),
+                i.score != null ? [' ', h('span', { class: 'badge' }, `${i.score}/100`)] : null,
+                i.stage ? [' ', h('span', { class: 'badge' }, i.stage)] : null,
                 h('div', {}, `“${i.text}”`),
                 i.state !== 'waiting' ? h('div', { class: 'muted' }, `${i.by}: ${i.reply}`, i.issue ? [' · ', link(i.issue)] : null) : null,
               ),

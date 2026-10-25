@@ -17,7 +17,7 @@ import { watchErrors } from './report.js';
 import { Sound } from './sound.js';
 import { forgetSong as forgetSongOf, keepSong, loadSong } from './songs.js';
 import * as storage from './storage.js';
-import { UI } from './ui.js';
+import { UI, wishKey } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
 import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
@@ -129,7 +129,7 @@ keeper.addEventListener('status', async (e) => {
   wishesChecked = true;
   try {
     const seen = ui.wishesSeen();
-    const fresh = (await keeper.wishes()).filter((w) => w.state !== 'waiting' && !seen.has(w.id));
+    const fresh = (await keeper.wishes()).filter((w) => w.state !== 'waiting' && !seen.has(wishKey(w)));
     for (const w of fresh.slice(0, 2)) ui.wishAnswered(w);
     ui.markWishesSeen(fresh);
   } catch {

@@ -24,7 +24,7 @@ import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { langOf } from '../public/js/shared/words.js';
-import { USERNAME_MAX, usernameKey, WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
+import { cleanScore, USERNAME_MAX, usernameKey, WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
 import { Agent, layoutOf, testEnv } from './ctb-agent.js';
 import { Runs, transcript } from './ctb-runs.js';
 import { GitHub, LABELS, repoOf } from './ctb-github.js';
@@ -122,16 +122,41 @@ export function sh(file, args, { cwd, timeout = 120000, env = process.env } = {}
 // A worker's answer to a player's idea, as the model gives it.
 export const WISH_SCHEMA = {
   type: 'object',
-  properties: { accept: { type: 'boolean' }, reply: { type: 'string' }, title: { type: 'string' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
-  required: ['accept', 'reply'],
+  properties: { accept: { type: 'boolean' }, score: { type: 'integer' }, reply: { type: 'string' }, title: { type: 'string' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
+  required: ['accept', 'score', 'reply'],
 };
 
 // What a worker's proposal says, as the model answers it.
 export const PROPOSAL_SCHEMA = {
   type: 'object',
-  properties: { title: { type: 'string' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
-  required: ['title', 'tldr', 'what', 'done'],
+  properties: { title: { type: 'string' }, score: { type: 'integer' }, tldr: { type: 'string' }, what: { type: 'string' }, done: { type: 'array', items: { type: 'string' } } },
+  required: ['title', 'score', 'tldr', 'what', 'done'],
 };
+
+// How a worker scores an idea, 0 to 100, the same for a player's idea and
+// its own proposal (and as the rate-proposals skill does it), told to the
+// model.
+const SCORING = 'Score the idea from 0 to 100: start at 50; up to 25 more for how much kids would enjoy it (wonder, play, something to do or find), up to 15 more for being small and self-contained with something in the game to build on, 5 more for clear checks; 10 to 25 less for a big or risky change (the world itself, saving, many new models), 10 less for several things in one, 10 less for a polish nobody would notice, 20 or more less for taking away something kids can do now; and 0 to 15 for what the game has already.';
+
+// A model's score as a number out of 100, or null: some give it as text.
+const scoreOf = (v) => cleanScore(typeof v === 'string' && v.trim() ? Number(v) : v);
+
+// Where a player's idea has got to, as its issue tells it ({ closed,
+// completed, labels }, from GitHub.requests): a WISH_STAGES stage.
+export function stageOf(issue) {
+  if (issue.closed) return issue.completed ? 'done' : 'dropped';
+  const has = (l) => issue.labels.includes(l);
+  if (has(LABELS.stuck)) return 'stuck';
+  if (has(LABELS.pr)) return 'checking';
+  if (has(LABELS.working)) return 'building';
+  if (has(LABELS.task) || has(LABELS.approved)) return 'approved';
+  return 'proposed';
+}
+
+// News only goes forward: a task between two tries (no "working" label for a
+// moment) is not told as picked again. Stuck and being built go back and forth.
+const STAGE_STEP = { '': 0, proposed: 1, approved: 2, building: 3, stuck: 3, checking: 4, done: 5, dropped: 5 };
+export const newsOf = (was, now) => now !== was && (STAGE_STEP[now] > STAGE_STEP[was] || (STAGE_STEP[now] === STAGE_STEP[was] && STAGE_STEP[now] === 3));
 // How long each part of a proposal may be: issues are kept short.
 const TLDR_MAX = 300;
 const WHAT_MAX = 700;
@@ -147,7 +172,8 @@ export function proposalBody(idea, footer) {
   if (!tldr) return '';
   const what = line(idea?.what, WHAT_MAX);
   const done = (Array.isArray(idea?.done) ? idea.done : []).map((d) => line(d, DONE_MAX).replace(/^[-*]\s*/, '')).filter(Boolean).slice(0, DONE_ITEMS);
-  return [`## TL;DR\n\n${tldr}`, what ? `## What\n\n${what}` : '', done.length ? `## Done when\n\n${done.map((d) => `- ${d}`).join('\n')}` : '', `_${footer}_`].filter(Boolean).join('\n\n');
+  const score = scoreOf(idea?.score);
+  return [`## TL;DR\n\n${tldr}`, what ? `## What\n\n${what}` : '', done.length ? `## Done when\n\n${done.map((d) => `- ${d}`).join('\n')}` : '', score === null ? '' : `**Score: ${score}/100**`, `_${footer}_`].filter(Boolean).join('\n\n');
 }
 
 const issueBrief = (i) => (i ? { number: i.number, title: i.title, url: i.url } : null);
@@ -196,7 +222,8 @@ export class Company extends EventEmitter {
     this.polling = null;
     this.proposedAt = proposedAt;
     this.onProposed = onProposed;
-    // Players' ideas, at the keeper: { list(), answer(id, answer) }, or null.
+    // Players' ideas, at the keeper: { list(), answer(id, answer), stage(id,
+    // stage) }, or null.
     this.wishes = wishes;
     this.reviewing = null;
     this.reviewer = 0;
@@ -287,6 +314,7 @@ export class Company extends EventEmitter {
         this.work(w, open.shift());
       }
       this.reviewWishes();
+      await this.followWishes();
       const idle = this.workers.slice(0, this.settings.workers).every((w) => !w.issue);
       if (idle && !open.length && this.settings.propose && this.now() - this.proposedAt >= this.settings.proposeHours * 3600000 && this.proposals.length < MAX_PROPOSALS) {
         // Not waited for: a slow model must not hold up the board.
@@ -653,7 +681,7 @@ export class Company extends EventEmitter {
       const recent = await this.git(['log', '--format=%s', '-n', '25', 'origin/main'], { cwd: this.repoDir }).catch(() => '');
       const open = [...this.tasks, ...this.proposals].map((i) => `#${i.number} ${i.title}`).join('\n') || '(none)';
       const thought = await this.think(w, { kind: 'proposal', title: 'A proposal' }, [
-        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a 3D block-building island game for kids played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of one thing that exists, or one small new thing kids would enjoy. Narrow and specific: it changes one thing, named in the title (like "Make the bus honk when tapped" or "Show the pet's name over its head"), touching a few files at most. Never a summary, a recap, a log or a list of several things; never "improve X" or "update Y" without saying exactly what. Not something already done or already proposed. Be concise: plain words, no filler. Answer as JSON: {"title": a short imperative issue title, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
+        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds kids-world, a 3D block-building island game for kids played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. Propose ONE small, concrete improvement a single engineer could make in a day: a bug fix, a polish of one thing that exists, or one small new thing kids would enjoy. Narrow and specific: it changes one thing, named in the title (like "Make the bus honk when tapped" or "Show the pet's name over its head"), touching a few files at most. Never a summary, a recap, a log or a list of several things; never "improve X" or "update Y" without saying exactly what. Not something already done or already proposed. Be concise: plain words, no filler. ${SCORING} Answer as JSON: {"title": a short imperative issue title, "score": its score, "tldr": one or two sentences saying what and why, "what": the change itself in at most three short sentences, "done": two to four short checks that tell it is done}.` },
         { role: 'user', content: `What the game has now:\n${features}\n\nRecent changes:\n${recent}\n\nOpen tasks and proposals:\n${open}` },
       ], PROPOSAL_SCHEMA, { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.8 });
       run = thought.run;
@@ -705,6 +733,28 @@ export class Company extends EventEmitter {
     return this.reviewing;
   }
 
+  // Accepted ideas' news, from their issues: each that has got further since
+  // is told to its player. Ideas done with (in the game, or not picked) are
+  // not looked up again.
+  async followWishes() {
+    if (!this.wishes?.stage) return;
+    try {
+      const open = (await this.wishes.list()).filter((w) => w.state === 'accepted' && w.issue?.number && STAGE_STEP[w.stage ?? ''] < 5);
+      if (!open.length) return;
+      const issues = new Map((await this.github.requests()).map((i) => [i.number, i]));
+      for (const wish of open) {
+        const issue = issues.get(wish.issue.number);
+        if (!issue) continue;
+        const stage = stageOf(issue);
+        if (!newsOf(wish.stage ?? '', stage)) continue;
+        await this.wishes.stage(wish.id, stage);
+        this.log(`CTB: a player's idea #${issue.number} is ${stage} now; they were told.`);
+      }
+    } catch (error) {
+      this.log(`CTB: could not look up players' ideas (${error.message}).`);
+    }
+  }
+
   // One idea read by one worker: yes or no, said back to the player, and a
   // proposal filed for a yes.
   async reviewWish(w, wish) {
@@ -714,7 +764,7 @@ export class Company extends EventEmitter {
     try {
       const features = await this.features();
       const thought = await this.think(w, { kind: 'idea', title: `An idea: ${String(wish.text).slice(0, 80)}` }, [
-        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game sent an idea for it. Decide whether CTB takes it on. Say yes to an idea that fits the game, is kind and fun for kids, and could be built — perhaps as a small first version of it. Read what the game has now first, all of it, and never tell the child the game has no such thing when it does; an idea that grows something the game has (more of it, stronger, for more animals) is a new idea, not one it has. Say no to one the game already has exactly so (and tell the child where to find it), one that is not about the game, one that is unkind, scary or not for kids, or one far too big to build. Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be ready, and do not promise it will be built exactly so. For a yes, also write the GitHub issue for the engineers, in English: one specific change, named in a short imperative title, a TL;DR of one or two sentences, what to change in at most three short sentences (naming what in the game it builds on, when it builds on something), and two to four short checks that tell it is done. Answer as JSON: {"accept": true or false, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
+        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game sent an idea for it. Decide whether CTB takes it on. Say yes to an idea that fits the game, is kind and fun for kids, and could be built — perhaps as a small first version of it. Read what the game has now first, all of it, and never tell the child the game has no such thing when it does; an idea that grows something the game has (more of it, stronger, for more animals) is a new idea, not one it has. Say no to one the game already has exactly so (and tell the child where to find it), one that is not about the game, one that is unkind, scary or not for kids, or one far too big to build. Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be ready, and do not promise it will be built exactly so. For a yes, also write the GitHub issue for the engineers, in English: one specific change, named in a short imperative title, a TL;DR of one or two sentences, what to change in at most three short sentences (naming what in the game it builds on, when it builds on something), and two to four short checks that tell it is done. ${SCORING} Score a no too; a yes scores 50 or more. Answer as JSON: {"accept": true or false, "score": its score, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
         { role: 'user', content: `What the game has now:\n${features}\n\nThe child's idea:\n${String(wish.text).slice(0, WISH_TEXT_MAX)}` },
       ], WISH_SCHEMA, { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.4 });
       run = thought.run;
@@ -734,8 +784,8 @@ export class Company extends EventEmitter {
       } else {
         this.log(`CTB: ${w.name} turned down a player's idea.`);
       }
-      await this.wishes.answer(wish.id, { state: answer.accept ? 'accepted' : 'declined', by: w.name, reply, ...(issue ? { issue: { number: issue.number, url: issue.url } } : {}) });
-      run?.end({ ok: true, why: `${answer.accept ? `Accepted, as #${issue.number}` : 'Declined'}: “${reply}”`, url: issue?.url ?? '' });
+      await this.wishes.answer(wish.id, { state: answer.accept ? 'accepted' : 'declined', by: w.name, reply, score: scoreOf(answer.score), ...(issue ? { issue: { number: issue.number, url: issue.url } } : {}) });
+      run?.end({ ok: true, why: `${answer.accept ? `Accepted, as #${issue.number}` : 'Declined'} (score ${scoreOf(answer.score) ?? '?'}): “${reply}”`, url: issue?.url ?? '' });
       this.office?.say(w.k, answer.accept ? 'I just read a great idea from a player — we are taking it on!' : 'I just read an idea from a player and wrote back to them.');
       if (issue) await this.refresh();
     } catch (error) {
@@ -870,7 +920,7 @@ export class CtbControl {
       proposedAt: await this.readProposedAt(),
       onProposed: (at) => this.saveProposedAt(at),
       // Players' ideas, kept by the keeper, and its way to answer them.
-      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a) } : null,
+      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a), stage: (id, s) => this.keeper.stageWish(id, s) } : null,
       ...(this.git ? { git: this.git } : {}),
     });
     if (this.rooms) {
@@ -966,7 +1016,7 @@ export class CtbControl {
       // The newest run logs, of every worker.
       runs: this.runs.list().slice(0, RUNS_SHOWN),
       // Players' ideas lately, from the keeper, each with its answer.
-      ideas: this.keeper?.store ? (await this.keeper.store.wishes()).slice(0, 30).map((w) => ({ at: w.at, name: w.name, username: w.username, text: w.text, state: w.state, by: w.by, reply: w.reply, issue: w.issue ?? null })) : [],
+      ideas: this.keeper?.store ? (await this.keeper.store.wishes()).slice(0, 30).map((w) => ({ at: w.at, name: w.name, username: w.username, text: w.text, state: w.state, by: w.by, reply: w.reply, score: w.score ?? null, stage: w.stage ?? '', issue: w.issue ?? null })) : [],
     };
   }
 
