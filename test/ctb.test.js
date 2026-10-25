@@ -519,7 +519,8 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const room = office.room;
   assert.equal(room.world.name, ISLAND_NAME);
   const workers = () => [...room.players.values()].filter((p) => p.online && p.name.endsWith('💼'));
-  await eventually(() => workers().length === 3 && workers().every((p) => p.s[4] === 8));
+  await eventually(() => workers().length === 3 && workers().every((p) => p.s[4] === 13));
+  // With nothing to work on yet, each is on a coffee break (render/avatar.js ANIM.coffee).
   assert.deepEqual(workers().map((p) => p.name), ['Ada 💼', 'Ben 💼', 'Cleo 💼']);
   assert.equal(room.host, 0, 'no worker owns the island: one login does, and it is not here');
   // Each sits on a chair of the office, facing its TV.
@@ -563,6 +564,13 @@ test('the office on the CTB island: workers at their desks, answering children, 
     const [fx, fz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][B.block(id).front];
     assert.ok(fx * (seat.x - s.x - 0.5) + fz * (seat.z - s.z - 0.5) > 0.5, 'facing them');
   }
+
+  // Working on an issue, typing away (ANIM.type); the others still on their coffee break.
+  await eventually(() => workers()[0].s[4] === 12);
+  assert.deepEqual(workers().map((p) => p.s[4]), [12, 13, 13]);
+  // Done with it, back to the coffee.
+  office.showScreens([{ name: 'Ada 💼', issue: null, doing: 'At their desk', steps: [], since: 0 }]);
+  await eventually(() => workers()[0].s[4] === 13);
 
   // The AI friend talking to them gets no answer: it would answer back, on and on.
   const pip = { send: () => {} };

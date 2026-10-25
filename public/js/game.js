@@ -4552,14 +4552,15 @@ export class Game extends EventTarget {
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
       // Sitting on a chair or a sofa (not lying in bed): tea party company.
-      p.sitting = s.anim === ANIM.sit;
+      // At a desk, typing or on a coffee break (the CTB office's workers), is sitting too.
+      p.sitting = s.anim === ANIM.sit || s.anim === ANIM.type || s.anim === ANIM.coffee;
       // In a seat at all, sitting or lying: nobody else can sit there.
-      p.inSeat = s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl;
+      p.inSeat = p.sitting || s.anim === ANIM.lie || s.anim === ANIM.curl;
       const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id || c.passengers.includes(p.id)) : null;
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
-      if (p.seated || s.anim === ANIM.sit || s.anim === ANIM.lie || s.anim === ANIM.curl || s.anim === ANIM.piano) a.shadow.visible = false;
+      if (p.seated || p.inSeat || s.anim === ANIM.piano) a.shadow.visible = false;
     }
     for (const p of this.players.values()) {
       if (p.bubble && (p.bubble.left -= dt) <= 0) p.bubble = null;

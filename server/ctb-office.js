@@ -30,8 +30,10 @@ import { PeerHost } from './host.js';
 export const ISLAND_NAME = 'CTB';
 // Where the game is played, for the island's link (KIDS_WORLD_PAGES_URL to change it).
 export const PAGES_URL = process.env.KIDS_WORLD_PAGES_URL || 'https://ctbot000.github.io/kids-world/';
-// As the renderer's poses (render/avatar.js ANIM).
-const SIT = 8;
+// As the renderer's poses (render/avatar.js ANIM): typing at the desk while
+// working on something, sitting back with a coffee while not.
+const TYPE = 12;
+const COFFEE = 13;
 const SAVE_MS = 5 * 60000;
 // Answering children: one worker at a time, and not too often.
 const ANSWER_GAP_MS = 6000;
@@ -281,6 +283,8 @@ class Clerk extends EventEmitter {
     this.me = 0;
     this.welcomed = false;
     this.ended = false;
+    // Working on an issue (ctb.js screens): typing, or else on a coffee break.
+    this.busy = false;
     this.link = new LocalLink(office.room);
     this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look, ...(k === 0 && office.token ? { token: office.token } : {}) }));
     this.link.on('message', (msg) => this.safely(() => this.handle(msg)));
@@ -310,11 +314,18 @@ class Clerk extends EventEmitter {
     }
   }
 
-  // At their desk, sitting facing their screen.
+  // At their desk, sitting facing their screen: typing away when busy,
+  // sat back with a coffee when not.
+  setBusy(busy) {
+    if (busy === this.busy) return;
+    this.busy = busy;
+    this.sit();
+  }
+
   sit() {
     const seat = this.office.seats[this.k];
     if (!seat || !this.welcomed) return;
-    this.link.send({ t: 'm', s: [+seat.x.toFixed(2), +seat.y.toFixed(2), +seat.z.toFixed(2), +seat.yaw.toFixed(2), SIT, 0] });
+    this.link.send({ t: 'm', s: [+seat.x.toFixed(2), +seat.y.toFixed(2), +seat.z.toFixed(2), +seat.yaw.toFixed(2), this.busy ? TYPE : COFFEE, 0] });
   }
 
   say(raw) {
@@ -797,6 +808,7 @@ export class Office {
     const cells = placeTemplate(deskComputers(), this.site.x, this.site.base, this.site.z, this.site.facing);
     const screens = [];
     this.clerks.forEach((c, k) => {
+      c.setBusy(Boolean(list[k]?.issue));
       if (list[k] && cells[k]) screens.push({ x: cells[k][0], y: cells[k][1], z: cells[k][2], ...list[k] });
     });
     this.room.setScreens(screens);

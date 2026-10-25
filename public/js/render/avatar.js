@@ -244,7 +244,10 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // enough to fit in it, the root in the middle of the bed (shared/seats.js);
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13 };
+// How often someone on a coffee break takes a sip, and how long a sip takes (s).
+const SIP_EVERY = 6.5;
+const SIP_TIME = 2.4;
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -1895,6 +1898,21 @@ function pianoHand(size, side, skin) {
 // The bench you sit on at the piano, its padded top where the root is and
 // its four legs down to the floor: a little wider than you, of the same dark
 // wood as the piano, with a red cushion.
+// A mug of coffee, for a break at a desk: held by its side in the palm,
+// its handle out towards the hand, its own way up (rotation.x keeps it so).
+function coffeeMug(h) {
+  const g = new THREE.Group();
+  const cup = toon('#f4f1ea');
+  const r = 0.032 * h;
+  const tall = 0.075 * h;
+  g.add(mesh(cylinder(r, r * 0.9, tall, 14), cup, 0, 0, 0));
+  g.add(mesh(cylinder(r * 0.88, r * 0.88, 0.004, 14), toon('#5b3a24'), 0, tall / 2 - 0.006 * h, 0));
+  // The handle: a ring standing up on the side (a torus lies in its own xy plane).
+  g.add(mesh(torus(r * 0.5, 0.006 * h), cup, r * 1.05, 0, 0));
+  g.add(mesh(cylinder(r * 1.01, r * 1.01, tall * 0.25, 14), toon('#1f8a8a'), 0, -tall * 0.1, 0));
+  return g;
+}
+
 function pianoBench() {
   const g = new THREE.Group();
   const wood = toon('#3b2a24');
@@ -1930,6 +1948,8 @@ export class Avatar {
       { u: 0.7, to: 0.7, at: -Infinity, finger: 2 },
     ];
     this.bench = pianoBench();
+    // The mug in hand on a coffee break, there only then.
+    this.mug = null;
     // A soft round shadow under the feet.
     const shadow = blobShadow(0.42);
     shadow.position.y = 0.02;
@@ -2276,6 +2296,42 @@ export class Avatar {
       headTilt = playing ? Math.sin(t * 2.2) * 0.08 : Math.sin(t * 0.7) * 0.04;
       headNod = 0.18 + (pl + ph2) * 0.03;
       legs = [[-1.42, -0.1, 1.35, 0], [-1.42, 0.1, 1.35, 0]];
+    } else if (anim === ANIM.type) {
+      // At a desk, leaning in to the keyboard, both forearms out over it and
+      // the hands tapping away in turn, quick and uneven; now and then a
+      // pause to read the screen, the head bent to it all the while.
+      bob = -(B.hip - SIT_HIPS);
+      lean = 0.12;
+      const busy = Math.sin(t * 0.9) + Math.sin(t * 0.37 + 1) > -1.1;
+      const tapL = busy ? Math.max(0, Math.sin(t * 17)) ** 2 : 0;
+      const tapR = busy ? Math.max(0, Math.sin(t * 19.5 + 1.3)) ** 2 : 0;
+      armRaiseL = armRaiseR = -0.1;
+      armFwdL = -0.85 + tapL * 0.08;
+      armFwdR = -0.85 + tapR * 0.08;
+      bendL = 0.9 - tapL * 0.1;
+      bendR = 0.9 - tapR * 0.1;
+      twist = busy ? (tapR - tapL) * 0.03 : 0;
+      headNod = 0.16 + (busy ? 0 : Math.sin(t * 0.8) * 0.03);
+      headTilt = busy ? Math.sin(t * 1.3) * 0.025 : Math.sin(t * 0.6) * 0.07;
+      legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
+    } else if (anim === ANIM.coffee) {
+      // On a break, sat back with a mug of coffee: held in front of you,
+      // and every so often lifted for a sip, the head tipping back a little
+      // as you drink; the other hand rests in the lap.
+      bob = -(B.hip - SIT_HIPS);
+      lean = -0.06;
+      const c = t % SIP_EVERY;
+      const sip = c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
+      armRaiseL = 0;
+      armFwdL = -0.3;
+      bendL = 0.85;
+      armRaiseR = 0.08 - sip * 0.22;
+      armFwdR = -0.35 - sip * 0.45;
+      bendR = 1.35 + sip * 0.75;
+      headNod = 0.05 - sip * 0.22;
+      headTilt = sip ? 0 : Math.sin(t * 0.7) * 0.06;
+      legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
+      this.sip = sip;
     } else if (anim === ANIM.curl) {
       // Hugging your knees, chin tucked in, breathing slowly.
       armRaiseL = armRaiseR = -0.05;
@@ -2445,12 +2501,13 @@ export class Avatar {
     }
 
     const curled = anim === ANIM.curl;
-    const sitting = anim === ANIM.sit || anim === ANIM.piano || curled;
+    const sitting = anim === ANIM.sit || anim === ANIM.piano || anim === ANIM.type || anim === ANIM.coffee || curled;
     if ((anim === ANIM.piano) !== (this.bench.parent === this.root)) {
       if (anim === ANIM.piano) this.root.add(this.bench);
       else this.bench.removeFromParent();
     }
     this.playHands(anim === ANIM.piano, lean, [armFwdL, armFwdR], [bendL, bendR], t);
+    this.holdMug(anim === ANIM.coffee, lean + armFwdR - bendR);
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);
@@ -2603,6 +2660,26 @@ export class Avatar {
         fingers[f - 1].joint.rotation.x = 0.97 + ripple * 0.4 - struck * 0.35;
       }
     }
+  }
+
+  // On a coffee break, the mug in the hand where a weapon would be (the
+  // weapon put away meanwhile), kept upright whatever the forearm does
+  // (pitch: the forearm's, from the torso's lean, the shoulder and the
+  // elbow), and tipped towards you as you sip.
+  holdMug(holding, pitch) {
+    const hand = this.hands[1];
+    if (holding !== (this.mug?.parent === hand)) {
+      if (holding) {
+        this.mug ??= coffeeMug(this.build.hand);
+        this.mug.position.set(-0.03 * this.build.hand, -0.05 * this.build.hand, 0.012 * this.build.hand);
+        hand.add(this.mug);
+        this.weapon?.removeFromParent();
+      } else {
+        this.mug.removeFromParent();
+        if (this.weapon && !this.handsPlaying) hand.add(this.weapon);
+      }
+    }
+    if (holding) this.mug.rotation.x = -pitch + (this.sip ?? 0) * 0.9;
   }
 
   // How the curled-up pose (already set on the body, at full size) has to be
