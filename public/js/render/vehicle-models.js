@@ -2,7 +2,8 @@
 // (boxy, with studs on top): a car with big round headlights for eyes, a
 // speedboat with an outboard motor and a flag, a yellow digger on tracks
 // with a drill on the front and a flashing light, a mine cart with a
-// lantern, a kick scooter with a bell that lights up when it rings, and
+// lantern, a kick scooter with a bell that lights up when it rings, and a
+// wooden sled on runners that curl up in front; and
 // for friends to ride in together, an open-top bus and a
 // ferry, each with three rows of two seats behind the driver's; and to fly,
 // a helicopter with a seat for two friends behind the pilot's, and a
@@ -296,6 +297,45 @@ function scooter(id) {
   return { ...v, height: 1.05, center: 0.55, pick: 0.65, shadow: 0.5, seen: 95 };
 }
 
+const WOODS = ['#b98b5a', '#a97748', '#c49a68'];
+
+// A little wooden sled: two runners with a curl up in front (a rod bent
+// round the front of each, on a pivot of its own so the curl can spring),
+// slats across them to sit on — the front one the seat's colour, turning the
+// colour of whoever is riding — and a rope from runner to runner to hold.
+// No wheels: it slides on its runners, so drive() leaves them alone.
+function sled(id) {
+  const v = rig();
+  const { body } = v;
+  const wood = toon(WOODS[id % WOODS.length]);
+  const dark = toon('#4a4e57');
+  for (const side of [-1, 1]) {
+    // The runner, with its curl up in front.
+    block(body, wood, side * 0.36 - 0.04, 0.06, -0.5, side * 0.36 + 0.04, 0.12, 0.46);
+    const curl = new THREE.Group();
+    curl.position.set(side * 0.36, 0.12, 0.46);
+    body.add(curl);
+    curl.add(mesh(cylinder(0.04, 0.04, 0.42, 10), wood, 0, 0.12, -0.05, 1, 0.06, 1));
+    curl.add(mesh(sphere(1, 12, 10), wood, 0, 0.26, -0.1, 0.045, 0.05, 0.045));
+    curl.rotation.x = -0.5;
+    // The runner's iron shoe underneath.
+    block(body, dark, side * 0.36 - 0.045, 0.03, -0.5, side * 0.36 + 0.045, 0.06, 0.46);
+  }
+  // Slats across the runners, the one the rider sits on (see ride.z) the
+  // seat, its colour whosever is sitting on it (see setRider); the rest a
+  // little lower, wood.
+  v.seat = block(body, v.pad, -0.4, 0.21, -0.14, 0.4, 0.3, 0.06);
+  block(body, wood, -0.4, 0.19, 0.06, 0.4, 0.28, 0.34);
+  // Behind the seat, one long slat for a pet riding along (no gap for it to
+  // sit over).
+  block(body, wood, -0.4, 0.19, -0.5, 0.4, 0.28, -0.14);
+  // The rope to hold, run through the curl of each runner.
+  const rope = toon('#e8dcc8');
+  rod(body, rope, [-0.36, 0.36, 0.38], [0.36, 0.36, 0.38], 0.018);
+  v.eyes = null;
+  return { ...v, height: 0.45, center: 0.2, pick: 0.35, shadow: 0.55, seen: 90 };
+}
+
 // The seats for friends, two to a row behind the driver (as ride.seats in
 // shared/critters.js), each a cushion of its own colour with a back,
 // cushions at height y. Their materials go in v.seatPads.
@@ -574,7 +614,7 @@ function balloon(id) {
   return { ...v, air: true, height: 4.6, center: 1.4, pick: 1.4, shadow: 1, seen: 220 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, bus, ferry, helicopter, balloon };
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -627,7 +667,7 @@ export function drive(m, dt, state, moving, air = 0) {
   } else {
     // An engine's shake, a bounce off the ground, and a tilt in the air.
     b.position.y = moving ? Math.sin(t * 40) * 0.006 : 0;
-    b.rotation.set(state === 'jump' ? clamp(-m.vy * 0.03, -0.3, 0.3) : 0, 0, m.type === 'minecart' && moving ? Math.sin(t * 9) * 0.03 : m.type === 'scooter' ? -clamp(m.turn * 0.06, -0.22, 0.22) : 0);
+    b.rotation.set(state === 'jump' ? clamp(-m.vy * 0.03, -0.3, 0.3) : 0, 0, m.type === 'minecart' && moving ? Math.sin(t * 9) * 0.03 : m.type === 'scooter' || m.type === 'sled' ? -clamp(m.turn * 0.06, -0.22, 0.22) : 0);
     if (state === 'swim') b.position.y = Math.sin(t * 2) * 0.03 - 0.05;
   }
   if (honk) b.position.y += Math.abs(Math.sin(t * 14)) * 0.05;

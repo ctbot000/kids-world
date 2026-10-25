@@ -447,8 +447,11 @@ test('every big animal can be drawn in every state, with and without a rider, at
 
 // The big friendly dog: new kinds go on the end of the list, because the
 // wire sends the index, so an old page reads every other animal as it did.
-test('the dog is the newest animal, on the end of the list, big and rideable', () => {
-  assert.equal(CRITTER_TYPES.indexOf('dog'), CRITTER_TYPES.length - 1, 'on the end of CRITTER_TYPES, and only there');
+// (The sled, a vehicle, went on the end after it.)
+test('the dog is the newest animal, big and rideable, with only vehicles after it', () => {
+  const after = CRITTER_TYPES.slice(CRITTER_TYPES.indexOf('dog') + 1);
+  assert.ok(after.length > 0 && after.every((t) => CRITTER_INFO[t].vehicle), 'nothing after the dog but vehicles');
+  assert.ok(!CRITTER_TYPES.slice(0, -1).includes('sled'), 'the sled, the newest of them, only once, on the end');
   const info = CRITTER_INFO.dog;
   assert.ok(BIG.includes('dog') && info.ride && info.swims && info.gallops, 'big, rideable, swims and gallops like the pony');
   assert.ok(info.names.length >= 5, 'it has names to be called by');

@@ -144,6 +144,78 @@ test('a car drives faster than you run, honks instead of jumping, and hops up a 
   assert.ok(!bodyOverlapsSolid(w, r.body));
 });
 
+test('a sled is in the toy box with the other vehicles, and you sit on it with your legs in front', () => {
+  assert.ok(VEHICLES.includes('sled'), 'in the Vehicles tab');
+  assert.equal(CRITTER_INFO.sled.name, 'Sled');
+  assert.ok(!CRITTER_INFO.sled.fixed, "not one of a fun park's rides");
+  const w = meadow();
+  const r = ride(w, 'sled', 10.5, 6, 20.5);
+  assert.ok(r, 'room for it on the meadow');
+  assert.ok(!r.r.stand, 'its rider sits');
+  // Sitting with their legs out in front of them over the front of the deck.
+  assert.ok(r.r.reach > 0.5, `legs out in front (reach ${r.r.reach})`);
+  assert.ok(r.r.spread < 0.3, `nearly together (spread ${r.r.spread})`);
+  assert.ok(!bodyOverlapsSolid(w, r.body));
+  // Getting off sets you down beside it, and it stays where it is.
+  const at = { x: r.body.x, y: r.body.y, z: r.body.z, yaw: r.yaw };
+  const off = getOffAt(w, r);
+  assert.ok(Math.hypot(off.x - at.x, off.z - at.z) > 0.7, 'getting off beside it');
+  assert.deepEqual([r.body.x, r.body.y, r.body.z], [at.x, at.y, at.z], 'the sled stays where it was');
+});
+
+test('a sled drives along, quicker on snow than on grass, and coasts to a stop when you let go', () => {
+  const w = meadow();
+  // Half the meadow snow, half grass.
+  for (let z = 0; z < 48; z++) for (let x = 24; x < 48; x++) w.set(x, 5, z, B.SNOW);
+  const snow = ride(w, 'sled', 30.5, 6, 20.5, Math.PI / 2);
+  go(w, snow, { mx: 1, mz: 0 }, 3);
+  const onSnow = Math.abs(snow.body.vx);
+  assert.ok(onSnow > MOVE.walk, `along on the snow at ${onSnow.toFixed(2)}`);
+  // Letting go, it coasts a good way before it stops.
+  go(w, snow, {}, 4);
+  assert.ok(snow.body.x > 34, `coasting on, to ${snow.body.x.toFixed(2)}`);
+  assert.ok(Math.abs(snow.body.vx) < 0.1, `and stopping (${snow.body.vx.toFixed(3)})`);
+  const grass = ride(w, 'sled', 10.5, 6, 20.5, Math.PI / 2);
+  go(w, grass, { mx: 1, mz: 0 }, 3);
+  const onGrass = Math.abs(grass.body.vx);
+  assert.ok(onGrass > 1, `it can be pushed along on grass too, at ${onGrass.toFixed(2)}`);
+  assert.ok(onGrass < onSnow * 0.8, `but slower than on snow (${onGrass.toFixed(2)} against ${onSnow.toFixed(2)})`);
+  // On grass it stops soon after you let go.
+  const x0 = grass.body.x;
+  go(w, grass, {}, 2);
+  assert.ok(Math.abs(grass.body.vx) < 0.1 && grass.body.x - x0 < 3, `stopping soon on the grass (${(grass.body.x - x0).toFixed(2)} along)`);
+  // Steering as you walk.
+  go(w, grass, { mx: 0, mz: 1 }, 1.5);
+  assert.ok(Math.abs(grass.yaw) < 0.1, `facing the way it goes, at ${grass.yaw.toFixed(2)}`);
+});
+
+test('a sled slides down a snowy slope, faster than on the flat, and its rider gets off beside it', () => {
+  const w = new World({ W: 64, H: 32, D: 16, sea: 3 });
+  for (let x = 0; x < w.W; x++) {
+    for (let z = 0; z < w.D; z++) {
+      w.set(x, 0, z, B.MAGIC_FLOOR);
+      // A hill running down from x = 0 (top, y = 12) to x = 16 (y = 4), then flat.
+      const y = Math.max(4, 12 - Math.floor(x / 2));
+      for (let yy = 1; yy <= y; yy++) w.set(x, yy, z, yy === y ? B.SNOW : B.STONE);
+    }
+  }
+  const r = ride(w, 'sled', 1.5, 13, 8.5, Math.PI / 2);
+  // Facing down the hill, it goes all by itself, faster than walking, and
+  // runs on down the slope and out onto the flat at the bottom.
+  let fastest = 0;
+  for (let i = 0; i < 9 * 60; i++) {
+    stepRide(w, r, {}, 1 / 60);
+    fastest = Math.max(fastest, Math.hypot(r.body.vx, r.body.vz));
+  }
+  assert.ok(fastest > MOVE.walk, `down the hill of its own accord, at up to ${fastest.toFixed(2)}`);
+  assert.ok(r.body.x > 16, `off the slope and onto the flat, at ${r.body.x.toFixed(2)}`);
+  assert.equal(r.body.y, 5, `down on the flat, at y ${r.body.y}`);
+  assert.ok(Math.hypot(r.body.vx, r.body.vz) < 0.2, `slowing to a stop (${Math.hypot(r.body.vx, r.body.vz).toFixed(3)})`);
+  const off = getOffAt(w, r);
+  assert.ok(Math.hypot(off.x - r.body.x, off.z - r.body.z) > 0.7, 'getting off beside it');
+  assert.ok(!bodyOverlapsSolid(w, { ...r.body, x: off.x, y: off.y, z: off.z, radius: 0.3, height: 1.5 }), 'with somewhere to stand');
+});
+
 test('a kick scooter is quicker than you run, rings its bell instead of jumping, hops up a step, and you stand on the deck', () => {
   const w = meadow();
   for (let z = 0; z < 48; z++) for (let x = 30; x < 48; x++) w.set(x, 6, z, B.GRASS);
