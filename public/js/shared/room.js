@@ -26,7 +26,7 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_HEARTS, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
+import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
@@ -1195,6 +1195,13 @@ export class Room {
     const people = [];
     for (const [id, w] of where) {
       const p = this.players.get(id);
+      // Someone on a dragon's back is fair game, as the dragon under them:
+      // a bump there takes its hearts (see hurt), never theirs.
+      const dragon = this.dragonUnder(id);
+      if (dragon) {
+        people.push({ id, x: dragon.x, y: dragon.y, z: dragon.z, flying: w.flying, riding: false, mount: CRITTER_INFO.dragon.ride.radius, safeUntil: 0, dizzy: false });
+        continue;
+      }
       people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now });
     }
     const adv = this.adventure;
@@ -1226,6 +1233,11 @@ export class Room {
   hurt(pid, monster, now, stomp = false) {
     const p = this.players.get(pid);
     if (!p) return;
+    const dragon = this.dragonUnder(pid);
+    if (dragon) {
+      this.bumpRide(dragon, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump, now);
+      return;
+    }
     const b = monster.body;
     const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2) };
     if (isHeavy(monster.kind)) msg.big = true;
@@ -1370,60 +1382,53 @@ export class Room {
     }
   }
 
-  // The tame dragons being ridden, as they go: a monster bumping into them
-  // takes one of their hearts (the rider's HP never, they are safe up on its
-  // back), the hearts come back by themselves once no monster has been near
-  // for a while, and with none left the rider is set down beside it, unhurt,
-  // while the dragon rests, too tired to ride, for a short while.
+  // The tame dragon someone is riding, and can still ride, or null.
+  dragonUnder(pid) {
+    for (const c of this.critters.list) {
+      if (c.rider === pid) return c.type === 'dragon' && canRide(c) && !(rideOf(c).restUntil > this.now()) ? c : null;
+    }
+    return null;
+  }
+
+  // A monster bumped into a ridden dragon (hurt): bumps of its hearts off
+  // (the rider's HP never, they are safe up on its back), not too often, and
+  // with none left the rider is set down beside it, unhurt, while the dragon
+  // rests, too tired to ride, for a short while.
+  bumpRide(c, bumps, now) {
+    const ride = rideOf(c);
+    if (now - ride.bumpAt < RIDE_BUMP_MS) return;
+    ride.hearts = Math.max(0, ride.hearts - bumps * BUMP_HP);
+    ride.bumpAt = now;
+    ride.healAt = now;
+    if (ride.hearts) {
+      this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
+      return;
+    }
+    ride.restUntil = now + RIDE_REST_MS;
+    this.unride(c.rider);
+    this.broadcast({ t: 'chearts', id: c.id, hearts: 0, max: ride.max, rest: RIDE_REST_MS });
+  }
+
+  // The tame dragons being ridden, as they go: their hearts come back by
+  // themselves once no monster has been near for a while, and one resting
+  // (see bumpRide) has all of them back when its rest is over.
   stepRides(now) {
     for (const c of this.critters.list) {
-      // Only a rideable dragon has ride-hearts (a wild one's fight has its
-      // own), and a resting one goes on resting with nobody on its back.
-      if (c.type !== 'dragon' || !canRide(c)) continue;
-      const ride = rideOf(c);
-      // Its hearts only matter under a rider — unless it is resting off the
-      // bumps it took with one aboard (then it finishes its rest below).
-      if (!c.rider && !ride.restUntil) continue;
+      // Only a rideable dragon has ride-hearts (a wild one's fight has its own).
+      if (c.type !== 'dragon' || !c.ride || !canRide(c)) continue;
+      const ride = c.ride;
       if (ride.restUntil) {
         if (now < ride.restUntil) continue;
-        // The rest was the recovery: all its hearts back, and it can be ridden.
         ride.restUntil = 0;
         ride.hearts = ride.max;
         ride.healAt = now;
         this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
         continue;
       }
-      // A monster beside it bumps the dragon, not the rider: a heart off, not
-      // too often (as a monster's own giggle keeps bumps apart).
-      let bumped = false;
-      if (now - (ride.bumpAt ?? -Infinity) >= RIDE_BUMP_MS) {
-        for (const m of this.monsters.list) {
-          if (m.march || m.passive || m.kind === 'king') continue;
-          const b = m.body;
-          if (Math.hypot(b.x - c.x, b.z - c.z) > b.radius + CRITTER_INFO.dragon.ride.radius) continue;
-          if (b.y > c.y + 2 || b.y + b.height < c.y) continue;
-          ride.hearts = Math.max(0, ride.hearts - BUMP_HP);
-          ride.bumpAt = now;
-          ride.healAt = now;
-          bumped = true;
-          break;
-        }
-      }
-      if (bumped && !ride.hearts) {
-        // None left: down its rider comes, beside it and safe, and it rests.
-        ride.restUntil = now + RIDE_REST_MS;
-        this.unride(c.rider);
-        this.broadcast({ t: 'chearts', id: c.id, hearts: 0, max: ride.max, rest: RIDE_REST_MS });
-        continue;
-      }
-      if (bumped) {
-        this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
-        continue;
-      }
       // No monster near for a while: a heart back, again and again until full.
       if (ride.hearts >= ride.max) continue;
       const near = this.monsters.list.some((m) => !m.march && Math.hypot(m.body.x - c.x, m.body.z - c.z) < RIDE_HEAL_NEAR);
-      if (near || now - (ride.healAt ?? -Infinity) < RIDE_HEAL_MS) continue;
+      if (near || now - ride.healAt < RIDE_HEAL_MS) continue;
       ride.hearts++;
       ride.healAt = now;
       this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });

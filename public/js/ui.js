@@ -6440,7 +6440,7 @@ export class UI {
     // where it breathes fire at them (game.js breath). A wild dragon near
     // shows it too, but only on foot: from a tame dragon's back there is no
     // bopping dragons.
-    const monsterNear = Boolean(me) && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m));
+    const monsterNear = Boolean(me) && (!g.riding || g.riding.type === 'dragon') && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m));
     const wildNear = Boolean(me) && !g.riding && [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6));
     const near = monsterNear || wildNear;
     if (el.hidden === near) el.hidden = !near;
