@@ -3120,13 +3120,15 @@ export class UI {
   }
 
   // On the shared isle nobody builds and nobody flies on their own, so its
-  // tools, its toy box and its fly button are not even there.
+  // tools, its toy box and its fly button are not even there. Nobody builds
+  // on the CTB island either (it stays just as it is), so no tools there.
   renderShared() {
     const shared = this.game?.shared === true;
-    $('toolbar').hidden = shared;
-    $('toolopts').hidden = shared;
-    $('hotbar').hidden = shared;
-    $('btn-toybox').hidden = shared;
+    const stays = this.game?.staysAsMade === true;
+    $('toolbar').hidden = stays;
+    $('toolopts').hidden = stays;
+    $('hotbar').hidden = stays;
+    $('btn-toybox').hidden = stays;
     $('btn-fly').hidden = shared;
   }
 
@@ -3319,8 +3321,9 @@ export class UI {
   // The toy box: every block, plant, stamp and animal to choose from.
   toyBox(tab = null) {
     const g = this.game;
-    // The shared isle stays just as it was made: its toy box stays shut.
-    if (g?.shared) {
+    // The shared isle stays just as it was made, and the CTB island just as
+    // it is: their toy box stays shut.
+    if (g?.staysAsMade) {
       this.sound.play('no');
       this.toast('🧸', `${g.world.name} stays just as it was made, so its toy box stays shut!`);
       return;
