@@ -4624,7 +4624,7 @@ export class Game extends EventTarget {
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
       if (!info?.vehicle && state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
-        if (c.type !== 'butterfly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
+        if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
       this.seaSights(c, s, state, now);
