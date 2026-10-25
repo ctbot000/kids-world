@@ -45,7 +45,7 @@ export function startRide(world, type, m) {
 export function stepRide(world, ride, input, dt) {
   const r = ride.r;
   if (r.rails && !ride.rail) ride.rail = ontoRails(world, ride);
-  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : r.air ? fly(world, ride, input, dt) : walk(world, ride, input, dt);
+  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : r.air ? fly(world, ride, input, dt) : r.sled ? slide(world, ride, input, dt) : walk(world, ride, input, dt);
   ride.held = Boolean(input.jump);
   const b = ride.body;
   if (!ride.rail && Math.hypot(b.vx, b.vz) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 8));
@@ -65,6 +65,63 @@ function walk(world, ride, input, dt) {
   if (r.drill && Math.hypot(input.mx || 0, input.mz || 0) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(input.mx, input.mz), Math.min(1, dt * 6));
   const ev = stepBody(world, b, { mx: input.mx, mz: input.mz, run: input.run, jump: input.jump && (!r.trick || b.inWater) }, dt, { move: r });
   ev.trick = trick;
+  return ev;
+}
+
+// The snow a sled runs on: snow and ice, and the frosting of a candy island,
+// which is that island's snow.
+const SNOWY = new Set([B.SNOW, B.ICE, B.FROSTING]);
+
+// What the sled is sliding over: snow under its middle, or just ahead of the
+// way it is heading (so it slows as it runs off the snow, not before), or
+// plain ground.
+function underSled(world, b) {
+  const v = Math.hypot(b.vx, b.vz);
+  const x = b.x + (v > 0.5 ? (b.vx / v) * 0.5 : 0);
+  const z = b.z + (v > 0.5 ? (b.vz / v) * 0.5 : 0);
+  const at = standHeight(world, x, z, b.y + 1.5);
+  return at !== null && SNOWY.has(world.get(FL(x), at - 1, FL(z))) ? 'snow' : 'ground';
+}
+
+// Sliding, as on roller skates (physics.js glide): the runners make the
+// ground slippery, so pushing along builds up speed, and letting go coasts.
+// On snow it is quick and runs on a long while; on grass it is heavy going
+// and stops soon. Any way downhill pulls it (slope, all the harder on snow)
+// and it never gathers more speed than top. Pulling back the way it is going
+// brakes it; once it has stopped, the way you push is the way it faces and
+// goes, like a mine cart at the end of its line.
+function slide(world, ride, input, dt) {
+  const r = ride.r;
+  const b = ride.body;
+  const here = r.sled[underSled(world, b)];
+  const len = Math.hypot(input.mx || 0, input.mz || 0);
+  const push = len > 0.3;
+  let dir = { mx: input.mx || 0, mz: input.mz || 0 };
+  if (push && b.onGround && Math.hypot(b.vx, b.vz) < 0.05) {
+    // Standing still, it turns to the way you push.
+    ride.yaw = turn(ride.yaw, Math.atan2(input.mx, input.mz), Math.min(1, dt * 10));
+    dir = { mx: Math.sin(ride.yaw), mz: Math.cos(ride.yaw) };
+  } else if (push && b.vx * dir.mx + b.vz * dir.mz < 0) {
+    // Pulling back the way it is going brakes it, without turning it round.
+    dir = { mx: 0, mz: 0 };
+  }
+  const move = { ...r, walk: here.walk, run: here.top, glide: { push: here.push, coast: here.coast } };
+  const ev = stepBody(world, b, { ...input, ...dir }, dt, { move, autoJump: true });
+  // Downhill: the ground ahead of it lower than that behind (a block or two
+  // over the span of the sled) pulls it along, all the harder on snow, and it
+  // never gathers more speed than top. Off the edge of the world, or over a
+  // gap, there is no way to tell: no pull either way.
+  if (b.onGround) {
+    const fx = Math.sin(ride.yaw);
+    const fz = Math.cos(ride.yaw);
+    const ahead = standHeight(world, b.x + fx * 1.4, b.z + fz * 1.4, b.y + 1.5);
+    const behind = standHeight(world, b.x - fx * 1.4, b.z - fz * 1.4, b.y + 1.5);
+    const drop = behind !== null && ahead !== null ? behind - ahead : 0;
+    if (drop > 0.05 && Math.hypot(b.vx, b.vz) < here.top) {
+      b.vx += fx * Math.min(1, drop) * here.slope * dt;
+      b.vz += fz * Math.min(1, drop) * here.slope * dt;
+    }
+  }
   return ev;
 }
 

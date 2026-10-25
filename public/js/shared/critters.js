@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -108,6 +108,16 @@ export const CRITTER_INFO = {
   // quicker than anyone runs and nimble, hopping the little steps itself.
   // The jump button rings its bell.
   scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
+  // A little wooden sled (sled: it slides — see riding.js). The ground is
+  // slippery under its runners, as roller skates are (physics.js glide): push
+  // off and it coasts. snow: how it goes on snow and ice (and the frosting of
+  // a candy island, which is that island's snow) — quick, and it runs on a
+  // long while after you stop pushing; ground: anywhere else, slow to get
+  // going and stopping soon. slope: how hard a hillside pulls it down, and
+  // top: the fastest it ever gathers to. Its rider sits with their legs out
+  // in front over the front of the deck, and a small hop carries it over the
+  // little steps in its way.
+  sled: { name: 'Sled', icon: '🛷', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.3, z: -0.04, radius: 0.4, height: 1.6, float: 0.25, spread: 0.1, reach: 0.7, walk: 4.5, run: 7.5, swim: 2, jump: 7.6, sled: { snow: { walk: 5.5, run: 8, push: 10, coast: 2, slope: 14, top: 12 }, ground: { walk: 2.6, run: 3.8, push: 7, coast: 7, slope: 5, top: 6 } } }, names: ['Whizz', 'Woody', 'Slippy', 'Toboggan', 'Whoosh', 'Snowball', 'Zoomer', 'Frosty', 'Swifty', 'Bolt'] },
   // The dragon, the one dragon of a volcano island (worldgen.js): a great
   // green dragon, twice as big as a pony and more, asleep on the volcano,
   // wings folded, until someone comes near — then it wakes and breathes
@@ -145,7 +155,8 @@ export const CRITTER_INFO = {
 // air: it flies (see riding.js), its box (height) tall enough for all of it,
 // a balloon's balloon too. stand: its rider stands on it rather than sits
 // (a kick scooter), their feet on the deck, seat the height of their hips
-// over it.
+// over it. sled: it slides (see riding.js), slippery as roller skates, quick
+// on snow and slow elsewhere.
 export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 // What the toy box has to drive (not a fun park's rides, built where they are).
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].fixed);

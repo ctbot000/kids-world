@@ -568,7 +568,8 @@ export class Sound {
       // (type): the car beep-beeps, the boat toots, the mine cart rings its
       // bell, the digger goes vrrrm, the bus goes honk-honk, the ferry
       // gives one long, low toot, the helicopter goes beep-boop, the
-      // balloon's burner roars, and the kick scooter's bell goes ring-ring.
+      // balloon's burner roars, and the kick scooter's bell goes ring-ring;
+      // the sled gives a whistle as it sets off.
       case 'helicopter':
       case 'balloon':
       case 'bus':
@@ -578,6 +579,7 @@ export class Sound {
       case 'digger':
       case 'minecart':
       case 'scooter':
+      case 'sled':
         this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
         this.play('honk', { type: name });
         break;
@@ -606,6 +608,11 @@ export class Sound {
           for (let i = 0; i < 2; i++) {
             this.tone(2350 * r(), { at: i * 0.13, type: 'square', attack: 0.002, decay: 0.16, gain: 0.03 });
             this.tone(3520 * r(), { at: i * 0.13, type: 'triangle', attack: 0.002, decay: 0.1, gain: 0.018 });
+          }
+        } else if (opts.type === 'sled') {
+          // A cheerful whistle: whee-ee, as you set off down the hill.
+          for (let i = 0; i < 2; i++) {
+            this.tone(NOTE(76 - i * 5), { at: i * 0.18, type: 'triangle', attack: 0.01, decay: 0.22, gain: 0.05, slide: -250, slideTime: 0.18 });
           }
         } else if (opts.type === 'digger') {
           this.noise(0.5, { type: 'bandpass', freq: 900, sweep: 1600, q: 2, gain: 0.12, attack: 0.03 });
@@ -646,6 +653,11 @@ export class Sound {
           // No engine at all: little wheels whirring along the ground.
           this.noise(0.16, { type: 'lowpass', freq: 500 + (opts.speed ?? 0) * 60, gain: 0.035 });
           this.tone(120 + (opts.speed ?? 0) * 10, { type: 'sine', attack: 0.02, decay: 0.14, gain: 0.012 });
+          break;
+        }
+        if (opts.type === 'sled') {
+          // No engine either: runners hissing over the snow, higher the faster.
+          this.noise(0.2, { type: 'bandpass', freq: 900 + (opts.speed ?? 0) * 90, q: 0.8, gain: 0.03 });
           break;
         }
         this.tone((opts.type === 'digger' ? 55 : 80) + (opts.speed ?? 0) * 6, { type: 'sawtooth', attack: 0.02, decay: 0.18, gain: 0.025, vibrato: 20 });
