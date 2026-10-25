@@ -5,6 +5,8 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'ctb-tab', date: '2026-10-25', icon: '🏢', title: 'Visit CTB', text: 'Tap 🏢 CTB on the title screen to visit CTB\'s helpers at their desks.' },
+  { id: 'computer', date: '2026-10-25', icon: '💻', title: 'Computers', text: 'A Computer in the toy box\'s 🛋️ Home tab, glowing with code like the ones at CTB.' },
   { id: 'gomoku', date: '2026-10-24', icon: '⭕', title: 'Gomoku', text: 'Five in a row at any Go board: tap ⭕ Gomoku, and play a friend or Pip!' },
   { id: 'go-board', date: '2026-10-24', icon: '⚫', title: 'Go boards', text: 'Play Go on a small board with a friend, or with Pip, who teaches you the rules as you play!' },
   { id: 'fun-park', date: '2026-10-24', icon: '🎡', title: 'Fun park islands', text: 'Make a Fun Park Island: a roller coaster, a Ferris wheel and a merry-go-round to ride!' },

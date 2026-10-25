@@ -12,6 +12,25 @@ import { Fallback, Ollama, Zai } from '../server/llm.js';
 
 const SCHEMA = { type: 'object', properties: { say: { type: 'string' } }, required: ['say'] };
 
+test('the Z.ai client reads an answer GLM left in its thinking', async () => {
+  const answers = [
+    { content: '', reasoning_content: 'They said hi, so I say {"say":"hi"} back. {"say":"Hi!","mood":{"happy":true}}' },
+    { content: '  ', reasoning_content: '{"say":"Hey!"}' },
+    { content: '', reasoning_content: '{"say":"Yo!"} }' },
+    { content: '', reasoning_content: 'I should say hi.' },
+  ];
+  const fetch = async (url, init = {}) => {
+    const body = init.body && JSON.parse(init.body);
+    const message = body?.max_tokens === 1 ? { content: 'ok' } : answers.shift();
+    return new Response(JSON.stringify({ choices: [{ message, finish_reason: 'stop' }], usage: {} }));
+  };
+  const llm = new Zai({ urls: ['https://z.test/v4'], model: 'glm-5.3-flash', key: 'a key', fetch });
+  assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA), { say: 'Hi!', mood: { happy: true } }, 'the last JSON object in its thinking');
+  assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA), { say: 'Hey!' });
+  assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA), { say: 'Yo!' }, 'with a stray brace after it');
+  await assert.rejects(llm.chat([{ role: 'user', content: 'hi' }], SCHEMA), /said nothing it could read/, 'thinking with no JSON is still no answer');
+});
+
 test('the Z.ai client asks with the answer shape in words, and reads its JSON', async () => {
   const sent = [];
   const fetch = async (url, init = {}) => {

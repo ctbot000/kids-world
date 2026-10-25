@@ -216,6 +216,32 @@ const MODELS = {
     ];
   },
 
+  // A Computer: a screen on a stand, glowing with lines of code in a dark
+  // editor and a little power light, a keyboard in front and a mouse
+  // beside it.
+  computer() {
+    const code = [
+      [0.14, 0.7, 0.42, '#7cc4ff'],
+      [0.2, 0.64, 0.6, '#ffd166'],
+      [0.2, 0.58, 0.5, '#9be38a'],
+      [0.26, 0.52, 0.72, '#f78fb3'],
+      [0.26, 0.46, 0.56, '#9be38a'],
+      [0.2, 0.4, 0.66, '#ffd166'],
+      [0.14, 0.34, 0.3, '#7cc4ff'],
+    ];
+    return [
+      box(0.36, 0, 0.62, 0.64, 0.03, 0.84, BLACK, 'plain'),
+      box(0.46, 0.03, 0.72, 0.54, 0.26, 0.78, BLACK, 'plain'),
+      box(0.06, 0.22, 0.62, 0.94, 0.82, 0.72, BLACK, 'plain'),
+      box(0.1, 0.26, 0.61, 0.9, 0.78, 0.62, '#1f2a3d', 'glow'),
+      ...code.map(([x0, y, x1, color]) => box(x0, y, 0.605, x1, y + 0.03, 0.61, color, 'glow')),
+      box(0.86, 0.235, 0.61, 0.89, 0.25, 0.62, '#5fe08a', 'glow'),
+      box(0.12, 0, 0.14, 0.72, 0.035, 0.4, STEEL, 'plain'),
+      ...[0.18, 0.25, 0.32].map((z) => box(0.15, 0.035, z, 0.69, 0.05, z + 0.05, '#e9ecf0', 'plain')),
+      box(0.8, 0, 0.22, 0.88, 0.04, 0.34, WHITE, 'plain'),
+    ];
+  },
+
   fireplace() {
     const brick = '#ffffff';
     return [

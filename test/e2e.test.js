@@ -23,6 +23,7 @@ import { STUDY_SIZE } from '../public/js/shared/study.js';
 import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import { placeTemplate } from '../public/js/shared/stamps.js';
 import { World } from '../public/js/shared/world.js';
 import { adminHandler } from '../server/admin.js';
 import { Buddy, DEFAULT_NAME } from '../server/buddy.js';
@@ -3110,6 +3111,67 @@ test('the ?ctb link opens the CTB island without a login, its workers at their d
     assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'CTB');
     await until(page, () => ['Ada 💼', 'Ben 💼'].every((n) => [...window.kidsWorld.game.players.values()].some((p) => p.name === n && p.sitting)));
     assert.equal(await page.evaluate(() => window.kidsWorld.game.settings.build), 'host', 'only the workers build there');
+    // Their computers show their real work, on every page there.
+    office.showScreens([
+      { name: 'Ada 💼', issue: { n: 12, title: 'Fix the bus' }, doing: '#12: editing public/js/bus.js', steps: [{ n: 3, tool: 'edit', what: 'editing public/js/bus.js', thought: 'The bus stops one block too early.' }], since: Date.now() - 5 * 60000 },
+      { name: 'Ben 💼', issue: null, doing: 'At their desk', steps: [], since: 0 },
+    ]);
+    await until(page, () => window.kidsWorld.game.screens.size === 2 && window.kidsWorld.renderer.screens.shown.size === 2);
+    // Beside Ada's chair: she is sitting in it, so there is no sitting there,
+    // but her computer's screen is there to look at.
+    const [[sx, sy, sz]] = placeTemplate([[-5, 1, 8, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
+    await page.evaluate(
+      ([x, y, z]) => {
+        const kw = window.kidsWorld;
+        Object.assign(kw.game.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+        kw.step(1 / 60, 20);
+      },
+      [sx, sy, sz],
+    );
+    await until(page, () => !window.kidsWorld.game.seatTarget && window.kidsWorld.game.screenTarget && document.getElementById('ride').textContent.includes('Look'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => document.querySelector('#modal:not([hidden]) h2')?.textContent.includes('Ada'));
+    const shown = await page.$eval('#modal', (el) => el.textContent);
+    for (const bit of ['Working on #12 for 5 min', 'Step 3: editing public/js/bus.js', 'The bus stops one block too early.']) assert.ok(shown.includes(bit), bit);
+    // It keeps up as she works.
+    office.showScreens([{ name: 'Ada 💼', issue: { n: 12, title: 'Fix the bus' }, doing: '#12: running test/bus.test.js', steps: [{ n: 4, tool: 'test', what: 'running test/bus.test.js', thought: 'Now the tests.' }], since: Date.now() - 6 * 60000 }]);
+    await until(page, () => document.querySelector('#modal').textContent.includes('Step 4: running test/bus.test.js'));
+    await page.keyboard.press('Escape');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await office.close();
+    server.rooms.delete(office.room.code);
+  }
+});
+
+test('🏢 CTB on the title screen goes to the CTB island, which is not among 🧱 Build’s open islands', { skip }, async () => {
+  const office = await new Office({ rooms: server.rooms, log: () => {} }).open(2);
+  const page = await openPlayer(base, { name: 'Sunny Otter' });
+  try {
+    await until(page, () => !document.getElementById('mode-switch').hidden && !document.getElementById('mode-ctb').hidden);
+    // 🧱 Build's list of open islands leaves it out.
+    await clickButton(page, '🧱 Build');
+    await clickButton(page, 'Visit a friend');
+    await until(page, () => document.querySelector('#modal .open-note')?.hidden === false || document.querySelector('#modal .island-item'));
+    assert.equal(await page.$eval('#modal', (el) => [...el.querySelectorAll('.island-item b')].some((b) => b.textContent === 'CTB')), false, 'not among the open islands');
+    await page.keyboard.press('Escape');
+    await until(page, () => !window.kidsWorld.ui.modalOpen);
+    await clickButton(page, '🏢 CTB');
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine', 'btn-isle']) assert.equal(await page.$eval(`#${id}`, (el) => el.hidden), true, id);
+    assert.match(await page.$eval('#tagline', (el) => el.textContent), /CTB/);
+    await clickButton(page, 'Visit CTB');
+    await inGame(page);
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.code), office.room.code);
+    // Back at the title, on 🏢 CTB.
+    await page.click('#btn-settings');
+    await clickButton(page, 'Leave island', '#modal');
+    await until(page, () => !document.getElementById('title').hidden);
+    assert.equal(await page.$eval('#mode-ctb', (el) => el.classList.contains('on')), true, 'the world you played in');
+    assert.equal(await page.$eval('#btn-ctb', (el) => el.hidden), false);
+    await clickButton(page, '🧱 Build');
+    assert.equal(await page.$eval('#btn-ctb', (el) => el.hidden), true, 'CTB is on its own side');
+    assert.equal(await page.$eval('#btn-new', (el) => el.hidden), false);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -3232,8 +3294,21 @@ test('the ranking shows the players with a login to anyone, live: you marked onc
   const levels = () => page.$$eval('#modal .rank-row .tag-level', (els) => els.map((el) => el.textContent.trim()));
   try {
     // A guest sees it from the title screen, and is told how to be in it.
+    // The keeper's answer comes as a board is tapped, and the tab stays where
+    // the finger aimed: the dialog grows downward as the rows come in.
+    const ranking = keeper.store.ranking.bind(keeper.store);
+    let answer;
+    const answered = new Promise((done) => (answer = done));
+    keeper.store.ranking = async (...args) => (await answered, ranking(...args));
     await clickButton(page, 'Ranking');
-    await clickButton(page, 'Builders', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Asking the island keeper'));
+    const builders = await page.evaluateHandle(() => [...document.querySelectorAll('#modal button')].find((b) => b.textContent.includes('Builders')));
+    await landed(page, builders);
+    const aimed = await builders.boundingBox();
+    answer();
+    keeper.store.ranking = ranking;
+    await until(page, () => document.querySelector('#modal .rank-row'));
+    await page.mouse.click(aimed.x + aimed.width / 2, aimed.y + aimed.height / 2);
     await until(page, () => document.querySelectorAll('#modal .rank-row').length === 2);
     assert.deepEqual(await names(), ['Minji', 'Brave Fox']);
     assert.deepEqual(await levels(), ['⭐2', '⭐1'], 'each row says their level');

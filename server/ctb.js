@@ -51,6 +51,11 @@ const THINK_TOKENS = 8000;
 const GATE_MS = 12 * 60000;
 const GATE_ROUNDS = 2;
 const GATE_STEPS = 20;
+// What a worker's computer on the island shows: their last few steps, a
+// thought cut to this many characters, and the task's title.
+const SCREEN_STEPS = 6;
+const SCREEN_THOUGHT = 240;
+const SCREEN_TITLE = 120;
 // How many run logs the admin page lists.
 const RUNS_SHOWN = 40;
 // How many more tries a task that ran out of steps gets at once, carrying
@@ -299,7 +304,22 @@ export class Company extends EventEmitter {
   tell(w, doing, say = '') {
     w.doing = doing;
     if (say) this.office?.say(w.k, say);
+    this.showScreens();
     this.emit('change');
+  }
+
+  // Each worker's computer on the island shows their real work: the task,
+  // what they are doing and their last few steps, with their thoughts.
+  showScreens() {
+    this.office?.showScreens?.(
+      this.workers.map((w) => ({
+        name: w.name,
+        issue: w.issue ? { n: w.issue.number, title: String(w.issue.title).slice(0, SCREEN_TITLE) } : null,
+        doing: w.doing,
+        steps: w.issue ? w.steps.slice(-SCREEN_STEPS).map((s) => ({ n: s.n, tool: s.tool, what: s.what, thought: s.thought.slice(0, SCREEN_THOUGHT) })) : [],
+        since: w.issue ? w.startedAt : 0,
+      })),
+    );
   }
 
   step(w, step, n) {
@@ -859,6 +879,7 @@ export class CtbControl {
       this.office = make({ rooms: this.rooms, file: this.islandFile, keeper: this.keeper, rtc: this.rtc, server: this.server, iceServers: this.iceServers, log: this.log, answer: (k, name, text) => this.company?.answer(k, name, text) ?? '', ignores: (name) => name === this.friendName(), ownerWho: await this.ownerWho() });
       await this.office.open(this.settings.workers);
       this.company.office = this.office;
+      this.company.showScreens();
     }
     await this.company.start();
     // A new idea from a player is read at once, not at the next look at the board.

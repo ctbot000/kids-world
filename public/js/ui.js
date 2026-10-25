@@ -8,6 +8,8 @@ import { BLACK, GAMES as BOARD_GAMES, gameOf, lessonsOf, NO_MOVE, placeName, WHI
 import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
+import { sinceText } from './shared/screens.js';
+import { paintScreen, TOOL_COLORS } from './render/screens.js';
 import { stationId } from './shared/broadcast.js';
 import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
@@ -358,7 +360,10 @@ export class UI {
 
   // pose: you are choosing how you look, so on a narrow screen everything
   // else makes way for you above the dialog.
-  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false } = {}) {
+  // fills: what the dialog shows comes in after it opens (from the island
+  // keeper), so it opens from the top and grows downward: the tabs and
+  // buttons above stay where a finger is about to tap them.
+  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false, fills = false } = {}) {
     // Opening a dialog over another closes that one first, so what it changed
     // goes back: the camera that turned to you, the big map being drawn. Before
     // building, as the new dialog may set the same things up again.
@@ -370,6 +375,7 @@ export class UI {
     build(body);
     const panel = $('modal').querySelector('.panel');
     panel.classList.toggle('narrow', narrow);
+    panel.classList.toggle('fills', fills);
     $('modal').classList.toggle('see-through', seeThrough);
     document.body.classList.toggle('posing', pose);
     $('modal').hidden = false;
@@ -421,6 +427,8 @@ export class UI {
     $('btn-isle').onclick = () => handlers.sharedIsle?.();
     $('mode-build').onclick = () => this.setTitleWorld('home');
     $('mode-adventure').onclick = () => this.setTitleWorld('isle');
+    $('mode-ctb').onclick = () => this.setTitleWorld('ctb');
+    $('btn-ctb').onclick = () => handlers.ctb?.();
     $('btn-new').onclick = () => this.newIslandDialog();
     $('btn-visit').onclick = () => this.visitDialog();
     $('btn-mine').onclick = () => this.myIslandsDialog();
@@ -506,35 +514,40 @@ export class UI {
     this.renderTitleWorld();
   }
 
-  // 🧱 Build or ⚔️ Adventure on the title screen: two worlds of you, kept
-  // apart. Build is your islands and your friends', with your level,
-  // stickers, shop and ranking; Adventure is the shared isle, with its own.
-  // There once the isle is (where the list of open islands is) or you have
-  // been on it; remembered on this device, and the world you last played in.
+  // 🧱 Build, ⚔️ Adventure or 🏢 CTB on the title screen: two worlds of you,
+  // kept apart, and the CTB island. Build is your islands and your friends',
+  // with your level, stickers, shop and ranking; Adventure is the shared
+  // isle, with its own. Adventure is there once the isle is (where the list
+  // of open islands is) or you have been on it, CTB where the list is;
+  // remembered on this device, and the world you last played in.
   hasIsleWorld() {
     return Boolean(this.isle) && (Boolean(this.handlers?.listAvailable?.()) || this.isle.progress.xp > 0);
   }
 
   setTitleWorld(world) {
-    this.titleWorld = world === 'isle' ? 'isle' : 'home';
+    this.titleWorld = ['isle', 'ctb'].includes(world) ? world : 'home';
     save('titleWorld', this.titleWorld);
     this.renderTitleWorld();
   }
 
   renderTitleWorld() {
-    this.titleWorld ??= load('titleWorld', 'home') === 'isle' ? 'isle' : 'home';
+    this.titleWorld ??= ['isle', 'ctb'].includes(load('titleWorld', 'home')) ? load('titleWorld', 'home') : 'home';
+    const list = Boolean(this.handlers?.listAvailable?.());
     const can = this.hasIsleWorld();
     const isle = can && this.titleWorld === 'isle';
-    $('mode-switch').hidden = !can;
-    for (const [id, on] of [['mode-build', !isle], ['mode-adventure', isle]]) {
+    const ctb = list && this.titleWorld === 'ctb';
+    $('mode-switch').hidden = !can && !list;
+    $('mode-adventure').hidden = !can;
+    $('mode-ctb').hidden = !list;
+    for (const [id, on] of [['mode-build', !isle && !ctb], ['mode-adventure', isle], ['mode-ctb', ctb]]) {
       $(id).classList.toggle('on', on);
       $(id).setAttribute('aria-selected', String(on));
     }
-    const list = Boolean(this.handlers?.listAvailable?.());
     $('btn-isle').hidden = !isle || !list;
     $('isle-away').hidden = !isle || list;
-    for (const id of ['btn-new', 'btn-visit', 'btn-mine']) $(id).hidden = isle;
-    $('tagline').textContent = isle ? 'Free Adventure Isle from grumpy monsters together!' : 'Build a happy island with your friends!';
+    $('btn-ctb').hidden = !ctb;
+    for (const id of ['btn-new', 'btn-visit', 'btn-mine']) $(id).hidden = isle || ctb;
+    $('tagline').textContent = isle ? 'Free Adventure Isle from grumpy monsters together!' : ctb ? 'Visit CTB’s helpers at their desks, making Kids World better!' : 'Build a happy island with your friends!';
     // At the title, the pages show the world picked (on an island, the one you are in).
     const p = isle ? this.isle : this.home;
     if (!this.game && p !== this.profile) {
@@ -763,7 +776,8 @@ export class UI {
   }
 
   // 🌍 Islands open now: anyone's island that friends can visit, the busiest
-  // first, asked for again every few seconds while it is on screen.
+  // first, asked for again every few seconds while it is on screen. The CTB
+  // island is not among them: it has 🏢 CTB on the title screen.
   openIslandList() {
     const note = h('p', { class: 'muted open-note' }, '🔄 Looking for islands…');
     const list = h('div', { class: 'island-list open-islands' });
@@ -824,7 +838,7 @@ export class UI {
       started = true;
       let again = hurried(5000);
       try {
-        const islands = await this.handlers.openIslands();
+        const islands = (await this.handlers.openIslands()).filter((it) => !it.watch);
         if (list.isConnected) draw(islands);
       } catch (error) {
         again = 30000;
@@ -1834,6 +1848,7 @@ export class UI {
         ask(on);
       },
       {
+        fills: true,
         onClose: () => {
           keeper.removeEventListener('ranking', onNews);
           keeper.removeEventListener('status', onStatus);
@@ -1958,7 +1973,7 @@ export class UI {
         note.say('🔎', 'Asking the island keeper…');
         setTimeout(ask, 0);
       },
-      { narrow: true },
+      { narrow: true, fills: true },
     );
   }
 
@@ -2056,7 +2071,7 @@ export class UI {
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, 🛼 roller skates to glide, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
-          card('🏢', 'CTB', ['On the CTB island, Grace 🌷 meets you at the gate and shows you to the office, where grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on! Got an idea for the game? Send it to them with 💡 below, and one of them writes back.']),
+          card('🏢', 'CTB', ['Tap 🏢 CTB on the title screen, then Visit CTB. On the CTB island, Grace 🌷 meets you at the gate and shows you to the office, where grown-up helpers sit at their desks making Kids World better: they fix things and add new ones. Visit them and ask what they are working on! Got an idea for the game? Send it to them with 💡 below, and one of them writes back.']),
           card('↩️', 'Oops!', ['The undo button (or ', h('kbd', {}, 'Z'), ') takes back what you just did.']),
           card('🔢', 'Quick keys', [h('kbd', {}, '1'), '–', h('kbd', {}, '0'), ' pick blocks, ', h('kbd', {}, 'E'), ' opens the toy box, ', h('kbd', {}, 'T'), ' talks, ', h('kbd', {}, 'L'), ' changes how you look, ', h('kbd', {}, 'P'), ' takes a photo. The middle mouse button copies the block you point at.']),
           card('🎥', 'See through your eyes', ['Press 🎥 to look from behind you, through your own eyes, or from high in the sky. Zooming all the way in looks through your eyes too. Through your eyes, left and right turn you round.']),
@@ -2865,7 +2880,7 @@ export class UI {
       this.renderLevel();
     }
     // Back at the title, the world you played in.
-    if (this.isle) this.setTitleWorld(game.profile === this.isle ? 'isle' : 'home');
+    if (this.isle) this.setTitleWorld(game.profile === this.isle ? 'isle' : game.code && game.code === this.ctbCode ? 'ctb' : 'home');
     $('title').hidden = true;
     $('hud').hidden = false;
     document.body.classList.add('playing');
@@ -2979,6 +2994,8 @@ export class UI {
     // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
     on('piano-gone', () => this.modalOpen && $('modal').querySelector('.piano-board') && this.closeModal());
     on('tv-open', () => this.tvDialog());
+    on('screen-open', () => this.screenDialog());
+    on('screens', () => this.screenChanged?.());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
     on('cook-open', () => this.cookDialog());
@@ -4296,7 +4313,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget || g.screenTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4369,18 +4386,18 @@ export class UI {
   // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -5292,6 +5309,53 @@ export class UI {
   // channels, and the channels to flip through with ◀ ▶, a tap on one, the
   // arrow keys or the number keys; and while something is on air, 📡 Live,
   // the same on every TV (tv-live.js).
+  // A computer's screen, big (shared/screens.js): whose it is, their task,
+  // what they are doing and their last steps, each with what they thought,
+  // newest first, kept up to date while it is open.
+  screenDialog() {
+    const g = this.game;
+    if (!g?.screenAt) return;
+    const canvas = h('canvas', { class: 'screen-picture', width: 512, height: 332, role: 'img' });
+    const since = h('p', { class: 'muted screen-since' });
+    const steps = h('ol', { class: 'screen-steps' });
+    const title = h('h2', {});
+    const show = () => {
+      const sc = g.screens.get(g.screenAt?.key);
+      if (!sc) {
+        this.closeModal();
+        return;
+      }
+      title.textContent = `💻 ${sc.name}`;
+      paintScreen(canvas, sc);
+      canvas.setAttribute('aria-label', sc.issue ? `${sc.name}'s screen: task #${sc.issue.n}, ${sc.issue.title}. ${sc.doing}` : `${sc.name}'s screen: ${sc.doing}`);
+      since.textContent = sc.issue ? `Working on #${sc.issue.n} for ${sinceText(sc.since)}.` : 'No task right now.';
+      steps.replaceChildren(
+        ...[...sc.steps].reverse().map((t) =>
+          h(
+            'li',
+            { class: 'screen-step' },
+            h('div', { class: 'screen-what' }, h('span', { class: 'screen-dot', style: `background:${TOOL_COLORS[t.tool] ?? '#e9eef6'}` }), `Step ${t.n}: ${t.what}`),
+            t.thought ? h('div', { class: 'screen-thought' }, t.thought) : '',
+          ),
+        ),
+      );
+    };
+    this.screenChanged = show;
+    this.openModal(
+      (root) => {
+        root.append(title, h('div', { class: 'screen-set' }, canvas), since, steps);
+        show();
+      },
+      {
+        seeThrough: true,
+        onClose: () => {
+          this.screenChanged = null;
+          g.closeScreen();
+        },
+      },
+    );
+  }
+
   tvDialog() {
     const g = this.game;
     const t = g?.tvAt;

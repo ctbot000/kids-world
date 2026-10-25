@@ -24,6 +24,7 @@ import { ANIM, Avatar } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
 import { GoBoards } from './go-boards.js';
+import { Screens } from './screens.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel } from './mosquito-model.js';
@@ -150,6 +151,7 @@ export class Renderer {
     this.effects = new Effects(this.scene);
     this.drawings = new Drawings(this.scene, this.terrain);
     this.goBoards = new GoBoards(this.scene, this.terrain);
+    this.screens = new Screens(this.scene, this.terrain);
     this.env = {};
 
     this.hemi = new THREE.HemisphereLight(0xdff2ff, 0x9fcf7f, 1.6);

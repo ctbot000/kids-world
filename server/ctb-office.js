@@ -1,7 +1,7 @@
 // The CTB island: an island of this server where CTB's workers (ctb.js) have
 // their office, a glass-and-white building with a big "CTB" sign on its
-// roof, and inside it a desk for each of them, with a chair and a TV for a
-// screen. Each worker is a player on the island, joined the way the AI friend
+// roof, and inside it a desk for each of them, with a chair and a computer.
+// Each worker is a player on the island, joined the way the AI friend
 // joins one (dialer.js LocalLink), sitting at their desk and saying what they
 // are working on — which is real work on this project: GitHub issues turned
 // into pull requests. Children can visit, look round and ask them what they
@@ -59,7 +59,7 @@ export const MAX_WORKERS = STAFF.length;
 export const workerName = (k) => `${STAFF[k].name} 💼`;
 
 // Which office the island has: a newer one is put up in place of an older one.
-export const OFFICE_VERSION = 3;
+export const OFFICE_VERSION = 4;
 
 // Three by five letters for the signs, top row first.
 const LETTERS = {
@@ -91,8 +91,8 @@ export const GROUNDS = { x0: -16, x1: 16, z0: -41, z1: 20 };
 // its doors at dz = 0: a modern glass building, one tall floor, with "CTB"
 // in white letters along its roof. A paved plaza in front with planters and
 // lights; inside, a lobby with a reception desk before a charcoal logo wall,
-// the team's desks in pairs facing each other, each with a chair and a TV
-// for a screen, a glass meeting room with a long table and a screen on its
+// the team's desks in pairs facing each other, each with a chair and a
+// computer, a glass meeting room with a long table and a screen on its
 // wall, a lounge and a pantry. The desks' chairs are where the workers sit.
 export function officeCells() {
   const map = new Map();
@@ -210,14 +210,13 @@ export function officeCells() {
   }
   for (const x of [-7, 7]) put(x, 1, 5, B.POTTED_PLANT);
 
-  // The team's desks: pairs facing each other across a row of tables, a TV
-  // on each for a screen.
+  // The team's desks: pairs facing each other across a row of tables, a
+  // computer on each.
   for (const [x, z, front] of deskSpots()) {
     put(x, 1, z, B.turnedTo(B.CHAIR, front));
-    const tz = front === 1 ? z + 1 : z - 1;
-    put(x, 1, tz, B.TABLE);
-    put(x, 2, tz, B.turnedTo(B.TV, front === 1 ? 3 : 1));
+    put(x, 1, z + (front === 1 ? 1 : -1), B.TABLE);
   }
+  for (const [x, y, z, front] of deskComputers()) put(x, y, z, B.turnedTo(B.COMPUTER, front));
   // Between the pairs, plants; along the left wall, the pantry and shelves.
   put(-6, 1, 10, B.POTTED_PLANT);
   put(-6, 1, 14, B.POTTED_PLANT);
@@ -262,6 +261,12 @@ export function deskSpots() {
     [-9, 15, 3],
     [-8, 15, 3],
   ];
+}
+
+// The computer on each desk, in the workers' order: [x, y, z, front] in the
+// office's own cells, on the table in front of the chair, facing it.
+export function deskComputers() {
+  return deskSpots().map(([x, z, front]) => [x, 2, front === 1 ? z + 1 : z - 1, front === 1 ? 3 : 1]);
 }
 
 // One worker on the island: a player sitting at their desk, saying what they
@@ -626,6 +631,7 @@ export class Office {
     this.token = '';
     this.seats = [];
     this.clerks = [];
+    this.screenList = [];
     this.host = null;
     this.answeredAt = 0;
     this.saving = Promise.resolve();
@@ -769,6 +775,7 @@ export class Office {
     const n = Math.max(1, Math.min(MAX_WORKERS, count));
     while (this.clerks.length > n) this.clerks.pop().leave();
     while (this.clerks.length < n) this.clerks.push(new Clerk({ office: this, k: this.clerks.length }));
+    this.showScreens();
     // The guide is always there, whoever else is: once the first worker is in.
     if (!this.guide && !this.guideComing) {
       this.guideComing = true;
@@ -779,6 +786,20 @@ export class Office {
       if (first.welcomed) come();
       else first.once('ready', come);
     }
+  }
+
+  // What the workers' computers show (ctb.js screens): each worker's real
+  // work, on the computer at their desk, for everyone on the island to see.
+  // A desk nobody sits at shows nothing of its own.
+  showScreens(list = this.screenList) {
+    this.screenList = list;
+    if (!this.room || !this.site) return;
+    const cells = placeTemplate(deskComputers(), this.site.x, this.site.base, this.site.z, this.site.facing);
+    const screens = [];
+    this.clerks.forEach((c, k) => {
+      if (list[k] && cells[k]) screens.push({ x: cells[k][0], y: cells[k][1], z: cells[k][2], ...list[k] });
+    });
+    this.room.setScreens(screens);
   }
 
   isClerk(pid) {

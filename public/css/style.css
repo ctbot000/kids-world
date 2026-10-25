@@ -357,8 +357,9 @@ body.fullscreen .full-icon .leave {
   }
 }
 
-/* Build or Adventure on the title screen: your worlds, each with its own
-   level, stickers, shop and ranking (the shared isle's apart from the rest). */
+/* Build, Adventure or CTB on the title screen: your worlds, each with its
+   own level, stickers, shop and ranking (the shared isle's apart from the
+   rest), and the CTB island. */
 .mode-switch {
   justify-content: center;
   margin-bottom: 0;
@@ -367,6 +368,14 @@ body.fullscreen .full-icon .leave {
 .mode-switch .chip {
   font-size: 1.1rem;
   padding: 10px 20px;
+}
+
+/* All three in one row on a phone. */
+@media (max-width: 480px) {
+  .mode-switch .chip {
+    font-size: 1rem;
+    padding: 9px 12px;
+  }
 }
 
 .isle-away {
@@ -1856,6 +1865,14 @@ body.touch.playing #joystick {
 
 .panel.narrow {
   width: min(460px, 100%);
+}
+
+/* Filled in after it opens: grows downward from near the top, so nothing
+   above what comes in moves (centred, it would rise by half of it). */
+.panel.fills {
+  align-self: start;
+  margin-top: min(6vh, 56px);
+  max-height: calc(min(88vh, 900px, 100%) - min(6vh, 56px));
 }
 
 .panel.side {
@@ -4956,6 +4973,57 @@ button.go-pt {
 
 /* A TV's picture in its black frame, 16:9, a channel name between ◀ and ▶
    under it, and a button for each channel. */
+.screen-set {
+  padding: 10px 10px 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(#3a3f4a, #23252b);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.12), 0 4px 0 #17181c;
+}
+
+.screen-picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 512 / 332;
+  border-radius: 6px;
+}
+
+.screen-since {
+  margin: 10px 0 6px;
+}
+
+.screen-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 36vh;
+  overflow-y: auto;
+}
+
+.screen-step {
+  padding: 8px 0;
+  border-top: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.screen-what {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.screen-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+
+.screen-thought {
+  margin-top: 3px;
+  font-style: italic;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+
 .tv-set {
   padding: 10px;
   border-radius: var(--radius-md);
