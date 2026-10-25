@@ -60,8 +60,9 @@ export const STAFF = [
 export const MAX_WORKERS = STAFF.length;
 export const workerName = (k) => `${STAFF[k].name} 💼`;
 
-// Which office the island has: a newer one is put up in place of an older one.
-export const OFFICE_VERSION = 4;
+// Which office the island has: a newer one is put up in place of an older one
+// (5: the same office, put up again over what visitors had changed of it).
+export const OFFICE_VERSION = 5;
 
 // Three by five letters for the signs, top row first.
 const LETTERS = {
