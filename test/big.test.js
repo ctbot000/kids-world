@@ -445,6 +445,15 @@ test('every big animal can be drawn in every state, with and without a rider, at
   }
 });
 
+// The big friendly dog: new kinds go on the end of the list, because the
+// wire sends the index, so an old page reads every other animal as it did.
+test('the dog is the newest animal, on the end of the list, big and rideable', () => {
+  assert.equal(CRITTER_TYPES.indexOf('dog'), CRITTER_TYPES.length - 1, 'on the end of CRITTER_TYPES, and only there');
+  const info = CRITTER_INFO.dog;
+  assert.ok(BIG.includes('dog') && info.ride && info.swims && info.gallops, 'big, rideable, swims and gallops like the pony');
+  assert.ok(info.names.length >= 5, 'it has names to be called by');
+});
+
 test('big animals behave the same whatever else is on the island, and leave the others as they were', () => {
   // The same island with and without its big animals: the rest do exactly the same.
   const trace = (withBig) => {
