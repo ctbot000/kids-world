@@ -169,6 +169,22 @@ test('fed a fruit, a big animal comes along with you, a little way off, and keep
   assert.ok(pony.x < 30 && pony.x > 26, `on the bank, at ${pony.x.toFixed(2)}`);
 });
 
+test('fed a fruit, the big dog comes along with you too', () => {
+  const w = meadow();
+  const sim = new CritterSim(6);
+  const dog = sim.add('dog', 8.5, 6, 20.5);
+  const you = { x: 8.5, y: 6, z: 20.5, yaw: 0, anim: 1 };
+  sim.feed(dog.id, 1, you, 0);
+  let t = 3000;
+  for (let i = 0; i < 200; i++) {
+    you.x = Math.min(26, 8.5 + i * 0.25);
+    t += 100;
+    sim.step(w, 0.1, t, new Map([[1, you]]));
+  }
+  const d = Math.hypot(dog.x - you.x, dog.z - you.z);
+  assert.ok(d > 1.5 && d < 4.5, `close behind you, ${d.toFixed(2)} away`);
+});
+
 test('a pony walks and gallops faster than you do, jumps higher, bumps into walls and hops up a step', () => {
   const w = meadow();
   const r = ride(w, 'pony', 10.5, 6, 20.5);
@@ -200,6 +216,34 @@ test('a pony walks and gallops faster than you do, jumps higher, bumps into wall
   assert.equal(r.body.y, 7, 'hopped up the step');
   assert.ok(r.body.x <= 36 - r.body.radius + 1e-3 && r.body.x > 35, `stopped at the wall, at ${r.body.x}`);
   assert.ok(!bodyOverlapsSolid(w, r.body));
+});
+
+test('the big dog rides like a pony: faster than you run, a high jump, its ears and tongue drawn', () => {
+  const w = meadow();
+  const r = ride(w, 'dog', 10.5, 6, 20.5);
+  assert.equal(r.body.radius, CRITTER_INFO.dog.ride.radius);
+  go(w, r, { mx: 1, mz: 0 }, 1);
+  assert.ok(Math.abs(r.body.vx - CRITTER_INFO.dog.ride.walk) < 0.01, `walking at ${r.body.vx}`);
+  assert.equal(rideState(r), 'walk');
+  go(w, r, { mx: 1, mz: 0, run: true }, 0.5);
+  assert.ok(r.body.vx > 9 && r.body.vx > 7, 'galloping faster than you run');
+  assert.equal(rideState(r), 'run');
+  // A jump: about two blocks, higher than you jump.
+  go(w, r, {}, 1);
+  let top = 0;
+  go(w, r, { jump: true }, 0.1);
+  for (let i = 0; i < 60; i++) {
+    stepRide(w, r, {}, 1 / 60);
+    top = Math.max(top, r.body.y);
+  }
+  assert.ok(top - 6 > 2.2 && top - 6 < 2.6, `up ${(top - 6).toFixed(2)}, higher than the pony's`);
+  // Floppy ears that flap, and its tongue out when it is glad.
+  const m = new CritterModel('dog', 1);
+  assert.equal(m.ears.length, 2, 'two floppy ears');
+  assert.ok(!m.tongue.visible, 'its tongue in at rest');
+  m.update(1 / 30, 'happy', false, 0);
+  assert.ok(m.tongue.visible, 'its tongue out when it is glad');
+  m.dispose();
 });
 
 test("the elephant sprays water instead of jumping, and still climbs a step and out of the water", () => {
@@ -239,7 +283,7 @@ test('swimmers climb out of the water onto a bank a block over it, and no higher
   ]) {
     const w = sea();
     for (let x = 40; x < 64; x++) for (let z = 0; z < 48; z++) for (let y = 13; y <= 12 + bank; y++) w.set(x, y, z, B.GRASS);
-    for (const type of ['player', 'pony', 'polarbear', 'elephant']) {
+    for (const type of ['player', 'pony', 'polarbear', 'elephant', 'dog']) {
       const b = makeBody(34.5, 9, 20.5);
       let move;
       if (type !== 'player') {

@@ -1079,6 +1079,98 @@ function unicorn(id) {
 
 const reindeer = (id) => pony(id, 'reindeer');
 
+// The big friendly dog: huge and fluffy, with a wagging tail, floppy ears
+// and a collar with a tag. It stands taller than you, and is glad about it.
+const DOGS = [
+  { fur: '#c98d4f', belly: '#f4e3cb', ear: '#8a5a30' }, // golden
+  { fur: '#e8e2d6', belly: '#fbf8f0', ear: '#c9bda6' }, // cream
+  { fur: '#8a6a4a', belly: '#d9c6a8', ear: '#5c4430' }, // brown
+  { fur: '#d9d9df', belly: '#f2f2f6', ear: '#9a9aa4' }, // grey
+  { fur: '#4a4245', belly: '#7a7076', ear: '#2b2528' }, // black
+];
+
+function dog(id) {
+  const k = DOGS[id % DOGS.length];
+  const { g, body, pivot } = bigRig(0.72);
+  const fur = toon(k.fur);
+  const R = [0.36, 0.3, 0.56];
+  // A big fluffy body: deep at the chest, with a paler belly, and ruffs of
+  // fur round the shoulders and the rump.
+  pivot.add(mesh(sphere(), fur, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), toon(k.belly), 0, -0.08, 0.18, 0.24, 0.18, 0.3));
+  pivot.add(mesh(sphere(), fur, 0, 0.04, 0.3, 0.3, 0.28, 0.28));
+  pivot.add(mesh(sphere(), fur, 0, 0.02, -0.3, 0.31, 0.27, 0.28));
+  const legs = fourLegs(pivot, { x: 0.19, front: 0.34, back: -0.34, hip: -0.2, len: 0.56, r: 0.085, color: k.fur, paw: k.belly });
+  // Toes showing in each paw.
+  for (const leg of legs) for (const x of [-0.04, 0.04]) leg.add(mesh(sphere(1, 8, 6), toon(k.belly), x, -0.53, 0.1, 0.03, 0.02, 0.045));
+
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.16, 0.44);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.5;
+  neck.add(n);
+  n.add(mesh(lathe([[0, -0.08], [0.14, -0.06], [0.15, 0.06], [0.13, 0.22], [0.11, 0.32]], 16), fur, 0, 0, 0, 1, 1, 1.1));
+  // The fluffy ruff of fur round its neck.
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    n.add(mesh(sphere(1, 10, 8), toon(k.belly), Math.sin(a) * 0.1, 0.1 + Math.cos(a) * 0.03, 0.06 + Math.cos(a) * 0.06, 0.09, 0.08, 0.07));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.32, 0.02);
+  n.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.17, 0.16, 0.18));
+  // A broad muzzle with a big black nose and a mouth that smiles round it.
+  head.add(mesh(sphere(), toon(k.belly), 0, -0.06, 0.16, 0.1, 0.085, 0.12));
+  head.add(mesh(sphere(), toon(BLACK), 0, -0.02, 0.27, 0.045, 0.035, 0.035));
+  head.add(mesh(sphere(1, 8, 6), toon(BLACK), 0, -0.09, 0.25, 0.05, 0.012, 0.02));
+  // A pink tongue, out when it is glad (the happy gait tips the head up).
+  const tongue = mesh(sphere(1, 8, 6), toon('#f2909e'), 0, -0.1, 0.26, 0.028, 0.045, 0.02);
+  tongue.visible = false;
+  head.add(tongue);
+  const eyes = sideEyes(head, 0.11, 0.06, 0.1, 0.03);
+  // Floppy ears, hung from the top of the head, that flap as it goes.
+  const ears = [-1, 1].map((side) => {
+    const e = new THREE.Group();
+    e.position.set(side * 0.13, 0.12, -0.02);
+    e.rotation.z = -side * 0.5;
+    e.add(mesh(sphere(), toon(k.ear), side * 0.02, -0.09, 0, 0.07, 0.13, 0.045));
+    e.userData.side = side;
+    head.add(e);
+    return e;
+  });
+  // A collar with a golden tag, under the ruff.
+  neck.add(mesh(torus(0.14, 0.02), toon('#e8413c'), 0, 0.02, 0.04).rotateX(Math.PI / 2 - 0.4));
+  neck.add(mesh(sphere(), toon('#ffcf3f', { emissive: 0.2 }), 0, -0.06, 0.13, 0.035));
+
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.16, -0.56);
+  pivot.add(tail);
+  // A fluffy tail of puffs, wagging in trot (and wide when it is happy).
+  tail.add(mesh(sphere(1, 10, 8), fur, 0, 0.02, -0.04, 0.06, 0.06, 0.07));
+  tail.add(mesh(sphere(1, 10, 8), toon(k.belly), 0, 0.1, -0.1, 0.075, 0.075, 0.08));
+  const s = saddle(pivot, R[1] + 0.06, 0.28, 0.26);
+  return {
+    group: g,
+    body,
+    pivot,
+    neck,
+    head,
+    eyes,
+    ears,
+    tongue,
+    tail,
+    legs,
+    ...s,
+    height: 1.5,
+    shadow: 0.6,
+    pick: 0.75,
+    center: 0.9,
+    seen: 110,
+    gait: { len: 0.5, run: 4, happy: 'hop', graze: 0.7 },
+  };
+}
+
 // The dragon of a volcano island (render/dragon-model.js), on the big
 // animals' rig.
 const dragon = (id) => realDragon(id, { bigRig });
@@ -1305,7 +1397,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1542,6 +1634,8 @@ export class CritterModel {
       const flap = state === 'happy' ? 0.5 + Math.sin(t * 9) * 0.4 : Math.max(0, Math.sin(t * 1.3 + this.id)) * 0.5;
       for (const e of this.ears) e.rotation.y = e.userData.side * (0.35 + flap);
     }
+    // The dog's tongue out when it is glad (petted, fed) or racing along.
+    if (this.tongue) this.tongue.visible = state === 'happy' || gallop;
     if (this.trunk) {
       this.trick = Math.max(0, this.trick - dt);
       // Up and forward to spray, or out of the water; curled in to eat.

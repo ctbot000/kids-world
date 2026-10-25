@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -85,6 +85,9 @@ export const CRITTER_INFO = {
   reindeer: { name: 'Reindeer', icon: '🦌', speed: 1.4, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 11 }, names: ['Dasher', 'Dancer', 'Prancer', 'Comet', 'Cupid', 'Blitzen', 'Jingle', 'Holly', 'Snowflake', 'Aurora'] },
   polarbear: { name: 'Polar Bear', icon: '🐻‍❄️', speed: 1, swims: true, flies: false, big: true, paddles: true, ground: ICY, home: 10, ride: { seat: 1.05, radius: 0.46, height: 2.25, float: 0.75, spread: 1, walk: 4.5, run: 7.5, swim: 5, jump: 8.5 }, names: ['Nanook', 'Iceberg', 'Blizzard', 'Mitten', 'Snowdrift', 'Polo', 'Nuka', 'Glacier', 'Puffball', 'Yeti'] },
   unicorn: { name: 'Unicorn', icon: '🦄', speed: 1.6, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.21, radius: 0.44, height: 2.4, float: 0.85, spread: 0.85, walk: 6, run: 10.5, swim: 3.5, jump: 11.5 }, names: ['Stardust', 'Moonbeam', 'Candyfloss', 'Celeste', 'Dreamy', 'Sugarplum', 'Pixie', 'Starlight', 'Wish', 'Lullaby'] },
+  // A big fluffy dog, gentle and glad to be ridden; faster than you run,
+  // and it jumps higher too.
+  dog: { name: 'Dog', icon: '🐶', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 10, swim: 3.5, jump: 11 }, names: ['Buddy', 'Rex', 'Biscuit', 'Waggles', 'Rosie', 'Bruno', 'Barnaby', 'Gus', 'Poppy', 'Muddy'] },
   // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
@@ -567,14 +570,15 @@ export function placePolar(world, rng, counts = scaleCounts(polarCounts(world.th
 }
 
 // How many big animals an island starts with: ponies, cows, an elephant and a
-// giraffe; reindeer and polar bears in the snow; unicorns on candy islands.
-// A volcano island has none — its one big animal is the dragon (placeDragon).
+// giraffe, and a big friendly dog; reindeer and polar bears in the snow;
+// unicorns on candy islands. A volcano island has none — its one big animal
+// is the dragon (placeDragon).
 export function bigCounts(theme) {
   if (theme === 'snowy') return { reindeer: 3, polarbear: 2 };
   if (theme === 'candy') return { unicorn: 3, pony: 1 };
-  if (theme === 'flat') return { pony: 2, cow: 2 };
+  if (theme === 'flat') return { pony: 2, cow: 2, dog: 1 };
   if (theme === 'volcano') return {};
-  return { pony: 2, cow: 2, elephant: 1, giraffe: 1 };
+  return { pony: 2, cow: 2, elephant: 1, giraffe: 1, dog: 1 };
 }
 
 // Whether a big animal, with a rider on, fits standing at (x, y, z).
@@ -1989,10 +1993,12 @@ export class CritterSim {
     return null;
   }
 
-  // Somebody else already there, or on the way: two friends never share a seat.
+  // Somebody else already there, or on the way: two friends never share a
+  // seat. (Not the big animals: they get about, and how they wander about
+  // their island must not change what any of the others do.)
   taken(c, x, y, z) {
     return this.list.some(
-      (o) => o !== c && ((Math.hypot(o.x - x, o.z - z) < 0.5 && Math.abs(o.y - y) < 1) || (o.mode === 'fly' && Math.hypot(o.tx - x, o.tz - z) < 0.5 && Math.abs(o.ty - y) < 1)),
+      (o) => o !== c && !CRITTER_INFO[o.type].big && ((Math.hypot(o.x - x, o.z - z) < 0.5 && Math.abs(o.y - y) < 1) || (o.mode === 'fly' && Math.hypot(o.tx - x, o.tz - z) < 0.5 && Math.abs(o.ty - y) < 1)),
     );
   }
 
