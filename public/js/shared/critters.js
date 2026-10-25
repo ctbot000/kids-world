@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -71,6 +71,9 @@ export const CRITTER_INFO = {
   turtle: { name: 'Turtle', icon: '🐢', speed: 0.8, swims: true, flies: false, sea: 'beach', ground: SANDY, range: [1.5, 5], names: ['Sheldon', 'Myrtle', 'Slowpoke', 'Pickle', 'Mossy', 'Tank', 'Bean', 'Kelp', 'Lagoon', 'Olive'] },
   crab: { name: 'Crab', icon: '🦀', speed: 1.3, swims: false, flies: false, sea: 'beach', ground: SANDY, home: 8, wades: true, sideways: true, range: [0.8, 2.5], names: ['Pinchy', 'Snappy', 'Clawdia', 'Sidney', 'Scuttle', 'Nipper', 'Clicky', 'Rusty', 'Tickles', 'Sideways'] },
   octopus: { name: 'Octopus', icon: '🐙', speed: 1.5, swims: true, flies: false, sea: 'water', names: ['Inky', 'Squiggle', 'Octavia', 'Wiggly', 'Noodle', 'Swirly', 'Bloop', 'Doodle', 'Hugs', 'Jelly'] },
+  // A giant clam (room.js opens it): it never moves, so its speed is 0. It
+  // rests on the sandy floor of the shallows, and a tap asks it for a pearl.
+  clam: { name: 'Giant Clam', icon: '🦪', speed: 0, swims: true, flies: false, sea: 'water', names: ['Clammy', 'Shellby', 'Pearline', 'Gappy', 'Barnaby', 'Sandy', 'Mollusk', 'Snap', 'Bubbles', 'Old Grumpy'] },
   penguin: { name: 'Penguin', icon: '🐧', speed: 1.2, swims: true, flies: false, sea: 'shore', ground: ICY, home: 10, range: [1, 4], dives: true, climb: 1.3, swimSpeed: 3.6, slides: true, names: ['Tuxedo', 'Snowdrop', 'Frosty', 'Icicle', 'Wobble', 'Slider', 'Popsicle', 'Chilly', 'Sprinkles', 'Igloo'] },
   seal: { name: 'Seal', icon: '🦭', speed: 0.6, swims: true, flies: false, sea: 'shore', ground: ICY, home: 6, range: [0.8, 3], dives: true, climb: 1.3, swimSpeed: 3, names: ['Whiskers', 'Barkley', 'Sealia', 'Flappy', 'Clapper', 'Seabiscuit', 'Muffin', 'Lolly', 'Dumpling', 'Slippy'] },
   // Big animals (big), to ride. gallops: runs about now and then by itself;
@@ -150,7 +153,7 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // the look-only ones that come and go on their own (the firefly).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open'];
 export const MAX_CRITTERS = 64;
 // The most fireflies an island lets out at once: enough for a little wonder,
 // never a swarm — and they never take a seat an animal could have.
@@ -192,6 +195,10 @@ export function critterBox(type) {
 
 const FOLLOW_MS = 60000;
 const HAPPY_MS = 2200;
+// A giant clam: it gapes open for a few minutes after a tap (then shuts
+// again, stepClam), and the chance there is a pearl in there when it does.
+const CLAM_OPEN_S = 150;
+const CLAM_PEARL_CHANCE = 0.5;
 
 // What bees visit and butterflies rest on.
 export const FLOWERS = new Set([B.TULIP, B.DAISY, B.BLUEBELL, B.COSMOS, B.SUNFLOWER, B.LOLLIPOP, B.GUMDROP]);
@@ -289,6 +296,7 @@ export const SURFACE = 0.875;
 const WATERS = {
   fish: { deep: 1 },
   octopus: { deep: 2 },
+  clam: { deep: 1 },
   dolphin: { deep: 3, sea: true, wide: 1 },
   whale: { deep: 4, sea: true, wide: 2 },
   penguin: { deep: 2 },
@@ -300,6 +308,8 @@ const WATERS = {
 const BANDS = {
   fish: (w) => [w.floor + 1.25, w.top + SURFACE - 0.3],
   octopus: (w) => [w.floor + 1.02, w.top + SURFACE - 0.5],
+  // A clam sits on the floor of the shallows, and stays there.
+  clam: (w) => [w.floor + 1, w.floor + 1],
   dolphin: (w) => [w.top + SURFACE - 1, w.top + SURFACE - 0.3],
   whale: (w) => [w.top + SURFACE - 0.3, w.top + SURFACE - 0.22],
   // Penguins and seals keep within a few blocks of the top.
@@ -315,6 +325,7 @@ const PENGUIN_LEAP = [2.6, 0.9, 0.75];
 export const NEEDS_WATER = {
   fish: 'Fish need water: tap a pond or the sea!',
   octopus: 'An octopus needs deeper water: tap the sea!',
+  clam: 'A giant clam needs the sandy shallows: tap the sea by the beach!',
   dolphin: 'Dolphins need the open sea: tap the water past the beach!',
   whale: 'A whale needs the deep sea, far out from the beach!',
   boat: 'A boat needs water: tap a pond or the sea!',
@@ -472,11 +483,11 @@ export function placeFlyers(world, rng, counts = scaleCounts(flyerCounts(world.t
 // How many sea creatures an island starts with: no turtles in the snow, and
 // none at all in a volcano island's sea of lava.
 export function seaCounts(theme) {
-  if (theme === 'snowy') return { fish: 3, dolphin: 2, whale: 1, crab: 2, octopus: 1 };
+  if (theme === 'snowy') return { fish: 3, dolphin: 2, whale: 1, crab: 2, octopus: 1, clam: 2 };
   if (theme === 'volcano') return {};
   // Flat Land's sea is a narrow moat, with no beach.
-  if (theme === 'flat') return { fish: 3, turtle: 1, octopus: 1 };
-  return { fish: 4, dolphin: 2, whale: 1, turtle: 2, crab: 3, octopus: 1 };
+  if (theme === 'flat') return { fish: 3, turtle: 1, octopus: 1, clam: 1 };
+  return { fish: 4, dolphin: 2, whale: 1, turtle: 2, crab: 3, octopus: 1, clam: 3 };
 }
 
 // Where they start out: fish and the octopus in the shallows (or a pond),
@@ -497,7 +508,11 @@ export function placeSea(world, rng, counts = scaleCounts(seaCounts(world.theme)
           else if (tries >= spots(world, 400) && w && w.top - w.floor <= 3 && SANDY.has(world.get(FL(x), w.floor, FL(z)))) y = type === 'crab' ? w.floor + 1 : w.top + 0.75;
         } else {
           const w = waterFor(world, x, z, WATERS[type]);
-          if (w && (type === 'dolphin' || type === 'whale' || w.top - w.floor <= 5)) {
+          // A giant clam: on sandy ground under the top of the water, in the
+          // shallows only (at most a few cells deep), resting on the floor.
+          if (type === 'clam') {
+            if (w && w.top === world.sea && w.top - w.floor <= 3 && SANDY.has(world.get(FL(x), w.floor, FL(z)))) y = w.floor + 1;
+          } else if (w && (type === 'dolphin' || type === 'whale' || w.top - w.floor <= 5)) {
             const [lo, hi] = BANDS[type](w);
             y = (lo + hi) / 2;
           }
@@ -844,6 +859,16 @@ export class CritterSim {
     const c = this.get(id);
     // A firefly is only for looking at: it is not petted, nor fed.
     if (!c || CRITTER_INFO[c.type].look) return null;
+    // A giant clam: instead of turning happy it opens — and maybe there is a
+    // pearl in there. Already open, there is nothing more to try just now.
+    // It shuts itself again after a few minutes (stepClam).
+    if (c.type === 'clam') {
+      if (c.state === 'open') return null;
+      c.state = 'open';
+      c.timer = CLAM_OPEN_S;
+      c.pearl = this.rng.chance(CLAM_PEARL_CHANCE);
+      return c;
+    }
     c.happyUntil = now + HAPPY_MS;
     c.state = 'happy';
     if (player && !c.onHead) c.yaw = Math.atan2(player.x - c.x, player.z - c.z);
@@ -876,6 +901,12 @@ export class CritterSim {
     }
     if (info.vehicle) {
       this.stepVehicle(world, c, dt, now);
+      return;
+    }
+    // A giant clam: it never moves. Open, it stays so until its time is up,
+    // then shuts again for another try.
+    if (c.type === 'clam') {
+      this.stepClam(world, c, dt);
       return;
     }
     if (c.follow && (c.followUntil < now || !players.has(c.follow))) c.follow = 0;
@@ -972,6 +1003,17 @@ export class CritterSim {
     else this.fall(world, c, dt);
     // Afloat, a penguin or a seal is swimming whatever it was doing.
     if (info.dives && c.state !== 'happy' && world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)) === B.WATER) c.state = 'swim';
+  }
+
+  // A giant clam's whole life: it rests where it is, open if it was tapped
+  // not long ago, until it shuts again and everyone can have another go.
+  stepClam(world, c, dt) {
+    if (c.state !== 'open') return;
+    c.timer -= dt;
+    if (c.timer <= 0) {
+      c.state = 'idle';
+      c.pearl = false;
+    }
   }
 
   // Where each animal stands, for keeping things out of it: a box with a

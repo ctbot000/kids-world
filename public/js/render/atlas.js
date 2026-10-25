@@ -1676,6 +1676,25 @@ const PAINT = {
     ctx.fillStyle = '#ffc2cb';
     ctx.fillRect(26, 50, 12, 8);
   },
+  pearl(ctx) {
+    const g = ctx.createRadialGradient(32, 34, 2, 32, 34, 30);
+    g.addColorStop(0, 'rgba(255,250,240,0.8)');
+    g.addColorStop(1, 'rgba(200,220,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    ctx.fillStyle = '#f6f2ee';
+    ctx.beginPath();
+    ctx.arc(32, 34, 17, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+    outline(ctx, 'rgba(150,140,160,0.6)', 2.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ellipse(ctx, 26, 28, 5, 3.5, 0.5);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,190,210,0.35)';
+    ellipse(ctx, 38, 40, 6, 4, -0.4);
+    ctx.fill();
+  },
   'star-piece'(ctx) {
     const g = ctx.createRadialGradient(32, 34, 2, 32, 34, 30);
     g.addColorStop(0, 'rgba(255,250,200,0.9)');

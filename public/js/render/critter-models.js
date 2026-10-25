@@ -692,6 +692,41 @@ function octopus(id) {
   return { group: g, body, head, eyes, tentacles, skin, color, height: 0.58, shadow: 0.25, pick: 0.4 };
 }
 
+// A giant clam, resting on the sandy floor of the shallows: two great shells
+// closed round a gleaming pearl, until someone taps it open.
+function clam(id) {
+  const nacre = toon(id % 2 ? '#f2d8c8' : '#e8d4e8');
+  const edge = toon('#c98da0');
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  // Eyes on a little bump between the shells, hidden while it is shut.
+  body.add(mesh(sphere(), toon('#d9b8a8'), 0, 0.1, 0.06, 0.1, 0.07, 0.09));
+  const eyes = eyesOn(body, 0.1, 0.07, 0.09, 0.05, 0.015, 0.02);
+  // The pearl, tucked between the shells (its group rides up as they part).
+  const pearl = new THREE.Group();
+  pearl.add(mesh(sphere(1, 12, 8), toon('#ffffff', { emissive: 0.55 }), 0, 0.13, 0.04, 0.065));
+  body.add(pearl);
+  // Two shells hinged at the back: a positive angle (times the side) gapes one.
+  const shells = [-1, 1].map((side) => {
+    const s = new THREE.Group();
+    s.position.set(0, 0.08, -0.16);
+    s.rotation.x = -side * 0.05;
+    s.userData.side = side;
+    const R = [0.23, 0.08, 0.26];
+    s.add(mesh(sphere(), nacre, 0, 0, 0, ...R));
+    // Ribs and a pink rim, like the ridges of a real shell.
+    for (const a of [-0.7, -0.35, 0, 0.35, 0.7]) {
+      const rib = mesh(sphere(1, 10, 8), edge, Math.sin(a) * R[0] * 0.75, 0, Math.cos(a) * R[2] * 0.75, 0.035, 0.03, 0.09);
+      rib.rotation.y = a;
+      s.add(rib);
+    }
+    body.add(s);
+    return s;
+  });
+  return { group: g, body, head: body, eyes, pearl, shells, height: 0.3, shadow: 0.42, pick: 0.42, center: 0.15 };
+}
+
 // Penguins and seals, on the shore of a snowy island and in the sea by it.
 
 function penguin() {
@@ -1270,7 +1305,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1388,6 +1423,9 @@ export class CritterModel {
         break;
       case 'octopus':
         this.wiggle(state);
+        break;
+      case 'clam':
+        this.gape(state);
         break;
       case 'penguin':
         this.waddle(state, moving);
@@ -1714,6 +1752,18 @@ export class CritterModel {
     if (state === 'happy') this.skin.color.setHSL((t * 0.4) % 1, 0.75, 0.66);
     else this.skin.color.set(this.color);
     if (!jet && state !== 'sleep') this.head.position.y = 0.38 + Math.sin(t * 2) * 0.015;
+  }
+
+  // A giant clam: shut, its shells resting on each other; open, they gape
+  // apart and its pearl and its eyes come out to be seen.
+  gape(state) {
+    const open = state === 'open';
+    this.gapeK = clamp((this.gapeK ?? 0) + (open ? 0.08 : -0.08), 0, 1);
+    const k = this.gapeK;
+    for (const s of this.shells) s.rotation.x = -s.userData.side * (0.05 + k * 0.75 + Math.sin(this.time * 1.3) * 0.02 * k);
+    this.pearl.position.y = k * 0.16;
+    this.pearl.visible = k > 0.25;
+    this.eyes.visible = k > 0.5;
   }
 
   // A penguin waddles side to side on land, lies flat out on its tummy to

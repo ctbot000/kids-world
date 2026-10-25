@@ -321,6 +321,11 @@ export class Sound {
         this.tone(320 * r(), { decay: 0.18, gain: 0.12, slide: 900, slideTime: 0.12 });
         this.tone(NOTE(88), { at: 0.08, decay: 0.25, gain: 0.05, type: 'triangle' });
         break;
+      // A giant clam: a wet bloop from under its shells.
+      case 'clam':
+        this.tone(240 * r(), { decay: 0.22, gain: 0.14, slide: 620, slideTime: 0.14 });
+        this.noise(0.12, { type: 'lowpass', freq: 900, gain: 0.05 });
+        break;
       // A swing of the arm (the 👊 button): a soft whoosh.
       case 'swish':
         this.noise(0.14, { type: 'bandpass', freq: 700, sweep: 2200, q: 1.2, gain: 0.12 });
