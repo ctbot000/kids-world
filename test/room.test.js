@@ -382,6 +382,9 @@ test('flying friends can be invited, and come in over the water rather than unde
   const a = join(room);
   const w = room.world;
   const s = w.spawn;
+  // The island starts full of its own friends (a big dog among them now):
+  // some go home, so there is room to invite all of these.
+  for (const c of room.critters.list.slice(0, 8)) room.receive(a, { t: 'critter', op: 'bye', id: c.id });
   for (const type of ['bird', 'owl', 'bee', 'seagull', 'butterfly']) {
     room.receive(a, { t: 'critter', op: 'invite', type, x: s.x, y: s.y, z: s.z });
     const c = room.critters.get(a.last('cadd').critter.id);
@@ -402,6 +405,8 @@ test('sea creatures are invited at the water, and a whale only where the sea is 
   const a = join(room);
   const w = room.world;
   const s = w.spawn;
+  // Room to invite all of these (the island starts full of its own friends).
+  for (const c of room.critters.list.slice(0, 8)) room.receive(a, { t: 'critter', op: 'bye', id: c.id });
   // Out at sea, far from the beach.
   let sea = null;
   for (let x = 2; x < w.W && !sea; x++) if (w.get(x, w.sea, 2) === B.WATER && w.top(x, 2) < w.sea - 5) sea = { x: x + 0.5, z: 2.5 };
@@ -544,7 +549,7 @@ test('an island from before the big animals gets them, once', () => {
     const count = (r) => r.critters.list.filter((c) => BIG.includes(c.type)).length;
     const load = (sv) => new Room({ code: '123456', save: JSON.parse(JSON.stringify(sv)), now: time.now });
     const old = load({ ...save, v: 4, critters: save.critters.filter((c) => !BIG.includes(c.type)) });
-    assert.equal(count(old), { sunny: 6, snowy: 5, candy: 4, flat: 4 }[theme], theme);
+    assert.equal(count(old), { sunny: 7, snowy: 5, candy: 4, flat: 5 }[theme], theme);
     assert.equal(count(load(old.exportSave())), count(old), `${theme}: only the once`);
   }
 });

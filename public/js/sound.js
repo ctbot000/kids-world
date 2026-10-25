@@ -525,6 +525,13 @@ export class Sound {
         this.noise(0.18, { type: 'lowpass', freq: 700, gain: 0.12 });
         for (let i = 0; i < 3; i++) this.tone(2350 * r(), { at: 0.15 + i * 0.09, decay: 0.3, gain: 0.03 });
         break;
+      case 'dog':
+        // Woof! Woof! — big and glad to see you.
+        for (let i = 0; i < 2; i++) {
+          this.tone(180 * r(), { at: i * 0.28, type: 'sawtooth', decay: 0.14, gain: 0.09, slide: 120, slideTime: 0.12 });
+          this.noise(0.1, { at: i * 0.28, type: 'lowpass', freq: 900, gain: 0.06 });
+        }
+        break;
       case 'cow':
         // Moooo.
         this.tone(150 * r(), { type: 'sawtooth', attack: 0.12, decay: 0.85, gain: 0.05, slide: 118, slideTime: 0.8, vibrato: 2 });
