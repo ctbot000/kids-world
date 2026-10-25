@@ -197,7 +197,7 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
       trace.usage = [{ name: 'Z.ai', model: 'stand-in', promptTokens: 5, tokens: 5 }];
       const idea = messages.at(-1).content.split("The child's idea:\n")[1];
       asked.push({ idea, system: messages[0].content, schema });
-      if (idea.startsWith('A rainbow')) return { accept: true, score: 77, reply: 'Yes! We love that idea.', title: 'Add a rainbow slide stamp', tldr: 'A rainbow slide kids can slide down.', what: 'A stamp of a slide in rainbow bricks.', done: ['It is in the toy box', 'Sliding down it works'] };
+      if (idea.startsWith('A rainbow')) return { accept: true, scoring: { already: false, enjoy: 15, small: 10, checks: 5, newParts: ['a slide stamp'], risk: 0, bundled: false, polish: false, takesAway: 0 }, reply: 'Yes! We love that idea.', title: 'Add a rainbow slide stamp', tldr: 'A rainbow slide kids can slide down.', what: 'A stamp of a slide in rainbow bricks.', done: ['It is in the toy box', 'Sliding down it works'] };
       if (idea.startsWith('숙제')) return { accept: false, score: '12', reply: '그건 게임 밖의 일이라 할 수 없어요. 미안해요!', title: '', tldr: '', what: '', done: [] };
       if (fail) throw new Error('Z.ai is busy');
       return { accept: false, reply: 'We have fireworks already!' };
@@ -226,8 +226,8 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   assert.match(asked[0].system, /^You are Ada/);
   assert.match(asked[1].system, /^You are Ben/);
   assert.match(asked[0].system, /in the language the child wrote in/);
-  assert.match(asked[0].system, /Score the idea from 0 to 100/);
-  assert.ok(asked[0].schema.required.includes('score'));
+  assert.match(asked[0].system, /Score the idea in parts/);
+  assert.ok(asked[0].schema.required.includes('scoring'));
   const kept = await keeper.store.wishes();
   const of = (w) => kept.find((k) => k.id === w.id);
   assert.equal(of(yes).state, 'accepted');
@@ -235,9 +235,10 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   assert.equal(of(yes).reply, 'Yes! We love that idea.');
   assert.deepEqual(of(yes).issue, { number: 41, url: 'https://github.com/ctbot000/toy/issues/41' });
   // Each scored by the worker who read it, a yes or a no; the player sees it.
+  // Added up from its parts, with 5 more for being a player's idea.
   assert.equal(of(yes).score, 77);
-  assert.equal(of(no).score, 12, 'a score given as text');
-  assert.match(github.made[0].body, /\*\*Score: 77\/100\*\*/);
+  assert.equal(of(no).score, 12, 'a score given as a number, as text, instead of parts');
+  assert.match(github.made[0].body, /\*\*Score: 77\/100\*\* \(enjoy \+15 · small \+10 · checks \+5 · a player's idea \+5 · new: a slide stamp −8\)/);
   assert.equal(of(no).state, 'declined');
   assert.equal(of(no).reply, '그건 게임 밖의 일이라 할 수 없어요. 미안해요!');
   assert.equal(of(later).state, 'waiting');

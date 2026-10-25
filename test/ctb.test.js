@@ -23,7 +23,7 @@ import { Agent, inside, layoutOf, STEP_SCHEMA } from '../server/ctb-agent.js';
 import { LABELS, repoOf } from '../server/ctb-github.js';
 import { deskSpots, GROUNDS, GUIDE, ISLAND_NAME, Office, OFFICE_VERSION, officeCells, workerName } from '../server/ctb-office.js';
 import { RUNS_DIR, Runs, transcript } from '../server/ctb-runs.js';
-import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody } from '../server/ctb.js';
+import { changeSettings, Company, CtbControl, defaultSettings, islandWho, proposalBody, pullBody, scoreFrom } from '../server/ctb.js';
 import { KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 
@@ -457,6 +457,29 @@ test('run logs: written as they go, read back after a restart, the newest kept, 
   await runs.start({ kind: 'proposal', k: 2, worker: 'Cleo 💼', model: 'glm', messages: [] });
   assert.equal(runs.list().length, 2);
   assert.equal(await runs.read(a.summary.id), null);
+});
+
+test('a score is added up from its parts, each kept to its range, and shown with what made it', () => {
+  const dog = { already: false, enjoy: 20, small: 12, checks: 5, newParts: ['a big dog model'], risk: 0, bundled: false, polish: false, takesAway: 0 };
+  assert.deepEqual(scoreFrom(dog), { score: 79, why: 'enjoy +20 · small +12 · checks +5 · new: a big dog model −8' });
+  assert.equal(scoreFrom(dog, { request: true }).score, 84, "a player's idea: 5 more");
+  // A model that gives every part its most gets no more than each allows,
+  // and new parts and risk together take off 25 at most.
+  assert.equal(scoreFrom({ ...dog, enjoy: 90, small: 40, checks: 9, newParts: [] }).score, 95);
+  assert.equal(scoreFrom({ ...dog, newParts: ['a model', 'a block', 'a save', 'a window'], risk: 10 }).score, 62);
+  // Several in one, a polish, and taking away.
+  assert.equal(scoreFrom({ ...dog, bundled: true, polish: true, takesAway: 20 }).score, 39);
+  // Already in the game: 15 at most, however it scores otherwise.
+  assert.deepEqual(scoreFrom({ ...dog, already: true }), { score: 15, why: 'enjoy +20 · small +12 · checks +5 · new: a big dog model −8 · already in the game' });
+  // Parts missing or wrong count as none; no parts, no score.
+  assert.equal(scoreFrom({ enjoy: 'lots', small: -5, newParts: 'a model' }).score, 50);
+  assert.equal(scoreFrom(null), null);
+  // In the issue, on the score's own line; a model that gave a number
+  // instead has that number shown.
+  const body = proposalBody({ tldr: 'A dog.', what: 'Ride it.', done: ['a', 'b'], scoring: dog }, 'f', { request: true });
+  assert.match(body, /\n\*\*Score: 84\/100\*\* \(enjoy \+20 · small \+12 · checks \+5 · a player's idea \+5 · new: a big dog model −8\)\n/);
+  assert.match(proposalBody({ tldr: 'A dog.', score: '70' }, 'f'), /\*\*Score: 70\/100\*\*\n/);
+  assert.doesNotMatch(proposalBody({ tldr: 'A dog.' }, 'f'), /Score/);
 });
 
 test('with nothing to do a worker proposes a task as an issue, which starts once labelled approved, or is turned down', async () => {
