@@ -404,34 +404,43 @@ function renderSummary(state) {
   );
 }
 
-// Screen time (shared/lock.js): every player locked at once, or unlocked,
-// as the keeper tells every page connected to it.
+// Screen time (shared/lock.js): every player locked at once, after a
+// minute's warning, or unlocked, as the keeper tells every page connected
+// to it. While it counts down, the card is drawn again as it locks.
 let lockShown = '';
+let lockTimer = 0;
+const seconds = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 function renderLock(k) {
   const el = $('lock');
   el.hidden = !k;
   if (!k) return;
-  const key = JSON.stringify([k.lock, k.lockable]);
+  const pending = Boolean(k.lock && k.lock.at > Date.now());
+  const key = JSON.stringify([k.lock, k.lockable, pending]);
   if (key === lockShown) return;
   lockShown = key;
+  clearTimeout(lockTimer);
+  if (pending) lockTimer = setTimeout(() => refresh(true), k.lock.at - Date.now() + 250);
   const set = async (on) => {
-    if (on && !confirm('Lock every player now? Their game is covered until you unlock it.')) return;
+    if (on && !confirm('Lock every player in one minute? They see a countdown first, then their game is covered until you unlock it.')) return;
     const res = await api('lock', { method: on ? 'PUT' : 'DELETE', headers: { 'X-Kids-World-Admin': '1' } });
     if (!res.ok) alert('That did not work. Is the keeper still running?');
     refresh(true);
   };
+  const pages = plural(k.lockable, 'page', 'pages');
   el.classList.toggle('on', Boolean(k.lock));
   el.replaceChildren(
     h(
       'div',
       { class: 'lock-text' },
-      h('b', {}, k.lock ? 'Screen time: every player is locked' : 'Screen time: players can play'),
+      h('b', {}, pending ? `Screen time: every player is locked at ${seconds.format(k.lock.at)}` : k.lock ? 'Screen time: every player is locked' : 'Screen time: players can play'),
       h(
         'span',
         { class: 'muted' },
-        k.lock
-          ? `Since ${time.format(k.lock.since)} · ${plural(k.lockable, 'page', 'pages')} connected now, and every page that connects, show "Screen time is over".`
-          : `Locking covers the game on every page connected to the keeper (${plural(k.lockable, 'page', 'pages')} now) and every page that connects later, until you unlock it.`,
+        pending
+          ? `${pages} connected now ${k.lockable === 1 ? 'is' : 'are'} counting down the last minute. Unlocking now calls it off.`
+          : k.lock
+            ? `Since ${time.format(k.lock.at)} · ${pages} connected now, and every page that connects, show "Screen time is over".`
+            : `Locking gives every page connected to the keeper (${pages} now) a one-minute countdown, then covers the game, and every page that connects later, until you unlock it.`,
       ),
     ),
     k.lock ? h('button', { type: 'submit', onclick: () => set(false) }, 'Unlock all players') : h('button', { type: 'button', class: 'danger', onclick: () => set(true) }, 'Lock all players'),

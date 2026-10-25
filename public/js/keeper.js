@@ -976,12 +976,18 @@ export class KeeperClient extends EventTarget {
     this.emit('onair', { onAir });
   }
 
-  // Whether the keeper says every player is locked: a 'lock' event when
-  // that changes. A keeper from before screen time says nothing of it.
+  // Whether the keeper says every player is locked, and when it locks (by
+  // this page's clock): a 'lock' event when that changes. A keeper from
+  // before screen time says nothing of it.
   heardLock(raw) {
     if (raw === undefined) return;
-    const lock = cleanLock(raw);
-    if (Boolean(lock) === Boolean(this.lock)) return;
+    let lock = cleanLock(raw);
+    if (lock) {
+      const left = Number.isFinite(raw.left) ? Math.max(0, raw.left) : 0;
+      lock = { since: lock.since, at: Date.now() + left };
+    }
+    // The same lock heard again (connecting once more): only the clocks differ.
+    if (Boolean(lock) === Boolean(this.lock) && (!lock || lock.since === this.lock.since)) return;
     this.lock = lock;
     saveLock(lock);
     this.emit('lock', { lock });

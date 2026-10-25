@@ -2884,10 +2884,12 @@ test('a TV broadcast: the admin page puts a YouTube video and then a video on it
   }
 });
 
-test('screen time: the admin page locks every player, a page reloaded stays locked and takes no keys, and unlocking lets them play again', { skip }, async () => {
+test('screen time: the admin page locks every player after a countdown (called off by unlocking in time), a page reloaded stays locked and takes no keys, and unlocking lets them play again', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
   const identity = await createIdentity(dir);
   const keeper = await keeperOnline(identity, dir);
+  // A few seconds' countdown, not a minute.
+  keeper.lockWarningMs = 4000 * SLOW;
   const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
   const origin = `http://127.0.0.1:${games.address().port}`;
@@ -2902,8 +2904,21 @@ test('screen time: the admin page locks every player, a page reloaded stays lock
     await admin.goto(`${origin}/admin/`);
     await until(admin, () => document.getElementById('lock').textContent.includes('players can play') && document.getElementById('lock').textContent.includes('1 page now'));
 
+    // Unlocked in time, the countdown is called off.
     await clickButton(admin, 'Lock all players', '#lock');
-    await until(page, () => document.getElementById('screen-lock')?.checkVisibility());
+    await until(page, () => /^⏰ Screen time ends in \d+ seconds?\. Time to finish up!$/.test(document.getElementById('screen-lock-warning')?.textContent));
+    assert.equal(await page.$('#screen-lock'), null, 'still playing during the countdown');
+    await clickButton(admin, 'Unlock all players', '#lock');
+    await until(page, () => !document.getElementById('screen-lock-warning'));
+    assert.equal(keeper.lock, null);
+    await new Promise((done) => setTimeout(done, 4500 * SLOW));
+    assert.equal(await page.$('#screen-lock'), null, 'never locked');
+
+    // Counted down, it locks.
+    await clickButton(admin, 'Lock all players', '#lock');
+    await until(page, () => document.getElementById('screen-lock-warning'));
+    await until(admin, () => document.getElementById('lock').textContent.includes('every player is locked at'));
+    await until(page, () => document.getElementById('screen-lock')?.checkVisibility() && !document.getElementById('screen-lock-warning'));
     assert.ok(keeper.lock.since > 0);
     await until(admin, () => document.getElementById('lock').textContent.includes('every player is locked'));
     await page.keyboard.press('KeyE');

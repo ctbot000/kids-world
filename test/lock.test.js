@@ -1,5 +1,5 @@
 // Screen time (shared/lock.js): the keeper's admin page locks every player
-// at once, the keeper tells the pages that know of it, as they connect and
+// at once, after a minute's warning, the keeper tells the pages that know of it, as they connect and
 // as it changes, and keeps it over a restart.
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
-import { cleanLock } from '../public/js/shared/lock.js';
+import { cleanLock, LOCK_WARNING_MS, lockNews } from '../public/js/shared/lock.js';
 import { adminHandler } from '../server/admin.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
@@ -53,35 +53,45 @@ async function page(keeper, device, me = {}) {
   return { hi, news: () => replies.filter((r) => r.t === 'lock-news') };
 }
 
-test('a lock is checked: since when, or nothing', () => {
-  assert.deepEqual(cleanLock({ since: 1234.5 }), { since: 1234 });
-  assert.deepEqual(cleanLock({ since: 'soon' }), { since: 0 });
+test('a lock is checked: since when and when it locks, or nothing; one from before the warning locks at once', () => {
+  assert.deepEqual(cleanLock({ since: 1234.5, at: 61234.5 }), { since: 1234, at: 61234 });
+  assert.deepEqual(cleanLock({ since: 1234 }), { since: 1234, at: 1234 });
+  assert.deepEqual(cleanLock({ since: 1234, at: 1000 }), { since: 1234, at: 1234 });
+  assert.deepEqual(cleanLock({ since: 'soon' }), { since: 0, at: 0 });
   assert.equal(cleanLock(null), null);
   assert.equal(cleanLock('locked'), null);
+  assert.deepEqual(lockNews({ since: 0, at: 60_000 }, 15_000), { since: 0, at: 60_000, left: 45_000 });
+  assert.deepEqual(lockNews({ since: 0, at: 60_000 }, 90_000), { since: 0, at: 60_000, left: 0 });
+  assert.equal(lockNews(null, 0), null);
 });
 
-test('the keeper locks the pages that know of screen time, as they connect and as it changes, and keeps it over a restart', async () => {
+test('the keeper locks the pages that know of screen time after a minute, as they connect and as it changes, and keeps it over a restart', async () => {
   const dir = await newDir();
-  const { keeper } = await keeperIn(dir);
+  let clock = 1_000_000;
+  const { keeper } = await keeperIn(dir, () => clock);
   const old = await page(keeper, 'a1'.repeat(16));
   const tablet = await page(keeper, 'b2'.repeat(16), { lock: true });
   assert.equal(tablet.hi.lock, null, 'nobody locked');
   assert.equal('lock' in old.hi, false, 'a page from before screen time hears nothing of it');
   assert.equal(keeper.status().lockable, 1);
 
-  assert.deepEqual(await keeper.setLock(true), { since: 1_000_000 });
-  assert.deepEqual(tablet.news(), [{ t: 'lock-news', lock: { since: 1_000_000 } }]);
+  const lock = { since: 1_000_000, at: 1_000_000 + LOCK_WARNING_MS };
+  assert.equal(LOCK_WARNING_MS, 60_000, 'a minute to finish up');
+  assert.deepEqual(await keeper.setLock(true), lock);
+  assert.deepEqual(tablet.news(), [{ t: 'lock-news', lock: { ...lock, left: 60_000 } }]);
   assert.deepEqual(old.news(), []);
   await keeper.setLock(true);
   assert.equal(tablet.news().length, 1, 'locking again is no news');
+  clock += 20_000;
   const phone = await page(keeper, 'c3'.repeat(16), { lock: true });
-  assert.deepEqual(phone.hi.lock, { since: 1_000_000 }, 'a page connecting while locked is locked');
+  assert.deepEqual(phone.hi.lock, { ...lock, left: 40_000 }, 'a page connecting in the last minute counts down what is left of it');
   await keeper.stop();
 
-  const again = (await keeperIn(dir)).keeper;
-  assert.deepEqual(again.lock, { since: 1_000_000 }, 'still locked after a restart');
+  clock += 60_000;
+  const again = (await keeperIn(dir, () => clock)).keeper;
+  assert.deepEqual(again.lock, lock, 'still locked after a restart');
   const later = await page(again, 'd4'.repeat(16), { lock: true });
-  assert.deepEqual(later.hi.lock, { since: 1_000_000 });
+  assert.deepEqual(later.hi.lock, { ...lock, left: 0 }, 'locked at once');
   assert.equal(await again.setLock(false), null);
   assert.deepEqual(later.news(), [{ t: 'lock-news', lock: null }]);
   await again.stop();
