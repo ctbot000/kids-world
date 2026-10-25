@@ -6,8 +6,8 @@
 // are working on — which is real work on this project: GitHub issues turned
 // into pull requests. Children can visit, look round and ask them what they
 // are doing. The island's owner is one login, set on the admin page (izeye
-// unless changed): only they build there, so the office stays as it is, and
-// while they are away nobody owns it — never a worker, a visitor or the AI
+// unless changed), and nobody builds or draws there, not even them, so the
+// office stays as it is; while they are away nobody owns it — never a worker, a visitor or the AI
 // friend, which does not come here at all. It is saved in the keeper's data folder
 // (ctb-island.json), and with the keeper online hosted peer to peer too
 // (host.js) and on its list of open islands, as the AI friend's own island is.

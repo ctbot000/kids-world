@@ -2696,6 +2696,10 @@ export class Game extends EventTarget {
   openDrawing() {
     const t = this.drawTarget;
     if (!t) return;
+    if (this.settings.owned) {
+      this.emit('notice', { text: `${this.world.name} stays just as it is — no drawing here!`, level: 'info' });
+      return;
+    }
     this.drawAt = t;
     this.emit('draw-open');
   }
@@ -3617,7 +3621,7 @@ export class Game extends EventTarget {
     // Only the owner builds on this island right now (or it is the shared
     // isle, nobody's to build on): the drill stays still.
     if (!this.mayBuild) {
-      if (!this.riding.toldNoDig) this.emit('notice', { text: this.shared ? `${this.world.name} stays just as it is, so the digger cannot dig.` : 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
+      if (!this.riding.toldNoDig) this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is, so the digger cannot dig.` : 'The island owner is the only builder right now, so the digger cannot dig.', level: 'info' });
       this.riding.toldNoDig = true;
       return;
     }
@@ -3668,9 +3672,14 @@ export class Game extends EventTarget {
   // ------------------------------------------------ edits
 
   // Whether you may change this island: yours, or its owner lets friends
-  // build. The shared isle is nobody's to build on: it stays as it was made.
+  // build. The shared isle is nobody's to build on: it stays as it was made,
+  // and so does an island owned by one login (the CTB island), even for its owner.
   get mayBuild() {
-    return !this.shared && (this.settings.build !== 'host' || this.pid === this.host);
+    return !this.staysAsMade && (this.settings.build !== 'host' || this.pid === this.host);
+  }
+
+  get staysAsMade() {
+    return this.shared || this.settings.owned === true;
   }
 
   // Makes a change here at once and asks the island to make it for everyone.
@@ -3680,7 +3689,7 @@ export class Game extends EventTarget {
     // nobody's to build on): nothing changes, so nothing is picked up,
     // collected or spent either (the island would only say no).
     if (!this.mayBuild) {
-      this.emit('notice', { text: this.shared ? `${this.world.name} stays just as it is — no building here!` : 'The island owner is the only builder right now.', level: 'warn' });
+      this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is — no building here!` : 'The island owner is the only builder right now.', level: 'warn' });
       this.sound.play('no');
       return false;
     }

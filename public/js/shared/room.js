@@ -715,14 +715,14 @@ export class Room {
       return;
     }
     // The shared isle is nobody's to build on: it stays as it was made, for
-    // everyone who comes, so nothing is picked up or collected either.
-    if (this.shared) {
+    // everyone who comes, so nothing is picked up or collected either. So
+    // does an island owned by one login (the CTB island), even for its owner.
+    if (this.shared || this.ownerWho) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
       this.notice(conn, `${this.world.name} stays just as it is — no building here!`);
       return;
     }
-    // An island owned by one login (the CTB island) is only ever its owner's to change.
-    const refused = (this.ownerWho || this.settings.build === 'host') && p.id !== this.host;
+    const refused = this.settings.build === 'host' && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
       this.notice(conn, refused ? 'The island owner is the only builder right now.' : 'Whoa, slow down a little!');
@@ -987,7 +987,7 @@ export class Room {
       case 'settings': {
         const before = this.settings.day;
         this.settings = cleanSettings(msg.settings, this.settings);
-        // Its owner is its only builder, whatever the toggle says.
+        // Nobody builds on an island owned by one login, whatever the toggle says.
         if (this.ownerWho) this.settings.build = 'host';
         this.broadcast({ t: 'settings', settings: this.publicSettings() });
         if (!this.settings.monsters) this.noMonsters();
@@ -1067,7 +1067,7 @@ export class Room {
 
   // The island's rules as everyone hears them: whether it has a passcode, never the passcode.
   publicSettings() {
-    // owned: an island owned by one login (the CTB island), that only its owner builds on.
+    // owned: an island owned by one login (the CTB island), that stays just as it is.
     return { ...this.settings, passcode: this.passcode !== '', ...(this.ownerWho ? { owned: true } : {}) };
   }
 
@@ -2088,8 +2088,8 @@ export class Room {
     if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
     const stroke = cleanStroke(msg.s);
     if (!stroke) return;
-    if (this.ownerWho && p.id !== this.host) {
-      this.notice(conn, 'Only the island owner can draw here.');
+    if (this.ownerWho) {
+      this.notice(conn, `${this.world.name} stays just as it is — no drawing here!`);
       return;
     }
     const k = this.world.index(...at);

@@ -4002,7 +4002,7 @@ export class UI {
         if (handlers.canToggleOnline()) {
           root.append(toggle(handlers.isOnline(), '👫 Friends can visit', 'Friends join with your island code.', (on) => handlers.setOnline(on)));
         }
-        // An island only its owner ever builds on (the CTB island) has no such toggle.
+        // An island that stays just as it is (the CTB island) has no such toggle.
         if (!g.settings.owned) {
           root.append(
             toggle(g.settings.build === 'everyone', '🧱 Friends can build', 'Turn off so only you can change the island.', (on) =>

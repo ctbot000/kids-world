@@ -657,6 +657,10 @@ test('the office on the CTB island: workers at their desks, answering children, 
   assert.equal(room.world.get(sx, sy, sz), B.AIR, 'a visitor builds nothing, even with the rule changed behind its back');
   assert.ok(told.some((m) => m.t === 'ack' && m.seq === 1 && m.fix.length));
   room.settings.build = 'host';
+  // Nor does its owner: the office stays just as it is.
+  room.receive(owner, { t: 'edit', seq: 2, cells: [sx, sy, sz, B.STAR_BLOCK] });
+  assert.equal(room.world.get(sx, sy, sz), B.AIR, 'the owner builds nothing either');
+  assert.ok(heard.some((m) => m.t === 'ack' && m.seq === 2 && m.fix.length));
   room.detach(owner);
   room.leave(izeye.id);
   assert.equal(room.host, 0, 'away, nobody owns it — not a worker, not a visitor');
