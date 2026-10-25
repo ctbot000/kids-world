@@ -21,7 +21,27 @@ const STEEL = '#c9ced6';
 const BLACK = '#2c2f36';
 const BOOKS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#8c5bd6', '#f59331', '#f47fb8', '#2fc1b3'];
 
+// How high a table's top is: what stands on tables (a computer) in the cell
+// above one is drawn down on it (furnitureDrop).
+const TABLE_TOP = 0.82;
+const ON_TABLES = new Set(['computer']);
+
 const box = (x0, y0, z0, x1, y1, z1, color, tile = 'plain') => [x0, y0, z0, x1, y1, z1, color, tile];
+
+// A computer keyboard lying from x0 to x1 and from z0 at the front (where
+// you sit) to z1: a dark tray with four rows of keys on it, the space bar
+// in the front row between a few keys either side.
+function keyboard(x0, x1, z0, z1) {
+  const out = [box(x0, 0, z0, x1, 0.02, z1, '#3b3f47', 'plain')];
+  const n = 12;
+  const pitch = (x1 - x0 - 0.02) / n;
+  const depth = (z1 - z0 - 0.02) / 5;
+  const key = (a, b, row) => box(a + 0.003, 0.02, z0 + 0.01 + row * depth + 0.003, b - 0.003, 0.034, z0 + 0.01 + (row + 1) * depth - 0.003, '#e9ecf0', 'plain');
+  const at = (i) => x0 + 0.01 + i * pitch;
+  for (let row = 1; row < 5; row++) for (let i = 0; i < n; i++) out.push(key(at(i), at(i + 1), row));
+  for (const [a, b] of [[0, 2], [2, 3], [3, 9], [9, 10], [10, 12]]) out.push(key(at(a), at(b), 0));
+  return out;
+}
 
 // A piano's two octaves of keys, from x0 to x1 at height y, from z0 at the
 // front to z1: fifteen white keys with a gap between each, and the black
@@ -236,9 +256,10 @@ const MODELS = {
       box(0.1, 0.26, 0.61, 0.9, 0.78, 0.62, '#1f2a3d', 'glow'),
       ...code.map(([x0, y, x1, color]) => box(x0, y, 0.605, x1, y + 0.03, 0.61, color, 'glow')),
       box(0.86, 0.235, 0.61, 0.89, 0.25, 0.62, '#5fe08a', 'glow'),
-      box(0.12, 0, 0.14, 0.72, 0.035, 0.4, STEEL, 'plain'),
-      ...[0.18, 0.25, 0.32].map((z) => box(0.15, 0.035, z, 0.69, 0.05, z + 0.05, '#e9ecf0', 'plain')),
-      box(0.8, 0, 0.22, 0.88, 0.04, 0.34, WHITE, 'plain'),
+      ...keyboard(0.24, 0.76, 0.03, 0.25),
+      // The mouse on the right as you sit at it (the layout's -x), a button line across it.
+      box(0.08, 0, 0.08, 0.16, 0.03, 0.2, WHITE, 'plain'),
+      box(0.115, 0.03, 0.14, 0.125, 0.033, 0.2, STEEL, 'plain'),
     ];
   },
 
@@ -272,7 +293,7 @@ const MODELS = {
     const r = same(1, 0);
     const f = same(0, -1);
     const b = same(0, 1);
-    const out = [box(l ? 0 : 0.02, 0.74, f ? 0 : 0.02, r ? 1 : 0.98, 0.82, b ? 1 : 0.98, WOOD, 'planks')];
+    const out = [box(l ? 0 : 0.02, TABLE_TOP - 0.08, f ? 0 : 0.02, r ? 1 : 0.98, TABLE_TOP, b ? 1 : 0.98, WOOD, 'planks')];
     // A leg at each corner with no table beside it either way.
     for (const [lx, lz, sx, sz] of [
       [0.08, 0.08, l, f],
@@ -903,10 +924,16 @@ const turnOffset = (dx, dz) => [-dz, dx];
 
 // A point (px, py, pz) of a piece of furniture's own layout, in the world,
 // for block `id` at cell (x, y, z), turned the way it faces.
-export function furniturePoint(id, x, y, z, px, py, pz) {
+export function furniturePoint(id, x, y, z, px, py, pz, drop = 0) {
   let [ax, az] = [px, pz];
   for (let i = 0; i < turnsFor(BLOCKS[id]?.front ?? 3); i++) [ax, az] = turnPoint(ax, az);
-  return [x + ax, y + py, z + az];
+  return [x + ax, y + py + drop, z + az];
+}
+
+// How far down the piece with block `id` is drawn, standing on the block
+// `below` it: onto the top of a table, for what stands on tables, or not at all.
+export function furnitureDrop(id, below) {
+  return ON_TABLES.has(BLOCKS[id]?.model) && BLOCKS[below]?.model === 'table' ? TABLE_TOP - 1 : 0;
 }
 
 // The boxes of the piece of furniture with block `id` at cell (x, y, z) of
@@ -921,6 +948,7 @@ export function furnitureBoxes(id, x, y, z, at) {
     const other = BLOCKS[at(x + ox, y, z + oz)];
     return other?.model === def.model && other.front === def.front;
   };
+  const drop = furnitureDrop(id, at(x, y - 1, z));
   return modelBoxes(id, same).map(([x0, y0, z0, x1, y1, z1, color, tile]) => {
     let [ax, az] = [x0, z0];
     let [bx, bz] = [x1, z1];
@@ -928,6 +956,6 @@ export function furnitureBoxes(id, x, y, z, at) {
       [ax, az] = turnPoint(ax, az);
       [bx, bz] = turnPoint(bx, bz);
     }
-    return [x + Math.min(ax, bx), y + y0, z + Math.min(az, bz), x + Math.max(ax, bx), y + y1, z + Math.max(az, bz), color, tile];
+    return [x + Math.min(ax, bx), y + y0 + drop, z + Math.min(az, bz), x + Math.max(ax, bx), y + y1 + drop, z + Math.max(az, bz), color, tile];
   });
 }

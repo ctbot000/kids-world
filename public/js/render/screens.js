@@ -47,10 +47,11 @@ export class Screens {
     this.shown = new Map();
   }
 
-  // Screen `s` (as cleanScreens makes them) on the computer `id` in its cell.
-  show(key, s, id) {
+  // Screen `s` (as cleanScreens makes them) on the computer `id` in its
+  // cell, drawn `drop` down in it (on a table: furnitureDrop).
+  show(key, s, id, drop = 0) {
     let d = this.shown.get(key);
-    if (!d || d.id !== id) {
+    if (!d || d.id !== id || d.drop !== drop) {
       if (d) this.remove(key);
       const canvas = document.createElement('canvas');
       canvas.width = W;
@@ -64,7 +65,7 @@ export class Screens {
       });
       // Seen from in front (-z in the layout), its left is the layout's +x.
       const { x0, x1, y0, y1, z } = GLASS;
-      const at = (px, py) => furniturePoint(id, s.x, s.y, s.z, px, py, z);
+      const at = (px, py) => furniturePoint(id, s.x, s.y, s.z, px, py, z, drop);
       const [bl, br, tr, tl] = [at(x1, y0), at(x0, y0), at(x0, y1), at(x1, y1)];
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute([...bl, ...br, ...tr, ...bl, ...tr, ...tl], 3));
@@ -72,7 +73,7 @@ export class Screens {
       geometry.computeBoundingSphere();
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `screen ${key}`;
-      d = { id, mesh, canvas, texture, drawn: '' };
+      d = { id, drop, mesh, canvas, texture, drawn: '' };
       this.shown.set(key, d);
       this.group.add(mesh);
     }

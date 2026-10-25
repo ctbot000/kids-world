@@ -250,6 +250,12 @@ export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6
 // long a sip takes (s).
 const SIP_GAP = [3, 10];
 const SIP_TIME = 2.4;
+// Where the wrists are typing at a desk, from the root (the seat of a chair,
+// shared/seats.js): up, and forward, just short of the keys of the keyboard
+// on the table in front of it (shared/furniture.js computer); and how far
+// apart they are.
+const TYPE_WRIST = [0.355, 0.53];
+const TYPE_APART = 0.2;
 // A coffee mug's radius and height, for a hand of size 1.
 const MUG_R = 0.027;
 const MUG_H = 0.062;
@@ -2215,7 +2221,8 @@ export class Avatar {
     let armRaiseR = REST_RAISE;
     let armFwdL = 0;
     let armFwdR = 0;
-    // The right upper arm turned about its own length (only to hold a mug).
+    // Each upper arm turned about its own length (only to hold a mug or to type).
+    let armTwistL = 0;
     let armTwistR = 0;
     // How far each elbow and knee bends.
     let bendL = 0.14;
@@ -2342,20 +2349,28 @@ export class Avatar {
       headNod = 0.18 + (pl + ph2) * 0.03;
       legs = [[-1.42, -0.1, 1.35, 0], [-1.42, 0.1, 1.35, 0]];
     } else if (anim === ANIM.type) {
-      // At a desk, leaning in to the keyboard, both forearms out over it and
-      // the hands tapping away in turn, quick and uneven; now and then a
-      // pause to read the screen, the head bent to it all the while.
+      // At a desk, leaning in to the keyboard, both hands on it palm down
+      // and the fingers tapping away at the keys, quick and uneven
+      // (typeHands); now and then a pause to read the screen, the head bent
+      // to it all the while. Each arm reaches for where its wrist is
+      // (TYPE_WRIST), the hands drifting a little along the keys as they go.
       bob = -(B.hip - SIT_HIPS);
-      lean = 0.12;
+      lean = 0.2;
       const q = t + this.quirk;
       const busy = Math.sin(q * 0.9) + Math.sin(q * 0.37 + 1) > -1.1;
+      this.typing = busy;
       const tapL = busy ? Math.max(0, Math.sin(q * 17)) ** 2 : 0;
       const tapR = busy ? Math.max(0, Math.sin(q * 19.5 + 1.3)) ** 2 : 0;
-      armRaiseL = armRaiseR = -0.1;
-      armFwdL = -0.85 + tapL * 0.08;
-      armFwdR = -0.85 + tapR * 0.08;
-      bendL = 0.9 - tapL * 0.1;
-      bendR = 0.9 - tapR * 0.1;
+      // A wrist in the torso's own frame (from the hips, turned back by the
+      // lean), the left one mirrored to reach for it as the right arm would.
+      const wrist = (side, drift) =>
+        scratch.v
+          .set(side * (TYPE_APART / 2 + drift), TYPE_WRIST[0] - SIT_HIPS, TYPE_WRIST[1] + (busy ? 0 : -0.04))
+          .applyEuler(scratch.e.set(-lean, 0, 0))
+          .toArray()
+          .map((v, i) => (i ? v : v * side));
+      [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo(wrist(1, Math.sin(q * 0.5) * 0.02));
+      [armFwdL, armTwistL, armRaiseL, bendL] = this.reachTo(wrist(-1, Math.sin(q * 0.43 + 2) * 0.02));
       twist = busy ? (tapR - tapL) * 0.03 : 0;
       headNod = 0.16 + (busy ? 0 : Math.sin(q * 0.8) * 0.03);
       headTilt = busy ? Math.sin(q * 1.3) * 0.025 : Math.sin(q * 0.6) * 0.07;
@@ -2560,7 +2575,7 @@ export class Avatar {
       if (anim === ANIM.piano) this.root.add(this.bench);
       else this.bench.removeFromParent();
     }
-    this.playHands(anim === ANIM.piano, lean, [armFwdL, armFwdR], [bendL, bendR], t);
+    this.playHands(anim === ANIM.piano || anim === ANIM.type, lean, [armFwdL, armFwdR], [bendL, bendR], t);
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);
@@ -2583,11 +2598,12 @@ export class Avatar {
     }
     // The arms hang from mirrored shoulders, so each side opens outward with
     // its own sign; the elbows bend the forearms forward.
-    armL.rotation.set(armSwing + armFwdL, 0, -armRaiseL);
+    armL.rotation.set(armSwing + armFwdL, -armTwistL, -armRaiseL);
     armR.rotation.set(-armSwing + armFwdR, armTwistR, armRaiseR);
     elbowL.rotation.x = -bendL;
     elbowR.rotation.x = -bendR;
     this.holdMug(anim === ANIM.coffee);
+    if (anim === ANIM.type) this.typeHands(lean, twist, t + this.quirk);
     this.body.position.y = bob + hop + dip;
     // In bed, the whole of you tips back about your feet, face up, and sinks
     // to lie on your back.
@@ -2689,14 +2705,14 @@ export class Avatar {
         else this.hands[1].add(this.weapon);
       }
     }
-    if (!playing) return;
+    if (!playing || this.anim === ANIM.type) return;
     // The arms are this.keys' other way round: arms[1] (+x) plays the low keys.
     for (let i = 0; i < 2; i++) {
       const { group, fingers, thumb } = this.hands[i].userData.piano;
       const k = this.keys[1 - i];
       // Pitched so its fingers point forward and a little down, wherever the
       // forearm points (the torso's lean, the shoulder, the elbow).
-      group.rotation.x = -(Math.PI / 2 - 0.2) - (lean + fwd[i] - bend[i]);
+      group.rotation.set(-(Math.PI / 2 - 0.2) - (lean + fwd[i] - bend[i]), 0, 0);
       const since = t - k.at;
       const strike = Math.max(0, 1 - since / 0.22) ** 1.5;
       const busy = since < 1.5;
@@ -2712,6 +2728,31 @@ export class Avatar {
         }
         fingers[f - 1].knuckle.rotation.x = curl;
         fingers[f - 1].joint.rotation.x = 0.97 + ripple * 0.4 - struck * 0.35;
+      }
+    }
+  }
+
+  // At a desk, typing: the jointed hands (as at the piano), each turned at
+  // the wrist to lie palm down over the keyboard, the fingers pointing on
+  // along it and a little in, whatever the arm does; the fingers arched over
+  // the keys, each tapping one now and then at its own pace, so they go in
+  // no order, and resting on them while you read.
+  typeHands(lean, twist, q) {
+    const body = scratch.q2.setFromEuler(scratch.e.set(lean, twist, 0));
+    for (let i = 0; i < 2; i++) {
+      const side = i ? 1 : -1;
+      const { group, fingers, thumb } = this.hands[i].userData.piano;
+      const arm = new THREE.Quaternion().setFromEuler(this.arms[i].rotation).multiply(scratch.q.setFromEuler(this.elbows[i].rotation));
+      const want = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 0.3, -side * 0.3, 0, 'YXZ'));
+      group.quaternion.copy(body).multiply(arm).invert().multiply(want);
+      for (let f = 0; f < 5; f++) {
+        const tap = this.typing ? Math.max(0, Math.sin(q * (9 + ((f * 7 + i * 3) % 5) * 1.9) + f * 2.1 + i)) ** 8 : 0;
+        if (f === 0) {
+          thumb.rotation.x = 0.7 + tap * 0.4;
+          continue;
+        }
+        fingers[f - 1].knuckle.rotation.x = 0.45 + tap * 0.55;
+        fingers[f - 1].joint.rotation.x = 0.75 - tap * 0.3;
       }
     }
   }

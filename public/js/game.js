@@ -12,6 +12,7 @@ import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
+import { furnitureDrop } from './shared/furniture.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
@@ -2573,7 +2574,7 @@ export class Game extends EventTarget {
     this.screens = cleanScreens(list);
     for (const [k, sc] of this.screens) {
       const id = this.world?.get(sc.x, sc.y, sc.z);
-      if (isComputer(id)) this.renderer.screens.show(k, sc, id);
+      if (isComputer(id)) this.renderer.screens.show(k, sc, id, furnitureDrop(id, this.world.get(sc.x, sc.y - 1, sc.z)));
       else this.screens.delete(k);
     }
     for (const k of before.keys()) if (!this.screens.has(k)) this.renderer.screens.remove(k);
