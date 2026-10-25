@@ -229,9 +229,9 @@ export const mdText = (text) => String(text).replace(/[\\`*_[\]{}()#+\-.!|<>~@]/
 export const creditIn = (body) => /💡 An idea from \*\*(.+?)\*\*/u.exec(String(body ?? ''))?.[1] ?? '';
 
 // The workers and their work. llm: what they think with (llm.js), its model
-// picked by the settings or the AI friend's. office: the CTB island, or null.
+// picked by the settings, or defaultModel (the llm's own) until one is. office: the CTB island, or null.
 export class Company extends EventEmitter {
-  constructor({ llm, github, repoDir, workDir, office = null, settings, friendModel = () => '', log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {}, proposedAt = 0, onProposed = () => {}, wishes = null, runs = null }) {
+  constructor({ llm, github, repoDir, workDir, office = null, settings, defaultModel = llm.model, log = (text) => console.log(text), now = Date.now, git = (args, opts) => sh('git', args, opts), node = process.execPath, onUsage = () => {}, proposedAt = 0, onProposed = () => {}, wishes = null, runs = null }) {
     super();
     this.llm = llm;
     this.github = github;
@@ -239,7 +239,7 @@ export class Company extends EventEmitter {
     this.workDir = workDir;
     this.office = office;
     this.settings = settings;
-    this.friendModel = friendModel;
+    this.defaultModel = defaultModel;
     this.now = now;
     this.git = git;
     this.node = node;
@@ -281,7 +281,7 @@ export class Company extends EventEmitter {
   }
 
   get model() {
-    return this.settings.model || this.friendModel() || this.llm.model;
+    return this.settings.model || this.defaultModel;
   }
 
   async start() {
@@ -901,7 +901,7 @@ export class Company extends EventEmitter {
 // CTB as the admin page runs it: its settings, saved in ctb.json, and its
 // island, workers and token tally. make* are for tests.
 export class CtbControl {
-  constructor({ dir, repoDir, llm, rooms = null, keeper = null, rtc = null, server = null, iceServers = [], friendModel = () => '', friendName = () => '', env = process.env, now = Date.now, github = null, makeOffice = null, git = undefined, log = (text) => console.log(text) }) {
+  constructor({ dir, repoDir, llm, rooms = null, keeper = null, rtc = null, server = null, iceServers = [], friendName = () => '', env = process.env, now = Date.now, github = null, makeOffice = null, git = undefined, log = (text) => console.log(text) }) {
     this.file = join(dir, SETTINGS_FILE);
     this.usage = new TokenUsage(join(dir, USAGE_FILE), now);
     this.islandFile = join(dir, ISLAND_FILE);
@@ -911,12 +911,14 @@ export class CtbControl {
     this.runs = new Runs({ dir, now, log });
     this.repoDir = repoDir;
     this.llm = llm;
+    // The model with none picked: the llm's own, as it came (each task sets
+    // llm.model to the one it works with).
+    this.defaultModel = llm.model;
     this.rooms = rooms;
     this.keeper = keeper;
     this.rtc = rtc;
     this.server = server;
     this.iceServers = iceServers;
-    this.friendModel = friendModel;
     this.friendName = friendName;
     this.settings = defaultSettings(env);
     this.saved = false;
@@ -952,7 +954,7 @@ export class CtbControl {
       repoDir: this.repoDir,
       workDir: this.workDir,
       settings: this.settings,
-      friendModel: this.friendModel,
+      defaultModel: this.defaultModel,
       log: this.log,
       onUsage: (entries) => this.usage.add(entries),
       runs: this.runs,
@@ -1048,7 +1050,7 @@ export class CtbControl {
       running: Boolean(this.company),
       maxWorkers: MAX_WORKERS,
       models: await this.llm.models().catch(() => []),
-      friendModel: this.friendModel(),
+      defaultModel: this.defaultModel,
       island: this.office?.summary() ?? null,
       ...(this.company ? this.company.status() : { repo: this.github?.repo ?? '', problem: '', workers: [], tasks: [], proposals: [], pulls: [], history: [] }),
       usage: this.usage.summary(),

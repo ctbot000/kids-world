@@ -778,7 +778,7 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   // Busy thinking forever, so nothing is done with the tasks.
   const llm = { ...scripted([]), chat: () => new Promise(() => {}) };
   const rooms = new Map();
-  const ctb = new CtbControl({ dir: store.dir, repoDir: repo, llm, rooms, github, env: {}, friendModel: () => 'glm-5.3-flash', log: () => {} });
+  const ctb = new CtbControl({ dir: store.dir, repoDir: repo, llm, rooms, github, env: {}, log: () => {} });
   await ctb.start();
   after(() => ctb.stop());
   const web = createGameServer({ log: () => {}, admin: adminHandler({ store, ctb }) });
@@ -791,7 +791,8 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   assert.equal(state.running, true);
   assert.equal(state.problem, '');
   assert.equal(state.repo, 'ctbot000/toy');
-  assert.equal(state.model, 'glm-5.3-flash', 'the AI friend’s model until one is picked');
+  assert.equal(state.model, 'stand-in', 'the llm’s own model until one is picked');
+  assert.equal(state.defaultModel, 'stand-in');
   assert.equal(state.island.name, ISLAND_NAME);
   assert.deepEqual(state.proposals.map((p) => p.number), [3]);
   assert.equal((await post('/tasks', { title: '' })).status, 400);

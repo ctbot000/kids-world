@@ -28,7 +28,7 @@ import { Buddy } from './buddy.js';
 import { CtbControl } from './ctb.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
-import { Fallback, Ollama, Zai } from './llm.js';
+import { DEFAULT_CTB_MODEL, Fallback, Ollama, Zai } from './llm.js';
 import { WebSocketServer } from 'ws';
 
 export const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -352,12 +352,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const ctb = new CtbControl({
     dir: store.dir,
     repoDir: fileURLToPath(new URL('..', import.meta.url)),
-    llm: new Zai(),
+    llm: new Zai({ model: process.env.KIDS_WORLD_CTB_MODEL || DEFAULT_CTB_MODEL }),
     keeper: keeper ?? null,
     rtc: keeper?.rtc ?? null,
     server: keeper?.server ?? null,
     iceServers: ICE_SERVERS,
-    friendModel: () => friend.settings.model,
     // The AI friend, whom the workers never answer: it would answer them back.
     friendName: () => friend.settings.name,
   });

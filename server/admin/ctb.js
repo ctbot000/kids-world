@@ -67,7 +67,7 @@ function settingsForm(h) {
     workers.replaceChildren(...Array.from({ length: state.maxWorkers }, (_, k) => h('option', { value: k + 1 }, k + 1)));
     workers.value = String(s.workers);
     const models = state.models.includes(s.model) || !s.model ? state.models : [s.model, ...state.models];
-    model.replaceChildren(h('option', { value: '' }, `Same as the AI friend (${state.friendModel || 'its default'})`), ...models.map((m) => h('option', { value: m }, m)));
+    model.replaceChildren(h('option', { value: '' }, `Default (${state.defaultModel})`), ...models.map((m) => h('option', { value: m }, m)));
     model.value = s.model;
     save.disabled = true;
   };

@@ -16,6 +16,9 @@ export const DEFAULT_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_MODEL = 'gemma3:4b';
 export const ZAI_URLS = ['https://api.z.ai/api/paas/v4', 'https://api.z.ai/api/coding/paas/v4'];
 export const DEFAULT_ZAI_MODEL = 'glm-5.3-flash';
+// CTB's workers do real work, so they think with Z.ai's best model unless
+// the admin page picks another (KIDS_WORLD_CTB_MODEL until then).
+export const DEFAULT_CTB_MODEL = 'glm-5.3';
 
 const TIMEOUT_MS = 30000;
 
