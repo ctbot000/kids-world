@@ -376,8 +376,7 @@ test('a computer after the Go board, glowing, its picture inside its cell', () =
   for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.COMPUTER)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1);
 });
 
-test('a pet bed after the tea table, a low basket a pet can get into', () => {
-  const home = B.blocksIn('home');
+test('a pet bed after the tea table, a low basket a pet can get into', () => {  const home = B.blocksIn('home');
   assert.ok(home.includes(B.PET_BED), 'in the toy box\'s Home tab');
   assert.ok(B.block(B.PET_BED).turns, 'it turns to face whoever puts it down');
   assert.ok(B.SOLID[B.PET_BED] === 0, 'not solid: a pet curls up in it, and you step over it');
@@ -391,6 +390,39 @@ test('a pet bed after the tea table, a low basket a pet can get into', () => {
   // Turned every way, its boxes stay in their cell.
   for (let front = 0; front < 4; front++) {
     for (const [x0, , z0, x1, , z1] of furnitureBoxes(B.turnedTo(B.PET_BED, front), 5, 6, 5, () => B.AIR)) {
+      assert.ok(x0 >= 5 && x1 <= 6 && z0 >= 5 && z1 <= 6 && x0 < x1 && z0 < z1);
+    }
+  }
+});
+
+test('a hot tub after the pet bed, a steaming barrel you soak in together', async () => {
+  const { seatNear, seatPose, standUpAt } = await import('../public/js/shared/seats.js');
+  const home = B.blocksIn('home');
+  assert.ok(home.includes(B.HOT_TUB), 'in the toy box\'s Home tab');
+  assert.equal(home[home.indexOf(B.PET_BED) + 1], B.HOT_TUB, 'right after the pet bed');
+  assert.ok(B.block(B.HOT_TUB).turns, 'it turns to face whoever puts it down');
+  assert.ok(B.block(B.HOT_TUB).light > 0, 'it glows, lighting the room at night');
+  const boxes = modelBoxes(B.HOT_TUB);
+  for (const [x0, y0, z0, x1, y1, z1] of boxes) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+  // A ring of staves round glowing water that fills the middle of the tub.
+  assert.ok(boxes.filter(([, y0, , , y1]) => y0 < 0.5 && y1 > 0.5).length >= 16, 'a ring of staves');
+  const water = boxes.find(([, , , , , , , tile]) => tile === 'glow');
+  assert.ok(water, 'glowing water fills it');
+  assert.ok(water[0] < 0.3 && water[2] < 0.3 && water[3] > 0.7 && water[5] > 0.7, 'the water reaches across the tub');
+  assert.ok(water[4] > 0.5, 'the water comes up high');
+  // Sitting in it: in the middle of the tub, low down in the water, and two
+  // friends can sit side by side (the pose tells the game it is a soak).
+  const w = meadow();
+  w.set(10, 6, 10, B.HOT_TUB);
+  assert.deepEqual(seatNear(w, { x: 10.5, y: 6, z: 11.2 }), { x: 10, y: 6, z: 10 });
+  const soak = seatPose(w, 10, 6, 10);
+  assert.equal(soak.pose, 'soak');
+  assert.deepEqual([soak.x, soak.z], [10.5, 10.5], 'in the middle of the tub');
+  assert.ok(soak.y < 6.3, `down in the water: ${soak.y}`);
+  assert.equal(standUpAt(w, 10, 6, 10).y, 6, 'you get out beside it');
+  // Turned every way, its boxes stay in their cell.
+  for (let front = 0; front < 4; front++) {
+    for (const [x0, , z0, x1, , z1] of furnitureBoxes(B.turnedTo(B.HOT_TUB, front), 5, 6, 5, () => B.AIR)) {
       assert.ok(x0 >= 5 && x1 <= 6 && z0 >= 5 && z1 <= 6 && x0 < x1 && z0 < z1);
     }
   }

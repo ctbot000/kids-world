@@ -246,6 +246,11 @@ export const TEA_TABLE = furniture(154, 'tea-table', { name: 'Tea Table', color:
 // at night your pet walks to the nearest one and curls up in it. Not solid,
 // so a pet can get into it and you can step over it. After the tea table.
 export const PET_BED = furniture(262, 'pet-bed', { name: 'Pet Bed', color: '#f7b6cf', after: 154, solid: false, sound: 'cloth' });
+// A hot tub to soak in (shared/seats.js): a round wooden tub of steaming
+// water, its glow lighting the room at night. Press Q beside it to slip in up
+// to your shoulders, and two or more friends soaking together show hearts
+// over it, like a tea party. After the pet bed.
+export const HOT_TUB = furniture(266, 'hot-tub', { name: 'Hot Tub', color: '#8b5a3c', after: 262, light: 8, sound: 'water' });
 // Arcade machines, each running a mini-game everyone at it plays together
 // (shared/arcade.js): walk up and press Q to play. Their screens glow and
 // light the room a little.

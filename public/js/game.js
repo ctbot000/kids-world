@@ -3192,6 +3192,7 @@ export class Game extends EventTarget {
     }
     this.seat = { x: cell.x, y: cell.y, z: cell.z };
     this.teaCounted = false;
+    this.tubCounted = false;
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0 });
     this.sound.play('place', { kind: 'cloth' });
     this.profile.count('sat');
@@ -3199,10 +3200,11 @@ export class Game extends EventTarget {
     if (isStudyDesk(this.world.get(cell.x, cell.y, cell.z))) this.emit('study-open');
     if (!this.toldSeat) {
       this.toldSeat = true;
-      const name = B.block(this.world.get(cell.x, cell.y, cell.z)).name.toLowerCase();
+      const id = this.world.get(cell.x, cell.y, cell.z);
+      const name = B.block(id).name.toLowerCase();
       // At a study desk Q (and the button) open your workbooks instead.
-      const how = isStudyDesk(this.world.get(cell.x, cell.y, cell.z)) ? 'Walk' : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
-      this.emit('toast', { icon: pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(this.world.get(cell.x, cell.y, cell.z)) ? 'at' : 'on'} the ${name}. ${how} to get up.` });
+      const how = isStudyDesk(id) ? 'Walk' : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
+      this.emit('toast', { icon: pose.pose === 'soak' ? '♨️' : pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose === 'soak' ? `Ahh, into the ${name}! ${how} to get out.` : pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(id) ? 'at' : 'on'} the ${name}. ${how} to get up.` });
     }
     this.emit('ride');
   }
@@ -3217,6 +3219,51 @@ export class Game extends EventTarget {
     Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false });
     unstick(this.world, b);
     this.emit('ride');
+  }
+
+  // The island's hot tubs, each frame: steam rises off the water over
+  // everyone soaking in one, you and your friends, and while two or more soak
+  // in the same tub together, hearts show over it, like a tea party.
+  updateHotTubs() {
+    const now = performance.now();
+    // Everyone soaking, with the tub each is in (the cell their seat is).
+    const soaking = [];
+    if (this.seat) {
+      const pose = seatPose(this.world, this.seat.x, this.seat.y, this.seat.z);
+      if (pose?.pose === 'soak') soaking.push({ who: this.players.get(this.pid), me: true, x: pose.x, y: pose.y, z: pose.z, tub: this.seat });
+    }
+    for (const p of this.players.values()) {
+      if (p.me || !p.inSeat || !p.avatar) continue;
+      const a = p.avatar.root.position;
+      const x = Math.floor(a.x);
+      const y = Math.floor(a.y);
+      const z = Math.floor(a.z);
+      if (B.block(this.world.get(x, y, z)).model !== 'hot-tub') continue;
+      soaking.push({ who: p, me: false, x: a.x, y: a.y, z: a.z, tub: { x, y, z } });
+    }
+    for (const s of soaking) {
+      // Now and then, a wisp of steam off the water round their shoulders.
+      if (!s.who || now < (s.who.steamAt ?? 0) || !this.near(s.x, s.y, s.z, 40)) continue;
+      s.who.steamAt = now + 400 + Math.random() * 300;
+      this.renderer.effects.steam(s.x, s.y + 0.5, s.z);
+    }
+    // Hearts over any tub two or more are soaking in together, now and then
+    // while they do, as a tea party's do. Only the tubs near enough to see, so
+    // a far-off one is left alone. The first time you share one with a friend
+    // you are told so, once each time you get in; the soak itself counts for
+    // the Comfy Spot sticker, as any seat does (sitDown).
+    const tubs = new Map();
+    for (const s of soaking) tubs.set(s.tub, [...(tubs.get(s.tub) ?? []), s]);
+    for (const [tub, inOne] of tubs) {
+      if (inOne.length < 2 || !this.near(tub.x + 0.5, tub.y, tub.z + 0.5, 40) || now < (this.tubHeartsAt ?? 0)) continue;
+      this.tubHeartsAt = now + 900 + Math.random() * 400;
+      this.renderer.effects.hearts(tub.x + 0.5, tub.y + 1.3, tub.z + 0.5, 3);
+      const mine = inOne.some((s) => s.me);
+      const friend = inOne.find((s) => !s.me)?.who?.name ?? null;
+      if (!mine || !friend || this.tubCounted) continue;
+      this.tubCounted = true;
+      this.emit('toast', { icon: '♨️', text: `A cozy soak with ${friend}!` });
+    }
   }
 
   // A tea party: you and a friend both sitting (shared/seats.js) with a Tea
@@ -3268,7 +3315,7 @@ export class Game extends EventTarget {
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
     me.yaw = pose.yaw;
     me.speed = 0;
-    me.anim = { sit: ANIM.sit, lie: ANIM.lie, curl: ANIM.curl }[pose.pose];
+    me.anim = { sit: ANIM.sit, soak: ANIM.sit, lie: ANIM.lie, curl: ANIM.curl }[pose.pose];
     const a = this.players.get(this.pid)?.avatar;
     if (a) {
       a.root.position.set(b.x, b.y, b.z);
@@ -4351,6 +4398,7 @@ export class Game extends EventTarget {
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
+    this.updateHotTubs();
     this.updateCritters(dt);
     this.seatPassengers(dt);
     this.updatePets(dt);

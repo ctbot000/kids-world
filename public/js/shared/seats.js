@@ -1,10 +1,10 @@
-// Sitting on chairs, sofas and school and study desks, and lying in bed
-// (curled up in a bed one block long, stretched out in a longer one).
-// Walk up to one and press Q (or the Sit button beside it): you sit facing
-// the way it faces, or lie down with your head at the head of the bed.
-// Moving, jumping, Shift or Q gets you up again, in front of it. Friends
-// see you sit (render/avatar.js ANIM.sit and ANIM.lie, sent with where you
-// are like any other pose).
+// Sitting on chairs and sofas, at school and study desks, soaking in a hot
+// tub, and lying in bed (curled up in a bed one block long, stretched out in
+// a longer one). Walk up to one and press Q (or the Sit button beside it):
+// you sit facing the way it faces, or lie down with your head at the head of
+// the bed. Moving, jumping, Shift or Q gets you up again, in front of it.
+// Friends see you sit (render/avatar.js ANIM.sit and ANIM.lie, sent with
+// where you are like any other pose).
 import { BLOCKS } from './blocks.js';
 
 // For each kind of seat: lie down or sit, and for sitting how high the seat
@@ -16,6 +16,9 @@ export const SEATS = {
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
   'study-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
+  // Soaking in a hot tub (game.js draws the steam and the hearts): in the
+  // middle of the tub and low down, so the water comes up to your shoulders.
+  'hot-tub': { pose: 'soak', h: 0.12, at: [0.5, 0.5] },
 };
 
 // The four ways along the ground, as RAIL_DIRS.
@@ -99,7 +102,7 @@ export function seatPose(world, x, y, z) {
     return { x: cx + px, y: y + seat.h, z: cz + pz, yaw, pose: 'lie', cell: { x, y, z } };
   }
   const [px, pz] = layoutPoint(front, seat.at[0], seat.at[1]);
-  return { x: x + px, y: y + seat.h, z: z + pz, yaw, pose: 'sit', cell: { x, y, z } };
+  return { x: x + px, y: y + seat.h, z: z + pz, yaw, pose: seat.pose, cell: { x, y, z } };
 }
 
 const open = (world, x, y, z) => !BLOCKS[world.get(x, y, z)]?.solid && !BLOCKS[world.get(x, y + 1, z)]?.solid;
