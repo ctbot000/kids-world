@@ -241,6 +241,9 @@ export class Zai {
       trace.zai = { promptTokens: body.usage?.prompt_tokens ?? null, tokens: body.usage?.completion_tokens ?? null, cachedTokens: body.usage?.prompt_tokens_details?.cached_tokens ?? null, reasoningTokens: body.usage?.completion_tokens_details?.reasoning_tokens ?? null };
       spent(trace, this, body.usage?.prompt_tokens, body.usage?.completion_tokens);
     }
+    // GLM now and then thinks its whole answer and leaves the answer itself
+    // empty: the JSON at the end of its thinking is that answer.
+    if (!words.trim()) return this.read(body.choices?.[0]?.message?.reasoning_content ?? '', { last: true });
     return this.read(words);
   }
 
@@ -254,13 +257,32 @@ export class Zai {
     return `Z.ai answered ${res.status}${why ? `: ${why}` : ''}`;
   }
 
-  // The JSON in the model's words, in case it said more around it.
-  read(words) {
+  // The JSON in the model's words, in case it said more around it. last:
+  // the last JSON object in them (its thinking, which has words before).
+  read(words, { last = false } = {}) {
     try {
       return JSON.parse(words);
     } catch {
-      const from = words.indexOf('{');
       const to = words.lastIndexOf('}');
+      if (last) {
+        // It may end on a stray brace or two after the object.
+        const ends = [to];
+        while (ends.length < 3 && ends.at(-1) > 0) {
+          const end = words.lastIndexOf('}', ends.at(-1) - 1);
+          if (end === -1) break;
+          ends.push(end);
+        }
+        for (const end of ends) {
+          for (let from = words.lastIndexOf('{', end); from !== -1; from = from ? words.lastIndexOf('{', from - 1) : -1) {
+            try {
+              const found = JSON.parse(words.slice(from, end + 1));
+              if (found && typeof found === 'object') return found;
+            } catch {}
+          }
+        }
+        throw new Error('Z.ai said nothing it could read');
+      }
+      const from = words.indexOf('{');
       if (from !== -1 && to > from) return JSON.parse(words.slice(from, to + 1));
       throw new Error('Z.ai said nothing it could read');
     }
