@@ -720,3 +720,32 @@ test('fireflies come out over the flowers at night and go home at dawn, the same
   assert.equal(room.critters.list.filter((c) => c.type === 'firefly').length, 0);
   assert.ok(!room.exportSave().critters.some((c) => c.type === 'firefly'), 'and none are saved with the island');
 });
+
+test('the night\'s fireflies take no animal\'s seat, and are only for looking at', () => {
+  const { room, time } = makeRoom();
+  const a = join(room);
+  room.env.time = 0.9;
+  room.tick();
+  const fly = room.critters.list.find((c) => c.type === 'firefly');
+  assert.ok(fly, 'fireflies are out');
+  // An island filling up at night still has every seat for its animals.
+  const s = room.world.spawn;
+  for (let i = 0; i < room.critters.max + 5; i++) {
+    time.advance(50);
+    room.receive(a, { t: 'critter', op: 'invite', type: 'bunny', x: s.x, y: s.y, z: s.z });
+  }
+  assert.equal(room.critters.list.filter((c) => c.type !== 'firefly').length, room.critters.max);
+  assert.equal(a.last('notice')?.text, 'The island is full of animal friends already!');
+  // Nobody brings one out of the toy box, even by asking for it.
+  const flies = room.critters.list.filter((c) => c.type === 'firefly').length;
+  room.receive(a, { t: 'critter', op: 'bye', id: room.critters.list.find((c) => c.type === 'bunny').id });
+  time.advance(50);
+  room.receive(a, { t: 'critter', op: 'invite', type: 'firefly', x: s.x, y: s.y, z: s.z });
+  assert.equal(room.critters.list.filter((c) => c.type === 'firefly').length, flies, 'no firefly invited');
+  // Nor is one petted or fed: it never follows anyone.
+  const fx = a.all('cfx').length;
+  room.receive(a, { t: 'critter', op: 'pet', id: fly.id });
+  room.receive(a, { t: 'critter', op: 'feed', id: fly.id, fruit: 'apple' });
+  assert.equal(a.all('cfx').length, fx);
+  assert.ok(!fly.follow, 'it follows nobody');
+});

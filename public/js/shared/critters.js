@@ -56,7 +56,7 @@ export const CRITTER_INFO = {
   owl: { name: 'Owl', icon: '🦉', speed: 3.2, swims: false, flies: true, nocturnal: true, names: ['Hootie', 'Ollie', 'Luna', 'Starry', 'Moony', 'Professor', 'Twig', 'Nutmeg', 'Hazel', 'Pinecone'] },
   bee: { name: 'Bee', icon: '🐝', speed: 2.2, swims: false, flies: true, names: ['Buzzy', 'Bumble', 'Stripes', 'Nectar', 'Pollen', 'Fuzzy', 'Bizzy', 'Jellybean', 'Dot', 'Zippy'] },
   // A firefly is only for looking at: it comes out over the flowers at night
-  // (the room invites them at dusk and sees them off at dawn, fireflies.js)
+  // (the room invites them at dusk and sees them off at dawn, Room.stepFireflies)
   // and is never in the toy box, nor saved with the island.
   firefly: { name: 'Firefly', icon: '✨', speed: 0.8, swims: false, flies: true, nocturnal: true, look: true, names: ['Glimmer', 'Flicker', 'Ember', 'Wisp', 'Glow', 'Dusk', 'Twinkle', 'Spark', 'Lantern', 'Mote'] },
   seagull: { name: 'Seagull', icon: '🕊️', speed: 5, swims: true, flies: true, names: ['Gully', 'Skipper', 'Captain', 'Sandy', 'Sailor', 'Coral', 'Splashy', 'Windy', 'Shelly', 'Marina'] },
@@ -789,7 +789,7 @@ export class CritterSim {
     // take a seat an animal could have.
     if (CRITTER_INFO[type].look) {
       if (this.list.filter((c) => CRITTER_INFO[c.type].look).length >= MAX_FIREFLIES) return null;
-    } else if (this.list.length >= this.max) return null;
+    } else if (this.animals() >= this.max) return null;
     const info = CRITTER_INFO[type];
     const rng = info.vehicle ? this.vehicleRng : info.big ? this.bigRng : this.rng;
     const c = {
@@ -835,9 +835,15 @@ export class CritterSim {
     return this.list.find((c) => c.id === id) ?? null;
   }
 
+  // How many seats are taken: everyone but the look-only fireflies.
+  animals() {
+    return this.list.reduce((n, c) => n + (CRITTER_INFO[c.type].look ? 0 : 1), 0);
+  }
+
   pet(id, player, now) {
     const c = this.get(id);
-    if (!c) return null;
+    // A firefly is only for looking at: it is not petted, nor fed.
+    if (!c || CRITTER_INFO[c.type].look) return null;
     c.happyUntil = now + HAPPY_MS;
     c.state = 'happy';
     if (player && !c.onHead) c.yaw = Math.atan2(player.x - c.x, player.z - c.z);

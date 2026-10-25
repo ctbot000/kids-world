@@ -820,7 +820,8 @@ export class Room {
       }
       case 'invite': {
         // A fun park's rides are built with it, not brought.
-        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // Nor are fireflies: they come out by themselves at night.
+        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || CRITTER_INFO[msg.type].look || ![msg.x, msg.y, msg.z].every(finite)) return;
         // A dragon comes only to those who have tamed a volcano island's
         // dragon often enough (dragon.js TAMES_TO_INVITE: their page keeps
         // count and only sends for one then), and tame: one of your own.
@@ -830,7 +831,7 @@ export class Room {
           this.notice(conn, `${this.world.name} stays just as it was made, so its toy box stays shut!`, 'info');
           return;
         }
-        if (this.critters.list.length >= this.critters.max) {
+        if (this.critters.animals() >= this.critters.max) {
           this.notice(conn, 'The island is full of animal friends already!', 'info');
           return;
         }

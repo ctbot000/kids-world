@@ -4247,6 +4247,11 @@ export class Game extends EventTarget {
       this.send({ t: 'critter', op: 'bye', id });
       return;
     }
+    // A firefly is only for looking at: no petting, and no fruit spent.
+    if (CRITTER_INFO[entry.type].look) {
+      this.emit('toast', { icon: CRITTER_INFO[entry.type].icon, text: `${entry.name || 'A firefly'} glows softly — just for looking at!` });
+      return;
+    }
     // A vehicle is only honked at, whatever is in your hand.
     if (CRITTER_INFO[entry.type].vehicle) {
       this.send({ t: 'critter', op: 'pet', id });
