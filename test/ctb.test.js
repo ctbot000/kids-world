@@ -639,10 +639,24 @@ test('the office on the CTB island: workers at their desks, answering children, 
   const izeye = [...room.players.values()].find((p) => p.name === 'izeye');
   assert.equal(room.host, izeye.id);
   assert.ok(heard.some((m) => m.t === 'host' && m.pid === izeye.id), 'the others hear who owns it now');
-  const sneaky = { send: () => {} };
+  const told = [];
+  const sneaky = { send: (text) => told.push(JSON.parse(text)) };
   room.attach(sneaky);
   room.receive(sneaky, { t: 'join', protocol: PROTOCOL, name: 'Sneaky', look: { animal: 'cat' }, who: 'cd'.repeat(32) });
   assert.equal(room.host, izeye.id);
+  assert.equal(told.find((m) => m.t === 'welcome').settings.owned, true);
+  // Nobody else ever changes it: the owner cannot let friends build, nor hand it over.
+  room.receive(owner, { t: 'host', cmd: 'settings', settings: { build: 'everyone' } });
+  assert.equal(room.settings.build, 'host');
+  const sneakyId = [...room.players.values()].find((p) => p.name === 'Sneaky').id;
+  room.receive(owner, { t: 'host', cmd: 'handover', pid: sneakyId });
+  assert.equal(room.host, izeye.id);
+  room.settings.build = 'everyone';
+  const [[sx, sy, sz]] = placeTemplate([[0, 10, -20, 0]], office.site.x, office.site.base, office.site.z, office.site.facing);
+  room.receive(sneaky, { t: 'edit', seq: 1, cells: [sx, sy, sz, B.STAR_BLOCK] });
+  assert.equal(room.world.get(sx, sy, sz), B.AIR, 'a visitor builds nothing, even with the rule changed behind its back');
+  assert.ok(told.some((m) => m.t === 'ack' && m.seq === 1 && m.fix.length));
+  room.settings.build = 'host';
   room.detach(owner);
   room.leave(izeye.id);
   assert.equal(room.host, 0, 'away, nobody owns it — not a worker, not a visitor');

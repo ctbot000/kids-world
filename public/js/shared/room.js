@@ -721,7 +721,8 @@ export class Room {
       this.notice(conn, `${this.world.name} stays just as it is — no building here!`);
       return;
     }
-    const refused = this.settings.build === 'host' && p.id !== this.host;
+    // An island owned by one login (the CTB island) is only ever its owner's to change.
+    const refused = (this.ownerWho || this.settings.build === 'host') && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
       this.notice(conn, refused ? 'The island owner is the only builder right now.' : 'Whoa, slow down a little!');
@@ -986,6 +987,8 @@ export class Room {
       case 'settings': {
         const before = this.settings.day;
         this.settings = cleanSettings(msg.settings, this.settings);
+        // Its owner is its only builder, whatever the toggle says.
+        if (this.ownerWho) this.settings.build = 'host';
         this.broadcast({ t: 'settings', settings: this.publicSettings() });
         if (!this.settings.monsters) this.noMonsters();
         if (before !== this.settings.day) {
@@ -1019,6 +1022,11 @@ export class Room {
       case 'handover': {
         const target = this.players.get(msg.pid);
         if (!target?.online) return;
+        // An island owned by one login stays theirs.
+        if (this.ownerWho) {
+          this.notice(conn, 'This island always stays yours.', 'info');
+          return;
+        }
         this.host = target.id;
         this.broadcast({ t: 'host', pid: target.id });
         this.tellHost();
@@ -1059,7 +1067,8 @@ export class Room {
 
   // The island's rules as everyone hears them: whether it has a passcode, never the passcode.
   publicSettings() {
-    return { ...this.settings, passcode: this.passcode !== '' };
+    // owned: an island owned by one login (the CTB island), that only its owner builds on.
+    return { ...this.settings, passcode: this.passcode !== '', ...(this.ownerWho ? { owned: true } : {}) };
   }
 
   // The owner, whoever that is now, hears the passcode.
@@ -2079,6 +2088,10 @@ export class Room {
     if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
     const stroke = cleanStroke(msg.s);
     if (!stroke) return;
+    if (this.ownerWho && p.id !== this.host) {
+      this.notice(conn, 'Only the island owner can draw here.');
+      return;
+    }
     const k = this.world.index(...at);
     let pic = this.drawings.get(k);
     if (!pic) {

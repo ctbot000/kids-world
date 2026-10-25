@@ -4002,10 +4002,15 @@ export class UI {
         if (handlers.canToggleOnline()) {
           root.append(toggle(handlers.isOnline(), '👫 Friends can visit', 'Friends join with your island code.', (on) => handlers.setOnline(on)));
         }
+        // An island only its owner ever builds on (the CTB island) has no such toggle.
+        if (!g.settings.owned) {
+          root.append(
+            toggle(g.settings.build === 'everyone', '🧱 Friends can build', 'Turn off so only you can change the island.', (on) =>
+              g.send({ t: 'host', cmd: 'settings', settings: { build: on ? 'everyone' : 'host' } }),
+            ),
+          );
+        }
         root.append(
-          toggle(g.settings.build === 'everyone', '🧱 Friends can build', 'Turn off so only you can change the island.', (on) =>
-            g.send({ t: 'host', cmd: 'settings', settings: { build: on ? 'everyone' : 'host' } }),
-          ),
           toggle(g.settings.locked, '🚪 No new visitors', 'Friends already here can stay.', (on) => g.send({ t: 'host', cmd: 'settings', settings: { locked: on } })),
           this.passcodeSetting(),
           toggle(Boolean(g.settings.monsters), '👾 Monsters', MONSTERS_ABOUT, (on) => g.send({ t: 'host', cmd: 'settings', settings: { monsters: on } })),
