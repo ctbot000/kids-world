@@ -8,10 +8,11 @@
 //   npm test -- <files or node --test flags>    plain node --test, on just those
 // E2E_SHARDS (how many processes share the end-to-end tests, for each of mouse
 // and touch), TEST_JOBS (how many run at once) and E2E_JOBS (how many of
-// those can be end-to-end ones) change how it shares them out.
-import { spawn } from 'node:child_process';
+// those can be end-to-end ones) change how it shares them out. While the
+// computer is short of memory, no more start until it eases (memoryShort).
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, freemem } from 'node:os';
 
 const FLAGS = ['--test', '--test-timeout=180000', '--test-force-exit'];
 const args = process.argv.slice(2);
@@ -59,9 +60,17 @@ async function runAll() {
   const counts = { tests: 0, pass: 0, fail: 0, cancelled: 0, skipped: 0 };
   console.log(`${jobs.length} test files and shares of the end-to-end tests, up to ${most} at once (${mostE2e} end-to-end)`);
 
+  let held = 0;
   await new Promise((finished) => {
+    let waking = null;
     const next = () => {
       while (running.size < most) {
+        // Short of memory, nothing more starts until something ends or it eases.
+        if (running.size && memoryShort()) {
+          if (!waking) held++;
+          waking ??= setTimeout(() => ((waking = null), next()), 2000);
+          break;
+        }
         const e2eRunning = [...running].filter((job) => job.e2e).length;
         const index = waiting.findIndex((job) => !job.e2e || e2eRunning < mostE2e);
         if (index < 0) break;
@@ -105,6 +114,7 @@ async function runAll() {
     renameSync(`${timesFile}.${process.pid}`, timesFile);
   } catch {}
   const took = seconds(Date.now() - started);
+  if (held) console.log(`Short of memory, new tests were held back for about ${held * 2} s`);
   const tally = `${counts.pass} of ${counts.tests} tests passed${counts.skipped ? `, ${counts.skipped} skipped` : ''}`;
   if (failed.length) {
     console.log(`✖ ${tally}, ${counts.fail} failed${counts.cancelled ? `, ${counts.cancelled} cancelled` : ''}, in ${took}: ${failed.join(', ')}`);
@@ -112,6 +122,20 @@ async function runAll() {
     process.exitCode = 1;
   } else {
     console.log(`✔ ${tally}, in ${took}`);
+  }
+}
+
+// Whether starting another test could push the computer into swapping: an
+// end-to-end share takes a browser of 1 to 1.5 GB. On macOS, free memory says
+// little (the rest is cached or compressed), so it is the kernel's own memory
+// pressure, which turns from normal (1) to warning (2) as it starts swapping.
+// Elsewhere, Node's free memory is what can be had without swapping.
+function memoryShort() {
+  if (process.platform !== 'darwin') return freemem() < 1.5 * 2 ** 30;
+  try {
+    return Number(execFileSync('sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], { encoding: 'utf8' })) >= 2;
+  } catch {
+    return false;
   }
 }
 
