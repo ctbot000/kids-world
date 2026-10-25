@@ -248,6 +248,9 @@ export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6
 // How often someone on a coffee break takes a sip, and how long a sip takes (s).
 const SIP_EVERY = 6.5;
 const SIP_TIME = 2.4;
+// A coffee mug's radius and height, for a hand of size 1.
+const MUG_R = 0.027;
+const MUG_H = 0.062;
 
 export function shirtColor(index) {
   return BRICK_COLORS[index]?.[2] ?? BRICK_COLORS[0][2];
@@ -1898,13 +1901,12 @@ function pianoHand(size, side, skin) {
 // The bench you sit on at the piano, its padded top where the root is and
 // its four legs down to the floor: a little wider than you, of the same dark
 // wood as the piano, with a red cushion.
-// A mug of coffee, for a break at a desk: held by its side in the palm,
-// its handle out towards the hand, its own way up (rotation.x keeps it so).
+// A mug of coffee, for a break at a desk, its handle on its +x side.
 function coffeeMug(h) {
   const g = new THREE.Group();
   const cup = toon('#f4f1ea');
-  const r = 0.032 * h;
-  const tall = 0.075 * h;
+  const r = MUG_R * h;
+  const tall = MUG_H * h;
   g.add(mesh(cylinder(r, r * 0.9, tall, 14), cup, 0, 0, 0));
   g.add(mesh(cylinder(r * 0.88, r * 0.88, 0.004, 14), toon('#5b3a24'), 0, tall / 2 - 0.006 * h, 0));
   // The handle: a ring standing up on the side (a torus lies in its own xy plane).
@@ -2046,6 +2048,8 @@ export class Avatar {
     for (const side of [-1, 1]) {
       const arm = new THREE.Group();
       arm.position.set(side * B.shoulder[1], B.shoulder[0], 0);
+      // Turned about its length last (only ever to hold a mug: reachTo).
+      arm.rotation.order = 'XZY';
       arm.add(mesh(sleeveShape(B), shirtMat));
       arm.add(mesh(torus(B.arm[2] * 1.22, 0.0068), band, 0, -B.sleeve + 0.005, 0).rotateX(Math.PI / 2));
       arm.add(mesh(upperArmShape(B), skin));
@@ -2172,6 +2176,8 @@ export class Avatar {
     let armRaiseR = REST_RAISE;
     let armFwdL = 0;
     let armFwdR = 0;
+    // The right upper arm turned about its own length (only to hold a mug).
+    let armTwistR = 0;
     // How far each elbow and knee bends.
     let bendL = 0.14;
     let bendR = 0.14;
@@ -2321,17 +2327,16 @@ export class Avatar {
       bob = -(B.hip - SIT_HIPS);
       lean = -0.06;
       const c = t % SIP_EVERY;
-      const sip = c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
+      const up = c < SIP_TIME ? Math.min(1, Math.sin((c / SIP_TIME) * Math.PI) * 1.6) : 0;
+      this.sip = up * up * (3 - 2 * up);
       armRaiseL = 0;
       armFwdL = -0.3;
       bendL = 0.85;
-      armRaiseR = 0.08 - sip * 0.22;
-      armFwdR = -0.35 - sip * 0.45;
-      bendR = 1.35 + sip * 0.75;
-      headNod = 0.05 - sip * 0.22;
-      headTilt = sip ? 0 : Math.sin(t * 0.7) * 0.06;
+      // The right hand round the mug, wherever it is (see holdMug).
+      [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo(this.mugGrip(this.sip));
+      headNod = 0.04 - this.sip * 0.14;
+      headTilt = this.sip ? 0 : Math.sin(t * 0.7) * 0.06;
       legs = [[-1.48, -0.07, 1.3, 0], [-1.48, 0.07, 1.3, 0]];
-      this.sip = sip;
     } else if (anim === ANIM.curl) {
       // Hugging your knees, chin tucked in, breathing slowly.
       armRaiseL = armRaiseR = -0.05;
@@ -2507,7 +2512,7 @@ export class Avatar {
       else this.bench.removeFromParent();
     }
     this.playHands(anim === ANIM.piano, lean, [armFwdL, armFwdR], [bendL, bendR], t);
-    this.holdMug(anim === ANIM.coffee, lean + armFwdR - bendR);
+    this.holdMug(anim === ANIM.coffee, lean);
     const lying = anim === ANIM.lie;
     if (legs) {
       legL.rotation.set(legs[0][0], 0, legs[0][1]);
@@ -2531,7 +2536,7 @@ export class Avatar {
     // The arms hang from mirrored shoulders, so each side opens outward with
     // its own sign; the elbows bend the forearms forward.
     armL.rotation.set(armSwing + armFwdL, 0, -armRaiseL);
-    armR.rotation.set(-armSwing + armFwdR, 0, armRaiseR);
+    armR.rotation.set(-armSwing + armFwdR, armTwistR, armRaiseR);
     elbowL.rotation.x = -bendL;
     elbowR.rotation.x = -bendR;
     this.body.position.y = bob + hop + dip;
@@ -2662,24 +2667,77 @@ export class Avatar {
     }
   }
 
-  // On a coffee break, the mug in the hand where a weapon would be (the
-  // weapon put away meanwhile), kept upright whatever the forearm does
-  // (pitch: the forearm's, from the torso's lean, the shoulder and the
-  // elbow), and tipped towards you as you sip.
-  holdMug(holding, pitch) {
-    const hand = this.hands[1];
-    if (holding !== (this.mug?.parent === hand)) {
+  // On a coffee break, a mug held in front of the chest, and lifted to the
+  // lips for a sip (this.sip, 0 to 1), tipping up as you drink: it is
+  // placed on the torso, kept upright against its lean, and the right hand
+  // reaches round it (mugGrip, reachTo); a weapon is put away meanwhile.
+  holdMug(holding, lean) {
+    if (holding !== (this.mug?.parent === this.torso)) {
       if (holding) {
         this.mug ??= coffeeMug(this.build.hand);
-        this.mug.position.set(-0.03 * this.build.hand, -0.05 * this.build.hand, 0.012 * this.build.hand);
-        hand.add(this.mug);
+        this.torso.add(this.mug);
         this.weapon?.removeFromParent();
       } else {
         this.mug.removeFromParent();
-        if (this.weapon && !this.handsPlaying) hand.add(this.weapon);
+        if (this.weapon && !this.handsPlaying) this.hands[1].add(this.weapon);
       }
     }
-    if (holding) this.mug.rotation.x = -pitch + (this.sip ?? 0) * 0.9;
+    if (!holding) return;
+    this.mug.position.fromArray(this.mugAt(this.sip));
+    this.mug.rotation.x = -lean - Math.max(0, this.sip - 0.5) * 1.6;
+  }
+
+  // Where the mug is, on the torso: before the chest, at the lips, or on its way between.
+  mugAt(sip) {
+    const B = this.build;
+    const k = B.arm[0] / 0.3;
+    const h = B.hand;
+    const held = [0.04 * k, B.shoulder[0] * 0.6, 0.19 * k];
+    const lips = [0, this.head.position.y + 0.05 - MUG_H * h * 0.2, 0.1 + MUG_R * h * 1.4];
+    // Brought up in an arc, out clear of the chest on the way.
+    const at = held.map((v, i) => v + (lips[i] - v) * sip);
+    at[2] += Math.sin(sip * Math.PI) * 0.05 * k;
+    return at;
+  }
+
+  // Where the right wrist is to hold it: beside it, on the handle's side.
+  mugGrip(sip) {
+    const k = this.build.arm[0] / 0.3;
+    const [x, y, z] = this.mugAt(sip);
+    return [x + MUG_R * this.build.hand + 0.03 * k, y - 0.05 * k, z - 0.005];
+  }
+
+  // The right arm's angles to put its wrist at a point on the torso: [the
+  // shoulder's forward swing, the upper arm's turn about its length, its
+  // raise out to the side, the elbow's bend], with the elbow kept down and
+  // out as it would be. Two bones: the elbow is on the circle of points
+  // the upper arm's length from the shoulder and the forearm's from the
+  // wrist, the one nearest down and out; the shoulder's swing and raise
+  // point the upper arm at it, and its turn and the elbow's bend the
+  // forearm on to the wrist (the arm's rotation order is XZY).
+  reachTo(at) {
+    const B = this.build;
+    const [a, b] = B.arm;
+    const v = new THREE.Vector3(at[0] - B.shoulder[1], at[1] - B.shoulder[0], at[2]);
+    const d = THREE.MathUtils.clamp(v.length(), Math.abs(a - b) + 1e-3, a + b - 1e-3);
+    const n = v.clone().normalize();
+    const c = (a * a - b * b + d * d) / (2 * d);
+    const rho = Math.sqrt(Math.max(0, a * a - c * c));
+    const w = new THREE.Vector3(0.45, -1, -0.15);
+    w.addScaledVector(n, -w.dot(n)).normalize();
+    const elbow = n.clone().multiplyScalar(c).addScaledVector(w, rho);
+    const u = elbow.clone().divideScalar(a);
+    const raise = Math.asin(THREE.MathUtils.clamp(u.x, -1, 1));
+    const fwd = Math.atan2(-u.z, -u.y);
+    // The forearm, back in the upper arm's own frame.
+    const f = n.multiplyScalar(d).sub(elbow).divideScalar(b);
+    const [ca, sa, cr, sr] = [Math.cos(fwd), Math.sin(fwd), Math.cos(raise), Math.sin(raise)];
+    const fy = f.y * ca + f.z * sa;
+    const fz = -f.y * sa + f.z * ca;
+    const lx = f.x * cr + fy * sr;
+    const ly = -f.x * sr + fy * cr;
+    const bend = Math.acos(THREE.MathUtils.clamp(-ly, -1, 1));
+    return [fwd, Math.atan2(lx, fz), raise, bend];
   }
 
   // How the curled-up pose (already set on the body, at full size) has to be
