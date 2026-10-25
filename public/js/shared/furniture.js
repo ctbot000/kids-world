@@ -475,6 +475,29 @@ const MODELS = {
     return out;
   },
 
+  // A hot tub (shared/seats.js): a round wooden barrel of steaming water in
+  // a rim that glows, lighting the room at night. Soakers sit in the middle
+  // of it, up to their shoulders in the water (the steam is drawn over them
+  // in game.js, from where they are).
+  'hot-tub'() {
+    const out = [];
+    // The barrel: staves in a ring, leaning out a little at the top, with two
+    // dark bands round them, on a low plinth.
+    for (const [y0, y1, r] of [[0.06, 0.4, 0.4], [0.4, 0.72, 0.43]]) {
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        const x = 0.5 + Math.cos(a) * r;
+        const z = 0.5 + Math.sin(a) * r;
+        out.push(box(x - 0.05, y0, z - 0.05, x + 0.05, y1, z + 0.05, i % 3 ? DARK_WOOD : WOOD, 'planks'));
+      }
+    }
+    out.push(box(0.04, 0.14, 0.04, 0.96, 0.18, 0.96, '#6b4226', 'planks'), box(0.04, 0.56, 0.04, 0.96, 0.6, 0.96, '#6b4226', 'planks'));
+    out.push(box(0.12, 0, 0.12, 0.88, 0.06, 0.88, '#6b4226', 'planks'));
+    // The water, up to the rim, glowing softly in the dark.
+    out.push(box(0.15, 0.1, 0.15, 0.85, 0.62, 0.85, '#9fe3ff', 'glow'));
+    return out;
+  },
+
   // An arcade machine, its screen glowing in the dark: a joystick and two
   // buttons under a screen showing the game it runs (shared/arcade.js), and
   // a lit marquee over it. This one runs Bop-a-Blob, with a blob on it.

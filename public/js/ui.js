@@ -4449,7 +4449,7 @@ export class UI {
       return;
     }
     const touch = this.input.touchMode;
-    const label = g.seat ? (g.atStudyDesk ? '📚 Study' : '👋 Get up') : seat.pose === 'lie' ? '🛏️ Lie down' : '🪑 Sit';
+    const label = g.seat ? (g.atStudyDesk ? '📚 Study' : '👋 Get up') : seat.pose === 'lie' ? '🛏️ Lie down' : seat.pose === 'soak' ? '♨️ Soak' : '🪑 Sit';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;

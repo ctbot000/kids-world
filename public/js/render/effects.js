@@ -364,6 +364,21 @@ export class Effects {
     this.add('zzz', x + 0.2, y, z, { vy: 0.5, vx: 0.25, size: 0.28, life: 1.8, grow: 0.2, color: '#c9d6ff' });
   }
 
+  // A wisp of steam off a hot tub (game.js updateHotTubs sends one up every
+  // few moments over whoever is soaking in it): a soft puff, rising slowly and
+  // spreading out as it fades.
+  steam(x, y, z) {
+    this.add('puff', x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5, {
+      vy: 0.45 + Math.random() * 0.25,
+      vx: (Math.random() - 0.5) * 0.12,
+      vz: (Math.random() - 0.5) * 0.12,
+      size: 0.16 + Math.random() * 0.1,
+      life: 1.7,
+      grow: 0.4,
+      color: '#eef8ff',
+    });
+  }
+
   // A blow landing at (x, y, z), going the way (dx, dz) along the ground: a
   // white flash there that is gone almost at once, a ring of sparkles in
   // color bursting out round it, and quick streaks flying on the way the
