@@ -16,9 +16,10 @@ export const SEATS = {
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
   'study-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
-  // Soaking in a hot tub (game.js draws the steam and the hearts): in the
-  // middle of the tub and low down, so the water comes up to your shoulders.
-  'hot-tub': { pose: 'soak', h: 0.12, at: [0.5, 0.5] },
+  // Soaking in a hot tub (game.js draws the steam and the hearts): low down,
+  // so the water comes up to your shoulders, with room for two side by side
+  // (spots, the first one free).
+  'hot-tub': { pose: 'soak', h: 0.12, spots: [[0.32, 0.5], [0.68, 0.5]] },
 };
 
 // The four ways along the ground, as RAIL_DIRS.
@@ -77,8 +78,9 @@ export function seatNear(world, body, reach = 1.6, taken = () => false) {
 // Where you are on the seat in cell (x, y, z): { x, y, z, yaw, pose, cell },
 // the point your hips are at (and for a bed, your feet), or null if it is
 // not a seat. In a bed you lie from its foot, the front of the bed in front
-// of all the others joined to it, with your head towards its head.
-export function seatPose(world, x, y, z) {
+// of all the others joined to it, with your head towards its head. A seat
+// with room for more than one (a hot tub) has spots: `spot` says which.
+export function seatPose(world, x, y, z, spot = 0) {
   const id = world.get(x, y, z);
   const seat = seatOf(id);
   if (!seat) return null;
@@ -101,8 +103,30 @@ export function seatPose(world, x, y, z) {
     const [px, pz] = layoutPoint(front, 0.5, 0.14);
     return { x: cx + px, y: y + seat.h, z: cz + pz, yaw, pose: 'lie', cell: { x, y, z } };
   }
-  const [px, pz] = layoutPoint(front, seat.at[0], seat.at[1]);
+  const [ax, az] = seat.spots?.[spot] ?? seat.at;
+  const [px, pz] = layoutPoint(front, ax, az);
   return { x: x + px, y: y + seat.h, z: z + pz, yaw, pose: seat.pose, cell: { x, y, z } };
+}
+
+// The spot free in the seat in cell (x, y, z), with friends sitting where
+// `others` says ({ x, y, z } each): its number, or -1 if it is taken (each
+// friend is in the spot nearest them). Two can soak in a hot tub together.
+export function freeSpot(world, x, y, z, others) {
+  const seat = seatOf(world.get(x, y, z));
+  if (!seat) return -1;
+  const spots = seat.spots ? seat.spots.map((_, k) => seatPose(world, x, y, z, k)) : [seatPose(world, x, y, z)];
+  const taken = new Set();
+  for (const o of others) {
+    let best = -1;
+    let near = 0.5;
+    spots.forEach((s, k) => {
+      const d = Math.hypot(o.x - s.x, o.z - s.z);
+      if (d < near && Math.abs(o.y - s.y) < 0.8) [best, near] = [k, d];
+    });
+    if (best >= 0) taken.add(best);
+  }
+  for (let k = 0; k < spots.length; k++) if (!taken.has(k)) return k;
+  return -1;
 }
 
 const open = (world, x, y, z) => !BLOCKS[world.get(x, y, z)]?.solid && !BLOCKS[world.get(x, y + 1, z)]?.solid;
@@ -126,4 +150,19 @@ export function standUpAt(world, x, y, z) {
     if (open(world, x + dx, y, z + dz) && BLOCKS[world.get(x + dx, y - 1, z + dz)]?.solid) return { x: x + dx + 0.5, y, z: z + dz + 0.5 };
   }
   return { x: x + 0.5, y: y + 1, z: z + 0.5 };
+}
+
+// The hot tubs two or more of `people` ({ x, y, z } each, where they are)
+// are soaking in together: { x, y, z, in } for each, `in` the indexes of the
+// people in it (game.js shows hearts over it).
+export function tubsShared(world, people) {
+  const tubs = new Map();
+  people.forEach((p, i) => {
+    const [x, y, z] = [Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)];
+    if (BLOCKS[world.get(x, y, z)]?.model !== 'hot-tub') return;
+    const key = `${x},${y},${z}`;
+    if (!tubs.has(key)) tubs.set(key, { x, y, z, in: [] });
+    tubs.get(key).in.push(i);
+  });
+  return [...tubs.values()].filter((t) => t.in.length > 1);
 }
