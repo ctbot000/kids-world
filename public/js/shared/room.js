@@ -17,7 +17,7 @@ import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, isFixed, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { growEdit, validCells } from './tools.js';
@@ -212,6 +212,10 @@ export class Room {
     // The games of Go at the island's Go boards (go.js), never saved either.
     this.go = new GoSim();
     this.goSent = '';
+    // The fireflies out tonight (their critter ids), and whether it is night
+    // as far as they are concerned. Never saved: they come out again at dusk.
+    this.fireflies = [];
+    this.firefliesNight = null;
 
     if (save) {
       this.loadSave(save);
@@ -817,7 +821,8 @@ export class Room {
       }
       case 'invite': {
         // A fun park's rides are built with it, not brought.
-        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // Nor are fireflies: they come out by themselves at night.
+        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || CRITTER_INFO[msg.type].look || ![msg.x, msg.y, msg.z].every(finite)) return;
         // A dragon comes only to those who have tamed a volcano island's
         // dragon often enough (dragon.js TAMES_TO_INVITE: their page keeps
         // count and only sends for one then), and tame: one of your own.
@@ -827,7 +832,7 @@ export class Room {
           this.notice(conn, `${this.world.name} stays just as it was made, so its toy box stays shut!`, 'info');
           return;
         }
-        if (this.critters.list.length >= this.critters.max) {
+        if (this.critters.animals() >= this.critters.max) {
           this.notice(conn, 'The island is full of animal friends already!', 'info');
           return;
         }
@@ -1132,6 +1137,7 @@ export class Room {
     for (const p of this.players.values()) {
       if (p.online) where.set(p.id, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3], anim: p.s[4], flying: (p.s[5] & 1) === 1, hat: p.look?.hat, hair: lookHair(p.look), tall: lookTall(p.look) });
     }
+    this.stepFireflies(isNight(env.time));
     this.critters.step(this.world, dt, now, where, isNight(env.time));
     // A wave with nobody left to see it goes home, to come again on Start.
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
@@ -1178,6 +1184,45 @@ export class Room {
     this.grow(now);
     this.farm(now);
     this.nature(now);
+  }
+
+  // The fireflies: the host lets a few out over the flowers at dusk and
+  // sees them all home again at dawn, telling everyone, so an island's
+  // night has the same little lights for everybody in it.
+  stepFireflies(night) {
+    if (night === this.firefliesNight) return;
+    this.firefliesNight = night;
+    const w = this.world;
+    if (!night) {
+      for (const id of this.fireflies.splice(0)) {
+        const c = this.critters.remove(id);
+        if (c) this.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+      return;
+    }
+    // Over a flower first, or over open grass where there are none; low,
+    // so the glow stays near the ground.
+    const flowerTop = (x, z) => {
+      const h = w.top(x, z);
+      return h >= 0 && FLOWERS.has(w.get(x, h + 1, z)) ? h : -1;
+    };
+    for (let n = 0; n < MAX_FIREFLIES; n++) {
+      let at = null;
+      for (let tries = 0; tries < 60 && !at; tries++) {
+        const x = this.rng.int(2, w.W - 3);
+        const z = this.rng.int(2, w.D - 3);
+        const h = tries < 40 ? flowerTop(x, z) : w.top(x, z);
+        if (h < 1 || w.get(x, h, z) !== B.GRASS) continue;
+        if (w.get(x, h + 1, z) !== B.AIR && B.KIND[w.get(x, h + 1, z)] !== B.K_PLANT) continue;
+        at = [x + 0.5, h + 1 + 0.6 + this.rng.range(0, 0.4), z + 0.5];
+      }
+      if (!at) break;
+      const c = this.critters.add('firefly', at[0], at[1], at[2]);
+      if (c) {
+        this.fireflies.push(c.id);
+        this.broadcast({ t: 'cadd', critter: { id: c.id, type: c.type, name: c.name }, s: this.critters.pack().find((r) => r[0] === c.id), by: 0 });
+      }
+    }
   }
 
   // Animals and monsters that walked into someone, or into each other, step

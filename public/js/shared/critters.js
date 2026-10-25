@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -55,6 +55,10 @@ export const CRITTER_INFO = {
   bird: { name: 'Bird', icon: '🐦', speed: 4.2, swims: false, flies: true, names: ['Skye', 'Robin', 'Melody', 'Whistle', 'Feather', 'Kiwi', 'Pepper', 'Wren', 'Tilly', 'Dash'] },
   owl: { name: 'Owl', icon: '🦉', speed: 3.2, swims: false, flies: true, nocturnal: true, names: ['Hootie', 'Ollie', 'Luna', 'Starry', 'Moony', 'Professor', 'Twig', 'Nutmeg', 'Hazel', 'Pinecone'] },
   bee: { name: 'Bee', icon: '🐝', speed: 2.2, swims: false, flies: true, names: ['Buzzy', 'Bumble', 'Stripes', 'Nectar', 'Pollen', 'Fuzzy', 'Bizzy', 'Jellybean', 'Dot', 'Zippy'] },
+  // A firefly is only for looking at: it comes out over the flowers at night
+  // (the room invites them at dusk and sees them off at dawn, Room.stepFireflies)
+  // and is never in the toy box, nor saved with the island.
+  firefly: { name: 'Firefly', icon: '✨', speed: 0.8, swims: false, flies: true, nocturnal: true, look: true, names: ['Glimmer', 'Flicker', 'Ember', 'Wisp', 'Glow', 'Dusk', 'Twinkle', 'Spark', 'Lantern', 'Mote'] },
   seagull: { name: 'Seagull', icon: '🕊️', speed: 5, swims: true, flies: true, names: ['Gully', 'Skipper', 'Captain', 'Sandy', 'Sailor', 'Coral', 'Splashy', 'Windy', 'Shelly', 'Marina'] },
   // sea: 'water' never leaves it; 'beach' and 'shore' walk the ground (the
   // sand, the cold shore) and float on the water, or wade along its bottom.
@@ -141,12 +145,16 @@ export const BIG = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].big);
 export const VEHICLES = CRITTER_TYPES.filter((type) => CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].fixed);
 // A fun park's rides, which stay where they were built.
 export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
-// The animals, without the vehicles — and without the wild ones, which are
-// their island's own (the dragon), to invite only once tamed (dragon.js).
-export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild);
+// The animals, without the vehicles — without the wild ones, which are
+// their island's own (the dragon), to invite only once tamed — and without
+// the look-only ones that come and go on their own (the firefly).
+export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
 // New states go on the end too.
 export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire'];
 export const MAX_CRITTERS = 64;
+// The most fireflies an island lets out at once: enough for a little wonder,
+// never a swarm — and they never take a seat an animal could have.
+export const MAX_FIREFLIES = 20;
 
 // How many more animals a bigger island has than a cozy one (128 blocks
 // across), side to side: a big one half as many again, a huge one twice.
@@ -776,7 +784,12 @@ export class CritterSim {
   }
 
   add(type, x, y, z, name = null, yaw = null) {
-    if (!CRITTER_INFO[type] || this.list.length >= this.max) return null;
+    if (!CRITTER_INFO[type]) return null;
+    // The look-only friends (fireflies) have a cap of their own: they never
+    // take a seat an animal could have.
+    if (CRITTER_INFO[type].look) {
+      if (this.list.filter((c) => CRITTER_INFO[c.type].look).length >= MAX_FIREFLIES) return null;
+    } else if (this.animals() >= this.max) return null;
     const info = CRITTER_INFO[type];
     const rng = info.vehicle ? this.vehicleRng : info.big ? this.bigRng : this.rng;
     const c = {
@@ -822,9 +835,15 @@ export class CritterSim {
     return this.list.find((c) => c.id === id) ?? null;
   }
 
+  // How many seats are taken: everyone but the look-only fireflies.
+  animals() {
+    return this.list.reduce((n, c) => n + (CRITTER_INFO[c.type].look ? 0 : 1), 0);
+  }
+
   pet(id, player, now) {
     const c = this.get(id);
-    if (!c) return null;
+    // A firefly is only for looking at: it is not petted, nor fed.
+    if (!c || CRITTER_INFO[c.type].look) return null;
     c.happyUntil = now + HAPPY_MS;
     c.state = 'happy';
     if (player && !c.onHead) c.yaw = Math.atan2(player.x - c.x, player.z - c.z);
@@ -1647,6 +1666,9 @@ export class CritterSim {
       case 'bee':
         this.nextFlower(world, c);
         return;
+      case 'firefly':
+        this.glow(world, c);
+        return;
       default:
         this.flutter(world, c);
     }
@@ -1685,6 +1707,21 @@ export class CritterSim {
     }
     const s = this.around(c, 1.5, 5, 12);
     this.flyTo(c, this.airAbove(world, s.x, s.z, 1.4, 3.2), 'air');
+  }
+
+  // Fireflies: a slow drift, mostly from flower to flower and never far from
+  // home, hovering a little above the blossoms (or low over the grass where
+  // there are none), so the glow stays near the ground where it can be seen.
+  glow(world, c) {
+    if (this.rng.chance(0.65)) {
+      const f = this.findPerch(world, c, 0.5, 4, 8, (q) => q.flower, 24);
+      if (f) {
+        this.flyTo(c, { ...f, y: f.y + 0.7 + this.rng.range(0, 0.3) }, 'flower');
+        return;
+      }
+    }
+    const s = this.around(c, 1, 3, 8);
+    this.flyTo(c, this.airAbove(world, s.x, s.z, 0.6, 1.2), 'air');
   }
 
   // Seagulls: round and round, high over the shore, on a circle of their own.
@@ -2334,7 +2371,9 @@ export class CritterSim {
   }
 
   save() {
-    return this.list.map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), yaw: +c.yaw.toFixed(2), ...(c.tame ? { tame: true } : {}) }));
+    // The fireflies are the night's own: they come and go by themselves, so
+    // they are never written into the island.
+    return this.list.filter((c) => !CRITTER_INFO[c.type].look).map((c) => ({ type: c.type, name: c.name, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), yaw: +c.yaw.toFixed(2), ...(c.tame ? { tame: true } : {}) }));
   }
 }
 

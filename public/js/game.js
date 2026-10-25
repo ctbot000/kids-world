@@ -4256,6 +4256,11 @@ export class Game extends EventTarget {
       this.send({ t: 'critter', op: 'bye', id });
       return;
     }
+    // A firefly is only for looking at: no petting, and no fruit spent.
+    if (CRITTER_INFO[entry.type].look) {
+      this.emit('toast', { icon: CRITTER_INFO[entry.type].icon, text: `${entry.name || 'A firefly'} glows softly — just for looking at!` });
+      return;
+    }
     // A vehicle is only honked at, whatever is in your hand.
     if (CRITTER_INFO[entry.type].vehicle) {
       this.send({ t: 'critter', op: 'pet', id });
@@ -4634,7 +4639,7 @@ export class Game extends EventTarget {
       const rare = c.type === 'seagull' || c.type === 'whale' ? 2 : 1;
       if (!info?.vehicle && state !== 'sleep' && night === Boolean(info?.nocturnal) && now > c.voiceAt && this.near(s.x, s.y, s.z, far)) {
         c.voiceAt = now + (9000 + Math.random() * 14000) * rare;
-        if (c.type !== 'butterfly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
+        if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
       this.seaSights(c, s, state, now);

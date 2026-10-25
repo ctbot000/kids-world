@@ -355,6 +355,32 @@ function bee() {
   return { group: g, body, pivot, head, eyes, wings, folded: [], legs: null, tail: null, height: 0.16, shadow: 0, tiny: true, flapRate: 48 };
 }
 
+// A firefly: a wee dark beetle whose abdomen glows, brighter as it pulses.
+// No wings to speak of — just a shell and a lantern, tiny like the bee's.
+function firefly() {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.06;
+  body.add(pivot);
+  // The shell over the back, open at the tail end where the lantern shows.
+  pivot.add(mesh(sphere(), toon('#4a3a30'), 0, 0, -0.01, 0.05, 0.045, 0.065));
+  pivot.add(mesh(sphere(), toon('#5c4a3c'), 0, 0.01, 0.045, 0.04, 0.035, 0.03));
+  // The lantern: a glowing tip, drawn bright so it shows after dark.
+  const lantern = mesh(sphere(), toon('#ffe97a', { emissive: 1.6 }), 0, -0.005, -0.075, 0.032);
+  pivot.add(lantern);
+  const head = new THREE.Group();
+  head.position.set(0, 0.005, 0.055);
+  pivot.add(head);
+  head.add(mesh(sphere(), toon('#3a3028'), 0, 0, 0, 0.032));
+  const eyes = eyesOn(head, 0.032, 0.032, 0.032, 0.014, 0.005, 0.008);
+  for (const side of [-1, 1]) head.add(mesh(cylinder(0.003, 0.003, 0.04, 4), toon(BLACK), side * 0.012, 0.03, 0.005).rotateX(-side * 0.4 - 0.3));
+  const glass = toon('#eef8ff', { transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+  const wings = wingPair(pivot, { x: 0.012, y: 0.045, z: -0.02, length: 0.085, width: 0.03, thick: 0.005, color: '#ddeaff', material: glass });
+  return { group: g, body, pivot, head, eyes, wings, lantern, folded: [], legs: null, tail: null, height: 0.12, shadow: 0, tiny: true, flapRate: 24 };
+}
+
 function seagull() {
   const WHITE_FEATHERS = '#fbfbf8';
   const GREY = '#aab4c0';
@@ -1244,7 +1270,7 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1343,6 +1369,9 @@ export class CritterModel {
         break;
       case 'bee':
         this.buzz(state);
+        break;
+      case 'firefly':
+        this.glowPulse(state);
         break;
       case 'fish':
         this.school(state);
@@ -1583,6 +1612,21 @@ export class CritterModel {
     this.pivot.position.x = sitting ? 0 : Math.sin(t * 2.65) * 0.04;
     this.pivot.rotation.z = sitting ? 0 : Math.sin(t * 3.1) * 0.15;
     if (!sitting) this.body.position.y = Math.sin(t * 5.3) * 0.03;
+  }
+
+  // A firefly's lantern breathes: a slow soft blink that swells while it
+  // sips at a flower, and winks out asleep by day. The lamp itself scales
+  // (its lit material is shared), a haze of wings and a gentle bob about it.
+  glowPulse(state) {
+    const t = this.time;
+    const asleep = state === 'sleep';
+    const sip = state === 'eat';
+    const beat = asleep ? 0 : sip ? 0.72 + Math.sin(t * 5) * 0.28 : 0.5 + Math.sin(t * 2.2) * Math.sin(t * 0.9) * 0.5;
+    this.lantern.scale.setScalar(asleep ? 0.3 : Math.max(0.001, 0.5 + beat));
+    const a = asleep ? 0.1 : 0.3 + Math.sin(t * this.flapRate) * 0.2;
+    for (const w of this.wings) w.rotation.z = w.userData.wing * a;
+    this.pivot.rotation.z = asleep ? 0 : Math.sin(t * 2.1) * 0.12;
+    this.body.position.y = asleep ? 0 : Math.sin(t * 3.4) * 0.02;
   }
 
   // Three fish, tails going, keeping together; one of them leaps out of the
