@@ -2983,6 +2983,8 @@ export class UI {
     });
     on('defense', () => this.renderDefense());
     on('dizzy', () => this.renderHp());
+    // On and off a dragon's back: its own hearts by yours (renderHp).
+    on('ride', () => this.renderHp());
     on('welcome', () => {
       this.renderDefense();
       this.renderShared();
@@ -4124,13 +4126,20 @@ export class UI {
     }
     const { hp, maxHp } = g;
     const share = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
+    // A dragon under you has hearts of its own, by yours: monster bumps take
+    // those (game.js rideHeartsNews), never your HP.
+    const ride = g.riding?.type === 'dragon' ? g.critters.get(g.riding.id) : null;
+    const dragon = ride ? { hp: ride.rideHearts ?? 0, max: ride.rideMax ?? 0 } : null;
+    const dragonBar = dragon ? h('span', { class: `hp-bar dragon${dragon.hp <= dragon.max * 0.25 ? ' low' : ''}` }, h('span', { style: `width: ${((Math.max(0, dragon.hp) / Math.max(1, dragon.max)) * 100).toFixed(1)}%` })) : '';
     const camps = adv ? [...adv.camps.values()].filter((c) => c.kind === 'camp') : [];
     const freed = camps.filter((c) => c.freed).length;
-    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
+    el.setAttribute('aria-label', `${hp} of ${maxHp} HP${dragon ? `, dragon ${dragon.hp} of ${dragon.max}` : ''}${adv ? `, ${freed} of ${camps.length} camps free` : ''}`);
     el.replaceChildren(
       h('span', { class: 'hp-label' }, '❤️ HP'),
       h('span', { class: `hp-bar${share <= 0.25 ? ' low' : share <= 0.5 ? ' half' : ''}` }, h('span', { style: `width: ${(share * 100).toFixed(1)}%` })),
       h('span', { class: 'hp-num' }, `${hp}/${maxHp}`),
+      dragon ? h('span', { class: 'hp-label' }, '🐲') : '',
+      dragonBar,
       adv ? h('span', { class: 'camps' }, `🚩 ${freed}/${camps.length}`) : '',
     );
     if (hp < (this.hpShown ?? Infinity)) {
@@ -6427,7 +6436,13 @@ export class UI {
     const me = g.me?.body;
     const el = $('btn-attack');
     const close = (m, far = ATTACK_SHOW) => Math.hypot(m.x - me.x, m.y - me.y, m.z - me.z) < far;
-    const near = Boolean(me) && !g.riding && ([...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m)) || [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6)));
+    // A monster about shows the bop button — on foot, or on a dragon's back,
+    // where it breathes fire at them (game.js breath). A wild dragon near
+    // shows it too, but only on foot: from a tame dragon's back there is no
+    // bopping dragons.
+    const monsterNear = Boolean(me) && (!g.riding || g.riding.type === 'dragon') && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m));
+    const wildNear = Boolean(me) && !g.riding && [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6));
+    const near = monsterNear || wildNear;
     if (el.hidden === near) el.hidden = !near;
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;

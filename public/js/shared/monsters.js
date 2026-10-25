@@ -370,7 +370,7 @@ export class MonsterSim {
   }
 
   // Moves them on by dt seconds. people: the players on the island, as
-  // { id, x, y, z, flying, riding, dizzy, safeUntil }. options: roam, whether
+  // { id, x, y, z, flying, riding, dizzy, safeUntil, mount }. options: roam, whether
   // monsters come out round the players (the island rule); havens, the safe
   // places ({ x, z, r, kind }); camps, what the camp monsters keep to (an
   // AdventureSim, or anything with campById). Returns who each one bumped
@@ -578,7 +578,8 @@ export class MonsterSim {
       if (now >= m.giggle && now >= (m.dazed ?? 0) && !m.passive) {
         for (const p of people) {
           if (p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
-          if (Math.hypot(p.x - b.x, p.z - b.z) > b.radius + BUMP_PAD || sheltered(p)) continue;
+          // mount: the dragon someone rides (room.js), as wide as it is.
+          if (Math.hypot(p.x - b.x, p.z - b.z) > b.radius + BUMP_PAD + (p.mount ?? 0) || sheltered(p)) continue;
           // Their feet over its top: they are jumping on it, not bumped (see
           // bop), unless it is a Spiky, which nobody lands on.
           const top = kindOf(m.kind).land ? b.height - 0.25 : b.height + 0.3;

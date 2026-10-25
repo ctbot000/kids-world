@@ -26,7 +26,7 @@ import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
-import { canRide, FIRE, hitDragon, isWild, stepDragons } from './dragon.js';
+import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
@@ -885,9 +885,15 @@ export class Room {
         const c = this.critters.get(msg.id);
         const r = c && CRITTER_INFO[c.type].ride;
         if (!r || c.rider === p.id || c.passengers?.includes(p.id)) return;
-        // A wild dragon has to be tamed first (dragon.js).
+        // A wild dragon has to be tamed first (dragon.js), and a tired one
+        // (its ride-hearts gone, see stepRides) needs a moment to catch its
+        // breath before anyone climbs on again.
         if (!canRide(c)) {
           this.notice(conn, `${c.name} the dragon is wild! Bop it until it is tired out to tame it — and watch out for its fire!`, 'info');
+          return;
+        }
+        if (c.type === 'dragon' && (rideOf(c).restUntil ?? 0) > now) {
+          this.notice(conn, `${c.name} is worn out! Let it catch its breath a moment.`, 'info');
           return;
         }
         // With someone driving, the others ride along, in the seats it has;
@@ -917,6 +923,9 @@ export class Room {
         break;
       case 'hit':
         this.hitDragon(p, msg);
+        break;
+      case 'fire':
+        this.dragonBreath(p, msg);
         break;
       case 'trick': {
         // A spout from the whale, a spray from the elephant's trunk, or a honk.
@@ -1125,6 +1134,7 @@ export class Room {
     // water boils away and ice melts, and HP comes back whatever took it.
     this.stepLava(now);
     this.stepMelts(now);
+    this.stepRides(now);
     this.healUp(now);
     // A round of hide and seek, as it goes.
     if (this.hideseek.round) {
@@ -1185,6 +1195,13 @@ export class Room {
     const people = [];
     for (const [id, w] of where) {
       const p = this.players.get(id);
+      // Someone on a dragon's back is fair game, as the dragon under them:
+      // a bump there takes its hearts (see hurt), never theirs.
+      const dragon = this.dragonUnder(id);
+      if (dragon) {
+        people.push({ id, x: dragon.x, y: dragon.y, z: dragon.z, flying: w.flying, riding: false, mount: CRITTER_INFO.dragon.ride.radius, safeUntil: 0, dizzy: false });
+        continue;
+      }
       people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now });
     }
     const adv = this.adventure;
@@ -1216,6 +1233,11 @@ export class Room {
   hurt(pid, monster, now, stomp = false) {
     const p = this.players.get(pid);
     if (!p) return;
+    const dragon = this.dragonUnder(pid);
+    if (dragon) {
+      this.bumpRide(dragon, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump, now);
+      return;
+    }
     const b = monster.body;
     const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2) };
     if (isHeavy(monster.kind)) msg.big = true;
@@ -1275,6 +1297,50 @@ export class Room {
     for (const c of news.wild) this.broadcast({ t: 'dragon', id: c.id, fx: 'wild' });
   }
 
+  // Fire, at its rider's word: a tame dragon with someone on its back
+  // breathes a short burst ahead of it (dragon.js RIDE_FIRE), at most about
+  // once a second — the same flames a wild one pours, and every monster in
+  // them takes one bop (the rider's, so it counts for them). A tired dragon
+  // (its ride-hearts gone, see the bumps below) does nothing at all.
+  dragonBreath(p, msg) {
+    const c = this.critters.get(msg.id);
+    if (!c || c.type !== 'dragon' || c.rider !== p.id || !canRide(c)) return;
+    const now = this.now();
+    const ride = rideOf(c);
+    if ((ride.restUntil ?? 0) > now || now - ride.breathAt < RIDE_FIRE.every) return;
+    ride.breathAt = now;
+    this.broadcast({ t: 'dragon', id: c.id, fx: 'fire', yaw: +c.yaw.toFixed(3), ms: RIDE_FIRE.ms });
+    // The monsters in the flames: each a heart off (the wild fire's reach and
+    // cone, dragon.js inFlames), and pop with the last — told as any bop is.
+    for (const m of [...this.monsters.list]) {
+      if (m.march) {
+        if (this.inFlamesOf(c, m.body)) this.bopMarcher(p, m, now, 1);
+        continue;
+      }
+      if (m.kind === 'king') {
+        if (this.inFlamesOf(c, m.body)) this.bopKing(p, m, now, 1);
+        continue;
+      }
+      if (!this.inFlamesOf(c, m.body)) continue;
+      const hit = this.monsters.hit(m, p.id, { x: c.x, y: c.y, z: c.z }, now, 1);
+      if (hit.wait) continue;
+      if (hit.hearts) {
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+        continue;
+      }
+      this.monsters.remove(m.id);
+      const b = m.body;
+      this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+      if (m.camp) this.adventure?.guardGone(m, now);
+    }
+  }
+
+  // Whether a monster's body stands in the flames a dragon breathes from
+  // where it is (its middle, facing the way it faces).
+  inFlamesOf(c, b) {
+    return inFlames({ x: c.x, y: c.y, z: c.z }, c.yaw, b.x, b.y + b.height / 2, b.z);
+  }
+
   // A bop at a wild dragon, from as far as an arm (or the toy weapon in it)
   // reaches: hearts off it, and with the last it is tame, and everyone who
   // bopped it in that fight has tamed it (their pages count it).
@@ -1313,6 +1379,59 @@ export class Room {
       const s = p.s;
       if (this.world.get(Math.floor(s[0]), Math.floor(s[1] + 0.5), Math.floor(s[2])) !== B.LAVA) continue;
       this.knock(p, now, hpAfterBump(p.hp, LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });
+    }
+  }
+
+  // The tame dragon someone is riding, and can still ride, or null.
+  dragonUnder(pid) {
+    for (const c of this.critters.list) {
+      if (c.rider === pid) return c.type === 'dragon' && canRide(c) && !(rideOf(c).restUntil > this.now()) ? c : null;
+    }
+    return null;
+  }
+
+  // A monster bumped into a ridden dragon (hurt): bumps of its hearts off
+  // (the rider's HP never, they are safe up on its back), not too often, and
+  // with none left the rider is set down beside it, unhurt, while the dragon
+  // rests, too tired to ride, for a short while.
+  bumpRide(c, bumps, now) {
+    const ride = rideOf(c);
+    if (now - ride.bumpAt < RIDE_BUMP_MS) return;
+    ride.hearts = Math.max(0, ride.hearts - bumps * BUMP_HP);
+    ride.bumpAt = now;
+    ride.healAt = now;
+    if (ride.hearts) {
+      this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
+      return;
+    }
+    ride.restUntil = now + RIDE_REST_MS;
+    this.unride(c.rider);
+    this.broadcast({ t: 'chearts', id: c.id, hearts: 0, max: ride.max, rest: RIDE_REST_MS });
+  }
+
+  // The tame dragons being ridden, as they go: their hearts come back by
+  // themselves once no monster has been near for a while, and one resting
+  // (see bumpRide) has all of them back when its rest is over.
+  stepRides(now) {
+    for (const c of this.critters.list) {
+      // Only a rideable dragon has ride-hearts (a wild one's fight has its own).
+      if (c.type !== 'dragon' || !c.ride || !canRide(c)) continue;
+      const ride = c.ride;
+      if (ride.restUntil) {
+        if (now < ride.restUntil) continue;
+        ride.restUntil = 0;
+        ride.hearts = ride.max;
+        ride.healAt = now;
+        this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
+        continue;
+      }
+      // No monster near for a while: a heart back, again and again until full.
+      if (ride.hearts >= ride.max) continue;
+      const near = this.monsters.list.some((m) => !m.march && Math.hypot(m.body.x - c.x, m.body.z - c.z) < RIDE_HEAL_NEAR);
+      if (near || now - ride.healAt < RIDE_HEAL_MS) continue;
+      ride.hearts++;
+      ride.healAt = now;
+      this.broadcast({ t: 'chearts', id: c.id, hearts: ride.hearts, max: ride.max });
     }
   }
 

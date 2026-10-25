@@ -47,6 +47,28 @@ export const TAMES_TO_INVITE = 10;
 // New moods go on the end: the wire sends the index (critters.js pack).
 export const MOODS = ['asleep', 'awake', 'tame'];
 
+// Riding a tame dragon (room.js keeps these on the critter, as c.ride): it
+// has hearts of its own — more than a player's — and a monster's bump takes
+// them instead of the rider's HP. At its rider's word (X, or 👊) it breathes
+// a short burst of fire ahead of it, at most about once a second; every
+// monster in the flames takes one bop. With its hearts gone it rests, too
+// tired to ride, and they come back by themselves once no monster has been
+// near for a while.
+export const RIDE_HEARTS = 120;
+export const RIDE_FIRE = { every: 1000, ms: 600 };
+export const RIDE_REST_MS = 8000;
+export const RIDE_HEAL_MS = 3000;
+export const RIDE_HEAL_NEAR = 10;
+// A monster's bump takes one heart off at most this often (per dragon).
+export const RIDE_BUMP_MS = 900;
+
+// A tame dragon's ride-hearts and breath, made the first time they are
+// needed (a wild dragon's fight has its own hearts, above).
+export function rideOf(c) {
+  if (!c.ride) c.ride = { hearts: RIDE_HEARTS, max: RIDE_HEARTS, breathAt: -Infinity, bumpAt: -Infinity, healAt: -Infinity, restUntil: 0 };
+  return c.ride;
+}
+
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 
 // Whether this is a wild dragon: the island's own, not one brought from the toy box.
@@ -197,10 +219,13 @@ export function hitDragon(c, pid, now, power = 1) {
 }
 
 // What the wire carries of a dragon's fight (critters.js pack): its mood,
-// hearts and how many it had. Null for any other critter.
+// hearts and how many it had. Null for any other critter. A dragon that has
+// been ridden adds its ride-hearts too (a fourth number), so everyone sees
+// how it is doing under its rider.
 export function packFight(c) {
   if (c.type !== 'dragon') return null;
-  if (c.tame) return [MOODS.indexOf('tame'), 0, DRAGON_HEARTS];
+  const ride = c.ride ? [c.ride.hearts] : [];
+  if (c.tame) return [MOODS.indexOf('tame'), 0, DRAGON_HEARTS, ...ride];
   const f = fightOf(c);
-  return [MOODS.indexOf(f.mood), f.hearts, f.max];
+  return [MOODS.indexOf(f.mood), f.hearts, f.max, ...ride];
 }

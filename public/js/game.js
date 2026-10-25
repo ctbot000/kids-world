@@ -18,7 +18,7 @@ import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './
 import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, isBlank, isBoard } from './shared/drawing.js';
-import { DRAGON_HEARTS, FIRE, TAMES_TO_INVITE } from './shared/dragon.js';
+import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -410,6 +410,9 @@ export class Game extends EventTarget {
       case 'ride':
         this.rideNews(msg);
         break;
+      case 'chearts':
+        this.rideHeartsNews(msg);
+        break;
       case 'dragon':
         this.dragonNews(msg);
         break;
@@ -750,6 +753,11 @@ export class Game extends EventTarget {
       let entry = this.critters.get(c.id);
       if (!entry) entry = this.addCritter({ ...c, name: '' });
       entry.fight = c.fight;
+      // A ridden dragon's own hearts ride along in its fight (dragon.js packFight).
+      if (c.fight?.rideHearts != null) {
+        entry.rideHearts = c.fight.rideHearts;
+        entry.rideMax = RIDE_HEARTS;
+      }
       entry.snaps.push({ t: now, x: c.x, y: c.y, z: c.z, yaw: c.yaw, state: c.state });
       if (entry.snaps.length > 8) entry.snaps.shift();
     }
@@ -761,6 +769,11 @@ export class Game extends EventTarget {
     if (!c || this.critters.has(c.id)) return;
     const entry = this.addCritter({ ...c, name: msg.critter.name });
     entry.fight = c.fight;
+    // A ridden dragon's own hearts ride along in its fight (dragon.js packFight).
+    if (c.fight?.rideHearts != null) {
+      entry.rideHearts = c.fight.rideHearts;
+      entry.rideMax = RIDE_HEARTS;
+    }
     this.renderer.effects.sparkles(c.x, c.y + 0.4, c.z, 14);
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
@@ -1269,6 +1282,9 @@ export class Game extends EventTarget {
     const p = c.model.group.position;
     const near = this.near(p.x, p.y, p.z, 45);
     if (msg.fx === 'fire') {
+      // Its own rider lit the flames and heard the whoosh at once (breath);
+      // the island's word is for everyone else.
+      if (this.riding?.id === c.id) return;
       c.fireYaw = Number(msg.yaw) || 0;
       c.fireUntil = performance.now() + (Number(msg.ms) || FIRE.ms);
       if (near) this.sound.play('fire');
@@ -1457,7 +1473,9 @@ export class Game extends EventTarget {
   // nothing through a wall; the bubble blaster's bubble goes at the nearest
   // one in front of you instead. Returns the nearest one's id, or null.
   attack() {
-    if (!this.world || !this.me || this.riding || this.aboard) return null;
+    if (!this.world || !this.me || this.aboard) return null;
+    // On a dragon's back, a swing is a breath of fire instead (see breath).
+    if (this.riding) return this.breath();
     if (this.dizzy || !this.attackReady()) return null;
     const now = performance.now();
     const weapon = wornWeapon(this.profile.data.gear);
@@ -1548,6 +1566,30 @@ export class Game extends EventTarget {
       this.emit('toast', { icon: weapon?.icon ?? '👊', text: blaster ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
     }
     return null;
+  }
+
+  // On a dragon's back (attack above): a burst of fire ahead of it, told to
+  // the island (room.js dragonBreath, which bops the monsters in the flames
+  // and keeps the once-a-second pace) and lit here at once, the way a wild
+  // dragon's flames show (dragonFrame). Returns the ride, or null — nothing
+  // at all when the breath is not ready yet.
+  breath() {
+    const ride = this.riding;
+    if (!ride || ride.type !== 'dragon') return null;
+    const now = performance.now();
+    if (now - (this.breathAt ?? -Infinity) < RIDE_FIRE.every) return null;
+    this.breathAt = now;
+    this.send({ t: 'critter', op: 'fire', id: ride.id });
+    // The flames and the whoosh right away, on its entry — that is what
+    // mountPose and dragonFrame read — and the island's word comes to
+    // everyone else as a 'dragon' fx (dragonNews), as for a wild one.
+    const c = this.critters.get(ride.id);
+    if (c) {
+      c.fireYaw = this.me.yaw;
+      c.fireUntil = now + RIDE_FIRE.ms;
+    }
+    this.sound.play('fire');
+    return ride;
   }
 
   // A swing that landed wears the weapon in your hand (shop.js usesLeft):
@@ -2978,6 +3020,32 @@ export class Game extends EventTarget {
     this.emit('ride');
   }
 
+  // A ridden dragon's own hearts (dragon.js RIDE_HEARTS), as they change: a
+  // bump knocks some off (the rider's HP never), they come back by themselves,
+  // and with none left the dragon rests — its rider, set down beside it, hears
+  // why. rest: how long until it can be ridden again.
+  rideHeartsNews(msg) {
+    const c = this.critters.get(msg.id);
+    if (!c) return;
+    const was = c.rideHearts ?? msg.max ?? RIDE_HEARTS;
+    c.rideHearts = msg.hearts;
+    c.rideRestUntil = msg.rest ? performance.now() + msg.rest : 0;
+    const p = c.model.group.position;
+    if (msg.hearts < was) {
+      c.flashUntil = performance.now() + FLASH_MS;
+      if (this.near(p.x, p.y, p.z, 30)) {
+        this.renderer.effects.bang(p.x, p.y + CRITTER_INFO.dragon.ride.height * 0.7, p.z);
+        this.sound.play('bump');
+      }
+    }
+    if (msg.rest && this.riding?.id === c.id) {
+      this.getOff();
+      this.emit('toast', { icon: '🐲', text: `${c.name || 'The dragon'} is worn out! Let it catch its breath a moment, then climb on again.` });
+      this.sound.play('no');
+    }
+    this.emit('ride');
+  }
+
   // Someone hopped on to ride along in one of a vehicle's seats for
   // friends, or got out of it (pid 0).
   seatNews(entry, msg) {
@@ -3202,6 +3270,10 @@ export class Game extends EventTarget {
     // A little hop up onto its back.
     ride.hop = { t: 0, x: b.x, y: b.y, z: b.z };
     this.riding = ride;
+    // Its own hearts, for the bar by yours (ui.js renderHp): full, until the
+    // island says a bump has taken some.
+    entry.rideHearts = entry.rideHearts ?? RIDE_HEARTS;
+    entry.rideMax = entry.rideMax ?? RIDE_HEARTS;
     b.flying = false;
     this.emit('fly', false);
     this.sound.play('jump');
@@ -3226,7 +3298,9 @@ export class Game extends EventTarget {
       const trick =
         { leap: 'Jump to leap!', spout: 'Jump to blow water!', spray: 'Jump to spray water!' }[ride.r.trick] ??
         (ride.r.air ? `Hold jump to fly up, and ${this.touch ? '⬇️' : 'Shift'} to come down!` : 'Jump to jump!');
-      this.emit('toast', { icon: info.icon, text: `You are riding ${name}! ${trick} ${how}` });
+      // A dragon bops from the saddle: fire at whatever is ahead (attack above).
+      const fire = entry.type === 'dragon' ? ` Bop (${this.touch ? '👊' : 'X'}) to breathe fire!` : '';
+      this.emit('toast', { icon: info.icon, text: `You are riding ${name}! ${trick}${fire} ${how}` });
       this.profile.count('rides');
       if (ride.r.sea) this.profile.count('searides');
     }
@@ -3565,14 +3639,18 @@ export class Game extends EventTarget {
   mountPose(c) {
     if (this.riding?.id === c.id) {
       const r = this.riding.body;
-      return { x: r.x, y: r.y, z: r.z, yaw: this.riding.yaw, state: c.spoutUntil > performance.now() ? 'spout' : rideState(this.riding) };
+      const now = performance.now();
+      const state = c.spoutUntil > now ? 'spout' : now < (c.fireUntil ?? 0) && c.type === 'dragon' ? 'fire' : rideState(this.riding);
+      return { x: r.x, y: r.y, z: r.z, yaw: this.riding.yaw, state };
     }
     const recent = c.lastRider && performance.now() - c.leftAt < 600 ? c.lastRider : 0;
     const p = this.players.get(c.rider || recent);
     if (!p || p.me || !p.avatar || !p.seated) return null;
     const a = p.avatar.root;
     const at = mountUnder(c.type, { x: a.position.x, y: a.position.y, z: a.position.z, yaw: a.rotation.y });
-    return { ...at, state: this.ridden(c, at) };
+    // A dragon breathing fire rears as it does it (dragonFrame lights the flames).
+    const state = performance.now() < (c.fireUntil ?? 0) && c.type === 'dragon' ? 'fire' : this.ridden(c, at);
+    return { ...at, state };
   }
 
   // How an animal a friend is riding moves, from how it is drawn going.

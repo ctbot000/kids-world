@@ -2348,7 +2348,8 @@ export function unpackCritter(row) {
     z: row[4] / 100,
     yaw: row[5] / 100,
     state: STATES[row[6]] ?? 'idle',
-    // A dragon's fight: { mood, hearts, max } (dragon.js), or null.
-    fight: row.length >= 10 ? { mood: MOODS[row[7]] ?? 'tame', hearts: row[8], max: Math.max(1, row[9]) } : null,
+    // A dragon's fight: { mood, hearts, max } (dragon.js), or null — and a
+    // dragon that has been ridden brings its ride-hearts along too.
+    fight: row.length >= 10 ? { mood: MOODS[row[7]] ?? 'tame', hearts: row[8], max: Math.max(1, row[9]), ...(row.length >= 11 ? { rideHearts: row[10] } : {}) } : null,
   };
 }
