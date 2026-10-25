@@ -21,6 +21,7 @@ export const XP_FOR = {
   fruit: { xp: 2 },
   shells: { xp: 3 },
   stars: { xp: 10 },
+  pearls: { xp: 10 },
   gems: { xp: 10 },
   diamonds: { xp: 50 },
   petted: { xp: 2, cap: 500 },

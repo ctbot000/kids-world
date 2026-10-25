@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
-import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline } from '../public/js/shared/critters.js';
+import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline, STATES, unpackCritter } from '../public/js/shared/critters.js';
+import { sellPrice } from '../public/js/shared/shop.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 
@@ -332,4 +333,88 @@ test('fireflies have a cap of their own, and never take a seat an animal could h
   assert.equal(sim.list.filter((c) => c.type === 'firefly').length, MAX_FIREFLIES);
   // And they are never written into the island.
   assert.ok(!sim.save().some((c) => c.type === 'firefly'), 'the save has no fireflies');
+});
+
+// A giant clam in the sandy shallows, with water over it and sand under it.
+function shallow(W = 40, D = 40) {
+  const w = new World({ W, H: 24, D, sea: 4 });
+  for (let x = 0; x < W; x++) {
+    for (let z = 0; z < D; z++) {
+      w.set(x, 0, z, B.MAGIC_FLOOR);
+      for (let y = 1; y <= 3; y++) w.set(x, y, z, B.SAND);
+      for (let y = 4; y <= 4; y++) w.set(x, y, z, B.WATER);
+    }
+  }
+  return w;
+}
+
+test('a tap opens a giant clam: maybe a pearl, maybe nothing but bubbles, and it shuts again after a while', () => {
+  const sim = new CritterSim(11);
+  const c = sim.add('clam', 5.5, 4, 5.5);
+  assert.ok(c, 'the clam moved in');
+  assert.equal(c.state, 'idle', 'it starts shut');
+  // Tapped, it opens — and the open state travels to everyone on the wire.
+  const opened = sim.pet(c.id, { x: 6, y: 4, z: 5 }, 1000);
+  assert.equal(opened.id, c.id, 'the tap opened it');
+  assert.equal(opened.state, 'open');
+  assert.equal(typeof opened.pearl, 'boolean', 'it has decided whether a pearl is in there');
+  const row = sim.pack().find((r) => r[0] === c.id);
+  assert.equal(unpackCritter(row).state, 'open', 'everyone sees it open');
+  // Already open, there is nothing more to try just now.
+  assert.equal(sim.pet(c.id, { x: 6, y: 4, z: 5 }, 2000), null, 'an open clam stays as it is');
+  // It never moves, whatever the time.
+  const world = shallow();
+  sim.step(world, 0.1, 3000, new Map());
+  assert.equal(c.x, 5.5, 'it has not stirred');
+  // A few minutes on, it has shut itself again for another try.
+  for (let t = 3; t <= 16 * 60; t += 0.1) sim.step(world, 0.1, t * 1000, new Map());
+  assert.equal(c.state, 'idle', 'it shut itself');
+  assert.ok(!c.pearl, 'its pearl, if there was one, is gone');
+  // And a new tap opens it once more.
+  assert.equal(sim.pet(c.id, { x: 6, y: 4, z: 5 }, 16 * 60 * 1000 + 1).state, 'open', 'it opens again');
+});
+
+test('with a pearl to give, a tap gives it to the one who tapped, and the shop buys it for 5 coins', () => {
+  // One clam in a hundred opens with a pearl for sure: enough for the test.
+  const sim = new CritterSim(3);
+  const c = sim.add('clam', 5.5, 4, 5.5);
+  let pearl = null;
+  for (let i = 0; i < 500 && pearl === null; i++) {
+    const opened = sim.pet(c.id, { x: 6, y: 4, z: 5 }, i * 1000);
+    if (opened) pearl = opened.pearl;
+    c.timer = 0;
+    sim.step(shallow(), 0.1, i * 1000 + 500, new Map());
+  }
+  assert.ok(pearl !== null, 'it opened within five hundred tries');
+  assert.equal(sellPrice('pearl'), 5, 'the shop buys a pearl for 5 coins');
+  assert.ok(B.PEARL && B.COLLECTABLES.some((t) => t.key === 'pearl'), 'a pearl is a basket treasure');
+  assert.ok(ANIMAL_TYPES.includes('clam'), 'clams are in the toy box too');
+});
+
+test('giant clams rest on the sandy floor of the shallows on islands of every kind', () => {
+  for (const theme of ['sunny', 'snowy', 'candy', 'flat']) {
+    const { world, critters } = generate({ seed: 4242, theme });
+    const clams = critters.filter((c) => c.type === 'clam');
+    assert.ok(clams.length > 0, `${theme}: the island has clams`);
+    for (const c of clams) {
+      const floor = world.get(Math.floor(c.x), Math.floor(c.y) - 1, Math.floor(c.z));
+      assert.ok(floor === B.SAND || floor === B.PEBBLES, `${theme}: sand under it`);
+      assert.equal(world.get(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z)), B.WATER, `${theme}: water over it`);
+      assert.ok(Number.isInteger(c.y), `${theme}: resting on the floor`);
+    }
+  }
+});
+
+test('a clam model gapes open to show its pearl, and shuts again', () => {
+  const m = new CritterModel('clam', 1);
+  m.time = 0;
+  assert.ok(m.shells?.length === 2 && m.pearl, 'two shells and a pearl');
+  m.update(0.05, 'idle', false, 2);
+  assert.ok(!m.pearl.visible && !m.eyes.visible, 'shut: pearl and eyes tucked away');
+  for (let i = 0; i < 60; i++) m.update(0.05, 'open', false, 2);
+  assert.ok(m.pearl.visible, 'open: the pearl shows');
+  assert.ok(m.pearl.position.y > 0.1, 'the pearl has risen out of the shells');
+  assert.ok(Math.abs(m.shells[0].rotation.x) > 0.5, 'the shells have parted');
+  for (let i = 0; i < 60; i++) m.update(0.05, 'idle', false, 2);
+  assert.ok(!m.pearl.visible && !m.eyes.visible, 'shut again');
 });
