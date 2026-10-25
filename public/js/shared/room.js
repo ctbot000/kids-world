@@ -808,7 +808,7 @@ export class Room {
     switch (msg.op) {
       case 'pet': {
         const c = this.critters.pet(msg.id, who, now);
-        if (c) this.broadcast({ t: 'cfx', id: c.id, fx: 'pet', by: p.id });
+        if (c) this.broadcast({ t: 'cfx', id: c.id, fx: CRITTER_INFO[c.type].vehicle ? 'pet' : c.type === 'clam' ? 'clam' : 'pet', by: p.id, pearl: c.type === 'clam' ? c.pearl : undefined });
         break;
       }
       case 'feed': {

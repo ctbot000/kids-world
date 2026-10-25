@@ -809,6 +809,23 @@ export class Game extends EventTarget {
       if (this.near(p.x, p.y, p.z, 30)) this.sound.play('trumpet');
       return;
     }
+    // A giant clam tapped: its shells gape with a puff of bubbles, and the
+    // one who tapped it finds a pearl in their basket if there was one.
+    if (msg.fx === 'clam') {
+      this.renderer.effects.sparkles(p.x, p.y + 0.3, p.z, 12, ['#cfeeff', '#ffffff', '#9fe8ff', '#e8f8ff']);
+      if (this.near(p.x, p.y, p.z, 20)) this.sound.play('clam');
+      if (msg.by === this.pid) {
+        if (msg.pearl) {
+          this.profile.addToBasket('pearl', 1);
+          this.profile.count('pearls');
+          this.sound.play('collect');
+          this.emit('toast', { icon: '🦪', text: 'A pearl! It shines like the moon. ✨' });
+        } else {
+          this.sound.play('bubble');
+        }
+      }
+      return;
+    }
     // A vehicle honked, or tapped (it honks then too): its lights flash.
     if (CRITTER_INFO[entry.type].vehicle) {
       entry.model.trick = 0.7;
@@ -4191,6 +4208,7 @@ export class Game extends EventTarget {
       if (B.FRUIT_ITEMS.includes(id)) p.count('fruit');
       else if (B.isRipe(id)) p.count('harvested');
       else if (id === B.SHELL) p.count('shells');
+      else if (id === B.PEARL) p.count('pearls');
       else if (id === B.STAR_PIECE) p.count('stars');
       else if (B.isJewel(id)) {
         p.count('gems');
@@ -4263,6 +4281,12 @@ export class Game extends EventTarget {
     }
     // A vehicle is only honked at, whatever is in your hand.
     if (CRITTER_INFO[entry.type].vehicle) {
+      this.send({ t: 'critter', op: 'pet', id });
+      return;
+    }
+    // A giant clam is only tapped at, whatever is in your hand (it opens,
+    // and maybe there is a pearl in there).
+    if (entry.type === 'clam') {
       this.send({ t: 'critter', op: 'pet', id });
       return;
     }

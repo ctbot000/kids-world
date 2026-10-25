@@ -77,8 +77,9 @@ test('the mosquito is a monster now, and no animal any more', () => {
   assert.equal(MONSTER_KINDS.indexOf('mosquito'), 4, 'new kinds go on the end: the wire sends the index');
   assert.ok(!CRITTER_TYPES.includes('mosquito'), 'no critter of them');
   // (Nor anything new in the middle: the fun park's rides came after the
-  // dragon, and the firefly went on the end, night-only and look-only.)
-  assert.deepEqual(CRITTER_TYPES.slice(-4), ['dragon', 'carousel', 'ferris', 'firefly']);
+  // dragon, the firefly went on the end, night-only and look-only, and the
+  // clam after that, a sea creature like the octopus.)
+  assert.deepEqual(CRITTER_TYPES.slice(-5), ['dragon', 'carousel', 'ferris', 'firefly', 'clam']);
   const sim = new MonsterSim(1);
   const w = meadow();
   const m = sim.add(w, 20.5, 11, 20.5, { kind: 'mosquito' });

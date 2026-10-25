@@ -494,11 +494,16 @@ export function seaCounts(theme) {
 // dolphins and the whale out at sea, crabs and turtles on the beach.
 export function placeSea(world, rng, counts = scaleCounts(seaCounts(world.theme), world)) {
   const out = [];
+  // A clam hunts hard for its sandy shallows, spending hundreds of dice
+  // rolls: it has a stream of its own, so the other sea creatures land just
+  // where they always did.
+  const clamRng = new Rng(world.seed ^ 0x1cea);
   for (const [type, n] of Object.entries(counts)) {
+    const dice = type === 'clam' ? clamRng : rng;
     for (let i = 0; i < n; i++) {
       for (let tries = 0; tries < spots(world, 800); tries++) {
-        const x = rng.int(2, world.W - 3) + 0.5;
-        const z = rng.int(2, world.D - 3) + 0.5;
+        const x = dice.int(2, world.W - 3) + 0.5;
+        const z = dice.int(2, world.D - 3) + 0.5;
         let y = null;
         if (CRITTER_INFO[type].sea === 'beach') {
           const p = perchAt(world, x, z);

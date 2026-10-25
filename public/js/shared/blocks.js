@@ -324,7 +324,8 @@ export const FRUIT_SPROUTS = FRUITS.map(([key, name], i) =>
 export const SHELL = def(75, 'shell', { name: 'Seashell', kind: 'item', tiles: 'shell', collect: 'shell', sound: 'plant' });
 export const STAR_PIECE = def(76, 'star-piece', { name: 'Star Piece', kind: 'item', tiles: 'star-piece', collect: 'star', light: 10, sound: 'glass' });
 // A pearl, found now and then in a giant clam (critters.js). It gleams a little.
-export const PEARL = def(258, 'pearl', { name: 'Pearl', kind: 'item', tiles: 'pearl', collect: 'pearl', light: 4, sound: 'glass' });
+// The first id past the computer's, which turns and so takes 257-260.
+export const PEARL = def(261, 'pearl', { name: 'Pearl', kind: 'item', tiles: 'pearl', collect: 'pearl', light: 4, sound: 'glass' });
 
 // ---------------------------------------------------------------- jewels
 // Jewels sit in gem rocks, deep in the stone of the island and in the walls
