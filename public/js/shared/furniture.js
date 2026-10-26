@@ -334,6 +334,19 @@ const MODELS = {
     ];
   },
 
+  // A picture frame (shared/drawing.js): a wooden frame on the wall, the
+  // drawing hung in it laid over its white at FRAME_AT (render/drawings.js).
+  // Its picture in the toy box is a frame with a little landscape in it.
+  'picture-frame'() {
+    return [
+      box(0.12, 0.28, 0.93, 0.88, 0.88, 1, WOOD, 'planks'),
+      box(0.18, 0.34, 0.925, 0.82, 0.82, 0.935, WHITE, 'plain'),
+      box(0.2, 0.4, 0.915, 0.8, 0.56, 0.93, '#6cbf6a', 'plain'),
+      box(0.2, 0.34, 0.915, 0.8, 0.4, 0.93, '#9ad8f7', 'plain'),
+      box(0.62, 0.6, 0.915, 0.78, 0.74, 0.93, '#fcd535', 'plain'),
+    ];
+  },
+
   table(same) {
     const l = same(-1, 0);
     const r = same(1, 0);

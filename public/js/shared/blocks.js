@@ -231,6 +231,10 @@ export const COMPUTER = furniture(257, 'computer', { name: 'Computer', color: '#
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
+// A picture frame (shared/drawing.js): hangs on the wall like the picture,
+// with one of your own drawings in it. Walk up, press Q and pick one from
+// your gallery to hang. After the picture.
+export const PICTURE_FRAME = furniture(305, 'picture-frame', { name: 'Picture Frame', color: '#c98a52', after: 137, solid: false, wall: true, sound: 'wood' });
 export const TABLE = furniture(141, 'table', { name: 'Table', color: '#c98a52', turns: false, sound: 'wood' });
 export const FLOOR_LAMP = furniture(142, 'floor-lamp', { name: 'Floor Lamp', color: '#fbe7a1', turns: false, light: 14, sound: 'glass' });
 export const POTTED_PLANT = furniture(143, 'potted-plant', { name: 'Potted Plant', color: '#4caf50', turns: false, sound: 'plant' });

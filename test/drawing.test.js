@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { furnitureBoxes, modelBoxes } from '../public/js/shared/furniture.js';
-import { addToGallery, applyStroke, blankPicture, boardNear, cleanGallery, cleanStroke, COLORS, decodePicture, encodePicture, GALLERY_MAX, GALLERY_TEXT_MAX, isBlank, isBoard, joinGalleries, MAX_POINTS, PICTURE_AT, PICTURE_H, PICTURE_W, pictureCorners, removeFromGallery } from '../public/js/shared/drawing.js';
+import { addToGallery, applyStroke, blankPicture, boardNear, cleanGallery, cleanStroke, COLORS, decodePicture, encodePicture, FRAME_AT, frameCorners, frameNear, GALLERY_MAX, GALLERY_TEXT_MAX, isBlank, isBoard, isFrame, joinGalleries, MAX_POINTS, PICTURE_AT, PICTURE_H, PICTURE_W, pictureCorners, removeFromGallery } from '../public/js/shared/drawing.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 import { addProgress, KEPT_MAX, keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
@@ -67,6 +67,66 @@ test('the drawing board beside you is found, and none further away', () => {
   assert.deepEqual([near.x, near.y, near.z], [8, 5, 8]);
   assert.equal(boardNear(w, { x: 8.5, y: 5, z: 4.5 }), null, 'too far');
   assert.equal(boardNear(w, { x: 8.5, y: 9, z: 7 }), null, 'up above it');
+});
+
+test('the picture frame hangs on a wall beside the picture, in the Home tab, its drawing facing out the way it does', () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.PICTURE) + 1], B.PICTURE_FRAME);
+  const d = B.BLOCKS[B.PICTURE_FRAME];
+  assert.equal(d.kind, 'furniture');
+  assert.ok(!d.solid && d.wall, 'hangs on a wall, like the picture');
+  for (let k = 0; k < 4; k++) assert.ok(isFrame(B.PICTURE_FRAME + k));
+  for (const id of [B.PICTURE, B.DRAWING_BOARD, B.WALL_TV, B.AIR]) assert.ok(!isFrame(id));
+  const boxes = modelBoxes(B.PICTURE_FRAME);
+  for (const [x0, y0, z0, x1, y1, z1] of boxes) {
+    assert.ok(x0 >= 0 && z0 >= 0 && x1 <= 1 && z1 <= 1 && y0 >= 0 && y1 <= 1, 'inside its cell');
+    assert.ok(x1 > x0 && y1 > y0 && z1 > z0);
+  }
+  // The white the drawing lies over, just behind it, its own shape.
+  const white = boxes.find((b) => b[6] === '#f7f5ef');
+  assert.deepEqual(white.slice(0, 2).concat(white.slice(3, 5)), [FRAME_AT.x0, FRAME_AT.y0, FRAME_AT.x1, FRAME_AT.y1]);
+  assert.ok(white[2] > FRAME_AT.z && white[2] - FRAME_AT.z < 0.02, 'the drawing just in front of the white');
+  // In front of the little landscape an empty frame shows too, so a drawing
+  // hung in it covers it.
+  for (const b of boxes) assert.ok(b[2] > FRAME_AT.z, `the drawing in front of the box at z ${b[2]}`);
+  assert.ok(Math.abs((FRAME_AT.x1 - FRAME_AT.x0) / (FRAME_AT.y1 - FRAME_AT.y0) - PICTURE_W / PICTURE_H) < 1e-9, 'the drawing its own shape');
+  // And facing out, whichever way the frame was put on the wall.
+  for (let k = 0; k < 4; k++) {
+    const id = B.PICTURE_FRAME + k;
+    const [bl, br, tr, tl] = frameCorners(id, 10, 5, 20);
+    const placed = furnitureBoxes(id, 10, 5, 20, () => B.AIR).find((b) => b[6] === '#f7f5ef');
+    for (const p of [bl, br, tr, tl]) {
+      assert.ok(p[0] >= placed[0] - 0.04 && p[0] <= placed[3] + 0.04 && p[2] >= placed[2] - 0.04 && p[2] <= placed[5] + 0.04, `facing ${k}: on the frame`);
+    }
+    assert.equal(bl[1], 5 + FRAME_AT.y0);
+    assert.equal(tl[1], 5 + FRAME_AT.y1);
+    const u = br.map((v, i) => v - bl[i]);
+    const v = tl.map((w, i) => w - bl[i]);
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const [fx, fz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][B.BLOCKS[id].front];
+    assert.ok(n[0] * fx + n[2] * fz > 0 && Math.abs(n[1]) < 1e-9, `facing ${k}`);
+  }
+  // Found beside you, like a drawing board, and nowhere else.
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  w.set(8, 5, 8, B.turnedTo(B.PICTURE_FRAME, 3));
+  assert.deepEqual([frameNear(w, { x: 8.5, y: 5, z: 6.8 }).x, frameNear(w, { x: 8.5, y: 5, z: 6.8 }).z], [8, 8]);
+  assert.equal(frameNear(w, { x: 8.5, y: 5, z: 4.5 }), null, 'too far');
+});
+
+test('a drawing hung in a frame is seen by everyone, kept when the island is saved, and goes with the frame when it is picked up', () => {
+  const { room, conn, a, b, x, y, z } = island();
+  room.world.set(x, y, z, B.turnedTo(B.PICTURE_FRAME, 3));
+  const text = encodePicture(picture(4, 12));
+  room.receive(a, { t: 'draw', at: [x, y, z], s: { k: 'paste', px: text } });
+  assert.deepEqual(room.drawings.get(room.world.index(x, y, z)).px, decodePicture(text));
+  assert.equal(b.all('draw')[0].s.px, text, 'passed on to everyone');
+  const c = conn();
+  assert.equal(c.inbox.find((m) => m.t === 'welcome').drawings.length, 1, 'newcomers told of it');
+  const again = new Room({ save: JSON.parse(JSON.stringify(room.exportSave())) });
+  assert.deepEqual(again.drawings.get(again.world.index(x, y, z)).px, decodePicture(text), 'kept when saved');
+  // Picked up: the frame takes its drawing with it.
+  room.world.set(x, y, z, B.AIR);
+  assert.equal(room.drawings.size, 0);
 });
 
 test('strokes are checked, and draw lines, fill patches and wipe clean', () => {
