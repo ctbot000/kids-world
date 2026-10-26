@@ -37,6 +37,7 @@ import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
+import { lapStep, lapTime, raceTrack } from './shared/race.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
@@ -590,6 +591,9 @@ export class Game extends EventTarget {
     this.world = World.decode(msg.meta, msg.blocks);
     this.renderer.setWorld(this.world);
     this.renderer.terrain.buildAll();
+    // A racing island's track, to time laps round (race.js).
+    this.raceTrack = raceTrack(this.world);
+    this.lap = null;
     this.riding = null;
     this.aboard = null;
     this.pending.clear();
@@ -3623,6 +3627,7 @@ export class Game extends EventTarget {
       const how = this.touch ? 'Tap 👋 Get out to get out.' : 'Press Q to get out.';
       const what = {
         digger: `Drive into a hill to dig a tunnel! Hold jump to dig up, or ${this.touch ? '⬇️' : 'Shift'} to dig down.`,
+        kart: 'The fastest wheels on the island! On a race track, cross the finish line to start your lap clock.',
         paintvan: 'It paints the ground you drive over, in the colour you picked with the Paint tool!',
         minecart: 'Push to roll along the rails! Jump to ring the bell.',
         scooter: 'Quicker than you run! Jump to ring the bell.',
@@ -3853,6 +3858,7 @@ export class Game extends EventTarget {
     if (ev.dig) this.drill(ev.dig);
     if (ev.paint) this.paintTrail(ev.paint);
     if (ev.mow) this.mow(ev.mow);
+    if (this.raceTrack) this.timeLap(r);
     // Along the rails: clickety-clack over each rail, a clunk at the end of the line.
     if (ev.rolled) {
       this.railed += ev.rolled;
@@ -3974,6 +3980,26 @@ export class Game extends EventTarget {
     for (let i = 3; i < cells.length; i += 4) if (cells[i] === B.AIR || cells[i] === B.WATER) dug++;
     this.profile.count('drilled', dug);
     if (plan.collected.length) this.collect(plan.collected, cells);
+  }
+
+  // Round a racing island's track, the lap clock: crossing the finish line
+  // starts it, and crossing it again after going all the way round tells
+  // you your time, and whether it is your best on this island yet (kept in
+  // this browser).
+  timeLap(r) {
+    const key = `${this.world.name}|${this.world.seed}`;
+    if (this.lap?.id !== this.riding.id) this.lap = { id: this.riding.id, best: load('laps', {})[key] };
+    const ev = lapStep(this.lap, this.raceTrack, r.x, r.y, r.z, performance.now());
+    if (!ev) return;
+    if (ev.start) {
+      this.emit('toast', { icon: '🏁', text: 'Go! Your lap clock is running — all the way round and back over the line!' });
+      this.sound.play('ding');
+      return;
+    }
+    if (ev.best) save('laps', { ...load('laps', {}), [key]: ev.lap });
+    this.emit('toast', { icon: ev.best ? '🏆' : '🏁', text: `Lap: ${lapTime(ev.lap)}${ev.best ? ' — your best yet!' : ` (your best: ${lapTime(this.lap.best)})`}` });
+    this.sound.play(ev.best ? 'fanfare' : 'ding');
+    this.profile.count('laps');
   }
 
   // The lawn mower's blade cutting the grass it rolls over short (riding.js),

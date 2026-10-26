@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -131,6 +131,9 @@ export const CRITTER_INFO = {
   // crops on anyone's farmland — the same rule the digger's drill follows the
   // other way round.
   mower: { name: 'Lawn Mower', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { mow: true, seat: 0.78, z: -0.18, radius: 0.55, height: 1.95, float: 0.5, spread: 0.15, reach: 1.2, walk: 4, run: 6, swim: 1.8, jump: 8, trick: 'honk' }, names: ['Buzzly', 'Chompy', 'Snippy', 'Mowey', 'Grassy', 'Trimmy', 'Whirly', 'Clip-Clop', 'Snip-Snip', 'Buzz'] },
+  // The go-kart: low and quick, the fastest thing on wheels, waiting on a
+  // racing island's starting grid (race.js) and in the toy box too.
+  kart: { name: 'Go-Kart', icon: '🏎️', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.28, z: -0.12, radius: 0.5, height: 1.5, float: 0.4, spread: 0.1, reach: 1.3, walk: 8.5, run: 14, swim: 2, jump: 7.6, trick: 'honk' }, names: ['Zippy', 'Rocket', 'Lightning', 'Checkers', 'Vroomer', 'Flash', 'Pit Stop', 'Dash', 'Racer', 'Nitro'] },
   // The dragon, the one dragon of a volcano island (worldgen.js): a great
   // green dragon, twice as big as a pony and more, asleep on the volcano,
   // wings folded, until someone comes near — then it wakes and breathes

@@ -3,12 +3,14 @@
 // seashells, jewels in the rock and a mine into each mountain, animal
 // friends, and a spot for everyone to arrive at; on an adventure island, the
 // grumpy monsters' camps and King Grumble's castle too; on a fun park
-// island, the park in the middle (park.js).
+// island, the park in the middle (park.js); on a racing island, the race
+// track there instead (race.js).
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
+import { buildRace } from './race.js';
 import * as B from './blocks.js';
-import { busesClearOf, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
+import { busesClearOf, CRITTER_INFO, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, katsuraTree, placeTemplate } from './stamps.js';
@@ -20,6 +22,7 @@ export const THEMES = [
   { key: 'candy', name: 'Candy Island', icon: '🍭', blurb: 'Frosting hills and lollipop trees' },
   { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
   { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
+  { key: 'race', name: 'Racing Island', icon: '🏁', blurb: 'A race track with go-karts and lap times' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -69,8 +72,10 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
 
   // ---------------------------------------------------------------- shape
   const mAngle = rng.next() * Math.PI * 2;
-  // On a fun park island, out past the park.
-  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : theme === 'park' ? rng.range(0.34, 0.4) * W : rng.range(0.18, 0.3) * W;
+  // On a fun park island, out past the park (and on a racing island, past
+  // the race track, laid out on the same square).
+  const plaza = theme === 'park' || theme === 'race';
+  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : plaza ? rng.range(0.34, 0.4) * W : rng.range(0.18, 0.3) * W;
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
   const mHeight = theme === 'snowy' ? 24 : theme === 'volcano' ? 26 : 18;
@@ -83,12 +88,12 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     const a = rng.next() * Math.PI * 2;
     const r = rng.range(0.1, 0.32) * W;
     const m = { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, height: mHeight * rng.range(0.7, 1) };
-    if (Math.hypot(m.x - cx, m.z - cz) < (theme === 'park' ? PARK_HALF + 24 : 16) || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
+    if (Math.hypot(m.x - cx, m.z - cz) < (plaza ? PARK_HALF + 24 : 16) || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
     mountains.push(m);
   }
   const nearMountain = (x, z, r) => mountains.some((m) => Math.hypot(x - m.x, z - m.z) < r);
   const parkLevel = sea + 4;
-  const park = theme === 'park' ? { cx: Math.floor(cx), cz: Math.floor(cz) } : null;
+  const park = plaza ? { cx: Math.floor(cx), cz: Math.floor(cz) } : null;
   for (let x = 0; x < W; x++) {
     for (let z = 0; z < D; z++) {
       let h;
@@ -110,8 +115,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
         // Soft beaches: land just above the sea is pulled down to it.
         if (h > sea && h < sea + 2.2 && mask < 0.55) h = sea + (h - sea) * 0.6;
       }
-      // A fun park island's park is flat, the land easing into it round it.
-      if (theme === 'park') {
+      // A fun park island's park is flat, the land easing into it round it
+      // (and a racing island's race track).
+      if (plaza) {
         const edge = Math.max(Math.abs(x + 0.5 - cx), Math.abs(z + 0.5 - cz)) - PARK_HALF - 1;
         h = parkLevel + (h - parkLevel) * smoothstep(0, PARK_BLEND, edge);
       }
@@ -285,8 +291,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   }
 
   // ---------------------------------------------------------------- the park
-  // On a fun park island, the park in the middle, with its own way in.
-  const built = park ? buildPark(world, { ...park, level: parkLevel, pal }) : null;
+  // On a fun park island, the park in the middle, with its own way in; on a
+  // racing island, the race track.
+  const built = park ? (theme === 'race' ? buildRace : buildPark)(world, { ...park, level: parkLevel, pal }) : null;
 
   // ---------------------------------------------------------------- spawn
   const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);
@@ -456,8 +463,17 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   critters.push(...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng), ...placeBig(world, rng));
   // The one dragon, asleep on the volcano (critters.js).
   if (theme === 'volcano') critters.push(...placeDragon(world, rng, mountains[0]));
-  // The park's rides, and the roller coaster's cars.
-  if (built) critters.push(...built.rides);
+  // The park's rides, and the roller coaster's cars (or the go-karts on the
+  // race track's grid).
+  if (built) {
+    // Nothing walking about starts out in the park or on the track (the
+    // big animals find their own spots): they can wander in later.
+    for (let i = critters.length - 1; i >= 0; i--) {
+      const c = critters[i];
+      if (!CRITTER_INFO[c.type].vehicle && !CRITTER_INFO[c.type].flies && inPark(park, c.x, c.z)) critters.splice(i, 1);
+    }
+    critters.push(...built.rides);
+  }
 
   // ---------------------------------------------------------------- jewels and mines
   // Last, from randomness of their own, so the rest of the island comes out

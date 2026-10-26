@@ -1055,6 +1055,13 @@ const PAINT = {
     }
     bevel(ctx, 0.5);
   },
+  // A racing island's track (blocks.js RACE_TRACK): dark grey asphalt,
+  // speckled with the little stones in it.
+  asphalt(ctx) {
+    fill(ctx, '#4f535c');
+    speckles(ctx, 31, ['#5d626c', '#454850', '#6a6f78', '#3e4148'], 90, [0.8, 2]);
+    bevel(ctx, 0.35);
+  },
   checker(ctx) {
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {

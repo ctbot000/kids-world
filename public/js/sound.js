@@ -603,6 +603,7 @@ export class Sound {
       case 'minecart':
       case 'scooter':
       case 'paintvan':
+      case 'kart':
         this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
         this.play('honk', { type: name });
         break;

@@ -745,7 +745,58 @@ function mower(id) {
   return { ...v, height: 1.55, center: 0.5, pick: 0.8, shadow: 0.8, seen: 90 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan, mower };
+const KARTS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#f59331', '#8c5bd6'];
+
+// A go-kart: a low frame on four fat wheels, the driver's bucket seat
+// between them, a steering wheel, a nose with a racing number on it, side
+// pods, and a spoiler up behind.
+function kart(id) {
+  const v = rig();
+  const { body } = v;
+  const paint = toon(KARTS[id % KARTS.length]);
+  const white = toon('#f7f5ef');
+  const dark = toon('#4a4e57');
+  v.wheels = [
+    [-1, 0.5, 0.17],
+    [1, 0.5, 0.17],
+    [-1, -0.48, 0.2],
+    [1, -0.48, 0.2],
+  ].map(([sx, z, r]) => wheel(body, sx * 0.43, r, z, r, 0.17));
+  // The frame, low between the wheels, and the floor the seat is on.
+  block(body, dark, -0.3, 0.08, -0.62, 0.3, 0.14, 0.62);
+  // The nose, sloping down to a bumper, with a white number board.
+  block(body, paint, -0.24, 0.14, 0.2, 0.24, 0.3, 0.66);
+  block(body, paint, -0.18, 0.3, 0.2, 0.18, 0.36, 0.52);
+  block(body, white, -0.12, 0.2, 0.66, 0.12, 0.3, 0.68);
+  const num = mesh(cylinder(0.04, 0.04, 0.02, 10), toon(BLACK), 0, 0.25, 0.685);
+  num.rotation.x = Math.PI / 2;
+  body.add(num);
+  studs(body, paint, 0.36, [-0.08, 0.08], [0.3, 0.44]);
+  // Side pods between the wheels.
+  for (const side of [-1, 1]) block(body, paint, side * 0.26, 0.12, -0.2, side * 0.42, 0.26, 0.24);
+  // The bucket seat (where the driver sits, at the kart's seat height: see
+  // shared/critters.js) and its back.
+  v.seat = block(body, v.pad, -0.2, 0.14, -0.4, 0.2, 0.28, -0.04);
+  block(body, v.pad, -0.2, 0.14, -0.48, 0.2, 0.62, -0.4);
+  // The steering wheel on its column.
+  body.add(mesh(cylinder(0.02, 0.02, 0.28, 8), dark, 0, 0.36, 0.18, 0.4));
+  const steer = mesh(torus(0.1, 0.022), toon(BLACK), 0, 0.46, 0.1);
+  steer.rotation.x = -0.9;
+  body.add(steer);
+  // The engine behind the seat, and a spoiler on two struts over it.
+  block(body, toon(METAL), -0.16, 0.14, -0.66, 0.16, 0.34, -0.48);
+  for (const side of [-1, 1]) block(body, dark, side * 0.2 - 0.02, 0.34, -0.66, side * 0.2 + 0.02, 0.62, -0.62);
+  block(body, paint, -0.36, 0.62, -0.72, 0.36, 0.66, -0.56);
+  for (const side of [-1, 1]) block(body, white, side < 0 ? -0.38 : 0.34, 0.56, -0.72, side < 0 ? -0.34 : 0.38, 0.72, -0.56);
+  // Little headlight eyes on the nose, and a bumper behind.
+  v.eyes = lampEyes(body, 0.13, 0.33, 0.56, 0.06, v.glow);
+  const b = mesh(cylinder(0.04, 0.04, 0.7, 10), white, 0, 0.16, -0.74);
+  b.rotation.z = Math.PI / 2;
+  body.add(b);
+  return { ...v, height: 0.75, center: 0.35, pick: 0.6, shadow: 0.7, seen: 110 };
+}
+
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan, mower, kart };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,

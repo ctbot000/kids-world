@@ -108,6 +108,9 @@ export const MOWED = def(303, 'mowed-grass', { name: 'Mowed Grass', tiles: { top
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });
 export const PEBBLES = def(13, 'pebbles', { name: 'Pebbles', category: 'building', tiles: 'pebbles', studs: true, sound: 'stone' });
 export const BRICK_WALL = def(14, 'brick-wall', { name: 'Brick Wall', category: 'building', tiles: 'brick-wall', studs: true, sound: 'stone' });
+// A racing island's track (race.js): smooth dark asphalt, to build roads
+// and race tracks of your own with too.
+export const RACE_TRACK = def(313, 'race-track', { name: 'Race Track', category: 'building', after: 14, tiles: 'asphalt', sound: 'stone' });
 export const GLASS = def(15, 'glass', { name: 'Window Glass', kind: 'glass', category: 'building', tiles: 'glass', sound: 'glass' });
 export const LAMP = def(16, 'lamp', { name: 'Lamp', category: 'building', tiles: 'lamp', light: 15, sound: 'glass' });
 export const STAR_BLOCK = def(17, 'star-block', { name: 'Star Block', category: 'building', tiles: 'star-block', light: 13, sound: 'glass' });
