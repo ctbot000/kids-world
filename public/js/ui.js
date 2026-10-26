@@ -6585,15 +6585,12 @@ export class UI {
         );
       }
       tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
-    }
-    for (const [pid, tag] of this.tags) {
-      if (!seen.has(pid)) {
-        tag.remove();
-        this.tags.delete(pid);
-      }
+      tag.at = { x: scr.x, y: scr.y, bubble: Boolean(p.bubble) };
     }
     // A pet's speech bubble (a parrot repeating what you said), over its head
-    // wherever it has got to; the same tags again, a little smaller.
+    // wherever it has got to; the same tags again, a little smaller. One
+    // perched on its owner's head would cover the owner's own bubble, so it
+    // goes up above it.
     for (const [pid, pet] of g.pets) {
       if (!pet.bubble || !pet.model.group.visible || g.hiddenFromMe(pid)) continue;
       const pos = pet.model.group.position;
@@ -6610,7 +6607,20 @@ export class UI {
         tag.dataset.key = pet.bubble.text;
         tag.replaceChildren(h('div', { class: 'bubble pet', lang: langOf(pet.bubble.text) || undefined }, pet.bubble.text));
       }
-      tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
+      let y = scr.y;
+      const owner = this.tags.get(pid);
+      if (seen.has(pid) && owner.at.bubble) {
+        const top = owner.at.y - owner.offsetHeight;
+        const across = Math.abs(scr.x - owner.at.x) < (owner.offsetWidth + tag.offsetWidth) / 2;
+        if (across && y > top && y - tag.offsetHeight < owner.at.y) y = top - 4;
+      }
+      tag.style.transform = `translate(${scr.x}px, ${y}px) translate(-50%, -100%)`;
+    }
+    for (const [pid, tag] of this.tags) {
+      if (!seen.has(pid)) {
+        tag.remove();
+        this.tags.delete(pid);
+      }
     }
     this.renderHideSeek();
     this.rideButton(g, r);

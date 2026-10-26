@@ -2485,6 +2485,61 @@ test('a pet picked in My pet comes along: it follows you and sits by you, is pet
   await b.browserContext().close();
 });
 
+test('a parrot says back what you type in Talk, in a bubble that stays up clear of yours, and a friend sees it too', { skip }, async () => {
+  const pet = { kind: 'parrot', coat: 'green', name: 'Polly' };
+  const a = await openPlayer(base, { name: 'Chatty Bear', look: { animal: 'bear', fur: 'brown', shirt: 2, hat: 'none', pet } });
+  await makeIsland(a, { online: true, theme: 'Flat Land' });
+  const pid = await a.evaluate(() => window.kidsWorld.game.pid);
+  await until(a, (pid) => window.kidsWorld.game.pets.get(pid)?.kind === 'parrot', pid);
+  // Standing still, it comes to sit on your head.
+  await a.evaluate(() => window.kidsWorld.step(1 / 60, 240));
+  assert.equal(await a.evaluate((pid) => window.kidsWorld.game.pets.get(pid).sim.mode, pid), 'perch');
+  const code = await a.evaluate(() => window.kidsWorld.game.code);
+  const b = await openPlayer(`${base}?code=${code}`, { name: 'Merry Seal' });
+  await clickButton(b, 'go!', '#modal');
+  await inGame(b);
+  await until(b, (pid) => window.kidsWorld.game.pets.get(pid)?.name === 'Polly', pid);
+  await b.evaluate((pid) => {
+    const g = window.kidsWorld.game;
+    const pet = g.pets.get(pid).sim;
+    Object.assign(g.me.body, { x: pet.x + 3, y: pet.y - 1, z: pet.z, vx: 0, vy: 0, vz: 0 });
+    window.kidsWorld.step(1 / 60, 30);
+  }, pid);
+  assert.ok(await petOnScreen(b, pid), 'the friend can see the parrot');
+
+  // Chatty Bear types hello: it is over their head at once, and over Polly's a second later.
+  await a.click('#btn-say');
+  const box = await a.waitForSelector('#modal .text-input');
+  await landed(a, box);
+  await box.type('hello');
+  await clickButton(a, 'Send', '#modal');
+  await until(a, () => [...document.querySelectorAll('.bubble:not(.pet)')].some((el) => el.textContent === 'hello'));
+  assert.equal(await a.evaluate(() => document.querySelectorAll('.bubble.pet').length), 0, 'not straight away');
+  await a.evaluate(() => window.kidsWorld.step(1 / 60, 75));
+  await until(a, () => [...document.querySelectorAll('.bubble.pet')].some((el) => el.textContent === 'hello'));
+  // It stays put while it is up, popped in once and then fully there.
+  await a.evaluate(() => (document.querySelector('.bubble.pet').kept = true));
+  await new Promise((r) => setTimeout(r, 600));
+  const shown = await a.evaluate(() => {
+    window.kidsWorld.step(1 / 60, 5);
+    const el = document.querySelector('.bubble.pet');
+    const mine = document.querySelector('.bubble:not(.pet)').getBoundingClientRect();
+    const its = el.getBoundingClientRect();
+    const apart = its.bottom <= mine.top || its.top >= mine.bottom || its.right <= mine.left || its.left >= mine.right;
+    return { kept: el.kept === true, opacity: Number(getComputedStyle(el).opacity), apart };
+  });
+  assert.deepEqual(shown, { kept: true, opacity: 1, apart: true }, 'one bubble, fully shown, not on top of yours');
+  // The friend sees it too.
+  await b.evaluate(() => window.kidsWorld.step(1 / 60, 75));
+  await until(b, () => [...document.querySelectorAll('.bubble.pet')].some((el) => el.textContent === 'hello'));
+  // And once said, it goes again.
+  await a.evaluate(() => window.kidsWorld.step(1 / 60, 60 * 12));
+  await until(a, () => document.querySelectorAll('.bubble.pet').length === 0);
+  assert.deepEqual(pageErrors, []);
+  await a.browserContext().close();
+  await b.browserContext().close();
+});
+
 test('two friends peer to peer: visiting, building together, rules and saying goodbye', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
   // A name of the host's own, typed in Change me.
