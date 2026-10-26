@@ -460,6 +460,14 @@ export const turnedDoor = (id) => {
   if (!d?.door) return 0;
   return d.base + (d.door === 'shut' ? DOOR_STEP : -DOOR_STEP) + ((d.front + 1) % 4);
 };
+// Whether two blocks are doors of one kind — the same colour, facing the same
+// way — so one stood above the other joins into one tall door: drawn as one
+// (shared/furniture.js) and swung as one (tools.js doorEdit).
+export const sameDoor = (a, b) => {
+  const kind = (id) => BLOCKS[id].model.replace(/-open$/, '');
+  return Boolean(DOOR[a] && DOOR[b] && kind(a) === kind(b) && BLOCKS[a].front === BLOCKS[b].front);
+};
+
 // Whether a block is a door at all, and whether it is one swung open.
 export const DOOR = new Uint8Array(BLOCK_IDS);
 export const DOOR_OPEN = new Uint8Array(BLOCK_IDS);
