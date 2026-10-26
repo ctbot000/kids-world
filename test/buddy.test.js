@@ -2,7 +2,7 @@
 // own name and look, says hello and answers what friends say (with what the
 // model was told about it), builds when asked, walks after its friend and
 // flies to one far away, helps a dizzy friend up and bops a monster coming at
-// one; it goes home when asked, when left alone, and stays away from an island
+// one, tells a friend their MBTI when asked; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
 // its own words, talks with it there as a player would (the model's answer
@@ -20,7 +20,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
-import { ALONE_MS, Buddy, BYE_MS, DEFAULT_NAME, isGoodbye, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
+import { ALONE_MS, Buddy, BYE_MS, DEFAULT_NAME, isGoodbye, isMbtiAsk, languageOf, mbtiLine, mbtiOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
 import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.js';
@@ -126,6 +126,11 @@ test('invited, it comes in under its name and look, says hello, answers a friend
   const built = await eventually(() => minji.of('edit').find((m) => m.by === pip.id));
   assert.equal(built.kind, 'stamp');
   assert.ok(built.cells.length > 100, 'a whole house');
+
+  minji.say({ t: 'say', text: '내 MBTI 뭐야?' });
+  await eventually(() => llm.asked.at(-1).includes('내 MBTI 뭐야?'));
+  const { type } = mbtiOf('Minji');
+  assert.match(llm.asked.at(-1), new RegExp(`They are asking for their own MBTI\\. Their MBTI is ${type} \\(.+\\).*재미로`));
   assert.match(systemPrompt(DEFAULT_NAME), /AI friend/);
   assert.match(systemPrompt(DEFAULT_NAME), /Never ask for personal things/);
   assert.match(systemPrompt(DEFAULT_NAME), /When a child asks what time or day it is, tell them the real one/);
@@ -382,6 +387,18 @@ test('it notices goodbyes and answers in their language', () => {
   assert.equal(languageOf('같이 놀자'), 'Korean');
   assert.equal(languageOf('hello'), 'English');
   assert.equal(languageOf('こんにちは'), 'the same language they wrote in');
+});
+
+test('asked for their MBTI, it tells them one, the same each time for the same name', () => {
+  for (const text of ["What's my MBTI?", '내 mbti 뭐야?', '나 엠비티아이 알려줘', '내 성격 유형은?']) assert.ok(isMbtiAsk(text), text);
+  for (const text of ['hi Pip', "let's build"]) assert.ok(!isMbtiAsk(text), text);
+  assert.deepEqual(mbtiOf('Minji'), mbtiOf('minji'));
+  assert.match(mbtiOf('Minji').type, /^[EI][NS][TF][JP]$/);
+  const types = new Set(['Minji', 'Jun', 'Sora', 'Theo', 'Ava', 'Leo', 'Mia', 'Noah'].map((n) => mbtiOf(n).type));
+  assert.ok(types.size > 3, 'not everyone gets the same one');
+  const { type, meaning, ko } = mbtiOf('Minji');
+  assert.ok(mbtiLine('Minji', "What's my MBTI?").includes(`like "Your MBTI is ${type}: you are ${meaning}! Just for fun!"`));
+  assert.ok(mbtiLine('Minji', '내 MBTI 뭐야?').includes(`like "너의 MBTI는 ${type}! ${ko}야!`), 'an example in Korean, for an answer in Korean');
 });
 
 test('the admin page saves its settings and applies them, shows where it is and what is said, has it say something, and sends it home', async () => {

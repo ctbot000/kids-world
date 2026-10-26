@@ -201,6 +201,47 @@ const GOODBYE = /\b(bye|goodbye|see you|go away|go home|leave)\b|잘 ?가|안녕
 
 export const isGoodbye = (text) => GOODBYE.test(text);
 
+// "What's my MBTI?": it tells them one, just for fun, the same one each time
+// for the same name, so asking again does not change who they are.
+const MBTI_ASK = /mbti|엠비티아이|personality type|성격 ?유형/iu;
+// What each means, in English and in Korean: a small model answers in the
+// language of the example it is given.
+const MBTI = {
+  INTJ: ['a clever planner with big ideas', '큰 꿈을 세우는 똑똑한 계획가'],
+  INTP: ['a curious thinker who loves puzzles', '퍼즐을 좋아하는 호기심 많은 생각쟁이'],
+  ENTJ: ['a brave leader who gets things done', '척척 해내는 용감한 대장'],
+  ENTP: ['a quick inventor full of new ideas', '새 아이디어가 가득한 발명가'],
+  INFJ: ['a kind dreamer who understands friends', '친구 마음을 잘 아는 다정한 꿈쟁이'],
+  INFP: ['a gentle dreamer with a big heart', '마음이 넓은 따뜻한 꿈쟁이'],
+  ENFJ: ['a warm helper who cheers everyone on', '모두를 응원하는 따뜻한 도우미'],
+  ENFP: ['a happy explorer who loves new friends', '새 친구를 좋아하는 신나는 탐험가'],
+  ISTJ: ['a steady builder you can count on', '믿음직하고 꼼꼼한 건축가'],
+  ISFJ: ['a caring friend who looks after others', '친구들을 잘 챙기는 다정한 친구'],
+  ESTJ: ['a great organizer who keeps things going', '척척 정리하는 멋진 반장'],
+  ESFJ: ['a friendly host who makes everyone welcome', '모두를 반겨 주는 친절한 주인'],
+  ISTP: ['a handy maker who likes to see how things work', '뚝딱뚝딱 잘 만드는 손재주꾼'],
+  ISFP: ['a creative artist who loves pretty things', '예쁜 것을 좋아하는 예술가'],
+  ESTP: ['a bold adventurer who loves action', '모험을 좋아하는 씩씩한 모험가'],
+  ESFP: ['a fun star who makes every day a party', '매일을 파티로 만드는 신나는 스타'],
+};
+
+export const isMbtiAsk = (text) => MBTI_ASK.test(text);
+
+export function mbtiOf(name) {
+  let h = 0;
+  for (const ch of String(name).toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const type = Object.keys(MBTI)[h % 16];
+  return { type, meaning: MBTI[type][0], ko: MBTI[type][1] };
+}
+
+// The line telling the model what to say to an MBTI ask, with an example in
+// their language.
+export function mbtiLine(name, text) {
+  const { type, meaning, ko } = mbtiOf(name);
+  const like = languageOf(text) === 'Korean' ? `너의 MBTI는 ${type}! ${ko}야! 그냥 재미로 보는 거야!` : `Your MBTI is ${type}: you are ${meaning}! Just for fun!`;
+  return `They are asking for their own MBTI. Their MBTI is ${type} (${meaning}); yours is not asked. Tell them in your own words, like "${like}"`;
+}
+
 // The real date and time now, in words for the model: children ask what time
 // or day it is, and the game's own quick day and night is not it. Said where
 // this computer is, the time the children on it live by.
@@ -1382,6 +1423,7 @@ export class Visit extends EventEmitter {
     if (ask.why) lines.push(ask.why);
     else if (theirs) lines.push(`${theirs.name} just said: "${theirs.text}"`, `Answer ${to?.name ?? theirs.name}. Do not repeat what you said before.`);
     else lines.push(`Say something to ${to?.name ?? 'your friends'}.`);
+    if (!ask.why && theirs && this.chat.at(-1) === theirs && isMbtiAsk(theirs.text)) lines.push(mbtiLine(theirs.name, theirs.text));
     if (ask.bye) lines.push('They are saying goodbye to you: say a friendly bye, and use action leave.');
     if (ask.admin) lines.push('"Admin" is not a player on the island: they are the person who looks after this server, trying you out from its page. Be yourself with them, as friendly as ever.');
     lines.push(`Write "say" in ${languageOf(theirs?.text ?? `${w.name} ${this.others().map((p) => p.name).join(' ')}`)}.`);
