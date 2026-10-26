@@ -14,7 +14,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { cleanWish, KEEPER_VERSION, TELL_US_LEVEL, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
 import { levelFor } from '../public/js/shared/levels.js';
 import { LABELS } from '../server/ctb-github.js';
-import { bugAbout, Company, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
+import { bugAbout, Company, unnamed, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 
 const dirs = [];
@@ -421,6 +421,10 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   assert.doesNotMatch(bug.user, /Otter Bay|ABCD-1234/);
   assert.match(asked.find((a) => a.user.includes('어떻게')).user, /The page's latest errors: none/);
   assert.equal(bugAbout(null), '(nothing)');
+  // A description never carries the report's code or names, however the model put them.
+  const about = { name: '그냥 사람', island: { name: 'Otter Bay', code: '482753' } };
+  assert.equal(unnamed('Hi, 그냥 사람! On otter bay, code 482 753 and 482-753 and 482753.', { about, player: 'Sunny Otter' }), 'Hi, a name! On a name, code a code and a code and a code.');
+  assert.equal(unnamed('Nothing here.', null), 'Nothing here.');
 
   // A real one is a proposal, labelled a bug and a player's, crediting them.
   const filed = github.made.find((m) => m.title === 'Keep the pony from sinking into water');

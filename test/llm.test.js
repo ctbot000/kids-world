@@ -70,6 +70,7 @@ test('the Z.ai client has a picture described by its vision model, whatever mode
   assert.equal(await llm.see('data:image/jpeg;base64,/9j/', 'What is wrong?', trace), 'A pony in water.');
   const asked = sent.at(-1);
   assert.equal(asked.model, ZAI_VISION_MODEL);
+  assert.deepEqual(asked.thinking, { type: 'disabled' }, 'or it may think away every token and say nothing');
   assert.deepEqual(asked.messages[0].content, [{ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/' } }, { type: 'text', text: 'What is wrong?' }]);
   assert.deepEqual(trace.usage, [{ name: 'Z.ai', model: ZAI_VISION_MODEL, promptTokens: 900, tokens: 6 }]);
   assert.ok(costOf('Z.ai', ZAI_VISION_MODEL, 1e6, 1e6) > 0, 'priced');

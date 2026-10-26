@@ -247,6 +247,18 @@ export const mdText = (text) => String(text).replace(/[\\`*_[\]{}()#+\-.!|<>~@]/
 // The player an issue credits for its idea or the problem they found (as
 // proposalBody's footer says it), or ''.
 export const creditIn = (body) => /(?:💡 An idea|🐞 A problem found) (?:from|by) \*\*(.+?)\*\*/u.exec(String(body ?? ''))?.[1] ?? '';
+// A picture's description (text) without the report's island code (however
+// it is spaced), the island's name and the player's names in it.
+export function unnamed(text, report) {
+  const a = report?.about ?? {};
+  const code = String(a.island?.code ?? '').replace(/[^0-9A-Za-z]/g, '');
+  const escape = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let out = String(text ?? '');
+  if (code.length >= 4) out = out.replace(new RegExp([...code].map(escape).join('[\\s-]?'), 'giu'), 'a code');
+  for (const name of [a.island?.name, a.name, report?.player].map((v) => String(v ?? '').trim()).filter((v) => v.length >= 2)) out = out.replace(new RegExp(escape(name), 'giu'), 'a name');
+  return out;
+}
+
 // What a problem report's page knew, for the worker reading it: where the
 // player was, the device and the page's latest errors (report.about, see
 // keeper.js cleanReport), never the island's name or code.
@@ -933,7 +945,7 @@ export class Company extends EventEmitter {
       const features = await this.features();
       const report = (await this.wishes.report?.(wish.report).catch(() => null)) ?? null;
       const words = String(wish.text ?? '').slice(0, REPORT_TEXT_MAX);
-      const sight = report?.picture ? await this.describePicture(wish, words) : '';
+      const sight = report?.picture ? await this.describePicture(wish, words, report) : '';
       // A picture alone, not described (the model failed, say), waits for next time.
       if (!words && !sight) throw new Error('its picture could not be described');
       const thought = await this.think(w, { kind: 'bug', title: `A problem: ${(words || '(a picture)').slice(0, 80)}` }, [
@@ -959,8 +971,10 @@ export class Company extends EventEmitter {
   // What a problem report's picture shows, in words, from the vision model
   // (llm.see), told what the child wrote with it: '' when there is no
   // picture or it could not be described. Kept for a try again (the model
-  // reading it failing, say), so a picture is looked at once.
-  async describePicture(wish, words) {
+  // reading it failing, say), so a picture is looked at once. What the
+  // report knows of the island's code and name and the player's name is
+  // taken out of it, as the model does not always leave them out itself.
+  async describePicture(wish, words, report = null) {
     if (this.sights.has(wish.report)) return this.sights.get(wish.report);
     if (!this.llm.see || !this.wishes.picture) return '';
     const trace = {};
@@ -968,12 +982,13 @@ export class Company extends EventEmitter {
       const file = await this.wishes.picture(wish.report);
       if (!file) return '';
       const image = `data:image/jpeg;base64,${(await readFile(file)).toString('base64')}`;
-      const sight = (
+      const sight = unnamed(
         await this.llm.see(
           image,
           `A child playing Kids World, a 3D block-building island game for kids in the browser, sent this picture with a report of a problem${words ? `, saying: “${words}”` : ', with no words'}. It is most likely a screenshot of the game (or a photo they picked). Describe in plain English, in at most eight short sentences: what is on the screen (the place, characters, blocks, buttons, windows and any words shown) and anything that looks wrong or broken, especially what the child's words point to. Say only what you can see; do not guess at causes. Never copy out an island's code or passcode, or anyone's name, shown in it: say "a code" or "a player" instead.`,
           trace,
-        )
+        ),
+        report,
       )
         .replace(/\s+/gu, ' ')
         .trim()

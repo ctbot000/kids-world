@@ -275,7 +275,8 @@ export class Zai {
     const res = await this.fetch(`${url}/chat/completions`, {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify({ model, stream: false, temperature: 0.2, max_tokens: maxTokens, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text: question }] }] }),
+      // Thinking off: left on, it can spend every token thinking and say nothing.
+      body: JSON.stringify({ model, stream: false, temperature: 0.2, max_tokens: maxTokens, thinking: { type: 'disabled' }, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text: question }] }] }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw await this.trouble(res);
