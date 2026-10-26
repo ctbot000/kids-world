@@ -143,3 +143,19 @@ test('a bomb in gem rock pops its jewels to whoever laid it', () => {
   assert.deepEqual(blast.gems, [B.GEM_ROCKS[0]], 'the ruby rock is shaken loose');
   assert.equal(w.get(12, 4, 12), B.AIR, 'the ruby rock is dug out');
 });
+
+test('a bomb saved with the island before it popped goes off once the island is open again', () => {
+  const { room, time } = makeRoom();
+  const a = join(room);
+  const w = room.world;
+  const top = w.top(12, 12);
+  room.edit(a, room.clients.get(a), room.players.get(1), { seq: 1, kind: 'build', cells: [12, top + 1, 12, B.BOMB] });
+  // Saved (the host left) with its fuse still burning.
+  const again = new Room({ save: room.exportSave(), now: time.now, random: () => 0.5 });
+  const b = join(again);
+  assert.equal(again.world.get(12, top + 1, 12), B.BOMB, 'saved with the island');
+  time.advance(4000);
+  again.tick();
+  assert.equal(again.world.get(12, top + 1, 12), B.AIR, 'it popped');
+  assert.equal(b.last('fx')?.kind, 'blast', 'with a boom');
+});

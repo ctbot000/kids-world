@@ -271,6 +271,9 @@ export class Room {
           else if (B.block(id).grows) this.growth.set(w.index(x, y, z), this.now() + this.between(GROW_MS));
           else if (B.CROP_OF[id]) this.planted(x, y, z, id);
           else if (B.SOIL[id]) this.tilled(x, y, z, id);
+          // A mining bomb saved before it popped: its fuse burns again, the
+          // jewels it shakes loose going to nobody (who laid it is not known).
+          else if (id === B.BOMB) this.bombs.set(w.index(x, y, z), { x, y, z, by: 0, at: this.now() + this.between(BOMB_FUSE_MS), next: this.now() });
           else if (volcano && id === B.WATER) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
           else if (volcano && id === B.ICE) this.melts.set(w.index(x, y, z), { x, y, z, at: this.now() + this.between(MELT_MS), to: B.WATER });
         }
