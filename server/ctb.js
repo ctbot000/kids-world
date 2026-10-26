@@ -58,6 +58,8 @@ const SCREEN_THOUGHT = 240;
 const SCREEN_TITLE = 120;
 // How many run logs the admin page lists.
 const RUNS_SHOWN = 40;
+// How a run that ran out of steps and carries on in the next try ends its why.
+const CARRIED = /\(Carried on in the next try, \d+ of \d+\.\)$/;
 // How many more tries a task that ran out of steps gets at once, carrying
 // on from the work kept, before it is marked stuck for a person to look at.
 export const CARRY_ONS = 2;
@@ -264,7 +266,7 @@ export class Company extends EventEmitter {
       if (this.history.length > HISTORY) this.history.splice(0, this.history.length - HISTORY);
       log(text);
     };
-    this.workers = STAFF.map((s, k) => ({ k, name: workerName(k), doing: 'At their desk', issue: null, steps: [], startedAt: 0, done: 0, stuck: 0 }));
+    this.workers = STAFF.map((s, k) => ({ k, name: workerName(k), doing: 'At their desk', issue: null, owns: null, steps: [], startedAt: 0, done: 0, stuck: 0 }));
     this.tasks = [];
     this.proposals = [];
     this.pulls = [];
@@ -277,8 +279,6 @@ export class Company extends EventEmitter {
     this.wishes = wishes;
     this.reviewing = null;
     this.reviewer = 0;
-    // Whose turn it is to take the next task.
-    this.taker = 0;
     this.proposing = false;
     this.stopped = false;
     this.timer = null;
@@ -300,8 +300,13 @@ export class Company extends EventEmitter {
 
   async start() {
     await this.check();
-    // Tasks a worker was on when this last stopped go back on the board.
+    // Tasks a worker was on when this last stopped go back on the board, each
+    // for the same worker to carry on with, as is one it ran out of steps on.
     if (!this.problem) {
+      for (const t of this.tasks) {
+        const k = this.ownerOf(t.number);
+        if (k !== null && this.workers[k]) this.workers[k].owns = t.number;
+      }
       for (const i of this.tasks.filter((t) => t.labels.includes(LABELS.working))) {
         await this.github.label(i.number, { remove: [LABELS.working] }).catch(() => {});
         i.labels = i.labels.filter((l) => l !== LABELS.working);
@@ -311,6 +316,13 @@ export class Company extends EventEmitter {
     this.timer.unref?.();
     this.poll();
     return this;
+  }
+
+  // The worker (k) whose unfinished task n is, from its last run: one the
+  // server stopping cut off, or that ran out of steps to carry on; or null.
+  ownerOf(n) {
+    const last = this.runs?.list().find((r) => r.kind === 'task' && r.issue?.number === n);
+    return last && (last.stopped || CARRIED.test(last.why)) ? last.k : null;
   }
 
   // '' when GitHub, git and the model are there, or what is wrong.
@@ -345,9 +357,10 @@ export class Company extends EventEmitter {
     }
   }
 
-  // The workers finish one task before anyone takes the next: the oldest
-  // nobody is on, taken by the next of them in turn. With nothing to do, one
-  // proposes something now and then.
+  // Free workers take the oldest tasks nobody is on, each finishing its own
+  // first: a task it ran out of steps on, or that a restart cut off, is its
+  // to carry on, and nobody else's. With nothing to do, one proposes
+  // something now and then.
   poll() {
     if (this.polling || this.stopped || !this.settings.on) return this.polling;
     this.polling = (async () => {
@@ -363,7 +376,27 @@ export class Company extends EventEmitter {
       const busy = new Set(this.workers.filter((w) => w.issue).map((w) => w.issue.number));
       const open = this.tasks.filter((t) => !busy.has(t.number) && ![LABELS.working, LABELS.pr, LABELS.stuck, LABELS.proposal].some((l) => t.labels.includes(l)));
       const staff = this.workers.slice(0, this.settings.workers);
-      if (open.length && !this.workers.some((w) => w.issue)) this.work(staff[this.taker++ % staff.length], open.shift());
+      const owned = new Set(staff.map((w) => w.owns).filter(Boolean));
+      const take = (w, t) => {
+        open.splice(open.indexOf(t), 1);
+        this.work(w, t);
+      };
+      for (const w of staff) {
+        if (w.issue) continue;
+        if (w.owns) {
+          const mine = open.find((t) => t.number === w.owns);
+          if (mine) {
+            take(w, mine);
+            continue;
+          }
+          // Still on the board but not to be taken now (a proposal again, say): wait for it.
+          if (this.tasks.some((t) => t.number === w.owns && ![LABELS.stuck, LABELS.pr].some((l) => t.labels.includes(l)))) continue;
+          // Finished some other way (closed, stuck, a pull request): free for the next.
+          w.owns = null;
+        }
+        const next = open.find((t) => !owned.has(t.number));
+        if (next) take(w, next);
+      }
       this.reviewWishes();
       await this.followWishes();
       const idle = this.workers.slice(0, this.settings.workers).every((w) => !w.issue);
@@ -421,6 +454,8 @@ export class Company extends EventEmitter {
   // One task, from the issue to a pull request.
   async work(w, issue) {
     w.issue = issue;
+    // Theirs until it is done: a pull request, or stuck.
+    w.owns = issue.number;
     w.steps = [];
     w.startedAt = this.now();
     const n = issue.number;
@@ -494,6 +529,7 @@ export class Company extends EventEmitter {
       await this.github.label(n, { add: [LABELS.pr], remove: [LABELS.working] });
       await this.github.comment(n, `${w.name} opened ${url}.`);
       w.done++;
+      w.owns = null;
       outcome = { ok: true, url };
       this.tell(w, `Opened a pull request for #${n}`, `Done! A pull request for #${n}: ${issue.title}`);
       this.office?.emote(w.k, 'cheer');
@@ -513,6 +549,7 @@ export class Company extends EventEmitter {
         await this.github.comment(n, `${w.name} at CTB ran out of steps on this, try ${tries} of ${CARRY_ONS + 1}:\n\n${error.message}\n\nThe work so far is kept on the branch \`${branch}\`, and the next try carries on from it now.`).catch(() => {});
         return;
       }
+      if (!this.stopped) w.owns = null;
       this.log(`CTB: ${w.name} could not finish #${n}: ${error.message.split('\n')[0]}`);
       this.tell(w, `Stuck on #${n}`, `I got stuck on #${n}. A grown-up will have a look.`);
       if (!this.stopped) {
