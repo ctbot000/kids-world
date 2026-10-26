@@ -14,7 +14,7 @@ import { CritterModel } from '../public/js/render/critter-models.js';
 import * as B from '../public/js/shared/blocks.js';
 import { CRITTER_INFO, CRITTER_TYPES, riderAt } from '../public/js/shared/critters.js';
 import { bodyOverlapsSolid, makeBody, stepBody } from '../public/js/shared/physics.js';
-import { EMOTE_TRICKS, makePet, PET_INFO, petPose, poseSpot, startTrick, stepPet, TRICKS } from '../public/js/shared/pets.js';
+import { EMOTE_TRICKS, hearsay, makePet, PET_INFO, petPose, poseSpot, startTrick, stepPet, TRICKS } from '../public/js/shared/pets.js';
 import { Rng } from '../public/js/shared/rng.js';
 import { cleanLook, cleanPet, EMOTE_KEYS, NAME_MAX, PET_COATS, PETS, randomPetName } from '../public/js/shared/words.js';
 import { World } from '../public/js/shared/world.js';
@@ -424,4 +424,31 @@ test('a pet riding along sits on the back of the animal or in the vehicle, behin
     assert.ok(seat.y - middle < 0.35, `${type}: not up in the air over it`);
     mount.dispose();
   }
+});
+
+test('a parrot repeats what you say, about a second later; asleep or far behind, and every other pet, it says nothing', () => {
+  const world = meadow();
+  const me = makeBody(24.5, 6, 24.5);
+  // Every pet hears the same: only the parrot says it back.
+  for (const kind of KINDS) {
+    const pet = makePet(kind, 24.5, 6, 24.5);
+    together(world, me, pet, { mx: 0, mz: 0 }, 3);
+    hearsay(pet, ownerOf(me), 'hello!');
+    let echoed = '';
+    together(world, me, pet, { mx: 0, mz: 0 }, 3, { look: (p, ev) => (echoed = ev.echoed ?? echoed) });
+    assert.equal(echoed, kind === 'parrot' ? 'hello!' : '', `${kind}: ${kind === 'parrot' ? 'says it back' : 'says nothing'}`);
+    assert.ok(!pet.echo, `${kind}: done with it`);
+  }
+  // Too far away to hear it (and never stepped nearer, so it stays that way).
+  const far = makePet('parrot', 10.5, 6, 24.5);
+  hearsay(far, ownerOf(me), 'hello!');
+  assert.ok(!far.echo, 'far behind: it hears nothing');
+  // Asleep, it lets it pass.
+  const sleepy = makePet('parrot', 24.5, 6, 24.5);
+  together(world, me, sleepy, { mx: 0, mz: 0 }, 5, { night: true });
+  assert.equal(sleepy.state, 'sleep', 'settled on your head and off to sleep');
+  hearsay(sleepy, ownerOf(me), 'good night');
+  let kept = '';
+  together(world, me, sleepy, { mx: 0, mz: 0 }, 2, { night: true, look: (p, ev) => (kept = ev.echoed ?? kept) });
+  assert.ok(!kept, 'asleep: it stays quiet');
 });

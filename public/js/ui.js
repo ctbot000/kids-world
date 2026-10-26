@@ -6585,6 +6585,36 @@ export class UI {
         );
       }
       tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
+      tag.at = { x: scr.x, y: scr.y, bubble: Boolean(p.bubble) };
+    }
+    // A pet's speech bubble (a parrot repeating what you said), over its head
+    // wherever it has got to; the same tags again, a little smaller. One
+    // perched on its owner's head would cover the owner's own bubble, so it
+    // goes up above it.
+    for (const [pid, pet] of g.pets) {
+      if (!pet.bubble || !pet.model.group.visible || g.hiddenFromMe(pid)) continue;
+      const pos = pet.model.group.position;
+      const scr = r.project(pos.x, pos.y + pet.model.height + 0.25, pos.z);
+      if (!scr.visible) continue;
+      seen.add(`pet${pid}`);
+      let tag = this.tags.get(`pet${pid}`);
+      if (!tag) {
+        tag = h('div', { class: 'tag' });
+        this.tags.set(`pet${pid}`, tag);
+        $('overlays').append(tag);
+      }
+      if (tag.dataset.key !== pet.bubble.text) {
+        tag.dataset.key = pet.bubble.text;
+        tag.replaceChildren(h('div', { class: 'bubble pet', lang: langOf(pet.bubble.text) || undefined }, pet.bubble.text));
+      }
+      let y = scr.y;
+      const owner = this.tags.get(pid);
+      if (seen.has(pid) && owner.at.bubble) {
+        const top = owner.at.y - owner.offsetHeight;
+        const across = Math.abs(scr.x - owner.at.x) < (owner.offsetWidth + tag.offsetWidth) / 2;
+        if (across && y > top && y - tag.offsetHeight < owner.at.y) y = top - 4;
+      }
+      tag.style.transform = `translate(${scr.x}px, ${y}px) translate(-50%, -100%)`;
     }
     for (const [pid, tag] of this.tags) {
       if (!seen.has(pid)) {

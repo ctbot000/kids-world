@@ -27,7 +27,7 @@ import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './
 import { XP_FOR } from './shared/levels.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
-import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
+import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { freeSpot, scootsAt, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
@@ -1059,6 +1059,12 @@ export class Game extends EventTarget {
         pet.voiceAt = now + 20000 + Math.random() * 25000;
         this.sound.play(pet.kind);
       }
+      // The parrot's echo come due: the words again, over it, with a squawk.
+      if (ev.echoed) {
+        pet.bubble = { text: ev.echoed, left: BUBBLE_SECS + Math.min(6, [...ev.echoed].length / 20) };
+        if (this.near(at.x, at.y, at.z, 24)) this.sound.play(pet.kind);
+      }
+      if (pet.bubble && (pet.bubble.left -= dt) <= 0) pet.bubble = null;
     }
   }
 
@@ -4270,6 +4276,10 @@ export class Game extends EventTarget {
       if (sticker) this.sound.play('ui');
       else this.sound.babble(text, msg.pid);
     }
+    // Their parrot hears it, to repeat in a moment (see updatePets). A sticker
+    // is a picture, not something to say.
+    const pet = this.pets.get(msg.pid);
+    if (pet) hearsay(pet.sim, this.petOwner(msg.pid) ?? { x: pet.sim.x, z: pet.sim.z }, typed || Number.isInteger(msg.p) ? text : '');
     this.emit('chat', { ...msg, text });
   }
 
