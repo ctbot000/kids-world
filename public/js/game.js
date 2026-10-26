@@ -142,7 +142,11 @@ const TOUGH_TOLD = {
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
   ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
   mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
+  queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
 };
+// What popping the Queen Mosquito pays over an ordinary monster's pop (see
+// popped): a few coins, on top of the XP her own count carries (levels.js).
+const QUEEN_POP = { coins: 5 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
 function compass(dx, dz) {
@@ -521,6 +525,9 @@ export class Game extends EventTarget {
         break;
       case 'home':
         this.cameHome(msg);
+        break;
+      case 'mheal':
+        this.monsterHealed(msg);
         break;
       case 'env':
         this.setEnv(msg);
@@ -1139,6 +1146,19 @@ export class Game extends EventTarget {
     this.monsters.delete(id);
   }
 
+  // The Queen Mosquito got a heart back (monsters.js step, while nobody is
+  // near her): little hearts rise over her, as they do over a fed pet, so
+  // everyone sees her mending and knows to come back and keep at her.
+  monsterHealed(msg) {
+    if (!Array.isArray(msg.m)) return;
+    for (const id of msg.m) {
+      const entry = this.monsters.get(id);
+      const p = entry?.model.group.position;
+      if (!p || entry.kind !== 'queen') continue;
+      if (this.near(p.x, p.y, p.z, 40)) this.renderer.effects.hearts(p.x, p.y + (entry.model.height ?? 1.8) * 0.9, p.z, 2);
+    }
+  }
+
   // Your HP, and the most you can have, as a message carries them ({ hp, max }).
   setHp(msg) {
     if (Number.isInteger(msg?.max) && msg.max > 0) this.maxHp = msg.max;
@@ -1245,12 +1265,17 @@ export class Game extends EventTarget {
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
     const here = [p.x, p.y, p.z].every(Number.isFinite);
-    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40);
+    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' || entry?.kind === 'queen' ? 120 : 40);
     if (near) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
       if (entry?.kind === 'big' || entry?.kind === 'knight' || entry?.kind === 'golem') fx.sparkles(p.x, p.y + 0.9, p.z, 30, entry.kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : entry.kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
+      // The Queen Mosquito goes with a big pop of her own, crown and all.
+      if (entry?.kind === 'queen') {
+        fx.sparkles(p.x, p.y + 1.1, p.z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
+        fx.firework(p.x, p.y + 2, p.z);
+      }
       if (entry?.kind === 'king') {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
@@ -1261,10 +1286,17 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
+      // Popping the Queen Mosquito is a feat of its own: a count of her, a
+      // few coins and the XP that comes with it, over and above a monster's.
+      const queen = entry?.kind === 'queen';
+      if (queen) {
+        this.profile.count('queens');
+        this.profile.earn(QUEEN_POP.coins);
+      }
       // The reward for it, where it happened: stars out of the monster, and
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
-      const xp = XP_FOR.popped.xp;
+      const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
       if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
       if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
@@ -1847,6 +1879,7 @@ export class Game extends EventTarget {
         // A mosquito whines and a spider skitters as they come at you; the
         // others grumble.
         if (entry.kind === 'mosquito') this.sound.play('mosquito');
+        else if (entry.kind === 'queen') this.sound.play('queen');
         else if (entry.kind === 'spider') this.sound.play('spider');
         else this.sound.play('grumble', { big });
       }
@@ -4930,10 +4963,11 @@ export class Game extends EventTarget {
       m.group.position.set(s.x, s.y, s.z);
       m.group.rotation.y = s.yaw;
       const state = s.state ?? 'idle';
-      // Far enough off, an animal is too small to see, and is not drawn.
+      // Whether it went anywhere this frame, and far enough off it is too
+      // small to see, and is not drawn.
+      const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
       if (m.group.visible) {
-        const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
         const ground = this.renderer.groundUnder(s.x, s.y, s.z);
         m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
         this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
@@ -4958,14 +4992,14 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
-      this.seaSights(c, s, state, now);
+      this.seaSights(c, s, state, now, moving);
     }
   }
 
   // A splash where a dolphin, a penguin or a fish leaves the water or goes
   // back in, or a penguin or a seal dives; a penguin sliding on its tummy and
   // the whale's spout, which are each worth a sticker.
-  seaSights(c, s, state, now) {
+  seaSights(c, s, state, now, moving) {
     const fx = this.renderer.effects;
     const was = c.was;
     c.was = state;
@@ -4974,6 +5008,17 @@ export class Game extends EventTarget {
       if (top !== null && this.near(s.x, s.y, s.z, 30)) fx.splash(s.x, top, s.z);
     }
     if (c.type === 'penguin' && state === 'slide' && was !== 'slide' && this.near(s.x, s.y, s.z, 25)) this.profile.count('slides');
+    // A duck paddling along leaves a little ripple at its tail every couple
+    // of seconds, spreading out and fading away behind it. Ashore, drifting
+    // asleep afloat, or under the water, there is nothing: only paddling
+    // actually going somewhere stirs it.
+    if (c.type === 'duck' && state === 'swim' && moving && this.near(s.x, s.y, s.z, 90) && now >= (c.rippleAt ?? 0)) {
+      const top = this.surfaceAt(s.x, s.z);
+      if (top !== null) {
+        c.rippleAt = now + 2000;
+        fx.ripple(s.x - Math.sin(s.yaw) * 0.3, top + 0.02, s.z - Math.cos(s.yaw) * 0.3);
+      }
+    }
     if (c.type === 'dolphin' || c.type === 'penguin') {
       const top = this.surfaceAt(s.x, s.z);
       const out = top !== null && s.y > top;
