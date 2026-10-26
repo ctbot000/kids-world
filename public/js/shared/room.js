@@ -86,6 +86,8 @@ const CHAT_KEEP = 30;
 // A mining bomb (blocks.js BOMB), once placed: this long a fuse, sparking
 // away, before it pops (stepBombs).
 const BOMB_FUSE_MS = [2200, 2800];
+// How often a waiting bomb throws its fizzing spark (stepBombs).
+const BOMB_SPARK_MS = 400;
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -299,7 +301,7 @@ export class Room {
       if (isGoBoard(before) && !isGoBoard(after) && this.go.removeAt(x, y, z)) this.sendGo();
       // A mining bomb placed starts its fuse, and one taken away (picked up,
       // or built over) stops it.
-      if (after === B.BOMB) this.bombs.set(k, { x, y, z, by: this.bombPlacer ?? 0, at: this.now() + this.between(BOMB_FUSE_MS) });
+      if (after === B.BOMB) this.bombs.set(k, { x, y, z, by: this.bombPlacer ?? 0, at: this.now() + this.between(BOMB_FUSE_MS), next: this.now() });
       else if (before === B.BOMB) this.bombs.delete(k);
       // Water or ice put down on a volcano island is not there to stay.
       if (volcano) {
@@ -1979,16 +1981,23 @@ export class Room {
     for (const [conn, c] of this.clients) if (c.pid === pid) this.safeSend(conn, text);
   }
 
-  // Mining bombs placed (blocks.js BOMB), their fuses burning down. One that
-  // pops digs its blast hole (tools.js blastEdit) as an edit by the island
-  // itself, telling everyone where to see and hear the boom, and any jewels
-  // it shook loose go to whoever placed it: the blast is theirs, so what it
-  // dug out belongs in their basket. The jewels travel with the boom as a
-  // list of item ids, which each page drops into that player's basket.
+  // Mining bombs placed (blocks.js BOMB), their fuses burning down: a
+  // fizzing spark at the fuse's end every few moments, so everyone can see
+  // (and steer clear of) a bomb about to pop. One that pops digs its blast
+  // hole (tools.js blastEdit) as an edit by the island itself, telling
+  // everyone where to see and hear the boom, and any jewels it shook loose
+  // go to whoever placed it: the blast is theirs, so what it dug out belongs
+  // in their basket. The jewels travel with the boom as a list of item ids,
+  // which each page drops into that player's basket.
   stepBombs(now) {
     const w = this.world;
     for (const [k, bomb] of [...this.bombs]) {
-      if (bomb.at > now) continue;
+      if (bomb.at > now) {
+        if (bomb.next > now) continue;
+        bomb.next = now + BOMB_SPARK_MS;
+        if (w.get(bomb.x, bomb.y, bomb.z) === B.BOMB) this.broadcast({ t: 'fx', kind: 'fuse', x: bomb.x + 0.5, y: bomb.y + 0.9, z: bomb.z + 0.5 });
+        continue;
+      }
       this.bombs.delete(k);
       // Picked up or built over before it went off: nothing to pop.
       if (w.get(bomb.x, bomb.y, bomb.z) !== B.BOMB) continue;

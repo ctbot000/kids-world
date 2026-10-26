@@ -362,11 +362,12 @@ export class Sound {
         this.tone(78 * r(), { decay: 0.5, gain: (opts.near ?? 1) * 0.35, slide: 38, slideTime: 0.4 });
         this.noise(0.35, { type: 'lowpass', freq: 380, gain: (opts.near ?? 1) * 0.3 });
         break;
-      // A mining bomb popping: a big soft boom with rubble rattling down.
+      // A mining bomb popping: a big soft boom with rubble rattling down,
+      // softer the further off it was (game.js blast).
       case 'boom':
-        this.tone(95 * r(), { decay: 0.55, gain: 0.3, slide: 40, slideTime: 0.45 });
-        this.noise(0.5, { type: 'lowpass', freq: 700, sweep: 150, gain: 0.28 });
-        this.noise(0.3, { at: 0.12, type: 'bandpass', freq: 1800, sweep: 500, q: 0.8, gain: 0.08 });
+        this.tone(95 * r(), { decay: 0.55, gain: (opts.near ?? 1) * 0.3, slide: 40, slideTime: 0.45 });
+        this.noise(0.5, { type: 'lowpass', freq: 700, sweep: 150, gain: (opts.near ?? 1) * 0.28 });
+        this.noise(0.3, { at: 0.12, type: 'bandpass', freq: 1800, sweep: 500, q: 0.8, gain: (opts.near ?? 1) * 0.08 });
         break;
       case 'ouch':
         this.tone(150 * r(), { decay: 0.35, gain: 0.25, type: 'triangle', slide: 70, slideTime: 0.3, vibrato: 25 });

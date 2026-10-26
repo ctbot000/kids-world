@@ -517,6 +517,7 @@ export class Game extends EventTarget {
       case 'fx':
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
+        else if (msg.kind === 'fuse') this.fuse(msg);
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -3974,14 +3975,21 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: '🌠', text: 'A shooting star! Look for a star piece on the ground.' });
   }
 
+  // A mining bomb's fuse fizzing (shared/room.js stepBombs, while it waits):
+  // a few little sparks off the top of the bomb, so it reads as about to pop.
+  fuse(msg) {
+    this.renderer.effects.sparkles(msg.x, msg.y, msg.z, 5, ['#ffdf5a', '#ffffff', '#ff8fc4']);
+  }
+
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and
-  // heard wherever you stand, and any jewels the blast shook out of gem rocks
-  // into the basket of whoever laid it.
+  // heard wherever you stand — softer from far off — and any jewels the
+  // blast shook out of gem rocks into the basket of whoever laid it.
   blast(msg) {
     const fx = this.renderer.effects;
     fx.pop(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), '#d9d3c7', 24);
     fx.sparkles(msg.x, msg.y + 0.5, msg.z, 30, ['#ffd84d', '#ff8fc4', '#ffffff']);
-    if (this.near(msg.x, msg.y, msg.z, 40)) this.sound.play('boom');
+    const d = this.me ? Math.hypot(this.me.body.x - msg.x, this.me.body.y - msg.y, this.me.body.z - msg.z) : 0;
+    this.sound.play('boom', { near: Math.max(0.35, 1 - d / 120) });
     if (msg.by !== this.pid || !msg.gems?.length) return;
     const cells = [];
     for (let i = 0; i < msg.gems.length; i++) cells.push(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), B.AIR);

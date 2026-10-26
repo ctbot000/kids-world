@@ -107,12 +107,15 @@ test('a placed bomb sparks, then pops with a boom everyone hears', () => {
   room.edit(a, room.clients.get(a), room.players.get(1), { seq: 1, kind: 'build', cells: [12, top + 1, 12, B.BOMB] });
   assert.equal(w.get(12, top + 1, 12), B.BOMB, 'the bomb is down');
   a.inbox.length = 0;
-  // The fuse: nothing pops early.
-  time.advance(1000);
+  // The fuse: its spark fizzles for everyone, and nothing pops early.
+  time.advance(500);
   room.tick();
   assert.equal(w.get(12, top + 1, 12), B.BOMB, 'still sparking');
+  const fuses = a.inbox.filter((m) => m.t === 'fx' && m.kind === 'fuse');
+  assert.ok(fuses.length >= 1, 'the fizzing spark is told');
+  assert.equal(fuses[0].x, 12.5, 'the spark is at the bomb');
   // Then the boom.
-  time.advance(2000);
+  time.advance(2500);
   room.tick();
   assert.equal(w.get(12, top + 1, 12), B.AIR, 'the bomb has gone');
   const blast = a.last('fx');
