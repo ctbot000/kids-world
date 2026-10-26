@@ -2643,7 +2643,7 @@ export class UI {
         );
         root.append(
           h('h2', {}, '🐞 Something went wrong?'),
-          h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it. A CTB helper reads it too and writes back to you under 💡 Ideas.'),
+          h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it. A CTB helper reads it too, picture and all, and writes back to you under 💡 Ideas.'),
           text,
           h('div', { class: 'setting report-picture' }, shot, h('div', {}, label, detail), sw),
           h('div', { class: 'row' }, pick, file),
@@ -2794,7 +2794,7 @@ export class UI {
         h('div', { class: 'idea-stage', lang }, stageWords(w)),
       );
     }
-    return h('div', { class: `idea ${w.kind} ${w.state} ${w.stage}` }, h('p', { class: 'idea-text', lang }, bug ? h('span', { class: 'emoji', title: 'A problem you told of' }, '🐞 ') : null, `“${w.text}”`, score ? ' ' : null, score), status, journey);
+    return h('div', { class: `idea ${w.kind} ${w.state} ${w.stage}` }, h('p', { class: 'idea-text', lang }, bug ? h('span', { class: 'emoji', title: 'A problem you told of' }, '🐞 ') : null, w.text ? `“${w.text}”` : '📷 A picture you sent', score ? ' ' : null, score), status, journey);
   }
 
   // News of an idea of yours: a helper's answer, or how far it has got since.

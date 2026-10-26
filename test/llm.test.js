@@ -8,7 +8,7 @@
 // answer — problem() — when either one is there.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Fallback, Ollama, Zai } from '../server/llm.js';
+import { costOf, Fallback, Ollama, Zai, ZAI_VISION_MODEL } from '../server/llm.js';
 
 const SCHEMA = { type: 'object', properties: { say: { type: 'string' } }, required: ['say'] };
 
@@ -57,6 +57,23 @@ test('the Z.ai client asks with the answer shape in words, and reads its JSON', 
   assert.match(asked.body.messages.at(-1).content, /"say"/);
   // Without a trace, as before.
   assert.deepEqual(await llm.chat([{ role: 'user', content: 'hi' }], SCHEMA), { say: 'Hi!' });
+});
+
+test('the Z.ai client has a picture described by its vision model, whatever model it chats with', async () => {
+  const sent = [];
+  const fetch = async (url, init = {}) => {
+    if (init.body) sent.push(JSON.parse(init.body));
+    return Response.json({ choices: [{ message: { content: '  A pony in water.\n' }, finish_reason: 'stop' }], usage: { prompt_tokens: 900, completion_tokens: 6 } });
+  };
+  const llm = new Zai({ urls: ['https://z.test/v4'], model: 'glm-5.3', key: 'a key', fetch });
+  const trace = {};
+  assert.equal(await llm.see('data:image/jpeg;base64,/9j/', 'What is wrong?', trace), 'A pony in water.');
+  const asked = sent.at(-1);
+  assert.equal(asked.model, ZAI_VISION_MODEL);
+  assert.deepEqual(asked.messages[0].content, [{ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/' } }, { type: 'text', text: 'What is wrong?' }]);
+  assert.deepEqual(trace.usage, [{ name: 'Z.ai', model: ZAI_VISION_MODEL, promptTokens: 900, tokens: 6 }]);
+  assert.ok(costOf('Z.ai', ZAI_VISION_MODEL, 1e6, 1e6) > 0, 'priced');
+  assert.equal(llm.model, 'glm-5.3', 'its own model stays as it was');
 });
 
 test('the Z.ai client chats on the endpoint its key works on, and remembers it', async () => {

@@ -72,6 +72,8 @@ const HISTORY = 80;
 const STEPS_KEPT = 30;
 const MODEL_NAME = /^[\w.:/-]{0,100}$/;
 const TITLE_MAX = 200;
+// How long a picture's description may be.
+const SIGHT_MAX = 1500;
 const BODY_MAX = 20000;
 
 // Who a login is to the islands it joins, as its pages say (main.js islandWho).
@@ -298,6 +300,8 @@ export class Company extends EventEmitter {
     // Players' ideas, at the keeper: { list(), answer(id, answer), stage(id,
     // stage) }, or null.
     this.wishes = wishes;
+    // Problem reports' pictures as described in words, by report id.
+    this.sights = new Map();
     this.reviewing = null;
     this.reviewer = 0;
     this.proposing = false;
@@ -918,8 +922,9 @@ export class Company extends EventEmitter {
   // A problem a player told of (🐞), read by one worker as an idea is: a
   // real problem in the game it can fix is taken on, filed as a proposal
   // labelled "ctb: bug" too; anything else gets a kind answer. The model
-  // has what the player wrote and what their page knew (where they were,
-  // the device, its latest errors), never the picture or the island's code.
+  // has what the player wrote, what their page knew (where they were, the
+  // device, its latest errors; never the island's name or code) and, with a
+  // picture, what it shows in words (describePicture): it reads only text.
   async reviewBug(w, wish) {
     const doing = w.doing;
     this.tell(w, 'Reading a problem a player told of');
@@ -927,9 +932,13 @@ export class Company extends EventEmitter {
     try {
       const features = await this.features();
       const report = (await this.wishes.report?.(wish.report).catch(() => null)) ?? null;
-      const thought = await this.think(w, { kind: 'bug', title: `A problem: ${String(wish.text).slice(0, 80)}` }, [
-        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game told of a problem with it: something that went wrong. Decide whether CTB takes it on. Say yes to a real problem in the game that an engineer could look into and fix: something broken, stuck, wrong or confusing, told clearly enough to know where to look (what the page knew helps: where they were, the device, the page's latest errors). Say no to one that is how the game is meant to work (and tell the child kindly how it works, or where to find what they looked for), one that is not about the game, or one too unclear to know what went wrong (and thank them, and ask them to tell again what they did and what happened). Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be fixed. For a yes, also write the GitHub issue for the engineers, in English: the one fix, named in a short imperative title (like "Keep the pony from sinking into water blocks"), a TL;DR of one or two sentences saying what goes wrong and where, what to look into and change in at most three short sentences (naming what the player saw and anything the page knew that points to it), and two to four short checks that tell it is fixed. ${SCORING} For a problem, enjoy is how much fixing it helps kids play (a crash or being stuck scores high), small how little it takes to fix, and already true only when it is no problem at all. Score a no too. Answer as JSON: {"accept": true or false, "scoring": its score in parts, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
-        { role: 'user', content: `What the game has now:\n${features}\n\nWhat the child's page knew:\n${bugAbout(report?.about)}\n\nThe child's problem:\n${String(wish.text).slice(0, REPORT_TEXT_MAX)}` },
+      const words = String(wish.text ?? '').slice(0, REPORT_TEXT_MAX);
+      const sight = report?.picture ? await this.describePicture(wish, words) : '';
+      // A picture alone, not described (the model failed, say), waits for next time.
+      if (!words && !sight) throw new Error('its picture could not be described');
+      const thought = await this.think(w, { kind: 'bug', title: `A problem: ${(words || '(a picture)').slice(0, 80)}` }, [
+        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game told of a problem with it: something that went wrong. Decide whether CTB takes it on. Say yes to a real problem in the game that an engineer could look into and fix: something broken, stuck, wrong or confusing, told clearly enough to know where to look (what the page knew helps: where they were, the device, the page's latest errors; and a picture of their screen, described in words, shows what they saw — it may be a screenshot of the game or a photo they picked). Say no to one that is how the game is meant to work (and tell the child kindly how it works, or where to find what they looked for), one that is not about the game, or one too unclear to know what went wrong (and thank them, and ask them to tell again what they did and what happened). Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in (with no words from them, in the language of their name when it is plainly not English, or else in English), saying yes or no and why; never say when it will be fixed. For a yes, also write the GitHub issue for the engineers, in English: the one fix, named in a short imperative title (like "Keep the pony from sinking into water blocks"), a TL;DR of one or two sentences saying what goes wrong and where, what to look into and change in at most three short sentences (naming what the player saw and anything the page knew that points to it), and two to four short checks that tell it is fixed. ${SCORING} For a problem, enjoy is how much fixing it helps kids play (a crash or being stuck scores high), small how little it takes to fix, and already true only when it is no problem at all. Score a no too. Answer as JSON: {"accept": true or false, "scoring": its score in parts, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
+        { role: 'user', content: `What the game has now:\n${features}\n\nWhat the child's page knew:\n${bugAbout(report?.about)}${report?.about?.name ? `\nTheir name: ${report.about.name}` : ''}${sight ? `\n\nWhat the picture they sent shows, described by a model that can see it:\n${sight}` : report?.picture ? '\n\nThey sent a picture too, which could not be described.' : ''}\n\nThe child's problem:\n${words || '(no words: only the picture)'}` },
       ], WISH_SCHEMA, { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.4 });
       run = thought.run;
       await this.answerWish(w, wish, thought.answer, run, {
@@ -944,6 +953,39 @@ export class Company extends EventEmitter {
       throw error;
     } finally {
       this.tell(w, doing);
+    }
+  }
+
+  // What a problem report's picture shows, in words, from the vision model
+  // (llm.see), told what the child wrote with it: '' when there is no
+  // picture or it could not be described. Kept for a try again (the model
+  // reading it failing, say), so a picture is looked at once.
+  async describePicture(wish, words) {
+    if (this.sights.has(wish.report)) return this.sights.get(wish.report);
+    if (!this.llm.see || !this.wishes.picture) return '';
+    const trace = {};
+    try {
+      const file = await this.wishes.picture(wish.report);
+      if (!file) return '';
+      const image = `data:image/jpeg;base64,${(await readFile(file)).toString('base64')}`;
+      const sight = (
+        await this.llm.see(
+          image,
+          `A child playing Kids World, a 3D block-building island game for kids in the browser, sent this picture with a report of a problem${words ? `, saying: “${words}”` : ', with no words'}. It is most likely a screenshot of the game (or a photo they picked). Describe in plain English, in at most eight short sentences: what is on the screen (the place, characters, blocks, buttons, windows and any words shown) and anything that looks wrong or broken, especially what the child's words point to. Say only what you can see; do not guess at causes. Never copy out an island's code or passcode, or anyone's name, shown in it: say "a code" or "a player" instead.`,
+          trace,
+        )
+      )
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .slice(0, SIGHT_MAX);
+      this.sights.set(wish.report, sight);
+      if (this.sights.size > 50) this.sights.delete(this.sights.keys().next().value);
+      return sight;
+    } catch (error) {
+      this.log(`CTB: a report's picture could not be described (${error.message}).`);
+      return '';
+    } finally {
+      if (trace.usage?.length) this.onUsage(trace.usage);
     }
   }
 
@@ -1099,7 +1141,7 @@ export class CtbControl {
       onProposed: (at) => this.saveProposedAt(at),
       // Players' ideas (and problems told of), kept by the keeper, and its
       // way to answer them.
-      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a), stage: (id, s) => this.keeper.stageWish(id, s), report: async (id) => (await this.keeper.store.reports()).find((r) => r.id === id) ?? null } : null,
+      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a), stage: (id, s) => this.keeper.stageWish(id, s), report: async (id) => (await this.keeper.store.reports()).find((r) => r.id === id) ?? null, picture: (id) => this.keeper.store.reportPicture(id) } : null,
       ...(this.git ? { git: this.git } : {}),
     });
     if (this.rooms) {

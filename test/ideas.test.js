@@ -321,16 +321,18 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   const tablet = await page(keeper, TABLET, '22');
   await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter' } });
   await playIsle(tablet, 'Sunny Otter');
-  const report = (text, about = {}) => {
+  const JPEG = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]).toString('base64')}`;
+  const report = (text, about = {}, picture = null) => {
     clock.t += 1000;
-    return tablet.say({ t: 'report', report: { text, about: { name: 'Sunny Otter', ...about } } });
+    return tablet.say({ t: 'report', report: { text, picture, about: { name: 'Sunny Otter', ...about } } });
   };
-  await report('My pony sinks into the water and gets stuck', { where: 'island', screen: '1024x768', touch: true, island: { name: 'Otter Bay', code: 'ABCD-1234', kind: 'mine', theme: 'beach' }, errors: ['12:00:01 TypeError: pony.y is undefined'] });
+  await report('My pony sinks into the water and gets stuck', { where: 'island', screen: '1024x768', touch: true, island: { name: 'Otter Bay', code: 'ABCD-1234', kind: 'mine', theme: 'beach' }, errors: ['12:00:01 TypeError: pony.y is undefined'] }, JPEG);
   await report('어떻게 날 수 있어요?');
-  // A picture alone is for the grown-ups: the model cannot see it.
-  clock.t += 1000;
-  await tablet.say({ t: 'report', report: { picture: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]).toString('base64')}`, about: { name: 'Sunny Otter' } } });
-  assert.equal(heard.length, 2);
+  // A picture alone goes too: it is described to the worker in words.
+  await report('', {}, JPEG);
+  assert.equal(heard.length, 3);
+  assert.deepEqual(cleanWish(heard[2]), { ...cleanWish(heard[2]), kind: 'bug', picture: true, text: '' });
+  assert.equal(cleanWish({ ...heard[2], picture: false }), null, 'no words and no picture is nothing');
   const TABLET_PLAYER = () => heard[0].player;
   // An idea limit is not a problem report's: the waiting bugs leave room for ideas.
   for (let i = 0; i < WISHES_AN_HOUR; i++) {
@@ -339,7 +341,7 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   }
 
   // Open reports from before CTB read them are handed over once: not a
-  // resolved one, one with no words, or one it has already.
+  // resolved one, or one it has already.
   const store = keeper.store;
   const old = async (text, seen = false) => {
     clock.t += 1000;
@@ -350,20 +352,30 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   const before = await old('The bomb does not break every block');
   await old('Fixed already', true);
   const handed = await store.handOverReports();
-  assert.deepEqual(handed.map((w) => [w.kind, w.report, w.text]), [['bug', before, 'The bomb does not break every block']]);
+  assert.deepEqual(handed.map((w) => [w.kind, w.report, w.text, w.picture]), [['bug', before, 'The bomb does not break every block', false]]);
   assert.deepEqual(await store.handOverReports(), [], 'once');
   heard.push(...handed);
 
   const asked = [];
+  const looked = [];
+  let blind = true;
   const llm = {
     model: 'stand-in',
     problem: async () => '',
     models: async () => [],
+    // The vision model: fails the first time on a picture with no words.
+    see: async (image, question, trace) => {
+      trace.usage = [{ name: 'Z.ai', model: 'glm-4.6v', promptTokens: 900, tokens: 40 }];
+      looked.push({ image, question });
+      if (question.includes('with no words') && blind) throw new Error('Z.ai is busy');
+      return question.includes('pony') ? 'A pony up to its neck in a  water block,\n by a beach.' : 'The title screen with a red error box saying "Oops".';
+    },
     chat: async (messages, schema, trace) => {
       trace.usage = [{ name: 'Z.ai', model: 'stand-in', promptTokens: 5, tokens: 5 }];
       const user = messages.at(-1).content;
       asked.push({ system: messages[0].content, user });
       if (user.includes('pony sinks')) return { accept: true, scoring: { already: false, enjoy: 20, small: 10, checks: 5, newParts: [], risk: 5, bundled: false, polish: false, takesAway: 0 }, reply: 'Oh no! We will fix your pony.', title: 'Keep the pony from sinking into water', tldr: 'A ridden pony sinks into water blocks and gets stuck.', what: 'Look at how the pony meets water.', done: ['The pony swims on water'] };
+      if (user.includes('red error box')) return { accept: true, scoring: { already: false, enjoy: 15, small: 10, checks: 5, newParts: [], risk: 0, bundled: false, polish: false, takesAway: 0 }, reply: 'Thanks! We saw the error and will fix it.', title: 'Fix the title screen error box', tldr: 'An error box shows on the title screen.', what: 'Find what throws on the title screen.', done: ['No error box on the title screen'] };
       if (user.includes('어떻게')) return { accept: false, scoring: { already: true }, reply: '헬리콥터를 타면 날 수 있어요!' };
       return { accept: false, reply: 'Thanks for your idea!' };
     },
@@ -376,13 +388,31 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
     workDir: await tempDir(),
     settings: { ...defaultSettings({}), workers: 1, propose: false },
     log: () => {},
-    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a), stage: (id, stage) => keeper.stageWish(id, stage), report: async (id) => (await keeper.store.reports()).find((r) => r.id === id) ?? null },
+    onUsage: (entries) => usage.push(...entries),
+    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a), stage: (id, stage) => keeper.stageWish(id, stage), report: async (id) => (await keeper.store.reports()).find((r) => r.id === id) ?? null, picture: (id) => keeper.store.reportPicture(id) },
   });
+  const usage = [];
   company.problem = '';
   await company.reviewWishes();
+  // The picture alone could not be described: it waits, and is read next time.
+  assert.equal((await keeper.store.wishes()).find((w) => w.report === heard[2].report).state, 'waiting');
+  blind = false;
+  await company.reviewWishes();
+
+  // Pictures are looked at by the vision model, told what the child wrote,
+  // each once; the worker reads what it saw, in words.
+  assert.equal(looked.length, 3, 'the pony picture once, the one alone twice (it failed once)');
+  assert.equal(looked[0].image, JPEG);
+  assert.match(looked[0].question, /saying: “My pony sinks into the water and gets stuck”/);
+  assert.ok(usage.some((u) => u.model === 'glm-4.6v'), 'its tokens are counted');
+  const alone = asked.find((a) => a.user.includes('red error box'));
+  assert.match(alone.user, /What the picture they sent shows, described by a model that can see it:\nThe title screen with a red error box/);
+  assert.match(alone.user, /The child's problem:\n\(no words: only the picture\)/);
+  assert.match(alone.user, /Their name: Sunny Otter/);
 
   // Asked as a problem, with what the page knew, never the island's name or code.
   const bug = asked.find((a) => a.user.includes('pony sinks'));
+  assert.match(bug.user, /described by a model that can see it:\nA pony up to its neck in a water block, by a beach\./);
   assert.match(bug.system, /told of a problem/);
   assert.match(bug.system, /in the language the child wrote in/);
   assert.match(bug.user, /Where: island\nIsland: mine, theme beach/);
@@ -404,12 +434,17 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   assert.deepEqual(news.map((w) => [w.state, w.reply]), [
     ['accepted', 'Oh no! We will fix your pony.'],
     ['declined', '헬리콥터를 타면 날 수 있어요!'],
+    // A try that fails ends that round: the rest wait for the next.
+    ['accepted', 'Thanks! We saw the error and will fix it.'],
     ['declined', 'Thanks for your idea!'],
   ]);
+  assert.equal(news[2].picture, true);
+  assert.equal(news[2].text, '');
+  assert.ok(github.made.some((m) => m.title === 'Fix the title screen error box'));
   assert.equal(news[1].score, 15, 'no problem at all scores low');
   assert.ok(asked.some((a) => a.user.includes('The bomb does not break every block')), 'the one handed over is read too');
   const mine = (await tablet.say({ t: 'wishes' })).wishes;
-  assert.equal(mine.filter((w) => w.kind === 'bug').length, 3);
+  assert.equal(mine.filter((w) => w.kind === 'bug').length, 4);
   assert.deepEqual(cleanWish(news[0]), news[0]);
   assert.equal(cleanWish(news[0]).kind, 'bug');
 });

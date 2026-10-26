@@ -1120,17 +1120,18 @@ export class KeeperStore extends EventEmitter {
 
   // A problem report (keepReport's id) kept for CTB's workers beside the
   // player's ideas, read and answered the same way: the wish as kept, or
-  // null for one with no words. Its limits are the report's own.
+  // null for one with neither words nor a picture. Its limits are the
+  // report's own.
   keepBug(player, reportId) {
     if (!isDeviceId(player) || !isReportId(reportId)) return Promise.resolve(null);
     return this.serial(async () => {
       const report = await readJson(join(this.dir, 'reports', `${reportId}.json`));
       const text = shortText(report?.text, REPORT_TEXT_MAX).replace(/\s+/gu, ' ');
-      if (!text) return null;
+      if (!text && !report?.picture) return null;
       const now = this.now();
       const record = (await readJson(this.path(player, 'device.json'))) ?? {};
       const login = await this.readLogin(player);
-      const wish = { id: `${now}-${randomHex(4)}`, at: now, player, name: record.profile?.name || report.player || '', username: login?.username ?? '', kind: 'bug', report: reportId, text, state: 'waiting', by: '', reply: '', answeredAt: 0 };
+      const wish = { id: `${now}-${randomHex(4)}`, at: now, player, name: record.profile?.name || report.player || '', username: login?.username ?? '', kind: 'bug', report: reportId, text, picture: Boolean(report.picture), state: 'waiting', by: '', reply: '', answeredAt: 0 };
       const json = JSON.stringify(wish);
       this.room(json.length);
       const folder = join(this.dir, 'wishes');
@@ -1140,14 +1141,14 @@ export class KeeperStore extends EventEmitter {
     });
   }
 
-  // Open problem reports in words that CTB has not had (from before it read
-  // them, say), each kept for it now as keepBug does: the wishes kept. Only
-  // from a login, as every report is now, and the oldest first.
+  // Open problem reports that CTB has not had (from before it read them,
+  // say), each kept for it now as keepBug does: the wishes kept. Only from
+  // a login, as every report is now, and the oldest first.
   async handOverReports() {
     const had = new Set((await this.wishes()).filter((w) => w.kind === 'bug').map((w) => w.report));
     const out = [];
     for (const r of (await this.reports()).reverse()) {
-      if (r.seen || !r.username || !String(r.text ?? '').trim() || had.has(r.id)) continue;
+      if (r.seen || !r.username || (!String(r.text ?? '').trim() && !r.picture) || had.has(r.id)) continue;
       const bug = await this.keepBug(r.device, r.id);
       if (bug) out.push(bug);
     }
@@ -1226,7 +1227,7 @@ export function cleanVisit(raw) {
 
 // An idea (or a problem told of, kind 'bug') as its sender's page sees it:
 // never who sent it, nor the issue.
-const wishForPage = (w) => ({ id: w.id, at: w.at, kind: w.kind === 'bug' ? 'bug' : 'idea', text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt, score: w.score ?? null, stage: w.stage ?? '', stageAt: w.stageAt ?? 0 });
+const wishForPage = (w) => ({ id: w.id, at: w.at, kind: w.kind === 'bug' ? 'bug' : 'idea', ...(w.picture ? { picture: true } : {}), text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt, score: w.score ?? null, stage: w.stage ?? '', stageAt: w.stageAt ?? 0 });
 
 export function cleanReport(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -1990,8 +1991,8 @@ export class Keeper extends EventEmitter {
         const { id, player } = await this.store.keepReport(conn.folder, msg.report);
         this.reply(conn, { t: 'kept', what: 'report', id });
         this.note({ device: conn.folder, what: 'report', player });
-        // Read by CTB's workers too, as an idea is: one in words, for the
-        // model cannot see the picture.
+        // Read by CTB's workers too, as an idea is (its picture described
+        // to them in words).
         const bug = await this.store.keepBug(who, id).catch(() => null);
         if (bug) this.emit('wish', bug);
         break;

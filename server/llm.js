@@ -19,6 +19,9 @@ export const DEFAULT_ZAI_MODEL = 'glm-5.3-flash';
 // CTB's workers do real work, so they think with Z.ai's best model unless
 // the admin page picks another (KIDS_WORLD_CTB_MODEL until then).
 export const DEFAULT_CTB_MODEL = 'glm-5.3';
+// What reads a picture for CTB (a problem report's, Zai.see): the GLM models
+// it works with read only text.
+export const ZAI_VISION_MODEL = 'glm-4.6v';
 
 const TIMEOUT_MS = 30000;
 
@@ -43,6 +46,7 @@ const ZAI_PRICES = {
   'glm-4-32b-0414-128k': [0.1, 0.1],
   'glm-4.7-flash': [0, 0],
   'glm-4.5-flash': [0, 0],
+  'glm-4.6v': [0.3, 0.9],
 };
 
 // What tokens of a model (by who serves it, as in spent) cost in US dollars,
@@ -55,9 +59,9 @@ export function costOf(name, model, promptTokens, tokens) {
 // The tokens one answer took, added to the trace's usage: one entry for each
 // model that answered (Z.ai's, then Ollama's when it fell back), counted on
 // the admin page whether or not the answer was any good.
-function spent(trace, llm, promptTokens, tokens) {
+function spent(trace, llm, promptTokens, tokens, model = llm.model) {
   const count = (n) => (Number.isFinite(n) && n >= 0 ? n : 0);
-  (trace.usage ??= []).push({ name: llm.name, model: llm.model, promptTokens: count(promptTokens), tokens: count(tokens) });
+  (trace.usage ??= []).push({ name: llm.name, model, promptTokens: count(promptTokens), tokens: count(tokens) });
 }
 const OPTIONS = { temperature: 0.7, num_predict: 160 };
 const ZAI_OPTIONS = { temperature: 0.7, max_tokens: 200 };
@@ -255,6 +259,35 @@ export class Zai {
     // empty: the JSON at the end of its thinking is that answer.
     if (!words.trim()) return this.read(body.choices?.[0]?.message?.reasoning_content ?? '', { last: true });
     return this.read(words);
+  }
+
+  // What a picture (a data: URL) shows, in words, as a vision model
+  // (ZAI_VISION_MODEL) answers what is asked of it: '' when it says nothing.
+  // trace as for chat, its usage under that model.
+  async see(image, question, trace = null, { model = ZAI_VISION_MODEL, maxTokens = 1500, timeoutMs = 120000 } = {}) {
+    if (!this.key) throw new Error('Z.ai has no API key (ZAI_API_KEY)');
+    const url = await this.pick();
+    if (!url) throw this.busy ?? new Error('Z.ai is not answering (or the API key is no good)');
+    if (trace) {
+      trace.sentAt = Date.now();
+      trace.model = model;
+    }
+    const res = await this.fetch(`${url}/chat/completions`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ model, stream: false, temperature: 0.2, max_tokens: maxTokens, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text: question }] }] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) throw await this.trouble(res);
+    const body = await res.json();
+    const words = String(body.choices?.[0]?.message?.content ?? '').trim();
+    if (trace) {
+      trace.raw = words;
+      trace.reasoning = body.choices?.[0]?.message?.reasoning_content ?? '';
+      trace.finish = body.choices?.[0]?.finish_reason ?? '';
+      spent(trace, this, body.usage?.prompt_tokens, body.usage?.completion_tokens, model);
+    }
+    return words;
   }
 
   // Why an answer failed, in Z.ai's own words when it says, as an error.

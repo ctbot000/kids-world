@@ -96,18 +96,22 @@ export const WISH_STAGES = ['proposed', 'approved', 'building', 'stuck', 'checki
 
 // An idea as a page shows it, from the keeper: { id, at, kind, text, state,
 // by, reply, answeredAt, score, stage, stageAt }, or null. kind is 'idea', or
-// 'bug' for a problem the player told of (🐞), read the same way. by is the worker who
+// 'bug' for a problem the player told of (🐞), read the same way: one with a
+// picture says so (picture: true), and may have no words. by is the worker who
 // read it; reply what they said back; score how good the worker thought it,
 // 0 to 100 (null before it was read).
 export function cleanWish(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !/^\d{13}-[0-9a-f]{8}$/.test(raw.id)) return null;
   const kind = raw.kind === 'bug' ? 'bug' : 'idea';
   const text = typeof raw.text === 'string' ? raw.text.slice(0, kind === 'bug' ? REPORT_TEXT_MAX : WISH_TEXT_MAX) : '';
-  if (!text) return null;
+  // A problem told of may be a picture alone.
+  const picture = kind === 'bug' && raw.picture === true;
+  if (!text && !picture) return null;
   return {
     id: raw.id,
     at: Number.isFinite(raw.at) ? raw.at : 0,
     kind,
+    ...(picture ? { picture } : {}),
     text,
     state: WISH_STATES.includes(raw.state) ? raw.state : 'waiting',
     by: typeof raw.by === 'string' ? raw.by.slice(0, 40) : '',
