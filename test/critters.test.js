@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
+import { Ripple } from '../public/js/render/effects.js';
 import * as B from '../public/js/shared/blocks.js';
 import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline, STATES, unpackCritter } from '../public/js/shared/critters.js';
 import { sellPrice } from '../public/js/shared/shop.js';
@@ -150,6 +151,59 @@ test('seagulls circle high over the shore, and come down to the beach or the wat
   });
   assert.ok(high / steps > 0.3, `up high ${high} of ${steps} steps`);
   assert.deepEqual([...down].sort(), ['land', 'water']);
+});
+
+// A meadow at y = 5 with a pool dug into it, three deep (water at y 3 to 5),
+// over x and z 10 to 17: a duck paddles about in it and comes out again.
+function meadowWithPool() {
+  const w = new World({ W: 48, H: 32, D: 48, sea: 5 });
+  for (let x = 0; x < w.W; x++) {
+    for (let z = 0; z < w.D; z++) {
+      w.set(x, 0, z, B.MAGIC_FLOOR);
+      const pool = x >= 10 && x <= 17 && z >= 10 && z <= 17;
+      for (let y = 1; y <= 5; y++) w.set(x, y, z, pool && y >= 3 ? B.WATER : y === 5 ? B.GRASS : B.STONE);
+    }
+  }
+  return w;
+}
+
+test('a paddling duck leaves ripples that spread and fade away, and ashore or diving it leaves none', () => {
+  const w = meadowWithPool();
+  const sim = new CritterSim(3);
+  const duck = sim.add('duck', 13.5, 6, 13.5);
+  let now = 0;
+  const paddling = { afloat: 0, swim: 0, ashoreSwim: 0 };
+  for (let i = 0; i < 6000; i++) {
+    now += 100;
+    sim.step(w, 0.1, now, new Map(), false);
+    const afloat = w.get(FL(duck.x), FL(duck.y), FL(duck.z)) === B.WATER;
+    if (afloat) paddling.afloat++;
+    // Only a duck paddling along is 'swim': floating still it idles or eats,
+    // ashore it walks, and a duck never dives (as a penguin does).
+    if (duck.state === 'swim') {
+      if (afloat) paddling.swim++;
+      else paddling.ashoreSwim++;
+    }
+  }
+  assert.ok(paddling.afloat > 600, `the duck spends ${paddling.afloat} steps in the water`);
+  assert.ok(paddling.swim > 600, `it paddles for ${paddling.swim} of them`);
+  assert.equal(paddling.ashoreSwim, 0, 'ashore it never paddles');
+  assert.ok(!CRITTER_INFO.duck.dives, 'a duck never dives');
+  // The ripple ring it leaves behind: it spreads out and fades away within
+  // about a second, then is free for the next one.
+  const ripple = new Ripple({ add: () => {} });
+  ripple.go(duck.x, 4, duck.z);
+  assert.ok(ripple.busy && ripple.mesh.visible, 'a ripple starts out showing');
+  const sizes = [];
+  let gone = null;
+  for (let i = 1; i <= 120; i++) {
+    ripple.update(1 / 60);
+    if (ripple.busy) sizes.push(ripple.mesh.scale.x);
+    else gone ??= i;
+  }
+  assert.ok(Math.max(...sizes) > 0.55, `it spreads out (${Math.max(...sizes).toFixed(2)})`);
+  assert.ok(sizes[0] < sizes[sizes.length - 1], 'it grows as it goes');
+  assert.ok(gone > 36 && gone <= 60, `it fades away after ${gone} sixtieths of a second`);
 });
 
 test('fed a fruit, a flying friend flies along with you, and sits on your head when you stand still', () => {

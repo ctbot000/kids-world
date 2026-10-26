@@ -4942,10 +4942,11 @@ export class Game extends EventTarget {
       m.group.position.set(s.x, s.y, s.z);
       m.group.rotation.y = s.yaw;
       const state = s.state ?? 'idle';
-      // Far enough off, an animal is too small to see, and is not drawn.
+      // Whether it went anywhere this frame, and far enough off it is too
+      // small to see, and is not drawn.
+      const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
       if (m.group.visible) {
-        const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
         const ground = this.renderer.groundUnder(s.x, s.y, s.z);
         m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
         this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
@@ -4970,14 +4971,14 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
-      this.seaSights(c, s, state, now);
+      this.seaSights(c, s, state, now, moving);
     }
   }
 
   // A splash where a dolphin, a penguin or a fish leaves the water or goes
   // back in, or a penguin or a seal dives; a penguin sliding on its tummy and
   // the whale's spout, which are each worth a sticker.
-  seaSights(c, s, state, now) {
+  seaSights(c, s, state, now, moving) {
     const fx = this.renderer.effects;
     const was = c.was;
     c.was = state;
@@ -4986,6 +4987,17 @@ export class Game extends EventTarget {
       if (top !== null && this.near(s.x, s.y, s.z, 30)) fx.splash(s.x, top, s.z);
     }
     if (c.type === 'penguin' && state === 'slide' && was !== 'slide' && this.near(s.x, s.y, s.z, 25)) this.profile.count('slides');
+    // A duck paddling along leaves a little ripple at its tail every couple
+    // of seconds, spreading out and fading away behind it. Ashore, drifting
+    // asleep afloat, or under the water, there is nothing: only paddling
+    // actually going somewhere stirs it.
+    if (c.type === 'duck' && state === 'swim' && moving && this.near(s.x, s.y, s.z, 90) && now >= (c.rippleAt ?? 0)) {
+      const top = this.surfaceAt(s.x, s.z);
+      if (top !== null) {
+        c.rippleAt = now + 2000;
+        fx.ripple(s.x - Math.sin(s.yaw) * 0.3, top + 0.02, s.z - Math.cos(s.yaw) * 0.3);
+      }
+    }
     if (c.type === 'dolphin' || c.type === 'penguin') {
       const top = this.surfaceAt(s.x, s.z);
       const out = top !== null && s.y > top;
