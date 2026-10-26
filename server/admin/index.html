@@ -17,10 +17,9 @@
         <button type="button" role="tab" id="tab-overview" aria-controls="overview">Overview</button>
         <button type="button" role="tab" id="tab-players" aria-controls="players">Players <span id="devices-count" class="badge"></span></button>
         <button type="button" role="tab" id="tab-visitors" aria-controls="visitors-section">Visitors <span id="visitors-count" class="badge"></span></button>
-        <button type="button" role="tab" id="tab-reports" aria-controls="reports-section" hidden>Problem reports <span id="reports-count" class="badge"></span></button>
         <button type="button" role="tab" id="tab-tv" aria-controls="tv-section" hidden>TV broadcast</button>
         <button type="button" role="tab" id="tab-friend" aria-controls="friend-section" hidden>AI friend</button>
-        <button type="button" role="tab" id="tab-ctb" aria-controls="ctb-section" hidden>CTB</button>
+        <button type="button" role="tab" id="tab-ctb" aria-controls="ctb-section" hidden>CTB <span id="ctb-reports-count" class="badge bad" hidden></span></button>
       </nav>
     </header>
     <main>
@@ -38,9 +37,6 @@
       <section id="visitors-section" role="tabpanel" aria-labelledby="tab-visitors">
         <div id="visitors" class="visitors"></div>
       </section>
-      <section id="reports-section" role="tabpanel" aria-labelledby="tab-reports" hidden>
-        <div id="reports" class="reports"></div>
-      </section>
       <section id="tv-section" role="tabpanel" aria-labelledby="tab-tv" hidden>
         <div id="tv" class="tv card"></div>
       </section>
@@ -49,6 +45,11 @@
       </section>
       <section id="ctb-section" role="tabpanel" aria-labelledby="tab-ctb" hidden>
         <div id="ctb" class="ctb"></div>
+        <section id="reports-section" class="card ctb-card reports-card" hidden>
+          <h3>🐞 Problem reports <span id="reports-count" class="badge"></span></h3>
+          <p class="muted">What players told of in the game. One in words goes to the workers too, beside the players’ ideas.</p>
+          <div id="reports" class="reports"></div>
+        </section>
       </section>
     </main>
   </body>

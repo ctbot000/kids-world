@@ -1217,8 +1217,15 @@ button.primary:hover {
   gap: 16px;
 }
 
-.ctb [hidden] {
+.ctb [hidden],
+.ctb[hidden],
+.reports-card[hidden] {
   display: none;
+}
+
+/* The problem reports, on their own while CTB has nothing to show. */
+.ctb + .reports-card {
+  margin-top: 16px;
 }
 
 .ctb p {

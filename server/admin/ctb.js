@@ -290,10 +290,17 @@ export function setUpCtb(helpers) {
     );
   }
 
+  // The problem reports' card (admin.js renderReports) sits among CTB's own
+  // after the task board, or on its own while CTB has nothing to show.
   function render(state) {
-    const section = document.getElementById('ctb-section');
-    section.hidden = !state;
-    if (!state) return;
+    const ctb = document.getElementById('ctb');
+    ctb.hidden = !state;
+    if (!state) {
+      ctb.after(helpers.reports);
+      helpers.shown();
+      return;
+    }
+    helpers.shown();
     if (!view) {
       const settings = settingsForm(h);
       // One card a part, the work going on first and the forms after it.
@@ -304,6 +311,7 @@ export function setUpCtb(helpers) {
         card({}, view.line, settings.form, view.island),
         view.crew,
         view.board,
+        helpers.reports,
         h('div', { class: 'ctb-row' }, view.proposals, view.ideas, view.pulls),
         card({}, h('h3', {}, 'New task'), taskForm(h)),
         runs.el,

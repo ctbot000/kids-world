@@ -174,13 +174,24 @@ function reportCard(r) {
   );
 }
 
+// The CTB tab holds the problem reports as well: it shows while either
+// has something to show.
+function showCtbTab() {
+  $('ctb-section').hidden = $('ctb').hidden && $('reports-section').hidden;
+}
+
 let reportsShown = '';
 function renderReports(state) {
   const reports = state.reports ?? [];
   $('reports-section').hidden = reports.length === 0;
+  showCtbTab();
   const waiting = reports.filter((r) => !r.seen).length;
   $('reports-count').textContent = waiting ? `${waiting} open` : 'all resolved';
   $('reports-count').className = `badge${waiting ? ' bad' : ' ok'}`;
+  // The CTB tab, where they are, says how many are open.
+  $('ctb-reports-count').hidden = !waiting;
+  $('ctb-reports-count').textContent = `🐞 ${waiting}`;
+  $('ctb-reports-count').title = `${plural(waiting, 'problem report', 'problem reports')} open`;
   const key = JSON.stringify(reports);
   if (key === reportsShown) return;
   reportsShown = key;
@@ -1118,7 +1129,9 @@ async function refresh(now = false) {
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
+// Problem reports had a tab of their own before they moved into CTB's.
+if (location.hash === '#reports') history.replaceState(null, '', '#ctb');
 setUpTabs();
 setUpTv();
-const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened });
+const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
 refresh();
