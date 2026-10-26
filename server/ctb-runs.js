@@ -131,7 +131,7 @@ export class Runs {
     return this;
   }
 
-  // A new run. what: { kind ('task', 'idea' or 'proposal'), k, worker,
+  // A new run. what: { kind ('task', 'idea', 'bug' or 'proposal'), k, worker,
   // model, issue, title, messages (as first sent to the model) }.
   async start(what) {
     await mkdir(this.dir, { recursive: true });

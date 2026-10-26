@@ -94,17 +94,20 @@ export const WISH_STATES = ['waiting', 'accepted', 'declined'];
 // workers stuck on it. '' before any news.
 export const WISH_STAGES = ['proposed', 'approved', 'building', 'stuck', 'checking', 'done', 'dropped'];
 
-// An idea as a page shows it, from the keeper: { id, at, text, state, by,
-// reply, answeredAt, score, stage, stageAt }, or null. by is the worker who
+// An idea as a page shows it, from the keeper: { id, at, kind, text, state,
+// by, reply, answeredAt, score, stage, stageAt }, or null. kind is 'idea', or
+// 'bug' for a problem the player told of (🐞), read the same way. by is the worker who
 // read it; reply what they said back; score how good the worker thought it,
 // 0 to 100 (null before it was read).
 export function cleanWish(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !/^\d{13}-[0-9a-f]{8}$/.test(raw.id)) return null;
-  const text = typeof raw.text === 'string' ? raw.text.slice(0, WISH_TEXT_MAX) : '';
+  const kind = raw.kind === 'bug' ? 'bug' : 'idea';
+  const text = typeof raw.text === 'string' ? raw.text.slice(0, kind === 'bug' ? REPORT_TEXT_MAX : WISH_TEXT_MAX) : '';
   if (!text) return null;
   return {
     id: raw.id,
     at: Number.isFinite(raw.at) ? raw.at : 0,
+    kind,
     text,
     state: WISH_STATES.includes(raw.state) ? raw.state : 'waiting',
     by: typeof raw.by === 'string' ? raw.by.slice(0, 40) : '',

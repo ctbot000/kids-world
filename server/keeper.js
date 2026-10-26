@@ -18,7 +18,8 @@
 //                                                   who, and what the page knew of where they were
 //   <data>/reports/<id>.jpg                         and the picture of their screen, if it came
 //   <data>/wishes/<id>.json                         an idea for the game a player sent CTB's
-//                                                   workers, and their answer (see server/ctb.js)
+//                                                   workers (or a problem report in words, for
+//                                                   them too), and their answer (see server/ctb.js)
 //   <data>/visitors.json                            the pages that came by with no login: when,
 //                                                   how often, from where and on what browser
 //
@@ -1098,7 +1099,7 @@ export class KeeperStore extends EventEmitter {
     const times = (this.wishTimes.get(player) ?? []).filter((t) => now - t < HOUR_MS);
     if (times.length >= WISHES_AN_HOUR) return Promise.reject(new KeepError('wait', 'That is a lot of ideas! Send another one later.'));
     return this.serial(async () => {
-      const mine = (await this.wishes()).filter((w) => w.player === player && w.state === 'waiting');
+      const mine = (await this.wishes()).filter((w) => w.player === player && w.state === 'waiting' && w.kind !== 'bug');
       if (mine.length >= WISHES_WAITING) throw new KeepError('wait', 'Your other ideas are still being read. Wait for an answer first!');
       times.push(now);
       this.wishTimes.set(player, times);
@@ -1117,7 +1118,29 @@ export class KeeperStore extends EventEmitter {
     });
   }
 
-  // Every idea kept, the newest first.
+  // A problem report (keepReport's id) kept for CTB's workers beside the
+  // player's ideas, read and answered the same way: the wish as kept, or
+  // null for one with no words. Its limits are the report's own.
+  keepBug(player, reportId) {
+    if (!isDeviceId(player) || !isReportId(reportId)) return Promise.resolve(null);
+    return this.serial(async () => {
+      const report = await readJson(join(this.dir, 'reports', `${reportId}.json`));
+      const text = shortText(report?.text, REPORT_TEXT_MAX).replace(/\s+/gu, ' ');
+      if (!text) return null;
+      const now = this.now();
+      const record = (await readJson(this.path(player, 'device.json'))) ?? {};
+      const login = await this.readLogin(player);
+      const wish = { id: `${now}-${randomHex(4)}`, at: now, player, name: record.profile?.name || report.player || '', username: login?.username ?? '', kind: 'bug', report: reportId, text, state: 'waiting', by: '', reply: '', answeredAt: 0 };
+      const json = JSON.stringify(wish);
+      this.room(json.length);
+      const folder = join(this.dir, 'wishes');
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      await this.write(join(folder, `${wish.id}.json`), json);
+      return wish;
+    });
+  }
+
+  // Every idea kept (and problem report for CTB, kind 'bug'), the newest first.
   async wishes() {
     const folder = join(this.dir, 'wishes');
     const out = [];
@@ -1187,8 +1210,9 @@ export function cleanVisit(raw) {
   return { page: shortText(a.page, 200), agent: shortText(a.agent, 300), screen: shortText(a.screen, 40), touch: a.touch === true, language: shortText(a.language, 20) };
 }
 
-// An idea as its sender's page sees it: never who sent it, nor the issue.
-const wishForPage = (w) => ({ id: w.id, at: w.at, text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt, score: w.score ?? null, stage: w.stage ?? '', stageAt: w.stageAt ?? 0 });
+// An idea (or a problem told of, kind 'bug') as its sender's page sees it:
+// never who sent it, nor the issue.
+const wishForPage = (w) => ({ id: w.id, at: w.at, kind: w.kind === 'bug' ? 'bug' : 'idea', text: w.text, state: w.state, by: w.by, reply: w.reply, answeredAt: w.answeredAt, score: w.score ?? null, stage: w.stage ?? '', stageAt: w.stageAt ?? 0 });
 
 export function cleanReport(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -1948,10 +1972,14 @@ export class Keeper extends EventEmitter {
       case 'report': {
         // A problem a player told of, with a picture of their screen: logged
         // in, so the grown-ups know who to thank and to ask.
-        await this.needIsleLevel(mine('tell of a problem'), 'tell of a problem');
+        const who = await this.needIsleLevel(mine('tell of a problem'), 'tell of a problem');
         const { id, player } = await this.store.keepReport(conn.folder, msg.report);
         this.reply(conn, { t: 'kept', what: 'report', id });
         this.note({ device: conn.folder, what: 'report', player });
+        // Read by CTB's workers too, as an idea is: one in words, for the
+        // model cannot see the picture.
+        const bug = await this.store.keepBug(who, id).catch(() => null);
+        if (bug) this.emit('wish', bug);
         break;
       }
       case 'wish': {

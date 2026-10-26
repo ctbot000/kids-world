@@ -14,7 +14,7 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { cleanWish, KEEPER_VERSION, TELL_US_LEVEL, WISHES_AN_HOUR, WISHES_WAITING } from '../public/js/shared/keeper.js';
 import { levelFor } from '../public/js/shared/levels.js';
 import { LABELS } from '../server/ctb-github.js';
-import { Company, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
+import { bugAbout, Company, creditIn, defaultSettings, mdText, newsOf, pullBody, stageOf } from '../server/ctb.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 
 const dirs = [];
@@ -110,8 +110,13 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
   const told = await tablet.say({ t: 'report', report: { text: 'The pony is stuck', about: { name: 'Sunny Otter' } } });
   assert.equal(told.what, 'report');
   assert.equal((await store.reports())[0].username, 'Otter Fan');
+  // CTB hears of it too, as a problem beside their ideas (not counted as one).
+  assert.equal(heard.length, 2);
+  assert.equal(heard[1].kind, 'bug');
+  assert.equal(heard[1].report, (await store.reports())[0].id);
+  heard.pop();
   assert.equal(kept.what, 'wish');
-  assert.deepEqual(Object.keys(kept.wish).sort(), ['answeredAt', 'at', 'by', 'id', 'reply', 'score', 'stage', 'stageAt', 'state', 'text'], 'never who sent it');
+  assert.deepEqual(Object.keys(kept.wish).sort(), ['answeredAt', 'at', 'by', 'id', 'kind', 'reply', 'score', 'stage', 'stageAt', 'state', 'text'], 'never who sent it');
   assert.equal(kept.wish.text, 'A rainbow slide!');
   assert.equal(kept.wish.state, 'waiting');
   assert.equal(heard.length, 1);
@@ -129,8 +134,9 @@ test('a logged-in player sends ideas, within limits, and only their own pages he
 
   // Their own ideas, the newest first; another player sees only theirs.
   const mine = (await tablet.say({ t: 'wishes' })).wishes;
-  assert.equal(mine.length, WISHES_WAITING);
-  assert.equal(mine.at(-1).text, 'A rainbow slide!');
+  assert.equal(mine.length, WISHES_WAITING + 1);
+  assert.equal(mine.filter((w) => w.kind === 'bug').length, 1);
+  assert.equal(mine.filter((w) => w.kind === 'idea').at(-1).text, 'A rainbow slide!');
   assert.deepEqual((await other.say({ t: 'wishes' })).wishes, []);
 
   // An answer: kept, and told to that player's pages, not another's.
@@ -305,4 +311,86 @@ test('a worker reads each idea in turn, says yes or no in the player’s languag
   assert.equal(stageOf({ closed: true, completed: false, labels: [LABELS.proposal] }), 'dropped');
   assert.equal(newsOf('proposed', 'dropped'), true);
   assert.equal(newsOf('done', 'dropped'), false);
+});
+
+test('a problem a player tells of is read by a worker as an idea is, and a real one filed as a bug to fix', async () => {
+  const clock = { t: Date.UTC(2026, 9, 26, 3) };
+  const { keeper } = await keeperWith(clock);
+  const heard = [];
+  keeper.on('wish', (w) => heard.push(w));
+  const tablet = await page(keeper, TABLET, '22');
+  await tablet.say({ t: 'make-login', username: 'Otter Fan', password: PASSWORD, profile: { name: 'Sunny Otter' } });
+  await playIsle(tablet, 'Sunny Otter');
+  const report = (text, about = {}) => {
+    clock.t += 1000;
+    return tablet.say({ t: 'report', report: { text, about: { name: 'Sunny Otter', ...about } } });
+  };
+  await report('My pony sinks into the water and gets stuck', { where: 'island', screen: '1024x768', touch: true, island: { name: 'Otter Bay', code: 'ABCD-1234', kind: 'mine', theme: 'beach' }, errors: ['12:00:01 TypeError: pony.y is undefined'] });
+  await report('어떻게 날 수 있어요?');
+  // A picture alone is for the grown-ups: the model cannot see it.
+  clock.t += 1000;
+  await tablet.say({ t: 'report', report: { picture: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]).toString('base64')}`, about: { name: 'Sunny Otter' } } });
+  assert.equal(heard.length, 2);
+  // An idea limit is not a problem report's: the waiting bugs leave room for ideas.
+  for (let i = 0; i < WISHES_AN_HOUR; i++) {
+    clock.t += 1000;
+    assert.equal((await tablet.say({ t: 'wish', text: `Idea ${i}` })).what, 'wish');
+  }
+
+  const asked = [];
+  const llm = {
+    model: 'stand-in',
+    problem: async () => '',
+    models: async () => [],
+    chat: async (messages, schema, trace) => {
+      trace.usage = [{ name: 'Z.ai', model: 'stand-in', promptTokens: 5, tokens: 5 }];
+      const user = messages.at(-1).content;
+      asked.push({ system: messages[0].content, user });
+      if (user.includes('pony sinks')) return { accept: true, scoring: { already: false, enjoy: 20, small: 10, checks: 5, newParts: [], risk: 5, bundled: false, polish: false, takesAway: 0 }, reply: 'Oh no! We will fix your pony.', title: 'Keep the pony from sinking into water', tldr: 'A ridden pony sinks into water blocks and gets stuck.', what: 'Look at how the pony meets water.', done: ['The pony swims on water'] };
+      if (user.includes('어떻게')) return { accept: false, scoring: { already: true }, reply: '헬리콥터를 타면 날 수 있어요!' };
+      return { accept: false, reply: 'Thanks for your idea!' };
+    },
+  };
+  const github = hub();
+  const company = new Company({
+    llm,
+    github,
+    repoDir: await tempDir(),
+    workDir: await tempDir(),
+    settings: { ...defaultSettings({}), workers: 1, propose: false },
+    log: () => {},
+    wishes: { list: () => keeper.store.wishes(), answer: (id, a) => keeper.answerWish(id, a), stage: (id, stage) => keeper.stageWish(id, stage), report: async (id) => (await keeper.store.reports()).find((r) => r.id === id) ?? null },
+  });
+  company.problem = '';
+  await company.reviewWishes();
+
+  // Asked as a problem, with what the page knew, never the island's name or code.
+  const bug = asked.find((a) => a.user.includes('pony sinks'));
+  assert.match(bug.system, /told of a problem/);
+  assert.match(bug.system, /in the language the child wrote in/);
+  assert.match(bug.user, /Where: island\nIsland: mine, theme beach/);
+  assert.match(bug.user, /Screen: 1024x768, touch/);
+  assert.match(bug.user, /TypeError: pony\.y is undefined/);
+  assert.doesNotMatch(bug.user, /Otter Bay|ABCD-1234/);
+  assert.match(asked.find((a) => a.user.includes('어떻게')).user, /The page's latest errors: none/);
+  assert.equal(bugAbout(null), '(nothing)');
+
+  // A real one is a proposal, labelled a bug and a player's, crediting them.
+  const filed = github.made.find((m) => m.title === 'Keep the pony from sinking into water');
+  assert.deepEqual(filed.labels, [LABELS.proposal, LABELS.request, LABELS.bug]);
+  assert.match(filed.body, /🐞 A problem found by \*\*Sunny Otter\*\*, playing Kids World — thank you! Taken on by Ada 💼/);
+  assert.equal(creditIn(filed.body), 'Sunny Otter');
+  assert.match(pullBody({ issue: { number: 41, body: filed.body }, summary: 'Fixed it.', worker: 'Ada 💼', model: 'glm' }), /Closes #41\.\n\n🐞 A problem found by \*\*Sunny Otter\*\*, playing Kids World — thank you!/);
+
+  // The player hears both answers, as problems, in their list beside their ideas.
+  const news = tablet.news().map((n) => n.wish).filter((w) => w.kind === 'bug');
+  assert.deepEqual(news.map((w) => [w.state, w.reply]), [
+    ['accepted', 'Oh no! We will fix your pony.'],
+    ['declined', '헬리콥터를 타면 날 수 있어요!'],
+  ]);
+  assert.equal(news[1].score, 15, 'no problem at all scores low');
+  const mine = (await tablet.say({ t: 'wishes' })).wishes;
+  assert.equal(mine.filter((w) => w.kind === 'bug').length, 2);
+  assert.deepEqual(cleanWish(news[0]), news[0]);
+  assert.equal(cleanWish(news[0]).kind, 'bug');
 });

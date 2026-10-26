@@ -99,7 +99,7 @@ function taskForm(h) {
   return form;
 }
 
-const KIND = { task: '🛠️ Task', idea: '💡 Idea', proposal: '📝 Proposal' };
+const KIND = { task: '🛠️ Task', idea: '💡 Idea', bug: '🐞 Problem', proposal: '📝 Proposal' };
 const num = new Intl.NumberFormat();
 const RUN_POLL_MS = 4000;
 const took = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s` : `${(ms / 1000).toFixed(1)} s`);
@@ -339,7 +339,7 @@ export function setUpCtb(helpers) {
     );
     const IDEA = { waiting: ['waiting', 'warn'], accepted: ['accepted', 'ok'], declined: ['declined', ''] };
     view.ideas.replaceChildren(
-      h('h3', {}, 'Players’ ideas ', h('span', { class: 'badge' }, String(state.ideas?.length ?? 0))),
+      h('h3', {}, 'Players’ ideas and problems ', h('span', { class: 'badge' }, String(state.ideas?.length ?? 0))),
       state.ideas?.length
         ? h(
             'ul',
@@ -350,6 +350,7 @@ export function setUpCtb(helpers) {
                 {},
                 h('span', { class: `badge ${IDEA[i.state][1]}` }, IDEA[i.state][0]),
                 ' ',
+                i.kind === 'bug' ? 'Problem from ' : null,
                 h('b', {}, i.name || i.username || 'A player'),
                 h('span', { class: 'muted' }, ` · ${ago(i.at)}`),
                 i.score != null ? [' ', h('span', { class: 'badge' }, `${i.score}/100`)] : null,
@@ -359,7 +360,7 @@ export function setUpCtb(helpers) {
               ),
             ),
           )
-        : h('p', { class: 'muted' }, 'No ideas from players yet. They send them from 💡 in the game’s help and settings.'),
+        : h('p', { class: 'muted' }, 'No ideas or problems from players yet. They send them from 💌 in the game.'),
     );
     view.pulls.replaceChildren(
       h('h3', {}, 'Pull requests'),

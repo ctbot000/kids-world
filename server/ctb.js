@@ -8,7 +8,9 @@
 // send ideas for the game from the game itself (the keeper keeps them): a
 // worker reads each one, says yes or no to the player, kindly and in their
 // own language, and files one it takes as a proposal (labelled "ctb:
-// request" too), which waits for approval like the workers' own. A worker free for a task takes
+// request" too), which waits for approval like the workers' own. A problem
+// a player tells of (🐞) goes the same way: a worker reads it, writes back,
+// and files one it takes as a proposal labelled "ctb: bug" as well. A worker free for a task takes
 // the oldest, works on it in a git worktree of its own on a branch
 // ctb/issue-<n> (ctb-agent.js: reading, editing and running tests, one step
 // at a time), runs the unit tests, and when they pass commits, pushes the
@@ -24,7 +26,7 @@ import { EventEmitter } from 'node:events';
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { langOf } from '../public/js/shared/words.js';
-import { cleanScore, USERNAME_MAX, usernameKey, WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
+import { cleanScore, REPORT_TEXT_MAX, USERNAME_MAX, usernameKey, WISH_TEXT_MAX } from '../public/js/shared/keeper.js';
 import { Agent, layoutOf, testEnv } from './ctb-agent.js';
 import { Runs, transcript } from './ctb-runs.js';
 import { GitHub, LABELS, repoOf } from './ctb-github.js';
@@ -233,14 +235,33 @@ export function strayFile(path, text) {
 
 export function pullBody({ issue, summary, worker, model }) {
   const credit = creditIn(issue.body);
-  return `${summary.trim() || 'Done as the issue asks.'}\n\nCloses #${issue.number}.${credit ? `\n\n💡 An idea from **${credit}**, playing Kids World — thank you!` : ''}\n\n— ${worker}, CTB (${model})`;
+  const line = bugIn(issue.body) ? `🐞 A problem found by **${credit}**` : `💡 An idea from **${credit}**`;
+  return `${summary.trim() || 'Done as the issue asks.'}\n\nCloses #${issue.number}.${credit ? `\n\n${line}, playing Kids World — thank you!` : ''}\n\n— ${worker}, CTB (${model})`;
 }
 
 // A name as plain text in GitHub's Markdown: no formatting, links or @mentions.
 export const mdText = (text) => String(text).replace(/[\\`*_[\]{}()#+\-.!|<>~@]/g, (c) => `\\${c}`);
 
-// The player an issue credits for its idea (as proposalBody's footer says it), or ''.
-export const creditIn = (body) => /💡 An idea from \*\*(.+?)\*\*/u.exec(String(body ?? ''))?.[1] ?? '';
+// The player an issue credits for its idea or the problem they found (as
+// proposalBody's footer says it), or ''.
+export const creditIn = (body) => /(?:💡 An idea|🐞 A problem found) (?:from|by) \*\*(.+?)\*\*/u.exec(String(body ?? ''))?.[1] ?? '';
+// What a problem report's page knew, for the worker reading it: where the
+// player was, the device and the page's latest errors (report.about, see
+// keeper.js cleanReport), never the island's name or code.
+export function bugAbout(about) {
+  if (!about || typeof about !== 'object') return '(nothing)';
+  const island = about.island ? [about.island.kind, about.island.theme && `theme ${about.island.theme}`, about.island.online && `online: ${about.island.online}`, about.island.players && `${about.island.players} playing`, about.island.host && 'they host it'].filter(Boolean).join(', ') : '';
+  const lines = [
+    about.where && `Where: ${about.where}`,
+    island && `Island: ${island}`,
+    about.screen && `Screen: ${about.screen}${about.touch ? ', touch' : ''}`,
+    about.layout && `Layout: ${about.layout}`,
+    about.agent && `Browser: ${about.agent}`,
+    about.errors?.length ? `The page's latest errors:\n${about.errors.join('\n')}` : "The page's latest errors: none",
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+const bugIn = (body) => /🐞 A problem found by \*\*/u.test(String(body ?? ''));
 
 // The workers and their work. llm: what they think with (llm.js), its model
 // picked by the settings, or defaultModel (the llm's own) until one is. office: the CTB island, or null.
@@ -868,6 +889,7 @@ export class Company extends EventEmitter {
   // One idea read by one worker: yes or no, said back to the player, and a
   // proposal filed for a yes.
   async reviewWish(w, wish) {
+    if (wish.kind === 'bug') return this.reviewBug(w, wish);
     const doing = w.doing;
     this.tell(w, 'Reading an idea from a player');
     let run = null;
@@ -878,33 +900,76 @@ export class Company extends EventEmitter {
         { role: 'user', content: `What the game has now:\n${features}\n\nThe child's idea:\n${String(wish.text).slice(0, WISH_TEXT_MAX)}` },
       ], WISH_SCHEMA, { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.4 });
       run = thought.run;
-      const answer = thought.answer;
-      const reply = String(answer?.reply ?? '').replace(/\s+/gu, ' ').trim().slice(0, 300);
-      if (!reply || typeof answer.accept !== 'boolean') throw new Error('the model gave no answer to say');
-      let issue = null;
-      if (answer.accept) {
-        const title = String(answer.title ?? '').trim().slice(0, TITLE_MAX);
-        // Credited to the player by the name they play under (never their
-        // username, which they log in with), carried on to the pull request.
-        const name = mdText(String(wish.name || '').trim() || 'a player');
-        const body = proposalBody(answer, `💡 An idea from **${name}**, playing Kids World — thank you! Accepted by ${w.name}, CTB (${this.model}). Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`, { request: true });
-        if (!title || !body) throw new Error('the model said yes but wrote no issue');
-        issue = await this.github.create({ title, body, labels: [LABELS.proposal, LABELS.request] });
-        this.log(`CTB: ${w.name} took a player's idea as #${issue.number} “${title}”.`);
-      } else {
-        this.log(`CTB: ${w.name} turned down a player's idea.`);
-      }
-      const score = ideaScore(answer, true)?.score ?? null;
-      await this.wishes.answer(wish.id, { state: answer.accept ? 'accepted' : 'declined', by: w.name, reply, score, ...(issue ? { issue: { number: issue.number, url: issue.url } } : {}) });
-      run?.end({ ok: true, why: `${answer.accept ? `Accepted, as #${issue.number}` : 'Declined'} (score ${score ?? '?'}): “${reply}”`, url: issue?.url ?? '' });
-      this.office?.say(w.k, answer.accept ? 'I just read a great idea from a player — we are taking it on!' : 'I just read an idea from a player and wrote back to them.');
-      if (issue) await this.refresh();
+      await this.answerWish(w, wish, thought.answer, run, {
+        footer: (name) => `💡 An idea from **${name}**, playing Kids World — thank you! Accepted by ${w.name}, CTB (${this.model}).`,
+        labels: [LABELS.proposal, LABELS.request],
+        what: "a player's idea",
+        took: 'I just read a great idea from a player — we are taking it on!',
+        read: 'I just read an idea from a player and wrote back to them.',
+      });
     } catch (error) {
       run?.end({ ok: false, why: error.message });
       throw error;
     } finally {
       this.tell(w, doing);
     }
+  }
+
+  // A problem a player told of (🐞), read by one worker as an idea is: a
+  // real problem in the game it can fix is taken on, filed as a proposal
+  // labelled "ctb: bug" too; anything else gets a kind answer. The model
+  // has what the player wrote and what their page knew (where they were,
+  // the device, its latest errors), never the picture or the island's code.
+  async reviewBug(w, wish) {
+    const doing = w.doing;
+    this.tell(w, 'Reading a problem a player told of');
+    let run = null;
+    try {
+      const features = await this.features();
+      const report = (await this.wishes.report?.(wish.report).catch(() => null)) ?? null;
+      const thought = await this.think(w, { kind: 'bug', title: `A problem: ${String(wish.text).slice(0, 80)}` }, [
+        { role: 'system', content: `You are ${STAFF[w.k].name}, a software engineer at CTB, which builds Kids World, a 3D block-building island game for kids (about 5 to 12) played together in the browser: cozy building and pets, and adventures too, with monsters to bop, hearts and potions, toy weapons and a dragon to tame. A child playing the game told of a problem with it: something that went wrong. Decide whether CTB takes it on. Say yes to a real problem in the game that an engineer could look into and fix: something broken, stuck, wrong or confusing, told clearly enough to know where to look (what the page knew helps: where they were, the device, the page's latest errors). Say no to one that is how the game is meant to work (and tell the child kindly how it works, or where to find what they looked for), one that is not about the game, or one too unclear to know what went wrong (and thank them, and ask them to tell again what they did and what happened). Then write to the child: one or two short, warm sentences in simple words, in the language the child wrote in, saying yes or no and why; never say when it will be fixed. For a yes, also write the GitHub issue for the engineers, in English: the one fix, named in a short imperative title (like "Keep the pony from sinking into water blocks"), a TL;DR of one or two sentences saying what goes wrong and where, what to look into and change in at most three short sentences (naming what the player saw and anything the page knew that points to it), and two to four short checks that tell it is fixed. ${SCORING} For a problem, enjoy is how much fixing it helps kids play (a crash or being stuck scores high), small how little it takes to fix, and already true only when it is no problem at all. Score a no too. Answer as JSON: {"accept": true or false, "scoring": its score in parts, "reply": the words to the child, "title": "", "tldr": "", "what": "", "done": []} (the issue's parts empty for a no).` },
+        { role: 'user', content: `What the game has now:\n${features}\n\nWhat the child's page knew:\n${bugAbout(report?.about)}\n\nThe child's problem:\n${String(wish.text).slice(0, REPORT_TEXT_MAX)}` },
+      ], WISH_SCHEMA, { maxTokens: THINK_TOKENS, timeoutMs: 180000, temperature: 0.4 });
+      run = thought.run;
+      await this.answerWish(w, wish, thought.answer, run, {
+        footer: (name) => `🐞 A problem found by **${name}**, playing Kids World — thank you! Taken on by ${w.name}, CTB (${this.model}).`,
+        labels: [LABELS.proposal, LABELS.request, LABELS.bug],
+        what: 'a problem a player told of',
+        took: 'A player told us of a problem — we are going to fix it!',
+        read: 'I just read a problem a player told of and wrote back to them.',
+      });
+    } catch (error) {
+      run?.end({ ok: false, why: error.message });
+      throw error;
+    } finally {
+      this.tell(w, doing);
+    }
+  }
+
+  // A worker's answer to an idea or a problem, as the model gave it: said
+  // back to the player, and for a yes, a proposal filed.
+  async answerWish(w, wish, answer, run, { footer, labels, what, took, read }) {
+    const reply = String(answer?.reply ?? '').replace(/\s+/gu, ' ').trim().slice(0, 300);
+    if (!reply || typeof answer.accept !== 'boolean') throw new Error('the model gave no answer to say');
+    let issue = null;
+    if (answer.accept) {
+      const title = String(answer.title ?? '').trim().slice(0, TITLE_MAX);
+      // Credited to the player by the name they play under (never their
+      // username, which they log in with), carried on to the pull request.
+      const name = mdText(String(wish.name || '').trim() || 'a player');
+      const body = proposalBody(answer, `${footer(name)} Label it “${LABELS.approved}” to start it (Approve on the admin page does that); close it to turn it down.`, { request: true });
+      if (!title || !body) throw new Error('the model said yes but wrote no issue');
+      issue = await this.github.create({ title, body, labels });
+      this.log(`CTB: ${w.name} took ${what} as #${issue.number} “${title}”.`);
+    } else {
+      this.log(`CTB: ${w.name} turned down ${what}.`);
+    }
+    const score = ideaScore(answer, true)?.score ?? null;
+    await this.wishes.answer(wish.id, { state: answer.accept ? 'accepted' : 'declined', by: w.name, reply, score, ...(issue ? { issue: { number: issue.number, url: issue.url } } : {}) });
+    run?.end({ ok: true, why: `${answer.accept ? `Accepted, as #${issue.number}` : 'Declined'} (score ${score ?? '?'}): “${reply}”`, url: issue?.url ?? '' });
+    this.office?.say(w.k, answer.accept ? took : read);
+    if (issue) await this.refresh();
   }
 
   // What a worker says when a child talks to them on the island. A line with
@@ -1032,8 +1097,9 @@ export class CtbControl {
       runs: this.runs,
       proposedAt: await this.readProposedAt(),
       onProposed: (at) => this.saveProposedAt(at),
-      // Players' ideas, kept by the keeper, and its way to answer them.
-      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a), stage: (id, s) => this.keeper.stageWish(id, s) } : null,
+      // Players' ideas (and problems told of), kept by the keeper, and its
+      // way to answer them.
+      wishes: this.keeper ? { list: () => this.keeper.store.wishes(), answer: (id, a) => this.keeper.answerWish(id, a), stage: (id, s) => this.keeper.stageWish(id, s), report: async (id) => (await this.keeper.store.reports()).find((r) => r.id === id) ?? null } : null,
       ...(this.git ? { git: this.git } : {}),
     });
     if (this.rooms) {
@@ -1128,8 +1194,8 @@ export class CtbControl {
       usage: this.usage.summary(),
       // The newest run logs, of every worker.
       runs: this.runs.list().slice(0, RUNS_SHOWN),
-      // Players' ideas lately, from the keeper, each with its answer.
-      ideas: this.keeper?.store ? (await this.keeper.store.wishes()).slice(0, 30).map((w) => ({ at: w.at, name: w.name, username: w.username, text: w.text, state: w.state, by: w.by, reply: w.reply, score: w.score ?? null, stage: w.stage ?? '', issue: w.issue ?? null })) : [],
+      // Players' ideas (and problems told of) lately, from the keeper, each with its answer.
+      ideas: this.keeper?.store ? (await this.keeper.store.wishes()).slice(0, 30).map((w) => ({ at: w.at, kind: w.kind === 'bug' ? 'bug' : 'idea', name: w.name, username: w.username, text: w.text, state: w.state, by: w.by, reply: w.reply, score: w.score ?? null, stage: w.stage ?? '', issue: w.issue ?? null })) : [],
     };
   }
 

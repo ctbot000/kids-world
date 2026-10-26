@@ -54,13 +54,14 @@ const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
 // The news of an idea, as wishesSeen keeps it: its answer, or its latest step.
 export const wishKey = (w) => (w.stage && w.stage !== 'proposed' ? `${w.id}:${w.stage}` : w.id);
 // An accepted idea's way into the game, step by step, and the stages
-// (shared/keeper.js WISH_STAGES) each step stands for.
+// (shared/keeper.js WISH_STAGES) each step stands for; a problem's own
+// names (bugName) where they differ.
 const IDEA_STEPS = [
   { icon: '📝', name: 'Read', stages: ['proposed'] },
   { icon: '👍', name: 'Picked', stages: ['approved'] },
-  { icon: '🔨', name: 'Building', stages: ['building', 'stuck'] },
+  { icon: '🔨', name: 'Building', bugName: 'Fixing', stages: ['building', 'stuck'] },
   { icon: '🔍', name: 'Checking', stages: ['checking'] },
-  { icon: '🌟', name: 'In the game', stages: ['done'] },
+  { icon: '🌟', name: 'In the game', bugName: 'Fixed', stages: ['done'] },
 ];
 const STAGE_ICON = { proposed: '📝', approved: '👍', building: '🔨', stuck: '🧩', checking: '🔍', done: '🌟', dropped: '💭' };
 const STAGE_WORDS = {
@@ -83,8 +84,32 @@ const STAGE_WORDS = {
     dropped: '이번에는 네 아이디어가 뽑히지 않았어요. 고마워요, 또 보내 주세요!',
   },
 };
+// The same for a problem a player told of (🐞), on its way to being fixed.
+const BUG_STAGE_WORDS = {
+  en: {
+    proposed: 'A grown-up will look at it and pick what the helpers fix next.',
+    approved: 'A grown-up picked your problem to fix! The CTB helpers will fix it soon.',
+    building: 'A CTB helper is fixing your problem right now!',
+    stuck: 'The helpers got stuck fixing your problem. A grown-up will help them.',
+    checking: 'Your problem is fixed! A grown-up is checking the fix before it goes in the game.',
+    done: 'Your problem is fixed in Kids World now! Thank you for finding it.',
+    dropped: 'Your problem was not picked to fix this time. Thank you for telling us!',
+  },
+  ko: {
+    proposed: '어른이 보고 도우미들이 다음에 고칠 것을 골라요.',
+    approved: '어른이 네가 알려 준 문제를 고르기로 했어요! CTB 도우미들이 곧 고칠 거예요.',
+    building: 'CTB 도우미가 지금 네가 알려 준 문제를 고치고 있어요!',
+    stuck: '도우미들이 문제를 고치다가 막혔어요. 어른이 도와줄 거예요.',
+    checking: '문제가 고쳐졌어요! 게임에 넣기 전에 어른이 확인하고 있어요.',
+    done: '네가 알려 준 문제가 이제 키즈 월드에서 고쳐졌어요! 찾아 줘서 고마워요.',
+    dropped: '이번에는 이 문제를 고치기로 뽑히지 않았어요. 알려 줘서 고마워요!',
+  },
+};
 // What an accepted idea's stage means, in the language the idea was written in.
-const stageWords = (w) => (STAGE_WORDS[langOf(w.text)] ?? STAGE_WORDS.en)[w.stage || 'proposed'];
+const stageWords = (w) => {
+  const words = w.kind === 'bug' ? BUG_STAGE_WORDS : STAGE_WORDS;
+  return (words[langOf(w.text)] ?? words.en)[w.stage || 'proposed'];
+};
 const $ = (id) => document.getElementById(id);
 
 // "just now", "5 minutes ago", "on 10/3/2026".
@@ -2618,7 +2643,7 @@ export class UI {
         );
         root.append(
           h('h2', {}, '🐞 Something went wrong?'),
-          h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it.'),
+          h('p', {}, 'Tell the grown-ups who look after Kids World, and they will try to fix it. A CTB helper reads it too and writes back to you under 💡 Ideas.'),
           text,
           h('div', { class: 'setting report-picture' }, shot, h('div', {}, label, detail), sw),
           h('div', { class: 'row' }, pick, file),
@@ -2732,7 +2757,7 @@ export class UI {
           h('h2', {}, '💡 Ideas for Kids World'),
           h('p', {}, 'Tell the helpers at CTB what you would love to see in Kids World. One of them reads your idea and writes back to you!'),
           ...(!loggedIn ? [h('p', { class: 'login-note warn' }, '🔑 Log in to send an idea.')] : unlocked ? [text, note, h('div', { class: 'row', style: 'margin-top:12px' }, send)] : [this.tellUsLocked()]),
-          loggedIn ? h('h3', { style: 'margin-top:16px' }, 'Your ideas') : null,
+          loggedIn ? h('h3', { style: 'margin-top:16px' }, 'Your ideas and problems') : null,
           loggedIn ? list : null,
         );
         refresh();
@@ -2751,7 +2776,8 @@ export class UI {
   // helper's score for it and, once taken on, how far it has got.
   ideaCard(w) {
     const lang = langOf(w.text) || undefined;
-    const score = w.score != null && w.state !== 'waiting' ? h('span', { class: 'idea-score', title: `${w.by || 'The helper'} gave your idea ${w.score} out of 100` }, `⭐ ${w.score}/100`) : null;
+    const bug = w.kind === 'bug';
+    const score = w.score != null && w.state !== 'waiting' ? h('span', { class: 'idea-score', title: `${w.by || 'The helper'} gave your ${bug ? 'problem' : 'idea'} ${w.score} out of 100` }, `⭐ ${w.score}/100`) : null;
     const status =
       w.state === 'waiting'
         ? h('div', { class: 'muted' }, '⏳ Waiting for a CTB helper to read it')
@@ -2764,11 +2790,11 @@ export class UI {
         { class: 'idea-journey' },
         w.stage === 'dropped'
           ? null
-          : h('ol', { class: 'idea-steps', 'aria-label': 'How far your idea has got' }, ...IDEA_STEPS.map((s, k) => h('li', { class: k < at ? 'done' : k === at ? 'now' : '', 'aria-current': k === at ? 'step' : undefined }, h('span', { class: 'emoji' }, s.icon), ' ', s.name))),
+          : h('ol', { class: 'idea-steps', 'aria-label': bug ? 'How far the fix has got' : 'How far your idea has got' }, ...IDEA_STEPS.map((s, k) => h('li', { class: k < at ? 'done' : k === at ? 'now' : '', 'aria-current': k === at ? 'step' : undefined }, h('span', { class: 'emoji' }, s.icon), ' ', bug ? (s.bugName ?? s.name) : s.name))),
         h('div', { class: 'idea-stage', lang }, stageWords(w)),
       );
     }
-    return h('div', { class: `idea ${w.state} ${w.stage}` }, h('p', { class: 'idea-text', lang }, `“${w.text}”`, score ? ' ' : null, score), status, journey);
+    return h('div', { class: `idea ${w.kind} ${w.state} ${w.stage}` }, h('p', { class: 'idea-text', lang }, bug ? h('span', { class: 'emoji', title: 'A problem you told of' }, '🐞 ') : null, `“${w.text}”`, score ? ' ' : null, score), status, journey);
   }
 
   // News of an idea of yours: a helper's answer, or how far it has got since.
@@ -2779,7 +2805,7 @@ export class UI {
     const told = this.wishesSeen().has(wishKey(wish));
     this.markWishesSeen([wish]);
     if (!told && wish.stage && wish.stage !== 'proposed') this.toast(STAGE_ICON[wish.stage], stageWords(wish));
-    else if (!told) this.toast(wish.state === 'accepted' ? '✅' : '💭', `${wish.by} read your idea${wish.score != null ? ` (⭐ ${wish.score}/100)` : ''}: ${wish.reply}`);
+    else if (!told) this.toast(wish.state === 'accepted' ? '✅' : '💭', `${wish.by} read your ${wish.kind === 'bug' ? 'problem' : 'idea'}${wish.score != null ? ` (⭐ ${wish.score}/100)` : ''}: ${wish.reply}`);
     this.ideasRefresh?.();
   }
 
