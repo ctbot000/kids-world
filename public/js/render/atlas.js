@@ -1859,6 +1859,36 @@ for (const [key, , , color] of GEMS) {
   };
 }
 
+// The mining bomb: a round black bomb with a fizzing spark on a short fuse,
+// as it sits in a mine and as the toy box shows it.
+PAINT.bomb = (ctx) => {
+  const g = ctx.createRadialGradient(26, 26, 4, 32, 34, 26);
+  g.addColorStop(0, '#5a606b');
+  g.addColorStop(1, '#23262c');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(32, 36, 21, 0, Math.PI * 2);
+  ctx.fill();
+  outline(ctx, 'rgba(0,0,0,0.55)', 2.5);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ellipse(ctx, 24, 28, 5, 3, -0.6);
+  ctx.fill();
+  // The fuse holder and the fuse curling up from it.
+  ctx.strokeStyle = '#8a9099';
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(32, 16);
+  ctx.quadraticCurveTo(34, 8, 42, 7);
+  ctx.stroke();
+  star(ctx, 44, 6, 5, 2, 4);
+  ctx.fillStyle = '#ffdf5a';
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  star(ctx, 44, 6, 2, 0.8, 4);
+  ctx.fill();
+};
+
 // Rails, seen from above: two steel rails on wooden sleepers, running down
 // the tile; and round a corner, from the middle of its bottom edge to the
 // middle of its right one (render/mesher.js turns them to fit).

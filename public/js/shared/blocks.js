@@ -352,6 +352,13 @@ export const GEM_ROCKS = GEMS.map(([key, name], i) => def(80 + i, `${key}-rock`,
 export const GEM_ITEMS = GEMS.map(([key, name], i) => def(85 + i, key, { name, kind: 'item', tiles: key, collect: key, light: 6, sound: 'glass' }));
 export const DIAMOND_ROCK = GEM_ROCKS[4];
 
+// A mining bomb: a little cartoon bomb, put down as a block while digging
+// for jewels. It sparks for a moment, then pops with a boom that digs a
+// round hole in the natural ground — never in anything anyone built, planted
+// or furnished — and any gem rocks caught in the blast drop their jewels
+// into the blaster's basket (shared/tools.js blastEdit, shared/room.js).
+export const BOMB = def(270, 'bomb', { name: 'Mining Bomb', category: 'building', after: 90, tiles: 'bomb', sound: 'stone' });
+
 // ---------------------------------------------------------------- farm
 // Farmland: soil turned over in furrows, for crops to grow in. Watered — by
 // the watering can, the rain, or water close by — it turns dark, and what
