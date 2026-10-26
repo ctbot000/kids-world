@@ -11,6 +11,7 @@ import { gashaponMaterials, gashaponModel } from './gashapon-model.js';
 import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { tankMaterials, tankModel } from './fishtank-model.js';
 import { clockMaterials, clockModel } from './clock-model.js';
+import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
 
@@ -651,7 +652,7 @@ export class Terrain {
       group.add(model);
       // A fan's blades go round, a tank's fish swim and a clock's pendulum
       // swings, each at a time of its own.
-      if (model.userData.spin || model.userData.tick) chunk.movers.push({ model, phase: (x * 7.3 + z * 3.1 + y) % 10 });
+      if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
     }
     this.group.add(group);
     this.chunks.set(key, chunk);
@@ -680,6 +681,10 @@ export class Terrain {
       this.clockMaterials ??= clockMaterials(toyMaterial);
       return clockModel(this.clockMaterials, kind);
     }
+    if (kind === 'rocking-chair') {
+      this.rockingMaterials ??= rockingMaterials(toyMaterial);
+      return rockingModel(this.rockingMaterials);
+    }
     return null;
   }
 
@@ -690,13 +695,14 @@ export class Terrain {
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
   }
 
-  // The blades of the fans in sight go round, an electric fan's head
-  // sweeps from side to side, fish swim round their tanks and clocks tell
-  // the island's time of day, `day` (env.js).
-  animate(time, day = 0.5) {
+  // The blades of the fans in sight go round, an electric fan's head sweeps
+  // from side to side, fish swim round their tanks, clocks tell the island's
+  // time of day, `day` (env.js), and a rocking chair rocks while someone is
+  // in it (`satIn`, the cells someone is sitting in, from game.js).
+  animate(time, day = 0.5, satIn = null) {
     for (const chunk of this.chunks.values()) {
       if (!chunk.group.visible) continue;
-      for (const { model, phase } of chunk.movers) {
+      for (const { model, phase, cell } of chunk.movers) {
         const t = time + phase;
         model.userData.tick?.(t, day);
         for (const { part, axis, speed } of model.userData.spin ?? []) {
@@ -707,6 +713,13 @@ export class Terrain {
         if (sway) {
           sway.rotation.y = swayAt(t);
           sway.updateMatrix();
+        }
+        // A rocking chair rocks only while someone is in it; otherwise it
+        // comes to rest standing straight.
+        const rock = model.userData.rock;
+        if (rock) {
+          rock.rotation.x = satIn?.has(cell) ? rockingAt(t) : 0;
+          rock.updateMatrix();
         }
       }
     }

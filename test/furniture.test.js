@@ -11,7 +11,7 @@ import { XP_FOR } from '../public/js/shared/levels.js';
 import { meshChunk } from '../public/js/render/mesher.js';
 import { placeTemplate, stampByKey } from '../public/js/shared/stamps.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
-import { teaTableNear } from '../public/js/shared/seats.js';
+import { seatNear, seatPose, standUpAt, teaTableNear } from '../public/js/shared/seats.js';
 import { applyCells, buildEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -247,6 +247,52 @@ test('sitting down to tea with a friend earns Tea Party', () => {
   assert.equal(sticker.test(stats(1)), true);
 });
 
+test('a rocking chair after the chair: sit in it and it rocks, you with it, friends see you', async () => {
+  const home = B.blocksIn('home');
+  assert.equal(home[home.indexOf(B.CHAIR) + 1], B.ROCKING_CHAIR, 'right after the chair');
+  assert.equal(B.baseOf(B.ROCKING_CHAIR + 1), B.ROCKING_CHAIR, 'it turns to face you');
+  assert.ok(B.block(B.ROCKING_CHAIR).turns && B.SOLID[B.ROCKING_CHAIR] === 1);
+  assert.equal(B.block(B.ROCKING_CHAIR).real, 'rocking-chair', 'drawn as a real model');
+  // Its picture stays inside its cell across and through it, whichever way it
+  // is turned (the back leans over the top, as a chair's does).
+  for (let front = 0; front < 4; front++) {
+    for (const [x0, , z0, x1, , z1] of modelBoxes(B.turnedTo(B.ROCKING_CHAIR, front))) {
+      assert.ok(x0 >= 0 && z0 >= 0 && x0 < 1 && z0 < 1 && x1 <= 1 && z1 <= 1, 'its picture inside its cell');
+    }
+  }
+  // It is a seat: you sit in it facing the way it faces, and get up in front.
+  const w = meadow();
+  w.set(10, 6, 10, B.turnedTo(B.ROCKING_CHAIR, 1));
+  assert.deepEqual(seatNear(w, { x: 10.5, y: 6, z: 11.6 }), { x: 10, y: 6, z: 10 });
+  const sit = seatPose(w, 10, 6, 10);
+  assert.equal(sit.pose, 'sit');
+  assert.ok(Math.abs(sit.yaw) < 1e-9, 'facing the way it faces');
+  assert.deepEqual(standUpAt(w, 10, 6, 10), { x: 10.5, y: 6, z: 11.5 }, 'up in front of it');
+
+  // The mesher leaves its boxes out and says where it stands, as a real model.
+  const { meshChunk } = await import('../public/js/render/mesher.js');
+  const { LightMap } = await import('../public/js/shared/light.js');
+  const light = new LightMap(w);
+  light.computeAll();
+  const visuals = { faceLayer: new Int16Array(256 * 3), tint: new Uint8Array(256 * 3).fill(255), studTint: new Uint8Array(256 * 3).fill(200) };
+  const out = meshChunk(w, light, visuals, 0, 0);
+  assert.deepEqual(out.reals, [[10, 6, 10, B.turnedTo(B.ROCKING_CHAIR, 1)]]);
+
+  // The chair itself: it fits its cell, and what rocks is its whole frame on
+  // its rockers, which stand still when nobody is in it and sway back and
+  // forth, never far, when someone is.
+  const THREE = await import('../public/vendor/three.module.js');
+  const { rockingMaterials, rockingModel, rockingAt, rockPhase, SEAT } = await import('../public/js/render/rocking-model.js');
+  const model = rockingModel(rockingMaterials());
+  const size = new THREE.Box3().setFromObject(model);
+  assert.ok(size.min.y >= 0 && size.max.y <= 1.001 && size.min.x >= -0.5 && size.max.x <= 0.5 && size.min.z >= -0.5 && size.max.z <= 0.5, 'it fits its cell');
+  assert.ok(model.userData.rock, 'the frame rocks on its rockers');
+  assert.equal(rockingAt(0), rockingAt(0));
+  for (let t = 0; t < 20; t += 0.25) assert.ok(Math.abs(rockingAt(t)) < 0.3, 'never far off straight');
+  assert.ok(Math.abs(rockingAt(rockPhase(10, 6, 10) + 1) - rockingAt(rockPhase(10, 6, 10) + 1.5)) > 0.01, 'it sways');
+  assert.ok(SEAT.y > 0.5 && SEAT.y < 0.7, 'a seat at sitting height');
+});
+
 test('fans: an electric fan that turns and a ceiling fan to walk under that lights the room, after the potted plant, drawn as real models', async () => {
   const home = B.blocksIn('home');
   assert.equal(home[home.indexOf(B.POTTED_PLANT) + 1], B.ELECTRIC_FAN, 'right after the potted plant');
@@ -451,6 +497,35 @@ test('a hot tub after the pet bed, a steaming barrel you soak in together', asyn
   for (let front = 0; front < 4; front++) {
     for (const [x0, , z0, x1, , z1] of furnitureBoxes(B.turnedTo(B.HOT_TUB, front), 5, 6, 5, () => B.AIR)) {
       assert.ok(x0 >= 5 && x1 <= 6 && z0 >= 5 && z1 <= 6 && x0 < x1 && z0 < z1);
+    }
+  }
+});
+
+test('in a rocking chair you rock with it: leaned the way it leans, your hips on its seat', async () => {
+  const THREE = await import('../public/vendor/three.module.js');
+  const { rockedSitter, rockingMaterials, rockingModel, SEAT } = await import('../public/js/render/rocking-model.js');
+  const { seatPose } = await import('../public/js/shared/seats.js');
+  const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
+  const w = meadow();
+  for (let front = 0; front < 4; front++) {
+    w.set(10, 6, 10, B.turnedTo(B.ROCKING_CHAIR, front));
+    const pose = seatPose(w, 10, 6, 10);
+    for (const a of [-0.18, 0.1, 0.22]) {
+      // The chair as render/terrain.js lays it in, rocked by a.
+      const chair = rockingModel(rockingMaterials(() => new THREE.MeshBasicMaterial()));
+      chair.position.set(10.5, 6, 10.5);
+      chair.rotation.y = FACING[front];
+      chair.userData.rock.rotation.x = a;
+      chair.updateMatrixWorld(true);
+      const rock = chair.userData.rock;
+      const seat = rock.localToWorld(new THREE.Vector3(pose.x - 10.5, SEAT.y - SEAT.pivot, pose.z - 10.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), -FACING[front]));
+      const up = new THREE.Vector3(0, 1, 0).transformDirection(rock.matrixWorld);
+      // You, as game.js rockWith puts you.
+      const r = rockedSitter(a, pose.yaw);
+      const you = new THREE.Vector3(pose.x + r.dx, pose.y + r.dy, pose.z + r.dz);
+      const yourUp = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(r.lean, pose.yaw, 0, 'YXZ'));
+      assert.ok(you.distanceTo(seat) < 0.01, `on the seat facing ${front}, rocked ${a}: ${you.distanceTo(seat)}`);
+      assert.ok(yourUp.distanceTo(up) < 0.01, `leaned with it facing ${front}, rocked ${a}`);
     }
   }
 });
