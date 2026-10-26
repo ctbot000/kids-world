@@ -12,7 +12,7 @@ import { bodyOverlapsSolid, MOVE } from '../public/js/shared/physics.js';
 import { drillCells, getOffAt, railNext, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
-import { applyCells, drillEdit } from '../public/js/shared/tools.js';
+import { applyCells, drillEdit, paintVanEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 import { meshChunk } from '../public/js/render/mesher.js';
@@ -291,6 +291,56 @@ test('the digger digs a tunnel into a hill, up and down steps, and jewels out of
   assert.ok(!bodyOverlapsSolid(w, up.body));
   // Never the magic floor.
   assert.deepEqual(drillCells(w, { x: 2.5, y: 1, z: 2.5, radius: 0.6 }, 0, 0, 'below'), []);
+});
+
+test('the paint van paints the ground it rolls over, never anything built, and undo takes the trail away', () => {
+  const w = meadow();
+  // On the way: a brick someone put down, a fence, a daisy growing, and
+  // farmland someone turned over (the grass top is at y = 5).
+  w.set(26, 6, 20, B.TOY_BRICKS[0]);
+  w.set(27, 6, 21, B.FENCE);
+  w.set(28, 6, 19, B.DAISY);
+  w.set(29, 5, 20, B.FARMLAND);
+  const r = ride(w, 'paintvan', 15.5, 6, 20.5, Math.PI / 2);
+  const paint = (input, seconds, id = B.SNOW) => {
+    const undo = [];
+    for (let i = 0; i < seconds * 60; i++) {
+      const ev = stepRide(w, r, input, 1 / 60);
+      if (!ev.paint) continue;
+      const plan = paintVanEdit(w, ev.paint, id);
+      for (let k = 0; k < plan.cells.length; k += 4) undo.push(plan.cells[k], plan.cells[k + 1], plan.cells[k + 2], w.get(plan.cells[k], plan.cells[k + 1], plan.cells[k + 2]), plan.cells[k + 3]);
+      applyCells(w, plan.cells);
+    }
+    return undo;
+  };
+  const undo = paint({ mx: 1, mz: 0 }, 6);
+  assert.ok(r.body.x > 30, `drove along, to ${r.body.x.toFixed(2)}`);
+  // A swath of snow on the ground where it rolled, three blocks wide, but
+  // not where anything anyone put down stands, nor the farmland.
+  let painted = 0;
+  for (let x = 16; x < 30; x++) {
+    if (x === 26 || x === 29) continue;
+    assert.equal(w.get(x, 5, 20), B.SNOW, `painted at ${x},20`);
+    if (w.get(x, 5, 21) === B.SNOW) painted++;
+  }
+  assert.ok(painted >= 10, `a swath either side (${painted})`);
+  // Never over anything anyone put down.
+  assert.equal(w.get(26, 6, 20), B.TOY_BRICKS[0], 'not over the bricks');
+  assert.equal(w.get(27, 6, 21), B.FENCE, 'not over the fence');
+  assert.equal(w.get(28, 6, 19), B.DAISY, 'not over the daisy');
+  assert.equal(w.get(28, 5, 19), B.GRASS, 'nor the ground it grows on');
+  assert.equal(w.get(29, 5, 20), B.FARMLAND, 'not over the farmland');
+  assert.equal(w.get(10, 5, 20), B.GRASS, 'nothing where it never went');
+  // Standing still paints nothing.
+  w.set(FL(r.body.x), 5, FL(r.body.z), B.GRASS);
+  paint({}, 1);
+  assert.equal(w.get(FL(r.body.x), 5, FL(r.body.z)), B.GRASS, 'standing still');
+  // Undo puts the grass back, just as it was.
+  const back = [];
+  for (let i = undo.length - 5; i >= 0; i -= 5) back.push(undo[i], undo[i + 1], undo[i + 2], undo[i + 3]);
+  applyCells(w, back);
+  for (let x = 16; x < 30; x++) if (x !== 26 && x !== 29) assert.equal(w.get(x, 5, 20), B.GRASS, `grass again at ${x},20`);
+  assert.equal(w.get(20, 5, 21), B.GRASS, 'grass beside it too');
 });
 
 test('a mine cart rolls along its rails, round a corner, up a slope and back down it, and stops at the end of the line', () => {
