@@ -32,6 +32,10 @@
 // online it is hosted peer to peer too (host.js) and on the keeper's list of
 // open islands, so the game on any website can visit it.
 //
+// Its friends' personalities: asked for their MBTI, it asks a few questions
+// first if it does not know them well enough, and remembers the answers
+// (personality.js).
+//
 // Settings: on the admin page (friend.js), or before any are saved there,
 // KIDS_WORLD_AI=off turns it off; KIDS_WORLD_AI_NAME names it;
 // KIDS_WORLD_AI_WANDER=off keeps it to invitations. It keeps a short account
@@ -60,6 +64,7 @@ import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKe
 import { LocalLink, PeerLink } from './dialer.js';
 import { PeerHost } from './host.js';
 import { friendId } from './keeper.js';
+import { isMbtiAsk, nextQuestion, People, PICK_SCHEMA, pickMessages, plainPick, questionsLeft, questionText, tellLine } from './personality.js';
 
 export const DEFAULT_NAME = 'Pip 🤖';
 // A kid in headphones and a sky-blue T-shirt, with a baby dragon.
@@ -98,6 +103,8 @@ const HELP_MS = 1000;
 // its goodbye, a moment for it to be seen before it goes.
 const LISTEN_MS = 1300;
 const TALK_GAP_MS = 2500;
+// From what it says to a question it then asks, as if typing it.
+const QUESTION_GAP_MS = 1500;
 export const BYE_MS = 2500;
 const QUIET_MS = [100000, 170000];
 const BUILD_GAP_MS = 20000;
@@ -201,47 +208,6 @@ const GOODBYE = /\b(bye|goodbye|see you|go away|go home|leave)\b|잘 ?가|안녕
 
 export const isGoodbye = (text) => GOODBYE.test(text);
 
-// "What's my MBTI?": it tells them one, just for fun, the same one each time
-// for the same name, so asking again does not change who they are.
-const MBTI_ASK = /mbti|엠비티아이|personality type|성격 ?유형/iu;
-// What each means, in English and in Korean: a small model answers in the
-// language of the example it is given.
-const MBTI = {
-  INTJ: ['a clever planner with big ideas', '큰 꿈을 세우는 똑똑한 계획가'],
-  INTP: ['a curious thinker who loves puzzles', '퍼즐을 좋아하는 호기심 많은 생각쟁이'],
-  ENTJ: ['a brave leader who gets things done', '척척 해내는 용감한 대장'],
-  ENTP: ['a quick inventor full of new ideas', '새 아이디어가 가득한 발명가'],
-  INFJ: ['a kind dreamer who understands friends', '친구 마음을 잘 아는 다정한 꿈쟁이'],
-  INFP: ['a gentle dreamer with a big heart', '마음이 넓은 따뜻한 꿈쟁이'],
-  ENFJ: ['a warm helper who cheers everyone on', '모두를 응원하는 따뜻한 도우미'],
-  ENFP: ['a happy explorer who loves new friends', '새 친구를 좋아하는 신나는 탐험가'],
-  ISTJ: ['a steady builder you can count on', '믿음직하고 꼼꼼한 건축가'],
-  ISFJ: ['a caring friend who looks after others', '친구들을 잘 챙기는 다정한 친구'],
-  ESTJ: ['a great organizer who keeps things going', '척척 정리하는 멋진 반장'],
-  ESFJ: ['a friendly host who makes everyone welcome', '모두를 반겨 주는 친절한 주인'],
-  ISTP: ['a handy maker who likes to see how things work', '뚝딱뚝딱 잘 만드는 손재주꾼'],
-  ISFP: ['a creative artist who loves pretty things', '예쁜 것을 좋아하는 예술가'],
-  ESTP: ['a bold adventurer who loves action', '모험을 좋아하는 씩씩한 모험가'],
-  ESFP: ['a fun star who makes every day a party', '매일을 파티로 만드는 신나는 스타'],
-};
-
-export const isMbtiAsk = (text) => MBTI_ASK.test(text);
-
-export function mbtiOf(name) {
-  let h = 0;
-  for (const ch of String(name).toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
-  const type = Object.keys(MBTI)[h % 16];
-  return { type, meaning: MBTI[type][0], ko: MBTI[type][1] };
-}
-
-// The line telling the model what to say to an MBTI ask, with an example in
-// their language.
-export function mbtiLine(name, text) {
-  const { type, meaning, ko } = mbtiOf(name);
-  const like = languageOf(text) === 'Korean' ? `너의 MBTI는 ${type}! ${ko}야! 그냥 재미로 보는 거야!` : `Your MBTI is ${type}: you are ${meaning}! Just for fun!`;
-  return `They are asking for their own MBTI. Their MBTI is ${type} (${meaning}); yours is not asked. Tell them in your own words, like "${like}"`;
-}
-
 // The real date and time now, in words for the model: children ask what time
 // or day it is, and the game's own quick day and night is not it. Said where
 // this computer is, the time the children on it live by.
@@ -278,9 +244,10 @@ export class Buddy extends EventEmitter {
   // for the players list and the list of open islands. rooms: the dedicated
   // server's rooms. rtc: node-datachannel, to visit islands peer to peer.
   // home: whether it keeps an island of its own on this server, saved in homeFile.
+  // peopleFile: where what it knows of its friends' personalities is saved.
   // pauses: how long its pauses in talking are (listening for more, typing,
   // the moment before it goes), as a part of the real ones; tests shorten them.
-  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS, pauses = 1 }) {
+  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, peopleFile = null, random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS, pauses = 1 }) {
     super();
     this.llm = llm;
     this.keeper = keeper;
@@ -328,6 +295,7 @@ export class Buddy extends EventEmitter {
     this.home = null;
     this.homeToken = '';
     this.builds = [];
+    this.people = new People({ file: peopleFile, log: this.log, now });
     this.saving = Promise.resolve();
     this.stopped = false;
   }
@@ -344,6 +312,7 @@ export class Buddy extends EventEmitter {
   }
 
   async start() {
+    await this.people.load();
     await this.check();
     this.timers.push(setInterval(() => this.check(), CHECK_MS));
     // Wandering can be turned off and on while it runs.
@@ -638,6 +607,9 @@ export class Visit extends EventEmitter {
     this.adventure = null;
     this.defense = null;
     this.chat = [];
+    // The personality question asked of each friend and not answered yet:
+    // name → { q, misses }.
+    this.quizzes = new Map();
     // Lines the admin page had it say, until the island says them back.
     this.forAdmin = [];
     this.body = null;
@@ -1367,13 +1339,68 @@ export class Visit extends EventEmitter {
   async answer(ask) {
     const messages = [
       { role: 'system', content: systemPrompt(this.name) },
-      { role: 'user', content: this.situation(ask) },
+      { role: 'user', content: this.situation(ask, await this.personality(ask)) },
     ];
     return this.buddy.ask(messages, ANSWER_SCHEMA, `what to say on “${this.world?.name ?? this.island.name}”${ask.admin ? ', asked from the admin page' : ''}${ask.then === 'leave' ? ', leaving' : ''}`);
   }
 
+  // Asked for their MBTI, or answering a question it asked to find it: what
+  // to tell the model about it, read from what they just said.
+  async personality(ask) {
+    const theirs = this.chat.at(-1);
+    if (ask.why || !theirs || theirs.mine || theirs === this.quizRead) return [];
+    this.quizRead = theirs;
+    const name = theirs.name;
+    const people = this.buddy.people;
+    const quiz = this.quizzes.get(name);
+    // An answer of just "1" is in the language the question was asked in.
+    const lang = quiz && !/\p{L}{2}/u.test(theirs.text) ? quiz.lang : languageOf(theirs.text);
+    ask.lang = lang;
+    if (quiz) {
+      const pick = plainPick(quiz.q, theirs.text) || (await this.readPick(quiz.q, theirs.text));
+      if (pick) {
+        await people.answer(name, quiz.q.id, pick);
+        this.quizzes.delete(name);
+        const [, a, b] = quiz.q.en;
+        const next = nextQuestion(people.answersOf(name));
+        if (!next) return [tellLine(`${name} just answered your last question to find their MBTI (${pick === 'a' ? a : b}).`, people.typeOf(name), lang)];
+        this.quizzes.set(name, { q: next, misses: 0, lang });
+        ask.question = questionText(next, lang);
+        return [`${name} answered your question to find their MBTI: ${pick === 'a' ? a : b}. Say something short and kind about that answer, and nothing more: you ask the next question (${questionsLeft(people.answersOf(name))} more at most) right after, by itself.`];
+      }
+      quiz.misses++;
+      if (quiz.misses >= 2 && !isMbtiAsk(theirs.text)) {
+        this.quizzes.delete(name);
+        return [`You were asking ${name} questions to find their MBTI, but they are talking about something else now. Answer what they said; leave the questions for when they ask for their MBTI again.`];
+      }
+      ask.question = questionText(quiz.q, lang);
+      if (isMbtiAsk(theirs.text)) return [`${name} is asking for their MBTI again. Say you need a few more answers first (${questionsLeft(people.answersOf(name))} at most), and nothing more: you ask the question again right after, by itself.`];
+      return [`You asked ${name} a question to find their MBTI ("${quiz.q.en[0]}") and they did not pick a choice yet. Say one short, friendly thing back to what they said, in your own words (not theirs), and nothing more: you ask the question again right after, by itself.`];
+    }
+    if (!isMbtiAsk(theirs.text)) return [];
+    const type = people.typeOf(name);
+    if (type) return [tellLine(`${name} is asking for their MBTI.`, type, lang)];
+    const next = nextQuestion(people.answersOf(name));
+    this.quizzes.set(name, { q: next, misses: 0, lang });
+    ask.question = questionText(next, lang);
+    const started = next.id !== 'EI0';
+    return [`${name} is asking for their MBTI, but you do not know them well enough yet. ${started ? 'Say you will finish the questions you started last time' : 'Say you will ask a few fun questions first to find out'} (${questionsLeft(people.answersOf(name))} at most), and nothing more: you ask the first question right after, by itself.`];
+  }
+
+  // Which choice their answer picked ('a' or 'b'), or '' for neither.
+  async readPick(q, text) {
+    try {
+      const { pick } = await this.buddy.ask(pickMessages(q, text), PICK_SCHEMA, `which choice an answer picked on “${this.world?.name ?? this.island.name}”`);
+      return pick === 'a' || pick === 'b' ? pick : '';
+    } catch (error) {
+      this.buddy.log(`AI friend: no answer from the model (${error.message}).`);
+      return '';
+    }
+  }
+
   // What the model is told about the island, who is there and what was said.
-  situation(ask) {
+  // about: lines about their personality, from personality().
+  situation(ask, about = []) {
     const b = this.body;
     const w = this.world;
     const steps = (s) => Math.round(Math.hypot(s[0] - b.x, s[2] - b.z));
@@ -1396,6 +1423,8 @@ export class Visit extends EventEmitter {
       if (p.dizzy) bits.push('dizzy');
       else if (p.s[5] & 1) bits.push('flying');
       if (p.look?.pet) bits.push(`with a pet ${p.look.pet.kind} called ${p.look.pet.name}`);
+      const type = this.buddy.people.typeOf(p.name);
+      if (type) bits.push(`MBTI ${type}`);
       return `${p.name} (${bits.join(', ')})`;
     });
     lines.push(`Friends here: ${friends.join('; ') || 'nobody'}.`);
@@ -1423,10 +1452,10 @@ export class Visit extends EventEmitter {
     if (ask.why) lines.push(ask.why);
     else if (theirs) lines.push(`${theirs.name} just said: "${theirs.text}"`, `Answer ${to?.name ?? theirs.name}. Do not repeat what you said before.`);
     else lines.push(`Say something to ${to?.name ?? 'your friends'}.`);
-    if (!ask.why && theirs && this.chat.at(-1) === theirs && isMbtiAsk(theirs.text)) lines.push(mbtiLine(theirs.name, theirs.text));
+    lines.push(...about);
     if (ask.bye) lines.push('They are saying goodbye to you: say a friendly bye, and use action leave.');
     if (ask.admin) lines.push('"Admin" is not a player on the island: they are the person who looks after this server, trying you out from its page. Be yourself with them, as friendly as ever.');
-    lines.push(`Write "say" in ${languageOf(theirs?.text ?? `${w.name} ${this.others().map((p) => p.name).join(' ')}`)}.`);
+    lines.push(`Write "say" in ${ask.lang ?? languageOf(theirs?.text ?? `${w.name} ${this.others().map((p) => p.name).join(' ')}`)}.`);
     return lines.join('\n');
   }
 
@@ -1445,6 +1474,14 @@ export class Visit extends EventEmitter {
     if (say) {
       this.saidAt = this.now();
       this.link.send({ t: 'say', text: say });
+    }
+    // A question to find their MBTI, word for word, as a line of its own.
+    if (ask.question) {
+      setTimeout(() => this.safely(() => {
+        if (this.ended) return;
+        this.saidAt = this.now();
+        this.link.send({ t: 'say', text: ask.question });
+      }), (say ? QUESTION_GAP_MS : 0) * this.buddy.pauses);
     }
     // On its own island it stays: a goodbye is a wave.
     if (this.home && action === 'leave') action = 'wave';

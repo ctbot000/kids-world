@@ -9,12 +9,15 @@
 // KIDS_WORLD_AI_WANDER=off, KIDS_WORLD_AI_HOME=off).
 // The tokens its models took, a day at a time, are tallied beside them in
 // ai-friend-usage.json, for the admin page.
+// What it knows of its friends' personalities is in ai-friend-people.json
+// (personality.js).
 // Changes apply at once: a new name from its next visit on, as the islands it
 // is on know it by the old one; turned off, it goes home from every island.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { isValidName, NAME_MAX } from '../public/js/shared/words.js';
 import { DEFAULT_NAME } from './buddy.js';
+import { PEOPLE_FILE } from './personality.js';
 import { KeepError } from './keeper.js';
 import { costOf, DEFAULT_ZAI_MODEL } from './llm.js';
 
@@ -183,12 +186,13 @@ export class TokenUsage {
 export class FriendControl {
   // dir: where its settings are saved. llm: what it talks with (llm.js: Z.ai
   // with the local Ollama as a standby), whose model the settings pick.
-  // make(settings, { homeFile }): a new Buddy, keeping its own island in
-  // homeFile.
+  // make(settings, { homeFile, peopleFile }): a new Buddy, keeping its own
+  // island in homeFile and what it knows of its friends in peopleFile.
   constructor({ dir, llm, make, env = process.env, now = Date.now }) {
     this.file = join(dir, SETTINGS_FILE);
     this.usage = new TokenUsage(join(dir, USAGE_FILE), now);
     this.homeFile = join(dir, HOME_FILE);
+    this.peopleFile = join(dir, PEOPLE_FILE);
     this.llm = llm;
     this.make = make;
     this.settings = defaultSettings(env);
@@ -212,7 +216,7 @@ export class FriendControl {
   }
 
   async wake() {
-    this.buddy = this.make(this.settings, { homeFile: this.homeFile });
+    this.buddy = this.make(this.settings, { homeFile: this.homeFile, peopleFile: this.peopleFile });
     this.buddy.onUsage = (entries) => this.usage.add(entries);
     this.last = this.buddy;
     await this.buddy.start();

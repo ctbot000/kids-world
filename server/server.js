@@ -331,7 +331,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const friend = new FriendControl({
     dir: store.dir,
     llm: new Fallback(new Zai(), new Ollama()),
-    make: (settings, { homeFile }) =>
+    make: (settings, { homeFile, peopleFile }) =>
       new Buddy({
         llm: friend.llm,
         keeper: keeper ?? null,
@@ -344,6 +344,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         maxVisits: settings.maxVisits,
         home: settings.home,
         homeFile,
+        peopleFile,
       }),
   });
   // CTB, whose workers do real work on this project from its GitHub issues,

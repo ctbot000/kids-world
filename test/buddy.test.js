@@ -2,7 +2,8 @@
 // own name and look, says hello and answers what friends say (with what the
 // model was told about it), builds when asked, walks after its friend and
 // flies to one far away, helps a dizzy friend up and bops a monster coming at
-// one, tells a friend their MBTI when asked; it goes home when asked, when left alone, and stays away from an island
+// one, asked for their MBTI, asks a friend a few questions first and
+// remembers the answers; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
 // its own words, talks with it there as a player would (the model's answer
@@ -20,13 +21,15 @@ import { Reassembler, sendText } from '../public/js/shared/framing.js';
 import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import * as B from '../public/js/shared/blocks.js';
-import { ALONE_MS, Buddy, BYE_MS, DEFAULT_NAME, isGoodbye, isMbtiAsk, languageOf, mbtiLine, mbtiOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
+import { ALONE_MS, Buddy, BYE_MS, DEFAULT_NAME, isGoodbye, languageOf, systemPrompt, tidySay, whenReal } from '../server/buddy.js';
 import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
 import { adminHandler } from '../server/admin.js';
 import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.js';
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 import { Ollama } from '../server/llm.js';
+import { isMbtiAsk, nextQuestion, People, plainPick, QUESTIONS, questionsLeft, questionText, typeOf } from '../server/personality.js';
+import { CHAT_MAX } from '../public/js/shared/words.js';
 
 const dirs = [];
 async function tempDir() {
@@ -127,10 +130,6 @@ test('invited, it comes in under its name and look, says hello, answers a friend
   assert.equal(built.kind, 'stamp');
   assert.ok(built.cells.length > 100, 'a whole house');
 
-  minji.say({ t: 'say', text: '내 MBTI 뭐야?' });
-  await eventually(() => llm.asked.at(-1).includes('내 MBTI 뭐야?'));
-  const { type } = mbtiOf('Minji');
-  assert.match(llm.asked.at(-1), new RegExp(`They are asking for their own MBTI\\. Their MBTI is ${type} \\(.+\\).*재미로`));
   assert.match(systemPrompt(DEFAULT_NAME), /AI friend/);
   assert.match(systemPrompt(DEFAULT_NAME), /Never ask for personal things/);
   assert.match(systemPrompt(DEFAULT_NAME), /When a child asks what time or day it is, tell them the real one/);
@@ -389,16 +388,107 @@ test('it notices goodbyes and answers in their language', () => {
   assert.equal(languageOf('こんにちは'), 'the same language they wrote in');
 });
 
-test('asked for their MBTI, it tells them one, the same each time for the same name', () => {
+test('a type takes two answers that agree for each letter, or a third where they do not', () => {
   for (const text of ["What's my MBTI?", '내 mbti 뭐야?', '나 엠비티아이 알려줘', '내 성격 유형은?']) assert.ok(isMbtiAsk(text), text);
   for (const text of ['hi Pip', "let's build"]) assert.ok(!isMbtiAsk(text), text);
-  assert.deepEqual(mbtiOf('Minji'), mbtiOf('minji'));
-  assert.match(mbtiOf('Minji').type, /^[EI][NS][TF][JP]$/);
-  const types = new Set(['Minji', 'Jun', 'Sora', 'Theo', 'Ava', 'Leo', 'Mia', 'Noah'].map((n) => mbtiOf(n).type));
-  assert.ok(types.size > 3, 'not everyone gets the same one');
-  const { type, meaning, ko } = mbtiOf('Minji');
-  assert.ok(mbtiLine('Minji', "What's my MBTI?").includes(`like "Your MBTI is ${type}: you are ${meaning}! Just for fun!"`));
-  assert.ok(mbtiLine('Minji', '내 MBTI 뭐야?').includes(`like "너의 MBTI는 ${type}! ${ko}야!`), 'an example in Korean, for an answer in Korean');
+  const answers = {};
+  const asked = [];
+  // E, N, a tie on T/F broken by a third answer, P.
+  const picks = { EI0: 'a', EI1: 'a', SN0: 'b', SN1: 'b', TF0: 'a', TF1: 'b', TF2: 'a', JP0: 'b', JP1: 'b' };
+  assert.equal(questionsLeft(answers), 8);
+  for (let q = nextQuestion(answers); q; q = nextQuestion(answers)) {
+    assert.equal(typeOf(answers), '', 'not known before the last answer');
+    asked.push(q.id);
+    answers[q.id] = picks[q.id];
+  }
+  assert.deepEqual(asked, ['EI0', 'SN0', 'TF0', 'JP0', 'EI1', 'SN1', 'TF1', 'JP1', 'TF2']);
+  assert.equal(typeOf(answers), 'ENTP');
+  assert.equal(plainPick(nextQuestion({}), '1'), 'a');
+  assert.equal(plainPick(nextQuestion({}), '② '), 'b');
+  assert.equal(plainPick(nextQuestion({}), '1 and 2'), '');
+  // Every question fits in a chat line, in both languages.
+  for (const q of QUESTIONS) for (const lang of ['English', 'Korean']) assert.ok([...questionText(q, lang)].length <= CHAT_MAX, questionText(q, lang));
+});
+
+test('asked for their MBTI, it asks a friend questions until it knows, remembers the answers and tells them next time at once', async () => {
+  const dir = await tempDir();
+  const peopleFile = join(dir, 'ai-friend-people.json');
+  // The island's clock a second on for each line said, past its limit on
+  // how fast anyone talks.
+  let skew = 0;
+  const { room, rooms, island } = server({ now: () => Date.now() + skew });
+  const minji = child(room);
+  const llm = model((prompt) => {
+    if (prompt.includes('The child said: "친구들이랑 노는 게 좋아"')) return { pick: 'a' };
+    if (prompt.includes('The child said:')) return { pick: 'none' };
+    return { say: '음!', action: 'none', stamp: 'none' };
+  });
+  const buddy = friend({ llm, rooms, peopleFile });
+  await buddy.start();
+  assert.equal(buddy.invited(island, 'Minji'), '');
+  let pip = await eventually(() => buddyIn(room));
+  await eventually(() => minji.of('say').find((m) => m.pid === pip.id));
+  // Each line said, the next once it has answered: what its model was told,
+  // and what it said (its answer, then any question on a line of its own).
+  const pipLines = () => minji.of('say').filter((m) => m.pid === pip.id).map((m) => m.text);
+  let question = '';
+  const said = async (text) => {
+    const before = llm.asked.length;
+    const answered = pipLines().length;
+    skew += 1000;
+    minji.say({ t: 'say', text });
+    await eventually(() => pipLines().length > answered);
+    const prompt = llm.asked.slice(before).find((p) => p.includes('Write "say"'));
+    question = '';
+    if (/right after, by itself/.test(prompt)) question = await eventually(() => pipLines().length > answered + 1 && pipLines().at(-1));
+    return prompt;
+  };
+
+  let prompt = await said('내 MBTI 뭐야?');
+  assert.match(prompt, /Minji is asking for their MBTI, but you do not know them well enough yet\. Say you will ask a few fun questions first to find out \(8 at most\), and nothing more: you ask the first question right after, by itself\./);
+  assert.equal(question, '바쁜 하루가 끝나면 뭐가 더 좋아? ① 친구들이랑 왁자지껄 노는 것? ② 혼자 조용히 쉬는 것?', 'the question word for word, after what the model said');
+  prompt = await said('같이 집 짓자');
+  assert.match(prompt, /did not pick a choice yet\. Say one short, friendly thing back to what they said, in your own words \(not theirs\), and nothing more: you ask the question again right after/);
+  prompt = await said('MBTI 알려줘!');
+  assert.match(prompt, /Minji is asking for their MBTI again\. Say you need a few more answers first \(8 at most\)/);
+  assert.match(question, /^바쁜 하루가/);
+  assert.match(question, /^바쁜 하루가/);
+  prompt = await said('친구들이랑 노는 게 좋아');
+  assert.match(prompt, /Minji answered your question to find their MBTI: playing with lots of friends\. Say something short and kind about that answer, and nothing more: you ask the next question \(7 more at most\)/);
+  assert.match(question, /^어떤 이야기가 더 좋아\?/);
+  assert.match(prompt, /Write "say" in Korean\./);
+  for (const text of ['2', '1']) prompt = await said(text);
+  assert.match(prompt, /Write "say" in Korean\./, 'a bare "1" answered in the language the question was asked in');
+  const kept = JSON.parse(await readFile(peopleFile, 'utf8'));
+  assert.deepEqual(kept.people.minji.answers, { EI0: 'a', SN0: 'b', TF0: 'a' }, 'saved as they answer');
+
+  // Pip goes, and a new one starts from the same file: it carries on
+  // where they left off, then tells them.
+  buddy.stop();
+  await eventually(() => !buddyIn(room));
+  const again = friend({ llm, rooms, peopleFile });
+  await again.start();
+  assert.deepEqual(again.people.answersOf('Minji'), { EI0: 'a', SN0: 'b', TF0: 'a' });
+  assert.equal(again.invited(island, 'Minji'), '');
+  pip = await eventually(() => buddyIn(room));
+  await eventually(() => minji.of('say').find((m) => m.pid === pip.id));
+  prompt = await said('What is my MBTI?');
+  assert.match(prompt, /Minji is asking for their MBTI, but you do not know them well enough yet\. Say you will finish the questions you started last time \(5 at most\)/);
+  assert.equal(question, 'On a day off, what do you like? (1) planning the day ahead, or (2) seeing what happens?');
+  for (const text of ['2', '1', '②', '2번', '2']) prompt = await said(text);
+  assert.match(prompt, /the next question \(1 more at most\)/);
+  assert.match(question, /^In a game, what makes you happiest\?/, 'a third question where two answers disagree');
+  prompt = await said('1');
+  assert.equal(question, '', 'no more questions');
+  assert.match(prompt, /Minji just answered your last question to find their MBTI \(.+\)\. From their answers to your questions, their own MBTI is ENTP \(a quick inventor full of new ideas\); yours is not asked\. Tell them in your own words, like "Your MBTI is ENTP: you are a quick inventor full of new ideas! Just for fun!"/);
+  prompt = await said('Hi Pip');
+  assert.match(prompt, /Friends here: Minji \([^)]*MBTI ENTP\)/, 'remembered as it talks with them');
+
+  const later = new People({ file: peopleFile });
+  await later.load();
+  assert.equal(later.typeOf('MINJI'), 'ENTP', 'known by name, whatever the case');
+  prompt = await said('내 MBTI 뭐였지?');
+  assert.match(prompt, /Minji is asking for their MBTI\. From their answers to your questions, their own MBTI is ENTP .*like "너의 MBTI는 ENTP! 새 아이디어가 가득한 발명가야!/);
 });
 
 test('the admin page saves its settings and applies them, shows where it is and what is said, has it say something, and sends it home', async () => {
