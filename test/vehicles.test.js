@@ -295,11 +295,12 @@ test('the digger digs a tunnel into a hill, up and down steps, and jewels out of
 
 test('the paint van paints the ground it rolls over, never anything built, and undo takes the trail away', () => {
   const w = meadow();
-  // A brick someone put down, a fence and a rose on the way, and farmland.
+  // On the way: a brick someone put down, a fence, a daisy growing, and
+  // farmland someone turned over (the grass top is at y = 5).
   w.set(26, 6, 20, B.TOY_BRICKS[0]);
   w.set(27, 6, 21, B.FENCE);
-  w.set(28, 6, 19, B.ROSE);
-  w.set(29, 6, 20, B.FARMLAND);
+  w.set(28, 6, 19, B.DAISY);
+  w.set(29, 5, 20, B.FARMLAND);
   const r = ride(w, 'paintvan', 15.5, 6, 20.5, Math.PI / 2);
   const paint = (input, seconds, id = B.SNOW) => {
     const undo = [];
@@ -314,29 +315,32 @@ test('the paint van paints the ground it rolls over, never anything built, and u
   };
   const undo = paint({ mx: 1, mz: 0 }, 6);
   assert.ok(r.body.x > 30, `drove along, to ${r.body.x.toFixed(2)}`);
-  // A swath of snow where it rolled, three blocks wide.
+  // A swath of snow on the ground where it rolled, three blocks wide, but
+  // not where anything anyone put down stands, nor the farmland.
   let painted = 0;
   for (let x = 16; x < 30; x++) {
-    assert.equal(w.get(x, 6, 20), B.SNOW, `painted at ${x},20`);
-    if (w.get(x, 6, 21) === B.SNOW) painted++;
+    if (x === 26 || x === 29) continue;
+    assert.equal(w.get(x, 5, 20), B.SNOW, `painted at ${x},20`);
+    if (w.get(x, 5, 21) === B.SNOW) painted++;
   }
   assert.ok(painted >= 10, `a swath either side (${painted})`);
   // Never over anything anyone put down.
   assert.equal(w.get(26, 6, 20), B.TOY_BRICKS[0], 'not over the bricks');
   assert.equal(w.get(27, 6, 21), B.FENCE, 'not over the fence');
-  assert.equal(w.get(28, 6, 19), B.ROSE, 'not over the rose');
-  assert.equal(w.get(29, 6, 20), B.FARMLAND, 'not over the farmland');
-  assert.equal(w.get(10, 6, 20), B.GRASS, 'nothing where it never went');
+  assert.equal(w.get(28, 6, 19), B.DAISY, 'not over the daisy');
+  assert.equal(w.get(28, 5, 19), B.GRASS, 'nor the ground it grows on');
+  assert.equal(w.get(29, 5, 20), B.FARMLAND, 'not over the farmland');
+  assert.equal(w.get(10, 5, 20), B.GRASS, 'nothing where it never went');
   // Standing still paints nothing.
-  w.set(FL(r.body.x), 6, FL(r.body.z), B.GRASS);
+  w.set(FL(r.body.x), 5, FL(r.body.z), B.GRASS);
   paint({}, 1);
-  assert.equal(w.get(FL(r.body.x), 6, FL(r.body.z)), B.GRASS, 'standing still');
+  assert.equal(w.get(FL(r.body.x), 5, FL(r.body.z)), B.GRASS, 'standing still');
   // Undo puts the grass back, just as it was.
   const back = [];
   for (let i = undo.length - 5; i >= 0; i -= 5) back.push(undo[i], undo[i + 1], undo[i + 2], undo[i + 3]);
   applyCells(w, back);
-  for (let x = 16; x < 30; x++) assert.equal(w.get(x, 6, 20), B.GRASS || x === 26 ? B.GRASS : B.GRASS, `grass again at ${x},20`);
-  assert.equal(w.get(20, 6, 21), B.GRASS, 'grass beside it too');
+  for (let x = 16; x < 30; x++) if (x !== 26 && x !== 29) assert.equal(w.get(x, 5, 20), B.GRASS, `grass again at ${x},20`);
+  assert.equal(w.get(20, 5, 21), B.GRASS, 'grass beside it too');
 });
 
 test('a mine cart rolls along its rails, round a corner, up a slope and back down it, and stops at the end of the line', () => {

@@ -638,24 +638,27 @@ function paintvan(id) {
   block(body, white, 0.38, 0.66, 0.43, 0.41, 0.96, 0.51);
   block(body, white, -0.41, 0.93, 0.43, 0.41, 0.96, 0.51);
   v.eyes = lampEyes(body, 0.22, 0.5, 0.79, 0.1, v.glow);
-  // The boxy back, open at the top where the seat is, with a stripe of paint
-  // down its side and a barrel on the roof.
-  block(body, shell, -0.45, 0.24, -0.8, 0.45, 0.9, 0.2);
-  block(body, shell, -0.45, 0.9, -0.8, 0.45, 0.96, 0.2);
+  // The boxy back, open at the top where the driver sits: a floor level with
+  // the cab's roof, walls round it, a stripe of paint down its side and a
+  // barrel on the roof at the back.
+  block(body, shell, -0.45, 0.24, -0.8, 0.45, 0.72, 0.2);
+  block(body, shell, -0.45, 0.72, -0.8, 0.45, 0.96, -0.5);
   studs(body, shell, 0.96, [-0.2, 0.2], [-0.7]);
+  block(body, shell, -0.45, 0.72, 0.02, 0.45, 0.96, 0.2);
+  for (const side of [-1, 1]) block(body, shell, side < 0 ? -0.45 : 0.32, 0.72, -0.8, side < 0 ? -0.32 : 0.45, 0.96, 0.2);
   block(body, white, -0.46, 0.5, -0.8, -0.43, 0.7, 0.2);
   block(body, white, 0.43, 0.5, -0.8, 0.46, 0.7, 0.2);
-  block(body, white, -0.45, 0.24, -0.42, 0.45, 0.9, -0.36);
   for (const side of [-1, 1]) {
     block(body, toon('#e8453c'), side * 0.4, 0.5, -0.7, side * 0.4 + 0.06 * side, 0.56, -0.3);
     block(body, toon('#fcd535'), side * 0.4, 0.58, -0.7, side * 0.4 + 0.06 * side, 0.64, -0.3);
   }
-  // The driver's seat in the middle, on top of the back, facing forward.
-  v.seat = block(body, v.pad, -0.24, 0.96, -0.2, 0.24, 1.03, 0.28);
-  block(body, v.pad, -0.24, 0.96, -0.34, 0.24, 1.4, -0.26);
-  block(body, dark, -0.3, 0.96, -0.22, 0.3, 1.0, 0.3);
-  body.add(mesh(cylinder(0.02, 0.02, 0.3, 6), dark, 0, 1.0, 0.1));
-  body.add(mesh(sphere(1, 10, 8), toon('#e8453c'), 0, 1.16, 0.1, 0.05));
+  // The driver's seat in the middle of the floor, facing forward, its
+  // backrest behind it out of the rider's way (the seat height, critters.js).
+  block(body, dark, -0.3, 0.72, -0.44, 0.3, 0.84, 0.08);
+  v.seat = block(body, v.pad, -0.25, 0.84, -0.4, 0.25, 0.93, 0.06);
+  block(body, v.pad, -0.25, 0.72, -0.56, 0.25, 1.3, -0.44);
+  body.add(mesh(cylinder(0.02, 0.02, 0.3, 6), dark, 0, 1.0, -0.02));
+  body.add(mesh(sphere(1, 10, 8), toon('#e8453c'), 0, 1.16, -0.02, 0.05));
   // A barrel of paint up on the roof, and a light on a pole, flashing while
   // it paints.
   body.add(mesh(cylinder(0.16, 0.16, 0.3, 14), shell, -0.2, 1.11, -0.66));
@@ -749,7 +752,7 @@ export function drive(m, dt, state, moving, air = 0) {
   // The paint van's roller turns as it goes, and its light flashes while it
   // paints (see riding.js).
   if (m.roller) {
-    m.roller.rotation.z -= (go * dt) / 0.2;
+    m.roller.rotation.x -= (go * dt) / 0.2;
     m.beacon.emissiveIntensity = moving || honk ? 0.4 + Math.max(0, Math.sin(t * 9)) * 0.9 : 0.3;
   }
 }
