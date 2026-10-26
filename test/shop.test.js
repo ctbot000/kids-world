@@ -182,9 +182,9 @@ test('coins and gear are kept at the keeper, from the device that changed them l
 test('a toy weapon is in the look the island sees while you have it on, and only a real one', () => {
   const look = { animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' };
   assert.equal(lookWithGear(look, { weapon: 0, off: {} }).weapon, undefined);
-  assert.equal(lookWithGear(look, { weapon: 3, off: {} }).weapon, 'hammer');
-  assert.equal(lookWithGear(look, { weapon: 4, off: {} }).weapon, 'lavablade', 'the best there is');
-  assert.equal(lookWithGear({ ...look, weapon: 'hammer' }, { weapon: 3, off: { weapon: true } }).weapon, undefined, 'taken off');
+  assert.equal(lookWithGear(look, { weapon: 4, off: {} }).weapon, 'hammer');
+  assert.equal(lookWithGear(look, { weapon: 5, off: {} }).weapon, 'lavablade', 'the best there is');
+  assert.equal(lookWithGear({ ...look, weapon: 'hammer' }, { weapon: 4, off: { weapon: true } }).weapon, undefined, 'taken off');
   assert.equal(wornWeapon({ weapon: 1, off: {} }).key, 'sword');
   assert.equal(wornWeapon({ weapon: 0, off: {} }), null);
   assert.equal(cleanLook({ ...look, weapon: 'blaster' }).weapon, 'blaster');
@@ -204,9 +204,9 @@ test('any of the weapons you own can be the one in your hand: the one you pick, 
   assert.equal(wornWeapon({ weapon: 4, pick: { weapon: 2 }, off: {} }).key, 'blaster');
   assert.equal(lookWithGear({ animal: 'fox', fur: 'orange', shirt: 2, hat: 'none' }, { weapon: 4, pick: { weapon: 1 }, off: {} }).weapon, 'sword');
   // No pick (or one not yours, or silly): the best you have.
-  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 4 }, off: {} }).key, 'hammer');
-  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1.5 }, off: {} }).key, 'hammer');
-  assert.equal(wornWeapon({ weapon: 3, pick: {}, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 4, pick: { weapon: 5 }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 4, pick: { weapon: 1.5 }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 4, pick: {}, off: {} }).key, 'hammer');
   // Taken off: none at all, picked or not.
   assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1 }, off: { weapon: true } }), null);
 });
@@ -220,15 +220,15 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     assert.equal(p.nextWeapon(), null, 'nothing to flip through');
     assert.equal(p.pickWeapon(1), null, 'nothing to pick either');
     p.earn(1000);
-    for (const key of ['sword', 'blaster', 'hammer', 'lavablade']) {
+    for (const key of ['sword', 'blaster', 'bombrod', 'hammer', 'lavablade']) {
       assert.equal(p.buy('weapon'), true);
       // Each new one goes straight into your hand.
       assert.equal(wornWeapon(p.data.gear).key, key);
     }
     assert.equal(p.nextWeapon().key, 'sword', 'round to the first');
     assert.equal(p.nextWeapon().key, 'blaster');
-    assert.equal(p.pickWeapon(4).key, 'lavablade');
-    assert.equal(p.pickWeapon(5), null, 'not one of yours');
+    assert.equal(p.pickWeapon(5).key, 'lavablade');
+    assert.equal(p.pickWeapon(6), null, 'not one of yours');
     assert.equal(p.pickWeapon(0), null);
     assert.equal(wornWeapon(p.data.gear).key, 'lavablade', 'the pick stays');
     p.wear('weapon', false);
@@ -236,7 +236,7 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     assert.equal(p.nextWeapon().key, 'lavablade', 'flipping puts it back on');
     // Kept on this device.
     const again = new Profile();
-    assert.equal(again.data.gear.pick.weapon, 4);
+    assert.equal(again.data.gear.pick.weapon, 5);
     assert.equal(wornWeapon(again.data.gear).key, 'lavablade');
   } finally {
     delete globalThis.localStorage;
@@ -379,9 +379,9 @@ test('weapons wear out as they bop, break, and are fixed in the shop for less th
     assert.ok(fixPrice({ weapon: 4, wear: { [w.key]: w.uses } }, w) < w.price, `fixing the ${w.name} costs less than buying it`);
   }
   // A broken pick falls back to the best not broken; all broken, a fist.
-  const [sword, blaster, hammer] = WEAPONS;
-  assert.equal(wornWeapon({ weapon: 3, pick: { weapon: 1 }, wear: { sword: sword.uses }, off: {} }).key, 'hammer');
-  assert.equal(wornWeapon({ weapon: 3, pick: {}, wear: { hammer: hammer.uses }, off: {} }).key, 'blaster');
+  const [sword, blaster, rod, hammer] = WEAPONS;
+  assert.equal(wornWeapon({ weapon: 4, pick: { weapon: 1 }, wear: { sword: sword.uses }, off: {} }).key, 'hammer');
+  assert.equal(wornWeapon({ weapon: 4, pick: {}, wear: { hammer: hammer.uses }, off: {} }).key, 'bombrod');
   assert.equal(wornWeapon({ weapon: 2, pick: {}, wear: { sword: sword.uses, blaster: blaster.uses }, off: {} }), null);
   assert.equal(lookWithGear({ animal: 'fox' }, { weapon: 1, wear: { sword: sword.uses }, off: {} }).weapon, undefined, 'friends see no broken sword');
 

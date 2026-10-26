@@ -233,6 +233,33 @@ export function drillEdit(world, cells) {
   return { cells: o.cells(), collected };
 }
 
+// The Bomb Rod's pop (shop.js bombrod, lobbed with a swing): the same blast
+// as a mining bomb's, but a toy one — it bops the monsters caught in it and
+// shakes the jewels out of any gem rocks, without digging the ground. Only
+// natural gem rocks ever go, so nothing anyone built, planted or furnished
+// is ever broken, and the ground is left standing. Returns { cells, collected }.
+export function gemBlastEdit(world, x, y, z) {
+  const o = new Overlay(world);
+  const collected = [];
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.hypot(dx, dy, dz) > 2.4) continue;
+        const cx = x + dx;
+        const cy = y + dy;
+        const cz = z + dz;
+        if (!world.inBounds(cx, cy, cz) || cy === 0) continue;
+        const id = o.get(cx, cy, cz);
+        // Gem rocks only: the ground stands, and with it anything anyone
+        // built, planted or furnished — the mining bomb's rule, minus the hole.
+        if (!B.GEM_ROCKS.includes(id) || !o.set(cx, cy, cz, B.AIR)) continue;
+        collected.push(id);
+      }
+    }
+  }
+  return { cells: o.cells(), collected };
+}
+
 // The mining bomb's blast (blocks.js BOMB, placed with buildEdit): a small
 // round hole in natural ground only, so nothing anyone built, planted or
 // furnished is ever broken. Gem rocks caught in it drop their jewels, which
