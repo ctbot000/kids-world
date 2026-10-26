@@ -203,4 +203,12 @@ test("a chair's scoot from cell to cell is an edit of its own, and everyone sees
   // there) takes nothing away.
   room.receive(a, { t: 'edit', seq: 3, kind: 'scoot', cells: [x, y, z + 2, chair, x, y, z + 1, B.AIR], expect: [B.AIR, B.AIR] });
   assert.equal(w.get(x, y, z + 1), B.turnedTo(chair, 1), 'the chair stays put');
+  assert.equal(w.get(x, y, z + 2), B.AIR, 'and no second chair turns up');
+  // Rolling into a friend's block put down there a moment before: the
+  // chair stays where it was, rather than going from there and nowhere else.
+  room.receive(b, { t: 'edit', seq: 1, kind: 'build', cells: [x, y, z + 2, B.STONE] });
+  room.receive(a, { t: 'edit', seq: 4, kind: 'scoot', cells: [x, y, z + 2, B.turnedTo(chair, 1), x, y, z + 1, B.AIR], expect: [B.AIR, B.turnedTo(chair, 1)] });
+  assert.equal(w.get(x, y, z + 1), B.turnedTo(chair, 1), 'the chair is still there');
+  assert.equal(w.get(x, y, z + 2), B.STONE, 'and so is the block');
+  assert.equal(a.last('ack').fix.length, 8, 'both cells put back on the scooter\'s page');
 });

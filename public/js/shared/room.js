@@ -761,6 +761,20 @@ export class Room {
         return;
       }
     }
+    // A desk chair rolling on (game.js scootInSeat) goes all at once or not
+    // at all: from one cell and into the next, so a friend's build in the
+    // way, or the chair already gone, never leaves it nowhere, or twice over.
+    if (kind === 'scoot') {
+      let ok = Boolean(expect);
+      for (let i = 0; i < cells.length && ok; i += 4) {
+        const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
+        ok = expect[i / 4] === this.world.get(x, y, z) && !(B.SOLID[id] && this.onlinePlayers().some((q) => q.id !== p.id && cellHitsBody(x, y, z, { x: q.s[0], y: q.s[1], z: q.s[2], radius: BODY.radius, height: BODY.height })));
+      }
+      if (!ok) {
+        this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
+        return;
+      }
+    }
     c.cells -= n;
     // Who is placing this, for a mining bomb's fuse: its blast's jewels go
     // in their basket (stepBombs).
