@@ -291,3 +291,37 @@ test('water stays put on any other island', () => {
   assert.equal(room.world.get(x, y, z), B.WATER, 'no boiling there');
   assert.equal(room.world.get(x, y + 1, z), B.ICE, 'no melting either');
 });
+
+test('ten cozy houses stamped on a volcano island earn the Pompeii sticker, and the count travels with a login', async () => {
+  const { STAT_KEYS, STICKERS } = await import('../public/js/shared/stickers.js');
+  const sticker = STICKERS.find((s) => s.key === 'pompeii');
+  assert.ok(sticker, 'the sticker is there');
+  assert.equal(sticker.icon, '🌋');
+  assert.ok(sticker.name && sticker.text, 'says what it is');
+  assert.ok(STAT_KEYS.includes('volcanohouses'), 'the count the game keeps');
+  assert.equal(sticker.goal, 10, 'shows how far there is to go');
+  // Only the tenth house does it, as any other island's houses do not.
+  const stats = (n) => Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'volcanohouses' ? n : 0]));
+  assert.equal(sticker.test(stats(9)), false);
+  assert.equal(sticker.test(stats(10)), true);
+  // Counting it on a profile earns the sticker, which the keeper keeps.
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const p = new Profile();
+    const earned = [];
+    p.addEventListener('sticker', (e) => earned.push(e.detail.key));
+    for (let i = 0; i < 9; i++) p.count('volcanohouses');
+    assert.deepEqual(earned, [], 'nine houses are not enough');
+    p.count('volcanohouses');
+    assert.deepEqual(earned, ['pompeii'], 'the tenth earns it');
+    assert.equal(p.data.stats.volcanohouses, 10);
+    const { keptProfile } = await import('../public/js/shared/keeper.js');
+    const kept = keptProfile(p.data);
+    assert.equal(kept.stats.volcanohouses, 10, 'the count comes along');
+    assert.ok(kept.stickers.pompeii, 'and so does the sticker');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});

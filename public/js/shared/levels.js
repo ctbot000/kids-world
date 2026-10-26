@@ -59,6 +59,7 @@ export const XP_FOR = {
   steps: { xp: 0.05 },
   popped: { xp: 5 },
   furnished: { xp: 2 },
+  volcanohouses: { xp: 5 },
   sat: { xp: 2, cap: 50 },
   teas: { xp: 10, cap: 100 },
   arcade: { xp: 10 },
