@@ -386,6 +386,34 @@ test('a try out of steps leaves a note with its work, and the next try is taken 
   assert.ok(github.comments.some((c) => c.n === 17 && /could not finish this:\n\nran out of steps \(100\)\n\nNothing much\./.test(c.body)));
 });
 
+test('a worker finishes its own task before taking another, even one waiting longer', async () => {
+  const { dir, repo } = await project();
+  const github = hub([issue(20, 'add a multiply', 'And fix add.')]);
+  const taken = [];
+  const llm = scripted((messages) => {
+    const task = messages[1].content;
+    const last = messages.at(-1).content;
+    if (last.startsWith('You are out of steps.')) return { summary: 'Done: mul.js. Left: fix add.' };
+    const n = messages.filter((m) => m.role === 'assistant').length;
+    if (n === 0) {
+      taken.push(Number(task.match(/#(\d+)/)[1]));
+      // While #20 is under way, an older task turns up on the board (its
+      // proposal approved, say), ahead of it.
+      if (taken.length === 1) github.issues.unshift(issue(19, 'older', ''));
+    }
+    if (task.includes('#19')) return { thought: 'no', tool: 'give_up', summary: 'not now' };
+    if (!task.includes('An earlier try')) return n === 0 ? { thought: 'mul first', tool: 'write', path: 'mul.js', content: 'export const mul = (a, b) => a * b;\n' } : { thought: 'look', tool: 'list', path: '' };
+    if (n === 0) return { thought: 'fix add', tool: 'edit', path: 'add.js', old: 'a - b', new: 'a + b' };
+    return { thought: 'done', tool: 'done', title: 'Add mul and fix add', summary: 'Both.' };
+  });
+  const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 1, propose: false }, log: () => {} });
+  await company.start();
+  after(() => company.stop());
+  await eventually(() => github.pullsMade.length === 1 && taken.includes(19) && !company.workers[0].issue, 120000);
+  assert.deepEqual(taken, [20, 20, 19], 'out of steps on #20, Ada carried on with it before the older #19');
+  assert.equal(company.workers[0].owns, null, 'and is free again');
+});
+
 test('a task a restart cuts off carries on where it was, worktree and conversation and all', async () => {
   const { dir, origin, repo } = await project();
   const github = hub([issue(14, 'add a multiply', 'And fix add.')]);
@@ -408,6 +436,7 @@ test('a task a restart cuts off carries on where it was, worktree and conversati
   // After it: a new server, its run logs read again, and the task taken again.
   let given = null;
   const after_ = scripted((messages) => {
+    if (messages[1].content.includes('#13')) return { thought: 'no', tool: 'give_up', summary: 'not now' };
     const n = messages.filter((m) => m.role === 'assistant').length;
     if (n === 2) {
       given = messages;
@@ -418,10 +447,14 @@ test('a task a restart cuts off carries on where it was, worktree and conversati
   const runs = await new Runs({ dir: logs }).load();
   const [cut] = runs.list(0);
   assert.equal(cut.stopped, true, 'cut off, so ended as stopped');
-  const b = new Company({ llm: after_, github, repoDir: repo, workDir: join(dir, 'work'), settings, log: () => {}, runs });
+  // Two at their desks now, and an older task waiting too: #14 is still
+  // Ada's to finish, so Ben takes the older one.
+  github.issues.unshift(issue(13, 'older', ''));
+  const b = new Company({ llm: after_, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...settings, workers: 2 }, log: () => {}, runs });
   await b.start();
   after(() => b.stop());
-  await eventually(() => github.pullsMade.length === 1 && !b.workers[0].issue);
+  await eventually(() => github.pullsMade.length === 1 && github.issues[0].labels.includes(LABELS.stuck) && !b.workers.some((w) => w.issue));
+  assert.equal(runs.list(1)[0].issue.number, 13, 'Ben took the older task');
   // The model had its two steps back, as it took them, with their results.
   assert.deepEqual(given.filter((m) => m.role === 'assistant').map((m) => JSON.parse(m.content).tool), ['write', 'list']);
   assert.match(given[3].content, /^Result of write:\nWrote mul\.js/);

@@ -142,6 +142,7 @@ function car(id) {
 
 const BOATS = ['#e8453c', '#3a73d8', '#2fc1b3', '#8c5bd6', '#f59331'];
 const PAINT_VANS = ['#f4f1ea', '#8fd3ff', '#ffd166', '#c7a4ff'];
+const MOWERS = ['#e8453c', '#35a852', '#3a73d8', '#f59331'];
 
 function boat(id) {
   const v = rig();
@@ -687,7 +688,64 @@ function paintvan(id) {
   return { ...v, height: 1.45, center: 0.6, pick: 0.9, shadow: 0.9, seen: 110 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan };
+// The lawn mower: a little ride-on mower, its driver sat out in the open
+// over the back wheels, with a steering wheel, a grass basket behind and a
+// wide cutting deck in front whose blade spins as it goes — cutting the grass
+// it rolls over short and taking off the flowers in its path (riding.js
+// mowCells). Big back wheels and little front ones it steers on, in whichever
+// of its colours the island picked for it.
+function mower(id) {
+  const v = rig();
+  const { body } = v;
+  const paint = toon(MOWERS[id % MOWERS.length]);
+  const white = toon('#f7f5ef');
+  const dark = toon('#4a4e57');
+  // Big wheels behind, little ones in front, which it steers on.
+  v.wheels = [-1, 1].map((side) => wheel(body, side * 0.34, 0.24, -0.5, 0.24, 0.16));
+  v.steer = [-1, 1].map((side) => wheel(body, side * 0.32, 0.13, 0.44, 0.13, 0.1));
+  // The body the driver sits on, with its rounded nose over the deck.
+  block(body, paint, -0.34, 0.28, -0.72, 0.34, 0.56, 0.34);
+  block(body, paint, -0.3, 0.34, 0.34, 0.3, 0.52, 0.62);
+  block(body, paint, -0.34, 0.52, -0.3, 0.34, 0.58, 0.34);
+  studs(body, paint, 0.58, [-0.18, 0.18], [-0.6, -0.4]);
+  // The driver's seat above the body (the seat height, critters.js), its
+  // backrest behind out of the rider's way, and a grass basket behind the
+  // wheels, open at the top and filling with clippings as it goes.
+  block(body, dark, -0.26, 0.56, -0.32, 0.26, 0.7, -0.04);
+  v.seat = block(body, v.pad, -0.24, 0.7, -0.32, 0.24, 0.78, -0.04);
+  block(body, v.pad, -0.24, 0.56, -0.48, 0.24, 1.18, -0.32);
+  const basket = toon('#c99a5b');
+  block(body, basket, -0.28, 0.5, -0.96, 0.28, 0.56, -0.72);
+  for (const side of [-1, 1]) block(body, basket, side < 0 ? -0.28 : 0.22, 0.56, -0.96, side < 0 ? -0.22 : 0.28, 0.94, -0.72);
+  block(body, basket, -0.28, 0.56, -0.96, 0.28, 0.94, -0.9);
+  block(body, dark, -0.3, 0.5, -0.98, 0.3, 0.54, -0.7);
+  const clippings = toon('#8fd865');
+  block(body, clippings, -0.22, 0.88, -0.94, 0.22, 0.92, -0.74);
+  // A steering column and wheel, and headlight eyes over the deck.
+  body.add(mesh(cylinder(0.025, 0.025, 0.34, 8), dark, 0, 0.66, 0.34, 0.3));
+  const bars = mesh(torus(0.13, 0.025, Math.PI * 2), dark, 0, 0.8, 0.3);
+  bars.rotation.x = Math.PI / 2.6;
+  body.add(bars);
+  v.eyes = lampEyes(body, 0.17, 0.44, 0.63, 0.07, v.glow);
+  // The cutting deck: a wide hood in front, and under it the blade that spins
+  // as it mows (drive, below), with its chute down to the grass.
+  block(body, paint, -0.5, 0.24, 0.3, 0.5, 0.38, 0.66);
+  block(body, white, -0.5, 0.28, 0.32, 0.5, 0.34, 0.64);
+  for (const side of [-1, 1]) block(body, paint, side < 0 ? -0.52 : 0.46, 0.2, 0.34, side < 0 ? -0.46 : 0.52, 0.42, 0.62);
+  const blade = new THREE.Group();
+  blade.position.set(0, 0.3, 0.5);
+  blade.add(mesh(cylinder(0.05, 0.05, 0.06, 10), dark));
+  for (const side of [-1, 1]) blade.add(mesh(box(), toon(METAL), side * 0.32, -0.02, 0, 0.6, 0.03, 0.1));
+  body.add(blade);
+  v.blade = blade;
+  // A little flag on a pole at the back, to spot it in the grass.
+  body.add(mesh(cylinder(0.014, 0.014, 0.5, 6), dark, 0, 1.2, -0.9));
+  v.flag = mesh(cone(0.1, 0.18, 4), toon('#fcd535'), 0, 1.5, -0.9);
+  body.add(v.flag);
+  return { ...v, height: 1.55, center: 0.5, pick: 0.8, shadow: 0.8, seen: 90 };
+}
+
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan, mower };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -755,4 +813,11 @@ export function drive(m, dt, state, moving, air = 0) {
     m.roller.rotation.x -= (go * dt) / 0.2;
     m.beacon.emissiveIntensity = moving || honk ? 0.4 + Math.max(0, Math.sin(t * 9)) * 0.9 : 0.3;
   }
+  // The lawn mower's blade spins as it goes (and gives a whirl when honked),
+  // and its little front wheels turn the way it is steering.
+  if (m.blade) {
+    m.spin = clamp((m.spin ?? 0) + dt * (moving || honk ? 40 : -40), 0, 30);
+    m.blade.rotation.y += m.spin * dt;
+  }
+  if (m.steer) for (const w of m.steer) w.rotation.y = clamp(m.turn * 0.05, -0.4, 0.4);
 }

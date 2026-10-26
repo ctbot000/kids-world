@@ -45,6 +45,8 @@ function def(id, key, props) {
     collect: null,
     ...props,
   };
+  // Two blocks on one id would quietly turn one into the other in every save.
+  if (defs[id]) throw new Error(`block id ${id} is taken by ${defs[id].key}, wanted for ${key}`);
   if (typeof d.tiles === 'string') d.tiles = { top: d.tiles, side: d.tiles, bottom: d.tiles };
   else if (d.tiles) d.tiles = { top: d.tiles.top, side: d.tiles.side ?? d.tiles.top, bottom: d.tiles.bottom ?? d.tiles.top };
   d.solid = d.kind === 'solid' || d.kind === 'glass' || d.kind === 'tree' || (d.kind === 'furniture' && d.solid !== false);
@@ -96,6 +98,11 @@ export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', cate
 // turns back into the island's own grass, snow or frosting. Natural ground,
 // not something to build with.
 export const GLOOM = def(27, 'gloom', { name: 'Gloomy Ground', tiles: { top: 'gloom-top', side: 'gloom-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
+// Grass the lawn mower has mown (riding.js mowCells): the same grass cut
+// short, the pale stripe a mower leaves behind it. Natural ground like the
+// grass it was — it is what the mower leaves, not something to build with —
+// and mowing it again mows nothing.
+export const MOWED = def(303, 'mowed-grass', { name: 'Mowed Grass', tiles: { top: 'mowed-top', side: 'mowed-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
 
 // ---------------------------------------------------------------- building
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });
@@ -334,6 +341,10 @@ export const FRUIT_SPROUTS = FRUITS.map(([key, name], i) =>
   def(59 + i, `${key}-sprout`, { name: `${name.replace(/ies$/, 'y')} Sprout`, kind: 'plant', tiles: 'sprout', grows: `fruit-${key}`, sound: 'plant' }),
 );
 export const SHELL = def(75, 'shell', { name: 'Seashell', kind: 'item', tiles: 'shell', collect: 'shell', sound: 'plant' });
+// Flowers the lawn mower took off the grass (riding.js mowCells), a bunch in
+// the basket: put one down and it stands there to be picked up again. Picked
+// by hand, a flower is just taken off, as before; only the mower gathers.
+export const FLOWER_BUNCH = def(304, 'flower-bunch', { name: 'Flowers', kind: 'item', tiles: 'flower-bunch', collect: 'flower', sound: 'plant' });
 export const STAR_PIECE = def(76, 'star-piece', { name: 'Star Piece', kind: 'item', tiles: 'star-piece', collect: 'star', light: 10, sound: 'glass' });
 // A pearl, found now and then in a giant clam (critters.js). It gleams a little.
 // The first id past the computer's, which turns and so takes 257-260.
@@ -457,6 +468,7 @@ export const COLLECTABLES = [
   { key: 'shell', name: 'Seashell', plural: 'Seashells', item: SHELL, sprout: 0 },
   { key: 'pearl', name: 'Pearl', plural: 'Pearls', item: PEARL, sprout: 0 },
   { key: 'star', name: 'Star Piece', plural: 'Star Pieces', item: STAR_PIECE, sprout: 0 },
+  { key: 'flower', name: 'Flowers', plural: 'Flowers', item: FLOWER_BUNCH, sprout: 0 },
   ...GEMS.map(([key, name, plural], i) => ({ key, name, plural, item: GEM_ITEMS[i], sprout: 0 })),
 ];
 
@@ -478,9 +490,22 @@ for (const d of defs) {
   EMIT[d.id] = d.light;
   KIND[d.id] = KIND_CODE[d.kind];
 }
-// Natural ground, which the hills tool shapes (farmland is ground too).
+// Natural ground, which the hills tool shapes (farmland is ground too, and
+// so is the lawn mower's short grass).
 export const TERRAIN = new Uint8Array(BLOCK_IDS);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, ...GEM_ROCKS]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, MOWED, ...GEM_ROCKS]) TERRAIN[id] = 1;
+// Ground the lawn mower cuts short (riding.js mowCells): the grass of a
+// meadow, and what it becomes. Snow and frosting it leaves alone, as it leaves
+// the sand and the stone. (Ids run past 255 here, so no Uint8Array.)
+export const MOWS = new Uint16Array(BLOCK_IDS);
+MOWS[GRASS] = MOWED;
+// What the mower's blade takes off the grass it mows: the wild flowers and
+// plants of the Plants tab, never a sprout (it grows into a tree), a crop,
+// rails (a plant to the mesher, but laid by someone) or a watering can.
+export const CUTS = new Uint8Array(BLOCK_IDS);
+for (const d of defs) if (d?.kind === 'plant' && d.category === 'plants' && !d.grows) CUTS[d.id] = 1;
+// The flowers among them, which it gathers into the basket as a bunch.
+export const FLOWERS_CUT = new Set([TULIP, DAISY, BLUEBELL, COSMOS, SUNFLOWER]);
 // Farmland, dry (1) or watered (2): what crops grow in.
 export const SOIL = new Uint8Array(BLOCK_IDS);
 SOIL[FARMLAND] = 1;

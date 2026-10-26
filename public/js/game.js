@@ -25,7 +25,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -38,7 +38,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
-import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
+import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -71,7 +71,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, not
 // only once the host's next update says so.
@@ -88,6 +88,8 @@ const REPEAT_MS = 230;
 // Drops of water out of the watering can, and how seldom crops ripening near
 // you play their little tune.
 const WATER_DROPS = ['#5fb8ff', '#a8dcff', '#ffffff'];
+// The little bits of grass and petals that fly up where the mower cuts.
+const GRASS_CLIPPINGS = ['#8fd865', '#6fbf4c', '#f47fb8'];
 const RIPE_TUNE_MS = 4000;
 const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
@@ -138,6 +140,7 @@ const TOUGH_TOLD = {
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
+  ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
   mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
 };
 
@@ -461,6 +464,9 @@ export class Game extends EventTarget {
         break;
       case 'stomp':
         this.stomped(msg);
+        break;
+      case 'mfire':
+        this.monsterFire(msg);
         break;
       case 'won':
         this.islandWon(msg);
@@ -1158,7 +1164,10 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
-    if (msg.fire && !this.toldFire) {
+    if (msg.fire && msg.ghost && !this.toldGhostFire) {
+      this.toldGhostFire = true;
+      this.emit('toast', { icon: '🔥', text: 'Ouch, a Lava Ghost’s fire! When it rears back, move out of the way it is facing — then bop it!' });
+    } else if (msg.fire && !msg.ghost && !this.toldFire) {
       this.toldFire = true;
       this.emit('toast', { icon: '🔥', text: 'Ouch, dragon fire! When it rears back, run out of the way it is facing — then bop it!' });
     }
@@ -1261,6 +1270,17 @@ export class Game extends EventTarget {
 
   // A monster bopped, with hearts left: it squashes and hops back, and
   // whoever bopped it hears how many more bops it takes.
+  // A Lava Ghost breathing fire: its flames pour out the way it faced, for
+  // a moment (updateMonsters draws them from its mouth).
+  monsterFire(msg) {
+    const entry = this.monsters.get(msg.id);
+    if (!entry) return;
+    entry.fireYaw = Number(msg.yaw) || 0;
+    entry.fireUntil = performance.now() + (Number(msg.ms) || GHOST_FIRE.ms);
+    const p = entry.model.group.position;
+    if (this.near(p.x, p.y, p.z, 30)) this.sound.play('fire');
+  }
+
   monsterHit(msg) {
     const now = performance.now();
     const entry = this.monsters.get(msg.id);
@@ -1523,6 +1543,8 @@ export class Game extends EventTarget {
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
+      // Mr. Mole's mound of dirt is not him: nothing to bop there.
+      if (moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, reach);
@@ -1678,8 +1700,9 @@ export class Game extends EventTarget {
       // King Grumble can be landed on again and again (and so can one
       // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
-      // Nobody lands on a Spiky: the host counts it as a bump.
-      if (entry.kind === 'spiky') continue;
+      // Nobody lands on a Spiky: the host counts it as a bump. Nor on Mr.
+      // Mole under the ground.
+      if (entry.kind === 'spiky' || moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
@@ -1800,6 +1823,11 @@ export class Game extends EventTarget {
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
+      // A Lava Ghost's flames, from its mouth, while it breathes them.
+      if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
+        const at = m.mouthAt();
+        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, GHOST_FIRE.reach, GHOST_FIRE.angle);
+      }
       const king = entry.kind === 'king';
       const big = isHeavy(entry.kind);
       // King Grumble dazed from a stomp: stars round his crown, and the first
@@ -3655,6 +3683,7 @@ export class Game extends EventTarget {
     }
     if (ev.dig) this.drill(ev.dig);
     if (ev.paint) this.paintTrail(ev.paint);
+    if (ev.mow) this.mow(ev.mow);
     // Along the rails: clickety-clack over each rail, a clunk at the end of the line.
     if (ev.rolled) {
       this.railed += ev.rolled;
@@ -3776,6 +3805,30 @@ export class Game extends EventTarget {
     for (let i = 3; i < cells.length; i += 4) if (cells[i] === B.AIR || cells[i] === B.WATER) dug++;
     this.profile.count('drilled', dug);
     if (plan.collected.length) this.collect(plan.collected, cells);
+  }
+
+  // The lawn mower's blade cutting the grass it rolls over short (riding.js),
+  // the flowers and plants in its path popping off (and, any that count as
+  // treasure, going in your basket).
+  mow(swath) {
+    // Only the owner builds on this island right now (or it is the shared
+    // isle, nobody's to build on): the blade is stopped.
+    if (!this.mayBuild) {
+      if (!this.riding.toldNoMow) this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is, so the mower cannot mow.` : 'The island owner is the only builder right now, so the mower cannot mow.', level: 'info' });
+      this.riding.toldNoMow = true;
+      return;
+    }
+    const plan = mowEdit(this.world, swath.cells, swath.cut);
+    if (!plan.cells.length) return;
+    if (!this.edit('pick', plan.cells, { undoable: !plan.collected.length })) return;
+    this.previewKey = '';
+    this.editEffects('pick', plan.cells, true);
+    // A puff of grass clippings over what it cut, petals where a flower popped.
+    const fx = this.renderer.effects;
+    for (let i = 0; i < plan.cells.length; i += 8) fx.sparkles(plan.cells[i] + 0.5, plan.cells[i + 1] + 0.8, plan.cells[i + 2] + 0.5, 2, GRASS_CLIPPINGS);
+    this.sound.play('plant');
+    this.profile.count('picked', plan.cells.length / 4);
+    if (plan.collected.length) this.collect(plan.collected, plan.cells);
   }
 
   // The paint van's roller painting the ground it rolls over (riding.js), in

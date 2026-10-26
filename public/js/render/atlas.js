@@ -484,6 +484,20 @@ const PAINT = {
     wavyBand(ctx, '#7ccb57', 16, 3);
     speckles(ctx, 12, ['#8fd865'], 6, [1, 2]);
   },
+  // The lawn mower's short grass (blocks.js MOWED): the same green cut close,
+  // with the pale line the mower leaves along its way.
+  'mowed-top'(ctx) {
+    fill(ctx, '#6fbf4c');
+    speckles(ctx, 16, ['#7ccb57', '#63b043', '#8fd865'], 60, [1.2, 2.6]);
+    ctx.fillStyle = 'rgba(158,214,112,0.55)';
+    ctx.fillRect(0, TILE / 2 - 3, TILE, 6);
+    bevel(ctx, 0.7);
+  },
+  'mowed-side'(ctx) {
+    PAINT.dirt(ctx);
+    wavyBand(ctx, '#6fbf4c', 11, 3);
+    speckles(ctx, 17, ['#7ccb57'], 6, [1, 2]);
+  },
   // The monsters' gloomy ground (shared/adventure.js): dull purple with
   // darker blotches and a few grey wisps.
   'gloom-top'(ctx) {
@@ -1651,6 +1665,26 @@ const PAINT = {
       ctx.fill();
     }
     leaf(ctx, 36, 9, 14, -0.2);
+  },
+  // A bunch of the flowers the lawn mower gathered (blocks.js FLOWER_BUNCH):
+  // a tulip, a daisy and a pink flower, their stems tied with a ribbon.
+  'flower-bunch'(ctx) {
+    for (const [name, x, a] of [
+      ['tulip', -11, -0.32],
+      ['cosmos', 11, 0.32],
+      ['daisy', 0, 0],
+    ]) {
+      ctx.save();
+      ctx.translate(32 + x * 0.3, 60);
+      ctx.rotate(a);
+      ctx.scale(0.72, 0.72);
+      ctx.translate(-32, -62);
+      PAINT[name](ctx);
+      ctx.restore();
+    }
+    ctx.fillStyle = '#ffd84d';
+    ctx.fillRect(26, 46, 12, 6);
+    outline(ctx, 'rgba(160,110,20,0.6)', 1.5);
   },
   shell(ctx) {
     ctx.fillStyle = '#ffd6dc';

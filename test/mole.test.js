@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { BUMP_HP, HIT_MS, KINDS, maxHp, MAX_MONSTERS, MONSTER_KINDS, MONSTER_STATES, MOLE_BODY, MOLE_DIG, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { BUMP_HP, HIT_MS, KINDS, maxHp, MAX_MONSTERS, MONSTER_KINDS, MONSTER_STATES, MOLE_BODY, MOLE_DIG, moleUnder, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { MoleModel } from '../public/js/render/mole-model.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -60,8 +60,8 @@ function step(sim, world, ms, people, night = false, at = 0) {
 }
 
 test('Mr. Mole is a monster, on the end of the kinds', () => {
-  assert.equal(MONSTER_KINDS.indexOf('mole'), 8, 'new kinds go on the end: the wire sends the index');
-  assert.deepEqual(MONSTER_KINDS.slice(0, 8), ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem'], 'the kinds before him keep their places');
+  assert.equal(MONSTER_KINDS.indexOf('mole'), 9, 'new kinds go on the end: the wire sends the index');
+  assert.deepEqual(MONSTER_KINDS.slice(0, 9), ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost'], 'the kinds before him keep their places');
   assert.ok(MONSTER_STATES.includes('dig'), 'burrowing is a state of its own');
   const sim = new MonsterSim(1);
   const w = meadow();
@@ -131,6 +131,22 @@ test('nobody bops him and nobody jumps on him while he is under the ground', () 
   m.under = false;
   assert.equal(sim.canBop(m.id, p, 0), m, 'up top, a bop finds him');
   assert.equal(sim.landsOn(m.id, { x: m.body.x, y: m.body.y + 1, z: m.body.z }), m, 'and so does a jump');
+});
+
+test('under the ground he bumps nobody, even someone his mound passes under', () => {
+  const sim = new MonsterSim(3);
+  const w = meadow();
+  const m = sim.add(w, 20.5, 11, 20.5, { kind: 'mole' });
+  // After someone well off, with someone else standing right on him.
+  const far = { id: 1, x: 20.5, y: 11, z: 30.5, safeUntil: 0, dizzy: false, riding: false };
+  const over = { id: 2, x: 20.5, y: 11, z: 20.9, safeUntil: 0, dizzy: false, riding: false };
+  m.target = 1;
+  const bumps = sim.step(w, 0.1, 1100, [far, over], false, { roam: false, havens: [] });
+  assert.equal(m.under, true, 'still under');
+  assert.deepEqual(bumps, [], 'a mound of dirt bumps nobody');
+  assert.equal(moleUnder('mole', m.state), true, 'and his state tells the page he is under');
+  assert.equal(moleUnder('mole', 'hop'), false);
+  assert.equal(moleUnder('blob', 'chase'), false);
 });
 
 test('three bops or one landing sees him off once he is up', () => {
