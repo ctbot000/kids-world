@@ -16,7 +16,7 @@ export const COINS_MAX = 99999;
 
 // Coins for one of each thing in the basket: fruit grows back on the trees,
 // vegetables take growing (the bigger, the longer), a diamond is found once
-// in a mine.
+// in a mine. Flowers the mower gathers are as easy to come by as fruit.
 export const SELL_PRICES = {
   apple: 1,
   orange: 1,
@@ -32,6 +32,7 @@ export const SELL_PRICES = {
   shell: 2,
   pearl: 5,
   star: 5,
+  flower: 1,
   ruby: 10,
   sapphire: 10,
   emerald: 12,

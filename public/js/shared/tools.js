@@ -265,6 +265,30 @@ export function blastEdit(world, x, y, z) {
   return { cells: o.cells(), collected };
 }
 
+// The lawn mower's blade (riding.js mowCells) cutting the grass it rolls
+// over short, [[x, y, z], ...], and taking the plants off it, [[x, y, z], ...]:
+// the grass becomes the mown grass and the plants go in the basket. Like the
+// drill and the roller, it only ever touches what grows there by itself (the
+// cells it is given are the top of the natural ground, and what stands on it
+// its own), so nothing anyone built, planted or furnished is ever cut, nor the
+// crops on anyone's farmland — which is ground, and never mown at all.
+export function mowEdit(world, cells, cut) {
+  const o = new Overlay(world);
+  const collected = [];
+  for (const [x, y, z] of cells) {
+    const id = o.get(x, y, z);
+    if (!B.MOWS[id]) continue;
+    o.set(x, y, z, B.MOWS[id]);
+  }
+  for (const [x, y, z] of cut) {
+    const id = o.get(x, y, z);
+    if (!B.CUTS[id]) continue;
+    // A flower goes in the basket, in the bunch of flowers there.
+    if (o.set(x, y, z, B.AIR) && B.FLOWERS_CUT.has(id)) collected.push(B.FLOWER_BUNCH);
+  }
+  return { cells: o.cells(), collected };
+}
+
 export function paintEdit(world, hit, id, size = 1) {
   const o = new Overlay(world);
   if (!B.block(id).cube || id === B.WATER) return { cells: [], collected: [] };
@@ -478,6 +502,16 @@ export function growEdit(world, x, y, z, seed) {
   const touched = o.order.map(([a, b, c]) => [a, b, c]);
   settle(o, touched);
   return o.cells();
+}
+
+// The same door the other way round: a bop on it (see game.js attack)
+// swings its panel open, and the next bop shuts it again. Returns [] when
+// nothing is there to swing.
+export function doorEdit(world, x, y, z) {
+  const id = world.get(x, y, z);
+  const to = B.turnedDoor(id);
+  if (!to) return [];
+  return [x, y, z, to];
 }
 
 // Every cell of an edit inside the world, with a known block, and never the

@@ -50,7 +50,7 @@ function nameOf(raw) {
   return isValidName(name) && [...name].length <= NAME_MAX ? name : '';
 }
 export const MAX_PLAYERS = 8;
-export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature', 'water'];
+export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature', 'water', 'door'];
 
 const RATE_BURST = 240;
 const RATE_PER_SEC = 90;
@@ -741,7 +741,10 @@ export class Room {
       this.notice(conn, `${this.world.name} stays just as it is — no building here!`);
       return;
     }
-    const refused = this.settings.build === 'host' && p.id !== this.host;
+    // A door swinging open or shut is no build: anyone may bop one, wherever
+    // the island's owner lets friends build or not, so nobody is stuck in or out.
+    const swing = kind === 'door' && cells.length === 4 && B.DOOR[cells[3]] === 1 && cells[3] === B.turnedDoor(this.world.get(cells[0], cells[1], cells[2]));
+    const refused = !swing && this.settings.build === 'host' && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
       this.notice(conn, refused ? 'The island owner is the only builder right now.' : 'Whoa, slow down a little!');
