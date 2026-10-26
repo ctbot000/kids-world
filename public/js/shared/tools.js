@@ -503,6 +503,16 @@ export function growEdit(world, x, y, z, seed) {
   return o.cells();
 }
 
+// The same door the other way round: a bop on it (see game.js attack)
+// swings its panel open, and the next bop shuts it again. Returns [] when
+// nothing is there to swing.
+export function doorEdit(world, x, y, z) {
+  const id = world.get(x, y, z);
+  const to = B.turnedDoor(id);
+  if (!to) return [];
+  return [x, y, z, to];
+}
+
 // Every cell of an edit inside the world, with a known block, and never the
 // magic floor. Used by the host on everything it receives.
 export function validCells(world, cells) {

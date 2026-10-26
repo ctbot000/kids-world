@@ -6526,7 +6526,9 @@ export class UI {
     // bopping dragons.
     const monsterNear = Boolean(me) && (!g.riding || g.riding.type === 'dragon') && [...g.monsters.values()].some(({ model: { group: { position: m } } }) => close(m));
     const wildNear = Boolean(me) && !g.riding && [...g.critters.values()].some((c) => c.type === 'dragon' && c.fight && c.fight.mood !== 'tame' && close(c.model.group.position, ATTACK_SHOW + 6));
-    const near = monsterNear || wildNear;
+    // So does a door just ahead, on foot, for a swing to open or shut it.
+    const doorNear = Boolean(me) && !g.riding && !g.aboard && !g.seat && Boolean(g.doorAhead());
+    const near = monsterNear || wildNear || doorNear;
     if (el.hidden === near) el.hidden = !near;
     const icon = wornWeapon(this.profile.data.gear)?.icon ?? '👊';
     if (el.textContent !== icon) el.textContent = icon;
