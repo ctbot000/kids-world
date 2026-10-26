@@ -15,6 +15,9 @@ export const SEATS = {
   // A rocking chair rocks while you sit in it (game.js), so its seat is a
   // little higher off the ground on its rockers.
   'rocking-chair': { pose: 'sit', h: 0.56, at: [0.5, 0.5] },
+  // A desk chair on wheels (game.js scootInSeat): you sit a little high, and
+  // walking rolls it along the floor instead of getting you up.
+  'desk-chair': { pose: 'sit', h: 0.52, at: [0.5, 0.5], scoots: true },
   sofa: { pose: 'sit', h: 0.48, at: [0.5, 0.46] },
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
@@ -34,6 +37,10 @@ const DIRS = [
 ];
 
 export const seatOf = (id) => SEATS[BLOCKS[id]?.model] ?? null;
+
+// Whether the seat in this cell is one you scoot on (a desk chair on wheels):
+// walking rolls it along the floor instead of getting you up.
+export const scootsAt = (world, x, y, z) => Boolean(SEATS[BLOCKS[world.get(x, y, z)]?.model]?.scoots);
 
 // A point of a cell's layout (as the model's: x across, z back from its
 // front) in the world, for a piece facing `front`.

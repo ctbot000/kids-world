@@ -28,9 +28,9 @@ import { XP_FOR } from './shared/levels.js';
 import { ARM_REACH, bodyOf, bopGap, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
-import { freeSpot, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
+import { freeSpot, scootsAt, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
@@ -3360,6 +3360,13 @@ export class Game extends EventTarget {
     const me = this.me;
     const b = me.body;
     const c = this.seat;
+    // A desk chair on wheels rolls along the floor with you instead — but
+    // only where you may build, for the chair is carried from cell to cell as
+    // it goes; anywhere else it is a seat like any other.
+    if (this.mayBuild && scootsAt(this.world, c.x, c.y, c.z)) {
+      this.scootInSeat(dt, input);
+      return;
+    }
     const pose = seatPose(this.world, c.x, c.y, c.z, c.spot);
     if (!pose || Math.hypot(b.x - pose.x, b.z - pose.z) > 0.8) {
       this.seat = null;
@@ -3386,6 +3393,82 @@ export class Game extends EventTarget {
       a.root.rotation.order = 'YXZ';
       a.root.rotation.x = 0;
       if (B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)));
+      a.update(dt, me.anim, 0);
+      a.shadow.visible = false;
+    }
+  }
+
+  // Rolling round the floor in a wheeled desk chair you are sitting in: the
+// walk keys roll it gently the way you steer, and it turns as it goes. Your
+// body leads and the chair follows from cell to cell, so friends see both
+// move; when you stop or get off, there it stays. A bump into anything solid
+// stops it, and the ground only: it will not roll off a step, into water or
+// out of the island.
+  scootInSeat(dt, input) {
+    const me = this.me;
+    const b = me.body;
+    const w = this.world;
+    const c = this.seat;
+    // Any get-off (jump, Shift, or a walk at nothing) still gets you off,
+    // beside the chair where it stopped.
+    if (this.dizzy || this.counting || input.jump || input.down) {
+      this.standUp();
+      this.liftLatch = true;
+      return;
+    }
+    const move = this.steer(input.readMove(), dt);
+    const yaw = this.renderer.view.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const mx = fx * move.y + -fz * move.x;
+    const mz = fz * move.y + fx * move.x;
+    // Rolling is gentler than walking, and speeds up only slowly: a chair on
+    // wheels, not a go-cart.
+    if (Math.hypot(mx, mz) > 0.05) {
+      stepBody(w, b, { mx, mz, jump: false, down: false, run: false }, dt, { move: SCOOT, bounce: false });
+    } else {
+      b.vx = 0;
+      b.vz = 0;
+    }
+    b.inWater = false;
+    b.vy = 0;
+    b.flying = false;
+    // Where the chair now is: the cell you are in, if it is a place one stands
+    // (flat, dry and inside the island), else where it was.
+    const id = w.get(c.x, c.y, c.z);
+    const nx = Math.floor(b.x);
+    const ny = Math.floor(b.y + 0.1);
+    const nz = Math.floor(b.z);
+    const roomy = (x, y, z) => !B.SOLID[w.get(x, y, z)] && !B.SOLID[w.get(x, y + 1, z)] && B.SOLID[w.get(x, y - 1, z)] && w.get(x, y, z) !== B.WATER && w.get(x, y - 1, z) !== B.WATER;
+    if ((nx !== c.x || ny !== c.y || nz !== c.z) && roomy(nx, ny, nz)) {
+      // The chair turns to face the way it is rolling, so the back is behind
+      // you as you scoot; standing still, it keeps the way it faces.
+      const going = Math.hypot(b.vx, b.vz) > 0.3 ? Math.atan2(b.vx, b.vz) : null;
+      const facing = going === null ? id : B.turnedTo(id, facingFromYaw(-going));
+      if (this.edit('scoot', [nx, ny, nz, facing, c.x, c.y, c.z, B.AIR], { undoable: false })) {
+        c.x = nx;
+        c.y = ny;
+        c.z = nz;
+      }
+    }
+    // You sit as the chair has you, facing the way it faces.
+    const pose = seatPose(w, c.x, c.y, c.z, c.spot) ?? null;
+    if (!pose) {
+      this.seat = null;
+      unstick(w, b);
+      this.emit('ride');
+      return;
+    }
+    Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0, onGround: true, inWater: false, flying: false });
+    me.yaw = pose.yaw;
+    me.speed = Math.hypot(b.vx, b.vz);
+    me.anim = ANIM.sit;
+    const a = this.players.get(this.pid)?.avatar;
+    if (a) {
+      a.root.position.set(b.x, b.y, b.z);
+      a.root.rotation.y = me.yaw;
+      a.root.rotation.order = 'YXZ';
+      a.root.rotation.x = 0;
       a.update(dt, me.anim, 0);
       a.shadow.visible = false;
     }

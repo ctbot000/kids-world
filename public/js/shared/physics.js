@@ -19,6 +19,17 @@ export const MOVE = {
   maxFall: 30,
 };
 
+// Scooting along the floor in a wheeled desk chair (game.js scootInSeat):
+// slower than a walk, picking up speed and slowing down only gradually, as
+// something on little wheels does, and never jumping.
+export const SCOOT = {
+  walk: 2.4,
+  run: 3.2,
+  groundAccel: 9,
+  airAccel: 9,
+  jump: 0,
+};
+
 // Landing on a trampoline bounces a body back up with some of the speed it
 // came down with (keep), so the bounces die away by themselves, and stop
 // once slower than stop. With jump held it goes up faster each time (push),
