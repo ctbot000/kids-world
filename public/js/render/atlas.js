@@ -1666,6 +1666,26 @@ const PAINT = {
     }
     leaf(ctx, 36, 9, 14, -0.2);
   },
+  // A bunch of the flowers the lawn mower gathered (blocks.js FLOWER_BUNCH):
+  // a tulip, a daisy and a pink flower, their stems tied with a ribbon.
+  'flower-bunch'(ctx) {
+    for (const [name, x, a] of [
+      ['tulip', -11, -0.32],
+      ['cosmos', 11, 0.32],
+      ['daisy', 0, 0],
+    ]) {
+      ctx.save();
+      ctx.translate(32 + x * 0.3, 60);
+      ctx.rotate(a);
+      ctx.scale(0.72, 0.72);
+      ctx.translate(-32, -62);
+      PAINT[name](ctx);
+      ctx.restore();
+    }
+    ctx.fillStyle = '#ffd84d';
+    ctx.fillRect(26, 46, 12, 6);
+    outline(ctx, 'rgba(160,110,20,0.6)', 1.5);
+  },
   shell(ctx) {
     ctx.fillStyle = '#ffd6dc';
     ctx.beginPath();

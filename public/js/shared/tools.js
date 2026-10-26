@@ -282,8 +282,9 @@ export function mowEdit(world, cells, cut) {
   }
   for (const [x, y, z] of cut) {
     const id = o.get(x, y, z);
-    if (B.KIND[id] !== B.K_PLANT || B.CROP_OF[id] || B.BLOCKS[id]?.grows) continue;
-    if (o.set(x, y, z, B.AIR) && B.block(id).collect) collected.push(id);
+    if (!B.CUTS[id]) continue;
+    // A flower goes in the basket, in the bunch of flowers there.
+    if (o.set(x, y, z, B.AIR) && B.FLOWERS_CUT.has(id)) collected.push(B.FLOWER_BUNCH);
   }
   return { cells: o.cells(), collected };
 }

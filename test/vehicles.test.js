@@ -356,16 +356,21 @@ test('the lawn mower is in the toy box, mows a stripe of short grass, gathers th
   w.set(29, 5, 20, B.FARMLAND);
   w.set(29, 6, 20, B.CROP_STAGES[0][2]);
   w.set(30, 6, 19, B.OAK_SPROUT);
+  // And rails someone laid on the grass: a plant to the mesher, but built.
+  w.set(23, 6, 20, B.RAIL);
   const r = ride(w, 'mower', 15.5, 6, 20.5, Math.PI / 2);
   // Jump honks instead of jumping, as a car does.
   const [first] = go(w, r, { jump: true }, 1 / 60);
   assert.ok(first.trick && !first.jumped, 'a honk, not a jump');
   assert.ok(!go(w, r, { jump: true }, 0.5).some((ev) => ev.trick), 'once for each press');
+  const gathered = [];
   const mow = (input, seconds) => {
     for (let i = 0; i < seconds * 60; i++) {
       const ev = stepRide(w, r, input, 1 / 60);
       if (!ev.mow) continue;
-      applyCells(w, mowEdit(w, ev.mow.cells, ev.mow.cut).cells);
+      const plan = mowEdit(w, ev.mow.cells, ev.mow.cut);
+      applyCells(w, plan.cells);
+      gathered.push(...plan.collected);
     }
   };
   mow({ mx: 1, mz: 0 }, 7);
@@ -375,18 +380,24 @@ test('the lawn mower is in the toy box, mows a stripe of short grass, gathers th
   // farmland: those it leaves alone, below).
   let beside = 0;
   for (let x = 16; x < 31; x++) {
-    if (x === 26 || x === 29) continue;
+    if (x === 23 || x === 26 || x === 29) continue;
     assert.equal(w.get(x, 5, 20), B.MOWED, `mown at ${x},20`);
     if (w.get(x, 5, 21) === B.MOWED) beside++;
   }
   assert.ok(beside >= 10, `a stripe either side (${beside})`);
   assert.equal(w.get(22, 6, 20), B.AIR, 'the daisy taken off');
   assert.equal(w.get(24, 6, 21), B.AIR, 'the tall grass taken off');
+  // The daisy goes in the basket as a bunch of flowers; the tall grass is no flower.
+  assert.deepEqual(gathered, [B.FLOWER_BUNCH]);
+  assert.equal(B.block(B.FLOWER_BUNCH).collect, 'flower');
+  assert.ok(B.COLLECTABLES.some((c) => c.key === 'flower' && c.item === B.FLOWER_BUNCH), 'a kind of its own in the basket');
   assert.equal(w.get(FL(r.body.x), 5, FL(r.body.z)), B.MOWED, 'and where it stands');
   // Never anything anyone put down, nor planted, nor the farmland or its crop.
   assert.equal(w.get(26, 6, 20), B.TOY_BRICKS[0], 'not the bricks');
   assert.equal(w.get(26, 5, 20), B.GRASS, 'nor the grass under them');
   assert.equal(w.get(27, 6, 21), B.FENCE, 'not the fence');
+  assert.equal(w.get(23, 6, 20), B.RAIL, 'not the rails');
+  assert.equal(B.block(B.MOWED).key, 'mowed-grass', 'mown grass is a block of its own');
   assert.equal(w.get(29, 5, 20), B.FARMLAND, 'not the farmland');
   assert.equal(w.get(29, 6, 20), B.CROP_STAGES[0][2], 'nor the crop in it');
   assert.equal(w.get(30, 6, 19), B.OAK_SPROUT, 'not a sprout');

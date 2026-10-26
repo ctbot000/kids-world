@@ -481,7 +481,7 @@ export function mowCells(world, body, half = 1) {
         const id = world.get(x, y, z);
         if (id === B.AIR || id === B.WATER) continue;
         if (B.MOWS[id]) ground = y;
-        else if (plant === null && B.KIND[id] === B.K_PLANT && !B.CROP_OF[id] && !B.BLOCKS[id]?.grows) {
+        else if (plant === null && B.CUTS[id]) {
           plant = y;
           continue;
         }
