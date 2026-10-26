@@ -474,6 +474,13 @@ export class Sound {
         this.tone(560 * r(), { type: 'sawtooth', attack: 0.1, decay: 0.8, gain: 0.014, vibrato: 7, slide: 700 * r(), slideTime: 0.6 });
         this.tone(1120 * r(), { type: 'triangle', attack: 0.1, decay: 0.7, gain: 0.005, vibrato: 11 });
         break;
+      case 'queen':
+        // The Queen Mosquito's whine: the same thin drone, but much deeper
+        // and bigger — she is half as big again — and it goes on longer.
+        this.tone(210 * r(), { type: 'sawtooth', attack: 0.15, decay: 1.6, gain: 0.03, vibrato: 5, slide: 260 * r(), slideTime: 1.2 });
+        this.tone(420 * r(), { type: 'triangle', attack: 0.15, decay: 1.5, gain: 0.012, vibrato: 8 });
+        this.tone(105 * r(), { type: 'sawtooth', attack: 0.2, decay: 1.8, gain: 0.02, vibrato: 3 });
+        break;
       case 'spider':
         // Tk-tk-tk-tk: a giant spider's legs skittering over the bricks as
         // it scuttles at you, quicker and quicker away.
@@ -482,6 +489,14 @@ export class Sound {
           this.noise(0.014, { at, type: 'highpass', freq: 2800, gain: 0.06 });
           this.tone(1300 - i * 80, { at, decay: 0.028, gain: 0.026, slide: 700, slideTime: 0.028 });
         }
+        break;
+      case 'mole':
+        // Shff-shff-pop! Mr. Mole coming up out of his burrow: earth
+        // shifting under the ground, then the burst of dirt as he breaks
+        // the surface, with a cross little grunt.
+        for (let i = 0; i < 3; i++) this.noise(0.1, { at: i * 0.09, type: 'lowpass', freq: 420, gain: 0.12 });
+        this.noise(0.4, { at: 0.28, type: 'bandpass', freq: 900, sweep: 320, q: 0.7, gain: 0.2 });
+        this.tone(240 * r(), { at: 0.3, type: 'sawtooth', attack: 0.03, decay: 0.16, gain: 0.05, slide: 170, vibrato: 16 });
         break;
       case 'fish':
         // Blub, blub.
