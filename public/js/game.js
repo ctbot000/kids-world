@@ -38,7 +38,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
-import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
+import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -88,6 +88,8 @@ const REPEAT_MS = 230;
 // Drops of water out of the watering can, and how seldom crops ripening near
 // you play their little tune.
 const WATER_DROPS = ['#5fb8ff', '#a8dcff', '#ffffff'];
+// The little bits of grass and petals that fly up where the mower cuts.
+const GRASS_CLIPPINGS = ['#8fd865', '#6fbf4c', '#f47fb8'];
 const RIPE_TUNE_MS = 4000;
 const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
@@ -3647,6 +3649,7 @@ export class Game extends EventTarget {
     }
     if (ev.dig) this.drill(ev.dig);
     if (ev.paint) this.paintTrail(ev.paint);
+    if (ev.mow) this.mow(ev.mow);
     // Along the rails: clickety-clack over each rail, a clunk at the end of the line.
     if (ev.rolled) {
       this.railed += ev.rolled;
@@ -3768,6 +3771,30 @@ export class Game extends EventTarget {
     for (let i = 3; i < cells.length; i += 4) if (cells[i] === B.AIR || cells[i] === B.WATER) dug++;
     this.profile.count('drilled', dug);
     if (plan.collected.length) this.collect(plan.collected, cells);
+  }
+
+  // The lawn mower's blade cutting the grass it rolls over short (riding.js),
+  // the flowers and plants in its path popping off (and, any that count as
+  // treasure, going in your basket).
+  mow(swath) {
+    // Only the owner builds on this island right now (or it is the shared
+    // isle, nobody's to build on): the blade is stopped.
+    if (!this.mayBuild) {
+      if (!this.riding.toldNoMow) this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is, so the mower cannot mow.` : 'The island owner is the only builder right now, so the mower cannot mow.', level: 'info' });
+      this.riding.toldNoMow = true;
+      return;
+    }
+    const plan = mowEdit(this.world, swath.cells, swath.cut);
+    if (!plan.cells.length) return;
+    if (!this.edit('pick', plan.cells, { undoable: !plan.collected.length })) return;
+    this.previewKey = '';
+    this.editEffects('pick', plan.cells, true);
+    // A puff of grass clippings over what it cut, petals where a flower popped.
+    const fx = this.renderer.effects;
+    for (let i = 0; i < plan.cells.length; i += 8) fx.sparkles(plan.cells[i] + 0.5, plan.cells[i + 1] + 0.8, plan.cells[i + 2] + 0.5, 2, GRASS_CLIPPINGS);
+    this.sound.play('plant');
+    this.profile.count('picked', plan.cells.length / 4);
+    if (plan.collected.length) this.collect(plan.collected, plan.cells);
   }
 
   // The paint van's roller painting the ground it rolls over (riding.js), in
