@@ -87,12 +87,15 @@ export const GEAR = [
     // whichever you like (profile.js pickWeapon, ui.js backpackDialog): a
     // long reach or a hard hit, by what you are popping. uses: how many
     // swings that land it lasts before it breaks (see wear, below).
+    // Saves keep the weapons as how many levels you have (gear.weapon), so
+    // a new one goes on the end: put in between, it would turn everyone's
+    // saved weapons into others. The Bomb Rod is last for that.
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, uses: 60, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, uses: 80, does: 'Two bubbles pop a monster, a few steps in front of you.' },
-      { key: 'bombrod', name: 'Bomb Rod', icon: '💣', price: 150, power: 2, reach: 3.7, king: 1, uses: 70, does: 'Lobs a small bomb a few steps ahead: its pop bops every monster in the blast and shakes jewels out of gem rocks, without digging the ground.' },
       { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, uses: 100, does: 'One bop pops a monster right in front of you, and King Grumble feels every bop twice.' },
       { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, uses: 120, does: 'One bop pops any monster from a step away, and King Grumble feels every bop three times over.' },
+      { key: 'bombrod', name: 'Bomb Rod', icon: '💣', price: 450, power: 2, reach: 3.7, king: 1, uses: 70, does: 'Lobs a small bomb a few steps ahead: its pop bops every monster in the blast and shakes jewels out of gem rocks, without digging the ground.' },
     ],
   },
 ];
