@@ -1292,7 +1292,7 @@ export class Room {
       const p = this.players.get(pid);
       if (!p) continue;
       const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
-      this.knock(p, now, hpAfterBump(p.hp, half ? GHOST_FIRE.bumps / 2 : GHOST_FIRE.bumps), { t: 'bump', pid, id: m.id, fire: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+      this.knock(p, now, hpAfterBump(p.hp, half ? GHOST_FIRE.bumps / 2 : GHOST_FIRE.bumps), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
     }
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);

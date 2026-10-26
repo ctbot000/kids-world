@@ -269,13 +269,14 @@ function tentAt(world, x, y, z, r) {
 
 // Whether the column at (x, z) is water or lava a monster would fall into
 // (a volcano island's sea and lakes are lava: into the fire, no monster goes).
-function wet(world, x, y, z) {
+// overLava: a Lava Ghost, which floats over the lava but keeps out of water.
+function wet(world, x, y, z, overLava = false) {
   const cx = FL(x);
   const cz = FL(z);
   for (let yy = FL(y + 0.5); yy >= Math.max(0, FL(y) - 3); yy--) {
     const id = world.get(cx, yy, cz);
-    if (id === B.WATER || id === B.LAVA) return true;
-    if (B.SOLID[id]) return false;
+    if (id === B.WATER || (id === B.LAVA && !overLava)) return true;
+    if (B.SOLID[id] || id === B.LAVA) return false;
   }
   return false;
 }
@@ -523,7 +524,8 @@ export class MonsterSim {
       } else if (m.windup || m.slam) {
         // Crouched for a stomp, then up he goes, straight up, so he comes
         // down just where the ring on the ground said he would.
-        m.state = m.windup ? 'stomp' : 'chase';
+        // (A Lava Ghost rearing back to breathe fire uses the same windup.)
+        m.state = m.windup ? (m.kind === 'ghost' ? 'breathe' : 'stomp') : 'chase';
         if (m.windup && now >= m.windup) {
           m.windup = 0;
           if (m.kind === 'ghost') {
@@ -646,7 +648,7 @@ export class MonsterSim {
         }
         const ax = b.x + mx * 0.9;
         const az = b.z + mz * 0.9;
-        if (into(ax, az) || (!swim && (wet(world, ax, b.y, az) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))))) {
+        if (into(ax, az) || (!swim && (wet(world, ax, b.y, az, float) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))))) {
           mx = 0;
           mz = 0;
           m.wander = null;
@@ -660,7 +662,7 @@ export class MonsterSim {
         // bump height only as it darts at someone; a Lava Ghost drifts low
         // over whatever is beneath it, a little lower on the chase.
         b.flying = true;
-        const hover = fly ? (m.state === 'chase' ? MOSQUITO_HOVER.low : MOSQUITO_HOVER.high) : m.state === 'chase' ? GHOST_HOVER.chase : GHOST_HOVER.high;
+        const hover = fly ? (m.state === 'chase' ? MOSQUITO_HOVER.low : MOSQUITO_HOVER.high) : m.state === 'chase' || m.state === 'breathe' ? GHOST_HOVER.chase : GHOST_HOVER.high;
         // A Lava Ghost floats over the lava lakes too, so for it the surface
         // of any liquid above the ground counts as the ground.
         let base = Math.max(world.top(FL(b.x), FL(b.z)), world.sea) + 1;

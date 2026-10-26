@@ -25,7 +25,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -71,7 +71,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, not
 // only once the host's next update says so.
@@ -138,6 +138,7 @@ const TOUGH_TOLD = {
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
+  ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
@@ -460,6 +461,9 @@ export class Game extends EventTarget {
         break;
       case 'stomp':
         this.stomped(msg);
+        break;
+      case 'mfire':
+        this.monsterFire(msg);
         break;
       case 'won':
         this.islandWon(msg);
@@ -1150,7 +1154,10 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
-    if (msg.fire && !this.toldFire) {
+    if (msg.fire && msg.ghost && !this.toldGhostFire) {
+      this.toldGhostFire = true;
+      this.emit('toast', { icon: '🔥', text: 'Ouch, a Lava Ghost’s fire! When it rears back, move out of the way it is facing — then bop it!' });
+    } else if (msg.fire && !msg.ghost && !this.toldFire) {
       this.toldFire = true;
       this.emit('toast', { icon: '🔥', text: 'Ouch, dragon fire! When it rears back, run out of the way it is facing — then bop it!' });
     }
@@ -1253,6 +1260,17 @@ export class Game extends EventTarget {
 
   // A monster bopped, with hearts left: it squashes and hops back, and
   // whoever bopped it hears how many more bops it takes.
+  // A Lava Ghost breathing fire: its flames pour out the way it faced, for
+  // a moment (updateMonsters draws them from its mouth).
+  monsterFire(msg) {
+    const entry = this.monsters.get(msg.id);
+    if (!entry) return;
+    entry.fireYaw = Number(msg.yaw) || 0;
+    entry.fireUntil = performance.now() + (Number(msg.ms) || GHOST_FIRE.ms);
+    const p = entry.model.group.position;
+    if (this.near(p.x, p.y, p.z, 30)) this.sound.play('fire');
+  }
+
   monsterHit(msg) {
     const now = performance.now();
     const entry = this.monsters.get(msg.id);
@@ -1792,6 +1810,11 @@ export class Game extends EventTarget {
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
+      // A Lava Ghost's flames, from its mouth, while it breathes them.
+      if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
+        const at = m.mouthAt();
+        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, GHOST_FIRE.reach, GHOST_FIRE.angle);
+      }
       const king = entry.kind === 'king';
       const big = isHeavy(entry.kind);
       // King Grumble dazed from a stomp: stars round his crown, and the first

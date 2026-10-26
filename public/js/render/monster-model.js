@@ -14,6 +14,8 @@ import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
 const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'], ghost: ['#ff7a2f', '#a3300c'] };
+// Where a mouth is (mouthAt), worked out into this.
+const MOUTH_AT = new THREE.Vector3();
 const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25, ghost: 1.15 };
 // A helmet's dome, a cap of moss, and a stone.
 const DOME = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -195,11 +197,19 @@ export class MonsterModel {
     this.body.rotation.set(0, 0, 0);
     // A giggle: shaking side to side, mouth wide open.
     if (state === 'giggle') this.body.rotation.z = Math.sin(t * 22) * 0.18;
-    this.mouth.scale.y = state === 'giggle' ? 0.08 : 0.03;
+    // Mouth wide open giggling, and a Lava Ghost's breathing fire.
+    this.mouth.scale.y = state === 'giggle' || state === 'breathe' ? 0.08 : 0.03;
+    // Rearing back to breathe it.
+    if (state === 'breathe') this.body.rotation.x = -0.25;
     // Crosser still, chasing.
     for (const brow of this.brows) brow.mesh.rotation.z = brow.side * (state === 'chase' ? 0.65 : 0.4);
     const mat = night ? this.eyeGlow : this.eyeWhite;
     for (const eye of this.eyes) if (eye.material !== mat) eye.material = mat;
+  }
+
+  // Where its mouth is in the world: a Lava Ghost's fire comes out of it.
+  mouthAt() {
+    return this.mouth.getWorldPosition(MOUTH_AT);
   }
 
   dispose() {
