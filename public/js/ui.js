@@ -618,30 +618,34 @@ export class UI {
     }
   }
 
-  // The island's name: any typed, or one rolled for its kind (shown grey
-  // while the box is empty). While what is typed is no name, the last one stays.
+  // The island's name: typed, or rolled with 🎲 for its kind (rolled again
+  // when another kind is picked, unless changed), and never one of your own
+  // islands' nor an open island's. Your first island is free; each after it
+  // costs coins (profile.js islandPrice).
   newIslandDialog() {
     let theme = 'sunny';
     let size = SIZES[0].key;
-    let rolled = randomIslandName(theme);
-    let own = '';
+    let rolled = '';
     let online = true;
     let monsters = false;
     let adventure = false;
     let defense = false;
+    const p = this.home;
+    const price = p.islandPrice(this.handlers.islands().length);
     this.openModal((root) => {
-      const nameBox = h('input', { type: 'text', class: 'text-input name-input', value: rolled, placeholder: rolled, maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
+      const nameBox = h('input', { type: 'text', class: 'text-input name-input', placeholder: 'Type a name, or roll one 🎲', maxLength: ISLAND_NAME_MAX * 2, autocomplete: 'off', 'aria-label': 'Island name' });
       nameBox.spellcheck = false;
-      nameBox.addEventListener('input', () => (own = nameBox.value.trim() ? cleanIslandName(nameBox.value) || own : ''));
-      nameBox.addEventListener('change', () => {
-        if (nameBox.value.trim()) nameBox.value = own || rolled;
-      });
-      // 🎲 drops a typed name; a kind of island picked keeps it.
+      const note = h('p', { class: 'login-note warn island-name-note', hidden: true });
+      const say = (text) => {
+        note.textContent = text;
+        note.hidden = !text;
+      };
+      nameBox.addEventListener('input', () => say(''));
       const roll = (anew) => {
+        if (!anew && (!rolled || nameBox.value !== rolled)) return;
         rolled = randomIslandName(theme);
-        nameBox.placeholder = rolled;
-        if (anew) own = '';
-        if (!own && (anew || nameBox.value.trim())) nameBox.value = rolled;
+        nameBox.value = rolled;
+        say('');
       };
       const grid = h('div', { class: 'grid wide' });
       const draw = () => {
@@ -754,21 +758,53 @@ export class UI {
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '⚔️ Adventure'), h('div', { class: 'muted' }, ADVENTURE_ABOUT)), adventureSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🗼 Tower defense'), h('div', { class: 'muted' }, DEFENSE_ABOUT)), defenseSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
+        price ? h('p', { class: 'muted island-price' }, `A new island costs 🪙 ${price}. You have 🪙 ${p.data.coins.toLocaleString()}.`) : h('p', { class: 'muted island-price' }, '🎁 Your first island is free!'),
+        note,
         h(
           'button',
           {
             class: 'big green',
             type: 'button',
             style: 'margin-top:14px',
-            onclick: () => {
+            onclick: async (e) => {
+              const name = cleanIslandName(nameBox.value);
+              if (!name) {
+                say(nameBox.value.trim() ? 'That is no name for an island. Try another!' : 'Give your island a name, or roll one with 🎲.');
+                nameBox.focus();
+                return;
+              }
+              const button = e.currentTarget;
+              button.disabled = true;
+              const taken = await this.islandNameTaken(name);
+              button.disabled = false;
+              if (taken) {
+                say(`${taken === 'mine' ? 'One of your islands' : 'An open island'} is called “${name}” already. Pick another name!`);
+                nameBox.focus();
+                return;
+              }
+              if (p.data.coins < price) {
+                say(`You need 🪙 ${price} for a new island, and have 🪙 ${p.data.coins.toLocaleString()}. Sell things in the shop for more!`);
+                return;
+              }
+              if (!note.isConnected || !p.payForIsland(this.handlers.islands().length)) return;
               this.closeModal();
-              this.handlers.make({ theme, size, name: own || rolled, online, adventure, defense, settings: monsters ? { monsters: true } : null });
+              this.handlers.make({ theme, size, name, online, adventure, defense, settings: monsters ? { monsters: true } : null });
             },
           },
           '✨ Make it!',
         ),
       );
     });
+  }
+
+  // Whether name is taken: 'mine' by one of your islands, 'open' by an
+  // island on the list of open ones (when that list answers soon), or ''.
+  async islandNameTaken(name) {
+    const same = (other) => typeof other === 'string' && other.toLocaleLowerCase() === name.toLocaleLowerCase();
+    if (this.handlers.islands().some((i) => same(i.name))) return 'mine';
+    if (!this.handlers.listAvailable?.()) return '';
+    const open = await Promise.race([this.handlers.openIslands().catch(() => []), new Promise((done) => setTimeout(() => done([]), 3000))]);
+    return open.some((i) => same(i.name)) ? 'open' : '';
   }
 
   // count boxes of one digit each, like an island code: typing moves on to

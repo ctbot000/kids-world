@@ -297,6 +297,11 @@ async function clickBeside(page, selector) {
 }
 
 async function makeIsland(page, { online, theme = 'Sunny Island', size = '', name = '' }) {
+  // An island after the first costs coins: given here, so making it spends none.
+  await page.evaluate(() => {
+    const { profile, ui } = window.kidsWorld;
+    profile.earn(profile.islandPrice(ui.handlers.islands().length));
+  });
   await clickButton(page, 'Make an island');
   // A name typed before the kind of island is picked stays.
   if (name) {
@@ -306,6 +311,7 @@ async function makeIsland(page, { online, theme = 'Sunny Island', size = '', nam
     await box.type(name);
   }
   await clickButton(page, theme, '#modal');
+  if (!name) await clickButton(page, 'New name', '#modal');
   if (size) await clickButton(page, size, '#modal');
   if (!online) await clickSwitch(page, '#modal .switch');
   await clickButton(page, 'Make it', '#modal');
@@ -401,6 +407,47 @@ async function hold(page, code) {
 }
 
 const blockAt = (page, c) => page.evaluate((c) => window.kidsWorld.game.world.get(c.x, c.y, c.z), c);
+
+test('an island needs a name of its own, and coins after the first: the first is free, each after it 🪙 50', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
+  // What the dialog says once Make it has looked (the name check takes a moment).
+  const note = async () => (await page.waitForFunction(() => { const el = document.querySelector('#modal .island-name-note'); return !el.hidden && el.textContent; })).jsonValue();
+  const typeName = async (name) => {
+    const box = await page.waitForSelector('#modal .name-input');
+    await box.evaluate((el) => (el.value = ''));
+    await box.type(name);
+  };
+  await clickButton(page, 'Make an island');
+  assert.match(await page.$eval('#modal .island-price', (el) => el.textContent), /first island is free/);
+  assert.equal(await page.$eval('#modal .name-input', (el) => el.value), '');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickButton(page, 'Make it', '#modal');
+  assert.match(await note(), /Give your island a name/);
+  await typeName('Pebble Bay');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  assert.deepEqual(await page.evaluate(() => [window.kidsWorld.profile.data.coins, window.kidsWorld.profile.data.stats.islands]), [0, 1]);
+
+  // Back at the title (the test's profile written afresh, but the island
+  // in My islands), the next one costs coins, and no island of yours shares its name.
+  await page.reload();
+  await clickButton(page, 'Make an island');
+  assert.match(await page.$eval('#modal .island-price', (el) => el.textContent), /costs 🪙 50/);
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await typeName('pebble bay');
+  await clickButton(page, 'Make it', '#modal');
+  assert.match(await note(), /One of your islands is called/);
+  await typeName('Shell Cove');
+  await clickButton(page, 'Make it', '#modal');
+  assert.match(await note(), /You need 🪙 50/);
+  await page.evaluate(() => window.kidsWorld.profile.earn(70));
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.world.name), 'Shell Cove');
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.coins), 20);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
 
 test('playing alone: build with a click, pick up with a right-click, undo, talk', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda', fur: 'white', shirt: 1, hat: 'crown' } });
@@ -1364,6 +1411,7 @@ test('monsters, turned on in Make an island: HP on screen, one aimed at through 
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
   await clickSwitch(page, '#modal .switch'); // Friends can visit: off
   await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
   await clickButton(page, 'Make it', '#modal');
@@ -3793,6 +3841,7 @@ test('an adventure island with a friend: a camp’s monster popped with X from u
   const host = await openPlayer(p2p(), { name: 'Brave Fox' });
   await clickButton(host, 'Make an island');
   await clickButton(host, 'Flat Land', '#modal');
+  await clickButton(host, 'New name', '#modal');
   await clickSwitch(host, '#modal .switch[aria-label="Adventure"]');
   await clickButton(host, 'Make it', '#modal');
   await inGame(host);
@@ -4000,6 +4049,7 @@ test('a tower defense island: a tower built by its pad with V, a wave started wi
   const page = await openPlayer(base + '?p2p=1', { name: 'Brave Fox' });
   await clickButton(page, 'Make an island');
   await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
   await clickSwitch(page, '#modal .switch'); // Friends can visit: off
   // Adventure first, then Tower defense: one or the other, never both.
   await clickSwitch(page, '#modal .switch[aria-label="Adventure"]');

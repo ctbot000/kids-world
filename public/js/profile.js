@@ -11,7 +11,7 @@ import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.
 import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, fixPrice, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
+import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, fixPrice, ISLAND_PRICE, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -315,6 +315,23 @@ export class Profile extends EventTarget {
     g.wear[weapon.key] = (g.wear[weapon.key] ?? 0) + 1;
     this.shopped();
     return { weapon, left: usesLeft(g, weapon) };
+  }
+
+  // What a new island costs (ui.js newIslandDialog): nothing for your
+  // first, ISLAND_PRICE once you have made one or have one (had: how many
+  // are in My islands).
+  islandPrice(had = 0) {
+    return had > 0 || this.data.stats.islands > 0 ? ISLAND_PRICE : 0;
+  }
+
+  // Pays for a new island and counts it. Says whether it happened.
+  payForIsland(had = 0) {
+    const price = this.islandPrice(had);
+    if (this.data.coins < price) return false;
+    this.data.coins -= price;
+    this.data.stats.islands++;
+    this.shopped();
+    return true;
   }
 
   // A worn or broken weapon fixed in the shop (shop.js fixPrice): as good

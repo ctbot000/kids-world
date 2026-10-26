@@ -13,6 +13,8 @@ import { COLLECTABLES } from './blocks.js';
 import { cleanToys } from './gashapon.js';
 
 export const COINS_MAX = 99999;
+// A new island: your first is free, and each after it costs this.
+export const ISLAND_PRICE = 50;
 
 // Coins for one of each thing in the basket: fruit grows back on the trees,
 // vegetables take growing (the bigger, the longer), a diamond is found once
