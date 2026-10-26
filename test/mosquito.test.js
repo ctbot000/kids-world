@@ -324,7 +324,7 @@ test('the enemy mosquito’s wings beat together in every state, and its eyes gl
 });
 
 test('the Queen Mosquito is a monster of her own: many hearts, a harder bump, and nobody can land on her', () => {
-  assert.equal(MONSTER_KINDS.indexOf('queen'), 8, 'new kinds go on the end: the wire sends the index');
+  assert.equal(MONSTER_KINDS.indexOf('queen'), 10, 'new kinds go on the end: the wire sends the index');
   assert.equal(KINDS.queen.hearts, 14, 'many hearts');
   assert.equal(KINDS.queen.bump, 2, 'a bump twice a giant mosquito’s');
   assert.equal(KINDS.queen.land, 0, 'nobody lands on her');

@@ -36,6 +36,14 @@
 // great lump of mossy rock nearly twice your height, slow, that bumps three
 // times as much HP off you and takes twelve bops (a landing, two).
 //
+// And a Lava Ghost, on a volcano island only: a floating wisp of molten
+// rock that drifts slowly after you over the ground and the lava lakes alike
+// (never over water, nor into a tent or the safe place round the start, like
+// any of them) and every few seconds breathes a short jet of fire from its
+// mouth (GHOST_FIRE), the dragon's breath drawn smaller, burning whoever is
+// in it. Nobody lands on one — it is up in the air — so bop it three times
+// and it goes pop.
+//
 // And the Queen Mosquito, the giant one's mother and much bigger, with a
 // little crown: she guards the deepest camp of an adventure island. Like her
 // little cousins she darts down out of the air to bump HP off you — twice as
@@ -121,12 +129,17 @@ export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
 // A giant spider: wider than a Big Bruiser is round but only up to your
 // middle, skittering about on its eight legs.
 export const SPIDER_BODY = { radius: 0.55, height: 0.95 };
+// Mr. Mole: a little wider than a blob, and only as far out of the ground
+// as he is tall when he pops up.
+export const MOLE_BODY = { radius: 0.5, height: 1.0 };
 // A Queen Mosquito: bigger than the giant one, crown and all.
 export const QUEEN_BODY = { radius: 0.8, height: 1.8 };
 // A Grumble Knight: a blob a little bigger than most, its helmet on top.
 export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 // A Stone Golem: taller than a player and wider than a Big Bruiser.
 export const GOLEM_BODY = { radius: 0.85, height: 1.75 };
+// A Lava Ghost: a blob's width but taller, hanging in the air a little way.
+export const GHOST_BODY = { radius: 0.45, height: 0.95 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -182,6 +195,11 @@ const HIT_PUSH = 7;
 const CROSS_MS = 5000;
 const CROSS_RUN = 6.5;
 const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };
+// Mr. Mole's burrowing: how fast his mound of dirt glides along under the
+// ground (quicker than you walk, never as quick as you run), how near you he
+// comes up out of it, how long he stays up for a bop or a jump, and how long
+// the dip back down takes before he is under again.
+export const MOLE_DIG = { run: 5.4, pop: 3.0, up: 2600, down: 800 };
 // The roaming kinds, and how tough each is: its hearts, how many it bumps
 // off you, how many a landing on it takes (Infinity: it pops at once; 0:
 // nobody lands on it, it bumps them), and how it gets about, usually and
@@ -203,6 +221,14 @@ export const KINDS = {
   knight: { hearts: 8, bump: 2, land: 2, move: { walk: 1.8, run: 4.6, jump: 8 }, cross: { walk: 1.8, run: 6.6, jump: 8 } },
   // A Stone Golem lumbers, slower than a Big Bruiser, but bumps the hardest.
   golem: { hearts: 12, bump: 3, land: 2, move: { walk: 1.2, run: 3.2, jump: 9 }, cross: { walk: 1.2, run: 4.4, jump: 9 } },
+  // A Lava Ghost drifts after you, slow as a Big Bruiser and never as quick
+  // as you walk, and its fire does the hurting (GHOST_FIRE): it bumps nobody.
+  ghost: { hearts: 3, bump: 0, land: 0, move: { walk: 1.1, run: 2.4 }, cross: { walk: 1.1, run: 3.4 } },
+  // Mr. Mole burrows: the run is how fast his mound of dirt glides along
+  // under the ground, quicker than you walk and never as quick as you run.
+  // Above ground he is only up a moment, and one bop or landing counts the
+  // same (see MOLE_DIG and step).
+  mole: { hearts: 3, bump: 1, land: Infinity, move: { walk: 2, run: MOLE_DIG.run, jump: 8 }, cross: { walk: 2, run: 6.5, jump: 8 } },
   // The Queen Mosquito: many hearts, a bump twice a giant mosquito's, and
   // nobody lands on her — she is up in the air, like her little cousins.
   queen: { hearts: 14, bump: 2, land: 0, move: { walk: 2, run: 5 }, cross: { walk: 2, run: 6.4 } },
@@ -210,21 +236,36 @@ export const KINDS = {
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs. A giant
 // spider is hardly ever about by day and oftener at night.
-const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2, spider: 0.16 } };
+const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08, mole: 0.1 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2, spider: 0.16, mole: 0.14 } };
+// How often the one that comes out on a volcano island is a Lava Ghost.
+const GHOST_SHARE = 0.3;
 // How high a mosquito keeps itself over the ground (or the water) beneath
 // it: well up out of reach of arm and jump until it darts at someone, when
 // it comes down to bump height; and how quickly it rises and sinks.
 export const MOSQUITO_HOVER = { high: 2.3, low: 1.0, march: 1.1, up: 3 };
+// A Lava Ghost's breath of fire (dragon.js FIRE, drawn smaller): it rears
+// back this long first — long enough to see it coming — then a short jet of
+// flames pours out as far as GHOST_FIRE.reach in front of its mouth, in a
+// cone GHOST_FIRE.angle either side, and burns whoever is in it for this many
+// bumps' worth of HP (monsters.js BUMP_HP): half that in Knight Armor or a
+// Fire Suit. One breath every GHOST_FIRE.every while it is after someone.
+export const GHOST_FIRE = { first: 1500, every: 3200, windup: 750, ms: 1000, reach: 4.5, angle: 0.4, bumps: 1.5 };
+// How high a Lava Ghost floats over the ground (or the lava) beneath it: low
+// enough to bop, high enough that nobody lands on it by jumping.
+export const GHOST_HOVER = { high: 1.5, chase: 1.0, up: 2.5 };
 // Landing on one: your feet this far above its middle at least, and this
 // close side to side (a little more than touching, as you have moved on a
 // little by the time the host hears of it).
 const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
-export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'queen'];
+export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, queen: QUEEN_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY })[kind] ?? MONSTER_BODY;
+// Whether Mr. Mole is under the ground, from his state as the wire sends
+// it: up out of it he only ever hops or giggles (see step).
+export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
 // The heavy ones: a bigger knock when they bump you, and a bigger pop.
 export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem' || kind === 'queen';
 
@@ -261,19 +302,31 @@ function tentAt(world, x, y, z, r) {
 
 // Whether the column at (x, z) is water or lava a monster would fall into
 // (a volcano island's sea and lakes are lava: into the fire, no monster goes).
-function wet(world, x, y, z) {
+// overLava: a Lava Ghost, which floats over the lava but keeps out of water.
+function wet(world, x, y, z, overLava = false) {
   const cx = FL(x);
   const cz = FL(z);
   for (let yy = FL(y + 0.5); yy >= Math.max(0, FL(y) - 3); yy--) {
     const id = world.get(cx, yy, cz);
-    if (id === B.WATER || id === B.LAVA) return true;
-    if (B.SOLID[id]) return false;
+    if (id === B.WATER || (id === B.LAVA && !overLava)) return true;
+    if (B.SOLID[id] || id === B.LAVA) return false;
   }
   return false;
 }
 
 // The safe places of an island without camps: just its start.
 const startOnly = (world) => [{ x: world.spawn.x, z: world.spawn.z, r: SAFE_RADIUS }];
+
+// Whether a point (x, y, z) is in a Lava Ghost's jet of fire, breathed from
+// its body b the way yaw faces (dragon.js inFlames, drawn smaller).
+export function inGhostFlames(b, yaw, x, y, z) {
+  const dx = x - b.x;
+  const dz = z - b.z;
+  const d = Math.hypot(dx, dz);
+  if (d > GHOST_FIRE.reach || y < b.y - 1.5 || y > b.y + 2.5) return false;
+  if (d < 1) return true;
+  return Math.abs(wrap(Math.atan2(dx, dz) - yaw)) <= GHOST_FIRE.angle;
+}
 
 export class MonsterSim {
   constructor(seed = 1) {
@@ -288,10 +341,15 @@ export class MonsterSim {
     this.nextId = 1;
     this.spawnAt = 0;
     // Camp monsters that went by themselves (into the water), King
-    // Grumble's landings, and the hearts the Queen Mosquito got back, since
-    // they were last taken (see takeGone, takeStomps, takeHealed).
+    // Grumble's landings and Lava Ghosts' breaths of fire, since they were
+    // last taken (see takeGone, takeStomps, takeFires, takeBurns).
     this.gone = [];
     this.stomps = [];
+    this.fires = [];
+    this.burns = [];
+    // And Mr. Mole's comings up out of the ground (see takeUps).
+    this.ups = [];
+    // And the hearts the Queen Mosquito got back (see takeHealed).
     this.healed = [];
   }
 
@@ -316,11 +374,14 @@ export class MonsterSim {
     const body = makeBody(x, y, z);
     body.radius = size.radius;
     body.height = size.height;
-    // A mosquito comes out already on the wing, and so does the queen.
-    if (kind === 'mosquito' || kind === 'queen') body.flying = true;
+    // A mosquito comes out already on the wing, and so do a Lava Ghost and
+    // the Queen Mosquito.
+    if (kind === 'mosquito' || kind === 'ghost' || kind === 'queen') body.flying = true;
     const rng = camp || march ? this.campRng : this.rng;
     const hearts = kindOf(kind).hearts;
     const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, healAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    // Mr. Mole comes out under the ground, as a mound of dirt on the move.
+    if (kind === 'mole') Object.assign(m, { under: true, up: 0 });
     if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
@@ -361,8 +422,32 @@ export class MonsterSim {
     return out;
   }
 
-  // Which kind comes out next, by day or at night (see TOUGH).
-  pickKind(night) {
+  // Mr. Mole's poppings up, since they were last taken: for the burst of
+  // dirt as he comes out of the ground (see room.js).
+  takeUps() {
+    const out = this.ups;
+    this.ups = [];
+    return out;
+  }
+
+  // The Lava Ghosts that breathed fire since last asked, and the people they
+  // burned, for the host to tell everyone about.
+  takeFires() {
+    const out = this.fires;
+    this.fires = [];
+    return out;
+  }
+
+  takeBurns() {
+    const out = this.burns;
+    this.burns = [];
+    return out;
+  }
+
+  // Which kind comes out next, by day or at night (see TOUGH). A Lava Ghost
+  // comes out only on a volcano island, near the lava lakes and the sea of it.
+  pickKind(night, theme = null) {
+    if (theme === 'volcano' && this.kindRng.chance(GHOST_SHARE)) return 'ghost';
     let r = this.kindRng.next();
     for (const [kind, share] of Object.entries(TOUGH[night ? 'night' : 'day'])) {
       if (r < share) return kind;
@@ -407,7 +492,7 @@ export class MonsterSim {
       this.spawnAt = now + SPAWN_MS;
       if (this.roaming < this.wanted(people.length, night)) {
         const at = this.findSpot(world, people, havens);
-        if (at) this.add(world, at.x, at.y, at.z, { kind: this.pickKind(night) });
+        if (at) this.add(world, at.x, at.y, at.z, { kind: this.pickKind(night, world.theme) });
       }
     }
     const bumps = [];
@@ -424,6 +509,10 @@ export class MonsterSim {
       }
       const b = m.body;
       const fly = m.kind === 'mosquito' || m.kind === 'queen';
+      // A Lava Ghost floats too, but it keeps out of the water where a
+      // mosquito crosses it (into the fire of a lava lake, though, it goes).
+      const float = m.kind === 'ghost';
+      const swim = fly;
       const camp = m.camp ? (camps?.campById(m.camp) ?? null) : null;
       // Lonely, far from everyone: off it goes (one of a camp stays). In the
       // water or the lava, it goes too.
@@ -486,6 +575,12 @@ export class MonsterSim {
       }
       // King Grumble's stomp only ever counts down while he is after someone.
       if (!target) m.stompAt = 0;
+      // A Lava Ghost's breath of fire counts down only while it is after
+      // someone too: with nobody to breathe at, it gives up on one.
+      if (!target && m.kind === 'ghost') {
+        m.windup = 0;
+        m.fireAt = 0;
+      }
       let mx = 0;
       let mz = 0;
       const every = STOMP_EVERY[m.rage ?? 0] ?? STOMP.every;
@@ -496,14 +591,42 @@ export class MonsterSim {
       } else if (m.windup || m.slam) {
         // Crouched for a stomp, then up he goes, straight up, so he comes
         // down just where the ring on the ground said he would.
-        m.state = m.windup ? 'stomp' : 'chase';
+        // (A Lava Ghost rearing back to breathe fire uses the same windup.)
+        m.state = m.windup ? (m.kind === 'ghost' ? 'breathe' : 'stomp') : 'chase';
         if (m.windup && now >= m.windup) {
           m.windup = 0;
-          m.slam = true;
-          b.vx = 0;
-          b.vz = 0;
-          b.vy = STOMP.jump;
-          b.onGround = false;
+          if (m.kind === 'ghost') {
+            // Rearing back is over: the jet of fire pours out now, the way it
+            // faced (see fires, which the host tells everyone about).
+            m.state = 'breathe';
+            m.breath = now + GHOST_FIRE.ms;
+            m.burned = new Set();
+            b.vx = 0;
+            b.vz = 0;
+            this.fires.push(m);
+          } else {
+            m.slam = true;
+            b.vx = 0;
+            b.vz = 0;
+            b.vy = STOMP.jump;
+            b.onGround = false;
+          }
+        }
+      } else if (m.breath) {
+        // A Lava Ghost breathing fire stands still while it lasts, burning
+        // each of the people in the flames once (the host tells everyone:
+        // see takeFires and takeBurns).
+        m.state = 'breathe';
+        for (const p of people) {
+          if (p.riding || p.dizzy || m.burned.has(p.id) || sheltered(p) || now < (p.safeUntil ?? 0)) continue;
+          if (inGhostFlames(b, m.yaw, p.x, p.y, p.z)) {
+            m.burned.add(p.id);
+            this.burns.push({ monster: m, pid: p.id });
+          }
+        }
+        if (now >= m.breath) {
+          m.breath = 0;
+          m.fireAt = now + GHOST_FIRE.every;
         }
       } else if (target) {
         const dx = target.x - b.x;
@@ -517,6 +640,19 @@ export class MonsterSim {
           mz = m.detour.z;
         }
         m.state = 'chase';
+        // A Lava Ghost stops and breathes fire at whoever it is after, near
+        // enough: it rears back first (see GHOST_FIRE), then a short jet of
+        // flames pours out the way it faces, and it drifts on after them.
+        if (m.kind === 'ghost' && !m.windup && !m.breath) {
+          if (!m.fireAt) m.fireAt = now + GHOST_FIRE.first;
+          else if (now >= m.fireAt && d < GHOST_FIRE.reach + 1.5) {
+            m.fireAt = 0;
+            m.windup = now + GHOST_FIRE.windup;
+            m.state = 'breathe';
+            mx = 0;
+            mz = 0;
+          }
+        }
         if (m.kind === 'king' && b.onGround && !m.slam) {
           if (!m.stompAt) m.stompAt = now + every * 0.6;
           else if (now >= m.stompAt && d < STOMP.reach + 2) {
@@ -579,7 +715,7 @@ export class MonsterSim {
         }
         const ax = b.x + mx * 0.9;
         const az = b.z + mz * 0.9;
-        if (into(ax, az) || (!fly && (wet(world, ax, b.y, az) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))))) {
+        if (into(ax, az) || (!swim && (wet(world, ax, b.y, az, float) || (tentAt(world, ax, b.y, az, b.radius) && !underTent(world, b.x, b.y, b.z))))) {
           mx = 0;
           mz = 0;
           m.wander = null;
@@ -588,12 +724,65 @@ export class MonsterSim {
       }
       const pace = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
       let events;
-      if (fly) {
+      if (m.kind === 'mole') {
+        // Mr. Mole: under the ground his mound of dirt glides along, up and
+        // down the ground as it rises and falls (no hops, and no falling into
+        // anything: a digger goes round the water, as the check above sees
+        // to). Beside whoever he is after, up he pops for a bop or a jump,
+        // then dips back under and carries on.
+        if (m.under) {
+          // Burrowing along: a mound of dirt on the move, chasing whoever he
+          // is after (the model shows him under the ground either way).
+          m.state = target ? 'chase' : 'dig';
+          b.flying = false;
+          const want = groundAt(world, b.x, b.z) ?? b.y;
+          const d = want - b.y;
+          b.y += Math.sign(d) * Math.min(Math.abs(d), 6 * dt);
+          b.vy = 0;
+          b.onGround = false;
+          events = stepBody(world, b, { mx, mz, run: true }, dt, { autoJump: false, move: { ...pace, jump: 0 } });
+          if (target) {
+            const near = Math.hypot(target.x - b.x, target.z - b.z);
+            if (near <= MOLE_DIG.pop) {
+              // Up he comes, right beside them, with a burst of dirt.
+              m.under = false;
+              m.up = now + MOLE_DIG.up;
+              m.state = 'hop';
+              this.ups.push({ monster: m, x: b.x, y: b.y, z: b.z });
+            }
+          }
+        } else {
+          // Up out of the ground, on his feet a moment: he comes at whoever
+          // he popped up beside, hopping as a blob does, to bump them — and
+          // to give them their chance to bop him or jump on him.
+          events = stepBody(world, b, { mx, mz, jump: (mx || mz) && b.onGround, run: m.state === 'chase' }, dt, { autoJump: true, move: pace });
+          m.state = now < m.giggle ? 'giggle' : 'hop';
+          // His moment up top over: back under, and on he goes.
+          if (now >= (m.up ?? 0)) {
+            m.under = true;
+            m.state = 'idle';
+            b.vx = 0;
+            b.vz = 0;
+          }
+        }
+      } else if (fly || float) {
         // A mosquito hangs in the air well up out of reach, coming down to
-        // bump height only as it darts at someone.
+        // bump height only as it darts at someone; a Lava Ghost drifts low
+        // over whatever is beneath it, a little lower on the chase.
         b.flying = true;
-        const want = Math.max(world.top(FL(b.x), FL(b.z)), world.sea) + 1 + (m.state === 'chase' ? MOSQUITO_HOVER.low : MOSQUITO_HOVER.high);
-        events = stepBody(world, b, { mx, mz, jump: b.y < want - 0.2, down: b.y > want + 0.2, run: false }, dt, { move: { fly: m.state === 'chase' ? pace.run : pace.walk, flyUp: MOSQUITO_HOVER.up } });
+        const hover = fly ? (m.state === 'chase' ? MOSQUITO_HOVER.low : MOSQUITO_HOVER.high) : m.state === 'chase' || m.state === 'breathe' ? GHOST_HOVER.chase : GHOST_HOVER.high;
+        // A Lava Ghost floats over the lava lakes too, so for it the surface
+        // of any liquid above the ground counts as the ground.
+        let base = Math.max(world.top(FL(b.x), FL(b.z)), world.sea) + 1;
+        if (float) {
+          for (let y = FL(base); y < world.H - 1; y++) {
+            const id = world.get(FL(b.x), y, FL(b.z));
+            if (B.SOLID[id] || id === B.WATER || id === B.LAVA) base = y + 1;
+            else break;
+          }
+        }
+        const want = base + hover;
+        events = stepBody(world, b, { mx, mz, jump: b.y < want - 0.2, down: b.y > want + 0.2, run: false }, dt, { move: { fly: m.state === 'chase' ? pace.run : pace.walk, flyUp: fly ? MOSQUITO_HOVER.up : GHOST_HOVER.up } });
       } else {
         // The others get about in hops.
         events = stepBody(world, b, { mx, mz, jump: (mx || mz) && b.onGround, run: m.state === 'chase' }, dt, { autoJump: true, move: pace });
@@ -613,7 +802,9 @@ export class MonsterSim {
       }
       if (mx || mz) m.yaw = Math.atan2(mx, mz);
       // Bumping into someone: they are knocked back, and it giggles a moment.
-      if (now >= m.giggle && now >= (m.dazed ?? 0) && !m.passive) {
+      // A Lava Ghost bumps nobody: its fire does the hurting (GHOST_FIRE).
+      // Nor does Mr. Mole under the ground: he pops up first.
+      if (now >= m.giggle && now >= (m.dazed ?? 0) && !m.passive && m.kind !== 'ghost' && !m.under) {
         for (const p of people) {
           if (p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
           // mount: the dragon someone rides (room.js), as wide as it is.
@@ -707,7 +898,7 @@ export class MonsterSim {
   // Whether someone with their feet at p is landing on the one numbered id.
   landsOn(id, p) {
     const m = this.get(id);
-    if (!m) return null;
+    if (!m || m.under) return null;
     const b = m.body;
     const up = p.y - b.y;
     if (up < b.height * 0.4 || up > b.height + 1.2) return null;
@@ -741,7 +932,9 @@ export class MonsterSim {
   // shop.js).
   canBop(id, p, extra = 0) {
     const m = this.get(id);
-    if (!m) return null;
+    // Nobody bops Mr. Mole while he is under the ground: only his mound of
+    // dirt is there, and that is not him.
+    if (!m || m.under) return null;
     return bopGap(p, m.body, ARM_REACH + extra + BOP_SLACK) === null ? null : m;
   }
 
