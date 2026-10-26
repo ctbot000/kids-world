@@ -331,11 +331,28 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   clock.t += 1000;
   await tablet.say({ t: 'report', report: { picture: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]).toString('base64')}`, about: { name: 'Sunny Otter' } } });
   assert.equal(heard.length, 2);
+  const TABLET_PLAYER = () => heard[0].player;
   // An idea limit is not a problem report's: the waiting bugs leave room for ideas.
   for (let i = 0; i < WISHES_AN_HOUR; i++) {
     clock.t += 1000;
     assert.equal((await tablet.say({ t: 'wish', text: `Idea ${i}` })).what, 'wish');
   }
+
+  // Open reports from before CTB read them are handed over once: not a
+  // resolved one, one with no words, or one it has already.
+  const store = keeper.store;
+  const old = async (text, seen = false) => {
+    clock.t += 1000;
+    const { id } = await store.keepReport(TABLET_PLAYER(), { text, about: { name: 'Sunny Otter' } });
+    if (seen) await store.setReportSeen(id, true);
+    return id;
+  };
+  const before = await old('The bomb does not break every block');
+  await old('Fixed already', true);
+  const handed = await store.handOverReports();
+  assert.deepEqual(handed.map((w) => [w.kind, w.report, w.text]), [['bug', before, 'The bomb does not break every block']]);
+  assert.deepEqual(await store.handOverReports(), [], 'once');
+  heard.push(...handed);
 
   const asked = [];
   const llm = {
@@ -387,10 +404,12 @@ test('a problem a player tells of is read by a worker as an idea is, and a real 
   assert.deepEqual(news.map((w) => [w.state, w.reply]), [
     ['accepted', 'Oh no! We will fix your pony.'],
     ['declined', '헬리콥터를 타면 날 수 있어요!'],
+    ['declined', 'Thanks for your idea!'],
   ]);
   assert.equal(news[1].score, 15, 'no problem at all scores low');
+  assert.ok(asked.some((a) => a.user.includes('The bomb does not break every block')), 'the one handed over is read too');
   const mine = (await tablet.say({ t: 'wishes' })).wishes;
-  assert.equal(mine.filter((w) => w.kind === 'bug').length, 2);
+  assert.equal(mine.filter((w) => w.kind === 'bug').length, 3);
   assert.deepEqual(cleanWish(news[0]), news[0]);
   assert.equal(cleanWish(news[0]).kind, 'bug');
 });

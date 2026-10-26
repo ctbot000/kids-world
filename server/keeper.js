@@ -1140,6 +1140,20 @@ export class KeeperStore extends EventEmitter {
     });
   }
 
+  // Open problem reports in words that CTB has not had (from before it read
+  // them, say), each kept for it now as keepBug does: the wishes kept. Only
+  // from a login, as every report is now, and the oldest first.
+  async handOverReports() {
+    const had = new Set((await this.wishes()).filter((w) => w.kind === 'bug').map((w) => w.report));
+    const out = [];
+    for (const r of (await this.reports()).reverse()) {
+      if (r.seen || !r.username || !String(r.text ?? '').trim() || had.has(r.id)) continue;
+      const bug = await this.keepBug(r.device, r.id);
+      if (bug) out.push(bug);
+    }
+    return out;
+  }
+
   // Every idea kept (and problem report for CTB, kind 'bug'), the newest first.
   async wishes() {
     const folder = join(this.dir, 'wishes');

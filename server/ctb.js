@@ -1110,6 +1110,9 @@ export class CtbControl {
       this.company.office = this.office;
       this.company.showScreens();
     }
+    // Open problem reports CTB has not had yet, such as from before it read them.
+    const handed = (await this.keeper?.store?.handOverReports?.().catch((error) => (this.log(`CTB: could not take the open problem reports (${error.message}).`), []))) ?? [];
+    if (handed.length) this.log(`CTB: took ${handed.length} open problem report${handed.length === 1 ? '' : 's'} to read.`);
     await this.company.start();
     // A new idea from a player is read at once, not at the next look at the board.
     this.onWish = () => this.company?.reviewWishes();
