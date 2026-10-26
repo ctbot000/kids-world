@@ -50,7 +50,7 @@ function nameOf(raw) {
   return isValidName(name) && [...name].length <= NAME_MAX ? name : '';
 }
 export const MAX_PLAYERS = 8;
-export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature', 'water', 'door'];
+export const EDIT_KINDS = ['build', 'pick', 'paint', 'hills', 'stamp', 'undo', 'grow', 'nature', 'water', 'door', 'scoot'];
 
 const RATE_BURST = 240;
 const RATE_PER_SEC = 90;

@@ -850,24 +850,28 @@ function office() {
   // A flat roof, with a star on the front.
   c.box(-6, 5, -1, 6, 5, 10, CHARCOAL);
   c.put(0, 6, 0, B.STAR_BLOCK);
-  // Desks along the back and facing each other down the middle, each with a
-  // wheeled chair to scoot round on.
-  c.put(0, 1, 3, B.turnedTo(B.STUDY_DESK, 0));
-  c.put(0, 1, 5, B.turnedTo(B.STUDY_DESK, 2));
-  c.put(-3, 1, 7, B.turnedTo(B.STUDY_DESK, 2));
-  c.put(3, 1, 7, B.turnedTo(B.STUDY_DESK, 2));
-  for (const [x, z] of [[0, 4], [-3, 6], [3, 6]]) c.put(x, 1, z, B.DESK_CHAIR);
-  // A TV on the back wall, and a tea table for a break.
+  // Desks in two rows facing each other down the room: a table each with a
+  // computer on it, and a wheeled chair a step back to scoot up to it, the
+  // middle left open to roll across.
+  for (const x of [-3, 3]) {
+    c.put(x, 1, 3, B.TABLE);
+    c.put(x, 1, 7, B.TABLE);
+    c.put(x, 2, 3, B.turnedTo(B.COMPUTER, 1));
+    c.put(x, 2, 7, B.turnedTo(B.COMPUTER, 3));
+    c.put(x, 1, 4, B.turnedTo(B.DESK_CHAIR, 3));
+    c.put(x, 1, 6, B.turnedTo(B.DESK_CHAIR, 1));
+  }
+  // A TV on the back wall, and a tea corner by the door for a break.
   c.put(0, 2, 9, B.WALL_TV);
-  c.put(-3, 1, 2, B.TEA_TABLE);
-  // Bookshelves along the side walls, a picture over them.
-  for (const z of [3, 4]) c.put(-4, 1, z, B.turnedTo(B.BOOKSHELF, 1));
-  for (const z of [3, 4]) c.put(4, 1, z, B.turnedTo(B.BOOKSHELF, 3));
+  c.put(-2, 1, 2, B.TEA_TABLE);
+  // Bookshelves along the sides at the back, a picture over them.
+  for (const z of [7, 8]) c.put(-4, 1, z, B.turnedTo(B.BOOKSHELF, 1));
+  for (const z of [7, 8]) c.put(4, 1, z, B.turnedTo(B.BOOKSHELF, 3));
   c.put(-4, 3, 3, B.turnedTo(B.PICTURE, 1));
-  // Lamps in the corners, and a potted plant by the door.
+  // Lamps in the corners by the door, and a potted plant beside it.
   c.put(-4, 1, 1, B.FLOOR_LAMP);
   c.put(4, 1, 1, B.FLOOR_LAMP);
-  c.put(-2, 1, 1, B.POTTED_PLANT);
+  c.put(2, 1, 1, B.POTTED_PLANT);
   return c.list();
 }
 
