@@ -948,6 +948,83 @@ function costLine(c) {
   return h('div', { class: 'cost' }, c.unpriced ? `${dollars(c.cost)} + unknown` : dollars(c.cost));
 }
 
+// The tokens of each of the last 30 days as stacked bars, one colour a model
+// (in the table's order, the eighth and on together as a grey Other), with each
+// day's models, total and cost on hover. Chart.js (public/vendor) draws it;
+// charts whose canvas has left the page are let go when the next is made.
+const charts = new Set();
+const SERIES = 8;
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function chartColours(chart) {
+  chart.data.datasets.forEach((d, i) => (d.backgroundColor = cssVar(`--series-${Math.min(i, SERIES - 1) + 1}`)));
+  const { scales, plugins } = chart.options;
+  for (const axis of [scales.x, scales.y]) {
+    axis.ticks.color = cssVar('--text-2');
+    axis.grid.color = cssVar('--border');
+    axis.border.color = cssVar('--border-strong');
+  }
+  plugins.legend.labels.color = cssVar('--text');
+  chart.update('none');
+}
+
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => charts.forEach(chartColours));
+
+function usageChart(usage, models) {
+  const days = usage.days ?? [];
+  if (!days.some((d) => d.rows.length) || typeof Chart === 'undefined') return null;
+  for (const c of charts) {
+    if (c.canvas.isConnected) continue;
+    c.destroy();
+    charts.delete(c);
+  }
+  Chart.defaults.font.family = cssVar('--font');
+  const key = (r) => `${r.name}\n${r.model}`;
+  const shown = models.slice(0, SERIES - 1);
+  const slot = new Map(shown.map((m, i) => [key(m), i]));
+  const series = shown.map((m) => ({ label: m.model, data: days.map(() => 0) }));
+  if (models.length > shown.length) series.push({ label: 'Other', data: days.map(() => 0) });
+  days.forEach((d, i) => {
+    for (const r of d.rows) series[slot.get(key(r)) ?? SERIES - 1].data[i] += r.promptTokens + r.tokens;
+  });
+  const label = (day) => new Date(`${day}T12:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const canvas = h('canvas', { role: 'img', 'aria-label': 'Tokens used each of the last 30 days, by model; the table below has the numbers.' });
+  const chart = new Chart(canvas, {
+    type: 'bar',
+    data: { labels: days.map((d) => label(d.day)), datasets: series.map((d) => ({ ...d, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24, borderWidth: { top: 2 }, borderColor: 'transparent' })) },
+    options: {
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 12 }, border: {} },
+        y: { stacked: true, beginAtZero: true, ticks: { maxTicksLimit: 5, callback: (v) => Intl.NumberFormat('en-US', { notation: 'compact' }).format(v) }, grid: {}, border: { display: false } },
+      },
+      plugins: {
+        legend: { display: series.length > 1, position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 } },
+        tooltip: {
+          filter: (item) => item.raw > 0,
+          callbacks: {
+            label: (item) => ` ${item.dataset.label}: ${num(item.raw)}`,
+            footer: (items) => {
+              const d = days[items[0]?.dataIndex];
+              if (!d?.rows.length) return 'No answers';
+              const tokens = d.rows.reduce((t, r) => t + r.promptTokens + r.tokens, 0);
+              const known = d.rows.filter((r) => r.cost !== null);
+              const cost = known.reduce((t, r) => t + r.cost, 0);
+              const answers = d.rows.reduce((t, r) => t + r.answers, 0);
+              return [`${num(tokens)} tokens in ${plural(answers, 'answer', 'answers')}`, known.length ? `${dollars(cost)}${known.length < d.rows.length ? ' + unknown' : ''}` : 'price unknown'];
+            },
+          },
+        },
+      },
+    },
+  });
+  chartColours(chart);
+  charts.add(chart);
+  return h('div', { class: 'usage-chart' }, h('h4', {}, 'Tokens a day, last 30 days'), h('div', { class: 'usage-canvas' }, canvas));
+}
+
 function usageTable(usage) {
   if (!usage?.since) return [h('p', { class: 'muted' }, 'No token usage recorded yet.')];
   const periods = usage.periods;
@@ -959,6 +1036,7 @@ function usageTable(usage) {
   const row = (head, of) => h('tr', {}, h('th', { scope: 'row' }, head), ...periods.map((p) => cell(of(p))));
   return [
     h('h3', {}, 'Token usage'),
+    usageChart(usage, models),
     h(
       'div',
       { class: 'usage-wrap' },

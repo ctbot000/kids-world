@@ -615,6 +615,10 @@ test('the tokens its models take are tallied a day at a time, saved, and shown o
   assert.deepEqual(week.total, today.total, 'ten days ago is not in the last 7');
   assert.deepEqual(month.total, { answers: 4, promptTokens: 2400, tokens: 90, cost: (1700 * 0.15 + 70 * 0.5) / 1e6, unpriced: false });
   assert.deepEqual(all.total, month.total);
+  assert.deepEqual(s.days.map((d) => d.day), [...Array(30)].map((_, i) => dayOf(now - (29 - i) * DAY)), 'the last 30 days, oldest first');
+  assert.deepEqual(s.days[19].rows.map((r) => [r.model, r.promptTokens, r.answers]), [['glm-5.3-flash', 800, 1], ['gemma3:4b', 700, 1]]);
+  assert.deepEqual(s.days[29].rows.map((r) => r.cost), [(900 * 0.15 + 40 * 0.5) / 1e6, 0]);
+  assert.equal(s.days.filter((d) => d.rows.length).length, 2, 'no rows on a day with no answers');
   await usage.save();
   const again = await new TokenUsage(join(dir, USAGE_FILE), () => now).load();
   assert.deepEqual(again.summary(), s, 'kept after a restart');

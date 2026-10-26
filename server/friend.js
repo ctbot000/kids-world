@@ -144,7 +144,9 @@ export class TokenUsage {
   // What the admin page shows: today, the last 7 and 30 days (today among
   // them) and every day kept, each a row per model and the totals, with what
   // they cost in US dollars (null for a model of unknown price; the total
-  // then counts only the known ones, and says so with unpriced).
+  // then counts only the known ones, and says so with unpriced); and for its
+  // chart each of the last 30 days, oldest first, a row per model used that
+  // day (none on a day with no answers).
   summary() {
     const today = this.now();
     const kept = Object.keys(this.days).sort();
@@ -169,7 +171,12 @@ export class TokenUsage {
       );
       return { key, rows, total };
     };
-    return { since: kept[0] ?? null, periods: [period('today', 1), period('week', 7), period('month', 30), period('all', 0)] };
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const day = dayOf(today - i * DAY_MS);
+      days.push({ day, rows: (this.days[day] ?? []).map((r) => ({ ...r, cost: costOf(r.name, r.model, r.promptTokens, r.tokens) })) });
+    }
+    return { since: kept[0] ?? null, periods: [period('today', 1), period('week', 7), period('month', 30), period('all', 0)], days };
   }
 }
 

@@ -60,6 +60,11 @@ const peer = await read('peerjs', 'dist/peerjs.min.js');
 await writeFile(new URL('peerjs.min.js', vendor), `/*! PeerJS ${peerVersion} | MIT License | https://github.com/peers/peerjs */\n${peer}\n`);
 console.log(`vendored peerjs@${peerVersion} -> public/vendor/peerjs.min.js`);
 
+const chartVersion = await version('chart.js');
+const chart = await read('chart.js', 'dist/chart.umd.min.js');
+await writeFile(new URL('chart.umd.min.js', vendor), `${chart}\n`);
+console.log(`vendored chart.js@${chartVersion} -> public/vendor/chart.umd.min.js`);
+
 const fontVersion = await version('@fontsource/fredoka');
 for (const weight of [500, 700]) {
   const file = `fredoka-latin-${weight}-normal.woff2`;
