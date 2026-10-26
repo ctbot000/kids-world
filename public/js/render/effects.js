@@ -497,6 +497,19 @@ export class Effects {
     }
   }
 
+  // A ripple on the water behind a paddling duck: a flat ring that spreads
+  // out and fades away in about a second, from a small pool of rings.
+  ripple(x, y, z, from = 0.12, to = 0.6) {
+    this.ripples ??= [];
+    let r = this.ripples.find((k) => !k.busy);
+    if (!r) {
+      if (this.ripples.length >= RIPPLE_POOL) return;
+      r = new Ripple(this.scene);
+      this.ripples.push(r);
+    }
+    r.go(x, y, z, from, to);
+  }
+
   update(dt) {
     for (const s of this.slashes) {
       if (!s.group.visible) continue;
@@ -504,6 +517,7 @@ export class Effects {
       s.mat.uniforms.uHead.value = (s.age / SLASH_SECS) * (1 + SLASH_TRAIL);
       if (s.age >= SLASH_SECS) s.group.visible = false;
     }
+    for (const r of this.ripples ?? []) r.update(dt);
     let n = 0;
     const c = this.center.array;
     const col = this.color.array;
@@ -553,5 +567,45 @@ export class Effects {
     this.center.needsUpdate = true;
     this.color.needsUpdate = true;
     this.info.needsUpdate = true;
+  }
+}
+
+// A ripple on the water: a thin flat ring that spreads out from a paddling
+// duck's tail and fades away in about a second, the way the whale's spout
+// does its trick. Kept in a small pool and used again and again.
+const RIPPLE_POOL = 12;
+const RIPPLE_SECS = 0.9;
+
+export class Ripple {
+  constructor(scene) {
+    this.busy = false;
+    this.mesh = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 40), new THREE.MeshBasicMaterial({ color: '#eaf7ff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.renderOrder = 4;
+    this.mesh.visible = false;
+    scene.add(this.mesh);
+    this.age = 0;
+  }
+
+  // Starts a ring at (x, y, z) that grows from radius `from` to `to`.
+  go(x, y, z, from = 0.12, to = 0.6) {
+    this.busy = true;
+    this.age = 0;
+    this.from = from;
+    this.to = to;
+    this.mesh.position.set(x, y, z);
+    this.mesh.scale.setScalar(from);
+    this.mesh.visible = true;
+  }
+
+  update(dt) {
+    if (!this.busy) return;
+    this.age += dt;
+    const k = Math.min(1, this.age / RIPPLE_SECS);
+    this.mesh.scale.setScalar(this.from + (this.to - this.from) * (1 - (1 - k) ** 2));
+    this.mesh.material.opacity = 0.5 * (1 - k);
+    if (k < 1) return;
+    this.busy = false;
+    this.mesh.visible = false;
   }
 }
