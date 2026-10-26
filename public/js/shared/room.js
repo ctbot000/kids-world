@@ -1285,6 +1285,10 @@ export class Room {
     if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
+    // The Queen Mosquito getting a heart back (monsters.js step): everyone
+    // near sees the little hearts over her.
+    const healed = this.monsters.takeHealed();
+    if (healed.length) this.broadcast({ t: 'mheal', m: healed });
     // A Lava Ghost's breath of fire: the jet everyone sees, and whoever it
     // burned, with Knight Armor or a Fire Suit taking half of it.
     for (const m of this.monsters.takeFires()) this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: GHOST_FIRE.ms });

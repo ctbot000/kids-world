@@ -9,7 +9,7 @@
 // the one in critter-models.js, where it lived as an animal.)
 import * as THREE from '../../vendor/three.module.js';
 import { wingPair } from './critter-models.js';
-import { blobShadow, capsule, cylinder, mesh, sphere, toon } from './toon.js';
+import { blobShadow, capsule, cone, cylinder, mesh, sphere, toon } from './toon.js';
 
 const FUR = ['#8494ab', '#9aa5b8', '#76859e'];
 const STRIPE = '#4e5a70';
@@ -180,5 +180,33 @@ export class MosquitoModel {
     this.shadow.removeFromParent();
     this.shadow.geometry.dispose();
     this.shadow.material.dispose();
+  }
+}
+
+// The Queen Mosquito (shared/monsters.js): the giant one's mother, half as
+// big again, with a little gold crown on her head and a deeper whine. Built
+// from the giant mosquito's own body, so she looks just her kin, only more.
+export class QueenMosquitoModel extends MosquitoModel {
+  constructor(theme = 'sunny', id = 1) {
+    super(theme, id);
+    this.group.scale.setScalar(1.55);
+    // A little crown: a gold band with three points, set between her antennae.
+    const gold = toon('#ffd84d', { emissive: 0.25 });
+    const crown = new THREE.Group();
+    crown.position.set(0, 0.13, 0.02);
+    crown.rotation.x = -0.15;
+    crown.add(mesh(cylinder(0.11, 0.115, 0.035, 12), gold, 0, 0, 0));
+    for (const [x, z] of [
+      [-0.06, 0],
+      [0, 0.012],
+      [0.06, 0],
+    ]) crown.add(mesh(cone(0.022, 0.07, 5), gold, x, 0.045, z));
+    crown.add(mesh(sphere(1, 8, 6), toon('#ff5f9e', { emissive: 0.4 }), 0, 0.05, 0.012, 0.018));
+    this.head.add(crown);
+    this.height = 1.8;
+    this.center = 0.95;
+    this.pick = 1.05;
+    this.shadowScale = 1.35;
+    this.seen = 170;
   }
 }

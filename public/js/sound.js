@@ -474,6 +474,13 @@ export class Sound {
         this.tone(560 * r(), { type: 'sawtooth', attack: 0.1, decay: 0.8, gain: 0.014, vibrato: 7, slide: 700 * r(), slideTime: 0.6 });
         this.tone(1120 * r(), { type: 'triangle', attack: 0.1, decay: 0.7, gain: 0.005, vibrato: 11 });
         break;
+      case 'queen':
+        // The Queen Mosquito's whine: the same thin drone, but much deeper
+        // and bigger — she is half as big again — and it goes on longer.
+        this.tone(210 * r(), { type: 'sawtooth', attack: 0.15, decay: 1.6, gain: 0.03, vibrato: 5, slide: 260 * r(), slideTime: 1.2 });
+        this.tone(420 * r(), { type: 'triangle', attack: 0.15, decay: 1.5, gain: 0.012, vibrato: 8 });
+        this.tone(105 * r(), { type: 'sawtooth', attack: 0.2, decay: 1.8, gain: 0.02, vibrato: 3 });
+        break;
       case 'spider':
         // Tk-tk-tk-tk: a giant spider's legs skittering over the bricks as
         // it scuttles at you, quicker and quicker away.

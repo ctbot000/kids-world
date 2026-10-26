@@ -416,8 +416,12 @@ export class AdventureSim {
     this.stage = cleanStage(stage);
     this.camps = camps.map((c) => {
       const freed = Boolean(c.freed) || Boolean(won);
-      return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false };
+      return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false, queen: false };
     });
+    // The deepest camp — the one furthest from the start — wakes the Queen
+    // Mosquito with its own monsters, as a tougher extra guard.
+    const deepest = this.camps.filter((c) => c.kind === 'camp').pop();
+    if (deepest) deepest.queen = true;
     this.won = Boolean(won) || (this.camps.length > 0 && this.camps.every((c) => c.freed));
     this.king = noKing();
     // The Monster Gashapon (stepGasha): where it is ({ x, y, z, until }) or
@@ -502,7 +506,8 @@ export class AdventureSim {
   }
 
   // Someone came near: out come its monsters (or King Grumble, with his
-  // hearts for as many friends as are on the island now).
+  // hearts for as many friends as are on the island now). The deepest camp
+  // wakes the Queen Mosquito too, as a tougher extra guard.
   wake(world, c, people, monsters, players) {
     c.awake = true;
     c.back = [];
@@ -514,6 +519,7 @@ export class AdventureSim {
       return;
     }
     for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
+    if (c.queen) this.addQueen(world, c, people, monsters);
   }
 
   // Nobody near for a while: its monsters go back in, and come out afresh
@@ -555,10 +561,20 @@ export class AdventureSim {
     return monsters.add(world, c.x + 2.5, c.y, c.z, { camp: c.id, kind: bug });
   }
 
+  // The Queen Mosquito out over the deepest camp (see wake): on the wing
+  // above its middle, where she can see whoever comes in. She comes back the
+  // same way if she ever goes off by herself (into water someone poured in).
+  addQueen(world, c, people, monsters) {
+    const m = monsters.add(world, c.x, c.y + 1, c.z, { camp: c.id, kind: 'queen' });
+    if (m) m.queen = true;
+    return m;
+  }
+
   // Which kind a camp needs next: its mosquito, then whichever of the
-  // stage's tough ones it is missing, then a blob.
+  // stage's tough ones it is missing, then a blob. The queen is not one of
+  // them: she is the deepest camp's own extra guard (addQueen).
   guardKind(c, monsters) {
-    const here = monsters.list.filter((m) => m.camp === c.id).map((m) => m.kind);
+    const here = monsters.list.filter((m) => m.camp === c.id && m.kind !== 'queen').map((m) => m.kind);
     if (!here.includes('mosquito')) return 'mosquito';
     const have = new Map();
     for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
@@ -692,10 +708,11 @@ export class AdventureSim {
   }
 
   // One of a camp's monsters popped (or gone by itself): back it comes in a
-  // while, while the camp is not free. King Grumble's helpers do not.
+  // while, while the camp is not free. King Grumble's helpers and the Queen
+  // Mosquito do not: popping her is that camp's own little victory.
   guardGone(m, now) {
     const c = this.campById(m.camp);
-    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king') return;
+    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king' || m.kind === 'queen') return;
     c.back.push(now + GUARD_BACK_MS);
   }
 
