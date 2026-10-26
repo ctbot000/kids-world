@@ -436,8 +436,9 @@ export function paintCells(world, body, half = 1) {
 }
 
 // Rolling along, the van paints the ground it passes over, a few times a
-// second and only where there is ground to paint. The colour comes from the
-// driver (ride.paintId, set by the page: the Paint tool's chosen colour).
+// second and only where there is ground to paint. Which colour is the
+// caller's business: the page paints these cells with the one picked with
+// the Paint tool (game.js paintTrail).
 function painting(world, ride, input, dt) {
   ride.paintIn -= dt;
   if (ride.paintIn > 0) return null;
