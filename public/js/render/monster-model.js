@@ -13,8 +13,8 @@ import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from
 
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
-const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'] };
-const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25 };
+const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'], ghost: ['#ff7a2f', '#a3300c'] };
+const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25, ghost: 1.15 };
 // A helmet's dome, a cap of moss, and a stone.
 const DOME = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
 const CAP = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.4);
@@ -155,6 +155,13 @@ export class MonsterModel {
       this.eyeWhite = toon('#ffb13b', { emissive: 0.7 });
       this.eyeGlow = toon('#ff7a1a', { emissive: 1 });
       for (const eye of this.eyes) eye.material = this.eyeWhite;
+    }
+    // A Lava Ghost: ember eyes and a mouth that glows before it breathes fire.
+    if (kind === 'ghost') {
+      this.eyeWhite = toon('#ffb13b', { emissive: 0.7 });
+      this.eyeGlow = toon('#ff5a00', { emissive: 1 });
+      for (const eye of this.eyes) eye.material = this.eyeWhite;
+      this.mouth.material = toon('#ff4d00', { emissive: 0.8 });
     }
     this.height = H * 2 * k;
     this.center = H * k;
