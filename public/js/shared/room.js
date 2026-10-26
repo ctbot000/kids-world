@@ -743,7 +743,7 @@ export class Room {
     }
     // A door swinging open or shut is no build: anyone may bop one, wherever
     // the island's owner lets friends build or not, so nobody is stuck in or out.
-    const swing = kind === 'door' && cells.length === 4 && B.DOOR[cells[3]] && B.DOOR[this.world.get(cells[0], cells[1], cells[2])];
+    const swing = kind === 'door' && cells.length === 4 && B.DOOR[cells[3]] === 1 && cells[3] === B.turnedDoor(this.world.get(cells[0], cells[1], cells[2]));
     const refused = !swing && this.settings.build === 'host' && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });

@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
+import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
 import { applyCells, buildEdit, doorEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
@@ -82,4 +83,41 @@ test('a bop swings a door open, and the next bop shuts it again', () => {
   // Nothing there to swing: no cells at all.
   w.set(10, 6, 10, B.PLANKS);
   assert.deepEqual(doorEdit(w, 10, 6, 10), []);
+});
+
+test('a friend may bop a door where only the owner builds, but not make it another door', () => {
+  const room = new Room({ code: '123456', theme: 'sunny', name: 'Sunny Cove', seed: 42 });
+  const conn = () => {
+    const c = { inbox: [] };
+    c.send = (text) => c.inbox.push(JSON.parse(text));
+    c.close = () => {};
+    return c;
+  };
+  const join = (name) => {
+    const c = conn();
+    room.attach(c);
+    room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' } });
+    return c;
+  };
+  const owner = join('Happy Panda');
+  const friend = join('Brave Otter');
+  room.receive(owner, { t: 'host', cmd: 'settings', settings: { build: 'host' } });
+  const w = room.world;
+  const x = Math.floor(w.spawn.x) + 3;
+  const z = Math.floor(w.spawn.z) + 3;
+  const y = w.top(x, z) + 1;
+  room.receive(owner, { t: 'edit', seq: 1, kind: 'build', cells: [x, y, z, B.DOORS[0]] });
+  assert.equal(w.get(x, y, z), B.DOORS[0]);
+  const open = B.turnedDoor(B.DOORS[0]);
+  room.receive(friend, { t: 'edit', seq: 1, kind: 'door', cells: [x, y, z, open] });
+  assert.equal(w.get(x, y, z), open, 'the friend swung it open');
+  const heard = owner.inbox.filter((m) => m.t === 'edit' && m.kind === 'door');
+  assert.deepEqual(heard.at(-1).cells, [x, y, z, open], 'and the owner sees it swing');
+  // A door edit that is no swing (another colour, or the wrong way round)
+  // is a build, and refused.
+  room.receive(friend, { t: 'edit', seq: 2, kind: 'door', cells: [x, y, z, B.DOORS[1]] });
+  room.receive(friend, { t: 'edit', seq: 3, kind: 'door', cells: [x, y, z, open + 1] });
+  assert.equal(w.get(x, y, z), open);
+  room.receive(friend, { t: 'edit', seq: 4, kind: 'door', cells: [x, y, z, B.DOORS[0]] });
+  assert.equal(w.get(x, y, z), B.DOORS[0], 'and shut again');
 });

@@ -1599,15 +1599,9 @@ export class Game extends EventTarget {
   // Swinging at it swings it open (or shut again), which everyone on the
   // island sees. Returns true when one swung.
   bopDoor(b, fx, fz, reach) {
-    const w = this.world;
-    // At chest height, straight ahead: a door fills its cell, so the ray
-    // meets it as soon as it meets the wall it is set in.
-    const eye = { x: b.x, y: b.y + BODY.eye * 0.8, z: b.z };
-    const stop = (id) => B.DOOR[id] === 1 || B.SOLID[id] === 1;
-    const hit = raycast(w, eye.x, eye.y, eye.z, fx, 0, fz, Math.max(1.8, reach + 0.6), stop);
-    if (!hit || !B.DOOR[hit.id]) return false;
-    if (Math.hypot(hit.x + 0.5 - eye.x, hit.y + 0.5 - eye.y, hit.z + 0.5 - eye.z) > REACH + 1) return false;
-    const cells = doorEdit(w, hit.x, hit.y, hit.z);
+    const hit = this.doorAhead(b, fx, fz, reach);
+    if (!hit) return false;
+    const cells = doorEdit(this.world, hit.x, hit.y, hit.z);
     if (!cells.length) return false;
     // Anyone may bop a door, wherever the island's owner lets friends build
     // or not: nobody is ever stuck in or out. A bop is not a build, so Undo
@@ -1615,6 +1609,16 @@ export class Game extends EventTarget {
     if (!this.edit('door', cells, { undoable: false, anyone: true })) return false;
     this.sound.play('place', { kind: B.block(cells[3]).sound });
     return true;
+  }
+
+  // The door straight ahead within a swing's reach (the cell it is in), or
+  // null: the ray goes at waist height, as a door fills one cell, the lower
+  // of a doorway two blocks high, and at chest height would pass over it.
+  doorAhead(b = this.me?.body, fx = Math.sin(this.me?.yaw ?? 0), fz = Math.cos(this.me?.yaw ?? 0), reach = ARM_REACH + (wornWeapon(this.profile.data.gear)?.reach ?? 0)) {
+    if (!this.world || !b) return null;
+    const stop = (id) => B.DOOR[id] === 1 || B.SOLID[id] === 1;
+    const hit = raycast(this.world, b.x, b.y + 0.5, b.z, fx, 0, fz, Math.max(1.8, reach + 0.6), stop);
+    return hit && B.DOOR[hit.id] ? hit : null;
   }
 
   // On a dragon's back (attack above): a burst of fire ahead of it, told to
@@ -3961,9 +3965,11 @@ export class Game extends EventTarget {
     const w = this.world;
     for (let i = last.cells.length - 5; i >= 0; i -= 5) {
       const [x, y, z, before, after] = last.cells.slice(i, i + 5);
-      if (w.get(x, y, z) !== after) continue;
+      // A door put down and bopped open since is still the one put down.
+      const here = w.get(x, y, z);
+      if (here !== after && !(B.DOOR[after] && B.turnedDoor(after) === here)) continue;
       cells.push(x, y, z, before);
-      expect.push(after);
+      expect.push(here);
     }
     if (this.edit('undo', cells, { expect, undoable: false })) {
       this.sound.play('pop');
