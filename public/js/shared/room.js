@@ -31,7 +31,7 @@ import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
-import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isBoard, MAX_PICTURES } from './drawing.js';
+import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
@@ -296,8 +296,9 @@ export class Room {
       else if (B.CROP_OF[before]) this.crops.delete(k);
       if (B.SOIL[after]) this.tilled(x, y, z, after);
       else if (B.SOIL[before]) this.soil.delete(k);
-      // A drawing board picked up (or painted over): its picture goes with it.
-      if (isBoard(before) && !isBoard(after)) this.drawings.delete(k);
+      // A drawing board or a picture frame picked up (or painted over): its
+      // picture goes with it.
+      if (isPictureAt(before) && !isPictureAt(after)) this.drawings.delete(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
@@ -2196,12 +2197,12 @@ export class Room {
 
   // ------------------------------------------------ drawing boards
 
-  // A stroke on a drawing board (drawing.js), by someone standing at it:
-  // drawn on the island's copy of its picture and passed on to everyone
-  // else, who draw it on theirs.
+  // A stroke on a drawing board or a picture hung in a frame (drawing.js),
+  // by someone standing at it: drawn on the island's copy of its picture and
+  // passed on to everyone else, who draw it on theirs.
   draw(conn, p, msg) {
     const at = msg.at;
-    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isBoard(this.world.get(...at))) return;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isPictureAt(this.world.get(...at))) return;
     if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
     const stroke = cleanStroke(msg.s);
     if (!stroke) return;
@@ -2299,7 +2300,7 @@ export class Room {
       if (!Array.isArray(row) || !row.slice(0, 3).every(Number.isInteger)) continue;
       const [x, y, z, text] = row;
       const px = decodePicture(text);
-      if (px && !isBlank(px) && isBoard(this.world.get(x, y, z))) this.drawings.set(this.world.index(x, y, z), { x, y, z, px });
+      if (px && !isBlank(px) && isPictureAt(this.world.get(x, y, z))) this.drawings.set(this.world.index(x, y, z), { x, y, z, px });
     }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';

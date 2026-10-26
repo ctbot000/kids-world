@@ -52,12 +52,19 @@ const MAX_R = 3;
 export const MAX_POINTS = 64;
 export const MAX_PICTURES = 64;
 
-// Whether a block is a drawing board (any way it faces).
+// Whether a block is a drawing board (any way it faces), and whether one is
+// a picture frame hung on a wall with a drawing of your own in it (drawing.js).
 export const isBoard = (id) => BLOCKS[id]?.model === 'drawing-board';
+export const isFrame = (id) => BLOCKS[id]?.model === 'picture-frame';
+
+// Whether a block carries a picture at all: a board to draw on, or a frame
+// with a drawing hung in it.
+export const isPictureAt = (id) => isBoard(id) || isFrame(id);
 
 // The drawing board nearest a body standing beside it: { x, y, z, key } of
-// its cell, or null.
+// its cell, or null. So too the picture frame beside you.
 export const boardNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => (isBoard(id) ? {} : null), reach);
+export const frameNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => (isFrame(id) ? {} : null), reach);
 
 // Where the picture is on the board, in the model's own layout (facing -z,
 // furniture.js): from x0 to x1 across, y0 to y1 up, just in front of the
@@ -70,6 +77,24 @@ export const PICTURE_AT = { x0: 0.1, x1: 0.9, y0: 0.58, y1: 1.18, z: 0.468 };
 // its left is at x1.
 export function pictureCorners(id, x, y, z) {
   const { x0, x1, y0, y1, z: pz } = PICTURE_AT;
+  return [
+    furniturePoint(id, x, y, z, x1, y0, pz),
+    furniturePoint(id, x, y, z, x0, y0, pz),
+    furniturePoint(id, x, y, z, x0, y1, pz),
+    furniturePoint(id, x, y, z, x1, y1, pz),
+  ];
+}
+
+// Where the drawing hangs in a picture frame, in the model's own layout
+// (facing -z, furniture.js): the same shape as a board's picture, over the
+// frame's white, just in front of it and of the little landscape an empty
+// frame shows.
+export const FRAME_AT = { x0: 0.18, x1: 0.82, y0: 0.34, y1: 0.82, z: 0.91 };
+
+// The drawing's corners in the world on the frame with block `id` at cell
+// (x, y, z), as pictureCorners does for a board.
+export function frameCorners(id, x, y, z) {
+  const { x0, x1, y0, y1, z: pz } = FRAME_AT;
   return [
     furniturePoint(id, x, y, z, x1, y0, pz),
     furniturePoint(id, x, y, z, x0, y0, pz),
