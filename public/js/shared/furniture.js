@@ -12,7 +12,7 @@
 // behind the other one long bed, and tables next to each other one big
 // table. `same(dx, dz)` says whether the cell that far away (in the
 // model's own layout: +x across, +z towards its back) holds one.
-import { BLOCKS } from './blocks.js';
+import { BLOCKS, sameDoor } from './blocks.js';
 
 const WOOD = '#c98a52';
 const DARK_WOOD = '#8b5a3c';
@@ -971,18 +971,27 @@ const MODELS = {
   // hinged at the frame's x = 0 post, so bopping it swings the panel out to
   // lie along the wall beside it — the same door, the other way round, drawn
   // by the same model with `open` instead. Three woods: oak, walnut, blue.
-  door(open = false, frame = WOOD, panel = '#c98a52') {
-    const out = [box(0, 0, 0.42, 0.08, 1, 0.58, frame, 'planks'), box(0.92, 0, 0.42, 1, 1, 0.58, frame, 'planks'), box(0.08, 0.9, 0.42, 0.92, 1, 0.58, frame, 'planks')];
+  // The `same` callback also says whether the cell above (dy 1) or below
+  // (dy -1) holds a door of the same kind, so two stacked one above the other
+  // draw as one tall door: no lintel between them and no handle up top.
+  door(open = false, frame = WOOD, panel = '#c98a52', same = () => false) {
+    const up = same(0, 0, 1);
+    const down = same(0, 0, -1);
+    // With a door above, this half has no lintel: the panel runs on up into
+    // it, and the door above keeps the head of the whole tall door.
+    const out = [box(0, 0, 0.42, 0.08, 1, 0.58, frame, 'planks'), box(0.92, 0, 0.42, 1, 1, 0.58, frame, 'planks')];
+    if (!up) out.push(box(0.08, 0.9, 0.42, 0.92, 1, 0.58, frame, 'planks'));
     if (open) {
       // The panel swung round the hinge post, out of the gap and along the
       // side of it, standing open into the room behind.
-      out.push(box(0.02, 0, 0.5, 0.1, 0.9, 1.34, panel, 'planks'));
-      out.push(box(0.78, 0.42, 0.44, 0.84, 0.48, 0.5, '#f5c542', 'plain'));
+      out.push(box(0.02, 0, 0.5, 0.1, up ? 1 : 0.9, 1.34, panel, 'planks'));
+      if (!down) out.push(box(0.78, 0.42, 0.44, 0.84, 0.48, 0.5, '#f5c542', 'plain'));
       return out;
     }
-    out.push(box(0.08, 0, 0.44, 0.92, 0.9, 0.56, panel, 'planks'));
-    // A little golden handle on the panel's face.
-    out.push(box(0.8, 0.42, 0.4, 0.86, 0.48, 0.44, '#f5c542', 'plain'));
+    out.push(box(0.08, 0, 0.44, 0.92, up ? 1 : 0.9, 0.56, panel, 'planks'));
+    // A little golden handle on the panel's face, at hand height: only the
+    // bottom half of a tall door has one.
+    if (!down) out.push(box(0.8, 0.42, 0.4, 0.86, 0.48, 0.44, '#f5c542', 'plain'));
     return out;
   },
 };
@@ -995,8 +1004,8 @@ for (const [key, panel, frame] of [
   ['walnut', '#8b5a3c', '#5c3a24'],
   ['blue', '#5b8fd9', '#3a5fa8'],
 ]) {
-  MODELS[`door-${key}`] = () => MODELS.door(false, frame, panel);
-  MODELS[`door-${key}-open`] = () => MODELS.door(true, frame, panel);
+  MODELS[`door-${key}`] = (same) => MODELS.door(false, frame, panel, same);
+  MODELS[`door-${key}-open`] = (same) => MODELS.door(true, frame, panel, same);
 }
 
 // The boxes of a piece of furniture in its own layout (facing -z).
@@ -1032,7 +1041,10 @@ export function furnitureDrop(id, below) {
 export function furnitureBoxes(id, x, y, z, at) {
   const def = BLOCKS[id];
   const k = turnsFor(def.front);
-  const same = (dx, dz) => {
+  const same = (dx, dz, dy = 0) => {
+    // Above or below: the doors stacked one over the other (sameDoor) join,
+    // as beds join end to end.
+    if (dy) return sameDoor(id, at(x, y + dy, z));
     let [ox, oz] = [dx, dz];
     for (let i = 0; i < k; i++) [ox, oz] = turnOffset(ox, oz);
     const other = BLOCKS[at(x + ox, y, z + oz)];

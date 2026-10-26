@@ -743,8 +743,24 @@ export class Room {
       return;
     }
     // A door swinging open or shut is no build: anyone may bop one, wherever
-    // the island's owner lets friends build or not, so nobody is stuck in or out.
-    const swing = kind === 'door' && cells.length === 4 && B.DOOR[cells[3]] === 1 && cells[3] === B.turnedDoor(this.world.get(cells[0], cells[1], cells[2]));
+    // the island's owner lets friends build or not, so nobody is stuck in or
+    // out. The halves of a tall door swing together, so a swing may touch the
+    // whole vertical run of them — and nothing else may ride along with it.
+    const swing = kind === 'door' && cells.length <= this.world.H * 4 && (() => {
+      const [fx, , fz] = cells;
+      const first = this.world.get(cells[0], cells[1], cells[2]);
+      if (!B.DOOR[first]) return false;
+      const ys = [];
+      for (let i = 0; i < cells.length; i += 4) {
+        const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
+        if (B.DOOR[id] !== 1 || id !== B.turnedDoor(this.world.get(x, y, z))) return false;
+        if (x !== fx || z !== fz || ys.includes(y)) return false;
+        if (!B.sameDoor(first, this.world.get(x, y, z))) return false;
+        ys.push(y);
+      }
+      ys.sort((a, b) => a - b);
+      return ys.every((y, i) => i === 0 || y === ys[i - 1] + 1);
+    })();
     const refused = !swing && this.settings.build === 'host' && p.id !== this.host;
     if (refused || c.cells < n) {
       this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });

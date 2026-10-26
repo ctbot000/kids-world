@@ -190,10 +190,21 @@ export function pickEdit(world, hit, size = 1) {
       }
     }
   }
-  // A real tree comes away whole: its foot and all of its trunk.
+  // A real tree comes away whole: its foot and all of its trunk. So does a
+  // tall door: the halves stacked one above the other are one door, however
+  // high it goes.
   const seen = new Set(targets.map((t) => t.join()));
   for (const [x, y, z] of [...targets]) {
-    if (B.KIND[world.get(x, y, z)] !== B.K_TREE) continue;
+    if (B.KIND[world.get(x, y, z)] !== B.K_TREE) {
+      if (!B.DOOR[world.get(x, y, z)]) continue;
+      for (const dy of [1, -1]) {
+        for (let yy = y + dy; B.sameDoor(world.get(x, y, z), world.get(x, yy, z)) && !seen.has(`${x},${yy},${z}`); yy += dy) {
+          seen.add(`${x},${yy},${z}`);
+          targets.push([x, yy, z]);
+        }
+      }
+      continue;
+    }
     for (const dy of [1, -1]) {
       for (let yy = y + dy; B.KIND[world.get(x, yy, z)] === B.K_TREE && !seen.has(`${x},${yy},${z}`); yy += dy) {
         seen.add(`${x},${yy},${z}`);
@@ -505,13 +516,20 @@ export function growEdit(world, x, y, z, seed) {
 }
 
 // The same door the other way round: a bop on it (see game.js attack)
-// swings its panel open, and the next bop shuts it again. Returns [] when
-// nothing is there to swing.
+// swings its panel open, and the next bop shuts it again. Two stacked one
+// above the other are one tall door (blocks.js sameDoor), however high it
+// goes: every half of it swings together, to the same way round, so a bop on
+// any half opens or shuts the whole door. Returns [] when nothing is there
+// to swing.
 export function doorEdit(world, x, y, z) {
   const id = world.get(x, y, z);
   const to = B.turnedDoor(id);
   if (!to) return [];
-  return [x, y, z, to];
+  const out = [x, y, z, to];
+  for (const dy of [1, -1]) {
+    for (let yy = y + dy; B.sameDoor(id, world.get(x, yy, z)); yy += dy) out.push(x, yy, z, to);
+  }
+  return out;
 }
 
 // Every cell of an edit inside the world, with a known block, and never the
