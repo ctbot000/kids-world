@@ -89,6 +89,20 @@ const BED_GIVE_UP = 30;
 export const TRICKS = { happy: 2.2, eat: 1.8, beg: 2.2, spin: 1.6, jump: 1, roll: 2, nap: 3.5 };
 export const EMOTE_TRICKS = { wave: 'beg', dance: 'spin', cheer: 'jump', hearts: 'happy', clap: 'jump', sleepy: 'nap', laugh: 'roll', surprise: 'jump' };
 
+// A parrot's party trick: it repeats what its owner says (hearsay), this long
+// after, in a bubble of its own (the page shows it, with a squawk). Only a
+// parrot within earshot does — ECHO_NEAR — so one asleep or left far behind
+// (popped over from far away, still catching up) stays quiet.
+const ECHO_AFTER = 1;
+const ECHO_NEAR = 12;
+
+// What its owner just said, for a parrot to repeat (see stepPet, which brings
+// it out as ev.echoed). Anything else said before then replaces it.
+export function hearsay(pet, owner, text) {
+  if (pet.kind !== 'parrot' || !text || pet.state === 'sleep' || Math.hypot(owner.x - pet.x, owner.z - pet.z) > ECHO_NEAR) return;
+  pet.echo = { text, at: pet.time + ECHO_AFTER };
+}
+
 const FL = Math.floor;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -126,6 +140,8 @@ export function makePet(kind, x, y, z, { yaw = 0, seed = 1 } = {}) {
     // A trick it is doing, and for how much longer.
     trick: '',
     trickLeft: 0,
+    // What its owner last said, for a parrot to repeat, and when (hearsay).
+    echo: null,
     // Which way it looks while it sits (a glance about now and then).
     glance: 0,
     glanceAt: 2,
@@ -173,6 +189,12 @@ export const petPose = (pet) => pet.trick || pet.state;
 export function stepPet(world, pet, owner, dt, { night = false } = {}) {
   const ev = { popped: false, splashed: false, boarded: false, alighted: false };
   pet.time += dt;
+  // Its owner's last word, now repeated (a parrot's hearsay) — unless it has
+  // since fallen asleep or been left far behind.
+  if (pet.echo && pet.time >= pet.echo.at) {
+    if (pet.state !== 'sleep' && Math.hypot(owner.x - pet.x, owner.z - pet.z) <= ECHO_NEAR) ev.echoed = pet.echo.text;
+    pet.echo = null;
+  }
   pet.still = owner.moving ? 0 : pet.still + dt;
   if (pet.trickLeft > 0) {
     pet.trickLeft = Math.max(0, pet.trickLeft - dt);

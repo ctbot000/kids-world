@@ -6592,6 +6592,26 @@ export class UI {
         this.tags.delete(pid);
       }
     }
+    // A pet's speech bubble (a parrot repeating what you said), over its head
+    // wherever it has got to; the same tags again, a little smaller.
+    for (const [pid, pet] of g.pets) {
+      if (!pet.bubble || !pet.model.group.visible || g.hiddenFromMe(pid)) continue;
+      const pos = pet.model.group.position;
+      const scr = r.project(pos.x, pos.y + pet.model.height + 0.25, pos.z);
+      if (!scr.visible) continue;
+      seen.add(`pet${pid}`);
+      let tag = this.tags.get(`pet${pid}`);
+      if (!tag) {
+        tag = h('div', { class: 'tag' });
+        this.tags.set(`pet${pid}`, tag);
+        $('overlays').append(tag);
+      }
+      if (tag.dataset.key !== pet.bubble.text) {
+        tag.dataset.key = pet.bubble.text;
+        tag.replaceChildren(h('div', { class: 'bubble pet', lang: langOf(pet.bubble.text) || undefined }, pet.bubble.text));
+      }
+      tag.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -100%)`;
+    }
     this.renderHideSeek();
     this.rideButton(g, r);
     this.defendButton(g, r);

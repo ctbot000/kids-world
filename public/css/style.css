@@ -1379,6 +1379,13 @@ body.touch.playing #joystick {
   padding: 2px 10px;
 }
 
+/* A pet's own bubble (a parrot repeating what you said): a little smaller
+   than a player's, so it reads as the bird's. */
+.bubble.pet {
+  max-width: 160px;
+  font-size: 0.95rem;
+}
+
 .bubble::after {
   content: '';
   position: absolute;
