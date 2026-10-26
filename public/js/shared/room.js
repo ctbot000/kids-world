@@ -1282,6 +1282,10 @@ export class Room {
     if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
+    // The Queen Mosquito getting a heart back (monsters.js step): everyone
+    // near sees the little hearts over her.
+    const healed = this.monsters.takeHealed();
+    if (healed.length) this.broadcast({ t: 'mheal', m: healed });
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
     // King Grumble landing: a thump everyone sees, and a moment later, whoever

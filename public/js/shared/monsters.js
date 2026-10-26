@@ -36,6 +36,13 @@
 // great lump of mossy rock nearly twice your height, slow, that bumps three
 // times as much HP off you and takes twelve bops (a landing, two).
 //
+// And the Queen Mosquito, the giant one's mother and much bigger, with a
+// little crown: she guards the deepest camp of an adventure island. Like her
+// little cousins she darts down out of the air to bump HP off you — twice as
+// much — and nobody can jump on her, and she takes a lot of bops to pop. Her
+// own trick: with nobody within a few steps of her for a few seconds, she gets
+// a heart back every two seconds, so friends have to keep at her together.
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -114,6 +121,8 @@ export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
 // A giant spider: wider than a Big Bruiser is round but only up to your
 // middle, skittering about on its eight legs.
 export const SPIDER_BODY = { radius: 0.55, height: 0.95 };
+// A Queen Mosquito: bigger than the giant one, crown and all.
+export const QUEEN_BODY = { radius: 0.8, height: 1.8 };
 // A Grumble Knight: a blob a little bigger than most, its helmet on top.
 export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 // A Stone Golem: taller than a player and wider than a Big Bruiser.
@@ -162,6 +171,11 @@ export function bopGap(p, b, reach) {
 export const BLOB_HEARTS = 3;
 export const HIT_MS = 400;
 const HEAL_MS = 5000;
+// The Queen Mosquito's healing (see step): a heart back this long apart, but
+// only once nobody has been within QUEEN_NEAR steps of her for this long.
+export const QUEEN_HEAL_MS = 2000;
+export const QUEEN_NEAR = 12;
+export const QUEEN_LONELY_MS = 3000;
 // A bop knocks it back this fast, and up a little; then for a while it comes
 // after whoever tapped it this fast: quicker than you walk, slower than you run.
 const HIT_PUSH = 7;
@@ -189,6 +203,9 @@ export const KINDS = {
   knight: { hearts: 8, bump: 2, land: 2, move: { walk: 1.8, run: 4.6, jump: 8 }, cross: { walk: 1.8, run: 6.6, jump: 8 } },
   // A Stone Golem lumbers, slower than a Big Bruiser, but bumps the hardest.
   golem: { hearts: 12, bump: 3, land: 2, move: { walk: 1.2, run: 3.2, jump: 9 }, cross: { walk: 1.2, run: 4.4, jump: 9 } },
+  // The Queen Mosquito: many hearts, a bump twice a giant mosquito's, and
+  // nobody lands on her — she is up in the air, like her little cousins.
+  queen: { hearts: 14, bump: 2, land: 0, move: { walk: 2, run: 5 }, cross: { walk: 2, run: 6.4 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs. A giant
@@ -205,11 +222,11 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'queen'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, queen: QUEEN_BODY })[kind] ?? MONSTER_BODY;
 // The heavy ones: a bigger knock when they bump you, and a bigger pop.
-export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem';
+export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem' || kind === 'queen';
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -270,10 +287,12 @@ export class MonsterSim {
     this.list = [];
     this.nextId = 1;
     this.spawnAt = 0;
-    // Camp monsters that went by themselves (into the water), and King
-    // Grumble's landings, since they were last taken (see takeGone, takeStomps).
+    // Camp monsters that went by themselves (into the water), King
+    // Grumble's landings, and the hearts the Queen Mosquito got back, since
+    // they were last taken (see takeGone, takeStomps, takeHealed).
     this.gone = [];
     this.stomps = [];
+    this.healed = [];
   }
 
   get(id) {
@@ -297,11 +316,11 @@ export class MonsterSim {
     const body = makeBody(x, y, z);
     body.radius = size.radius;
     body.height = size.height;
-    // A mosquito comes out already on the wing.
-    if (kind === 'mosquito') body.flying = true;
+    // A mosquito comes out already on the wing, and so does the queen.
+    if (kind === 'mosquito' || kind === 'queen') body.flying = true;
     const rng = camp || march ? this.campRng : this.rng;
     const hearts = kindOf(kind).hearts;
-    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, healAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
     if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
@@ -331,6 +350,14 @@ export class MonsterSim {
   takeStomps() {
     const out = this.stomps;
     this.stomps = [];
+    return out;
+  }
+
+  // The hearts the Queen Mosquito has got back since they were last taken, as
+  // the ids of the moments she healed, for the room to show everyone.
+  takeHealed() {
+    const out = this.healed;
+    this.healed = [];
     return out;
   }
 
@@ -396,7 +423,7 @@ export class MonsterSim {
         continue;
       }
       const b = m.body;
-      const fly = m.kind === 'mosquito';
+      const fly = m.kind === 'mosquito' || m.kind === 'queen';
       const camp = m.camp ? (camps?.campById(m.camp) ?? null) : null;
       // Lonely, far from everyone: off it goes (one of a camp stays). In the
       // water or the lava, it goes too.
@@ -441,8 +468,19 @@ export class MonsterSim {
         }
       }
       m.target = target?.id ?? 0;
-      // Left alone a while: all its hearts back.
-      if (m.hitAt && now - m.hitAt >= HEAL_MS) {
+      // Left alone a while: all its hearts back. The Queen Mosquito is
+      // another matter: while nobody is within a few steps of her for a few
+      // seconds, she gets a heart back every two seconds (see takeHealed), so
+      // friends have to keep at her together.
+      if (m.kind === 'queen') {
+        const near = people.some((p) => Math.hypot(p.x - b.x, p.z - b.z) <= QUEEN_NEAR);
+        m.quiet = near ? 0 : (m.quiet ?? 0) + dt * 1000;
+        if (m.hearts < m.max && m.quiet >= QUEEN_LONELY_MS && now - Math.max(m.hitAt, m.healAt ?? 0) >= QUEEN_HEAL_MS) {
+          m.hearts++;
+          m.healAt = now;
+          this.healed.push(m.id);
+        }
+      } else if (m.hitAt && now - m.hitAt >= HEAL_MS) {
         m.hearts = m.max ?? BLOB_HEARTS;
         m.hitAt = 0;
       }

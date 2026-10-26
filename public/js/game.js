@@ -138,6 +138,7 @@ const TOUGH_TOLD = {
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
+  queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
@@ -511,6 +512,9 @@ export class Game extends EventTarget {
         break;
       case 'home':
         this.cameHome(msg);
+        break;
+      case 'mheal':
+        this.monsterHealed(msg);
         break;
       case 'env':
         this.setEnv(msg);
@@ -1120,6 +1124,19 @@ export class Game extends EventTarget {
   dropMonster(id) {
     this.renderer.removeMonster(id);
     this.monsters.delete(id);
+  }
+
+  // The Queen Mosquito got a heart back (monsters.js step, while nobody is
+  // near her): little hearts rise over her, as they do over a fed pet, so
+  // everyone sees her mending and knows to come back and keep at her.
+  monsterHealed(msg) {
+    if (!Array.isArray(msg.m)) return;
+    for (const id of msg.m) {
+      const entry = this.monsters.get(id);
+      const p = entry?.model.group.position;
+      if (!p || entry.kind !== 'queen') continue;
+      if (this.near(p.x, p.y, p.z, 40)) this.renderer.effects.hearts(p.x, p.y + (entry.model.height ?? 1.8) * 0.9, p.z, 2);
+    }
   }
 
   // Your HP, and the most you can have, as a message carries them ({ hp, max }).
@@ -1778,6 +1795,7 @@ export class Game extends EventTarget {
         // A mosquito whines and a spider skitters as they come at you; the
         // others grumble.
         if (entry.kind === 'mosquito') this.sound.play('mosquito');
+        else if (entry.kind === 'queen') this.sound.play('queen');
         else if (entry.kind === 'spider') this.sound.play('spider');
         else this.sound.play('grumble', { big });
       }
