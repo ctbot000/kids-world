@@ -282,7 +282,7 @@ export function setUpCtb(helpers) {
     return h(
       'article',
       { class: 'visit' },
-      h('div', { class: 'ctb-worker-head' }, h('h4', {}, w.name), h('button', { type: 'button', class: 'quiet small', title: `${w.name}'s talks with the model, the newest open`, onclick: () => runs.pick(k, { latest: true }) }, '🔍 Model runs')),
+      h('div', { class: 'ctb-worker-head' }, h('h4', {}, w.name), h('button', { type: 'button', class: 'quiet small', title: `${w.name}'s talks with the model, the newest open`, onclick: () => (document.getElementById('tab-ctb-runs').click(), runs.pick(k, { latest: true })) }, '🔍 Model runs')),
       w.issue ? h('div', { class: 'ctb-worker-issue' }, link(w.issue), ` ${w.issue.title}`) : null,
       h('div', {}, h('b', {}, w.doing), w.issue ? h('span', { class: 'muted' }, ` · since ${ago(w.startedAt)}`) : null),
       h('div', { class: 'muted' }, `${plural(w.done, 'pull request', 'pull requests')} opened, stuck ${plural(w.stuck, 'time', 'times')}`, w.last ? [' · last: ', link(w.last.issue), ' ', w.last.ok ? h('a', { href: w.last.url, target: '_blank', rel: 'noopener' }, 'pull request') : `stuck: ${String(w.last.why).split('\n')[0]}`] : null),
@@ -290,34 +290,28 @@ export function setUpCtb(helpers) {
     );
   }
 
-  // The problem reports' card (admin.js renderReports) sits among CTB's own
-  // after the task board, or on its own while CTB has nothing to show.
+  // A part a sub-tab (index.html): the workers with the settings and what
+  // happened lately; the task board with proposals, pull requests and a form
+  // for a new task; what players sent, beside the problem reports (admin.js
+  // renderReports); the model runs; and the tokens. While CTB has nothing to
+  // show, only the problem reports are left.
+  const PARTS = ['ctb-workers', 'ctb-tasks', 'ctb-models', 'ctb-tokens'];
   function render(state) {
-    const ctb = document.getElementById('ctb');
-    ctb.hidden = !state;
-    if (!state) {
-      ctb.after(helpers.reports);
-      helpers.shown();
-      return;
-    }
+    for (const id of PARTS) document.getElementById(id).hidden = !state;
+    if (view) view.ideas.hidden = !state;
     helpers.shown();
+    if (!state) return;
     if (!view) {
       const settings = settingsForm(h);
       // One card a part, the work going on first and the forms after it.
       const card = (attrs, ...children) => h('section', { ...attrs, class: `card ctb-card ${attrs.class ?? ''}`.trim() }, ...children);
       view = { settings, line: h('div', { class: 'friend-line' }), island: h('p', { class: 'muted' }), count: h('span', { class: 'badge' }), workers: h('div', { class: 'visits' }), board: card({}), proposals: card({}), ideas: card({}), pulls: card({}), usage: card({ class: 'usage-section' }), history: card({}) };
       view.crew = card({}, h('h3', {}, 'Workers ', view.count), view.workers);
-      document.getElementById('ctb').replaceChildren(
-        card({}, view.line, settings.form, view.island),
-        view.crew,
-        view.board,
-        helpers.reports,
-        h('div', { class: 'ctb-row' }, view.proposals, view.ideas, view.pulls),
-        card({}, h('h3', {}, 'New task'), taskForm(h)),
-        runs.el,
-        view.usage,
-        view.history,
-      );
+      document.getElementById('ctb-workers').replaceChildren(card({}, view.line, settings.form, view.island), view.crew, view.history);
+      document.getElementById('ctb-tasks').replaceChildren(view.board, h('div', { class: 'ctb-row' }, view.proposals, view.pulls), card({}, h('h3', {}, 'New task'), taskForm(h)));
+      helpers.reports.before(view.ideas);
+      document.getElementById('ctb-models').replaceChildren(runs.el);
+      document.getElementById('ctb-tokens').replaceChildren(view.usage);
     }
     view.settings.fill(state);
     const [cls, words] = !state.running ? ['off', 'Off'] : state.problem ? ['wait', `Closed: ${state.problem}`] : ['on', `Open on ${state.repo} · ${state.model}`];
@@ -333,6 +327,7 @@ export function setUpCtb(helpers) {
     runs.update(state);
     view.count.textContent = String(state.workers.length);
     view.crew.hidden = !state.workers.length;
+    document.getElementById('ctb-tasks-count').textContent = state.tasks.length + state.proposals.length ? String(state.tasks.length + state.proposals.length) : '';
     view.board.replaceChildren(
       h('h3', {}, 'Task board ', h('span', { class: 'badge' }, String(state.tasks.length))),
       state.tasks.length

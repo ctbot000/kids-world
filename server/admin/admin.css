@@ -117,7 +117,7 @@ main {
   padding: 20px 16px 64px;
 }
 
-main > [role='tabpanel']:not(.active) {
+[role='tabpanel']:not(.active) {
   display: none;
 }
 
@@ -1260,11 +1260,6 @@ button.primary:hover {
   display: none;
 }
 
-/* The problem reports, on their own while CTB has nothing to show. */
-.ctb + .reports-card {
-  margin-top: 16px;
-}
-
 .ctb p {
   margin: 0;
 }
@@ -1511,4 +1506,19 @@ button.link:hover {
   font: 12px/1.45 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* CTB's own tabs, under the page's: a row of their own over its parts. */
+.tabs.subtabs {
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs.subtabs[hidden] {
+  display: none;
+}
+
+.subtabs [role='tab'] {
+  height: 36px;
+  margin-bottom: -1px;
 }

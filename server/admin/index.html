@@ -45,12 +45,24 @@
         <div id="friend" class="friend card"></div>
       </section>
       <section id="ctb-section" role="tabpanel" aria-labelledby="tab-ctb" hidden>
-        <div id="ctb" class="ctb"></div>
-        <section id="reports-section" class="card ctb-card reports-card" hidden>
-          <h3>🐞 Problem reports <span id="reports-count" class="badge"></span></h3>
-          <p class="muted">What players told of in the game. One in words goes to the workers too, beside the players’ ideas.</p>
-          <div id="reports" class="reports"></div>
-        </section>
+        <nav class="tabs subtabs" role="tablist" aria-label="CTB parts">
+          <button type="button" role="tab" id="tab-ctb-workers" aria-controls="ctb-workers">👷 Workers</button>
+          <button type="button" role="tab" id="tab-ctb-tasks" aria-controls="ctb-tasks">📋 Tasks <span id="ctb-tasks-count" class="badge"></span></button>
+          <button type="button" role="tab" id="tab-ctb-players" aria-controls="ctb-players">💌 From players <span id="ctb-players-count" class="badge bad" hidden></span></button>
+          <button type="button" role="tab" id="tab-ctb-runs" aria-controls="ctb-models">🔍 Model runs</button>
+          <button type="button" role="tab" id="tab-ctb-tokens" aria-controls="ctb-tokens">🪙 Tokens</button>
+        </nav>
+        <div id="ctb-workers" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-workers" hidden></div>
+        <div id="ctb-tasks" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-tasks" hidden></div>
+        <div id="ctb-players" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-players" hidden>
+          <section id="reports-section" class="card ctb-card reports-card" hidden>
+            <h3>🐞 Problem reports <span id="reports-count" class="badge"></span></h3>
+            <p class="muted">What players told of in the game. One in words goes to the workers too, beside the players’ ideas.</p>
+            <div id="reports" class="reports"></div>
+          </section>
+        </div>
+        <div id="ctb-models" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-runs" hidden></div>
+        <div id="ctb-tokens" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-tokens" hidden></div>
       </section>
     </main>
   </body>

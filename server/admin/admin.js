@@ -174,10 +174,12 @@ function reportCard(r) {
   );
 }
 
-// The CTB tab holds the problem reports as well: it shows while either
-// has something to show.
+// The CTB tab holds the problem reports as well, under 💌 From players with
+// the players' ideas: it shows while either has something to show.
 function showCtbTab() {
-  $('ctb-section').hidden = $('ctb').hidden && $('reports-section').hidden;
+  const off = $('ctb-workers').hidden;
+  $('ctb-players').hidden = off && $('reports-section').hidden;
+  $('ctb-section').hidden = $('ctb-players').hidden;
 }
 
 let reportsShown = '';
@@ -192,6 +194,9 @@ function renderReports(state) {
   $('ctb-reports-count').hidden = !waiting;
   $('ctb-reports-count').textContent = `🐞 ${waiting}`;
   $('ctb-reports-count').title = `${plural(waiting, 'problem report', 'problem reports')} open`;
+  $('ctb-players-count').hidden = !waiting;
+  $('ctb-players-count').textContent = `🐞 ${waiting}`;
+  $('ctb-players-count').title = $('ctb-reports-count').title;
   const key = JSON.stringify(reports);
   if (key === reportsShown) return;
   reportsShown = key;
