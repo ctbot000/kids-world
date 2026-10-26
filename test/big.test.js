@@ -406,8 +406,10 @@ test('each rider sits on the saddle, on the top of the back', () => {
     m.group.updateMatrixWorld(true);
     // The highest point under the rider's hips (not a rotor or a balloon
     // up over it). Standing (a kick scooter), their feet are on the deck,
-    // their hips a rider's own height above it (HIPS, critters.js).
-    const under = (hits) => hits.find((h) => !m.over || !isIn(h.object, m.over));
+    // their hips a rider's own height above it (HIPS, critters.js). Nor
+    // what is hidden (a go-kart's robot driver, there only while it races).
+    const shown = (o) => o.visible && (!o.parent || shown(o.parent));
+    const under = (hits) => hits.find((h) => (!m.over || !isIn(h.object, m.over)) && shown(h.object));
     let top = -Infinity;
     for (const rad of [0, 0.06, 0.12]) {
       for (let i = 0; i < (rad ? 10 : 1); i++) {

@@ -62,6 +62,8 @@ export const XP_FOR = {
   furnished: { xp: 2 },
   volcanohouses: { xp: 5 },
   laps: { xp: 10 },
+  races: { xp: 15 },
+  racewins: { xp: 25 },
   sat: { xp: 2, cap: 50 },
   teas: { xp: 10, cap: 100 },
   arcade: { xp: 10 },

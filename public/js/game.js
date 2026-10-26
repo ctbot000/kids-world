@@ -37,7 +37,7 @@ import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
-import { lapStep, lapTime, raceTrack } from './shared/race.js';
+import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './shared/race.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
@@ -259,6 +259,8 @@ export class Game extends EventTarget {
     // and when it was told of, to count its time down from.
     this.hideseek = null;
     this.hsAt = 0;
+    // A race round a racing island's track (shared/race.js), or null.
+    this.race = null;
     // The gashapon machine beside you, and the one whose window is open.
     this.gashaTarget = null;
     this.gashaAt = null;
@@ -527,6 +529,12 @@ export class Game extends EventTarget {
       case 'hsfx':
         this.hideSeekFx(msg);
         break;
+      case 'rc':
+        this.setRace(msg.s);
+        break;
+      case 'rcfx':
+        this.raceFx(msg);
+        break;
       case 'home':
         this.cameHome(msg);
         break;
@@ -621,6 +629,7 @@ export class Game extends EventTarget {
     this.setGo(msg.go ?? []);
     this.setScreens(msg.screens ?? []);
     this.setHideSeek(msg.hideseek ?? null);
+    this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
     // The song goes on playing over a reconnect; its pieces come after this.
@@ -3807,7 +3816,8 @@ export class Game extends EventTarget {
   moveRide(dt, input) {
     const ride = this.riding;
     const me = this.me;
-    const move = this.steer(input.readMove(), dt);
+    // On the grid for 3, 2, 1… nobody goes till GO.
+    const move = this.raceFrozen() ? { x: 0, y: 0 } : this.steer(input.readMove(), dt);
     const yaw = this.renderer.view.yaw;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
@@ -3991,6 +4001,9 @@ export class Game extends EventTarget {
     if (this.lap?.id !== this.riding.id) this.lap = { id: this.riding.id, best: load('laps', {})[key] };
     const ev = lapStep(this.lap, this.raceTrack, r.x, r.y, r.z, performance.now());
     if (!ev) return;
+    if (ev.lap !== undefined) this.profile.count('laps');
+    // In a race, the race tells you how you are doing instead (raceFx).
+    if (this.racing) return;
     if (ev.start) {
       this.emit('toast', { icon: '🏁', text: 'Go! Your lap clock is running — all the way round and back over the line!' });
       this.sound.play('ding');
@@ -3999,7 +4012,107 @@ export class Game extends EventTarget {
     if (ev.best) save('laps', { ...load('laps', {}), [key]: ev.lap });
     this.emit('toast', { icon: ev.best ? '🏆' : '🏁', text: `Lap: ${lapTime(ev.lap)}${ev.best ? ' — your best yet!' : ` (your best: ${lapTime(this.lap.best)})`}` });
     this.sound.play(ev.best ? 'fanfare' : 'ding');
-    this.profile.count('laps');
+  }
+
+  // ------------------------------------------------ races
+
+  // A race round a racing island's track (shared/race.js), as the island
+  // tells of it, each time it changes.
+  setRace(raw) {
+    this.race = cleanRace(raw);
+    this.raceAt = performance.now();
+    this.emit('race');
+  }
+
+  // The ms left of this phase of the race (lining up, racing, results).
+  raceLeft() {
+    const r = this.race;
+    return r ? Math.max(0, r.left - (performance.now() - this.raceAt)) : 0;
+  }
+
+  // You, in the race going (on the grid, or racing and not over the line yet).
+  get racing() {
+    const r = this.race;
+    if (!r || r.phase === 'done') return false;
+    return r.racers.some((q) => q.pid === this.pid && !q.done) || (r.phase === 'grid' && this.riding?.type === 'kart');
+  }
+
+  // The countdown before GO, when nobody on the grid moves.
+  raceFrozen() {
+    return this.race?.phase === 'grid' && this.riding?.type === 'kart' && this.raceLeft() <= COUNT_MS;
+  }
+
+  // Whether 🏁 Race! can be called: driving a go-kart on a racing island
+  // with no race going.
+  canCallRace() {
+    return Boolean(this.raceTrack) && this.riding?.type === 'kart' && !(this.race && this.race.phase !== 'done');
+  }
+
+  raceStart() {
+    this.send({ t: 'race', op: 'start' });
+    this.sound.play('ui');
+  }
+
+  raceStop() {
+    this.send({ t: 'race', op: 'stop' });
+  }
+
+  // A racer's name: You, a friend's, or the computer's driver.
+  racerName(q) {
+    if (!q) return 'Someone';
+    if (q.pid === undefined) return q.name;
+    return q.pid === this.pid ? 'You' : (this.players.get(q.pid)?.name ?? 'A friend');
+  }
+
+  // What just happened in the race: called, GO, a lap, someone over the
+  // line, the results. Whoever raced earns coins for a place on the podium.
+  raceFx(msg) {
+    const toast = (icon, text) => this.emit('toast', { icon, text });
+    const racer = (key) => this.race?.racers.find((q) => q.key === key) ?? (key === `p${this.pid}` ? { pid: this.pid } : null);
+    const mine = (key) => key === `p${this.pid}`;
+    switch (msg.f) {
+      case 'start': {
+        this.sound.play('fanfare');
+        const who = msg.by === this.pid ? 'You called a race!' : `${this.players.get(msg.by)?.name ?? 'A friend'} called a race!`;
+        toast('🏁', `${who} Get in a go-kart and line up behind the finish line — three laps!`);
+        break;
+      }
+      case 'go':
+        this.sound.play('fanfare');
+        this.emit('race-go');
+        break;
+      case 'lap':
+        if (!mine(msg.key)) break;
+        this.sound.play('ding');
+        toast('🏁', msg.lap === this.race?.laps ? 'Final lap! Go go go!' : `Lap ${msg.lap} of ${this.race?.laps ?? 3}!`);
+        break;
+      case 'finish': {
+        const name = this.racerName(racer(msg.key));
+        if (mine(msg.key)) {
+          this.sound.play(msg.place === 1 ? 'victory' : 'fanfare');
+          toast(msg.place === 1 ? '🏆' : '🏁', `You finished ${ordinal(msg.place)}! ${lapTime(msg.ms)}`);
+        } else {
+          this.sound.play('ding');
+          toast('🏁', `${name} finished ${ordinal(msg.place)}!`);
+        }
+        break;
+      }
+      case 'end': {
+        if (msg.why === 'stopped') toast('🏳️', 'The race was stopped. Call another any time!');
+        else if (msg.why === 'empty' && !msg.results.length) toast('🏁', 'Nobody lined up in a go-kart, so there was no race.');
+        const me = msg.results.find((q) => q.pid === this.pid);
+        if (me && !msg.why?.match(/stopped/)) {
+          const coins = { 1: 5, 2: 3, 3: 1 }[me.place] ?? 0;
+          this.profile.count('races');
+          if (me.place === 1 && msg.results.length > 1) this.profile.count('racewins');
+          if (coins) this.profile.earn(coins);
+          const podium = msg.results.slice(0, 3).map((q) => `${['🥇', '🥈', '🥉'][q.place - 1]} ${q.pid === undefined ? q.name : q.pid === this.pid ? 'You' : (this.players.get(q.pid)?.name ?? 'A friend')}`).join('  ');
+          toast(me.place === 1 ? '🏆' : '🏁', `${podium}${coins ? `  🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}!` : ''}`);
+        }
+        break;
+      }
+    }
+    this.emit('race');
   }
 
   // The lawn mower's blade cutting the grass it rolls over short (riding.js),
@@ -5135,6 +5248,8 @@ export class Game extends EventTarget {
       // small to see, and is not drawn.
       const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      // A go-kart racing with nobody in it has the computer's driver at the wheel.
+      if (m.robot) m.robot.visible = state === 'race' && !c.rider;
       if (m.group.visible) {
         const ground = this.renderer.groundUnder(s.x, s.y, s.z);
         m.update(dt, state, moving, ground === null ? 9 : s.y - ground);
@@ -5294,6 +5409,7 @@ export class Game extends EventTarget {
     this.arcadeAt = null;
     this.arcadeTarget = null;
     this.hideseek = null;
+    this.race = null;
     this.gashaAt = null;
     this.gashaTarget = null;
     this.pianoAt = null;

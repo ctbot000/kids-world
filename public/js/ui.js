@@ -25,6 +25,7 @@ import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
+import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
@@ -2138,7 +2139,7 @@ export class UI {
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🎡', 'Fun park', ['A 🎡 Fun Park Island has a roller coaster, a Ferris wheel and a merry-go-round. Walk up to the Ferris wheel or the merry-go-round and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to go round and round with your friends. Get in a roller coaster car at its station and push ahead to climb the hill, then whoosh down the drop!']),
-          card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. Can you beat your best?']),
+          card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. To race, tap 🏁 Race! in your kart: everyone in a go-kart lines up behind the line, the computer drives the karts left over, and after 3, 2, 1, GO! it is three laps — first over the line wins!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
@@ -3091,6 +3092,13 @@ export class UI {
       this.sound.play('ui');
       this.goNextStage();
     };
+    $('race-btn').onmousedown = (e) => e.preventDefault();
+    $('race-btn').onclick = () => {
+      $('race-btn').blur();
+      this.sound.unlock();
+      if (game.canCallRace()) game.raceStart();
+      else game.raceStop();
+    };
     $('defend').onmousedown = (e) => e.preventDefault();
     $('defend').onclick = () => {
       $('defend').blur();
@@ -3155,6 +3163,9 @@ export class UI {
       this.renderHideSeek();
       if (this.modalOpen && $('modal').querySelector('.hideseek-part')) this.drawHideSeekPart?.();
     });
+    on('race-go', () => {
+      this.raceGoAt = performance.now();
+    });
     on('quiz-offer', () => this.quizOfferDialog(true));
     on('quiz', () => this.quizNews());
     on('next-stage', () => this.nextStageNews());
@@ -3188,6 +3199,9 @@ export class UI {
     $('defend').hidden = true;
     $('defense').hidden = true;
     $('hideseek').hidden = true;
+    $('race').hidden = true;
+    $('race-btn').hidden = true;
+    $('race-count').hidden = true;
     $('blindfold').hidden = true;
     this.stopNextStage();
     document.body.classList.remove('playing');
@@ -4342,6 +4356,78 @@ export class UI {
     } else {
       el.replaceChildren(h('span', {}, '🙈 Hide and seek is over'), found);
     }
+  }
+
+  // A race on a racing island: over the hotbar, the countdown to line up,
+  // then your lap, your place and the race's time (or, watching, who is in
+  // front), then the podium; and 3, 2, 1, GO! big over the track. Called
+  // every frame, so it changes only what changed.
+  renderRace(g) {
+    const r = g?.race;
+    const el = $('race');
+    const count = $('race-count');
+    const left = g ? g.raceLeft() : 0;
+    // The countdown, and GO! for a moment after.
+    let big = '';
+    if (r?.phase === 'grid' && left <= COUNT_MS && g.racing) big = String(Math.max(1, Math.ceil(left / 1000)));
+    else if (performance.now() - (this.raceGoAt ?? -1e9) < 1000 && g?.racing) big = 'GO!';
+    if (count.textContent !== big) {
+      count.textContent = big;
+      count.classList.toggle('go', big === 'GO!');
+      if (big) this.sound.play(big === 'GO!' ? 'ding' : 'ui');
+    }
+    if (count.hidden === Boolean(big)) count.hidden = !big;
+    const secs = Math.ceil(left / 1000);
+    const going = r?.phase === 'race' ? Math.floor((RACE_MS - left) / 1000) : 0;
+    const key = r ? `${r.phase}|${secs}|${going}|${r.racers.map((q) => `${q.key}:${q.lap}:${q.place}`).join()}` : '';
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.hidden = !r;
+    if (!r) return;
+    const me = r.racers.findIndex((q) => q.pid === g.pid);
+    const clock = `${Math.floor(going / 60)}:${String(going % 60).padStart(2, '0')}`;
+    if (r.phase === 'grid') {
+      el.replaceChildren(h('span', {}, `🏁 Race in ${secs}`), h('span', { class: 'muted' }, g.riding?.type === 'kart' ? `${r.racers.length} lined up — behind the line!` : 'Get in a 🏎️ go-kart to race!'));
+    } else if (r.phase === 'race') {
+      const mine = r.racers[me];
+      if (mine) {
+        el.replaceChildren(
+          h('span', {}, mine.done ? `🏁 ${lapTime(mine.ms)}` : `🏁 Lap ${Math.max(1, mine.lap)}/${r.laps}`),
+          h('span', { class: 'place' }, `${ordinal(me + 1)} of ${r.racers.length}`),
+          h('span', { class: 'muted' }, `⏱️ ${clock}`),
+        );
+      } else {
+        el.replaceChildren(h('span', {}, '🏁 Race on!'), h('span', { class: 'place' }, `🥇 ${g.racerName(r.racers[0])}`), h('span', { class: 'muted' }, `⏱️ ${clock}`));
+      }
+    } else {
+      const podium = r.racers.slice(0, 3).map((q, i) => `${['🥇', '🥈', '🥉'][i]} ${g.racerName(q)}`);
+      el.replaceChildren(h('span', {}, '🏆'), ...podium.map((t) => h('span', {}, t)));
+    }
+  }
+
+  // 🏁 Race!, while driving a go-kart on a racing island with no race going;
+  // 🏳️ Stop the race, for whoever called it, while it goes. Down over the
+  // hotbar, to the left of the kart (its own Get out is on its right).
+  raceButton(g, r) {
+    const el = $('race-btn');
+    const race = g.race;
+    const call = g.canCallRace();
+    const stop = !call && race && race.phase !== 'done' && race.by === g.pid;
+    if ((!call && !stop) || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const label = call ? '🏁 Race!' : '🏳️ Stop the race';
+    if (el.dataset.key !== label) {
+      el.dataset.key = label;
+      el.textContent = label;
+      el.setAttribute('aria-label', call ? 'Start a race: everyone in a go-kart lines up' : 'Stop the race');
+    }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 150;
+    el.style.transform = `translate(${Math.max(16 + width / 2, w / 2 - 70 - width / 2)}px, ${Math.max(140, hgt - 230)}px) translate(-50%, -100%)`;
+    el.hidden = false;
   }
 
   // On a tower defense island: the wave, the Star Stone's hearts and the
@@ -6686,6 +6772,8 @@ export class UI {
       }
     }
     this.renderHideSeek();
+    this.renderRace(g);
+    this.raceButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);

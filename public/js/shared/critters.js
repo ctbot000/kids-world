@@ -183,7 +183,7 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // the look-only ones that come and go on their own (the firefly).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race'];
 export const MAX_CRITTERS = 64;
 // The most fireflies an island lets out at once: enough for a little wonder,
 // never a swarm — and they never take a seat an animal could have.
@@ -1329,6 +1329,12 @@ export class CritterSim {
   // a helicopter or a balloon left up in the air comes gently down.
   // Honked at (petted), it honks back for a moment.
   stepVehicle(world, c, dt, now) {
+    // A go-kart racing on a racing island, driven by the computer (race.js
+    // RaceSim moves it).
+    if (c.racing) {
+      c.body = null;
+      return;
+    }
     c.state = c.happyUntil > now ? 'happy' : 'idle';
     // A fun park's ride stands where it was built (and turns by the clock).
     if (CRITTER_INFO[c.type].fixed) return;

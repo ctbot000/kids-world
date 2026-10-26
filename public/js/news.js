@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'races', date: '2026-10-28', icon: '🏆', title: 'Go-kart races', text: 'On a 🏁 Racing Island, tap 🏁 Race! in a go-kart: line up with your friends and the computer\'s robot drivers, and three laps after GO, the first over the line wins!' },
   { id: 'racing', date: '2026-10-28', icon: '🏁', title: 'Racing islands', text: 'Make a 🏁 Racing Island: jump in a 🏎️ go-kart, race round the track and beat your best lap time!' },
   { id: 'pompeii', date: '2026-10-28', icon: '🌋', title: 'The Pompeii sticker', text: 'Stamp 10 cozy houses on a 🌋 volcano island for the new 🌋 Pompeii sticker!' },
   { id: 'hot-tub', date: '2026-10-27', icon: '♨️', title: 'Hot tubs', text: 'A Hot Tub in the toy box\'s 🛋️ Home tab: slip in up to your shoulders and soak with your friends — the steam rises, and hearts show when you share it!' },

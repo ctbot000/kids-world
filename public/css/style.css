@@ -941,6 +941,44 @@ body.fullscreen .full-icon .leave {
   color: #7b4fd0;
 }
 
+/* A race: the lap, your place and the time, over the hotbar. */
+.race-bar .place {
+  color: #d9480f;
+}
+
+/* Race! and Stop the race, in chequered black and white. */
+.ride-button.race-button {
+  background: #f7f5ef;
+  box-shadow:
+    0 4px 0 #4a4e57,
+    0 3px 10px rgba(61, 46, 79, 0.25);
+}
+
+/* 3, 2, 1, GO! in big letters over the track. */
+.race-count {
+  position: fixed;
+  left: 50%;
+  top: 34%;
+  z-index: 14;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: clamp(4rem, 18vmin, 9rem);
+  font-weight: 800;
+  line-height: 1;
+  text-shadow:
+    0 6px 0 rgba(61, 46, 79, 0.45),
+    0 0 24px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.race-count.go {
+  color: #7fe07f;
+}
+
+.race-count[hidden] {
+  display: none;
+}
+
 /* The seeker's eyes shut while everyone hides: the island covered, the count big. */
 .blindfold {
   position: fixed;

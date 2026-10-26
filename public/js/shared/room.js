@@ -15,6 +15,7 @@ import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_REACH, helpHp } fro
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
+import { RaceSim, raceTrack } from './race.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
@@ -364,6 +365,7 @@ export class Room {
     if (this.arcade.left(pid)) this.sendArcade();
     if (this.go.left(pid)) this.sendGo();
     this.hideSeekLeft(pid);
+    this.raceLeft(pid);
     p.online = false;
     this.broadcast({ t: 'left', pid });
     if (this.host === pid) this.passHost();
@@ -507,6 +509,9 @@ export class Room {
         break;
       case 'hideseek':
         this.hideSeekOp(conn, p, msg);
+        break;
+      case 'race':
+        this.raceOp(conn, p, msg);
         break;
       case 'go':
         this.goOp(conn, p, msg);
@@ -698,6 +703,7 @@ export class Room {
       defense: this.defense?.describe(this.monsters) ?? null,
       arcade: this.arcade.pack(this.now()),
       hideseek: this.hideseek.pack(this.now()),
+      race: this.raceSim()?.pack(this.now()) ?? null,
       go: this.go.pack(),
       drawings: this.packDrawings(),
       ...(this.screens ? { screens: this.screens } : {}),
@@ -1079,6 +1085,7 @@ export class Room {
         if (this.arcade.left(target.id)) this.sendArcade();
         if (this.go.left(target.id)) this.sendGo();
         this.hideSeekLeft(target.id);
+        this.raceLeft(target.id);
         this.kicked.add(target.id);
         for (const [token, owner] of this.tokens) if (owner === target.id) this.tokens.delete(token);
         target.online = false;
@@ -1217,6 +1224,12 @@ export class Room {
     if (this.hideseek.round) {
       for (const fx of this.hideseek.step(this.world, now, where)) this.broadcast({ t: 'hsfx', ...fx });
       this.sendHideSeek();
+    }
+    // A race round a racing island's track, as it goes.
+    if (this.race?.round) {
+      const drivers = new Set(this.critters.list.filter((c) => c.type === 'kart' && c.rider).map((c) => c.rider));
+      for (const fx of this.race.step(now, dt, where, drivers)) this.broadcast({ t: 'rcfx', ...fx });
+      this.sendRace();
     }
     // The games at the arcade machines, as they go.
     if (this.arcade.sessions.size) {
@@ -1918,6 +1931,62 @@ export class Room {
     if (text === this.hsSent) return;
     this.hsSent = text;
     this.broadcast({ t: 'hs', s: pack });
+  }
+
+  // ------------------------------------------------ races
+
+  // A racing island's races (race.js), never saved: null on any other island.
+  raceSim() {
+    if (this.race === undefined) {
+      const track = raceTrack(this.world);
+      this.race = track ? new RaceSim(track) : null;
+    }
+    return this.race;
+  }
+
+  // 🏁 Race! from someone driving a go-kart on a racing island (everyone in
+  // a kart lines up, and the island's other karts race too, driven by the
+  // computer), or 🏳️ Stop from whoever called it or the island's owner.
+  raceOp(conn, p, msg) {
+    const race = this.raceSim();
+    if (!race) return;
+    const now = this.now();
+    if (msg.op === 'start') {
+      const kart = this.critters.list.find((c) => c.rider === p.id);
+      if (kart?.type !== 'kart') {
+        this.notice(conn, 'Get in a go-kart to start a race!', 'info');
+        return;
+      }
+      const free = this.critters.list.filter((c) => c.type === 'kart' && !c.rider && !c.passengers?.some(Boolean) && Math.max(Math.abs(c.x - race.track.cx), Math.abs(c.z - race.track.cz)) <= 26);
+      const res = race.start(p.id, free, now);
+      if (res.why === 'busy') this.notice(conn, 'A race is going already!', 'info');
+      if (!res.ok) return;
+      this.broadcast({ t: 'rcfx', f: 'start', by: p.id });
+      this.sendRace();
+      return;
+    }
+    if (msg.op === 'stop') {
+      const r = race.round;
+      if (!race.playing || (r.by !== p.id && p.id !== this.host)) return;
+      this.broadcast({ t: 'rcfx', ...race.end(now, 'stopped') });
+      this.sendRace();
+    }
+  }
+
+  raceLeft(pid) {
+    if (!this.race?.round) return;
+    for (const f of this.race.left(pid, this.now())) this.broadcast({ t: 'rcfx', ...f });
+    this.sendRace();
+  }
+
+  // The race to everyone, as it changes (a new phase, a lap, a place):
+  // each page counts its time down by itself from there.
+  sendRace() {
+    const pack = this.race.pack(this.now());
+    const text = JSON.stringify(pack && { ...pack, left: 0 });
+    if (text === this.raceSent) return;
+    this.raceSent = text;
+    this.broadcast({ t: 'rc', s: pack });
   }
 
   // ------------------------------------------------ Go

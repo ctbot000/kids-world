@@ -788,6 +788,20 @@ function kart(id) {
   for (const side of [-1, 1]) block(body, dark, side * 0.2 - 0.02, 0.34, -0.66, side * 0.2 + 0.02, 0.62, -0.62);
   block(body, paint, -0.36, 0.62, -0.72, 0.36, 0.66, -0.56);
   for (const side of [-1, 1]) block(body, white, side < 0 ? -0.38 : 0.34, 0.56, -0.72, side < 0 ? -0.34 : 0.38, 0.72, -0.56);
+  // The computer's driver, at the wheel only while it races (game.js shows
+  // it): a little robot in a racing helmet.
+  const robot = new THREE.Group();
+  const tin = toon('#c9d3de');
+  block(robot, tin, -0.16, 0.28, -0.36, 0.16, 0.62, -0.1);
+  for (const side of [-1, 1]) block(robot, tin, side * 0.16 - 0.04, 0.42, -0.3, side * 0.16 + 0.04, 0.5, 0.06);
+  robot.add(mesh(sphere(1, 16, 12), paint, 0, 0.8, -0.22, 0.17, 0.17, 0.17));
+  block(robot, toon('#2b2530'), -0.13, 0.76, -0.1, 0.13, 0.86, -0.06);
+  for (const side of [-1, 1]) robot.add(mesh(sphere(1, 8, 6), toon('#7ff3ff', { emissive: 0.6 }), side * 0.06, 0.81, -0.055, 0.025));
+  robot.add(mesh(cylinder(0.01, 0.01, 0.14, 6), dark, 0, 1.02, -0.22));
+  robot.add(mesh(sphere(1, 8, 6), toon('#ff4a4a', { emissive: 0.5 }), 0, 1.1, -0.22, 0.03));
+  robot.visible = false;
+  body.add(robot);
+  v.robot = robot;
   // Little headlight eyes on the nose, and a bumper behind.
   v.eyes = lampEyes(body, 0.13, 0.33, 0.56, 0.06, v.glow);
   const b = mesh(cylinder(0.04, 0.04, 0.7, 10), white, 0, 0.16, -0.74);
