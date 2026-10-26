@@ -96,6 +96,11 @@ export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', cate
 // turns back into the island's own grass, snow or frosting. Natural ground,
 // not something to build with.
 export const GLOOM = def(27, 'gloom', { name: 'Gloomy Ground', tiles: { top: 'gloom-top', side: 'gloom-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
+// Grass the lawn mower has mown (riding.js mowCells): the same grass cut
+// short, the pale stripe a mower leaves behind it. Natural ground like the
+// grass it was — it is what the mower leaves, not something to build with —
+// and mowing it again mows nothing.
+export const MOWED = def(272, 'mowed-grass', { name: 'Mowed Grass', tiles: { top: 'mowed-top', side: 'mowed-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
 
 // ---------------------------------------------------------------- building
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });
@@ -445,9 +450,14 @@ for (const d of defs) {
   EMIT[d.id] = d.light;
   KIND[d.id] = KIND_CODE[d.kind];
 }
-// Natural ground, which the hills tool shapes (farmland is ground too).
+// Natural ground, which the hills tool shapes (farmland is ground too, and
+// so is the lawn mower's short grass).
 export const TERRAIN = new Uint8Array(BLOCK_IDS);
-for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, ...GEM_ROCKS]) TERRAIN[id] = 1;
+for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, MOWED, ...GEM_ROCKS]) TERRAIN[id] = 1;
+// Ground the lawn mower cuts short (riding.js mowCells): the grass of a
+// meadow. Snow and frosting it leaves alone, as it leaves the sand and the stone.
+export const MOWS = new Uint8Array(BLOCK_IDS);
+MOWS[GRASS] = MOWED;
 // Farmland, dry (1) or watered (2): what crops grow in.
 export const SOIL = new Uint8Array(BLOCK_IDS);
 SOIL[FARMLAND] = 1;

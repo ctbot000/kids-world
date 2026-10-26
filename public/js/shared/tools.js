@@ -265,6 +265,29 @@ export function blastEdit(world, x, y, z) {
   return { cells: o.cells(), collected };
 }
 
+// The lawn mower's blade (riding.js mowCells) cutting the grass it rolls
+// over short, [[x, y, z], ...], and taking the plants off it, [[x, y, z], ...]:
+// the grass becomes the mown grass and the plants go in the basket. Like the
+// drill and the roller, it only ever touches what grows there by itself (the
+// cells it is given are the top of the natural ground, and what stands on it
+// its own), so nothing anyone built, planted or furnished is ever cut, nor the
+// crops on anyone's farmland — which is ground, and never mown at all.
+export function mowEdit(world, cells, cut) {
+  const o = new Overlay(world);
+  const collected = [];
+  for (const [x, y, z] of cells) {
+    const id = o.get(x, y, z);
+    if (!B.MOWS[id]) continue;
+    o.set(x, y, z, B.MOWS[id]);
+  }
+  for (const [x, y, z] of cut) {
+    const id = o.get(x, y, z);
+    if (B.KIND[id] !== B.K_PLANT || B.CROP_OF[id] || B.BLOCKS[id]?.grows) continue;
+    if (o.set(x, y, z, B.AIR) && B.block(id).collect) collected.push(id);
+  }
+  return { cells: o.cells(), collected };
+}
+
 export function paintEdit(world, hit, id, size = 1) {
   const o = new Overlay(world);
   if (!B.block(id).cube || id === B.WATER) return { cells: [], collected: [] };

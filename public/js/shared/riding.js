@@ -34,7 +34,7 @@ export function startRide(world, type, m) {
     Object.assign(body, { radius: r.radius, height: r.height, float: r.float });
     if (bodyOverlapsSolid(world, body)) return null;
   }
-  return { type, r, body, yaw: m.yaw, leap: null, held: false, rail: null, drillIn: 0, paintIn: 0 };
+  return { type, r, body, yaw: m.yaw, leap: null, held: false, rail: null, drillIn: 0, paintIn: 0, mowIn: 0 };
 }
 
 // One step of the ride: input is { mx, mz } (which way, in the world), jump,
@@ -52,6 +52,7 @@ export function stepRide(world, ride, input, dt) {
   if (!ride.rail && Math.hypot(b.vx, b.vz) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 8));
   if (r.drill) ev.dig = drill(world, ride, input, dt);
   if (r.paint) ev.paint = painting(world, ride, input, dt);
+  if (r.mow) ev.mow = mowing(world, ride, input, dt);
   return ev;
 }
 
@@ -450,6 +451,61 @@ function painting(world, ride, input, dt) {
   if (!cells.length) return null;
   ride.paintIn = 0.22;
   return cells;
+}
+
+// What the lawn mower cuts under it: the grass it rolls over, cut short
+// (a stripe half a few blocks wide, like the paint van's), and the flowers and
+// plants in its path, which pop off into the driver's basket. Only what grows
+// there by itself — never anything anyone built, planted or furnished (the
+// cells it is given are the top of the natural ground, what stands on it its
+// own), nor farmland anyone turned over themselves, nor the crops growing in
+// it, nor gem rocks. Returns { cells, cut }: cells are the ground it mows
+// [[x, y, z], ...] and cut the plants it takes off (tools.js mowEdit).
+export function mowCells(world, body, half = 1) {
+  const cells = [];
+  const cut = [];
+  for (let i = -half; i <= half; i++) {
+    for (let k = -half; k <= half; k++) {
+      const x = FL(body.x) + i;
+      const z = FL(body.z) + k;
+      if (!world.inBounds(x, 1, z)) continue;
+      // The top of the natural ground in this column, at or just under the
+      // mower, and only if nothing anyone put down stands on it.
+      let ground = null;
+      for (let y = Math.min(FL(body.y) + 1, world.H - 1); y >= 1; y--) {
+        const id = world.get(x, y, z);
+        if (id === B.AIR || id === B.WATER) continue;
+        if (B.MOWS[id]) ground = y;
+        break;
+      }
+      if (ground !== null) cells.push([x, ground, z]);
+      // What grows on that ground: a flower or a plant standing on it, which
+      // the mower takes off with the grass. A crop is a plant someone planted
+      // themselves, and so is a sprout; farmland is ground someone turned over,
+      // and never mown at all.
+      const y = (ground ?? Math.min(FL(body.y) + 1, world.H - 1)) + 1;
+      const on = world.get(x, y, z);
+      if (B.KIND[on] === B.K_PLANT && !B.CROP_OF[on] && !B.BLOCKS[on]?.grows) cut.push([x, y, z]);
+    }
+  }
+  return { cells, cut };
+}
+
+// Rolling along, the mower cuts the grass it passes over, a few times a
+// second and only where there is grass to cut or a plant to take off. What it
+// all becomes is the caller's business: the page mows these cells short and
+// gathers the plants into the basket (game.js mow).
+function mowing(world, ride, input, dt) {
+  ride.mowIn -= dt;
+  if (ride.mowIn > 0) return null;
+  const b = ride.body;
+  // Only while it is rolling along the ground, not standing still (a parked
+  // mower cuts nothing) nor up in the air.
+  if (!b.onGround || Math.hypot(b.vx, b.vz) < 0.4) return null;
+  const { cells, cut } = mowCells(world, b, 1);
+  if (!cells.length && !cut.length) return null;
+  ride.mowIn = 0.22;
+  return { cells, cut };
 }
 
 // How the animal is moving under its rider, for its model.

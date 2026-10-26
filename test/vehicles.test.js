@@ -12,7 +12,7 @@ import { bodyOverlapsSolid, MOVE } from '../public/js/shared/physics.js';
 import { drillCells, getOffAt, railNext, rideState, startRide, stepRide } from '../public/js/shared/riding.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
-import { applyCells, drillEdit, paintVanEdit } from '../public/js/shared/tools.js';
+import { applyCells, drillEdit, mowEdit, paintVanEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
 import { meshChunk } from '../public/js/render/mesher.js';
@@ -341,6 +341,62 @@ test('the paint van paints the ground it rolls over, never anything built, and u
   applyCells(w, back);
   for (let x = 16; x < 30; x++) if (x !== 26 && x !== 29) assert.equal(w.get(x, 5, 20), B.GRASS, `grass again at ${x},20`);
   assert.equal(w.get(20, 5, 21), B.GRASS, 'grass beside it too');
+});
+
+test('the lawn mower is in the toy box, mows a stripe of short grass, gathers the flowers and leaves builds and crops alone', () => {
+  assert.ok(VEHICLES.includes('mower'), 'in the Vehicles tab');
+  const w = meadow();
+  // On the way: a daisy and a tall grass growing on the grass, a brick someone
+  // put down, a fence, farmland someone turned over with a crop growing in it,
+  // and a tree sprout (the grass top is at y = 5).
+  w.set(22, 6, 20, B.DAISY);
+  w.set(24, 6, 21, B.TALL_GRASS);
+  w.set(26, 6, 20, B.TOY_BRICKS[0]);
+  w.set(27, 6, 21, B.FENCE);
+  w.set(29, 5, 20, B.FARMLAND);
+  w.set(29, 6, 20, B.CROP_STAGES[0][2]);
+  w.set(30, 6, 19, B.OAK_SPROUT);
+  const r = ride(w, 'mower', 15.5, 6, 20.5, Math.PI / 2);
+  // Jump honks instead of jumping, as a car does.
+  assert.ok(go(w, r, { jump: true }, 0.2).every((ev) => ev.trick && !ev.jumped), 'a honk, not a jump');
+  const mow = (input, seconds) => {
+    for (let i = 0; i < seconds * 60; i++) {
+      const ev = stepRide(w, r, input, 1 / 60);
+      if (!ev.mow) continue;
+      applyCells(w, mowEdit(w, ev.mow.cells, ev.mow.cut).cells);
+    }
+  };
+  mow({ mx: 1, mz: 0 }, 7);
+  assert.ok(r.body.x > 31, `drove along, to ${r.body.x.toFixed(2)}`);
+  // A stripe of short grass where it rolled, three blocks wide, with the
+  // flowers and plants gone from it.
+  let beside = 0;
+  for (let x = 16; x < 31; x++) {
+    assert.equal(w.get(x, 5, 20), B.MOWED, `mown at ${x},20`);
+    if (w.get(x, 5, 21) === B.MOWED) beside++;
+  }
+  assert.ok(beside >= 10, `a stripe either side (${beside})`);
+  assert.equal(w.get(22, 6, 20), B.AIR, 'the daisy taken off');
+  assert.equal(w.get(24, 6, 21), B.AIR, 'the tall grass taken off');
+  assert.equal(w.get(FL(r.body.x), 5, FL(r.body.z)), B.MOWED, 'and where it stands');
+  // Never anything anyone put down, nor planted, nor the farmland or its crop.
+  assert.equal(w.get(26, 6, 20), B.TOY_BRICKS[0], 'not the bricks');
+  assert.equal(w.get(26, 5, 20), B.GRASS, 'nor the grass under them');
+  assert.equal(w.get(27, 6, 21), B.FENCE, 'not the fence');
+  assert.equal(w.get(29, 5, 20), B.FARMLAND, 'not the farmland');
+  assert.equal(w.get(29, 6, 20), B.CROP_STAGES[0][2], 'nor the crop in it');
+  assert.equal(w.get(30, 6, 19), B.OAK_SPROUT, 'not a sprout');
+  assert.equal(w.get(10, 5, 20), B.GRASS, 'nothing where it never went');
+  // Standing still mows nothing.
+  w.set(FL(r.body.x), 5, FL(r.body.z), B.GRASS);
+  mow({}, 1);
+  assert.equal(w.get(FL(r.body.x), 5, FL(r.body.z)), B.GRASS, 'standing still');
+  // Getting off leaves it beside you, where it stays.
+  const at = { x: r.body.x, y: r.body.y, z: r.body.z, yaw: r.yaw };
+  const off = getOffAt(w, r);
+  assert.ok(Math.hypot(off.x - at.x, off.z - at.z) > 0.7, 'getting off beside it');
+  assert.deepEqual([r.body.x, r.body.y, r.body.z], [at.x, at.y, at.z], 'the mower stays where it was');
+  assert.ok(!bodyOverlapsSolid(w, r.body));
 });
 
 test('a mine cart rolls along its rails, round a corner, up a slope and back down it, and stops at the end of the line', () => {
