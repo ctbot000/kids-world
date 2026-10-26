@@ -1175,12 +1175,14 @@ test('a huge circus tent put down from the toy box with a click is walked into t
   const cloth = await page.evaluate((cloth) => window.kidsWorld.game.world.blocks.filter((id) => cloth[id]).length, [...CLOTH]);
   assert.ok(cloth > 600, `${cloth} blocks of tent cloth`);
   // In front of its porch, walking straight in, past the way in and the benches to the ring
-  // (with no big animal or vehicle of the random island standing in the way),
-  // by day all the while: the hint is only for daytime, and a slow page can
-  // still be walking when the island's evening comes. What the toasts say is
+  // (with no animal or vehicle of the random island standing in the way: you
+  // keep out of every one the page has, and the page hears they are gone
+  // only at the room's next tick, so the walk waits for that), by day all
+  // the while: the hint is only for daytime, and a slow page can still be
+  // walking when the island's evening comes. What the toasts say is
   // kept as they come: one is gone in four seconds, sooner than a slow page
   // gets round to looking.
-  await page.evaluate(async (t) => {
+  const gone = await page.evaluate((t) => {
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
     room.settings.day = 'day';
@@ -1188,8 +1190,13 @@ test('a huge circus tent put down from the toy box with a click is walked into t
     room.broadcast(room.envMessage());
     kw.toasted = [];
     kw.game.addEventListener('toast', (e) => kw.toasted.push(e.detail.text));
-    const { BIG, VEHICLES } = await import('/js/shared/critters.js');
-    for (const c of [...room.critters.list]) if (BIG.includes(c.type) || VEHICLES.includes(c.type)) room.critters.remove(c.id);
+    const ids = room.critters.list.map((c) => c.id);
+    for (const id of ids) room.critters.remove(id);
+    return ids;
+  }, tent);
+  await until(page, (ids) => ids.every((id) => !window.kidsWorld.game.critters.has(id)), gone);
+  await page.evaluate((t) => {
+    const kw = window.kidsWorld;
     Object.assign(kw.game.me.body, { x: t.x, y: t.y, z: t.z, vx: 0, vy: 0, vz: 0 });
     kw.renderer.view.yaw = Math.atan2(-t.f[0], -t.f[1]);
     kw.step(1 / 60, 5);
