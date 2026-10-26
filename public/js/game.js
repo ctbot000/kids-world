@@ -38,7 +38,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
-import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
+import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -1582,6 +1582,9 @@ export class Game extends EventTarget {
       }
     }, lands * 1000);
     if (best) return best.id;
+    // Nothing to bop but perhaps a door: one the swing passes through swings
+    // open, and the next bop shuts it again.
+    if (this.bopDoor(b, fx, fz, reach)) return null;
     // A monster you can see but not reach: say how bopping works, now and then.
     const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
     if (near && now > (this.toldReach ?? 0)) {
@@ -1589,6 +1592,33 @@ export class Game extends EventTarget {
       this.emit('toast', { icon: weapon?.icon ?? '👊', text: blaster ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
     }
     return null;
+  }
+
+  // A door the swing of the fist (👊 or X) passes through: the one the ray of
+  // your bop meets first, a step in front of you, whatever tool you hold.
+  // Swinging at it swings it open (or shut again), which everyone on the
+  // island sees. Returns true when one swung.
+  bopDoor(b, fx, fz, reach) {
+    const hit = this.doorAhead(b, fx, fz, reach);
+    if (!hit) return false;
+    const cells = doorEdit(this.world, hit.x, hit.y, hit.z);
+    if (!cells.length) return false;
+    // Anyone may bop a door, wherever the island's owner lets friends build
+    // or not: nobody is ever stuck in or out. A bop is not a build, so Undo
+    // never takes it back.
+    if (!this.edit('door', cells, { undoable: false, anyone: true })) return false;
+    this.sound.play('place', { kind: B.block(cells[3]).sound });
+    return true;
+  }
+
+  // The door straight ahead within a swing's reach (the cell it is in), or
+  // null: the ray goes at waist height, as a door fills one cell, the lower
+  // of a doorway two blocks high, and at chest height would pass over it.
+  doorAhead(b = this.me?.body, fx = Math.sin(this.me?.yaw ?? 0), fz = Math.cos(this.me?.yaw ?? 0), reach = ARM_REACH + (wornWeapon(this.profile.data.gear)?.reach ?? 0)) {
+    if (!this.world || !b) return null;
+    const stop = (id) => B.DOOR[id] === 1 || B.SOLID[id] === 1;
+    const hit = raycast(this.world, b.x, b.y + 0.5, b.z, fx, 0, fz, Math.max(1.8, reach + 0.6), stop);
+    return hit && B.DOOR[hit.id] ? hit : null;
   }
 
   // On a dragon's back (attack above): a burst of fire ahead of it, told to
@@ -3834,12 +3864,13 @@ export class Game extends EventTarget {
   }
 
   // Makes a change here at once and asks the island to make it for everyone.
-  edit(kind, cells, { expect = null, undoable = true } = {}) {
+  edit(kind, cells, { expect = null, undoable = true, anyone = false } = {}) {
     if (!cells.length) return false;
     // Only the owner builds here right now (or it is the shared isle,
     // nobody's to build on): nothing changes, so nothing is picked up,
-    // collected or spent either (the island would only say no).
-    if (!this.mayBuild) {
+    // collected or spent either (the island would only say no). A bopped
+    // door is anyone's to swing, so it slips past this.
+    if (!this.mayBuild && !anyone) {
       this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is — no building here!` : 'The island owner is the only builder right now.', level: 'warn' });
       this.sound.play('no');
       return false;
@@ -3934,9 +3965,11 @@ export class Game extends EventTarget {
     const w = this.world;
     for (let i = last.cells.length - 5; i >= 0; i -= 5) {
       const [x, y, z, before, after] = last.cells.slice(i, i + 5);
-      if (w.get(x, y, z) !== after) continue;
+      // A door put down and bopped open since is still the one put down.
+      const here = w.get(x, y, z);
+      if (here !== after && !(B.DOOR[after] && B.turnedDoor(after) === here)) continue;
       cells.push(x, y, z, before);
-      expect.push(after);
+      expect.push(here);
     }
     if (this.edit('undo', cells, { expect, undoable: false })) {
       this.sound.play('pop');
@@ -3971,6 +4004,8 @@ export class Game extends EventTarget {
       if (kind === 'pick') this.sound.play('pop');
       else if (kind === 'build' || kind === 'stamp') this.sound.play('place', { kind: B.block(id).sound });
       else if (kind === 'water') this.sound.play('water');
+      // A friend's bop on a door: the same creak of wood as your own.
+      else if (kind === 'door') this.sound.play('place', { kind: B.block(id).sound });
     }
   }
 
