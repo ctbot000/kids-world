@@ -288,6 +288,23 @@ export function paintEdit(world, hit, id, size = 1) {
   return { cells: o.cells(), collected: gone.filter((g) => B.block(g).collect) };
 }
 
+// The paint van's roller (riding.js paintCells) painting the ground it rolls
+// over, [[x, y, z], ...], as the brush does: only natural ground (the cells
+// it is given are the top of it, nothing anyone built, planted or furnished
+// on top), so a trail is a road or a field of colour.
+export function paintVanEdit(world, cells, id) {
+  const o = new Overlay(world);
+  if (!B.block(id).cube || id === B.WATER) return { cells: [], collected: [] };
+  const touched = [];
+  for (const [x, y, z] of cells) {
+    const here = o.get(x, y, z);
+    if (here === B.MAGIC_FLOOR || here === id) continue;
+    if (o.set(x, y, z, id)) touched.push([x, y, z]);
+  }
+  const gone = settle(o, touched);
+  return { cells: o.cells(), collected: gone.filter((g) => B.block(g).collect) };
+}
+
 // The highest natural ground block in a column at or below y.
 function groundAt(o, x, z, fromY) {
   for (let y = Math.min(fromY, o.world.H - 1); y >= 1; y--) {

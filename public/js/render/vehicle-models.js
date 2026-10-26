@@ -141,6 +141,7 @@ function car(id) {
 }
 
 const BOATS = ['#e8453c', '#3a73d8', '#2fc1b3', '#8c5bd6', '#f59331'];
+const PAINT_VANS = ['#f4f1ea', '#8fd3ff', '#ffd166', '#c7a4ff'];
 
 function boat(id) {
   const v = rig();
@@ -614,7 +615,76 @@ function balloon(id) {
   return { ...v, air: true, height: 4.6, center: 1.4, pick: 1.4, shadow: 1, seen: 220 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon };
+// The paint van: a boxy little van with a stripe, a barrel of paint on its
+// roof and a wide roller under its back, which paints the ground it rolls
+// over (riding.js paintCells) in the colour picked with the Paint tool.
+function paintvan(id) {
+  const v = rig();
+  const { body } = v;
+  const shell = toon(PAINT_VANS[id % PAINT_VANS.length]);
+  const white = toon('#f7f5ef');
+  const dark = toon('#4a4e57');
+  v.wheels = [
+    [-1, 1],
+    [1, 1],
+  ].map(([sx]) => wheel(body, sx * 0.52, 0.2, 0.55, 0.2, 0.15));
+  // The cab in front, with its windscreen, and the body behind, with studs.
+  block(body, shell, -0.45, 0.24, 0.2, 0.45, 0.66, 0.8);
+  block(body, shell, -0.45, 0.66, 0.2, 0.45, 0.72, 0.8);
+  studs(body, shell, 0.72, [-0.2, 0.2], [0.32, 0.68]);
+  block(body, white, -0.45, 0.34, 0.2, 0.45, 0.62, 0.8);
+  block(body, toon('#bfe8ff', { transparent: true, opacity: 0.55 }), -0.38, 0.68, 0.44, 0.38, 0.94, 0.5);
+  block(body, white, -0.41, 0.66, 0.43, -0.38, 0.96, 0.51);
+  block(body, white, 0.38, 0.66, 0.43, 0.41, 0.96, 0.51);
+  block(body, white, -0.41, 0.93, 0.43, 0.41, 0.96, 0.51);
+  v.eyes = lampEyes(body, 0.22, 0.5, 0.79, 0.1, v.glow);
+  // The boxy back, open at the top where the seat is, with a stripe of paint
+  // down its side and a barrel on the roof.
+  block(body, shell, -0.45, 0.24, -0.8, 0.45, 0.9, 0.2);
+  block(body, shell, -0.45, 0.9, -0.8, 0.45, 0.96, 0.2);
+  studs(body, shell, 0.96, [-0.2, 0.2], [-0.7]);
+  block(body, white, -0.46, 0.5, -0.8, -0.43, 0.7, 0.2);
+  block(body, white, 0.43, 0.5, -0.8, 0.46, 0.7, 0.2);
+  block(body, white, -0.45, 0.24, -0.42, 0.45, 0.9, -0.36);
+  for (const side of [-1, 1]) {
+    block(body, toon('#e8453c'), side * 0.4, 0.5, -0.7, side * 0.4 + 0.06 * side, 0.56, -0.3);
+    block(body, toon('#fcd535'), side * 0.4, 0.58, -0.7, side * 0.4 + 0.06 * side, 0.64, -0.3);
+  }
+  // The driver's seat in the middle, on top of the back, facing forward.
+  v.seat = block(body, v.pad, -0.24, 0.96, -0.2, 0.24, 1.03, 0.28);
+  block(body, v.pad, -0.24, 0.96, -0.34, 0.24, 1.4, -0.26);
+  block(body, dark, -0.3, 0.96, -0.22, 0.3, 1.0, 0.3);
+  body.add(mesh(cylinder(0.02, 0.02, 0.3, 6), dark, 0, 1.0, 0.1));
+  body.add(mesh(sphere(1, 10, 8), toon('#e8453c'), 0, 1.16, 0.1, 0.05));
+  // A barrel of paint up on the roof, and a light on a pole, flashing while
+  // it paints.
+  body.add(mesh(cylinder(0.16, 0.16, 0.3, 14), shell, -0.2, 1.11, -0.66));
+  body.add(mesh(cylinder(0.17, 0.17, 0.05, 14), dark, -0.2, 1.28, -0.66));
+  body.add(mesh(cylinder(0.12, 0.12, 0.06, 14), toon('#f7f5ef'), -0.2, 1.02, -0.66));
+  const beacon = toon('#ff9a2e', { emissive: 0.3 }).clone();
+  v.owned.push(beacon);
+  body.add(mesh(cylinder(0.02, 0.02, 0.3, 6), dark, 0.3, 1.11, -0.62));
+  body.add(mesh(sphere(1, 12, 10), beacon, 0.3, 1.28, -0.62, 0.07));
+  v.beacon = beacon;
+  // The roller under the back: a wide drum on two small wheels, which paints
+  // as it turns.
+  const roller = new THREE.Group();
+  roller.position.set(0, 0.2, -0.55);
+  const drum = mesh(cylinder(0.2, 0.2, 0.85, 18), toon('#f4f1ea'));
+  drum.rotation.z = Math.PI / 2;
+  roller.add(drum);
+  for (const end of [-1, 1]) {
+    const cap = mesh(cylinder(0.08, 0.08, 0.06, 12), toon(METAL), (end * 0.85) / 2, 0, 0);
+    cap.rotation.z = Math.PI / 2;
+    roller.add(cap);
+  }
+  body.add(roller);
+  v.roller = roller;
+  for (const side of [-1, 1]) v.wheels.push(wheel(body, side * 0.52, 0.14, -0.2, 0.14, 0.1));
+  return { ...v, height: 1.45, center: 0.6, pick: 0.9, shadow: 0.9, seen: 110 };
+}
+
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -675,5 +745,11 @@ export function drive(m, dt, state, moving, air = 0) {
     const working = moving || state === 'walk' || state === 'run';
     m.drill.rotation.z += dt * (working ? 16 : honk ? 8 : 0);
     m.beacon.emissiveIntensity = working || honk ? 0.4 + Math.max(0, Math.sin(t * 9)) * 0.9 : 0.3;
+  }
+  // The paint van's roller turns as it goes, and its light flashes while it
+  // paints (see riding.js).
+  if (m.roller) {
+    m.roller.rotation.z -= (go * dt) / 0.2;
+    m.beacon.emissiveIntensity = moving || honk ? 0.4 + Math.max(0, Math.sin(t * 9)) * 0.9 : 0.3;
   }
 }

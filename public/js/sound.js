@@ -575,7 +575,8 @@ export class Sound {
       // (type): the car beep-beeps, the boat toots, the mine cart rings its
       // bell, the digger goes vrrrm, the bus goes honk-honk, the ferry
       // gives one long, low toot, the helicopter goes beep-boop, the
-      // balloon's burner roars, and the kick scooter's bell goes ring-ring;
+      // balloon's burner roars, the kick scooter's bell goes ring-ring, and
+      // the paint van beeps its horn;
       // the sled gives a whistle as it sets off.
       case 'helicopter':
       case 'balloon':
@@ -586,6 +587,7 @@ export class Sound {
       case 'digger':
       case 'minecart':
       case 'scooter':
+      case 'paintvan':
         this.tone(70 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.45, gain: 0.05, slide: 110, slideTime: 0.3, vibrato: 14 });
         this.play('honk', { type: name });
         break;

@@ -36,7 +36,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -118,6 +118,12 @@ export const CRITTER_INFO = {
   // in front over the front of the deck, and a small hop carries it over the
   // little steps in its way.
   sled: { name: 'Sled', icon: '🛷', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.3, z: -0.04, radius: 0.4, height: 1.6, float: 0.25, spread: 0.1, reach: 0.7, walk: 4.5, run: 7.5, swim: 2, jump: 7.6, sled: { snow: { walk: 5.5, run: 8, push: 10, coast: 2, slope: 14, top: 12 }, ground: { walk: 2.6, run: 3.8, push: 7, coast: 7, slope: 5, top: 6 } } }, names: ['Whizz', 'Woody', 'Slippy', 'Toboggan', 'Whoosh', 'Snowball', 'Zoomer', 'Frosty', 'Swifty', 'Bolt'] },
+  // The paint van (ride.paint: it paints — see riding.js). Driving it paints
+  // the natural ground it rolls over, a swath a few blocks wide, in the colour
+  // picked with the Paint tool. It paints only natural ground, never anything
+  // anyone built, planted or furnished — the same rule the digger's drill
+  // follows the other way round.
+  paintvan: { name: 'Paint Van', icon: '🚐', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { paint: true, seat: 0.92, z: -0.22, radius: 0.6, height: 2.15, float: 0.75, spread: 0.15, reach: 1.3, walk: 3.5, run: 5, swim: 1.8, jump: 8.5, trick: 'honk' }, names: ['Splodgy', 'Drippy', 'Brushy', 'Roller', 'Splashy Van', 'Dabby', 'Stripey', 'Dauber', 'Painty', 'Colourful'] },
   // The dragon, the one dragon of a volcano island (worldgen.js): a great
   // green dragon, twice as big as a pony and more, asleep on the volcano,
   // wings folded, until someone comes near — then it wakes and breathes

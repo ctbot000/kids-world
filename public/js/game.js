@@ -38,7 +38,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { underTent } from './shared/tents.js';
-import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
+import { applyCells, buildEdit, drillEdit, harvestEdit, hillEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
@@ -3581,6 +3581,7 @@ export class Game extends EventTarget {
       }
     }
     if (ev.dig) this.drill(ev.dig);
+    if (ev.paint) this.paintTrail(ev.paint);
     // Along the rails: clickety-clack over each rail, a clunk at the end of the line.
     if (ev.rolled) {
       this.railed += ev.rolled;
@@ -3702,6 +3703,55 @@ export class Game extends EventTarget {
     for (let i = 3; i < cells.length; i += 4) if (cells[i] === B.AIR || cells[i] === B.WATER) dug++;
     this.profile.count('drilled', dug);
     if (plan.collected.length) this.collect(plan.collected, cells);
+  }
+
+  // The paint van's roller painting the ground it rolls over (riding.js), in
+  // the colour picked with the Paint tool. Undo takes the whole trail away, a
+  // swath at a time as it was painted.
+  paintTrail(cells) {
+    // Only the owner builds on this island right now (or it is the shared
+    // isle, nobody's to build on): the roller rolls on dry.
+    if (!this.mayBuild) {
+      if (!this.riding.toldNoPaint) this.emit('notice', { text: this.staysAsMade ? `${this.world.name} stays just as it is, so the paint van cannot paint.` : 'The island owner is the only builder right now, so the paint van cannot paint.', level: 'info' });
+      this.riding.toldNoPaint = true;
+      return;
+    }
+    const id = this.paintVanColor();
+    if (!id) return;
+    const plan = paintVanEdit(this.world, cells, id);
+    if (!plan.cells.length) return;
+    // What each swath paints over, noted before it is painted, as undo keeps
+    // it: [x, y, z, before, after, ...]. A block painted twice keeps its first
+    // colour for undo, the one that was there when the trail began.
+    const w = this.world;
+    const undo = [];
+    for (let i = 0; i < plan.cells.length; i += 4) undo.push(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2], w.get(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2]), plan.cells[i + 3]);
+    if (!this.edit('paint', plan.cells, { undoable: false })) return;
+    // One undo for the whole trail: each swath joins the last one's, so long as
+    // the same drive is going on (a moment since the last one). Undo takes the
+    // whole road or field away at once. Redoing over a cell it painted already
+    // (a U-turn) leaves it as it was: it was painted to stay that colour.
+    const now = performance.now();
+    const last = this.undoStack[this.undoStack.length - 1];
+    if (last?.kind === 'paint' && last.drive === this.riding?.id && now - last.at < 2000) last.at = now;
+    else {
+      this.undoStack.push({ kind: 'paint', drive: this.riding?.id, at: now, cells: [] });
+      if (this.undoStack.length > UNDO_KEEP) this.undoStack.shift();
+      this.emit('undo', this.undoStack.length);
+    }
+    const trail = this.undoStack[this.undoStack.length - 1];
+    trail.done ??= new Set();
+    for (let i = 0; i < undo.length; i += 5) {
+      const k = `${undo[i]},${undo[i + 1]},${undo[i + 2]}`;
+      if (trail.done.has(k)) continue;
+      trail.done.add(k);
+      trail.cells.push(undo[i], undo[i + 1], undo[i + 2], undo[i + 3], undo[i + 4]);
+    }
+    this.previewKey = '';
+    const fx = this.renderer.effects;
+    for (let i = 0; i < plan.cells.length; i += 8) fx.sparkles(plan.cells[i] + 0.5, plan.cells[i + 1] + 0.7, plan.cells[i + 2] + 0.5, 2, [B.BLOCKS[id].color, '#ffffff']);
+    this.sound.play('paint');
+    this.profile.count('painted', plan.cells.length / 4);
   }
 
   // Where an animal with someone on it is drawn: under you, as you move it;
@@ -4004,6 +4054,15 @@ export class Game extends EventTarget {
       return c ? c.sprout || c.item : 0;
     }
     return this.profile.data.hotbar[this.slot] ?? B.GRASS;
+  }
+
+  // The colour the paint van paints in: the one picked with the Paint tool
+  // (a cube block in the hotbar slot), kept from before if what is in the
+  // slot now is no colour to paint with.
+  paintVanColor() {
+    const id = this.profile.data.hotbar[this.slot] ?? 0;
+    if (id && B.block(id).cube && id !== B.WATER) this.lastPaint = id;
+    return this.lastPaint ?? 0;
   }
 
   // Everything the pointer could mean: a monster, an animal, a block, or

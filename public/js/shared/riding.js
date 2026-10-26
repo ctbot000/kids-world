@@ -8,7 +8,8 @@
 // digs out the ground it drives into; a mine cart rolls along rails, round
 // their corners and up and down their slopes, and rolls on by itself. The
 // helicopter and the balloon fly: jump held lifts them off and up, down
-// brings them down, and they hover with neither.
+// brings them down, and they hover with neither. The paint van paints the
+// ground it rolls over, in the colour its driver picked with the Paint tool.
 import * as B from './blocks.js';
 import { CRITTER_INFO, leapFrom, standHeight, SURFACE, swimmable, waterColumn } from './critters.js';
 import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
@@ -33,7 +34,7 @@ export function startRide(world, type, m) {
     Object.assign(body, { radius: r.radius, height: r.height, float: r.float });
     if (bodyOverlapsSolid(world, body)) return null;
   }
-  return { type, r, body, yaw: m.yaw, leap: null, held: false, rail: null, drillIn: 0 };
+  return { type, r, body, yaw: m.yaw, leap: null, held: false, rail: null, drillIn: 0, paintIn: 0 };
 }
 
 // One step of the ride: input is { mx, mz } (which way, in the world), jump,
@@ -50,6 +51,7 @@ export function stepRide(world, ride, input, dt) {
   const b = ride.body;
   if (!ride.rail && Math.hypot(b.vx, b.vz) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 8));
   if (r.drill) ev.dig = drill(world, ride, input, dt);
+  if (r.paint) ev.paint = painting(world, ride, input, dt);
   return ev;
 }
 
@@ -402,6 +404,50 @@ function drill(world, ride, input, dt) {
   }
   if (!cells.length) return null;
   ride.drillIn = 0.22;
+  return cells;
+}
+
+// ------------------------------------------------ the paint van
+
+// What the paint van's roller paints under it: the natural ground of the
+// cells it rolls over, a swath (half) a few blocks wide. Only natural ground —
+// never anything anyone built, planted or furnished, nor farmland anyone
+// turned over themselves, nor gem rocks — the same rule the digger's drill
+// follows the other way round. Returns the cells, [[x, y, z], ...], the top
+// block of each (the caller paints it; tools.js paintVanEdit).
+export function paintCells(world, body, half = 1) {
+  const out = [];
+  for (let i = -half; i <= half; i++) {
+    for (let k = -half; k <= half; k++) {
+      const x = FL(body.x) + i;
+      const z = FL(body.z) + k;
+      if (!world.inBounds(x, 1, z)) continue;
+      // The top of the natural ground in this column, at or just under the
+      // van, and only if nothing anyone put down stands on it.
+      for (let y = Math.min(FL(body.y) + 1, world.H - 1); y >= 1; y--) {
+        const id = world.get(x, y, z);
+        if (id === B.AIR || id === B.WATER) continue;
+        if (B.TERRAIN[id] && !B.SOIL[id] && !B.GEM_ROCK[id]) out.push([x, y, z]);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// Rolling along, the van paints the ground it passes over, a few times a
+// second and only where there is ground to paint. The colour comes from the
+// driver (ride.paintId, set by the page: the Paint tool's chosen colour).
+function painting(world, ride, input, dt) {
+  ride.paintIn -= dt;
+  if (ride.paintIn > 0) return null;
+  const b = ride.body;
+  // Only while it is rolling along the ground, not standing still (a parked
+  // van paints nothing) nor up in the air.
+  if (!b.onGround || Math.hypot(b.vx, b.vz) < 0.4) return null;
+  const cells = paintCells(world, b, 1);
+  if (!cells.length) return null;
+  ride.paintIn = 0.22;
   return cells;
 }
 
