@@ -87,8 +87,9 @@ export function pictureCorners(id, x, y, z) {
 
 // Where the drawing hangs in a picture frame, in the model's own layout
 // (facing -z, furniture.js): the same shape as a board's picture, over the
-// frame's white, just in front of it.
-export const FRAME_AT = { x0: 0.18, x1: 0.82, y0: 0.34, y1: 0.82, z: 0.922 };
+// frame's white, just in front of it and of the little landscape an empty
+// frame shows.
+export const FRAME_AT = { x0: 0.18, x1: 0.82, y0: 0.34, y1: 0.82, z: 0.91 };
 
 // The drawing's corners in the world on the frame with block `id` at cell
 // (x, y, z), as pictureCorners does for a board.

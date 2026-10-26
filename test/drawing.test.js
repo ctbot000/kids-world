@@ -85,7 +85,10 @@ test('the picture frame hangs on a wall beside the picture, in the Home tab, its
   // The white the drawing lies over, just behind it, its own shape.
   const white = boxes.find((b) => b[6] === '#f7f5ef');
   assert.deepEqual(white.slice(0, 2).concat(white.slice(3, 5)), [FRAME_AT.x0, FRAME_AT.y0, FRAME_AT.x1, FRAME_AT.y1]);
-  assert.ok(white[2] > FRAME_AT.z && white[2] - FRAME_AT.z < 0.01, 'the drawing just in front of the white');
+  assert.ok(white[2] > FRAME_AT.z && white[2] - FRAME_AT.z < 0.02, 'the drawing just in front of the white');
+  // In front of the little landscape an empty frame shows too, so a drawing
+  // hung in it covers it.
+  for (const b of boxes) assert.ok(b[2] > FRAME_AT.z, `the drawing in front of the box at z ${b[2]}`);
   assert.ok(Math.abs((FRAME_AT.x1 - FRAME_AT.x0) / (FRAME_AT.y1 - FRAME_AT.y0) - PICTURE_W / PICTURE_H) < 1e-9, 'the drawing its own shape');
   // And facing out, whichever way the frame was put on the wall.
   for (let k = 0; k < 4; k++) {
