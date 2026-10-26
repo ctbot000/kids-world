@@ -16,7 +16,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { GUARD_BACK_MS } from '../public/js/shared/adventure.js';
 import { CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { LEAK, waveOf } from '../public/js/shared/defense.js';
-import { HIT_MS, BUMP_HP, KINDS, maxHp, MONSTER_KINDS, MONSTER_STATES, MonsterSim, MOSQUITO_HOVER, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { HIT_MS, BUMP_HP, isHeavy, KINDS, maxHp, MONSTER_KINDS, MONSTER_STATES, MonsterSim, MOSQUITO_HOVER, QUEEN_HEAL_MS, QUEEN_LONELY_MS, QUEEN_NEAR, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { MosquitoModel } from '../public/js/render/mosquito-model.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -321,6 +321,85 @@ test('the enemy mosquito’s wings beat together in every state, and its eyes gl
   }
   assert.ok(m.squash < 0.3, 'the squash dies away');
   m.dispose();
+});
+
+test('the Queen Mosquito is a monster of her own: many hearts, a harder bump, and nobody can land on her', () => {
+  assert.equal(MONSTER_KINDS.indexOf('queen'), 8, 'new kinds go on the end: the wire sends the index');
+  assert.equal(KINDS.queen.hearts, 14, 'many hearts');
+  assert.equal(KINDS.queen.bump, 2, 'a bump twice a giant mosquito’s');
+  assert.equal(KINDS.queen.land, 0, 'nobody lands on her');
+  assert.equal(isHeavy('queen'), true, 'a heavy one: a bigger knock and a bigger pop');
+  const w = meadow();
+  const sim = new MonsterSim(13);
+  const q = sim.add(w, 20.5, 11, 20.5, { camp: 1, kind: 'queen' });
+  assert.equal(q.body.flying, true, 'she comes out on the wing, like her little cousins');
+  assert.ok(q.body.height > 1.15, `bigger than a giant mosquito (${q.body.height})`);
+  const back = unpackMonster(sim.pack()[0]);
+  assert.equal(back.kind, 'queen');
+  assert.deepEqual([back.hearts, back.max], [14, 14]);
+});
+
+test('the Queen Mosquito gets a heart back every two seconds while nobody is near her', () => {
+  const w = meadow();
+  const sim = new MonsterSim(14);
+  // A queen over a camp in the middle of the meadow, well down in her hearts.
+  const q = sim.add(w, 48.5, 11, 48.5, { camp: 1, kind: 'queen' });
+  const camp = { id: 1, kind: 'camp', x: 48.5, y: 11, z: 48.5, r: 7, freed: false, awake: true, back: [], holders: 0, guarded: false };
+  const camps = { campById: () => camp };
+  let now = 1000;
+  // Steps her on by ms with whoever is about, gathering the hearts she got back.
+  const on = (ms, people) => {
+    const healed = [];
+    for (let t = 0; t < ms; t += 100) {
+      now += 100;
+      sim.step(w, 0.1, now, people, false, { roam: false, camps });
+      healed.push(...sim.takeHealed());
+    }
+    return healed;
+  };
+  q.hearts = 8;
+  q.hitAt = 0;
+  q.healAt = 0;
+  assert.equal(q.hearts, 8, 'well down');
+  // Someone within a few steps of her: no heart back.
+  const beside = on(8000, [onFoot(1, 55.5, 48.5)]);
+  assert.ok(Math.hypot(55.5 - q.body.x, 48.5 - q.body.z) < QUEEN_NEAR, 'they are within a few steps of her');
+  assert.deepEqual(beside, [], 'no heart back while someone is near');
+  assert.equal(q.hearts, 8);
+  // Everyone far away: after a few seconds, a heart every two, until she is full.
+  const away = on(QUEEN_LONELY_MS + 6 * QUEEN_HEAL_MS + 2000, [onFoot(1, 20.5, 20.5)]);
+  assert.equal(q.hearts, 14, 'all her hearts back');
+  assert.equal(away.length, 6, `a heart back every ${QUEEN_HEAL_MS / 1000} seconds, six of them`);
+  assert.deepEqual([...new Set(away)], [q.id], 'each one says it was her');
+  // Full up: no more healing.
+  assert.deepEqual(on(5000, [onFoot(1, 20.5, 20.5)]), [], 'full: nothing more to heal');
+  // Someone comes back and bops her: the quiet while nobody was near is forgotten.
+  q.hearts = 8;
+  const backNear = on(4000, [onFoot(1, 55.5, 48.5)]);
+  assert.deepEqual(backNear, [], 'no heart back with someone near again');
+});
+
+test('the Queen Mosquito heals at most a heart every two seconds, not sooner for being hit', () => {
+  const w = meadow();
+  const sim = new MonsterSim(15);
+  const q = sim.add(w, 48.5, 11, 48.5, { camp: 1, kind: 'queen' });
+  const camp = { id: 1, kind: 'camp', x: 48.5, y: 11, z: 48.5, r: 7, freed: false, awake: true, back: [], holders: 0, guarded: false };
+  const camps = { campById: () => camp };
+  let now = 5000;
+  const on = (ms, people) => {
+    const healed = [];
+    for (let t = 0; t < ms; t += 100) {
+      now += 100;
+      sim.step(w, 0.1, now, people, false, { roam: false, camps });
+      healed.push(...sim.takeHealed());
+    }
+    return healed;
+  };
+  // A bop just now: no healing until two seconds after it.
+  q.hearts = 10;
+  q.hitAt = now;
+  const first = on(3 * QUEEN_HEAL_MS, []);
+  assert.ok(first.length >= 1 && first.length <= 2, `a heart back at the earliest two seconds after the bop (${first.length})`);
 });
 
 test('a mosquito left alone goes off, like the others', () => {

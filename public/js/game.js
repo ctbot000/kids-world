@@ -142,6 +142,9 @@ const TOUGH_TOLD = {
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
   queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
 };
+// What popping the Queen Mosquito pays over an ordinary monster's pop (see
+// popped): a few coins, on top of the XP her own count carries (levels.js).
+const QUEEN_POP = { coins: 5 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
 function compass(dx, dz) {
@@ -1244,12 +1247,17 @@ export class Game extends EventTarget {
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
     const here = [p.x, p.y, p.z].every(Number.isFinite);
-    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40);
+    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' || entry?.kind === 'queen' ? 120 : 40);
     if (near) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
       if (entry?.kind === 'big' || entry?.kind === 'knight' || entry?.kind === 'golem') fx.sparkles(p.x, p.y + 0.9, p.z, 30, entry.kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : entry.kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
+      // The Queen Mosquito goes with a big pop of her own, crown and all.
+      if (entry?.kind === 'queen') {
+        fx.sparkles(p.x, p.y + 1.1, p.z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
+        fx.firework(p.x, p.y + 2, p.z);
+      }
       if (entry?.kind === 'king') {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
@@ -1260,10 +1268,17 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
+      // Popping the Queen Mosquito is a feat of its own: a count of her, a
+      // few coins and the XP that comes with it, over and above a monster's.
+      const queen = entry?.kind === 'queen';
+      if (queen) {
+        this.profile.count('queens');
+        this.profile.earn(QUEEN_POP.coins);
+      }
       // The reward for it, where it happened: stars out of the monster, and
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
-      const xp = XP_FOR.popped.xp;
+      const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
       if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
       if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
