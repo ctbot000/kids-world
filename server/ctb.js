@@ -277,6 +277,8 @@ export class Company extends EventEmitter {
     this.wishes = wishes;
     this.reviewing = null;
     this.reviewer = 0;
+    // Whose turn it is to take the next task.
+    this.taker = 0;
     this.proposing = false;
     this.stopped = false;
     this.timer = null;
@@ -343,7 +345,8 @@ export class Company extends EventEmitter {
     }
   }
 
-  // Free workers take the oldest tasks nobody is on; with nothing to do, one
+  // The workers finish one task before anyone takes the next: the oldest
+  // nobody is on, taken by the next of them in turn. With nothing to do, one
   // proposes something now and then.
   poll() {
     if (this.polling || this.stopped || !this.settings.on) return this.polling;
@@ -359,10 +362,8 @@ export class Company extends EventEmitter {
       if (go.length) await this.refresh();
       const busy = new Set(this.workers.filter((w) => w.issue).map((w) => w.issue.number));
       const open = this.tasks.filter((t) => !busy.has(t.number) && ![LABELS.working, LABELS.pr, LABELS.stuck, LABELS.proposal].some((l) => t.labels.includes(l)));
-      for (const w of this.workers.slice(0, this.settings.workers)) {
-        if (w.issue || !open.length) continue;
-        this.work(w, open.shift());
-      }
+      const staff = this.workers.slice(0, this.settings.workers);
+      if (open.length && !this.workers.some((w) => w.issue)) this.work(staff[this.taker++ % staff.length], open.shift());
       this.reviewWishes();
       await this.followWishes();
       const idle = this.workers.slice(0, this.settings.workers).every((w) => !w.issue);

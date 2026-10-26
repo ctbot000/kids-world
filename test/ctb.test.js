@@ -289,14 +289,27 @@ test('failing unit tests go back to the worker, and a task it cannot finish is m
     return { thought: 'done', tool: 'done', title: 'Add mul', summary: 'mul, and add fixed.' };
   });
   const company = new Company({ llm, github, repoDir: repo, workDir: join(dir, 'work'), settings: { ...defaultSettings({}), workers: 2, propose: false }, log: () => {} });
+  // One task at a time, the two workers taking turns.
+  const onIt = [];
+  const poll = company.poll.bind(company);
+  company.poll = () => {
+    const at = poll();
+    for (const w of company.workers) if (w.issue && !onIt.some(([k, n]) => k === w.k && n === w.issue.number)) onIt.push([w.k, w.issue.number, company.workers.filter((v) => v.issue).length]);
+    return at;
+  };
   await company.start();
   after(() => company.stop());
-  await eventually(() => github.issues.every((i) => i.labels.includes(LABELS.pr) || i.labels.includes(LABELS.stuck)) && company.workers.every((w) => !w.issue));
+  await eventually(() => {
+    company.poll();
+    return github.issues.every((i) => i.labels.includes(LABELS.pr) || i.labels.includes(LABELS.stuck)) && company.workers.every((w) => !w.issue);
+  });
   assert.deepEqual(github.issues[0].labels, [LABELS.task, LABELS.pr]);
   assert.deepEqual(github.issues[1].labels, [LABELS.task, LABELS.stuck]);
   assert.ok(github.comments.some((c) => c.n === 9 && /could not finish this:\n\nThis cannot be done\./.test(c.body)));
   assert.equal(github.pullsMade.length, 1);
   assert.equal(round, 4);
+  assert.deepEqual(onIt.map(([k, n]) => [k, n]), [[0, 8], [1, 9]], 'Ada took the first, and Ben the next once it was done');
+  assert.ok(onIt.every(([, , busy]) => busy === 1), 'never two at once');
   // A stuck task is not taken again until the label comes off.
   await company.poll();
   assert.equal(company.workers.filter((w) => w.issue).length, 0);
@@ -816,9 +829,11 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   assert.equal((await post('/proposals/3/approve')).status, 200);
   assert.ok(github.issues[0].labels.includes(LABELS.approved));
   await eventually(() => github.issues[0].labels.includes(LABELS.task) && !github.issues[0].labels.includes(LABELS.proposal));
-  await eventually(async () => (await (await fetch(base)).json()).workers.filter((w) => w.issue).length === 2);
+  await eventually(async () => (await (await fetch(base)).json()).workers.some((w) => w.issue));
   state = await (await fetch(base)).json();
-  assert.deepEqual(state.workers.map((w) => w.issue.number).sort((a, b) => a - b), [3, 101]);
+  // One task at a time: Ada is on one, and the other waits for her to finish.
+  assert.deepEqual(state.workers.filter((w) => w.issue).map((w) => w.name), ['Ada 💼']);
+  assert.ok([3, 101].includes(state.workers[0].issue.number));
   assert.match(state.workers[0].doing, /^#\d+: /);
 
   // Each worker's talks with the model, as run logs: listed, read whole, and as a transcript to download.
