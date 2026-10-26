@@ -758,16 +758,44 @@ test('the office on the CTB island: workers at their desks, answering children, 
   await rebuilt.close();
 
   // Fewer workers: the last ones leave; saved, it is the same island again.
+  const staffIds = Object.fromEntries([...room.players.values()].filter((p) => p.online && (p.name.endsWith('💼') || p.name === GUIDE.name)).map((p) => [p.name, p.id]));
   office.staff(1);
   await eventually(() => workers().length === 1);
+  // Who visits is who is there now, not who the island remembers.
+  room.receive(conn, { t: 'leave' });
+  await eventually(() => !office.summary().visitors.includes('Minji'));
   await office.close();
+  // From before each had a token kept: copies of them left behind, and only Ada's token.
+  const kept = JSON.parse(await readFile(join(dir, 'ctb-island.json'), 'utf8'));
+  const adaToken = kept.tokens['Ada 💼'];
+  const nextPid = kept.save.nextPid;
+  kept.save.players.push({ id: nextPid, name: 'Ben 💼', look: {} }, { id: nextPid + 1, name: GUIDE.name, look: {} });
+  kept.save.nextPid += 2;
+  await writeFile(join(dir, 'ctb-island.json'), JSON.stringify({ ...kept, tokens: undefined, token: adaToken }));
   const again = new Office({ rooms: new Map(), file: join(dir, 'ctb-island.json'), log: () => {} });
-  await again.open(1);
+  await again.open(2);
   after(() => again.close());
   assert.equal(again.room.code, room.code);
   assert.deepEqual(again.site, office.site);
-  await eventually(() => [...again.room.players.values()].some((p) => p.online && p.name === 'Ada 💼'));
+  const online = () => [...again.room.players.values()].filter((p) => p.online);
+  await eventually(() => online().some((p) => p.name === 'Ada 💼') && online().some((p) => p.name === 'Ben 💼') && online().some((p) => p.name === GUIDE.name));
   assert.equal(again.room.host, 0, 'the old island’s owner, a worker, owns it no more');
+  // The copies are forgotten; Ada comes back as herself.
+  const named = (name) => [...again.room.players.values()].filter((p) => p.name === name);
+  assert.deepEqual(named('Ada 💼').map((p) => p.id), [staffIds['Ada 💼']]);
+  assert.equal(named('Ben 💼').length, 1);
+  assert.equal(named(GUIDE.name).length, 1);
+  assert.ok(named('Minji').length === 1 && !named('Minji')[0].online, 'a visitor who left is still remembered');
+  assert.deepEqual(again.summary().visitors, []);
+  // Every one of them has a token kept now, so the next time each comes back as themselves.
+  const ids = Object.fromEntries(online().map((p) => [p.name, p.id]));
+  await again.close();
+  const third = new Office({ rooms: new Map(), file: join(dir, 'ctb-island.json'), log: () => {} });
+  await third.open(2);
+  after(() => third.close());
+  await eventually(() => [...third.room.players.values()].filter((p) => p.online).length === 3);
+  assert.deepEqual(Object.fromEntries([...third.room.players.values()].filter((p) => p.online).map((p) => [p.name, p.id])), ids);
+  assert.equal(third.room.players.size, again.room.players.size, 'nobody new for the island to remember');
 });
 
 test('a worker answers in Korean when spoken to in Korean, saying the same things as in English', () => {

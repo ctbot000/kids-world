@@ -273,7 +273,8 @@ export function deskComputers() {
 }
 
 // One worker on the island: a player sitting at their desk, saying what they
-// are doing. The first one's token is kept with the island, so it comes back as itself.
+// are doing. Their tokens are kept with the island, so each comes back as
+// themselves, not as one more player for the island to remember.
 class Clerk extends EventEmitter {
   constructor({ office, k }) {
     super();
@@ -287,7 +288,7 @@ class Clerk extends EventEmitter {
     // Working on an issue (ctb.js screens): typing, or else on a coffee break.
     this.busy = false;
     this.link = new LocalLink(office.room);
-    this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look, ...(k === 0 && office.token ? { token: office.token } : {}) }));
+    this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look, ...(office.tokens[this.name] ? { token: office.tokens[this.name] } : {}) }));
     this.link.on('message', (msg) => this.safely(() => this.handle(msg)));
     this.link.on('close', () => {
       this.ended = true;
@@ -306,7 +307,7 @@ class Clerk extends EventEmitter {
     if (msg.t === 'welcome') {
       this.welcomed = true;
       this.me = msg.you;
-      if (this.k === 0 && msg.token) this.office.token = msg.token;
+      if (msg.token) this.office.tokens[this.name] = msg.token;
       this.sit();
       this.emit('ready');
     } else if (msg.t === 'say' && msg.pid !== this.me && !this.office.isClerk(msg.pid)) {
@@ -399,7 +400,7 @@ class Guide extends EventEmitter {
     this.waitSaidAt = 0;
     this.until = 0;
     this.link = new LocalLink(office.room);
-    this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look }));
+    this.link.on('open', () => this.link.send({ t: 'join', protocol: PROTOCOL, name: this.name, look: this.look, ...(office.tokens[this.name] ? { token: office.tokens[this.name] } : {}) }));
     this.link.on('message', (msg) => this.safely(() => this.handle(msg)));
     this.link.on('close', () => {
       this.ended = true;
@@ -438,6 +439,7 @@ class Guide extends EventEmitter {
       case 'welcome': {
         this.welcomed = true;
         this.me = msg.you;
+        if (msg.token) this.office.tokens[this.name] = msg.token;
         for (const p of msg.players ?? []) if (p.id !== this.me) this.players.set(p.id, { ...p });
         this.goHome(true);
         this.ticker = setInterval(() => this.safely(() => this.tick()), GUIDE_TICK_MS);
@@ -618,6 +620,15 @@ class Guide extends EventEmitter {
   }
 }
 
+// The staff's tokens kept with the island ({ name: token }), from before
+// each had one too: then only the first worker's, as token.
+function keptTokens(kept) {
+  const out = {};
+  for (const [name, token] of Object.entries(kept.tokens && typeof kept.tokens === 'object' ? kept.tokens : {})) if (typeof token === 'string') out[name] = token;
+  if (typeof kept.token === 'string' && kept.token && !out[workerName(0)]) out[workerName(0)] = kept.token;
+  return out;
+}
+
 // The island, its office and the workers on it. answer(k, name, text) gives
 // what worker k says back to a child (or '' for nothing).
 export class Office {
@@ -640,7 +651,8 @@ export class Office {
     this.ownerWho = ownerWho;
     this.random = random;
     this.room = null;
-    this.token = '';
+    // Each worker's and the guide's token on the island, by name.
+    this.tokens = {};
     this.seats = [];
     this.clerks = [];
     this.screenList = [];
@@ -675,7 +687,8 @@ export class Office {
     room.watchable = true;
     this.room = room;
     this.setOwner(this.ownerWho);
-    this.token = kept?.code === room.code && typeof kept.token === 'string' ? kept.token : '';
+    this.tokens = kept?.code === room.code ? keptTokens(kept) : {};
+    this.forgetStaff();
     this.site = !fresh && kept?.code === room.code && kept.site ? kept.site : null;
     // An office from before this one comes down, and this one goes up.
     if (this.site && kept.office !== OFFICE_VERSION) {
@@ -880,7 +893,7 @@ export class Office {
   save() {
     const room = this.room;
     if (!room || !this.file) return this.saving;
-    const text = `${JSON.stringify({ code: room.code, token: this.token, site: this.site, office: OFFICE_VERSION, save: room.exportSave() })}\n`;
+    const text = `${JSON.stringify({ code: room.code, tokens: this.tokens, site: this.site, office: OFFICE_VERSION, save: room.exportSave() })}\n`;
     const file = this.file;
     this.saving = this.saving.then(async () => {
       try {
@@ -894,6 +907,20 @@ export class Office {
     return this.saving;
   }
 
+  // The workers and the guide as the island remembers them from before,
+  // under no token of theirs: each came back as one more player (only Ada
+  // had a token kept once), filling the island's memory of who was there.
+  forgetStaff() {
+    const room = this.room;
+    const names = new Set([...STAFF.map((_, k) => workerName(k)), GUIDE.name]);
+    const theirs = new Set(Object.values(this.tokens).map((t) => room.tokens.get(t)));
+    for (const p of [...room.players.values()]) {
+      if (p.online || !names.has(p.name) || theirs.has(p.id) || p.id === room.host || p.id === room.reservedHost) continue;
+      room.players.delete(p.id);
+      for (const [token, owner] of room.tokens) if (owner === p.id) room.tokens.delete(token);
+    }
+  }
+
   // What the admin page shows of it.
   summary() {
     const room = this.room;
@@ -905,7 +932,8 @@ export class Office {
       // The link anyone can open it with, on the game's website.
       url: `${PAGES_URL}?ctb`,
       shared: this.host?.state ?? '',
-      visitors: [...room.players.values()].filter((p) => !clerks.has(p.id)).map((p) => p.name),
+      // Who is there now: the island remembers those who left too.
+      visitors: [...room.players.values()].filter((p) => p.online && !clerks.has(p.id)).map((p) => p.name),
     };
   }
 
