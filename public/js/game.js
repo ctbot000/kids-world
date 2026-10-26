@@ -4590,6 +4590,9 @@ export class Game extends EventTarget {
       case 'stamp':
         this.sound.play('stamp');
         p.count('stamps');
+        // A cozy house stamped on a volcano island is one of the ten that
+        // earn the Pompeii sticker: on any other island it is just a house.
+        if (this.stamp === 'house' && this.world.theme === 'volcano') p.count('volcanohouses');
         this.renderer.effects.sparkles(hit.x + 0.5, hit.y + 1.5, hit.z + 0.5, 20);
         break;
       case 'water':

@@ -1385,7 +1385,7 @@ export class UI {
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
           ...STICKERS.map((s) =>
-            h('div', { class: `sticker-card${got[s.key] ? '' : ' locked'}` }, h('span', { class: 'emoji' }, s.icon), h('b', {}, got[s.key] ? s.name : '???'), h('span', { class: 'muted' }, s.text)),
+            h('div', { class: `sticker-card${got[s.key] ? '' : ' locked'}` }, h('span', { class: 'emoji' }, s.icon), h('b', {}, got[s.key] ? s.name : '???'), h('span', { class: 'muted' }, s.text), s.goal && !got[s.key] ? h('span', { class: 'muted' }, `${Math.min(p.data.stats[s.of] ?? 0, s.goal)}/${s.goal}`) : null),
           ),
         ),
       );
