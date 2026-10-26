@@ -417,6 +417,39 @@ export const WATERING_CAN = def(198, 'watering-can', { name: 'Watering Can', kin
 export const SCARECROW = furniture(199, 'scarecrow', { name: 'Scarecrow', color: '#e8453c', category: 'farm', sound: 'wood' });
 export const FENCE = furniture(203, 'fence', { name: 'Fence', color: '#c98a52', turns: false, category: 'farm', sound: 'wood' });
 
+// A door (blocks.js): a frame with a panel that swings open when a player
+// bops it, and shuts on the next bop. Each colour's shut door is four ids in
+// a row (one per way its front can face, as any furniture that turns) and
+// its open one the same four, 16 further on: the two ids of one door, either
+// way round, are always 16 apart, whichever way it faces. Anyone may bop one
+// open, so nobody is ever stuck in or out.
+export const DOOR_COLORS = [
+  ['oak', 'Oak', '#c98a52'],
+  ['walnut', 'Walnut', '#8b5a3c'],
+  ['blue', 'Blue', '#5b8fd9'],
+];
+export const DOOR_STEP = 16;
+export const DOORS = DOOR_COLORS.map(([key, name, color], i) => {
+  const id = 275 + i * 4;
+  const shut = furniture(id, `door-${key}`, { name: `${name} Door`, color, after: 15, category: 'building', sound: 'wood', door: 'shut' });
+  furniture(id + DOOR_STEP, `door-${key}-open`, { name: `${name} Door`, color, after: id, category: false, sound: 'wood', door: 'open', solid: false });
+  return shut;
+});
+// The block of the same door the other way round: swung open, or shut again.
+export const turnedDoor = (id) => {
+  const d = BLOCKS[id];
+  if (!d?.door) return 0;
+  return d.base + (d.door === 'shut' ? DOOR_STEP : -DOOR_STEP) + ((d.front + 1) % 4);
+};
+// Whether a block is a door at all, and whether it is one swung open.
+export const DOOR = new Uint8Array(BLOCK_IDS);
+export const DOOR_OPEN = new Uint8Array(BLOCK_IDS);
+for (const d of defs) {
+  if (!d?.door) continue;
+  DOOR[d.id] = 1;
+  DOOR_OPEN[d.id] = d.door === 'open' ? 1 : 0;
+}
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),

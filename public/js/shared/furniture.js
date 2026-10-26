@@ -930,7 +930,38 @@ const MODELS = {
     }
     return out;
   },
+
+  // A door (blocks.js DOORS): a frame round the cell with a panel in it,
+  // hinged at the frame's x = 0 post, so bopping it swings the panel out to
+  // lie along the wall beside it — the same door, the other way round, drawn
+  // by the same model with `open` instead. Three woods: oak, walnut, blue.
+  door(open = false, frame = WOOD, panel = '#c98a52') {
+    const out = [box(0, 0, 0.42, 0.08, 1, 0.58, frame, 'planks'), box(0.92, 0, 0.42, 1, 1, 0.58, frame, 'planks'), box(0.08, 0.9, 0.42, 0.92, 1, 0.58, frame, 'planks')];
+    if (open) {
+      // The panel swung round the hinge post, out of the gap and along the
+      // side of it, standing open into the room behind.
+      out.push(box(0.02, 0, 0.5, 0.1, 0.9, 1.34, panel, 'planks'));
+      out.push(box(0.78, 0.42, 0.44, 0.84, 0.48, 0.5, '#f5c542', 'plain'));
+      return out;
+    }
+    out.push(box(0.08, 0, 0.44, 0.92, 0.9, 0.56, panel, 'planks'));
+    // A little golden handle on the panel's face.
+    out.push(box(0.8, 0.42, 0.4, 0.86, 0.48, 0.44, '#f5c542', 'plain'));
+    return out;
+  },
 };
+
+// The doors of each colour (blocks.js DOORS), shut and open: the same model,
+// the panel in the gap or swung round the hinge out of it. The frame is a
+// darker wood than the panel, so the door shows up in a wall of planks too.
+for (const [key, panel, frame] of [
+  ['oak', '#c98a52', DARK_WOOD],
+  ['walnut', '#8b5a3c', '#5c3a24'],
+  ['blue', '#5b8fd9', '#3a5fa8'],
+]) {
+  MODELS[`door-${key}`] = () => MODELS.door(false, frame, panel);
+  MODELS[`door-${key}-open`] = () => MODELS.door(true, frame, panel);
+}
 
 // The boxes of a piece of furniture in its own layout (facing -z).
 export function modelBoxes(id, same = () => false) {
