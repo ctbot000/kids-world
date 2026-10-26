@@ -169,6 +169,7 @@ export class Zai {
   // and remembered: null when it works nowhere.
   async pick() {
     if (this.where) return this.where;
+    let busy = null;
     for (const url of this.urls) {
       let res;
       try {
@@ -184,9 +185,15 @@ export class Zai {
       if (res.ok) {
         this.where = url;
         this.url = url;
+        this.busy = null;
         return url;
       }
+      const why = await this.trouble(res);
+      if (why.busy) busy = why;
     }
+    // Busy somewhere (overloaded, say) is worth trying again later, unlike a
+    // key that works nowhere: chat() says which.
+    this.busy = busy;
     return null;
   }
 
@@ -219,7 +226,7 @@ export class Zai {
   async chat(messages, schema, trace = null, opts = {}) {
     if (!this.key) throw new Error('Z.ai has no API key (ZAI_API_KEY)');
     const url = await this.pick();
-    if (!url) throw new Error('Z.ai is not answering (or the API key is no good)');
+    if (!url) throw this.busy ?? new Error('Z.ai is not answering (or the API key is no good)');
     const options = { ...ZAI_OPTIONS, ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}), ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) };
     if (trace) {
       trace.sentAt = Date.now();
@@ -233,7 +240,7 @@ export class Zai {
       body: JSON.stringify({ model: this.model, messages: said, stream: false, temperature: options.temperature, max_tokens: options.max_tokens, response_format: { type: 'json_object' } }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(await this.trouble(res));
+    if (!res.ok) throw await this.trouble(res);
     const body = await res.json();
     const words = body.choices?.[0]?.message?.content ?? '';
     if (trace) {
@@ -250,14 +257,24 @@ export class Zai {
     return this.read(words);
   }
 
-  // Why an answer failed, in Z.ai's own words when it says.
+  // Why an answer failed, in Z.ai's own words when it says, as an error.
+  // busy: worth trying again in a while, as Z.ai is overloaded or down for a
+  // moment (a 429 or a 5xx), not out of credit (a 429 with its code 1113);
+  // waitMs: how long it asked to be left alone (Retry-After), when it said.
   async trouble(res) {
     let why = '';
+    let code = '';
     try {
       const body = await res.json();
       why = body.error?.message ?? body.message ?? '';
+      code = String(body.error?.code ?? body.code ?? '');
     } catch {}
-    return `Z.ai answered ${res.status}${why ? `: ${why}` : ''}`;
+    const error = new Error(`Z.ai answered ${res.status}${why ? `: ${why}` : ''}`);
+    error.status = res.status;
+    error.busy = (res.status === 429 && code !== '1113') || res.status >= 500;
+    const after = Number(res.headers?.get('retry-after'));
+    if (after > 0) error.waitMs = after * 1000;
+    return error;
   }
 
   // The JSON in the model's words, in case it said more around it. last:

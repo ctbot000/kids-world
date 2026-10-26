@@ -47,6 +47,13 @@ export const HANDOFF_SCHEMA = { type: 'object', properties: { summary: { type: '
 const HANDOFF_MAX = 3000;
 // The model's failures in a row (an empty answer now and then) a task survives.
 const FAILURES = 5;
+// How long to wait before asking again while the model is busy (overloaded,
+// or down for a moment: llm.js marks those errors busy), longer each time,
+// about eight minutes in all; those tries are not among the failures above.
+// Five tries at once gave up on an overload that was over a minute later.
+const BUSY_WAITS = [5, 15, 30, 60, 120, 240].map((s) => s * 1000);
+// The longest wait the model may ask for itself (Retry-After).
+const WAIT_MAX = 10 * 60 * 1000;
 // How much of a tool's result the model sees, and how much of the older ones.
 const RESULT_MAX = 12000;
 const OLD_RESULT_MAX = 400;
@@ -138,7 +145,7 @@ const tail = (text, max) => (text.length <= max ? text : `… (${text.length - m
 // are counted from (main as it was), changed, the files changed since, and
 // earlier, what that try said of it.
 export class Agent {
-  constructor({ llm, root, name, task, layout = '', maxSteps = MAX_STEPS, onStep = () => {}, onUsage = () => {}, onCall = () => {}, onResult = () => {}, node = process.execPath, stopped = () => false, base = 'HEAD', changed = [], earlier = '' }) {
+  constructor({ llm, root, name, task, layout = '', maxSteps = MAX_STEPS, onStep = () => {}, onUsage = () => {}, onCall = () => {}, onResult = () => {}, node = process.execPath, stopped = () => false, pause = null, base = 'HEAD', changed = [], earlier = '' }) {
     this.llm = llm;
     this.root = root;
     this.name = name;
@@ -151,6 +158,13 @@ export class Agent {
     this.base = base;
     this.node = node;
     this.stopped = stopped;
+    // How a wait is spent (tests pass their own): in short sleeps, cut off
+    // when the server stops.
+    this.pause =
+      pause ??
+      (async (ms) => {
+        for (const end = Date.now() + ms; !this.stopped() && Date.now() < end; ) await new Promise((done) => setTimeout(done, Math.min(1000, end - Date.now())));
+      });
     this.messages = [
       { role: 'system', content: systemPrompt({ name, layout }) },
       { role: 'user', content: `Your task, GitHub issue #${task.number}: ${task.title}\n\n${task.body || '(no description)'}${changed.length ? `\n\nAn earlier try at this did not finish, and its work is already in your working copy (diff shows it): ${changed.join(', ')}. Carry on from it rather than starting over.${earlier ? ` What that try said when it stopped:\n\n${earlier}` : ''}` : ''}` },
@@ -240,16 +254,22 @@ export class Agent {
 
   async run() {
     let failures = 0;
+    let waits = 0;
     while (this.steps < this.maxSteps) {
       if (this.stopped()) return { ok: false, why: 'stopped', steps: this.steps };
       let step;
       try {
         step = await this.next();
       } catch (error) {
+        if (error.busy && waits < BUSY_WAITS.length) {
+          await this.pause(Math.min(Math.max(BUSY_WAITS[waits++], error.waitMs ?? 0), WAIT_MAX));
+          continue;
+        }
         if (++failures >= FAILURES) return { ok: false, why: `the model failed: ${error.message}`, steps: this.steps };
         continue;
       }
       failures = 0;
+      waits = 0;
       this.steps++;
       if (!step || typeof step !== 'object' || !TOOLS.includes(step.tool)) {
         this.messages.push({ role: 'assistant', content: JSON.stringify(step ?? null) });

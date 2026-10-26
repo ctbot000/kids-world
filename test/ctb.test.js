@@ -847,3 +847,37 @@ test('settings are checked, and the admin page adds tasks, approves proposals an
   assert.equal(state.running, false);
   assert.equal((await post('/tasks', { title: 'x' })).status, 400, 'CTB is off');
 });
+
+test('a worker waits while the model is busy, longer each time, and then carries on', async () => {
+  const { repo } = await project();
+  const task = { number: 7, title: 'add subtracts', body: 'Fix it.' };
+  const busy = (waitMs) => Object.assign(new Error('Z.ai answered 429: overloaded'), { busy: true, status: 429, ...(waitMs ? { waitMs } : {}) });
+  // Busy six times (once asking for a minute itself), then answering.
+  let calls = 0;
+  const llm = {
+    model: 'stand-in',
+    chat: async () => {
+      calls++;
+      if (calls <= 6) throw busy(calls === 2 ? 60000 : 0);
+      return { thought: 'no', tool: 'give_up', summary: 'not this one' };
+    },
+  };
+  const waits = [];
+  const agent = new Agent({ llm, root: repo, name: 'Ada', task, pause: async (ms) => waits.push(ms) });
+  const result = await agent.run();
+  assert.deepEqual(waits, [5000, 60000, 30000, 60000, 120000, 240000]);
+  assert.equal(result.why, 'not this one', 'carried on once it answered');
+
+  // Busy for good: after the waits, the usual five failures, and stuck.
+  const always = new Agent({ llm: { model: 'stand-in', chat: async () => { throw busy(); } }, root: repo, name: 'Ada', task, pause: async (ms) => waits.push(ms) });
+  waits.length = 0;
+  const stuck = await always.run();
+  assert.equal(waits.length, 6);
+  assert.match(stuck.why, /^the model failed: Z.ai answered 429: overloaded/);
+
+  // Not busy (out of credit, say): no waiting.
+  const broke = new Agent({ llm: { model: 'stand-in', chat: async () => { throw new Error('Z.ai answered 429: Insufficient balance'); } }, root: repo, name: 'Ada', task, pause: async (ms) => waits.push(ms) });
+  waits.length = 0;
+  assert.match((await broke.run()).why, /Insufficient balance/);
+  assert.deepEqual(waits, []);
+});

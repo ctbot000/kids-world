@@ -164,3 +164,21 @@ test('a fallback around the real Ollama client still talks to it the same way', 
   assert.equal(trace.model, 'tiny');
   assert.equal(sent[0].url, 'http://ollama.test/api/chat');
 });
+
+test('the Z.ai client tells a busy Z.ai (try again later) from one that will not answer', async () => {
+  const answering = (res) => async (url, init = {}) => (init.body && JSON.parse(init.body).max_tokens === 1 ? Response.json({ choices: [{ message: { content: '' } }] }) : res());
+  const overloaded = () => new Response(JSON.stringify({ error: { code: '1305', message: 'The service may be temporarily overloaded, please try again later' } }), { status: 429, headers: { 'Retry-After': '20' } });
+  const ask = (fetch) => new Zai({ urls: ['https://z.test/v4'], key: 'a key', fetch }).chat([{ role: 'user', content: 'hi' }], SCHEMA);
+  await assert.rejects(() => ask(answering(overloaded)), (e) => e.busy === true && e.status === 429 && e.waitMs === 20000);
+  await assert.rejects(() => ask(answering(() => new Response('', { status: 503 }))), (e) => e.busy === true && e.waitMs === undefined);
+  const broke = () => new Response(JSON.stringify({ error: { code: '1113', message: 'Insufficient balance' } }), { status: 429 });
+  await assert.rejects(() => ask(answering(broke)), (e) => e.busy === false);
+  await assert.rejects(() => ask(answering(() => new Response('', { status: 401 }))), (e) => e.busy === false);
+
+  // Looking for its endpoint: out of credit on one and overloaded on the
+  // other is busy; a key no good on either is not.
+  const both = new Zai({ urls: ['https://z.test/v4', 'https://z.test/coding/v4'], key: 'a key', fetch: async (url) => (url.includes('coding') ? overloaded() : broke()) });
+  await assert.rejects(() => both.chat([{ role: 'user', content: 'hi' }], SCHEMA), (e) => e.busy === true && /overloaded/.test(e.message));
+  const nowhere = new Zai({ urls: ['https://z.test/v4'], key: 'a key', fetch: async () => new Response('', { status: 401 }) });
+  await assert.rejects(() => nowhere.chat([{ role: 'user', content: 'hi' }], SCHEMA), (e) => !e.busy && /not answering/.test(e.message));
+});
