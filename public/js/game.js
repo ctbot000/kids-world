@@ -516,6 +516,7 @@ export class Game extends EventTarget {
         break;
       case 'fx':
         if (msg.kind === 'star') this.fallingStar(msg);
+        else if (msg.kind === 'blast') this.blast(msg);
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -3971,6 +3972,20 @@ export class Game extends EventTarget {
     this.renderer.sky.shootingStar(msg);
     this.sound.play('star');
     this.emit('toast', { icon: '🌠', text: 'A shooting star! Look for a star piece on the ground.' });
+  }
+
+  // A mining bomb going off (shared/room.js stepBombs): the boom seen and
+  // heard wherever you stand, and any jewels the blast shook out of gem rocks
+  // into the basket of whoever laid it.
+  blast(msg) {
+    const fx = this.renderer.effects;
+    fx.pop(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), '#d9d3c7', 24);
+    fx.sparkles(msg.x, msg.y + 0.5, msg.z, 30, ['#ffd84d', '#ff8fc4', '#ffffff']);
+    if (this.near(msg.x, msg.y, msg.z, 40)) this.sound.play('boom');
+    if (msg.by !== this.pid || !msg.gems?.length) return;
+    const cells = [];
+    for (let i = 0; i < msg.gems.length; i++) cells.push(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), B.AIR);
+    this.collect(msg.gems, cells);
   }
 
   // ------------------------------------------------ tools

@@ -233,6 +233,38 @@ export function drillEdit(world, cells) {
   return { cells: o.cells(), collected };
 }
 
+// The mining bomb's blast (blocks.js BOMB, placed with buildEdit): a small
+// round hole in natural ground only, so nothing anyone built, planted or
+// furnished is ever broken. Gem rocks caught in it drop their jewels, which
+// go in the blaster's basket.
+export function blastEdit(world, x, y, z) {
+  const o = new Overlay(world);
+  const collected = [];
+  const holes = [];
+  // The bomb itself goes first, so its own cell is part of the hole.
+  if (world.inBounds(x, y, z) && y !== 0) o.set(x, y, z, B.AIR);
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.hypot(dx, dy, dz) > 2.4) continue;
+        const cx = x + dx;
+        const cy = y + dy;
+        const cz = z + dz;
+        if (!world.inBounds(cx, cy, cz) || cy === 0) continue;
+        const id = o.get(cx, cy, cz);
+        // Natural ground only: never anything anyone built, planted or
+        // furnished, and farmland is ground someone turned over themselves.
+        if (!B.TERRAIN[id] || B.SOIL[id] || !o.set(cx, cy, cz, B.AIR)) continue;
+        holes.push([cx, cy, cz]);
+        if (B.block(id).collect) collected.push(id);
+      }
+    }
+  }
+  flood(o, holes);
+  for (const id of settle(o, holes)) if (B.block(id).collect) collected.push(id);
+  return { cells: o.cells(), collected };
+}
+
 export function paintEdit(world, hit, id, size = 1) {
   const o = new Overlay(world);
   if (!B.block(id).cube || id === B.WATER) return { cells: [], collected: [] };

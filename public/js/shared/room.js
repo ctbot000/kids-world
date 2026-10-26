@@ -20,7 +20,7 @@ import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
-import { growEdit, validCells } from './tools.js';
+import { blastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
@@ -83,6 +83,9 @@ const STAR_MS = 25000;
 const MAX_SHELLS = 16;
 const MAX_STARS = 6;
 const CHAT_KEEP = 30;
+// A mining bomb (blocks.js BOMB), once placed: this long a fuse, sparking
+// away, before it pops (stepBombs).
+const BOMB_FUSE_MS = [2200, 2800];
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -252,6 +255,9 @@ export class Room {
     // water that boils away in turn (stepMelts, each tick): what the heat
     // has left to do, by the cell it will do it to.
     this.melts = new Map();
+    // Mining bombs placed, by the cell they sit in: the cell, who placed one
+    // there, and when it pops (stepBombs).
+    this.bombs = new Map();
     const volcano = w.theme === 'volcano';
     for (let x = 0; x < w.W; x++) {
       for (let z = 0; z < w.D; z++) {
@@ -291,6 +297,10 @@ export class Room {
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
       if (isGoBoard(before) && !isGoBoard(after) && this.go.removeAt(x, y, z)) this.sendGo();
+      // A mining bomb placed starts its fuse, and one taken away (picked up,
+      // or built over) stops it.
+      if (after === B.BOMB) this.bombs.set(k, { x, y, z, by: this.bombPlacer ?? 0, at: this.now() + this.between(BOMB_FUSE_MS) });
+      else if (before === B.BOMB) this.bombs.delete(k);
       // Water or ice put down on a volcano island is not there to stay.
       if (volcano) {
         if (after === B.WATER) this.melts.set(k, { x, y, z, at: this.now() + this.between(BOIL_MS), to: B.AIR });
@@ -743,6 +753,9 @@ export class Room {
       }
     }
     c.cells -= n;
+    // Who is placing this, for a mining bomb's fuse: its blast's jewels go
+    // in their basket (stepBombs).
+    this.bombPlacer = p.id;
     const others = this.onlinePlayers().filter((q) => q.id !== p.id);
     const applied = [];
     const fix = [];
@@ -772,6 +785,7 @@ export class Room {
     if (applied.length) this.broadcast({ t: 'edit', by: p.id, seq, kind, cells: applied });
     this.sendTo(conn, { t: 'ack', seq, fix });
     if (applied.length) this.changed();
+    this.bombPlacer = 0;
   }
 
   current(cells) {
@@ -1184,6 +1198,7 @@ export class Room {
     this.grow(now);
     this.farm(now);
     this.nature(now);
+    this.stepBombs(now);
   }
 
   // The fireflies: the host lets a few out over the flowers at dusk and
@@ -1962,6 +1977,28 @@ export class Room {
   sendToPid(pid, msg) {
     const text = JSON.stringify(msg);
     for (const [conn, c] of this.clients) if (c.pid === pid) this.safeSend(conn, text);
+  }
+
+  // Mining bombs placed (blocks.js BOMB), their fuses burning down. One that
+  // pops digs its blast hole (tools.js blastEdit) as an edit by the island
+  // itself, telling everyone where to see and hear the boom, and any jewels
+  // it shook loose go to whoever placed it: the blast is theirs, so what it
+  // dug out belongs in their basket. The jewels travel with the boom as a
+  // list of item ids, which each page drops into that player's basket.
+  stepBombs(now) {
+    const w = this.world;
+    for (const [k, bomb] of [...this.bombs]) {
+      if (bomb.at > now) continue;
+      this.bombs.delete(k);
+      // Picked up or built over before it went off: nothing to pop.
+      if (w.get(bomb.x, bomb.y, bomb.z) !== B.BOMB) continue;
+      const plan = blastEdit(w, bomb.x, bomb.y, bomb.z);
+      if (!plan.cells.length) continue;
+      for (let i = 0; i < plan.cells.length; i += 4) w.set(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2], plan.cells[i + 3]);
+      this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: plan.cells });
+      this.broadcast({ t: 'fx', kind: 'blast', x: bomb.x + 0.5, y: bomb.y + 0.5, z: bomb.z + 0.5, by: bomb.by, gems: plan.collected });
+      this.changed();
+    }
   }
 
   grow(now) {
