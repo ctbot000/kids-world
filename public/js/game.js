@@ -18,7 +18,7 @@ import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
 import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
-import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, isBlank, isBoard } from './shared/drawing.js';
+import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
 import { advanceTime, isNight } from './shared/env.js';
@@ -274,9 +274,12 @@ export class Game extends EventTarget {
     // of each level ended, for the break before the next one.
     this.classTarget = null;
     // The drawing board beside you, the one whose picture is open, and the
-    // pictures on the island's boards, by cell key (shared/drawing.js).
+    // pictures on the island's boards, by cell key (shared/drawing.js). So too
+    // the picture frame beside you, and the one whose gallery is open.
     this.drawTarget = null;
     this.drawAt = null;
+    this.frameTarget = null;
+    this.frameAt = null;
     this.drawings = new Map();
     this.classEnded = { junior: 0, senior: 0 };
     // The stove beside you (shared/cooking.js), when you last cooked each
@@ -2760,7 +2763,7 @@ export class Game extends EventTarget {
       if (!Array.isArray(row)) continue;
       const [x, y, z, text] = row;
       const px = decodePicture(text);
-      if (px && isBoard(this.world.get(x, y, z))) this.showDrawing(x, y, z, px);
+      if (px && isPictureAt(this.world.get(x, y, z))) this.showDrawing(x, y, z, px);
     }
     this.emit('drawing');
   }
@@ -2781,7 +2784,8 @@ export class Game extends EventTarget {
     return this.drawings.get(keyOf(t.x, t.y, t.z)) ?? blankPicture();
   }
 
-  // Q (or the Draw button) by a drawing board: its picture opens.
+  // Q (or the Draw button) by a drawing board: its picture opens. By a picture
+  // frame instead: your gallery opens, to hang one of your drawings in it.
   openDrawing() {
     const t = this.drawTarget;
     if (!t) return;
@@ -2793,13 +2797,25 @@ export class Game extends EventTarget {
     this.emit('draw-open');
   }
 
+  openFrame() {
+    const t = this.frameTarget;
+    if (!t) return;
+    if (this.settings.owned) {
+      this.emit('notice', { text: `${this.world.name} stays just as it is — no drawing here!`, level: 'info' });
+      return;
+    }
+    this.frameAt = t;
+    this.sound.play('ui');
+    this.emit('frame-open', t);
+  }
+
   // A stroke drawn on the open board, there at once. A line is drawn a bit
   // at a time as the finger moves and sent a few bits together (sendStroke):
   // drawn either way, it comes out the same.
   drawStroke(raw) {
     const t = this.drawAt;
     const s = cleanStroke(raw);
-    if (!t || !s || !isBoard(this.world.get(t.x, t.y, t.z))) return;
+    if (!t || !s || !isPictureAt(this.world.get(t.x, t.y, t.z))) return;
     const px = this.drawingAt(t);
     applyStroke(px, s);
     this.showDrawing(t.x, t.y, t.z, px);
@@ -2817,7 +2833,7 @@ export class Game extends EventTarget {
     const s = cleanStroke(msg.s);
     if (!s || !Array.isArray(msg.at)) return;
     const [x, y, z] = msg.at;
-    if (!isBoard(this.world?.get(x, y, z))) return;
+    if (!isPictureAt(this.world?.get(x, y, z))) return;
     const t = { x, y, z };
     const px = this.drawingAt(t);
     applyStroke(px, s);
@@ -2843,7 +2859,7 @@ export class Game extends EventTarget {
       const key = keyOf(cells[i], cells[i + 1], cells[i + 2]);
       const px = this.drawings.get(key);
       if (!px) continue;
-      if (isBoard(cells[i + 3])) {
+      if (isPictureAt(cells[i + 3])) {
         this.renderer.drawings.show(key, cells[i + 3], cells[i], cells[i + 1], cells[i + 2], px);
       } else {
         this.drawings.delete(key);
@@ -3232,6 +3248,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.drawTarget) {
       this.openDrawing();
+      return;
+    }
+    if (!id && this.frameTarget) {
+      this.openFrame();
       return;
     }
     if (!id && this.goTarget) {
@@ -4603,6 +4623,7 @@ export class Game extends EventTarget {
     this.stationTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.dizzy && !on.flying && on.onGround ? stationNear(this.world, on) : null;
     this.classTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.dizzy && !on.flying && on.onGround ? chalkboardNear(this.world, on) : null;
     this.drawTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.dizzy && !on.flying && on.onGround ? boardNear(this.world, on) : null;
+    this.frameTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? frameNear(this.world, on) : null;
     this.stoveTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? stoveNear(this.world, on) : null;
     this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
@@ -5074,6 +5095,8 @@ export class Game extends EventTarget {
     this.study = null;
     this.drawAt = null;
     this.drawTarget = null;
+    this.frameAt = null;
+    this.frameTarget = null;
     this.goGames.clear();
     this.goAt = null;
     this.goTarget = null;

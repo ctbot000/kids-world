@@ -32,7 +32,7 @@ import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, RECIPES, recipeByKey } from './shared/cooking.js';
 import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
-import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
+import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { blockIcon } from './render/atlas.js';
@@ -3081,6 +3081,7 @@ export class UI {
     on('study-open', () => this.studyDialog());
     on('study', () => this.studyNews());
     on('draw-open', () => this.drawDialog());
+    on('frame-open', () => this.galleryDialog({ frame: this.game?.frameAt }));
     on('go-open', () => this.goDialog());
     on('go', () => this.renderGo());
     on('gofx', (e) => this.goHeard(e.detail));
@@ -4399,7 +4400,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.stoveTarget || g.goTarget || g.screenTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4472,18 +4473,18 @@ export class UI {
   // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -5293,7 +5294,7 @@ export class UI {
   // newest first, each to save as a file or take down — and, opened from a
   // board, to put up on it again. Kept up to date as it changes (on another
   // device too, with a login).
-  galleryDialog({ board = null } = {}) {
+  galleryDialog({ board = null, frame = null } = {}) {
     const p = this.home;
     const g = this.game;
     const grid = h('div', { class: 'gallery-grid' });
@@ -5327,15 +5328,22 @@ export class UI {
             p.takeDownDrawing(it.id);
           };
           const putUp = () => {
-            if (!g || !isBoard(g.world?.get(board.x, board.y, board.z))) {
+            const onFrame = frame && isFrame(g.world?.get(frame.x, frame.y, frame.z));
+            const where = board && isBoard(g.world?.get(board.x, board.y, board.z)) ? board : onFrame ? frame : null;
+            if (!g || !where) {
               this.sound.play('no');
               return;
             }
-            g.drawAt = board;
+            g.drawAt = where;
             const stroke = { k: 'paste', px: it.px };
             g.drawStroke(stroke);
             g.sendStroke(stroke);
             this.sound.play('pop');
+            if (onFrame) {
+              this.closeModal();
+              this.toast('🖼️', 'Your drawing is up on the frame — everyone can see it!');
+              return;
+            }
             this.drawDialog();
           };
           return h(
@@ -5346,7 +5354,7 @@ export class UI {
             h(
               'div',
               { class: 'shop-buttons' },
-              board ? h('button', { class: 'chip gallery-put', type: 'button', onclick: putUp }, '🎨 Put it up') : null,
+              board ? h('button', { class: 'chip gallery-put', type: 'button', onclick: putUp }, '🎨 Put it up') : hanging ? h('button', { class: 'chip gallery-put', type: 'button', onclick: putUp }, '🖼️ Hang') : null,
               h('button', { class: 'chip gallery-file', type: 'button', 'aria-label': 'Save as a picture file', onclick: () => this.savePictureFile(px, it.island) }, '💾'),
               down,
             ),
@@ -5355,10 +5363,15 @@ export class UI {
       );
     };
     const changed = () => render();
+    const hanging = Boolean(frame);
     this.openModal(
       (root) => {
         const back = board && g ? h('button', { class: 'chip', type: 'button', onclick: () => ((g.drawAt = board), this.drawDialog()) }, '🎨 Back to the board') : null;
-        root.append(h('div', { class: 'dialog-head' }, title, back), board ? h('p', { class: 'muted' }, 'Tap 🎨 Put it up to put a picture on this board again — for everyone to see!') : null, grid);
+        root.append(
+          h('div', { class: 'dialog-head' }, title, back),
+          hanging ? h('p', { class: 'muted' }, 'Tap 🖼️ Hang to hang one of your drawings on this frame — for everyone to see!') : board ? h('p', { class: 'muted' }, 'Tap 🎨 Put it up to put a picture on this board again — for everyone to see!') : null,
+          grid,
+        );
         render();
         p.addEventListener('gallery', changed);
       },

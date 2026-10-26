@@ -3,7 +3,7 @@
 // by the sun in the open, by lamps at night — so it sits in the room like
 // the rest of the board.
 import * as THREE from '../../vendor/three.module.js';
-import { COLORS, PICTURE_H, PICTURE_W, pictureCorners } from '../shared/drawing.js';
+import { COLORS, frameCorners, isFrame, PICTURE_H, PICTURE_W, pictureCorners } from '../shared/drawing.js';
 import { LIGHT_GLSL } from './terrain.js';
 
 // Each colour as its bytes, as written (sRGB: the shader decodes them, as it does the blocks').
@@ -68,8 +68,9 @@ export class Drawings {
       this.group.add(mesh);
     }
     if (d.id !== id) {
-      // The quad over the board's white, facing out the way the board does.
-      const [bl, br, tr, tl] = pictureCorners(id, x, y, z);
+      // The quad over the board's or the frame's white, facing out the way it does.
+      const corners = isFrame(id) ? frameCorners : pictureCorners;
+      const [bl, br, tr, tl] = corners(id, x, y, z);
       const g = d.mesh.geometry;
       g.setAttribute('position', new THREE.Float32BufferAttribute([...bl, ...br, ...tr, ...bl, ...tr, ...tl], 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
