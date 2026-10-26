@@ -130,7 +130,7 @@ export const CRITTER_INFO = {
   // by itself — never anything anyone built, planted or furnished, nor the
   // crops on anyone's farmland — the same rule the digger's drill follows the
   // other way round.
-  mower: { name: 'Lawn Mower', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { mow: true, seat: 0.78, z: -0.18, radius: 0.55, height: 1.7, float: 0.5, spread: 0.15, reach: 1.2, walk: 4, run: 6, swim: 1.8, jump: 8, trick: 'honk' }, names: ['Buzzly', 'Chompy', 'Snippy', 'Mowey', 'Grassy', 'Trimmy', 'Whirly', 'Clip-Clop', 'Snip-Snip', 'Buzz'] },
+  mower: { name: 'Lawn Mower', icon: '🚜', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { mow: true, seat: 0.78, z: -0.18, radius: 0.55, height: 1.95, float: 0.5, spread: 0.15, reach: 1.2, walk: 4, run: 6, swim: 1.8, jump: 8, trick: 'honk' }, names: ['Buzzly', 'Chompy', 'Snippy', 'Mowey', 'Grassy', 'Trimmy', 'Whirly', 'Clip-Clop', 'Snip-Snip', 'Buzz'] },
   // The dragon, the one dragon of a volcano island (worldgen.js): a great
   // green dragon, twice as big as a pony and more, asleep on the volcano,
   // wings folded, until someone comes near — then it wakes and breathes

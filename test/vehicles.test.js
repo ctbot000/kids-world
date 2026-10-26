@@ -358,7 +358,9 @@ test('the lawn mower is in the toy box, mows a stripe of short grass, gathers th
   w.set(30, 6, 19, B.OAK_SPROUT);
   const r = ride(w, 'mower', 15.5, 6, 20.5, Math.PI / 2);
   // Jump honks instead of jumping, as a car does.
-  assert.ok(go(w, r, { jump: true }, 0.2).every((ev) => ev.trick && !ev.jumped), 'a honk, not a jump');
+  const [first] = go(w, r, { jump: true }, 1 / 60);
+  assert.ok(first.trick && !first.jumped, 'a honk, not a jump');
+  assert.ok(!go(w, r, { jump: true }, 0.5).some((ev) => ev.trick), 'once for each press');
   const mow = (input, seconds) => {
     for (let i = 0; i < seconds * 60; i++) {
       const ev = stepRide(w, r, input, 1 / 60);
@@ -369,9 +371,11 @@ test('the lawn mower is in the toy box, mows a stripe of short grass, gathers th
   mow({ mx: 1, mz: 0 }, 7);
   assert.ok(r.body.x > 31, `drove along, to ${r.body.x.toFixed(2)}`);
   // A stripe of short grass where it rolled, three blocks wide, with the
-  // flowers and plants gone from it.
+  // flowers and plants gone from it (not under the bricks nor over the
+  // farmland: those it leaves alone, below).
   let beside = 0;
   for (let x = 16; x < 31; x++) {
+    if (x === 26 || x === 29) continue;
     assert.equal(w.get(x, 5, 20), B.MOWED, `mown at ${x},20`);
     if (w.get(x, 5, 21) === B.MOWED) beside++;
   }

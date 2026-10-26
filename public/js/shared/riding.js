@@ -470,22 +470,27 @@ export function mowCells(world, body, half = 1) {
       const z = FL(body.z) + k;
       if (!world.inBounds(x, 1, z)) continue;
       // The top of the natural ground in this column, at or just under the
-      // mower, and only if nothing anyone put down stands on it.
+      // mower, and only if nothing anyone put down stands on it. A flower or
+      // plant growing on it does not stop the blade: it looks under it for the
+      // ground, and takes the plant off with the grass. A crop is a plant
+      // someone planted themselves, and so is a sprout; farmland is ground
+      // someone turned over, and never mown at all.
       let ground = null;
+      let plant = null;
       for (let y = Math.min(FL(body.y) + 1, world.H - 1); y >= 1; y--) {
         const id = world.get(x, y, z);
         if (id === B.AIR || id === B.WATER) continue;
         if (B.MOWS[id]) ground = y;
+        else if (plant === null && B.KIND[id] === B.K_PLANT && !B.CROP_OF[id] && !B.BLOCKS[id]?.grows) {
+          plant = y;
+          continue;
+        }
         break;
       }
       if (ground !== null) cells.push([x, ground, z]);
-      // What grows on that ground: a flower or a plant standing on it, which
-      // the mower takes off with the grass. A crop is a plant someone planted
-      // themselves, and so is a sprout; farmland is ground someone turned over,
-      // and never mown at all.
-      const y = (ground ?? Math.min(FL(body.y) + 1, world.H - 1)) + 1;
-      const on = world.get(x, y, z);
-      if (B.KIND[on] === B.K_PLANT && !B.CROP_OF[on] && !B.BLOCKS[on]?.grows) cut.push([x, y, z]);
+      // The plant is only taken off where the grass under it was mown: one
+      // standing on anything anyone put down stays as it is.
+      if (ground !== null && plant !== null) cut.push([x, plant, z]);
     }
   }
   return { cells, cut };

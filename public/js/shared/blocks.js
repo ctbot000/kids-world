@@ -455,8 +455,9 @@ for (const d of defs) {
 export const TERRAIN = new Uint8Array(BLOCK_IDS);
 for (const id of [2, 3, 4, 5, 6, 11, 13, 19, 20, 21, 22, 25, 27, 28, FARMLAND, WET_FARMLAND, MOWED, ...GEM_ROCKS]) TERRAIN[id] = 1;
 // Ground the lawn mower cuts short (riding.js mowCells): the grass of a
-// meadow. Snow and frosting it leaves alone, as it leaves the sand and the stone.
-export const MOWS = new Uint8Array(BLOCK_IDS);
+// meadow, and what it becomes. Snow and frosting it leaves alone, as it leaves
+// the sand and the stone. (Ids run past 255 here, so no Uint8Array.)
+export const MOWS = new Uint16Array(BLOCK_IDS);
 MOWS[GRASS] = MOWED;
 // Farmland, dry (1) or watered (2): what crops grow in.
 export const SOIL = new Uint8Array(BLOCK_IDS);

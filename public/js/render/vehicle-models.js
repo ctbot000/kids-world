@@ -708,11 +708,12 @@ function mower(id) {
   block(body, paint, -0.3, 0.34, 0.34, 0.3, 0.52, 0.62);
   block(body, paint, -0.34, 0.52, -0.3, 0.34, 0.58, 0.34);
   studs(body, paint, 0.58, [-0.18, 0.18], [-0.6, -0.4]);
-  // The driver's seat over the back wheels, and a grass basket behind it, open
-  // at the top and filling with clippings as it goes.
-  block(body, dark, -0.24, 0.56, -0.56, 0.24, 0.68, -0.5);
-  v.seat = block(body, v.pad, -0.22, 0.68, -0.54, 0.22, 0.76, -0.44);
-  block(body, v.pad, -0.22, 0.56, -0.72, 0.22, 1.16, -0.56);
+  // The driver's seat above the body (the seat height, critters.js), its
+  // backrest behind out of the rider's way, and a grass basket behind the
+  // wheels, open at the top and filling with clippings as it goes.
+  block(body, dark, -0.26, 0.56, -0.32, 0.26, 0.7, -0.04);
+  v.seat = block(body, v.pad, -0.24, 0.7, -0.32, 0.24, 0.78, -0.04);
+  block(body, v.pad, -0.24, 0.56, -0.48, 0.24, 1.18, -0.32);
   const basket = toon('#c99a5b');
   block(body, basket, -0.28, 0.5, -0.96, 0.28, 0.56, -0.72);
   for (const side of [-1, 1]) block(body, basket, side < 0 ? -0.28 : 0.22, 0.56, -0.96, side < 0 ? -0.22 : 0.28, 0.94, -0.72);
@@ -815,7 +816,7 @@ export function drive(m, dt, state, moving, air = 0) {
   // The lawn mower's blade spins as it goes (and gives a whirl when honked),
   // and its little front wheels turn the way it is steering.
   if (m.blade) {
-    m.spin = Math.max(0, (m.spin ?? 0) + dt * (moving || honk ? 40 : -20));
+    m.spin = clamp((m.spin ?? 0) + dt * (moving || honk ? 40 : -40), 0, 30);
     m.blade.rotation.y += m.spin * dt;
   }
   if (m.steer) for (const w of m.steer) w.rotation.y = clamp(m.turn * 0.05, -0.4, 0.4);
