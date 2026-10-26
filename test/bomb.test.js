@@ -1,11 +1,13 @@
 // The mining bomb: put down as a block beside the rails, its fuse burns on
 // the host and it pops into a small round hole in the natural ground only,
 // with gem rocks caught in the blast dropping their jewels for the blaster.
+// The Bomb Rod throws the same blast as a toy: bops and jewels, no hole.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { applyCells, blastEdit } from '../public/js/shared/tools.js';
+import { WEAPONS, weaponOf } from '../public/js/shared/shop.js';
+import { applyCells, blastEdit, gemBlastEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 
 // Flat stone up to y = 5, with a ruby rock buried in it.
@@ -158,4 +160,61 @@ test('a bomb saved with the island before it popped goes off once the island is 
   again.tick();
   assert.equal(again.world.get(12, top + 1, 12), B.AIR, 'it popped');
   assert.equal(b.last('fx')?.kind, 'blast', 'with a boom');
+});
+
+test('the Bomb Rod is a toy weapon of the shop, bought after the Lava Blade', () => {
+  assert.equal(weaponOf('bombrod').name, 'Bomb Rod');
+  assert.equal(WEAPONS.at(-1).key, 'bombrod', 'last, so saved weapons stay what they were');
+});
+
+test('a Bomb Rod pop shakes jewels out of gem rocks and never digs the ground', () => {
+  const w = rockyWorld();
+  // A ruby rock right beside where the bomb lands, in the ground.
+  w.set(13, 4, 12, B.GEM_ROCKS[0]);
+  // Right in the blast: a toy brick, farmland, a planted flower and furniture,
+  // all to stand.
+  w.set(11, 5, 11, B.TOY_BRICKS[0]);
+  w.set(11, 5, 12, B.FARMLAND);
+  w.set(11, 5, 13, B.TULIP);
+  w.set(12, 5, 11, B.CHAIR);
+  const plan = gemBlastEdit(w, 12, 5, 12);
+  applyCells(w, plan.cells);
+  assert.deepEqual(plan.collected, [B.GEM_ROCKS[0]], 'the ruby rock in the blast is shaken loose');
+  assert.equal(w.get(13, 4, 12), B.AIR, 'the ruby rock itself is gone');
+  assert.equal(w.get(12, 5, 12), B.STONE, 'the ground is never dug');
+  assert.equal(w.get(12, 2, 12), B.GEM_ROCKS[0], 'a gem rock further down stays');
+  assert.equal(B.block(w.get(11, 5, 11)).key, 'brick-red', 'a toy brick stands');
+  assert.equal(w.get(11, 5, 12), B.FARMLAND, 'farmland stands');
+  assert.equal(w.get(11, 5, 13), B.TULIP, 'a planted flower stands');
+  assert.equal(w.get(12, 5, 11), B.CHAIR, 'furniture stands');
+});
+
+test('a Bomb Rod thrown bops the monsters in its blast, as the thrower\'s bops', () => {
+  const time = clock();
+  const room = new Room({ code: '123456', theme: 'flat', seed: 7, now: time.now, settings: { monsters: true } });
+  const W = 96;
+  const w = new World({ W, H: 32, D: W, sea: 4, theme: 'flat', spawn: { x: W / 2 + 0.5, y: 11, z: W / 2 + 0.5 } });
+  for (let x = 0; x < W; x++) for (let z = 0; z < W; z++) for (let y = 0; y <= 10; y++) w.set(x, y, z, y === 10 ? B.GRASS : B.DIRT);
+  room.world = w;
+  room.hookWorld();
+  room.monsters.spawnAt = Infinity;
+  const a = join(room, { look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', weapon: 'bombrod' } });
+  const spawn = w.spawn;
+  // Facing the way the bomb goes (yaw 0: straight on in z), three steps off.
+  room.receive(a, { t: 'm', s: [spawn.x, 11, spawn.z, 0, 0, 0] });
+  const m = room.monsters.add(w, spawn.x, 11, spawn.z + 3);
+  Object.assign(m.body, { x: spawn.x, y: 11, z: spawn.z + 3, vx: 0, vy: 0, vz: 0 });
+  a.inbox.length = 0;
+  room.receive(a, { t: 'bomb', d: 3 });
+  const blast = a.last('fx');
+  assert.ok(blast && blast.kind === 'blast', 'the pop is told');
+  assert.equal(blast.by, 1, 'it was the thrower\'s');
+  assert.ok(a.inbox.some((msg) => msg.t === 'fx' && msg.kind === 'lob'), 'friends see the bomb lobbed');
+  assert.ok(a.inbox.some((msg) => msg.t === 'mhit' && msg.by === 1), 'the monster is bopped as theirs');
+  // A monster well out of the blast is left alone.
+  const far = room.monsters.add(w, spawn.x, 11, spawn.z - 6);
+  Object.assign(far.body, { x: spawn.x, y: 11, z: spawn.z - 6, vx: 0, vy: 0, vz: 0 });
+  a.inbox.length = 0;
+  room.receive(a, { t: 'bomb', d: 3 });
+  assert.equal(a.inbox.some((msg) => msg.t === 'mhit'), false, 'too far for the blast');
 });

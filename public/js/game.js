@@ -103,6 +103,9 @@ const FRONT = 0.34;
 const SWEEP = -0.17;
 // A weapon this many swings from breaking says so.
 const WEAR_WARN = 10;
+// How hard the Bomb Rod's little bomb is pulled down as it flies (game.js
+// lobBomb): a short steep arc, over a fence and down in a few steps.
+const ROD_ARC_G = 9;
 
 // A monster bopped flashes white, on and off, this long.
 const FLASH_MS = 300;
@@ -536,6 +539,7 @@ export class Game extends EventTarget {
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
+        else if (msg.kind === 'lob' && msg.pid !== this.pid) this.lobBomb(msg.x, msg.y, msg.z, msg.tx, msg.tz);
         break;
       case 'mfx':
         // Mr. Mole popping up: his burst of dirt (see room.js).
@@ -1581,6 +1585,7 @@ export class Game extends EventTarget {
     const fx = Math.sin(this.me.yaw);
     const fz = Math.cos(this.me.yaw);
     const blaster = weapon?.key === 'blaster';
+    const rod = weapon?.key === 'bombrod';
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
@@ -1594,7 +1599,7 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster ? FRONT : SWEEP)) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster || rod ? FRONT : SWEEP)) continue;
       const ey = b.y + BODY.eye;
       const dy = m.y + size.height / 2 - ey;
       const len = Math.hypot(dx, dy, dz) || 1;
@@ -1615,7 +1620,7 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster ? FRONT : SWEEP)) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster || rod ? FRONT : SWEEP)) continue;
       const hit = { id: c.id, gap, dx, dz, m, size, dragon: true };
       dragons.push(hit);
       if (!best || gap < best.gap) best = hit;
@@ -1623,7 +1628,7 @@ export class Game extends EventTarget {
     // The blaster turns to aim at its one; a sweep goes the way you face,
     // turning only for one right up against you behind.
     const behind = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1) < SWEEP;
-    if (best && (blaster || behind(best))) this.me.yaw = Math.atan2(best.dx, best.dz);
+    if (best && (blaster || rod || behind(best))) this.me.yaw = Math.atan2(best.dx, best.dz);
     // The bop (and a blaster's bubble) goes when the swing lands, a moment on;
     // the whoosh of a swing as it starts.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
@@ -1639,6 +1644,14 @@ export class Game extends EventTarget {
         if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
         else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
+      } else if (rod) {
+        // The little bomb lobbed in an arc to where you face, popping there.
+        const d = best ? Math.hypot(best.dx, best.dz) : reach;
+        this.lobBomb(hand.x, hand.y, hand.z, b.x + Math.sin(yaw) * d, b.z + Math.cos(yaw) * d);
+        this.sound.play('swish');
+        this.send({ t: 'bomb', d: +d.toFixed(2) });
+        this.wearOut();
+        return;
       } else {
         this.slashFrom(this.players.get(this.pid)?.avatar);
         if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
@@ -4323,6 +4336,22 @@ export class Game extends EventTarget {
   // a few little sparks off the top of the bomb, so it reads as about to pop.
   fuse(msg) {
     this.renderer.effects.sparkles(msg.x, msg.y, msg.z, 5, ['#ffdf5a', '#ffffff', '#ff8fc4']);
+  }
+
+  // The Bomb Rod's little bomb (shop.js bombrod), lobbed from the hand at
+  // (x, y, z) to land at (tx, tz): a dark ball with its fuse fizzing, flying
+  // in an arc over the way. It pops where it lands (the host's word comes back
+  // as a blast fx, blast), so here is only the flight of it.
+  lobBomb(x, y, z, tx, tz) {
+    const t = 0.45;
+    const ty = Math.max(this.me.body.y, this.world.top(Math.floor(tx), Math.floor(tz)) + 1) + 0.3;
+    const vx = (tx - x) / t;
+    const vz = (tz - z) / t;
+    // Enough of a push up to rise over the arc and come down there (gravity
+    // pulls the particle down all the while, as much as half of it again).
+    const vy = (ty - y) / t + 0.5 * ROD_ARC_G * t;
+    this.renderer.effects.add('puff', x, y, z, { vx, vy, vz, size: 0.24, life: t, grow: 0.3, gravity: ROD_ARC_G, color: '#3b3644', delay: 0.1 });
+    this.renderer.effects.add('sparkle', x, y, z, { vx, vy, vz, size: 0.12, life: t, gravity: ROD_ARC_G, color: '#ffd23f', delay: 0.1 });
   }
 
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and

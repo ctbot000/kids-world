@@ -86,6 +86,19 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // Back over the shoulder, the rod tipped up, then a fling forward and up:
+  // the bomb leaves it at the top of the throw, and the arm settles back.
+  bombrod: {
+    secs: 0.46,
+    strike: 0.4,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.22, w: 1, wL: 0.3, fwd: -2.9, raise: 0.55, elbow: 0.9, wrist: -0.55, fwdL: 0, raiseL: 0, elbowL: 0, lean: -0.1, nod: -0.1 },
+      { at: 0.4, w: 1, wL: 0.5, fwd: -1.3, raise: 0.3, elbow: 0.15, wrist: 1.6, fwdL: -0.9, raiseL: -0.25, elbowL: 0.7, lean: 0.14, nod: 0.06, step: 0.3 },
+      { at: 0.62, w: 1, wL: 0.3, fwd: -1.2, raise: 0.22, elbow: 0.2, wrist: 1.5, fwdL: -0.9, raiseL: -0.25, elbowL: 0.7, lean: 0.1, step: 0.25 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
   // The Lava Blade: drawn up high behind, both hands on it, then a great
   // diagonal cut down across, the whole body winding into it — slower than
   // the sword and heavier, and it lands like it.
@@ -1488,6 +1501,16 @@ export function weapon(kind) {
         mesh(sphere(), toon('#bff3ff', { transparent: true, opacity: 0.75 }), 0, 0.1, 0.09, 0.07),
         mesh(cylinder(0.05, 0.035, 0.08, 14), toon('#ffcf3f'), 0, 0.28, 0),
         mesh(torus(0.045, 0.012), toon('#ff7fb2'), 0, 0.33, 0),
+      );
+      break;
+    case 'bombrod': // A rod with a little bomb waiting at its tip, fuse lit.
+      g.add(
+        mesh(cylinder(0.03, 0.03, 0.16, 10), toon('#ffcf3f'), 0, 0.02, 0),
+        mesh(sphere(), toon('#ff7fb2'), 0, -0.055, 0, 0.035),
+        mesh(capsule(0.032, 0.34), toon('#9b7bea'), 0, 0.28, 0, 1, 1, 0.9),
+        mesh(sphere(), toon('#3b3644'), 0, 0.5, 0, 0.09),
+        mesh(cylinder(0.02, 0.02, 0.06, 8), toon('#ffd23f'), 0, 0.62, 0),
+        mesh(sphere(), toon('#ffd23f', { emissive: 0.6 }), 0, 0.66, 0, 0.025),
       );
       break;
     case 'hammer': {

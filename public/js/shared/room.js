@@ -20,7 +20,7 @@ import * as B from './blocks.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
-import { blastEdit, growEdit, validCells } from './tools.js';
+import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
@@ -88,6 +88,10 @@ const CHAT_KEEP = 30;
 const BOMB_FUSE_MS = [2200, 2800];
 // How often a waiting bomb throws its fizzing spark (stepBombs).
 const BOMB_SPARK_MS = 400;
+// A Bomb Rod (shop.js bombrod) throws its little bomb this far at most, and
+// its pop reaches this far round where it lands (rodBlast).
+const ROD_RANGE = 5;
+const ROD_BLAST = 2;
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -477,6 +481,11 @@ export class Room {
         break;
       case 'bop':
         this.bop(p, msg);
+        break;
+      // A Bomb Rod's throw (shop.js bombrod): the bomb lands where the thrower
+      // faces, a few steps off, and pops at once.
+      case 'bomb':
+        this.rodBlast(p, msg);
         break;
       case 'potion':
         this.drank(p);
@@ -1680,6 +1689,60 @@ export class Room {
     const b = m.body;
     this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
     this.sendDefense();
+  }
+
+  // A Bomb Rod thrown (shop.js bombrod): the small bomb pops where it lands,
+  // a few steps off, bopping every monster caught in its blast — the thrower's
+  // bops, as any swing of theirs is — and shaking the jewels out of any gem
+  // rocks there into their basket (tools.js gemBlastEdit). The ground is never
+  // dug, and nothing anyone built, planted or furnished is ever broken.
+  rodBlast(p, msg) {
+    const now = this.now();
+    if ((p.dizzyUntil ?? 0) > now || weaponOf(p.look?.weapon)?.key !== 'bombrod') return;
+    // Where it pops: a few steps the way they face, no further than the rod
+    // throws, on the ground there (or in it, so a blast against a wall still
+    // catches the gem rocks in the wall).
+    const fx = Math.sin(p.s[3] ?? 0);
+    const fz = Math.cos(p.s[3] ?? 0);
+    const dist = Math.min(ROD_RANGE, Math.max(0, +msg.d || 0));
+    const x = Math.floor(p.s[0] + fx * dist);
+    const z = Math.floor(p.s[2] + fz * dist);
+    const y = Math.floor(p.s[1] + 0.5);
+    if (!this.world.inBounds(x, y, z)) return;
+    // Friends see the bomb lobbed from the thrower's hand, arcing down to it.
+    this.broadcast({ t: 'fx', kind: 'lob', pid: p.id, x: +p.s[0].toFixed(2), y: +(p.s[1] + 1).toFixed(2), z: +p.s[2].toFixed(2), tx: x + 0.5, tz: z + 0.5 });
+    // The monsters in the blast: each takes a bop of the thrower's.
+    for (const m of [...this.monsters.list]) {
+      if (m.under) continue;
+      const b = m.body;
+      if (Math.hypot(b.x - x - 0.5, b.z - z - 0.5) > ROD_BLAST + b.radius) continue;
+      if (b.y > y + ROD_BLAST + 1 || b.y + b.height < y - ROD_BLAST) continue;
+      if (m.march) {
+        this.bopMarcher(p, m, now, weaponOf('bombrod').power);
+        continue;
+      }
+      if (m.kind === 'king') {
+        this.bopKing(p, m, now, weaponOf('bombrod').king);
+        continue;
+      }
+      const hit = this.monsters.hit(m, p.id, { x: p.s[0], y: p.s[1], z: p.s[2] }, now, weaponOf('bombrod').power);
+      if (hit.wait) continue;
+      if (hit.hearts) {
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+        continue;
+      }
+      this.monsters.remove(m.id);
+      this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+      if (m.camp) this.adventure?.guardGone(m, now);
+    }
+    // The gem rocks caught in it: their jewels, and the boom everyone hears.
+    const plan = gemBlastEdit(this.world, x, y, z);
+    if (plan.cells.length) {
+      for (let i = 0; i < plan.cells.length; i += 4) this.world.set(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2], plan.cells[i + 3]);
+      this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: plan.cells });
+      this.changed();
+    }
+    this.broadcast({ t: 'fx', kind: 'blast', x: x + 0.5, y: y + 0.5, z: z + 0.5, by: p.id, gems: plan.collected });
   }
 
   // ------------------------------------------------ tower defense

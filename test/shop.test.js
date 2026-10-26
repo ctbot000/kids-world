@@ -190,9 +190,12 @@ test('a toy weapon is in the look the island sees while you have it on, and only
   assert.equal(cleanLook({ ...look, weapon: 'blaster' }).weapon, 'blaster');
   assert.equal(cleanLook({ ...look, weapon: 'lavablade' }).weapon, 'lavablade');
   assert.equal(cleanLook({ ...look, weapon: 'cannon' }).weapon, undefined);
-  for (let i = 1; i < WEAPONS.length; i++) {
-    assert.ok(WEAPONS[i].power >= WEAPONS[i - 1].power && WEAPONS[i].king >= WEAPONS[i - 1].king);
-    assert.ok(WEAPONS[i].power > WEAPONS[i - 1].power || WEAPONS[i].reach > WEAPONS[i - 1].reach, `${WEAPONS[i].name} does more`);
+  // The ones that bop one at a time each do more; the Bomb Rod, last, pops
+  // all in its blast instead (bomb.test.js).
+  const boppers = WEAPONS.filter((w) => w.key !== 'bombrod');
+  for (let i = 1; i < boppers.length; i++) {
+    assert.ok(boppers[i].power >= boppers[i - 1].power && boppers[i].king >= boppers[i - 1].king);
+    assert.ok(boppers[i].power > boppers[i - 1].power || boppers[i].reach > boppers[i - 1].reach, `${boppers[i].name} does more`);
   }
   // Each reaches further than an arm, and none far: no bopping from across the meadow.
   for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 5, `${w.name} reaches ${w.reach}`);
@@ -219,8 +222,8 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     const p = new Profile();
     assert.equal(p.nextWeapon(), null, 'nothing to flip through');
     assert.equal(p.pickWeapon(1), null, 'nothing to pick either');
-    p.earn(1000);
-    for (const key of ['sword', 'blaster', 'hammer', 'lavablade']) {
+    p.earn(1500);
+    for (const key of ['sword', 'blaster', 'hammer', 'lavablade', 'bombrod']) {
       assert.equal(p.buy('weapon'), true);
       // Each new one goes straight into your hand.
       assert.equal(wornWeapon(p.data.gear).key, key);
@@ -228,7 +231,7 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     assert.equal(p.nextWeapon().key, 'sword', 'round to the first');
     assert.equal(p.nextWeapon().key, 'blaster');
     assert.equal(p.pickWeapon(4).key, 'lavablade');
-    assert.equal(p.pickWeapon(5), null, 'not one of yours');
+    assert.equal(p.pickWeapon(6), null, 'not one of yours');
     assert.equal(p.pickWeapon(0), null);
     assert.equal(wornWeapon(p.data.gear).key, 'lavablade', 'the pick stays');
     p.wear('weapon', false);
@@ -392,7 +395,7 @@ test('weapons wear out as they bop, break, and are fixed in the shop for less th
     const p = new Profile();
     p.data.gear = cleanGear({});
     assert.equal(p.useWeapon(), null, 'a fist never wears out');
-    p.earn(1000);
+    p.earn(1500);
     p.buy('weapon');
     p.buy('weapon');
     p.pickWeapon(1);
