@@ -1681,12 +1681,15 @@ test('🛼 roller skates: bought in the shop, on in place of your shoes, and you
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden);
   // Push off, let go, and roll on: down a lane the island clears of trees
-  // (towards its middle), nobody about.
-  await page.evaluate(async () => {
+  // (towards its middle), nobody about: you keep out of every animal and
+  // vehicle the page has, and the page hears they are gone only at the
+  // room's next tick, so the push off waits for that.
+  const gone = await page.evaluate(async () => {
     const B = await import('/js/shared/blocks.js');
     const kw = window.kidsWorld;
     const room = kw.session.link.room;
-    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const ids = room.critters.list.map((c) => c.id);
+    for (const id of ids) room.critters.remove(id);
     const b = kw.game.me.body;
     const bx = Math.floor(b.x);
     const by = Math.floor(b.y + 0.01);
@@ -1699,7 +1702,9 @@ test('🛼 roller skates: bought in the shop, on in place of your shoes, and you
       }
     }
     kw.renderer.view.yaw = dz < 0 ? 0 : Math.PI;
+    return ids;
   });
+  await until(page, (ids) => ids.every((id) => !window.kidsWorld.game.critters.has(id)), gone);
   await until(page, () => {
     const g = window.kidsWorld.game;
     const b = g.me.body;
