@@ -819,6 +819,62 @@ function cookingSchool() {
   return c.list();
 }
 
+// A small furnished office for playing company: a light open room with a
+// wood floor and a big window, and in it desks with computers, wheeled chairs
+// to scoot round on (game.js scootInSeat), bookshelves, a wall TV, lamps and
+// a potted plant.
+function office() {
+  const c = new Cells();
+  c.box(-5, 0, 0, 5, 0, 9, B.PARQUET);
+  for (let y = 1; y <= 4; y++) {
+    for (let x = -5; x <= 5; x++) {
+      for (let z = 0; z <= 9; z++) {
+        const sideX = x === -5 || x === 5;
+        const sideZ = z === 0 || z === 9;
+        if (!sideX && !sideZ) {
+          c.put(x, y, z, B.AIR);
+          continue;
+        }
+        const corner = sideX && sideZ;
+        const window = (y === 2 || y === 3) && ((sideX && [2, 3, 6, 7].includes(z)) || (z === 0 && [-3, -2, 2, 3].includes(x)));
+        c.put(x, y, z, corner ? CHARCOAL : y === 4 ? WHITE : window ? B.GLASS : SKY);
+      }
+    }
+  }
+  // The way in, three wide, with a sign over it.
+  for (let x = -1; x <= 1; x++) {
+    c.put(x, 1, 0, B.AIR);
+    c.put(x, 2, 0, B.AIR);
+    c.put(x, 3, 0, x === 0 ? WHITE : BLUE);
+  }
+  // A flat roof, with a star on the front.
+  c.box(-6, 5, -1, 6, 5, 10, CHARCOAL);
+  c.put(0, 6, 0, B.STAR_BLOCK);
+  // Desks in two rows facing each other down the room: a table each with a
+  // computer on it, and a wheeled chair a step back to scoot up to it, the
+  // middle left open to roll across.
+  for (const x of [-3, 3]) {
+    c.put(x, 1, 3, B.TABLE);
+    c.put(x, 1, 7, B.TABLE);
+    c.put(x, 2, 3, B.turnedTo(B.COMPUTER, 1));
+    c.put(x, 2, 7, B.turnedTo(B.COMPUTER, 3));
+    c.put(x, 1, 4, B.turnedTo(B.DESK_CHAIR, 3));
+    c.put(x, 1, 6, B.turnedTo(B.DESK_CHAIR, 1));
+  }
+  // A TV on the back wall, and a tea corner by the door for a break.
+  c.put(0, 2, 9, B.WALL_TV);
+  c.put(-2, 1, 2, B.TEA_TABLE);
+  // Bookshelves along the sides at the back, a picture over them.
+  for (const z of [7, 8]) c.put(-4, 1, z, B.turnedTo(B.BOOKSHELF, 1));
+  for (const z of [7, 8]) c.put(4, 1, z, B.turnedTo(B.BOOKSHELF, 3));
+  c.put(-4, 3, 3, B.turnedTo(B.PICTURE, 1));
+  // Lamps in the corners by the door, and a potted plant beside it.
+  c.put(-4, 1, 1, B.FLOOR_LAMP);
+  c.put(4, 1, 1, B.FLOOR_LAMP);
+  c.put(2, 1, 1, B.POTTED_PLANT);
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
@@ -845,6 +901,7 @@ export const STAMPS = [
   { key: 'video-arcade', name: 'Video Arcade', icon: '🕹️', cells: videoArcade() },
   { key: 'school', name: 'School', icon: '🏫', cells: school() },
   { key: 'cooking-school', name: 'Cooking School', icon: '🍳', cells: cookingSchool() },
+  { key: 'office', name: 'Office', icon: '🏢', cells: office() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

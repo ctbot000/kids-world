@@ -191,6 +191,10 @@ export const CHAIR = furniture(101, 'chair', { name: 'Chair', color: '#c98a52', 
 // A rocking chair (shared/seats.js): sit in it and it rocks gently back and
 // forth on its curved rockers, carrying you with it (render/rocking-model.js).
 export const ROCKING_CHAIR = furniture(271, 'rocking-chair', { name: 'Rocking Chair', color: '#8b5a3c', after: 101, sound: 'wood', real: 'rocking-chair' });
+// A wheeled desk chair: sit in it and walk, and it rolls gently along the
+// floor with you, the way you steer (game.js scootInSeat). After the rocking
+// chair.
+export const DESK_CHAIR = furniture(309, 'desk-chair', { name: 'Desk Chair', color: '#2f6fe4', after: 271, sound: 'wood' });
 export const SOFA = furniture(105, 'sofa', { name: 'Sofa', color: '#5b8fd9', sound: 'cloth' });
 export const BED = furniture(109, 'bed', { name: 'Bed', color: '#f29bc4', sound: 'cloth' });
 export const BOOKSHELF = furniture(113, 'bookshelf', { name: 'Bookshelf', color: '#a8703f', sound: 'wood' });

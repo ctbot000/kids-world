@@ -94,6 +94,29 @@ const MODELS = {
     return out;
   },
 
+  // A wheeled desk chair (game.js scootInSeat): sit in it and walk, and it
+  // rolls along the floor with you. A base of five spokes, each on a little
+  // wheel, a gas lift up to the seat and a cushioned back — the seat turns
+  // any way you like, so no front of its own, unlike most furniture.
+  'desk-chair'() {
+    const out = [];
+    // The five spokes of the base, each out to a wheel at its end.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const x = Math.sin(a) * 0.3;
+      const z = Math.cos(a) * 0.3;
+      out.push(box(0.46 - Math.abs(x) * 0.85, 0.05, 0.46 - Math.abs(z) * 0.85, 0.54 + Math.abs(x) * 0.85, 0.11, 0.54 + Math.abs(z) * 0.85, STEEL, 'plain'));
+      out.push(box(0.5 + x - 0.04, 0, 0.5 + z - 0.04, 0.5 + x + 0.04, 0.05, 0.5 + z + 0.04, BLACK, 'plain'));
+    }
+    // The gas lift up to the seat, and the seat with its cushion.
+    out.push(box(0.42, 0.11, 0.42, 0.58, 0.46, 0.58, STEEL, 'plain'));
+    out.push(box(0.15, 0.44, 0.15, 0.85, 0.52, 0.85, '#3b3f47', 'plain'));
+    out.push(box(0.19, 0.52, 0.19, 0.81, 0.58, 0.78, '#2f6fe4', 'cloth'));
+    // The cushioned back, leaning back a little, and its post up from the seat.
+    out.push(box(0.44, 0.52, 0.44, 0.56, 0.98, 0.5, STEEL, 'plain'));
+    out.push(box(0.17, 0.56, 0.68, 0.83, 0.98, 0.82, '#2f6fe4', 'cloth'));
+    return out;
+  },
   sofa(same) {
     const left = same(-1, 0);
     const right = same(1, 0);

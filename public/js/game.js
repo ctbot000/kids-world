@@ -28,9 +28,9 @@ import { XP_FOR } from './shared/levels.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
-import { freeSpot, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
+import { freeSpot, scootsAt, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
@@ -3326,9 +3326,14 @@ export class Game extends EventTarget {
       this.toldSeat = true;
       const id = this.world.get(cell.x, cell.y, cell.z);
       const name = B.block(id).name.toLowerCase();
+      // A desk chair on wheels rolls as you walk, and only Q (or the button)
+      // gets you off it.
+      const rolls = scootsAt(this.world, cell.x, cell.y, cell.z);
+      const off = this.touch ? 'Tap 👋 Get up to get off.' : 'Press Q to get off.';
       // At a study desk Q (and the button) open your workbooks instead.
-      const how = isStudyDesk(id) ? 'Walk' : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
-      this.emit('toast', { icon: pose.pose === 'soak' ? '♨️' : pose.pose === 'sit' ? '🛋️' : '🛏️', text: pose.pose === 'soak' ? `Ahh, into the ${name}! ${how} to get out.` : pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(id) ? 'at' : 'on'} the ${name}. ${how} to get up.` });
+      const how = isStudyDesk(id) ? 'Walk' : rolls ? off : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
+      const hint = rolls ? pose.pose === 'sit' ? `You sit on the ${name} — walk to scoot it along! ${off}` : off : pose.pose === 'soak' ? `Ahh, into the ${name}! ${how} to get out.` : pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(id) ? 'at' : 'on'} the ${name}. ${how} to get up.`;
+      this.emit('toast', { icon: pose.pose === 'soak' ? '♨️' : rolls ? '🪑' : pose.pose === 'sit' ? '🛋️' : '🛏️', text: hint });
     }
     this.emit('ride');
   }
@@ -3447,6 +3452,13 @@ export class Game extends EventTarget {
     const me = this.me;
     const b = me.body;
     const c = this.seat;
+    // A desk chair on wheels rolls along the floor with you instead — but
+    // only where you may build, for the chair is carried from cell to cell as
+    // it goes; anywhere else it is a seat like any other.
+    if (this.mayBuild && scootsAt(this.world, c.x, c.y, c.z)) {
+      this.scootInSeat(dt, input);
+      return;
+    }
     const pose = seatPose(this.world, c.x, c.y, c.z, c.spot);
     if (!pose || Math.hypot(b.x - pose.x, b.z - pose.z) > 0.8) {
       this.seat = null;
@@ -3473,6 +3485,91 @@ export class Game extends EventTarget {
       a.root.rotation.order = 'YXZ';
       a.root.rotation.x = 0;
       if (B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)));
+      a.update(dt, me.anim, 0);
+      a.shadow.visible = false;
+    }
+  }
+
+  // Rolling round the floor in a wheeled desk chair you are sitting in: the
+  // walk keys roll it gently the way you steer, and it turns as it goes. Your
+  // body leads and the chair follows from cell to cell, so friends see both
+  // move; when you stop or get off, there it stays. A bump into anything solid
+  // stops it, and the ground only: it will not roll off a step, into water or
+  // out of the island.
+  scootInSeat(dt, input) {
+    const me = this.me;
+    const b = me.body;
+    const w = this.world;
+    const c = this.seat;
+    // Any get-off (jump or Shift) gets you off, beside the chair where it
+    // stopped.
+    if (this.dizzy || input.jump || input.down) {
+      this.standUp();
+      this.liftLatch = true;
+      return;
+    }
+    const move = this.steer(input.readMove(), dt);
+    const yaw = this.renderer.view.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const mx = fx * move.y + -fz * move.x;
+    const mz = fz * move.y + fx * move.x;
+    // The chair's own cell is where you sit, so as far as this one roll is
+    // concerned it is not there: you glide out of it, and into whatever is
+    // beside it, which is what stops you. (physics.js needs no more of a world
+    // than this.)
+    const free = { W: w.W, H: w.H, D: w.D, get: (x, y, z) => (x === c.x && y === c.y && z === c.z ? B.AIR : w.get(x, y, z)) };
+    // Rolling is gentler than walking, and speeds up and slows down only
+    // gradually, as a chair on wheels does: let go and it coasts to a stop.
+    stepBody(free, b, { mx, mz, jump: false, down: false, run: false }, dt, { move: SCOOT, bounce: false });
+    b.inWater = false;
+    b.vy = 0;
+    b.flying = false;
+    b.onGround = true;
+    // Where the chair now is: the cell your hips are over, if it is a place it
+    // could stand (empty, with headroom, on solid dry ground, inside the
+    // island); otherwise it stays where it was and you with it.
+    const id = w.get(c.x, c.y, c.z);
+    const nx = Math.floor(b.x);
+    const ny = Math.floor(b.y + 0.1);
+    const nz = Math.floor(b.z);
+    const sits = (x, y, z) => w.inBounds(x, y, z) && !B.SOLID[w.get(x, y, z)] && !B.SOLID[w.get(x, y + 1, z)] && B.SOLID[w.get(x, y - 1, z)] && w.get(x, y, z) !== B.WATER && w.get(x, y - 1, z) !== B.WATER;
+    if ((nx !== c.x || ny !== c.y || nz !== c.z) && sits(nx, ny, nz)) {
+      // The chair turns to face the way it is rolling, so its back is behind
+      // you as you scoot (as any seat, you face the way it faces); standing
+      // still, it keeps the way it faces.
+      const going = Math.hypot(b.vx, b.vz) > 0.3 ? Math.atan2(b.vx, b.vz) : null;
+      // Its front (RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z) is the way it rolls —
+      // atan2(vx, vz) is 0 rolling toward +z — so its back is behind you as you
+      // scoot; standing still, it keeps the way it faces.
+      const front = going === null ? B.block(id).front : ((1 - Math.round(going / (Math.PI / 2))) % 4 + 4) % 4;
+      const moved = B.turnedTo(id, front);
+      // The cell it leaves must still be the chair, so a friend's build landing
+      // there between one roll and the next does not get wiped away.
+      if (this.edit('scoot', [nx, ny, nz, moved, c.x, c.y, c.z, B.AIR], { expect: [B.AIR, id], undoable: false })) {
+        c.x = nx;
+        c.y = ny;
+        c.z = nz;
+      }
+    }
+    // You sit as the chair has you, facing the way it faces.
+    const pose = seatPose(w, c.x, c.y, c.z, c.spot) ?? null;
+    if (!pose) {
+      this.seat = null;
+      unstick(w, b);
+      this.emit('ride');
+      return;
+    }
+    Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, onGround: true, inWater: false, flying: false });
+    me.yaw = pose.yaw;
+    me.speed = Math.hypot(b.vx, b.vz);
+    me.anim = ANIM.sit;
+    const a = this.players.get(this.pid)?.avatar;
+    if (a) {
+      a.root.position.set(b.x, b.y, b.z);
+      a.root.rotation.y = me.yaw;
+      a.root.rotation.order = 'YXZ';
+      a.root.rotation.x = 0;
       a.update(dt, me.anim, 0);
       a.shadow.visible = false;
     }
@@ -4101,6 +4198,9 @@ export class Game extends EventTarget {
       this.cropEffects(cells);
       return;
     }
+    // A chair rolling across the floor is furniture sliding, not a build: no
+    // burst of studs or thump of wood, it just glides.
+    if (kind === 'scoot') return;
     if (!mine && !this.near(first[0], first[1], first[2], 28)) return;
     const tint = this.renderer.atlas.studTint;
     const colorOf = (id) => `rgb(${tint[id * 3]},${tint[id * 3 + 1]},${tint[id * 3 + 2]})`;
