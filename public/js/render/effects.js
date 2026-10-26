@@ -510,6 +510,25 @@ export class Effects {
     r.go(x, y, z, from, to);
   }
 
+  // Mr. Mole coming up out of the ground: a burst of dirt out of the spot
+  // his mound rose to, crumbs of earth flying every way and falling back.
+  dirt(x, y, z) {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 1 + Math.random() * 2.2;
+      this.add(i % 3 ? 'square' : 'puff', x, y + 0.15, z, {
+        vx: Math.cos(a) * s,
+        vy: 2 + Math.random() * 2.6,
+        vz: Math.sin(a) * s,
+        size: i % 3 ? 0.07 + Math.random() * 0.06 : 0.22 + Math.random() * 0.12,
+        life: 0.45 + Math.random() * 0.3,
+        gravity: 14,
+        drag: 1,
+        color: ['#6e5236', '#7d5f3f', '#5e442c', '#8a6a48'][i % 4],
+      });
+    }
+  }
+
   update(dt) {
     for (const s of this.slashes) {
       if (!s.group.visible) continue;

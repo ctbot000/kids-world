@@ -199,7 +199,8 @@ test('the Grumble Knight and the Stone Golem are tougher than a Big Bruiser, and
   assert.deepEqual(toughGuards(3), ['knight', 'spiky']);
   assert.deepEqual(toughGuards(5), ['golem', 'knight', 'big', 'spiky']);
   assert.ok(toughGuards(20).length > toughGuards(5).length);
-  // A camp of stage 5 wakes with its mosquito and the tough ones first.
+  // A camp of stage 5 wakes with its mosquito and the tough ones first. Being
+  // the only camp, it is the deepest, so the Queen Mosquito guards it too.
   const w = flat();
   const camp = { id: 1, kind: 'camp', x: 30.5, y: 6, z: 30.5, r: 7 };
   for (const [stage, want] of [[1, []], [5, ['golem', 'knight', 'big', 'spiky']]]) {
@@ -210,6 +211,7 @@ test('the Grumble Knight and the Stone Golem are tougher than a Big Bruiser, and
     const kinds = monsters.list.map((m) => m.kind);
     assert.equal(kinds[0], 'mosquito');
     for (const k of want) assert.ok(kinds.includes(k), `stage ${stage} has a ${k}`);
-    if (!want.length) assert.ok(kinds.slice(1).every((k) => k === 'blob'), 'stage 1: blobs');
+    assert.ok(kinds.includes('queen'), `stage ${stage}: the queen guards the deepest camp`);
+    if (!want.length) assert.ok(kinds.slice(1).every((k) => k === 'blob' || k === 'queen'), 'stage 1: blobs otherwise');
   }
 });

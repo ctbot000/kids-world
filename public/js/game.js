@@ -25,7 +25,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -71,7 +71,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, not
 // only once the host's next update says so.
@@ -140,7 +140,13 @@ const TOUGH_TOLD = {
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
+  ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
+  mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
+  queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
 };
+// What popping the Queen Mosquito pays over an ordinary monster's pop (see
+// popped): a few coins, on top of the XP her own count carries (levels.js).
+const QUEEN_POP = { coins: 5 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
 function compass(dx, dz) {
@@ -463,6 +469,9 @@ export class Game extends EventTarget {
       case 'stomp':
         this.stomped(msg);
         break;
+      case 'mfire':
+        this.monsterFire(msg);
+        break;
       case 'won':
         this.islandWon(msg);
         break;
@@ -514,6 +523,9 @@ export class Game extends EventTarget {
       case 'home':
         this.cameHome(msg);
         break;
+      case 'mheal':
+        this.monsterHealed(msg);
+        break;
       case 'env':
         this.setEnv(msg);
         break;
@@ -521,6 +533,13 @@ export class Game extends EventTarget {
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
+        break;
+      case 'mfx':
+        // Mr. Mole popping up: his burst of dirt (see room.js).
+        if (msg.kind === 'dirt') {
+          this.renderer.effects.dirt(msg.x, msg.y, msg.z);
+          this.sound.play('mole');
+        }
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -1124,6 +1143,19 @@ export class Game extends EventTarget {
     this.monsters.delete(id);
   }
 
+  // The Queen Mosquito got a heart back (monsters.js step, while nobody is
+  // near her): little hearts rise over her, as they do over a fed pet, so
+  // everyone sees her mending and knows to come back and keep at her.
+  monsterHealed(msg) {
+    if (!Array.isArray(msg.m)) return;
+    for (const id of msg.m) {
+      const entry = this.monsters.get(id);
+      const p = entry?.model.group.position;
+      if (!p || entry.kind !== 'queen') continue;
+      if (this.near(p.x, p.y, p.z, 40)) this.renderer.effects.hearts(p.x, p.y + (entry.model.height ?? 1.8) * 0.9, p.z, 2);
+    }
+  }
+
   // Your HP, and the most you can have, as a message carries them ({ hp, max }).
   setHp(msg) {
     if (Number.isInteger(msg?.max) && msg.max > 0) this.maxHp = msg.max;
@@ -1152,7 +1184,10 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
-    if (msg.fire && !this.toldFire) {
+    if (msg.fire && msg.ghost && !this.toldGhostFire) {
+      this.toldGhostFire = true;
+      this.emit('toast', { icon: '🔥', text: 'Ouch, a Lava Ghost’s fire! When it rears back, move out of the way it is facing — then bop it!' });
+    } else if (msg.fire && !msg.ghost && !this.toldFire) {
       this.toldFire = true;
       this.emit('toast', { icon: '🔥', text: 'Ouch, dragon fire! When it rears back, run out of the way it is facing — then bop it!' });
     }
@@ -1227,12 +1262,17 @@ export class Game extends EventTarget {
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
     const here = [p.x, p.y, p.z].every(Number.isFinite);
-    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' ? 120 : 40);
+    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' || entry?.kind === 'queen' ? 120 : 40);
     if (near) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
       // King Grumble goes with a much bigger pop.
       if (entry?.kind === 'big' || entry?.kind === 'knight' || entry?.kind === 'golem') fx.sparkles(p.x, p.y + 0.9, p.z, 30, entry.kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : entry.kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
+      // The Queen Mosquito goes with a big pop of her own, crown and all.
+      if (entry?.kind === 'queen') {
+        fx.sparkles(p.x, p.y + 1.1, p.z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
+        fx.firework(p.x, p.y + 2, p.z);
+      }
       if (entry?.kind === 'king') {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
@@ -1243,10 +1283,17 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
+      // Popping the Queen Mosquito is a feat of its own: a count of her, a
+      // few coins and the XP that comes with it, over and above a monster's.
+      const queen = entry?.kind === 'queen';
+      if (queen) {
+        this.profile.count('queens');
+        this.profile.earn(QUEEN_POP.coins);
+      }
       // The reward for it, where it happened: stars out of the monster, and
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
-      const xp = XP_FOR.popped.xp;
+      const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
       if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
       if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
@@ -1255,6 +1302,17 @@ export class Game extends EventTarget {
 
   // A monster bopped, with hearts left: it squashes and hops back, and
   // whoever bopped it hears how many more bops it takes.
+  // A Lava Ghost breathing fire: its flames pour out the way it faced, for
+  // a moment (updateMonsters draws them from its mouth).
+  monsterFire(msg) {
+    const entry = this.monsters.get(msg.id);
+    if (!entry) return;
+    entry.fireYaw = Number(msg.yaw) || 0;
+    entry.fireUntil = performance.now() + (Number(msg.ms) || GHOST_FIRE.ms);
+    const p = entry.model.group.position;
+    if (this.near(p.x, p.y, p.z, 30)) this.sound.play('fire');
+  }
+
   monsterHit(msg) {
     const now = performance.now();
     const entry = this.monsters.get(msg.id);
@@ -1517,6 +1575,8 @@ export class Game extends EventTarget {
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
+      // Mr. Mole's mound of dirt is not him: nothing to bop there.
+      if (moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, reach);
@@ -1672,8 +1732,9 @@ export class Game extends EventTarget {
       // King Grumble can be landed on again and again (and so can one
       // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
-      // Nobody lands on a Spiky: the host counts it as a bump.
-      if (entry.kind === 'spiky') continue;
+      // Nobody lands on a Spiky: the host counts it as a bump. Nor on Mr.
+      // Mole under the ground.
+      if (entry.kind === 'spiky' || moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
@@ -1794,6 +1855,11 @@ export class Game extends EventTarget {
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
+      // A Lava Ghost's flames, from its mouth, while it breathes them.
+      if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
+        const at = m.mouthAt();
+        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, GHOST_FIRE.reach, GHOST_FIRE.angle);
+      }
       const king = entry.kind === 'king';
       const big = isHeavy(entry.kind);
       // King Grumble dazed from a stomp: stars round his crown, and the first
@@ -1810,6 +1876,7 @@ export class Game extends EventTarget {
         // A mosquito whines and a spider skitters as they come at you; the
         // others grumble.
         if (entry.kind === 'mosquito') this.sound.play('mosquito');
+        else if (entry.kind === 'queen') this.sound.play('queen');
         else if (entry.kind === 'spider') this.sound.play('spider');
         else this.sound.play('grumble', { big });
       }

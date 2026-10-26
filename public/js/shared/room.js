@@ -29,7 +29,7 @@ import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
-import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isBoard, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
@@ -1285,8 +1285,26 @@ export class Room {
     if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
+    // The Queen Mosquito getting a heart back (monsters.js step): everyone
+    // near sees the little hearts over her.
+    const healed = this.monsters.takeHealed();
+    if (healed.length) this.broadcast({ t: 'mheal', m: healed });
+    // A Lava Ghost's breath of fire: the jet everyone sees, and whoever it
+    // burned, with Knight Armor or a Fire Suit taking half of it.
+    for (const m of this.monsters.takeFires()) this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: GHOST_FIRE.ms });
+    for (const { monster: m, pid } of this.monsters.takeBurns()) {
+      const p = this.players.get(pid);
+      if (!p) continue;
+      const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
+      this.knock(p, now, hpAfterBump(p.hp, half ? GHOST_FIRE.bumps / 2 : GHOST_FIRE.bumps), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+    }
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
+    // Mr. Mole coming up out of the ground beside someone: a burst of dirt
+    // everyone sees, and his little grunt of arrival.
+    for (const u of this.monsters.takeUps()) {
+      this.broadcast({ t: 'mfx', kind: 'dirt', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
+    }
     // King Grumble landing: a thump everyone sees, and a moment later, whoever
     // was on the ground near him then is knocked over.
     for (const s of this.monsters.takeStomps()) {
@@ -1390,6 +1408,8 @@ export class Room {
     // The monsters in the flames: each a heart off (the wild fire's reach and
     // cone, dragon.js inFlames), and pop with the last — told as any bop is.
     for (const m of [...this.monsters.list]) {
+      // Mr. Mole under the ground: no fire reaches him there.
+      if (m.under) continue;
       if (m.march) {
         if (this.inFlamesOf(c, m.body)) this.bopMarcher(p, m, now, 1);
         continue;
