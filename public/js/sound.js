@@ -483,6 +483,14 @@ export class Sound {
           this.tone(1300 - i * 80, { at, decay: 0.028, gain: 0.026, slide: 700, slideTime: 0.028 });
         }
         break;
+      case 'mole':
+        // Shff-shff-pop! Mr. Mole coming up out of his burrow: earth
+        // shifting under the ground, then the burst of dirt as he breaks
+        // the surface, with a cross little grunt.
+        for (let i = 0; i < 3; i++) this.noise(0.1, { at: i * 0.09, type: 'lowpass', freq: 420, gain: 0.12 });
+        this.noise(0.4, { at: 0.28, type: 'bandpass', freq: 900, sweep: 320, q: 0.7, gain: 0.2 });
+        this.tone(240 * r(), { at: 0.3, type: 'sawtooth', attack: 0.03, decay: 0.16, gain: 0.05, slide: 170, vibrato: 16 });
+        break;
       case 'fish':
         // Blub, blub.
         for (let i = 0; i < 2; i++) this.tone(500 * r(), { at: i * 0.12, decay: 0.08, gain: 0.06, slide: 900, slideTime: 0.06 });

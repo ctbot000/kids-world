@@ -25,7 +25,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, stepBody, unstick } from './shared/physics.js';
@@ -141,6 +141,7 @@ const TOUGH_TOLD = {
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
   ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
+  mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
@@ -525,6 +526,13 @@ export class Game extends EventTarget {
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
+        break;
+      case 'mfx':
+        // Mr. Mole popping up: his burst of dirt (see room.js).
+        if (msg.kind === 'dirt') {
+          this.renderer.effects.dirt(msg.x, msg.y, msg.z);
+          this.sound.play('mole');
+        }
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -1535,6 +1543,8 @@ export class Game extends EventTarget {
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
+      // Mr. Mole's mound of dirt is not him: nothing to bop there.
+      if (moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, reach);
@@ -1690,8 +1700,9 @@ export class Game extends EventTarget {
       // King Grumble can be landed on again and again (and so can one
       // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
-      // Nobody lands on a Spiky: the host counts it as a bump.
-      if (entry.kind === 'spiky') continue;
+      // Nobody lands on a Spiky: the host counts it as a bump. Nor on Mr.
+      // Mole under the ground.
+      if (entry.kind === 'spiky' || moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;

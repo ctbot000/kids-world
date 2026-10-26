@@ -55,8 +55,8 @@ function meadowRoom() {
 const onFoot = (id, x, z, y = 11) => ({ id, x, y, z, flying: false, riding: false, dizzy: false, safeUntil: 0 });
 
 test('a Lava Ghost goes on the end of the kinds, and comes out on volcano islands only', () => {
-  assert.equal(MONSTER_KINDS.at(-1), 'ghost', 'new kinds go on the end: the wire sends the index');
-  assert.equal(MONSTER_STATES.at(-1), 'breathe');
+  assert.equal(MONSTER_KINDS.indexOf('ghost'), 8, 'new kinds go on the end: the wire sends the index');
+  assert.equal(MONSTER_STATES.indexOf('breathe'), 6);
   assert.deepEqual([KINDS.ghost.hearts, KINDS.ghost.bump, KINDS.ghost.land], [3, 0, 0]);
   const kinds = (theme) => {
     const sim = new MonsterSim(9);

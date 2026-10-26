@@ -1296,6 +1296,11 @@ export class Room {
     }
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
+    // Mr. Mole coming up out of the ground beside someone: a burst of dirt
+    // everyone sees, and his little grunt of arrival.
+    for (const u of this.monsters.takeUps()) {
+      this.broadcast({ t: 'mfx', kind: 'dirt', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
+    }
     // King Grumble landing: a thump everyone sees, and a moment later, whoever
     // was on the ground near him then is knocked over.
     for (const s of this.monsters.takeStomps()) {
@@ -1399,6 +1404,8 @@ export class Room {
     // The monsters in the flames: each a heart off (the wild fire's reach and
     // cone, dragon.js inFlames), and pop with the last — told as any bop is.
     for (const m of [...this.monsters.list]) {
+      // Mr. Mole under the ground: no fire reaches him there.
+      if (m.under) continue;
       if (m.march) {
         if (this.inFlamesOf(c, m.body)) this.bopMarcher(p, m, now, 1);
         continue;

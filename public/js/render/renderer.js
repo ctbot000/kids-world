@@ -30,6 +30,7 @@ import { MonsterModel } from './monster-model.js';
 import { MosquitoModel } from './mosquito-model.js';
 import { PetModel, petSeat } from './pet-models.js';
 import { SpiderModel } from './spider-model.js';
+import { MoleModel } from './mole-model.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
@@ -471,10 +472,10 @@ export class Renderer {
   }
 
   // kind: 'blob', 'big' or 'spiky', 'king' for King Grumble, 'mosquito' for
-  // the giant mosquito, 'spider' for the giant spider.
+  // the giant mosquito, 'spider' for the giant spider, 'mole' for Mr. Mole.
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
