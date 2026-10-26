@@ -71,6 +71,29 @@ const MODELS = {
     return out;
   },
 
+  // A rocking chair: a chair on two curved rockers that tip back and forth
+  // when someone sits in it. The rockers are drawn as the real model's curved
+  // runners when the piece is placed (render/rocking-model.js); these boxes,
+  // straightened out, are its picture in the toy box.
+  'rocking-chair'() {
+    const out = [];
+    // The two runners, front to back, that it rocks on.
+    for (const x of [0.16, 0.76]) out.push(box(x, 0, 0.06, x + 0.09, 0.07, 0.94, DARK_WOOD, 'planks'));
+    // Four short legs up from them to the seat.
+    for (const x of [0.18, 0.74]) for (const z of [0.2, 0.72]) out.push(box(x, 0.07, z, x + 0.08, 0.48, z + 0.08, WOOD, 'planks'));
+    out.push(box(0.15, 0.48, 0.15, 0.85, 0.56, 0.85, WOOD, 'planks'));
+    out.push(box(0.2, 0.56, 0.2, 0.8, 0.61, 0.76, '#e8453c', 'cloth'));
+    // A back that leans back a little, in two slats.
+    out.push(box(0.15, 0.61, 0.72, 0.85, 0.9, 0.79, WOOD, 'planks'));
+    out.push(box(0.15, 0.9, 0.75, 0.85, 1.05, 0.82, WOOD, 'planks'));
+    // The two arms, out from the seat at each side.
+    for (const x of [0.11, 0.79]) {
+      out.push(box(x, 0.56, 0.62, x + 0.1, 0.72, 0.7, WOOD, 'planks'));
+      out.push(box(x, 0.72, 0.24, x + 0.1, 0.76, 0.7, WOOD, 'planks'));
+    }
+    return out;
+  },
+
   sofa(same) {
     const left = same(-1, 0);
     const right = same(1, 0);

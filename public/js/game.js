@@ -43,6 +43,7 @@ import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
+import { rockingAt, rockPhase } from './render/rocking-model.js';
 import { flashModel } from './render/toon.js';
 
 export const TOOLS = [
@@ -3266,6 +3267,23 @@ export class Game extends EventTarget {
   }
 
 
+  // The rocking chairs with someone in them (you or a friend sitting), as
+  // 'x,y,z' keys: what the renderer is told each frame so those rock and the
+  // rest stand still (render/terrain.js animate).
+  satInSeats() {
+    const out = new Set();
+    const add = (x, y, z) => {
+      if (B.block(this.world.get(x, y, z)).model === 'rocking-chair') out.add(`${x},${y},${z}`);
+    };
+    if (this.seat) add(this.seat.x, this.seat.y, this.seat.z);
+    for (const p of this.players.values()) {
+      if (p.me || !p.inSeat || !p.avatar) continue;
+      const a = p.avatar.root.position;
+      add(Math.floor(a.x), Math.floor(a.y), Math.floor(a.z));
+    }
+    return out;
+  }
+
   // A tea party: you and a friend both sitting (shared/seats.js) with a Tea
   // Table beside each of your seats, at the same table or two pushed
   // together. Counted once each time you sit down, with hearts over the
@@ -3320,6 +3338,9 @@ export class Game extends EventTarget {
     if (a) {
       a.root.position.set(b.x, b.y, b.z);
       a.root.rotation.y = me.yaw;
+      // In a rocking chair you rock with it, leaned over with the seat.
+      a.root.rotation.order = 'YXZ';
+      a.root.rotation.x = B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair' ? rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)) : 0;
       a.update(dt, me.anim, 0);
       a.shadow.visible = false;
     }
@@ -4444,7 +4465,7 @@ export class Game extends EventTarget {
     // Sitting or lying down, your eyes are lower than your hips are high.
     this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : this.pianoAt ? { x: b.x, y: b.y - BENCH_H, z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
-    this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z } });
+    this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
     this.observe();
   }
 
@@ -4587,6 +4608,7 @@ export class Game extends EventTarget {
       const a = self.avatar;
       a.root.position.set(b.x, b.y, b.z);
       a.root.rotation.y = me.yaw;
+      a.root.rotation.x = 0;
       // Your swing stops dead a moment as it lands on a monster (strike).
       a.update(performance.now() < (this.hitStopUntil ?? 0) ? 0 : dt, me.anim, speed);
       this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
@@ -4658,6 +4680,14 @@ export class Game extends EventTarget {
       const speed = Math.hypot(s.x - prev.x, s.z - prev.z) / Math.max(dt, 1e-3);
       a.root.position.set(s.x, s.y, s.z);
       a.root.rotation.y = s.yaw;
+      // In a rocking chair, a friend rocks with it, leaned over like the
+      // chair is (each chair at a time of its own, as render/terrain.js has it).
+      a.root.rotation.order = 'YXZ';
+      const cell = [Math.floor(s.x), Math.floor(s.y), Math.floor(s.z)];
+      a.root.rotation.x =
+        s.anim === ANIM.sit && B.block(this.world.get(...cell)).model === 'rocking-chair'
+          ? rockingAt(this.renderer.time + rockPhase(...cell))
+          : 0;
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
       // Sitting on a chair or a sofa (not lying in bed): tea party company.

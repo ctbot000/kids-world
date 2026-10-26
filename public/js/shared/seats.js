@@ -12,6 +12,9 @@ import { BLOCKS } from './blocks.js';
 // is laid out in shared/furniture.js, facing -z).
 export const SEATS = {
   chair: { pose: 'sit', h: 0.54, at: [0.5, 0.52] },
+  // A rocking chair rocks while you sit in it (game.js), so its seat is a
+  // little higher off the ground on its rockers.
+  'rocking-chair': { pose: 'sit', h: 0.56, at: [0.5, 0.5] },
   sofa: { pose: 'sit', h: 0.48, at: [0.5, 0.46] },
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },
