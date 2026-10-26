@@ -652,7 +652,7 @@ export class Terrain {
       group.add(model);
       // A fan's blades go round, a tank's fish swim and a clock's pendulum
       // swings, each at a time of its own.
-      if (model.userData.spin || model.userData.tick) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
+      if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
     }
     this.group.add(group);
     this.chunks.set(key, chunk);

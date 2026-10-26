@@ -40,6 +40,18 @@ export const rockingAt = (time) => Math.sin(time * 1.6) * 0.2 + 0.02;
 // every mover one like it, and game.js leans whoever is in it by the same).
 export const rockPhase = (x, y, z) => (x * 7.3 + z * 3.1 + y) % 10;
 
+// Whoever sits in a rocking chair rocked by `a` (rockingAt), facing `yaw` as
+// the chair's seat has them (shared/seats.js): how far they lean (an
+// avatar's rotation.x, its rotation order YXZ), and how far their hips have
+// moved with the seat (dx, dy, dz), as it swings about the rockers.
+export function rockedSitter(a, yaw) {
+  const h = SEAT.y - SEAT.pivot;
+  // The seat swings back along the chair's own +z, and the chair faces the
+  // way you do: its back is behind you.
+  const back = h * Math.sin(a);
+  return { lean: -a, dx: -Math.sin(yaw) * back, dy: h * (Math.cos(a) - 1), dz: -Math.cos(yaw) * back };
+}
+
 const shapes = {};
 
 // A runner: a shallow curve of wood from the front of the cell to its back,

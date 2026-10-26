@@ -43,7 +43,7 @@ import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
-import { rockingAt, rockPhase } from './render/rocking-model.js';
+import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
 import { flashModel } from './render/toon.js';
 
 export const TOOLS = [
@@ -3267,6 +3267,18 @@ export class Game extends EventTarget {
   }
 
 
+  // An avatar sitting in a rocking chair rocked by `angle`, its root where
+  // the chair's seat has them and turned to face its way: leaned with the
+  // chair, and carried with the seat as it swings about the rockers.
+  rockWith(a, angle) {
+    const r = rockedSitter(angle, a.root.rotation.y);
+    a.rocked = r;
+    a.root.rotation.x = r.lean;
+    a.root.position.x += r.dx;
+    a.root.position.y += r.dy;
+    a.root.position.z += r.dz;
+  }
+
   // The rocking chairs with someone in them (you or a friend sitting), as
   // 'x,y,z' keys: what the renderer is told each frame so those rock and the
   // rest stand still (render/terrain.js animate).
@@ -3340,7 +3352,8 @@ export class Game extends EventTarget {
       a.root.rotation.y = me.yaw;
       // In a rocking chair you rock with it, leaned over with the seat.
       a.root.rotation.order = 'YXZ';
-      a.root.rotation.x = B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair' ? rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)) : 0;
+      a.root.rotation.x = 0;
+      if (B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)));
       a.update(dt, me.anim, 0);
       a.shadow.visible = false;
     }
@@ -4677,17 +4690,18 @@ export class Game extends EventTarget {
       if (!s) continue;
       const a = p.avatar;
       const prev = a.root.position;
-      const speed = Math.hypot(s.x - prev.x, s.z - prev.z) / Math.max(dt, 1e-3);
+      // Rocked in a rocking chair, where they were is less the swing (rockWith).
+      const [rx, rz] = a.rocked ? [a.rocked.dx, a.rocked.dz] : [0, 0];
+      const speed = Math.hypot(s.x - prev.x + rx, s.z - prev.z + rz) / Math.max(dt, 1e-3);
+      a.rocked = null;
       a.root.position.set(s.x, s.y, s.z);
       a.root.rotation.y = s.yaw;
       // In a rocking chair, a friend rocks with it, leaned over like the
       // chair is (each chair at a time of its own, as render/terrain.js has it).
       a.root.rotation.order = 'YXZ';
+      a.root.rotation.x = 0;
       const cell = [Math.floor(s.x), Math.floor(s.y), Math.floor(s.z)];
-      a.root.rotation.x =
-        s.anim === ANIM.sit && B.block(this.world.get(...cell)).model === 'rocking-chair'
-          ? rockingAt(this.renderer.time + rockPhase(...cell))
-          : 0;
+      if (s.anim === ANIM.sit && B.block(this.world.get(...cell)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(...cell)));
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
       // Sitting on a chair or a sofa (not lying in bed): tea party company.

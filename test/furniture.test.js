@@ -500,3 +500,32 @@ test('a hot tub after the pet bed, a steaming barrel you soak in together', asyn
     }
   }
 });
+
+test('in a rocking chair you rock with it: leaned the way it leans, your hips on its seat', async () => {
+  const THREE = await import('../public/vendor/three.module.js');
+  const { rockedSitter, rockingMaterials, rockingModel, SEAT } = await import('../public/js/render/rocking-model.js');
+  const { seatPose } = await import('../public/js/shared/seats.js');
+  const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
+  const w = meadow();
+  for (let front = 0; front < 4; front++) {
+    w.set(10, 6, 10, B.turnedTo(B.ROCKING_CHAIR, front));
+    const pose = seatPose(w, 10, 6, 10);
+    for (const a of [-0.18, 0.1, 0.22]) {
+      // The chair as render/terrain.js lays it in, rocked by a.
+      const chair = rockingModel(rockingMaterials(() => new THREE.MeshBasicMaterial()));
+      chair.position.set(10.5, 6, 10.5);
+      chair.rotation.y = FACING[front];
+      chair.userData.rock.rotation.x = a;
+      chair.updateMatrixWorld(true);
+      const rock = chair.userData.rock;
+      const seat = rock.localToWorld(new THREE.Vector3(pose.x - 10.5, SEAT.y - SEAT.pivot, pose.z - 10.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), -FACING[front]));
+      const up = new THREE.Vector3(0, 1, 0).transformDirection(rock.matrixWorld);
+      // You, as game.js rockWith puts you.
+      const r = rockedSitter(a, pose.yaw);
+      const you = new THREE.Vector3(pose.x + r.dx, pose.y + r.dy, pose.z + r.dz);
+      const yourUp = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(r.lean, pose.yaw, 0, 'YXZ'));
+      assert.ok(you.distanceTo(seat) < 0.01, `on the seat facing ${front}, rocked ${a}: ${you.distanceTo(seat)}`);
+      assert.ok(yourUp.distanceTo(up) < 0.01, `leaned with it facing ${front}, rocked ${a}`);
+    }
+  }
+});
