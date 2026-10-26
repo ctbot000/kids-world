@@ -1287,6 +1287,11 @@ export class Room {
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
+    // Mr. Mole coming up out of the ground beside someone: a burst of dirt
+    // everyone sees, and his little grunt of arrival.
+    for (const u of this.monsters.takeUps()) {
+      this.broadcast({ t: 'mfx', kind: 'dirt', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
+    }
     // King Grumble landing: a thump everyone sees, and a moment later, whoever
     // was on the ground near him then is knocked over.
     for (const s of this.monsters.takeStomps()) {

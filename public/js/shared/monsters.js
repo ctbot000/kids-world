@@ -114,6 +114,9 @@ export const MOSQUITO_BODY = { radius: 0.5, height: 1.15 };
 // A giant spider: wider than a Big Bruiser is round but only up to your
 // middle, skittering about on its eight legs.
 export const SPIDER_BODY = { radius: 0.55, height: 0.95 };
+// Mr. Mole: a little wider than a blob, and only as far out of the ground
+// as he is tall when he pops up.
+export const MOLE_BODY = { radius: 0.5, height: 1.0 };
 // A Grumble Knight: a blob a little bigger than most, its helmet on top.
 export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 // A Stone Golem: taller than a player and wider than a Big Bruiser.
@@ -168,6 +171,11 @@ const HIT_PUSH = 7;
 const CROSS_MS = 5000;
 const CROSS_RUN = 6.5;
 const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };
+// Mr. Mole's burrowing: how fast his mound of dirt glides along under the
+// ground (quicker than you walk, never as quick as you run), how near you he
+// comes up out of it, how long he stays up for a bop or a jump, and how long
+// the dip back down takes before he is under again.
+export const MOLE_DIG = { run: 5.4, pop: 3.0, up: 2600, down: 800 };
 // The roaming kinds, and how tough each is: its hearts, how many it bumps
 // off you, how many a landing on it takes (Infinity: it pops at once; 0:
 // nobody lands on it, it bumps them), and how it gets about, usually and
@@ -189,11 +197,16 @@ export const KINDS = {
   knight: { hearts: 8, bump: 2, land: 2, move: { walk: 1.8, run: 4.6, jump: 8 }, cross: { walk: 1.8, run: 6.6, jump: 8 } },
   // A Stone Golem lumbers, slower than a Big Bruiser, but bumps the hardest.
   golem: { hearts: 12, bump: 3, land: 2, move: { walk: 1.2, run: 3.2, jump: 9 }, cross: { walk: 1.2, run: 4.4, jump: 9 } },
+  // Mr. Mole burrows: the run is how fast his mound of dirt glides along
+  // under the ground, quicker than you walk and never as quick as you run.
+  // Above ground he is only up a moment, and one bop or landing counts the
+  // same (see MOLE_DIG and step).
+  mole: { hearts: 3, bump: 1, land: Infinity, move: { walk: 2, run: MOLE_DIG.run, jump: 8 }, cross: { walk: 2, run: 6.5, jump: 8 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs. A giant
 // spider is hardly ever about by day and oftener at night.
-const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2, spider: 0.16 } };
+const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08, mole: 0.1 }, night: { big: 0.2, spiky: 0.25, mosquito: 0.2, spider: 0.16, mole: 0.14 } };
 // How high a mosquito keeps itself over the ground (or the water) beneath
 // it: well up out of reach of arm and jump until it darts at someone, when
 // it comes down to bump height; and how quickly it rises and sinks.
@@ -204,10 +217,10 @@ export const MOSQUITO_HOVER = { high: 2.3, low: 1.0, march: 1.1, up: 3 };
 const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
-export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem'];
+export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'dig'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'mole'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, mole: MOLE_BODY })[kind] ?? MONSTER_BODY;
 // The heavy ones: a bigger knock when they bump you, and a bigger pop.
 export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem';
 
@@ -274,6 +287,8 @@ export class MonsterSim {
     // Grumble's landings, since they were last taken (see takeGone, takeStomps).
     this.gone = [];
     this.stomps = [];
+    // And Mr. Mole's comings up out of the ground (see takeUps).
+    this.ups = [];
   }
 
   get(id) {
@@ -302,6 +317,8 @@ export class MonsterSim {
     const rng = camp || march ? this.campRng : this.rng;
     const hearts = kindOf(kind).hearts;
     const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
+    // Mr. Mole comes out under the ground, as a mound of dirt on the move.
+    if (kind === 'mole') Object.assign(m, { under: true, up: 0 });
     if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
@@ -331,6 +348,14 @@ export class MonsterSim {
   takeStomps() {
     const out = this.stomps;
     this.stomps = [];
+    return out;
+  }
+
+  // Mr. Mole's poppings up, since they were last taken: for the burst of
+  // dirt as he comes out of the ground (see room.js).
+  takeUps() {
+    const out = this.ups;
+    this.ups = [];
     return out;
   }
 
@@ -550,7 +575,48 @@ export class MonsterSim {
       }
       const pace = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
       let events;
-      if (fly) {
+      if (m.kind === 'mole') {
+        // Mr. Mole: under the ground his mound of dirt glides along, up and
+        // down the ground as it rises and falls (no hops, and no falling into
+        // anything: a digger goes round the water, as the check above sees
+        // to). Beside whoever he is after, up he pops for a bop or a jump,
+        // then dips back under and carries on.
+        if (m.under) {
+          // Burrowing along: a mound of dirt on the move, chasing whoever he
+          // is after (the model shows him under the ground either way).
+          m.state = target ? 'chase' : 'dig';
+          b.flying = false;
+          const want = groundAt(world, b.x, b.z) ?? b.y;
+          const d = want - b.y;
+          b.y += Math.sign(d) * Math.min(Math.abs(d), 6 * dt);
+          b.vy = 0;
+          b.onGround = false;
+          events = stepBody(world, b, { mx, mz, run: true }, dt, { autoJump: false, move: { ...pace, jump: 0 } });
+          if (target) {
+            const near = Math.hypot(target.x - b.x, target.z - b.z);
+            if (near <= MOLE_DIG.pop) {
+              // Up he comes, right beside them, with a burst of dirt.
+              m.under = false;
+              m.up = now + MOLE_DIG.up;
+              m.state = 'hop';
+              this.ups.push({ monster: m, x: b.x, y: b.y, z: b.z });
+            }
+          }
+        } else {
+          // Up out of the ground, on his feet a moment: he comes at whoever
+          // he popped up beside, hopping as a blob does, to bump them — and
+          // to give them their chance to bop him or jump on him.
+          events = stepBody(world, b, { mx, mz, jump: (mx || mz) && b.onGround, run: m.state === 'chase' }, dt, { autoJump: true, move: pace });
+          m.state = now < m.giggle ? 'giggle' : 'hop';
+          // His moment up top over: back under, and on he goes.
+          if (now >= (m.up ?? 0)) {
+            m.under = true;
+            m.state = 'idle';
+            b.vx = 0;
+            b.vz = 0;
+          }
+        }
+      } else if (fly) {
         // A mosquito hangs in the air well up out of reach, coming down to
         // bump height only as it darts at someone.
         b.flying = true;
@@ -669,7 +735,7 @@ export class MonsterSim {
   // Whether someone with their feet at p is landing on the one numbered id.
   landsOn(id, p) {
     const m = this.get(id);
-    if (!m) return null;
+    if (!m || m.under) return null;
     const b = m.body;
     const up = p.y - b.y;
     if (up < b.height * 0.4 || up > b.height + 1.2) return null;
@@ -703,7 +769,9 @@ export class MonsterSim {
   // shop.js).
   canBop(id, p, extra = 0) {
     const m = this.get(id);
-    if (!m) return null;
+    // Nobody bops Mr. Mole while he is under the ground: only his mound of
+    // dirt is there, and that is not him.
+    if (!m || m.under) return null;
     return bopGap(p, m.body, ARM_REACH + extra + BOP_SLACK) === null ? null : m;
   }
 

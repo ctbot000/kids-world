@@ -138,6 +138,7 @@ const TOUGH_TOLD = {
   spider: { icon: '🕷️', text: 'A giant spider! It scuttles quicker than you walk, so run! You can jump on it — twice — or bop it four times.' },
   knight: { icon: '🛡️', text: 'A Grumble Knight! Its helmet and shield make it tough: eight bops, or four jumps on its helmet. Cross, it is nearly as quick as you run!' },
   golem: { icon: '🗿', text: 'A Stone Golem! Slow but very strong: a bump takes three times as much HP. Twelve bops — or six jumps — to see it off.' },
+  mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
 };
 
 // Which way (dx, dz) points, in words: north is -z (the map's top).
@@ -519,6 +520,13 @@ export class Game extends EventTarget {
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
+        break;
+      case 'mfx':
+        // Mr. Mole popping up: his burst of dirt (see room.js).
+        if (msg.kind === 'dirt') {
+          this.renderer.effects.dirt(msg.x, msg.y, msg.z);
+          this.sound.play('mole');
+        }
         break;
       case 'settings':
         this.settings = msg.settings;
