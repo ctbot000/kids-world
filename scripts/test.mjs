@@ -3,7 +3,9 @@
 // each with a browser and servers of its own (E2E_SHARD in test/e2e.test.js).
 // Whatever took longest last time starts first, so nothing long is left to
 // run on its own at the end. A file that passes gets a line; one that fails
-// gets everything it printed.
+// gets everything it printed. A file that fails runs again, just its failed
+// tests (node's --test-rerun-failures), up to TEST_RETRIES times (1), and
+// passes if they do: the tests that passed only then are named at the end.
 //   npm test -- --touch    also the end-to-end tests with no mouse, as on a touch screen
 //   npm test -- <files or node --test flags>    plain node --test, on just those
 // E2E_SHARDS (how many processes share the end-to-end tests, for each of mouse
@@ -11,8 +13,9 @@
 // those can be end-to-end ones) change how it shares them out. While the
 // computer is short of memory, no more start until it eases (memoryShort).
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { availableParallelism, freemem } from 'node:os';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { availableParallelism, freemem, tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const FLAGS = ['--test', '--test-timeout=180000', '--test-force-exit'];
 const args = process.argv.slice(2);
@@ -39,6 +42,10 @@ async function runAll() {
   const e2e = (label, extra) =>
     Array.from({ length: shards }, (_, k) => ({ name: `test/e2e.test.js ${k + 1}/${shards}${label}`, file: 'test/e2e.test.js', e2e: true, env: { ...extra, E2E_SHARD: `${k}/${shards}` } }));
   const jobs = [...e2e('', {}), ...(touch ? e2e(' with no mouse', { E2E_NO_MOUSE: '1' }) : []), ...files];
+  // Where each job's run keeps which of its tests passed, for running only the failed ones again.
+  const states = mkdtempSync(join(tmpdir(), 'kids-world-test-'));
+  jobs.forEach((job, k) => Object.assign(job, { state: join(states, `${k}.json`), attempt: 0, flaky: [] }));
+  const retries = Number(env.TEST_RETRIES ?? 1);
 
   // How long each took last time, longest first; the end-to-end ones first the very first time.
   const timesFile = 'node_modules/.cache/kids-world/test-times.json';
@@ -57,6 +64,7 @@ async function runAll() {
   const running = new Set();
   const failed = [];
   const again = [];
+  const flaky = [];
   const counts = { tests: 0, pass: 0, fail: 0, cancelled: 0, skipped: 0 };
   console.log(`${jobs.length} test files and shares of the end-to-end tests, up to ${most} at once (${mostE2e} end-to-end)`);
 
@@ -82,24 +90,33 @@ async function runAll() {
     const start = (job) => {
       running.add(job);
       const begun = Date.now();
-      const child = spawn(process.execPath, [...FLAGS, '--test-reporter=spec', job.file], { env: { ...env, ...color, ...job.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [...FLAGS, '--test-reporter=spec', `--test-rerun-failures=${job.state}`, job.file], { env: { ...env, ...color, ...job.env }, stdio: ['ignore', 'pipe', 'pipe'] });
       let output = '';
       child.stdout.on('data', (chunk) => (output += chunk));
       child.stderr.on('data', (chunk) => (output += chunk));
       child.on('close', (code) => {
         running.delete(job);
         const took = Date.now() - begun;
-        times[job.name] = took;
+        // How long a whole run took, not a rerun of a few of its tests.
+        if (!job.attempt) times[job.name] = took;
         const plain = output.replace(/\x1b\[[0-9;]*m/g, '');
         const count = (what) => Number(plain.match(new RegExp(`^ℹ ${what} (\\d+)$`, 'm'))?.[1] ?? 0);
-        for (const what of Object.keys(counts)) counts[what] += count(what);
+        const names = plain.split('✖ failing tests:')[1]?.match(/^✖ .+(?= \([\d.]+ms\)$)/gm) ?? [];
+        const last = code === 0 || job.attempt >= retries;
+        // A rerun reports the tests that passed before as passing, so only the last run counts.
+        if (last) for (const what of Object.keys(counts)) counts[what] += count(what);
         if (code === 0) {
-          console.log(`✔ ${job.name}: ${count('tests')} tests, ${seconds(took)}`);
+          console.log(`✔ ${job.name}: ${count('tests')} tests, ${seconds(took)}${job.attempt ? `, passing on run ${job.attempt + 1}` : ''}`);
+          flaky.push(...job.flaky.map((name) => `${name.slice(2)} (${job.name})`));
+        } else if (!last) {
+          console.log(`↻ ${job.name}: failed after ${seconds(took)} (exit ${code}), running ${names.length > 1 ? `its ${names.length} failed tests` : names.length ? 'its failed test' : 'it'} again:${names.map((name) => `\n  ${name}`).join('')}`);
+          job.flaky.push(...names);
+          job.attempt++;
+          waiting.unshift(job);
         } else {
           failed.push(job.name);
           console.log(`\n✖ ${job.name}: failed after ${seconds(took)} (exit ${code})\n${output.trimEnd()}\n`);
           // A failed test of a share, to run again by itself (and at its own line, which a share does not report).
-          const names = plain.split('✖ failing tests:')[1]?.match(/^✖ .+(?= \([\d.]+ms\)$)/gm) ?? [];
           if (job.e2e) for (const name of new Set(names)) again.push(`${job.env.E2E_NO_MOUSE ? 'E2E_NO_MOUSE=1 ' : ''}node --test --test-force-exit --test-name-pattern=${quote(escape(name.slice(2)))} ${job.file}`);
         }
         next();
@@ -113,7 +130,9 @@ async function runAll() {
     writeFileSync(`${timesFile}.${process.pid}`, JSON.stringify(times, null, 1));
     renameSync(`${timesFile}.${process.pid}`, timesFile);
   } catch {}
+  rmSync(states, { recursive: true, force: true });
   const took = seconds(Date.now() - started);
+  if (flaky.length) console.log(`Passed only when run again (flaky):\n${flaky.map((name) => `  ${name}`).join('\n')}`);
   if (held) console.log(`Short of memory, new tests were held back for about ${held * 2} s`);
   const tally = `${counts.pass} of ${counts.tests} tests passed${counts.skipped ? `, ${counts.skipped} skipped` : ''}`;
   if (failed.length) {
