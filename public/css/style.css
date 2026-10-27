@@ -5542,3 +5542,14 @@ html {
 .monster-stats .stat-value {
   font-size: 1rem;
 }
+
+.monster-card .figure {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+/* A monster not seen yet: only its shadow. */
+.monster-card .figure.shadow {
+  filter: brightness(0) opacity(0.18);
+}

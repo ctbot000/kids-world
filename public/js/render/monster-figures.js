@@ -8,11 +8,12 @@
 // window drawing them in a WebGL context of its own swaps them for copies
 // lit there (render/gasha-stage.js).
 import * as THREE from '../../vendor/three.module.js';
-import { STOMP } from '../shared/monsters.js';
+import { MONSTER_KINDS, STOMP } from '../shared/monsters.js';
 import { MONSTER_FIGURES } from '../shared/gashapon.js';
 import { KingModel } from './adventure-models.js';
 import { MonsterModel } from './monster-model.js';
-import { MosquitoModel } from './mosquito-model.js';
+import { MoleModel } from './mole-model.js';
+import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { SpiderModel } from './spider-model.js';
 
 const TALL = 0.95;
@@ -30,25 +31,42 @@ export function shownBox(obj) {
   return box;
 }
 
-function modelOf(f) {
-  if (f.monster === 'king') {
-    const k = new KingModel(f.theme ?? 'sunny', STOMP.reach);
+// A monster's model by its kind, stood still: in its idle pose, but Mr.
+// Mole up out of the ground, his mound left out.
+function modelOf(kind, theme = 'sunny') {
+  if (kind === 'king') {
+    const k = new KingModel(theme, STOMP.reach);
     k.update(0, 'idle', 0, false, false);
     k.bubble.visible = false;
     k.bubbleRim.visible = false;
     k.ring.visible = false;
     return k;
   }
-  const m = f.monster === 'mosquito' ? new MosquitoModel(f.theme ?? 'sunny', 1) : f.monster === 'spider' ? new SpiderModel(f.theme ?? 'sunny', 1) : new MonsterModel(f.theme ?? 'sunny', f.monster);
-  m.update(0, 'idle', 0, false);
+  const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel }[kind];
+  const m = make ? new make(theme, 1) : new MonsterModel(theme, kind);
+  // (He comes up over a moment, so the moment is let go by.)
+  m.update(kind === 'mole' ? 1 : 0, kind === 'mole' ? 'hop' : 'idle', 0, false);
+  if (kind === 'mole') m.mound.visible = false;
   return m;
 }
 
 // The figure of a monster figure by its key, or null.
 export function monsterFigure(key) {
   const f = MONSTER_FIGURES.find((t) => t.key === key);
-  if (!f) return null;
-  const model = modelOf(f);
+  return f ? figureOf(f.monster, f.theme, key) : null;
+}
+
+// The figure of a monster by its kind (shared/monsters.js MONSTER_KINDS),
+// as the monster collection shows it (ui.js monsterBook): its key is
+// MONSTER_PREFIX and the kind.
+export const MONSTER_PREFIX = 'monster-';
+export function monsterKindFigure(key) {
+  const kind = key.slice(MONSTER_PREFIX.length);
+  return MONSTER_KINDS.includes(kind) ? figureOf(kind, 'sunny', key) : null;
+}
+
+function figureOf(kind, theme, key) {
+  const model = modelOf(kind, theme);
   const inner = model.group;
   // The monsters face +z as they go; a figure faces -z.
   inner.rotation.y = Math.PI;

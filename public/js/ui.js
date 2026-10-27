@@ -1486,9 +1486,18 @@ export class UI {
     const seen = MONSTER_BOOK.filter((m) => stats[seenKey(m.kind)] > 0);
     const beaten = MONSTER_BOOK.filter((m) => stats[popKey(m.kind)] > 0);
     let current = tab;
-    this.openModal((root) => {
+    let closed = false;
+    this.openModal(
+      (root) => {
       const tabRow = h('div', { class: 'tabs' });
       const grid = h('div', { class: 'grid monster-book' });
+      // Each monster as it really looks, in 3D (render/gasha-stage.js), once
+      // the pictures are made: its emoji till then, or without WebGL. One
+      // not seen yet is its shadow.
+      const pic = (m, got) => {
+        const src = this.monsterPictures?.[`monster-${m.kind}`];
+        return src ? h('img', { class: `figure${got ? '' : ' shadow'}`, src, alt: got ? m.name : 'A monster not seen yet', draggable: false }) : h('span', { class: 'emoji' }, m.icon);
+      };
       const note = h('p', { class: 'muted' });
       const stat = (key, name, value) => h('div', { class: 'stat', 'data-stat': key }, h('span', { class: 'stat-name' }, name), h('b', { class: 'stat-value' }, value));
       const draw = () => {
@@ -1520,7 +1529,7 @@ export class UI {
           grid.replaceChildren(
             ...MONSTER_BOOK.map((m) => {
               const got = stats[seenKey(m.kind)] > 0;
-              return h('div', { class: `sticker-card${got ? '' : ' locked'}`, 'data-kind': m.kind }, h('span', { class: 'emoji' }, m.icon), h('b', {}, got ? m.name : '???'));
+              return h('div', { class: `sticker-card monster-card${got ? '' : ' locked'}`, 'data-kind': m.kind }, pic(m, got), h('b', {}, got ? m.name : '???'));
             }),
           );
           return;
@@ -1531,13 +1540,13 @@ export class UI {
             const popped = stats[popKey(m.kind)] ?? 0;
             if (!popped) {
               const met = stats[seenKey(m.kind)] > 0;
-              return h('div', { class: 'sticker-card monster-card locked', 'data-kind': m.kind }, h('span', { class: 'emoji' }, m.icon), h('b', {}, met ? m.name : '???'), h('span', { class: 'muted' }, met ? 'Pop one to see its stats' : 'Not seen yet'));
+              return h('div', { class: 'sticker-card monster-card locked', 'data-kind': m.kind }, pic(m, met), h('b', {}, met ? m.name : '???'), h('span', { class: 'muted' }, met ? 'Pop one to see its stats' : 'Not seen yet'));
             }
             const s = monsterStats(m.kind);
             return h(
               'div',
               { class: 'sticker-card monster-card', 'data-kind': m.kind },
-              h('span', { class: 'emoji' }, m.icon),
+              pic(m, true),
               h('b', {}, m.name),
               h('span', { class: 'muted popped' }, `Popped ×${popped.toLocaleString()}`),
               h(
@@ -1554,7 +1563,17 @@ export class UI {
       };
       draw();
       root.append(h('h2', {}, '👾 Monster collection'), tabRow, note, grid);
-    });
+      if (!this.monsterPictures) {
+        import('./render/gasha-stage.js')
+          .then(({ toyPortraits }) => {
+            this.monsterPictures = toyPortraits(MONSTER_BOOK.map((m) => `monster-${m.kind}`));
+            if (!closed) draw();
+          })
+          .catch(() => {});
+      }
+      },
+      { onClose: () => (closed = true) },
+    );
   }
 
   // The shop: sell what is in your basket for coins, and buy running shoes,

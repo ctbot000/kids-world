@@ -5867,16 +5867,20 @@ test('the 👾 monster collection: a monster near you on an adventure island goe
   await until(page, () => window.kidsWorld.profile.data.stats.popblob === 1);
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
-  await until(page, () => document.querySelector('#modal .monster-book'));
+  // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
+  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 11);
   const seen = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
     blob: document.querySelector('#modal .monster-book [data-kind="blob"]').textContent,
     golem: document.querySelector('#modal .monster-book [data-kind="golem"]').textContent,
+    blobPic: document.querySelector('#modal .monster-book [data-kind="blob"] img').className,
+    golemPic: document.querySelector('#modal .monster-book [data-kind="golem"] img').className,
   }));
+  assert.deepEqual([seen.blobPic, seen.golemPic], ['figure', 'figure shadow']);
   assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 11\)$/);
   assert.equal(seen.tabs[1], '🏆 Defeated (1 of 11)');
-  assert.equal(seen.blob, '👾Grumpy Blob');
-  assert.equal(seen.golem, '🗿???');
+  assert.equal(seen.blob, 'Grumpy Blob');
+  assert.equal(seen.golem, '???');
   await page.click('#modal .tabs .chip[data-tab="defeated"]');
   await until(page, () => document.querySelector('#modal .monster-book').dataset.tab === 'defeated');
   const card = await page.evaluate(() => {
