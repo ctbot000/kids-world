@@ -32,7 +32,8 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
-import { COOK_BREAK_MS, cookCoins, RECIPES, recipeByKey } from './shared/cooking.js';
+import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
+import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
 import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
@@ -2253,7 +2254,7 @@ export class UI {
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one!']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
-          card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
+          card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
@@ -6469,32 +6470,40 @@ export class UI {
     let timer = 0;
     this.openModal(
       (root) => {
-        const list = h('div', { class: 'recipe-list' });
-        const render = () => {
-          list.replaceChildren(
-            ...RECIPES.map((r, i) => {
-              const wait = g.cookBreak(r.key);
-              const s = Math.ceil(wait / 1000);
-              return h(
-                'button',
-                {
-                  class: `big ${['blue', 'pink', 'green'][i % 3]}`,
-                  type: 'button',
-                  disabled: wait > 0,
-                  'data-recipe': r.key,
-                  onclick: () => {
-                    this.sound.unlock();
-                    this.sound.play('ui');
-                    g.startCooking(r.key);
-                  },
+        // The buttons made once and kept up to date, so a tap never lands
+        // on one just taken away.
+        const subs = [];
+        const list = h(
+          'div',
+          { class: 'recipe-list' },
+          RECIPES.map((r, i) => {
+            subs.push(h('span', { class: 'quiz-sub' }));
+            return h(
+              'button',
+              {
+                class: `big ${['blue', 'pink', 'green'][i % 3]}`,
+                type: 'button',
+                'data-recipe': r.key,
+                onclick: () => {
+                  this.sound.unlock();
+                  this.sound.play('ui');
+                  g.startCooking(r.key);
                 },
-                h('span', { class: 'emoji' }, r.icon),
-                h('span', { class: 'quiz-level' }, h('span', {}, r.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🧽 Washing up: ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${r.steps.length} steps · 🪙 up to ${cookCoins(r.steps.length)}`)),
-              );
-            }),
-          );
+              },
+              h('span', { class: 'emoji' }, r.icon),
+              h('span', { class: 'quiz-level' }, h('span', {}, r.name), subs[i]),
+            );
+          }),
+        );
+        const render = () => {
+          RECIPES.forEach((r, i) => {
+            const wait = g.cookBreak(r.key);
+            const s = Math.ceil(wait / 1000);
+            list.children[i].disabled = wait > 0;
+            subs[i].textContent = wait > 0 ? `🧽 Washing up: ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${r.steps.length} steps · 🪙 up to ${cookCoins(r.steps.length)}`;
+          });
         };
-        root.append(h('h2', {}, '🍳 Cooking Class'), h('p', {}, 'Aprons on! Pick a recipe, then tap each step in the right order. Every step right first time earns a coin.'), list);
+        root.append(h('h2', {}, '🍳 Cooking Class'), h('p', {}, 'Aprons on! Pick a recipe and cook it yourself: take what comes next off the shelf, then crack, pour, stir, chop, spread and bake. A coin for every step done just right!'), list);
         render();
         timer = setInterval(render, 1000);
       },
@@ -6744,25 +6753,31 @@ export class UI {
     else this.renderCooking();
   }
 
-  // The cooking class, in a window: the steps done so far, a pan with what
-  // has gone in, and the steps to pick the next one from; at the end, the
-  // dish made and what it earned.
+  // The cooking class, in a window: a kitchen (render/kitchen.js) with what
+  // the step is done in and the food so far, the shelf of things to pick
+  // the next one from, and the recipe as far as it has got. Picked, you do
+  // the step with your own hands: drag it into the bowl, hold it over to
+  // pour, stir round, tap to chop, rub over to spread, and take it off the
+  // heat when it is golden. At the end, the dish made and what it earned.
   cookingDialog() {
     const g = this.game;
     const c = g?.cooking;
     if (!c) return;
     const recipe = recipeByKey(c.recipe);
+    if (this.cookEls) cancelAnimationFrame(this.cookEls.raf);
     this.cookEls = null;
     this.openModal(
       (root) => {
-        const status = h('div', { class: 'quiz-status' });
+        const status = h('div', { class: 'quiz-status cook-hint', 'aria-live': 'polite' });
         const box = h('div', { class: 'cook-box' });
-        this.cookEls = { cooking: c, status, box, wrong: new Set(), step: 0 };
+        this.cookEls = { cooking: c, status, box, step: -1, view: { points: [], covered: new Uint8Array(0), spin: 0, pos: null, tool: null, pour: false, down: false, t: 0 } };
         root.append(h('h2', {}, `${recipe.icon} ${recipe.name}`), status, box);
+        this.cookKitchen();
       },
       {
         narrow: true,
         onClose: () => {
+          if (this.cookEls) cancelAnimationFrame(this.cookEls.raf);
           this.cookEls = null;
           if (g.cooking === c) g.closeCooking();
         },
@@ -6771,70 +6786,261 @@ export class UI {
     this.renderCooking();
   }
 
+  // The kitchen's canvas, shelf and button to take it off the heat, and the
+  // hands at work on them.
+  cookKitchen() {
+    const g = this.game;
+    const els = this.cookEls;
+    const c = els.cooking;
+    const view = els.view;
+    const recipe = recipeByKey(c.recipe);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const canvas = h('canvas', { class: 'cook-canvas', width: KITCHEN_W * dpr, height: KITCHEN_H * dpr, role: 'img', 'aria-label': 'The kitchen' });
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const say = (text, warn = false) => {
+      els.verdict.textContent = text;
+      els.verdict.classList.toggle('warn', warn);
+    };
+    const at = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: ((e.clientX - r.left) / r.width) * KITCHEN_W, y: ((e.clientY - r.top) / r.height) * KITCHEN_H };
+    };
+    const inVessel = (p, k = 1) => p && Math.hypot(p.x - VESSEL.x, p.y - VESSEL.y) < VESSEL.r * k;
+    const step = () => (c.done ? null : recipe.steps[c.step]);
+    // Off the heat: too soon leaves it on, golden or dark finishes the step.
+    const takeOut = () => {
+      const how = g.cookTakeOut();
+      if (how === 'raw') {
+        this.sound.play('no');
+        say('🙈 Not cooked yet — watch it, and wait a little longer!', true);
+      } else if (how === 'golden') {
+        this.sound.play('collect');
+        say('🌟 Just right!');
+      } else if (how === 'dark') {
+        this.sound.play('ui');
+        say('😅 A little dark, but still yummy!', true);
+      }
+    };
+    const off = h('button', { class: 'big yellow cook-off', type: 'button', hidden: true, onclick: takeOut }, '🧤 Take it off the heat');
+    // A drag from the shelf (add, pour): the thing follows your finger, and
+    // goes in when let go over the vessel, or pours while held over it.
+    let drag = null;
+    const shelf = h(
+      'div',
+      { class: 'cook-shelf', role: 'group', 'aria-label': 'The shelf' },
+      c.shelf.map((item, i) => {
+        const b = h('button', { class: 'cook-item', type: 'button', 'data-i': i, 'aria-label': item.name }, h('span', { class: 'emoji' }, item.icon), h('span', { class: 'cook-name' }, item.name));
+        const pick = () => {
+          this.sound.unlock();
+          const right = g.cookPick(i);
+          if (right === false) {
+            this.sound.play('no');
+            b.classList.remove('shake');
+            void b.offsetWidth;
+            b.classList.add('shake');
+            clearTimeout(b.shakeTimer);
+            b.shakeTimer = setTimeout(() => b.classList.remove('shake'), 900);
+            say(`🙈 Not yet! The ${item.name.toLowerCase()} ${item.step < 0 ? 'is not in this recipe' : 'comes later'}.`, true);
+          } else if (right) {
+            this.sound.play('ui');
+            say('');
+          }
+          return right;
+        };
+        b.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          if (!pick()) return;
+          const st = step();
+          if (st.act === 'add' || st.act === 'pour') {
+            drag = { id: e.pointerId, act: st.act };
+            b.setPointerCapture?.(e.pointerId);
+            view.pos = at(e);
+          }
+          view.tool = st.act === 'heat' ? null : item.icon;
+        });
+        b.addEventListener('pointermove', (e) => {
+          if (drag?.id === e.pointerId) view.pos = at(e);
+        });
+        const drop = (e) => {
+          if (drag?.id !== e.pointerId) return;
+          if (drag.act === 'add' && e.type === 'pointerup' && inVessel(view.pos, 1.15)) {
+            this.sound.play('collect');
+            g.cookWork(1);
+          }
+          drag = null;
+          view.pour = false;
+          view.tool = null;
+        };
+        b.addEventListener('pointerup', drop);
+        b.addEventListener('pointercancel', drop);
+        // From the keyboard: picked, and added or poured in one go.
+        b.addEventListener('click', (e) => {
+          if (e.detail !== 0 || !pick()) return;
+          const st = step();
+          if (st.act === 'add' || st.act === 'pour') g.cookWork(st.act === 'add' ? 1 : st.n);
+        });
+        return b;
+      }),
+    );
+    // Hands on the kitchen: stirring, chopping, rubbing, taking it out.
+    let last = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.sound.unlock();
+      const p = at(e);
+      view.pos = p;
+      const st = step();
+      if (!st) return;
+      if (c.phase === 'pick') {
+        say('👇 First pick what comes next off the shelf!', true);
+        return;
+      }
+      if (st.act === 'heat') {
+        if (inVessel(p, 1.4)) takeOut();
+        return;
+      }
+      if (st.act === 'chop') {
+        view.down = true;
+        if (inVessel(p, 1.5)) {
+          this.sound.play('ui');
+          g.cookWork(1);
+        }
+        return;
+      }
+      if (st.act === 'stir' || st.act === 'rub') {
+        view.down = true;
+        last = Math.atan2(p.y - VESSEL.y, p.x - VESSEL.x);
+        canvas.setPointerCapture?.(e.pointerId);
+        rub(p);
+      }
+    });
+    const rub = (p) => {
+      const st = step();
+      if (st?.act !== 'rub' || !view.points.length) return;
+      let fresh = 0;
+      view.points.forEach(([x, y], i) => {
+        if (!view.covered[i] && Math.hypot(x - p.x, y - p.y) < 20) {
+          view.covered[i] = 1;
+          fresh++;
+        }
+      });
+      if (fresh) g.cookWork(fresh / view.points.length);
+    };
+    canvas.addEventListener('pointermove', (e) => {
+      const p = at(e);
+      view.pos = p;
+      const st = step();
+      if (!view.down || !st) return;
+      if (st.act === 'stir' && inVessel(p, 1.25) && Math.hypot(p.x - VESSEL.x, p.y - VESSEL.y) > 10) {
+        const a = Math.atan2(p.y - VESSEL.y, p.x - VESSEL.x);
+        let d = a - last;
+        if (d > Math.PI) d -= Math.PI * 2;
+        if (d < -Math.PI) d += Math.PI * 2;
+        last = a;
+        view.spin += d;
+        g.cookWork(Math.abs(d) / (Math.PI * 2));
+      } else if (st.act === 'rub') rub(p);
+    });
+    const up = () => {
+      view.down = false;
+    };
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    canvas.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse' && !view.down) view.pos = null;
+    });
+    els.verdict = h('p', { class: 'quiz-verdict cook-verdict', 'aria-live': 'polite' });
+    els.steps = h('ol', { class: 'cook-steps' });
+    els.shelf = shelf;
+    els.off = off;
+    els.kitchen = h('div', { class: 'cook-kitchen' }, h('div', { class: 'cook-wrap' }, canvas), off, shelf, els.verdict, els.steps);
+    els.box.replaceChildren(els.kitchen);
+    // The kitchen's clock: cooking on the heat, pouring, and drawing.
+    let then = performance.now();
+    const frame = (now) => {
+      if (this.cookEls !== els) return;
+      const dt = Math.min(0.1, (now - then) / 1000);
+      then = now;
+      view.t += dt;
+      const st = step();
+      if (st && c.phase === 'work' && st.act === 'heat') g.cookHeat(dt);
+      view.pour = Boolean(drag && drag.act === 'pour' && inVessel(view.pos, 1.2));
+      if (view.pour) g.cookWork(dt);
+      if (!c.done) {
+        drawKitchen(ctx, c, view);
+        const hint = this.cookHint(c, st);
+        if (els.status.dataset.k !== hint) {
+          els.status.dataset.k = hint;
+          els.status.textContent = hint;
+        }
+        off.hidden = !(st && st.act === 'heat' && c.phase === 'work');
+      }
+      els.raf = requestAnimationFrame(frame);
+    };
+    els.raf = requestAnimationFrame(frame);
+  }
+
+  // What to do now, over the kitchen.
+  cookHint(c, st) {
+    const recipe = recipeByKey(c.recipe);
+    const where = `Step ${c.step + 1} of ${recipe.steps.length}`;
+    if (!st) return '';
+    if (c.phase === 'pick') return `${where} · What comes next? Pick it off the shelf 👇`;
+    const thing = st.name.toLowerCase();
+    if (st.act === 'add') return st.n > 1 ? `Drag the ${thing} into the ${st.vessel}! (${Math.round(c.progress * st.n)} of ${st.n})` : `Drag the ${thing} onto the ${st.vessel}!`;
+    if (st.act === 'pour') return `Hold the ${thing} over the ${st.vessel} to pour it in`;
+    if (st.act === 'stir') return `Stir round and round in the ${st.vessel}! 🔄`;
+    if (st.act === 'chop') return st.n > 1 ? `Tap with the knife to chop! 🔪 (${Math.round(c.progress * st.n)} of ${st.n})` : 'Tap with the knife to cut it in half! 🔪';
+    if (st.act === 'rub') return { roll: 'Roll back and forth over the dough to flatten it', sauce: 'Spread the sauce all over the dough', cheese: 'Sprinkle cheese all over the pizza', chips: 'Sprinkle chips on every cookie', wash: 'Rub the vegetables clean under the tap', butter: 'Spread the butter all over the bread' }[st.look];
+    const how = doneness(c.heat);
+    const golden = st.vessel === 'pot' ? 'just right' : 'golden';
+    return how === 'raw' ? `Cooking… take it off when it’s ${golden}!` : how === 'golden' ? `🌟 ${golden[0].toUpperCase() + golden.slice(1)} — take it off now!` : '🔥 It’s been on too long — quick!';
+  }
+
   renderCooking() {
     const g = this.game;
     const c = g?.cooking;
     const els = this.cookEls;
     if (!c || els?.cooking !== c || !this.modalOpen) return;
     const recipe = recipeByKey(c.recipe);
-    const total = c.asks.length;
-    if (els.step !== c.step) {
-      els.step = c.step;
-      els.wrong.clear();
-    }
-    const status = c.done ? `Ready! ${c.right} of ${total} steps right first time` : `Step ${c.step + 1} of ${total} · What comes next?`;
-    if (els.status.dataset.k !== status) {
-      els.status.dataset.k = status;
-      els.status.textContent = status;
-    }
+    const total = recipe.steps.length;
     const done = recipe.steps.slice(0, c.step);
-    const steps = h('ol', { class: 'cook-steps' }, done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`)));
     if (c.done) {
-      if (!els.served) {
-        els.served = true;
-        this.sound.play(c.right === total ? 'victory' : 'fanfare');
-      }
+      if (els.served) return;
+      els.served = true;
+      this.sound.play(c.right === total ? 'victory' : 'fanfare');
+      els.status.textContent = `Ready! ${c.right} of ${total} steps just right`;
       const other = RECIPES.find((r) => r.key !== c.recipe && !g.cookBreak(r.key));
       els.box.replaceChildren(
         h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, recipe.icon),
         h('div', { class: `quiz-result${c.right === total ? ' perfect' : ''}` }, `${c.right === total ? '🌟' : '🧑‍🍳'} Your ${recipe.name}${recipe.name.endsWith('s') ? ' are' : ' is'} ready!`),
-        h('p', { class: 'quiz-credit' }, c.right === total ? 'Every step right first time! ' : 'Yummy! ', `You earned: 🪙 ${c.coins} ${c.coins === 1 ? 'coin' : 'coins'}`, c.xp ? ` and ⭐ ${c.xp} XP` : ''),
-        steps,
+        h('p', { class: 'quiz-credit' }, c.right === total ? 'Every step just right! ' : 'Yummy! ', `You earned: 🪙 ${c.coins} ${c.coins === 1 ? 'coin' : 'coins'}`, c.xp ? ` and ⭐ ${c.xp} XP` : ''),
+        h('ol', { class: 'cook-steps' }, done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`))),
         h('p', { class: 'muted' }, `🧽 The ${recipe.name} can be made again after a ${Math.round(COOK_BREAK_MS / 60_000)}-minute wash-up.`),
         other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); this.closeModal(); this.cookDialog(); } }, h('span', { class: 'emoji' }, '📖'), ' Cook something else') : '',
         h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
       );
       return;
     }
-    const ask = c.asks[c.step];
-    const pan = h('div', { class: 'cook-pan', 'aria-label': done.length ? `In the pan: ${done.map((st) => st.icon).join(' ')}` : 'An empty pan' }, done.length ? done.map((st) => h('span', {}, st.icon)) : h('span', { class: 'muted' }, '🍳'));
-    const answers = h(
-      'div',
-      { class: 'quiz-answers', role: 'group', 'aria-label': 'Steps' },
-      ask.choices.map((choice, at) =>
-        h(
-          'button',
-          {
-            class: `quiz-answer cook-step${els.wrong.has(at) ? ' wrong' : ''}`,
-            type: 'button',
-            disabled: els.wrong.has(at),
-            onclick: () => {
-              this.sound.unlock();
-              const right = g.cookPick(at);
-              if (right === true) this.sound.play('collect');
-              else if (right === false) {
-                els.wrong.add(at);
-                this.sound.play('no');
-                this.renderCooking();
-              }
-            },
-          },
-          h('span', { class: 'emoji' }, choice.icon),
-          ` ${choice.text}`,
-        ),
-      ),
-    );
-    els.box.replaceChildren(steps, pan, answers, els.wrong.size ? h('p', { class: 'quiz-verdict' }, '🙈 Not yet! Which step comes before that one?') : '');
+    // A new step: its own places to rub over, and nothing in your hand.
+    if (els.step !== c.step) {
+      els.step = c.step;
+      const view = els.view;
+      view.points = rubPoints(c.recipe, c.step);
+      view.covered = new Uint8Array(view.points.length);
+      view.spin = 0;
+      view.tool = null;
+      view.down = false;
+      els.steps.replaceChildren(...done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`)));
+    }
+    for (const b of els.shelf.children) {
+      const item = c.shelf[Number(b.dataset.i)];
+      const used = item.step >= 0 && item.step < c.step;
+      b.disabled = used;
+      b.classList.toggle('used', used);
+      b.classList.toggle('on', c.phase === 'work' && item.step === c.step);
+    }
   }
 
   // The quiz you are taking, in a window: where it has got to, the question

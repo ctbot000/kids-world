@@ -16,7 +16,7 @@ import { computerNear } from './shared/typing.js';
 import { furnitureDrop } from './shared/furniture.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
-import { cookBreakLeft, cookCoins, makeLesson, recipeByKey, stoveNear } from './shared/cooking.js';
+import { cookBreakLeft, cookCoins, heatUp, makeLesson, pickItem, recipeByKey, stoveNear, takeOut, workOn } from './shared/cooking.js';
 import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
@@ -303,7 +303,7 @@ export class Game extends EventTarget {
     this.classEnded = { junior: 0, senior: 0 };
     // The stove beside you (shared/cooking.js), when you last cooked each
     // recipe, for the break before the next time, and the cooking class
-    // going: { recipe, asks, step, misses, right, done, coins, xp }.
+    // going (shared/cooking.js makeLesson, and its coins and xp when done).
     this.stoveTarget = null;
     this.cookEnded = {};
     this.cooking = null;
@@ -2607,32 +2607,54 @@ export class Game extends EventTarget {
     return cookBreakLeft(this.cookEnded[key] ?? 0, performance.now());
   }
 
-  // A cooking class begun: the recipe's steps to put in order, unless its
-  // break is still on. Says 'cooking', which opens the window on it (ui.js).
+  // A cooking class begun, its shelf laid out, unless the recipe's break is
+  // still on. Says 'cooking', which opens the window on it (ui.js).
   startCooking(key) {
     if (!recipeByKey(key) || this.cookBreak(key) > 0) return;
-    const lesson = makeLesson(key, (Math.random() * 2 ** 31) | 0);
-    this.cooking = { ...lesson, step: 0, misses: lesson.asks.map(() => 0), right: 0, done: false };
+    this.cooking = makeLesson(key, (Math.random() * 2 ** 31) | 0);
     this.emit('cooking');
   }
 
-  // A step picked as the one that comes next: true when it was (on to the
-  // step after it, and with the last one the dish made, its coins and XP
-  // yours), false when not (try again), undefined for no step to take.
+  // The thing at shelf place i picked up: true when it is what comes next,
+  // false when not (a miss: try again), undefined when there is nothing to
+  // pick. Says 'cooking'.
   cookPick(i) {
     const c = this.cooking;
-    if (!c || c.done) return;
-    const ask = c.asks[c.step];
-    if (!ask || !Number.isInteger(i) || i < 0 || i >= ask.choices.length) return;
-    if (i !== ask.answer) {
-      c.misses[c.step]++;
-      this.emit('cooking');
-      return false;
-    }
-    if (!c.misses[c.step]) c.right++;
-    c.step++;
-    if (c.step === c.asks.length) {
-      c.done = true;
+    if (!c || c.done || !Number.isInteger(i)) return;
+    const right = pickItem(c, i);
+    if (right !== undefined) this.emit('cooking');
+    return right;
+  }
+
+  // Some of the step done with your hands (shared/cooking.js workOn): true
+  // when that finished it. Says 'cooking' only then, for this comes with
+  // every move of a stir or a rub.
+  cookWork(amount) {
+    const c = this.cooking;
+    if (!c || !workOn(c, amount)) return false;
+    this.cooked();
+    return true;
+  }
+
+  // Time going by on the heat, from the window's own clock.
+  cookHeat(dt) {
+    heatUp(this.cooking, dt);
+  }
+
+  // Off the heat: 'raw' (left on), 'golden' or 'dark' (the step done), or
+  // undefined.
+  cookTakeOut() {
+    const c = this.cooking;
+    const how = c ? takeOut(c) : undefined;
+    if (how && how !== 'raw') this.cooked();
+    return how;
+  }
+
+  // A step finished: with the last one the dish is made, its coins and XP
+  // yours. Says 'cooking'.
+  cooked() {
+    const c = this.cooking;
+    if (c.done && c.coins === undefined) {
       c.coins = cookCoins(c.right);
       c.xp = XP_FOR.dishes.xp + c.right * XP_FOR.cookright.xp;
       this.cookEnded[c.recipe] = performance.now();
@@ -2643,7 +2665,6 @@ export class Game extends EventTarget {
       if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: c.xp });
     }
     this.emit('cooking');
-    return true;
   }
 
   // The cooking window closed: a class half done simply goes.

@@ -18,7 +18,8 @@ import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { latestNews, NEWS } from '../public/js/news.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
-import { RECIPES } from '../public/js/shared/cooking.js';
+import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
+import { KITCHEN_H, KITCHEN_W, VESSEL } from '../public/js/render/kitchen.js';
 import { STUDY_SIZE } from '../public/js/shared/study.js';
 import { PICTURE_H, PICTURE_W } from '../public/js/shared/drawing.js';
 import { youtubeAt } from '../public/js/shared/broadcast.js';
@@ -5032,7 +5033,7 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   await page.browserContext().close();
 });
 
-test('a cooking class: Q by a stove opens the recipes, its steps tapped in order make the dish, a wrong one only says not yet, and the recipe is after a wash-up', { skip }, async () => {
+test('a cooking class: Q by a stove opens the recipes; pancakes made by hand (eggs and flour dragged into the bowl, milk poured, stirred round, fried and taken off golden), a wrong pick a miss, and the recipe is after a wash-up', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // A stove on level ground beside the start, and nothing rideable near it
@@ -5067,19 +5068,65 @@ test('a cooking class: Q by a stove opens the recipes, its steps tapped in order
   assert.equal(await page.evaluate(() => document.querySelectorAll('.recipe-list button').length), RECIPES.length);
   const recipe = RECIPES[0];
   await page.click(`.recipe-list button[data-recipe="${recipe.key}"]`);
-  await until(page, (name) => document.querySelector('#modal h2').textContent.includes(name) && document.querySelector('.cook-step'), recipe.name);
-  // A wrong step first: not yet, and that one put by.
-  const first = await page.evaluate(() => window.kidsWorld.game.cooking.asks[0]);
-  const wrong = first.answer === 0 ? 1 : 0;
-  await page.click(`.cook-step:nth-child(${wrong + 1})`);
-  await until(page, () => document.querySelector('.quiz-verdict')?.textContent.includes('Not yet'));
-  assert.ok(await page.evaluate((n) => document.querySelector(`.cook-step:nth-child(${n})`).disabled, wrong + 1));
-  // Then every step right, each going into the pan.
-  for (let i = 0; i < recipe.steps.length; i++) {
-    const right = await page.evaluate((i) => window.kidsWorld.game.cooking.asks[i].answer, i);
-    await page.click(`.cook-step:nth-child(${right + 1})`);
-    if (i < recipe.steps.length - 1) await until(page, (n) => document.querySelectorAll('.cook-pan span').length === n && !document.querySelector('.quiz-verdict'), i + 1);
-  }
+  await until(page, (name) => document.querySelector('#modal h2').textContent.includes(name) && document.querySelector('.cook-canvas'), recipe.name);
+  // Once the window has grown to its size.
+  await until(page, () => Math.abs(document.querySelector('.cook-canvas').getBoundingClientRect().width - document.querySelector('.cook-canvas').offsetWidth) < 0.5);
+  const box = await (await page.$('.cook-canvas')).boundingBox();
+  const spot = (x, y) => [box.x + (x / KITCHEN_W) * box.width, box.y + (y / KITCHEN_H) * box.height];
+  const shelf = async (step) => {
+    const i = await page.evaluate((step) => window.kidsWorld.game.cooking.shelf.findIndex((s) => s.step === step), step);
+    const b = await (await page.$(`.cook-item[data-i="${i}"]`)).boundingBox();
+    return [b.x + b.width / 2, b.y + b.height / 2];
+  };
+  const cooking = () => page.evaluate(() => ({ ...window.kidsWorld.game.cooking }));
+  // Into the bowl by hand before anything is picked: nothing happens.
+  await page.mouse.click(...spot(VESSEL.x, VESSEL.y));
+  await until(page, () => document.querySelector('.cook-verdict')?.textContent.includes('shelf'));
+  // Something not in the recipe first: not yet, a miss.
+  await page.mouse.click(...(await shelf(-1)));
+  await until(page, () => document.querySelector('.cook-verdict')?.textContent.includes('Not yet'));
+  assert.deepEqual((await cooking()).misses.slice(0, 1), [1]);
+  // A drag from the shelf, let go over the bowl: in it goes (two eggs).
+  const dragIn = async (step, hold = 0) => {
+    const from = await shelf(step);
+    await page.mouse.move(...from);
+    await page.mouse.down();
+    for (let t = 1; t <= 6; t++) await page.mouse.move(...from.map((v, k) => v + (spot(VESSEL.x, VESSEL.y - 30)[k] - v) * (t / 6)));
+    if (hold) await until(page, (step) => window.kidsWorld.game.cooking.step > step, step);
+    await page.mouse.up();
+  };
+  await dragIn(0);
+  await until(page, () => window.kidsWorld.game.cooking.progress === 0.5);
+  // One let go away from the bowl does not count.
+  const from = await shelf(0);
+  await page.mouse.move(...from);
+  await page.mouse.down();
+  await page.mouse.move(...spot(20, 20));
+  await page.mouse.up();
+  assert.equal((await cooking()).progress, 0.5);
+  await dragIn(0);
+  await until(page, () => window.kidsWorld.game.cooking.step === 1);
+  // The milk held over the bowl pours until it is in.
+  await dragIn(1, true);
+  await dragIn(2);
+  await dragIn(2);
+  await until(page, () => window.kidsWorld.game.cooking.step === 3);
+  // The spoon: round and round in the bowl.
+  await page.mouse.click(...(await shelf(3)));
+  await page.mouse.move(...spot(VESSEL.x + 50, VESSEL.y));
+  await page.mouse.down();
+  for (let t = 0; t <= 24 * 3.5 && (await cooking()).step === 3; t++) await page.mouse.move(...spot(VESSEL.x + Math.cos((t / 24) * Math.PI * 2) * 50, VESSEL.y + Math.sin((t / 24) * Math.PI * 2) * 50));
+  await page.mouse.up();
+  await until(page, () => window.kidsWorld.game.cooking.step === 4);
+  // The frying pan: on the heat; taken off too soon it stays on, and off
+  // golden it is done.
+  await page.mouse.click(...(await shelf(4)));
+  await until(page, () => !document.querySelector('.cook-off').hidden);
+  await page.click('.cook-off');
+  await until(page, () => document.querySelector('.cook-verdict')?.textContent.includes('Not cooked yet'));
+  assert.equal((await cooking()).step, 4);
+  await until(page, (g) => window.kidsWorld.game.cooking.heat > (g[0] + g[1]) / 2, GOLDEN);
+  await page.mouse.click(...spot(VESSEL.x, VESSEL.y));
   await until(page, () => document.querySelector('.cook-dish') && document.querySelector('.quiz-result')?.textContent.includes('ready'));
   const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, stats: window.kidsWorld.profile.data.stats, stickers: window.kidsWorld.profile.data.stickers }));
   assert.equal(after.coins, at.coins + recipe.steps.length - 1, 'a coin for each step right first time');
