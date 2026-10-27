@@ -20,7 +20,7 @@ import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
+import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
@@ -1442,6 +1442,7 @@ export class UI {
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
+        this.statsCard(),
         h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
@@ -1452,6 +1453,27 @@ export class UI {
         ),
       );
     });
+  }
+
+  // Your stats (shop.js statsOf), with what each one comes from: HP from
+  // your level (and how much of it you have now, on an island), AP from the
+  // weapon you hold, DEF from Knight Armor, SPD from shoes or skates and JMP
+  // from the Hero Cape.
+  statsCard() {
+    const p = this.profile;
+    const s = statsOf(p.progress.level, p.data.gear);
+    const g = this.game;
+    const now = g && Number.isFinite(g.hp) && g.maxHp === s.hp ? g.hp : s.hp;
+    const stat = (key, icon, name, value, from) => h('div', { class: 'stat', 'data-stat': key, title: from }, h('span', { class: 'stat-name' }, `${icon} ${name}`), h('b', { class: 'stat-value' }, value), h('span', { class: 'muted' }, from));
+    return h(
+      'div',
+      { class: 'stats-card', role: 'group', 'aria-label': 'My stats' },
+      stat('hp', '❤️', 'HP', now < s.hp ? `${now}/${s.hp}` : String(s.hp), `${maxHp(1)} at level 1, +${maxHp(2) - maxHp(1)} each level up`),
+      stat('ap', '⚔️', 'AP', String(s.ap), s.weapon ? `${s.weapon.icon} ${s.weapon.name} · King Grumble ${s.king}` : '👊 Bare paws: get a weapon in the 🛒 shop'),
+      stat('def', '🛡️', 'DEF', `${s.def}%`, s.def ? '🛡️ Knight Armor: bumps take half' : s.fireproof ? '🧑‍🚒 Fire Suit: lava never burns' : 'Knight Armor halves bumps'),
+      stat('spd', '👟', 'SPD', `${s.speed}%`, s.speed > 100 ? 'Faster with your shoes or skates' : 'Running shoes go faster'),
+      stat('jmp', '🦘', 'JMP', `${s.jump}%`, s.jump > 100 ? '🦸 Hero Cape: higher jumps' : 'The Hero Cape jumps higher'),
+    );
   }
 
   // The shop: sell what is in your basket for coins, and buy running shoes,

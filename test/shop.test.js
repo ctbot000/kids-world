@@ -15,7 +15,7 @@ import { makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { AdventureSim } from '../public/js/shared/adventure.js';
 import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, SKATE_GLIDE, isBroken, lookWithGear, nextLevel, sale, sellPrice, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
+import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, SKATE_GLIDE, isBroken, lookWithGear, nextLevel, sale, sellPrice, statsOf, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
 import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
 import { World } from '../public/js/shared/world.js';
@@ -483,4 +483,16 @@ test('skates go on your feet in place of shoes: in the look, and put on one at a
   } finally {
     delete globalThis.localStorage;
   }
+});
+
+test('stats: HP from the level, AP from the weapon held, DEF from Knight Armor, SPD from shoes or skates, JMP from the Hero Cape', () => {
+  assert.deepEqual(statsOf(1, cleanGear({})), { hp: 100, ap: 1, king: 1, weapon: null, def: 0, fireproof: false, speed: 100, jump: 100 });
+  const s = statsOf(10, cleanGear({ weapon: 3, shoes: 2, clothes: ['armor'], outfit: 'armor' }));
+  assert.equal(s.hp, 145);
+  assert.equal(s.weapon.key, 'hammer');
+  assert.deepEqual([s.ap, s.king, s.def, s.speed, s.jump], [3, 2, 50, 140, 100]);
+  // Skates beat shoes, a broken weapon is bare paws again, and the cape jumps half as high again.
+  const t = statsOf(1, cleanGear({ weapon: 1, wear: { sword: WEAPONS[0].uses }, shoes: 3, skates: 1, clothes: ['cape'], outfit: 'cape' }));
+  assert.deepEqual([t.ap, t.weapon, t.speed, t.jump], [1, null, Math.round(100 * GEAR[2].levels[0].boost), 148]);
+  assert.equal(statsOf(1, cleanGear({ weapon: 2, off: { weapon: true } })).ap, 1);
 });

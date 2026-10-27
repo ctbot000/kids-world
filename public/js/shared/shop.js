@@ -11,6 +11,8 @@
 // (keeper.js).
 import { COLLECTABLES } from './blocks.js';
 import { cleanToys } from './gashapon.js';
+import { maxHp } from './monsters.js';
+import { MOVE } from './physics.js';
 
 export const COINS_MAX = 99999;
 // A new island: your first is free, and each after it costs this.
@@ -280,6 +282,28 @@ export function gearMove(gear, base) {
     flyUp: base.flyUp * sky,
     ...(jump ? { jump } : {}),
     ...(skates > 1 ? { glide: SKATE_GLIDE } : {}),
+  };
+}
+
+// Your stats, for the ⭐ window (ui.js): hp, the most HP you have at your
+// level; ap, the hearts a bop takes off a monster (bare paws take 1) and
+// king, off King Grumble; def, the share of a bump's HP that Knight Armor
+// keeps off; speed, how fast your feet are, and jump, how high you jump,
+// both as percent of anyone's with nothing on.
+export function statsOf(level, gear) {
+  const weapon = wornWeapon(gear);
+  const outfit = wornOutfit(gear);
+  const skates = boost(gear, 'skates');
+  const jump = outfit?.jump ?? MOVE.jump;
+  return {
+    hp: maxHp(level),
+    ap: weapon?.power ?? 1,
+    king: weapon?.king ?? 1,
+    weapon,
+    def: outfit?.power === 'armor' ? 50 : 0,
+    fireproof: outfit?.power === 'fireproof',
+    speed: Math.round(100 * (skates > 1 ? skates : boost(gear, 'shoes'))),
+    jump: Math.round((100 * jump * jump) / (MOVE.jump * MOVE.jump)),
   };
 }
 

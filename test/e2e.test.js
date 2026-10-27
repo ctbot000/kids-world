@@ -5818,3 +5818,20 @@ test('📰 What\'s new opens by itself with the updates since you last played, o
     await page.browserContext().close();
   }
 });
+
+test('the ⭐ level window shows your stats: HP from your level, AP from the weapon you hold', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Strong Otter' });
+  const stats = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#modal .stat')].map((s) => [s.dataset.stat, s.querySelector('.stat-value').textContent])));
+  await page.click('#btn-level');
+  await until(page, () => document.querySelectorAll('#modal .stat').length === 5);
+  assert.deepEqual(await stats(), { hp: '100', ap: '1', def: '0%', spd: '100%', jmp: '100%' });
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    window.kidsWorld.profile.earn(40);
+    window.kidsWorld.profile.buy('weapon');
+  });
+  await page.click('#btn-level');
+  await until(page, () => document.querySelector('#modal .stat[data-stat="ap"] .stat-value')?.textContent === '2');
+  assert.ok(await page.evaluate(() => document.querySelector('#modal .stat[data-stat="ap"]').textContent.includes('Foam Sword')));
+  await page.browserContext().close();
+});

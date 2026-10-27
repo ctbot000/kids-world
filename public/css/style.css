@@ -2435,6 +2435,33 @@ body.touch.playing #joystick {
   font-size: 1.4rem;
 }
 
+/* Your stats under your level (ui.js statsCard): HP, AP, DEF, SPD, JMP. */
+.stats-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #eef6ff;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.3rem;
+}
+
+.stat .muted {
+  font-size: 0.75rem;
+}
+
 /* Another player's level before their name: on the tag over them in the
    world, and in the ranking rows, the players list, invitations, and the
    friends on an island (ui.js levelTag). */
