@@ -633,7 +633,7 @@ test('the clock and the weather move on, and the owner can stop the clock', () =
     room.tick();
     seen.add(room.env.weather);
   }
-  assert.ok(seen.has('rain') && seen.has('rainbow') && seen.has('clear'), [...seen].join());
+  assert.ok((seen.has('rain') || seen.has('snow')) && seen.has('rainbow') && seen.has('clear'), [...seen].join());
   room.receive(a, { t: 'host', cmd: 'settings', settings: { day: 'day' } });
   time.advance(60000);
   room.tick();

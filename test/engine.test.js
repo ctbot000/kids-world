@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { maxCritters } from '../public/js/shared/critters.js';
-import { advanceTime, daylight, isDaytime } from '../public/js/shared/env.js';
+import { advanceTime, daylight, isDaytime, nextWeather } from '../public/js/shared/env.js';
 import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody, unstick } from '../public/js/shared/physics.js';
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
@@ -422,4 +422,23 @@ test('days are long and nights are short', () => {
   assert.equal(daylight(0.5), 1);
   assert.equal(daylight(0), 0);
   assert.equal(advanceTime(0.6, 100, 'day'), 0.42);
+});
+
+test('wet weather is sometimes snow, except on candy and volcano islands', () => {
+  const spells = (theme) => {
+    const seen = new Set();
+    let s = 1;
+    const random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 2000; i++) seen.add(nextWeather('clear', theme, random).weather);
+    return seen;
+  };
+  for (const theme of ['sunny', 'flat']) {
+    const seen = spells(theme);
+    assert.ok(seen.has('rain') && seen.has('snow'), `${theme}: ${[...seen]}`);
+  }
+  const snowy = spells('snowy');
+  assert.ok(snowy.has('snow') && !snowy.has('rain'));
+  const candy = spells('candy');
+  assert.ok(candy.has('sprinkles') && !candy.has('snow'));
+  assert.ok(!spells('volcano').has('snow'));
 });

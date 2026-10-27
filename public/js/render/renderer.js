@@ -70,6 +70,10 @@ export const QUALITY = {
 };
 // Shadows are drawn this far round you, either way, fading out before the edge.
 const SHADOW_EXTENT = 13;
+// Snow lying about: all the way from none to thick in 150 seconds of snow
+// (block tops all white by 100), and melted in 120 once it stops.
+const SNOW_RATE = 1 / 150;
+const MELT_RATE = 1 / 120;
 
 // A camera's shallow focus, as in a photo of a toy up close: what is well
 // nearer or further than `focus` (along the view) goes soft, the more so the
@@ -208,6 +212,10 @@ export class Renderer {
     this.view = { yaw: Math.PI * 0.85, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false };
     this.focus = { x: 0, y: 0, z: 0, cloudY: 90 };
     this.time = 0;
+    // How much snow lies on the island, from none to a thick white blanket
+    // (render/terrain.js SNOW_GLSL): it piles up while it snows and melts
+    // away slower once it stops.
+    this.snow = 0;
     this.world = null;
     this.selfHidden = false;
     // False while time is stepped without frames (see main.js): it moves on, nothing is drawn.
@@ -765,6 +773,7 @@ export class Renderer {
   frame(dt, state) {
     this.time += dt;
     const env = environment(state.time, state.weather, this.world?.theme, this.env);
+    this.snow = Math.min(1, Math.max(0, this.snow + dt * (state.weather === 'snow' ? SNOW_RATE : -MELT_RATE)));
     const fogFar = this.fogFar ?? 150;
     this.terrain.setLighting({
       daylight: env.daylight,
@@ -778,6 +787,7 @@ export class Renderer {
       nearFade: this.nearFade,
       shadowFocus: state.focus,
       shadowReach: SHADOW_EXTENT * 0.95,
+      snow: this.snow,
     });
     this.sky.setWeather(state.weather);
     this.focus.x = state.focus.x;

@@ -96,6 +96,45 @@ const SHADOW_FRAG = /* glsl */ `
   }
 `;
 
+// Snow lying on the island (Renderer.snow, 0 to 1): it settles first in
+// patches on the tops of blocks out under the open sky, each patch at a
+// moment of its own, until the tops are all white; then it piles up thicker
+// and creeps down over their edges. Faces are told apart by the slope of
+// the surface on screen, as the blocks' meshes carry no normals.
+const SNOW_GLSL = /* glsl */ `
+  uniform float uSnow;
+  float snowHash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  // How white this point is, from 0 to 1. sky: the sky light reaching it.
+  float snowCover(vec3 world, float sky, bool buried) {
+    if (uSnow <= 0.0) return 0.0;
+    #ifdef FOLIAGE
+      // A crown's own leaves keep some sky off its top; snow lands anyway.
+      float open = smoothstep(0.3, 0.5, sky);
+    #else
+      float open = smoothstep(0.45, 0.7, sky);
+    #endif
+    if (open <= 0.0) return 0.0;
+    vec3 n = normalize(cross(dFdx(world), dFdy(world)));
+    // Each quarter of a block top whitens at a moment of its own, a block's
+    // patches near one another; all of it by two-thirds of the way.
+    float at = mix(snowHash(floor(world.xz * 4.0)), snowHash(floor(world.xz) + 17.0), 0.45) * 0.6;
+    float top = smoothstep(at, at + 0.06, uSnow);
+    if (n.y > 0.6) return top * open;
+    if (n.y < -0.3) return 0.0;
+    // Down the sides: a band from the top edge, with a wavy hem, as deep as
+    // the snow is thick (a quarter of a block at most).
+    float deep = max(0.0, uSnow - 0.6) * 0.6;
+    float along = dot(world.xz, vec2(1.0)) * 6.0;
+    float hem = deep * (0.75 + 0.25 * sin(along) + 0.15 * sin(along * 2.7 + 1.3));
+    float side = step(1.0 - hem, fract(world.y - 0.001)) * step(0.01, deep);
+    if (buried) side = smoothstep(0.65, 0.75, uSnow);
+    return max(side, 0.0) * top * open;
+  }
+  vec3 snowy(vec3 col, vec3 light, float cover) {
+    return mix(col, decode(vec3(0.94, 0.97, 1.0)) * light, cover);
+  }
+`;
+
 const SOLID_VERT = /* glsl */ `
   ${SHADOW_VERT_PARS}
   attribute vec3 uvl;
@@ -136,6 +175,7 @@ const SOLID_FRAG = /* glsl */ `
   varying float vDepth;
   ${LIGHT_GLSL}
   ${SHADOW_FRAG}
+  ${SNOW_GLSL}
   void main() {
     nearFade(vDepth);
     #ifdef FOLIAGE
@@ -153,7 +193,11 @@ const SOLID_FRAG = /* glsl */ `
     #else
       float shade = vLit.w;
     #endif
-    vec3 col = base * lightOf(vLit.x, vLit.y, sunlit()) * ao * shade;
+    vec3 light = lightOf(vLit.x, vLit.y, sunlit());
+    vec3 col = base * light * ao * shade;
+    #if !defined(GLASS) && (!defined(SWAY) || defined(FOLIAGE))
+      col = snowy(col, light * mix(0.8, 1.0, vLit.z), snowCover(vWorld, vLit.x, false));
+    #endif
     #ifdef GLASS
       gl_FragColor = vec4(fogged(col, vDepth), tex.a);
     #else
@@ -328,9 +372,11 @@ const STUD_FRAG = /* glsl */ `
   varying float vDepth;
   ${LIGHT_GLSL}
   ${SHADOW_FRAG}
+  ${SNOW_GLSL}
   void main() {
     nearFade(vDepth);
-    vec3 col = decode(vTint) * lightOf(vLit.x, vLit.y, sunlit()) * vShade;
+    vec3 light = lightOf(vLit.x, vLit.y, sunlit());
+    vec3 col = snowy(decode(vTint) * light * vShade, light, snowCover(vWorld, vLit.x, true));
     gl_FragColor = vec4(fogged(col, vDepth), 1.0);
     #include <colorspace_fragment>
   }
@@ -428,6 +474,7 @@ export class Terrain {
       uWaterLayer: { value: atlas.layers.get('water') ?? 0 },
       uLavaLayer: { value: atlas.layers.get('lava') ?? 0 },
       uNearFade: { value: 1 },
+      uSnow: { value: 0 },
       // Where shadows are drawn: round this point, out to this far.
       uShadowFocus: { value: new THREE.Vector3() },
       uShadowReach: { value: 12 },
@@ -736,8 +783,9 @@ export class Terrain {
   }
 
   // shadowFocus, shadowReach: where the shadows of what moves are drawn.
-  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time, nearFade = true, shadowFocus = null, shadowReach = 12 }) {
+  setLighting({ daylight, sun, ambient, fog, fogNear, fogFar, time, nearFade = true, shadowFocus = null, shadowReach = 12, snow = 0 }) {
     const u = this.uniforms;
+    u.uSnow.value = snow;
     if (shadowFocus) u.uShadowFocus.value.copy(shadowFocus);
     u.uShadowReach.value = shadowReach;
     u.uNearFade.value = nearFade ? 1 : 0;

@@ -67,7 +67,6 @@ export const isRaining = (weather) => weather === 'rain' || weather === 'snow' |
 // Now and then a cloudy sky spins up a tornado, which blows itself out
 // back into clouds.
 export function nextWeather(current, theme, random = Math.random) {
-  const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : 'rain';
   if (current === 'rain' || current === 'snow' || current === 'sprinkles') return { weather: 'rainbow', seconds: 70 + random() * 40 };
   if (current === 'rainbow') return { weather: 'clear', seconds: 200 + random() * 160 };
   if (current === 'tornado') return { weather: 'cloudy', seconds: 60 + random() * 60 };
@@ -75,6 +74,9 @@ export function nextWeather(current, theme, random = Math.random) {
   if (current === 'cloudy' && r >= 0.9) return { weather: 'tornado', seconds: TORNADO_SECONDS[0] + random() * (TORNADO_SECONDS[1] - TORNADO_SECONDS[0]) };
   if (r < 0.55 || (theme === 'volcano' && r < 0.95)) return { weather: 'clear', seconds: 180 + random() * 180 };
   if (r < 0.8) return { weather: 'cloudy', seconds: 120 + random() * 120 };
+  // Anywhere else (but by a volcano), a wet spell is now and then snow
+  // instead of rain.
+  const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : theme !== 'volcano' && random() < 0.35 ? 'snow' : 'rain';
   return { weather: wet, seconds: 90 + random() * 90 };
 }
 
