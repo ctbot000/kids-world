@@ -4409,11 +4409,23 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   // The island takes it away: the window says so, and turns no more.
   await page.evaluate((at) => window.kidsWorld.session.link.room.gashaNews({ t: 'gasha-gone', ...at }), at);
   await until(page, () => document.querySelector('.gasha-said').textContent.includes('has gone') && document.querySelector('.gasha-turn').disabled);
-  // The figure is in the collection's 👾 Monster figures, not the backpack.
+  // The 🧱 Build side's collection has the capsule toys only: monster
+  // figures come from Adventure Isle, and its collection has them.
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden);
-  await page.evaluate(() => window.kidsWorld.ui.collectionDialog('monster'));
+  await page.evaluate(() => window.kidsWorld.ui.collectionDialog());
+  await until(page, () => document.querySelector('.collection-toys')?.dataset.tab === 'capsule');
+  assert.ok(await page.evaluate(() => document.querySelector('.collection-head').textContent.includes('Capsule toys') && !document.querySelector('#modal').textContent.includes('Monster figures')));
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.evaluate(() => {
+    const ui = window.kidsWorld.ui;
+    ui.isle.data.gear.toys['m-golem'] = 1;
+    ui.profile = ui.isle;
+    ui.collectionDialog();
+  });
   await until(page, () => document.querySelector('.collection-toys')?.dataset.tab === 'monster' && document.querySelectorAll('.collection-toys .gasha-toy-card:not(.missing)').length === 1);
+  assert.ok(await page.evaluate(() => document.querySelector('.collection-head').textContent.includes('Monster figures')));
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

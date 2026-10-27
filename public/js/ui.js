@@ -5205,7 +5205,7 @@ export class UI {
         const about = monster
           ? `Every turn is 🪙 ${kit.price} coins for one of ${kit.list.length} monster figures. ${stageNow > 1 ? `On stage ${stageNow}` : 'Here'} the odds are ★ ${odds[0]} · ★★ ${odds[1]} · ★★★ ${odds[2]} — the higher the stage, the better the chance of a rare one!`
           : `Every turn is 🪙 ${kit.price} coins for a surprise toy: ${kit.list.length} to collect, ★ common, ★★ rare and ★★★ super rare!`;
-        root.append(h('h2', {}, kit.title), coins, stage, said, turn, heading, grid, h('p', { class: 'muted gasha-about' }, about), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog(monster ? 'monster' : 'capsule') }, '🧸 My collection'));
+        root.append(h('h2', {}, kit.title), coins, stage, said, turn, heading, grid, h('p', { class: 'muted gasha-about' }, about), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 My collection'));
         show();
       },
       {
@@ -5241,52 +5241,33 @@ export class UI {
     );
   }
 
-  // Your collection, apart from the backpack: 🎁 the capsule toys from
-  // gashapon machines and 👾 the monster figures from the Monster Gashapon
-  // of Adventure Isle, every one of each (those still to find as closed
-  // capsules, with how rare they are), and how many you have.
-  collectionDialog(tab = 'capsule') {
+  // Your collection, apart from the backpack: on the 🧱 Build side, 🎁 the
+  // capsule toys from gashapon machines; on the ⚔️ Adventure side (Adventure
+  // Isle's world of its own, the only place they come from), 👾 the monster
+  // figures from its Monster Gashapon. Every one of the set (those still to
+  // find as closed capsules, with how rare they are), and how many you have.
+  collectionDialog() {
     const p = this.profile;
-    let current = tab;
+    const isle = p === this.isle;
+    const set = isle
+      ? { key: 'monster', list: MONSTER_FIGURES, text: '👾 Monster figures', note: 'A 👾 Monster Gashapon turns up on 🌟 Adventure Isle now and then: follow its beam of light to it for a monster figure. The higher the stage, the better the chance of a rare one!' }
+      : { key: 'capsule', list: TOYS, text: '🎁 Capsule toys', note: 'Turn a 🎁 gashapon machine for a capsule toy: find them in the toy box’s 🛋️ Home tab and at the 🕹️ Video Arcade.' };
     let onChange = null;
     this.openModal(
       (root) => {
-        const tabRow = h('div', { class: 'tabs' });
-        const note = h('p', { class: 'muted' });
-        const grid = h('div', { class: 'gasha-toys collection-toys' });
+        const heading = h('h3', { class: 'collection-head' });
+        const grid = h('div', { class: 'gasha-toys collection-toys', 'data-tab': set.key });
         const draw = () => {
           const toys = p.data.gear.toys;
-          const sets = [
-            { key: 'capsule', list: TOYS, text: '🎁 Capsule toys' },
-            { key: 'monster', list: MONSTER_FIGURES, text: '👾 Monster figures' },
-          ];
-          tabRow.replaceChildren(
-            ...sets.map((t) =>
-              h(
-                'button',
-                {
-                  class: `chip${t.key === current ? ' on' : ''}`,
-                  type: 'button',
-                  'data-tab': t.key,
-                  onclick: () => {
-                    current = t.key;
-                    this.sound.play('ui');
-                    draw();
-                  },
-                },
-                `${t.text} (${toysFound(toys, t.list)} of ${t.list.length})`,
-              ),
-            ),
-          );
-          const set = sets.find((t) => t.key === current);
-          grid.dataset.tab = current;
-          note.textContent =
-            current === 'capsule'
-              ? 'Turn a 🎁 gashapon machine for a capsule toy: find them in the toy box’s 🛋️ Home tab and at the 🕹️ Video Arcade.'
-              : 'On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light to it for a monster figure. The higher the stage, the better the chance of a rare one!';
+          heading.textContent = `${set.text} (${toysFound(toys, set.list)} of ${set.list.length})`;
           grid.replaceChildren(...set.list.map((t) => this.toyCard(t, toys[t.key] ?? 0)));
         };
-        root.append(h('div', { class: 'dialog-head' }, h('h2', {}, '🧸 My collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')), tabRow, note, grid);
+        root.append(
+          h('div', { class: 'dialog-head' }, h('h2', {}, '🧸 My collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')),
+          heading,
+          h('p', { class: 'muted' }, set.note),
+          grid,
+        );
         draw();
         this.loadToyPictures(() => {
           if (this.modalOpen && grid.isConnected) draw();
