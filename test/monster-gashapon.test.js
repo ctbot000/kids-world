@@ -215,3 +215,22 @@ test('the Grumble Knight and the Stone Golem are tougher than a Big Bruiser, and
     if (!want.length) assert.ok(kinds.slice(1).every((k) => k === 'blob' || k === 'queen'), 'stage 1: blobs otherwise');
   }
 });
+
+test('only the shared isle, Adventure Isle, gets the Monster Gashapon: no other adventure island does', () => {
+  for (const shared of [false, true]) {
+    let t = 1_000_000;
+    const room = new Room({ code: '123456', theme: 'flat', size: 'small', seed: 5, adventure: true, shared, now: () => t });
+    const c = { inbox: [], send: (m) => c.inbox.push(JSON.parse(m)), close: () => {} };
+    room.attach(c);
+    room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'cat' } });
+    const s = room.world.spawn;
+    for (let ms = 0; ms < MONSTER_GASHA.first[1] + 15000; ms += 500) {
+      t += 500;
+      room.receive(c, { t: 'm', s: [s.x, s.y, s.z, 0, 0, 0] });
+      room.tick();
+    }
+    const up = c.inbox.find((m) => m.t === 'gasha');
+    if (shared) assert.ok(up && isMonsterGashapon(room.world.get(up.x, up.y, up.z)), 'it turns up on Adventure Isle');
+    else assert.equal(up, undefined, 'never on an island made with Adventure on');
+  }
+});

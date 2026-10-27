@@ -1218,7 +1218,8 @@ export class Room {
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
     if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.stepDragons(now, where);
-    if (this.adventure) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
+    // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
+    if (this.adventure && this.shared) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
     this.keepApart(where);
     // The volcano's own dangers and chores: lava burns whoever stands in it,
     // water boils away and ice melts, and HP comes back whatever took it.

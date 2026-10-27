@@ -1771,8 +1771,7 @@ test('🛼 roller skates: bought in the shop, on in place of your shoes, and you
   assert.equal(await speed(), 0, 'and then stopped');
   // In the backpack, the shoes back on take the skates off.
   await page.keyboard.press('KeyI');
-  // Drawn again once the capsule toys' pictures are in: its buttons are new then.
-  await until(page, () => document.querySelector('#modal h2')?.textContent === '🎒 Backpack' && window.kidsWorld.ui.toyPictures);
+  await until(page, () => document.querySelector('#modal h2')?.textContent === '🎒 Backpack');
   const names = await page.evaluate(() => [...document.querySelectorAll('#modal .shop-card b')].map((b) => b.textContent));
   assert.deepEqual(names, ['Bouncy Sneakers', 'Roller Skates ✅']);
   await clickButton(page, '👕 Put on', '#modal .shop-card:nth-child(1)');
@@ -4342,15 +4341,17 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await until(page, (left) => window.kidsWorld.profile.data.coins === left && document.querySelector('.gasha-capsule').classList.contains('open'), 12 - 2 * GASHA_PRICE);
   await until(page, () => document.querySelector('.gasha-turn').disabled && document.querySelector('.gasha-said').textContent.length > 0);
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['capsule-toy']), 'the sticker');
-  // Your toys are in your backpack too, with their figures and how rare they are.
-  await page.keyboard.press('Escape');
-  await until(page, () => document.getElementById('modal').hidden);
-  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  // Your toys are in your collection, apart from the backpack, with their
+  // figures and how rare they are.
+  await page.evaluate(() => [...document.querySelectorAll('#modal button')].find((b) => b.textContent.includes('My collection')).click());
   await until(page, (names) => {
-    const cards = [...document.querySelectorAll('.backpack-toys .gasha-toy-card')];
+    const cards = [...document.querySelectorAll('.collection-toys .gasha-toy-card:not(.missing)')];
     const have = Object.keys(window.kidsWorld.profile.data.gear.toys);
-    return cards.length === have.length && cards.every((c) => c.querySelector('img.figure') && c.querySelector('.rarity')) && have.every((k) => cards.some((c) => c.textContent.includes(names[k])));
+    return document.querySelector('#modal h2').textContent.includes('My collection') && cards.length === have.length && cards.every((c) => c.querySelector('img.figure') && c.querySelector('.rarity')) && have.every((k) => cards.some((c) => c.textContent.includes(names[k])));
   }, Object.fromEntries(TOYS.map((t) => [t.key, t.name])));
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('Backpack'));
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#modal .gasha-toy-card').length), 0, 'none in the backpack');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
@@ -4408,11 +4409,11 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   // The island takes it away: the window says so, and turns no more.
   await page.evaluate((at) => window.kidsWorld.session.link.room.gashaNews({ t: 'gasha-gone', ...at }), at);
   await until(page, () => document.querySelector('.gasha-said').textContent.includes('has gone') && document.querySelector('.gasha-turn').disabled);
-  // The figure is in the backpack too.
+  // The figure is in the collection's 👾 Monster figures, not the backpack.
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden);
-  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
-  await until(page, () => document.querySelectorAll('.backpack-figures .gasha-toy-card').length === 1);
+  await page.evaluate(() => window.kidsWorld.ui.collectionDialog('monster'));
+  await until(page, () => document.querySelector('.collection-toys')?.dataset.tab === 'monster' && document.querySelectorAll('.collection-toys .gasha-toy-card:not(.missing)').length === 1);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

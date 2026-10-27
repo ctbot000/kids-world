@@ -1444,7 +1444,7 @@ export class UI {
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
         this.statsCard(),
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1846,40 +1846,16 @@ export class UI {
             const game = this.game?.world ? this.game : null;
             cards.push(card(POTION.icon, `${POTION.name} × ${p.data.potions}`, POTION.does, false, game ? button('😋 Drink one', () => game.drink()) : h('span', { class: 'muted' }, 'Drink one on an island.')));
           }
-          // The capsule toys you have from gashapon machines, most rare first.
-          const have = TOYS.filter((t) => (gear.toys[t.key] ?? 0) > 0).sort((a, b) => b.rare - a.rare);
-          const empty = have.length || MONSTER_FIGURES.some((t) => (gear.toys[t.key] ?? 0) > 0)
-            ? 'Nothing from the 🛒 shop in here yet: sell treasures from your basket there, and buy shoes, wings, toy weapons, clothes and potions!'
-            : 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!';
-          list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, empty)]));
-          toysHead.textContent = `🎁 Capsule toys (${have.length} of ${TOYS.length})`;
-          toys.replaceChildren(
-            ...(have.length ? have.map((t) => this.toyCard(t, gear.toys[t.key])) : [h('p', { class: 'muted shop-empty' }, 'No capsule toys yet. Turn a 🎁 gashapon machine for one: you find them in the toy box\'s 🛋️ Home tab and at the 🕹️ Video Arcade.')]),
-          );
-          // And the monster figures, from the Monster Gashapon.
-          const figs = MONSTER_FIGURES.filter((t) => (gear.toys[t.key] ?? 0) > 0).sort((a, b) => b.rare - a.rare);
-          figsHead.textContent = `👾 Monster figures (${figs.length} of ${MONSTER_FIGURES.length})`;
-          monsterFigs.replaceChildren(
-            ...(figs.length ? figs.map((t) => this.toyCard(t, gear.toys[t.key])) : [h('p', { class: 'muted shop-empty' }, 'No monster figures yet. On an adventure island a 👾 Monster Gashapon turns up now and then: follow its beam of light to it!')]),
+          list.replaceChildren(
+            ...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!')]),
           );
         };
-        const toysHead = h('h3', { class: 'backpack-toys-head' });
-        const toys = h('div', { class: 'gasha-toys backpack-toys' });
-        const figsHead = h('h3', { class: 'backpack-toys-head' });
-        const monsterFigs = h('div', { class: 'gasha-toys backpack-toys backpack-figures' });
-        this.loadToyPictures(() => {
-          if (this.modalOpen && toys.isConnected) draw();
-        });
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop')),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection')),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             list,
-            toysHead,
-            toys,
-            figsHead,
-            monsterFigs,
           ].filter(Boolean),
         );
         draw();
@@ -2266,14 +2242,14 @@ export class UI {
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
-          card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in your 🎒 backpack.']),
+          card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in 🧸 My collection.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
-          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. Now and then a 👾 Monster Gashapon turns up: follow its beam of light, and turn it for a figure of a real monster — on a higher stage of Adventure Isle, a rare one is likelier!']),
+          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one!']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
@@ -2286,7 +2262,7 @@ export class UI {
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
-          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, drink a 🧪 potion, and see your 🎁 capsule toys from gashapon machines. You see yourself as you change.']),
+          card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion. You see yourself as you change. Your 🎁 capsule toys and 👾 monster figures are in 🧸 My collection.']),
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, pearls, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, 🛼 roller skates to glide, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer or lava blade to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
           card('💬', 'Talk', ['Type to your friends with the speech bubble (', h('kbd', {}, 'T'), '), or tap a ready-made hello. Dance with the smiley.']),
           card('🗺️', 'Map', ['The little map shows where you are, with a yellow arrow. Tap it to see the whole island.']),
@@ -5229,7 +5205,7 @@ export class UI {
         const about = monster
           ? `Every turn is 🪙 ${kit.price} coins for one of ${kit.list.length} monster figures. ${stageNow > 1 ? `On stage ${stageNow}` : 'Here'} the odds are ★ ${odds[0]} · ★★ ${odds[1]} · ★★★ ${odds[2]} — the higher the stage, the better the chance of a rare one!`
           : `Every turn is 🪙 ${kit.price} coins for a surprise toy: ${kit.list.length} to collect, ★ common, ★★ rare and ★★★ super rare!`;
-        root.append(h('h2', {}, kit.title), coins, stage, said, turn, heading, grid, h('p', { class: 'muted gasha-about' }, about));
+        root.append(h('h2', {}, kit.title), coins, stage, said, turn, heading, grid, h('p', { class: 'muted gasha-about' }, about), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog(monster ? 'monster' : 'capsule') }, '🧸 My collection'));
         show();
       },
       {
@@ -5262,6 +5238,63 @@ export class UI {
       h('span', { class: 'name' }, n ? t.name : '???'),
       h('span', { class: `rarity ${r.key}`, 'aria-label': r.name }, h('span', { class: 'stars' }, r.stars), ` ${r.name}`),
       n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
+    );
+  }
+
+  // Your collection, apart from the backpack: 🎁 the capsule toys from
+  // gashapon machines and 👾 the monster figures from the Monster Gashapon
+  // of Adventure Isle, every one of each (those still to find as closed
+  // capsules, with how rare they are), and how many you have.
+  collectionDialog(tab = 'capsule') {
+    const p = this.profile;
+    let current = tab;
+    let onChange = null;
+    this.openModal(
+      (root) => {
+        const tabRow = h('div', { class: 'tabs' });
+        const note = h('p', { class: 'muted' });
+        const grid = h('div', { class: 'gasha-toys collection-toys' });
+        const draw = () => {
+          const toys = p.data.gear.toys;
+          const sets = [
+            { key: 'capsule', list: TOYS, text: '🎁 Capsule toys' },
+            { key: 'monster', list: MONSTER_FIGURES, text: '👾 Monster figures' },
+          ];
+          tabRow.replaceChildren(
+            ...sets.map((t) =>
+              h(
+                'button',
+                {
+                  class: `chip${t.key === current ? ' on' : ''}`,
+                  type: 'button',
+                  'data-tab': t.key,
+                  onclick: () => {
+                    current = t.key;
+                    this.sound.play('ui');
+                    draw();
+                  },
+                },
+                `${t.text} (${toysFound(toys, t.list)} of ${t.list.length})`,
+              ),
+            ),
+          );
+          const set = sets.find((t) => t.key === current);
+          grid.dataset.tab = current;
+          note.textContent =
+            current === 'capsule'
+              ? 'Turn a 🎁 gashapon machine for a capsule toy: find them in the toy box’s 🛋️ Home tab and at the 🕹️ Video Arcade.'
+              : 'On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light to it for a monster figure. The higher the stage, the better the chance of a rare one!';
+          grid.replaceChildren(...set.list.map((t) => this.toyCard(t, toys[t.key] ?? 0)));
+        };
+        root.append(h('div', { class: 'dialog-head' }, h('h2', {}, '🧸 My collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')), tabRow, note, grid);
+        draw();
+        this.loadToyPictures(() => {
+          if (this.modalOpen && grid.isConnected) draw();
+        });
+        onChange = draw;
+        p.addEventListener('basket', onChange);
+      },
+      { onClose: () => p.removeEventListener('basket', onChange) },
     );
   }
 

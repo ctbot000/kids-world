@@ -688,9 +688,10 @@ export class AdventureSim {
     }
   }
 
-  // The Monster Gashapon, now and then: with someone on the island it turns
-  // up a while later (MONSTER_GASHA.first) near one of them, stays a while
-  // and goes, and turns up again later somewhere else (MONSTER_GASHA.again).
+  // The Monster Gashapon, now and then (the room asks only on the shared
+  // isle, Adventure Isle): with someone on the island it turns up a while
+  // later (MONSTER_GASHA.first) near one of them, stays a while and goes,
+  // and turns up again later somewhere else (MONSTER_GASHA.again).
   // With nobody about, the wait starts again when someone comes. Returns
   // what happened, for the room to make happen and tell everyone:
   //   { t: 'gasha', x, y, z, id } it turned up (id: the block, turned to

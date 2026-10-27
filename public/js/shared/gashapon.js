@@ -49,8 +49,9 @@ export const TOYS = [
 ];
 
 // The monster figures, out of the Monster Gashapon that turns up now and
-// then on adventure islands (adventure.js): the island's own monsters
-// (monsters.js), each a little figure of the real thing.
+// then on the shared isle, Adventure Isle (adventure.js, room.js), and on no
+// other island: the island's own monsters (monsters.js), each a little
+// figure of the real thing.
 export const MONSTER_FIGURES = [
   { key: 'm-blob', icon: '👾', name: 'Grumpy Blob', rare: 0, monster: 'blob' },
   { key: 'm-frosty', icon: '🧊', name: 'Frosty Blob', rare: 0, monster: 'blob', theme: 'snowy' },
@@ -90,7 +91,7 @@ export function rarityOdds(list = TOYS, stage = 1) {
   return by.map((n) => n / total);
 }
 
-// The Monster Gashapon on an adventure island: it turns up on its own a
+// The Monster Gashapon on Adventure Isle: it turns up on its own a
 // while after someone is there, somewhere a little way off from one of
 // them, stays a while for anyone to find, and goes again, to turn up
 // somewhere else later (adventure.js AdventureSim.stepGasha).
