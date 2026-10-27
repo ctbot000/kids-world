@@ -2435,11 +2435,12 @@ body.touch.playing #joystick {
   font-size: 1.4rem;
 }
 
-/* Your stats under your level (ui.js statsCard): HP, AP, DEF, SPD, JMP. */
+/* Your stats in the 🎒 backpack (ui.js statsCard): HP, AP, DEF, SPD, JMP,
+   each flashing green with ▲ or red with ▼ as what you put on changes it. */
 .stats-card {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
   margin-bottom: 14px;
 }
 
@@ -2448,7 +2449,7 @@ body.touch.playing #joystick {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 8px;
+  padding: 6px 4px;
   border-radius: 14px;
   background: #eef6ff;
   text-align: center;
@@ -2460,6 +2461,36 @@ body.touch.playing #joystick {
 
 .stat .muted {
   font-size: 0.75rem;
+}
+
+.stat-up {
+  animation: stat-up 1.2s ease-out;
+}
+
+.stat-down {
+  animation: stat-down 1.2s ease-out;
+}
+
+.stat-up .stat-arrow {
+  color: #1f9d4c;
+}
+
+.stat-down .stat-arrow {
+  color: #d64545;
+}
+
+@keyframes stat-up {
+  0% {
+    background: #b8f0c8;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes stat-down {
+  0% {
+    background: #ffc9c9;
+    transform: scale(0.94);
+  }
 }
 
 /* Another player's level before their name: on the tag over them in the

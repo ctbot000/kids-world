@@ -1446,7 +1446,6 @@ export class UI {
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
-        this.statsCard(),
         h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
@@ -1459,25 +1458,39 @@ export class UI {
     });
   }
 
-  // Your stats (shop.js statsOf), with what each one comes from: HP from
-  // your level (and how much of it you have now, on an island), AP from the
-  // weapon you hold, DEF from Knight Armor, SPD from shoes or skates and JMP
-  // from the Hero Cape.
-  statsCard() {
+  // Your stats (shop.js statsOf), in the 🎒 backpack, with what each one
+  // comes from: HP from your level (and how much of it you have now, on an
+  // island), AP from the weapon you hold, DEF from Knight Armor, SPD from
+  // shoes or skates and JMP from the Hero Cape. Given the numbers it last
+  // showed, each one that went up or down since says so with ▲ or ▼ and a
+  // flash, as you put things on and take them off.
+  statsCard(was = null) {
     const p = this.profile;
     const s = statsOf(p.progress.level, p.data.gear);
     const g = this.game;
     const now = g && Number.isFinite(g.hp) && g.maxHp === s.hp ? g.hp : s.hp;
-    const stat = (key, icon, name, value, from) => h('div', { class: 'stat', 'data-stat': key, title: from }, h('span', { class: 'stat-name' }, `${icon} ${name}`), h('b', { class: 'stat-value' }, value), h('span', { class: 'muted' }, from));
-    return h(
+    const nums = { hp: s.hp, ap: s.ap, def: s.def, spd: s.speed, jmp: s.jump };
+    const stat = (key, icon, name, value, from) => {
+      const change = was && nums[key] !== was[key] ? (nums[key] > was[key] ? 'up' : 'down') : '';
+      return h(
+        'div',
+        { class: `stat${change ? ` stat-${change}` : ''}`, 'data-stat': key, title: from },
+        h('span', { class: 'stat-name' }, `${icon} ${name}`),
+        h('b', { class: 'stat-value' }, value, change ? h('span', { class: 'stat-arrow', 'aria-label': change }, change === 'up' ? ' ▲' : ' ▼') : null),
+        h('span', { class: 'muted' }, from),
+      );
+    };
+    const card = h(
       'div',
       { class: 'stats-card', role: 'group', 'aria-label': 'My stats' },
       stat('hp', '❤️', 'HP', now < s.hp ? `${now}/${s.hp}` : String(s.hp), `${maxHp(1)} at level 1, +${maxHp(2) - maxHp(1)} each level up`),
-      stat('ap', '⚔️', 'AP', String(s.ap), s.weapon ? `${s.weapon.icon} ${s.weapon.name} · King Grumble ${s.king}` : '👊 Bare paws: get a weapon in the 🛒 shop'),
+      stat('ap', '⚔️', 'AP', String(s.ap), s.weapon ? `${s.weapon.icon} ${s.weapon.name} · King Grumble ${s.king}` : '👊 Bare paws: hold a toy weapon'),
       stat('def', '🛡️', 'DEF', `${s.def}%`, s.def ? '🛡️ Knight Armor: bumps take half' : s.fireproof ? '🧑‍🚒 Fire Suit: lava never burns' : 'Knight Armor halves bumps'),
       stat('spd', '👟', 'SPD', `${s.speed}%`, s.speed > 100 ? 'Faster with your shoes or skates' : 'Running shoes go faster'),
       stat('jmp', '🦘', 'JMP', `${s.jump}%`, s.jump > 100 ? '🦸 Hero Cape: higher jumps' : 'The Hero Cape jumps higher'),
     );
+    card.stats = nums;
+    return card;
   }
 
   // Your monster collection from adventure islands (adventure.js
@@ -1815,8 +1828,12 @@ export class UI {
             change();
             this.sound.play('ui');
           });
+        let stats = null;
         const draw = () => {
           const gear = p.data.gear;
+          const fresh = this.statsCard(stats?.stats);
+          if (stats) stats.replaceWith(fresh);
+          stats = fresh;
           const cards = [];
           for (const g of GEAR) {
             const level = gear[g.key];
@@ -1853,15 +1870,16 @@ export class UI {
             ...(cards.length ? cards : [h('p', { class: 'muted shop-empty' }, 'Your backpack is empty. Sell treasures from your basket in the 🛒 shop, and buy shoes, wings, toy weapons, clothes and potions: they all go in here!')]),
           );
         };
+        draw();
         root.append(
           ...[
             h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection')),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
+            stats,
             list,
           ].filter(Boolean),
         );
-        draw();
         onChange = draw;
         p.addEventListener('basket', onChange);
       },
