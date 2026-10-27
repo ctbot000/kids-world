@@ -56,7 +56,7 @@ function smooth(a, b, x) {
 
 // ---------------------------------------------------------------- weather
 
-export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles'];
+export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles', 'tornado'];
 
 // Something falling out of the sky — rain, snow or candy sprinkles — which
 // waters farmland out under the open sky (shared/room.js).
@@ -64,12 +64,39 @@ export const isRaining = (weather) => weather === 'rain' || weather === 'snow' |
 
 // What comes next, and for how many seconds. A volcano island never rains:
 // the rain would only hiss away on the lava (and no rainbow without it).
+// Now and then a cloudy sky spins up a tornado, which blows itself out
+// back into clouds.
 export function nextWeather(current, theme, random = Math.random) {
   const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : 'rain';
   if (current === 'rain' || current === 'snow' || current === 'sprinkles') return { weather: 'rainbow', seconds: 70 + random() * 40 };
   if (current === 'rainbow') return { weather: 'clear', seconds: 200 + random() * 160 };
+  if (current === 'tornado') return { weather: 'cloudy', seconds: 60 + random() * 60 };
   const r = random();
+  if (current === 'cloudy' && r >= 0.9) return { weather: 'tornado', seconds: TORNADO_SECONDS[0] + random() * (TORNADO_SECONDS[1] - TORNADO_SECONDS[0]) };
   if (r < 0.55 || (theme === 'volcano' && r < 0.95)) return { weather: 'clear', seconds: 180 + random() * 180 };
   if (r < 0.8) return { weather: 'cloudy', seconds: 120 + random() * 120 };
   return { weather: wet, seconds: 90 + random() * 90 };
+}
+
+// ---------------------------------------------------------------- tornado
+
+// How long one lasts, from and to (seconds).
+export const TORNADO_SECONDS = [75, 120];
+// Anyone out in the open this close to its middle is swept up.
+export const TORNADO_REACH = 2.6;
+// How tall the funnel stands over the ground.
+export const TORNADO_HEIGHT = 24;
+
+// Where a tornado is, age seconds after it touched down: a wandering path
+// over the middle of the island, worked out the same on every machine from
+// its seed (the room sends seed and age, shared/room.js envMessage). It
+// goes about as fast as you walk, so you can always get away.
+export function tornadoAt(seed, age, W = 128, D = 128) {
+  const phase = (k) => ((Math.imul(seed + k, 0x9e3779b1) >>> 0) / 4294967296) * Math.PI * 2;
+  const rx = W * 0.3;
+  const rz = D * 0.3;
+  return {
+    x: W / 2 + rx * (0.75 * Math.sin(0.045 * age + phase(1)) + 0.25 * Math.sin(0.13 * age + phase(2))),
+    z: D / 2 + rz * (0.75 * Math.sin(0.037 * age + phase(3)) + 0.25 * Math.sin(0.11 * age + phase(4))),
+  };
 }

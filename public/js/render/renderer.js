@@ -25,6 +25,7 @@ import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
 import { GoBoards } from './go-boards.js';
 import { Screens } from './screens.js';
+import { Tornado } from './tornado-model.js';
 import { Effects } from './effects.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
@@ -150,6 +151,7 @@ export class Renderer {
     this.terrain = new Terrain(this.scene, atlas);
     this.sky = new Sky(this.scene);
     this.effects = new Effects(this.scene);
+    this.tornado = new Tornado(this.scene);
     this.drawings = new Drawings(this.scene, this.terrain);
     this.goBoards = new GoBoards(this.scene, this.terrain);
     this.screens = new Screens(this.scene, this.terrain);
@@ -782,6 +784,7 @@ export class Renderer {
     this.focus.y = state.focus.y;
     this.focus.z = state.focus.z;
     this.sky.update(dt, this.time, env, this.camera, this.focus);
+    this.tornado.update(dt, this.time, state.tornado ?? null, env.day);
     this.scene.fog = null;
 
     // Lights for the players and animals follow the sun.

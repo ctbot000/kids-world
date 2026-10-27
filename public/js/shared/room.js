@@ -1180,7 +1180,9 @@ export class Room {
   // ------------------------------------------------ time
 
   envMessage() {
-    return { t: 'env', time: +this.env.time.toFixed(5), weather: this.env.weather, mode: this.settings.day };
+    const tw = this.env.twister;
+    // A tornado's path comes from its seed; its age says where along it it is.
+    return { t: 'env', time: +this.env.time.toFixed(5), weather: this.env.weather, mode: this.settings.day, ...(tw ? { twister: { seed: tw.seed, age: +tw.age.toFixed(2) } } : {}) };
   }
 
   tick() {
@@ -1191,10 +1193,14 @@ export class Room {
     const env = this.env;
     env.time = advanceTime(env.time, dt, this.settings.day);
     env.left -= dt;
+    if (env.twister) env.twister.age += dt;
     if (env.left <= 0) {
       const next = nextWeather(env.weather, this.world.theme, () => this.rng.next());
       env.weather = next.weather;
       env.left = next.seconds;
+      // Each tornado a path of its own (no draw of the rng of its own, so
+      // the weather after it comes out as before).
+      env.twister = next.weather === 'tornado' ? { seed: Math.floor(next.seconds * 1e6) >>> 0, age: 0 } : null;
       this.broadcast(this.envMessage());
       this.envSentAt = now;
     } else if (now - this.envSentAt >= ENV_MS) {
@@ -2485,7 +2491,9 @@ export class Room {
       for (const f of placeScooters(this.world, new Rng(seed ^ 0x85ebca6b), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;
-    this.env = { time, weather: WEATHERS.includes(save.env?.weather) ? save.env.weather : 'clear', left: 180 };
+    // A tornado blew itself out while the island was put away.
+    const weather = save.env?.weather === 'tornado' ? 'cloudy' : save.env?.weather;
+    this.env = { time, weather: WEATHERS.includes(weather) ? weather : 'clear', left: 180 };
     if (Array.isArray(save.players)) {
       for (const raw of save.players.slice(-KEEP_PLAYERS)) {
         if (!Number.isInteger(raw?.id) || raw.id < 1) continue;

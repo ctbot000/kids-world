@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'tornado', date: '2026-10-28', icon: '🌪️', title: 'Tornadoes', text: 'Now and then a cloudy sky spins up a 🌪️ tornado that wanders over the island. Hide indoors — or run into it for a wild spin up the funnel, and the new 🌪️ Storm Chaser sticker!' },
   { id: 'monster-book', date: '2026-10-28', icon: '👾', title: 'Monster collection', text: 'Every monster you meet on an adventure island goes in your 👾 Monster collection (in ⭐ Stickers, or the island window): 👀 Seen, and 🏆 Defeated with each one\'s name and stats.' },
   { id: 'stats', date: '2026-10-28', icon: '⚔️', title: 'Your stats', text: 'Tap ⭐ Level to see your stats: ❤️ HP, ⚔️ AP, 🛡️ DEF, 👟 SPD and 🦘 JMP, and what makes each one go up.' },
   { id: 'races', date: '2026-10-28', icon: '🏆', title: 'Go-kart races', text: 'On a 🏁 Racing Island, tap 🏁 Race! in a go-kart: line up with your friends and the computer\'s robot drivers, and three laps after GO, the first over the line wins!' },

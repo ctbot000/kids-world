@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
+import { nextWeather, TORNADO_SECONDS, tornadoAt } from '../public/js/shared/env.js';
 import { BIG, CRITTER_INFO, MAX_CRITTERS, NEEDS_WATER, needsRoom, riderAt, unpackCritter } from '../public/js/shared/critters.js';
+import { MOVE } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { isMadeUpName, PHRASES } from '../public/js/shared/words.js';
 
@@ -636,6 +638,43 @@ test('the clock and the weather move on, and the owner can stop the clock', () =
   time.advance(60000);
   room.tick();
   assert.equal(room.env.time, 0.42);
+});
+
+test('a cloudy sky now and then spins up a tornado, which wanders the island and blows out into clouds', () => {
+  const { room, time } = makeRoom();
+  const a = join(room);
+  // Clouds, and the roll that turns them into a tornado.
+  Object.assign(room.env, { weather: 'cloudy', left: 0 });
+  const next = room.rng.next;
+  room.rng.next = () => 0.95;
+  time.advance(1000);
+  room.tick();
+  room.rng.next = next;
+  const seen = a.last('env');
+  assert.equal(seen.weather, 'tornado');
+  assert.ok(Number.isInteger(seen.twister.seed) && seen.twister.age >= 0, JSON.stringify(seen.twister));
+  // Its path is the same on every machine, inside the island, never faster than a walk.
+  const w = room.world;
+  let last = tornadoAt(seen.twister.seed, 0, w.W, w.D);
+  assert.deepEqual(last, tornadoAt(seen.twister.seed, 0, w.W, w.D));
+  for (let t = 0.5; t <= TORNADO_SECONDS[1]; t += 0.5) {
+    const p = tornadoAt(seen.twister.seed, t, w.W, w.D);
+    assert.ok(p.x > 0 && p.x < w.W && p.z > 0 && p.z < w.D);
+    assert.ok(Math.hypot(p.x - last.x, p.z - last.z) / 0.5 < MOVE.walk);
+    last = p;
+  }
+  // A tornado saved goes back as clouds.
+  const save = JSON.parse(JSON.stringify(room.exportSave()));
+  assert.equal(save.env.weather, 'tornado');
+  assert.equal(new Room({ code: '123456', save }).env.weather, 'cloudy');
+  room.env.left = 0;
+  room.tick();
+  assert.equal(room.env.weather, 'cloudy');
+  assert.equal(room.env.twister, null);
+  assert.equal(a.last('env').twister, undefined);
+  for (const current of ['tornado', 'clear', 'rain', 'rainbow']) {
+    for (let r = 0; r < 1; r += 0.01) if (current !== 'tornado') assert.notEqual(nextWeather(current, 'sunny', () => r).weather, 'tornado', 'only out of clouds');
+  }
 });
 
 test('an island saves and loads with its blocks, animals, friends and owner', () => {

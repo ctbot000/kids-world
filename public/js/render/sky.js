@@ -49,7 +49,7 @@ export function environment(time, weather, theme, out = {}) {
   const horizon = (out.horizon ??= new THREE.Color());
   skyAt(time, top, horizon);
   const day = daylight(time);
-  const gloom = weather === 'rain' ? 0.5 : weather === 'cloudy' ? 0.28 : weather === 'snow' ? 0.3 : weather === 'sprinkles' ? 0.15 : 0;
+  const gloom = weather === 'rain' ? 0.5 : weather === 'tornado' ? 0.45 : weather === 'cloudy' ? 0.28 : weather === 'snow' ? 0.3 : weather === 'sprinkles' ? 0.15 : 0;
   if (gloom) {
     tmpA.copy(GRAY_NIGHT).lerp(GRAY_DAY, day);
     top.lerp(tmpA, gloom);
@@ -413,7 +413,7 @@ export class Sky {
     this.clouds.position.set(focus.x + ((drift + 260) % 520) - 260, focus.cloudY, focus.z);
     const night = 1 - env.day;
     this.cloudMaterial.color.setRGB(1, 1, 1).lerp(new THREE.Color(0.28, 0.32, 0.5), night * 0.85);
-    const dark = this.weatherKind === 'rain' ? 0.35 : this.weatherKind === 'cloudy' ? 0.15 : 0;
+    const dark = this.weatherKind === 'rain' || this.weatherKind === 'tornado' ? 0.35 : this.weatherKind === 'cloudy' ? 0.15 : 0;
     this.cloudMaterial.color.multiplyScalar(1 - dark);
     this.cloudMaterial.opacity = this.weatherKind === 'clear' || this.weatherKind === 'rainbow' ? 0.72 : 0.88;
 

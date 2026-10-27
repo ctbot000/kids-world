@@ -57,6 +57,7 @@ export const XP_FOR = {
   swims: { xp: 3 },
   nights: { xp: 10 },
   rainbows: { xp: 10 },
+  tornadoes: { xp: 10 },
   steps: { xp: 0.05 },
   popped: { xp: 5 },
   furnished: { xp: 2 },

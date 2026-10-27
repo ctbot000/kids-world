@@ -5891,3 +5891,60 @@ test('the 👾 monster collection: a monster near you on an adventure island goe
   assert.equal(await page.evaluate(() => document.querySelectorAll('#modal .monster-book .monster-stats').length), 1);
   await page.browserContext().close();
 });
+
+test('a tornado sweeps you up out in the open, spins you round and flings you out; a roof over your head keeps you safe', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false });
+  // A tornado from the room, as the weather brings one.
+  await page.evaluate(() => {
+    const room = window.kidsWorld.session.link.room;
+    Object.assign(room.env, { weather: 'tornado', left: 1e9, twister: { seed: 1234, age: 0 } });
+    room.broadcast(room.envMessage());
+  });
+  await until(page, () => window.kidsWorld.game.env.twister?.seed === 1234 && document.querySelector('#topbar .weather')?.textContent === '🌪️');
+  // Right beside it, with a roof just over your head: safe.
+  const safe = await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const g = window.kidsWorld.game;
+    const foot = g.tornadoFoot();
+    const b = g.me.body;
+    const at = { x: Math.floor(foot.x), y: Math.round(foot.y), z: Math.floor(foot.z) };
+    Object.assign(b, { x: foot.x, y: at.y, z: foot.z });
+    const open = g.caughtByTornado(foot);
+    const was = g.world.get(at.x, at.y + 3, at.z);
+    g.world.set(at.x, at.y + 3, at.z, B.STONE);
+    const roofed = g.caughtByTornado(foot);
+    g.world.set(at.x, at.y + 3, at.z, was);
+    return { open, roofed };
+  });
+  assert.deepEqual(safe, { open: true, roofed: false });
+  // Out in the open: up and round, then flung out somewhere else.
+  await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const foot = g.tornadoFoot();
+    Object.assign(g.me.body, { x: foot.x + 0.5, y: foot.y, z: foot.z, vx: 0, vy: 0, vz: 0, flying: false });
+  });
+  await until(page, () => window.kidsWorld.game.whirl?.t > 1.5);
+  const up = await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    return { rise: g.me.body.y - g.tornadoFoot().y, swept: g.profile.data.stats.tornadoes };
+  });
+  assert.ok(up.rise > 4, `lifted up the funnel (${up.rise})`);
+  assert.equal(up.swept, 1);
+  await until(page, () => {
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const foot = g.tornadoFoot();
+    return !g.whirl && b.onGround && Math.hypot(b.x - foot.x, b.z - foot.z) > 2.6;
+  });
+  await until(page, () => window.kidsWorld.profile.data.stickers.tornado);
+  // It blows itself out: no tornado left to draw.
+  await page.evaluate(() => {
+    const room = window.kidsWorld.session.link.room;
+    room.env.left = 0;
+    room.tick();
+  });
+  await until(page, () => window.kidsWorld.game.env.weather === 'cloudy' && window.kidsWorld.game.tornadoFoot() === null);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});

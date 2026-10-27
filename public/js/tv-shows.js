@@ -206,6 +206,7 @@ const WEATHER_WORDS = {
   clear: 'Sunny',
   cloudy: 'Cloudy',
   rain: 'Rainy',
+  tornado: 'Tornado!',
   rainbow: 'Rainbow!',
   snow: 'Snowy',
   sprinkles: 'Candy sprinkles!',
@@ -226,7 +227,7 @@ function islandWeather(ctx, t, W, H, env) {
     circle(ctx, cx, cy, 26, '#fff6c9');
     circle(ctx, cx + 12, cy - 8, 22, '#1b2050');
     for (let i = 0; i < 6; i++) if (Math.sin(t * 3 + i) > -0.3) circle(ctx, 20 + i * 27, 18 + (i % 2) * 16, 1.6, '#ffffff');
-  } else if (weather !== 'cloudy' && !isRaining(weather)) {
+  } else if (weather !== 'cloudy' && weather !== 'tornado' && !isRaining(weather)) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(t * 0.5);
@@ -252,6 +253,17 @@ function islandWeather(ctx, t, W, H, env) {
     });
   }
   if (weather !== 'clear' && weather !== 'rainbow') cloud(ctx, cx - 34 + Math.sin(t) * 4, cy - 4, 1.3, night ? '#9aa1c0' : '#ffffff');
+  if (weather === 'tornado') {
+    // A grey funnel under the cloud, swaying, its rings going round.
+    for (let i = 0; i < 9; i++) {
+      const k = i / 8;
+      const sway = Math.sin(t * 2 + k * 3) * 8 * (1 - k);
+      ctx.fillStyle = i % 2 ? '#8a939e' : '#a7b0bb';
+      ctx.beginPath();
+      ctx.ellipse(cx - 30 + sway, cy + 78 - i * 8, 4 + 26 * k * k + 4 * k, 3 + 2 * k, 0, 0, TAU);
+      ctx.fill();
+    }
+  }
   if (isRaining(weather)) {
     for (let i = 0; i < 14; i++) {
       const x = cx - 36 + ((i * 13) % 70);
@@ -280,7 +292,7 @@ function islandWeather(ctx, t, W, H, env) {
   ctx.font = '800 22px system-ui, sans-serif';
   ctx.fillText(WEATHER_WORDS[weather], 158 + (W - 172) / 2, 96);
   ctx.font = '600 12px system-ui, sans-serif';
-  ctx.fillText(night ? 'Sleep tight! 🌙' : weather === 'rain' ? 'Your farm gets watered!' : 'A good day to play!', 158 + (W - 172) / 2, 120);
+  ctx.fillText(night ? 'Sleep tight! 🌙' : weather === 'rain' ? 'Your farm gets watered!' : weather === 'tornado' ? 'Stay indoors — or take a spin!' : 'A good day to play!', 158 + (W - 172) / 2, 120);
   // The news ticker along the bottom.
   ctx.fillStyle = '#e8453c';
   ctx.fillRect(0, H - 22, W, 22);

@@ -21,7 +21,7 @@ import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
-import { advanceTime, isNight } from './shared/env.js';
+import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
@@ -62,6 +62,8 @@ export const HILL_MODES = [
   { key: 'flat', name: 'Flatten', icon: '➖' },
 ];
 
+// How long the tornado spins you round before it flings you out (seconds).
+const WHIRL_SECONDS = 3.2;
 // How fast left and right turn you round looking through your own eyes (radians a second).
 const TURN_SPEED = 2.4;
 // How the camera looks arriving at an island with a view to show: nearly level, to take in a building.
@@ -4468,10 +4470,89 @@ export class Game extends EventTarget {
   // ------------------------------------------------ time and weather
 
   setEnv(env) {
+    const was = this.env.weather;
     this.env.time = env.time;
     this.env.weather = env.weather;
     this.env.mode = env.mode;
+    const tw = env.twister;
+    this.env.twister = tw && Number.isFinite(tw.seed) && Number.isFinite(tw.age) ? { seed: tw.seed, age: tw.age } : null;
+    if (env.weather === 'tornado' && was !== 'tornado' && this.world) {
+      this.emit('toast', { icon: '🌪️', text: 'A tornado! Get indoors to stay safe — or go near it for a wild spin!' });
+    }
     this.emit('env');
+  }
+
+  // Where the tornado touches down just now, or null with none about.
+  tornadoFoot() {
+    const tw = this.env.twister;
+    if (this.env.weather !== 'tornado' || !tw || !this.world) return null;
+    const w = this.world;
+    const { x, z } = tornadoAt(tw.seed, tw.age, w.W, w.D);
+    const ground = Math.max(w.sea, w.top(Math.floor(x), Math.floor(z)) + 1);
+    // Up and down over hills and houses smoothly, not in steps.
+    this.tornadoY = this.tornadoY === undefined || Math.abs(this.tornadoY - ground) > 20 ? ground : this.tornadoY + (ground - this.tornadoY) * 0.05;
+    return { x, y: this.tornadoY, z };
+  }
+
+  // Out in the open close to the tornado, on foot or flying: swept up. A
+  // roof (or anything else) over your head keeps you safe.
+  caughtByTornado(foot) {
+    if (!foot || this.dizzy || this.counting || this.lift || performance.now() < (this.whirlAfter ?? 0)) return false;
+    const b = this.me.body;
+    if (Math.hypot(b.x - foot.x, b.z - foot.z) > TORNADO_REACH || b.y < foot.y - 2 || b.y > foot.y + TORNADO_HEIGHT * 0.6) return false;
+    return this.world.top(Math.floor(b.x), Math.floor(b.z)) < b.y + 0.5;
+  }
+
+  // Round and round and up the funnel, then flung out the side to land
+  // somewhere else (a bit dizzy, but never hurt).
+  whirlAround(dt, foot) {
+    const me = this.me;
+    const b = me.body;
+    if (!this.whirl) {
+      this.whirl = { t: 0, ang: Math.atan2(b.z - foot.z, b.x - foot.x), y: b.y };
+      if (b.flying) {
+        b.flying = false;
+        this.emit('fly', false);
+      }
+      this.sound.play('whirl');
+      this.profile.count('tornadoes');
+      if (!this.toldWhirl) {
+        this.toldWhirl = true;
+        this.emit('toast', { icon: '🌪️', text: 'Whoooa! Round and round you go!' });
+      }
+    }
+    const wh = this.whirl;
+    wh.t += dt;
+    wh.ang += (4 + wh.t * 1.5) * dt;
+    // Rising to about halfway up, and the funnel widens as you go.
+    const up = Math.min(TORNADO_HEIGHT * 0.5, wh.t * 4.5);
+    const r = 1.6 + up * 0.18;
+    b.x = foot.x + Math.cos(wh.ang) * r;
+    b.z = foot.z + Math.sin(wh.ang) * r;
+    b.y = Math.max(wh.y, foot.y) + up;
+    b.vx = b.vy = b.vz = 0;
+    b.onGround = false;
+    me.yaw += 9 * dt;
+    me.anim = ANIM.air;
+    me.speed = 0;
+    if (wh.t >= WHIRL_SECONDS) {
+      // Flung out, away from the middle.
+      b.vx = Math.cos(wh.ang) * 12;
+      b.vz = Math.sin(wh.ang) * 12;
+      b.vy = 5;
+      this.whirl = null;
+      this.whirlAfter = performance.now() + 5000;
+      unstick(this.world, b);
+      this.sound.play('jump');
+    }
+    const a = this.players.get(this.pid)?.avatar;
+    if (a) {
+      a.root.position.set(b.x, b.y, b.z);
+      a.root.rotation.y = me.yaw;
+      a.root.rotation.x = 0;
+      a.update(dt, me.anim, 0);
+      this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
+    }
   }
 
   fallingStar(msg) {
@@ -4932,10 +5013,20 @@ export class Game extends EventTarget {
     if (!this.world || !this.me) return;
     const env = this.env;
     env.time = advanceTime(env.time, dt, env.mode);
+    if (env.twister) env.twister.age += dt;
+    const foot = this.tornadoFoot();
+    // Swept up by the tornado: off whatever you were on, round you go.
+    if (!this.whirl && !this.riding && !this.aboard && !this.seat && !this.pianoAt && this.caughtByTornado(foot)) this.whirlAround(0, foot);
     this.touch = input.touchMode;
-    if (this.riding) this.moveRide(dt, input);
+    if (this.whirl) {
+      if (foot) this.whirlAround(dt, foot);
+      // Blown out under you: dropped where you are.
+      else this.whirl = null;
+    } else if (this.riding) this.moveRide(dt, input);
     else if (this.aboard) this.rideAlong(input);
     else this.moveMe(dt, input);
+    // The wind roars louder the closer it is.
+    this.sound.wind(foot ? Math.max(0, 1 - Math.hypot(this.me.body.x - foot.x, this.me.body.z - foot.z) / 50) : 0);
     this.rideTarget = this.findRideable();
     const on = this.me.body;
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on, undefined, (x, y, z) => this.seatTaken(x, y, z)) : null;
@@ -4978,7 +5069,7 @@ export class Game extends EventTarget {
     // Sitting or lying down, your eyes are lower than your hips are high.
     this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : this.pianoAt ? { x: b.x, y: b.y - BENCH_H, z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
-    this.renderer.frame(dt, { time: env.time, weather: env.weather, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
+    this.renderer.frame(dt, { time: env.time, weather: env.weather, tornado: foot, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
     this.observe();
   }
 

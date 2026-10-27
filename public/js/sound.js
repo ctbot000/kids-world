@@ -187,6 +187,11 @@ export class Sound {
         [72, 76, 79, 84, 88].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.06, decay: 0.25, gain: 0.14, type: 'triangle' }));
         this.noise(0.3, { type: 'highpass', freq: 5000, gain: 0.05, at: 0.1 });
         break;
+      case 'whirl':
+        // A rising whoosh as the wind snatches you up.
+        this.noise(1.6, { type: 'bandpass', freq: 300, sweep: 1800, q: 1.4, gain: 0.22, attack: 0.15 });
+        this.tone(220, { type: 'triangle', decay: 1.2, gain: 0.06, slide: 660, slideTime: 1.1, vibrato: 12 });
+        break;
       case 'jump':
         this.tone(260 * r(), { decay: 0.16, gain: 0.16, slide: 560, slideTime: 0.12 });
         break;
@@ -954,6 +959,42 @@ export class Sound {
       g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.8);
       src.stop(ctx.currentTime + 3);
       this.rain = null;
+    }
+  }
+
+  // The roar of a tornado: low rumbling noise whose pitch wanders, from 0
+  // (none, or far away) to 1 (right beside it).
+  wind(level) {
+    const ctx = this.ctx;
+    if (!this.ready || !ctx) return;
+    if (level > 0.01 && !this.gust) {
+      const src = ctx.createBufferSource();
+      this.noise(0.01, { gain: 0.0001 }); // makes sure the noise buffer exists
+      src.buffer = this.noiseBuffer;
+      src.loop = true;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 260;
+      band.Q.value = 0.7;
+      const g = ctx.createGain();
+      g.gain.value = 0.0001;
+      src.connect(band).connect(g).connect(this.sfx);
+      src.start();
+      this.gust = { src, g, band, level: 0 };
+    }
+    const gust = this.gust;
+    if (!gust) return;
+    if (level > 0.01) {
+      // Only when it changes enough to hear, not every frame.
+      if (Math.abs(gust.level - level) > 0.03) {
+        gust.g.gain.setTargetAtTime(0.0001 + 0.2 * level * level, ctx.currentTime, 0.4);
+        gust.level = level;
+      }
+      gust.band.frequency.setTargetAtTime(200 + 160 * level + 90 * Math.sin(ctx.currentTime * 1.3), ctx.currentTime, 0.3);
+    } else {
+      gust.g.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.6);
+      gust.src.stop(ctx.currentTime + 3);
+      this.gust = null;
     }
   }
 }
