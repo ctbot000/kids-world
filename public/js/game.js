@@ -25,6 +25,7 @@ import { advanceTime, isNight } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
+import { popKey, seenKey } from './shared/stickers.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -1143,6 +1144,9 @@ export class Game extends EventTarget {
         entry = { id: m.id, kind: m.kind, snaps: [], model: this.renderer.addMonster(m.id, m.kind), grumbleAt: now + Math.random() * 4000 };
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
+        // On an adventure island, one near you goes in your monster
+        // collection as seen (ui.js monsterBook).
+        if (this.adventure && !this.profile.data.stats[seenKey(m.kind)] && this.near(m.x, m.y, m.z, 30)) this.profile.count(seenKey(m.kind), 1, { max: true });
         // The first tough one near you this time: what it is.
         const told = TOUGH_TOLD[m.kind];
         if (told && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
@@ -1309,6 +1313,11 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
+      // And as defeated in the collection, on an adventure island.
+      if (this.adventure && entry) {
+        this.profile.count(seenKey(entry.kind), 1, { max: true });
+        this.profile.count(popKey(entry.kind));
+      }
       // Popping the Queen Mosquito is a feat of its own: a count of her, a
       // few coins and the XP that comes with it, over and above a monster's.
       const queen = entry?.kind === 'queen';

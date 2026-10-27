@@ -5517,3 +5517,28 @@ html {
   pointer-events: none;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 }
+
+/* The monster collection (ui.js monsterBook): a defeated monster's card
+   with its stats, two by two. */
+.monster-book {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+}
+
+.monster-book[data-tab='defeated'] {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.monster-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+}
+
+.monster-stats .stat {
+  padding: 6px 4px;
+}
+
+.monster-stats .stat-value {
+  font-size: 1rem;
+}

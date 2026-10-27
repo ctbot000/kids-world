@@ -30,7 +30,9 @@
 // a stage number scales everything below that says so.
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
-import { campDistance, DAZED_HIT, SAFE_RADIUS } from './monsters.js';
+import { BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, KING_MOVES, kindOf, SAFE_RADIUS } from './monsters.js';
+import { MOVE } from './physics.js';
+import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
 
@@ -115,6 +117,42 @@ export const stageRaise = (base, stage) => {
   const by = Math.min(STAGE_RAISE, 1 + (cleanStage(stage) - 1) / 10);
   return by === 1 ? base : Math.round(base * by);
 };
+
+// ------------------------------------------------------- the monster book
+
+// Every monster there is, for the collection of adventure islands (ui.js
+// monsterBook): one seen near you on an adventure island goes in as seen,
+// and one you popped there as defeated, with how many and its stats.
+const BOOK = {
+  blob: { icon: '👾', name: 'Grumpy Blob' },
+  mosquito: { icon: '🦟', name: 'Giant Mosquito' },
+  spiky: { icon: '🦔', name: 'Spiky' },
+  mole: { icon: '🐹', name: 'Mr. Mole' },
+  spider: { icon: '🕷️', name: 'Giant Spider' },
+  big: { icon: '💪', name: 'Big Bruiser' },
+  knight: { icon: '🛡️', name: 'Grumble Knight' },
+  ghost: { icon: '👻', name: 'Lava Ghost' },
+  golem: { icon: '🗿', name: 'Stone Golem' },
+  queen: { icon: '👑', name: 'Queen Mosquito' },
+  king: { icon: '🤴', name: 'King Grumble' },
+};
+export const MONSTER_BOOK = MONSTER_LOG.map((kind) => ({ kind, ...BOOK[kind] }));
+
+// A monster's stats, as the collection shows them: its hearts (HP), the HP
+// a bump of it takes off you (ATK, fire for a Lava Ghost), what jumping on
+// it does (JMP) and how quick it comes after you (before a bop makes it
+// cross), against how quick you run (SPD). King Grumble's hearts are for one friend on stage 1: more friends,
+// and higher stages, give him more.
+export function monsterStats(kind) {
+  const pct = (run) => Math.round((100 * run) / MOVE.run);
+  if (kind === 'king') {
+    return { hp: kingHearts(1), atk: BUMP_HP, fire: false, jump: 'Counts as a bop', speed: pct(KING_MOVES[0].run) };
+  }
+  const k = kindOf(kind);
+  const jump = k.land === Infinity ? 'Pops at once' : k.land ? `${Math.ceil(k.hearts / k.land)} jumps` : 'No jumping!';
+  const fire = kind === 'ghost';
+  return { hp: k.hearts, atk: Math.round((fire ? GHOST_FIRE.bumps : k.bump) * BUMP_HP), fire, jump, speed: pct(k.move.run) };
+}
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));

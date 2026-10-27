@@ -35,7 +35,8 @@ import { COOK_BREAK_MS, cookCoins, RECIPES, recipeByKey } from './shared/cooking
 import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
-import { NEXT_STAGE_SECONDS } from './shared/adventure.js';
+import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
+import { popKey, seenKey } from './shared/stickers.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -1443,7 +1444,7 @@ export class UI {
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
         this.statsCard(),
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1474,6 +1475,86 @@ export class UI {
       stat('spd', '👟', 'SPD', `${s.speed}%`, s.speed > 100 ? 'Faster with your shoes or skates' : 'Running shoes go faster'),
       stat('jmp', '🦘', 'JMP', `${s.jump}%`, s.jump > 100 ? '🦸 Hero Cape: higher jumps' : 'The Hero Cape jumps higher'),
     );
+  }
+
+  // Your monster collection from adventure islands (adventure.js
+  // MONSTER_BOOK): 👀 Seen, every kind of monster you have come across there
+  // (the rest a ???), and 🏆 Defeated, the ones you popped there, each with
+  // its name, how many you popped and its stats (monsterStats).
+  monsterBook(tab = 'seen') {
+    const stats = this.profile.data.stats;
+    const seen = MONSTER_BOOK.filter((m) => stats[seenKey(m.kind)] > 0);
+    const beaten = MONSTER_BOOK.filter((m) => stats[popKey(m.kind)] > 0);
+    let current = tab;
+    this.openModal((root) => {
+      const tabRow = h('div', { class: 'tabs' });
+      const grid = h('div', { class: 'grid monster-book' });
+      const note = h('p', { class: 'muted' });
+      const stat = (key, name, value) => h('div', { class: 'stat', 'data-stat': key }, h('span', { class: 'stat-name' }, name), h('b', { class: 'stat-value' }, value));
+      const draw = () => {
+        const tabs = [
+          { key: 'seen', text: `👀 Seen (${seen.length} of ${MONSTER_BOOK.length})` },
+          { key: 'defeated', text: `🏆 Defeated (${beaten.length} of ${MONSTER_BOOK.length})` },
+        ];
+        tabRow.replaceChildren(
+          ...tabs.map((t) =>
+            h(
+              'button',
+              {
+                class: `chip${t.key === current ? ' on' : ''}`,
+                type: 'button',
+                'data-tab': t.key,
+                onclick: () => {
+                  current = t.key;
+                  this.sound.play('ui');
+                  draw();
+                },
+              },
+              t.text,
+            ),
+          ),
+        );
+        grid.dataset.tab = current;
+        if (current === 'seen') {
+          note.textContent = 'Every monster you come across on an adventure island goes in here.';
+          grid.replaceChildren(
+            ...MONSTER_BOOK.map((m) => {
+              const got = stats[seenKey(m.kind)] > 0;
+              return h('div', { class: `sticker-card${got ? '' : ' locked'}`, 'data-kind': m.kind }, h('span', { class: 'emoji' }, m.icon), h('b', {}, got ? m.name : '???'));
+            }),
+          );
+          return;
+        }
+        note.textContent = 'Pop a monster on an adventure island to see its stats here. SPD is how quick it comes after you, against how quick you run.';
+        grid.replaceChildren(
+          ...MONSTER_BOOK.map((m) => {
+            const popped = stats[popKey(m.kind)] ?? 0;
+            if (!popped) {
+              const met = stats[seenKey(m.kind)] > 0;
+              return h('div', { class: 'sticker-card monster-card locked', 'data-kind': m.kind }, h('span', { class: 'emoji' }, m.icon), h('b', {}, met ? m.name : '???'), h('span', { class: 'muted' }, met ? 'Pop one to see its stats' : 'Not seen yet'));
+            }
+            const s = monsterStats(m.kind);
+            return h(
+              'div',
+              { class: 'sticker-card monster-card', 'data-kind': m.kind },
+              h('span', { class: 'emoji' }, m.icon),
+              h('b', {}, m.name),
+              h('span', { class: 'muted popped' }, `Popped ×${popped.toLocaleString()}`),
+              h(
+                'div',
+                { class: 'monster-stats' },
+                stat('hp', '❤️ HP', m.kind === 'king' ? `${s.hp}+` : String(s.hp)),
+                stat('atk', s.fire ? '🔥 ATK' : '💥 ATK', String(s.atk)),
+                stat('spd', '👟 SPD', `${s.speed}%`),
+                stat('jmp', '🦘 JMP', s.jump),
+              ),
+            );
+          }),
+        );
+      };
+      draw();
+      root.append(h('h2', {}, '👾 Monster collection'), tabRow, note, grid);
+    });
   }
 
   // The shop: sell what is in your basket for coins, and buy running shoes,
@@ -3879,6 +3960,7 @@ export class UI {
               : adv.won
                 ? ''
                 : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
+            h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'),
           );
         }
         const def = g.defense;

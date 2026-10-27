@@ -145,7 +145,7 @@ export const GHOST_BODY = { radius: 0.45, height: 0.95 };
 export const KING_BODY = { radius: 0.95, height: 1.8 };
 // The crosser he gets (rage: 0, 1 at two thirds of his hearts, 2 at a
 // third), the quicker: at the last as quick as you walk, never as you run.
-const KING_MOVES = [3, 3.8, 4.6].map((run) => ({ walk: 1.8, run, jump: 9 }));
+export const KING_MOVES = [3, 3.8, 4.6].map((run) => ({ walk: 1.8, run, jump: 9 }));
 // Marching along a tower defense island's road: a little quicker than they
 // hop about, and King Grumble slower.
 const MARCH = { walk: 2.5, run: 2.5, jump: 8 };

@@ -7,12 +7,16 @@ import { test } from 'node:test';
 import { cleanLevel, levelFor, MAX_LEVEL, progressOf, STICKER_XP, XP_FOR, xpForLevel, xpOf, xpToNext } from '../public/js/shared/levels.js';
 import { rankBoards } from '../public/js/shared/ranking.js';
 import { lookWithGear } from '../public/js/shared/shop.js';
-import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { MONSTER_LOG, popKey, seenKey, STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { cleanLook } from '../public/js/shared/words.js';
 
-test('everything counted earns XP, except the highest you flew, and only counted things do', () => {
+test('everything counted earns XP, except the highest you flew and the monster collection, and only counted things do', () => {
+  // The monster collection's counts (seen and popped, kind by kind) go over
+  // what popped already earns XP for.
+  const book = new Set(MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]));
   for (const key of Object.keys(XP_FOR)) assert.ok(STAT_KEYS.includes(key), `${key} is counted`);
-  for (const key of STAT_KEYS) if (key !== 'highest') assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
+  for (const key of STAT_KEYS) if (key !== 'highest' && !book.has(key)) assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
+  for (const key of book) assert.equal(XP_FOR[key], undefined, key);
   assert.equal(xpOf({ highest: 1000 }, {}), 0);
 });
 

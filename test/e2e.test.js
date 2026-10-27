@@ -5835,3 +5835,55 @@ test('the ⭐ level window shows your stats: HP from your level, AP from the wea
   assert.ok(await page.evaluate(() => document.querySelector('#modal .stat[data-stat="ap"]').textContent.includes('Foam Sword')));
   await page.browserContext().close();
 });
+
+test('the 👾 monster collection: a monster near you on an adventure island goes in as seen, one you pop as defeated, with its name and stats', { skip }, async () => {
+  const page = await openPlayer(p2p(), { name: 'Keen Owl' });
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
+  await clickSwitch(page, '#modal .switch[aria-label="Adventure"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  const stats = () => page.evaluate(() => Object.fromEntries(Object.entries(window.kidsWorld.profile.data.stats).filter(([k, n]) => /^(seen|pop)/.test(k) && n > 0)));
+  assert.deepEqual(await stats(), {});
+  // Into camp 1: its monsters come out, and each kind near you is seen.
+  const c = await page.evaluate(() => window.kidsWorld.session.link.room.adventure.camps.find((c) => c.kind === 'camp'));
+  await page.evaluate((c) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: c.x + 2, y: c.y + 1, z: c.z + 2, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+  }, c);
+  await until(page, (id) => window.kidsWorld.session.link.room.monsters.list.some((m) => m.camp === id) && window.kidsWorld.profile.data.stats.seenblob === 1, c.id);
+  assert.equal((await stats()).popblob, undefined);
+  // A blob popped by you: defeated.
+  await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const m = room.monsters.list.find((o) => o.camp === id && o.kind === 'blob');
+    const b = m.body;
+    room.monsters.remove(m.id);
+    room.broadcast({ t: 'pop', id: m.id, by: kw.game.pid, x: b.x, y: b.y, z: b.z });
+  }, c.id);
+  await until(page, () => window.kidsWorld.profile.data.stats.popblob === 1);
+  await page.click('#btn-stickers-hud');
+  await clickButton(page, '👾 Monsters', '#modal');
+  await until(page, () => document.querySelector('#modal .monster-book'));
+  const seen = await page.evaluate(() => ({
+    tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
+    blob: document.querySelector('#modal .monster-book [data-kind="blob"]').textContent,
+    golem: document.querySelector('#modal .monster-book [data-kind="golem"]').textContent,
+  }));
+  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 11\)$/);
+  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 11)');
+  assert.equal(seen.blob, '👾Grumpy Blob');
+  assert.equal(seen.golem, '🗿???');
+  await page.click('#modal .tabs .chip[data-tab="defeated"]');
+  await until(page, () => document.querySelector('#modal .monster-book').dataset.tab === 'defeated');
+  const card = await page.evaluate(() => {
+    const el = document.querySelector('#modal .monster-book [data-kind="blob"]');
+    return { popped: el.querySelector('.popped').textContent, stats: Object.fromEntries([...el.querySelectorAll('.stat')].map((s) => [s.dataset.stat, s.querySelector('.stat-value').textContent])) };
+  });
+  assert.deepEqual(card, { popped: 'Popped ×1', stats: { hp: '3', atk: '20', spd: '49%', jmp: 'Pops at once' } });
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#modal .monster-book .monster-stats').length), 1);
+  await page.browserContext().close();
+});
