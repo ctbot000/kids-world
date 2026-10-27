@@ -56,18 +56,19 @@ function smooth(a, b, x) {
 
 // ---------------------------------------------------------------- weather
 
-export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles', 'tornado'];
+export const WEATHERS = ['clear', 'cloudy', 'rain', 'rainbow', 'snow', 'sprinkles', 'tornado', 'storm'];
 
 // Something falling out of the sky — rain, snow or candy sprinkles — which
-// waters farmland out under the open sky (shared/room.js).
-export const isRaining = (weather) => weather === 'rain' || weather === 'snow' || weather === 'sprinkles';
+// waters farmland out under the open sky (shared/room.js). A storm is heavy
+// rain with thunder and lightning (render/sky.js).
+export const isRaining = (weather) => weather === 'rain' || weather === 'snow' || weather === 'sprinkles' || weather === 'storm';
 
 // What comes next, and for how many seconds. A volcano island never rains:
 // the rain would only hiss away on the lava (and no rainbow without it).
 // Now and then a cloudy sky spins up a tornado, which blows itself out
-// back into clouds.
+// back into clouds. About one rain in three comes as a thunderstorm.
 export function nextWeather(current, theme, random = Math.random) {
-  if (current === 'rain' || current === 'snow' || current === 'sprinkles') return { weather: 'rainbow', seconds: 70 + random() * 40 };
+  if (isRaining(current)) return { weather: 'rainbow', seconds: 70 + random() * 40 };
   if (current === 'rainbow') return { weather: 'clear', seconds: 200 + random() * 160 };
   if (current === 'tornado') return { weather: 'cloudy', seconds: 60 + random() * 60 };
   const r = random();
@@ -77,7 +78,7 @@ export function nextWeather(current, theme, random = Math.random) {
   // Anywhere else (but by a volcano), a wet spell is now and then snow
   // instead of rain.
   const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : theme !== 'volcano' && random() < 0.35 ? 'snow' : 'rain';
-  return { weather: wet, seconds: 90 + random() * 90 };
+  return { weather: wet === 'rain' && r >= 0.93 ? 'storm' : wet, seconds: 90 + random() * 90 };
 }
 
 // ---------------------------------------------------------------- tornado

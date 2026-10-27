@@ -22,6 +22,8 @@ const KEY_COLORS = KEYS.map(([t, a, b]) => [t, new THREE.Color(a), new THREE.Col
 
 const tmpA = new THREE.Color();
 const tmpB = new THREE.Color();
+const tmpV = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
 
 function skyAt(time, top, horizon) {
   for (let i = 0; i < KEY_COLORS.length - 1; i++) {
@@ -49,7 +51,7 @@ export function environment(time, weather, theme, out = {}) {
   const horizon = (out.horizon ??= new THREE.Color());
   skyAt(time, top, horizon);
   const day = daylight(time);
-  const gloom = weather === 'rain' ? 0.5 : weather === 'tornado' ? 0.45 : weather === 'cloudy' ? 0.28 : weather === 'snow' ? 0.3 : weather === 'sprinkles' ? 0.15 : 0;
+  const gloom = weather === 'storm' ? 0.62 : weather === 'rain' ? 0.5 : weather === 'tornado' ? 0.45 : weather === 'cloudy' ? 0.28 : weather === 'snow' ? 0.3 : weather === 'sprinkles' ? 0.15 : 0;
   if (gloom) {
     tmpA.copy(GRAY_NIGHT).lerp(GRAY_DAY, day);
     top.lerp(tmpA, gloom);
@@ -71,7 +73,8 @@ export function environment(time, weather, theme, out = {}) {
   sun.setRGB(1, 0.96, 0.88).lerp(tmpB.setRGB(1, 0.72, 0.5), warm * day);
   sun.lerp(tmpB.setRGB(0.42, 0.52, 0.9), 1 - day);
   if (gloom) sun.multiplyScalar(1 - gloom * 0.35);
-  out.daylight = 0.34 + 0.66 * day;
+  // Under a storm's black clouds it is dim even at noon.
+  out.daylight = (0.34 + 0.66 * day) * (weather === 'storm' ? 0.62 : 1);
   out.ambient = (out.ambient ?? new THREE.Color()).setRGB(0.1, 0.11, 0.17);
   out.fog = (out.fog ??= new THREE.Color()).copy(horizon);
   out.stars = Math.max(0, 1 - day * 1.6) * (1 - gloom);
@@ -271,6 +274,12 @@ export class Sky {
     this.weather = null;
     this.weatherKind = 'clear';
     this.shooting = [];
+    // Lightning in a storm: bolts now and then, and the flash they light the
+    // island with (0 to 1, renderer.js); onStrike(distance) for the thunder.
+    this.bolts = [];
+    this.boltIn = 3;
+    this.flash = 0;
+    this.onStrike = null;
     this.rainbowAlpha = 0;
   }
 
@@ -355,7 +364,7 @@ export class Sky {
       this.weather.material.dispose();
       this.weather = null;
     }
-    if (kind !== 'rain' && kind !== 'snow' && kind !== 'sprinkles') return;
+    if (kind !== 'rain' && kind !== 'snow' && kind !== 'sprinkles' && kind !== 'storm') return;
     const n = kind === 'snow' ? 900 : 1200;
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
@@ -373,16 +382,60 @@ export class Sky {
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const mat = new THREE.PointsMaterial({
       size: kind === 'snow' ? 0.35 : kind === 'sprinkles' ? 0.3 : 0.28,
-      map: dropTexture(kind),
+      map: dropTexture(kind === 'storm' ? 'rain' : kind),
       transparent: true,
       depthWrite: false,
       vertexColors: true,
-      opacity: kind === 'rain' ? 0.7 : 0.95,
+      opacity: kind === 'rain' || kind === 'storm' ? 0.7 : 0.95,
     });
     this.weather = new THREE.Points(g, mat);
     this.weather.frustumCulled = false;
-    this.weather.userData = { kind, speed: kind === 'snow' ? 2.2 : kind === 'sprinkles' ? 6 : 16 };
+    this.weather.userData = { kind, speed: kind === 'snow' ? 2.2 : kind === 'sprinkles' ? 6 : kind === 'storm' ? 22 : 16 };
     this.group.add(this.weather);
+  }
+
+  // A bolt of lightning from the clouds to the ground, somewhere round
+  // `focus`: a zigzag of glowing sticks with a branch or two.
+  strike(focus, random = Math.random) {
+    const angle = random() * Math.PI * 2;
+    const dist = 30 + random() * 90;
+    const x = focus.x + Math.cos(angle) * dist;
+    const z = focus.z + Math.sin(angle) * dist;
+    const top = focus.cloudY ?? focus.y + 60;
+    const ground = focus.y - 3;
+    const group = new THREE.Group();
+    // A storybook yellow-white, to show against a pale grey sky as well.
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfff7b8, transparent: true, depthWrite: false, fog: false });
+    const glow = new THREE.MeshBasicMaterial({ color: 0x9aa8ff, transparent: true, opacity: 0.35, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    const stick = (a, b, width) => {
+      const len = a.distanceTo(b);
+      for (const [m, w] of [[mat, width], [glow, width * 4]]) {
+        const s = new THREE.Mesh(this.boltGeometry ??= new THREE.CylinderGeometry(0.5, 0.5, 1, 5, 1).translate(0, 0.5, 0), m);
+        s.scale.set(w, len, w);
+        s.position.copy(a);
+        s.quaternion.setFromUnitVectors(UP, tmpV.subVectors(b, a).normalize());
+        group.add(s);
+      }
+    };
+    const zigzag = (from, to, steps, width, branches) => {
+      let a = from.clone();
+      for (let i = 1; i <= steps; i++) {
+        const b = from.clone().lerp(to, i / steps);
+        if (i < steps) b.add(new THREE.Vector3((random() - 0.5) * 9, (random() - 0.5) * 3, (random() - 0.5) * 9));
+        stick(a, b, width);
+        if (branches && i > 1 && i < steps - 1 && random() < 0.35) {
+          const end = b.clone().add(new THREE.Vector3((random() - 0.5) * 30, -(10 + random() * 15), (random() - 0.5) * 30));
+          zigzag(b, end, 3, width * 0.5, false);
+        }
+        a = b;
+      }
+    };
+    zigzag(new THREE.Vector3(x, top, z), new THREE.Vector3(x + (random() - 0.5) * 20, ground, z + (random() - 0.5) * 20), 9, 1.1, true);
+    group.renderOrder = -5;
+    this.group.add(group);
+    this.bolts.push({ group, mats: [mat, glow], t: 0 });
+    this.flash = 1;
+    this.onStrike?.(dist);
   }
 
   shootingStar(from) {
@@ -413,7 +466,7 @@ export class Sky {
     this.clouds.position.set(focus.x + ((drift + 260) % 520) - 260, focus.cloudY, focus.z);
     const night = 1 - env.day;
     this.cloudMaterial.color.setRGB(1, 1, 1).lerp(new THREE.Color(0.28, 0.32, 0.5), night * 0.85);
-    const dark = this.weatherKind === 'rain' || this.weatherKind === 'tornado' ? 0.35 : this.weatherKind === 'cloudy' ? 0.15 : 0;
+    const dark = this.weatherKind === 'storm' ? 0.5 : this.weatherKind === 'rain' || this.weatherKind === 'tornado' ? 0.35 : this.weatherKind === 'cloudy' ? 0.15 : 0;
     this.cloudMaterial.color.multiplyScalar(1 - dark);
     this.cloudMaterial.opacity = this.weatherKind === 'clear' || this.weatherKind === 'rainbow' ? 0.72 : 0.88;
 
@@ -436,6 +489,28 @@ export class Sky {
       p.needsUpdate = true;
       this.weather.position.set(focus.x, focus.y - 12, focus.z);
     }
+
+    // Lightning: a strike every few seconds in a storm, flickering twice
+    // before it goes.
+    if (this.weatherKind === 'storm') {
+      this.boltIn -= dt;
+      if (this.boltIn <= 0) {
+        this.boltIn = 4 + Math.random() * 9;
+        this.strike(focus);
+      }
+    }
+    for (const b of [...this.bolts]) {
+      b.t += dt;
+      const on = b.t < 0.08 || (b.t > 0.14 && b.t < 0.3) ? 1 : 0;
+      b.mats[0].opacity = on;
+      b.mats[1].opacity = on * 0.35;
+      if (b.t > 0.32) {
+        this.group.remove(b.group);
+        for (const m of b.mats) m.dispose();
+        this.bolts.splice(this.bolts.indexOf(b), 1);
+      }
+    }
+    this.flash = this.bolts.some((b) => b.mats[0].opacity) ? 1 : Math.max(0, this.flash - dt * 5);
 
     for (const s of [...this.shooting]) {
       s.t += dt / 1.6;

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { maxCritters } from '../public/js/shared/critters.js';
-import { advanceTime, daylight, isDaytime, nextWeather } from '../public/js/shared/env.js';
+import { advanceTime, daylight, isDaytime, isRaining, nextWeather } from '../public/js/shared/env.js';
 import { BODY, bodyOverlapsSolid, makeBody, MOVE, stepBody, unstick } from '../public/js/shared/physics.js';
 import { raycast } from '../public/js/shared/raycast.js';
 import { FACING, facingFromYaw, placeTemplate, STAMPS } from '../public/js/shared/stamps.js';
@@ -441,4 +441,20 @@ test('wet weather is sometimes snow, except on candy and volcano islands', () =>
   const candy = spells('candy');
   assert.ok(candy.has('sprinkles') && !candy.has('snow'));
   assert.ok(!spells('volcano').has('snow'));
+});
+
+test('now and then the rain is a thunderstorm, which waters and ends in a rainbow', () => {
+  const seen = (theme) => {
+    const out = new Set();
+    let weather = 'clear';
+    let seed = 1;
+    const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    for (let i = 0; i < 4000; i++) out.add((weather = nextWeather(weather, theme, random).weather));
+    return out;
+  };
+  const grass = seen('grassy');
+  assert.ok(grass.has('storm') && grass.has('rain'), [...grass].join());
+  for (const theme of ['snowy', 'candy']) assert.ok(!seen(theme).has('storm'), `no storms on a ${theme} island`);
+  assert.ok(isRaining('storm'), 'a storm waters farmland');
+  assert.equal(nextWeather('storm', 'grassy').weather, 'rainbow');
 });

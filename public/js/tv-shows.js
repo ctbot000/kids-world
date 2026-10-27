@@ -210,6 +210,7 @@ const WEATHER_WORDS = {
   rainbow: 'Rainbow!',
   snow: 'Snowy',
   sprinkles: 'Candy sprinkles!',
+  storm: 'Thunderstorm!',
 };
 
 function islandWeather(ctx, t, W, H, env) {
@@ -264,11 +265,25 @@ function islandWeather(ctx, t, W, H, env) {
       ctx.fill();
     }
   }
+  // A storm's lightning bolt, flashing every few seconds.
+  if (weather === 'storm' && t % 3 < 0.25) {
+    ctx.fillStyle = '#ffe14d';
+    ctx.beginPath();
+    ctx.moveTo(cx + 2, cy + 6);
+    ctx.lineTo(cx - 12, cy + 34);
+    ctx.lineTo(cx - 2, cy + 34);
+    ctx.lineTo(cx - 10, cy + 60);
+    ctx.lineTo(cx + 12, cy + 26);
+    ctx.lineTo(cx + 2, cy + 26);
+    ctx.lineTo(cx + 10, cy + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
   if (isRaining(weather)) {
     for (let i = 0; i < 14; i++) {
       const x = cx - 36 + ((i * 13) % 70);
-      const y = cy + 18 + ((t * (weather === 'rain' ? 80 : 30) + i * 17) % 70);
-      if (weather === 'rain') {
+      const y = cy + 18 + ((t * (weather === 'rain' || weather === 'storm' ? 80 : 30) + i * 17) % 70);
+      if (weather === 'rain' || weather === 'storm') {
         ctx.fillStyle = '#4fa3ff';
         ctx.fillRect(x, y, 2, 7);
       } else if (weather === 'snow') {
@@ -292,7 +307,7 @@ function islandWeather(ctx, t, W, H, env) {
   ctx.font = '800 22px system-ui, sans-serif';
   ctx.fillText(WEATHER_WORDS[weather], 158 + (W - 172) / 2, 96);
   ctx.font = '600 12px system-ui, sans-serif';
-  ctx.fillText(night ? 'Sleep tight! 🌙' : weather === 'rain' ? 'Your farm gets watered!' : weather === 'tornado' ? 'Stay indoors — or take a spin!' : 'A good day to play!', 158 + (W - 172) / 2, 120);
+  ctx.fillText(night ? 'Sleep tight! 🌙' : weather === 'storm' ? 'Stay cozy indoors! ⚡' : weather === 'rain' ? 'Your farm gets watered!' : weather === 'tornado' ? 'Stay indoors — or take a spin!' : 'A good day to play!', 158 + (W - 172) / 2, 120);
   // The news ticker along the bottom.
   ctx.fillStyle = '#e8453c';
   ctx.fillRect(0, H - 22, W, 22);

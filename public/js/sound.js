@@ -816,6 +816,36 @@ export class Sound {
     this.noise(0.03, { type: 'bandpass', freq: f * 4, q: 1.5, gain: 0.04 * gain });
   }
 
+  // A clap of thunder after lightning `distance` away: a crack when it is
+  // close, then a long low rumble, later and softer the further off it is.
+  thunder(distance = 80) {
+    if (!this.ready) return;
+    const ctx = this.ctx;
+    const far = Math.min(1, distance / 150);
+    const at = ctx.currentTime + 0.25 + far * 1.4;
+    const gain = 0.32 - 0.18 * far;
+    if (far < 0.5) this.noise(0.25, { at: at - ctx.currentTime, type: 'highpass', freq: 1800, gain: gain * 0.4 });
+    this.noise(0.01, { gain: 0.0001 }); // makes sure the noise buffer exists
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    src.loop = true;
+    src.playbackRate.value = 0.6;
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(400 - 150 * far, at);
+    low.frequency.exponentialRampToValueAtTime(90, at + 3);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gain, at + 0.06 + far * 0.3);
+    // It rolls: a second swell, then dies away.
+    g.gain.exponentialRampToValueAtTime(gain * 0.4, at + 0.9);
+    g.gain.exponentialRampToValueAtTime(gain * 0.7, at + 1.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 3.5);
+    src.connect(low).connect(g).connect(this.sfx);
+    src.start(at, Math.random() * 0.5);
+    src.stop(at + 3.6);
+  }
+
   // ------------------------------------------------ music and ambience
 
   setMood(mood, weather) {
@@ -870,7 +900,7 @@ export class Sound {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     const now = ctx.currentTime;
-    this.rainLoop(this.musicOn ? { rain: 0.016, sprinkles: 0.008 }[this.weather] ?? 0 : 0);
+    this.rainLoop(this.musicOn ? { rain: 0.016, storm: 0.024, sprinkles: 0.008 }[this.weather] ?? 0 : 0);
     this.songLoop();
     if (!this.musicOn || this.song) {
       this.nextBeat = 0;
@@ -915,7 +945,7 @@ export class Sound {
     const bar = Math.floor(beat / 8);
     const chord = chords[Math.floor(bar / 2) % 4];
     const inBar = beat % 8;
-    const quiet = this.weather === 'rain' || this.weather === 'snow' ? 0.6 : 1;
+    const quiet = this.weather === 'storm' ? 0.45 : this.weather === 'rain' || this.weather === 'snow' ? 0.6 : 1;
     if (inBar === 0 && bar % 2 === 0) {
       for (const n of chord) this.tone(NOTE(n), { at, attack: 0.4, decay: spb * 15, gain: 0.05 * quiet, type: 'triangle', dest: this.music });
     }

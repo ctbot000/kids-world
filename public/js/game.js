@@ -175,6 +175,8 @@ export class Game extends EventTarget {
     this.link = link;
     this.renderer = renderer;
     this.sound = sound;
+    // Thunder after each flash of lightning in a storm (render/sky.js).
+    renderer.sky.onStrike = (distance) => sound.thunder(distance);
     this.profile = profile;
     this.mode = mode; // 'host', 'guest' or 'server'
     this.world = null;

@@ -54,6 +54,7 @@ const tmpY = new THREE.Vector3();
 const tmpZ = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const WHITE = new THREE.Color(1, 1, 1);
+const FLASH = new THREE.Color('#e8ecff');
 
 // How finished each picture is, best first: drawn into a picture of its own
 // (post) of at most this many pixels (fewer pixels per CSS pixel on a big,
@@ -774,6 +775,15 @@ export class Renderer {
     this.time += dt;
     const env = environment(state.time, state.weather, this.world?.theme, this.env);
     this.snow = Math.min(1, Math.max(0, this.snow + dt * (state.weather === 'snow' ? SNOW_RATE : -MELT_RATE)));
+    // A flash of lightning lights the sky and the island up white.
+    const flash = this.sky.flash;
+    if (flash) {
+      env.top.lerp(FLASH, flash * 0.55);
+      env.horizon.lerp(FLASH, flash * 0.65);
+      env.fog.lerp(FLASH, flash * 0.45);
+      env.daylight += (1 - env.daylight) * flash * 0.5;
+      env.sun.lerp(FLASH, flash * 0.4);
+    }
     const fogFar = this.fogFar ?? 150;
     this.terrain.setLighting({
       daylight: env.daylight,
@@ -803,7 +813,7 @@ export class Renderer {
     this.aimSun(state.focus, env.day > 0.15 ? env.sunDir : env.moonDir);
     this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 0.98, 0.94), 0.5);
     this.hemi.groundColor.setRGB(0.55, 0.62, 0.45).multiplyScalar(0.5 + 0.5 * env.day);
-    this.hemi.intensity = 1.05 + 0.65 * env.day;
+    this.hemi.intensity = 1.05 + 0.65 * env.day + 0.8 * flash;
     // The toys give back less of the studio's light at night, and the light
     // round their edges takes the sky's colour.
     toyLight.studio.value = 0.3 + 0.7 * env.day;
