@@ -12,7 +12,7 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
@@ -5958,6 +5958,76 @@ test('a tornado sweeps you up out in the open, spins you round and flings you ou
     room.tick();
   });
   await until(page, () => window.kidsWorld.game.env.weather === 'cloudy' && window.kidsWorld.game.tornadoFoot() === null);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a computer: Q by it opens typing practice, a line typed lights each next key and counts its speed, and Word Rain pops a typed word and keeps the best score', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A computer on the ground beside the start, and nothing rideable near it
+  // to take the button.
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, COMPUTER);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Type'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Computer'));
+  // The home row lesson: its first key lit, and the line typed in the box.
+  const line = await page.evaluate(() => document.querySelector('.type-line').textContent);
+  assert.match(line, /^[asdfjkl; ]{40,}$/);
+  const lit = () => page.evaluate(() => [...document.querySelectorAll('.type-key.next')].map((k) => k.textContent));
+  assert.deepEqual(await lit(), [line[0] === ';' ? ';' : line[0].toUpperCase()]);
+  assert.ok(await page.evaluate(() => document.activeElement?.classList.contains('type-box')), 'the box is ready to type in');
+  await page.keyboard.type(line.slice(0, 3));
+  assert.deepEqual(await lit(), [line[3] === ' ' ? 'space' : line[3] === ';' ? ';' : line[3].toUpperCase()]);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.type-line .ok').length), 3);
+  await page.keyboard.type(line.slice(3));
+  await until(page, () => document.querySelector('.type-stats').textContent.includes('Done'));
+  const stats = await page.evaluate(() => window.kidsWorld.game.profile.data.stats);
+  assert.equal(stats.typed, 1);
+  assert.ok(stats.typewpm > 0, JSON.stringify(stats.typewpm));
+  assert.deepEqual(await lit(), []);
+  assert.ok(await page.evaluate(() => !document.querySelector('.type-next').hidden));
+  // Word Rain: a falling word typed pops for a point, and the game over keeps the best.
+  await page.click('.type-tab[data-tab="rain"]');
+  await until(page, () => document.querySelector('.rain-sky') && document.querySelector('.type-body .big.green'));
+  await page.click('.type-body .big.green');
+  await until(page, () => window.kidsWorld.ui.typeRain?.()?.words.length > 0);
+  const word = await page.evaluate(() => window.kidsWorld.ui.typeRain().words[0].text);
+  await page.keyboard.type(word);
+  await until(page, () => window.kidsWorld.ui.typeRain().score === 1);
+  assert.equal(await page.evaluate(() => document.querySelector('.type-box').value), '', 'the box empties for the next word');
+  await page.evaluate(() => {
+    window.kidsWorld.ui.typeRain().hearts = 0;
+  });
+  await until(page, () => document.querySelector('.type-stats').textContent.includes('new best'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.profile.data.stats.rainbest), 1);
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.computerAt), null);
+  assert.equal(await page.evaluate(() => window.kidsWorld.ui.typeRain), null, 'its frames stop with the window');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

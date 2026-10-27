@@ -9,6 +9,7 @@ import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rari
 import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
 import { sinceText } from './shared/screens.js';
+import { FINGER_OF, KEY_ROWS, LESSONS, lessonLine, lessonOf, typingScore, WordRain } from './shared/typing.js';
 import { paintScreen, TOOL_COLORS } from './render/screens.js';
 import { stationId } from './shared/broadcast.js';
 import { isBroadcastStation, onAirShow } from './shared/station.js';
@@ -2255,6 +2256,7 @@ export class UI {
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and tap each step in the right order. Every step right first time is a coin, and the dish is yours to be proud of!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
+          card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right four times and you know it by heart! Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
@@ -3243,6 +3245,7 @@ export class UI {
     on('tv-open', () => this.tvDialog());
     on('screen-open', () => this.screenDialog());
     on('screens', () => this.screenChanged?.());
+    on('computer-open', () => this.computerDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
     on('cook-open', () => this.cookDialog());
@@ -4648,7 +4651,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4721,18 +4724,18 @@ export class UI {
   // beside a stove: the same button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -5739,6 +5742,269 @@ export class UI {
         },
       },
     );
+  }
+
+  // A computer showing nobody's work (shared/typing.js): ⌨️ Typing
+  // practice, a line to copy with the next key lit on a keyboard, and
+  // 🌧️ Word Rain, words falling from the sky to pop by typing them.
+  computerDialog() {
+    const g = this.game;
+    if (!g?.computerAt) return;
+    let stop = null;
+    const body = h('div', { class: 'type-body' });
+    const tabs = [
+      ['practice', '⌨️ Typing practice'],
+      ['rain', '🌧️ Word Rain'],
+    ].map(([key, label]) => h('button', { class: 'chip type-tab', type: 'button', 'data-tab': key, 'aria-pressed': 'false', onclick: () => show(key) }, label));
+    const show = (key) => {
+      stop?.();
+      this.typeTab = key;
+      for (const t of tabs) {
+        t.classList.toggle('on', t.dataset.tab === key);
+        t.setAttribute('aria-pressed', String(t.dataset.tab === key));
+      }
+      body.replaceChildren();
+      stop = key === 'rain' ? this.wordRain(body) : this.typingPractice(body);
+    };
+    this.openModal(
+      (root) => {
+        root.append(h('h2', {}, '💻 Computer'), h('div', { class: 'type-tabs' }, ...tabs), body);
+        show(this.typeTab ?? 'practice');
+      },
+      {
+        onClose: () => {
+          stop?.();
+          stop = null;
+          g.closeComputer();
+        },
+      },
+    );
+  }
+
+  // A box to type into, in the computer's window: no capitals or
+  // corrections from a phone's keyboard.
+  typeBox(label) {
+    return h('input', { type: 'text', class: 'text-input type-box', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'done', 'aria-label': label });
+  }
+
+  // ⌨️ Typing practice, in `body`: pick a lesson, copy its line.
+  typingPractice(body) {
+    const g = this.game;
+    let lesson = lessonOf(this.typeLesson);
+    let line = '';
+    let started = 0;
+    let done = false;
+    const lessons = LESSONS.map((l) =>
+      h('button', { class: 'chip type-lesson', type: 'button', 'data-lesson': l.key, onclick: () => {
+        this.typeLesson = l.key;
+        lesson = l;
+        fresh();
+      } }, `${l.icon} ${l.name}`),
+    );
+    const tip = h('p', { class: 'muted type-tip' });
+    const shown = h('div', { class: 'type-line', 'aria-hidden': 'true' });
+    const box = this.typeBox('Type the line here');
+    const keys = new Map();
+    const key = (k, label, cls = '') => {
+      const el = h('span', { class: `type-key f${FINGER_OF[k]} ${cls}` }, label);
+      keys.set(k, el);
+      return el;
+    };
+    const board = h(
+      'div',
+      { class: 'type-keys', 'aria-hidden': 'true' },
+      ...KEY_ROWS.map((row, i) => h('div', { class: `type-row r${i}` }, ...[...row].map((k) => key(k, k.toUpperCase())))),
+      h('div', { class: 'type-row' }, key(' ', 'space', 'type-space')),
+    );
+    const stats = h('div', { class: 'type-stats', role: 'status' });
+    const next = h('button', { class: 'big green type-next', type: 'button', hidden: true, onclick: () => fresh() }, '➡️ Next line');
+    const paint = () => {
+      const typed = box.value;
+      shown.replaceChildren(...[...line].map((c, i) => h('span', { class: i < typed.length ? (typed[i] === c ? 'ok' : 'bad') : i === typed.length ? 'at' : '' }, c)));
+      const want = done ? null : line[typed.length];
+      for (const [k, el] of keys) el.classList.toggle('next', k === want);
+      if (done) return;
+      const s = typingScore(line, typed, started ? performance.now() - started : 0);
+      stats.textContent = typed ? `${s.wpm} words a minute · ${s.accuracy}% right` : 'Start typing — the lit key is next!';
+    };
+    const fresh = () => {
+      line = lessonLine(lesson);
+      started = 0;
+      done = false;
+      box.value = '';
+      box.disabled = false;
+      next.hidden = true;
+      for (const el of lessons) el.classList.toggle('on', el.dataset.lesson === lesson.key);
+      tip.textContent = lesson.text;
+      paint();
+      box.focus();
+      // When the window has only just opened, once it shows.
+      this.focusSoon(box, 50);
+    };
+    const finish = () => {
+      done = true;
+      const s = typingScore(line, box.value, performance.now() - started);
+      const xp = g.typingDone(s.wpm, s.accuracy);
+      box.disabled = true;
+      next.hidden = false;
+      stats.textContent = s.accuracy < 50 ? `${s.accuracy}% right — slow down and try to get the letters right!` : `🎉 Done! ${s.wpm} words a minute · ${s.accuracy}% right${xp ? ` · +${xp} ⭐` : ''}`;
+      this.sound.play(s.accuracy < 50 ? 'no' : 'ding');
+      next.focus();
+    };
+    box.addEventListener('input', () => {
+      if (done) return;
+      box.value = box.value.toLowerCase().slice(0, line.length);
+      const typed = box.value;
+      if (!started && typed) started = performance.now();
+      const at = typed.length - 1;
+      if (at >= 0) this.sound.play(typed[at] === line[at] ? 'ui' : 'bump');
+      if (typed.length === line.length) finish();
+      paint();
+    });
+    body.append(h('div', { class: 'type-lessons' }, ...lessons), tip, shown, box, stats, next, board);
+    fresh();
+    return null;
+  }
+
+  // 🌧️ Word Rain, in `body`: words fall, typing one pops it. The function
+  // that stops it.
+  wordRain(body) {
+    const g = this.game;
+    const W = 480;
+    const H = 300;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const canvas = h('canvas', { class: 'rain-sky', width: W * dpr, height: H * dpr, role: 'img', 'aria-label': 'Word Rain: words falling from the sky' });
+    const ctx = canvas.getContext('2d');
+    const box = this.typeBox('Type a falling word');
+    box.disabled = true;
+    const status = h('div', { class: 'type-stats', role: 'status' });
+    const start = h('button', { class: 'big green', type: 'button', onclick: () => begin() }, '▶️ Start');
+    let rain = null;
+    let pops = [];
+    let last = 0;
+    const wordsOf = (n) => `${n} word${n === 1 ? '' : 's'}`;
+    const begin = () => {
+      rain = new WordRain();
+      pops = [];
+      start.hidden = true;
+      box.disabled = false;
+      box.value = '';
+      status.textContent = 'Type a word and it pops!';
+      box.focus();
+    };
+    const end = () => {
+      const best = g.profile.data.stats.rainbest ?? 0;
+      const xp = g.rainDone(rain.score);
+      status.textContent = xp ? `🎉 A new best: ${wordsOf(rain.score)}! +${xp} ⭐` : `${wordsOf(rain.score)} popped. Your best: ${best}.`;
+      this.sound.play(xp ? 'fanfare' : 'ding');
+      start.textContent = '🔁 Play again';
+      start.hidden = false;
+      box.disabled = true;
+      start.focus();
+    };
+    box.addEventListener('input', () => {
+      box.value = box.value.toLowerCase();
+      if (rain?.type(box.value)) box.value = '';
+    });
+    // Enter on a word that is not falling: the box empties for another try.
+    box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !box.value) return;
+      box.value = '';
+      this.sound.play('bump');
+    });
+    const draw = () => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, '#5aa6e8');
+      sky.addColorStop(1, '#bfe3ff');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#6cc46a';
+      ctx.fillRect(0, H - 28, W, 28);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (!rain) {
+        ctx.fillStyle = '#1d3557';
+        ctx.font = '700 24px system-ui, sans-serif';
+        ctx.fillText('🌧️ Word Rain', W / 2, H / 2 - 40);
+        ctx.font = '500 17px system-ui, sans-serif';
+        ctx.fillText('Words fall from the sky.', W / 2, H / 2 - 4);
+        ctx.fillText('Type one to pop it before it lands!', W / 2, H / 2 + 20);
+        return;
+      }
+      const typed = box.value.trim();
+      ctx.font = '700 18px system-ui, sans-serif';
+      for (const w of rain.words) {
+        const tw = ctx.measureText(w.text).width + 22;
+        const x = Math.min(W - tw / 2 - 4, Math.max(tw / 2 + 4, 20 + w.x * (W - 40)));
+        const y = 18 + w.y * (H - 64);
+        const hit = typed && w.text.startsWith(typed);
+        ctx.fillStyle = hit ? '#fff3c4' : '#ffffff';
+        ctx.strokeStyle = hit ? '#f4a300' : '#3d7cc9';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - tw / 2, y - 15, tw, 30, 15);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#1d3557';
+        ctx.fillText(w.text, x, y + 1);
+        if (hit) {
+          ctx.fillStyle = '#e07000';
+          ctx.textAlign = 'left';
+          ctx.fillText(typed, x - tw / 2 + 11, y + 1);
+          ctx.textAlign = 'center';
+        }
+      }
+      for (const p of pops) {
+        ctx.globalAlpha = 1 - p.t / 0.5;
+        ctx.font = `${24 + p.t * 40}px system-ui, sans-serif`;
+        ctx.fillText('✨', 20 + p.x * (W - 40), 18 + p.y * (H - 64));
+        ctx.globalAlpha = 1;
+      }
+      ctx.font = '20px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('❤️'.repeat(rain.hearts) + '🤍'.repeat(3 - rain.hearts), 10, H - 14);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#1d3557';
+      ctx.font = '700 18px system-ui, sans-serif';
+      ctx.fillText(`⭐ ${rain.score}`, W - 12, H - 14);
+      if (rain.over) {
+        ctx.fillStyle = 'rgba(29, 53, 87, 0.55)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = '700 26px system-ui, sans-serif';
+        ctx.fillText(`Game over — ${wordsOf(rain.score)}!`, W / 2, H / 2);
+      }
+    };
+    let raf = 0;
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(0.1, (now - (last || now)) / 1000);
+      last = now;
+      if (rain && !rain.over) {
+        rain.step(dt);
+        for (const e of rain.events) {
+          if (e.kind === 'pop') pops.push({ ...e.word, t: 0 });
+          this.sound.play(e.kind === 'pop' ? 'pop' : 'ouch');
+        }
+        rain.events.length = 0;
+        if (rain.over) end();
+      }
+      for (const p of pops) p.t += dt;
+      pops = pops.filter((p) => p.t < 0.5);
+      draw();
+    };
+    raf = requestAnimationFrame(frame);
+    const best = g.profile.data.stats.rainbest ?? 0;
+    status.textContent = best ? `Your best: ${wordsOf(best)}.` : 'Pop as many words as you can!';
+    body.append(h('div', { class: 'rain-set' }, canvas), box, status, start);
+    // The game going, for tests.
+    this.typeRain = () => rain;
+    return () => {
+      cancelAnimationFrame(raf);
+      this.typeRain = null;
+    };
   }
 
   tvDialog() {

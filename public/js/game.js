@@ -12,6 +12,7 @@ import { gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
+import { computerNear } from './shared/typing.js';
 import { furnitureDrop } from './shared/furniture.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
@@ -280,6 +281,10 @@ export class Game extends EventTarget {
     this.screens = new Map();
     this.screenTarget = null;
     this.screenAt = null;
+    // The computer beside you that shows nobody's work, to type at
+    // (shared/typing.js), and the one whose window is open.
+    this.computerTarget = null;
+    this.computerAt = null;
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -2743,6 +2748,47 @@ export class Game extends EventTarget {
     this.screenAt = null;
   }
 
+  // ------------------------------------------------ typing at a computer
+
+  // Q (or the Type button) by a computer that shows nobody's work: its
+  // window opens, for typing practice and Word Rain (shared/typing.js).
+  openComputer() {
+    const t = this.computerTarget;
+    if (!t) return;
+    this.computerAt = t;
+    this.sound.play('open');
+    this.emit('computer-open');
+  }
+
+  closeComputer() {
+    this.computerAt = null;
+  }
+
+  // A typing lesson finished at `wpm` words a minute with `accuracy` (0-100)
+  // per cent right: it counts for XP and stickers. The XP it earned.
+  typingDone(wpm, accuracy) {
+    if (accuracy < 50) return 0;
+    const best = this.profile.data.stats.typewpm ?? 0;
+    this.profile.count('typed');
+    this.profile.count('typewpm', wpm, { max: true });
+    const xp = XP_FOR.typed.xp + Math.max(0, wpm - best) * XP_FOR.typewpm.xp;
+    const b = this.me?.body;
+    if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp });
+    return xp;
+  }
+
+  // A game of Word Rain over with `score` words popped: a new best counts
+  // for XP and stickers. The XP it earned.
+  rainDone(score) {
+    const best = this.profile.data.stats.rainbest ?? 0;
+    if (score <= best) return 0;
+    this.profile.count('rainbest', score, { max: true });
+    const xp = (score - best) * XP_FOR.rainbest.xp;
+    const b = this.me?.body;
+    if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp });
+    return xp;
+  }
+
   // Whether everyone's spot in the seat in cell (x, y, z) is taken by
   // someone else sitting (or lying) in it: it is theirs until they get up.
   seatTaken(x, y, z) {
@@ -3336,6 +3382,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.screenTarget) {
       this.openScreen();
+      return;
+    }
+    if (!id && this.computerTarget) {
+      this.openComputer();
       return;
     }
     if (!id) {
@@ -5041,6 +5091,7 @@ export class Game extends EventTarget {
     this.stoveTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.dizzy && !on.flying && on.onGround ? stoveNear(this.world, on) : null;
     this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
+    this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     if (this.seat) this.checkTeaParty();
@@ -5533,6 +5584,8 @@ export class Game extends EventTarget {
     this.screens.clear();
     this.screenAt = null;
     this.screenTarget = null;
+    this.computerAt = null;
+    this.computerTarget = null;
     this.renderer.screens.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();

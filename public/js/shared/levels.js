@@ -94,6 +94,11 @@ export const XP_FOR = {
   studyright: { xp: 2, cap: 5000 },
   // Facts known by heart (shared/study.js), the most there have ever been.
   byheart: { xp: 5 },
+  // Typing lessons finished, and the best speed and Word Rain score there
+  // have ever been (shared/typing.js).
+  typed: { xp: 5, cap: 1000 },
+  typewpm: { xp: 1 },
+  rainbest: { xp: 2 },
   photos: { xp: 5, cap: 100 },
   sown: { xp: 2 },
   harvested: { xp: 1 },
