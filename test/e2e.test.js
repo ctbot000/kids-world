@@ -5999,7 +5999,8 @@ test('a computer: Q by it opens typing practice, a line typed lights each next k
   assert.match(line, /^[asdfjkl; ]{40,}$/);
   const lit = () => page.evaluate(() => [...document.querySelectorAll('.type-key.next')].map((k) => k.textContent));
   assert.deepEqual(await lit(), [line[0] === ';' ? ';' : line[0].toUpperCase()]);
-  assert.ok(await page.evaluate(() => document.activeElement?.classList.contains('type-box')), 'the box is ready to type in');
+  // The box is ready to type in, once the window shows.
+  await until(page, () => document.activeElement?.classList.contains('type-box'));
   await page.keyboard.type(line.slice(0, 3));
   assert.deepEqual(await lit(), [line[3] === ' ' ? 'space' : line[3] === ';' ? ';' : line[3].toUpperCase()]);
   assert.equal(await page.evaluate(() => document.querySelectorAll('.type-line .ok').length), 3);
