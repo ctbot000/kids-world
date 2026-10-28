@@ -5,9 +5,9 @@
 // and without one, as on a touch screen, all at once (scripts/test.mjs).
 // Run by hand: npm run check [-- <commit>]
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const root = git('rev-parse', '--show-toplevel');
@@ -20,6 +20,14 @@ const dir = mkdtempSync(join(tmpdir(), 'kids-world-check-'));
 // repository again, as bare, and its `git config` would write there.
 const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
 
+// The packages: this checkout's, or, in a worktree without an npm install of
+// its own, the main checkout's (beside the repository's shared git folder).
+function modules() {
+  const own = join(root, 'node_modules');
+  if (existsSync(own)) return own;
+  return join(dirname(resolve(root, git('rev-parse', '--git-common-dir'))), 'node_modules');
+}
+
 function run(label, args, env = {}) {
   console.log(`\n▶ ${label}`);
   const { status } = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit', env: { ...clean, ...env } });
@@ -28,7 +36,7 @@ function run(label, args, env = {}) {
 
 try {
   execFileSync('sh', ['-c', `git -C "$1" archive "$2" | tar -x -C "$3"`, 'sh', root, commit, dir], { stdio: 'inherit' });
-  symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  symlinkSync(modules(), join(dir, 'node_modules'), 'dir');
   console.log(`Testing ${commit.slice(0, 7)} in ${dir}`);
   run('all the tests, the end-to-end ones both with a mouse and with none, as on a touch screen', ['scripts/test.mjs', '--touch']);
   console.log(`\n✔ ${commit.slice(0, 7)} passes`);
