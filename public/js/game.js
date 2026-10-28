@@ -2073,7 +2073,7 @@ export class Game extends EventTarget {
       // (shared/quiz.js): the offer comes up by itself once the fireworks
       // have had their moment (updateAdventure), and after that waits with
       // the 🎓 by the flag (ui.js) for as long as you stay.
-      this.quizOffer = { at: performance.now() + WIN_OFFER_MS, told: false, taken: { junior: false, senior: false } };
+      this.quizOffer = { at: performance.now() + WIN_OFFER_MS, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
     }
     if (this.dizzy) {
       this.dizzy = false;

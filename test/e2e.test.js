@@ -4950,7 +4950,7 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   assert.equal(after.stats.quizzes, 1);
   assert.equal(after.stats.quizperfect, 1);
   assert.ok(after.stickers['quiz-whiz'] && after.stickers['quiz-perfect']);
-  // The middle school class is there to take straight on; Year 2 has its break.
+  // The other classes are there to take straight on; Year 2 has its break.
   assert.ok(await page.evaluate(() => [...document.querySelectorAll('.quiz-box button')].some((b) => b.textContent.includes('Middle School Year 3 class'))));
   await page.click('.quiz-box button.green');
   await until(page, () => document.getElementById('modal').hidden);
@@ -4960,6 +4960,7 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
     await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break')])),
     [
       [true, true],
+      [false, false],
       [false, false],
     ],
   );

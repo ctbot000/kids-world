@@ -6329,9 +6329,9 @@ export class UI {
 
   // The quizzes a conquered adventure island offers (game.js quizOffer): one
   // at elementary school second-year level, one at middle school third-year
-  // level, each for extra credit. auto: come up by itself once the island
-  // was won, so never over a window already open — after that, the 🎓 by the
-  // flag opens this again (adventureTags).
+  // level and a thinking-math one, each for extra credit. auto: come up by
+  // itself once the island was won, so never over a window already open —
+  // after that, the 🎓 by the flag opens this again (adventureTags).
   quizOfferDialog(auto = false) {
     const g = this.game;
     if (!g?.quizOffer || (auto && this.modalOpen)) return;
@@ -6341,7 +6341,7 @@ export class UI {
       (root) => {
         root.append(
           h('h2', {}, '🎓 Extra credit!'),
-          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — one question, and the right answer pays.` : 'You have done both of this island’s quizzes. Well done!'),
+          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — one question, and the right answer pays.` : 'You have done all of this island’s quizzes. Well done!'),
         );
         for (const l of levels) {
           const done = g.quizOffer.taken[l.key];
@@ -6349,7 +6349,7 @@ export class UI {
             h(
               'button',
               {
-                class: `big ${l.key === 'senior' ? 'pink' : 'blue'}`,
+                class: `big ${l.color}`,
                 type: 'button',
                 disabled: done,
                 onclick: () => {
@@ -6363,7 +6363,7 @@ export class UI {
             ),
           );
         }
-        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE === 1 ? 'One question' : `${QUIZ_SIZE} questions`} each. Finish one and the other is still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${g.nextStage.stage}` : 'as long as you stay on the island'}.`));
+        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE === 1 ? 'One question' : `${QUIZ_SIZE} questions`} each. Finish one and the others are still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${g.nextStage.stage}` : 'as long as you stay on the island'}.`));
       },
       { narrow: true },
     );
@@ -6435,7 +6435,7 @@ export class UI {
               return h(
                 'button',
                 {
-                  class: `big ${l.key === 'senior' ? 'pink' : 'blue'}`,
+                  class: `big ${l.color}`,
                   type: 'button',
                   disabled: wait > 0,
                   onclick: () => {
@@ -6902,7 +6902,7 @@ export class UI {
           `${q.school ? 'You earned' : 'Extra credit'}: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
         ),
         q.school ? h('p', { class: 'muted' }, `🔔 The next ${QUIZ_LEVELS[q.level].name} class is after a ${Math.round(CLASS_BREAK_MS / 60_000)}-minute break.`) : '',
-        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); if (q.school) g.startClass(other.key); else g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), q.school ? ` The ${other.name} class` : ` The ${other.name} quiz`) : '',
+        other ? h('button', { class: `big ${other.color}`, type: 'button', onclick: () => { this.sound.play('ui'); if (q.school) g.startClass(other.key); else g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), q.school ? ` The ${other.name} class` : ` The ${other.name} quiz`) : '',
         h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
       );
       return;

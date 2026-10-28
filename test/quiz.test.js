@@ -1,6 +1,7 @@
 // Extra-credit quizzes: an adventure island conquered offers everyone who
-// freed it two quizzes for extra credit — one at elementary school
-// second-year level, one at middle school third-year level — each a few
+// freed it three quizzes for extra credit — one at elementary school
+// second-year level, one at middle school third-year level and a
+// thinking-math one of puzzles to work out — each a few
 // questions picked and shuffled out of a bank of them, with the right answer
 // never where it was written; coins for the answers got right, and the
 // counts and stickers they earn.
@@ -10,10 +11,10 @@ import { XP_FOR } from '../public/js/shared/levels.js';
 import { makeQuiz, QUESTION_BANKS, QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from '../public/js/shared/quiz.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
-test('two quizzes, one for each school level, each with questions to spare', () => {
-  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['junior', 'senior']);
+test('three quizzes, each with questions to spare', () => {
+  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['junior', 'senior', 'thinker']);
   for (const [key, def] of Object.entries(QUIZ_LEVELS)) {
-    assert.ok(def.icon && def.name && def.how, `${key} says what it is`);
+    assert.ok(def.icon && def.name && def.how && def.color, `${key} says what it is`);
     const bank = QUESTION_BANKS[key];
     assert.ok(bank.length > QUIZ_SIZE, `${key} has more questions than a quiz asks`);
     const asked = new Set();
@@ -27,8 +28,9 @@ test('two quizzes, one for each school level, each with questions to spare', () 
       asked.add(q);
     }
   }
-  // The two quizzes ask different things.
-  for (const { q } of QUESTION_BANKS.junior) assert.ok(!QUESTION_BANKS.senior.some((o) => o.q === q), 'each bank its own');
+  // The quizzes ask different things.
+  const all = Object.values(QUESTION_BANKS).flatMap((bank) => bank.map((b) => b.q));
+  assert.equal(new Set(all).size, all.length, 'each bank its own');
 });
 
 test('a quiz asks its bank’s questions, the right answer somewhere among the answers', () => {
@@ -62,7 +64,7 @@ test('a level that is not one asks nothing', () => {
   assert.deepEqual(makeQuiz(undefined, 1), { level: undefined, questions: [] });
 });
 
-test('every answer right pays a coin, or two on the middle school quiz', () => {
+test('every answer right pays a coin, or two on the middle school and thinking-math quizzes', () => {
   assert.equal(quizCoins(0, 'junior'), 0);
   assert.equal(quizCoins(3, 'junior'), 3);
   assert.equal(quizCoins(3, 'senior'), 6);
@@ -70,6 +72,7 @@ test('every answer right pays a coin, or two on the middle school quiz', () => {
   assert.equal(quizCoins(0, 'senior'), 0);
   assert.equal(quizCoins(-2, 'junior'), 0);
   assert.equal(quizCoins(NaN, 'senior'), 0);
+  assert.equal(quizCoins(3, 'thinker'), 6);
 });
 
 test('the quizzes are counted, and earn their XP and stickers', () => {
