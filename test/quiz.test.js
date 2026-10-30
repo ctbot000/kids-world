@@ -18,12 +18,16 @@ test('three quizzes, each with questions to spare', () => {
     const bank = QUESTION_BANKS[key];
     assert.ok(bank.length > QUIZ_SIZE, `${key} has more questions than a quiz asks`);
     const asked = new Set();
-    for (const { q, a } of bank) {
+    for (const { q, a, pic } of bank) {
       assert.equal(typeof q, 'string');
       assert.ok(q.trim().length > 0, 'a question in words');
       assert.equal(a.length, 4, 'four answers to pick from');
       assert.equal(new Set(a).size, 4, 'no two answers alike');
       assert.ok(a.every((answer) => typeof answer === 'string' && answer.trim().length > 0), 'answers in words');
+      if (pic !== undefined) {
+        assert.ok(Array.isArray(pic) && pic.length > 0, 'a picture has rows');
+        assert.ok(pic.every((row) => typeof row === 'string' && row.trim().length > 0), 'each row has tiles');
+      }
       assert.ok(!asked.has(q), 'no question twice');
       asked.add(q);
     }
@@ -51,6 +55,13 @@ test('a quiz asks its bank’s questions, the right answer somewhere among the a
       asked.add(ask.q);
     }
   }
+});
+
+test('a puzzle with a picture keeps its picture in the quiz', () => {
+  const withPics = QUESTION_BANKS.thinker.filter((b) => b.pic);
+  assert.ok(withPics.length >= 10, 'plenty of picture puzzles');
+  const quiz = makeQuiz('thinker', 5, QUESTION_BANKS.thinker.length);
+  for (const ask of quiz.questions) assert.deepEqual(ask.pic, QUESTION_BANKS.thinker.find((b) => b.q === ask.q).pic);
 });
 
 test('the same seed asks the same quiz, and a different seed a different one', () => {

@@ -56,8 +56,11 @@ export const WIN_OFFER_MS = 2600;
 export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 ? Math.floor(right) * (QUIZ_LEVELS[level]?.coins ?? 1) : 0);
 
 // The banks the questions come from. Each: { q: the question, a: its answers,
-// the right one first } — makeQuiz shuffles the answers, so where the right
-// one lands is never where it was written.
+// the right one first, and pic: a picture to look at, if it has one } —
+// makeQuiz shuffles the answers, so where the right one lands is never where
+// it was written. A picture is rows of tiles, split at the spaces: an emoji,
+// a number or a sign each, · for an empty tile, | for a mirror and ❓ for the
+// tile to work out.
 export const QUESTION_BANKS = {
   junior: [
     { q: 'What is 7 + 8?', a: ['15', '13', '14', '16'] },
@@ -149,6 +152,24 @@ export const QUESTION_BANKS = {
     { q: 'How many squares are there on a 3 by 3 board, counting the bigger ones too?', a: ['14', '9', '10', '13'] },
     { q: 'A triangle has a line drawn from one corner to the opposite side. How many triangles can you find?', a: ['3', '2', '4', '1'] },
     { q: 'A hen lays 1 egg a day. How many eggs do 3 hens lay in 3 days?', a: ['9', '3', '6', '1'] },
+    // Puzzles in a picture: what fills the ❓, where a path ends, what a
+    // mirror shows, how a pattern grows.
+    { q: 'The beads go on in the same pattern. Which bead comes next?', pic: ['🔴 🔵 🔵 🔴 🔵 🔵 🔴 ❓'], a: ['🔵', '🔴', '🟡', '🟢'] },
+    { q: 'The arrow keeps turning the same way. Which arrow comes next?', pic: ['⬆️ ➡️ ⬇️ ⬅️ ⬆️ ❓'], a: ['➡️', '⬅️', '⬇️', '⬆️'] },
+    { q: 'Each row and each column has one of every shape. Which shape goes in the ❓?', pic: ['🔺 🟦 🟢 ⭐', '🟢 ⭐ 🔺 🟦', '🟦 🔺 ⭐ 🟢', '⭐ 🟢 🟦 ❓'], a: ['🔺', '🟦', '🟢', '⭐'] },
+    { q: 'Which tile is missing from the pattern?', pic: ['🟥 🟨 🟥', '🟨 🟥 🟨', '🟥 🟨 ❓'], a: ['🟥', '🟨', '🟦', '🟩'] },
+    { q: 'The line in the middle is a mirror. Which bead goes in the ❓?', pic: ['🔴 🟡 🔵 | 🔵 ❓ 🔴'], a: ['🟡', '🔴', '🔵', '🟢'] },
+    { q: 'The line is a mirror. Which arrow do you see in it?', pic: ['↗️ | ❓'], a: ['↖️', '↗️', '↘️', '↙️'] },
+    { q: 'Turn this arrow a quarter turn, the way a clock’s hands go. Which way does it point now?', pic: ['➡️'], a: ['⬇️', '⬆️', '⬅️', '➡️'] },
+    { q: 'The clock shows the time now. What time will it be 5 hours from now?', pic: ['🕒'], a: ['8 o’clock', '7 o’clock', '9 o’clock', '5 o’clock'] },
+    { q: 'Start on the 🐭. Go 2 right, 2 down, then 1 left. Where do you land?', pic: ['🐭 🍎 🍌', '🍇 🍓 🍒', '🥝 🍑 🍋'], a: ['🍑', '🍋', '🍓', '🍒'] },
+    { q: 'How many more cats than dogs are there?', pic: ['🐱 🐶 🐱 🐱', '🐶 🐱 🐱 🐶', '🐱 🐱 🐶 🐱'], a: ['4', '8', '3', '12'] },
+    { q: 'This staircase is 3 steps tall. How many blocks does a staircase 5 steps tall need?', pic: ['🟫 · ·', '🟫 🟫 ·', '🟫 🟫 🟫'], a: ['15', '10', '12', '25'] },
+    { q: 'The squares of dots grow: 1, then 4, then 9. How many dots are in the next one?', pic: ['· · · · · 🔵 🔵 🔵', '· · 🔵 🔵 · 🔵 🔵 🔵', '🔵 · 🔵 🔵 · 🔵 🔵 🔵'], a: ['16', '12', '15', '25'] },
+    { q: 'Both sides of each balance weigh the same. How many 🍌 weigh as much as two 🍍?', pic: ['🍌 🍌 🍌 = 🍍', '🍍 🍍 = ❓'], a: ['6', '5', '3', '9'] },
+    { q: 'Each fruit stands for a number. What is 🍇?', pic: ['🍎 + 🍎 = 10', '🍎 + 🍌 = 8', '🍌 + 🍇 = 7'], a: ['4', '3', '5', '7'] },
+    { q: 'Each number is the two under it added up. What goes in the ❓ at the top?', pic: ['· · ❓ · ·', '· 5 · 7 ·', '2 · 3 · 4'], a: ['12', '10', '14', '9'] },
+    { q: 'The moon grows a little each night. Which comes next?', pic: ['🌑 🌒 🌓 🌔 ❓'], a: ['🌕', '🌑', '🌘', '🌗'] },
   ],
 };
 
@@ -168,7 +189,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
   }
   return {
     level,
-    questions: picks.map(({ q, a }) => {
+    questions: picks.map(({ q, pic, a }) => {
       const choices = [...a];
       // The answers go where they land, and the right one (written first)
       // remembers where that was.
@@ -176,7 +197,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
         const j = Math.floor(rng.next() * (i + 1));
         [choices[i], choices[j]] = [choices[j], choices[i]];
       }
-      return { q, choices, answer: choices.indexOf(a[0]) };
+      return { q, ...(pic && { pic }), choices, answer: choices.indexOf(a[0]) };
     }),
   };
 }

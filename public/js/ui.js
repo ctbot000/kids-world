@@ -6912,7 +6912,7 @@ export class UI {
     const answered = this.quizAt < q.picks.length;
     const answers = h(
       'div',
-      { class: 'quiz-answers', role: 'group', 'aria-label': 'Answers' },
+      { class: `quiz-answers${ask.pic && ask.choices.every((c) => c.length <= 4) ? ' tiles' : ''}`, role: 'group', 'aria-label': 'Answers' },
       ask.choices.map((choice, at) =>
         h(
           'button',
@@ -6933,11 +6933,29 @@ export class UI {
     );
     els.box.replaceChildren(
       h('div', { class: 'quiz-question' }, ask.q),
+      ask.pic ? this.quizPic(ask.pic) : '',
       answers,
       answered ? h('p', { class: 'quiz-verdict' }, q.picks[this.quizAt] === ask.answer ? '✅ Yes, that’s the one!' : '❌ Not this one — the right answer is the one outlined green.') : '',
       answered
         ? h('button', { class: 'big green', type: 'button', onclick: () => { this.sound.play('ui'); this.quizAt++; this.renderQuiz(); } }, this.quizAt === total - 1 ? 'How you did ▶' : 'Next ▶')
         : '',
+    );
+  }
+
+  // A quiz question's picture (quiz.js): its rows of tiles in a grid, · an
+  // empty tile, | a mirror line and ❓ the tile to work out, ringed.
+  quizPic(rows) {
+    const tiles = rows.map((row) => row.split(' ').filter(Boolean));
+    const cols = Math.max(...tiles.map((row) => row.length));
+    return h(
+      'div',
+      { class: `quiz-pic${tiles.length === 1 && cols === 1 ? ' one' : ''}`, role: 'img', 'aria-label': rows.join(' / '), style: `grid-template-columns: repeat(${cols}, auto)` },
+      tiles.flatMap((row) =>
+        Array.from({ length: cols }, (_, at) => {
+          const t = row[at] ?? '·';
+          return h('span', { class: t === '·' ? 'gap' : t === '|' ? 'mirror' : t === '❓' ? 'ask' : /^[\p{N}+=−×]+$/u.test(t) ? 'sign' : '' }, t === '·' || t === '|' ? '' : t);
+        }),
+      ),
     );
   }
 
