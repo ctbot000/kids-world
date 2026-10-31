@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'real-coaster', date: '2026-10-31', icon: '🎢', title: 'A real roller coaster', text: 'Fun parks have a real roller coaster now: up the lift hill, down the drop and round the loop!' },
   { id: 'typing', date: '2026-10-28', icon: '⌨️', title: 'Typing at computers', text: 'Walk up to a 💻 Computer and tap ⌨️ Type: learn to type row by row with the next key lit up, then play 🌧️ Word Rain — type the falling words to pop them before they land!' },
   { id: 'snow', date: '2026-10-28', icon: '❄️', title: 'Snow piles up', text: 'Snow can fall on any island now, not only snowy ones, and it piles up little by little: white patches first, then a thick blanket over everything. When it stops, it slowly melts away.' },
   { id: 'tornado', date: '2026-10-28', icon: '🌪️', title: 'Tornadoes', text: 'Now and then a cloudy sky spins up a 🌪️ tornado that wanders over the island. Hide indoors — or run into it for a wild spin up the funnel, and the new 🌪️ Storm Chaser sticker!' },

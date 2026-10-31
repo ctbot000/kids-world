@@ -1058,6 +1058,69 @@ test('a kick scooter beside you is driven with the Drive button: quicker than yo
   await page.browserContext().close();
 });
 
+test('on a fun park island, the roller coaster is hopped into at its station, goes round by itself turned with its track, holds you in out on the track and lets you off back at the station', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Fun Park Island' });
+  // The page's clock (the island's too: it is in the page), moved on to
+  // where the train is wanted: `t` seconds into its cycle.
+  const clockTo = (t) =>
+    page.evaluate(async (t) => {
+      const { RUN } = await import('/js/shared/coaster.js');
+      window.realNow ??= Date.now;
+      const now = window.realNow();
+      const cycle = RUN.period * 1000;
+      const off = Math.floor(now / cycle) * cycle + t * 1000 - now + cycle;
+      Date.now = () => window.realNow() + off;
+    }, t);
+  await clockTo(0.5);
+  const id = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const c = kw.session.link.room.critters.list.find((o) => o.type === 'coaster');
+    Object.assign(kw.game.me.body, { x: c.x + 1.3, y: c.y, z: c.z, vx: 0, vy: 0, vz: 0 });
+    kw.renderer.view.yaw = Math.PI / 2;
+    kw.game.sendMove(true);
+    return c.id;
+  });
+  await until(page, (id) => window.kidsWorld.game.rideTarget === id && !document.getElementById('ride').hidden, id);
+  assert.match(await page.$eval('#ride', (el) => el.textContent), /🎢 Hop on/);
+  await page.click('#ride');
+  await until(page, (id) => window.kidsWorld.game.aboard?.id === id && window.kidsWorld.session.link.room.critters.get(id).passengers.includes(window.kidsWorld.game.pid), id);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Lap bar down')));
+  // Out on the lift hill: up it, leaning back with the track, and no getting out.
+  const { DWELL } = await page.evaluate(async () => ({ ...(await import('/js/shared/coaster.js')) }));
+  await clockTo(DWELL + 7);
+  // (Long enough for the hop up into the seat to be over.)
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 40));
+  const lift = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const c = kw.session.link.room.critters.get(id);
+    const up = kw.renderer.avatars.get(kw.game.pid).root.up.clone().applyQuaternion(kw.renderer.avatars.get(kw.game.pid).root.quaternion);
+    return { high: kw.game.me.body.y - c.y, upY: up.y };
+  }, id);
+  assert.ok(lift.high > 2, `up the lift (${lift.high.toFixed(1)} up)`);
+  assert.ok(lift.upY < 0.95, `leaning back with the track (${lift.upY.toFixed(2)})`);
+  await page.keyboard.press('KeyQ');
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 5));
+  assert.ok(await page.evaluate(() => Boolean(window.kidsWorld.game.aboard)), 'held in');
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Hold on tight')));
+  // Back at the station: out onto the platform, standing up straight.
+  await clockTo(1);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 10));
+  await page.keyboard.press('KeyQ');
+  await until(page, (id) => !window.kidsWorld.game.aboard && !window.kidsWorld.session.link.room.critters.get(id).passengers.includes(window.kidsWorld.game.pid), id);
+  const off = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const c = kw.session.link.room.critters.get(id);
+    const root = kw.renderer.avatars.get(kw.game.pid).root;
+    return { side: kw.game.me.body.x - c.x, up: kw.game.me.body.y - c.y, x: root.rotation.x, z: root.rotation.z };
+  }, id);
+  assert.ok(off.side > 0.6 && Math.abs(off.up) < 0.1, `on the platform beside it (${JSON.stringify(off)})`);
+  assert.ok(Math.abs(off.x) < 1e-6 && Math.abs(off.z) < 1e-6, 'standing up straight');
+  await page.evaluate(() => (Date.now = window.realNow));
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on a fun park island, the merry-go-round beside you is hopped on with the Hop on button, carries you round, and Q gets you off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Fun Park Island' });

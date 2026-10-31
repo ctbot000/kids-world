@@ -18,7 +18,8 @@ import { HideSeekSim } from './hideseek.js';
 import { RaceSim, raceTrack } from './race.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import * as B from './blocks.js';
-import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinSeat, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { trainAt } from './coaster.js';
+import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
@@ -135,13 +136,15 @@ const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 // first, where they are on it now: the cabin at the bottom of a Ferris
 // wheel, the horse going by on a merry-go-round.
 function nearestSeats(c, s) {
-  const spin = spinAt(c.type);
+  const ms = Date.now();
+  const spin = spinAt(c.type, ms);
   const far = (i) => {
-    const at = spinSeat(c.type, c, i, spin);
+    const at = riderAt(c.type, { x: c.x, y: c.y, z: c.z, yaw: c.yaw, spin, ms }, i + 1);
     return Math.hypot(at.x - s[0], at.y - s[1], at.z - s[2]);
   };
   return c.passengers.map((_, i) => [i, far(i)]).sort((a, b) => a[1] - b[1]).map(([i]) => i);
 }
+
 // Who a logged-in player is, as their pages tell an island (see main.js).
 export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 
@@ -979,6 +982,11 @@ export class Room {
         }
         if (along && !c.passengers.includes(0)) {
           this.notice(conn, `${c.name} is full! Wait for a seat.`, 'info');
+          return;
+        }
+        // The roller coaster's train takes riders on only in the station.
+        if (r.coaster && trainAt().phase !== 'station') {
+          this.notice(conn, 'The train is out on the track! Wait at the station: it is back soon.', 'info');
           return;
         }
         // Close enough to climb on (with some room for being a little behind).

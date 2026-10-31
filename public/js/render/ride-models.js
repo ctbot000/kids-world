@@ -6,8 +6,10 @@
 // shared/critters.js), so wherever a friend sits on it here is where
 // spinSeat says they are. Like the vehicles (vehicle-models.js), each seat
 // is coloured as the T-shirt of whoever sits in it, and the bulbs light up
-// bright when it is tapped.
+// bright when it is tapped. And the roller coaster (shared/coaster.js): its
+// steel track on yellow posts, and its train of three cars going round it.
 import * as THREE from '../../vendor/three.module.js';
+import { frameQuat, MARKS, TRACK, trackAt, TRAIN, trainAt } from '../shared/coaster.js';
 import { CRITTER_INFO, horseBob, spinAt } from '../shared/critters.js';
 import { bakeCached, cone, cylinder, geo, mesh, sphere, toon } from './toon.js';
 import { block, rig, rod } from './vehicle-models.js';
@@ -223,4 +225,135 @@ function ferris(id) {
   return { ...v, height: w.hub + w.r + 1, center: w.hub, pick: w.r + 0.5, shadow: 3.2, seen: 280 };
 }
 
-export const RIDE_BUILDERS = { carousel, ferris };
+// ------------------------------------------------ the roller coaster
+
+// The track as a curve for a tube to follow, `left` and `up` off its middle.
+class TrackCurve extends THREE.Curve {
+  constructor(left, up) {
+    super();
+    this.off = [left, up];
+  }
+
+  getPoint(u, target = new THREE.Vector3()) {
+    const f = trackAt(u * TRACK.len);
+    const [l, h] = this.off;
+    return target.set(f.p[0] + f.left[0] * l + f.up[0] * h, f.p[1] + f.left[1] * l + f.up[1] * h, f.p[2] + f.left[2] * l + f.up[2] * h);
+  }
+}
+
+const tube = (key, left, up, r) => geo(`coaster-${key}`, () => new THREE.TubeGeometry(new TrackCurve(left, up), TRACK.pts.length * 2, r, 8, true));
+
+// A box w x h x d at f's point (plus left and up), turned with the track.
+function onTrack(f, w, h, d, left = 0, up = 0) {
+  const L = new THREE.Vector3(...f.left);
+  const U = new THREE.Vector3(...f.up);
+  const T = new THREE.Vector3(...f.t);
+  const at = new THREE.Vector3(...f.p).addScaledVector(L, left).addScaledVector(U, up);
+  return new THREE.Matrix4().makeBasis(L, U, T).scale(new THREE.Vector3(w, h, d)).setPosition(at);
+}
+
+// The track, standing still: two steel rails, a fat spine under them, ties
+// across every half block, the lift hill's chain, and yellow posts down to
+// the ground wherever nothing of the track is under it.
+function coasterTrack(group) {
+  const box = geo('box', () => new THREE.BoxGeometry(1, 1, 1));
+  for (const side of [-1, 1]) group.add(mesh(tube(`rail${side}`, side * 0.42, 0, 0.06), toon('#e9edf2')));
+  group.add(mesh(tube('spine', 0, -0.3, 0.16), toon('#e8453c')));
+  const ties = [];
+  const chain = [];
+  for (let s = 0; s < TRACK.len; s += 0.5) {
+    const f = trackAt(s);
+    ties.push({ g: box, m: onTrack(f, 0.95, 0.07, 0.12, 0, -0.07) });
+    ties.push({ g: box, m: onTrack(f, 0.09, 0.22, 0.09, 0, -0.2) });
+  }
+  for (let s = MARKS.LIFT; s < MARKS.CREST; s += 0.3) chain.push({ g: box, m: onTrack(trackAt(s), 0.16, 0.04, 0.1, 0, 0.01) });
+  group.add(mesh(bakeCached('coaster-ties', ties), toon('#a3a7ad')));
+  group.add(mesh(bakeCached('coaster-chain', chain), toon('#3a3540')));
+  const posts = [];
+  const n = TRACK.pts.length;
+  for (let i = 0; i < n; i += 10) {
+    const q = TRACK.pts[i];
+    const foot = [q.p[0] - q.up[0] * 0.45, q.p[1] - q.up[1] * 0.45, q.p[2] - q.up[2] * 0.45];
+    if (q.up[1] < 0.35 || foot[1] < 0.6) continue;
+    // Not where it would go through the track lower down.
+    const under = TRACK.pts.some((o, j) => Math.abs(((j - i + n * 1.5) % n) - n / 2) < n / 2 - 16 && o.p[1] < foot[1] - 0.5 && Math.hypot(o.p[0] - foot[0], o.p[2] - foot[2]) < 1.1);
+    if (under) continue;
+    posts.push({ g: cylinder(1, 1, 1, 10), m: new THREE.Matrix4().makeScale(0.15, foot[1], 0.15).setPosition(foot[0], foot[1] / 2, foot[2]) });
+    posts.push({ g: cylinder(1, 1, 1, 10), m: new THREE.Matrix4().makeScale(0.3, 0.16, 0.3).setPosition(foot[0], 0.08, foot[2]) });
+  }
+  group.add(mesh(bakeCached('coaster-posts', posts), toon('#fcd535')));
+}
+
+// One car of the train, facing +z with its floor on the rails: two seats
+// side by side (their pads in v.seatPads, left first), padded sides, a lap
+// bar that comes down over both, and wheels on the rails. The front car has
+// a nose with big headlights.
+function coasterCar(v, k) {
+  const g = new THREE.Group();
+  const paint = toon(['#e8453c', '#fcd535', '#3a73d8'][k % 3]);
+  const white = toon(WHITE);
+  const dark = toon('#3a3540');
+  const top = TRAIN.seat;
+  block(g, dark, -0.5, 0.12, -0.9, 0.5, 0.22, 0.9);
+  block(g, paint, -0.58, 0.22, -0.9, 0.58, top - 0.12, 0.9);
+  for (const side of [-1, 1]) {
+    block(g, paint, side * 0.58 - 0.08, top - 0.12, -0.9, side * 0.58, top + 0.3, 0.75);
+    block(g, white, side * 0.58 - 0.09, top + 0.22, -0.9, side * 0.58 + 0.01, top + 0.3, 0.75);
+    for (const z of [-0.6, 0.6]) {
+      const w = mesh(cylinder(0.11, 0.11, 0.08, 12), dark, side * 0.42, 0.06, z);
+      w.rotation.z = Math.PI / 2;
+      g.add(w);
+    }
+  }
+  // The seats, a back behind each (and the next car's riders behind that).
+  for (const across of [TRAIN.across, -TRAIN.across]) {
+    const pad = seatPad(v);
+    block(g, pad, across - 0.24, top - 0.12, -0.42, across + 0.24, top, 0.1);
+    block(g, pad, across - 0.24, top - 0.12, -0.55, across + 0.24, top + 0.55, -0.42);
+  }
+  block(g, paint, -0.58, top - 0.12, 0.6, 0.58, top + 0.35, 0.9);
+  if (k === 0) {
+    g.add(mesh(sphere(1, 16, 12), paint, 0, top - 0.05, 0.95, 0.58, 0.32, 0.32));
+    for (const side of [-1, 1]) g.add(mesh(sphere(1, 12, 8), v.glow, side * 0.3, top + 0.05, 1.18, 0.1));
+  }
+  // The lap bar, on a pivot behind the riders' knees.
+  const bar = new THREE.Group();
+  bar.position.set(0, top + 0.45, 0.45);
+  g.add(bar);
+  const gold = toon(GOLD);
+  const across = mesh(cylinder(0.04, 0.04, 1.0, 8), gold, 0, 0, 0);
+  across.rotation.z = Math.PI / 2;
+  bar.add(across);
+  for (const x of [-0.48, 0.48]) bar.add(mesh(cylinder(0.035, 0.035, 0.3, 8), gold, x, -0.15, 0.02));
+  v.bars.push(bar);
+  return g;
+}
+
+function coaster() {
+  const v = rig('#fff1a8');
+  v.seatPads = [];
+  v.bars = [];
+  // Track and train hang off the group, not the body: a tap bounces only
+  // the body, and the whole coaster would bounce with it.
+  coasterTrack(v.group);
+  v.cars = Array.from({ length: TRAIN.cars }, (_, k) => {
+    const car = coasterCar(v, k);
+    v.group.add(car);
+    return car;
+  });
+  v.animate = () => {
+    const train = trainAt();
+    v.cars.forEach((car, k) => {
+      const f = trackAt(train.s - k * TRAIN.gap);
+      car.position.set(...f.p);
+      car.quaternion.set(...frameQuat(f));
+    });
+    // The lap bars up at the station, down out on the track.
+    const want = train.phase === 'station' && train.wait > 1.5 ? -1.25 : 0;
+    for (const bar of v.bars) bar.rotation.x += (want - bar.rotation.x) * 0.15;
+  };
+  v.animate();
+  return { ...v, height: 2, center: 1, pick: 1.2, shadow: 0, seen: 300 };
+}
+
+export const RIDE_BUILDERS = { carousel, ferris, coaster };

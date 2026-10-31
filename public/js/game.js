@@ -22,6 +22,7 @@ import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
 import { critterBox, CRITTER_INFO, headTop, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -3286,6 +3287,9 @@ export class Game extends EventTarget {
     entry.passengers[i] = msg.pid;
     const look = this.players.get(msg.pid)?.look;
     entry.model.setPassenger(i, msg.pid && look ? shirtColor(look.shirt) : null);
+    // A friend out of a roller coaster's seat stands up straight again.
+    const left = was && was !== msg.pid ? this.players.get(was)?.avatar : null;
+    if (left) left.root.rotation.set(0, left.root.rotation.y, 0);
     if (msg.pid === this.pid && this.aboard?.id !== entry.id) this.hopOn(entry, msg.seat);
     else if (was === this.pid && msg.pid !== this.pid && this.aboard?.id === entry.id) this.hopOff();
     this.emit('ride');
@@ -3307,6 +3311,8 @@ export class Game extends EventTarget {
     for (const c of this.critters.values()) {
       const r = CRITTER_INFO[c.type]?.ride;
       if (!r || !this.canBoard(c) || !c.model.group.visible || wildDragon(c)) continue;
+      // The roller coaster's train, only while it waits at the station.
+      if (r.coaster && trainAt().phase !== 'station') continue;
       const p = c.model.group.position;
       const d = Math.hypot(p.x - b.x, p.z - b.z) - r.radius;
       const up = b.y - p.y;
@@ -3773,8 +3779,10 @@ export class Game extends EventTarget {
     const driver = this.players.get(entry.rider);
     const who = driver ? `${driver.name || 'A friend'} is driving.` : 'Nobody is driving yet.';
     const how = this.touch ? 'Tap 👋 Get out to get out.' : 'Press Q to get out.';
-    // A fun park's ride goes round by itself.
-    if (info.fixed) this.emit('toast', { icon: info.icon, text: `All aboard the ${info.name}! Round and round you go. ${how}` });
+    // A fun park's ride goes round by itself; the roller coaster's lap bar
+    // comes down.
+    if (info.ride.coaster) this.emit('toast', { icon: info.icon, text: `Lap bar down! The ${info.name} sets off soon. Hold on tight!` });
+    else if (info.fixed) this.emit('toast', { icon: info.icon, text: `All aboard the ${info.name}! Round and round you go. ${how}` });
     else this.emit('toast', { icon: info.icon, text: `All aboard ${name}! ${who} Jump to honk. ${how}` });
     if (driver) this.profile.count('along');
     this.emit('ride');
@@ -3783,6 +3791,14 @@ export class Game extends EventTarget {
   // Getting out of a seat for friends, at once.
   getOut() {
     if (!this.aboard) return;
+    // Out of the roller coaster only at the station.
+    if (CRITTER_INFO[this.aboard.type].ride.coaster && trainAt().phase !== 'station') {
+      if (performance.now() > (this.holdOnAt ?? 0)) {
+        this.holdOnAt = performance.now() + 3000;
+        this.emit('toast', { icon: '🎢', text: 'Hold on tight! You get off back at the station.' });
+      }
+      return;
+    }
     this.sendMove(true);
     this.send({ t: 'critter', op: 'off' });
     this.hopOff();
@@ -3796,6 +3812,9 @@ export class Game extends EventTarget {
     this.aboard = null;
     const b = this.me.body;
     let flying = false;
+    // Upright again, out of the roller coaster.
+    const av = this.players.get(this.pid)?.avatar;
+    if (av) av.root.rotation.set(0, av.root.rotation.y, 0);
     const entry = this.critters.get(a.id);
     if (entry) {
       const g = entry.model.group;
@@ -3830,6 +3849,36 @@ export class Game extends EventTarget {
     }
     a.held = Boolean(input.jump);
     this.me.anim = ANIM.ride;
+    if (CRITTER_INFO[a.type].ride.coaster) this.coasterAlong(a);
+  }
+
+  // On the roller coaster: the camera behind you the way the train goes
+  // (but not swung round in the loop, upside down), the chain clacking up
+  // the lift hill, a whoosh down the drops, and back at the station a word
+  // on getting off or going round again.
+  coasterAlong(a) {
+    const now = performance.now();
+    const train = trainAt();
+    const f = a.frame;
+    if (f && f.up > 0.4 && train.v > 1) {
+      const v = this.renderer.view;
+      const heading = f.yaw + Math.PI;
+      v.yaw += (heading - v.yaw - Math.PI * 2 * Math.floor((heading - v.yaw + Math.PI) / (Math.PI * 2))) * Math.min(1, (now - (a.lastAt ?? now)) / 400);
+    }
+    a.lastAt = now;
+    if (train.phase === 'lift' && now > (a.clackAt ?? 0)) {
+      a.clackAt = now + 280;
+      this.sound.play('clack', { speed: 3 });
+    }
+    if (train.v > 11 && !a.whooshed) {
+      a.whooshed = true;
+      this.sound.play('swish');
+    } else if (train.v < 8) a.whooshed = false;
+    if (train.phase === 'station' && a.away) {
+      this.emit('toast', { icon: '🎢', text: `Back at the station! ${this.touch ? 'Tap 👋 Get out' : 'Press Q'} to get off, or stay on to go again.` });
+      this.profile.count('coasters');
+    }
+    a.away = train.phase !== 'station';
   }
 
   // Everyone riding along in a vehicle, in their seats in it as it is drawn
@@ -3865,7 +3914,11 @@ export class Game extends EventTarget {
         }
         const av = p.avatar;
         av.root.position.set(x, y, z);
-        av.root.rotation.y = seat.yaw;
+        // On the roller coaster, turned with the track: up the lift, down
+        // the drops, head down over the top of the loop.
+        if (seat.q && !(mine && this.aboard.hop)) av.root.quaternion.set(...seat.q);
+        else av.root.rotation.set(0, seat.yaw, 0);
+        if (mine) this.aboard.frame = { yaw: seat.yaw, up: seat.up ?? 1 };
         av.ride = r;
         if (mine) av.update(dt, ANIM.ride, speed);
         av.shadow.visible = false;

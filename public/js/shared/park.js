@@ -1,10 +1,9 @@
 // A fun park island's park, in the middle of the island (worldgen.js makes
 // the ground there flat for it): a square plaza paved in bricks, with
 //
-// - a roller coaster: a loop of rails up on a track of bricks, with a station
-//   at the ground and its cars waiting there (mine carts, riding.js: push
-//   to get going, and they race down its hills and slow up them), up a long
-//   lift hill, along a high straight, down a big drop and over two humps;
+// - a roller coaster (coaster.js): a steel track with a lift hill, a big
+//   drop, a vertical loop and banked turns, its train waiting at a station
+//   under a striped roof, going round by itself;
 // - a Ferris wheel and a merry-go-round, the island's own rides that turn
 //   by themselves for everyone to hop on (critters.js spinSeat);
 // - a fountain in the middle, a bouncy castle, a video arcade with gashapon
@@ -14,6 +13,7 @@
 // Everything is laid out from the plaza's middle (cx, cz): x across, z
 // towards the gate, as `o` offsets.
 import * as B from './blocks.js';
+import { TRACK } from './coaster.js';
 import { placeTemplate, stampByKey } from './stamps.js';
 
 const [RED, ORANGE, YELLOW, , GREEN, , SKY, BLUE, PURPLE, , PINK, WHITE, , , , TAN] = B.TOY_BRICKS;
@@ -28,31 +28,17 @@ export const PARK_BLEND = 7;
 // else grows or is put down: no trees, flowers or rocks of the island's own.
 export const inPark = (park, x, z, margin = 1) => Boolean(park) && Math.max(Math.abs(x - park.cx), Math.abs(z - park.cz)) <= PARK_HALF + margin;
 
-// The roller coaster's loop: round a rectangle, from its station on the
-// east side heading north (-z), each cell's height over the plaza. The
-// corners, and the cells either side of them, are level.
+// The roller coaster's corner of the park, a lawn inside its track; and
+// where the coaster stands (the middle of its station: coaster.js), from
+// the plaza's middle.
 const COASTER = { x0: -22, x1: -10, z0: -19, z1: 19 };
-function coasterPath() {
-  const { x0, x1, z0, z1 } = COASTER;
-  const out = [];
-  // East side, north: the station (z 19 to 7), then the lift hill, one up
-  // every other cell, to 8; along the top to the corner.
-  for (let i = 0; i <= z1 - z0; i++) out.push([x1, z1 - i, i <= 12 ? 0 : Math.min(8, Math.floor((i - 12) / 2))]);
-  // North side, west: the high straight.
-  for (let x = x1 - 1; x >= x0; x--) out.push([x, z0, 8]);
-  // West side, south: the big drop, a hump, another drop, a little hump.
-  const west = [8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 2, 3, 4, 5, 5, 5, 4, 3, 2, 1, 1, 1, 1, 1, 2, 3, 3, 3, 2, 1, 1, 1, 1, 1, 1, 1, 1];
-  for (let j = 0; j < z1 - z0; j++) out.push([x0, z0 + 1 + j, west[j] ?? 1]);
-  // South side, east, back down to the station.
-  for (let x = x0 + 1; x < x1; x++) out.push([x, z1, x - x0 <= 4 ? 1 : 0]);
-  return out;
-}
+const STATION = { ox: -9.5, oz: 11.2 };
 
 // The park, built into the world round (cx, cz) with the plaza at height
-// level. Returns { spawn, rides (the critters it brings: the Ferris wheel,
-// the merry-go-round and the coaster's cars), clear (what vehicles keep
-// clear of, as { x, z, r }), track ([x, y, z] of each rail, in order round
-// the loop) }.
+// level. Returns { spawn, rides (the critters it brings: the roller
+// coaster, the Ferris wheel and the merry-go-round), clear (what vehicles
+// keep clear of, as { x, z, r }), track ([x, y, z] along the coaster's
+// track, every block or so, in order round it) }.
 export function buildPark(world, { cx, cz, level, pal }) {
   const at = (ox, oz) => [cx + ox, cz + oz];
   const set = (ox, y, oz, id) => world.set(cx + ox, y, cz + oz, id);
@@ -77,27 +63,17 @@ export function buildPark(world, { cx, cz, level, pal }) {
   }
 
   // ------------------------------------------------ the roller coaster
-  const track = [];
-  const path = coasterPath();
-  path.forEach(([ox, oz, h], i) => {
-    const y = level + 1 + h;
-    track.push([cx + ox, y, cz + oz]);
-    set(ox, y, oz, B.RAIL);
-    if (h === 0) return;
-    // A brick track under the rails, in the colours of the rainbow round
-    // the loop, on white posts every third cell.
-    set(ox, y - 1, oz, RAINBOW[Math.floor(i / 6) % RAINBOW.length]);
-    if (i % 3 === 0) for (let k = level + 1; k < y - 1; k++) set(ox, k, oz, WHITE);
-  });
-  // The station: a platform beside the cars, under a striped roof on posts.
+  // Its track (a model of its own, not blocks), for keeping clear of.
+  const track = TRACK.pts.filter((_, i) => i % 4 === 0).map(({ p }) => [cx + STATION.ox + p[0], level + 1 + p[1], cz + STATION.oz + p[2]]);
+  // The station: a platform beside the train, under a striped roof on posts.
   for (let oz = 8; oz <= 15; oz++) {
     set(COASTER.x1 + 1, level, oz, B.PLANKS);
-    for (const ox of [COASTER.x1 - 1, COASTER.x1 + 2]) if (oz === 8 || oz === 15) for (let y = level + 1; y <= level + 4; y++) set(ox, y, oz, WHITE);
-    for (let ox = COASTER.x1 - 1; ox <= COASTER.x1 + 2; ox++) set(ox, level + 5, oz, (oz + ox) % 2 ? B.CLOTHS[0] : B.CLOTHS[7]);
+    // (Its posts a block clear of the train either side.)
+    for (const ox of [COASTER.x1 - 2, COASTER.x1 + 2]) if (oz === 8 || oz === 15) for (let y = level + 1; y <= level + 4; y++) set(ox, y, oz, WHITE);
+    // (A roof of bricks, not tent cloth, which would make it a tent to camp out in.)
+    for (let ox = COASTER.x1 - 2; ox <= COASTER.x1 + 2; ox++) set(ox, level + 5, oz, (oz + ox) % 2 ? RED : WHITE);
   }
-  const rides = [];
-  // Its cars, waiting at the station, facing up the line.
-  for (const oz of [13, 11, 9]) rides.push({ type: 'minecart', x: cx + COASTER.x1 + 0.5, y: level + 1, z: cz + oz + 0.5, yaw: Math.PI });
+  const rides = [{ type: 'coaster', x: cx + STATION.ox, y: level + 1, z: cz + STATION.oz, yaw: 0 }];
 
   // ------------------------------------------------ the rides
   // The Ferris wheel at the back, facing the gate, and the merry-go-round
@@ -128,7 +104,8 @@ export function buildPark(world, { cx, cz, level, pal }) {
   for (let k = -H + 2; k <= H - 2; k += 6) {
     for (const [ox, oz] of [[k, -H + 1], [k, H - 1], [-H + 1, k], [H - 1, k]]) {
       const [x, z] = at(ox, oz);
-      if (world.get(x, level + 1, z) === B.AIR && world.get(x, level + 2, z) === B.AIR && world.get(x, level, z) !== pal.top) place(placeTemplate(lamp, x, level + 1, z, 0));
+      const byTrack = track.some(([tx, , tz]) => Math.hypot(tx - x - 0.5, tz - z - 0.5) < 2);
+      if (!byTrack && world.get(x, level + 1, z) === B.AIR && world.get(x, level + 2, z) === B.AIR && world.get(x, level, z) !== pal.top) place(placeTemplate(lamp, x, level + 1, z, 0));
     }
   }
 
@@ -142,7 +119,7 @@ export function buildPark(world, { cx, cz, level, pal }) {
     { x: cx + 18.5, z: cz - 6.5, r: 4 },
     { x: cx + 18, z: cz + 12, r: 7 },
     { x: cx - 5, z: cz + 11, r: 2 },
-    ...track.map(([x, , z]) => ({ x: x + 0.5, z: z + 0.5, r: 1 })),
+    ...track.map(([x, , z]) => ({ x, z, r: 1.5 })),
   ];
   return { spawn, rides, clear, track };
 }

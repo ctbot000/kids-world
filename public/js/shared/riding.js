@@ -545,6 +545,8 @@ export function getOffAt(world, ride) {
   // Off a fun park's ride, out in front of it (a Ferris wheel's left and
   // right are under its wheel).
   if (r.spin) ways.unshift(ways.pop());
+  // Off the roller coaster onto its station's platform, on its right.
+  if (r.coaster) ways.unshift(ways.splice(1, 1)[0]);
   for (const [dx, dz] of ways) {
     for (const k of [1, 1.5]) {
       const x = b.x + dx * out * k;

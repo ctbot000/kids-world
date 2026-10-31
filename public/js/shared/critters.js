@@ -31,12 +31,13 @@
 import * as B from './blocks.js';
 import { bodyOverlapsSolid, makeBody, pushOut, shove, stepBody, unstick } from './physics.js';
 import { fightOf, isWild, MOODS, packFight } from './dragon.js';
+import { frameQuat, seatOnTrack, TRAIN, trainAt } from './coaster.js';
 import { Rng } from './rng.js';
 
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -155,6 +156,10 @@ export const CRITTER_INFO = {
   // wheel `r` round its hub, `hub` high, `hang` under the rim.
   carousel: { name: 'Merry-Go-Round', icon: '🎠', speed: 0, swims: false, flies: false, vehicle: 'ride', fixed: true, ride: { spin: 0.55, bob: 0.22, seat: 1.05, radius: 3.5, height: 4.8, float: 0, spread: 0.6, reach: 0.9, seats: ring(8, 2.45) }, names: ['Twirly', 'Merry', 'Whirligig', 'Galloping Gertie', 'Round-and-Round', 'Calliope', 'Carousella', 'Dizzy Daisy'] },
   ferris: { name: 'Ferris Wheel', icon: '🎡', speed: 0, swims: false, flies: false, vehicle: 'ride', fixed: true, ride: { spin: 0.16, wheel: { r: 6, hub: 8.2, hang: 1.7 }, seat: 0.55, radius: 1.9, height: 15, float: 0, spread: 0.12, reach: 1.3, seats: ring(8, 6) }, names: ['Big Wheel', 'Skyview', 'Loop-de-Loop', 'Starwheel', 'Up-and-Over', 'Cloudnine', 'Sunwheel', 'Hightop'] },
+  // The roller coaster (coaster.js): its train runs round its track by the
+  // clock, and everyone hops in while it waits at the station (its middle,
+  // where it stands). seats: two to a car, the front car first.
+  coaster: { name: 'Roller Coaster', icon: '🎢', speed: 0, swims: false, flies: false, vehicle: 'ride', fixed: true, ride: { coaster: true, seat: TRAIN.seat, radius: 0.5, height: 2.4, float: 0, spread: 0.12, reach: 1.3, seats: Array.from({ length: TRAIN.cars * 2 }, (_, i) => [i % 2 ? -TRAIN.across : TRAIN.across, -Math.floor(i / 2) * TRAIN.gap]) }, names: ['Thunderbolt', 'Loop-de-Loop', 'Big Dipper', 'Screamer', 'Rocket', 'Whirlwind', 'Zoomer', 'Corkscrew'] },
 };
 // Riding (ride, above): where the rider sits (seat: the top of its back, over
 // its feet, or over its middle for a dolphin or the whale; z: how far that is
@@ -260,6 +265,7 @@ export const HIPS = 0.25;
 export function riderAt(type, m, seat = 0) {
   const r = CRITTER_INFO[type].ride;
   if (r.spin) return spinSeat(type, m, Math.max(0, seat - 1), m.spin ?? spinAt(type));
+  if (r.coaster) return coasterSeat(m, Math.max(0, seat - 1), m.ms);
   const [across, z] = seat > 0 && r.seats?.[seat - 1] ? r.seats[seat - 1] : [0, r.z ?? 0];
   const sin = Math.sin(m.yaw);
   const cos = Math.cos(m.yaw);
@@ -294,6 +300,20 @@ export function spinSeat(type, m, i, spin) {
   const c = Math.cos(m.yaw + spin);
   const angle = Math.atan2(across, z) + m.yaw + spin;
   return { x: m.x + s * z + c * across, y: m.y + r.seat + horseBob(r, i, spin) - HIPS, z: m.z + c * z - s * across, yaw: angle + Math.PI / 2 };
+}
+
+// Where someone riding in seat i (0 on) of the roller coaster standing at
+// m = { x, y, z, yaw } is at a moment (ms, by the clock): their feet, the way
+// they face (yaw, flat), and how they are turned (q, a quaternion: up the
+// lift, down the drop, head down over the top of the loop).
+export function coasterSeat(m, i, ms = Date.now()) {
+  const f = seatOnTrack(trainAt(ms).s, i, HIPS);
+  const sin = Math.sin(m.yaw);
+  const cos = Math.cos(m.yaw);
+  const [x, y, z] = f.p;
+  const tx = f.t[0] * cos + f.t[2] * sin;
+  const tz = f.t[2] * cos - f.t[0] * sin;
+  return { x: m.x + x * cos + z * sin, y: m.y + y, z: m.z + z * cos - x * sin, yaw: Math.atan2(tx, tz), q: frameQuat(f, m.yaw), up: f.up[1] };
 }
 
 // How many friends a vehicle takes along, besides its driver.
