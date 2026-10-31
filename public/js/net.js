@@ -22,6 +22,9 @@ const SILENCE_MS = 16000;
 const CONNECT_TIMEOUT_MS = 20000;
 const PEER_START_TIMEOUT_MS = 15000;
 const OFFLINE_RETRY_MS = 3000;
+// An island not open to friends that the keeper's admin page asked to watch
+// (shared/watch.js) stays reachable this long after its last watcher goes.
+const WATCH_IDLE_MS = 2 * 60 * 1000;
 const MAX_RETRY_MS = 10000;
 const RECONNECT_CONFIRM_MS = 5000;
 // PeerServer holds undeliverable messages for 5 s before reporting them, once each.
@@ -113,6 +116,10 @@ export class HostLink extends Link {
     this.retryDelay = 1000;
     this.retryTimer = 0;
     this.closed = false;
+    // Not open to friends, but reachable for the keeper's admin page to
+    // watch it unseen (openToWatch), until this long after its last watcher.
+    this.watched = false;
+    this.watchedAt = 0;
     // Ten times a second, even while this tab is in the background.
     this.stopTicking = ticker(100, () => this.tick());
   }
@@ -131,21 +138,51 @@ export class HostLink extends Link {
     else this.setStatus('offline', 'Playing alone');
   }
 
-  // Open the island to friends, or close it again, while playing.
+  // Open the island to friends, or close it again, while playing. Anyone
+  // watching it from the keeper's admin page stays.
   setOnline(online) {
     if (online === this.online) return;
     this.online = online;
-    if (online) this.connect();
-    else {
-      for (const guest of [...this.guests.values()]) this.dropGuest(guest);
-      const peer = this.peer;
-      this.peer = null;
-      clearTimeout(this.retryTimer);
-      this.retryTimer = 0;
-      if (peer && !peer.disconnected) peer.disconnect();
-      peer?.destroy();
+    if (online) {
+      for (const guest of this.guests.values()) if (guest.adapter) guest.adapter.watchOnly = false;
+      if (!this.peer) this.connect();
+      else if (this.peer.open) this.setStatus('online', 'Friends can visit with the code');
+      else this.setStatus('connecting', 'Opening your island to friends…');
+    } else {
+      for (const guest of [...this.guests.values()]) if (!this.watcher(guest)) this.dropGuest(guest);
+      for (const guest of this.guests.values()) if (guest.adapter) guest.adapter.watchOnly = true;
+      if (!this.watched) this.hangUpPeer();
       this.setStatus('offline', 'Playing alone');
     }
+  }
+
+  // The keeper's admin page wants to watch this island (shared/watch.js):
+  // open to friends, it already can; if not, it is reachable for a while
+  // for watchers only, with nothing on this page to say so.
+  openToWatch() {
+    if (this.closed) return;
+    this.watched = true;
+    this.watchedAt = Date.now();
+    if (!this.peer) this.connect();
+  }
+
+  watcher(guest) {
+    return this.room.clients.get(guest.adapter)?.watch === true;
+  }
+
+  hangUpPeer() {
+    const peer = this.peer;
+    this.peer = null;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = 0;
+    if (peer && !peer.disconnected) peer.disconnect();
+    peer?.destroy();
+  }
+
+  // Only an island open to friends says how its connection is doing; one
+  // reachable just for watchers keeps quiet about it.
+  say(state, text) {
+    if (this.online) this.setStatus(state, text);
   }
 
   send(msg) {
@@ -162,15 +199,20 @@ export class HostLink extends Link {
     for (const guest of [...this.guests.values()]) {
       if (now - guest.lastSeen > SILENCE_MS) this.dropGuest(guest);
     }
+    if (this.watched && this.guests.size) this.watchedAt = now;
+    if (this.watched && now - this.watchedAt > WATCH_IDLE_MS) {
+      this.watched = false;
+      if (!this.online) this.hangUpPeer();
+    }
   }
 
   connect() {
     if (this.closed) return;
     if (typeof Peer === 'undefined') {
-      this.setStatus('failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.');
+      this.say('failed', 'Friends cannot visit right now (the connection helper did not load). You can still play alone.');
       return;
     }
-    if (this.state === 'idle' || this.state === 'offline') this.setStatus('connecting', 'Opening your island to friends…');
+    if (this.state === 'idle' || this.state === 'offline') this.say('connecting', 'Opening your island to friends…');
     const peer = new Peer(peerIdFor(this.code), this.peerOptions);
     this.peer = peer;
     peer.on('open', () => {
@@ -178,7 +220,7 @@ export class HostLink extends Link {
       this.retryDelay = 1000;
       this.idTakenSince = 0;
       this.everOnline = true;
-      this.setStatus('online', 'Friends can visit with the code');
+      this.say('online', 'Friends can visit with the code');
     });
     peer.on('connection', (conn) => {
       if (peer === this.peer && !this.closed) this.addGuest(conn);
@@ -195,7 +237,7 @@ export class HostLink extends Link {
 
   recover(peer) {
     if (this.closed || peer !== this.peer) return;
-    if (this.state !== 'id-taken') this.setStatus('reconnecting', 'Reconnecting…');
+    if (this.state !== 'id-taken') this.say('reconnecting', 'Reconnecting…');
     if (this.retryTimer) return;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = 0;
@@ -216,7 +258,7 @@ export class HostLink extends Link {
       if (this.closed || peer !== this.peer || peer.open || peer.disconnected || peer.destroyed) return;
       if (peer.socket?._wsOpen?.()) {
         this.retryDelay = 1000;
-        this.setStatus('online', 'Friends can visit with the code');
+        this.say('online', 'Friends can visit with the code');
       } else {
         peer.destroy();
       }
@@ -227,6 +269,9 @@ export class HostLink extends Link {
     if (this.closed || peer !== this.peer) return;
     switch (error.type) {
       case 'unavailable-id': {
+        // Reachable just for watchers, the island never takes a new code:
+        // it tries again (see recover).
+        if (!this.online) break;
         // A reopened island keeps its code, but PeerServer holds a dropped
         // session for up to 90 s; if the code is still taken after that,
         // someone else has it, and the island takes a new one.
@@ -236,7 +281,7 @@ export class HostLink extends Link {
           this.idTakenSince = 0;
           this.dispatchEvent(new CustomEvent('code', { detail: this.room.code }));
         } else {
-          this.setStatus('id-taken', 'Getting your island ready for visitors…');
+          this.say('id-taken', 'Getting your island ready for visitors…');
         }
         break;
       }
@@ -252,7 +297,7 @@ export class HostLink extends Link {
       case 'server-error':
       case 'socket-error':
       case 'socket-closed':
-        if (this.state !== 'id-taken') this.setStatus('reconnecting', 'Looking for the internet… trying again.');
+        if (this.state !== 'id-taken') this.say('reconnecting', 'Looking for the internet… trying again.');
         break;
       default:
       // peer-unavailable, webrtc: about one guest's connection, which cleans up on its own.
@@ -265,7 +310,7 @@ export class HostLink extends Link {
     const peer = this.peer;
     this.peer = null;
     peer?.destroy();
-    this.setStatus('failed', text);
+    this.say('failed', text);
   }
 
   addGuest(conn) {
@@ -281,6 +326,8 @@ export class HostLink extends Link {
           if (conn.open) sendText(conn, text);
         },
         close: () => setTimeout(() => this.dropGuest(guest), 200),
+        // Not open to friends: only the admin page's watchers come in.
+        watchOnly: !this.online,
       };
       this.guests.set(conn, guest);
       this.room.attach(guest.adapter);

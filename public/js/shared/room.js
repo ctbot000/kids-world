@@ -423,7 +423,11 @@ export class Room {
     if (!c || !msg || typeof msg !== 'object' || typeof msg.t !== 'string') return;
     if (!this.allow(c)) return;
     try {
-      if (c.watch) {
+      if (conn.watchOnly && !c.watch && msg.t !== 'watch' && msg.t !== 'ping') {
+        // A page connected only for the admin page to watch it (net.js):
+        // nobody else comes in that way.
+        this.sendTo(conn, { t: 'error', code: 'locked', text: 'This island is not open to visitors right now.' });
+      } else if (c.watch) {
         // Watching unseen (watch.js): only its pings, and its goodbye.
         if (msg.t === 'ping') this.sendTo(conn, { t: 'pong' });
         else if (msg.t === 'leave') {
@@ -1247,8 +1251,10 @@ export class Room {
 
   // The island on the list of open islands (see listing.js), or null while
   // it is closed to new visitors.
-  listing() {
-    if (this.settings.locked) return null;
+  // anyway: one closed to new visitors too (for the keeper's admin page,
+  // which watches any island: shared/watch.js).
+  listing({ anyway = false } = {}) {
+    if (this.settings.locked && !anyway) return null;
     const w = this.world;
     return {
       code: this.code,

@@ -18,7 +18,7 @@
 // login (when, how often, from where and on what), to clear; and what is on every TV in the game (a YouTube video, or
 // a video on this computer, which the admin page itself plays to them: see
 // shared/broadcast.js); screen time, every player locked at once (see
-// shared/lock.js); the islands open now, each to watch unseen (see
+// shared/lock.js); the islands being played now, each to watch unseen (see
 // shared/watch.js); and CTB, the company whose workers do real work on
 // this project (ctb.js): its settings, its workers and what they are doing,
 // its task board (GitHub issues) with a form for a new task, the workers'
@@ -241,9 +241,10 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
       return true;
     }
     if (pathname === '/admin/api/islands') {
-      // The islands open now, each with a ticket to watch it unseen (POST).
+      // The islands being played now, open to friends or not (hidden), each
+      // with a ticket to watch it unseen (POST).
       if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
-      else if (req.method === 'GET') json(res, 200, { islands: keeper.openIslands() });
+      else if (req.method === 'GET') json(res, 200, { islands: keeper.allIslands() });
       else res.writeHead(405, { Allow: 'GET' }).end();
       return true;
     }
@@ -255,7 +256,7 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
         const ticket = await keeper.watchTicket(watch[1]);
         // The islands are peer to peer, through the keeper's signaling server.
         if (ticket) json(res, 200, { code: watch[1], ticket, ...(keeper.signal ? { signal: keeper.signal } : {}) });
-        else json(res, 404, { error: 'That island is not open now.' });
+        else json(res, 404, { error: 'That island is not being played now.' });
       }
       return true;
     }

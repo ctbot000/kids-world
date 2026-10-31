@@ -1563,3 +1563,7 @@ button.link:hover {
 .island-list li {
   padding: 10px 0;
 }
+
+.island-open .badge {
+  flex: none;
+}

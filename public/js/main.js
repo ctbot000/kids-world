@@ -524,11 +524,16 @@ setInterval(() => {
 // The island you host peer to peer is on the keeper's list of open islands
 // while friends can visit it: how many are on it, whether it has a passcode
 // and so on, as they change. (On the dedicated server, the server lists it.)
+// Played alone, or closed to new visitors, it is on it hidden, for the
+// keeper's admin page alone, which can watch it unseen (shared/watch.js).
 function updateListing() {
-  const link = session?.mode === 'host' ? session.link : null;
-  const open = link && session.started && link.online && link.state === 'online';
-  keeper.setListing(open ? link.room.listing() : null);
+  const link = session?.mode === 'host' && session.started ? session.link : null;
+  const open = link?.online && link.state === 'online' ? link.room.listing() : null;
+  keeper.setListing(open ?? (link ? { ...link.room.listing({ anyway: true }), hidden: true } : null));
 }
+keeper.addEventListener('watch', (e) => {
+  if (session?.mode === 'host' && session.started && session.game.code === e.detail.code) session.link.openToWatch();
+});
 setInterval(updateListing, hurried(3000));
 window.addEventListener('pagehide', () => saveIsland());
 document.addEventListener('visibilitychange', () => {

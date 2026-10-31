@@ -1954,6 +1954,10 @@ export class Keeper extends EventEmitter {
         // Only an island of the keeper's own computer is one to come to
         // without logging in (the CTB island): never a page's.
         delete island.watch;
+        // One not open to friends (played alone, or closed to new
+        // visitors) is told too, hidden: on nobody's list but the admin
+        // page's, to watch it unseen (shared/watch.js).
+        if (msg.island.hidden === true) island.hidden = true;
         for (const other of this.conns.values()) if (other !== conn && other.island?.code === island.code) other.island = null;
         conn.island = island;
         this.reply(conn, { t: 'kept', what: 'open-island', code: island.code });
@@ -2107,6 +2111,12 @@ export class Keeper extends EventEmitter {
   // The list of open islands: those whose hosts' pages are connected and
   // said so, and those this process hosts.
   openIslands() {
+    return this.allIslands().filter((i) => !i.hidden);
+  }
+
+  // Every island the keeper knows of now, the hidden ones (not open to
+  // friends) too, as the admin page lists them.
+  allIslands() {
     const pages = [...this.conns.values()].filter((c) => c.island && !c.closed && !this.hosted.has(c.island.code)).map((c) => c.island);
     const ours = [...this.hosted.values()].map((listing) => cleanListing(listing())).filter(Boolean);
     return sortListings([...pages, ...ours]);
@@ -2123,8 +2133,12 @@ export class Keeper extends EventEmitter {
 
   // A ticket for the admin page to watch an open island unseen (watch.js),
   // or null when no island with that code is open.
+  // One not open to friends: its page is asked to be reachable for a while,
+  // for watchers only (net.js openToWatch).
   async watchTicket(code) {
-    if (!isValidCode(code) || !this.openIslands().some((i) => i.code === code)) return null;
+    if (!isValidCode(code) || !this.allIslands().some((i) => i.code === code)) return null;
+    const page = [...this.conns.values()].find((c) => c.island?.code === code && c.island.hidden && !c.closed);
+    if (page) this.reply(page, { t: 'watch-news', code });
     await this.loadKey();
     // The island checks it by its own clock, a real one.
     return signWatch(this.privateKey, code);

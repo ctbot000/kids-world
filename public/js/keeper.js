@@ -518,6 +518,8 @@ export class KeeperClient extends EventTarget {
 
   // Puts the island this page hosts on the list of open islands (a listing,
   // see shared/listing.js), or takes it off (null), whether or not copies go.
+  // One not open to friends is a listing marked hidden: the keeper lists it
+  // for its admin page alone, to watch it unseen (shared/watch.js).
   // While it is on it, the connection stays open, and comes back if it breaks.
   setListing(island) {
     if (!this.config || this.state === 'gone') return;
@@ -868,6 +870,12 @@ export class KeeperClient extends EventTarget {
     // What is on every TV now (or nothing): news, unasked.
     if (msg.t === 'tv-news') {
       if (this.state === 'ready') this.heardTv(msg.tv);
+      return;
+    }
+    // The admin page wants to watch the island hosted here, unseen
+    // (shared/watch.js): a 'watch' event, with its code.
+    if (msg.t === 'watch-news') {
+      if (this.state === 'ready' && msg.code === this.listing?.code) this.emit('watch', { code: msg.code });
       return;
     }
     // News of the ranking, unasked: never the answer to what is waiting.

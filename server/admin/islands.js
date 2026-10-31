@@ -1,7 +1,8 @@
-// The admin page's Islands tab: the islands open now (the keeper's list,
-// the one pages see in Visit a friend), each with 👁️ Watch, which opens the
-// game in a new tab watching it unseen (see public/js/shared/watch.js):
-// nobody there sees or hears of it.
+// The admin page's Islands tab: every island being played now that the
+// keeper knows of: those open to friends (the list pages see in Visit a
+// friend) and, hidden from that list, those played alone or closed to new
+// visitors. Each has 👁️ Watch, which opens the game in a new tab watching
+// it unseen (see public/js/shared/watch.js): nobody there sees or hears of it.
 import { prettyCode } from '/js/shared/codes.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
@@ -21,6 +22,7 @@ function islandRow(h, island, watch) {
       h('b', {}, island.name),
       h('span', { class: 'muted' }, [`Code ${prettyCode(island.code)}`, `${island.players} of ${island.max} playing`, island.passcode ? '🔒 passcode' : '', kind, stage].filter(Boolean).join(' · ')),
     ),
+    island.hidden ? h('span', { class: 'badge', title: 'Played alone or closed to new visitors: not on the list friends see' }, 'Not open to friends') : null,
     h('button', { type: 'button', class: 'primary', 'aria-label': `Watch ${island.name} unseen`, onclick: () => watch(island) }, '👁️ Watch'),
   );
 }
@@ -48,7 +50,7 @@ export function setUpIslands({ h }) {
       else location.href = url.href;
     } catch {
       tab?.close();
-      alert(`${island.name} is not open any more.`);
+      alert(`${island.name} is not being played any more.`);
     }
   }
 
@@ -68,8 +70,8 @@ export function setUpIslands({ h }) {
     if (key === shown) return;
     shown = key;
     $('islands').replaceChildren(
-      h('p', { class: 'muted' }, 'The islands open now. 👁️ Watch flies over one in a new tab, unseen: nobody there sees you, hears of you or counts you, and you touch nothing.'),
-      islands.length ? h('ol', { class: 'recent island-list card' }, ...islands.map((i) => islandRow(h, i, watch))) : h('p', { class: 'empty' }, 'No island is open right now.'),
+      h('p', { class: 'muted' }, 'The islands being played now, open to friends or not. 👁️ Watch flies over one in a new tab, unseen: nobody there sees you, hears of you or counts you, and you touch nothing.'),
+      islands.length ? h('ol', { class: 'recent island-list card' }, ...islands.map((i) => islandRow(h, i, watch))) : h('p', { class: 'empty' }, 'No island is being played right now.'),
     );
   };
 }

@@ -7,6 +7,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
+import { Reassembler, sendText } from '../public/js/shared/framing.js';
+import { KEEPER_VERSION } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { canWatch, WATCH_MS } from '../public/js/shared/watch.js';
 import { adminHandler } from '../server/admin.js';
@@ -141,6 +143,94 @@ test('an island turns away a watcher without a good ticket', async () => {
     assert.equal(await keeper.watchTicket('654321'), null, 'no ticket for an island not open');
     assert.equal(await canWatch(CODE, ticket, Date.now() + WATCH_MS + 1000), false, 'nor once it has run out');
     assert.ok(await canWatch(CODE, ticket));
+  } finally {
+    room.close();
+    await keeper.stop();
+  }
+});
+
+// A page connected to the keeper, as in lock.test.js: say() sends it a
+// message, and heard() is everything the keeper sent it.
+async function page(keeper, device) {
+  const replies = [];
+  const pieces = new Reassembler();
+  const conn = keeper.connection({ id: `page-${Math.random()}`, peer: 'page', pc: { close() {} } });
+  conn.dc = {
+    isOpen: () => !conn.closed,
+    sendMessage: (piece) => {
+      const text = pieces.accept(piece);
+      if (text != null) replies.push(JSON.parse(text));
+    },
+    close() {},
+  };
+  keeper.conns.set(conn.id, conn);
+  const say = async (msg) => {
+    const parts = [];
+    sendText({ send: (part) => parts.push(part) }, JSON.stringify(msg));
+    for (const part of parts) await keeper.receive(conn, part);
+    return replies.at(-1);
+  };
+  await say({ t: 'hello', v: KEEPER_VERSION, nonce: 'ab'.repeat(16) });
+  await say({ t: 'me', device });
+  return { say, heard: () => replies };
+}
+
+test('an island not open to friends is on the admin page’s list alone, and its page is asked to let a watcher in', async () => {
+  const { keeper } = await keeperHere();
+  try {
+    const alone = await page(keeper, 'a1'.repeat(16));
+    const open = await page(keeper, 'b2'.repeat(16));
+    assert.equal((await alone.say({ t: 'open-island', island: { ...listing, hidden: true } })).what, 'open-island');
+    await open.say({ t: 'open-island', island: { ...listing, code: '222333', name: 'Open Bay' } });
+    assert.deepEqual(
+      keeper.openIslands().map((i) => i.name),
+      ['Open Bay'],
+      'players never see it',
+    );
+    assert.deepEqual(
+      keeper.allIslands().map((i) => [i.name, i.hidden === true]),
+      [
+        ['Open Bay', false],
+        ['Sunny Cove', true],
+      ],
+    );
+    assert.ok(await keeper.watchTicket(CODE));
+    assert.deepEqual(alone.heard().at(-1), { t: 'watch-news', code: CODE }, 'its page is asked to open up for watching');
+    assert.ok(await keeper.watchTicket('222333'));
+    assert.equal(
+      open.heard().some((m) => m.t === 'watch-news'),
+      false,
+      'one open to friends already lets watchers in',
+    );
+  } finally {
+    await keeper.stop();
+  }
+});
+
+test('a connection only for watchers lets a watcher in and nobody else', async () => {
+  const { keeper } = await keeperHere();
+  keeper.listIsland(CODE, () => listing);
+  const room = new Room({ code: CODE, theme: 'sunny', name: 'Sunny Cove', seed: 42 });
+  try {
+    const owner = joinAs(room, 'Happy Panda');
+    const sneak = conn();
+    sneak.watchOnly = true;
+    room.attach(sneak);
+    room.receive(sneak, { t: 'join', protocol: PROTOCOL, name: 'Sneaky', look: {} });
+    assert.equal(sneak.last('welcome'), undefined);
+    assert.equal(sneak.last('error').code, 'locked');
+    assert.equal(room.online, 1);
+    const watcher = conn();
+    watcher.watchOnly = true;
+    room.attach(watcher);
+    room.receive(watcher, { t: 'watch', ticket: await keeper.watchTicket(CODE) });
+    await new Promise((done) => setTimeout(done, 50));
+    assert.equal(watcher.last('welcome').you, -1);
+    room.receive(owner, { t: 'm', s: [10, 12, 10, 0, 1, 0] });
+    assert.ok(watcher.last('m'));
+    room.settings.locked = true;
+    assert.equal(room.listing(), null, 'closed to new visitors: on no list friends see');
+    assert.equal(room.listing({ anyway: true }).code, CODE, 'but the admin page’s');
   } finally {
     room.close();
     await keeper.stop();

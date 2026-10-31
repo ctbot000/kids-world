@@ -6432,3 +6432,67 @@ test('the admin page watches an island unseen: it flies over it in a new tab, se
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('the admin page watches an island played alone too: the page opens up for it, saying nothing, and for nobody else', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${games.address().port}`;
+  const url = `${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const host = await openPlayer(url, { name: 'Sunny Otter' });
+  const friend = await openPlayer(url, { name: 'Brave Fox' });
+  const context = await browser.createBrowserContext();
+  try {
+    await makeIsland(host, { online: false, theme: 'Flat Land', name: 'Lonely Bay' });
+    const code = await host.evaluate(() => window.kidsWorld.game.code);
+    await eventually(() => keeper.allIslands().some((i) => i.code === code && i.hidden));
+    assert.equal(
+      keeper.openIslands().some((i) => i.code === code),
+      false,
+      'on no list friends see',
+    );
+    const admin = await context.newPage();
+    admin.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+    await admin.goto(`${origin}/admin/#islands`);
+    await until(admin, () => [...document.querySelectorAll('#islands .island-open')].some((el) => el.querySelector('b').textContent === 'Lonely Bay' && el.querySelector('.badge')?.textContent === 'Not open to friends'));
+
+    const opened = context.waitForTarget((t) => t.url().includes('watch='));
+    await clickButton(admin, '👁️ Watch', '#islands');
+    const watcher = await (await opened).page();
+    watcher.on('pageerror', (error) => pageErrors.push(`watcher: ${error.message}`));
+    await inGame(watcher);
+    assert.deepEqual(
+      await watcher.evaluate(() => [window.kidsWorld.game.pid, window.kidsWorld.game.world.name, [...window.kidsWorld.game.players.values()].map((p) => p.name)]),
+      [-1, 'Lonely Bay', ['Sunny Otter']],
+    );
+    // Its player sees nothing of it: still playing alone.
+    assert.deepEqual(
+      await host.evaluate(() => ({ online: window.kidsWorld.session.link.online, state: window.kidsWorld.session.link.state, status: document.getElementById('status').textContent, players: window.kidsWorld.game.players.size })),
+      { online: false, state: 'offline', status: '', players: 1 },
+    );
+
+    // A friend with its code gets nowhere.
+    await friend.evaluate((code) => window.kidsWorld.ui.handlers.visit(code), code);
+    await until(friend, () => [...document.querySelectorAll('#toasts .toast')].some((t) => t.textContent.includes('not open to visitors')));
+    assert.equal(await host.evaluate(() => window.kidsWorld.game.players.size), 1);
+
+    // Opened to friends while watched: the watcher stays, and friends can come.
+    await host.evaluate(() => window.kidsWorld.session.link.setOnline(true));
+    await until(host, () => window.kidsWorld.session.link.state === 'online');
+    await friend.evaluate((code) => window.kidsWorld.ui.handlers.visit(code), code);
+    await inGame(friend);
+    await until(watcher, () => window.kidsWorld.game.players.size === 2);
+    assert.equal(await watcher.evaluate(() => window.kidsWorld.session.link.state), 'online');
+    assert.equal(await host.evaluate(() => window.kidsWorld.game.players.size), 2, 'the watcher is not one of them');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+    await host.browserContext().close();
+    await friend.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
