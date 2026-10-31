@@ -788,6 +788,9 @@ export class Terrain {
     model.userData.feed();
     return true;
   }
+
+  // Chunks lost in the fog are not drawn at all, which also skips their
+  // animation: their fish stop swimming where no one can see them.
   updateVisibility(eye, fogFar) {
     const far = fogFar + CHUNK * 1.5;
     for (const chunk of this.chunks.values()) {

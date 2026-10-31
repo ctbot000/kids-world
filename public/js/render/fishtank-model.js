@@ -134,6 +134,9 @@ function feeder(materials, kind, fish, homes, top, nibbleY) {
     m.userData.shared = true;
     m.matrixAutoUpdate = false;
     m.scale.set(1.5, 0.5, 1.5);
+    // Built already on the water, hidden until a pinch comes.
+    m.position.set(f.x, top, f.z);
+    m.updateMatrix();
     return { ...f, m, eaten: false };
   });
   // The flake each fish has its eye on, and when the feeding began (in the
@@ -331,7 +334,7 @@ function wave(leaves, time) {
 
 // A whole tank, `kind` 'fish-tank' or 'fish-bowl', in the materials given
 // (tankMaterials). group.userData.feed() sprinkles a pinch of food on the
-// water (shared/fishtank.js).
+// water (shared/fishtank.js), and group.userData.flakes are its meshes.
 export function tankModel(materials, kind = 'fish-tank') {
   const group = new THREE.Group();
   group.name = kind;
@@ -354,10 +357,16 @@ export function tankModel(materials, kind = 'fish-tank') {
     group.add(f);
     fish.push(f);
     homes.push((time) => homeOf({ a, b, y, speed, dir, start: i * 1.3 + (kind === 'fish-bowl' ? (i ? 2 : 0) : 0) }, time));
+    // On its round from the first frame, so the model fits its cell as built.
+    const home = homes[i](0);
+    f.position.set(home.x, home.y, home.z);
+    f.rotation.y = home.angle;
+    f.updateMatrix();
   });
   const food = feeder(materials, kind, fish, homes, kind === 'fish-bowl' ? BOWL.top : TANK.y1 - 0.02, kind === 'fish-bowl' ? 0.63 : 0.78);
   for (const f of food.flakes) group.add(f.m);
   group.userData.feed = () => food.pinch();
+  group.userData.flakes = food.flakes;
   if (kind === 'fish-bowl') {
     meshes(group, bowlBody(), materials);
     const weed = plant(materials, 0.08, 0.37, 0.06, 4, 0.17);

@@ -680,6 +680,13 @@ export class Renderer {
     return dist * (dir.x * ahead.x + dir.y * ahead.y + dir.z * ahead.z) < SEE_THROUGH;
   }
 
+  // A pinch of fish food on the tank or bowl in cell (x, y, z): its flakes
+  // come down and its fish dart over to them (render/terrain.js). Whether the
+  // tank was found and fed.
+  feedFish(x, y, z) {
+    return this.terrain.feedFish(x, y, z);
+  }
+
   // The ray from the camera through a point on the screen (-1..1 each way).
   ray(ndcX, ndcY) {
     const origin = this.camera.position.clone();

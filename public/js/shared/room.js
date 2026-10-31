@@ -485,7 +485,7 @@ export class Room {
         if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
         const fed = feedTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2], key: keyOf(...msg.at) }, (this.fedFish ??= new Map()), this.now());
         if (fed.full) this.sendTo(conn, { t: 'notice', text: 'The fish are full — they will be hungry again in a little while.', level: 'info' });
-        else this.broadcast({ t: 'fish', pid, at: msg.at }, conn);
+        else this.broadcast({ t: 'fish', pid, at: msg.at });
         break;
       }
       case 'draw':

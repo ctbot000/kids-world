@@ -425,9 +425,10 @@ export class Game extends EventTarget {
       case 'piano':
         this.pianoHeard(msg);
         break;
+      // Fish food sprinkled on a tank or a bowl (fishtank.js) by whoever stood
+      // there: its flakes and darting fish, for everyone to see.
       case 'fish':
-        // Your own pinch showed at once (see feedFish).
-        if (msg.pid !== this.pid) this.pinchTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2] });
+        this.pinchTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2] });
         break;
       case 'swing': {
         const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
@@ -2839,22 +2840,21 @@ export class Game extends EventTarget {
 
   // Q (or the 🐟 Feed button) beside a fish tank or a fish bowl: a pinch of
   // flakes goes onto the water (shared/fishtank.js), the fish dart over and
-  // nibble them up, and everyone on the island sees it. Too soon after the
-  // last pinch, the island says the fish are full.
+  // nibble them up, and everyone on the island sees it — the island passes the
+  // pinch to them all, so when it says the fish are full, no one sees flakes.
   feedFish() {
     const t = this.tankTarget;
     if (!t) return;
     this.send({ t: 'fish', at: [t.x, t.y, t.z] });
-    this.pinchTank(t);
   }
 
-  // The pinch seen at once on your own page (the island passes it to everyone
-  // else): flakes on the water of the tank in cell (x, y, z) and its fish
-  // darting to them, with a heart or two rising as they nibble.
+  // A pinch the island passed on, from whoever fed the tank in cell (x, y, z):
+  // flakes on its water and its fish darting over to nibble them up, with a
+  // heart or two rising.
   pinchTank(t) {
-    this.renderer.feedFish(t.x, t.y, t.z);
-    this.sound.play('splash');
-    this.emit('fish-fed', { x: t.x, y: t.y, z: t.z });
+    if (!this.renderer.feedFish(t.x, t.y, t.z)) return;
+    this.sound.play('water');
+    this.renderer.effects.hearts(t.x + 0.5, t.y + 0.9, t.z + 0.5, 2);
   }
 
   // A typing lesson finished at `wpm` words a minute with `accuracy` (0-100)
