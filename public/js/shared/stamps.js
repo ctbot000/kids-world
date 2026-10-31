@@ -256,8 +256,9 @@ function cabin() {
       }
     }
   }
-  // A stone chimney up the back gable, and the fireplace it serves inside.
-  for (let y = 5; y <= 8; y++) c.put(2, y, 7, B.STONE);
+  // A stone chimney up the back gable and out above the roof, and the
+  // fireplace it serves inside.
+  for (let y = 5; y <= 9; y++) c.put(2, y, 7, B.STONE);
   c.put(2, 1, 6, B.FIREPLACE);
   // Furnished: a rug before the fire, the pet bed in the corner opposite
   // it, a table with two chairs, a bookshelf along the wall and a lamp under
@@ -271,11 +272,12 @@ function cabin() {
   c.put(-3, 1, 2, B.turnedTo(B.BOOKSHELF, 0));
   c.put(0, 7, 4, B.LAMP);
   // The porch: a plank floor before the door, two trunk posts holding a
-  // plank roof over it, with a lamp hanging in the middle.
+  // plank roof over it, with a lamp set in the roof (a lamp is a solid
+  // block, so one hung below would stand in the way to the door).
   c.box(-2, 0, -2, 2, 0, -1, B.PLANKS);
   for (const x of [-2, 2]) for (let y = 1; y <= 2; y++) c.put(x, y, -2, B.WOOD);
   c.box(-2, 3, -2, 2, 3, -1, B.PLANKS);
-  c.put(0, 2, -2, B.LAMP);
+  c.put(0, 3, -2, B.LAMP);
   return c.list();
 }
 

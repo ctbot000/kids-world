@@ -110,6 +110,10 @@ test('the Log Cabin is a furnished log cabin with a working door', () => {
   assert.equal(at(-2, 1, 6), B.PET_BED, 'the pet bed beside the fire');
   assert.equal(at(2, 6, 7), B.STONE, 'its chimney climbs the back gable');
   assert.equal(at(0, 7, 4), B.LAMP, 'a lamp lights it under the ridge');
+  assert.equal(at(2, 9, 7), B.STONE, 'the chimney stands up above the ridge');
+  // Nothing solid stands in the way from the porch steps to the door.
+  for (const dz of [-2, -1]) for (const dy of [1, 2]) assert.equal(at(0, dy, dz), B.AIR, `the way to the door is clear (${dy}, ${dz})`);
+  assert.equal(at(0, 3, -2), B.LAMP, 'a lamp lights the porch from its roof');
   // A bop swings the whole tall door open.
   const open = doorEdit(w, 16, 7, 14);
   assert.equal(open.length, 8, 'a bop swings both halves of the tall door');
