@@ -7,11 +7,15 @@
 // and five bright fish swimming round. A fish bowl: a round glass bowl on a
 // wooden stand, two goldfish going round in it over pebbles and a plant.
 //
+// Fed (shared/fishtank.js), the fish dart over to the flakes and nibble
+// them up off the top.
+//
 // Laid out in a cell's units, its foot in the middle of the floor at the
 // origin, facing -z like all furniture (shared/furniture.js). What moves is
 // done by group.userData.tick(time), which render/terrain.js calls.
 import * as THREE from '../../vendor/three.module.js';
 import { at, bake, lathe, roundedBox } from './gashapon-model.js';
+import { FEED_MS, flakeLayout } from '../shared/fishtank.js';
 
 // How each part takes the light: three's physical material settings.
 export const TANK_FINISH = {
@@ -29,6 +33,8 @@ export const TANK_FINISH = {
   blue: { color: '#1d5cff', roughness: 0.3, clearcoat: 1, envMapIntensity: 0.9 },
   pink: { color: '#ff3d96', roughness: 0.3, clearcoat: 1, envMapIntensity: 0.9 },
   red: { color: '#e01e1e', roughness: 0.3, clearcoat: 1, envMapIntensity: 0.9 },
+  // A flake of fish food, floating on the water.
+  flake: { color: '#ffa94d', roughness: 0.7, envMapIntensity: 0.5, side: THREE.DoubleSide },
   // See-through, drawn after what is inside them, and never hiding it.
   water: { color: '#1f96e0', roughness: 0.1, envMapIntensity: 0.3, transparent: true, opacity: 0.32, depthWrite: false },
   glass: { color: '#e6f6ff', roughness: 0.05, clearcoat: 1, envMapIntensity: 0.6, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide },
@@ -106,17 +112,122 @@ function makeFish(materials, color, size) {
   return group;
 }
 
-// A fish at `angle` round an oval a across and b deep, at height y, nose
-// the way it goes, its tail wagging.
-function swim(f, angle, a, b, y, dir, time) {
-  f.position.set(Math.cos(angle) * a, y, Math.sin(angle) * b);
+// A fish's place on its round at `time`: where it is (an oval a across and b
+// deep, at height y) and which way its nose points, going round `dir` way.
+function homeOf({ a, b, y, speed, dir, start }, time) {
+  const angle = start + time * speed * dir;
   const vx = -Math.sin(angle) * a * dir;
   const vz = Math.cos(angle) * b * dir;
-  f.rotation.y = Math.atan2(-vz, vx);
-  f.updateMatrix();
-  const tail = f.userData.tail;
-  tail.rotation.y = Math.sin(time * 9 + angle * 3) * 0.45;
-  tail.updateMatrix();
+  return { x: Math.cos(angle) * a, y: y + Math.sin(time * 0.8 + start) * 0.025, z: Math.sin(angle) * b, angle: Math.atan2(-vz, vx) };
+}
+
+// A pinch of fish food on the water (shared/fishtank.js flakeLayout): the
+// flakes come down onto it, float there, and the fish dart over and nibble
+// them up one by one, easing back to their rounds once the last is gone.
+// `homes` says where each fish is on its round, `nibbleY` how high one comes
+// to take a flake off the top and `top` where the flakes float.
+function feeder(materials, kind, fish, homes, top, nibbleY) {
+  const flakes = flakeLayout(kind).map((f, i) => {
+    const m = new THREE.Mesh(keep(`flake ${i % 2}`, () => ball(0.008 + (i % 2) * 0.003, 6, 4)), materials.flake);
+    m.visible = false;
+    m.renderOrder = 1;
+    m.userData.shared = true;
+    m.matrixAutoUpdate = false;
+    m.scale.set(1.5, 0.5, 1.5);
+    // Built already on the water, hidden until a pinch comes.
+    m.position.set(f.x, top, f.z);
+    m.updateMatrix();
+    return { ...f, m, eaten: false };
+  });
+  // The flake each fish has its eye on, and when the feeding began (in the
+  // tick's own clock, so whoever calls pinch needs no clock of their own).
+  const claimed = new Map();
+  let began = -1;
+  let pinched = false;
+  let last = 0;
+  return {
+    flakes,
+    pinch() {
+      pinched = true;
+    },
+    tick(time) {
+      const dt = Math.min(0.1, Math.max(0, time - last));
+      last = time;
+      if (pinched) {
+        pinched = false;
+        began = time;
+        claimed.clear();
+        for (const f of flakes) {
+          f.eaten = false;
+          f.m.visible = false;
+        }
+      }
+      const since = began < 0 ? Infinity : time - began;
+      if (began >= 0 && since > FEED_MS / 1000) {
+        began = -1;
+        claimed.clear();
+      }
+      // Each flake falls the last little way onto the water, then floats.
+      for (const f of flakes) {
+        const age = since - f.t;
+        f.m.visible = began >= 0 && !f.eaten && age > 0;
+        if (!f.m.visible) continue;
+        f.m.position.set(f.x, top - Math.min(1, age * 2.5) * 0.02, f.z);
+        f.m.rotation.y = f.x * 9;
+        f.m.updateMatrix();
+      }
+      fish.forEach((f, i) => {
+        const home = homes[i](time);
+        let tx = home.x;
+        let ty = home.y;
+        let tz = home.z;
+        let darting = false;
+        let aim = null;
+        if (began >= 0) {
+          // The flake nearest this fish, of those down and not taken.
+          aim = claimed.get(i);
+          if (aim && (aim.eaten || began < 0)) claimed.delete(i);
+          if (!claimed.has(i)) {
+            let bestD = 1;
+            for (const fl of flakes) {
+              if (fl.eaten || fl.t > since || [...claimed.values()].includes(fl)) continue;
+              const d = Math.hypot(f.position.x - fl.x, f.position.z - fl.z);
+              if (d < bestD) {
+                bestD = d;
+                aim = fl;
+              }
+            }
+            if (aim) claimed.set(i, aim);
+          }
+          if (aim && !aim.eaten) {
+            tx = aim.x;
+            ty = nibbleY;
+            tz = aim.z;
+            darting = true;
+          }
+        }
+        // Darting over to a flake, or easing back to its round.
+        const dx = tx - f.position.x;
+        const dy = ty - f.position.y;
+        const dz = tz - f.position.z;
+        const d = Math.hypot(dx, dy, dz);
+        const step = d < 1e-6 ? 1 : Math.min(1, (dt * (darting ? 1.2 : 0.5)) / d);
+        f.position.x += dx * step;
+        f.position.y += dy * step;
+        f.position.z += dz * step;
+        f.rotation.y = d > 0.005 ? Math.atan2(-dz, dx) : home.angle;
+        f.updateMatrix();
+        const tail = f.userData.tail;
+        tail.rotation.y = Math.sin(time * (darting ? 20 : 9) + i) * (darting ? 0.65 : 0.45);
+        tail.updateMatrix();
+        if (darting && d < 0.02) {
+          aim.eaten = true;
+          aim.m.visible = false;
+          claimed.delete(i);
+        }
+      });
+    },
+  };
 }
 
 let tankShapes;
@@ -222,46 +333,56 @@ function wave(leaves, time) {
 }
 
 // A whole tank, `kind` 'fish-tank' or 'fish-bowl', in the materials given
-// (tankMaterials).
+// (tankMaterials). group.userData.feed() sprinkles a pinch of food on the
+// water (shared/fishtank.js), and group.userData.flakes are its meshes.
 export function tankModel(materials, kind = 'fish-tank') {
   const group = new THREE.Group();
   group.name = kind;
   const leaves = [];
+  // The fish: colour, size, how far round each way, how high and how fast.
+  const school =
+    kind === 'fish-bowl'
+      ? [['orange', 1.5, 0.12, 0.12, 0.55, 0.7, 1], ['yellow', 1.25, 0.09, 0.09, 0.47, 0.55, -1]]
+      : [
+        ['orange', 1.7, 0.28, 0.14, 0.62, 0.5, 1],
+        ['yellow', 1.4, 0.25, 0.1, 0.7, 0.65, -1],
+        ['blue', 1.6, 0.3, 0.14, 0.55, 0.42, 1],
+        ['pink', 1.3, 0.22, 0.12, 0.74, 0.75, 1],
+        ['red', 1.5, 0.27, 0.08, 0.67, 0.55, -1],
+      ];
+  const fish = [];
+  const homes = [];
+  school.forEach(([c, size, a, b, y, speed, dir], i) => {
+    const f = makeFish(materials, c, size);
+    group.add(f);
+    fish.push(f);
+    homes.push((time) => homeOf({ a, b, y, speed, dir, start: i * 1.3 + (kind === 'fish-bowl' ? (i ? 2 : 0) : 0) }, time));
+    // On its round from the first frame, so the model fits its cell as built.
+    const home = homes[i](0);
+    f.position.set(home.x, home.y, home.z);
+    f.rotation.y = home.angle;
+    f.updateMatrix();
+  });
+  const food = feeder(materials, kind, fish, homes, kind === 'fish-bowl' ? BOWL.top : TANK.y1 - 0.02, kind === 'fish-bowl' ? 0.63 : 0.78);
+  for (const f of food.flakes) group.add(f.m);
+  group.userData.feed = () => food.pinch();
+  group.userData.flakes = food.flakes;
   if (kind === 'fish-bowl') {
     meshes(group, bowlBody(), materials);
     const weed = plant(materials, 0.08, 0.37, 0.06, 4, 0.17);
     group.add(weed.group);
     leaves.push(...weed.leaves);
-    const fishes = [makeFish(materials, 'orange', 1.5), makeFish(materials, 'yellow', 1.25)];
-    for (const f of fishes) group.add(f);
-    group.userData.tick = (time) => {
-      wave(leaves, time);
-      swim(fishes[0], time * 0.7, 0.12, 0.12, 0.55 + Math.sin(time * 0.5) * 0.02, 1, time);
-      swim(fishes[1], -time * 0.55 + 2, 0.09, 0.09, 0.47 + Math.sin(time * 0.6 + 1) * 0.02, -1, time);
-    };
-    group.userData.tick(0);
-    return group;
+  } else {
+    meshes(group, tankBody(), materials);
+    for (const [x, z, n, len] of [[-0.36, 0.18, 6, 0.32], [-0.18, 0.2, 4, 0.22], [0.33, 0.17, 7, 0.36], [0.38, -0.12, 3, 0.16], [-0.38, -0.15, 4, 0.2]]) {
+      const p = plant(materials, x, 0.46, z, n, len);
+      group.add(p.group);
+      leaves.push(...p.leaves);
+    }
   }
-  meshes(group, tankBody(), materials);
-  for (const [x, z, n, len] of [[-0.36, 0.18, 6, 0.32], [-0.18, 0.2, 4, 0.22], [0.33, 0.17, 7, 0.36], [0.38, -0.12, 3, 0.16], [-0.38, -0.15, 4, 0.2]]) {
-    const p = plant(materials, x, 0.46, z, n, len);
-    group.add(p.group);
-    leaves.push(...p.leaves);
-  }
-  // The fish: colour, size, how far round each way, how high and how fast.
-  const school = [
-    ['orange', 1.7, 0.28, 0.14, 0.62, 0.5, 1],
-    ['yellow', 1.4, 0.25, 0.1, 0.7, 0.65, -1],
-    ['blue', 1.6, 0.3, 0.14, 0.55, 0.42, 1],
-    ['pink', 1.3, 0.22, 0.12, 0.74, 0.75, 1],
-    ['red', 1.5, 0.27, 0.08, 0.67, 0.55, -1],
-  ].map(([c, size, a, b, y, speed, dir], i) => {
-    const f = makeFish(materials, c, size);
-    group.add(f);
-    return { f, a, b, y, speed, dir, start: i * 1.3 };
-  });
+  // A tank's bubbles come up from its stone; a bowl has none.
   const bubbles = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < (kind === 'fish-bowl' ? 0 : 5); i++) {
     const b = new THREE.Mesh(keep(`bubble ${i % 2}`, () => ball(0.008 + (i % 2) * 0.004, 8, 6)), materials.bubble);
     b.renderOrder = 1;
     b.userData.shared = true;
@@ -270,7 +391,7 @@ export function tankModel(materials, kind = 'fish-tank') {
   }
   group.userData.tick = (time) => {
     wave(leaves, time);
-    for (const { f, a, b, y, speed, dir, start } of school) swim(f, start + time * speed * dir, a, b, y + Math.sin(time * 0.8 + start) * 0.025, dir, time);
+    food.tick(time);
     // Bubbles go up one after another from the stone and burst at the top.
     bubbles.forEach((b, i) => {
       const k = (time * 0.35 + i / bubbles.length) % 1;

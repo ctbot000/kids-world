@@ -428,6 +428,8 @@ export class Terrain {
     scene.add(this.group);
     this.chunks = new Map();
     this.dirty = new Set();
+    // The fish tanks and bowls, by their cells, to feed (game.js feedFish).
+    this.tanks = new Map();
     this.world = null;
     this.light = null;
     this.studsOn = true;
@@ -700,6 +702,8 @@ export class Terrain {
       // A fan's blades go round, a tank's fish swim and a clock's pendulum
       // swings, each at a time of its own.
       if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
+      // A tank, to be fed by its cell (game.js feedFish).
+      if (model.userData.feed) this.tanks.set(`${x},${y},${z}`, model);
     }
     this.group.add(group);
     this.chunks.set(key, chunk);
@@ -740,6 +744,9 @@ export class Terrain {
     this.group.remove(chunk.group);
     // A real model's shapes are shared by all of them, and kept.
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
+    for (const { model } of chunk.movers) if (model.userData.feed) {
+      for (const [cell, m] of this.tanks) if (m === model) this.tanks.delete(cell);
+    }
   }
 
   // The blades of the fans in sight go round, an electric fan's head sweeps
@@ -772,7 +779,18 @@ export class Terrain {
     }
   }
 
-  // Chunks lost in the fog are skipped, and studs are only worth drawing close up.
+  // A pinch of fish food on the tank or bowl in cell (x, y, z), if it is
+  // drawn: its flakes come down and its fish dart over to them (game.js
+  // feedFish). Whether the tank was found.
+  feedFish(x, y, z) {
+    const model = this.tanks.get(`${x},${y},${z}`);
+    if (!model) return false;
+    model.userData.feed();
+    return true;
+  }
+
+  // Chunks lost in the fog are not drawn at all, which also skips their
+  // animation: their fish stop swimming where no one can see them.
   updateVisibility(eye, fogFar) {
     const far = fogFar + CHUNK * 1.5;
     for (const chunk of this.chunks.values()) {

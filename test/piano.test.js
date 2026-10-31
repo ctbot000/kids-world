@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
-import { BENCH_H, HIGH, isNote, isPiano, KEYS, LOW, noteOfKey, pianoNear, pianoSeat, SONGS } from '../public/js/shared/piano.js';
+import { BENCH_H, HIGH, isNote, isPiano, KEYS, LOW, noteOfKey, pianoNear, pianoSeat, Recorder, REC_MAX, SONGS } from '../public/js/shared/piano.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
@@ -135,4 +135,40 @@ test('notes and songs are counted, with the Piano Star sticker for a whole song'
   const star = STICKERS.find((s) => s.key === 'piano-star');
   assert.ok(star.test({ tunes: 1 }) && !star.test({ tunes: 0 }));
   assert.ok(STICKERS.length <= KEPT_MAX && STAT_KEYS.length <= KEPT_MAX, 'within what the keeper keeps');
+});
+
+test('your own song is taken down while recording and played back with its timing', () => {
+  const rec = new Recorder();
+  // Nothing to hear before any is made, and notes played before recording
+  // begins are not taken down.
+  assert.equal(rec.notes.length, 0);
+  assert.equal(rec.note(60, 1), false);
+  rec.start();
+  // The first note is the song's own start: a slow beginning is not a slow
+  // song, and a note off the keys is not taken down.
+  assert.equal(rec.note(60, 3), true);
+  assert.equal(rec.note(95, 0.5), false);
+  assert.equal(rec.note(64, 0.5), true);
+  assert.equal(rec.note(67, 1.5), true);
+  rec.stop();
+  assert.deepEqual(rec.notes, [
+    { n: 60, at: 0 },
+    { n: 64, at: 0.5 },
+    { n: 67, at: 2 },
+  ]);
+  assert.equal(rec.length, 2);
+  // Playing back: the notes that fall due in each moment, none twice, and
+  // a moment past the end has none left.
+  assert.deepEqual(rec.due(-1, 0), [60]);
+  assert.deepEqual(rec.due(0, 0.75), [64]);
+  assert.deepEqual(rec.due(0.75, 3), [67]);
+  assert.deepEqual(rec.due(-1, 3), [60, 64, 67]);
+  assert.deepEqual(rec.due(3, 4), []);
+  // Only so many notes fit.
+  rec.start();
+  for (let i = 0; i < REC_MAX + 5; i++) rec.note(60 + (i % 12), 0.05);
+  assert.equal(rec.notes.length, REC_MAX);
+  // Starting over loses what was there.
+  rec.start();
+  assert.equal(rec.notes.length, 0);
 });
