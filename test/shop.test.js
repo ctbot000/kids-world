@@ -15,6 +15,7 @@ import { makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { AdventureSim } from '../public/js/shared/adventure.js';
 import { ARM_REACH, BLOB_HEARTS, BOP_SLACK, HIT_MS, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import { STICKERS } from '../public/js/shared/stickers.js';
 import { cleanCoins, cleanGear, COINS_MAX, fixPrice, GEAR, gearMove, SKATE_GLIDE, isBroken, lookWithGear, nextLevel, sale, sellPrice, statsOf, usesLeft, WEAPONS, wearing, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
 import { Avatar, SWINGS, swingPose } from '../public/js/render/avatar.js';
@@ -177,6 +178,50 @@ test('coins and gear are kept at the keeper, from the device that changed them l
   assert.equal(added.coins, 13);
   assert.equal(added.gear.shoes, 2);
   assert.equal(added.gear.wings, 1);
+});
+
+test('every coin earned in all is counted, and a million of them is the Millionaire sticker', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const sticker = STICKERS.find((s) => s.key === 'millionaire');
+    assert.ok(sticker, 'the sticker is there');
+    const p = new Profile();
+    // Earning from anywhere and selling both count, and each is a sticker heard.
+    const heard = [];
+    p.addEventListener('sticker', (e) => heard.push(e.detail.key));
+    const before = p.data.stats.earned;
+    p.earn(3);
+    p.addToBasket('apple', 2);
+    p.sell('apple', 2);
+    assert.equal(p.data.stats.earned, before + 3 + 2 * sellPrice('apple'));
+    // Spending coins never lowers the total, and it is kept on this device.
+    p.earn(100);
+    assert.equal(p.buy('shoes'), true);
+    assert.ok(p.data.coins < 103);
+    assert.equal(p.data.stats.earned, before + 103 + 2 * sellPrice('apple'));
+    const again = new Profile();
+    assert.equal(again.data.stats.earned, p.data.stats.earned);
+    // A million of them, and the sticker is yours — not one coin before.
+    assert.equal(sticker.test({ earned: 999999 }), false);
+    p.earn(1000000 - (p.data.stats.earned - before));
+    assert.equal(p.data.stickers.millionaire > 0, true);
+    assert.deepEqual(heard, ['millionaire']);
+    assert.equal(sticker.test(p.data.stats), true);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('the coins earned in all are kept at the keeper, the most of either device, and added up for a guest', () => {
+  const mine = { name: 'Sunny Otter', stats: { earned: 700 }, changedAt: 100 };
+  const theirs = { name: 'Sunny Otter', stats: { earned: 900 }, changedAt: 200 };
+  assert.equal(keptProfile(mine).stats.earned, 700);
+  assert.equal(mergeProfiles(mine, theirs).stats.earned, 900, 'the most either device counted');
+  assert.equal(addProgress(mine, theirs).stats.earned, 1600, 'a guest\u2019s coins join in');
+  // A total past a million is kept whole: it is never reset.
+  assert.equal(keptProfile({ stats: { earned: 5000000 } }).stats.earned, 5000000);
 });
 
 test('a toy weapon is in the look the island sees while you have it on, and only a real one', () => {
