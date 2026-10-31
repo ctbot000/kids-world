@@ -493,6 +493,86 @@ function skateParts(knee, kind, B) {
   return wheels;
 }
 
+// An accessory (ACCESSORIES in shared/words.js) on the body: a necklace of
+// beads round the neck, a tie down the chest, a backpack on the back
+// (not under wings, a jet pack, a cape or a robe) or a watch on the left
+// wrist. Sunglasses are on the face (personFace).
+function accessorize(av, kind, B, look) {
+  const torso = av.torso;
+  const k = B.hip / BUILDS.kid.hip;
+  const top = B.shirt.length - 1;
+  const [cy] = B.shirt[top];
+  const parts = [];
+  let mat = null;
+  switch (kind) {
+    case 'necklace': {
+      // Beads round the neck, lying on the shirt and hanging lower in front,
+      // with a pink bead at the bottom.
+      mat = toon('#f6f0e6');
+      const shirtAt = (y) => {
+        const i = Math.max(1, B.shirt.findIndex(([ry]) => ry >= y));
+        const [a, b] = [B.shirt[i - 1], B.shirt[i] ?? B.shirt[top]];
+        const t = Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0] || 1)));
+        return a.map((v, j) => v + (b[j] - v) * t);
+      };
+      const y0 = B.shirt[top - 1][0];
+      const bead = (a, drop, r) => {
+        const [y, w, f, b] = shirtAt(y0 - drop);
+        return at(Math.sin(a) * (w + r * 0.6), y, Math.cos(a) * ((Math.cos(a) > 0 ? f : b) + r * 0.6), r);
+      };
+      for (let i = 0; i < 26; i++) {
+        const a = (i / 26) * Math.PI * 2;
+        parts.push({ g: sphere(1, 8, 6), m: bead(a, Math.max(0, Math.cos(a)) ** 2 * 0.07 * k, 0.011 * k) });
+      }
+      torso.add(mesh(bakeCached(`acc|necklace|${B.key}`, parts), mat));
+      torso.add(mesh(bakeCached(`acc|pendant|${B.key}`, [{ g: sphere(1, 12, 8), m: bead(0, 0.085 * k, 0.017 * k) }]), toon('#ff7aa8')));
+      return;
+    }
+    case 'tie': {
+      // A knot at the collar and the blade down the front of the shirt.
+      mat = toon('#d23b4a');
+      const y1 = B.shirt[3][0];
+      const z = (y) => (B.shirt.find(([ry]) => ry >= y) ?? B.shirt[top])[2] * 1.02 + 0.004 * k;
+      parts.push({ g: roundedBox(0.03 * k, 0.026 * k, 0.014 * k, 0.005 * k), m: at(0, cy - 0.022 * k, z(cy - 0.03 * k), 1, 1, 1, -0.2) });
+      const len = cy - 0.035 * k - y1;
+      parts.push({ g: cylinder(0.022 * k, 0.014 * k, len, 4), m: at(0, y1 + len / 2, z(y1 + len / 2), 1, 1, 0.25, -0.12, Math.PI / 4) });
+      torso.add(mesh(bakeCached(`acc|tie|${B.key}`, parts), mat));
+      return;
+    }
+    case 'backpack': {
+      if (look.wings || look.outfit === 'cape' || look.outfit === 'robe') return;
+      // A school backpack on the back with a flap and a front pocket, its
+      // straps over the shoulders.
+      const y = B.shoulder[0] - 0.12 * k;
+      const back = Math.max(...B.shirt.map(([, , , b]) => b));
+      const pack = new THREE.Group();
+      pack.position.set(0, y, -back - 0.045 * k);
+      pack.add(mesh(roundedBox(0.2 * k, 0.22 * k, 0.08 * k, 0.03 * k), toon('#f0a03c')));
+      pack.add(mesh(roundedBox(0.205 * k, 0.07 * k, 0.085 * k, 0.025 * k), toon('#d9822a'), 0, 0.085 * k, 0.002));
+      pack.add(mesh(roundedBox(0.13 * k, 0.08 * k, 0.03 * k, 0.012 * k), toon('#d9822a'), 0, -0.05 * k, -0.05 * k));
+      torso.add(pack);
+      for (const side of [-1, 1]) {
+        const over = new THREE.Vector3(side * B.shoulder[1] * 0.6, B.shoulder[0] + 0.03 * k, 0);
+        parts.push({ g: cylinder(1, 1, 1, 8), m: between(new THREE.Vector3(side * 0.06 * k, y + 0.08 * k, -back - 0.01 * k), over, 0.012 * k) });
+        parts.push({ g: cylinder(1, 1, 1, 8), m: between(over, new THREE.Vector3(side * B.shoulder[1] * 0.75, B.shirt[2][0], B.shirt[2][2] * 0.3), 0.012 * k) });
+      }
+      torso.add(mesh(bakeCached(`acc|straps|${B.key}`, parts), toon('#d9822a')));
+      return;
+    }
+    case 'watch': {
+      // A band round the left wrist and a round face on it.
+      const elbow = av.elbows[0];
+      const rw = B.arm[4];
+      const y = -B.arm[1] * 0.86;
+      elbow.add(mesh(torus(rw * 1.12, 0.008 * k), toon('#3b3f4a'), 0, y, 0).rotateX(Math.PI / 2));
+      elbow.add(mesh(cylinder(0.016 * k, 0.016 * k, 0.008 * k, 16), toon('#f5c542'), -rw * 1.15, y, 0).rotateZ(Math.PI / 2));
+      elbow.add(mesh(cylinder(0.012 * k, 0.012 * k, 0.009 * k, 16), toon('#ffffff'), -rw * 1.17, y, 0).rotateZ(Math.PI / 2));
+      return;
+    }
+    default:
+  }
+}
+
 // Flying gear from the shop on your back, over a cape or a robe: feathered
 // wings, a fairy's see-through ones, or a jet pack with two flames. Returns
 // { sides: [left, right] wing groups that flap, sweep: how far back they
@@ -1162,9 +1242,10 @@ const lipColor = (skin) => mix(darken(skin, 0.12), '#c4505c', 0.3);
 
 // A person's face on a skull, a kid's or a grown-up's (grown: what they have
 // on it, see FACES in shared/words.js; ears: false where hair covers them;
-// girl: longer lashes, rosier lips and, for a woman, a blush).
+// girl: longer lashes, rosier lips and, for a woman, a blush; shades:
+// sunglasses, over any glasses).
 // Returns the upper lids, which turn down by LID_SHUT to blink.
-function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = BLACK, girl = false } = {}) {
+function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = BLACK, girl = false, shades = false } = {}) {
   const eye = eyeLayout(f);
   const add = (g, mat) => skull.add(mesh(g, mat));
   add(personSkin(f, ears), toon(skin));
@@ -1197,15 +1278,16 @@ function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = B
   add(lipShape(f), toon(lips));
   add(mouthLine(f), toon(darken(lips, 0.45)));
   if (f.age === 'kid' || girl) add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: girl ? 0.3 : 0.22 }));
-  if (extra.includes('glasses')) glasses(skull, eye);
+  if (shades || extra.includes('glasses')) glasses(skull, eye, shades);
   if (extra.includes('beard')) beard(skull, f, hairColor);
   if (extra === 'moustache' || extra.includes('beard')) moustache(skull, f, hairColor);
   return lids;
 }
 
 // Round glasses in front of the eyes, with a bridge over the nose and arms
-// back to the ears: the frame, and the lenses in it.
-function glasses(skull, eye) {
+// back to the ears: the frame, and the lenses in it; or sunglasses, their
+// lenses dark (an accessory: ACCESSORIES in shared/words.js).
+function glasses(skull, eye, shades = false) {
   const ring = eye.r * 1.32;
   const frame = [];
   const lenses = [];
@@ -1217,7 +1299,7 @@ function glasses(skull, eye) {
   }
   const [a, b] = eye.eyes.map((e) => rim(e, -e.side * ring));
   frame.push({ g: cylinder(1, 1, 1, 6), m: between(a, b.clone().add(new THREE.Vector3(0, 0.004, 0)), 0.0085) });
-  skull.add(mesh(bake(frame), toon('#3a3340')), mesh(bake(lenses), toon('#d8f0ff', { transparent: true, opacity: 0.28 })));
+  skull.add(mesh(bake(frame), toon(shades ? '#1f1a24' : '#3a3340')), mesh(bake(lenses), shades ? toon('#20283a') : toon('#d8f0ff', { transparent: true, opacity: 0.28 })));
 }
 
 // A moustache under the nose, curling up a little at each end.
@@ -1828,6 +1910,9 @@ const capeSheet = (top, bottom, len, bulge, rows = [0, 1], out = 0) =>
     return g;
   });
 
+// The trousers that come with clothes: denim with dungarees, black with a tuxedo.
+const OUTFIT_TROUSERS = { dungarees: '#3d6fb6', tuxedo: '#2a2933' };
+
 // What a kind of clothes looks like: dressed onto the avatar (its torso and
 // arms), and returns what flaps as you go — { part, flap: how far it swings
 // back at a run, rest: and standing still } — or null for nothing that does.
@@ -1935,6 +2020,89 @@ function dressUp(av, kind, B) {
         arm.add(mesh(sleeveShape(B), coat, 0, 0, 0, 1.1, 1.6, 1.1));
         arm.add(mesh(torus(B.arm[2] * 1.38, 0.008 * k), lime, 0, -B.sleeve * 1.4, 0).rotateX(Math.PI / 2));
       }
+      break;
+    }
+    case 'hoodie': {
+      // A soft hoodie over the t-shirt: long sleeves, its hood down behind
+      // the neck, a pouch pocket in front and two drawstrings.
+      const top = B.shirt.length - 1;
+      const cloth = toon('#5aa9e6');
+      const dark = toon('#3f86c4');
+      torso.add(mesh(shell(0, top, 1.08, 1.1), cloth));
+      const [cy, cw] = ring(top);
+      put('hood', torso, cloth, sphere(1, 18, 12), at(0, cy - 0.025 * k, -backAt(cy) - 0.03 * k, cw * 1.9, 0.075 * k, 0.05 * k, -0.3));
+      const [py, , pf] = ring(1);
+      put('pocket', torso, dark, roundedBox(0.13 * k * (ring(1)[1] / (0.114 * k)), 0.07 * k, 0.012 * k, 0.006 * k), at(0, py + 0.03 * k, pf * 1.1 + 0.002, 1, 1, 1, -0.05));
+      for (const side of [-1, 1]) put('strings', torso, toon('#f4f4f4'), cylinder(0.004 * k, 0.004 * k, 0.09 * k, 6), at(side * 0.022 * k, cy - 0.06 * k, ring(top - 2)[2] * 1.12, 1, 1, 1, -0.15));
+      for (const arm of av.arms) arm.add(mesh(sleeveShape(B), cloth, 0, 0, 0, 1.08, 2.2, 1.08));
+      break;
+    }
+    case 'dungarees': {
+      // Denim dungarees over the jeans: a bib up the chest with a pocket and
+      // two gold buttons, straps over the shoulders and down the back, and a
+      // band round the waist.
+      const denim = toon('#3d6fb6');
+      const stitch = toon('#f0c35a');
+      const [wy, ww, wf, wb] = ring(0);
+      put('denim', torso, denim, torus(ww * 1.08, 0.016 * k), at(0, wy, ((wf - wb) * 1.08) / 2, 1, ((wf + wb) * 1.08) / 2 / (ww * 1.08), 1, Math.PI / 2));
+      const [ty, , tf] = ring(4);
+      const bibW = ring(2)[1] * 1.05;
+      const bibY = (wy + ty) / 2;
+      const bibZ = Math.max(...B.shirt.slice(0, 5).map(([, , f]) => f)) * 1.02 + 0.006 * k;
+      put('denim', torso, denim, roundedBox(bibW, ty - wy + 0.02 * k, 0.014 * k, 0.006 * k), at(0, bibY, bibZ, 1, 1, 1, -0.04));
+      put('pocket', torso, toon('#345f9e'), roundedBox(bibW * 0.5, 0.05 * k, 0.006 * k, 0.003 * k), at(0, bibY + 0.01 * k, bibZ + 0.009 * k, 1, 1, 1, -0.04));
+      const sy = B.shoulder[0] + 0.03 * k;
+      for (const side of [-1, 1]) {
+        const front = new THREE.Vector3(side * bibW * 0.4, ty, bibZ);
+        const over = new THREE.Vector3(side * B.shoulder[1] * 0.62, sy, 0);
+        const back = new THREE.Vector3(side * B.shoulder[1] * 0.3, ring(1)[0], -backAt(ring(1)[0]) - 0.008 * k);
+        put('denim', torso, denim, cylinder(1, 1, 1, 8), between(front, over, 0.011 * k));
+        put('denim', torso, denim, cylinder(1, 1, 1, 8), between(over, back, 0.011 * k));
+        put('buttons', torso, stitch, sphere(1, 10, 8), at(side * bibW * 0.38, ty - 0.008 * k, bibZ + 0.008 * k, 0.012 * k));
+      }
+      break;
+    }
+    case 'dress': {
+      // A party dress: a pink top over the t-shirt with puffed sleeves, a
+      // skirt that flares out from the waist to above the knees, a white
+      // sash round the middle with a bow behind, and white dots.
+      const pink = toon('#f27bb0');
+      const white = toon('#fbf6f8');
+      const top = B.shirt.length - 1;
+      torso.add(mesh(shell(0, top, 1.07, 1.09), pink));
+      for (const arm of av.arms) arm.add(mesh(sleeveShape(B), pink, 0, 0, 0, 1.22, 1.1, 1.22));
+      const w = Math.max(...B.seat.map(([, sw]) => sw));
+      const y0 = ring(0)[0] + 0.02 * k;
+      const L = (B.hip - B.knee) * 0.8;
+      torso.add(mesh(lathe([[w * 1.75, -L], [w * 1.72, -L + 0.012 * k], [w * 1.5, -L * 0.55], [w * 1.24, -L * 0.15], [w * 1.1, y0 - 0.04 * k], [w * 1.04, y0]], 28), toon('#f27bb0', { side: THREE.DoubleSide })));
+      torso.add(mesh(torus(w * 1.75, 0.01 * k), white, 0, -L + 0.006 * k, 0).rotateX(Math.PI / 2));
+      const [sy, sw, sf, sb] = ring(1);
+      torso.add(mesh(torus(sw * 1.08, 0.016 * k), white, 0, sy, ((sf - sb) * 1.08) / 2, 1, ((sf + sb) * 1.08) / 2 / (sw * 1.08), 1).rotateX(Math.PI / 2));
+      for (const side of [-1, 1]) put('bow', torso, white, sphere(1, 12, 8), at(side * 0.03 * k, sy, -backAt(sy) * 1.1 - 0.01 * k, 0.03 * k, 0.02 * k, 0.012 * k, 0, 0, side * 0.4));
+      put('bow', torso, white, sphere(1, 10, 8), at(0, sy, -backAt(sy) * 1.1 - 0.014 * k, 0.012 * k));
+      // Dots round the skirt.
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const [r, y] = i % 2 ? [w * 1.6, -L * 0.7] : [w * 1.38, -L * 0.38];
+        put('dots', torso, white, sphere(1, 6, 4), at(Math.sin(a) * (r + 0.002), y, Math.cos(a) * (r + 0.002), 0.011 * k));
+      }
+      break;
+    }
+    case 'tuxedo': {
+      // A black jacket with long sleeves over a white shirt front, buttons
+      // down it, a bow tie at the collar and a red flower on the lapel.
+      const black = toon('#23222b');
+      const top = B.shirt.length - 1;
+      torso.add(mesh(shell(0, top - 1, 1.09, 1.08), black));
+      for (const arm of av.arms) arm.add(mesh(sleeveShape(B), black, 0, 0, 0, 1.1, 2.2, 1.1));
+      const front = Math.max(...B.shirt.slice(2, top).map(([, , f]) => f)) * 1.08;
+      const [cy] = ring(top);
+      const [ly] = ring(2);
+      put('shirt', torso, toon('#fbfbf8'), roundedBox(0.05 * k, cy - ly, 0.01 * k, 0.004 * k), at(0, (cy + ly) / 2, front, 1, 1, 1, -0.12));
+      for (const i of [3, 4]) put('studs', torso, black, sphere(1, 8, 6), at(0, ring(i)[0], front + 0.006 * k, 0.006 * k));
+      for (const side of [-1, 1]) put('tie', torso, black, cone(0.016 * k, 0.04 * k, 10), at(side * 0.02 * k, cy - 0.02 * k, ring(top - 1)[2] * 1.05, 1, 1, 1, 0, 0, side * Math.PI / 2));
+      put('tie', torso, black, sphere(1, 8, 6), at(0, cy - 0.02 * k, ring(top - 1)[2] * 1.05 + 0.004 * k, 0.011 * k));
+      put('flower', torso, toon('#e0364b'), sphere(1, 10, 8), at(B.shoulder[1] * 0.45, ring(5)[0], ring(5)[2] * 1.1, 0.014 * k));
       break;
     }
     default:
@@ -2113,7 +2281,8 @@ export class Avatar {
     this.root.add(body);
 
     const frog = look.animal === 'frog';
-    const pants = frog ? fur : trousersFor(shirt);
+    // Trousers to go with the t-shirt, or with clothes that come with their own.
+    const pants = frog ? fur : (OUTFIT_TROUSERS[look.outfit] ?? trousersFor(shirt));
     const pantsMat = toon(pants);
     const seam = toon(darken(pants, 0.18));
     // Legs: a thigh from the hip, then the knee and the shin down to a
@@ -2232,7 +2401,7 @@ export class Avatar {
     if (person) {
       const hairColor = HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown;
       const f = faceFor(grown ? FACE_SHAPES.grown : FACE_SHAPES.kid, headOf(look));
-      this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor, girl: look.gender === 'girl' });
+      this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor, girl: look.gender === 'girl', shades: look.acc === 'sunglasses' });
       this.lidShut = this.eyes.userData.shut;
       this.sway = hair(skull, look.hair, hairColor, look.hat, grown ? 1.15 : 1);
     } else {
@@ -2249,6 +2418,8 @@ export class Avatar {
     // Flying gear on your back, over the clothes.
     const caped = look.outfit === 'cape' || look.outfit === 'robe';
     this.wings = look.wings ? wingsOn(this, look.wings, B, caped) : null;
+    // An accessory, over the clothes.
+    if (look.acc) accessorize(this, look.acc, B, look);
     // Under wings or a jet pack, a cape or a robe flies out less, to keep
     // clear of them.
     if (this.wings && caped && this.outfit) this.outfit = { ...this.outfit, flap: this.outfit.flap * 0.35 };

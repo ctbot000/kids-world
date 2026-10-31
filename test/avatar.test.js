@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { ANIM, Avatar } from '../public/js/render/avatar.js';
 import { headTop } from '../public/js/shared/critters.js';
-import { ANIMALS, BODIES, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, HEADS, HEIGHTS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
+import { ACCESSORIES, ANIMALS, BODIES, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, HEADS, HEIGHTS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
 
 const LOOKS = ANIMALS.flatMap((a) =>
   HATS.flatMap((hat, i) =>
@@ -258,6 +258,29 @@ test('a height, a body and a face shape of your own: kept as chosen, and drawn t
     const seen = new Set(Array.from({ length: 200 }, () => randomLook()[key]));
     assert.equal(seen.size, list.length);
   }
+});
+
+test('extras to wear: kept as chosen (sunglasses only on a face), and each drawn on', () => {
+  const kid = { animal: KID, fur: 'tan', shirt: 3, hat: 'none', skin: 'deep', hair: 'short', hairColor: 'pink' };
+  const bear = { animal: 'bear', fur: 'brown', shirt: 3, hat: 'none' };
+  for (const a of ACCESSORIES.filter((x) => x.key !== 'none')) {
+    assert.deepEqual(cleanLook({ ...kid, acc: a.key }), { ...kid, acc: a.key });
+    assert.deepEqual(cleanLook({ ...bear, acc: a.key }), a.person ? bear : { ...bear, acc: a.key });
+  }
+  assert.deepEqual(cleanLook({ ...kid, acc: 'none' }), kid);
+  assert.deepEqual(cleanLook({ ...kid, acc: 'monocle' }), kid);
+  const count = (look) => {
+    let n = 0;
+    new Avatar(look).root.traverse((o) => (n += o.isMesh ? 1 : 0));
+    return n;
+  };
+  for (const look of [kid, { ...kid, animal: GROWN_UP, face: 'beard', build: 'sturdy' }, bear]) {
+    for (const a of ACCESSORIES.filter((x) => x.key !== 'none' && (!x.person || isPerson(look)))) assert.ok(count({ ...look, acc: a.key }) > count(look), `${a.key} on ${look.animal}`);
+  }
+  // Sunglasses take the place of glasses; a backpack is not worn under wings.
+  const grown = { ...kid, animal: GROWN_UP, face: 'glasses' };
+  assert.equal(count({ ...grown, acc: 'sunglasses' }), count(grown));
+  assert.equal(count({ ...kid, wings: 'fairy', acc: 'backpack' }), count({ ...kid, wings: 'fairy' }));
 });
 
 test("a grown-up: a kid's skin and hair, a face of their own, and taller", () => {

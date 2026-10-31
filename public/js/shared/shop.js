@@ -116,6 +116,10 @@ export const CLOTHES = [
   { key: 'armor', name: 'Knight Armor', icon: '🛡️', price: 180, power: 'armor', does: 'Monster bumps and King Grumble’s stomps take only half as much HP.' },
   { key: 'firesuit', name: 'Fire Suit', icon: '🧑‍🚒', price: 220, power: 'fireproof', does: 'Lava never burns you: swim in it on a volcano island!' },
   { key: 'robe', name: 'Royal Robe', icon: '👑', price: 500, does: 'Just for looks: a long velvet robe with a fluffy white collar, fit for a king or a queen.' },
+  { key: 'hoodie', name: 'Comfy Hoodie', icon: '🧥', price: 30, does: 'Just for looks: a soft blue hoodie with a pouch pocket, drawstrings and its hood down.' },
+  { key: 'dungarees', name: 'Dungarees', icon: '👖', price: 35, does: 'Just for looks: denim dungarees with a bib, shoulder straps and shiny gold buttons.' },
+  { key: 'dress', name: 'Party Dress', icon: '👗', price: 60, does: 'Just for looks: a pink dress with puffed sleeves, a twirly dotted skirt and a bow behind.' },
+  { key: 'tuxedo', name: 'Smart Tuxedo', icon: '🤵', price: 90, does: 'Just for looks: a black jacket and a bow tie, with a red flower on the lapel.' },
 ];
 export const outfitOf = (key) => CLOTHES.find((c) => c.key === key) ?? null;
 

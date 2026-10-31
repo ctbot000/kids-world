@@ -161,6 +161,17 @@ export const HATS = [
   { key: 'headphones', name: 'Headphones', icon: '🎧' },
 ];
 
+// Something extra to wear, free like a hat: sunglasses (only on a kid or a
+// grown-up, who has a face for them), a necklace, a tie, a backpack or a
+// watch (render/avatar.js).
+export const ACCESSORIES = [
+  { key: 'none', name: 'Nothing', icon: '🙂' },
+  { key: 'sunglasses', name: 'Sunglasses', icon: '🕶️', person: true },
+  { key: 'necklace', name: 'Necklace', icon: '📿' },
+  { key: 'tie', name: 'Tie', icon: '👔' },
+  { key: 'backpack', name: 'Backpack', icon: '🎒' },
+  { key: 'watch', name: 'Watch', icon: '⌚' },
+];
 // A kid's skin, lightest to darkest, and the emoji skin tone for each.
 export const SKIN_TONES = {
   fair: '#ffe2cf',
@@ -289,6 +300,9 @@ export function cleanLook(look, random = Math.random) {
     shirt: SHIRT_COLORS.includes(look?.shirt) ? look.shirt : fallback.shirt,
     hat: HATS.some((h) => h.key === look?.hat) ? look.hat : 'none',
   };
+  // An accessory, only once chosen, and sunglasses only on a face.
+  const acc = ACCESSORIES.find((a) => a.key === look?.acc && a.key !== 'none');
+  if (acc && (!acc.person || isPerson({ animal }))) clean.acc = acc.key;
   // How tall and how built, only once chosen.
   if (HEIGHTS.some((h) => h.key === look?.height)) clean.height = look.height;
   if (BODIES.some((b) => b.key === look?.build)) clean.build = look.build;

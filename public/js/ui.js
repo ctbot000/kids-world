@@ -24,7 +24,7 @@ import { boardsOf } from './shared/ranking.js';
 import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ACCESSORIES, ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -1208,6 +1208,7 @@ export class UI {
         const shape = h('div', { class: 'look-shape' });
         const shirts = h('div', { class: 'swatches' });
         const hats = h('div', { class: 'grid' });
+        const accs = h('div', {});
         const choose = (change) => {
           change();
           this.sound.play('ui');
@@ -1325,6 +1326,8 @@ export class UI {
               }),
             ),
           );
+          // Sunglasses only for a face to put them on.
+          accs.replaceChildren(options(ACCESSORIES.filter((a) => !a.person || isPerson(look)), look.acc ?? 'none', (key) => (look.acc = key)));
           hats.replaceChildren(
             ...HATS.map((hat) =>
               h(
@@ -1364,6 +1367,8 @@ export class UI {
           shirts,
           h('h3', {}, 'Hat'),
           hats,
+          h('h3', {}, 'Extras'),
+          accs,
           h('button', { class: 'big green', type: 'button', style: 'margin-top:16px', onclick: () => this.closeModal() }, '👍 Done'),
         );
       },
