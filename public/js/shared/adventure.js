@@ -120,9 +120,9 @@ export const stageRaise = (base, stage) => {
 
 // ------------------------------------------------------- the monster book
 
-// Every monster there is, for the collection of adventure islands (ui.js
-// monsterBook): one seen near you on an adventure island goes in as seen,
-// and one you popped there as defeated, with how many and its stats.
+// Every monster there is, for the monster collection of Adventure Isle
+// (ui.js monsterBook): one seen near you on the isle goes in as seen, and
+// one you popped there as defeated, with how many and its stats.
 const BOOK = {
   blob: { icon: '👾', name: 'Grumpy Blob' },
   mosquito: { icon: '🦟', name: 'Giant Mosquito' },

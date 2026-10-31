@@ -130,7 +130,7 @@ export const STICKERS = [
   { key: 'millionaire', icon: '💰', name: 'Millionaire', text: 'Earn 1,000,000 coins in all', test: (s) => s.earned >= 1000000, goal: 1000000, of: 'earned' },
 ];
 
-// The monster collection of adventure islands (adventure.js MONSTER_BOOK):
+// The monster collection of Adventure Isle (adventure.js MONSTER_BOOK):
 // every kind of monster, the easiest first, each counted twice, as seen
 // (seen<kind>, 1 once you have) and as popped (pop<kind>, how many).
 export const MONSTER_LOG = ['blob', 'mosquito', 'spiky', 'mole', 'spider', 'big', 'knight', 'ghost', 'golem', 'queen', 'king'];

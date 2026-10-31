@@ -1213,9 +1213,6 @@ export class Game extends EventTarget {
         entry = { id: m.id, kind: m.kind, snaps: [], model: this.renderer.addMonster(m.id, m.kind), grumbleAt: now + Math.random() * 4000 };
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
-        // On an adventure island, one near you goes in your monster
-        // collection as seen (ui.js monsterBook).
-        if (this.adventure && !this.profile.data.stats[seenKey(m.kind)] && this.near(m.x, m.y, m.z, 30)) this.profile.count(seenKey(m.kind), 1, { max: true });
         // The first tough one near you this time: what it is.
         const told = TOUGH_TOLD[m.kind];
         if (told && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
@@ -1223,6 +1220,9 @@ export class Game extends EventTarget {
           this.emit('toast', told);
         }
       }
+      // On Adventure Isle, one near you goes in your monster collection as
+      // seen (ui.js monsterBook), whether it came out there or came up to you.
+      if (this.shared && this.adventure && !this.profile.data.stats[seenKey(m.kind)] && this.near(m.x, m.y, m.z, 30)) this.profile.count(seenKey(m.kind), 1, { max: true });
       entry.snaps.push({ t: now, x: m.x, y: m.y, z: m.z, yaw: m.yaw, state: m.state });
       entry.hearts = m.hearts;
       entry.max = m.max;
@@ -1386,8 +1386,8 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
-      // And as defeated in the collection, on an adventure island.
-      if (this.adventure && entry) {
+      // And as defeated in the collection, on Adventure Isle.
+      if (this.shared && this.adventure && entry) {
         this.profile.count(seenKey(entry.kind), 1, { max: true });
         this.profile.count(popKey(entry.kind));
       }

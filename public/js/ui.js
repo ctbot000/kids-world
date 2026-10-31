@@ -1446,7 +1446,7 @@ export class UI {
           h('span', { class: 'muted' }, `Everything you do earns XP: building, finding treasures, petting animals, riding, exploring and popping monsters, and every sticker is ${STICKER_XP} more.`),
           isle ? h('span', { class: 'muted' }, 'Adventure Isle is a world of its own: this XP, this level and these stickers are the isle’s, kept apart from yours everywhere else — and kept at the island keeper with a ranking of their own.') : null,
         ),
-        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
+        h('div', { class: 'dialog-head' }, h('h2', {}, `⭐ My stickers (${count} of ${STICKERS.length})`), ranking, h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monsters') : null, h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.galleryDialog() }, '🖼️ My gallery')),
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
@@ -1493,10 +1493,11 @@ export class UI {
     return card;
   }
 
-  // Your monster collection from adventure islands (adventure.js
-  // MONSTER_BOOK): 👀 Seen, every kind of monster you have come across there
-  // (the rest a ???), and 🏆 Defeated, the ones you popped there, each with
-  // its name, how many you popped and its stats (monsterStats).
+  // Your monster collection from Adventure Isle, the isle's own like its
+  // stickers (adventure.js MONSTER_BOOK): 👀 Seen, every kind of monster you
+  // have come across there (the rest a ???), and 🏆 Defeated, the ones you
+  // popped there, each with its name, how many you popped and its stats
+  // (monsterStats). Any other adventure island adds nothing to it.
   monsterBook(tab = 'seen') {
     const stats = this.profile.data.stats;
     const seen = MONSTER_BOOK.filter((m) => stats[seenKey(m.kind)] > 0);
@@ -1541,7 +1542,7 @@ export class UI {
         );
         grid.dataset.tab = current;
         if (current === 'seen') {
-          note.textContent = 'Every monster you come across on an adventure island goes in here.';
+          note.textContent = 'Every monster you come across on Adventure Isle goes in here.';
           grid.replaceChildren(
             ...MONSTER_BOOK.map((m) => {
               const got = stats[seenKey(m.kind)] > 0;
@@ -1550,7 +1551,7 @@ export class UI {
           );
           return;
         }
-        note.textContent = 'Pop a monster on an adventure island to see its stats here. SPD is how quick it comes after you, against how quick you run.';
+        note.textContent = 'Pop a monster on Adventure Isle to see its stats here. SPD is how quick it comes after you, against how quick you run.';
         grid.replaceChildren(
           ...MONSTER_BOOK.map((m) => {
             const popped = stats[popKey(m.kind)] ?? 0;
@@ -3980,7 +3981,7 @@ export class UI {
               : adv.won
                 ? ''
                 : h('p', { class: 'muted' }, 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
-            h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'),
+            g.shared ? h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection') : '',
           );
         }
         const def = g.defense;

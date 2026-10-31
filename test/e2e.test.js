@@ -6140,35 +6140,68 @@ test('the 🎒 backpack shows your stats, going up and down as you put things on
   await page.browserContext().close();
 });
 
-test('the 👾 monster collection: a monster near you on an adventure island goes in as seen, one you pop as defeated, with its name and stats', { skip }, async () => {
-  const page = await openPlayer(p2p(), { name: 'Keen Owl' });
-  await clickButton(page, 'Make an island');
-  await clickButton(page, 'Flat Land', '#modal');
-  await clickButton(page, 'New name', '#modal');
-  await clickSwitch(page, '#modal .switch[aria-label="Adventure"]');
-  await clickButton(page, 'Make it', '#modal');
+test('the 👾 monster collection is Adventure Isle’s: a monster near you there goes in as seen, one you pop as defeated, with its name and stats — any other adventure island adds nothing', { skip }, async () => {
+  // An adventure island of your own: its camp's monsters come out near you,
+  // and the collection neither counts them nor shows up.
+  const own = await openPlayer(p2p(), { name: 'Keen Owl' });
+  await clickButton(own, 'Make an island');
+  await clickButton(own, 'Flat Land', '#modal');
+  await clickButton(own, 'New name', '#modal');
+  await clickSwitch(own, '#modal .switch[aria-label="Adventure"]');
+  await clickButton(own, 'Make it', '#modal');
+  await inGame(own);
+  const camp = await own.evaluate(() => window.kidsWorld.session.link.room.adventure.camps.find((c) => c.kind === 'camp'));
+  await own.evaluate((c) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: c.x + 2, y: c.y + 1, z: c.z + 2, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+  }, camp);
+  await until(own, () => [...window.kidsWorld.game.monsters.values()].some((m) => m.kind === 'blob'));
+  await own.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const m = room.monsters.list.find((o) => o.kind === 'blob');
+    room.monsters.remove(m.id);
+    room.broadcast({ t: 'pop', id: m.id, by: kw.game.pid, x: m.body.x, y: m.body.y, z: m.body.z });
+  });
+  await until(own, () => window.kidsWorld.profile.data.stats.popped === 1);
+  assert.deepEqual(await own.evaluate(() => Object.entries(window.kidsWorld.profile.data.stats).filter(([k, n]) => /^(seen|pop)[a-z]/.test(k) && k !== 'popped' && n > 0)), []);
+  await own.click('#island-badge');
+  await until(own, () => document.querySelector('#modal .adventure-list'));
+  assert.ok(!(await own.evaluate(() => document.getElementById('modal').textContent.includes('Monster collection'))), 'no collection on an island of your own');
+  await own.keyboard.press('Escape');
+  await own.click('#btn-stickers-hud');
+  await until(own, () => document.querySelector('#modal .level-card'));
+  assert.ok(!(await own.evaluate(() => document.getElementById('modal').textContent.includes('👾 Monsters'))));
+  await own.browserContext().close();
+
+  // Adventure Isle: into one of its camps, its monsters come out, and each
+  // kind near you is seen — in the isle's own world of you.
+  const page = await openPlayer(base, { name: 'Keen Owl' });
+  await clickButton(page, '⚔️ Adventure');
+  await clickButton(page, 'Adventure Isle');
   await inGame(page);
-  const stats = () => page.evaluate(() => Object.fromEntries(Object.entries(window.kidsWorld.profile.data.stats).filter(([k, n]) => /^(seen|pop)/.test(k) && n > 0)));
-  assert.deepEqual(await stats(), {});
-  // Into camp 1: its monsters come out, and each kind near you is seen.
-  const c = await page.evaluate(() => window.kidsWorld.session.link.room.adventure.camps.find((c) => c.kind === 'camp'));
+  await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
+  const room = server.publicAdventure.room;
+  const c = room.adventure.camps.find((c) => c.kind === 'camp' && !c.freed);
+  const pid = await page.evaluate(() => window.kidsWorld.game.pid);
   await page.evaluate((c) => {
     const kw = window.kidsWorld;
     Object.assign(kw.game.me.body, { x: c.x + 2, y: c.y + 1, z: c.z + 2, vx: 0, vy: 0, vz: 0 });
     kw.game.sendMove(true);
-  }, c);
-  await until(page, (id) => window.kidsWorld.session.link.room.monsters.list.some((m) => m.camp === id) && window.kidsWorld.profile.data.stats.seenblob === 1, c.id);
-  assert.equal((await stats()).popblob, undefined);
+  }, { x: c.x, y: c.y, z: c.z });
+  await until(page, () => window.kidsWorld.isle.data.stats.seenblob === 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.popblob), 0);
   // A blob popped by you: defeated.
-  await page.evaluate((id) => {
-    const kw = window.kidsWorld;
-    const room = kw.session.link.room;
-    const m = room.monsters.list.find((o) => o.camp === id && o.kind === 'blob');
-    const b = m.body;
-    room.monsters.remove(m.id);
-    room.broadcast({ t: 'pop', id: m.id, by: kw.game.pid, x: b.x, y: b.y, z: b.z });
-  }, c.id);
-  await until(page, () => window.kidsWorld.profile.data.stats.popblob === 1);
+  const m = room.monsters.list.find((o) => o.camp === c.id && o.kind === 'blob');
+  room.monsters.remove(m.id);
+  room.broadcast({ t: 'pop', id: m.id, by: pid, x: m.body.x, y: m.body.y, z: m.body.z });
+  await until(page, () => window.kidsWorld.isle.data.stats.popblob === 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popblob), 0, 'your world everywhere else untouched');
+  await page.click('#island-badge');
+  await clickButton(page, '👾 Monster collection', '#modal');
+  await until(page, () => document.querySelector('#modal .monster-book'));
+  await page.keyboard.press('Escape');
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
   // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
