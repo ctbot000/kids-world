@@ -119,6 +119,13 @@ export const CRITTER_INFO = {
   // in front over the front of the deck, and a small hop carries it over the
   // little steps in its way.
   sled: { name: 'Sled', icon: '🛷', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.3, z: -0.04, radius: 0.4, height: 1.6, float: 0.25, spread: 0.1, reach: 0.7, walk: 4.5, run: 7.5, swim: 2, jump: 7.6, sled: { snow: { walk: 5.5, run: 8, push: 10, coast: 2, slope: 14, top: 12 }, ground: { walk: 2.6, run: 3.8, push: 7, coast: 7, slope: 5, top: 6 } } }, names: ['Whizz', 'Woody', 'Slippy', 'Toboggan', 'Whoosh', 'Snowball', 'Zoomer', 'Frosty', 'Swifty', 'Bolt'] },
+  // A hula hoop (hoop: it spins — see game.js). Put it down like a sled, walk
+  // up and tap Spin: it circles your waist while you swing your hips to keep
+  // it up, and after a while it wobbles down and drops, ready to spin again.
+  // spin: how many seconds it stays up; wobble: how many seconds the dying
+  // fall takes at the end; rate: how fast it whirls round the waist. Nobody
+  // rides it — it is a toy to spin, not a vehicle to drive, so it has no ride.
+  hoop: { name: 'Hula Hoop', icon: '⭕', speed: 0, swims: true, flies: false, vehicle: 'land', hoop: { spin: 11, wobble: 2.5, rate: 6 }, names: ['Twirly', 'Spinny', 'Whirly', 'Loop-De-Loop', 'Whizzy', 'Ringy', 'Swishy', 'Dizzy', 'Roundabout', 'Ollie'] },
   // The paint van (ride.paint: it paints — see riding.js). Driving it paints
   // the natural ground it rolls over, a swath a few blocks wide, in the colour
   // picked with the Paint tool. It paints only natural ground, never anything
@@ -188,7 +195,7 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // the look-only ones that come and go on their own (the firefly).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race', 'hoop'];
 export const MAX_CRITTERS = 64;
 // The most fireflies an island lets out at once: enough for a little wonder,
 // never a swarm — and they never take a seat an animal could have.

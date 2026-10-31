@@ -462,6 +462,26 @@ export class Room {
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
         break;
+      // A hula hoop spun round the waist (critters.js hoop), and dropped:
+      // everyone's copy of the island draws the hoop at their friend's waist,
+      // swinging their hips, until it drops. The hoop itself stays where it
+      // was put down on the ground, so nothing more needs saying.
+      case 'hoop':
+        if (msg.op === 'spin') {
+          const c = this.critters.get(msg.id);
+          if (!c || c.type !== 'hoop') break;
+          if (Math.hypot(c.x - p.s[0], c.z - p.s[2]) > 5 || Math.abs(c.y - p.s[1]) > 4) break;
+          // Only one hoop at a time, and only one spinner of each.
+          this.unhoop(pid);
+          c.hooper = pid;
+          c.state = 'hoop';
+          this.broadcast({ t: 'hoop', op: 'spin', id: c.id, pid });
+        } else if (msg.op === 'drop') {
+          const c = this.critters.get(msg.id);
+          if (!c || c.hooper !== pid) break;
+          this.broadcast({ t: 'hoop', op: 'drop', id: c.id, pid, x: msg.x, y: msg.y, z: msg.z });
+        }
+        break;
       // A swing at a monster (the 👊 button), for friends to see it start as
       // it does: the bop it lands comes a moment later.
       case 'swing':
@@ -1057,6 +1077,15 @@ export class Room {
       if (p) Object.assign(c, mountUnder(c.type, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3] }));
       this.critters.letGo(c);
       this.broadcast({ t: 'ride', id: c.id, pid: 0 });
+    }
+  }
+
+  // Whatever hula hoop pid was spinning drops: nobody's hooping it now.
+  unhoop(pid) {
+    for (const c of this.critters.list) {
+      if (c.type !== 'hoop' || c.hooper !== pid) continue;
+      c.hooper = 0;
+      c.state = 'idle';
     }
   }
 

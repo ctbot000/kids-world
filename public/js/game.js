@@ -247,6 +247,11 @@ export class Game extends EventTarget {
     // enough to sit on.
     this.seat = null;
     this.seatTarget = null;
+    // The hula hoop you are spinning (critters.js hoop): which one, when it
+    // wobbles down and drops, how far round it is and how many turns it has
+    // done. Also the hoop beside you, close enough to spin.
+    this.hooping = null;
+    this.hoopTarget = 0;
     // The games going at the island's arcade machines (shared/arcade.js),
     // by their machines' cells; the one close enough to play at, and the
     // one whose game you have open (see ui.js).
@@ -417,6 +422,9 @@ export class Game extends EventTarget {
         break;
       case 'emote':
         this.emoted(msg.pid, msg.e);
+        break;
+      case 'hoop':
+        this.hoopNews(msg);
         break;
       case 'draw':
         this.drawHeard(msg);
@@ -3367,8 +3375,7 @@ export class Game extends EventTarget {
   }
 
   // The big animal or vehicle you could get on: the nearest one beside you
-  // with room for you.
-  findRideable() {
+  // with room for you.  findRideable() {
     if (this.riding || this.aboard || !this.me) return 0;
     const b = this.me.body;
     let best = 0;
@@ -3392,6 +3399,15 @@ export class Game extends EventTarget {
   // Q, or the Ride button: on the animal beside you, or off the one you are on.
   toggleRide() {
     if (this.dizzy || this.counting) return;
+    // Spinning a hula hoop: Q drops it again (Shift does too, in input.js).
+    if (this.hooping) {
+      this.dropHoop();
+      return;
+    }
+    if (this.hoopTarget) {
+      this.startHoop();
+      return;
+    }
     if (this.aboard) {
       this.getOut();
       return;
@@ -3502,8 +3518,123 @@ export class Game extends EventTarget {
     this.emit('ride');
   }
 
+  // ------------------------------------------------ hula hoops
+
+  // The hula hoop put down nearest you, within reach to spin (findRideable's
+  // way of telling, but for hoops, which nobody rides).
+  hoopNear(on) {
+    const b = on ?? this.me?.body;
+    if (!b) return 0;
+    let best = 0;
+    let near = Infinity;
+    for (const c of this.critters.values()) {
+      if (c.type !== 'hoop' || c.hooper || !c.model.group.visible) continue;
+      const p = c.model.group.position;
+      const d = Math.hypot(p.x - b.x, p.z - b.z);
+      if (d < 2 && d < near) {
+        best = c.id;
+        near = d;
+      }
+    }
+    return best;
+  }
+
+  // Q (or the Spin button) by a hoop put down: round your waist it goes, and
+  // your hips swing to keep it up. Everyone's copy of the island hears it from
+  // the host (hoopNews), and it wobbles down and drops by itself after a while
+  // (updateHoop), ready to be spun again.
+  startHoop() {
+    const id = this.hoopTarget;
+    if (!id) return;
+    this.send({ t: 'hoop', op: 'spin', id });
+    // Ours shows at once; the host's word only confirms it.
+    this.hoopBegan(id, this.pid);
+  }
+
+  // The hoop is up: remember whose it is, for how long, and where it is round
+  // the waist. Ours is also the counter over the hotbar (ui.js).
+  hoopBegan(id, pid) {
+    const c = this.critters.get(id);
+    if (!c) return;
+    const spin = CRITTER_INFO.hoop.hoop;
+    c.hooper = pid;
+    c.spinAt = performance.now();
+    c.spinFor = spin.spin * 1000;
+    c.phase = 0;
+    if (pid === this.pid) {
+      this.hooping = { id, at: c.spinAt, for: c.spinFor, spins: 0 };
+      this.emit('hoop');
+      this.profile.count('hoops');
+      if (!this.toldHoop) {
+        this.toldHoop = true;
+        this.emit('toast', { icon: '⭕', text: `Round and round it goes! ${this.touch ? 'Tap 👋 Drop' : 'Press Q or Shift'} to drop it.` });
+      }
+      const p = this.players.get(this.pid);
+      if (p?.avatar) p.avatar.hoopRate = spin.rate;
+    }
+  }
+
+  // Down it comes: back on the ground where you are, ready to spin again. Sent
+  // by Q or Shift, or when it wobbles down by itself.
+  dropHoop(dropped = false) {
+    const h = this.hooping;
+    if (!h) return;
+    const c = this.critters.get(h.id);
+    const b = this.me.body;
+    this.send({ t: 'hoop', op: 'drop', id: h.id, x: b.x, y: b.y, z: b.z });
+    this.hooping = null;
+    this.emit('hoop');
+    if (c) this.hoopEnded(c, this.pid, dropped ? null : { x: b.x, y: b.y, z: b.z });
+  }
+
+  // The hoop is back on the ground (msg.x/y/z where it dropped, if it was
+  // dropped on the move and the host says so), or it went up round someone's
+  // waist. A friend's copy of the island hears of it from the host.
+  hoopNews(msg) {
+    if (msg.op === 'spin') this.hoopBegan(msg.id, msg.pid);
+    else if (msg.op === 'drop') {
+      const c = this.critters.get(msg.id);
+      if (c) this.hoopEnded(c, msg.pid, msg);
+    }
+  }
+
+  hoopEnded(c, pid, at) {
+    c.hooper = 0;
+    // Dropped on the move: it stays where the spinner let it go, on the ground.
+    if (Number.isFinite(at?.x)) {
+      c.x = at.x;
+      c.z = at.z;
+      c.y = (this.world.top(Math.floor(at.x), Math.floor(at.z)) ?? at.y) + 1;
+    }
+    const where = c.model.group.position;
+    this.sound.play('hoop', { drop: true });
+    this.renderer.effects.dust(where.x, where.y + 0.1, where.z);
+    if (pid === this.pid) {
+      this.hooping = null;
+      this.emit('hoop');
+    }
+  }
+
+  // Each frame while you hoop: the hoop round your waist and the counter of
+  // turns, until its time is up and it wobbles down and drops on its own.
+  updateHoop(dt) {
+    const h = this.hooping;
+    if (!h) return;
+    const c = this.critters.get(h.id);
+    if (!c || c.hooper !== this.pid) {
+      this.hooping = null;
+      this.emit('hoop');
+      return;
+    }
+    const spin = CRITTER_INFO.hoop.hoop;
+    h.spins += (dt * spin.rate) / (Math.PI * 2);
+    this.emit('hoop');
+    if (performance.now() - h.at > h.for) this.dropHoop(true);
+  }
+
   // Up out of your seat, in front of it (or beside it, or on top).
   standUp() {
+
     const c = this.seat;
     if (!c) return;
     this.seat = null;
@@ -4376,6 +4507,21 @@ export class Game extends EventTarget {
       const state = c.spoutUntil > now ? 'spout' : now < (c.fireUntil ?? 0) && c.type === 'dragon' ? 'fire' : rideState(this.riding);
       return { x: r.x, y: r.y, z: r.z, yaw: this.riding.yaw, state };
     }
+    // A hula hoop being spun circles its spinner's waist, round at its own
+    // rate from when it went up (hoopBegan noted spinAt), until it drops.
+    if (c.type === 'hoop') {
+      const p = c.hooper ? this.players.get(c.hooper) : null;
+      const at = c.hooper === this.pid ? this.me.body : p?.avatar?.root.position ?? null;
+      if (!at) return null;
+      const secs = (performance.now() - (c.spinAt ?? performance.now())) / 1000;
+      const spin = CRITTER_INFO.hoop.hoop;
+      // Steady at first, then wobbling as its time runs out and it drops.
+      const left = 1 - Math.min(1, secs / (spin.spin + spin.wobble));
+      c.phase = secs * spin.rate * (0.7 + 0.3 * left);
+      c.wobble = left < 0.3 ? (0.3 - left) / 0.3 : 0;
+      const yaw = c.hooper === this.pid ? this.me.yaw : p.avatar.root.rotation.y;
+      return { x: at.x, y: at.y + 0.42, z: at.z, yaw, state: 'hoop' };
+    }
     const recent = c.lastRider && performance.now() - c.leftAt < 600 ? c.lastRider : 0;
     const p = this.players.get(c.rider || recent);
     if (!p || p.me || !p.avatar || !p.seated) return null;
@@ -5247,6 +5393,9 @@ export class Game extends EventTarget {
     this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
+    // A hula hoop put down beside you: in reach to spin it. Only on foot,
+    // standing on the ground, and not spinning one already.
+    this.hoopTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !this.hooping && !on.flying && on.onGround ? this.hoopNear(on) : 0;
     this.sendMove();
     this.updatePlayers(dt);
     this.danceLoop();
@@ -5373,7 +5522,9 @@ export class Game extends EventTarget {
     const speed = Math.hypot(b.vx, b.vz);
     if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     me.speed = speed;
-    me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
+    // Hooping, the hips swing on the spot; walking or jumping drops the hoop.
+    if (this.hooping && still === false && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;
+    else me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
     if (events.bounced) {
       this.sound.play('boing', { speed: events.bounced });
