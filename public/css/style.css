@@ -5879,3 +5879,9 @@ html {
   width: 100%;
   aspect-ratio: 480 / 300;
 }
+
+/* Watching an island unseen from the keeper's admin page (shared/watch.js):
+   only looking about, flying and leaving. */
+body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-attack, #btn-weapon, #btn-jump, #aim-hint, #ride, #defend, #race-btn, #next-stage, #btn-stickers-hud, #btn-shop-hud, #btn-backpack-hud, #btn-feedback-hud) {
+  display: none !important;
+}

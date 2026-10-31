@@ -34,6 +34,7 @@
 // States: off (no keeper, or switched off), idle, connecting, ready, away,
 // refused, gone (the login this page was using was removed).
 
+import { trustWatchKey } from './shared/watch.js';
 import { get, set } from '../vendor/idb-keyval.js';
 import { hurried } from './hurry.js';
 import { signalingOptions } from './net.js';
@@ -231,6 +232,8 @@ export class KeeperClient extends EventTarget {
       if (!isPeerId(config?.peer) || !isPublicKey(config.key)) return;
       this.peerOptions = config.signal ? signalingOptions(new URLSearchParams({ signal: config.signal })) : {};
       this.publicKey = await crypto.subtle.importKey('jwk', config.key, KEY_ALGORITHM, false, ['verify']);
+      // An island hosted here lets the keeper's admin page watch it (watch.js).
+      trustWatchKey(config.key);
       this.config = config;
     } catch {
       return;

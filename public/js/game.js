@@ -208,6 +208,8 @@ export class Game extends EventTarget {
     this.typedPasscode = '';
     // The pass an invitation came with, which lets you in without the passcode.
     this.invitePass = '';
+    // Watching the island unseen, from the keeper's admin page (main.js).
+    this.watching = false;
     this.players = new Map();
     this.critters = new Map();
     // Everyone's pets (shared/pets.js), by their owner: each page moves them all.
@@ -384,6 +386,8 @@ export class Game extends EventTarget {
   }
 
   send(msg) {
+    // Watching unseen (shared/watch.js), the island hears nothing from here.
+    if (this.watching) return;
     this.link.send(msg);
   }
 
@@ -675,6 +679,12 @@ export class Game extends EventTarget {
     const body = makeBody(keep?.x ?? spawn.x, keep?.y ?? spawn.y, keep?.z ?? spawn.z);
     unstick(this.world, body);
     this.me = { body, yaw: Math.PI, anim: ANIM.idle, speed: 0 };
+    // Watching unseen: up in the air at once, to look about from (on the
+    // ground, flying would land at once).
+    if (this.watching) {
+      if (!keep) body.y += 8;
+      body.flying = true;
+    }
     for (const p of msg.players) this.addPlayer(p, false);
     const names = new Map(msg.critters.map((c) => [c.id, c]));
     for (const row of msg.pack) {
@@ -4751,7 +4761,7 @@ export class Game extends EventTarget {
 
   // Makes a change here at once and asks the island to make it for everyone.
   edit(kind, cells, { expect = null, undoable = true, anyone = false } = {}) {
-    if (!cells.length) return false;
+    if (!cells.length || this.watching) return false;
     // Only the owner builds here right now (or it is the shared isle,
     // nobody's to build on): nothing changes, so nothing is picked up,
     // collected or spent either (the island would only say no). A bopped
@@ -5805,7 +5815,8 @@ export class Game extends EventTarget {
     if (!b || this.dizzy) return;
     // The shared isle is an adventure on foot: you cannot fly there on
     // your own (its helicopter and balloon fly as anywhere — ride them!).
-    if (this.shared) {
+    // A watcher is nobody there, so it flies anywhere.
+    if (this.shared && !this.watching) {
       this.emit('notice', { text: `No flying on your own on ${this.world.name} — it is an adventure on foot!`, level: 'info' });
       this.sound.play('no');
       return;

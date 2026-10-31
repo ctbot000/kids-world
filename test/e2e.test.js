@@ -6356,3 +6356,79 @@ test('a computer: Q by it opens typing practice, a line typed lights each next k
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
+
+test('the admin page watches an island unseen: it flies over it in a new tab, sees everyone, and nobody there sees it or counts it', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${games.address().port}`;
+  const host = await openPlayer(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' });
+  const context = await browser.createBrowserContext();
+  try {
+    await makeIsland(host, { online: true, theme: 'Flat Land', name: 'Watch Bay' });
+    const admin = await context.newPage();
+    admin.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+    await admin.goto(`${origin}/admin/#islands`);
+    await until(admin, () => [...document.querySelectorAll('#islands .island-open b')].some((b) => b.textContent === 'Watch Bay'));
+    assert.match(await admin.$eval('#islands .island-open .muted', (el) => el.textContent), /1 of 8 playing/);
+
+    // 👁️ Watch: a new tab, flying over the island.
+    const opened = context.waitForTarget((t) => t.url().includes('watch='));
+    await clickButton(admin, '👁️ Watch', '#islands');
+    const watcher = await (await opened).page();
+    watcher.on('pageerror', (error) => pageErrors.push(`watcher: ${error.message}`));
+    await inGame(watcher);
+    assert.deepEqual(
+      await watcher.evaluate(() => {
+        const g = window.kidsWorld.game;
+        return { pid: g.pid, watching: g.watching, name: g.world.name, players: [...g.players.values()].map((p) => p.name), flying: g.me.body.flying, toolbar: document.getElementById('toolbar').offsetParent === null };
+      }),
+      { pid: -1, watching: true, name: 'Watch Bay', players: ['Sunny Otter'], flying: true, toolbar: true },
+    );
+    await until(watcher, () => document.getElementById('status').textContent.includes('Watching unseen'));
+
+    // Nobody on the island sees it, nor does the list of open islands count it.
+    const hostSees = () => host.evaluate(() => [...window.kidsWorld.game.players.values()].map((p) => p.name));
+    assert.deepEqual(await hostSees(), ['Sunny Otter']);
+    assert.equal(keeper.openIslands().find((i) => i.name === 'Watch Bay').players, 1);
+
+    // It sees the owner move…
+    const to = await host.evaluate(() => {
+      const g = window.kidsWorld.game;
+      g.me.body.x += 3;
+      g.sendMove(true);
+      return g.me.body.x;
+    });
+    await until(watcher, (x) => [...window.kidsWorld.game.players.values()].some((p) => Math.abs((p.snaps.at(-1)?.x ?? 0) - x) < 0.05), to);
+    // …and builds nothing, says nothing, sends nothing.
+    assert.equal(
+      await watcher.evaluate(() => {
+        const g = window.kidsWorld.game;
+        const s = g.world.spawn;
+        return g.edit('build', [Math.floor(s.x), Math.floor(s.y) + 3, Math.floor(s.z), 2]);
+      }),
+      false,
+    );
+    await watcher.evaluate(() => window.kidsWorld.game.send({ t: 'say', text: 'hello' }));
+    await new Promise((done) => setTimeout(done, 500));
+    assert.deepEqual(await host.evaluate(() => window.kidsWorld.game.chat.map((c) => c.text)), []);
+    assert.deepEqual(await hostSees(), ['Sunny Otter']);
+
+    // A page without a ticket gets nowhere.
+    const sneak = await context.newPage();
+    sneak.on('pageerror', (error) => pageErrors.push(`sneak: ${error.message}`));
+    const code = await host.evaluate(() => window.kidsWorld.game.code);
+    await sneak.goto(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}&watch=${code}&ticket=${Date.now() + 60000}.AAAA`);
+    await new Promise((done) => setTimeout(done, 3000 * SLOW));
+    assert.equal(await sneak.evaluate(() => window.kidsWorld.session?.started ?? false), false);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+    await host.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

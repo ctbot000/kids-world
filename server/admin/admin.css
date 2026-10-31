@@ -1522,3 +1522,44 @@ button.link:hover {
   height: 36px;
   margin-bottom: -1px;
 }
+
+/* ------------------------------------------------------------ islands */
+
+.open-now > p {
+  margin: 0 0 12px;
+}
+
+.island-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.island-icon {
+  flex: none;
+  font-size: 24px;
+}
+
+.island-about {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.island-about b {
+  overflow-wrap: anywhere;
+}
+
+.island-open button {
+  flex: none;
+}
+
+.island-list {
+  padding: 4px 16px;
+}
+
+.island-list li {
+  padding: 10px 0;
+}

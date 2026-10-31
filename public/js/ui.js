@@ -54,6 +54,8 @@ import { STICKERS } from './profile.js';
 import { QUALITY_CHOICES } from './quality.js';
 import { pictureFrom, recentErrors, screenshot } from './report.js';
 
+// The top bar's status while watching an island unseen (shared/watch.js).
+const WATCHING = '👁️ Watching unseen';
 // The ideas whose answers this device has shown already (see wishAnswered).
 const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
 // The news of an idea, as wishesSeen keeps it: its answer, or its latest step.
@@ -3145,6 +3147,9 @@ export class UI {
     $('title').hidden = true;
     $('hud').hidden = false;
     document.body.classList.add('playing');
+    // Watching unseen (shared/watch.js): nothing to build, carry or say.
+    document.body.classList.toggle('watching', game.watching === true);
+    if (game.watching) $('status').textContent = WATCHING;
     document.body.classList.toggle('touch', this.input.touchMode);
     this.buildToolbar();
     this.buildHotbar();
@@ -3312,6 +3317,7 @@ export class UI {
 
   detach() {
     this.game = null;
+    document.body.classList.remove('watching');
     // Back at the title, the world picked there.
     this.profile = this.titleWorld === 'isle' && this.hasIsleWorld() ? this.isle : this.home;
     this.levelKey = '';
@@ -4576,7 +4582,7 @@ export class UI {
   setStatus(state, text) {
     const el = $('status');
     const icon = { online: '🟢', offline: '', connecting: '🟡', reconnecting: '🟡', 'id-taken': '🟡', failed: '🔴' }[state] ?? '';
-    el.textContent = state === 'online' || state === 'offline' ? '' : `${icon} ${text}`;
+    el.textContent = state === 'online' && this.game?.watching ? WATCHING : state === 'online' || state === 'offline' ? '' : `${icon} ${text}`;
     this.renderIsland();
   }
 

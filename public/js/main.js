@@ -394,9 +394,11 @@ function tokenKey(kind, id) {
 // visit: the code of a friend's island you are visiting, and passcode: the
 // one you typed for it.
 // pass: from an invitation to it, which lets you in without its passcode.
-function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '', pass = '' }) {
+// watching: the keeper's admin page watching the island unseen (watchIsland).
+function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '', pass = '', watching = false }) {
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
+  game.watching = watching;
   game.token = profile.token(key);
   game.who = islandWho;
   game.typedPasscode = passcode;
@@ -444,8 +446,8 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
       ui.hideLoading();
       ui.attach(game, gameHandlers);
       sound.startMusic();
-      if (mode !== 'host') game.profile.count('visits');
-      if (!profile.data.seenHelp) {
+      if (mode !== 'host' && !watching) game.profile.count('visits');
+      if (!profile.data.seenHelp && !watching) {
         profile.update({ seenHelp: true });
         setTimeout(() => ui.toast('👋', 'Welcome! Walk with WASD or your thumb, and tap to build. ❓ shows how to play.'), 600);
       }
@@ -589,6 +591,19 @@ function visitIsland(raw, passcode = '', pass = '') {
   }
   const link = new GuestLink({ code, peerOptions });
   startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…', visit: code, passcode, pass });
+}
+
+// The keeper's admin page watching an island unseen (shared/watch.js): its
+// ticket, signed by the keeper, lets this page in without a player, so
+// nobody there sees it, and it flies about, touching nothing.
+function watchIsland(raw, ticket) {
+  const code = normalizeCode(raw);
+  if (!isValidCode(code) || serverMode || signalError) {
+    ui.toast('🙈', signalError || 'That island cannot be watched from here.', 'warn');
+    return;
+  }
+  const link = new GuestLink({ code, peerOptions });
+  startSession({ link, mode: 'guest', key: tokenKey('watch', code), loadingText: '👁️ Flying over the island, unseen…', first: () => ({ t: 'watch', ticket }), watching: true });
 }
 
 // Whether you have been on this island before, and so come back without its passcode.
@@ -965,7 +980,7 @@ input
   .on('unlock', () => sound.unlock())
   .on('tap', (ndc, button) => {
     const g = session?.game;
-    if (!g || ui.modalOpen) return;
+    if (!g || ui.modalOpen || g.watching) return;
     if (g.holdActed) {
       g.holdActed = false;
       return;
@@ -974,7 +989,7 @@ input
   })
   .on('hold', (down, ndc) => {
     const g = session?.game;
-    if (!g) return;
+    if (!g || g.watching) return;
     if (down) {
       g.holding = { at: performance.now() + 420, ndc };
       g.holdActed = false;
@@ -989,11 +1004,13 @@ input
   })
   .on('zoom', (f) => renderer.zoom(f))
   .on('pickBlock', (ndc) => {
-    if (session?.game && !ui.modalOpen) session.game.pickBlock(ndc);
+    if (session?.game && !ui.modalOpen && !session.game.watching) session.game.pickBlock(ndc);
   })
   .on('key', (code, e) => {
     const g = session?.game;
     if (!g || ui.modalOpen) return false;
+    // Watching unseen: only flying, the camera, photos and music.
+    if (g.watching && !['KeyF', 'KeyL', 'KeyP', 'KeyM'].includes(code)) return false;
     if (code.startsWith('Digit')) {
       const n = Number(code.slice(5));
       ui.selectSlot(n === 0 ? 9 : n - 1);
@@ -1126,6 +1143,13 @@ async function boot() {
   startDemo();
   ui.showTitle(titleHandlers);
   greet();
+  // From the keeper's admin page: watching an island unseen, straight away.
+  if (params.has('watch')) {
+    // (Never at the keeper itself, so not on its list of players playing.)
+    watchIsland(params.get('watch'), params.get('ticket') ?? '');
+    requestAnimationFrame(frame);
+    return;
+  }
   const code = normalizeCode(params.get('code'));
   // An invitation's link waits until you have logged in (it is still in the address).
   if (isValidCode(code) && !loginHandlers.required() && !params.has('ctb')) ui.visitDialog(code);

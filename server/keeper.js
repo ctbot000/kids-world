@@ -87,6 +87,7 @@ import { progressOf } from '../public/js/shared/levels.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { boardsOf, RANKING_TOP, rankBoards } from '../public/js/shared/ranking.js';
 import { lookWithGear } from '../public/js/shared/shop.js';
+import { signWatch, trustWatchKey } from '../public/js/shared/watch.js';
 import { World } from '../public/js/shared/world.js';
 
 export const DEFAULT_DATA_DIR = join(homedir(), '.kids-world');
@@ -1455,6 +1456,9 @@ export class Keeper extends EventEmitter {
     super();
     this.store = store;
     this.identity = identity;
+    // As given (a PeerServer URL, or null for the PeerJS cloud), for the
+    // admin page's links to islands (watchTicket), and as PeerJS options.
+    this.signal = signal;
     this.server = signalOptions(signal);
     this.iceServers = iceServers;
     this.now = now;
@@ -1492,6 +1496,8 @@ export class Keeper extends EventEmitter {
     this.lockWarningMs = LOCK_WARNING_MS;
     this.storeChanged = () => this.rankingChanged();
     store.on('change', this.storeChanged);
+    // The islands this process hosts take the admin page's watch tickets.
+    trustWatchKey(identity.publicKey);
   }
 
   // The private key, to sign with. start() does this first; tests that talk
@@ -2113,6 +2119,15 @@ export class Keeper extends EventEmitter {
 
   unlistIsland(code) {
     this.hosted.delete(code);
+  }
+
+  // A ticket for the admin page to watch an open island unseen (watch.js),
+  // or null when no island with that code is open.
+  async watchTicket(code) {
+    if (!isValidCode(code) || !this.openIslands().some((i) => i.code === code)) return null;
+    await this.loadKey();
+    // The island checks it by its own clock, a real one.
+    return signWatch(this.privateKey, code);
   }
 
   // The ranking, as an answer, or as news for a page watching it: news only

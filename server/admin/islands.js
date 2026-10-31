@@ -1,0 +1,75 @@
+// The admin page's Islands tab: the islands open now (the keeper's list,
+// the one pages see in Visit a friend), each with 👁️ Watch, which opens the
+// game in a new tab watching it unseen (see public/js/shared/watch.js):
+// nobody there sees or hears of it.
+import { prettyCode } from '/js/shared/codes.js';
+import { THEMES } from '/js/shared/worldgen.js';
+
+const $ = (id) => document.getElementById(id);
+
+function islandRow(h, island, watch) {
+  const theme = THEMES.find((t) => t.key === island.theme);
+  const kind = island.public ? '🌟 Adventure Isle' : island.watch ? '🏢 CTB' : island.adventure ? '⚔️ Adventure' : island.defense ? '🛡️ Tower defense' : '';
+  const stage = island.adventure ? `${island.public ? `stage ${island.adventure.stage}, ` : ''}${island.adventure.freed} of ${island.adventure.camps} camps free` : island.defense ? `wave ${island.defense.wave} of ${island.defense.waves}` : '';
+  return h(
+    'li',
+    { class: 'island-open' },
+    h('span', { class: 'island-icon', 'aria-hidden': 'true' }, theme?.icon ?? '🏝️'),
+    h(
+      'div',
+      { class: 'island-about' },
+      h('b', {}, island.name),
+      h('span', { class: 'muted' }, [`Code ${prettyCode(island.code)}`, `${island.players} of ${island.max} playing`, island.passcode ? '🔒 passcode' : '', kind, stage].filter(Boolean).join(' · ')),
+    ),
+    h('button', { type: 'button', class: 'primary', 'aria-label': `Watch ${island.name} unseen`, onclick: () => watch(island) }, '👁️ Watch'),
+  );
+}
+
+// Returns refresh(keeper): the list again, with the keeper's status (null:
+// no keeper here, and the tab goes).
+export function setUpIslands({ h }) {
+  let shown = '';
+  const section = $('islands-section');
+
+  async function watch(island) {
+    // Opened before asking, so no pop-up blocker stops it.
+    const tab = window.open('about:blank', '_blank');
+    try {
+      const res = await fetch(`/admin/api/islands/${island.code}/watch`, { method: 'POST', cache: 'no-store', headers: { 'X-Kids-World-Admin': '1' } });
+      const reply = res.ok ? await res.json() : null;
+      if (!reply?.ticket) throw new Error();
+      // Peer to peer, as the islands are, whatever this server is.
+      const url = new URL('/', location.href);
+      url.searchParams.set('p2p', '1');
+      if (reply.signal) url.searchParams.set('signal', reply.signal);
+      url.searchParams.set('watch', island.code);
+      url.searchParams.set('ticket', reply.ticket);
+      if (tab) tab.location.href = url.href;
+      else location.href = url.href;
+    } catch {
+      tab?.close();
+      alert(`${island.name} is not open any more.`);
+    }
+  }
+
+  return async function refresh(keeper) {
+    section.hidden = !keeper;
+    if (!keeper) return;
+    let islands = null;
+    try {
+      const res = await fetch('/admin/api/islands', { cache: 'no-store' });
+      if (res.ok) islands = (await res.json()).islands;
+    } catch {
+      islands = null;
+    }
+    if (!Array.isArray(islands)) return;
+    $('islands-count').textContent = islands.length || '';
+    const key = JSON.stringify(islands);
+    if (key === shown) return;
+    shown = key;
+    $('islands').replaceChildren(
+      h('p', { class: 'muted' }, 'The islands open now. 👁️ Watch flies over one in a new tab, unseen: nobody there sees you, hears of you or counts you, and you touch nothing.'),
+      islands.length ? h('ol', { class: 'recent island-list card' }, ...islands.map((i) => islandRow(h, i, watch))) : h('p', { class: 'empty' }, 'No island is open right now.'),
+    );
+  };
+}

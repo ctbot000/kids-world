@@ -18,7 +18,8 @@
 // login (when, how often, from where and on what), to clear; and what is on every TV in the game (a YouTube video, or
 // a video on this computer, which the admin page itself plays to them: see
 // shared/broadcast.js); screen time, every player locked at once (see
-// shared/lock.js); and CTB, the company whose workers do real work on
+// shared/lock.js); the islands open now, each to watch unseen (see
+// shared/watch.js); and CTB, the company whose workers do real work on
 // this project (ctb.js): its settings, its workers and what they are doing,
 // its task board (GitHub issues) with a form for a new task, the workers'
 // proposals to approve or turn down, and their pull requests. Only for this computer: requests from other
@@ -37,6 +38,7 @@ const PAGES = {
   '/admin/tv.js': 'tv.js',
   '/admin/ctb.js': 'ctb.js',
   '/admin/tabs.js': 'tabs.js',
+  '/admin/islands.js': 'islands.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -236,6 +238,25 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
         keeper.setTv(null);
         json(res, 200, { tv: null });
       } else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
+      return true;
+    }
+    if (pathname === '/admin/api/islands') {
+      // The islands open now, each with a ticket to watch it unseen (POST).
+      if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
+      else if (req.method === 'GET') json(res, 200, { islands: keeper.openIslands() });
+      else res.writeHead(405, { Allow: 'GET' }).end();
+      return true;
+    }
+    const watch = /^\/admin\/api\/islands\/([^/]+)\/watch$/.exec(pathname);
+    if (watch) {
+      if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
+      else if (req.method !== 'POST') res.writeHead(405, { Allow: 'POST' }).end();
+      else {
+        const ticket = await keeper.watchTicket(watch[1]);
+        // The islands are peer to peer, through the keeper's signaling server.
+        if (ticket) json(res, 200, { code: watch[1], ticket, ...(keeper.signal ? { signal: keeper.signal } : {}) });
+        else json(res, 404, { error: 'That island is not open now.' });
+      }
       return true;
     }
     if (pathname === '/admin/api/lock') {

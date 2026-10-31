@@ -37,6 +37,7 @@ import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
+import { canWatch } from './watch.js';
 import { hasPower, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
@@ -422,8 +423,16 @@ export class Room {
     if (!c || !msg || typeof msg !== 'object' || typeof msg.t !== 'string') return;
     if (!this.allow(c)) return;
     try {
-      if (!c.pid) {
+      if (c.watch) {
+        // Watching unseen (watch.js): only its pings, and its goodbye.
+        if (msg.t === 'ping') this.sendTo(conn, { t: 'pong' });
+        else if (msg.t === 'leave') {
+          this.clients.delete(conn);
+          conn.close?.();
+        }
+      } else if (!c.pid) {
         if (msg.t === 'join') this.join(conn, c, msg);
+        else if (msg.t === 'watch') this.watch(conn, c, msg);
         else if (msg.t === 'ping') this.sendTo(conn, { t: 'pong' });
       } else {
         this.handle(conn, c, msg);
@@ -670,6 +679,20 @@ export class Room {
     this.changed();
   }
 
+  // The keeper's admin page watching the island unseen, with a ticket the
+  // keeper signed for it (watch.js): everything everyone hears, and no
+  // player, so nobody is told and it counts for nothing here.
+  watch(conn, c, msg) {
+    canWatch(this.code, msg.ticket)
+      .then((ok) => {
+        if (!ok || this.clients.get(conn) !== c || c.pid || c.watch) return;
+        c.watch = true;
+        this.sendWelcome(conn, c);
+        this.sendSong(conn);
+      })
+      .catch((error) => this.log(error));
+  }
+
   // Whether a new visitor typed the island's passcode; if not, they are told
   // why they cannot come in.
   passcodeFits(conn, raw) {
@@ -738,12 +761,13 @@ export class Room {
       t: 'welcome',
       protocol: PROTOCOL,
       code: this.code,
-      you: c.pid,
+      // A watcher is nobody here: -1, never anyone's id, nor the owner's.
+      you: c.watch ? -1 : c.pid,
       token: c.token,
       host: this.host,
       settings: this.publicSettings(),
       // Only the owner hears the passcode itself.
-      ...(c.pid === this.host ? { passcode: this.passcode } : {}),
+      ...(c.pid && c.pid === this.host ? { passcode: this.passcode } : {}),
       meta: this.world.meta(),
       blocks: this.encodedBlocks(),
       players: this.onlinePlayers().map((p) => this.describePlayer(p)),
@@ -2477,7 +2501,7 @@ export class Room {
 
   broadcast(msg, except = null) {
     const text = JSON.stringify(msg);
-    for (const [conn, c] of this.clients) if (c.pid && conn !== except) this.safeSend(conn, text);
+    for (const [conn, c] of this.clients) if ((c.pid || c.watch) && conn !== except) this.safeSend(conn, text);
   }
 
   sendTo(conn, msg) {

@@ -12,7 +12,8 @@
 // came back; and the problems players told of, with a picture of their
 // screen, to mark done or delete; the visitors' log, of the pages that came
 // by with no login, to clear; and what is on every TV in the game
-// (tv.js); and CTB, whose workers do real work on the project (ctb.js). It reads /admin/api/state and /admin/api/friend every few
+// (tv.js); the islands open now, to watch any of them unseen (islands.js);
+// and CTB, whose workers do real work on the project (ctb.js). It reads /admin/api/state and /admin/api/friend every few
 // seconds — every moment, for a while, after something is said to it, so its
 // answer shows as it comes — and /admin/api/friend/llm too while
 // the model log is open.
@@ -27,6 +28,7 @@ import { World } from '/js/shared/world.js';
 import { CHAT_MAX } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 import { setUpCtb } from '/admin/ctb.js';
+import { setUpIslands } from '/admin/islands.js';
 import { setUpTabs } from '/admin/tabs.js';
 import { refreshTv, setUpTv } from '/admin/tv.js';
 
@@ -1161,6 +1163,7 @@ function render(state) {
   renderStatus(state);
   refreshTv(state?.keeper ?? null);
   renderLock(state?.keeper ?? null);
+  refreshIslands(state?.keeper ?? null);
   if (!state) return;
   renderSummary(state);
   renderRecent(state);
@@ -1216,5 +1219,6 @@ async function refresh(now = false) {
 if (location.hash === '#reports') history.replaceState(null, '', '#ctb');
 setUpTabs();
 setUpTv();
+const refreshIslands = setUpIslands({ h });
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
 refresh();
