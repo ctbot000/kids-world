@@ -12,7 +12,7 @@ import { meshChunk } from '../public/js/render/mesher.js';
 import { placeTemplate, stampByKey } from '../public/js/shared/stamps.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { seatNear, seatPose, standUpAt, teaTableNear } from '../public/js/shared/seats.js';
-import { applyCells, buildEdit } from '../public/js/shared/tools.js';
+import { applyCells, buildEdit, doorEdit, stampEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 
 // Flat grass with its top at y = 5.
@@ -81,6 +81,47 @@ test('a stamp turns its furniture with it', () => {
   // The Cozy House comes furnished.
   const house = stampByKey('house').cells.map(([, , , id]) => id);
   for (const id of [B.BED, B.TABLE, B.BOOKSHELF, B.CHAIR]) assert.ok(house.includes(id), B.block(id).name);
+});
+
+test('the Log Cabin is a furnished log cabin with a working door', () => {
+  const cabin = stampByKey('log-cabin');
+  assert.equal(cabin.name, 'Log Cabin');
+  assert.equal(cabin.icon, '🪵');
+  const ids = cabin.cells.map(([, , , id]) => id);
+  // Trunk walls, glass windows, and a lit fireplace with a pet bed inside.
+  for (const id of [B.WOOD, B.PLANKS, B.GLASS, B.FIREPLACE, B.PET_BED, B.LAMP]) assert.ok(ids.includes(id), B.block(id).name);
+  assert.ok(B.block(B.FIREPLACE).light > 0, 'the fireplace glows');
+  // A door two tall of one kind, so it swings as one door.
+  const doors = cabin.cells.filter(([, y, z, id]) => z === 0 && y <= 2 && B.DOOR[id]);
+  assert.equal(doors.length, 2, 'two halves of one door');
+  assert.equal(B.baseOf(doors[0][3]), B.baseOf(doors[1][3]));
+  // Placed, the whole cabin goes down in one edit facing the builder, the
+  // door swings open for a bop, and taking the cells back clears it all.
+  const w = meadow();
+  const e = stampEdit(w, onTop(16, 14), 'log-cabin', 0);
+  applyCells(w, e.cells);
+  const at = (dx, dy, dz) => w.get(16 - dx, 6 + dy, 14 + dz);
+  assert.equal(at(0, 1, 0), B.DOORS[1], 'the door stands in the front wall');
+  assert.equal(at(0, 2, 0), B.DOORS[1], 'two tall, so one door that swings as a whole');
+  assert.equal(at(2, 2, 0), B.GLASS, 'a window beside it');
+  assert.equal(at(4, 1, 4), B.WOOD, 'the walls are stacked trunks');
+  assert.equal(at(4, 2, 4), B.PLANKS, 'with a course of planks between them');
+  assert.equal(at(2, 1, 6), B.FIREPLACE, 'the fireplace against the back wall');
+  assert.equal(at(-2, 1, 6), B.PET_BED, 'the pet bed beside the fire');
+  assert.equal(at(2, 6, 7), B.STONE, 'its chimney climbs the back gable');
+  assert.equal(at(0, 7, 4), B.LAMP, 'a lamp lights it under the ridge');
+  assert.equal(at(2, 9, 7), B.STONE, 'the chimney stands up above the ridge');
+  // Nothing solid stands in the way from the porch steps to the door.
+  for (const dz of [-2, -1]) for (const dy of [1, 2]) assert.equal(at(0, dy, dz), B.AIR, `the way to the door is clear (${dy}, ${dz})`);
+  assert.equal(at(0, 3, -2), B.LAMP, 'a lamp lights the porch from its roof');
+  // A bop swings the whole tall door open.
+  const open = doorEdit(w, 16, 7, 14);
+  assert.equal(open.length, 8, 'a bop swings both halves of the tall door');
+  applyCells(w, open);
+  assert.equal(B.DOOR_OPEN[w.get(16, 7, 14)], 1);
+  // Undo takes the whole cabin away, nothing left standing.
+  applyCells(w, e.cells.map((v, i) => (i % 4 === 3 ? B.AIR : v)));
+  assert.equal(w.get(16, 7, 14), B.AIR, 'nothing of the cabin is left');
 });
 
 test('sofas side by side join into one long sofa, and beds one behind the other into one bed', () => {
