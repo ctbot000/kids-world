@@ -294,6 +294,8 @@ export class Game extends EventTarget {
     // (shared/typing.js), and the one whose window is open.
     this.computerTarget = null;
     this.computerAt = null;
+    // The fish tank or bowl beside you, to feed (shared/fishtank.js).
+    this.tankTarget = null;
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -5779,6 +5781,7 @@ export class Game extends EventTarget {
     this.screenTarget = null;
     this.computerAt = null;
     this.computerTarget = null;
+    this.tankTarget = null;
     this.renderer.screens.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();

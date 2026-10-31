@@ -123,3 +123,17 @@ test('the model: a pinch of flakes comes down, the fish dart over and eat them a
     assert.ok(fish.some((f, i) => f.position.distanceTo(homes[i]) > 0.05), `${kind}: the fish back to swimming`);
   }
 });
+
+test('a bowl has no bubbles going up outside its glass; a tank\'s rise inside it', () => {
+  const materials = tankMaterials();
+  const bubbles = (g) => g.children.filter((m) => m.material === materials.bubble);
+  const bowl = tankModel(materials, 'fish-bowl');
+  bowl.userData.tick(3.7);
+  for (const b of bubbles(bowl)) {
+    assert.ok(Math.hypot(b.position.x, b.position.z) < BOWL.r && b.position.y < BOWL.top, `a bubble outside the bowl at ${b.position.x}, ${b.position.y}, ${b.position.z}`);
+  }
+  const tank = tankModel(materials, 'fish-tank');
+  tank.userData.tick(3.7);
+  assert.equal(bubbles(tank).length, 5);
+  for (const b of bubbles(tank)) assert.ok(Math.abs(b.position.x) < TANK.x && b.position.y <= TANK.y1, 'inside the tank');
+});

@@ -380,8 +380,9 @@ export function tankModel(materials, kind = 'fish-tank') {
       leaves.push(...p.leaves);
     }
   }
+  // A tank's bubbles come up from its stone; a bowl has none.
   const bubbles = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < (kind === 'fish-bowl' ? 0 : 5); i++) {
     const b = new THREE.Mesh(keep(`bubble ${i % 2}`, () => ball(0.008 + (i % 2) * 0.004, 8, 6)), materials.bubble);
     b.renderOrder = 1;
     b.userData.shared = true;
