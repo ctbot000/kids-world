@@ -281,6 +281,9 @@ export class Game extends EventTarget {
     // you flip away or stop watching (see danceAlong).
     this.dancing = false;
     this.dancedAt = 0;
+    // Rounds after the first not yet echoed back: they count no dance and no
+    // pet trick, so watching is not a way to pile up stats and XP.
+    this.danceRepeats = 0;
     // What the island's computers show, by cell (shared/screens.js), the
     // computer beside you to look at, and the one being looked at.
     this.screens = new Map();
@@ -2596,12 +2599,15 @@ export class Game extends EventTarget {
   }
 
   // The next round of the dance, started soon enough that it runs straight
-  // on from the last (the dance emote lasts 3.2 seconds).
+  // on from the last (the dance emote lasts 3.2 seconds). Only the first
+  // round of a dance-along counts as a dance.
   danceLoop() {
     if (!this.dancing || this.seat || this.riding || this.aboard || this.pianoAt || this.me.body.flying) return;
     if (performance.now() < this.dancedAt) return;
+    const first = !this.dancedAt;
     this.dancedAt = performance.now() + 3200;
-    this.emote('dance');
+    if (!first) this.danceRepeats++;
+    this.emote('dance', first);
   }
 
   // ------------------------------------------------ school
@@ -4607,12 +4613,15 @@ export class Game extends EventTarget {
     this.emit('chat', { ...msg, text });
   }
 
-  emote(key) {
+  emote(key, counts = true) {
     this.send({ t: 'emote', e: key });
-    if (key === 'dance') this.profile.count('danced');
+    if (key === 'dance' && counts) this.profile.count('danced');
   }
 
   emoted(pid, key) {
+    // Your own dance-along round coming back: no trick counted for it.
+    const repeat = pid === this.pid && key === 'dance' && this.danceRepeats > 0;
+    if (repeat) this.danceRepeats--;
     const p = this.players.get(pid);
     if (!p?.avatar) return;
     p.avatar.playEmote(key);
@@ -4624,7 +4633,7 @@ export class Game extends EventTarget {
     if (pet && EMOTE_TRICKS[key] && pet.sim.mode !== 'ride') {
       startTrick(pet.sim, EMOTE_TRICKS[key]);
       if (key === 'hearts') this.renderer.effects.hearts(pet.sim.x, pet.sim.y + pet.model.height, pet.sim.z, 2);
-      if (pid === this.pid) this.profile.count('tricks');
+      if (pid === this.pid && !repeat) this.profile.count('tricks');
     }
   }
 
@@ -5716,6 +5725,7 @@ export class Game extends EventTarget {
     this.tvAt = null;
     this.tvTarget = null;
     this.dancing = false;
+    this.danceRepeats = 0;
     this.stationAt = null;
     this.stationTarget = null;
     this.classTarget = null;
