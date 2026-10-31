@@ -32,7 +32,7 @@ import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
-import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
@@ -463,9 +463,10 @@ export class Room {
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
         break;
       // A swing at a monster (the 👊 button), for friends to see it start as
-      // it does: the bop it lands comes a moment later.
+      // it does: the bop it lands comes a moment later. A King Punch (a bare
+      // fist held to charge) says so, for friends to see the shockwave.
       case 'swing':
-        this.broadcast({ t: 'swing', pid }, conn);
+        this.broadcast({ t: 'swing', pid, king: msg.king === true ? true : undefined }, conn);
         break;
       // A key played on a piano (piano.js), by someone standing at it, for
       // everyone else to hear from there.
@@ -1758,10 +1759,13 @@ export class Room {
     const now = this.now();
     const m = this.monsters.get(msg.id);
     if (!m || (!m.camp && !m.march && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
+    // A King Punch (a bare fist held to charge, game.js): only with an empty
+    // hand, and it reaches further round a wider arc. HP and XP are as a punch.
+    const king = msg.king === true && !weaponOf(p.look?.weapon);
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     const weapon = weaponOf(p.look?.weapon);
-    if (!landed && !this.monsters.canBop(m.id, at, weapon?.reach ?? 0)) return;
+    if (!landed && !this.monsters.canBop(m.id, at, king ? KING_REACH : weapon?.reach ?? 0)) return;
     if (m.march) {
       this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
       return;
@@ -1773,7 +1777,7 @@ export class Room {
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1));
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : undefined);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });

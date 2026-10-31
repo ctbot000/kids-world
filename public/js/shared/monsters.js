@@ -171,6 +171,11 @@ const GIGGLE_MS = 1400;
 // than on your screen.
 export const ARM_REACH = 1.2;
 export const BOP_SLACK = 1.2;
+// A King Punch (a bare fist held to charge, game.js) reaches further and
+// round a wider arc than an ordinary swing, and knocks them back harder.
+export const KING_REACH = 3.2;
+export const KING_SWEEP = -0.6;
+export const KING_PUSH = 13;
 // How far a body b (a monster's) is from the side of someone standing at p,
 // if it is about level with them and no further than reach, else null.
 export function bopGap(p, b, reach) {
@@ -907,10 +912,11 @@ export class MonsterSim {
 
   // A bop on a blob, by the player pid standing at p: a heart off it, a hop
   // back away from them, and it comes after them, crosser and quicker, for a
-  // while. power: the hearts a bop takes (more with a toy weapon). Returns
+  // while. power: the hearts a bop takes (more with a toy weapon), push how
+  // hard it is knocked back (a King Punch's is harder). Returns
   // { wait } (they tapped it a moment ago), or the hearts it has left (0: it
   // goes pop).
-  hit(m, pid, p, now, power = 1) {
+  hit(m, pid, p, now, power = 1, push = HIT_PUSH) {
     if (now - (m.hits.get(pid) ?? -Infinity) < HIT_MS) return { wait: true };
     m.hits.set(pid, now);
     m.hearts = Math.max(0, m.hearts - power);
@@ -920,7 +926,7 @@ export class MonsterSim {
     const dx = b.x - p.x;
     const dz = b.z - p.z;
     const d = Math.hypot(dx, dz) || 1;
-    Object.assign(b, { vx: (dx / d) * HIT_PUSH, vz: (dz / d) * HIT_PUSH, vy: 4, onGround: false });
+    Object.assign(b, { vx: (dx / d) * push, vz: (dz / d) * push, vy: 4, onGround: false });
     m.yaw = Math.atan2(-dx, -dz);
     m.cross = now + CROSS_MS;
     if (!m.passive) m.target = pid;

@@ -3182,8 +3182,10 @@ export class UI {
     $('btn-attack').onpointerdown = (e) => {
       e.preventDefault();
       this.sound.unlock();
+      this.input.bopHeld = true;
       game.attack();
     };
+    $('btn-attack').onpointerup = $('btn-attack').onpointerleave = $('btn-attack').onpointercancel = () => (this.input.bopHeld = false);
     // The weapon button, by it: the next of your toy weapons into your hand.
     $('btn-weapon').onmousedown = (e) => e.preventDefault();
     $('btn-weapon').onclick = () => {

@@ -13,6 +13,7 @@ export class Input {
     this.move = { x: 0, y: 0 };
     this.jumpHeld = false;
     this.downHeld = false;
+    this.bopHeld = false;
     this.pointer = { x: 0, y: 0, inside: false };
     this.press = null;
     this.touches = new Map();
@@ -59,6 +60,7 @@ export class Input {
     this.keys.clear();
     this.jumpHeld = false;
     this.downHeld = false;
+    this.bopHeld = false;
     this.endPress();
     this.touches.clear();
     this.endJoystick();
@@ -122,6 +124,12 @@ export class Input {
 
   get jump() {
     return this.jumpHeld || this.keys.has('Space');
+  }
+
+  // The bop button (👊 or X) held down: a bare fist held long enough charges
+  // up a King Punch (game.js chargeBop).
+  get bop() {
+    return this.bopHeld || this.keys.has('KeyX');
   }
 
   get down() {

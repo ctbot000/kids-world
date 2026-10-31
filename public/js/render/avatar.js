@@ -2200,6 +2200,24 @@ export class Avatar {
     return swing.secs * swing.strike;
   }
 
+  // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
+  // 1. The fist is drawn back and glows brighter and bigger as it charges —
+  // everyone sees it — and at 0 the glow is gone.
+  chargeUp(k) {
+    if (!this.chargeLight) {
+      // A golden glow in the right fist, lit from within, and the sparkles
+      // that come off it are effects' business (game.js shockwave draws those).
+      const light = new THREE.Mesh(sphere(0.14, 12, 8), toon('#ffd84d', { emissive: 1.4 }));
+      light.visible = false;
+      this.hands[1].add(light);
+      this.chargeLight = light;
+    }
+    this.chargeAt = k > 0 ? this.time : -Infinity;
+    this.chargeK = k;
+    this.chargeLight.visible = k > 0;
+    if (k > 0) this.chargeLight.scale.setScalar(0.4 + k * 1.1);
+  }
+
   // A key struck on the piano being played (MIDI note n): the hand on that
   // side of the keyboard moves over to it and strikes it.
   pianoNote(n) {
