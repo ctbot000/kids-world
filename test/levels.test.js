@@ -10,14 +10,16 @@ import { lookWithGear } from '../public/js/shared/shop.js';
 import { MONSTER_LOG, popKey, seenKey, STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { cleanLook } from '../public/js/shared/words.js';
 
-test('everything counted earns XP, except the highest you flew and the monster collection, and only counted things do', () => {
+test('everything counted earns XP, except the highest you flew, the monster collection and the coins earned in all, and only counted things do', () => {
   // The monster collection's counts (seen and popped, kind by kind) go over
-  // what popped already earns XP for.
+  // what popped already earns XP for. The coins earned in all (earned) are a
+  // lifetime total, not a thing done: what earned each coin already gave XP.
   const book = new Set(MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]));
   for (const key of Object.keys(XP_FOR)) assert.ok(STAT_KEYS.includes(key), `${key} is counted`);
-  for (const key of STAT_KEYS) if (key !== 'highest' && !book.has(key)) assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
+  for (const key of STAT_KEYS) if (key !== 'highest' && key !== 'earned' && !book.has(key)) assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
   for (const key of book) assert.equal(XP_FOR[key], undefined, key);
   assert.equal(xpOf({ highest: 1000 }, {}), 0);
+  assert.equal(xpOf({ earned: 1000000 }, {}), 0);
 });
 
 test('XP adds up what you did and your stickers, rounded down, with nothing odd counted', () => {

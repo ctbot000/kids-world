@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'millionaire', date: '2026-10-31', icon: '💰', title: 'The Millionaire sticker', text: 'Every coin you have ever earned now counts towards the legendary 💰 Millionaire sticker — a million coins in all! Selling in the shop, classes, races, hide and seek, pearls and monster prizes: they all add up, and spending never takes away from it.' },
   { id: 'feed-fish', date: '2026-10-31', icon: '🐟', title: 'Feed the fish', text: 'Walk up to a fish tank or a goldfish bowl and tap 🐟 Feed (or press Q): a pinch of flakes drifts down onto the water and the fish dart over and nibble them up! Feed them too soon, though, and they are still full.' },
   { id: 'king-bop', date: '2026-10-31', icon: '👑', title: 'King Bop', text: 'Pop 777 monsters for the new 👑 King Bop sticker — King Grumble\'s lucky number!' },
   { id: 'lightning-fire', date: '2026-10-31', icon: '🔥', title: 'Lightning starts fires', text: 'In a ⛈️ thunderstorm, lightning strikes the tallest things — and can set trees and grass on fire! Fire spreads to what grows next to it. Keep out of the flames, and put them out with the watering can.' },
