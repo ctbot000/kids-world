@@ -4950,9 +4950,29 @@ test('a TV: Q by it opens its picture, ◀ ▶, a tap and the number keys flip t
   assert.equal(await channel(), `5 · ${CHANNELS[4].icon} ${CHANNELS[4].name}`);
   assert.equal(await page.evaluate(() => document.querySelector('.tv-channel.on').dataset.channel), '4');
   seen.push(await picture());
+  // On 🪩 Dance Party you dance along, round after round, friends seeing
+  // each one; but only the first round counts as a dance.
+  const rounds = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const sent = [];
+    const send = kw.game.send.bind(kw.game);
+    kw.game.send = (m) => {
+      if (m.t === 'emote') sent.push(m.e);
+      return send(m);
+    };
+    for (let i = 0; i < 4; i++) {
+      kw.game.dancedAt = Math.min(kw.game.dancedAt, 1);
+      kw.step(1 / 60, 1);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    kw.game.send = send;
+    return { sent, danced: kw.profile.data.stats.danced, dancing: kw.game.dancing };
+  });
+  assert.deepEqual(rounds, { sent: ['dance', 'dance', 'dance', 'dance'], danced: 1, dancing: true });
   for (const n of seen) assert.ok(n > 5 && n < 2000, `a picture on every channel: ${seen}`);
   await page.keyboard.press('ArrowLeft');
   assert.equal(await channel(), `4 · ${CHANNELS[3].icon} ${CHANNELS[3].name}`);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.dancing), false, 'flipped away, the dancing stops');
   await until(page, () => window.kidsWorld.profile.data.stickers['channel-surfer']);
   assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.channels), 5);
   await page.keyboard.press('Escape');

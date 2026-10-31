@@ -8,7 +8,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
-import { CHANNELS, isTv, nextChannel, tvNear } from '../public/js/shared/tv.js';
+import { CHANNELS, DANCE, isDance, isTv, nextChannel, tvNear } from '../public/js/shared/tv.js';
 import { World } from '../public/js/shared/world.js';
 
 const TVS = [B.TV, B.RETRO_TV, B.WALL_TV];
@@ -52,6 +52,13 @@ test('the TV beside you is found, a Wall TV up on the wall too, and none further
   w.set(8, 7, 9, B.WALL_TV);
   assert.equal(tvNear(w, { x: 8.5, y: 5, z: 7.8 }).name, 'Wall TV', 'on the wall over your head');
   assert.equal(tvNear(w, { x: 8.5, y: 4, z: 7.8 }), null, 'too high up from further down');
+});
+
+test('the Dance Party channel is the one you dance along to', () => {
+  assert.equal(DANCE, CHANNELS.find((c) => c.key === 'dance'));
+  assert.ok(isDance(DANCE));
+  assert.ok(!isDance(CHANNELS[0]));
+  assert.ok(!isDance(null));
 });
 
 test('the channels go round both ways', () => {
