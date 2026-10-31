@@ -2533,14 +2533,16 @@ export class Game extends EventTarget {
   // A key played (MIDI note n) on the open piano: heard at once, a note
   // floats up from the piano, and it goes to the island for friends to
   // hear (shared/piano.js).
-  playPiano(n) {
+  // A note on the piano you sit at; one your own song plays back (counts
+  // false) sounds and goes to the island the same, but is not one you played.
+  playPiano(n, counts = true) {
     const t = this.pianoAt;
     if (!t) return;
     this.sound.piano(n, { grand: t.grand });
     this.players.get(this.pid)?.avatar?.pianoNote(n);
     this.pianoFx(t, n);
     this.send({ t: 'piano', n, at: [t.x, t.y, t.z] });
-    this.profile.count('notes');
+    if (counts) this.profile.count('notes');
   }
 
   // A song followed all the way through on the piano.

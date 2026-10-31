@@ -4644,7 +4644,28 @@ test('at the piano, a song of your own is recorded and played back with its timi
   assert.deepEqual(played.map((p) => p.n), [60, 62, 65]);
   assert.ok(played[1].gap > 0.2 && played[2].gap > played[1].gap + 0.2, JSON.stringify(played));
   await until(page, () => document.querySelector('.piano-said').textContent.includes('Your song'));
-  assert.deepEqual(await page.evaluate(() => window.kidsWorld.sawKeys.sort()), ['C 4', 'D 4', 'F 4']);
+  assert.deepEqual(await page.evaluate(() => [...new Set(window.kidsWorld.sawKeys)].sort()), ['C 4', 'D 4', 'F 4']);
+  // Playing back is not playing: a song picked while it plays (here one
+  // starting with the notes recorded, E E F of Ode to Joy) is not followed
+  // along by it, and no notes count as played.
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  for (const key of ['KeyC', 'KeyC', 'KeyV']) {
+    await page.keyboard.press(key);
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  const before = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    kw.saidAll = [];
+    new MutationObserver(() => kw.saidAll.push(document.querySelector('.piano-said').textContent)).observe(document.querySelector('.piano-said'), { childList: true, characterData: true, subtree: true });
+    document.querySelector('.piano-song.hear').click();
+    document.querySelector('.piano-songs [data-song="joy"]').click();
+    return kw.profile.data.stats.notes;
+  });
+  await until(page, () => document.querySelector('.piano-said').textContent.includes('Your song'));
+  const after = await page.evaluate(() => ({ notes: window.kidsWorld.profile.data.stats.notes, said: window.kidsWorld.saidAll }));
+  assert.equal(after.notes, before, 'notes played back are not counted as played');
+  assert.ok(!after.said.some((t) => /Ode to Joy: \d/.test(t)), JSON.stringify(after.said));
   // Standing up and sitting down again starts with no song of your own.
   await page.keyboard.press('Escape');
   await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.pianoAt === null);

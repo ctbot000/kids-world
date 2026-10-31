@@ -5348,9 +5348,12 @@ export class UI {
       said.textContent = song ? `${song.icon} ${song.name}: play the glowing key!` : 'Tap the keys to play!';
       light();
     };
-    const play = (n) => {
+    // A note played, or one your own song plays back (back): that one sounds
+    // the same but counts as no note played and follows no song, so a song
+    // picked while it plays is never played for you.
+    const play = (n, back = false) => {
       this.sound.unlock();
-      g.playPiano(n);
+      g.playPiano(n, !back);
       const now = performance.now() / 1000;
       if (rec.on && !playing) rec.note(n, now - lastNote);
       lastNote = now;
@@ -5360,7 +5363,7 @@ export class UI {
         void el.offsetWidth;
         el.classList.add('down');
       }
-      if (!song) return;
+      if (!song || back) return;
       if (n !== song.notes[at]) return;
       at++;
       if (at < song.notes.length) {
@@ -5407,7 +5410,7 @@ export class UI {
     // Each moment of playing back: the notes that came due in it sound.
     const tick = (now) => {
       const to = now / 1000 - startAt;
-      for (const n of rec.due(heard, to)) play(n);
+      for (const n of rec.due(heard, to)) play(n, true);
       heard = to;
       if (to > rec.length + 0.4) {
         stopPlay();
