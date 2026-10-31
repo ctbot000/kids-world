@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'king-bop', date: '2026-10-31', icon: '👑', title: 'King Bop', text: 'Pop 777 monsters for the new 👑 King Bop sticker — King Grumble\'s lucky number!' },
   { id: 'lightning-fire', date: '2026-10-31', icon: '🔥', title: 'Lightning starts fires', text: 'In a ⛈️ thunderstorm, lightning strikes the tallest things — and can set trees and grass on fire! Fire spreads to what grows next to it. Keep out of the flames, and put them out with the watering can.' },
   { id: 'lightning', date: '2026-10-31', icon: '⛈️', title: 'Thunderstorms', text: 'Now and then the rain comes as a ⛈️ thunderstorm: lightning flashes across the sky and the thunder rumbles. It waters your farm too!' },
   { id: 'real-kitchen', date: '2026-10-31', icon: '🍳', title: 'A real kitchen', text: 'Cooking classes happen in a real-looking 3D kitchen now: crack eggs into a glazed bowl, fry pancakes on a gas hob, bake pizza in a glowing oven — and see a picture of your dish at the end!' },

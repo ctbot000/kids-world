@@ -54,6 +54,52 @@ export const SONGS = [
 
 export const songOf = (key) => SONGS.find((s) => s.key === key) ?? null;
 
+// Your own song, made at the piano: ⏺ Record takes down each note you
+// play, when each came after the first one, and ▶ Play sounds them back
+// with their timing. It lasts only while you sit there: nothing is saved.
+export const REC_MAX = 200;
+
+export class Recorder {
+  constructor() {
+    this.notes = [];
+    this.on = false;
+    this.last = 0;
+  }
+
+  // Recording starts over, from the next note you play (whose moment is the
+  // song's own start, so a slow beginning is not a slow song).
+  start() {
+    this.notes = [];
+    this.on = true;
+    this.last = 0;
+  }
+
+  stop() {
+    this.on = false;
+  }
+
+  // A note played secs after the last one taken down: kept with how far it
+  // is into the song. Only so many fit, so a very long noodle is cut short
+  // rather than going on for ever.
+  note(n, secs) {
+    if (!this.on || !isNote(n) || this.notes.length >= REC_MAX) return false;
+    this.last += this.notes.length ? Math.max(0, secs) : 0;
+    this.notes.push({ n, at: this.last });
+    return true;
+  }
+
+  // How far the song runs, from its first note to its last.
+  get length() {
+    return this.notes.length ? this.notes[this.notes.length - 1].at : 0;
+  }
+
+  // The notes that fall between secs and to (the first at 0, so it sounds
+  // from the moment ▶ Play is tapped): what a moment of playing back sounds.
+  due(secs, to) {
+    return this.notes.filter((x) => x.at > secs && x.at <= to).map((x) => x.n);
+  }
+}
+
 // How high the piano bench is that you sit on to play (render/avatar.js
 // draws it under you), and how far in front of the piano's middle you sit:
 // the grand's keys stick out further, so you sit further out.

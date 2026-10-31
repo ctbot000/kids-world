@@ -118,6 +118,32 @@ test('photos are counted, and five of them are the Photographer’s sticker', as
   }
 });
 
+test('the 777th monster popped is the King Bop sticker, and one already past 777 earns it on their next pop', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const got = [];
+    const p = new Profile();
+    p.addEventListener('sticker', (e) => got.push(e.detail.key));
+    p.count('popped', 776);
+    assert.deepEqual(got, ['monster-popper', 'monster-master'], 'not yet at 777');
+    p.count('popped');
+    assert.deepEqual(got, ['monster-popper', 'monster-master', 'king-bop'], 'the 777th one is');
+    assert.equal(p.data.stats.popped, 777);
+    // Someone who was popping monsters before the sticker was: with only the
+    // older ones had, it comes on the next pop.
+    p.data.stats.popped = 5000;
+    p.data.stickers = { 'monster-popper': 1, 'monster-master': 1 };
+    const late = [];
+    p.addEventListener('sticker', (e) => late.push(e.detail.key));
+    p.count('popped');
+    assert.deepEqual(late, ['king-bop', 'monster-legend'], 'caught up on the next pop');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
 test('the ranking has a board for XP', () => {
   const players = [
     { id: 'a', profile: { name: 'Ann', look: {}, stats: { placed: 10 }, stickers: {} } },
@@ -145,6 +171,7 @@ test('harder stickers, and legendary ones after them, come only long after the e
     ['animal-friend', 'animal-whisperer', 'petted', 500],
     ['explorer', 'globetrotter', 'steps', 50000],
     ['monster-popper', 'monster-master', 'popped', 500],
+    ['monster-master', 'king-bop', 'popped', 777],
     ['flag-raiser', 'camp-liberator', 'freed', 50],
     ['island-hero', 'grumble-buster', 'kings', 10],
     ['star-keeper', 'fortress-guard', 'defended', 5],
@@ -161,7 +188,7 @@ test('harder stickers, and legendary ones after them, come only long after the e
     ['diamond-hoard', 'diamond-mountain', 'diamonds', 100],
     ['animal-whisperer', 'creature-keeper', 'petted', 5000],
     ['globetrotter', 'world-walker', 'steps', 500000],
-    ['monster-master', 'monster-legend', 'popped', 5000],
+    ['king-bop', 'monster-legend', 'popped', 5000],
     ['camp-liberator', 'freedom-legend', 'freed', 500],
     ['grumble-buster', 'king-of-kings', 'kings', 100],
     ['fortress-guard', 'unbreakable', 'defended', 50],
