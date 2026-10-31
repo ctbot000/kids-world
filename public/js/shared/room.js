@@ -373,6 +373,7 @@ export class Room {
     const p = this.players.get(pid);
     if (!p || this.connected(pid)) return;
     this.unride(pid);
+    this.unhoop(pid);
     if (this.arcade.left(pid)) this.sendArcade();
     if (this.go.left(pid)) this.sendGo();
     this.hideSeekLeft(pid);
@@ -467,22 +468,23 @@ export class Room {
       // everyone's copy of the island draws the hoop at their friend's waist,
       // swinging their hips, until it drops. The hoop itself stays where it
       // was put down on the ground, so nothing more needs saying.
-      case 'hoop':
+      case 'hoop': {
+        const c = this.critters.get(msg.id);
+        if (!c || c.type !== 'hoop') break;
         if (msg.op === 'spin') {
-          const c = this.critters.get(msg.id);
-          if (!c || c.type !== 'hoop') break;
-          if (Math.hypot(c.x - p.s[0], c.z - p.s[2]) > 5 || Math.abs(c.y - p.s[1]) > 4) break;
-          // Only one hoop at a time, and only one spinner of each.
+          // Only a hoop nobody else is spinning, lying beside you, and only
+          // one at a time: it goes round with you (critters.js) until it
+          // drops, by itself at the latest when its time is up.
+          if ((c.hooper && c.hooper !== pid) || Math.hypot(c.x - p.s[0], c.z - p.s[2]) > 3 || Math.abs(c.y - p.s[1]) > 2) break;
           this.unhoop(pid);
-          c.hooper = pid;
-          c.state = 'hoop';
+          const spin = CRITTER_INFO.hoop.hoop;
+          Object.assign(c, { hooper: pid, state: 'hoop', hoopUntil: this.now() + (spin.spin + spin.wobble + 2) * 1000 });
           this.broadcast({ t: 'hoop', op: 'spin', id: c.id, pid });
-        } else if (msg.op === 'drop') {
-          const c = this.critters.get(msg.id);
-          if (!c || c.hooper !== pid) break;
-          this.broadcast({ t: 'hoop', op: 'drop', id: c.id, pid, x: msg.x, y: msg.y, z: msg.z });
+        } else if (msg.op === 'drop' && c.hooper === pid) {
+          this.unhoop(pid);
         }
         break;
+      }
       // A swing at a monster (the 👊 button), for friends to see it start as
       // it does: the bop it lands comes a moment later. A King Punch (a bare
       // fist held to charge) says so, for friends to see the shockwave.
@@ -988,8 +990,8 @@ export class Room {
           return;
         }
         const riding = this.critters.get(msg.id);
-        if (riding?.rider || riding?.passengers?.some(Boolean)) {
-          this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
+        if (riding?.rider || riding?.passengers?.some(Boolean) || riding?.hooper) {
+          this.notice(conn, riding.hooper ? `Someone is spinning ${riding.name}! Wait until it drops.` : `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
           return;
         }
         // The island's own dragon stays: the volcano island would not be
@@ -1099,12 +1101,13 @@ export class Room {
     }
   }
 
-  // Whatever hula hoop pid was spinning drops: nobody's hooping it now.
+  // Whatever hula hoop pid was spinning drops where they stand: nobody's
+  // hooping it now, and everyone is told.
   unhoop(pid) {
     for (const c of this.critters.list) {
       if (c.type !== 'hoop' || c.hooper !== pid) continue;
-      c.hooper = 0;
-      c.state = 'idle';
+      Object.assign(c, { hooper: 0, state: 'idle', body: null });
+      this.broadcast({ t: 'hoop', op: 'drop', id: c.id, pid });
     }
   }
 

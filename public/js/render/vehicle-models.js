@@ -303,25 +303,21 @@ function scooter(id) {
 const WOODS = ['#b98b5a', '#a97748', '#c49a68'];
 
 // A hula hoop: a striped ring lying flat on the grass until someone walks up
-// and spins it round their waist (game.js). It is built in a group of its own
-// (v.spin) so spinning it round a waist, or wobbling it down, only turns and
-// tips that; the stripes show it going round.
+// and spins it round their waist (game.js). It is in a group of its own
+// (hoopRing), which drive() turns round and tips as game.js says (hoopTurn,
+// hoopTilt); the stripes show it going round.
 function hoop(id) {
   const v = rig();
-  const spin = new THREE.Group();
-  spin.position.y = 0.05;
-  v.body.add(spin);
+  const turn = new THREE.Group();
+  turn.position.y = 0.05;
+  v.body.add(turn);
   const ring = new THREE.Group();
   ring.rotation.x = Math.PI / 2;
-  spin.add(ring);
+  turn.add(ring);
   ring.add(mesh(torus(0.42, 0.042), toon('#f2b53c')));
   for (let i = 0; i < 4; i++) ring.add(mesh(torus(0.42, 0.045, Math.PI / 4), toon('#e8453c')).rotateZ((i / 4) * Math.PI * 2 + Math.PI / 8));
-  v.spin = spin;
-  v.eyes = null;
-  return { ...v, height: 0.12, center: 0.06, pick: 0.45, shadow: 0.45, seen: 80 };
+  return { ...v, hoopRing: turn, height: 0.12, center: 0.06, pick: 0.45, shadow: 0.45, seen: 80 };
 }
-
-
 
 // A little wooden sled: two runners with a curl up in front (a rod bent
 // round the front of each, on a pivot of its own so the curl can spring),
@@ -846,6 +842,16 @@ export function drive(m, dt, state, moving, air = 0) {
   // A fun park's ride turns by itself (ride-models.js).
   m.animate?.();
   m.trick = Math.max(0, m.trick - dt);
+  // A hula hoop round someone's waist: its middle swings round them, the
+  // ring pressed against the far side of their waist, tipping as it goes
+  // (game.js says how far round, how far out and how far it tips).
+  if (m.hoopRing) {
+    const turn = m.hoopTurn ?? 0;
+    const tilt = m.hoopTilt ?? 0;
+    const out = m.hoopOrbit ?? 0;
+    m.hoopRing.rotation.set(Math.cos(turn) * tilt, 0, -Math.sin(turn) * tilt);
+    m.hoopRing.position.set(Math.sin(turn) * out, 0.05, Math.cos(turn) * out);
+  }
   const go = moving ? m.hs : 0;
   for (const w of m.wheels ?? []) w.rotation.x += (go * dt) / w.userData.r;
   const honk = m.trick > 0 || state === 'happy';

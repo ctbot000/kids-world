@@ -2254,7 +2254,7 @@ export class UI {
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear, a unicorn or a big dog, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🐲', 'The dragon', ['Every 🌋 volcano island has a great green dragon, asleep near the crater. Go near and it wakes up and breathes fire: when it rears back, run out of the way it faces! Bop it (', h('kbd', {}, 'X'), ') until it is tired out and it is tame — walk up, tap Ride and hold jump to fly. Tame a dragon ' + TAMES_TO_INVITE + ' times and your own is in the toy box, to bring to any island.']),
-          card('🚗', 'Vehicles', ['Walk up to the car, the go-kart, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. A sled is quicker on snow than on grass, and slides down hills — bring one from the toy box. Bring the paint van from the toy box too: pick a colour with the Paint tool and drive round, and it paints the ground as you go. The lawn mower cuts the grass it rolls over into a short stripe, and the flowers in its path go in your basket — but it never cuts anything anyone built, nor a crop on the farmland. More are in the toy box.']),
+          card('🚗', 'Vehicles', ['Walk up to the car, the go-kart, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. A sled is quicker on snow than on grass, and slides down hills — bring one from the toy box. A hula hoop from the toy box goes round your waist: walk up to it and tap ⭕ Spin (or press Q), and keep still to keep it up! Bring the paint van from the toy box too: pick a colour with the Paint tool and drive round, and it paints the ground as you go. The lawn mower cuts the grass it rolls over into a short stripe, and the flowers in its path go in your basket — but it never cuts anything anyone built, nor a crop on the farmland. More are in the toy box.']),
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🎡', 'Fun park', ['A 🎡 Fun Park Island has a roller coaster, a Ferris wheel and a merry-go-round. Walk up to one and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride with your friends. Hop in the roller coaster’s train while it waits at the station: up the lift hill, down the drop and round the loop it goes, and you get off back at the station.']),
@@ -4669,6 +4669,10 @@ export class UI {
   // you ride (or near the top, seeing through your own eyes): kept on the
   // screen, clear of the top bar, the toasts and the hotbar.
   rideButton(g, r) {
+    if (!g.riding && !g.aboard && !g.seat && (g.hooping || g.hoopTarget)) {
+      this.hoopButton(g, r);
+      return;
+    }
     if (!g.riding && !g.aboard && (g.seat || (!g.rideTarget && g.seatTarget))) {
       this.seatButton(g, r);
       return;
@@ -4710,6 +4714,50 @@ export class UI {
     const y = scr.visible ? scr.y + 24 : 220;
     el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
     el.hidden = false;
+  }
+
+  // ⭕ Spin, beside a hula hoop put down next to you, and 👋 Drop while it
+  // goes round your waist: the Ride button, for hoops.
+  hoopButton(g, r) {
+    const el = $('ride');
+    const c = g.critters.get(g.hooping?.id ?? g.hoopTarget);
+    const at = g.hooping ? g.players.get(g.pid)?.avatar?.root.position : c?.model.group.position;
+    if (!c || !at || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const touch = this.input.touchMode;
+    const label = g.hooping ? '👋 Drop' : '⭕ Spin';
+    const key = `${label}|${touch}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
+      el.setAttribute('aria-label', g.hooping ? 'Drop the hula hoop' : `Spin ${c.name || 'the hula hoop'}`);
+    }
+    const scr = r.project(at.x, at.y + (g.hooping ? 1 : 0.3), at.z);
+    if (!scr.visible && !g.hooping) {
+      el.hidden = true;
+      return;
+    }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 150;
+    const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
+    const y = scr.visible ? scr.y + 24 : 220;
+    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
+  // While a hula hoop goes round your waist: how many times round, over the
+  // hotbar.
+  renderHoop(g) {
+    const el = $('hoop');
+    const spins = g?.hooping ? g.hooping.spins : -1;
+    const key = String(spins);
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.hidden = spins < 0;
+    if (spins >= 0) el.textContent = `⭕ ${spins} ${spins === 1 ? 'spin' : 'spins'}`;
   }
 
   // Sit (or Lie down), beside the chair, sofa or bed next to you, and Get up
@@ -7538,6 +7586,7 @@ export class UI {
     }
     this.renderHideSeek();
     this.renderRace(g);
+    this.renderHoop(g);
     this.raceButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);

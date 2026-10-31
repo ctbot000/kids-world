@@ -4991,6 +4991,60 @@ test('a drawing board: Q by it opens its picture, a line drawn with the mouse an
   await page.browserContext().close();
 });
 
+test('a hula hoop: put down from the toy box, ⭕ Spin (Q) puts it round your waist, the spins are counted, Shift drops it, and Undo takes it away', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Level ground beside the start, cleared, with nobody else about.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const g = kw.game;
+    const b = g.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && [-2, -1, 0, 1, 2].some((d) => room.world.top(x + d, z) !== ground || room.world.top(x, z + d) !== ground)) x++;
+    for (let dx = -2; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = ground + 1; y < ground + 8; y++) if (room.world.get(x + dx, y, z + dz)) room.natureCell([x + dx, y, z + dz], 0);
+    for (const c of [...room.critters.list]) {
+      room.critters.remove(c.id);
+      room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+    }
+    Object.assign(b, { x: x + 0.5, y: ground + 1, z: z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    g.sendMove(true);
+    for (let i = 0; i < 30; i++) kw.step(1 / 60, 1);
+    // Put down from the toy box's Vehicles tab, a step ahead.
+    g.critterType = 'hoop';
+    g.send({ t: 'critter', op: 'invite', type: 'hoop', x: x + 1.7, y: ground + 1, z: z + 0.5 });
+  });
+  await until(page, () => [...window.kidsWorld.game.critters.values()].some((c) => c.type === 'hoop') && window.kidsWorld.game.undoStack.length === 1);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Spin'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.hooping && document.getElementById('ride').textContent.includes('Drop'));
+  // Round it goes, the hips swinging, the spins counted over the hotbar.
+  await until(page, () => !document.getElementById('hoop').hidden && /⭕ [1-9]\d* spins?/.test(document.getElementById('hoop').textContent));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.me.anim), 14, 'the hips swing (ANIM.hoop)');
+  const round = await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const c = g.critters.get(g.hooping.id);
+    const p = c.model.group.position;
+    const b = g.me.body;
+    return { dx: p.x - b.x, dz: p.z - b.z, up: p.y - b.y };
+  });
+  assert.ok(Math.hypot(round.dx, round.dz) < 0.01 && round.up > 0.5 && round.up < 1.1, `round your waist: ${JSON.stringify(round)}`);
+  // Shift drops it at your feet, ready to spin again.
+  await page.keyboard.down('ShiftLeft');
+  await until(page, () => !window.kidsWorld.game.hooping);
+  await page.keyboard.up('ShiftLeft');
+  await until(page, () => document.getElementById('hoop').hidden);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Spin'));
+  // Undo takes it away again.
+  await page.evaluate(() => window.kidsWorld.game.undo());
+  await until(page, () => ![...window.kidsWorld.game.critters.values()].some((c) => c.type === 'hoop'));
+  await until(page, () => document.getElementById('ride').hidden);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a TV: Q by it opens its picture, ◀ ▶, a tap and the number keys flip the channel, every show is drawn, and the next TV opens on the channel last watched', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
