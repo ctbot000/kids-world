@@ -192,6 +192,24 @@ test("a kid's look: skin and hair, as chosen, as a kid starts out, or at random;
   assert.equal(lookIcon(null), '🙂');
 });
 
+test('a boy or a girl, a man or a woman: kept for a person, shown in their icon and their face', () => {
+  const kid = { animal: KID, fur: 'tan', shirt: 3, hat: 'cap', skin: 'deep', hair: 'bun', hairColor: 'pink' };
+  assert.deepEqual(cleanLook({ ...kid, gender: 'girl' }), { ...kid, gender: 'girl' });
+  assert.deepEqual(cleanLook({ ...kid, gender: 'robot' }), kid);
+  assert.deepEqual(cleanLook({ animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', gender: 'boy' }), { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' });
+  assert.deepEqual(['boy', 'girl', undefined].map((gender) => lookIcon({ ...kid, gender })), ['👦🏿', '👧🏿', '🧒🏿']);
+  const grown = { ...kid, animal: GROWN_UP, face: 'none' };
+  assert.deepEqual(['boy', 'girl', undefined].map((gender) => lookIcon({ ...grown, gender })), ['👨🏿', '👩🏿', '🧑🏿']);
+  assert.equal(lookIcon({ ...grown, gender: 'girl', face: 'beard' }), '🧔🏿\u200D\u2640\uFE0F');
+  // A girl has longer lashes than a boy.
+  const meshes = (gender) => {
+    let n = 0;
+    new Avatar({ ...kid, gender }).skull.traverse((o) => (n += o.isMesh ? 1 : 0));
+    return n;
+  };
+  assert.equal(meshes('girl'), meshes('boy') + 1);
+});
+
 test("a grown-up: a kid's skin and hair, a face of their own, and taller", () => {
   const grown = { animal: GROWN_UP, fur: 'tan', shirt: 3, hat: 'cap', skin: 'brown', hair: 'curly', hairColor: 'silver', face: 'glasses-beard' };
   assert.deepEqual(cleanLook(grown), grown);

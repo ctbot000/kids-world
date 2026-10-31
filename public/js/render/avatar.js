@@ -987,6 +987,21 @@ const lashLine = (r, open) =>
       .translate(0, R * Math.cos(cap), 0)
       .rotateX(-LID.tilt);
   });
+// A girl's longer lashes: two flicks up and out from the outer end of the
+// lash line, for an eye on that side (1 right, -1 left).
+const lashFlicks = (r, open, side) =>
+  geo(`lash-flick|${r}|${open}|${side}`, () => {
+    const R = r * 1.07;
+    const cap = Math.PI / 2 + LID.tilt - open;
+    const ring = R * Math.sin(cap);
+    const flicks = [1.12, 0.85].map((a, i) => {
+      const at = Math.PI / 2 - side * a;
+      const root = new THREE.Vector3(ring * Math.cos(at), R * Math.cos(cap), ring * Math.sin(at));
+      const tip = root.clone().add(new THREE.Vector3(side * 0.6, 1, 0.5).setLength(i ? 0.038 : 0.05));
+      return { g: new THREE.CylinderGeometry(0.0025, 0.0065, 1, 5), m: between(root, tip) };
+    });
+    return bake(flicks).rotateX(-LID.tilt);
+  });
 
 // The nose: a bridge from between the eyes out to a rounded tip, with a wing
 // either side of it (in skin, with the head); and the nostrils under it.
@@ -1099,9 +1114,10 @@ const cheekShape = (f) =>
 const lipColor = (skin) => mix(darken(skin, 0.12), '#c4505c', 0.3);
 
 // A person's face on a skull, a kid's or a grown-up's (grown: what they have
-// on it, see FACES in shared/words.js; ears: false where hair covers them).
+// on it, see FACES in shared/words.js; ears: false where hair covers them;
+// girl: longer lashes, rosier lips and, for a woman, a blush).
 // Returns the upper lids, which turn down by LID_SHUT to blink.
-function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = BLACK } = {}) {
+function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = BLACK, girl = false } = {}) {
   const eye = eyeLayout(f);
   const add = (g, mat) => skull.add(mesh(g, mat));
   add(personSkin(f, ears), toon(skin));
@@ -1126,13 +1142,14 @@ function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = B
   const onLid = (g) => eye.eyes.map((e) => ({ g, m: off.clone().multiply(placed(e.c, e.q)) }));
   lids.add(mesh(geo(`lids|${f.key}`, () => bake(onLid(upperLid(r, f.open)))), toon(skin)));
   lids.add(mesh(geo(`lashes|${f.key}`, () => bake(onLid(lashLine(r, f.open)))), toon('#2a1f22')));
+  if (girl) lids.add(mesh(geo(`lash-flicks|${f.key}`, () => bake(eye.eyes.map((e) => ({ g: lashFlicks(r, f.open, e.side), m: off.clone().multiply(placed(e.c, e.q)) })))), toon('#2a1f22')));
   lids.userData.shut = f.open + LID.low + 0.05;
   skull.add(lids);
   add(browShape(f), toon(darken(hairColor, 0.22)));
-  const lips = lipColor(skin);
+  const lips = girl ? mix(lipColor(skin), '#e0607a', 0.5) : lipColor(skin);
   add(lipShape(f), toon(lips));
   add(mouthLine(f), toon(darken(lips, 0.45)));
-  if (f.key === 'kid') add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: 0.22 }));
+  if (f.key === 'kid' || girl) add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: girl ? 0.3 : 0.22 }));
   if (extra.includes('glasses')) glasses(skull, eye);
   if (extra.includes('beard')) beard(skull, f, hairColor);
   if (extra === 'moustache' || extra.includes('beard')) moustache(skull, f, hairColor);
@@ -2164,7 +2181,7 @@ export class Avatar {
     if (person) {
       const hairColor = HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown;
       const f = grown ? FACE_SHAPES.grown : FACE_SHAPES.kid;
-      this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor });
+      this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor, girl: look.gender === 'girl' });
       this.lidShut = this.eyes.userData.shut;
       this.sway = hair(skull, look.hair, hairColor, look.hat, grown ? 1.15 : 1);
     } else {

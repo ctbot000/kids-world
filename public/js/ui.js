@@ -24,7 +24,7 @@ import { boardsOf } from './shared/ranking.js';
 import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -1238,6 +1238,20 @@ export class UI {
           );
           if (isPerson(look)) {
             parts.replaceChildren(
+              h('h3', {}, look.animal === GROWN_UP ? 'Man or woman' : 'Boy or girl'),
+              h(
+                'div',
+                { class: 'grid' },
+                ...GENDERS.map((g) => {
+                  const icon = lookIcon({ ...look, gender: g.key, face: 'none' });
+                  return h(
+                    'button',
+                    { class: `choice${g.key === look.gender ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.gender = g.key)) },
+                    h('span', { class: 'emoji' }, icon),
+                    look.animal === GROWN_UP ? g.grown : g.name,
+                  );
+                }),
+              ),
               h('h3', {}, 'Skin'),
               swatches(SKIN_TONES, look.skin, (key) => (look.skin = key)),
               h('h3', {}, 'Hair'),
