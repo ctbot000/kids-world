@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { ARM_REACH, BIG_BODY, BLOB_HEARTS, BOP_SLACK, bopGap, BUMP_HP, HIT_MS, HP_BACK, HP_BACK_MS, hpBack, HP_PER_LEVEL, KINDS, maxHp, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BIG_BODY, KING_REACH, BLOB_HEARTS, BOP_SLACK, bopGap, BUMP_HP, HIT_MS, HP_BACK, HP_BACK_MS, hpBack, HP_PER_LEVEL, KINDS, maxHp, MAX_MONSTERS, MONSTER_BODY, MonsterSim, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
 import { BODY } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -432,4 +432,37 @@ test('a Spiky cannot be landed on: it bumps whoever tries, and takes four bops',
     bops++;
   }
   assert.equal(bops, KINDS.spiky.hearts);
+});
+
+test('a King Punch bops from further off than a punch, only with a bare fist, knocking harder for the same heart', () => {
+  const { room, time } = meadowRoom();
+  const a = join(room);
+  const s = join(room, 'Brave Otter', { look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', weapon: 'sword' } });
+  room.monsters.spawnAt = Infinity;
+  const spawn = room.world.spawn;
+  // A monster two and a half steps past the side of an arm's reach: too far
+  // for a punch or a sword, near enough for a King Punch.
+  const gap = ARM_REACH + 1 + BOP_SLACK + 0.3;
+  assert.ok(gap + MONSTER_BODY.radius < KING_REACH + MONSTER_BODY.radius + BOP_SLACK);
+  const x = spawn.x + 20;
+  const m = room.monsters.add(room.world, x + gap + MONSTER_BODY.radius, 11, spawn.z);
+  const bop = (who, king) => {
+    time.t += HIT_MS;
+    Object.assign(m.body, { x: x + gap + MONSTER_BODY.radius, y: 11, z: spawn.z, vx: 0, vy: 0, vz: 0 });
+    room.receive(who, { t: 'm', s: [x, 11, spawn.z, 0, 0, 0] });
+    room.receive(who, king ? { t: 'bop', id: m.id, king: true } : { t: 'bop', id: m.id });
+  };
+  bop(a, false);
+  assert.equal(m.hearts, BLOB_HEARTS, 'out of a punch\'s reach');
+  bop(s, true);
+  assert.equal(m.hearts, BLOB_HEARTS, 'no King Punch with a toy weapon in hand');
+  bop(a, true);
+  assert.equal(m.hearts, BLOB_HEARTS - 1, 'a King Punch takes one heart, as a punch does');
+  const kingPush = m.body.vx;
+  // Right up close, a plain punch knocks it back less.
+  time.t += HIT_MS;
+  Object.assign(m.body, { x: x + 1.2, y: 11, z: spawn.z, vx: 0, vy: 0, vz: 0 });
+  room.receive(a, { t: 'bop', id: m.id });
+  assert.equal(m.hearts, BLOB_HEARTS - 2);
+  assert.ok(kingPush > m.body.vx + 3, `knocked back harder: ${kingPush} against ${m.body.vx}`);
 });

@@ -12,6 +12,11 @@ import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
+// A King Punch's charge (game.js chargeBop): how long it takes, and how far
+// in it is when friends are told of it, so theirs glows in step.
+export const CHARGE_SECS = 0.9;
+export const CHARGE_TOLD = 0.25;
+
 // Heads are made at one size, HEAD_R or so from the middle to the top, and
 // scaled down to the body they go on.
 const HEAD_R = 0.34;
@@ -257,7 +262,7 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // enough to fit in it, the root in the middle of the bed (shared/seats.js);
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14 };
 // How long someone on a coffee break waits between sips, at least and at
 // most, each wait picked at random so no two people sip together; and how
 // long a sip takes (s).
@@ -2200,6 +2205,29 @@ export class Avatar {
     return swing.secs * swing.strike;
   }
 
+  // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
+  // 1. The fist is drawn back and glows brighter and bigger as it charges —
+  // everyone sees it — and at 0 the glow is gone.
+  chargeUp(k) {
+    if (!this.chargeLight) {
+      // A golden glow in the right fist, lit from within, and the sparkles
+      // that come off it are effects' business (game.js shockwave draws those).
+      const light = new THREE.Mesh(sphere(0.14, 12, 8), toon('#ffd84d', { emissive: 1.4 }));
+      light.visible = false;
+      this.hands[1].add(light);
+      this.chargeLight = light;
+    }
+    this.chargeLight.visible = k > 0;
+    if (k > 0) this.chargeLight.scale.setScalar(0.4 + k * 1.1);
+  }
+
+  // A friend's King Punch charging, as the island tells it (on), or let go:
+  // the glow grows by itself in update, from how far it had come when told.
+  charging(on) {
+    this.chargeFrom = on ? this.time - CHARGE_TOLD : null;
+    if (!on) this.chargeUp(0);
+  }
+
   // A key struck on the piano being played (MIDI note n): the hand on that
   // side of the keyboard moves over to it and strikes it.
   pianoNote(n) {
@@ -2220,14 +2248,16 @@ export class Avatar {
   // bounce in the saddle).
   update(dt, anim, speed) {
     this.time += dt;
+    if (this.chargeFrom != null) this.chargeUp(Math.min(1, (this.time - this.chargeFrom) / CHARGE_SECS));
     const t = this.time;
     this.anim = anim;
     const B = this.build;
     const moving = anim === ANIM.walk || anim === ANIM.run;
     const running = anim === ANIM.run;
     const riding = anim === ANIM.ride;
-    // On skates, long slow pushes: you glide most of the way.
-    const rate = moving ? (this.skateLift ? 2.2 + speed * 0.45 : 3.2 + speed * 1.6) : 0;
+    // On skates, long slow pushes: you glide most of the way. Hooping, the
+    // hips push each way in turn, twice a turn of the hoop (ANIM.hoop below).
+    const rate = moving ? (this.skateLift ? 2.2 + speed * 0.45 : 3.2 + speed * 1.6) : anim === ANIM.hoop ? 2 * (this.hoopRate ?? 6) : 0;
     this.phase += dt * rate;
     const ph = this.phase;
     const s = Math.sin(ph);
@@ -2437,6 +2467,23 @@ export class Avatar {
       armRaiseL = armRaiseR = 0.12;
       bendL = bendR = 0.1;
       legs = [[0, -0.04, 0.04, 0], [0, 0.04, 0.04, 0]];
+    } else if (anim === ANIM.hoop) {
+      // Spinning a hula hoop round the waist: the hips swing side to side to
+      // keep it up, knees soft, arms out for balance and the head steady. The
+      // phase goes with the hoop itself (see update), so the swing keeps time
+      // with it whoever is hooping.
+      const w = Math.sin(ph);
+      twist = w * 0.4;
+      bob = -0.02 + Math.abs(Math.cos(ph)) * 0.02;
+      armRaiseL = armRaiseR = REST_RAISE + 0.5;
+      armFwdL = armFwdR = -0.25;
+      bendL = bendR = 0.3;
+      // The hips push each way in turn, legs going with them, the chest over it.
+      legs = [
+        [-0.1, -0.14 - Math.max(0, w) * 0.12, 0.3, 0.1],
+        [-0.1, 0.14 + Math.max(0, -w) * 0.12, 0.3, -0.1],
+      ];
+      headTilt = -w * 0.1;
     } else if (riding) {
       if (this.ride?.stand) {
         // Kicking along standing up (a kick scooter): front foot planted on

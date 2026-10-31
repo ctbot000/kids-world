@@ -192,6 +192,12 @@ export class Sound {
         this.noise(1.6, { type: 'bandpass', freq: 300, sweep: 1800, q: 1.4, gain: 0.22, attack: 0.15 });
         this.tone(220, { type: 'triangle', decay: 1.2, gain: 0.06, slide: 660, slideTime: 1.1, vibrato: 12 });
         break;
+      case 'hoop':
+        // A soft whoosh for each pass of the hoop round the waist, fading as
+        // it wobbles down and drops.
+        this.noise(0.4, { type: 'bandpass', freq: 520, sweep: 340, q: 1.2, gain: 0.07 * (opts.soft ? 0.5 : 1), attack: 0.08 });
+        if (opts.drop) this.tone(190, { decay: 0.24, gain: 0.14, slide: 110, type: 'triangle' });
+        break;
       case 'jump':
         this.tone(260 * r(), { decay: 0.16, gain: 0.16, slide: 560, slideTime: 0.12 });
         break;

@@ -32,7 +32,7 @@ import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
-import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
@@ -373,6 +373,7 @@ export class Room {
     const p = this.players.get(pid);
     if (!p || this.connected(pid)) return;
     this.unride(pid);
+    this.unhoop(pid);
     if (this.arcade.left(pid)) this.sendArcade();
     if (this.go.left(pid)) this.sendGo();
     this.hideSeekLeft(pid);
@@ -463,10 +464,37 @@ export class Room {
       case 'emote':
         if (EMOTE_KEYS.includes(msg.e)) this.broadcast({ t: 'emote', pid, e: msg.e });
         break;
+      // A hula hoop spun round the waist (critters.js hoop), and dropped:
+      // everyone's copy of the island draws the hoop at their friend's waist,
+      // swinging their hips, until it drops. The hoop itself stays where it
+      // was put down on the ground, so nothing more needs saying.
+      case 'hoop': {
+        const c = this.critters.get(msg.id);
+        if (!c || c.type !== 'hoop') break;
+        if (msg.op === 'spin') {
+          // Only a hoop nobody else is spinning, lying beside you, and only
+          // one at a time: it goes round with you (critters.js) until it
+          // drops, by itself at the latest when its time is up.
+          if ((c.hooper && c.hooper !== pid) || Math.hypot(c.x - p.s[0], c.z - p.s[2]) > 3 || Math.abs(c.y - p.s[1]) > 2) break;
+          this.unhoop(pid);
+          const spin = CRITTER_INFO.hoop.hoop;
+          Object.assign(c, { hooper: pid, state: 'hoop', hoopUntil: this.now() + (spin.spin + spin.wobble + 2) * 1000 });
+          this.broadcast({ t: 'hoop', op: 'spin', id: c.id, pid });
+        } else if (msg.op === 'drop' && c.hooper === pid) {
+          this.unhoop(pid);
+        }
+        break;
+      }
       // A swing at a monster (the 👊 button), for friends to see it start as
-      // it does: the bop it lands comes a moment later.
+      // it does: the bop it lands comes a moment later. A King Punch (a bare
+      // fist held to charge) says so, for friends to see the shockwave.
       case 'swing':
-        this.broadcast({ t: 'swing', pid }, conn);
+        this.broadcast({ t: 'swing', pid, king: msg.king === true ? true : undefined }, conn);
+        break;
+      // A King Punch charging (a bare fist held down), or let go: friends see
+      // the fist glow.
+      case 'charge':
+        this.broadcast({ t: 'charge', pid, on: msg.on === true }, conn);
         break;
       // A key played on a piano (piano.js), by someone standing at it, for
       // everyone else to hear from there.
@@ -962,8 +990,8 @@ export class Room {
           return;
         }
         const riding = this.critters.get(msg.id);
-        if (riding?.rider || riding?.passengers?.some(Boolean)) {
-          this.notice(conn, `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
+        if (riding?.rider || riding?.passengers?.some(Boolean) || riding?.hooper) {
+          this.notice(conn, riding.hooper ? `Someone is spinning ${riding.name}! Wait until it drops.` : `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
           return;
         }
         // The island's own dragon stays: the volcano island would not be
@@ -1070,6 +1098,16 @@ export class Room {
       if (p) Object.assign(c, mountUnder(c.type, { x: p.s[0], y: p.s[1], z: p.s[2], yaw: p.s[3] }));
       this.critters.letGo(c);
       this.broadcast({ t: 'ride', id: c.id, pid: 0 });
+    }
+  }
+
+  // Whatever hula hoop pid was spinning drops where they stand: nobody's
+  // hooping it now, and everyone is told.
+  unhoop(pid) {
+    for (const c of this.critters.list) {
+      if (c.type !== 'hoop' || c.hooper !== pid) continue;
+      Object.assign(c, { hooper: 0, state: 'idle', body: null });
+      this.broadcast({ t: 'hoop', op: 'drop', id: c.id, pid });
     }
   }
 
@@ -1771,10 +1809,13 @@ export class Room {
     const now = this.now();
     const m = this.monsters.get(msg.id);
     if (!m || (!m.camp && !m.march && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
+    // A King Punch (a bare fist held to charge, game.js): only with an empty
+    // hand, and it reaches further round a wider arc. HP and XP are as a punch.
+    const king = msg.king === true && !weaponOf(p.look?.weapon);
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     const weapon = weaponOf(p.look?.weapon);
-    if (!landed && !this.monsters.canBop(m.id, at, weapon?.reach ?? 0)) return;
+    if (!landed && !this.monsters.canBop(m.id, at, king ? KING_REACH : weapon?.reach ?? 0)) return;
     if (m.march) {
       this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
       return;
@@ -1786,7 +1827,7 @@ export class Room {
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1));
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : undefined);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });

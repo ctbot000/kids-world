@@ -3,7 +3,8 @@
 // speedboat with an outboard motor and a flag, a yellow digger on tracks
 // with a drill on the front and a flashing light, a mine cart with a
 // lantern, a kick scooter with a bell that lights up when it rings, and a
-// wooden sled on runners that curl up in front; and
+// wooden sled on runners that curl up in front; and a hula hoop, a striped
+// ring spun round your waist (game.js); and
 // for friends to ride in together, an open-top bus and a
 // ferry, each with three rows of two seats behind the driver's; and to fly,
 // a helicopter with a seat for two friends behind the pilot's, and a
@@ -300,6 +301,23 @@ function scooter(id) {
 }
 
 const WOODS = ['#b98b5a', '#a97748', '#c49a68'];
+
+// A hula hoop: a striped ring lying flat on the grass until someone walks up
+// and spins it round their waist (game.js). It is in a group of its own
+// (hoopRing), which drive() turns round and tips as game.js says (hoopTurn,
+// hoopTilt); the stripes show it going round.
+function hoop(id) {
+  const v = rig();
+  const turn = new THREE.Group();
+  turn.position.y = 0.05;
+  v.body.add(turn);
+  const ring = new THREE.Group();
+  ring.rotation.x = Math.PI / 2;
+  turn.add(ring);
+  ring.add(mesh(torus(0.42, 0.042), toon('#f2b53c')));
+  for (let i = 0; i < 4; i++) ring.add(mesh(torus(0.42, 0.045, Math.PI / 4), toon('#e8453c')).rotateZ((i / 4) * Math.PI * 2 + Math.PI / 8));
+  return { ...v, hoopRing: turn, height: 0.12, center: 0.06, pick: 0.45, shadow: 0.45, seen: 80 };
+}
 
 // A little wooden sled: two runners with a curl up in front (a rod bent
 // round the front of each, on a pivot of its own so the curl can spring),
@@ -810,7 +828,7 @@ function kart(id) {
   return { ...v, height: 0.75, center: 0.35, pick: 0.6, shadow: 0.7, seen: 110 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, bus, ferry, helicopter, balloon, paintvan, mower, kart };
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, hoop, bus, ferry, helicopter, balloon, paintvan, mower, kart };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,
@@ -824,6 +842,16 @@ export function drive(m, dt, state, moving, air = 0) {
   // A fun park's ride turns by itself (ride-models.js).
   m.animate?.();
   m.trick = Math.max(0, m.trick - dt);
+  // A hula hoop round someone's waist: its middle swings round them, the
+  // ring pressed against the far side of their waist, tipping as it goes
+  // (game.js says how far round, how far out and how far it tips).
+  if (m.hoopRing) {
+    const turn = m.hoopTurn ?? 0;
+    const tilt = m.hoopTilt ?? 0;
+    const out = m.hoopOrbit ?? 0;
+    m.hoopRing.rotation.set(Math.cos(turn) * tilt, 0, -Math.sin(turn) * tilt);
+    m.hoopRing.position.set(Math.sin(turn) * out, 0.05, Math.cos(turn) * out);
+  }
   const go = moving ? m.hs : 0;
   for (const w of m.wheels ?? []) w.rotation.x += (go * dt) / w.userData.r;
   const honk = m.trick > 0 || state === 'happy';
