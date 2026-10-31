@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { ANIM, Avatar } from '../public/js/render/avatar.js';
 import { headTop } from '../public/js/shared/critters.js';
-import { ANIMALS, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
+import { ANIMALS, BODIES, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, HEADS, HEIGHTS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
 
 const LOOKS = ANIMALS.flatMap((a) =>
   HATS.flatMap((hat, i) =>
@@ -208,6 +208,56 @@ test('a boy or a girl, a man or a woman: kept for a person, shown in their icon 
     return n;
   };
   assert.equal(meshes('girl'), meshes('boy') + 1);
+});
+
+test('a height, a body and a face shape of your own: kept as chosen, and drawn that way', () => {
+  const kid = { animal: KID, fur: 'tan', shirt: 3, hat: 'none', skin: 'deep', hair: 'short', hairColor: 'pink' };
+  const shaped = { ...kid, height: 'tall', build: 'sturdy', head: 'square' };
+  assert.deepEqual(cleanLook(shaped), shaped);
+  assert.deepEqual(cleanLook({ ...kid, height: 'huge', build: 'wobbly', head: 'pointy' }), kid);
+  // An animal is as tall and as built as you like, but has no face shape.
+  const cat = { animal: 'cat', fur: 'orange', shirt: 3, hat: 'none', height: 'short', build: 'slim' };
+  assert.deepEqual(cleanLook({ ...cat, head: 'round' }), cat);
+  const drawn = (look, anim = ANIM.idle) => {
+    const a = new Avatar(look);
+    a.update(0.1, anim, 0);
+    a.root.updateMatrixWorld(true);
+    return a;
+  };
+  const top = (look) => new THREE.Box3().setFromObject(drawn(look).skull).max.y;
+  const grown = { ...kid, animal: GROWN_UP, face: 'none' };
+  for (const look of [kid, grown, cat]) {
+    // Each height taller than the last, its head top where friends sit on it.
+    const tops = HEIGHTS.map((h) => top({ ...look, height: h.key }));
+    assert.ok(tops[0] < tops[1] - 0.08 && tops[2] > tops[1] + 0.04, `${look.animal}: ${tops}`);
+    for (const h of HEIGHTS) assert.ok(Math.abs(top({ ...look, height: h.key }) - tops[1] - (lookTall({ ...look, height: h.key }) - lookTall({ ...look, height: 'middle' }))) < 0.01);
+    // Sitting and riding, the hips are as high whatever the height.
+    for (const anim of [ANIM.ride, ANIM.dizzy]) {
+      const hips = HEIGHTS.map((h) => drawn({ ...look, height: h.key }, anim).legs[0].getWorldPosition(new THREE.Vector3()).y);
+      assert.ok(Math.abs(hips[0] - hips[2]) < 1e-9);
+    }
+  }
+  assert.ok(top({ ...grown, height: 'tall', hat: 'none' }) < 2 - 0.2, 'a tall grown-up still under a doorway two blocks high');
+  // A slimmer body narrower, a sturdier one wider.
+  const width = (look) => {
+    const box = new THREE.Box3().setFromObject(drawn(look).torso);
+    return box.max.x - box.min.x;
+  };
+  const widths = BODIES.map((b) => width({ ...kid, build: b.key }));
+  assert.ok(widths[0] < widths[1] * 0.92 && widths[2] > widths[1] * 1.08, `${widths}`);
+  // Each face shape a head of its own.
+  const heads = (look) => new Set(HEADS.map((h) => drawn({ ...look, head: h.key }).skull.children[0].geometry.uuid));
+  assert.equal(heads(kid).size, HEADS.length);
+  assert.equal(heads(grown).size, HEADS.length);
+  // Clothes from the shop fit each body.
+  const robe = (build) => drawn({ ...kid, build, outfit: 'robe' }).outfit;
+  assert.ok(robe('slim') && robe('sturdy'));
+  // At random, every kind of each.
+  for (const list of [HEIGHTS, BODIES]) {
+    const key = list === HEIGHTS ? 'height' : 'build';
+    const seen = new Set(Array.from({ length: 200 }, () => randomLook()[key]));
+    assert.equal(seen.size, list.length);
+  }
 });
 
 test("a grown-up: a kid's skin and hair, a face of their own, and taller", () => {

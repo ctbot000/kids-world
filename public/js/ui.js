@@ -24,7 +24,7 @@ import { boardsOf } from './shared/ranking.js';
 import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
-import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -1204,6 +1204,8 @@ export class UI {
         const animals = h('div', { class: 'grid' });
         // An animal's fur, or a kid's skin and hair.
         const parts = h('div', { class: 'look-parts' });
+        // How tall and how built, for an animal too.
+        const shape = h('div', { class: 'look-shape' });
         const shirts = h('div', { class: 'swatches' });
         const hats = h('div', { class: 'grid' });
         const choose = (change) => {
@@ -1220,7 +1222,22 @@ export class UI {
               h('button', { class: `swatch${key === chosen ? ' on' : ''}`, type: 'button', style: `background:${color}`, 'aria-label': key, onclick: () => choose(() => set(key)) }),
             ),
           );
+        // A row of choices with an icon each; chosen is the one a look without it has.
+        const options = (list, chosen, set) =>
+          h(
+            'div',
+            { class: 'grid' },
+            ...list.map((o) =>
+              h('button', { class: `choice${o.key === chosen ? ' on' : ''}`, type: 'button', onclick: () => choose(() => set(o.key)) }, h('span', { class: 'emoji' }, o.icon), o.name),
+            ),
+          );
         const draw = () => {
+          shape.replaceChildren(
+            h('h3', {}, 'Height'),
+            options(HEIGHTS, heightOf(look).key, (key) => (look.height = key)),
+            h('h3', {}, 'Body'),
+            options(BODIES, buildOf(look).key, (key) => (look.build = key)),
+          );
           animals.replaceChildren(
             ...ANIMALS.map((a) =>
               h(
@@ -1252,6 +1269,8 @@ export class UI {
                   );
                 }),
               ),
+              h('h3', {}, 'Face shape'),
+              options(HEADS, headOf(look).key, (key) => (look.head = key)),
               h('h3', {}, 'Skin'),
               swatches(SKIN_TONES, look.skin, (key) => (look.skin = key)),
               h('h3', {}, 'Hair'),
@@ -1340,6 +1359,7 @@ export class UI {
           h('h3', {}, 'I am a…'),
           animals,
           parts,
+          shape,
           h('h3', {}, 'T-shirt'),
           shirts,
           h('h3', {}, 'Hat'),

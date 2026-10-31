@@ -207,6 +207,34 @@ export const GENDERS = [
   { key: 'boy', name: 'Boy', grown: 'Man' },
   { key: 'girl', name: 'Girl', grown: 'Woman' },
 ];
+// How tall you are, and how you are built: for everyone, an animal too. by:
+// how much taller (or shorter) than the middle a kid and a grown-up stand,
+// the whole body drawn that much bigger; a grown-up tall stays under a
+// doorway two blocks high. width: how wide the body is built, and belly how
+// far a sturdy tummy comes out (render/avatar.js).
+export const HEIGHTS = [
+  { key: 'short', name: 'Short', icon: '🐣', kid: -0.12, grown: -0.14 },
+  { key: 'middle', name: 'Middle', icon: '🙂', kid: 0, grown: 0 },
+  { key: 'tall', name: 'Tall', icon: '🦒', kid: 0.1, grown: 0.05 },
+];
+export const BODIES = [
+  { key: 'slim', name: 'Slim', icon: '🌿', width: 0.84, belly: 0 },
+  { key: 'medium', name: 'Medium', icon: '🙂', width: 1, belly: 0 },
+  { key: 'sturdy', name: 'Sturdy', icon: '🐻', width: 1.2, belly: 0.03 },
+];
+// A person's face shape, from the eyes down: how long the jaw is, how much it
+// narrows to the chin, how late it starts to (square: late), how much
+// fuller the cheeks are (wide), and how far the chin comes forward, each
+// times a kid's or a grown-up's own.
+export const HEADS = [
+  { key: 'oval', name: 'Oval', icon: '🥚', jaw: 1, narrow: 1, late: 1.6, wide: 0, chin: 1 },
+  { key: 'round', name: 'Round', icon: '🌕', jaw: 0.84, narrow: 0.45, late: 1.6, wide: 0.1, chin: 0.6 },
+  { key: 'long', name: 'Long', icon: '🥒', jaw: 1.22, narrow: 1.15, late: 1.6, wide: -0.07, chin: 1.1 },
+  { key: 'square', name: 'Square', icon: '🟧', jaw: 1.02, narrow: 0.4, late: 4, wide: 0.07, chin: 1.15 },
+]
+export const heightOf = (look) => HEIGHTS.find((h) => h.key === look?.height) ?? HEIGHTS[1];
+export const buildOf = (look) => BODIES.find((b) => b.key === look?.build) ?? BODIES[1];
+export const headOf = (look) => (isPerson(look) && HEADS.find((h) => h.key === look.head)) || HEADS[0];
 // What a kid is when nothing (or nothing that makes sense) says otherwise.
 const KID_LOOK = { skin: 'golden', hair: 'short', hairColor: 'brown' };
 
@@ -214,9 +242,17 @@ const KID_LOOK = { skin: 'golden', hair: 'short', hairColor: 'brown' };
 export const isPerson = (look) => look?.animal === KID || look?.animal === GROWN_UP;
 // A person's hair style, or '' for an animal.
 export const lookHair = (look) => (isPerson(look) ? look.hair : '');
-// How much taller than a kid (or an animal) someone stands.
+// How much taller a grown-up stands than a kid (or an animal), whose head
+// top is KID_TALL up; how much taller than that someone stands, for their
+// height too (see HEIGHTS); and how much bigger than a kid or a grown-up of
+// the middle height they are drawn for it.
 export const GROWN_TALL = 0.32;
-export const lookTall = (look) => (look?.animal === GROWN_UP ? GROWN_TALL : 0);
+export const KID_TALL = 1.41;
+export const lookTall = (look) => (look?.animal === GROWN_UP ? GROWN_TALL + heightOf(look).grown : heightOf(look).kid);
+export const lookScale = (look) => {
+  const middle = KID_TALL + (look?.animal === GROWN_UP ? GROWN_TALL : 0);
+  return (KID_TALL + lookTall(look)) / middle;
+};
 
 // What friends see of you in a list: your animal, or a kid or grown-up with your skin.
 export function lookIcon(look) {
@@ -231,13 +267,13 @@ export function lookIcon(look) {
 // An animal (or a kid or a grown-up), a T-shirt and a hat: three draws, whatever comes up.
 function someLook(random) {
   const animal = pick(ANIMALS, random);
-  return { animal: animal.key, fur: animal.fur, shirt: pick(SHIRT_COLORS, random), hat: pick(HATS, random).key };
+  return { animal: animal.key, fur: animal.fur, shirt: pick(SHIRT_COLORS, random), hat: pick(HATS, random).key, height: pick(HEIGHTS, random).key, build: pick(BODIES, random).key };
 }
 
 export function randomLook(random = Math.random) {
   const look = someLook(random);
   if (!isPerson(look)) return look;
-  const person = { ...look, gender: pick(GENDERS, random).key, skin: pick(Object.keys(SKIN_TONES), random), hair: pick(HAIRS, random).key, hairColor: pick(Object.keys(HAIR_COLORS), random) };
+  const person = { ...look, gender: pick(GENDERS, random).key, skin: pick(Object.keys(SKIN_TONES), random), hair: pick(HAIRS, random).key, hairColor: pick(Object.keys(HAIR_COLORS), random), head: pick(HEADS, random).key };
   return look.animal === GROWN_UP ? { ...person, face: pick(FACES, random).key } : person;
 }
 
@@ -253,6 +289,9 @@ export function cleanLook(look, random = Math.random) {
     shirt: SHIRT_COLORS.includes(look?.shirt) ? look.shirt : fallback.shirt,
     hat: HATS.some((h) => h.key === look?.hat) ? look.hat : 'none',
   };
+  // How tall and how built, only once chosen.
+  if (HEIGHTS.some((h) => h.key === look?.height)) clean.height = look.height;
+  if (BODIES.some((b) => b.key === look?.build)) clean.build = look.build;
   if (isPerson({ animal })) {
     clean = {
       ...clean,
@@ -261,6 +300,7 @@ export function cleanLook(look, random = Math.random) {
       hairColor: Object.hasOwn(HAIR_COLORS, look?.hairColor) ? look.hairColor : KID_LOOK.hairColor,
     };
     if (GENDERS.some((g) => g.key === look?.gender)) clean.gender = look.gender;
+    if (HEADS.some((h) => h.key === look?.head)) clean.head = look.head;
   }
   if (animal === GROWN_UP) clean.face = FACES.some((f) => f.key === look?.face) ? look.face : 'none';
   // A toy weapon from the shop, in your hand (see shop.js).

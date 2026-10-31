@@ -9,7 +9,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
 import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
-import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
+import { buildOf, FUR_COLORS, GROWN_UP, HAIR_COLORS, headOf, isPerson, lookScale, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
 // A King Punch's charge (game.js chargeBop): how long it takes, and how far
@@ -236,6 +236,35 @@ const BUILDS = {
     head: { k: 0.335, y: 0.7161, z: 0.016, pivot: 0.59 },
   },
 };
+BUILDS.kid.key = 'kid';
+BUILDS.grown.key = 'grown';
+// A build made wider or narrower (buildOf in shared/words.js): the jeans and
+// the t-shirt as wide and deep as width says, a sturdy tummy out in front,
+// the hips and shoulders out as far, and the legs, arms and neck thicker, a
+// little less so. Made once for each.
+const builtAs = new Map();
+function buildFor(base, { key, width, belly }) {
+  if (width === 1 && !belly) return base;
+  const id = `${base.key}-${key}`;
+  if (builtAs.has(id)) return builtAs.get(id);
+  const limb = 1 + (width - 1) * 0.7;
+  const top = base.shirt[base.shirt.length - 1][0];
+  const B = {
+    ...base,
+    key: id,
+    hipX: base.hipX * width,
+    thigh: base.thigh.map((r) => r * width),
+    shin: base.shin.map((r) => r * limb),
+    seat: base.seat.map(([y, w, f, b]) => [y, w * width, f * width + belly * 0.4, b * width]),
+    // The tummy most at the middle of the shirt, none at the collar.
+    shirt: base.shirt.map(([y, w, f, b]) => [y, w * width, f * width + belly * Math.sin(Math.PI * Math.min(1, y / (top * 0.8))), b * width]),
+    shoulder: [base.shoulder[0], base.shoulder[1] * width],
+    neck: [base.neck[0], base.neck[1] * (1 + (width - 1) * 0.5), base.neck[2]],
+    arm: [base.arm[0], base.arm[1], ...base.arm.slice(2).map((r) => r * limb)],
+  };
+  builtAs.set(id, B);
+  return B;
+}
 // An animal's head on a kid's body: bigger than a person's, its top where a
 // kid's is.
 const ANIMAL_SKULL = { k: 0.42, y: 1.41 - HR[1] * 0.42 - BUILDS.kid.hip, z: 0.015, pivot: 0.45 };
@@ -882,10 +911,28 @@ const FACE_SHAPES = {
   kid: { key: 'kid', jaw: 1, chin: 0.65, narrow: 0.24, brow: 0.1, eyeY: -0.045, apart: 0.106, eyeR: 0.063, open: 0.5, nose: 0.026, noseTip: -0.15, mouth: -0.232, mouthW: 0.85, browT: 0.011 },
   grown: { key: 'grown', jaw: 1.12, chin: 0.85, narrow: 0.3, brow: 0.14, eyeY: -0.03, apart: 0.102, eyeR: 0.056, open: 0.42, nose: 0.03, noseTip: -0.168, mouth: -0.262, mouthW: 1, browT: 0.013 },
 };
-// Where the eyes are round the head (see headPoint), for the sockets they sit in.
-for (const f of Object.values(FACE_SHAPES)) {
+// How wide the face is, low down from the eyes to the chin (0 to 1), as a
+// part of the head's width: wide fuller at the cheeks (or less), and
+// narrowing to the chin, the later the bigger late is.
+const jawWidth = (f, low) => (1 + (f.wide ?? 0) * Math.min(1, low * 2.5) ** 2) * (1 - f.narrow * low ** (f.late ?? 1.6));
+// Where the eyes are round the head (see headPoint), for the sockets they
+// sit in; and late: how late down the jaw it narrows.
+const fitEyes = (f) => {
+  f.late ??= 1.6;
   f.eyeV = f.eyeY / (PR[1] * f.jaw);
-  f.eyeU = f.apart / (PR[0] * (1 - f.narrow * Math.abs(f.eyeV) ** 1.6));
+  f.eyeU = f.apart / (PR[0] * jawWidth(f, Math.abs(f.eyeV)));
+  return f;
+};
+for (const [age, f] of Object.entries(FACE_SHAPES)) fitEyes(f).age = age;
+// A kid's or a grown-up's face in a shape of its own (headOf in
+// shared/words.js), made once: its jaw longer or shorter, narrowing more or
+// less and later, its chin further out or less.
+const shapedFaces = new Map();
+function faceFor(base, head) {
+  if (head.key === 'oval') return base;
+  const key = `${base.age}-${head.key}`;
+  if (!shapedFaces.has(key)) shapedFaces.set(key, fitEyes({ ...base, key, jaw: base.jaw * head.jaw, narrow: base.narrow * head.narrow, late: head.late, wide: head.wide, chin: base.chin * head.chin }));
+  return shapedFaces.get(key);
 }
 
 const smoothstep = (w) => w * w * (3 - 2 * w);
@@ -898,7 +945,7 @@ const smoothstep = (w) => w * w * (3 - 2 * w);
 // can find a point of the face from x and y.
 function headPoint(f, u, v, w, out) {
   const low = Math.max(0, -v);
-  const x = PR[0] * u * (1 - f.narrow * low ** 1.6);
+  const x = PR[0] * u * jawWidth(f, low);
   const y = PR[1] * v * (v < 0 ? f.jaw : 1);
   let z = PR[2] * w;
   if (w > 0) {
@@ -943,7 +990,7 @@ const personHead = (f) =>
 function faceAt(f, fx, fy, out = 0) {
   const v = Math.max(-0.995, Math.min(0.995, fy / (PR[1] * (fy < 0 ? f.jaw : 1))));
   const low = Math.max(0, -v);
-  const u = fx / (PR[0] * (1 - f.narrow * low ** 1.6));
+  const u = fx / (PR[0] * jawWidth(f, low));
   const w = Math.sqrt(Math.max(0, 1 - u * u - v * v));
   const { p, n } = surfaceAt((a, b, c, o) => headPoint(f, a, b, c, o), new THREE.Vector3(u, v, w).normalize());
   return { p: p.addScaledVector(n, out), n };
@@ -1063,7 +1110,7 @@ const browShape = (f) =>
   geo(`brows|${f.key}`, () =>
     bake(
       [-1, 1].map((side) => {
-        const { p, n } = faceAt(f, side * f.apart * 1.04, f.eyeY + (f.key === 'kid' ? 0.078 : 0.072), 0.006);
+        const { p, n } = faceAt(f, side * f.apart * 1.04, f.eyeY + (f.age === 'kid' ? 0.078 : 0.072), 0.006);
         const R = 0.11;
         const arc = 0.85;
         const m = placed(p, facing(n), 1, 1, 1, 0, 0, side * 0.12)
@@ -1125,7 +1172,7 @@ function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = B
   add(geo(`nostrils|${f.key}`, () => bake(nostrilParts(f))), toon(darken(skin, 0.45)));
   // The eyes: whites, a brown iris, a pupil and a catchlight.
   const r = eye.r;
-  const iris = f.key === 'kid' ? 0.54 : 0.5;
+  const iris = f.age === 'kid' ? 0.54 : 0.5;
   const eyePart = (name, g, x, y, z, sx, sy, sz) =>
     add(
       geo(`eye-${name}|${f.key}`, () => bake(eye.eyes.map((e) => ({ g, m: placed(inEye(e, x, y, z), e.q, sx, sy, sz) })))),
@@ -1149,7 +1196,7 @@ function personFace(skull, f, skin, { ears = true, extra = 'none', hairColor = B
   const lips = girl ? mix(lipColor(skin), '#e0607a', 0.5) : lipColor(skin);
   add(lipShape(f), toon(lips));
   add(mouthLine(f), toon(darken(lips, 0.45)));
-  if (f.key === 'kid' || girl) add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: girl ? 0.3 : 0.22 }));
+  if (f.age === 'kid' || girl) add(cheekShape(f), toon('#ff8fa8', { transparent: true, opacity: girl ? 0.3 : 0.22 }));
   if (extra.includes('glasses')) glasses(skull, eye);
   if (extra.includes('beard')) beard(skull, f, hairColor);
   if (extra === 'moustache' || extra.includes('beard')) moustache(skull, f, hairColor);
@@ -1893,7 +1940,7 @@ function dressUp(av, kind, B) {
     default:
       break;
   }
-  for (const [name, { to, mat, parts }] of fused) to.add(mesh(bakeCached(`outfit|${kind}|${name}|${B === BUILDS.grown ? 'grown' : 'kid'}`, parts), mat));
+  for (const [name, { to, mat, parts }] of fused) to.add(mesh(bakeCached(`outfit|${kind}|${name}|${B.key}`, parts), mat));
   return flapping;
 }
 // A cape's width at the bottom goes by how wide the shoulders are.
@@ -2047,10 +2094,13 @@ export class Avatar {
     this.curlFit = null;
     const person = isPerson(look);
     const grown = look.animal === GROWN_UP;
-    const B = grown ? BUILDS.grown : BUILDS.kid;
+    const B = buildFor(grown ? BUILDS.grown : BUILDS.kid, buildOf(look));
     this.build = B;
-    // How much taller a grown-up is than a kid.
+    // How much taller a grown-up is than a kid, and someone tall or short
+    // than the middle: the whole body drawn that much bigger.
     this.tall = lookTall(look);
+    const size = lookScale(look);
+    this.size = size;
     // A kid's (or a grown-up's) skin is where an animal's fur is: face, neck and hands.
     const fur = person ? (SKIN_TONES[look.skin] ?? SKIN_TONES.golden) : (FUR_COLORS[look.fur] ?? FUR_COLORS.white);
     const skin = toon(fur);
@@ -2058,6 +2108,7 @@ export class Avatar {
     const shirtMat = toon(shirt);
     const band = toon(darken(shirt, 0.16));
     const body = new THREE.Group();
+    body.scale.setScalar(size);
     this.body = body;
     this.root.add(body);
 
@@ -2072,7 +2123,7 @@ export class Avatar {
     const shoes = skates ?? SHOES[look.shoes] ?? null;
     this.flames = [];
     this.wheels = [];
-    this.skateLift = skates ? SKATE_LIFT * B.foot : 0;
+    this.skateLift = skates ? SKATE_LIFT * B.foot * size : 0;
     this.legs = [];
     this.knees = [];
     for (const side of [-1, 1]) {
@@ -2180,7 +2231,7 @@ export class Avatar {
     this.skull = skull;
     if (person) {
       const hairColor = HAIR_COLORS[look.hairColor] ?? HAIR_COLORS.brown;
-      const f = grown ? FACE_SHAPES.grown : FACE_SHAPES.kid;
+      const f = faceFor(grown ? FACE_SHAPES.grown : FACE_SHAPES.kid, headOf(look));
       this.eyes = personFace(skull, f, fur, { ears: look.hair !== 'bob' && look.hair !== 'long', extra: grown ? (look.face ?? 'none') : 'none', hairColor, girl: look.gender === 'girl' });
       this.lidShut = this.eyes.userData.shut;
       this.sway = hair(skull, look.hair, hairColor, look.hat, grown ? 1.15 : 1);
@@ -2208,10 +2259,14 @@ export class Avatar {
     // Where the top of your head is sitting on the ground (dizzy), and how
     // far behind your middle the back of you reaches (the back of your head,
     // or of your jeans), to lie on it.
-    this.sitTop = 1.41 + this.tall - (B.hip - SIT_HIPS);
-    this.lieLift = Math.max(back, (person ? PR[2] * 1.08 : HR[2]) * H.k - H.z);
+    // All of it as big as you are drawn; and how far down the body goes for
+    // the hips to be on a seat or a saddle, as high whatever your size.
+    this.sitDrop = size * B.hip - SIT_HIPS;
+    this.rideDrop = size * B.hip - RIDE_HIPS;
+    this.sitTop = 1.41 + this.tall - this.sitDrop;
+    this.lieLift = size * Math.max(back, (person ? PR[2] * 1.08 : HR[2]) * H.k - H.z);
     // How far down you sink swimming, leaning forward, to have your head just out of the water.
-    this.swimDrop = B.hip + H.y * Math.cos(SWIM_LEAN) - SWIM_HEAD;
+    this.swimDrop = size * (B.hip + H.y * Math.cos(SWIM_LEAN)) - SWIM_HEAD;
   }
 
   // A swing at a monster, with whatever is in hand (see SWINGS). Returns how
@@ -2369,7 +2424,7 @@ export class Avatar {
     } else if (anim === ANIM.dizzy) {
       // Sat down with a bump, legs out in front, leaning back on your hands,
       // head going round and round.
-      bob = -(B.hip - SIT_HIPS);
+      bob = -this.sitDrop;
       lean = -0.18;
       armRaiseL = armRaiseR = 0.35;
       armFwdL = armFwdR = 0.4;
@@ -2380,7 +2435,7 @@ export class Avatar {
     } else if (anim === ANIM.sit) {
       // Sitting back in the seat, knees over its edge, hands in the lap,
       // looking about now and then.
-      bob = -(B.hip - SIT_HIPS);
+      bob = -this.sitDrop;
       lean = -0.04;
       armRaiseL = armRaiseR = 0;
       armFwdL = armFwdR = -0.3;
@@ -2395,7 +2450,7 @@ export class Avatar {
       // that played last; the fingers ripple while you are playing, and the
       // head sways with the music. The left hand is on this side (+x), the
       // low notes' end as you face the piano.
-      bob = -(B.hip - SIT_HIPS);
+      bob = -this.sitDrop;
       lean = 0.16;
       const [lo, hi] = this.keys;
       const glide = Math.min(1, dt * 14);
@@ -2424,7 +2479,7 @@ export class Avatar {
       // (typeHands); now and then a pause to read the screen, the head bent
       // to it all the while. Each arm reaches for where its wrist is
       // (TYPE_WRIST), the hands drifting a little along the keys as they go.
-      bob = -(B.hip - SIT_HIPS);
+      bob = -this.sitDrop;
       lean = 0.2;
       const q = t + this.quirk;
       const busy = Math.sin(q * 0.9) + Math.sin(q * 0.37 + 1) > -1.1;
@@ -2449,7 +2504,7 @@ export class Avatar {
       // On a break, sat back with a mug of coffee: held in front of you,
       // and every so often lifted for a sip, the head tipping back a little
       // as you drink; the other hand rests in the lap.
-      bob = -(B.hip - SIT_HIPS);
+      bob = -this.sitDrop;
       lean = -0.06;
       // The first sip some while after sitting down; each after it a random wait after the last.
       const wait = () => SIP_GAP[0] + Math.random() * (SIP_GAP[1] - SIP_GAP[0]);
@@ -2523,7 +2578,7 @@ export class Avatar {
         const k = Math.min(1, speed / 8);
         this.phase += dt * (speed > 0.4 ? 5 + speed * 1.2 : 0);
         // Hips where a kid's would be, longer legs reaching further down its sides.
-        bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - (B.hip - RIDE_HIPS);
+        bob = Math.abs(Math.sin(this.phase)) * (0.015 + k * 0.06) - this.rideDrop;
         lean = 0.1 + k * 0.15;
         armFwdL = armFwdR = -0.55 - Math.sin(this.phase) * 0.12 * k;
         armRaiseL = armRaiseR = 0.15;
@@ -2697,7 +2752,7 @@ export class Avatar {
     this.body.rotation.set(lying || curled ? -Math.PI / 2 : 0, curled ? Math.PI / 2 : spin, 0);
     this.body.position.x = 0;
     this.body.position.z = 0;
-    this.body.scale.setScalar(1);
+    this.body.scale.setScalar(this.size);
     if (lying) this.body.position.y += this.lieLift;
     // Skates stand you up on their wheels, which roll as you go (not in a
     // seat, a bed or the water).
