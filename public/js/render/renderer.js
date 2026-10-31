@@ -70,6 +70,10 @@ export const QUALITY = {
   medium: { post: true, pixels: 2.6e6, samples: 0, ao: 0.4e6, aoSamples: 8, dof: false, shadows: 1024 },
   low: { post: false, pixels: Infinity, samples: 0, ao: 0, aoSamples: 0, dof: false, shadows: 0 },
 };
+// Watching an island unseen (free), the camera backs off this far at most,
+// and sees at least this far, so a whole island is in sight.
+const FREE_DIST = 140;
+const FREE_FOG = 320;
 // Shadows are drawn this far round you, either way, fading out before the edge.
 const SHADOW_EXTENT = 13;
 // Snow lying about: all the way from none to thick in 150 seconds of snow
@@ -214,6 +218,9 @@ export class Renderer {
     this.scene.add(this.outline);
 
     this.view = { yaw: Math.PI * 0.85, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false };
+    // Watching an island unseen (game.js): no walls for the camera, and it
+    // backs off and sees further.
+    this.free = false;
     this.focus = { x: 0, y: 0, z: 0, cloudY: 90 };
     this.time = 0;
     // How much snow lies on the island, from none to a thick white blanket
@@ -565,14 +572,16 @@ export class Renderer {
     const v = this.view;
     v.goal = null;
     v.yaw += dyaw;
-    v.pitch = Math.min(1.35, Math.max(-0.35, v.pitch + dpitch));
+    // Free (watching unseen), it looks up from under things too.
+    v.pitch = Math.min(this.free ? 1.55 : 1.35, Math.max(this.free ? -1.2 : -0.35, v.pitch + dpitch));
   }
 
   // Zooming all the way in looks out through your own eyes.
   zoom(factor) {
     const v = this.view;
     v.goal = null;
-    v.dist = Math.min(18, Math.max(0.35, v.dist * factor));
+    // Free (watching unseen), it backs off far enough to see a whole island.
+    v.dist = Math.min(this.free ? FREE_DIST : 18, Math.max(0.35, v.dist * factor));
   }
 
   // Which of VIEWS the camera is nearest to now, after any zooming and turning.
@@ -635,7 +644,8 @@ export class Renderer {
       v.smooth.z += Math.sin(v.yaw) * v.shiftNow;
     }
     let dist = v.dist;
-    if (this.world && collide) {
+    // Free (watching unseen), nothing comes between the camera and you.
+    if (this.world && collide && !this.free) {
       const hit = raycast(this.world, v.smooth.x, v.smooth.y, v.smooth.z, dir.x, dir.y, dir.z, dist + 0.3, (id) => OPAQUE[id] === 1 && !TREE_PART[id]);
       if (hit) dist = Math.max(0.6, hit.dist - 0.3);
     }
@@ -794,7 +804,7 @@ export class Renderer {
       env.daylight += (1 - env.daylight) * flash * 0.5;
       env.sun.lerp(FLASH, flash * 0.4);
     }
-    const fogFar = this.fogFar ?? 150;
+    const fogFar = this.free ? Math.max(this.fogFar ?? 150, FREE_FOG) : (this.fogFar ?? 150);
     this.terrain.setLighting({
       daylight: env.daylight,
       sun: env.sun,

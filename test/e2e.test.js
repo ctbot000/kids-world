@@ -6554,6 +6554,37 @@ test('the admin page watches any island it kept: live while it is played, and it
       }),
       { pid: -1, name: 'Kept Bay', players: 0, watching: true, status: '👁️ Saved copy · latest', mode: 'host', listed: false },
     );
+    // Nothing blocks it: it flies through solid ground, below it and back,
+    // with the camera never pulled in, and backs off to see it all.
+    const flight = await copy.evaluate(() => {
+      const g = window.kidsWorld.game;
+      const r = window.kidsWorld.renderer;
+      const b = g.me.body;
+      const w = g.world;
+      const x = Math.floor(w.W / 2);
+      const z = Math.floor(w.D / 2);
+      const ground = w.groundBelow(x, w.H - 1, z);
+      Object.assign(b, { x: x + 0.5, y: ground - 2, z: z + 0.5 });
+      const solid = w.get(Math.floor(b.x), Math.floor(b.y), Math.floor(b.z)) !== 0;
+      const input = (move, extra = {}) => ({ readMove: () => move, jump: false, down: false, run: false, bop: false, touchMode: false, hoverNdc: () => null, ...extra });
+      const from = { x: b.x, z: b.z };
+      r.view.yaw = 0;
+      r.view.dist = 8;
+      g.update(0.5, input({ x: 0, y: 1 }));
+      const moved = Math.hypot(b.x - from.x, b.z - from.z);
+      g.update(0.5, input({ x: 0, y: 0 }, { down: true }));
+      const lower = b.y;
+      g.update(0.5, input({ x: 0, y: 0 }));
+      r.zoom(100);
+      return { solid, moved, lower, ground, cam: r.camDist, dist: r.view.dist, free: r.free };
+    });
+    assert.equal(flight.solid, true, 'it starts inside the ground');
+    assert.ok(flight.moved > 5, `it flew ${flight.moved} through it`);
+    assert.ok(flight.lower < flight.ground - 4, 'and down, under it');
+    assert.equal(flight.free, true);
+    assert.equal(flight.cam, 8, 'its camera never pulled in by the ground round it');
+    assert.equal(flight.dist, 140, 'and it backs off far enough to see the whole island');
+
     // Nothing of it is saved on that page, nor sent to the keeper.
     assert.deepEqual(await copy.evaluate(() => window.kidsWorld.ui.handlers.islands().map((i) => i.name)), []);
     assert.equal(

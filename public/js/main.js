@@ -1037,8 +1037,9 @@ input
   .on('key', (code, e) => {
     const g = session?.game;
     if (!g || ui.modalOpen) return false;
-    // Watching unseen: only flying, the camera, photos and music.
-    if (g.watching && !['KeyF', 'KeyL', 'KeyP', 'KeyM'].includes(code)) return false;
+    // Watching unseen: only the camera, photos and music (flying about, up
+    // and down, needs no key of its own: see Game.ghostMove).
+    if (g.watching && !['KeyL', 'KeyP', 'KeyM'].includes(code)) return false;
     if (code.startsWith('Digit')) {
       const n = Number(code.slice(5));
       ui.selectSlot(n === 0 ? 9 : n - 1);

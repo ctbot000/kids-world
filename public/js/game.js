@@ -69,6 +69,10 @@ export const HILL_MODES = [
 const WHIRL_SECONDS = 3.2;
 // How fast left and right turn you round looking through your own eyes (radians a second).
 const TURN_SPEED = 2.4;
+// Watching an island unseen, how fast you fly about (blocks a second), and
+// how much faster running (Ctrl or R) or backed far off; and how far past
+// its edges and above it you can go.
+const GHOST = { speed: 12, climb: 9, run: 3, far: 40, high: 80 };
 // How the camera looks arriving at an island with a view to show: nearly level, to take in a building.
 const ARRIVE_PITCH = -0.06;
 const INTERP_MS = 130;
@@ -681,8 +685,9 @@ export class Game extends EventTarget {
     const body = makeBody(keep?.x ?? spawn.x, keep?.y ?? spawn.y, keep?.z ?? spawn.z);
     unstick(this.world, body);
     this.me = { body, yaw: Math.PI, anim: ANIM.idle, speed: 0 };
-    // Watching unseen: up in the air at once, to look about from (on the
-    // ground, flying would land at once).
+    // Watching unseen: up in the air at once, to look about from, with a
+    // camera nothing gets in the way of (ghostMove).
+    this.renderer.free = this.watching;
     if (this.watching) {
       if (!keep) body.y += 8;
       body.flying = true;
@@ -5578,9 +5583,10 @@ export class Game extends EventTarget {
     if (env.twister) env.twister.age += dt;
     const foot = this.tornadoFoot();
     // Swept up by the tornado: off whatever you were on, round you go.
-    if (!this.whirl && !this.riding && !this.aboard && !this.seat && !this.pianoAt && this.caughtByTornado(foot)) this.whirlAround(0, foot);
+    if (!this.watching && !this.whirl && !this.riding && !this.aboard && !this.seat && !this.pianoAt && this.caughtByTornado(foot)) this.whirlAround(0, foot);
     this.touch = input.touchMode;
-    if (this.whirl) {
+    if (this.watching) this.ghostMove(dt, input);
+    else if (this.whirl) {
       if (foot) this.whirlAround(dt, foot);
       // Blown out under you: dropped where you are.
       else this.whirl = null;
@@ -5696,6 +5702,41 @@ export class Game extends EventTarget {
     this.renderer.view.yaw -= move.x * TURN_SPEED * dt;
     if (!this.riding) this.me.yaw = this.renderer.view.yaw + Math.PI;
     return { x: 0, y: move.y };
+  }
+
+  // Watching unseen: flying where you like, through anything (blocks,
+  // water, animals, a tornado), up with jump and down with down, faster
+  // running or backed far off, over the island and a way past its edges.
+  ghostMove(dt, input) {
+    const me = this.me;
+    const b = me.body;
+    const w = this.world;
+    const move = this.steer(input.readMove(), dt);
+    const yaw = this.renderer.view.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const fast = (input.run ? GHOST.run : 1) * Math.max(1, this.renderer.view.dist / 10);
+    const vx = (fx * move.y - fz * move.x) * GHOST.speed * fast;
+    const vz = (fz * move.y + fx * move.x) * GHOST.speed * fast;
+    const vy = ((input.jump ? 1 : 0) - (input.down ? 1 : 0)) * GHOST.climb * fast;
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    Object.assign(b, {
+      x: clamp(b.x + vx * dt, -GHOST.far, w.W + GHOST.far),
+      y: clamp(b.y + vy * dt, 0, w.H + GHOST.high),
+      z: clamp(b.z + vz * dt, -GHOST.far, w.D + GHOST.far),
+      vx,
+      vy,
+      vz,
+      flying: true,
+      onGround: false,
+      inWater: false,
+      inLava: false,
+      headInWater: false,
+    });
+    const speed = Math.hypot(vx, vz);
+    if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(vx, vz), Math.min(1, dt * 12));
+    me.speed = speed;
+    me.anim = ANIM.fly;
   }
 
   moveMe(dt, input) {
@@ -6075,6 +6116,7 @@ export class Game extends EventTarget {
 
   close() {
     this.closed = true;
+    this.renderer.free = false;
     this.link.removeEventListener('message', this.onMessage);
     this.profile.removeEventListener('change', this.onProfile);
     for (const pid of [...this.pets.keys()]) this.dropPet(pid);
