@@ -6,7 +6,7 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, FACES as CARD_FACES } from './shared/arcade.js';
 import { BLACK, GAMES as BOARD_GAMES, gameOf, lessonsOf, NO_MOVE, placeName, WHITE } from './shared/go.js';
 import { ALL_TOYS, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, rarityOdds, rarityOf, TOYS, toysFound } from './shared/gashapon.js';
-import { KEYS as PIANO_KEYS, noteOfKey, SONGS, songOf } from './shared/piano.js';
+import { KEYS as PIANO_KEYS, noteOfKey, Recorder, SONGS, songOf } from './shared/piano.js';
 import { CHANNELS, channelsWith, LIVE, nextChannel, ON_AIR } from './shared/tv.js';
 import { sinceText } from './shared/screens.js';
 import { FINGER_OF, KEY_ROWS, LESSONS, lessonLine, lessonOf, typingScore, WordRain } from './shared/typing.js';
@@ -2264,7 +2264,7 @@ export class UI {
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in 🧸 My collection.']),
-          card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows.']),
+          card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
@@ -5328,6 +5328,12 @@ export class UI {
     // The song being followed, and how far along it you are.
     let song = null;
     let at = 0;
+    // Your own song being made (shared/piano.js Recorder): the notes taken
+    // down while ⏺ Record is on, and their timing. It is not kept past this
+    // sitting, and playing it back does not take itself down.
+    const rec = new Recorder();
+    let lastNote = 0;
+    let playing = false;
     const keyEls = new Map();
     const said = h('div', { class: 'piano-said', 'aria-live': 'polite' }, 'Tap the keys to play!');
     const songs = h('div', { class: 'piano-songs' });
@@ -5345,6 +5351,9 @@ export class UI {
     const play = (n) => {
       this.sound.unlock();
       g.playPiano(n);
+      const now = performance.now() / 1000;
+      if (rec.on && !playing) rec.note(n, now - lastNote);
+      lastNote = now;
       const el = keyEls.get(n);
       if (el) {
         el.classList.remove('down');
@@ -5375,6 +5384,59 @@ export class UI {
       play(n);
     };
     const keyup = (e) => held.delete(noteOfKey(e.key));
+    // ⏺ Record takes down what you play and when each note came, and ▶ Play
+    // sounds it back with its timing, as if played (so friends nearby hear it
+    // too). Only while you sit here: standing up loses it.
+    const take = h('button', { class: 'piano-song rec', type: 'button', 'aria-label': 'Record what you play' }, '⏺ Record');
+    const hear = h('button', { class: 'piano-song hear', type: 'button', 'aria-label': 'Play back your song', disabled: true }, '▶ Play');
+    const mark = () => {
+      take.textContent = rec.on ? '⏹ Stop' : '⏺ Record';
+      take.classList.toggle('on', rec.on);
+      hear.disabled = rec.on || !rec.notes.length;
+    };
+    let raf = 0;
+    let startAt = 0;
+    let heard = 0;
+    const stopPlay = () => {
+      playing = false;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      hear.textContent = '▶ Play';
+      mark();
+    };
+    // Each moment of playing back: the notes that came due in it sound.
+    const tick = (now) => {
+      const to = now / 1000 - startAt;
+      for (const n of rec.due(heard, to)) play(n);
+      heard = to;
+      if (to > rec.length + 0.4) {
+        stopPlay();
+        said.textContent = `🎵 Your song, ${rec.notes.length} notes!`;
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    take.onclick = () => {
+      if (playing) stopPlay();
+      if (rec.on) rec.stop();
+      else rec.start();
+      lastNote = performance.now() / 1000;
+      said.textContent = rec.on ? '⏺ Recording — play anything!' : rec.notes.length ? `🎵 ${rec.notes.length} notes taken down — tap ▶ Play!` : 'Tap the keys to play!';
+      mark();
+    };
+    hear.onclick = () => {
+      if (playing) return stopPlay();
+      if (rec.on || !rec.notes.length) return;
+      // Not following a song at the same time, so its news does not talk over
+      // the playback's.
+      if (song) pick(song);
+      playing = true;
+      heard = -1;
+      startAt = performance.now() / 1000;
+      hear.textContent = '⏹ Stop';
+      said.textContent = '🎵 Playing your song…';
+      raf = requestAnimationFrame(tick);
+    };
     this.openModal(
       (root) => {
         const whites = PIANO_KEYS.filter((k) => !k.black);
@@ -5403,13 +5465,14 @@ export class UI {
             return b;
           }),
         );
-        root.append(h('h2', {}, t.grand ? '🎹 Grand Piano' : '🎹 Piano'), said, h('div', { class: 'piano-wrap' }, board), h('h3', {}, '🎵 Play a song'), songs, h('p', { class: 'muted' }, touch ? 'Friends nearby hear you play!' : 'Play with your keyboard too: Z X C V B N M for the low keys, Q W E R T Y U I for the high ones. Friends nearby hear you play!'));
+        root.append(h('h2', {}, t.grand ? '🎹 Grand Piano' : '🎹 Piano'), said, h('div', { class: 'piano-wrap' }, board), h('h3', {}, '⏺ Make your own'), h('div', { class: 'piano-songs' }, take, hear), h('h3', {}, '🎵 Play a song'), songs, h('p', { class: 'muted' }, touch ? 'Friends nearby hear you play!' : 'Play with your keyboard too: Z X C V B N M for the low keys, Q W E R T Y U I for the high ones. Friends nearby hear you play!'));
         window.addEventListener('keydown', keydown);
         window.addEventListener('keyup', keyup);
       },
       {
         seeThrough: true,
         onClose: () => {
+          cancelAnimationFrame(raf);
           window.removeEventListener('keydown', keydown);
           window.removeEventListener('keyup', keyup);
           g.closePiano();
