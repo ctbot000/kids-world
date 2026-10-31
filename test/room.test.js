@@ -344,6 +344,15 @@ test('phrases, stickers and anything typed can be said: tidied, and never empty,
   room.receive(a, { t: 'swing' });
   assert.deepEqual(b.last('swing'), { t: 'swing', pid: a.last('welcome').you });
   assert.equal(a.all('swing').length, 0);
+  // A King Punch charging and let go: friends see the fist glow, then the
+  // shockwave.
+  room.receive(a, { t: 'charge', on: true });
+  assert.deepEqual(b.last('charge'), { t: 'charge', pid: a.last('welcome').you, on: true });
+  room.receive(a, { t: 'charge', on: false });
+  assert.equal(b.last('charge').on, false);
+  room.receive(a, { t: 'swing', king: true });
+  assert.equal(b.last('swing').king, true);
+  assert.equal(a.all('charge').length, 0);
 });
 
 test('animals can be petted, fed, invited and said goodbye to', () => {

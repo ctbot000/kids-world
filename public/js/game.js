@@ -29,7 +29,7 @@ import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
@@ -47,7 +47,7 @@ import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowE
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
-import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
+import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
 import { flashModel } from './render/toon.js';
 
@@ -127,6 +127,8 @@ const SLASHES = {
   sword: { color: '#4fc3ff', y: 0.95 },
   hammer: { color: '#ffc21a', y: 1.25, upright: true },
   lavablade: { color: '#ff6a1f', y: 0.95 },
+  // The King Punch: a wider, golden shockwave all round in front.
+  king: { color: '#ffd84d', y: 0.9, wide: true },
 };
 // How each swing lands on a monster: your swing and the monsters it hit
 // stop dead for stop ms (a little longer for each more one), the camera
@@ -137,11 +139,18 @@ const IMPACTS = {
   sword: { stop: 70, shake: 0.08 },
   hammer: { stop: 120, shake: 0.2 },
   lavablade: { stop: 100, shake: 0.14 },
+  // A King Punch lands harder than any toy weapon.
+  king: { stop: 150, shake: 0.24 },
 };
 const STOP_MORE = 15;
 const STOP_MAX = 160;
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
+// The King Punch: how long the bop button must be held with an empty hand
+// before the fist is charged (and glowing), and how long the charge is kept
+// once the button is up, in case the swing cannot go just yet.
+const KING_CHARGE_MS = CHARGE_SECS * 1000;
+const KING_HOLD_MS = 400;
 // What each tougher monster is, told the first time one comes out near you.
 const TOUGH_TOLD = {
   big: { icon: '💪', text: 'A Big Bruiser! It bumps twice as much HP off you and takes six bops. Jumping on it takes three.' },
@@ -427,15 +436,25 @@ export class Game extends EventTarget {
       case 'piano':
         this.pianoHeard(msg);
         break;
+      // A friend's King Punch charging, or let go (chargeBop).
+      case 'charge':
+        if (msg.pid !== this.pid) this.players.get(msg.pid)?.avatar?.charging(msg.on === true);
+        break;
       // Fish food sprinkled on a tank or a bowl (fishtank.js) by whoever stood
       // there: its flakes and darting fish, for everyone to see.
       case 'fish':
         this.pinchTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2] });
         break;
       case 'swing': {
-        const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
+        const avatar = this.players.get(msg.pid)?.avatar;
+        const lands = avatar?.swing() ?? 0;
+        const king = msg.king === true;
         const world = this.world;
-        setTimeout(() => this.world === world && this.slashFrom(this.players.get(msg.pid)?.avatar), lands * 1000);
+        setTimeout(() => {
+          if (this.world !== world) return;
+          this.slashFrom(avatar, king);
+          if (king) this.shockwaveFrom(avatar);
+        }, lands * 1000);
         break;
       }
       case 'c':
@@ -1516,9 +1535,10 @@ export class Game extends EventTarget {
     }
   }
 
-  // Bopping a monster, or landing on it (on).
-  bop(id, on = false) {
-    this.send(on ? { t: 'bop', id, on: true } : { t: 'bop', id });
+  // Bopping a monster, or landing on it (on). A King Punch's bop (king) is
+  // the island's to allow for: it reaches further and hits harder.
+  bop(id, on = false, king = false) {
+    this.send(on ? { t: 'bop', id, on: true } : king ? { t: 'bop', id, king: true } : { t: 'bop', id });
   }
 
   // Drinking an HP potion (the 🧪 button by your HP, or Y): one out of your
@@ -1562,14 +1582,43 @@ export class Game extends EventTarget {
   }
 
   // The slash a swing leaves in the air as it lands, round in front of
-  // whoever swung (avatar) as far as their weapon reaches.
-  slashFrom(avatar) {
-    const look = avatar && SLASHES[avatar.weaponKind ?? 'punch'];
+  // whoever swung (avatar) as far as their weapon reaches. A King Punch's is
+  // the wide golden one, and it brings a shockwave with it (shockwaveFrom).
+  slashFrom(avatar, king = false) {
+    const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
     if (!look) return;
     const { position: at, rotation, scale } = avatar.root;
     if (!this.near(at.x, at.y, at.z, 40)) return;
-    const reach = 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
-    this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright });
+    const reach = king ? KING_REACH + 0.6 : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
+    this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, from: look.wide ? -2.4 : undefined, to: look.wide ? 2.4 : undefined });
+  }
+
+  // The golden shockwave of a King Punch, whoever threw it: a ring bursting
+  // out from them as far as it bops, with sparks flying off it.
+  shockwaveFrom(avatar) {
+    if (!avatar) return;
+    const { position: at, rotation } = avatar.root;
+    if (!this.near(at.x, at.y, at.z, 40)) return;
+    this.shockwave(at.x, at.y + 0.9, at.z, rotation.y);
+  }
+
+  shockwave(x, y, z, yaw) {
+    const e = this.renderer.effects;
+    for (let i = 0; i < 10; i++) {
+      const a = yaw + ((i / 10) * 2 - 1) * 1.25;
+      e.add('sparkle', x + Math.sin(a) * 0.8, y, z + Math.cos(a) * 0.8, {
+        vx: Math.sin(a) * 7,
+        vz: Math.cos(a) * 7,
+        vy: 0.4,
+        size: 0.4,
+        life: 0.5,
+        drag: 3,
+        grow: 0.6,
+        color: i % 2 ? '#ffd84d' : '#fff3a0',
+      });
+    }
+    e.ripple(x, y - 0.85, z, 0.5, KING_REACH + 1.2);
+    this.sound.play('boom', { near: 0.4 });
   }
 
   // Your swing landing on monsters (hits, as attack found them), at once,
@@ -1618,6 +1667,109 @@ export class Game extends EventTarget {
     this.hitStopUntil = until;
     this.renderer.shake(look.shake);
     this.sound.play('whack', { kind });
+  }
+
+  // The bop button held down (👊 or X) with an empty hand: after a moment the
+  // fist glows and hums, and on release a King Punch goes out — a wide golden
+  // shockwave that bops every monster in front of you, harder than a punch.
+  // With a toy weapon in hand there is no charge: the button swings as ever.
+  chargeBop(input) {
+    const held = Boolean(input?.bop) && !this.aboard && !this.riding && !this.dizzy && this.world && this.me && !wornWeapon(this.profile.data.gear);
+    const now = performance.now();
+    const avatar = this.players.get(this.pid)?.avatar;
+    if (!this.charge) {
+      if (!held) return;
+      this.charge = { at: now, told: false };
+    }
+    if (!held) {
+      // Let go: the punch goes if it was charged, and the charge is spent.
+      const ready = now - this.charge.at >= KING_CHARGE_MS - 60;
+      if (this.charge.sent) this.send({ t: 'charge', on: false });
+      this.charge = null;
+      if (avatar) avatar.chargeUp(0);
+      if (ready) this.kingPunch(input);
+      return;
+    }
+    const k = Math.min(1, (now - this.charge.at) / KING_CHARGE_MS);
+    if (avatar) avatar.chargeUp(k);
+    // Held past a tap: friends see the fist glow too (a quick tap tells nobody).
+    if (!this.charge.sent && now - this.charge.at >= CHARGE_TOLD * 1000) {
+      this.charge.sent = true;
+      this.send({ t: 'charge', on: true });
+    }
+    // The moment it is charged: a word of it, and the fizz of the charge.
+    if (k >= 1 && !this.charge.told) {
+      this.charge.told = true;
+      this.emit('toast', { icon: '👑', text: 'King Punch ready! Let go to bop everything in front of you!' });
+    }
+  }
+
+
+  // The charged fist let go: a King Punch. A wide golden shockwave sweeps
+  // round in front of you, further and wider than any swing, and bops every
+  // monster it passes through at once, each one hit harder than a punch bops
+  // it (HP and XP as ever: a heart off each, a Bruiser or King Grumble the
+  // same as a punch would). Returns how many it bopped.
+  kingPunch() {
+    if (!this.world || !this.me || this.aboard || this.dizzy || !this.attackReady()) return 0;
+    const now = performance.now();
+    this.attackAt = now + SWINGS.punch.secs * 1000;
+    const b = this.me.body;
+    if (this.renderer.camDist <= 1.3) this.me.yaw = this.renderer.view.yaw + Math.PI;
+    const fx = Math.sin(this.me.yaw);
+    const fz = Math.cos(this.me.yaw);
+    const hits = [];
+    for (const [id, entry] of this.monsters) {
+      if (moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
+      const m = entry.model.group.position;
+      const size = bodyOf(entry.kind);
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, KING_REACH);
+      if (gap === null) continue;
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      // Further round than a swing: nearly everything in front of you.
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < KING_SWEEP) continue;
+      const ey = b.y + BODY.eye;
+      const dy = m.y + size.height / 2 - ey;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      if (raycast(this.world, b.x, ey, b.z, dx / len, dy / len, dz / len, Math.max(0, len - size.radius), (block) => B.SOLID[block] === 1)) continue;
+      hits.push({ id, gap, dx, dz, m, size });
+    }
+    // The wild dragons in the sweep too, as a swing's are.
+    const dragons = [];
+    for (const c of this.critters.values()) {
+      if (!wildDragon(c)) continue;
+      const m = c.model.group.position;
+      const r = CRITTER_INFO.dragon.ride;
+      const size = { radius: r.radius, height: r.height };
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, ...size }, KING_REACH);
+      if (gap === null) continue;
+      const dx = m.x - b.x;
+      const dz = m.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < KING_SWEEP) continue;
+      dragons.push({ id: c.id, gap, dx, dz, m, size, dragon: true });
+    }
+    // The wind-up as any swing: the pose, the whoosh and the word to friends.
+    const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
+    this.send({ t: 'swing', king: true });
+    this.sound.play('swish');
+    const world = this.world;
+    setTimeout(() => {
+      if (this.world !== world) return;
+      const yaw = this.me.yaw;
+      this.slashFrom(this.players.get(this.pid)?.avatar, true);
+      this.shockwave(b.x, b.y + 0.95, b.z, yaw);
+      this.strike(hits, 'king', dragons);
+      this.bopSentAt = performance.now();
+      for (const hit of [...hits, ...dragons]) {
+        if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
+        else this.bop(hit.id, false, true);
+      }
+      this.wearOut();
+    }, lands * 1000);
+    return hits.length + dragons.length;
   }
 
   // The 👊 button (or X): a swing of the arm, and whatever is in it. It
@@ -5291,6 +5443,9 @@ export class Game extends EventTarget {
     this.updatePets(dt);
     this.updateMonsters(dt);
     this.updateAdventure(dt);
+    // The bop button held down (input.bop): a bare fist charges up a King
+    // Punch while it is held, and swings when it is let go.
+    this.chargeBop(input);
     // Holding the button down (after a moment) keeps building or picking as you sweep.
     const hold = this.holding;
     if (hold && performance.now() >= hold.at && this.tool !== 'stamp' && this.tool !== 'friends') {
