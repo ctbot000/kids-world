@@ -2267,7 +2267,7 @@ export class UI {
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! On 🪩 Dance Party you dance along until you flip away. When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. With nothing in your hand, hold it down for a second and let go for a 👑 King Punch that bops everything in front of you! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one!']),
@@ -3182,8 +3182,10 @@ export class UI {
     $('btn-attack').onpointerdown = (e) => {
       e.preventDefault();
       this.sound.unlock();
+      this.input.bopHeld = true;
       game.attack();
     };
+    $('btn-attack').onpointerup = $('btn-attack').onpointerleave = $('btn-attack').onpointercancel = () => (this.input.bopHeld = false);
     // The weapon button, by it: the next of your toy weapons into your hand.
     $('btn-weapon').onmousedown = (e) => e.preventDefault();
     $('btn-weapon').onclick = () => {
@@ -4671,7 +4673,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4740,22 +4742,23 @@ export class UI {
 
   // Play, beside an arcade machine or a piano next to you, Turn beside a
   // gashapon machine, Watch beside a TV, or Go live beside a broadcast
-  // station, Class beside a chalkboard, Draw beside a drawing board, or Cook
-  // beside a stove: the same button again.
+  // station, Class beside a chalkboard, Draw beside a drawing board, Cook
+  // beside a stove, or Feed beside a fish tank or a goldfish bowl: the same
+  // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget;
+    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;

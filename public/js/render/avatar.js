@@ -12,6 +12,11 @@ import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
+// A King Punch's charge (game.js chargeBop): how long it takes, and how far
+// in it is when friends are told of it, so theirs glows in step.
+export const CHARGE_SECS = 0.9;
+export const CHARGE_TOLD = 0.25;
+
 // Heads are made at one size, HEAD_R or so from the middle to the top, and
 // scaled down to the body they go on.
 const HEAD_R = 0.34;
@@ -2200,6 +2205,29 @@ export class Avatar {
     return swing.secs * swing.strike;
   }
 
+  // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
+  // 1. The fist is drawn back and glows brighter and bigger as it charges —
+  // everyone sees it — and at 0 the glow is gone.
+  chargeUp(k) {
+    if (!this.chargeLight) {
+      // A golden glow in the right fist, lit from within, and the sparkles
+      // that come off it are effects' business (game.js shockwave draws those).
+      const light = new THREE.Mesh(sphere(0.14, 12, 8), toon('#ffd84d', { emissive: 1.4 }));
+      light.visible = false;
+      this.hands[1].add(light);
+      this.chargeLight = light;
+    }
+    this.chargeLight.visible = k > 0;
+    if (k > 0) this.chargeLight.scale.setScalar(0.4 + k * 1.1);
+  }
+
+  // A friend's King Punch charging, as the island tells it (on), or let go:
+  // the glow grows by itself in update, from how far it had come when told.
+  charging(on) {
+    this.chargeFrom = on ? this.time - CHARGE_TOLD : null;
+    if (!on) this.chargeUp(0);
+  }
+
   // A key struck on the piano being played (MIDI note n): the hand on that
   // side of the keyboard moves over to it and strikes it.
   pianoNote(n) {
@@ -2220,6 +2248,7 @@ export class Avatar {
   // bounce in the saddle).
   update(dt, anim, speed) {
     this.time += dt;
+    if (this.chargeFrom != null) this.chargeUp(Math.min(1, (this.time - this.chargeFrom) / CHARGE_SECS));
     const t = this.time;
     this.anim = anim;
     const B = this.build;
