@@ -34,6 +34,7 @@ import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
+import { feedTank, isTank } from './fishtank.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { hasPower, weaponOf } from './shop.js';
@@ -475,6 +476,18 @@ export class Room {
         if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
         this.broadcast({ t: 'piano', pid, n: msg.n, at: msg.at }, conn);
         break;
+      // A pinch of fish food on a tank or a bowl (fishtank.js), for everyone
+      // else to see the flakes and the fish dart over. Too soon after the
+      // last pinch, only the feeder is told the fish are full.
+      case 'fish': {
+        if (!Array.isArray(msg.at) || !msg.at.every(Number.isInteger)) break;
+        if (!isTank(this.world.get(...msg.at))) break;
+        if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
+        const fed = feedTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2], key: keyOf(...msg.at) }, (this.fedFish ??= new Map()), this.now());
+        if (fed.full) this.sendTo(conn, { t: 'notice', text: 'The fish are full — they will be hungry again in a little while.', level: 'info' });
+        else this.broadcast({ t: 'fish', pid, at: msg.at });
+        break;
+      }
       case 'draw':
         this.draw(conn, p, msg);
         break;

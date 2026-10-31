@@ -17,6 +17,7 @@ import { furnitureDrop } from './shared/furniture.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, heatUp, makeLesson, pickItem, recipeByKey, stoveNear, takeOut, workOn } from './shared/cooking.js';
+import { isTank, tankNear } from './shared/fishtank.js';
 import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
@@ -293,6 +294,8 @@ export class Game extends EventTarget {
     // (shared/typing.js), and the one whose window is open.
     this.computerTarget = null;
     this.computerAt = null;
+    // The fish tank or bowl beside you, to feed (shared/fishtank.js).
+    this.tankTarget = null;
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -423,6 +426,11 @@ export class Game extends EventTarget {
         break;
       case 'piano':
         this.pianoHeard(msg);
+        break;
+      // Fish food sprinkled on a tank or a bowl (fishtank.js) by whoever stood
+      // there: its flakes and darting fish, for everyone to see.
+      case 'fish':
+        this.pinchTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2] });
         break;
       case 'swing': {
         const lands = this.players.get(msg.pid)?.avatar?.swing() ?? 0;
@@ -2830,6 +2838,27 @@ export class Game extends EventTarget {
     this.computerAt = null;
   }
 
+  // ------------------------------------------------ feeding the fish
+
+  // Q (or the 🐟 Feed button) beside a fish tank or a fish bowl: a pinch of
+  // flakes goes onto the water (shared/fishtank.js), the fish dart over and
+  // nibble them up, and everyone on the island sees it — the island passes the
+  // pinch to them all, so when it says the fish are full, no one sees flakes.
+  feedFish() {
+    const t = this.tankTarget;
+    if (!t) return;
+    this.send({ t: 'fish', at: [t.x, t.y, t.z] });
+  }
+
+  // A pinch the island passed on, from whoever fed the tank in cell (x, y, z):
+  // flakes on its water and its fish darting over to nibble them up, with a
+  // heart or two rising.
+  pinchTank(t) {
+    if (!this.renderer.feedFish(t.x, t.y, t.z)) return;
+    this.sound.play('water');
+    this.renderer.effects.hearts(t.x + 0.5, t.y + 0.9, t.z + 0.5, 2);
+  }
+
   // A typing lesson finished at `wpm` words a minute with `accuracy` (0-100)
   // per cent right: it counts for XP and stickers. The XP it earned.
   typingDone(wpm, accuracy) {
@@ -3457,6 +3486,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.computerTarget) {
       this.openComputer();
+      return;
+    }
+    if (!id && this.tankTarget) {
+      this.feedFish();
       return;
     }
     if (!id) {
@@ -5247,6 +5280,7 @@ export class Game extends EventTarget {
     this.goTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.dizzy && !on.flying && on.onGround ? goBoardNear(this.world, on) : null;
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
+    this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
     this.danceLoop();
@@ -5747,6 +5781,7 @@ export class Game extends EventTarget {
     this.screenTarget = null;
     this.computerAt = null;
     this.computerTarget = null;
+    this.tankTarget = null;
     this.renderer.screens.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();
