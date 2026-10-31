@@ -4578,6 +4578,104 @@ test('a piano: Q by it opens its keyboard, a tap and a key both play and go to t
   await page.browserContext().close();
 });
 
+test('at the piano, a song of your own is recorded and played back with its timing, and the keys go down as if played', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, GRAND_PIANO);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.sent = [];
+    const send = kw.game.send.bind(kw.game);
+    kw.game.send = (msg) => {
+      if (msg.t === 'piano') kw.sent.push({ ...msg, at: performance.now() });
+      return send(msg);
+    };
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Piano'));
+  // ▶ Play is quiet until there is a song of your own.
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.piano-song.hear')].every((b) => b.disabled)));
+  // ⏺ Record, then a few notes with space between them.
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  assert.ok(await page.evaluate(() => document.querySelector('.piano-said').textContent.includes('Recording')));
+  await page.keyboard.press('KeyZ');
+  await new Promise((r) => setTimeout(r, 300));
+  await page.keyboard.press('KeyX');
+  await new Promise((r) => setTimeout(r, 600));
+  await page.keyboard.press('KeyV');
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  const took = await page.evaluate(() => window.kidsWorld.sent.map((m) => m.n));
+  assert.deepEqual(took, [60, 62, 65]);
+  // ▶ Play sounds them again, the same notes in the same order with the gaps
+  // between them, the keys going down and the hands striking them.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    kw.sent = [];
+    const seen = [];
+    for (const k of document.querySelectorAll('.piano-key')) {
+      k.addEventListener('animationstart', () => seen.push(k.ariaLabel));
+    }
+    kw.sawKeys = seen;
+    document.querySelector('.piano-song.hear').click();
+  });
+  await until(page, () => window.kidsWorld.sent.length === 3);
+  const played = await page.evaluate(() => window.kidsWorld.sent.map((m) => ({ n: m.n, gap: m.at - window.kidsWorld.sent[0].at })));
+  assert.deepEqual(played.map((p) => p.n), [60, 62, 65]);
+  assert.ok(played[1].gap > 0.2 && played[2].gap > played[1].gap + 0.2, JSON.stringify(played));
+  await until(page, () => document.querySelector('.piano-said').textContent.includes('Your song'));
+  assert.deepEqual(await page.evaluate(() => [...new Set(window.kidsWorld.sawKeys)].sort()), ['C 4', 'D 4', 'F 4']);
+  // Playing back is not playing: a song picked while it plays (here one
+  // starting with the notes recorded, E E F of Ode to Joy) is not followed
+  // along by it, and no notes count as played.
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  for (const key of ['KeyC', 'KeyC', 'KeyV']) {
+    await page.keyboard.press(key);
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  await page.evaluate(() => document.querySelector('.piano-song.rec').click());
+  const before = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    kw.saidAll = [];
+    new MutationObserver(() => kw.saidAll.push(document.querySelector('.piano-said').textContent)).observe(document.querySelector('.piano-said'), { childList: true, characterData: true, subtree: true });
+    document.querySelector('.piano-song.hear').click();
+    document.querySelector('.piano-songs [data-song="joy"]').click();
+    return kw.profile.data.stats.notes;
+  });
+  await until(page, () => document.querySelector('.piano-said').textContent.includes('Your song'));
+  const after = await page.evaluate(() => ({ notes: window.kidsWorld.profile.data.stats.notes, said: window.kidsWorld.saidAll }));
+  assert.equal(after.notes, before, 'notes played back are not counted as played');
+  assert.ok(!after.said.some((t) => /Ode to Joy: \d/.test(t)), JSON.stringify(after.said));
+  // Standing up and sitting down again starts with no song of your own.
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.game.pianoAt === null);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Play'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('.piano-song.hear').disabled);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a Go board: Q by it sits you down as black, the AI friend called over plays white, a capture is cheered, two passes count the game, How to play steps through the rules, and closing it clears the board', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

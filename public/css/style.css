@@ -5260,6 +5260,26 @@ button.go-pt {
   box-shadow: 0 2px 0 var(--sun-dark);
 }
 
+/* Making your own song: recording glows red (⏹ Stop ends it), and ▶ Play
+   stays quiet until there is a song of your own to hear. */
+.piano-song.rec.on {
+  background: var(--pink);
+  box-shadow: 0 2px 0 var(--pink-dark);
+  color: #fff;
+  animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  50% {
+    filter: brightness(1.15);
+  }
+}
+
+.piano-song:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ------------------------------------------------ TVs */
 
 /* A TV's picture in its black frame, 16:9, a channel name between ◀ and ▶
