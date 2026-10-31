@@ -262,7 +262,7 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // enough to fit in it, the root in the middle of the bed (shared/seats.js);
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14 };
 // How long someone on a coffee break waits between sips, at least and at
 // most, each wait picked at random so no two people sip together; and how
 // long a sip takes (s).
@@ -2255,8 +2255,9 @@ export class Avatar {
     const moving = anim === ANIM.walk || anim === ANIM.run;
     const running = anim === ANIM.run;
     const riding = anim === ANIM.ride;
-    // On skates, long slow pushes: you glide most of the way.
-    const rate = moving ? (this.skateLift ? 2.2 + speed * 0.45 : 3.2 + speed * 1.6) : 0;
+    // On skates, long slow pushes: you glide most of the way. Hooping, the
+    // hips push each way in turn, twice a turn of the hoop (ANIM.hoop below).
+    const rate = moving ? (this.skateLift ? 2.2 + speed * 0.45 : 3.2 + speed * 1.6) : anim === ANIM.hoop ? 2 * (this.hoopRate ?? 6) : 0;
     this.phase += dt * rate;
     const ph = this.phase;
     const s = Math.sin(ph);
@@ -2466,6 +2467,23 @@ export class Avatar {
       armRaiseL = armRaiseR = 0.12;
       bendL = bendR = 0.1;
       legs = [[0, -0.04, 0.04, 0], [0, 0.04, 0.04, 0]];
+    } else if (anim === ANIM.hoop) {
+      // Spinning a hula hoop round the waist: the hips swing side to side to
+      // keep it up, knees soft, arms out for balance and the head steady. The
+      // phase goes with the hoop itself (see update), so the swing keeps time
+      // with it whoever is hooping.
+      const w = Math.sin(ph);
+      twist = w * 0.4;
+      bob = -0.02 + Math.abs(Math.cos(ph)) * 0.02;
+      armRaiseL = armRaiseR = REST_RAISE + 0.5;
+      armFwdL = armFwdR = -0.25;
+      bendL = bendR = 0.3;
+      // The hips push each way in turn, legs going with them, the chest over it.
+      legs = [
+        [-0.1, -0.14 - Math.max(0, w) * 0.12, 0.3, 0.1],
+        [-0.1, 0.14 + Math.max(0, -w) * 0.12, 0.3, -0.1],
+      ];
+      headTilt = -w * 0.1;
     } else if (riding) {
       if (this.ride?.stand) {
         // Kicking along standing up (a kick scooter): front foot planted on

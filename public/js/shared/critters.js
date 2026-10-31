@@ -37,7 +37,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -119,6 +119,14 @@ export const CRITTER_INFO = {
   // in front over the front of the deck, and a small hop carries it over the
   // little steps in its way.
   sled: { name: 'Sled', icon: '🛷', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { seat: 0.3, z: -0.04, radius: 0.4, height: 1.6, float: 0.25, spread: 0.1, reach: 0.7, walk: 4.5, run: 7.5, swim: 2, jump: 7.6, sled: { snow: { walk: 5.5, run: 8, push: 10, coast: 2, slope: 14, top: 12 }, ground: { walk: 2.6, run: 3.8, push: 7, coast: 7, slope: 5, top: 6 } } }, names: ['Whizz', 'Woody', 'Slippy', 'Toboggan', 'Whoosh', 'Snowball', 'Zoomer', 'Frosty', 'Swifty', 'Bolt'] },
+  // A hula hoop (hoop: it spins — see game.js). Put it down like a sled, walk
+  // up and tap Spin: it circles your waist while you swing your hips to keep
+  // it up, and after a while it wobbles down and drops, ready to spin again.
+  // spin: how many seconds it stays up; wobble: how many seconds the dying
+  // fall takes at the end; rate: how fast it whirls round the waist (radians
+  // a second). Nobody rides it — it is a toy to spin, not a vehicle to
+  // drive, so it has no ride, only the box it lies in on the ground (box).
+  hoop: { name: 'Hula Hoop', icon: '⭕', speed: 0, swims: true, flies: false, vehicle: 'land', hoop: { spin: 11, wobble: 2.5, rate: 6 }, box: { radius: 0.45, height: 0.15, float: 0.1, walk: 0, run: 0, swim: 0, jump: 0 }, names: ['Twirly', 'Spinny', 'Whirly', 'Loop-De-Loop', 'Whizzy', 'Ringy', 'Swishy', 'Dizzy', 'Roundabout', 'Ollie'] },
   // The paint van (ride.paint: it paints — see riding.js). Driving it paints
   // the natural ground it rolls over, a swath a few blocks wide, in the colour
   // picked with the Paint tool. It paints only natural ground, never anything
@@ -188,7 +196,7 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // the look-only ones that come and go on their own (the firefly).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race', 'hoop'];
 export const MAX_CRITTERS = 64;
 // The most fireflies an island lets out at once: enough for a little wonder,
 // never a swarm — and they never take a seat an animal could have.
@@ -224,6 +232,8 @@ export function critterBox(type) {
   if (!info || info.flies) return null;
   if (SMALL_BOX[type]) return { radius: SMALL_BOX[type][0], height: SMALL_BOX[type][1] };
   if (info.vehicle === 'sea') return { radius: info.ride.radius, height: 1 };
+  // A hula hoop lies flat: you walk over it, and spun it is round you.
+  if (info.box) return null;
   if (info.big || info.vehicle) return { radius: info.ride.radius, height: info.ride.height };
   return null;
 }
@@ -258,6 +268,14 @@ export function headTop(hat, hair = '', tall = 0) {
 // How high a rider's hips are over their feet, as render/avatar.js draws
 // them, less a little for sinking into the saddle.
 export const HIPS = 0.25;
+
+// How far round a hula hoop has gone (radians), secs after it went up round
+// someone's waist (CRITTER_INFO.hoop.hoop): steady while it is up, slowing as
+// it wobbles down.
+export function hoopTurn(secs, { spin, wobble, rate }) {
+  const d = Math.min(Math.max(0, secs - spin), wobble);
+  return rate * (Math.min(secs, spin) + d - (0.6 * d * d) / (2 * wobble));
+}
 
 // Where someone riding an animal at (x, y, z, yaw) is: their feet, as
 // everybody's are, with their hips on its back. seat: which seat, for a
@@ -630,7 +648,7 @@ export function bigCounts(theme) {
 
 // Whether a big animal, with a rider on, fits standing at (x, y, z).
 export function fits(world, type, x, y, z) {
-  const r = CRITTER_INFO[type].ride;
+  const r = CRITTER_INFO[type].ride ?? CRITTER_INFO[type].box;
   const b = { x, y, z, radius: r.radius, height: r.height };
   return !bodyOverlapsSolid(world, b) && bodyOverlapsSolid(world, { ...b, y: y - 0.05, height: 0.05 });
 }
@@ -954,6 +972,16 @@ export class CritterSim {
         return;
       }
       this.letGo(c);
+    }
+    // A hula hoop being spun goes round with its spinner, until it drops
+    // (or they are gone) and lies on the ground where they stood.
+    if (c.hooper) {
+      const spinner = players.get(c.hooper);
+      if (spinner && now < (c.hoopUntil ?? Infinity)) {
+        Object.assign(c, { x: spinner.x, y: spinner.y, z: spinner.z, yaw: spinner.yaw ?? c.yaw, state: 'hoop', body: null });
+        return;
+      }
+      c.hooper = 0;
     }
     if (info.vehicle) {
       this.stepVehicle(world, c, dt, now);
@@ -1374,7 +1402,7 @@ export class CritterSim {
       return;
     }
     const b = this.bodyOf(world, c);
-    stepBody(world, b, { mx: 0, mz: 0 }, dt, { move: CRITTER_INFO[c.type].ride, autoJump: false });
+    stepBody(world, b, { mx: 0, mz: 0 }, dt, { move: CRITTER_INFO[c.type].ride ?? CRITTER_INFO[c.type].box, autoJump: false });
     c.x = b.x;
     c.y = b.y;
     c.z = b.z;
@@ -1388,7 +1416,7 @@ export class CritterSim {
   // (physics.js): bumping into walls and trees, hopping up steps, swimming.
   bodyOf(world, c) {
     if (!c.body) {
-      const r = CRITTER_INFO[c.type].ride;
+      const r = CRITTER_INFO[c.type].ride ?? CRITTER_INFO[c.type].box;
       c.body = Object.assign(makeBody(c.x, c.y, c.z), { radius: r.radius, height: r.height, float: r.float });
     }
     // Anything built where it is lifts it out on top.
