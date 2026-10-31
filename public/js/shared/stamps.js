@@ -212,6 +212,75 @@ function house() {
   return c.list();
 }
 
+// A log cabin: walls of stacked tree trunks with a course of planks between
+// them, a bop-to-open door, glass windows, a low wood roof and a plank porch
+// before the door — and inside a glowing fireplace with a stone chimney, a pet
+// bed by the fire and a table to sit at.
+function cabin() {
+  const c = new Cells();
+  // A plank floor, then the walls: a course of trunks, a course of planks.
+  c.box(-4, 0, 0, 4, 0, 7, B.PLANKS);
+  for (let y = 1; y <= 4; y++) {
+    for (let x = -4; x <= 4; x++) {
+      for (let z = 0; z <= 7; z++) {
+        const sideX = x === -4 || x === 4;
+        const sideZ = z === 0 || z === 7;
+        if (!sideX && !sideZ) {
+          c.put(x, y, z, B.AIR);
+          continue;
+        }
+        c.put(x, y, z, y % 2 ? B.WOOD : B.PLANKS);
+      }
+    }
+  }
+  // The door at the front (two tall, one door that swings as a whole) and
+  // the windows either side of it, down both ends and at the back.
+  c.put(0, 1, 0, B.DOORS[1]);
+  c.put(0, 2, 0, B.DOORS[1]);
+  for (const x of [-2, 2]) c.put(x, 2, 0, B.GLASS);
+  for (const z of [2, 5]) {
+    c.put(-4, 2, z, B.GLASS);
+    c.put(4, 2, z, B.GLASS);
+  }
+  c.put(0, 2, 7, B.GLASS);
+  // The roof climbs in steps from both sides to a ridge, wood over the
+  // slopes and out past the front and back, the gables in planks.
+  for (let step = 0; step <= 3; step++) {
+    const y = 5 + step;
+    const lo = -5 + step;
+    const hi = 5 - step;
+    for (let x = lo; x <= hi; x++) {
+      for (let z = -1; z <= 8; z++) {
+        if (x <= lo + 1 || x >= hi - 1 || step === 3) c.put(x, y, z, B.WOOD);
+        else if (z >= 0 && z <= 7) c.put(x, y, z, z === 0 || z === 7 ? B.PLANKS : B.AIR);
+      }
+    }
+  }
+  // A stone chimney up the back gable and out above the roof, and the
+  // fireplace it serves inside.
+  for (let y = 5; y <= 9; y++) c.put(2, y, 7, B.STONE);
+  c.put(2, 1, 6, B.FIREPLACE);
+  // Furnished: a rug before the fire, the pet bed in the corner opposite
+  // it, a table with two chairs, a bookshelf along the wall and a lamp under
+  // the ridge.
+  for (let x = -1; x <= 1; x++) for (let z = 3; z <= 5; z++) c.put(x, 0, z, B.CARPETS[2]);
+  c.put(-2, 1, 6, B.PET_BED);
+  c.put(-1, 1, 3, B.TABLE);
+  c.put(0, 1, 3, B.TABLE);
+  c.put(-1, 1, 2, B.turnedTo(B.CHAIR, 1));
+  c.put(0, 1, 4, B.CHAIR);
+  c.put(-3, 1, 2, B.turnedTo(B.BOOKSHELF, 0));
+  c.put(0, 7, 4, B.LAMP);
+  // The porch: a plank floor before the door, two trunk posts holding a
+  // plank roof over it, with a lamp set in the roof (a lamp is a solid
+  // block, so one hung below would stand in the way to the door).
+  c.box(-2, 0, -2, 2, 0, -1, B.PLANKS);
+  for (const x of [-2, 2]) for (let y = 1; y <= 2; y++) c.put(x, y, -2, B.WOOD);
+  c.box(-2, 3, -2, 2, 3, -1, B.PLANKS);
+  c.put(0, 3, -2, B.LAMP);
+  return c.list();
+}
+
 function tower() {
   const c = new Cells();
   for (let y = 0; y <= 8; y++) {
@@ -877,6 +946,7 @@ function office() {
 
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
+  { key: 'log-cabin', name: 'Log Cabin', icon: '🪵', cells: cabin() },
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
   { key: 'big-tree', name: 'Big Tree', icon: '🌳', cells: bigTree() },
   { key: 'pine', name: 'Pine Tree', icon: '🌲', cells: pine() },

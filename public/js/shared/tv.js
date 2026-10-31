@@ -24,6 +24,11 @@ export const CHANNELS = [
 export const LIVE = { key: 'live', icon: '📡', name: 'Live' };
 export const ON_AIR = { key: 'onair', icon: '📹', name: 'On Air' };
 
+// The channel your feet cannot keep still on: watching it, you dance along
+// (the dance emote, over and over) until you flip away or stop watching.
+export const DANCE = CHANNELS.find((c) => c.key === 'dance');
+export const isDance = (c) => c?.key === 'dance';
+
 // The channels a TV has: someone on the island on air from a broadcast
 // station (onAir), and the keeper's live one (live), as there are.
 export const channelsWith = (live, onAir = null) => (live || onAir ? [...CHANNELS, ...(onAir ? [ON_AIR] : []), ...(live ? [LIVE] : [])] : CHANNELS);
