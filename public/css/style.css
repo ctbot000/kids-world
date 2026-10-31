@@ -4699,6 +4699,13 @@ button.go-pt {
   line-height: 1.5;
 }
 
+.cook-photo {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 0 var(--line);
+}
+
 .cook-dish {
   font-size: 5rem;
   line-height: 1.1;

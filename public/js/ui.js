@@ -34,6 +34,7 @@ import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
+import { Kitchen3D } from './render/kitchen3d.js';
 import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
@@ -6764,7 +6765,10 @@ export class UI {
     const c = g?.cooking;
     if (!c) return;
     const recipe = recipeByKey(c.recipe);
-    if (this.cookEls) cancelAnimationFrame(this.cookEls.raf);
+    if (this.cookEls) {
+      cancelAnimationFrame(this.cookEls.raf);
+      this.cookEls.k3?.dispose();
+    }
     this.cookEls = null;
     this.openModal(
       (root) => {
@@ -6777,7 +6781,11 @@ export class UI {
       {
         narrow: true,
         onClose: () => {
-          if (this.cookEls) cancelAnimationFrame(this.cookEls.raf);
+          if (this.cookEls) {
+            cancelAnimationFrame(this.cookEls.raf);
+            clearTimeout(this.cookEls.serveTimer);
+            this.cookEls.k3?.dispose();
+          }
           this.cookEls = null;
           if (g.cooking === c) g.closeCooking();
         },
@@ -6794,17 +6802,36 @@ export class UI {
     const c = els.cooking;
     const view = els.view;
     const recipe = recipeByKey(c.recipe);
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const canvas = h('canvas', { class: 'cook-canvas', width: KITCHEN_W * dpr, height: KITCHEN_H * dpr, role: 'img', 'aria-label': 'The kitchen' });
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    // The kitchen in 3D (render/kitchen3d.js), or drawn flat where WebGL
+    // cannot be had (render/kitchen.js).
+    const canvas = h('canvas', { class: 'cook-canvas', role: 'img', 'aria-label': 'The kitchen' });
+    let k3 = null;
+    let ctx = null;
+    try {
+      k3 = new Kitchen3D(canvas);
+    } catch {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = KITCHEN_W * dpr;
+      canvas.height = KITCHEN_H * dpr;
+      ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+    }
+    els.k3 = k3;
     const say = (text, warn = false) => {
       els.verdict.textContent = text;
       els.verdict.classList.toggle('warn', warn);
     };
+    // Where on the food a point on the screen is, in the kitchen's units;
+    // and the other way, a place in the kitchen on the screen.
     const at = (e) => {
+      if (k3) return k3.toKitchen(e.clientX, e.clientY, c) ?? { x: -1e4, y: -1e4 };
       const r = canvas.getBoundingClientRect();
       return { x: ((e.clientX - r.left) / r.width) * KITCHEN_W, y: ((e.clientY - r.top) / r.height) * KITCHEN_H };
+    };
+    els.screenOf = (x, y) => {
+      if (k3) return k3.toScreen(x, y, c);
+      const r = canvas.getBoundingClientRect();
+      return { x: r.left + (x / KITCHEN_W) * r.width, y: r.top + (y / KITCHEN_H) * r.height };
     };
     const inVessel = (p, k = 1) => p && Math.hypot(p.x - VESSEL.x, p.y - VESSEL.y) < VESSEL.r * k;
     const step = () => (c.done ? null : recipe.steps[c.step]);
@@ -6866,6 +6893,7 @@ export class UI {
           if (drag?.id !== e.pointerId) return;
           if (drag.act === 'add' && e.type === 'pointerup' && inVessel(view.pos, 1.15)) {
             this.sound.play('collect');
+            view.lastDrop = { ...view.pos };
             g.cookWork(1);
           }
           drag = null;
@@ -6959,7 +6987,7 @@ export class UI {
     // The kitchen's clock: cooking on the heat, pouring, and drawing.
     let then = performance.now();
     const frame = (now) => {
-      if (this.cookEls !== els) return;
+      if (this.cookEls !== els || !els.kitchen.isConnected) return;
       const dt = Math.min(0.1, (now - then) / 1000);
       then = now;
       view.t += dt;
@@ -6967,8 +6995,9 @@ export class UI {
       if (st && c.phase === 'work' && st.act === 'heat') g.cookHeat(dt);
       view.pour = Boolean(drag && drag.act === 'pour' && inVessel(view.pos, 1.2));
       if (view.pour) g.cookWork(dt);
+      if (k3) k3.render(c, view, dt);
+      else if (!c.done) drawKitchen(ctx, c, view);
       if (!c.done) {
-        drawKitchen(ctx, c, view);
         const hint = this.cookHint(c, st);
         if (els.status.dataset.k !== hint) {
           els.status.dataset.k = hint;
@@ -7011,16 +7040,12 @@ export class UI {
       els.served = true;
       this.sound.play(c.right === total ? 'victory' : 'fanfare');
       els.status.textContent = `Ready! ${c.right} of ${total} steps just right`;
-      const other = RECIPES.find((r) => r.key !== c.recipe && !g.cookBreak(r.key));
-      els.box.replaceChildren(
-        h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, recipe.icon),
-        h('div', { class: `quiz-result${c.right === total ? ' perfect' : ''}` }, `${c.right === total ? '🌟' : '🧑‍🍳'} Your ${recipe.name}${recipe.name.endsWith('s') ? ' are' : ' is'} ready!`),
-        h('p', { class: 'quiz-credit' }, c.right === total ? 'Every step just right! ' : 'Yummy! ', `You earned: 🪙 ${c.coins} ${c.coins === 1 ? 'coin' : 'coins'}`, c.xp ? ` and ⭐ ${c.xp} XP` : ''),
-        h('ol', { class: 'cook-steps' }, done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`))),
-        h('p', { class: 'muted' }, `🧽 The ${recipe.name} can be made again after a ${Math.round(COOK_BREAK_MS / 60_000)}-minute wash-up.`),
-        other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); this.closeModal(); this.cookDialog(); } }, h('span', { class: 'emoji' }, '📖'), ' Cook something else') : '',
-        h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
-      );
+      // The dish stays in the kitchen a moment to be looked at, then its
+      // picture goes over what it earned.
+      els.view.tool = null;
+      els.off.hidden = true;
+      els.shelf.hidden = true;
+      els.serveTimer = setTimeout(() => this.serveDish(), els.k3 ? 1600 : 0);
       return;
     }
     // A new step: its own places to rub over, and nothing in your hand.
@@ -7041,6 +7066,29 @@ export class UI {
       b.classList.toggle('used', used);
       b.classList.toggle('on', c.phase === 'work' && item.step === c.step);
     }
+  }
+
+  // The dish made: a picture of it as it came out of the kitchen, what it
+  // earned, and on to another recipe or done.
+  serveDish() {
+    const g = this.game;
+    const c = g?.cooking;
+    const els = this.cookEls;
+    if (!c?.done || els?.cooking !== c || !this.modalOpen) return;
+    const recipe = recipeByKey(c.recipe);
+    const total = recipe.steps.length;
+    const done = recipe.steps;
+    const photo = els.k3?.snapshot(c, els.view);
+    const other = RECIPES.find((r) => r.key !== c.recipe && !g.cookBreak(r.key));
+    els.box.replaceChildren(
+      photo ? h('img', { class: 'cook-dish cook-photo', src: photo, alt: `Your ${recipe.name}` }) : h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, recipe.icon),
+      h('div', { class: `quiz-result${c.right === total ? ' perfect' : ''}` }, `${c.right === total ? '🌟' : '🧑‍🍳'} Your ${recipe.name}${recipe.name.endsWith('s') ? ' are' : ' is'} ready!`),
+      h('p', { class: 'quiz-credit' }, c.right === total ? 'Every step just right! ' : 'Yummy! ', `You earned: 🪙 ${c.coins} ${c.coins === 1 ? 'coin' : 'coins'}`, c.xp ? ` and ⭐ ${c.xp} XP` : ''),
+      h('ol', { class: 'cook-steps' }, done.map((st) => h('li', {}, `✅ ${st.icon} ${st.text}`))),
+      h('p', { class: 'muted' }, `🧽 The ${recipe.name} can be made again after a ${Math.round(COOK_BREAK_MS / 60_000)}-minute wash-up.`),
+      other ? h('button', { class: 'big blue', type: 'button', onclick: () => { this.sound.play('ui'); this.closeModal(); this.cookDialog(); } }, h('span', { class: 'emoji' }, '📖'), ' Cook something else') : '',
+      h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
+    );
   }
 
   // The quiz you are taking, in a window: where it has got to, the question

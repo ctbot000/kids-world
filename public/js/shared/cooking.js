@@ -128,9 +128,9 @@ export const stoveNear = (world, body, reach = 2.2) => cellNear(world, body, (id
 // each, the step it is for or -1), the step being done and whether its
 // thing is still to pick ('pick') or picked and being done ('work'), how
 // far it has got (progress, 0-1; heat, the heat level), the wrong picks
-// made at each step, whether each came off the heat too dark, how many
-// steps were right, and whether the dish is done. The same seed makes the
-// same shelf.
+// made at each step, whether each came off the heat too dark and at what
+// heat (heats), how many steps were right, and whether the dish is done.
+// The same seed makes the same shelf.
 export function makeLesson(key, seed = 1) {
   const recipe = recipeByKey(key);
   if (!recipe) return null;
@@ -144,7 +144,7 @@ export function makeLesson(key, seed = 1) {
     [shelf[j], shelf[k]] = [shelf[k], shelf[j]];
   }
   const steps = recipe.steps.length;
-  return { recipe: recipe.key, shelf, step: 0, phase: 'pick', progress: 0, heat: 0, misses: Array(steps).fill(0), dark: Array(steps).fill(false), right: 0, done: false };
+  return { recipe: recipe.key, shelf, step: 0, phase: 'pick', progress: 0, heat: 0, misses: Array(steps).fill(0), dark: Array(steps).fill(false), heats: Array(steps).fill(0), right: 0, done: false };
 }
 
 // The step being done in a lesson, as the recipe has it, or null.
@@ -196,6 +196,7 @@ export function takeOut(lesson) {
   const how = doneness(lesson.heat);
   if (how === 'raw') return how;
   lesson.dark[lesson.step] = how === 'dark';
+  lesson.heats[lesson.step] = lesson.heat;
   finishStep(lesson);
   return how;
 }

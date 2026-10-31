@@ -60,7 +60,7 @@ const roundRect = (ctx, x, y, w, h, r, fill, stroke) => {
 
 // Places a little apart, by a seed: where things sit in the vessel.
 // r is how far out they go, or [across, up] for an oval.
-const spots = (n, seed, r, cx = VESSEL.x, cy = VESSEL.y) =>
+export const spots = (n, seed, r, cx = VESSEL.x, cy = VESSEL.y) =>
   Array.from({ length: n }, (_, i) => {
     const a = hash2(seed, i, 1) * TAU;
     const d = Math.sqrt(hash2(seed, i, 2));
@@ -69,8 +69,8 @@ const spots = (n, seed, r, cx = VESSEL.x, cy = VESSEL.y) =>
   });
 
 // The six cookies on the tray.
-const COOKIES = [-1, 0, 1].flatMap((i) => [-1, 1].map((j) => [VESSEL.x + i * 64, VESSEL.y + j * 38]));
-const SLICE = { x: VESSEL.x - 58, y: VESSEL.y - 58, w: 116, h: 116 };
+export const COOKIES = [-1, 0, 1].flatMap((i) => [-1, 1].map((j) => [VESSEL.x + i * 64, VESSEL.y + j * 38]));
+export const SLICE = { x: VESSEL.x - 58, y: VESSEL.y - 58, w: 116, h: 116 };
 
 // Where a rub step has to go over, as points 8 apart: the dough to roll out
 // or put sauce and cheese on, the cookies, the vegetables to wash, the
@@ -161,7 +161,7 @@ const rubbed = (view, fn) => {
   view.points?.forEach((p, i) => view.covered?.[i] && fn(p[0], p[1], i));
 };
 // Where the whole vegetables lie on a board, side by side.
-const wholeAt = (list, i) => [VESSEL.x + (i - (list.length - 1) / 2) * 70, VESSEL.y];
+export const wholeAt = (list, i) => [VESSEL.x + (i - (list.length - 1) / 2) * 70, VESSEL.y];
 
 // Vegetables, whole or chopped into more and more pieces.
 const veggies = (ctx, list, chops, seed, r = 60) => {

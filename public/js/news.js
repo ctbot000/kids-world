@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'real-kitchen', date: '2026-10-31', icon: '🍳', title: 'A real kitchen', text: 'Cooking classes happen in a real-looking 3D kitchen now: crack eggs into a glazed bowl, fry pancakes on a gas hob, bake pizza in a glowing oven — and see a picture of your dish at the end!' },
   { id: 'cook-by-hand', date: '2026-10-31', icon: '🥞', title: 'Cook with your own hands', text: 'Cooking classes are hands-on now: take what comes next off the shelf, then crack eggs into the bowl, pour, stir, chop, spread the sauce and take it off the heat when it is golden!' },
   { id: 'real-coaster', date: '2026-10-31', icon: '🎢', title: 'A real roller coaster', text: 'Fun parks have a real roller coaster now: up the lift hill, down the drop and round the loop!' },
   { id: 'typing', date: '2026-10-28', icon: '⌨️', title: 'Typing at computers', text: 'Walk up to a 💻 Computer and tap ⌨️ Type: learn to type row by row with the next key lit up, then play 🌧️ Word Rain — type the falling words to pop them before they land!' },

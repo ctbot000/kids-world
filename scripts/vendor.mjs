@@ -36,7 +36,7 @@ for (const name of ['three.core.js', 'three.module.js']) {
 // three-addons/ as in examples/jsm/ (and nothing else: the folder is made
 // afresh). Each import of 'three' is pointed at the vendored build, so add-ons
 // and game share one copy of three.
-const ADDONS = ['postprocessing/GTAOPass.js', 'postprocessing/ShaderPass.js', 'postprocessing/OutputPass.js', 'postprocessing/FXAAPass.js', 'environments/RoomEnvironment.js'];
+const ADDONS = ['postprocessing/GTAOPass.js', 'postprocessing/ShaderPass.js', 'postprocessing/OutputPass.js', 'postprocessing/FXAAPass.js', 'environments/RoomEnvironment.js', 'geometries/RoundedBoxGeometry.js', 'utils/BufferGeometryUtils.js'];
 const addons = new URL('three-addons/', vendor);
 await rm(addons, { recursive: true, force: true });
 const queue = [...ADDONS];
