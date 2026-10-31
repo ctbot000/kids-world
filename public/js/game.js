@@ -277,6 +277,10 @@ export class Game extends EventTarget {
     this.tvTarget = null;
     this.tvAt = null;
     this.tvChannel = 0;
+    // Whether you are watching the Dance Party channel, dancing along until
+    // you flip away or stop watching (see danceAlong).
+    this.dancing = false;
+    this.dancedAt = 0;
     // What the island's computers show, by cell (shared/screens.js), the
     // computer beside you to look at, and the one being looked at.
     this.screens = new Map();
@@ -2578,6 +2582,26 @@ export class Game extends EventTarget {
 
   closeTv() {
     this.tvAt = null;
+    this.danceAlong(false);
+  }
+
+  // Watching the 🪩 Dance Party channel, you dance along: the dance emote
+  // over and over (each one told to the island, so friends see you dance)
+  // until you flip to another channel or stop watching, which calls this with
+  // false. Sitting down, riding or flying, a round waits until you are back
+  // on your feet.
+  danceAlong(on) {
+    this.dancing = on === true;
+    if (!this.dancing) this.dancedAt = 0;
+  }
+
+  // The next round of the dance, started soon enough that it runs straight
+  // on from the last (the dance emote lasts 3.2 seconds).
+  danceLoop() {
+    if (!this.dancing || this.seat || this.riding || this.aboard || this.pianoAt || this.me.body.flying) return;
+    if (performance.now() < this.dancedAt) return;
+    this.dancedAt = performance.now() + 3200;
+    this.emote('dance');
   }
 
   // ------------------------------------------------ school
@@ -5214,6 +5238,7 @@ export class Game extends EventTarget {
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
     this.sendMove();
     this.updatePlayers(dt);
+    this.danceLoop();
     if (this.seat) this.checkTeaParty();
     this.updateHotTubs();
     this.updateCritters(dt);
@@ -5690,6 +5715,7 @@ export class Game extends EventTarget {
     this.pianoTarget = null;
     this.tvAt = null;
     this.tvTarget = null;
+    this.dancing = false;
     this.stationAt = null;
     this.stationTarget = null;
     this.classTarget = null;
