@@ -22,6 +22,7 @@ import { trainAt } from './coaster.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
+import { FIRE as BLAZE, Fires, strikeSpot } from './fire.js';
 import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
@@ -268,6 +269,12 @@ export class Room {
     // Mining bombs placed, by the cell they sit in: the cell, who placed one
     // there, and when it pops (stepBombs).
     this.bombs = new Map();
+    // Fires lightning has started (stepStorm), never saved; and when the
+    // next strike comes, in a storm. Their own draws, so the weather goes
+    // on as before.
+    const fireRng = new Rng((w.seed ^ 0x6c8e9cf5) >>> 0);
+    this.fires = new Fires(w, () => fireRng.next());
+    this.strikeAt = 0;
     const volcano = w.theme === 'volcano';
     for (let x = 0; x < w.W; x++) {
       for (let z = 0; z < w.D; z++) {
@@ -445,6 +452,9 @@ export class Room {
         break;
       case 'edit':
         this.edit(conn, c, p, msg);
+        break;
+      case 'douse':
+        this.douse(p, msg);
         break;
       case 'say':
         this.say(conn, c, p, msg);
@@ -701,6 +711,7 @@ export class Room {
       monsters: this.monsters.pack(),
       ...this.hpOf(this.players.get(c.pid)),
       env: this.envMessage(),
+      fires: this.fires.pack(),
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
       defense: this.defense?.describe(this.monsters) ?? null,
@@ -1232,6 +1243,7 @@ export class Room {
     // The volcano's own dangers and chores: lava burns whoever stands in it,
     // water boils away and ice melts, and HP comes back whatever took it.
     this.stepLava(now);
+    this.stepStorm(now);
     this.stepMelts(now);
     this.stepRides(now);
     this.healUp(now);
@@ -1545,6 +1557,60 @@ export class Room {
       if (this.world.get(Math.floor(s[0]), Math.floor(s[1] + 0.5), Math.floor(s[2])) !== B.LAVA) continue;
       this.knock(p, now, hpAfterBump(p.hp, LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });
     }
+  }
+
+  // A thunderstorm's lightning, and the fires it starts (fire.js). Every few
+  // seconds a bolt strikes the highest of a few spots on the island, which
+  // everyone sees and hears in the same place; what it hits may catch fire,
+  // and fire spreads to what burns next to it, burning it away, and burns
+  // whoever stands in it (not in a Fire Suit, nor up on a ride).
+  stepStorm(now) {
+    if (this.env.weather === 'storm') {
+      if (!this.strikeAt) this.strikeAt = now + this.fireBetween(BLAZE.strikeMs);
+      if (now >= this.strikeAt) {
+        this.strikeAt = now + this.fireBetween(BLAZE.strikeMs);
+        const spot = strikeSpot(this.world, this.fires.random);
+        if (spot) {
+          const caught = this.fires.random() < BLAZE.catches && this.fires.ignite(spot.x, spot.y, spot.z, now);
+          this.broadcast({ t: 'strike', x: spot.x, y: spot.y, z: spot.z, fire: caught });
+        }
+      }
+    } else this.strikeAt = 0;
+    if (!this.fires.list.size) return;
+    const { on, off, burnt } = this.fires.step(now, isRaining(this.env.weather));
+    if (burnt.length) {
+      const cells = [];
+      for (let i = 0; i < burnt.length; i += 4) {
+        const [x, y, z, id] = burnt.slice(i, i + 4);
+        if (this.world.get(x, y, z) === id) continue;
+        this.world.set(x, y, z, id);
+        cells.push(x, y, z, id);
+      }
+      if (cells.length) {
+        this.broadcast({ t: 'edit', by: 0, kind: 'nature', cells });
+        this.changed();
+      }
+    }
+    if (on.length || off.length) this.broadcast({ t: 'fire', on, off });
+    const riding = this.critters.aboard();
+    for (const p of this.players.values()) {
+      if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0) || hasPower(p.look, 'fireproof')) continue;
+      if (!this.fires.burning(p.s[0], p.s[1], p.s[2])) continue;
+      this.knock(p, now, hpAfterBump(p.hp, BLAZE.bumps), { t: 'bump', pid: p.id, burn: true });
+    }
+  }
+
+  fireBetween([lo, hi]) {
+    return lo + this.fires.random() * (hi - lo);
+  }
+
+  // The watering can tapped at (x, y, z): any fire round there goes out.
+  douse(p, msg) {
+    if (!p || ![msg.x, msg.y, msg.z].every(finite)) return;
+    // Only within reach of where they stand.
+    if (Math.hypot(msg.x - p.s[0], msg.y - p.s[1], msg.z - p.s[2]) > 12) return;
+    const off = this.fires.douse(msg.x, msg.y, msg.z);
+    if (off.length) this.broadcast({ t: 'fire', on: [], off, by: p.id });
   }
 
   // The tame dragon someone is riding, and can still ride, or null.

@@ -901,6 +901,7 @@ export class Sound {
     if (!ctx || ctx.state !== 'running') return;
     const now = ctx.currentTime;
     this.rainLoop(this.musicOn ? { rain: 0.016, storm: 0.024, sprinkles: 0.008 }[this.weather] ?? 0 : 0);
+    this.fireSound(now);
     this.songLoop();
     if (!this.musicOn || this.song) {
       this.nextBeat = 0;
@@ -959,6 +960,43 @@ export class Sound {
       this.tone(f, { at, decay: night ? 0.7 : 0.35, gain: (night ? 0.07 : 0.09) * quiet, dest: this.music });
       this.tone(f * 3, { at, decay: 0.08, gain: 0.015 * quiet, dest: this.music });
     }
+  }
+
+  // How loud a fire nearby is, 0 (none) to 1 (right beside it): set each
+  // frame, heard as schedule() goes (fireSound).
+  fireLoop(level) {
+    this.fireLevel = level;
+  }
+
+  // A fire's low roar, and the snaps and pops of what is burning in it.
+  fireSound(now) {
+    const ctx = this.ctx;
+    const level = this.fireLevel ?? 0;
+    if (level && !this.roar) {
+      this.noise(0.01, { gain: 0.0001 }); // makes sure the noise buffer exists
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      src.loop = true;
+      src.playbackRate.value = 0.5;
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 520;
+      const g = ctx.createGain();
+      g.gain.value = 0.0001;
+      src.connect(f).connect(g).connect(this.sfx);
+      src.start();
+      this.roar = { src, g };
+    }
+    if (this.roar) {
+      this.roar.g.gain.setTargetAtTime(Math.max(0.0001, level * 0.1), now, 0.4);
+      if (!level) {
+        this.roar.src.stop(now + 2);
+        this.roar = null;
+      }
+    }
+    if (!level) return;
+    // Crackles now and then (this runs every 50 ms), more the closer it is.
+    if (Math.random() < level * 0.45) this.noise(0.012 + Math.random() * 0.03, { at: Math.random() * 0.05, type: 'highpass', freq: 1800 + Math.random() * 2500, gain: (0.05 + Math.random() * 0.12) * level, attack: 0.001 });
   }
 
   // A soft hush under the music: dark filtered noise, quieter for sprinkles.

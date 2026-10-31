@@ -23,7 +23,48 @@ const KEY_COLORS = KEYS.map(([t, a, b]) => [t, new THREE.Color(a), new THREE.Col
 const tmpA = new THREE.Color();
 const tmpB = new THREE.Color();
 const tmpV = new THREE.Vector3();
-const UP = new THREE.Vector3(0, 1, 0);
+
+// A bolt's stretch of channel: a quad pushed out sideways across the way it
+// goes, square to the camera, glowing white at its middle and blue-violet
+// out to its edges.
+const BOLT_VERT = /* glsl */ `
+  attribute vec3 dir;
+  attribute vec4 info; // side (-1 or 1), width, brightness, fork (0 or 1)
+  varying float vSide;
+  varying float vBright;
+  uniform float uForks;
+  void main() {
+    vec3 across = normalize(cross(dir, cameraPosition - position));
+    vec3 p = position + across * info.x * info.y * 0.5;
+    vSide = info.x;
+    vBright = info.z * mix(1.0, uForks, info.w);
+    gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+  }
+`;
+const BOLT_FRAG = /* glsl */ `
+  varying float vSide;
+  varying float vBright;
+  uniform float uOn;
+  void main() {
+    float d = abs(vSide);
+    float core = exp(-pow(d * 7.0, 2.0));
+    float glow = exp(-d * 3.2) * (1.0 - d);
+    vec3 c = vec3(1.0) * core * 1.6 + vec3(0.55, 0.62, 1.0) * glow * 0.75;
+    gl_FragColor = vec4(c * uOn * vBright, 1.0);
+  }
+`;
+// Return strokes: [seconds, brightness] to step through, the last when it
+// is gone. A few kinds, picked at random.
+const STROKES = [
+  [[0, 1], [0.06, 0.15], [0.1, 0.95], [0.15, 0.2], [0.24, 0.8], [0.3, 0.1], [0.42, 0]],
+  [[0, 1], [0.08, 0.25], [0.13, 1], [0.2, 0.1], [0.34, 0]],
+  [[0, 0.9], [0.05, 0.2], [0.09, 0.7], [0.12, 0.15], [0.17, 1], [0.24, 0.3], [0.31, 0.7], [0.38, 0.05], [0.5, 0]],
+];
+function strokeAt(strokes, t) {
+  let on = 0;
+  for (const [at, v] of strokes) if (t >= at) on = v;
+  return on;
+}
 
 function skyAt(time, top, horizon) {
   for (let i = 0; i < KEY_COLORS.length - 1; i++) {
@@ -274,12 +315,10 @@ export class Sky {
     this.weather = null;
     this.weatherKind = 'clear';
     this.shooting = [];
-    // Lightning in a storm: bolts now and then, and the flash they light the
-    // island with (0 to 1, renderer.js); onStrike(distance) for the thunder.
+    // Lightning bolts flickering (strike), and the flash they light the
+    // island with (0 to 1, renderer.js).
     this.bolts = [];
-    this.boltIn = 3;
     this.flash = 0;
-    this.onStrike = null;
     this.rainbowAlpha = 0;
   }
 
@@ -394,48 +433,100 @@ export class Sky {
     this.group.add(this.weather);
   }
 
-  // A bolt of lightning from the clouds to the ground, somewhere round
-  // `focus`: a zigzag of glowing sticks with a branch or two.
-  strike(focus, random = Math.random) {
-    const angle = random() * Math.PI * 2;
-    const dist = 30 + random() * 90;
-    const x = focus.x + Math.cos(angle) * dist;
-    const z = focus.z + Math.sin(angle) * dist;
-    const top = focus.cloudY ?? focus.y + 60;
-    const ground = focus.y - 3;
-    const group = new THREE.Group();
-    // A storybook yellow-white, to show against a pale grey sky as well.
-    const mat = new THREE.MeshBasicMaterial({ color: 0xfff7b8, transparent: true, depthWrite: false, fog: false });
-    const glow = new THREE.MeshBasicMaterial({ color: 0x9aa8ff, transparent: true, opacity: 0.35, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
-    const stick = (a, b, width) => {
-      const len = a.distanceTo(b);
-      for (const [m, w] of [[mat, width], [glow, width * 4]]) {
-        const s = new THREE.Mesh(this.boltGeometry ??= new THREE.CylinderGeometry(0.5, 0.5, 1, 5, 1).translate(0, 0.5, 0), m);
-        s.scale.set(w, len, w);
-        s.position.copy(a);
-        s.quaternion.setFromUnitVectors(UP, tmpV.subVectors(b, a).normalize());
-        group.add(s);
-      }
-    };
-    const zigzag = (from, to, steps, width, branches) => {
-      let a = from.clone();
-      for (let i = 1; i <= steps; i++) {
-        const b = from.clone().lerp(to, i / steps);
-        if (i < steps) b.add(new THREE.Vector3((random() - 0.5) * 9, (random() - 0.5) * 3, (random() - 0.5) * 9));
-        stick(a, b, width);
-        if (branches && i > 1 && i < steps - 1 && random() < 0.35) {
-          const end = b.clone().add(new THREE.Vector3((random() - 0.5) * 30, -(10 + random() * 15), (random() - 0.5) * 30));
-          zigzag(b, end, 3, width * 0.5, false);
+  // A bolt of lightning from the clouds down to the block at `at` (the
+  // room picks it, so everyone sees the same one): a jagged channel, worked
+  // out by splitting each stretch and nudging its middle sideways again and
+  // again, with forks off it that fade before the ground. It flickers as a
+  // real one does, a few return strokes in under half a second, each lighting
+  // the island up (flash, renderer.js), brighter the closer it is to `you`.
+  strike(at, you, random = Math.random) {
+    const end = new THREE.Vector3(at.x + 0.5, at.y + 1, at.z + 0.5);
+    const top = Math.max(end.y + 40, (you.cloudY ?? end.y + 60) + 6);
+    const start = new THREE.Vector3(end.x + (random() - 0.5) * 30, top, end.z + (random() - 0.5) * 30);
+    const segs = [];
+    // Points from a to b, `depth` times split, each middle nudged sideways
+    // by `rough` of the stretch's length.
+    const channel = (a, b, depth, rough) => {
+      let pts = [a, b];
+      for (let d = 0; d < depth; d++) {
+        const next = [pts[0]];
+        for (let i = 1; i < pts.length; i++) {
+          const p = pts[i - 1];
+          const q = pts[i];
+          const len = p.distanceTo(q);
+          const mid = p.clone().lerp(q, 0.4 + random() * 0.2);
+          mid.x += (random() - 0.5) * len * rough;
+          mid.z += (random() - 0.5) * len * rough;
+          mid.y += (random() - 0.5) * len * rough * 0.3;
+          next.push(mid, q);
         }
-        a = b;
+        pts = next;
+      }
+      return pts;
+    };
+    const add = (pts, width, bright, fork) => {
+      for (let i = 1; i < pts.length; i++) {
+        // A fork thins and fades towards its tip.
+        const k = fork ? 1 - i / pts.length : 1;
+        segs.push({ a: pts[i - 1], b: pts[i], width: width * (0.4 + 0.6 * k), bright: bright * (0.25 + 0.75 * k), fork });
       }
     };
-    zigzag(new THREE.Vector3(x, top, z), new THREE.Vector3(x + (random() - 0.5) * 20, ground, z + (random() - 0.5) * 20), 9, 1.1, true);
-    group.renderOrder = -5;
-    this.group.add(group);
-    this.bolts.push({ group, mats: [mat, glow], t: 0 });
-    this.flash = 1;
-    this.onStrike?.(dist);
+    const main = channel(start, end, 7, 0.55);
+    add(main, 2.6, 1, 0);
+    for (let i = 8; i < main.length - 12; i++) {
+      if (random() > 0.07) continue;
+      const from = main[i];
+      const drop = (end.y - from.y) * (0.25 + random() * 0.35);
+      const side = new THREE.Vector3((random() - 0.5) * 2, 0, (random() - 0.5) * 2).normalize().multiplyScalar(Math.abs(drop) * (0.4 + random() * 0.5));
+      const to = from.clone().add(side).setY(from.y + drop);
+      const fork = channel(from, to, 5, 0.6);
+      add(fork, 1.5, 0.55, 1);
+      // Now and then a fork forks again.
+      if (random() < 0.4) {
+        const j = 8 + Math.floor(random() * (fork.length - 16));
+        const sub = fork[j];
+        add(channel(sub, sub.clone().add(new THREE.Vector3((random() - 0.5) * 10, -6 - random() * 8, (random() - 0.5) * 10)), 4, 0.6), 0.9, 0.35, 1);
+      }
+    }
+    // One quad a stretch, its two sides pushed out across it, facing the
+    // camera (the vertex shader).
+    const n = segs.length;
+    const pos = new Float32Array(n * 4 * 3);
+    const dir = new Float32Array(n * 4 * 3);
+    const info = new Float32Array(n * 4 * 4);
+    const index = new Uint32Array(n * 6);
+    segs.forEach((g, i) => {
+      const d = tmpV.subVectors(g.b, g.a);
+      [[g.a, -1], [g.a, 1], [g.b, -1], [g.b, 1]].forEach(([p, side], k) => {
+        const v = i * 4 + k;
+        pos.set([p.x, p.y, p.z], v * 3);
+        dir.set([d.x, d.y, d.z], v * 3);
+        info.set([side, g.width, g.bright, g.fork], v * 4);
+      });
+      index.set([i * 4, i * 4 + 2, i * 4 + 1, i * 4 + 1, i * 4 + 2, i * 4 + 3], i * 6);
+    });
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geom.setAttribute('dir', new THREE.BufferAttribute(dir, 3));
+    geom.setAttribute('info', new THREE.BufferAttribute(info, 4));
+    geom.setIndex(new THREE.BufferAttribute(index, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uOn: { value: 1 }, uForks: { value: 1 } },
+      vertexShader: BOLT_VERT,
+      fragmentShader: BOLT_FRAG,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 6;
+    this.group.add(mesh);
+    // How strongly it lights up where you are: a bolt far off, hardly.
+    const near = Math.max(0.25, Math.min(1, 1.3 - Math.hypot(end.x - you.x, end.z - you.z) / 160));
+    this.bolts.push({ mesh, mat, t: 0, near, strokes: STROKES[Math.floor(random() * STROKES.length)] });
+    this.flash = near;
   }
 
   shootingStar(from) {
@@ -490,27 +581,25 @@ export class Sky {
       this.weather.position.set(focus.x, focus.y - 12, focus.z);
     }
 
-    // Lightning: a strike every few seconds in a storm, flickering twice
-    // before it goes.
-    if (this.weatherKind === 'storm') {
-      this.boltIn -= dt;
-      if (this.boltIn <= 0) {
-        this.boltIn = 4 + Math.random() * 9;
-        this.strike(focus);
-      }
-    }
+    // Lightning, as its return strokes flicker (STROKES), lighting the
+    // island up as it goes.
+    let flash = 0;
     for (const b of [...this.bolts]) {
       b.t += dt;
-      const on = b.t < 0.08 || (b.t > 0.14 && b.t < 0.3) ? 1 : 0;
-      b.mats[0].opacity = on;
-      b.mats[1].opacity = on * 0.35;
-      if (b.t > 0.32) {
-        this.group.remove(b.group);
-        for (const m of b.mats) m.dispose();
+      const on = strokeAt(b.strokes, b.t);
+      b.mat.uniforms.uOn.value = on;
+      // Forks show in the first stroke; the strokes after go down the main
+      // channel alone.
+      b.mat.uniforms.uForks.value = b.t < b.strokes[1][0] ? 1 : 0.15;
+      flash = Math.max(flash, on * b.near);
+      if (b.t > b.strokes.at(-1)[0]) {
+        this.group.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mat.dispose();
         this.bolts.splice(this.bolts.indexOf(b), 1);
       }
     }
-    this.flash = this.bolts.some((b) => b.mats[0].opacity) ? 1 : Math.max(0, this.flash - dt * 5);
+    this.flash = Math.max(flash, this.flash - dt * 6, 0);
 
     for (const s of [...this.shooting]) {
       s.t += dt / 1.6;

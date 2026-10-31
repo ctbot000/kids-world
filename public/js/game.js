@@ -175,8 +175,6 @@ export class Game extends EventTarget {
     this.link = link;
     this.renderer = renderer;
     this.sound = sound;
-    // Thunder after each flash of lightning in a storm (render/sky.js).
-    renderer.sky.onStrike = (distance) => sound.thunder(distance);
     this.profile = profile;
     this.mode = mode; // 'host', 'guest' or 'server'
     this.world = null;
@@ -555,6 +553,13 @@ export class Game extends EventTarget {
       case 'env':
         this.setEnv(msg);
         break;
+      case 'strike':
+        this.lightning(msg);
+        break;
+      case 'fire':
+        this.renderer.fires.set(this.world, msg.on, msg.off);
+        if (msg.by === this.pid && msg.off.length) this.emit('toast', { icon: '🚿', text: 'Fire out! Well done.' });
+        break;
       case 'fx':
         if (msg.kind === 'star') this.fallingStar(msg);
         else if (msg.kind === 'blast') this.blast(msg);
@@ -643,6 +648,7 @@ export class Game extends EventTarget {
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setEnv(msg.env);
+    this.renderer.fires.reset(this.world, msg.fires ?? []);
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
     // An island with a view to show turns you to it as you arrive.
@@ -1230,6 +1236,10 @@ export class Game extends EventTarget {
     } else if (msg.fire && !msg.ghost && !this.toldFire) {
       this.toldFire = true;
       this.emit('toast', { icon: '🔥', text: 'Ouch, dragon fire! When it rears back, run out of the way it is facing — then bop it!' });
+    }
+    if (msg.burn && !this.toldBurn) {
+      this.toldBurn = true;
+      this.emit('toast', { icon: '🔥', text: 'Ouch, fire! Step out of the flames — or put them out with the watering can.' });
     }
     if (msg.lava && !this.toldLava) {
       this.toldLava = true;
@@ -4455,6 +4465,7 @@ export class Game extends EventTarget {
   // Blocks of this copy of the world just changed: redraw them, and the map.
   changed(cells) {
     this.renderer.terrain.cellsChanged(cells);
+    this.renderer.fires.changed();
     this.drawingsChanged(cells);
     this.emit('cells', cells);
   }
@@ -4678,6 +4689,22 @@ export class Game extends EventTarget {
       a.root.rotation.x = 0;
       a.update(dt, me.anim, 0);
       this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
+    }
+  }
+
+  // A bolt of lightning (room.js stepStorm): the same one for everyone,
+  // where the room says it struck, with thunder after it, later and softer
+  // the further off it is. What it set alight comes as a 'fire'.
+  lightning(msg) {
+    const b = this.me?.body;
+    if (!b || ![msg.x, msg.y, msg.z].every(Number.isFinite)) return;
+    this.renderer.sky.strike(msg, { x: b.x, y: b.y, z: b.z, cloudY: this.renderer.focus.cloudY });
+    const far = Math.hypot(msg.x + 0.5 - b.x, msg.z + 0.5 - b.z);
+    this.sound.thunder(far);
+    if (far < 60) this.renderer.effects.sparkles(msg.x + 0.5, msg.y + 1.1, msg.z + 0.5, 14, ['#ffffff', '#dfe6ff', '#fff3c4']);
+    if (msg.fire && far < 70 && !this.toldLightningFire) {
+      this.toldLightningFire = true;
+      this.emit('toast', { icon: '🔥', text: 'Lightning set it on fire! Put the fire out with the watering can (toy box 🌾 Farm tab) — and don’t stand in it!' });
     }
   }
 
@@ -4923,6 +4950,8 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
+    // The watering can puts out a fire round where it is tapped.
+    if (plan.kind === 'water' && this.douse(aim.hit)) return;
     // Watering farmland that is wet already only splashes; anything else
     // the watering can is no good for.
     if (plan.kind === 'water' && !plan.cells.length) {
@@ -5002,6 +5031,21 @@ export class Game extends EventTarget {
   // The watering can poured on farmland that is wet already ([x, y, z]
   // cells): drops on it and a trickle, and nothing else (an edit that
   // waters some shows its drops in editEffects).
+  // A fire at or round the block tapped with the watering can: water on it,
+  // and the room puts it out (room.js douse). False with none there.
+  douse(hit) {
+    const { x, y, z } = hit;
+    const fires = this.renderer.fires;
+    let near = false;
+    for (let dx = -1; dx <= 1 && !near; dx++) for (let dy = -1; dy <= 1 && !near; dy++) for (let dz = -1; dz <= 1 && !near; dz++) near = fires.has(x + dx, y + dy, z + dz);
+    if (!near) return false;
+    this.send({ t: 'douse', x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.waterFx([[x, y, z]]);
+    this.renderer.effects.steam(x + 0.5, y + 1.2, z + 0.5);
+    this.renderer.effects.steam(x + 0.5, y + 1.4, z + 0.5);
+    return true;
+  }
+
   waterFx(spots) {
     for (const [x, y, z] of spots) this.renderer.effects.sparkles(x + 0.5, y + 1.3, z + 0.5, 4, WATER_DROPS);
     this.sound.play('water');
@@ -5197,6 +5241,9 @@ export class Game extends EventTarget {
     this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : this.pianoAt ? { x: b.x, y: b.y - BENCH_H, z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, tornado: foot, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
+    // The roar and crackle of a fire, louder the closer you are.
+    const fire = this.renderer.fires.nearest(b.x, b.y, b.z);
+    this.sound.fireLoop(fire < 24 ? Math.min(1, 3 / Math.max(1, fire)) : 0);
     this.observe();
   }
 

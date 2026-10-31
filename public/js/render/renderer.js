@@ -27,6 +27,7 @@ import { GoBoards } from './go-boards.js';
 import { Screens } from './screens.js';
 import { Tornado } from './tornado-model.js';
 import { Effects } from './effects.js';
+import { FireView } from './fire.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { PetModel, petSeat } from './pet-models.js';
@@ -156,6 +157,8 @@ export class Renderer {
     this.terrain = new Terrain(this.scene, atlas);
     this.sky = new Sky(this.scene);
     this.effects = new Effects(this.scene);
+    // Blocks lightning has set alight (shared/fire.js).
+    this.fires = new FireView(this.scene, this.effects);
     this.tornado = new Tornado(this.scene);
     this.drawings = new Drawings(this.scene, this.terrain);
     this.goBoards = new GoBoards(this.scene, this.terrain);
@@ -841,6 +844,7 @@ export class Renderer {
     this.terrain.update(state.focus, 6);
     this.terrain.updateVisibility(this.camera.position, fogFar);
     this.terrain.animate(this.time, state.time, state.satIn);
+    this.fires.update(dt, state.focus);
     this.effects.update(dt);
     this.drawings.update();
     this.goBoards.update();
