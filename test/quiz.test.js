@@ -11,8 +11,8 @@ import { XP_FOR } from '../public/js/shared/levels.js';
 import { makeQuiz, QUESTION_BANKS, QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from '../public/js/shared/quiz.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
-test('three quizzes, each with questions to spare', () => {
-  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['junior', 'senior', 'thinker']);
+test('four quizzes, each with questions to spare', () => {
+  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['junior', 'senior', 'thinker', 'english']);
   for (const [key, def] of Object.entries(QUIZ_LEVELS)) {
     assert.ok(def.icon && def.name && def.how && def.color, `${key} says what it is`);
     const bank = QUESTION_BANKS[key];
@@ -21,8 +21,9 @@ test('three quizzes, each with questions to spare', () => {
     for (const { q, a, pic } of bank) {
       assert.equal(typeof q, 'string');
       assert.ok(q.trim().length > 0, 'a question in words');
-      assert.equal(a.length, 4, 'four answers to pick from');
-      assert.equal(new Set(a).size, 4, 'no two answers alike');
+      const answers = key === 'english' ? 3 : 4;
+      assert.equal(a.length, answers, `${answers} answers to pick from`);
+      assert.equal(new Set(a).size, answers, 'no two answers alike');
       assert.ok(a.every((answer) => typeof answer === 'string' && answer.trim().length > 0), 'answers in words');
       if (pic !== undefined) {
         assert.ok(Array.isArray(pic) && pic.length > 0, 'a picture has rows');
@@ -32,8 +33,9 @@ test('three quizzes, each with questions to spare', () => {
       asked.add(q);
     }
   }
-  // The quizzes ask different things.
-  const all = Object.values(QUESTION_BANKS).flatMap((bank) => bank.map((b) => b.q));
+  // The quizzes ask different things, but for the dictionary's, which may
+  // ask what another does (a spider's legs).
+  const all = Object.entries(QUESTION_BANKS).flatMap(([key, bank]) => (key === 'english' ? [] : bank.map((b) => b.q)));
   assert.equal(new Set(all).size, all.length, 'each bank its own');
 });
 
@@ -44,9 +46,10 @@ test('a quiz asks its bank’s questions, the right answer somewhere among the a
     assert.equal(quiz.questions.length, QUIZ_SIZE);
     const asked = new Set();
     for (const ask of quiz.questions) {
-      assert.equal(ask.choices.length, 4);
-      assert.equal(new Set(ask.choices).size, 4);
-      assert.ok(Number.isInteger(ask.answer) && ask.answer >= 0 && ask.answer < 4, 'the right answer is one of the four');
+      const n = level === 'english' ? 3 : 4;
+      assert.equal(ask.choices.length, n);
+      assert.equal(new Set(ask.choices).size, n);
+      assert.ok(Number.isInteger(ask.answer) && ask.answer >= 0 && ask.answer < n, 'the right answer is one of them');
       const bank = QUESTION_BANKS[level].find((b) => b.q === ask.q);
       assert.ok(bank, `a question of the ${level} bank`);
       assert.equal(ask.choices[ask.answer], bank.a[0], 'where it says the right answer is, there it is');
@@ -84,6 +87,7 @@ test('every answer right pays a coin, or two on the middle school and thinking-m
   assert.equal(quizCoins(-2, 'junior'), 0);
   assert.equal(quizCoins(NaN, 'senior'), 0);
   assert.equal(quizCoins(3, 'thinker'), 6);
+  assert.equal(quizCoins(3, 'english'), 3);
 });
 
 test('the quizzes are counted, and earn their XP and stickers', () => {
@@ -99,4 +103,20 @@ test('the quizzes are counted, and earn their XP and stickers', () => {
   assert.equal(whiz.test(zero), false);
   assert.equal(perfect.test({ ...zero, quizperfect: 1 }), true);
   assert.equal(perfect.test({ ...zero, quizzes: 5, quizright: 25 }), false, 'only a perfect quiz');
+});
+
+test('English Words asks the Kids Dictionary’s quizzes, each about its word', async () => {
+  const { readWord } = await import('../scripts/dictionary.mjs');
+  const page = ['# 🍎 apple', '', '## 한국어 뜻', '', '**사과**', '', '## Quiz', '', '1. What is an apple?', '   - an animal', '   - a fruit', '   - a color', '', '<details>', '<summary>Answers · 정답</summary>', '', '1. a fruit', '', '</details>'].join('\n');
+  assert.deepEqual(readWord(page), { word: 'apple', emoji: '🍎', ko: '사과', quiz: [{ q: 'What is an apple?', a: ['a fruit', 'an animal', 'a color'] }] });
+  assert.equal(readWord(page.replace('🍎 ', '')).emoji, '');
+  assert.throws(() => readWord(page.replace('1. a fruit', '1. a tree')), /not one of the answers/);
+  assert.throws(() => readWord(page.replace('**사과**', '사과')), /Korean meaning/);
+
+  const apple = QUESTION_BANKS.english.find((b) => b.q === 'What is an apple?');
+  assert.deepEqual(apple.word, { word: 'apple', emoji: '🍎', ko: '사과' });
+  assert.equal(apple.a[0], 'a fruit');
+  const quiz = makeQuiz('english', 9, QUESTION_BANKS.english.length);
+  for (const ask of quiz.questions) assert.ok(ask.word?.word && ask.word.ko, 'each question says its word');
+  assert.ok(makeQuiz('junior', 9).questions.every((ask) => !ask.word), 'only English Words has words');
 });

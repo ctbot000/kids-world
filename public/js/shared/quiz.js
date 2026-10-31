@@ -15,6 +15,12 @@
 // until they have done them all. Each quiz taken once, its question picked and its
 // answers shuffled out of a bank by chance (makeQuiz), so two quizzes are
 // seldom the same. A class at school (school.js) asks from the same banks.
+//
+// The English Words quiz asks what words mean, out of the Kids Dictionary
+// (english-words.js, brought in by scripts/dictionary.mjs): each question
+// about one word, which the quiz shows with it, and its Korean meaning once
+// it is answered.
+import { ENGLISH_WORDS } from './english-words.js';
 import { Rng } from './rng.js';
 
 // The quizzes, by their keys: what each is called, its button's colour and
@@ -44,6 +50,14 @@ export const QUIZ_LEVELS = {
     color: 'yellow',
     coins: 2,
   },
+  english: {
+    key: 'english',
+    icon: '🔤',
+    name: 'English Words',
+    how: 'One question on what an English word means, from the Kids Dictionary. Get it right for a coin!',
+    color: 'purple',
+    coins: 1,
+  },
 };
 
 // How many questions a quiz asks, out of its bank, and how long after the
@@ -60,7 +74,8 @@ export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 
 // makeQuiz shuffles the answers, so where the right one lands is never where
 // it was written. A picture is rows of tiles, split at the spaces: an emoji,
 // a number or a sign each, · for an empty tile, | for a mirror and ❓ for the
-// tile to work out.
+// tile to work out. The English Words questions have three answers each,
+// and word: the word asked about ({ word, emoji, ko }).
 export const QUESTION_BANKS = {
   junior: [
     { q: 'What is 7 + 8?', a: ['15', '13', '14', '16'] },
@@ -171,6 +186,9 @@ export const QUESTION_BANKS = {
     { q: 'Each number is the two under it added up. What goes in the ❓ at the top?', pic: ['· · ❓ · ·', '· 5 · 7 ·', '2 · 3 · 4'], a: ['12', '10', '14', '9'] },
     { q: 'The moon grows a little each night. Which comes next?', pic: ['🌑 🌒 🌓 🌔 ❓'], a: ['🌕', '🌑', '🌘', '🌗'] },
   ],
+  // Every word's quiz, but a question two words ask alike (“What is a
+  // diamond?” on diamond and on jewelry) only the first time.
+  english: ENGLISH_WORDS.flatMap(({ word, emoji, ko, quiz }) => quiz.map(({ q, a }) => ({ q, a, word: { word, emoji, ko } }))).filter((b, i, all) => all.findIndex((o) => o.q === b.q) === i),
 };
 
 // A quiz of a level, `size` questions picked out of the bank and shuffled, and
@@ -189,7 +207,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
   }
   return {
     level,
-    questions: picks.map(({ q, pic, a }) => {
+    questions: picks.map(({ q, pic, word, a }) => {
       const choices = [...a];
       // The answers go where they land, and the right one (written first)
       // remembers where that was.
@@ -197,7 +215,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
         const j = Math.floor(rng.next() * (i + 1));
         [choices[i], choices[j]] = [choices[j], choices[i]];
       }
-      return { q, ...(pic && { pic }), choices, answer: choices.indexOf(a[0]) };
+      return { q, ...(pic && { pic }), ...(word && { word }), choices, answer: choices.indexOf(a[0]) };
     }),
   };
 }

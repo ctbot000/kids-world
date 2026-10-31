@@ -5198,6 +5198,7 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
       [true, true],
       [false, false],
       [false, false],
+      [false, false],
     ],
   );
   await page.keyboard.press('Escape');

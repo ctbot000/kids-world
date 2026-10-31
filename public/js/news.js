@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'english-words', date: '2026-11-01', icon: '🔤', title: 'English Words quizzes', text: 'A new 🔤 English Words class at every chalkboard, and a quiz for extra credit on conquered adventure islands: what does the word mean? The questions come from the Kids Dictionary, and once you answer you see the word in Korean too!' },
   { id: 'millionaire', date: '2026-10-31', icon: '💰', title: 'The Millionaire sticker', text: 'Every coin you have ever earned now counts towards the legendary 💰 Millionaire sticker — a million coins in all! Selling in the shop, classes, races, hide and seek, pearls and monster prizes: they all add up, and spending never takes away from it.' },
   { id: 'hula-hoop', date: '2026-10-31', icon: '⭕', title: 'Hula hoops', text: 'Put down a ⭕ Hula Hoop from the toy box\'s 🚗 Vehicles tab, walk up and tap ⭕ Spin: round and round your waist it goes while you swing your hips! How many spins can you do before it drops?' },
   { id: 'feed-fish', date: '2026-10-31', icon: '🐟', title: 'Feed the fish', text: 'Walk up to a fish tank or a goldfish bowl and tap 🐟 Feed (or press Q): a pinch of flakes drifts down onto the water and the fish dart over and nibble them up! Feed them too soon, though, and they are still full.' },
