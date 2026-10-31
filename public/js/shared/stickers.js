@@ -55,6 +55,7 @@ export const STICKERS = [
   { key: 'world-walker', icon: '🗺️', name: 'World Walker', text: 'Walk 500,000 steps', test: (s) => s.steps >= 500000 },
   { key: 'monster-popper', icon: '👾', name: 'Monster Popper', text: 'Pop 10 monsters', test: (s) => s.popped >= 10 },
   { key: 'monster-master', icon: '🥊', name: 'Monster Master', text: 'Pop 500 monsters', test: (s) => s.popped >= 500 },
+  { key: 'king-bop', icon: '👑', name: 'King Bop', text: 'Pop 777 monsters', test: (s) => s.popped >= 777 },
   { key: 'monster-legend', icon: '🦖', name: 'Monster Legend', text: 'Pop 5,000 monsters', test: (s) => s.popped >= 5000 },
   { key: 'driver', icon: '🚗', name: 'Beep Beep!', text: 'Drive a car, a boat, a digger or a mine cart', test: (s) => s.drives >= 1 },
   { key: 'tunneler', icon: '🚜', name: 'Tunnel Digger', text: 'Dig 100 blocks with the digger', test: (s) => s.drilled >= 100 },
