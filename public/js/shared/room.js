@@ -468,6 +468,11 @@ export class Room {
       case 'swing':
         this.broadcast({ t: 'swing', pid, king: msg.king === true ? true : undefined }, conn);
         break;
+      // A King Punch charging (a bare fist held down), or let go: friends see
+      // the fist glow.
+      case 'charge':
+        this.broadcast({ t: 'charge', pid, on: msg.on === true }, conn);
+        break;
       // A key played on a piano (piano.js), by someone standing at it, for
       // everyone else to hear from there.
       case 'piano':

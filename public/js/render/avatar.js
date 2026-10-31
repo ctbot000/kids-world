@@ -12,6 +12,11 @@ import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { FUR_COLORS, GROWN_UP, HAIR_COLORS, isPerson, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
+// A King Punch's charge (game.js chargeBop): how long it takes, and how far
+// in it is when friends are told of it, so theirs glows in step.
+export const CHARGE_SECS = 0.9;
+export const CHARGE_TOLD = 0.25;
+
 // Heads are made at one size, HEAD_R or so from the middle to the top, and
 // scaled down to the body they go on.
 const HEAD_R = 0.34;
@@ -2212,10 +2217,15 @@ export class Avatar {
       this.hands[1].add(light);
       this.chargeLight = light;
     }
-    this.chargeAt = k > 0 ? this.time : -Infinity;
-    this.chargeK = k;
     this.chargeLight.visible = k > 0;
     if (k > 0) this.chargeLight.scale.setScalar(0.4 + k * 1.1);
+  }
+
+  // A friend's King Punch charging, as the island tells it (on), or let go:
+  // the glow grows by itself in update, from how far it had come when told.
+  charging(on) {
+    this.chargeFrom = on ? this.time - CHARGE_TOLD : null;
+    if (!on) this.chargeUp(0);
   }
 
   // A key struck on the piano being played (MIDI note n): the hand on that
@@ -2238,6 +2248,7 @@ export class Avatar {
   // bounce in the saddle).
   update(dt, anim, speed) {
     this.time += dt;
+    if (this.chargeFrom != null) this.chargeUp(Math.min(1, (this.time - this.chargeFrom) / CHARGE_SECS));
     const t = this.time;
     this.anim = anim;
     const B = this.build;

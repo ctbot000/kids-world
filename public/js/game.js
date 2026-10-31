@@ -46,7 +46,7 @@ import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowE
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
-import { ANIM, shirtColor, SWINGS } from './render/avatar.js';
+import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
 import { flashModel } from './render/toon.js';
 
@@ -148,7 +148,7 @@ const BOP_SPACING = 120;
 // The King Punch: how long the bop button must be held with an empty hand
 // before the fist is charged (and glowing), and how long the charge is kept
 // once the button is up, in case the swing cannot go just yet.
-const KING_CHARGE_MS = 900;
+const KING_CHARGE_MS = CHARGE_SECS * 1000;
 const KING_HOLD_MS = 400;
 // What each tougher monster is, told the first time one comes out near you.
 const TOUGH_TOLD = {
@@ -432,6 +432,10 @@ export class Game extends EventTarget {
         break;
       case 'piano':
         this.pianoHeard(msg);
+        break;
+      // A friend's King Punch charging, or let go (chargeBop).
+      case 'charge':
+        if (msg.pid !== this.pid) this.players.get(msg.pid)?.avatar?.charging(msg.on === true);
         break;
       case 'swing': {
         const avatar = this.players.get(msg.pid)?.avatar;
@@ -1672,6 +1676,7 @@ export class Game extends EventTarget {
     if (!held) {
       // Let go: the punch goes if it was charged, and the charge is spent.
       const ready = now - this.charge.at >= KING_CHARGE_MS - 60;
+      if (this.charge.sent) this.send({ t: 'charge', on: false });
       this.charge = null;
       if (avatar) avatar.chargeUp(0);
       if (ready) this.kingPunch(input);
@@ -1679,6 +1684,11 @@ export class Game extends EventTarget {
     }
     const k = Math.min(1, (now - this.charge.at) / KING_CHARGE_MS);
     if (avatar) avatar.chargeUp(k);
+    // Held past a tap: friends see the fist glow too (a quick tap tells nobody).
+    if (!this.charge.sent && now - this.charge.at >= CHARGE_TOLD * 1000) {
+      this.charge.sent = true;
+      this.send({ t: 'charge', on: true });
+    }
     // The moment it is charged: a word of it, and the fizz of the charge.
     if (k >= 1 && !this.charge.told) {
       this.charge.told = true;
