@@ -112,7 +112,9 @@ test('everything but the road comes out just as it would on the island without i
     let same = 0;
     for (let x = 0; x < w.W; x++) {
       for (let z = 0; z < w.D; z++) {
-        if (marks.some(([mx, mz]) => Math.hypot(mx - x - 0.5, mz - z - 0.5) < 10)) continue;
+        // (A tree comes down within 3 of a pad's square, 3 either way of it,
+        // and its crown reaches 3 more: up to 6√2 + 3.2 from the pad.)
+        if (marks.some(([mx, mz]) => Math.hypot(mx - x - 0.5, mz - z - 0.5) < 12)) continue;
         for (let y = 0; y < w.H; y++) assert.equal(w.get(x, y, z), plain.world.get(x, y, z), `${theme.key} at ${x}, ${y}, ${z}`);
         same++;
       }
