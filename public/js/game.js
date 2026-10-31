@@ -210,6 +210,8 @@ export class Game extends EventTarget {
     this.invitePass = '';
     // Watching the island unseen, from the keeper's admin page (main.js).
     this.watching = false;
+    // And what the top bar says meanwhile.
+    this.watchLabel = '';
     this.players = new Map();
     this.critters = new Map();
     // Everyone's pets (shared/pets.js), by their owner: each page moves them all.

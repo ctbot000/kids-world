@@ -394,11 +394,13 @@ function tokenKey(kind, id) {
 // visit: the code of a friend's island you are visiting, and passcode: the
 // one you typed for it.
 // pass: from an invitation to it, which lets you in without its passcode.
-// watching: the keeper's admin page watching the island unseen (watchIsland).
+// watching: what the top bar says while the keeper's admin page watches the
+// island unseen (watchIsland), or looks round a copy of it (lookAtCopy).
 function startSession({ link, mode, islandId = null, key, loadingText, first = (game) => game.joinMessage(), visit = '', passcode = '', pass = '', watching = false }) {
   endSession(false);
   const game = new Game({ link, renderer, sound, profile, mode });
-  game.watching = watching;
+  game.watching = Boolean(watching);
+  game.watchLabel = watching || '';
   game.token = profile.token(key);
   game.who = islandWho;
   game.typedPasscode = passcode;
@@ -527,7 +529,7 @@ setInterval(() => {
 // Played alone, or closed to new visitors, it is on it hidden, for the
 // keeper's admin page alone, which can watch it unseen (shared/watch.js).
 function updateListing() {
-  const link = session?.mode === 'host' && session.started ? session.link : null;
+  const link = session?.mode === 'host' && session.started && !session.game.watching ? session.link : null;
   const open = link?.online && link.state === 'online' ? link.room.listing() : null;
   keeper.setListing(open ?? (link ? { ...link.room.listing({ anyway: true }), hidden: true } : null));
 }
@@ -608,7 +610,28 @@ function watchIsland(raw, ticket) {
     return;
   }
   const link = new GuestLink({ code, peerOptions });
-  startSession({ link, mode: 'guest', key: tokenKey('watch', code), loadingText: '👁️ Flying over the island, unseen…', first: () => ({ t: 'watch', ticket }), watching: true });
+  startSession({ link, mode: 'guest', key: tokenKey('watch', code), loadingText: '👁️ Flying over the island, unseen…', first: () => ({ t: 'watch', ticket }), watching: '👁️ Watching unseen' });
+}
+
+// A copy of a player's island the keeper kept, from its admin page (same
+// computer): opened here to look round as nobody, its animals and weather
+// going on, but never saved, listed or open to anyone. copy: "device/island".
+async function lookAtCopy(copy, day) {
+  const [device, id] = copy.split('/');
+  let save = null;
+  try {
+    const res = await fetch(`/admin/api/devices/${encodeURIComponent(device)}/islands/${encodeURIComponent(id)}${day ? `?day=${encodeURIComponent(day)}` : ''}`, { cache: 'no-store' });
+    if (res.ok) save = await res.json();
+  } catch {}
+  let link = null;
+  try {
+    link = save && new HostLink({ island: { save }, online: false, watch: true });
+  } catch {}
+  if (!link) {
+    ui.toast('😕', 'That copy could not be opened. Open it from the keeper’s admin page, on its computer.', 'warn');
+    return;
+  }
+  startSession({ link, mode: 'host', key: tokenKey('copy', id), loadingText: '👁️ Opening the kept copy…', watching: `👁️ Saved copy · ${day || 'latest'}` });
 }
 
 // Whether you have been on this island before, and so come back without its passcode.
@@ -1149,9 +1172,10 @@ async function boot() {
   ui.showTitle(titleHandlers);
   greet();
   // From the keeper's admin page: watching an island unseen, straight away.
-  if (params.has('watch')) {
+  if (params.has('watch') || params.has('copy')) {
     // (Never at the keeper itself, so not on its list of players playing.)
-    watchIsland(params.get('watch'), params.get('ticket') ?? '');
+    if (params.has('copy')) lookAtCopy(params.get('copy'), params.get('day') ?? '');
+    else watchIsland(params.get('watch'), params.get('ticket') ?? '');
     requestAnimationFrame(frame);
     return;
   }

@@ -87,9 +87,11 @@ class Link extends EventTarget {
 
 export class HostLink extends Link {
   // island: { theme, size, name, adventure, defense } for a new island, or { save } to open a saved one.
-  constructor({ island, online = false, peerOptions = {} } = {}) {
+  // watch: this page only looks round it, as nobody (Room.watchHere).
+  constructor({ island, online = false, peerOptions = {}, watch = false } = {}) {
     super();
     this.online = online;
+    this.watch = watch;
     this.peerOptions = peerOptions;
     this.fixedCode = Boolean(island.save?.code);
     this.room = new Room({
@@ -133,7 +135,8 @@ export class HostLink extends Link {
   }
 
   start(joinMessage) {
-    this.send(joinMessage());
+    if (this.watch) queueMicrotask(() => !this.closed && this.room.watchHere(this.local));
+    else this.send(joinMessage());
     if (this.online) this.connect();
     else this.setStatus('offline', 'Playing alone');
   }

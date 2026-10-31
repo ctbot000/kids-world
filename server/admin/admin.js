@@ -1,5 +1,6 @@
 // The keeper's admin page, a tab for each part (tabs.js): who has sent copies, their islands seen from above
-// (drawn with the game's own map code), and downloads or deletes, and their
+// (drawn with the game's own map code), and downloads, deletes and 👁️ Watch
+// (live, or its copy to look round: islands.js), and their
 // logins: a new password for a player who forgot theirs, none at all, the
 // copies of a device that is gone moved into a player's login, or a player
 // taken out of the ranking, and where each was last seen from; the isle's
@@ -514,6 +515,7 @@ function islandCard(device, island) {
         'div',
         { class: 'actions' },
         choice,
+        h('button', { type: 'button', 'aria-label': `Watch ${island.name}`, title: 'Live while it is being played; else the copy picked, to look round', onclick: () => islandWatch.watchKept(device.id, island, choice.selectedIndex === 0 ? '' : choice.value) }, '👁️ Watch'),
         download,
         h('button', { class: 'danger', type: 'button', onclick: () => remove(`devices/${device.id}/islands/${island.id}`, `Delete every copy of “${island.name}” from ${who}? This cannot be undone.`) }, 'Delete'),
       ),
@@ -1219,6 +1221,7 @@ async function refresh(now = false) {
 if (location.hash === '#reports') history.replaceState(null, '', '#ctb');
 setUpTabs();
 setUpTv();
-const refreshIslands = setUpIslands({ h });
+const islandWatch = setUpIslands({ h });
+const refreshIslands = islandWatch.refresh;
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
 refresh();

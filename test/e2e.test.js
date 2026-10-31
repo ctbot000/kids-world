@@ -6496,3 +6496,76 @@ test('the admin page watches an island played alone too: the page opens up for i
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('the admin page watches any island it kept: live while it is played, and its copy, to look round, once its player has gone', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal), admin: adminHandler({ store: keeper.store, keeper }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${games.address().port}`;
+  const host = await openPlayer(`${origin}/?p2p=1&signal=${encodeURIComponent(signal)}`, { name: 'Sunny Otter' });
+  const context = await browser.createBrowserContext();
+  try {
+    // A player with a login, and an island played alone: kept.
+    await host.evaluate(() => window.kidsWorld.ui.makeLoginDialog());
+    await typeInto(host, 'Sunny Otter', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(host, 'Make my login', '#modal');
+    await until(host, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(host, () => clickButton(host, 'Got it', '#modal'));
+    await makeIsland(host, { online: false, theme: 'Flat Land', name: 'Kept Bay' });
+    await eventually(async () => (await keeper.store.devices()).some((d) => d.islands.some((i) => i.name === 'Kept Bay')));
+
+    const admin = await context.newPage();
+    admin.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+    await admin.goto(`${origin}/admin/#players`);
+    const watchIt = async () => {
+      const opened = context.waitForTarget((t) => /[?&](watch|copy)=/.test(t.url()));
+      await admin.evaluate(() => [...document.querySelectorAll('#devices article.island')].find((el) => el.querySelector('h4').textContent === 'Kept Bay').querySelector('button[aria-label="Watch Kept Bay"]').click());
+      const page = await (await opened).page();
+      page.on('pageerror', (error) => pageErrors.push(`watcher: ${error.message}`));
+      await inGame(page);
+      return page;
+    };
+    // Its islands, folded under the player.
+    await until(admin, () => document.querySelector('#devices details.fold summary'));
+    await admin.click('#devices details.fold summary');
+    await until(admin, () => document.querySelector('#devices button[aria-label="Watch Kept Bay"]'));
+
+    // Being played: watched live.
+    const live = await watchIt();
+    assert.match(live.url(), /[?&]watch=/);
+    assert.deepEqual(
+      await live.evaluate(() => [window.kidsWorld.game.pid, [...window.kidsWorld.game.players.values()].map((p) => p.name), document.getElementById('status').textContent]),
+      [-1, ['Sunny Otter'], '👁️ Watching unseen'],
+    );
+    await live.close();
+
+    // Its player gone: the kept copy, to look round, as nobody.
+    await host.evaluate(() => window.kidsWorld.ui.gameHandlers.leave());
+    await eventually(() => !keeper.allIslands().some((i) => i.name === 'Kept Bay'));
+    await host.browserContext().close();
+    const copy = await watchIt();
+    assert.match(copy.url(), /[?&]copy=/);
+    assert.deepEqual(
+      await copy.evaluate(() => {
+        const g = window.kidsWorld.game;
+        return { pid: g.pid, name: g.world.name, players: g.players.size, watching: g.watching, status: document.getElementById('status').textContent, mode: window.kidsWorld.session.mode, listed: window.kidsWorld.session.link.online };
+      }),
+      { pid: -1, name: 'Kept Bay', players: 0, watching: true, status: '👁️ Saved copy · latest', mode: 'host', listed: false },
+    );
+    // Nothing of it is saved on that page, nor sent to the keeper.
+    assert.deepEqual(await copy.evaluate(() => window.kidsWorld.ui.handlers.islands().map((i) => i.name)), []);
+    assert.equal(
+      keeper.allIslands().some((i) => i.name === 'Kept Bay'),
+      false,
+    );
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+    await host.browserContext().close().catch(() => {});
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

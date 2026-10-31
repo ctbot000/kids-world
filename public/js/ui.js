@@ -54,8 +54,6 @@ import { STICKERS } from './profile.js';
 import { QUALITY_CHOICES } from './quality.js';
 import { pictureFrom, recentErrors, screenshot } from './report.js';
 
-// The top bar's status while watching an island unseen (shared/watch.js).
-const WATCHING = '👁️ Watching unseen';
 // The ideas whose answers this device has shown already (see wishAnswered).
 const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
 // The news of an idea, as wishesSeen keeps it: its answer, or its latest step.
@@ -3149,7 +3147,7 @@ export class UI {
     document.body.classList.add('playing');
     // Watching unseen (shared/watch.js): nothing to build, carry or say.
     document.body.classList.toggle('watching', game.watching === true);
-    if (game.watching) $('status').textContent = WATCHING;
+    if (game.watching) $('status').textContent = game.watchLabel;
     document.body.classList.toggle('touch', this.input.touchMode);
     this.buildToolbar();
     this.buildHotbar();
@@ -4392,7 +4390,7 @@ export class UI {
     // tell anybody.
     const code = $('island-code');
     code.hidden = g.shared;
-    code.replaceChildren(...(g.shared ? [] : this.gameHandlers?.canInvite() ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
+    code.replaceChildren(...(g.shared ? [] : this.gameHandlers?.canInvite() || g.watching ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
     // The adventure island's stage, bright where its code goes (as in 👫
     // Players: the shared isle always, any other island only past stage 1).
     const adv = g.adventure;
@@ -4582,7 +4580,8 @@ export class UI {
   setStatus(state, text) {
     const el = $('status');
     const icon = { online: '🟢', offline: '', connecting: '🟡', reconnecting: '🟡', 'id-taken': '🟡', failed: '🔴' }[state] ?? '';
-    el.textContent = state === 'online' && this.game?.watching ? WATCHING : state === 'online' || state === 'offline' ? '' : `${icon} ${text}`;
+    // Watching unseen (shared/watch.js), it says so instead, live or a copy.
+    el.textContent = this.game?.watching && (state === 'online' || state === 'offline') ? this.game.watchLabel : state === 'online' || state === 'offline' ? '' : `${icon} ${text}`;
     this.renderIsland();
   }
 

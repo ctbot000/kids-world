@@ -697,6 +697,17 @@ export class Room {
       .catch((error) => this.log(error));
   }
 
+  // The same on the page the island lives in, which needs no ticket: a copy
+  // of an island the keeper kept, opened from its admin page to look round
+  // (main.js).
+  watchHere(conn) {
+    const c = this.clients.get(conn);
+    if (!c || c.pid) return;
+    c.watch = true;
+    this.sendWelcome(conn, c);
+    this.sendSong(conn);
+  }
+
   // Whether a new visitor typed the island's passcode; if not, they are told
   // why they cannot come in.
   passcodeFits(conn, raw) {

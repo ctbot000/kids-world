@@ -3,6 +3,8 @@
 // friend) and, hidden from that list, those played alone or closed to new
 // visitors. Each has 👁️ Watch, which opens the game in a new tab watching
 // it unseen (see public/js/shared/watch.js): nobody there sees or hears of it.
+// An island the keeper kept (the Players tab) is watched live while it is
+// being played, and otherwise its copy is opened to look round, as nobody.
 import { prettyCode } from '/js/shared/codes.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
@@ -27,15 +29,36 @@ function islandRow(h, island, watch) {
   );
 }
 
-// Returns refresh(keeper): the list again, with the keeper's status (null:
-// no keeper here, and the tab goes).
+// Returns { refresh(keeper), watchKept(device, island, day) }: refresh shows
+// the list again, with the keeper's status (null: no keeper here, and the
+// tab goes); watchKept watches a kept island (day: which copy, '' the latest).
 export function setUpIslands({ h }) {
   let shown = '';
   const section = $('islands-section');
 
-  async function watch(island) {
-    // Opened before asking, so no pop-up blocker stops it.
+  // Opened before asking, so no pop-up blocker stops it.
+  const show = (tab, url) => {
+    if (tab) tab.location.href = url.href;
+    else location.href = url.href;
+  };
+
+  async function watchKept(device, island, day = '') {
     const tab = window.open('about:blank', '_blank');
+    let live = null;
+    try {
+      const res = await fetch('/admin/api/islands', { cache: 'no-store' });
+      if (res.ok) live = (await res.json()).islands.find((i) => i.code === island.code) ?? null;
+    } catch {}
+    // The latest copy asked for, and it is being played: watch it live.
+    if (live && !day) return watch(live, tab);
+    const url = new URL('/', location.href);
+    url.searchParams.set('p2p', '1');
+    url.searchParams.set('copy', `${device}/${island.id}`);
+    if (day) url.searchParams.set('day', day);
+    show(tab, url);
+  }
+
+  async function watch(island, tab = window.open('about:blank', '_blank')) {
     try {
       const res = await fetch(`/admin/api/islands/${island.code}/watch`, { method: 'POST', cache: 'no-store', headers: { 'X-Kids-World-Admin': '1' } });
       const reply = res.ok ? await res.json() : null;
@@ -46,15 +69,14 @@ export function setUpIslands({ h }) {
       if (reply.signal) url.searchParams.set('signal', reply.signal);
       url.searchParams.set('watch', island.code);
       url.searchParams.set('ticket', reply.ticket);
-      if (tab) tab.location.href = url.href;
-      else location.href = url.href;
+      show(tab, url);
     } catch {
       tab?.close();
       alert(`${island.name} is not being played any more.`);
     }
   }
 
-  return async function refresh(keeper) {
+  async function refresh(keeper) {
     section.hidden = !keeper;
     if (!keeper) return;
     let islands = null;
@@ -73,5 +95,7 @@ export function setUpIslands({ h }) {
       h('p', { class: 'muted' }, 'The islands being played now, open to friends or not. 👁️ Watch flies over one in a new tab, unseen: nobody there sees you, hears of you or counts you, and you touch nothing.'),
       islands.length ? h('ol', { class: 'recent island-list card' }, ...islands.map((i) => islandRow(h, i, watch))) : h('p', { class: 'empty' }, 'No island is being played right now.'),
     );
-  };
+  }
+
+  return { refresh, watchKept };
 }
