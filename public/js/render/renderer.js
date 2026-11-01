@@ -397,31 +397,65 @@ export class Renderer {
   // hair, hat and all), for the lists of players: a PNG data URL, lit as by
   // day whatever the time on the island, made once for each look.
   face(look) {
-    const key = JSON.stringify(look ?? {});
+    return this.portrait(look);
+  }
+
+  // The same, or (body) the whole of them from their feet to over the hat,
+  // in a frame as tall as wide (aspect), turned (radians) a little away from
+  // straight on, for 🎨 Change me to show each choice on you; near: how close
+  // to a head, and aim: how far under the top of it to look (in metres); top:
+  // as high as a frame to fit, for heights side by side; size: how many
+  // pixels wide.
+  portrait(look, { body = false, turn = body ? 0.45 : 0, top = 0, near = 1.05, aim = 0.16 * near, size = 96 } = {}) {
+    const aspect = body ? 0.6 : 1;
+    const key = `${JSON.stringify([body, turn, top, near, aim, size])}|${JSON.stringify(look ?? {})}`;
     let url = this.faces?.get(key);
     if (url) return url;
     this.faces ??= new Map();
-    const SIZE = 96;
+    // Every pick in Change me makes a new set; keep only so many.
+    if (this.faces.size > 600) this.faces.clear();
+    const W = size;
+    const H = Math.round(size / aspect);
     if (!this.faceKit) {
       const scene = new THREE.Scene();
       const sun = new THREE.DirectionalLight(0xffffff, 2.2);
       sun.position.set(1.5, 3, 4);
       scene.add(new THREE.HemisphereLight(0xdff2ff, 0x9fcf7f, 1.6), sun);
-      const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { samples: 4 });
+      this.faceKit = { scene, sun, camera: new THREE.PerspectiveCamera(30, 1, 0.05, 20), sizes: new Map() };
+    }
+    const { scene, sun, camera } = this.faceKit;
+    let frame = this.faceKit.sizes.get(`${W}x${H}`);
+    if (!frame) {
+      const target = new THREE.WebGLRenderTarget(W, H, { samples: 4 });
       target.texture.colorSpace = THREE.SRGBColorSpace;
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = SIZE;
-      this.faceKit = { scene, camera: new THREE.PerspectiveCamera(30, 1, 0.05, 20), target, canvas, pixels: new Uint8Array(SIZE * SIZE * 4) };
+      canvas.width = W;
+      canvas.height = H;
+      frame = { target, canvas, pixels: new Uint8Array(W * H * 4) };
+      this.faceKit.sizes.set(`${W}x${H}`, frame);
     }
-    const { scene, camera, target, canvas, pixels } = this.faceKit;
+    const { target, canvas, pixels } = frame;
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    // The light turns with them, to light whichever side is seen.
+    sun.position.set(1.5, 3, 4).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn > Math.PI / 2 ? Math.PI : 0);
     const a = new Avatar(look);
     a.update(0, ANIM.idle, 0);
+    a.root.rotation.y = turn;
     scene.add(a.root);
-    // Framed from the chin to just over the hat, seen a little from above.
-    const top = headTop(look?.hat, lookHair(look), lookTall(look));
-    const mid = top - 0.16;
-    camera.position.set(0, mid + 0.06, 1.05);
-    camera.lookAt(0, mid, 0);
+    const head = headTop(look?.hat, lookHair(look), lookTall(look));
+    if (body) {
+      // Framed from the feet to over the hat, seen a little from above.
+      const high = Math.max(top, head) + 0.06;
+      const far = (high / 2 / Math.tan(THREE.MathUtils.degToRad(15))) * 1.02;
+      camera.position.set(0, high / 2 + far * 0.1, far);
+      camera.lookAt(0, high / 2 - 0.01, 0);
+    } else {
+      // Framed from the chin to just over the hat, seen a little from above.
+      const mid = head - aim;
+      camera.position.set(0, mid + 0.06 * near, near);
+      camera.lookAt(0, mid, 0);
+    }
     const day = [toyLight.studio.value, toyLight.rim.value, toyLight.rimColor.value.clone()];
     toyLight.studio.value = 1;
     toyLight.rim.value = 0.25;
@@ -432,7 +466,7 @@ export class Renderer {
     gl.setClearColor(0x000000, 0);
     gl.clear();
     gl.render(scene, camera);
-    gl.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
+    gl.readRenderTargetPixels(target, 0, 0, W, H, pixels);
     gl.setRenderTarget(was.target);
     gl.setClearColor(was.color, was.alpha);
     [toyLight.studio.value, toyLight.rim.value] = day;
@@ -440,8 +474,8 @@ export class Renderer {
     a.dispose();
     // Read back bottom row first: turned the right way up.
     const ctx = canvas.getContext('2d');
-    const image = ctx.createImageData(SIZE, SIZE);
-    for (let y = 0; y < SIZE; y++) image.data.set(pixels.subarray((SIZE - 1 - y) * SIZE * 4, (SIZE - y) * SIZE * 4), y * SIZE * 4);
+    const image = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) image.data.set(pixels.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
     ctx.putImageData(image, 0, 0);
     url = canvas.toDataURL('image/png');
     this.faces.set(key, url);

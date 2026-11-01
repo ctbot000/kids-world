@@ -956,6 +956,7 @@ const titleHandlers = {
     if (session?.game) lookTimer = setTimeout(() => session?.game?.send({ t: 'look', look: (session?.game?.profile ?? profile).shownLook, name: profile.name }), 400);
     else showDemoAvatar();
   },
+  portrait: (look, options) => renderer.portrait(look, options),
   lookOpen: () => lookAtMe(true),
   lookDone: () => lookAtMe(false),
 };

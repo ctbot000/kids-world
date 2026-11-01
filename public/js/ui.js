@@ -15,16 +15,16 @@ import { stationId } from './shared/broadcast.js';
 import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
-import { ANIMAL_TYPES, CRITTER_INFO, VEHICLES } from './shared/critters.js';
+import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
 import { STICKER_XP } from './shared/levels.js';
 import { boardsOf } from './shared/ranking.js';
-import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
+import { CLOTHES, fixPrice, GEAR, isBroken, levelDoes, lookWithGear, nextLevel, POTION, SEED_PACK, seedPrice, sellPrice, statsOf, usesLeft, WEAPONS, wearing, wornWeapon } from './shared/shop.js';
 import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
-import { ACCESSORIES, ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookIcon, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
+import { ACCESSORIES, ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookHair, lookIcon, lookTall, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
@@ -1223,21 +1223,43 @@ export class UI {
               h('button', { class: `swatch${key === chosen ? ' on' : ''}`, type: 'button', style: `background:${color}`, 'aria-label': key, onclick: () => choose(() => set(key)) }),
             ),
           );
-        // A row of choices with an icon each; chosen is the one a look without it has.
-        const options = (list, chosen, set) =>
+        // Sharp on a sharp screen, and close enough to see a face's shape.
+        const PIC = { size: 128, near: 0.78 };
+        // Where to look for each extra (see Renderer.portrait): a backpack from behind, a watch on the wrist.
+        const WORN = {
+          sunglasses: {},
+          necklace: { near: 0.95, aim: 0.42 },
+          tie: { near: 1.2, aim: 0.5 },
+          backpack: { near: 1.4, aim: 0.5, turn: 2.6 },
+          // Halfway down, whoever is wearing it.
+          watch: () => ({ near: 0.8, aim: headTop(look.hat, lookHair(look), lookTall(look)) * 0.5, turn: 1.2 }),
+        };
+        // You as you would be with a choice made, in what you have on (but
+        // the weapon), head and shoulders or (body) all of you; the icon
+        // (an emoji, or a picture) where it cannot be drawn.
+        const pic = (change, icon, options = {}) => {
+          const { weapon: _, level: __, ...worn } = lookWithGear({ ...look, ...change }, p.data.gear);
+          return this.lookPic(worn, { ...PIC, ...options }, typeof icon === 'string' ? h('span', { class: 'emoji' }, icon) : icon);
+        };
+        // A row of choices, each seen on you; chosen is the one a look without it has.
+        const options = (list, chosen, set, field, options) =>
           h(
             'div',
             { class: 'grid' },
             ...list.map((o) =>
-              h('button', { class: `choice${o.key === chosen ? ' on' : ''}`, type: 'button', onclick: () => choose(() => set(o.key)) }, h('span', { class: 'emoji' }, o.icon), o.name),
+              h('button', { class: `choice${o.key === chosen ? ' on' : ''}`, type: 'button', onclick: () => choose(() => set(o.key)) }, pic({ [field]: o.key }, o.icon, typeof options === 'function' ? options(o) : options), o.name),
             ),
           );
+        // An animal's own fur, or the skin and hair a kid or grown-up last had.
+        const asAnimal = (a) => (isPerson({ animal: a.key }) ? cleanLook({ ...look, animal: a.key }) : { animal: a.key, fur: a.fur });
         const draw = () => {
+          // Heights side by side in one frame, to see how much taller.
+          const tallest = Math.max(...HEIGHTS.map((t) => headTop(look.hat, lookHair(look), lookTall({ ...look, height: t.key }))));
           shape.replaceChildren(
             h('h3', {}, 'Height'),
-            options(HEIGHTS, heightOf(look).key, (key) => (look.height = key)),
+            options(HEIGHTS, heightOf(look).key, (key) => (look.height = key), 'height', { body: true, top: tallest }),
             h('h3', {}, 'Body'),
-            options(BODIES, buildOf(look).key, (key) => (look.build = key)),
+            options(BODIES, buildOf(look).key, (key) => (look.build = key), 'build', { body: true }),
           );
           animals.replaceChildren(
             ...ANIMALS.map((a) =>
@@ -1247,9 +1269,9 @@ export class UI {
                   class: `choice${a.key === look.animal ? ' on' : ''}`,
                   type: 'button',
                   // A kid or a grown-up keeps the skin and hair last chosen; an animal comes in its own fur.
-                  onclick: () => choose(() => Object.assign(look, isPerson({ animal: a.key }) ? cleanLook({ ...look, animal: a.key }) : { animal: a.key, fur: a.fur })),
+                  onclick: () => choose(() => Object.assign(look, asAnimal(a))),
                 },
-                h('span', { class: 'emoji' }, a.key === look.animal ? lookIcon(look) : a.icon),
+                pic(a.key === look.animal ? {} : asAnimal(a), a.key === look.animal ? lookIcon(look) : a.icon),
                 a.name,
               ),
             ),
@@ -1265,13 +1287,13 @@ export class UI {
                   return h(
                     'button',
                     { class: `choice${g.key === look.gender ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.gender = g.key)) },
-                    h('span', { class: 'emoji' }, icon),
+                    pic({ gender: g.key }, icon),
                     look.animal === GROWN_UP ? g.grown : g.name,
                   );
                 }),
               ),
               h('h3', {}, 'Face shape'),
-              options(HEADS, headOf(look).key, (key) => (look.head = key)),
+              options(HEADS, headOf(look).key, (key) => (look.head = key), 'head'),
               h('h3', {}, 'Skin'),
               swatches(SKIN_TONES, look.skin, (key) => (look.skin = key)),
               h('h3', {}, 'Hair'),
@@ -1282,7 +1304,7 @@ export class UI {
                   h(
                     'button',
                     { class: `choice${style.key === look.hair ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.hair = style.key)) },
-                    hairIcon(style.key, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor]),
+                    pic({ hair: style.key }, hairIcon(style.key, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor])),
                     style.name,
                   ),
                 ),
@@ -1299,7 +1321,7 @@ export class UI {
                         h(
                           'button',
                           { class: `choice${f.key === look.face ? ' on' : ''}`, type: 'button', onclick: () => choose(() => (look.face = f.key)) },
-                          hairIcon(look.hair, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor], f.key),
+                          pic({ face: f.key }, hairIcon(look.hair, SKIN_TONES[look.skin], HAIR_COLORS[look.hairColor], f.key)),
                           f.name,
                         ),
                       ),
@@ -1326,8 +1348,14 @@ export class UI {
               }),
             ),
           );
-          // Sunglasses only for a face to put them on.
-          accs.replaceChildren(options(ACCESSORIES.filter((a) => !a.person || isPerson(look)), look.acc ?? 'none', (key) => (look.acc = key)));
+          // Sunglasses only for a face to put them on; each seen close where
+          // it is worn.
+          accs.replaceChildren(
+            options(ACCESSORIES.filter((a) => !a.person || isPerson(look)), look.acc ?? 'none', (key) => (look.acc = key), 'acc', (a) => {
+              const worn = WORN[a.key] ?? WORN.necklace;
+              return typeof worn === 'function' ? worn() : worn;
+            }),
+          );
           hats.replaceChildren(
             ...HATS.map((hat) =>
               h(
@@ -1342,7 +1370,7 @@ export class UI {
                     draw();
                   },
                 },
-                h('span', { class: 'emoji' }, hat.icon),
+                pic({ hat: hat.key }, hat.icon),
                 hat.name,
               ),
             ),
@@ -4638,6 +4666,41 @@ export class UI {
       ),
     );
     this.fitFriends();
+  }
+
+  // A picture of a look as the renderer draws it (see Renderer.portrait), a
+  // few each frame so a window full of them opens at once: a blank the size
+  // of it until then, or the icon given where nothing can draw it.
+  lookPic(look, options, icon) {
+    const draw = this.handlers.portrait;
+    if (!draw) return icon;
+    const key = JSON.stringify([look, options]);
+    this.pics ??= new Map();
+    const cls = `look-pic${options?.body ? ' body' : ''}`;
+    const url = this.pics.get(key);
+    if (url) return h('img', { class: cls, src: url, alt: '' });
+    const el = h('span', { class: cls });
+    (this.picQueue ??= []).push({ el, look, options, key, icon, cls });
+    if (this.picQueue.length === 1) {
+      const work = () => {
+        const until = performance.now() + 10;
+        while (this.picQueue.length && performance.now() < until) {
+          const job = this.picQueue.shift();
+          // Gone again (another pick redrew the row) before it was drawn.
+          if (!job.el.isConnected) continue;
+          let src = null;
+          try {
+            src = draw(job.look, job.options);
+          } catch {}
+          if (this.pics.size > 600) this.pics.clear();
+          if (src) this.pics.set(job.key, src);
+          job.el.replaceWith(src ? h('img', { class: job.cls, src, alt: '' }) : job.icon);
+        }
+        if (this.picQueue.length) requestAnimationFrame(work);
+      };
+      requestAnimationFrame(work);
+    }
+    return el;
   }
 
   // Someone's face as their avatar has it, drawn by the renderer; their

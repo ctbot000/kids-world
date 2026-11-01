@@ -5905,3 +5905,16 @@ html {
 body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-attack, #btn-weapon, #btn-fly, #aim-hint, #ride, #defend, #race-btn, #next-stage, #btn-stickers-hud, #btn-shop-hud, #btn-backpack-hud, #btn-feedback-hud) {
   display: none !important;
 }
+
+/* 🎨 Change me's choices, each seen on you (ui.js lookPic). */
+.choice .look-pic {
+  display: block;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+
+.choice .look-pic.body {
+  width: 54px;
+  height: 90px;
+}
