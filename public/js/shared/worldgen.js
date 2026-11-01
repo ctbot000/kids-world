@@ -9,8 +9,9 @@ import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
 import { buildRace } from './race.js';
+import { buildZoo } from './zoo.js';
 import * as B from './blocks.js';
-import { busesClearOf, CRITTER_INFO, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
+import { busesClearOf, CRITTER_INFO, maxCritters, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, katsuraTree, placeTemplate } from './stamps.js';
@@ -23,6 +24,7 @@ export const THEMES = [
   { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
   { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
   { key: 'race', name: 'Racing Island', icon: '🏁', blurb: 'A race track with go-karts and lap times' },
+  { key: 'zoo', name: 'Zoo Island', icon: '🦒', blurb: 'Elephants, giraffes, penguins and a petting farm' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -74,7 +76,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   const mAngle = rng.next() * Math.PI * 2;
   // On a fun park island, out past the park (and on a racing island, past
   // the race track, laid out on the same square).
-  const plaza = theme === 'park' || theme === 'race';
+  const plaza = theme === 'park' || theme === 'race' || theme === 'zoo';
   const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : plaza ? rng.range(0.34, 0.4) * W : rng.range(0.18, 0.3) * W;
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
@@ -293,7 +295,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // ---------------------------------------------------------------- the park
   // On a fun park island, the park in the middle, with its own way in; on a
   // racing island, the race track.
-  const built = park ? (theme === 'race' ? buildRace : buildPark)(world, { ...park, level: parkLevel, pal }) : null;
+  const built = park ? ({ race: buildRace, zoo: buildZoo }[theme] ?? buildPark)(world, { ...park, level: parkLevel, pal }) : null;
 
   // ---------------------------------------------------------------- spawn
   const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);
@@ -472,7 +474,9 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       const c = critters[i];
       if (!CRITTER_INFO[c.type].vehicle && !CRITTER_INFO[c.type].flies && inPark(park, c.x, c.z)) critters.splice(i, 1);
     }
-    critters.push(...built.rides);
+    // A zoo's animals go first (and room is made for them below).
+    if (theme === 'zoo') critters.unshift(...built.rides);
+    else critters.push(...built.rides);
   }
 
   // ---------------------------------------------------------------- jewels and mines
@@ -524,6 +528,14 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // And after those, the same way: a kick scooter by where everyone comes in.
   critters.push(...placeScooters(world, new Rng(seed ^ 0x85ebca6b), [...busesClearOf([...vehicles, ...buses, ...aircraft], camps, road), ...parkClear]));
 
+  // On a zoo island, as many of the island's own animals as it takes are
+  // left out to make room for the zoo's, so it has them all and every
+  // vehicle too.
+  if (theme === 'zoo') {
+    for (let i = critters.length - 1; i >= built.rides.length && critters.length > maxCritters(world); i--) {
+      if (!CRITTER_INFO[critters[i].type].vehicle) critters.splice(i, 1);
+    }
+  }
   return { world, critters, fruit, mines, camps, defense: road };
 }
 
