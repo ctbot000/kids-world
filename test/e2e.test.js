@@ -6414,7 +6414,7 @@ test('a computer: Q by it opens typing practice, a line typed lights each next k
   await page.browserContext().close();
 });
 
-test('a robot kit: Q opens it, a hub goes on the plate with a tap, a ready-made robot and blocks tapped and dragged in, and Run drives it on the mat; the island keeps it on the kit', { skip }, async () => {
+test('a robot kit: Q opens it, a hub goes on the plate with a tap, a ready-made robot and blocks tapped and dragged in, and Run drives it on the mat; the island keeps it on the kit, and it drives out on the island and back', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   const at = await page.evaluate((id) => {
@@ -6489,6 +6489,24 @@ test('a robot kit: Q opens it, a hub goes on the plate with a tap, a ready-made 
     const kit = kw.session.link.room.kits.get(kw.session.link.room.world.index(at.x, at.y, at.z))?.kit;
     return kit?.parts.length === 8 && kit.code.length === 6 && kw.renderer.robotKits.shown.size === 1;
   }, at);
+  // 🏝️ Out on the island: it drives off in front of its kit, and comes back when called.
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('.rk-out'));
+  assert.ok(await page.evaluate(() => document.querySelector('.rk-home').hidden), 'nothing out to call back');
+  await page.click('.rk-out');
+  await until(page, () => document.getElementById('modal').hidden && window.kidsWorld.renderer.robotKits.out.size === 1);
+  const left = await page.evaluate(() => ({ ...[...window.kidsWorld.game.bots.values()][0] }));
+  assert.equal(left.y, at.y);
+  await until(page, (left) => {
+    const b = [...window.kidsWorld.game.bots.values()][0];
+    return Math.hypot(b.x - left.x, b.z - left.z) > 0.2;
+  }, left);
+  assert.equal(await page.evaluate(() => [...window.kidsWorld.renderer.robotKits.shown.values()][0].robot.visible), false, 'its kit stands empty');
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && !document.querySelector('.rk-home').hidden);
+  await page.click('.rk-home');
+  await until(page, () => window.kidsWorld.renderer.robotKits.out.size === 0 && [...window.kidsWorld.renderer.robotKits.shown.values()][0].robot.visible);
+  await page.keyboard.press('Escape');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

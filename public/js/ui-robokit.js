@@ -104,6 +104,15 @@ export function robotKitDialog(ui) {
   ].map(([key, label]) => h('button', { class: 'chip rk-tab', type: 'button', 'data-tab': key, 'aria-pressed': 'false', onclick: () => show(key) }, label));
   const runBtn = h('button', { class: 'big green rk-run', type: 'button', onclick: () => run() }, h('span', { class: 'emoji' }, '▶'), 'Run');
   const stopBtn = h('button', { class: 'big rk-stop', type: 'button', hidden: true, onclick: () => stopRun() }, h('span', { class: 'emoji' }, '⏹'), 'Stop');
+  const outBtn = h('button', { class: 'chip rk-out', type: 'button', onclick: () => driveOut() }, '🏝️ Drive on the island');
+  const homeBtn = h('button', { class: 'chip rk-home', type: 'button', hidden: true, onclick: () => {
+    g.kitOut(false);
+    ui.sound.play('ui');
+  } }, '↩️ Call it back');
+  // Whether this kit's robot is out on the island.
+  const showOut = () => {
+    homeBtn.hidden = !g.bots.has(at.key);
+  };
   const canvas = h('canvas', { class: 'rk-canvas', role: 'img', 'aria-label': 'Your robot' });
   const stageBox = h('div', { class: 'rk-stage' }, canvas);
   const side = h('div', { class: 'rk-side' });
@@ -299,6 +308,21 @@ export function robotKitDialog(ui) {
     stopBtn.hidden = false;
     ui.sound.play('ui');
     render();
+  };
+
+  // 🏝️ The robot drives out in front of its kit and runs its program on the
+  // island itself, for everyone; the window closes to watch it go.
+  const driveOut = () => {
+    ui.sound.unlock();
+    if (!st.parts.some((p) => p.k === 'hub') || !st.code.length) {
+      ui.sound.play('no');
+      return ui.toast('🤖', 'Build a robot with a hub and give it a program first!');
+    }
+    stopRun();
+    flush();
+    g.kitOut(true);
+    ui.closeModal();
+    ui.toast('🏝️', 'Off it goes! Walk up to the kit and tap ↩️ Call it back to bring it home.');
   };
 
   const stopRun = () => {
@@ -861,11 +885,13 @@ export function robotKitDialog(ui) {
     renderCode();
   };
   g.addEventListener('kit', heard);
+  g.addEventListener('bots', showOut);
+  showOut();
   const panel = document.querySelector('#modal .panel');
 
   ui.openModal(
     (root) => {
-      root.append(h('h2', {}, '🤖 Robot Kit'), h('div', { class: 'rk-bar' }, h('div', { class: 'rk-tabs' }, ...tabs), h('div', { class: 'rk-run-buttons' }, runBtn, stopBtn)), main, codeBox);
+      root.append(h('h2', {}, '🤖 Robot Kit'), h('div', { class: 'rk-bar' }, h('div', { class: 'rk-tabs' }, ...tabs), h('div', { class: 'rk-run-buttons' }, homeBtn, outBtn, runBtn, stopBtn)), main, codeBox);
       rebuild();
       renderCode();
       show(st.tab);
@@ -880,6 +906,7 @@ export function robotKitDialog(ui) {
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onUp);
         g.removeEventListener('kit', heard);
+        g.removeEventListener('bots', showOut);
         panel?.classList.remove('rk-panel');
         stage?.dispose();
         g.closeKit();

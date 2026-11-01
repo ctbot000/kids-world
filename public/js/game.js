@@ -331,6 +331,9 @@ export class Game extends EventTarget {
     this.kitTarget = null;
     this.kitAt = null;
     this.kits = new Map();
+    // The robots let out of their kits, driving on the island, by their
+    // kit's cell key, as the island tells (room.js packBots).
+    this.bots = new Map();
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -466,6 +469,12 @@ export class Game extends EventTarget {
         break;
       case 'kit':
         this.kitHeard(msg);
+        break;
+      case 'bots':
+        this.setBots(msg.b);
+        break;
+      case 'botbeep':
+        this.botBeep(msg);
         break;
       case 'piano':
         this.pianoHeard(msg);
@@ -732,6 +741,7 @@ export class Game extends EventTarget {
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setKits(msg.kits ?? []);
+    this.setBots(msg.bots ?? []);
     this.setEnv(msg.env);
     this.renderer.fires.reset(this.world, msg.fires ?? []);
     // The song goes on playing over a reconnect; its pieces come after this.
@@ -3196,6 +3206,35 @@ export class Game extends EventTarget {
     const [x, y, z] = msg.at;
     this.showKit(x, y, z, cleanKit(msg.kit));
     this.emit('kit', keyOf(x, y, z));
+  }
+
+  // ▶ On the island: the open kit's robot drives out in front of it and runs
+  // its program there, for everyone to see; or it is called back.
+  kitOut(out = true) {
+    const t = this.kitAt;
+    if (!t) return;
+    this.send({ t: 'kitrun', at: [t.x, t.y, t.z], op: out ? 'run' : 'home' });
+    if (out) this.ranRobot();
+  }
+
+  // The robots out on the island, as they go.
+  setBots(list) {
+    this.bots.clear();
+    for (const b of Array.isArray(list) ? list : []) if (typeof b?.k === 'string' && [b.x, b.y, b.z, b.a].every(Number.isFinite)) this.bots.set(b.k, b);
+    this.renderer.robotKits.setBots(this.bots, (k) => {
+      const [x, y, z] = k.split(',').map(Number);
+      return { parts: this.kits.get(k)?.parts ?? [], id: this.world?.get(x, y, z) };
+    }, (x, y, z) => this.renderer.terrain.studsOn && B.BLOCKS[this.world?.get(Math.floor(x), y - 1, Math.floor(z))]?.studs === true);
+    this.emit('bots');
+  }
+
+  // A robot on the island beeping: louder the nearer you are.
+  botBeep(msg) {
+    const b = this.bots.get(msg.k);
+    const me = this.me?.body;
+    if (!b || !me || !Number.isFinite(msg.n)) return;
+    const d = Math.hypot(b.x - me.x, b.y - me.y, b.z - me.z);
+    if (d < 24) this.sound.beep(msg.n, Math.min(4, Math.max(0.1, Number(msg.s) || 0.3)), 1 / (1 + d / 4));
   }
 
   // A program run on the play mat, counted for XP and the Robot Maker sticker.
@@ -6443,6 +6482,7 @@ export class Game extends EventTarget {
     this.kitTarget = null;
     this.kitAt = null;
     this.kits.clear();
+    this.bots.clear();
     this.renderer.robotKits.clear();
     this.escapeTarget = null;
     this.chestTarget = null;

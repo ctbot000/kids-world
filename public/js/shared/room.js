@@ -18,7 +18,7 @@ import { HideSeekSim } from './hideseek.js';
 import { RaceSim, raceTrack } from './race.js';
 import { buildHouse, escapeHouse, houseCells, houseUsed, inHouse, puzzleAt, RESET_MS, useEscape } from './escape.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
-import { cleanKit, isKit, MAX_KITS } from './robokit.js';
+import { BLOCK_CM, cleanKit, IslandEnv, isKit, MAX_BOTS, MAX_KITS, problems, RobotSim, startFrom } from './robokit.js';
 import * as B from './blocks.js';
 import { trainAt } from './coaster.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
@@ -68,6 +68,10 @@ const CRITTER_MS = 200;
 // Landing on a monster marching on a tower defense island takes this many of its hearts.
 const LAND_POWER = 3;
 const ENV_MS = 5000;
+// How long a robot let out on the island runs its program at most, and how
+// long it waits where it stopped before going back to its kit (robokit.js).
+const BOT_RUN_MS = 5 * 60000;
+const BOT_PARK_MS = 3 * 60000;
 const GROW_MS = [45000, 80000];
 const REGROW_MS = [120000, 200000];
 // On a volcano island, ice melts into water after this long, and water
@@ -191,6 +195,9 @@ export class Room {
     // The robots and programs at the island's robot kits (robokit.js), by
     // cell: { x, y, z, kit }. Saved with the island.
     this.kits = new Map();
+    // The robots let out of their kits, driving on the island, by their
+    // kit's cell: { k, at, sim, env, since, stopped }. Never saved.
+    this.bots = new Map();
     // What the computers on some desks show (whoever keeps the island sets
     // this, as the CTB island's office does with its workers' real work):
     // [{ x, y, z, name, issue, doing, steps, since }], or null for none.
@@ -324,6 +331,7 @@ export class Room {
       if (isPictureAt(before) && !isPictureAt(after)) this.drawings.delete(k);
       // A robot kit picked up takes its robot and program with it.
       if (isKit(before) && !isKit(after) && this.kits.delete(k)) this.broadcast({ t: 'kit', at: [x, y, z], kit: null });
+      if (isKit(before) && !isKit(after)) this.botHome(k);
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
@@ -542,6 +550,9 @@ export class Room {
         break;
       case 'kit':
         this.kit(conn, p, msg);
+        break;
+      case 'kitrun':
+        this.kitRun(conn, p, msg);
         break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
@@ -818,6 +829,7 @@ export class Room {
       go: this.go.pack(),
       drawings: this.packDrawings(),
       kits: this.packKits(),
+      bots: this.packBots(),
       ...(this.screens ? { screens: this.screens } : {}),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
@@ -1364,6 +1376,7 @@ export class Room {
     this.stepStorm(now);
     this.stepMelts(now);
     this.stepRides(now);
+    this.stepBots(dt, now);
     this.healUp(now);
     // A round of hide and seek, as it goes.
     if (this.hideseek.round) {
@@ -2705,8 +2718,98 @@ export class Room {
     }
     if (kit) this.kits.set(k, { x: at[0], y: at[1], z: at[2], kit });
     else this.kits.delete(k);
+    // A robot out on the island is called back to be built or coded afresh.
+    this.botHome(k);
     this.broadcast({ t: 'kit', pid: p.id, at, kit }, conn);
     this.changed();
+  }
+
+  // ▶ On the island at a robot kit: its robot drives out in front of it and
+  // runs its program on the island itself, for everyone (robokit.js
+  // IslandEnv); or, op 'home', it is called back.
+  kitRun(conn, p, msg) {
+    const at = msg.at;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isKit(this.world.get(...at))) return;
+    if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
+    const k = this.world.index(...at);
+    if (msg.op === 'home') {
+      this.botHome(k);
+      return;
+    }
+    if (this.ownerWho) {
+      this.notice(conn, `${this.world.name} stays just as it is — no robots out here!`);
+      return;
+    }
+    const kit = this.kits.get(k)?.kit;
+    if (!kit || problems(kit.parts).some((w) => /hub/.test(w)) || !kit.code.length) {
+      this.notice(conn, 'Build a robot with a hub and give it a program first!');
+      return;
+    }
+    let bot = this.bots.get(k);
+    if (!bot) {
+      if (this.bots.size >= MAX_BOTS) {
+        this.notice(conn, `${MAX_BOTS} robots at most can be out on an island at once. Call one back first!`);
+        return;
+      }
+      const start = startFrom(this.world, ...at, B.BLOCKS[this.world.get(...at)].front);
+      if (!start) {
+        this.notice(conn, 'There is no room for the robot in front of its kit. Clear a space on the floor there!');
+        return;
+      }
+      const env = new IslandEnv(this.world, start.level, () => this.onlinePlayers().map((q) => ({ x: q.s[0], y: q.s[1], z: q.s[2] })));
+      const sim = new RobotSim(kit.parts, env);
+      sim.reset(start);
+      bot = { k, at, sim, env };
+      this.bots.set(k, bot);
+    }
+    bot.sim.start(kit.code);
+    bot.since = this.now();
+    bot.stopped = 0;
+    this.sendBots();
+  }
+
+  // A robot back in its kit.
+  botHome(k) {
+    if (this.bots.delete(k)) this.sendBots();
+  }
+
+  // The robots out on the island, as they go: each runs its program for
+  // RUN_MS at most, waits where it stopped for PARK_MS, and goes back to
+  // its kit; one lost in water or lava, or off the bottom, goes back at once.
+  stepBots(dt, now) {
+    if (!this.bots.size) return;
+    for (const bot of [...this.bots.values()]) {
+      const { sim, env } = bot;
+      if (sim.running) {
+        for (let t = 0; t < dt - 1e-9; t += 1 / 60) sim.step(Math.min(1 / 60, dt - t));
+        for (const b of sim.sounds.splice(0)) this.broadcast({ t: 'botbeep', k: keyOf(...bot.at), n: b.note, s: b.sec });
+        if (now - bot.since > BOT_RUN_MS) sim.stop();
+        if (!sim.running) bot.stopped = now;
+      }
+      if (env.lost || (!sim.running && now - bot.stopped > BOT_PARK_MS)) this.bots.delete(bot.k);
+    }
+    this.sendBots();
+  }
+
+  packBots() {
+    return [...this.bots.values()].map(({ at, sim, env }) => ({
+      k: keyOf(...at),
+      x: Math.round((sim.x / BLOCK_CM) * 1000) / 1000,
+      y: env.level,
+      z: Math.round((sim.z / BLOCK_CM) * 1000) / 1000,
+      a: Math.round(sim.a * 1000) / 1000,
+      m: sim.matrix,
+      l: sim.lamps,
+      d: Object.fromEntries(Object.entries(sim.motors).map(([p, m]) => [p, Math.round(m.deg)])),
+      r: sim.running,
+    }));
+  }
+
+  sendBots() {
+    const text = JSON.stringify(this.packBots());
+    if (text === this.botsSent) return;
+    this.botsSent = text;
+    this.broadcast({ t: 'bots', b: JSON.parse(text) });
   }
 
   // The robots, as [x, y, z, { parts, code }] each.

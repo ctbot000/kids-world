@@ -5959,6 +5959,19 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
   gap: 8px;
 }
 
+.rk-run-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rk-run-buttons .big[hidden],
+.rk-run-buttons .chip[hidden] {
+  display: none;
+}
+
 .rk-run-buttons .big {
   width: auto;
   padding: 10px 22px;

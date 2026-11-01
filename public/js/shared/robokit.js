@@ -37,6 +37,8 @@ export const CELL = 4;
 // The most parts one robot has, and the most robots an island keeps.
 export const MAX_PARTS = 40;
 export const MAX_KITS = 64;
+// The most robots out driving on one island at once.
+export const MAX_BOTS = 8;
 // The most blocks one program has, and how deep loops and ifs may go.
 export const MAX_BLOCKS = 80;
 export const MAX_DEPTH = 5;
@@ -605,13 +607,14 @@ function* runBlock(b, sim) {
   }
 }
 
-// A robot on the play mat: built from its parts, it runs a program tick by
-// tick (step). `bricks` are the toy bricks' grid places.
+// A robot built from its parts, running a program tick by tick (step), on
+// the play mat or the island: `env` is where (MatEnv, IslandEnv), or the
+// play mat's toy bricks' grid places.
 export class RobotSim {
-  constructor(parts, bricks = DEFAULT_BRICKS) {
+  constructor(parts, env = DEFAULT_BRICKS) {
     this.parts = parts;
     this.info = analyse(parts);
-    this.bricks = bricks;
+    this.env = Array.isArray(env) ? new MatEnv(env) : env;
     const { middle, front } = this.info;
     // Each joined part's middle about the robot's middle, in cm, and the
     // way it faces, both turned so the robot's front is up the plate.
@@ -631,6 +634,15 @@ export class RobotSim {
       }
     });
     this.reset();
+  }
+
+  // The play mat's toy bricks.
+  get bricks() {
+    return this.env.bricks;
+  }
+
+  set bricks(list) {
+    this.env.bricks = list;
   }
 
   reset(pose = START) {
@@ -734,61 +746,28 @@ export class RobotSim {
     return i !== undefined && this.parts[i].k === kind ? i : -1;
   }
 
-  // How far the nearest brick or fence is in front of a distance sensor, in
-  // whole cm from its front, or null when nothing is within SEE_CM.
+  // How far the nearest thing is in front of a distance sensor, in whole
+  // cm from its front, or null when nothing is within SEE_CM.
   distance(p) {
     const i = this.partOn(p, 'distance');
     if (i < 0) return null;
     const s = this.placeOf(i);
-    const ox = s.x + s.fx * (CELL / 2);
-    const oz = s.z + s.fz * (CELL / 2);
-    let best = Infinity;
-    const slab = (b) => {
-      let t0 = 0;
-      let t1 = Infinity;
-      for (const [o, d, lo, hi] of [
-        [ox, s.fx, b.x0, b.x1],
-        [oz, s.fz, b.z0, b.z1],
-      ]) {
-        if (Math.abs(d) < 1e-9) {
-          if (o < lo || o > hi) return;
-          continue;
-        }
-        let a = (lo - o) / d;
-        let c = (hi - o) / d;
-        if (a > c) [a, c] = [c, a];
-        t0 = Math.max(t0, a);
-        t1 = Math.min(t1, c);
-      }
-      if (t0 <= t1) best = Math.min(best, t0);
-    };
-    for (const b of this.bricks) slab(brickBox(b));
-    // The fence, from the inside.
-    if (s.fx > 1e-9) best = Math.min(best, (MAT_W / 2 - ox) / s.fx);
-    if (s.fx < -1e-9) best = Math.min(best, (-MAT_W / 2 - ox) / s.fx);
-    if (s.fz > 1e-9) best = Math.min(best, (MAT_D / 2 - oz) / s.fz);
-    if (s.fz < -1e-9) best = Math.min(best, (-MAT_D / 2 - oz) / s.fz);
-    return best <= SEE_CM ? Math.max(0, Math.round(best)) : null;
+    const d = this.env.ray(s.x + s.fx * (CELL / 2), s.z + s.fz * (CELL / 2), s.fx, s.fz, SEE_CM);
+    return d <= SEE_CM ? Math.max(0, Math.round(d)) : null;
   }
 
   color(p) {
     const i = this.partOn(p, 'color');
     if (i < 0) return null;
     const s = this.placeOf(i);
-    return matColor(s.x, s.z);
+    return this.env.color(s.x, s.z);
   }
 
   pressed(p) {
     const i = this.partOn(p, 'bumper');
     if (i < 0) return false;
     const s = this.placeOf(i);
-    const x = s.x + s.fx * (CELL * 0.65);
-    const z = s.z + s.fz * (CELL * 0.65);
-    if (Math.abs(x) >= MAT_W / 2 || Math.abs(z) >= MAT_D / 2) return true;
-    return this.bricks.some((b) => {
-      const box = brickBox(b);
-      return x >= box.x0 && x <= box.x1 && z >= box.z0 && z <= box.z1;
-    });
+    return this.env.solid(s.x + s.fx * (CELL * 0.65), s.z + s.fz * (CELL * 0.65));
   }
 
   test(c) {
@@ -905,23 +884,173 @@ export class RobotSim {
         this.bumped = true;
       } else this.bumped = true;
     }
+    this.env.settle?.(this);
   }
 
-  // Whether the robot at (x, z) turned to a would be in a brick or the fence.
+  // Whether the robot at (x, z) turned to a would be in something.
   hits(x, z, a) {
-    const R = CELL / 2;
     for (const [bx, bz] of this.body) {
       const [px, pz] = rot(a, bx, bz);
-      const cx = x + px;
-      const cz = z + pz;
-      if (Math.abs(cx) > MAT_W / 2 - R || Math.abs(cz) > MAT_D / 2 - R) return true;
-      for (const b of this.bricks) {
-        const box = brickBox(b);
-        const nx = Math.max(box.x0, Math.min(cx, box.x1));
-        const nz = Math.max(box.z0, Math.min(cz, box.z1));
-        if ((cx - nx) ** 2 + (cz - nz) ** 2 < R * R) return true;
-      }
+      if (this.env.blocked(x + px, z + pz, CELL / 2)) return true;
     }
     return false;
   }
+}
+
+// The play mat as a robot finds it: its fence, the toy bricks on it (their
+// grid places) and its print.
+export class MatEnv {
+  constructor(bricks = DEFAULT_BRICKS) {
+    this.bricks = bricks;
+  }
+
+  blocked(x, z, R) {
+    if (Math.abs(x) > MAT_W / 2 - R || Math.abs(z) > MAT_D / 2 - R) return true;
+    return this.bricks.some((b) => {
+      const box = brickBox(b);
+      const nx = Math.max(box.x0, Math.min(x, box.x1));
+      const nz = Math.max(box.z0, Math.min(z, box.z1));
+      return (x - nx) ** 2 + (z - nz) ** 2 < R * R;
+    });
+  }
+
+  solid(x, z) {
+    if (Math.abs(x) >= MAT_W / 2 || Math.abs(z) >= MAT_D / 2) return true;
+    return this.bricks.some((b) => {
+      const box = brickBox(b);
+      return x >= box.x0 && x <= box.x1 && z >= box.z0 && z <= box.z1;
+    });
+  }
+
+  // How far along (dx, dz) from (ox, oz) the first brick or the fence is.
+  ray(ox, oz, dx, dz) {
+    let best = Infinity;
+    for (const b of this.bricks) {
+      const box = brickBox(b);
+      let t0 = 0;
+      let t1 = Infinity;
+      let miss = false;
+      for (const [o, d, lo, hi] of [
+        [ox, dx, box.x0, box.x1],
+        [oz, dz, box.z0, box.z1],
+      ]) {
+        if (Math.abs(d) < 1e-9) {
+          if (o < lo || o > hi) miss = true;
+          continue;
+        }
+        let a = (lo - o) / d;
+        let c = (hi - o) / d;
+        if (a > c) [a, c] = [c, a];
+        t0 = Math.max(t0, a);
+        t1 = Math.min(t1, c);
+      }
+      if (!miss && t0 <= t1) best = Math.min(best, t0);
+    }
+    if (dx > 1e-9) best = Math.min(best, (MAT_W / 2 - ox) / dx);
+    if (dx < -1e-9) best = Math.min(best, (-MAT_W / 2 - ox) / dx);
+    if (dz > 1e-9) best = Math.min(best, (MAT_D / 2 - oz) / dz);
+    if (dz < -1e-9) best = Math.min(best, (-MAT_D / 2 - oz) / dz);
+    return best;
+  }
+
+  color(x, z) {
+    return matColor(x, z);
+  }
+}
+
+// ------------------------------------------------------------ on the island
+//
+// A robot let out of its kit drives on the island itself, as big as it
+// stands on its kit: BLOCK_CM centimetres to a block. It drives along the
+// floor it is on, stops at anything solid (blocks, furniture, people), can
+// never climb a step but falls off an edge to the floor below, and is lost
+// in water or lava. Its colour sensor sees the colour of the block under it,
+// so a line of black bricks on white ones is a track to follow.
+
+export const BLOCK_CM = 40;
+// How near a person a robot can drive, and how far up and down it sees them.
+const PERSON_CM = 12;
+
+// The colour a sensor makes of a block's own colour: the nearest it knows.
+const SEEN_RGB = Object.fromEntries(SEEN_COLORS.map((k) => [k, [1, 3, 5].map((i) => parseInt(COLORS[k].hex.slice(i, i + 2), 16))]));
+const seenCache = new Map();
+export function seenColorOf(hex) {
+  if (!seenCache.has(hex)) {
+    const rgb = [1, 3, 5].map((i) => parseInt(String(hex).slice(i, i + 2), 16) || 0);
+    let best = 'black';
+    let near = Infinity;
+    for (const [k, c] of Object.entries(SEEN_RGB)) {
+      const d = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2;
+      if (d < near) {
+        near = d;
+        best = k;
+      }
+    }
+    seenCache.set(hex, best);
+  }
+  return seenCache.get(hex);
+}
+
+export class IslandEnv {
+  // `level` is the layer of blocks it drives in (its floor is the one under);
+  // `people()` says where everyone is, in blocks: [{ x, y, z }].
+  constructor(world, level, people = () => []) {
+    this.world = world;
+    this.level = level;
+    this.people = people;
+    this.lost = false;
+  }
+
+  block(x, z, y = this.level) {
+    return BLOCKS[this.world.get(Math.floor(x / BLOCK_CM), y, Math.floor(z / BLOCK_CM))];
+  }
+
+  // Something solid at a point: a block in its layer, or someone standing there.
+  solid(x, z) {
+    if (this.block(x, z)?.solid) return true;
+    return this.people().some((p) => Math.abs(p.y - this.level) < 1.5 && Math.hypot(p.x * BLOCK_CM - x, p.z * BLOCK_CM - z) < PERSON_CM);
+  }
+
+  blocked(x, z, R) {
+    return [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R]].some(([dx, dz]) => this.solid(x + dx, z + dz));
+  }
+
+  ray(ox, oz, dx, dz, max) {
+    for (let t = 0; t <= max; t += 1) if (this.solid(ox + dx * t, oz + dz * t)) return t;
+    return Infinity;
+  }
+
+  color(x, z) {
+    const b = this.block(x, z, this.level - 1);
+    return b?.solid || b?.kind === 'water' || b?.kind === 'lava' ? seenColorOf(b.color) : 'black';
+  }
+
+  // After moving: nothing under its middle and it falls to the floor below;
+  // into water or lava and it is lost.
+  settle(sim) {
+    let fell = 0;
+    while (this.level > 1 && fell < 64 && !this.block(sim.x, sim.z, this.level - 1)?.solid) {
+      const under = this.block(sim.x, sim.z, this.level - 1);
+      if (under?.kind === 'water' || under?.kind === 'lava') {
+        this.lost = true;
+        return;
+      }
+      this.level--;
+      fell++;
+    }
+    if (this.level <= 1) this.lost = true;
+  }
+}
+
+// Where a robot sets off from a kit at (x, y, z) facing `front` (0 +x, 1 +z,
+// 2 -x, 3 -z): the middle of the cell in front, on its floor, heading out.
+// null when there is no room there.
+export function startFrom(world, x, y, z, front) {
+  const [dx, dz] = [[1, 0], [0, 1], [-1, 0], [0, -1]][front] ?? [0, -1];
+  const cx = x + dx;
+  const cz = z + dz;
+  let level = y;
+  while (level > y - 3 && !BLOCKS[world.get(cx, level - 1, cz)]?.solid) level--;
+  if (!BLOCKS[world.get(cx, level - 1, cz)]?.solid || BLOCKS[world.get(cx, level, cz)]?.solid) return null;
+  return { x: (cx + 0.5) * BLOCK_CM, z: (cz + 0.5) * BLOCK_CM, a: Math.atan2(dx, -dz), level };
 }

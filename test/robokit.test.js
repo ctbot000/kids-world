@@ -12,6 +12,10 @@ import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
 import {
   analyse,
+  BLOCK_CM,
+  IslandEnv,
+  seenColorOf,
+  startFrom,
   cleanCode,
   cleanKit,
   cleanParts,
@@ -244,7 +248,8 @@ test('runs are counted, with XP and the Robot Maker sticker for 10', () => {
 });
 
 function island() {
-  const room = new Room({ code: '123456', theme: 'sunny', name: 'Sunny Cove', seed: 42 });
+  const time = { t: 1e6 };
+  const room = new Room({ code: '123456', theme: 'sunny', name: 'Sunny Cove', seed: 42, now: () => time.t });
   const conn = () => {
     const c = { inbox: [] };
     c.send = (text) => c.inbox.push(JSON.parse(text));
@@ -262,7 +267,17 @@ function island() {
   const y = room.world.top(x, z) + 1;
   room.world.set(x, y, z, B.ROBOT_KIT);
   p.s = [x - 0.5, y, z + 0.5, 0, 0, 0];
-  return { room, conn, a, b, pid, p, x, y, z };
+  return { room, conn, a, b, pid, p, x, y, z, time };
+}
+
+// A floor of snow round (x, y - 1, z), clear above it.
+function floor(room, x, y, z) {
+  for (let dx = -2; dx <= 8; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      room.world.set(x + dx, y - 1, z + dz, B.SNOW);
+      for (let dy = 0; dy < 3; dy++) if (dx || dz || dy) room.world.set(x + dx, y + dy, z + dz, B.AIR);
+    }
+  }
 }
 
 test('the island keeps a kit\'s robot from someone at it, passes it on, tells newcomers, saves it, and drops it with its kit', () => {
@@ -292,4 +307,75 @@ test('the island keeps a kit\'s robot from someone at it, passes it on, tells ne
   assert.equal(room.kits.size, 0);
   assert.deepEqual(b.all('kit').at(-1), { t: 'kit', at: [x, y, z], kit: null });
   assert.equal(room.exportSave().kits, undefined, 'none saved');
+});
+
+test('on the island a block\'s colour is seen as the nearest colour the sensor knows, and a robot sets off in front of its kit', () => {
+  assert.equal(seenColorOf('#2c2f36'), 'black');
+  assert.equal(seenColorOf('#f7f5ef'), 'white');
+  assert.equal(seenColorOf('#6cc24a'), 'green');
+  const cells = new Map();
+  const world = { get: (x, y, z) => cells.get(`${x},${y},${z}`) ?? (y < 5 ? B.STONE : B.AIR) };
+  // Facing +x: the cell in front, on its floor, heading +x.
+  const s = startFrom(world, 10, 5, 10, 0);
+  assert.deepEqual(s, { x: 11.5 * BLOCK_CM, z: 10.5 * BLOCK_CM, a: Math.PI / 2, level: 5 });
+  cells.set('11,5,10', B.STONE);
+  assert.equal(startFrom(world, 10, 5, 10, 0), null, 'no room in front');
+  // A wall ahead: the distance sensor sees it, and the robot stops short.
+  cells.delete('11,5,10');
+  cells.set('14,5,10', B.STONE);
+  const env = new IslandEnv(world, 5);
+  assert.equal(env.ray(11.5 * BLOCK_CM, 10.5 * BLOCK_CM, 1, 0, 200), 2.5 * BLOCK_CM);
+  const sim = new RobotSim(cleanParts([...template('car').parts, { k: 'distance', x: 3, z: 2 }]), env);
+  sim.reset(startFrom(world, 10, 5, 10, 0));
+  sim.start(cleanCode([{ op: 'go', dir: 'fwd' }, { op: 'until', c: { s: 'near', p: 'C', cm: 5 } }, { op: 'halt' }]));
+  runFor(sim, 20);
+  assert.equal(sim.running, false, 'it saw the wall and stopped');
+  assert.ok(sim.x < 14 * BLOCK_CM && sim.x > 12.5 * BLOCK_CM, `short of the wall (${(sim.x / BLOCK_CM).toFixed(2)})`);
+  // Off the edge of a step it falls to the floor below; into water it is lost.
+  for (let x = 12; x < 20; x++) cells.set(`${x},4,10`, B.AIR);
+  cells.delete('14,5,10');
+  const fall = new RobotSim(cleanParts(template('car').parts), new IslandEnv(world, 5));
+  fall.reset(startFrom(world, 10, 5, 10, 0));
+  fall.start(cleanCode([{ op: 'move', dir: 'fwd', cm: 60 }]));
+  runFor(fall, 8);
+  assert.equal(fall.env.level, 4);
+  assert.ok(!fall.env.lost);
+  for (let x = 12; x < 20; x++) cells.set(`${x},3,10`, B.WATER);
+  const sink = new RobotSim(cleanParts(template('car').parts), new IslandEnv(world, 5));
+  sink.reset(startFrom(world, 10, 5, 10, 0));
+  sink.start(cleanCode([{ op: 'move', dir: 'fwd', cm: 60 }]));
+  runFor(sink, 8);
+  assert.ok(sink.env.lost);
+});
+
+test('a robot let out of its kit drives on the island for everyone, beeps, and is called back', () => {
+  const { room, a, b, x, y, z, time } = island();
+  floor(room, x, y, z);
+  const id = B.turnedTo(B.ROBOT_KIT, 0);
+  room.world.set(x, y, z, id);
+  const t = template('car');
+  room.receive(a, { t: 'kit', at: [x, y, z], kit: { parts: t.parts, code: [{ op: 'beep', note: 64, sec: 0.2 }, { op: 'move', dir: 'fwd', cm: 40 }] } });
+  room.receive(a, { t: 'kitrun', at: [x, y, z], op: 'run' });
+  const out = b.all('bots').at(-1).b;
+  assert.equal(out.length, 1);
+  assert.equal(out[0].k, `${x},${y},${z}`);
+  assert.ok(Math.abs(out[0].x - (x + 1.5)) < 0.01 && out[0].y === y);
+  for (let i = 0; i < 60; i++) {
+    time.t += 100;
+    room.tick();
+  }
+  const now = b.all('bots').at(-1).b[0];
+  assert.ok(Math.abs(now.x - (x + 2.5)) < 0.05, `a block on (${now.x - x})`);
+  assert.equal(now.r, false, 'its program done, it waits there');
+  assert.deepEqual(b.all('botbeep')[0], { t: 'botbeep', k: `${x},${y},${z}`, n: 64, s: 0.2 });
+  // Newcomers see it out; editing the kit calls it back.
+  room.receive(a, { t: 'kitrun', at: [x, y, z], op: 'run' });
+  assert.equal(room.packBots().length, 1);
+  room.receive(a, { t: 'kitrun', at: [x, y, z], op: 'home' });
+  assert.deepEqual(b.all('bots').at(-1).b, []);
+  // No program, or no room in front: it stays in.
+  room.world.set(x + 1, y, z, B.STONE);
+  room.receive(a, { t: 'kitrun', at: [x, y, z], op: 'run' });
+  assert.equal(room.bots.size, 0);
+  assert.match(a.all('notice').at(-1).text, /no room/);
 });

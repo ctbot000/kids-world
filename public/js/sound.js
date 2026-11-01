@@ -876,11 +876,12 @@ export class Sound {
 
   // A robot hub's speaker beeping MIDI note n for sec seconds: a little
   // square wave, buzzy as a small speaker is, with a soft edge.
-  beep(n, sec = 0.5) {
+  // `gain` softer from further away.
+  beep(n, sec = 0.5, gain = 1) {
     if (!this.ready) return;
     const f = NOTE(n);
-    this.tone(f, { type: 'square', attack: 0.005, decay: Math.max(0.08, sec), gain: 0.06 });
-    this.tone(f * 2, { type: 'sine', attack: 0.005, decay: Math.max(0.06, sec * 0.6), gain: 0.03 });
+    this.tone(f, { type: 'square', attack: 0.005, decay: Math.max(0.08, sec), gain: 0.06 * gain });
+    this.tone(f * 2, { type: 'sine', attack: 0.005, decay: Math.max(0.06, sec * 0.6), gain: 0.03 * gain });
   }
 
   // A clap of thunder after lightning `distance` away: a crack when it is

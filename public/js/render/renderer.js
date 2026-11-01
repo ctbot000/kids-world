@@ -920,6 +920,7 @@ export class Renderer {
     this.effects.update(dt);
     this.drawings.update();
     this.goBoards.update();
+    this.robotKits.update(dt);
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;

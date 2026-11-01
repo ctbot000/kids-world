@@ -16,7 +16,7 @@ import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
 
 const STUD_RADIUS = 0.25;
-const STUD_HEIGHT = 0.13;
+export const STUD_HEIGHT = 0.13;
 const STUD_DISTANCE = 56;
 // Blocks right in front of the camera dissolve: from none of a surface at the
 // first distance (along the view) to all of it at the second. Half is gone
