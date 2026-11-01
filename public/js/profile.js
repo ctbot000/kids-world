@@ -11,7 +11,7 @@ import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.
 import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
-import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanPotions, COINS_MAX, fixPrice, ISLAND_PRICE, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
+import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanKeys, cleanPotions, COINS_MAX, KEYS_MAX, fixPrice, ISLAND_PRICE, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -37,6 +37,9 @@ function clean(raw) {
     basket,
     coins: cleanCoins(p.coins),
     potions: cleanPotions(p.potions),
+    // Keys for Adventure Isle's treasure chests (treasure.js), earned by
+    // solving quizzes there: only ever in the isle's own world of you.
+    keys: cleanKeys(p.keys),
     gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
@@ -45,7 +48,7 @@ function clean(raw) {
     hotbar,
     seenHelp: p.seenHelp === true,
     made: p.made === true,
-    // When your name, look, basket, coins, potions or gear last changed: 0 for a profile nobody has
+    // When your name, look, basket, coins, potions, keys or gear last changed: 0 for a profile nobody has
     // touched yet, which loses to any other when two are merged.
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
@@ -252,6 +255,30 @@ export class Profile extends EventTarget {
     }
     this.count('capsules');
     this.count('capsuletoys', toysFound(this.data.gear.toys), { max: true });
+  }
+
+  // A key for a treasure chest (treasure.js): one more earned, or one used
+  // up opening a chest. Each says whether it happened.
+  addKey() {
+    if (this.data.keys >= KEYS_MAX) return false;
+    this.data.keys++;
+    this.shopped();
+    return true;
+  }
+
+  // An HP potion found (in a treasure chest): into your pocket for free.
+  findPotion() {
+    if (this.data.potions >= 999) return false;
+    this.data.potions++;
+    this.shopped();
+    return true;
+  }
+
+  useKey() {
+    if (this.data.keys < 1) return false;
+    this.data.keys--;
+    this.shopped();
+    return true;
   }
 
   // One drunk (the island's half of it is game.js drink): out of your pocket.

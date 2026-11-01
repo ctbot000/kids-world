@@ -31,6 +31,7 @@ import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
+import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
@@ -2349,7 +2350,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. With nothing in your hand, hold it down for a second and let go for a 👑 King Punch that bops everything in front of you! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
-          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one!']),
+          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: press 🔒 by one and solve a quiz for a 🔑 key, then open it for coins.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school, Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
@@ -3342,6 +3343,7 @@ export class UI {
     });
     on('arcade-open', () => this.arcadeDialog());
     on('gasha-open', () => this.gashaDialog());
+    on('chest-open', () => this.chestDialog());
     on('gasha-gone', () => this.gashaShow?.());
     on('piano-open', () => this.pianoDialog());
     // Off the bench (bumped, sent home, or the piano picked up): its keyboard goes.
@@ -4813,7 +4815,7 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.seat && g.escapeTarget) {
+    if (!g.riding && !g.aboard && !g.seat && (g.escapeTarget || (g.chestTarget && !g.rideTarget))) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4935,13 +4937,20 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const puzzle = t === g.escapeTarget ? { button: ['👆 Press', `Press the ${B.ESCAPE_COLORS[t.color]?.[1].toLowerCase()} button`], crate: ['📦 Open', 'Open the crate'], dial: ['🔢 Turn', 'Turn the dial to the next number'] }[t.kind] : null;
+    const puzzle =
+      t === g.escapeTarget
+        ? { button: ['👆 Press', `Press the ${B.ESCAPE_COLORS[t.color]?.[1].toLowerCase()} button`], crate: ['📦 Open', 'Open the crate'], dial: ['🔢 Turn', 'Turn the dial to the next number'] }[t.kind]
+        : t === g.chestTarget
+          ? g.profile.data.keys > 0
+            ? ['🗝️ Open', 'Open the treasure chest with a key']
+            : ['🔒 Locked', 'The treasure chest is locked: solve a quiz for a key']
+          : null;
     const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
@@ -7422,6 +7431,10 @@ export class UI {
       els.status.textContent = status;
     }
     // All answered, and past the last one's answer: the results.
+    if (q.done && this.quizAt >= total && q.chest) {
+      this.chestQuizResult(q);
+      return;
+    }
     if (q.done && this.quizAt >= total) {
       const perfect = q.right === total;
       const coins = q.coins ?? quizCoins(q.right, q.level);
@@ -7474,6 +7487,74 @@ export class UI {
       answered
         ? h('button', { class: 'big green', type: 'button', onclick: () => { this.sound.play('ui'); this.quizAt++; this.renderQuiz(); } }, this.quizAt === total - 1 ? 'How you did ▶' : 'Next ▶')
         : '',
+    );
+  }
+
+  // ------------------------------------------------ treasure chests
+
+  // A locked treasure chest on Adventure Isle with no key to open it (game.js
+  // useChest, shared/treasure.js): a quiz to pick, each one question, and
+  // answered right, a key.
+  chestDialog() {
+    const g = this.game;
+    if (!g?.chestAt) return;
+    const keys = g.profile.data.keys;
+    this.openModal(
+      (root) => {
+        const list = h(
+          'div',
+          { class: 'class-list' },
+          Object.values(QUIZ_LEVELS).map((l) =>
+            h(
+              'button',
+              {
+                class: `big ${l.color}`,
+                type: 'button',
+                onclick: () => {
+                  this.sound.unlock();
+                  this.sound.play('ui');
+                  g.startKeyQuiz(l.key);
+                },
+              },
+              h('span', { class: 'emoji' }, l.icon),
+              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, 'One question · 🔑 a key if you get it right')),
+            ),
+          ),
+        );
+        root.append(
+          h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, '🧰🔒'),
+          h('h2', {}, '🔒 A treasure chest!'),
+          h('p', {}, `It is locked, and you have ${keys === 1 ? 'one key' : keys ? `${keys} keys` : 'no key'}. Solve a quiz to earn a 🔑 key, then open it for the treasure inside!`),
+          list,
+        );
+      },
+      { narrow: true },
+    );
+  }
+
+  // A key quiz answered: a key, and the chest to open with it (if it is still
+  // locked), or another question to try.
+  chestQuizResult(q) {
+    const g = this.game;
+    const els = this.quizEls;
+    if (!q.key) {
+      els.box.replaceChildren(
+        h('div', { class: 'quiz-result' }, '🔒 No key this time'),
+        h('p', { class: 'quiz-credit' }, 'Not quite! Try another question for a key.'),
+        h('button', { class: `big ${QUIZ_LEVELS[q.level].color}`, type: 'button', onclick: () => { this.sound.play('ui'); g.startKeyQuiz(q.level); } }, h('span', { class: 'emoji' }, '🔁'), ' Another question'),
+        h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
+      );
+      return;
+    }
+    const { x, y, z } = q.chest;
+    const locked = isChest(g.world?.get(x, y, z));
+    els.box.replaceChildren(
+      h('div', { class: 'quiz-result perfect' }, '🔑 You earned a key!'),
+      h('p', { class: 'quiz-credit' }, `Right! You have 🔑 ${g.profile.data.keys} ${g.profile.data.keys === 1 ? 'key' : 'keys'} now.`, q.xp ? ` And ⭐ ${q.xp} XP.` : ''),
+      locked
+        ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); g.chestAt = { x, y, z }; g.openChest(); this.closeModal(); } }, h('span', { class: 'emoji' }, '🗝️'), ' Open the chest')
+        : h('p', { class: 'muted' }, 'Somebody opened this chest already — keep your key for the next one!'),
+      h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, locked ? 'Later' : 'Done'),
     );
   }
 

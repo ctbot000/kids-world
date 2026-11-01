@@ -61,6 +61,13 @@ function pianoKeys(x0, x1, y, z0, z1) {
   return out;
 }
 
+// A treasure chest's box, and the gold bands round it from the ground up
+// to `top`, over the lid when it is shut.
+const GOLD = '#f2c03a';
+const chestBody = () => [box(0.12, 0, 0.22, 0.88, 0.46, 0.82, '#a8692f', 'planks')];
+const chestBands = (top) =>
+  [0.2, 0.72].flatMap((x) => [box(x, 0, 0.2, x + 0.08, top, 0.21, GOLD, 'plain'), box(x, top, 0.2, x + 0.08, top + 0.01, 0.84, GOLD, 'plain'), box(x, 0, 0.83, x + 0.08, top, 0.84, GOLD, 'plain')]);
+
 const MODELS = {
   chair() {
     const out = [];
@@ -607,6 +614,28 @@ const MODELS = {
       box(0.68, 0.3, 0.27, 0.78, 0.35, 0.32, '#35a852', 'plain'),
     ];
     return out;
+  },
+
+  // A treasure chest (shared/treasure.js): a wooden box with gold bands
+  // round it, a gold lock on the front with a keyhole, and its lid shut.
+  'treasure-chest'() {
+    return [...chestBody(), box(0.1, 0.46, 0.2, 0.9, 0.66, 0.84, '#8b4f22', 'planks'), ...chestBands(0.66), box(0.42, 0.3, 0.17, 0.58, 0.5, 0.2, GOLD, 'plain'), box(0.48, 0.34, 0.165, 0.52, 0.43, 0.17, BLACK, 'plain')];
+  },
+
+  // The chest opened: its lid thrown back, and gold coins heaped up inside
+  // with a jewel or two among them, glowing.
+  'treasure-chest-open'() {
+    return [
+      ...chestBody(),
+      box(0.1, 0.46, 0.84, 0.9, 1.02, 0.94, '#8b4f22', 'planks'),
+      box(0.18, 0.46, 0.83, 0.24, 1.02, 0.95, GOLD, 'plain'),
+      box(0.76, 0.46, 0.83, 0.82, 1.02, 0.95, GOLD, 'plain'),
+      box(0.14, 0.4, 0.24, 0.86, 0.5, 0.8, GOLD, 'glow'),
+      box(0.28, 0.5, 0.36, 0.66, 0.56, 0.68, GOLD, 'glow'),
+      box(0.36, 0.5, 0.4, 0.46, 0.6, 0.5, '#e8453c', 'glow'),
+      box(0.56, 0.5, 0.52, 0.64, 0.58, 0.6, '#3fb6e8', 'glow'),
+      box(0.42, 0.24, 0.17, 0.58, 0.4, 0.2, GOLD, 'plain'),
+    ];
   },
 
   // A gashapon, a capsule toy machine (shared/gashapon.js): a red stand

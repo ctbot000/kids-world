@@ -67,7 +67,7 @@ import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
 import { addToys } from './gashapon.js';
 import { cleanGallery, joinGalleries } from './drawing.js';
-import { cleanCoins, cleanGear, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
+import { cleanCoins, cleanGear, cleanKeys, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
 export const KEEPER_VERSION = 2;
@@ -184,7 +184,7 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
 export const KEPT_MAX = 256;
 
 // What is kept of a profile: your name and look, your basket, coins,
-// potions and gear from the shop, what you have done and the stickers it
+// potions and gear from the shop, chest keys (the isle's own world of you), what you have done and the stickers it
 // earned, when your name, look, basket, coins, potions or gear last
 // changed, and your gallery of drawings (drawing.js). Never your tokens,
 // which let you back into islands as yourself, nor your settings. The page
@@ -210,6 +210,7 @@ export function keptProfile(raw) {
     basket,
     coins: cleanCoins(p.coins),
     potions: cleanPotions(p.potions),
+    keys: cleanKeys(p.keys),
     gear: cleanGear(p.gear),
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, KEPT_MAX),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, KEPT_MAX),
@@ -266,7 +267,7 @@ export function usernameProblem(v) {
 }
 
 // One player's profile from two devices, put together: the name, look,
-// basket, coins, potions and gear from whichever changed them last, every
+// basket, coins, potions, keys and gear from whichever changed them last, every
 // sticker either has earned (dated the earlier day), and the most either has
 // done of everything.
 export function mergeProfiles(mine, theirs) {
@@ -280,7 +281,7 @@ export function mergeProfiles(mine, theirs) {
   // The gallery as it was last changed, on whichever device: a picture taken
   // down on one stays down.
   const gallery = b.gallery.changedAt > a.gallery.changedAt ? b.gallery : a.gallery;
-  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
+  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, keys: newer.keys, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
 }
 
 // Stats that are the best there has ever been, not a count to add up.
@@ -307,7 +308,7 @@ export function addProgress(player, guest) {
   gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
-  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), gear, gallery: joinGalleries(a.gallery, b.gallery) };
+  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:

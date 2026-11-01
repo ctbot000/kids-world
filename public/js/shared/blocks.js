@@ -524,6 +524,13 @@ export const DIALS = DIAL_COLORS.map((c) => {
   return base;
 });
 
+// ---------------------------------------------------------------- treasure chests
+// Treasure chests on Adventure Isle (treasure.js): locked, until someone
+// with a key opens one, and then open with its gold showing, for a while,
+// before it goes. Only the island puts them down or takes them away.
+export const CHEST = furniture(371, 'treasure-chest', { name: 'Treasure Chest', color: '#a8692f', category: false, light: 4, sound: 'wood', islandOnly: true });
+export const CHEST_OPEN = furniture(375, 'treasure-chest-open', { name: 'Open Treasure Chest', color: '#a8692f', category: false, light: 9, sound: 'wood', islandOnly: true });
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),

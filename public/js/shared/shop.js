@@ -152,6 +152,10 @@ export const seedPrice = (key) => SEED_PRICES[key] ?? 0;
 // Potions as kept: a whole number, never silly (like coins, but no more than
 // a basket holds).
 export const cleanPotions = (n) => (Number.isInteger(n) && n > 0 ? Math.min(999, n) : 0);
+// Keys for Adventure Isle's treasure chests (treasure.js), earned by solving
+// quizzes there: KEYS_MAX at the most.
+export const KEYS_MAX = 99;
+export const cleanKeys = (n) => (Number.isInteger(n) && n > 0 ? Math.min(KEYS_MAX, n) : 0);
 
 // What a level of gear does, for the shop.
 export const levelDoes = (level) => level.does ?? `${Math.round((level.boost - 1) * 100)}% faster.`;

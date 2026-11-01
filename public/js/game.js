@@ -46,6 +46,7 @@ import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
+import { chestNear, chestTreasure } from './shared/treasure.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
@@ -529,6 +530,9 @@ export class Game extends EventTarget {
         break;
       case 'gasha':
         this.gashaNews(msg);
+        break;
+      case 'chest':
+        this.chestNews(msg);
         break;
       case 'freed':
         this.campFreed(msg);
@@ -2339,6 +2343,19 @@ export class Game extends EventTarget {
     }
     // The last one answered: the quiz is done, and the extra credit is yours.
     q.done = true;
+    // A quiz at a treasure chest pays a key, and nothing else: not coins,
+    // XP or the quizzes' counts, which a question after question at a chest
+    // would pile up (the chest pays when it is opened).
+    if (q.chest) {
+      q.coins = 0;
+      q.xp = 0;
+      if (q.right === q.questions.length && this.profile.addKey()) {
+        q.key = true;
+        this.profile.count('keys');
+      }
+      this.emit('quiz');
+      return right;
+    }
     q.coins = quizCoins(q.right, q.level);
     q.xp = XP_FOR.quizzes.xp + q.right * XP_FOR.quizright.xp + (q.right === q.questions.length ? XP_FOR.quizperfect.xp : 0);
     if (q.school) this.classEnded[q.level] = performance.now();
@@ -2359,6 +2376,62 @@ export class Game extends EventTarget {
     if (!this.quizOffer || this.quizOffer.taken[level] || !QUIZ_LEVELS[level]) return;
     this.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0), picks: [], right: 0, done: false };
     this.emit('quiz');
+  }
+
+  // ------------------------------------------------ treasure chests
+
+  // Q (or the Open button) by a locked treasure chest on Adventure Isle
+  // (shared/treasure.js): with a key, the island is asked to open it (the
+  // key is spent once it says you did, chestNews); without, the quizzes
+  // that earn one are offered (ui.js chestDialog).
+  useChest() {
+    const t = this.chestTarget;
+    if (!t) return;
+    this.chestAt = t;
+    if (this.profile.data.keys > 0) {
+      this.openChest();
+      return;
+    }
+    this.sound.play('ui');
+    this.emit('chest-open');
+  }
+
+  // A key turned in the chest you are by (the one the window is for, or
+  // the one beside you).
+  openChest() {
+    const t = this.chestAt ?? this.chestTarget;
+    if (!t || this.profile.data.keys < 1) return;
+    this.send({ t: 'chest', at: [t.x, t.y, t.z] });
+  }
+
+  // A key quiz at a chest: one question of the level picked, which earns a
+  // key if it is answered right. Says 'quiz', which opens the window on it.
+  startKeyQuiz(level) {
+    const t = this.chestAt ?? this.chestTarget;
+    if (!t || !QUIZ_LEVELS[level]) return;
+    this.chestAt = t;
+    this.quiz = { level, chest: { x: t.x, y: t.y, z: t.z }, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0), picks: [], right: 0, done: false };
+    this.emit('quiz');
+  }
+
+  // A chest opened, as the island tells of it: by you, your key is spent
+  // and the treasure is yours; by anyone, heard and seen by whoever is near.
+  chestNews(msg) {
+    const { x, y, z } = msg;
+    if (![x, y, z].every(Number.isInteger)) return;
+    if (this.near(x + 0.5, y, z + 0.5, 30)) this.renderer.effects.sparkles(x + 0.5, y + 0.8, z + 0.5, 24, ['#ffd84d', '#fff3b0', '#ffffff']);
+    if (msg.by !== this.pid) {
+      if (this.near(x + 0.5, y, z + 0.5, 20)) this.sound.play('open');
+      return;
+    }
+    this.profile.useKey();
+    const got = chestTreasure(Math.random, this.adventure?.stage ?? 1);
+    this.profile.earn(got.coins);
+    if (got.potion) got.potion = this.profile.findPotion();
+    this.profile.count('chests');
+    this.sound.play('fanfare');
+    this.emit('reward', { x: x + 0.5, y: y + 1, z: z + 0.5, xp: XP_FOR.chests.xp });
+    this.emit('toast', { icon: '💰', text: `You opened the treasure chest: 🪙 ${got.coins} coins${got.potion ? ' and a 🧪 HP potion' : ''}!` });
   }
 
   // The quiz window closed: a quiz half done simply goes, to be begun afresh
@@ -3641,6 +3714,10 @@ export class Game extends EventTarget {
     }
     if (this.escapeTarget) {
       this.useEscape();
+      return;
+    }
+    if (this.chestTarget && !this.rideTarget) {
+      this.useChest();
       return;
     }
     const id = this.rideTarget;
@@ -5700,6 +5777,9 @@ export class Game extends EventTarget {
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
+    // On Adventure Isle, a locked treasure chest beside you.
+    const chest = this.shared && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? chestNear(this.world, on) : null;
+    this.chestTarget = chest && !chest.open ? chest : null;
     // A hula hoop put down beside you: in reach to spin it. Only on foot,
     // standing on the ground, and not spinning one already.
     this.hoopTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !this.hooping && !on.flying && on.onGround ? this.hoopNear(on) : 0;
@@ -6247,6 +6327,8 @@ export class Game extends EventTarget {
     this.computerTarget = null;
     this.tankTarget = null;
     this.escapeTarget = null;
+    this.chestTarget = null;
+    this.chestAt = null;
     this.hooping = null;
     this.hoopTarget = 0;
     this.renderer.screens.clear();

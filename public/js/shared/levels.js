@@ -79,6 +79,8 @@ export const XP_FOR = {
   capsuletoys: { xp: 10 },
   monsterfigs: { xp: 3, cap: 500 },
   monstertoys: { xp: 15 },
+  chests: { xp: 10 },
+  keys: { xp: 5, cap: 500 },
   notes: { xp: 0.1, cap: 1000 },
   tunes: { xp: 10, cap: 200 },
   channels: { xp: 1, cap: 200 },

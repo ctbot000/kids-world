@@ -33,6 +33,7 @@ import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
+import { CHEST_REACH } from './treasure.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
@@ -583,6 +584,9 @@ export class Room {
         break;
       case 'escape':
         this.escapeOp(conn, p, msg);
+        break;
+      case 'chest':
+        this.chestOp(conn, p, msg);
         break;
       case 'go':
         this.goOp(conn, p, msg);
@@ -1335,6 +1339,14 @@ export class Room {
     this.stepDragons(now, where);
     // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
     if (this.adventure && this.shared) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
+    // So do its treasure chests: put down, and gone a while after they open.
+    if (this.adventure && this.shared) {
+      const cells = this.adventure.stepChests(this.world, now).flat();
+      if (cells.length) {
+        this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+        this.changed();
+      }
+    }
     this.keepApart(where);
     // The volcano's own dangers and chores: lava burns whoever stands in it,
     // water boils away and ice melts, and HP comes back whatever took it.
@@ -2351,6 +2363,21 @@ export class Room {
       if (isMonsterGashapon(this.world.get(x, y, z))) this.natureCell([x, y, z], B.AIR);
       this.broadcast({ t: 'gasha', x, y, z, gone: true });
     }
+  }
+
+  // Someone with a key opening a treasure chest on the shared isle
+  // (treasure.js), standing by it: it opens for everyone, and everyone hears
+  // who opened it ({ t: 'chest', x, y, z, by }) — the one who did spends
+  // their key and gets what is inside.
+  chestOp(conn, p, msg) {
+    if (!this.adventure || !this.shared || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
+    const [x, y, z] = msg.at;
+    if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > CHEST_REACH || Math.abs(p.s[1] - y) > 3) return;
+    const cells = this.adventure.chests.open(this.world, x, y, z, this.now());
+    if (!cells) return;
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    this.broadcast({ t: 'chest', x, y, z, by: p.id });
+    this.changed();
   }
 
   // The gloomy ground round a camp back to the island's own, with flowers.

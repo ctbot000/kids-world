@@ -35,6 +35,7 @@ import { MOVE } from './physics.js';
 import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
+import { Chests } from './treasure.js';
 
 // A camp's fence goes round this far from its flag; King Grumble's castle
 // is a square this far from its middle to its walls.
@@ -468,6 +469,15 @@ export class AdventureSim {
     this.gasha = null;
     this.gashaNext = 0;
     this.gashaRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
+    // The treasure chests (treasure.js), on the shared isle only, with
+    // randomness of their own too.
+    this.chests = new Chests((seed ^ 0x85ebca6b) >>> 0);
+  }
+
+  // The treasure chests, now and then (the room asks only on the shared
+  // isle): the cells that changed, [x, y, z, id] each.
+  stepChests(world, now) {
+    return this.chests.step(world, now, { stage: this.stage, camps: this.camps });
   }
 
   // Whether there is anything left to free.
@@ -803,10 +813,10 @@ export class AdventureSim {
     };
   }
 
-  // (The Monster Gashapon goes when the island is put away: where it stood
-  // is kept only so that load can take it away.)
+  // (The Monster Gashapon and the treasure chests go when the island is put
+  // away: where they stood is kept only so that load can take them away.)
   save() {
-    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won, stage: this.stage, ...(this.gasha ? { gasha: [this.gasha.x, this.gasha.y, this.gasha.z] } : {}) };
+    return { camps: this.camps.map(({ id, kind, x, y, z, r, freed }) => ({ id, kind, x, y, z, r, freed })), won: this.won, stage: this.stage, ...(this.gasha ? { gasha: [this.gasha.x, this.gasha.y, this.gasha.z] } : {}), ...(this.chests.list.length ? { chests: this.chests.save() } : {}) };
   }
 
   // An adventure as saved, checked, or null for none.
@@ -825,6 +835,8 @@ export class AdventureSim {
       const [x, y, z] = raw.gasha;
       if (world.inBounds(x, y, z) && isMonsterGashapon(world.get(x, y, z))) world.set(x, y, z, B.AIR);
     }
+    // So have its treasure chests: new ones come.
+    Chests.clear(world, raw.chests);
     return camps.length ? new AdventureSim({ camps, won: raw.won === true, stage: cleanStage(raw.stage) }, seed) : null;
   }
 }

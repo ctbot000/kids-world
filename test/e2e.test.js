@@ -6230,6 +6230,62 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.browserContext().close();
 });
 
+test('a treasure chest on Adventure Isle: Q with no key offers a quiz, one answered right is a key, and the key opens the chest for its treasure', { skip }, async () => {
+  const page = await openPlayer(base, { name: 'Keen Owl' });
+  await clickButton(page, '⚔️ Adventure');
+  await clickButton(page, 'Adventure Isle');
+  await inGame(page);
+  await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
+  const room = server.publicAdventure.room;
+  const c = room.adventure.chests.list.find((o) => !o.openedAt);
+  assert.ok(c, 'chests about the isle');
+  // Nothing rideable near it to take the button.
+  for (const o of [...room.critters.list]) {
+    if (Math.hypot(o.x - c.x, o.z - c.z) < 16) {
+      room.critters.remove(o.id);
+      room.broadcast({ t: 'cdel', id: o.id, by: 0 });
+    }
+  }
+  await page.evaluate((c) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: c.x + 0.5, y: c.y + 0.2, z: c.z - 0.9, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+  }, { x: c.x, y: c.y, z: c.z });
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
+  const coins = await page.evaluate(() => window.kidsWorld.isle.data.coins);
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('treasure chest'));
+  // A wrong answer: no key, and another question to try.
+  await clickButton(page, 'Thinking Math', '#modal');
+  await until(page, () => window.kidsWorld.game.quiz?.chest && document.querySelector('#modal .quiz-answer'));
+  await page.evaluate(() => {
+    const ask = window.kidsWorld.game.quiz.questions[0];
+    document.querySelectorAll('#modal .quiz-answer')[(ask.answer + 1) % ask.choices.length].click();
+  });
+  await clickButton(page, 'How you did', '#modal');
+  await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('No key'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.keys), 0);
+  // Right: a key, and the chest opened with it.
+  await clickButton(page, 'Another question', '#modal');
+  await until(page, () => window.kidsWorld.game.quiz?.picks.length === 0 && document.querySelector('#modal .quiz-answer'));
+  await page.evaluate(() => document.querySelectorAll('#modal .quiz-answer')[window.kidsWorld.game.quiz.questions[0].answer].click());
+  await clickButton(page, 'How you did', '#modal');
+  await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('You earned a key'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.keys), 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.coins), coins, 'a key, not coins');
+  assert.deepEqual(await page.evaluate(() => [window.kidsWorld.isle.data.stats.quizzes, window.kidsWorld.isle.data.stats.keys]), [0, 1], 'nor a quiz to count');
+  await clickButton(page, 'Open the chest', '#modal');
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) >= 375 && window.kidsWorld.isle.data.stats.chests === 1, { x: c.x, y: c.y, z: c.z });
+  const after = await page.evaluate(() => ({ keys: window.kidsWorld.isle.data.keys, coins: window.kidsWorld.isle.data.coins, home: window.kidsWorld.profile.data.stats.chests }));
+  assert.equal(after.keys, 0, 'the key spent');
+  assert.ok(after.coins >= coins + 7, 'the treasure');
+  assert.equal(after.home, 0, 'in the isle’s own world of you');
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('opened the treasure chest')));
+  // Open, it has no button.
+  await until(page, () => document.getElementById('ride').hidden || !document.getElementById('ride').textContent.includes('Locked'));
+  await page.browserContext().close();
+});
+
 test('a tornado sweeps you up out in the open, spins you round and flings you out; a roof over your head keeps you safe', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false });

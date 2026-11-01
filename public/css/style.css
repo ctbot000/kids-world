@@ -4864,6 +4864,13 @@ button.go-pt {
   text-align: center;
 }
 
+/* A locked treasure chest's window: the chest, big, over its quizzes. */
+.chest-pic {
+  font-size: 3.4rem;
+  line-height: 1;
+  text-align: center;
+}
+
 /* A chalkboard's classes, one big button each, a little apart. */
 .class-list {
   display: flex;
