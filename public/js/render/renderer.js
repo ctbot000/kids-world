@@ -20,7 +20,7 @@ import { raycast } from '../shared/raycast.js';
 import { MAX_EDIT_CELLS } from '../shared/tools.js';
 import { lookHair, lookTall } from '../shared/words.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
-import { ANIM, Avatar } from './avatar.js';
+import { ANIM, Avatar, weapon } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
 import { GoBoards } from './go-boards.js';
@@ -405,10 +405,11 @@ export class Renderer {
   // straight on, for 🎨 Change me to show each choice on you; near: how close
   // to a head, and aim: how far under the top of it to look (in metres); top:
   // as high as a frame to fit, for heights side by side; size: how many
-  // pixels wide.
-  portrait(look, { body = false, turn = body ? 0.45 : 0, top = 0, near = 1.05, aim = 0.16 * near, size = 96 } = {}) {
+  // pixels wide. held: just the toy weapon in their hand, on its own,
+  // tipped up to be seen whole.
+  portrait(look, { body = false, turn = body ? 0.45 : 0, top = 0, near = 1.05, aim = 0.16 * near, size = 96, held = false } = {}) {
     const aspect = body ? 0.6 : 1;
-    const key = `${JSON.stringify([body, turn, top, near, aim, size])}|${JSON.stringify(look ?? {})}`;
+    const key = `${JSON.stringify([body, turn, top, near, aim, size, held])}|${JSON.stringify(held ? look?.weapon : (look ?? {}))}`;
     let url = this.faces?.get(key);
     if (url) return url;
     this.faces ??= new Map();
@@ -439,12 +440,22 @@ export class Renderer {
     camera.updateProjectionMatrix();
     // The light turns with them, to light whichever side is seen.
     sun.position.set(1.5, 3, 4).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn > Math.PI / 2 ? Math.PI : 0);
-    const a = new Avatar(look);
-    a.update(0, ANIM.idle, 0);
-    a.root.rotation.y = turn;
-    scene.add(a.root);
+    const a = held ? null : new Avatar(look);
+    const thing = held ? weapon(look.weapon) : null;
+    a?.update(0, ANIM.idle, 0);
+    if (a) a.root.rotation.y = turn;
+    scene.add(a?.root ?? thing);
     const head = headTop(look?.hat, lookHair(look), lookTall(look));
-    if (body) {
+    if (thing) {
+      // Pointing up and to the right, turned a little to show its sides,
+      // and framed to fit whatever its shape.
+      thing.rotation.set(0.35, 0.5, -0.8);
+      const box = new THREE.Box3().setFromObject(thing);
+      const mid = box.getCenter(new THREE.Vector3());
+      const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * 0.82;
+      camera.position.set(mid.x, mid.y + far * 0.15, mid.z + far);
+      camera.lookAt(mid);
+    } else if (body) {
       // Framed from the feet to over the hat, seen a little from above.
       const high = Math.max(top, head) + 0.06;
       const far = (high / 2 / Math.tan(THREE.MathUtils.degToRad(15))) * 1.02;
@@ -471,7 +482,8 @@ export class Renderer {
     gl.setClearColor(was.color, was.alpha);
     [toyLight.studio.value, toyLight.rim.value] = day;
     toyLight.rimColor.value.copy(day[2]);
-    a.dispose();
+    a?.dispose();
+    thing?.removeFromParent();
     // Read back bottom row first: turned the right way up.
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(W, H);

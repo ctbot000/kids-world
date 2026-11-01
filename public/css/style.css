@@ -2334,6 +2334,18 @@ body.touch.playing #joystick {
   filter: grayscale(1) opacity(0.45);
 }
 
+/* Gear and clothes seen on you (ui.js gearPic): in colour, to see before buying. */
+.shop-card .look-pic {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.shop-card .look-pic.body {
+  width: 78px;
+  height: 130px;
+}
+
 .shop-buttons {
   display: flex;
   flex-wrap: wrap;

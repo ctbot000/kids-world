@@ -1746,7 +1746,7 @@ export class UI {
               return h(
                 'div',
                 { class: `shop-card gear${owned ? '' : ' locked'}` },
-                h('span', { class: 'emoji' }, owned ? owned.icon : g.levels[0].icon),
+                this.gearPic(g.key, (owned ?? g.levels[0]).key, (owned ?? g.levels[0]).icon),
                 h('b', {}, owned ? owned.name : g.name),
                 h('span', { class: 'muted' }, owned ? (owned.does ?? `${levelDoes(owned)} ${g.about}`) : g.about),
                 next ? h('span', { class: 'muted' }, `${owned ? 'Next' : 'First'}: ${next.icon} ${levelDoes(next)}`) : null,
@@ -1770,7 +1770,7 @@ export class UI {
               return h(
                 'div',
                 { class: `shop-card gear${owned ? '' : ' locked'}` },
-                h('span', { class: 'emoji' }, c.icon),
+                this.gearPic('outfit', c.key, c.icon),
                 h('b', {}, c.name),
                 h('span', { class: 'muted' }, `${c.power ? '✨ ' : ''}${c.does}`),
                 h(
@@ -4702,6 +4702,23 @@ export class UI {
       requestAnimationFrame(work);
     }
     return el;
+  }
+
+  // A picture of you with something from the shop on (a GEAR level's key,
+  // under kind, or an outfit from CLOTHES) and nothing else bought, framed
+  // where it is worn: the icon where it cannot be drawn.
+  gearPic(kind, key, icon) {
+    const { weapon: _, outfit: __, shoes: ___, skates: ____, wings: _____, pet: ______, ...look } = this.profile.look;
+    const top = headTop(look.hat, lookHair(look), lookTall(look));
+    const options = {
+      // A cape from behind.
+      outfit: { body: true, turn: key === 'cape' ? 2.6 : 0.4 },
+      shoes: { near: 0.75, aim: top - 0.14, turn: 0.5 },
+      skates: { near: 0.85, aim: top - 0.18, turn: 1.1 },
+      wings: { near: 1.5, aim: 0.55, turn: 2.5 },
+      weapon: { held: true },
+    }[kind];
+    return this.lookPic({ ...look, [kind]: key }, { size: 128, ...options }, h('span', { class: 'emoji' }, icon));
   }
 
   // Someone's face as their avatar has it, drawn by the renderer; their
