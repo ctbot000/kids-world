@@ -1889,8 +1889,9 @@ export class UI {
       (root) => {
         const list = h('div', { class: 'grid shop-grid gear-grid' });
         const button = (text, onclick) => h('button', { class: 'chip', type: 'button', onclick }, text);
-        const card = (icon, name, does, on, action) =>
-          h('div', { class: 'shop-card gear' }, h('span', { class: 'emoji' }, icon), h('b', {}, `${name}${on ? ' ✅' : ''}`), h('span', { class: 'muted' }, does), h('div', { class: 'shop-buttons' }, action));
+        // pic: what it looks like on you (gearPic), or an icon.
+        const card = (pic, name, does, on, action) =>
+          h('div', { class: 'shop-card gear' }, typeof pic === 'string' ? h('span', { class: 'emoji' }, pic) : pic, h('b', {}, `${name}${on ? ' ✅' : ''}`), h('span', { class: 'muted' }, does), h('div', { class: 'shop-buttons' }, action));
         const tap = (text, change) =>
           button(text, () => {
             change();
@@ -1917,18 +1918,18 @@ export class UI {
                 const left = usesLeft(gear, w);
                 const does = left ? `${w.does} 💪 ${left} of ${w.uses} bops left.` : `💔 Broken! Fix it in the 🛒 shop.`;
                 const action = !left ? null : on ? tap('🙌 Put away', () => p.wear('weapon', false)) : tap('✋ Hold it', () => p.pickWeapon(i + 1));
-                cards.push(card(w.icon, w.name, does, on, action));
+                cards.push(card(this.gearPic('weapon', w.key, w.icon), w.name, does, on, action));
               });
               continue;
             }
             const owned = g.levels[level - 1];
             const on = wearing(gear, g.key) > 0;
-            cards.push(card(owned.icon, owned.name, `${levelDoes(owned)} ${g.about}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.wear(g.key, !on))));
+            cards.push(card(this.gearPic(g.key, owned.key, owned.icon), owned.name, `${levelDoes(owned)} ${g.about}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.wear(g.key, !on))));
           }
           for (const c of CLOTHES) {
             if (!gear.clothes.includes(c.key)) continue;
             const on = gear.outfit === c.key;
-            cards.push(card(c.icon, c.name, `${c.power ? '✨ ' : ''}${c.does}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.putOn(on ? '' : c.key))));
+            cards.push(card(this.gearPic('outfit', c.key, c.icon), c.name, `${c.power ? '✨ ' : ''}${c.does}`, on, tap(on ? '🙌 Take off' : '👕 Put on', () => p.putOn(on ? '' : c.key))));
           }
           if (p.data.potions > 0) {
             const game = this.game?.world ? this.game : null;
