@@ -3699,7 +3699,7 @@ export class UI {
                     this.toast(s.icon, `Tap the ground to put down the ${s.name.toLowerCase()}!`);
                   },
                 },
-                h('span', { class: 'emoji' }, s.icon),
+                this.lookPic(null, { stamp: s.key, turn: -0.6, size: 128 }, h('span', { class: 'emoji' }, s.icon)),
                 s.name,
               ),
             ),
@@ -3721,7 +3721,7 @@ export class UI {
                 this.toast('🔒', `Tame the wild dragon on a 🌋 volcano island ${TAMES_TO_INVITE} times to bring your own! You have tamed it ${tames} ${tames === 1 ? 'time' : 'times'}.`);
               },
             },
-            h('span', { class: 'emoji' }, '🐲'),
+            this.lookPic(null, { critter: 'dragon', turn: -0.6, size: 128 }, h('span', { class: 'emoji' }, '🐲')),
             'Dragon',
             h('small', {}, `🔒 ${tames}/${TAMES_TO_INVITE} tamed`),
           );
@@ -3741,7 +3741,7 @@ export class UI {
                     this.toast(CRITTER_INFO[type].icon, vehicles ? `Tap the ground to bring ${what}! Tap a vehicle to send it away.` : `Tap the ground to invite ${what}! Tap an animal to say bye.`);
                   },
                 },
-                h('span', { class: 'emoji' }, CRITTER_INFO[type].icon),
+                this.lookPic(null, { critter: type, turn: -0.6, size: 128 }, h('span', { class: 'emoji' }, CRITTER_INFO[type].icon)),
                 CRITTER_INFO[type].name,
               ),
             ),

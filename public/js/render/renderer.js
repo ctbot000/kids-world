@@ -13,12 +13,15 @@ import { FXAAPass } from '../../vendor/three-addons/postprocessing/FXAAPass.js';
 import { GTAOPass } from '../../vendor/three-addons/postprocessing/GTAOPass.js';
 import { OutputPass } from '../../vendor/three-addons/postprocessing/OutputPass.js';
 import { ShaderPass } from '../../vendor/three-addons/postprocessing/ShaderPass.js';
-import { OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
+import { DIRT, GRASS, OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
 import { headTop } from '../shared/critters.js';
+import { LightMap } from '../shared/light.js';
 import { STOMP } from '../shared/monsters.js';
 import { raycast } from '../shared/raycast.js';
+import { stampByKey } from '../shared/stamps.js';
 import { MAX_EDIT_CELLS } from '../shared/tools.js';
 import { lookHair, lookTall } from '../shared/words.js';
+import { World } from '../shared/world.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { ANIM, Avatar, shirtHex, weapon } from './avatar.js';
 import { CritterModel } from './critter-models.js';
@@ -29,6 +32,7 @@ import { Screens } from './screens.js';
 import { Tornado } from './tornado-model.js';
 import { Effects } from './effects.js';
 import { FireView } from './fire.js';
+import { shownBox } from './monster-figures.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { PetModel, petSeat } from './pet-models.js';
@@ -410,10 +414,12 @@ export class Renderer {
   // as high as a frame to fit, for heights side by side; size: how many
   // pixels wide. held: just the toy weapon in their hand, on its own,
   // tipped up to be seen whole; pet: just their pet (look.pet), sitting, in
-  // a collar the colour of their T-shirt.
-  portrait(look, { body = false, turn = body ? 0.45 : 0, top = 0, near = 1.05, aim = 0.16 * near, size = 96, held = false, pet = false } = {}) {
+  // a collar the colour of their T-shirt. critter: no one at all, but an
+  // animal or vehicle of that type, for the toy box; stamp: the blocks of
+  // that stamp, built on a patch of grass and seen from above.
+  portrait(look, { body = false, turn = body ? 0.45 : 0, top = 0, near = 1.05, aim = 0.16 * near, size = 96, held = false, pet = false, critter = null, stamp = null } = {}) {
     const aspect = body ? 0.6 : 1;
-    const what = held ? look?.weapon : pet ? [look?.pet?.kind, look?.pet?.coat, look?.shirt] : (look ?? {});
+    const what = held ? look?.weapon : pet ? [look?.pet?.kind, look?.pet?.coat, look?.shirt] : critter || stamp ? [critter, stamp, this.world?.theme] : (look ?? {});
     const key = `${JSON.stringify([body, turn, top, near, aim, size, held, pet])}|${JSON.stringify(what)}`;
     let url = this.faces?.get(key);
     if (url) return url;
@@ -445,11 +451,13 @@ export class Renderer {
     camera.updateProjectionMatrix();
     // The light turns with them, to light whichever side is seen.
     sun.position.set(1.5, 3, 4).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn > Math.PI / 2 ? Math.PI : 0);
-    const a = held || pet ? null : new Avatar(look);
+    const a = held || pet || critter || stamp ? null : new Avatar(look);
     const animal = pet ? new PetModel(look.pet, shirtHex(look.shirt)) : null;
-    const thing = held ? weapon(look.weapon) : animal?.group ?? null;
+    const beast = critter ? new CritterModel(critter, 1, this.world?.theme) : null;
+    const thing = held ? weapon(look.weapon) : (animal?.group ?? beast?.group ?? (stamp ? this.stampModel(stamp) : null));
     a?.update(0, ANIM.idle, 0);
     animal?.update(0, 'sit');
+    beast?.update(0, 'idle', false);
     if (a) a.root.rotation.y = turn;
     scene.add(a?.root ?? thing);
     const head = headTop(look?.hat, lookHair(look), lookTall(look));
@@ -458,11 +466,14 @@ export class Renderer {
       // sides; a pet turned as asked: framed to fit whatever its shape.
       if (held) thing.rotation.set(0.35, 0.5, -0.8);
       else thing.rotation.y = turn;
-      const box = new THREE.Box3().setFromObject(thing);
+      // A critter's hidden parts (what it carries, a splash) left out.
+      const box = critter || stamp ? shownBox(thing) : new THREE.Box3().setFromObject(thing);
       const mid = box.getCenter(new THREE.Vector3());
-      const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * 0.82;
-      camera.position.set(mid.x, mid.y + far * 0.15, mid.z + far);
+      const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * (stamp ? 0.78 : 0.82);
+      camera.position.set(mid.x, mid.y + far * (stamp ? 0.55 : 0.15), mid.z + far);
       camera.lookAt(mid);
+      camera.far = Math.max(20, far * 3);
+      camera.updateProjectionMatrix();
     } else if (body) {
       // Framed from the feet to over the hat, seen a little from above.
       const high = Math.max(top, head) + 0.06;
@@ -493,6 +504,9 @@ export class Renderer {
     a?.dispose();
     thing?.removeFromParent();
     animal?.dispose();
+    beast?.dispose();
+    if (stamp) this.faceKit.stamps?.clear();
+    camera.far = 20;
     // Read back bottom row first: turned the right way up.
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(W, H);
@@ -501,6 +515,40 @@ export class Renderer {
     url = canvas.toDataURL('image/png');
     this.faces.set(key, url);
     return url;
+  }
+
+  // A stamp's blocks as the island would draw them, standing on a patch of
+  // grass with a little dirt under it, turned round the middle of the
+  // patch: for portrait to take a picture of.
+  stampModel(key) {
+    const cells = stampByKey(key)?.cells;
+    if (!cells?.length) return null;
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (const c of cells) for (let i = 0; i < 3; i++) [lo[i], hi[i]] = [Math.min(lo[i], c[i]), Math.max(hi[i], c[i])];
+    const ground = 1 - Math.min(0, lo[1]);
+    const W = hi[0] - lo[0] + 3;
+    const D = hi[2] - lo[2] + 3;
+    // Past its sides is air all the way down: no sea.
+    const world = new World({ W, D, H: ground + hi[1] + 2, sea: -1, theme: this.world?.theme ?? 'sunny' });
+    for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
+      for (let y = 0; y < ground - 1; y++) world.set(x, y, z, DIRT);
+      world.set(x, ground - 1, z, GRASS);
+    }
+    for (const [x, y, z, id] of cells) world.set(x - lo[0] + 1, y + ground, z - lo[2] + 1, id);
+    this.faceKit.stamps ??= new Terrain(new THREE.Scene(), this.terrain.atlas);
+    const t = this.faceKit.stamps;
+    t.clear();
+    t.world = world;
+    t.light = new LightMap(world);
+    t.light.computeAll();
+    for (let cx = 0; cx < world.chunksX; cx++) for (let cz = 0; cz < world.chunksZ; cz++) t.dirty.add(`${cx},${cz}`);
+    t.buildAll();
+    t.setLighting({ daylight: 1, sun: new THREE.Color(1, 0.98, 0.94), ambient: new THREE.Color(0.32, 0.34, 0.4), fog: new THREE.Color(1, 1, 1), fogNear: 1e4, fogFar: 2e4, time: 0, nearFade: false });
+    const pivot = new THREE.Group();
+    t.group.position.set(-W / 2, 0, -D / 2);
+    pivot.add(t.group);
+    return pivot;
   }
 
   removeAvatar(pid) {

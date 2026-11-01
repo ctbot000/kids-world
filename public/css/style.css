@@ -2119,7 +2119,8 @@ body.touch.playing #joystick {
   color: var(--ink-soft);
 }
 
-.choice.locked .emoji {
+.choice.locked .emoji,
+.choice.locked .look-pic {
   filter: grayscale(1) opacity(0.45);
 }
 
