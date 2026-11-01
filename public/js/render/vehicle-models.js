@@ -291,8 +291,10 @@ function scooter(id) {
   // handlebars: a crossbar with a grip each end.
   rod(body, metal, [0, 0.14, 0.42], [0, 0.96, 0.29], 0.035);
   block(body, paint, -0.05, 0.13, 0.36, 0.05, 0.21, 0.45);
-  rod(body, metal, [-0.23, 0.96, 0.29], [0.23, 0.96, 0.29], 0.028);
-  for (const side of [-1, 1]) block(body, dark, side < 0 ? -0.34 : 0.23, 0.93, 0.25, side < 0 ? -0.23 : 0.34, 0.99, 0.33);
+  // Round grips, for the hands to close round (critters.js grips).
+  const [gx, gy, gz] = CRITTER_INFO.scooter.ride.grips;
+  rod(body, metal, [-0.23, gy, gz], [0.23, gy, gz], 0.028);
+  for (const side of [-1, 1]) body.add(mesh(cylinder(0.03, 0.03, 0.125, 12), dark, side * gx, gy, gz).rotateZ(Math.PI / 2));
   // The bell on the left of the bar, which lights up when it rings.
   body.add(mesh(cylinder(0.012, 0.012, 0.05, 6), dark, -0.12, 0.99, 0.29));
   body.add(mesh(sphere(1, 12, 8), v.glow, -0.12, 1.03, 0.29, 0.05, 0.035, 0.05));

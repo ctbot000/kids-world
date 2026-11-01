@@ -122,8 +122,10 @@ export const CRITTER_INFO = {
   balloon: { name: 'Hot-Air Balloon', icon: '🎈', speed: 0, swims: true, flies: false, vehicle: 'air', ride: { air: true, seat: 0.3, z: 0.55, radius: 0.95, height: 4.6, float: 0.5, spread: 0.12, reach: 1.3, walk: 1.5, run: 2, swim: 1, fly: 3.2, flyRun: 4.5, flyUp: 2.6, maxFall: 1.6, trick: 'honk', seats: [[-0.33, -0.05], [0.33, -0.05], [-0.33, -0.62], [0.33, -0.62]] }, names: ['Puffy', 'Rainbow', 'Cloud Hopper', 'Sky Bubble', 'Breezy', 'Floaty', 'Sunbeam', 'Lollipop', 'Up-Up', 'Marshmallow'] },
   // A kick scooter (stand): its rider stands on the deck rather than sits,
   // quicker than anyone runs and nimble, hopping the little steps itself.
-  // The jump button rings its bell.
-  scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
+  // The jump button rings its bell. grips: where the middle of each
+  // handlebar grip is, from its origin (across, up, forward), for the hands
+  // to hold (render/avatar.js) and the model to draw (vehicle-models.js).
+  scooter: { name: 'Kick Scooter', icon: '🛴', speed: 0, swims: true, flies: false, vehicle: 'land', ride: { stand: true, seat: 0.45, z: 0.06, grips: [0.29, 0.96, 0.29], radius: 0.4, height: 1.7, float: 0.25, spread: 0, reach: 0, walk: 5.5, run: 9.5, swim: 2.2, jump: 8.5, trick: 'honk' }, names: ['Scooty', 'Skippy', 'Wheely', 'Zip-Zip', 'Scoot-Scoot', 'Dart', 'Flip', 'Swooshy', 'Peppy', 'Kick-Kick'] },
   // A little wooden sled (sled: it slides — see riding.js). The ground is
   // slippery under its runners, as roller skates are (physics.js glide): push
   // off and it coasts. snow: how it goes on snow and ice (and the frosting of

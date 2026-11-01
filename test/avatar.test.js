@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import { ANIM, Avatar } from '../public/js/render/avatar.js';
-import { headTop } from '../public/js/shared/critters.js';
+import { CRITTER_INFO, headTop, HIPS } from '../public/js/shared/critters.js';
 import { ACCESSORIES, ANIMALS, BODIES, cleanLook, EMOTE_KEYS, FACES, GROWN_TALL, GROWN_UP, HAIR_COLORS, HAIRS, HATS, HEADS, HEIGHTS, isPerson, KID, lookHair, lookIcon, lookTall, randomLook, SKIN_TONES } from '../public/js/shared/words.js';
 
 const LOOKS = ANIMALS.flatMap((a) =>
@@ -367,4 +367,38 @@ test('at the piano, jointed hands play palm down with fingers arched, the finger
   assert.equal(a.weapon.parent, a.hands[1]);
   assert.equal(meshes(), resting);
   a.dispose();
+});
+
+test('on a kick scooter, both hands close round its grips in fists, whatever your size, standing still or kicking along, and let go to emote', () => {
+  const ride = CRITTER_INFO.scooter.ride;
+  const [gx, gy, gz] = ride.grips;
+  const grip = (side) => new THREE.Vector3(side * gx, gy - (ride.seat - HIPS), gz - ride.z);
+  const kid = { animal: KID, skin: 'golden', hair: 'short', hairColor: 'brown', shirt: 3 };
+  const looks = [kid, { ...kid, animal: GROWN_UP }, { animal: 'cat', fur: 'orange', shirt: 2 }].flatMap((look) => HEIGHTS.flatMap((h) => BODIES.map((b) => ({ ...look, height: h.key, build: b.key }))));
+  for (const look of [...looks, { ...kid, weapon: 'sword' }]) {
+    const a = new Avatar(look);
+    a.ride = ride;
+    for (const speed of [0, 4, 9]) {
+      for (let i = 0; i < 30; i++) {
+        a.update(1 / 30, ANIM.ride, speed);
+        a.root.updateMatrixWorld(true);
+        a.hands.forEach((hand, i) => {
+          const fist = hand.userData.fist.group;
+          assert.equal(fist.parent, hand, `${named(look)}: a fist`);
+          assert.ok(!hand.userData.rest.parent, `${named(look)}: not the resting hand`);
+          const held = fist.localToWorld(new THREE.Vector3(0, -0.062, -0.032));
+          const d = held.distanceTo(grip(i ? 1 : -1));
+          assert.ok(d < 0.005, `${named(look)} at ${speed}: the ${i ? 'right' : 'left'} hand on its grip (${d.toFixed(3)} off)`);
+        });
+      }
+    }
+    if (look.weapon) assert.ok(!a.weapon.parent, 'what is in hand is put away');
+    a.playEmote('wave');
+    a.update(1 / 30, ANIM.ride, 0);
+    assert.ok(a.hands.every((h) => h.userData.rest.parent && !h.userData.fist.group.parent), 'waving, the hands let go');
+    a.ride = null;
+    for (let i = 0; i < 100; i++) a.update(1 / 30, ANIM.idle, 0);
+    assert.ok(a.hands.every((h) => h.userData.rest.parent && !h.userData.fist.group.parent), 'off it, resting hands');
+    if (look.weapon) assert.equal(a.weapon.parent, a.hands[1], 'and what was in hand back in it');
+  }
 });

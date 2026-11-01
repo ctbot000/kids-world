@@ -8,6 +8,7 @@
 // emotes (wave, dance, cheer...).
 import * as THREE from '../../vendor/three.module.js';
 import { BRICK_COLORS, TOY_BRICKS } from '../shared/blocks.js';
+import { HIPS } from '../shared/critters.js';
 import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { buildOf, FUR_COLORS, GROWN_UP, HAIR_COLORS, headOf, isPerson, lookScale, lookTall, SKIN_TONES } from '../shared/words.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
@@ -2269,6 +2270,11 @@ const GRIP = (() => {
   const mugQ = q.clone().invert();
   return { q, wrist, mugQ, mug: wrist.clone().negate().applyQuaternion(mugQ) };
 })();
+// A fist round a handlebar grip, for a hand of size 1: q, the jointed
+// hand's turn on the body (its fingers pointing forward and down, the palm
+// down and back, over the grip); bar, where the middle of the grip is in
+// the hand, under the palm and in the curl of the fingers.
+const FIST = { q: new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 0.5, 0, 0)), bar: new THREE.Vector3(0, -0.062, -0.032) };
 const scratch = { q: new THREE.Quaternion(), q2: new THREE.Quaternion(), e: new THREE.Euler(), v: new THREE.Vector3() };
 
 // The bench you sit on at the piano, its padded top where the root is and
@@ -2442,6 +2448,14 @@ export class Avatar {
         grip.thumb.rotation.z = 0.15;
         hand.userData.grip = grip;
       }
+      // Its hold on a handlebar: the fingers and the thumb curled round it (see FIST).
+      const fist = pianoHand(B.hand, side, skin);
+      fist.fingers.forEach(({ knuckle, joint }) => {
+        knuckle.rotation.x = 1.05;
+        joint.rotation.x = 1.25;
+      });
+      fist.thumb.rotation.x = 1.1;
+      hand.userData.fist = fist;
       elbow.add(hand);
       arm.add(elbow);
       this.torso.add(arm);
@@ -2811,6 +2825,18 @@ export class Avatar {
         armFwdL = armFwdR = -0.95 - k * 0.12;
         armRaiseL = armRaiseR = 0.1;
         bendL = bendR = 0.55;
+        // Each hand on its grip, however big you are: bending over further
+        // where the arms would not reach them otherwise.
+        if (this.ride.grips) {
+          let reach;
+          for (let i = 0; i < 16; i++) {
+            reach = this.gripReach(bob, lean);
+            if (reach.ok) break;
+            lean += 0.06;
+          }
+          [armFwdR, armTwistR, armRaiseR, bendR] = reach.arm;
+          [armFwdL, armTwistL, armRaiseL, bendL] = reach.arm;
+        }
         legs = [
           [-0.08, -0.05, 0.12, 0],
           [kick ? 0.55 + Math.sin(this.phase) * 0.5 : 0.18, 0.05, kick ? 0.25 + 0.45 * Math.max(0, -Math.cos(this.phase)) : 0.1, 0],
@@ -2988,6 +3014,7 @@ export class Avatar {
     elbowL.rotation.x = -bendL;
     elbowR.rotation.x = -bendR;
     this.holdMug(anim === ANIM.coffee);
+    this.holdBars(riding && Boolean(this.ride?.grips) && !this.emote && swung >= swing.secs, lean);
     if (anim === ANIM.type) this.typeHands(lean, twist, t + this.quirk);
     this.body.position.y = bob + hop + dip;
     // In bed, the whole of you tips back about your feet, face up, and sinks
@@ -3187,6 +3214,54 @@ export class Avatar {
     const at = held.map((v, i) => v + (lips[i] - v) * sip);
     at[2] += Math.sin(sip * Math.PI) * 0.05 * k;
     return new THREE.Vector3(...at);
+  }
+
+  // Riding a kick scooter, both hands round its grips (this.ride.grips) in
+  // fists (FIST) in place of the resting ones, and a weapon put away
+  // meanwhile; each fist keeps its turn on the body, so the hand turns at
+  // the wrist from wherever the arm has brought it.
+  holdBars(holding, lean) {
+    if (holding !== Boolean(this.barsHeld)) {
+      this.barsHeld = holding;
+      for (const hand of this.hands) {
+        const { rest, fist } = hand.userData;
+        if (holding) {
+          rest.removeFromParent();
+          hand.add(fist.group);
+        } else {
+          fist.group.removeFromParent();
+          if (!this.handsPlaying && !hand.userData.grip?.group.parent) hand.add(rest);
+        }
+      }
+      if (this.weapon) {
+        if (holding) this.weapon.removeFromParent();
+        else if (!this.handsPlaying && !this.mug?.parent?.parent) this.hands[1].add(this.weapon);
+      }
+    }
+    if (!holding) return;
+    const body = scratch.q2.setFromEuler(scratch.e.set(lean, 0, 0));
+    for (let i = 0; i < 2; i++) {
+      const arm = scratch.q.setFromEuler(this.arms[i].rotation).multiply(new THREE.Quaternion().setFromEuler(this.elbows[i].rotation));
+      this.hands[i].userData.fist.group.quaternion.copy(body.clone().multiply(arm).invert().multiply(FIST.q));
+    }
+  }
+
+  // The right arm's angles (the left's mirror them) to hold the scooter's
+  // grip at a lean, the body bob up: the grip from the root, in the body's
+  // own size, less the fist's hold on it, turned back by the lean into the
+  // torso; ok, whether the arm reaches it.
+  gripReach(bob, lean) {
+    const B = this.build;
+    const { grips, seat, z = 0 } = this.ride;
+    const size = this.size;
+    const at = new THREE.Vector3(grips[0], grips[1] - (seat - HIPS) - bob, grips[2] - z)
+      .divideScalar(size)
+      .sub(scratch.v.copy(FIST.bar).multiplyScalar(B.hand).applyQuaternion(FIST.q));
+    at.y -= B.hip;
+    at.applyEuler(scratch.e.set(-lean, 0, 0));
+    const [a, b] = B.arm;
+    const far = Math.hypot(at.x - B.shoulder[1], at.y - B.shoulder[0], at.z);
+    return { arm: this.reachTo(at.toArray()), ok: far < (a + b) * 0.97 };
   }
 
   // The right arm's angles to put its wrist at a point on the torso: [the
