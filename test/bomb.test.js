@@ -164,7 +164,7 @@ test('a bomb saved with the island before it popped goes off once the island is 
 
 test('the Bomb Rod is a toy weapon of the shop, bought after the Lava Blade', () => {
   assert.equal(weaponOf('bombrod').name, 'Bomb Rod');
-  assert.equal(WEAPONS.at(-1).key, 'bombrod', 'last, so saved weapons stay what they were');
+  assert.equal(WEAPONS[4].key, 'bombrod', 'after it, so saved weapons stay what they were');
 });
 
 test('a Bomb Rod pop shakes jewels out of gem rocks and never digs the ground', () => {

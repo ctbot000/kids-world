@@ -360,6 +360,21 @@ export class Sound {
         }
         break;
       }
+      // The Toy Bow drawn: the string creaking back.
+      case 'creak':
+        this.noise(0.18, { type: 'bandpass', freq: 500, sweep: 900, q: 6, gain: 0.05 });
+        break;
+      // The Toy Bow let go: the string's twang, and the arrow's whoosh off.
+      case 'twang':
+        this.tone(196 * r(), { decay: 0.28, gain: 0.16, type: 'triangle', slide: 150, slideTime: 0.25 });
+        this.tone(392 * r(), { decay: 0.12, gain: 0.05, type: 'triangle' });
+        this.noise(0.12, { at: 0.02, type: 'bandpass', freq: 1500, sweep: 3200, q: 1.2, gain: 0.08 });
+        break;
+      // Its suction-cup arrow sticking: a rubbery thwop.
+      case 'thwop':
+        this.tone(170 * r(), { decay: 0.12, gain: 0.3, slide: 420, slideTime: 0.07 });
+        this.noise(0.05, { type: 'lowpass', freq: 1200, gain: 0.15 });
+        break;
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });

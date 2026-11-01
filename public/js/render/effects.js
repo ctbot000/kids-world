@@ -2,6 +2,7 @@
 // out, hearts for happy animals, sparkles, music notes, sleepy Zzz's and
 // splashes. All drawn as camera-facing pictures from one small sheet.
 import * as THREE from '../../vendor/three.module.js';
+import { arrow } from './avatar.js';
 
 const KINDS = ['puff', 'heart', 'sparkle', 'note', 'zzz', 'square', 'drop', 'star', 'bang'];
 const CELL = 64;
@@ -477,6 +478,32 @@ export class Effects {
     }
   }
 
+  // A Toy Bow's arrow (shared/shop.js bow) shot from (x, y, z) at (tx, ty,
+  // tz): it flies there point first, quick and nearly straight. On a
+  // monster (hit) it sticks a blink with a wobble and a puff of sparkles;
+  // missing, it flies on and drops. Returns how long the flight is, in s.
+  arrowShot(x, y, z, tx, ty, tz, hit = false) {
+    this.arrows ??= [];
+    let a = this.arrows.find((k) => !k.busy);
+    if (!a) {
+      if (this.arrows.length >= ARROW_POOL) return 0;
+      a = new Arrow(this.scene);
+      this.arrows.push(a);
+    }
+    const t = Math.max(0.08, Math.hypot(tx - x, ty - y, tz - z) / ARROW_SPEED);
+    a.go(x, y, z, tx, ty, tz, t, hit);
+    if (hit) {
+      const dx = tx - x;
+      const dz = tz - z;
+      const d = Math.hypot(dx, dz) || 1;
+      for (let i = 0; i < 6; i++) {
+        const k = Math.random() * Math.PI * 2;
+        this.add('sparkle', tx, ty, tz, { vx: Math.cos(k) * 1.8 - (dx / d) * 1.2, vy: 1 + Math.random() * 1.5, vz: Math.sin(k) * 1.8 - (dz / d) * 1.2, size: 0.16, life: 0.4, gravity: 6, color: i % 2 ? '#ffffff' : '#ff8fc4', delay: t });
+      }
+    }
+    return t;
+  }
+
   // A dragon's fire (one frame of it: called every frame while it breathes):
   // flames pouring out of its mouth at (x, y, z) the way yaw faces, spreading
   // as they go, as far as reach, in a cone angle either side.
@@ -537,6 +564,7 @@ export class Effects {
       if (s.age >= SLASH_SECS) s.group.visible = false;
     }
     for (const r of this.ripples ?? []) r.update(dt);
+    for (const a of this.arrows ?? []) a.update(dt);
     let n = 0;
     const c = this.center.array;
     const col = this.color.array;
@@ -626,5 +654,72 @@ export class Ripple {
     if (k < 1) return;
     this.busy = false;
     this.mesh.visible = false;
+  }
+}
+
+// The Toy Bow's arrows in flight (Effects arrowShot): a few, used again and
+// again. One flies at ARROW_SPEED blocks a second, sticks STICK_SECS where
+// it hit, or flies on and drops a while when it missed.
+const ARROW_POOL = 6;
+const ARROW_SPEED = 22;
+const STICK_SECS = 0.3;
+const DROP_SECS = 0.45;
+
+export class Arrow {
+  constructor(scene) {
+    this.busy = false;
+    this.group = new THREE.Group();
+    // The arrow points along +y; lookAt turns +z to where it flies.
+    const model = arrow();
+    model.rotation.x = Math.PI / 2;
+    model.position.z = -0.5;
+    model.scale.setScalar(1.25);
+    this.group.add(model);
+    this.group.visible = false;
+    scene.add(this.group);
+    this.from = new THREE.Vector3();
+    this.to = new THREE.Vector3();
+    this.v = new THREE.Vector3();
+    this.look = new THREE.Vector3();
+  }
+
+  go(x, y, z, tx, ty, tz, t, hit) {
+    this.busy = true;
+    this.age = 0;
+    this.t = t;
+    this.hit = hit;
+    this.from.set(x, y, z);
+    this.to.set(tx, ty, tz);
+    this.v.subVectors(this.to, this.from).divideScalar(t);
+    this.group.position.copy(this.from);
+    this.group.lookAt(this.look.copy(this.from).add(this.v));
+    this.group.visible = true;
+  }
+
+  update(dt) {
+    if (!this.busy) return;
+    this.age += dt;
+    const g = this.group;
+    if (this.age < this.t) {
+      g.position.copy(this.from).addScaledVector(this.v, this.age);
+    } else if (this.hit) {
+      // Stuck on by its cup, wobbling.
+      const k = this.age - this.t;
+      g.position.copy(this.to);
+      g.children[0].rotation.y = Math.sin(k * 60) * 0.25 * (1 - k / STICK_SECS);
+      if (k >= STICK_SECS) this.done();
+    } else {
+      const k = this.age - this.t;
+      this.v.y -= 14 * dt;
+      g.position.addScaledVector(this.v, dt);
+      g.lookAt(this.look.copy(g.position).add(this.v));
+      if (k >= DROP_SECS) this.done();
+    }
+  }
+
+  done() {
+    this.busy = false;
+    this.group.visible = false;
+    this.group.children[0].rotation.y = 0;
   }
 }

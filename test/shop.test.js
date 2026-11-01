@@ -235,15 +235,17 @@ test('a toy weapon is in the look the island sees while you have it on, and only
   assert.equal(cleanLook({ ...look, weapon: 'blaster' }).weapon, 'blaster');
   assert.equal(cleanLook({ ...look, weapon: 'lavablade' }).weapon, 'lavablade');
   assert.equal(cleanLook({ ...look, weapon: 'cannon' }).weapon, undefined);
-  // The ones that bop one at a time each do more; the Bomb Rod, last, pops
-  // all in its blast instead (bomb.test.js).
-  const boppers = WEAPONS.filter((w) => w.key !== 'bombrod');
+  // The first four each do more; the Bomb Rod after them pops all in its
+  // blast instead (bomb.test.js), and the Toy Bow shoots furthest.
+  const boppers = WEAPONS.slice(0, 4);
   for (let i = 1; i < boppers.length; i++) {
     assert.ok(boppers[i].power >= boppers[i - 1].power && boppers[i].king >= boppers[i - 1].king);
     assert.ok(boppers[i].power > boppers[i - 1].power || boppers[i].reach > boppers[i - 1].reach, `${boppers[i].name} does more`);
   }
   // Each reaches further than an arm, and none far: no bopping from across the meadow.
   for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 5, `${w.name} reaches ${w.reach}`);
+  assert.equal(WEAPONS.at(-1).key, 'bow', 'the Toy Bow last, so saved weapons stay what they were');
+  for (const w of WEAPONS.slice(0, -1)) assert.ok(weaponOf('bow').reach > w.reach, `the bow shoots further than the ${w.name}`);
 });
 
 test('any of the weapons you own can be the one in your hand: the one you pick, or the best', () => {
@@ -267,8 +269,8 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     const p = new Profile();
     assert.equal(p.nextWeapon(), null, 'nothing to flip through');
     assert.equal(p.pickWeapon(1), null, 'nothing to pick either');
-    p.earn(1500);
-    for (const key of ['sword', 'blaster', 'hammer', 'lavablade', 'bombrod']) {
+    p.earn(2000);
+    for (const key of ['sword', 'blaster', 'hammer', 'lavablade', 'bombrod', 'bow']) {
       assert.equal(p.buy('weapon'), true);
       // Each new one goes straight into your hand.
       assert.equal(wornWeapon(p.data.gear).key, key);
@@ -276,7 +278,7 @@ test('buying a weapon puts it in your hand, and you can carry any of yours: the 
     assert.equal(p.nextWeapon().key, 'sword', 'round to the first');
     assert.equal(p.nextWeapon().key, 'blaster');
     assert.equal(p.pickWeapon(4).key, 'lavablade');
-    assert.equal(p.pickWeapon(6), null, 'not one of yours');
+    assert.equal(p.pickWeapon(7), null, 'not one of yours');
     assert.equal(p.pickWeapon(0), null);
     assert.equal(wornWeapon(p.data.gear).key, 'lavablade', 'the pick stays');
     p.wear('weapon', false);
@@ -344,6 +346,10 @@ test('a toy weapon pops a blob in fewer bops, and only from as far as it reaches
   assert.equal(lavablade.taps(2), 1, 'a Lava Blade pops in one');
   assert.equal(lavablade.taps(edge('lavablade') - 0.1), 1, 'from a step away');
   assert.equal(lavablade.taps(edge('lavablade') + 0.1), Infinity);
+  const bow = meadowRoom('bow');
+  assert.equal(bow.taps(edge('bow') - 0.1), 1, 'one arrow pops a blob from far off');
+  assert.ok(edge('bow') > edge('blaster') + 0.2, 'further than a bubble flies');
+  assert.equal(bow.taps(edge('bow') + 0.1), Infinity, 'but not across the meadow');
   assert.equal(meadowRoom('cannon').taps(2), BLOB_HEARTS, 'no made-up weapons');
 });
 

@@ -104,6 +104,21 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // The Toy Bow: held out level in front, the other hand drawing the
+  // string back to the chest; it lets go (the arrow flies), the drawing
+  // hand springs back past the shoulder, and both come down.
+  bow: {
+    secs: 0.5,
+    strike: 0.5,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.24, w: 1, wL: 1, fwd: -1.5, raise: 0.1, elbow: 0.1, wrist: 1.45, fwdL: -1.45, raiseL: -0.55, elbowL: 0.4, twist: 0.25, lean: -0.02 },
+      { at: 0.46, w: 1, wL: 1, fwd: -1.5, raise: 0.1, elbow: 0.1, wrist: 1.45, fwdL: -1.35, raiseL: -0.6, elbowL: 2.1, twist: 0.42, lean: -0.05, nod: 0.05 },
+      { at: 0.5, w: 1, wL: 1, fwd: -1.5, raise: 0.1, elbow: 0.1, wrist: 1.45, fwdL: -1.1, raiseL: -0.3, elbowL: 2.3, twist: 0.45, lean: -0.05, nod: 0.05 },
+      { at: 0.7, w: 1, wL: 1, fwd: -1.45, raise: 0.1, elbow: 0.15, wrist: 1.4, fwdL: -0.7, raiseL: 0.1, elbowL: 1.6, twist: 0.35, lean: -0.03 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
   // The Lava Blade: drawn up high behind, both hands on it, then a great
   // diagonal cut down across, the whole body winding into it — slower than
   // the sword and heavier, and it lands like it.
@@ -1629,6 +1644,40 @@ function hair(head, style, color, hatKind, fall = 1) {
   return sway;
 }
 
+// The Toy Bow's arrow (shared/shop.js bow): a foam shaft along +y from
+// its tail at 0, feathers at the tail and a red suction cup on its tip.
+// The bow carries one nocked; render/effects.js arrowShot flies one off.
+export function arrow() {
+  const g = new THREE.Group();
+  g.name = 'arrow';
+  g.add(
+    mesh(cylinder(0.014, 0.014, 0.44, 8), toon('#7ed957'), 0, 0.24, 0),
+    mesh(cylinder(0.026, 0.05, 0.035, 14), toon('#ff5a6e'), 0, 0.475, 0),
+    mesh(cylinder(0.024, 0.016, 0.02, 10), toon('#ff5a6e'), 0, 0.45, 0),
+  );
+  for (let i = 0; i < 3; i++) {
+    const feather = mesh(roundedBox(0.004, 0.09, 0.04, 0.002), toon(i ? '#ffffff' : '#ff8fc4'), 0, 0.06, 0);
+    const f = new THREE.Group();
+    f.rotation.y = (i / 3) * Math.PI * 2;
+    feather.position.set(0, 0.06, 0.03);
+    f.add(feather);
+    g.add(f);
+  }
+  return g;
+}
+
+// The Toy Bow's two limbs: an arc in the y-z plane bulging forward (+y)
+// to the grip at the middle, its tips a little behind it.
+const BOW = { r: 0.36, a: 0.98 };
+const bowLimbs = () =>
+  geo('bowlimbs', () => {
+    const g = new THREE.TorusGeometry(BOW.r, 0.022, 8, 28, BOW.a * 2);
+    g.rotateZ(Math.PI / 2 - BOW.a);
+    g.translate(0, -BOW.r, 0);
+    g.rotateY(Math.PI / 2);
+    return g;
+  });
+
 // A toy weapon from the shop (shared/shop.js), held in the hand: its grip
 // at the hand, pointing forward with the arm down. Soft foam and bubbles,
 // in bright toy colours.
@@ -1664,6 +1713,27 @@ export function weapon(kind) {
         mesh(sphere(), toon('#ffd23f', { emissive: 0.6 }), 0, 0.66, 0, 0.025),
       );
       break;
+    case 'bow': {
+      // A bright toy bow held upright by its grip, the string behind it and
+      // a suction-cup arrow on the string, ready.
+      const back = -BOW.r * (1 - Math.cos(BOW.a));
+      const tip = BOW.r * Math.sin(BOW.a);
+      const grip = mesh(cylinder(0.034, 0.034, 0.12, 12), toon('#9b7bea'), 0, 0, 0);
+      grip.rotation.x = Math.PI / 2;
+      const string = mesh(cylinder(0.005, 0.005, tip * 2, 6), toon('#ffffff'), 0, back, 0);
+      string.rotation.x = Math.PI / 2;
+      const nocked = arrow();
+      nocked.position.y = back - 0.01;
+      g.add(
+        mesh(bowLimbs(), toon('#ff8a3d')),
+        grip,
+        string,
+        mesh(sphere(), toon('#ffcf3f'), 0, back, tip, 0.03),
+        mesh(sphere(), toon('#ffcf3f'), 0, back, -tip, 0.03),
+        nocked,
+      );
+      break;
+    }
     case 'hammer': {
       g.add(mesh(cylinder(0.026, 0.026, 0.42, 10), toon('#ffcf3f'), 0, 0.16, 0));
       const head = new THREE.Group();
@@ -2383,6 +2453,8 @@ export class Avatar {
     this.handsPlaying = false;
     this.weapon = look.weapon ? weapon(look.weapon) : null;
     this.weaponKind = this.weapon ? look.weapon : null;
+    // The Toy Bow's nocked arrow, gone from the string once it is shot.
+    this.nock = this.weapon?.getObjectByName('arrow') ?? null;
     if (this.weapon) {
       this.weapon.position.set(0, -0.045 * B.hand, 0.006 * B.hand);
       this.hands[1].add(this.weapon);
@@ -2939,6 +3011,8 @@ export class Avatar {
       const held = Math.PI / 2 + wrist + bendR;
       const up = this.emote ? Math.max(0, Math.min(1, (armRaiseR - 1.3) / 1.0)) : 0;
       this.weapon.rotation.x = held + (Math.PI - held) * up;
+      // Shot, the bow is empty until the swing is over and the next is on.
+      if (this.nock) this.nock.visible = !(swung >= swing.secs * swing.strike && swung < swing.secs);
     }
     // The head keeps looking ahead as the shoulders turn.
     this.head.rotation.set(headNod, -twist * 0.8, headTilt);

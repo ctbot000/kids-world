@@ -108,7 +108,7 @@ const UNDO_KEEP = 40;
 // Game time, not wall-clock time: a frame that comes late cannot use up a
 // speech bubble before it has been drawn.
 const BUBBLE_SECS = 4.5;
-// The 👊 button: the bubble blaster's bubble goes at a monster no further
+// The 👊 button: the bubble blaster's bubble (and the bow's arrow) goes at a monster no further
 // round from straight ahead than this (the cosine of 70°); any other swing
 // sweeps round in front of you, like a sword in a Zelda game, and hits every
 // monster it passes, as far round as this either side (the cosine of 100°).
@@ -1840,7 +1840,9 @@ export class Game extends EventTarget {
     if (this.renderer.camDist <= 1.3) this.me.yaw = this.renderer.view.yaw + Math.PI;
     const fx = Math.sin(this.me.yaw);
     const fz = Math.cos(this.me.yaw);
-    const blaster = weapon?.key === 'blaster';
+    const bow = weapon?.key === 'bow';
+    // The bubble blaster and the bow shoot at the one nearest in front.
+    const blaster = weapon?.key === 'blaster' || bow;
     const rod = weapon?.key === 'bombrod';
     const hits = [];
     let best = null;
@@ -1890,13 +1892,23 @@ export class Game extends EventTarget {
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
     this.send({ t: 'swing' });
     if (!blaster) this.sound.play('swish');
+    if (bow) this.sound.play('creak');
     const world = this.world;
     setTimeout(() => {
       if (this.world !== world) return;
       const yaw = this.me.yaw;
       const hand = { x: b.x + Math.sin(yaw) * 0.5, y: b.y + 1, z: b.z + Math.cos(yaw) * 0.5 };
       const at = best && (this.monsters.get(best.id)?.model.group.position ?? best.m);
-      if (blaster) {
+      // A bow's arrow bops as it lands on its monster, a blink after it flies.
+      let shot = 0;
+      if (bow) {
+        shot = at
+          ? this.renderer.effects.arrowShot(hand.x, hand.y + 0.25, hand.z, at.x, at.y + best.size.height / 2, at.z, true)
+          : this.renderer.effects.arrowShot(hand.x, hand.y + 0.25, hand.z, hand.x + Math.sin(yaw) * reach * 1.6, hand.y + 0.3, hand.z + Math.cos(yaw) * reach * 1.6);
+        this.sound.play('twang');
+        if (at) setTimeout(() => this.sound.play('thwop'), shot * 1000);
+        if (!at) shot = 0;
+      } else if (blaster) {
         if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
         else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
@@ -1913,12 +1925,17 @@ export class Game extends EventTarget {
         if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
       }
       if (best) {
-        this.bopSentAt = performance.now();
-        for (const hit of blaster ? [best] : [...hits, ...dragons]) {
-          if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
-          else this.bop(hit.id);
-        }
-        this.wearOut();
+        const bop = () => {
+          if (this.world !== world) return;
+          this.bopSentAt = performance.now();
+          for (const hit of blaster ? [best] : [...hits, ...dragons]) {
+            if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
+            else this.bop(hit.id);
+          }
+          this.wearOut();
+        };
+        if (shot) setTimeout(bop, shot * 1000);
+        else bop();
       }
     }, lands * 1000);
     if (best) return best.id;
