@@ -1,7 +1,7 @@
 // The pets (see shared/pets.js) as little models, in the coat each was given
 // and a collar the colour of their owner's T-shirt: a puppy, a kitten, a
-// bunny, a hamster, a piglet and a baby dragon on four legs, and a duckling
-// and a parrot on two. Each walks (or hops, scurries, waddles), runs, swims,
+// bunny, a hamster, a piglet and a baby dragon on four legs, and a
+// duckling, a parrot and a long-tailed tit on two. Each walks (or hops, scurries, waddles), runs, swims,
 // sits, lies down, sleeps, flies if it can, and does its tricks: begging,
 // spinning round, a jump, rolling over, a happy wiggle and a snack.
 import * as THREE from '../../vendor/three.module.js';
@@ -413,7 +413,69 @@ function parrot(coat) {
   return { group: g, body, roll, pivot, head, eyes, wings, folded, feet, band, tail, legs: [], ears: [], height: 0.4, pick: 0.24, bird: 'parrot', wingRate: 24 };
 }
 
-const BUILDERS = { puppy, kitten, bunny, hamster, piglet, dragon, duckling, parrot };
+// A long-tailed tit's coats: all white-headed (as in the north), with black
+// stripes over its eyes (as further south), or a warm buff. Every one has a
+// black back with rosy shoulders, and a tail longer than all the rest of it.
+const TITS = {
+  white: { head: '#fbf9f6', belly: '#fbf9f6', flank: '#f6dfe4' },
+  pink: { head: '#fbf9f6', belly: '#fbf6f4', flank: '#f2bccb', brow: true },
+  cream: { head: '#f6ead6', belly: '#f8eedd', flank: '#efd3c2' },
+};
+
+function tit(coat) {
+  const k = TITS[coat] ?? TITS.white;
+  const back = '#2f2a30';
+  const rosy = '#e7a3b6';
+  const { g, body, roll, pivot } = birdRig(0.12);
+  // A round little puff of a body, its head right on it (no neck to speak
+  // of): pale underneath, black on its back, with rosy shoulders.
+  pivot.add(mesh(sphere(1, 18, 14), toon(k.belly), 0, 0, 0, 0.072, 0.07, 0.078));
+  pivot.add(mesh(sphere(1, 16, 12), toon(back), 0, 0.022, -0.02, 0.05, 0.05, 0.062));
+  for (const side of [-1, 1]) {
+    pivot.add(mesh(sphere(1, 12, 10), toon(k.flank), side * 0.042, -0.012, 0.005, 0.034, 0.045, 0.055));
+    pivot.add(mesh(sphere(1, 12, 10), toon(rosy), side * 0.038, 0.03, -0.025, 0.022, 0.026, 0.04));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.07, 0.02);
+  pivot.add(head);
+  head.add(mesh(sphere(1, 18, 14), toon(k.head), 0, 0, 0, 0.058));
+  const eyes = eyesOn(head, 0.058, 0.058, 0.058, 0.03, 0.006, 0.011);
+  // Broad black stripes from over its eyes back to the nape.
+  if (k.brow) for (const side of [-1, 1]) head.add(mesh(sphere(1, 12, 8), toon(back), side * 0.03, 0.026, -0.01, 0.018, 0.016, 0.045).rotateY(side * 0.35));
+  // A tiny stubby beak.
+  const beak = mesh(cone(0.012, 0.022, 8), toon('#2b2530'), 0, -0.004, 0.064);
+  beak.rotation.x = Math.PI / 2;
+  head.add(beak);
+  blush(head, 0.058, 0.032, -0.014);
+  const band = collar(pivot, { y: 0.04, z: 0.025, r: 0.04, lean: 0.4, tag: false });
+  // The tail: long and thin, black, edged white.
+  const tail = new THREE.Group();
+  tail.position.set(0, -0.015, -0.065);
+  pivot.add(tail);
+  tail.add(mesh(sphere(1, 12, 10), toon(back), 0, -0.004, -0.09, 0.02, 0.007, 0.095).rotateX(-0.12));
+  for (const side of [-1, 1]) tail.add(mesh(sphere(1, 10, 8), toon('#f4f0ec'), side * 0.014, -0.006, -0.075, 0.008, 0.005, 0.072).rotateX(-0.12).rotateY(side * 0.06));
+  const folded = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.052, 0.012, -0.02);
+    f.rotation.z = side * 0.08;
+    f.add(mesh(sphere(1, 12, 10), toon(back), 0, -0.008, -0.014, 0.014, 0.036, 0.05));
+    f.add(mesh(sphere(1, 10, 8), toon('#f4f0ec'), side * 0.004, -0.016, -0.034, 0.01, 0.02, 0.026));
+    pivot.add(f);
+    return f;
+  });
+  const wings = wingPair(pivot, { x: 0.05, y: 0.02, length: 0.17, width: 0.06, thick: 0.012, color: back, tip: '#4a434b' });
+  const feet = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.025, 0.05, 0.01);
+    f.add(mesh(cylinder(0.006, 0.006, 0.05, 6), toon('#3a3438'), 0, -0.025, 0));
+    f.add(mesh(sphere(), toon('#3a3438'), 0, -0.05, 0.01, 0.014, 0.006, 0.022));
+    body.add(f);
+    return f;
+  });
+  return { group: g, body, roll, pivot, head, eyes, wings, folded, feet, band, tail, legs: [], ears: [], height: 0.27, pick: 0.21, bird: 'tit', wingRate: 32 };
+}
+
+const BUILDERS = { puppy, kitten, bunny, hamster, piglet, dragon, duckling, parrot, tit };
 
 // ------------------------------------------------ riding along
 
@@ -731,7 +793,8 @@ export class PetModel {
   }
 
   // Two legs: a duckling waddles, paddles and tucks its head in to sleep; a
-  // parrot stands up straight, flies with its wings out, and bobs about.
+  // parrot (and a long-tailed tit) stands up straight, flies with its wings
+  // out, and bobs about.
   birdPose(pose) {
     const t = this.time;
     const w = { drop: 0, pitch: 0, headX: 0, headY: 0, headZ: 0, fold: 1, open: 1 };
@@ -740,7 +803,7 @@ export class PetModel {
     this.rollOver = 0;
     this.bob = 0;
     this.flap = 0;
-    const parrot = this.bird === 'parrot';
+    const parrot = this.bird !== 'duck';
     switch (pose) {
       case 'walk':
       case 'run':
@@ -815,7 +878,7 @@ export class PetModel {
   applyBird(w) {
     const t = this.time;
     const c = this.cur;
-    const parrot = this.bird === 'parrot';
+    const parrot = this.bird !== 'duck';
     let bob = this.bob;
     let rock = 0;
     if (this.gait === 'walk') {
@@ -844,7 +907,9 @@ export class PetModel {
         f.visible = !flying;
         f.rotation.z = (i ? 1 : -1) * this.flap * Math.max(0, Math.sin(t * 16)) * 0.9;
       });
-      this.tail.rotation.x = flying ? 1.1 : 0.15 + Math.sin(t * 2) * 0.04;
+      // (A long-tailed tit's tail streams out behind it, and flicks.)
+      if (this.bird === 'tit') this.tail.rotation.x = flying ? -0.35 : Math.max(0, Math.sin(t * 1.3)) ** 8 * 0.35;
+      else this.tail.rotation.x = flying ? 1.1 : 0.15 + Math.sin(t * 2) * 0.04;
     } else {
       for (const wg of this.wings) wg.rotation.z = wg.userData.wing * (0.1 + this.flap * Math.max(0, Math.sin(t * 18)) * 0.9);
     }

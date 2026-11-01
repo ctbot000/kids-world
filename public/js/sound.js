@@ -438,6 +438,11 @@ export class Sound {
         this.tone(1300 * r(), { at: 0.18, type: 'square', attack: 0.02, decay: 0.2, gain: 0.03, slide: 800, slideTime: 0.18, vibrato: 40 });
         this.noise(0.08, { type: 'bandpass', freq: 2200, q: 2, gain: 0.05 });
         break;
+      case 'tit':
+        // Tsee-tsee-tsee, and a little trill.
+        for (let i = 0; i < 3; i++) this.tone(6200 * r(), { at: i * 0.07, decay: 0.04, gain: 0.03, slide: 7000, slideTime: 0.03 });
+        for (let i = 0; i < 4; i++) this.tone(4200 * r(), { at: 0.24 + i * 0.03, decay: 0.025, gain: 0.025 });
+        break;
       case 'dragon':
         // A tiny roar, and a puff of sparkles.
         this.tone(260 * r(), { type: 'sawtooth', attack: 0.05, decay: 0.4, gain: 0.05, slide: 520, slideTime: 0.25, vibrato: 35 });

@@ -7,10 +7,11 @@
 // A walking pet goes the way you went (along a trail of crumbs you leave),
 // runs to catch up when it falls behind, hops up steps and swims; when you
 // stop it comes to sit beside you, lies down after a while, and sleeps at
-// night. On a ride it rides along with you. A parrot flies round you and
-// sits on your head when you stand still; a baby dragon flies round you and
-// lands beside you. Left far behind, or stuck, a pet pops over to you. And
-// it does tricks: whatever you do (a wave, a dance), it does too.
+// night. On a ride it rides along with you. A parrot (and a long-tailed
+// tit) flies round you and sits on your head when you stand still; a baby
+// dragon flies round you and lands beside you. Left far behind, or stuck,
+// a pet pops over to you. And it does tricks: whatever you do (a wave, a
+// dance), it does too.
 //
 // Everything is timed by the steps it is given, never by the clock, so a
 // test stepping time along sees what a player would.
@@ -52,6 +53,7 @@ export const PET_INFO = {
   piglet: { radius: 0.2, height: 0.5, float: 0.3, walk: 4.6, run: 9.5 },
   duckling: { radius: 0.15, height: 0.4, float: 0.15, walk: 4.6, run: 9.5 },
   parrot: { radius: 0.15, height: 0.4, float: 0.2, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.75, perch: 'head' },
+  tit: { radius: 0.12, height: 0.3, float: 0.15, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.6, perch: 'head' },
   dragon: { radius: 0.2, height: 0.55, float: 0.3, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.45, perch: 'ground' },
 };
 

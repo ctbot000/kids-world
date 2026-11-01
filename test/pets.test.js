@@ -307,8 +307,8 @@ test('posing with you, a pet sits in front of you looking out the way you do', (
     const yaw = 2.2;
     for (let i = 0; i < 5 / DT; i++) stepPet(world, pet, ownerOf(me, yaw, { pose: true }), DT);
     const spot = poseSpot(ownerOf(me, yaw));
-    if (kind === 'parrot') {
-      // A parrot sits on your head for the picture.
+    if (PET_INFO[kind].perch === 'head') {
+      // A parrot (or a long-tailed tit) sits on your head for the picture.
       assert.equal(pet.mode, 'perch');
       assert.ok(Math.abs(pet.y - 6 - 1.41) < 0.01);
       continue;
@@ -338,10 +338,10 @@ test('a trick plays for a while, a jump leaves the ground, and walking off cuts 
   assert.notEqual(petPose(pet), 'spin', 'you went: it comes along instead');
 });
 
-test('a parrot sits on your head while you stand still (beside you while a friend is there), and a baby dragon lands beside you', () => {
+for (const bird of ['parrot', 'tit']) test(`a ${bird} sits on your head while you stand still (beside you while a friend is there), and a baby dragon lands beside you`, () => {
   const world = meadow();
   const me = standing(24.5, 6, 24.5);
-  const parrot = makePet('parrot', 22, 8, 24.5);
+  const parrot = makePet(bird, 22, 8, 24.5);
   const dragon = makePet('dragon', 27, 8, 24.5);
   for (let i = 0; i < 4 / DT; i++) {
     stepPet(world, parrot, ownerOf(me, 0, { head: 1.6 }), DT);

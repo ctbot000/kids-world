@@ -339,7 +339,8 @@ export function cleanLook(look, random = Math.random) {
 // its coat and its name are part of your look, as look.pet (none without
 // one), so friends see it and a login brings it along. The first coat and
 // the first name are a kind's own, for one that came without them. A
-// parrot and a baby dragon fly; the others walk, hop and swim.
+// parrot, a long-tailed tit and a baby dragon fly; the others walk, hop
+// and swim.
 export const PETS = [
   { key: 'puppy', name: 'Puppy', icon: '🐶', coats: ['tan', 'brown', 'cream', 'white', 'gray', 'charcoal'], names: ['Biscuit', 'Buddy', 'Waffles', 'Peanut', 'Coco', 'Bingo', 'Rolo', 'Noodle', 'Scout', 'Teddy'] },
   { key: 'kitten', name: 'Kitten', icon: '🐱', coats: ['orange', 'gray', 'white', 'charcoal', 'cream', 'brown'], names: ['Whiskers', 'Mittens', 'Luna', 'Tiger', 'Pumpkin', 'Socks', 'Muffin', 'Pebbles', 'Ginger', 'Mochi'] },
@@ -348,6 +349,7 @@ export const PETS = [
   { key: 'piglet', name: 'Piglet', icon: '🐷', coats: ['pink', 'cream', 'brown', 'charcoal'], names: ['Truffle', 'Rosie', 'Snuffles', 'Bubblegum', 'Poppy', 'Dumpling', 'Petunia', 'Button', 'Oinky', 'Sprout'] },
   { key: 'duckling', name: 'Duckling', icon: '🐥', coats: ['yellow', 'cream', 'white', 'brown'], names: ['Puddles', 'Waddles', 'Quackers', 'Sunny', 'Dandelion', 'Pipsqueak', 'Ducky', 'Splash', 'Lemon', 'Bubbles'] },
   { key: 'parrot', name: 'Parrot', icon: '🦜', flies: true, coats: ['green', 'blue', 'red', 'yellow'], names: ['Polly', 'Kiwi', 'Mango', 'Rio', 'Captain', 'Pepper', 'Echo', 'Tango', 'Skye', 'Chatter'] },
+  { key: 'tit', name: 'Long-tailed Tit', icon: '🐦', flies: true, coats: ['white', 'pink', 'cream'], names: ['Mochi', 'Snowy', 'Cotton', 'Puffin', 'Dango', 'Fluff', 'Pebble', 'Button', 'Tinsel', 'Daisy'] },
   { key: 'dragon', name: 'Baby Dragon', icon: '🐲', flies: true, coats: ['green', 'lavender', 'sky', 'pink', 'orange', 'red'], names: ['Sparky', 'Ember', 'Puff', 'Blaze', 'Smudge', 'Toasty', 'Cinder', 'Twinkle', 'Ziggy', 'Scales'] },
 ];
 export const PET_COATS = { ...FUR_COLORS, green: '#5cc96b', blue: '#4f9ff0', red: '#ef5b5b' };
