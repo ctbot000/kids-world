@@ -38,6 +38,7 @@ import { CHEST_REACH } from './treasure.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
+import { canFloat } from './fishing.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { canWatch } from './watch.js';
@@ -545,6 +546,18 @@ export class Room {
         else this.broadcast({ t: 'fish', pid, at: msg.at });
         break;
       }
+      // A fishing line (fishing.js) cast onto the water, and reeled in, with
+      // what came up on it: everyone else sees the line out from the caster's
+      // rod to the bobber, and the splash as it comes in. What was caught goes
+      // into the caster's own basket, as a pearl from a clam does.
+      case 'rod':
+        if (msg.op === 'cast') {
+          if (!canFloat(this.world, msg.at, p.s)) break;
+          this.broadcast({ t: 'rod', pid, op: 'cast', at: msg.at }, conn);
+        } else if (msg.op === 'reel') {
+          this.broadcast({ t: 'rod', pid, op: 'reel', caught: typeof msg.caught === 'string' ? msg.caught.slice(0, 16) : '' }, conn);
+        }
+        break;
       case 'draw':
         this.draw(conn, p, msg);
         break;

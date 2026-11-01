@@ -19,6 +19,8 @@ import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, heatUp, makeLesson, pickItem, recipeByKey, stoveNear, takeOut, workOn } from './shared/cooking.js';
 import { isTank, tankNear } from './shared/fishtank.js';
+import { biteWait, castSpot, catchFor, lineState, STAY } from './shared/fishing.js';
+import { FishingLine } from './render/fishing-rod.js';
 import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
@@ -326,6 +328,12 @@ export class Game extends EventTarget {
     this.computerAt = null;
     // The fish tank or bowl beside you, to feed (shared/fishtank.js).
     this.tankTarget = null;
+    // Fishing (shared/fishing.js): your line out on the water, { spot, x, z,
+    // biteAt, biting }, the water in front of you to cast onto, and every
+    // line out on the island (yours too), by player.
+    this.fishing = null;
+    this.fishTarget = null;
+    this.lines = new Map();
     // The robot kit beside you, the one whose window is open, and the robots
     // and programs at the island's kits, by cell key (shared/robokit.js).
     this.kitTarget = null;
@@ -463,6 +471,9 @@ export class Game extends EventTarget {
         break;
       case 'hoop':
         this.hoopNews(msg);
+        break;
+      case 'rod':
+        this.rodNews(msg);
         break;
       case 'draw':
         this.drawHeard(msg);
@@ -850,6 +861,8 @@ export class Game extends EventTarget {
     if (!p) return;
     this.renderer.removeAvatar(pid);
     this.dropPet(pid);
+    this.lines.get(pid)?.dispose();
+    this.lines.delete(pid);
     this.players.delete(pid);
     this.emit('players');
     if (!quiet && pid !== this.pid) {
@@ -3836,6 +3849,11 @@ export class Game extends EventTarget {
   // Q, or the Ride button: on the animal beside you, or off the one you are on.
   toggleRide() {
     if (this.dizzy || this.counting) return;
+    // Fishing: Q reels the line in, with a fish on it if one has the bobber.
+    if (this.fishing) {
+      this.reel();
+      return;
+    }
     // Spinning a hula hoop: Q drops it again (Shift does too, in input.js).
     if (this.hooping) {
       this.dropHoop();
@@ -3926,6 +3944,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.kitTarget) {
       this.openKit();
+      return;
+    }
+    if (!id && this.fishTarget) {
+      this.castLine();
       return;
     }
     if (!id) {
@@ -4072,6 +4094,142 @@ export class Game extends EventTarget {
       h.spins = spins;
       this.sound.play('hoop', { soft: secs > spin.spin });
       this.emit('hoop');
+    }
+  }
+
+  // ------------------------------------------------ fishing
+
+  // Q (or the 🎣 Fish button) facing water at the shore: the rod comes out
+  // and the bobber flies out onto the water (shared/fishing.js), for everyone
+  // on the island to see; a fish bites some seconds later.
+  castLine() {
+    const spot = this.fishTarget;
+    const b = this.me.body;
+    if (!spot || this.fishing) return;
+    this.me.yaw = Math.atan2(spot.x + 0.5 - b.x, spot.z + 0.5 - b.z);
+    this.fishing = { spot, x: b.x, z: b.z, biteAt: performance.now() + biteWait(Math.random()), biting: false };
+    this.send({ t: 'rod', op: 'cast', at: [spot.x, spot.y, spot.z] });
+    this.showLine(this.pid, spot);
+    this.sound.play('cast');
+    this.emit('fishing');
+    if (!this.toldFishing) {
+      this.toldFishing = true;
+      this.emit('toast', { icon: '🎣', text: `Wait for the bobber to dip under, then ${this.touch ? 'tap 🎣 Reel' : 'press Q'} quick!` });
+    }
+  }
+
+  // Each frame while your line is out: a fish biting (the bobber dips under,
+  // with a plink and a splash) or letting go (and another along later), and
+  // the line coming in if you walk off, jump, swim or get up into the air.
+  updateFishing(input) {
+    const f = this.fishing;
+    if (!f) return;
+    const b = this.me.body;
+    const move = input.readMove();
+    const gone = this.world.get(f.spot.x, f.spot.y, f.spot.z) !== B.WATER;
+    if (gone || this.dizzy || b.flying || b.inWater || !b.onGround || input.jump || Math.hypot(move.x, move.y) > 0.3 || Math.hypot(b.x - f.x, b.z - f.z) > STAY) {
+      this.stopFishing('');
+      return;
+    }
+    const now = performance.now();
+    const state = lineState(f, now);
+    if (state === 'bite' && !f.biting) {
+      f.biting = true;
+      this.sound.play('bite');
+      this.renderer.effects.splash(f.spot.x + 0.5, f.spot.y + 0.9, f.spot.z + 0.5);
+      this.emit('fishing');
+    } else if (state === 'gone') {
+      f.biting = false;
+      f.biteAt = now + biteWait(Math.random());
+      this.emit('notice', { text: 'It got away! Wait for the next one…', level: 'info' });
+      this.emit('fishing');
+    }
+    const me = this.players.get(this.pid)?.avatar;
+    if (me) me.rodDip = f.biting ? 1 : 0;
+  }
+
+  // Q (or 🎣 Reel) with your line out: a fish, if one has the bobber, into
+  // your basket — or now and then a seashell, a pearl or an old boot; too
+  // soon, and the line comes in empty.
+  reel() {
+    const f = this.fishing;
+    if (!f) return;
+    if (lineState(f, performance.now()) !== 'bite') {
+      this.emit('notice', { text: 'Too soon! Wait for the bobber to dip under the water.', level: 'info' });
+      this.stopFishing('');
+      return;
+    }
+    const c = catchFor(Math.random(), Math.random());
+    this.stopFishing(c.key);
+    const b = this.me.body;
+    if (c.basket) {
+      this.profile.addToBasket(c.basket, 1);
+      this.profile.count(c.basket === 'fish' ? 'fished' : c.basket === 'shell' ? 'shells' : 'pearls');
+      this.sound.play('collect');
+      this.renderer.effects.sparkles(b.x, b.y + 1.4, b.z, 14, ['#9fe8ff', '#ffffff', '#ffd84d', '#4aa8e8']);
+      if (c.basket === 'fish') this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: XP_FOR.fished.xp });
+      this.emit('collected', { key: c.basket, id: B.blockByKey(c.basket === 'fish' ? 'fish' : c.basket)?.id });
+    } else {
+      this.sound.play('bubble');
+    }
+    const text = c.basket === 'fish' ? `You caught ${/^[aeiou]/i.test(c.name) ? 'an' : 'a'} ${c.name}, ${c.length} cm long!` : c.key === 'boot' ? 'An old boot! Back in the water it goes.' : c.key === 'pearl' ? 'A pearl on the hook! It shines like the moon. ✨' : 'A seashell on the hook!';
+    this.emit('toast', { icon: c.icon, text });
+  }
+
+  // The line in, with what came up on it (a CATCHES key, or '' for nothing).
+  stopFishing(caught) {
+    if (!this.fishing) return;
+    this.fishing = null;
+    const me = this.players.get(this.pid)?.avatar;
+    if (me) me.rodDip = 0;
+    this.send({ t: 'rod', op: 'reel', caught });
+    this.dropLine(this.pid, caught);
+    this.emit('fishing');
+  }
+
+  // What the island says of a friend's line: cast out, or reeled in.
+  rodNews(msg) {
+    if (msg.pid === this.pid) return;
+    if (msg.op === 'cast' && Array.isArray(msg.at)) this.showLine(msg.pid, { x: msg.at[0], y: msg.at[1], z: msg.at[2] });
+    else if (msg.op === 'reel') this.dropLine(msg.pid, msg.caught);
+  }
+
+  showLine(pid, at) {
+    this.lines.get(pid)?.dispose();
+    this.lines.set(pid, new FishingLine(this.renderer.scene, at));
+  }
+
+  // A line reeled in: a splash where the bobber was, with the reel's
+  // whirr, and a fish leaping out with it if one came up.
+  dropLine(pid, caught) {
+    const line = this.lines.get(pid);
+    if (!line) return;
+    this.lines.delete(pid);
+    const at = line.bobber.position;
+    if (this.near(at.x, at.y, at.z, 24)) {
+      this.sound.play('reel');
+      if (caught) this.sound.play('splash');
+    }
+    if (caught) this.renderer.effects.splash(at.x, at.y, at.z);
+    else this.renderer.effects.ripple(at.x, at.y - 0.05, at.z);
+    line.dispose();
+  }
+
+  // Each frame, every line out on the island: from its fisher's rod tip to
+  // the bobber, a plop as each bobber lands.
+  updateLines(dt) {
+    if (!this.lines.size) return;
+    const t = performance.now() / 1000;
+    for (const [pid, line] of this.lines) {
+      const a = this.players.get(pid)?.avatar;
+      const tip = a?.rodTip(line.tip) ?? null;
+      line.update(tip, dt, t, pid === this.pid && Boolean(this.fishing?.biting));
+      if (!line.landed && line.age >= line.flight) {
+        line.landed = true;
+        const p = line.at;
+        if (this.near(p.x, p.y, p.z, 24)) this.sound.play('plop');
+        this.renderer.effects.ripple(p.x, p.y - 0.05, p.z);
+      }
     }
   }
 
@@ -5907,6 +6065,7 @@ export class Game extends EventTarget {
     else {
       this.updateHoop(input);
       this.moveMe(dt, input);
+      this.updateFishing(input);
     }
     // The wind roars louder the closer it is.
     this.sound.wind(foot ? Math.max(0, 1 - Math.hypot(this.me.body.x - foot.x, this.me.body.z - foot.z) / 50) : 0);
@@ -5936,11 +6095,19 @@ export class Game extends EventTarget {
     // A hula hoop put down beside you: in reach to spin it. Only on foot,
     // standing on the ground, and not spinning one already.
     this.hoopTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !this.hooping && !on.flying && on.onGround ? this.hoopNear(on) : 0;
+    // Water in front of you at the shore, to fish in, when there is nothing
+    // else beside you to use; while your line is out, where its bobber is.
+    this.fishTarget = this.fishing
+      ? this.fishing.spot
+      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
+        ? castSpot(this.world, on, this.me.yaw)
+        : null;
     this.sendMove();
     this.updatePlayers(dt);
     this.danceLoop();
     if (this.seat) this.checkTeaParty();
     this.updateHotTubs();
+    this.updateLines(dt);
     this.updateCritters(dt);
     this.seatPassengers(dt);
     this.updatePets(dt);
@@ -6102,6 +6269,8 @@ export class Game extends EventTarget {
     me.speed = speed;
     // Hooping, the hips swing on the spot; walking or jumping drops the hoop.
     if (this.hooping && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;
+    // Fishing, the rod held out over the water; walking off reels it in.
+    else if (this.fishing && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.fish;
     else me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
     if (events.bounced) {
@@ -6489,6 +6658,10 @@ export class Game extends EventTarget {
     this.chestAt = null;
     this.hooping = null;
     this.hoopTarget = 0;
+    this.fishing = null;
+    this.fishTarget = null;
+    for (const line of this.lines.values()) line.dispose();
+    this.lines.clear();
     this.renderer.screens.clear();
     this.drawings.clear();
     this.renderer.drawings.clear();

@@ -35,6 +35,7 @@ export const SELL_PRICES = {
   watermelon: 3,
   shell: 2,
   pearl: 5,
+  fish: 2,
   star: 5,
   flower: 1,
   ruby: 10,

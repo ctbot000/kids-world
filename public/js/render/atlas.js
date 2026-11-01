@@ -1750,6 +1750,42 @@ const PAINT = {
     star(ctx, 28, 30, 7, 3);
     ctx.fill();
   },
+  // A fish off the line (fishing.js): a plump blue one with a sunny belly,
+  // its tail fanned out behind it.
+  fish(ctx) {
+    ctx.fillStyle = '#4aa8e8';
+    ctx.beginPath();
+    ctx.moveTo(14, 32);
+    ctx.lineTo(4, 20);
+    ctx.lineTo(4, 44);
+    ctx.closePath();
+    ctx.fill();
+    outline(ctx, 'rgba(20,60,110,0.6)', 2.5);
+    ctx.fillStyle = '#4aa8e8';
+    ellipse(ctx, 34, 32, 24, 15);
+    ctx.fill();
+    outline(ctx, 'rgba(20,60,110,0.6)', 2.5);
+    ctx.fillStyle = '#ffe07a';
+    ellipse(ctx, 36, 38, 17, 7);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20,60,110,0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(44, 21);
+    ctx.quadraticCurveTo(40, 32, 44, 43);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(49, 28, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1d2433';
+    ctx.beginPath();
+    ctx.arc(50, 28, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ellipse(ctx, 28, 25, 7, 3, -0.3);
+    ctx.fill();
+  },
   // Vegetables, as the basket shows them.
   carrot(ctx) {
     ctx.fillStyle = '#ff8a1f';

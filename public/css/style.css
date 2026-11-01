@@ -1476,6 +1476,19 @@ body.touch.playing #joystick {
   border-color: var(--sun-dark);
 }
 
+/* A fish on the line: 🎣 Reel! flashes to say be quick. Its place is set
+   inline, so the flash is in its colours, not its size. */
+.ride-button.biting {
+  animation: reel-now 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes reel-now {
+  to {
+    background: #ff8a5c;
+    border-color: #fff3b0;
+  }
+}
+
 .critter-tag .name {
   background: rgba(255, 243, 176, 0.92);
 }
@@ -3539,9 +3552,10 @@ kbd {
   }
 }
 
-/* Upright screens under 640px tall have no room for the basket to grow: a
+/* Upright screens under 700px tall have no room for the basket to grow: a
    second row of treasures would push the touch buttons and the thumbstick
-   into the little map, Hills' options or a connection message. Nor do narrow
+   into the little map, Hills' options or a connection message (at 360x640,
+   once there were twenty-four kinds of treasure). Nor do narrow
    screens held sideways under 400px tall: between the thumbstick and the jump
    buttons a full basket wraps into two rows, three at 568px wide, and grows
    into a message under the tool options, or into the options themselves;
@@ -3549,7 +3563,7 @@ kbd {
    scrolling sideways like the hotbar under it. Its padding keeps the pills'
    shadows inside it, where scrolling would cut them off, and its margins
    take that room back. */
-@media (max-aspect-ratio: 3/4) and (max-height: 639px), (max-width: 760px) and (max-height: 399px) {
+@media (max-aspect-ratio: 3/4) and (max-height: 699px), (max-width: 760px) and (max-height: 399px) {
   .basket {
     flex-wrap: nowrap;
     justify-content: flex-start;

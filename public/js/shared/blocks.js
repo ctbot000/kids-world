@@ -365,6 +365,9 @@ export const STAR_PIECE = def(76, 'star-piece', { name: 'Star Piece', kind: 'ite
 // A pearl, found now and then in a giant clam (critters.js). It gleams a little.
 // The first id past the computer's, which turns and so takes 257-260.
 export const PEARL = def(261, 'pearl', { name: 'Pearl', kind: 'item', tiles: 'pearl', collect: 'pearl', light: 4, sound: 'glass' });
+// A fish caught on a line (fishing.js), whatever kind it was. The first id
+// past the robot kit's, which turns and so takes 379-382.
+export const FISH = def(383, 'fish', { name: 'Fish', kind: 'item', tiles: 'fish', collect: 'fish', sound: 'plant' });
 
 // ---------------------------------------------------------------- jewels
 // Jewels sit in gem rocks, deep in the stone of the island and in the walls
@@ -542,6 +545,7 @@ export const COLLECTABLES = [
   ...CROPS.map((c, i) => ({ key: c.key, name: c.name, plural: c.plural, item: CROP_ITEMS[i], sprout: CROP_STAGES[i][0], crop: true })),
   { key: 'shell', name: 'Seashell', plural: 'Seashells', item: SHELL, sprout: 0 },
   { key: 'pearl', name: 'Pearl', plural: 'Pearls', item: PEARL, sprout: 0 },
+  { key: 'fish', name: 'Fish', plural: 'Fish', item: FISH, sprout: 0 },
   { key: 'star', name: 'Star Piece', plural: 'Star Pieces', item: STAR_PIECE, sprout: 0 },
   { key: 'flower', name: 'Flowers', plural: 'Flowers', item: FLOWER_BUNCH, sprout: 0 },
   ...GEMS.map(([key, name, plural], i) => ({ key, name, plural, item: GEM_ITEMS[i], sprout: 0 })),

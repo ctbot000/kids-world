@@ -217,6 +217,25 @@ export class Sound {
         this.noise(0.4, { type: 'bandpass', freq: 900, q: 0.7, gain: 0.3 });
         for (let i = 0; i < 4; i++) this.tone(600 + Math.random() * 600, { at: 0.05 + i * 0.05, decay: 0.05, gain: 0.05, slide: 1400 });
         break;
+      // Fishing (shared/fishing.js): the rod swished out and the reel
+      // ticking as the line runs; the bobber plopping onto the water; a
+      // quick plink-plink as a fish takes it; and the reel wound in fast.
+      case 'cast':
+        this.noise(0.18, { type: 'bandpass', freq: 1800, q: 1.2, gain: 0.12, attack: 0.05 });
+        for (let i = 0; i < 6; i++) this.noise(0.02, { at: 0.12 + i * 0.045, type: 'bandpass', freq: 3200, q: 5, gain: 0.07 });
+        break;
+      case 'plop':
+        this.tone(520, { decay: 0.12, gain: 0.14, slide: 900, slideTime: 0.08 });
+        this.noise(0.08, { type: 'lowpass', freq: 1400, gain: 0.08 });
+        break;
+      case 'bite':
+        this.tone(NOTE(84), { decay: 0.08, gain: 0.12, type: 'triangle' });
+        this.tone(NOTE(84), { at: 0.12, decay: 0.08, gain: 0.12, type: 'triangle' });
+        this.noise(0.15, { at: 0.02, type: 'bandpass', freq: 900, q: 0.8, gain: 0.12 });
+        break;
+      case 'reel':
+        for (let i = 0; i < 10; i++) this.noise(0.018, { at: i * 0.03, type: 'bandpass', freq: 3600, q: 6, gain: 0.08 });
+        break;
       // The watering can: a soft shower, and drops pattering on the soil.
       case 'water':
         this.noise(0.5, { type: 'highpass', freq: 2600, gain: 0.05, attack: 0.06 });
