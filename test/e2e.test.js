@@ -6775,7 +6775,7 @@ test('the admin page watches any island it kept: live while it is played, and it
   }
 });
 
-test('fishing: 🎣 Fish (Q) at the shore casts a line onto the water, 🎣 Reel! (Q) when a fish bites lands it in the basket, too soon reels in nothing, and walking off reels in', { skip }, async () => {
+test('fishing: 🎣 Fish (Q) at the shore casts a line with a fish circling under it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // Level ground beside the start, cleared, with a pond dug in front, to the east.
@@ -6802,28 +6802,43 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line onto the water, 🎣 Reel
   });
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🎣 Fish'));
   await page.keyboard.press('KeyQ');
-  await until(page, () => window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 1 && document.getElementById('ride').textContent.includes('Reel'));
-  // The rod held out (ANIM.fish).
+  await until(page, () => window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 1 && document.getElementById('ride').textContent.includes('Wait'));
+  // The rod held out (ANIM.fish), and a fish's shadow circling the bobber.
   await until(page, () => window.kidsWorld.game.me.anim === 15);
+  await until(page, () => {
+    const g = window.kidsWorld.game;
+    const line = g.lines.get(g.pid);
+    return line.shadow.visible && line.shadow.position.distanceTo(line.at) < 2;
+  });
   const out = await page.evaluate(() => {
     const g = window.kidsWorld.game;
-    return { spot: g.fishing.spot, water: g.world.get(g.fishing.spot.x, g.fishing.spot.y, g.fishing.spot.z), rod: Boolean(g.players.get(g.pid).avatar.rodTip()) };
+    return { water: g.world.get(g.fishing.spot.x, g.fishing.spot.y, g.fishing.spot.z), rod: Boolean(g.players.get(g.pid).avatar.rodTip()) };
   });
-  assert.equal(out.water, 10, 'the bobber on the water');
-  assert.ok(out.rod, 'a rod in hand');
-  // A bite: the button says to reel, and Q lands a minnow (the most likely catch) in the basket.
-  await page.evaluate(() => (window.kidsWorld.game.fishing.biteAt = performance.now()));
-  await until(page, () => window.kidsWorld.game.fishing?.biting && document.getElementById('ride').textContent.includes('🎣 Reel!'));
+  assert.deepEqual(out, { water: 10, rod: true }, 'the bobber on the water, a rod in hand');
+  // A bite: the bobber goes under and the button says strike; Q hooks a
+  // minnow (the most likely catch), and held, reels it in over the meter.
+  await page.evaluate(() => {
+    const f = window.kidsWorld.game.fishing;
+    f.nibbles = [];
+    f.strikeAt = performance.now();
+  });
+  await until(page, () => window.kidsWorld.game.fishing?.striking && document.getElementById('ride').textContent.includes('🎣 Strike!'));
   await page.evaluate(() => {
     const random = Math.random;
     Math.random = () => 0.01;
-    setTimeout(() => (Math.random = random), 200);
+    setTimeout(() => (Math.random = random), 100);
   });
-  await page.keyboard.press('KeyQ');
-  await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
+  await page.keyboard.down('KeyQ');
+  await until(page, () => window.kidsWorld.game.fishing?.phase === 'fight' && !document.getElementById('fishfight').hidden && document.getElementById('ride').textContent.includes('Hold to reel'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.fishing.catch.key), 'minnow');
+  await until(page, () => window.kidsWorld.game.fishing?.phase === 'landed');
+  await page.keyboard.up('KeyQ');
+  assert.equal(await page.evaluate(() => document.getElementById('fishfight').hidden), true, 'the meter gone');
+  assert.ok(await page.evaluate(() => window.kidsWorld.game.lines.get(window.kidsWorld.game.pid).caught?.name === 'fish minnow'), 'the minnow hanging from the line');
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.profile.basket.fish, window.kidsWorld.profile.data.stats.fished, Boolean(window.kidsWorld.profile.data.stickers['gone-fishing'])]), [1, 1, true]);
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => /You caught a Minnow, \d+ cm long!/.test(t.textContent)));
-  // Too soon: the line comes in empty.
+  await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
+  // Too soon: it is scared off, and the line comes in empty.
   await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish'));
   await page.keyboard.press('KeyQ');
   await until(page, () => window.kidsWorld.game.fishing);
@@ -6837,6 +6852,27 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line onto the water, 🎣 Reel
   await page.keyboard.down('KeyS');
   await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
   await page.keyboard.up('KeyS');
+  // On a touch screen the button is pressed and held: down strikes, held reels, up lets go.
+  await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    Object.assign(b, { x: g.lastCast.x, z: g.lastCast.z, vx: 0, vz: 0 });
+    g.me.yaw = Math.PI / 2;
+  });
+  await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.fishing);
+  await page.evaluate(() => {
+    const f = window.kidsWorld.game.fishing;
+    f.nibbles = [];
+    f.strikeAt = performance.now();
+  });
+  await until(page, () => window.kidsWorld.game.fishing?.striking);
+  const press = (type) => page.evaluate((type) => document.getElementById('ride').dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1 })), type);
+  await press('pointerdown');
+  assert.deepEqual(await page.evaluate(() => [window.kidsWorld.game.fishing?.phase, window.kidsWorld.game.reelHeld]), ['fight', true], 'hooked and reeling');
+  await press('pointerup');
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.reelHeld), false, 'let go');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

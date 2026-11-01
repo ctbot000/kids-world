@@ -233,8 +233,17 @@ export class Sound {
         this.tone(NOTE(84), { at: 0.12, decay: 0.08, gain: 0.12, type: 'triangle' });
         this.noise(0.15, { at: 0.02, type: 'bandpass', freq: 900, q: 0.8, gain: 0.12 });
         break;
+      // The reel wound in: a run of clicks (a few soft ones, held in a fight).
       case 'reel':
-        for (let i = 0; i < 10; i++) this.noise(0.018, { at: i * 0.03, type: 'bandpass', freq: 3600, q: 6, gain: 0.08 });
+        for (let i = 0; i < (opts.soft ? 4 : 10); i++) this.noise(0.018, { at: i * 0.03 + Math.random() * 0.01, type: 'bandpass', freq: 3600 * r(), q: 6, gain: opts.soft ? 0.05 : 0.08 });
+        break;
+      // A nibble at the bobber: one small plink.
+      case 'nibble':
+        this.tone(NOTE(91) * r(), { decay: 0.06, gain: 0.07, type: 'triangle' });
+        break;
+      // The line pulled too tight: a thin creak, rising.
+      case 'strain':
+        this.tone(700 * r(), { type: 'sawtooth', attack: 0.02, decay: 0.22, gain: 0.03, slide: 1100, slideTime: 0.2 });
         break;
       // The watering can: a soft shower, and drops pattering on the soil.
       case 'water':

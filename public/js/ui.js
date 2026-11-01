@@ -16,6 +16,7 @@ import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
+import { FIGHT } from './shared/fishing.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -2367,7 +2368,7 @@ export class UI {
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
-          card('🎣', 'Fishing', ['Stand at the edge of a pond or the sea, facing the water, and tap 🎣 Fish (or press ', h('kbd', {}, 'Q'), '): out flies your bobber. When it dips under the water, tap 🎣 Reel! (or ', h('kbd', {}, 'Q'), ') quick to pull in a fish for your basket! Too soon and the line comes in empty; walk off to reel it in.']),
+          card('🎣', 'Fishing', ['Stand at the edge of a pond or the sea, facing the water, and tap 🎣 Fish (or press ', h('kbd', {}, 'Q'), '). A twitch is only a nibble! When the bobber goes right under, tap 🎣 Strike! (or ', h('kbd', {}, 'Q'), ') quick. Then hold 🎣 Hold to reel (or hold ', h('kbd', {}, 'Q'), ') to wind the fish in — but let go when the line goes red, or it snaps! Big fish fight hard.']),
           card('💎', 'Jewels', ['Tap a sparkly gem rock to dig out its jewel. Look in the mine in the mountain, or dig deep down!']),
           card('🎒', 'Backpack', ['Everything you buy in the 🛒 shop goes in your 🎒 backpack (the 🎒 button, or ', h('kbd', {}, 'I'), '): put your shoes, wings and clothes on or take them off, pick which toy weapon is in your hand, and drink a 🧪 potion. You see yourself as you change. Your 🎁 capsule toys and 👾 monster figures are in 🧸 My collection.']),
           card('🛒', 'Shop', ['Sell your fruit, vegetables, shells, pearls, star pieces and jewels for coins in the 🛒 shop, then buy running shoes to run faster, 🛼 roller skates to glide, wings or a jet pack to fly faster, a toy sword, bubble blaster, star hammer, lava blade, bomb rod or bow to pop monsters, 👕 clothes (a cape to jump higher, armor against bumps, a fire suit for lava, or just to look grand), 🧪 potions to fill your HP up, and vegetables to plant!']),
@@ -3293,8 +3294,26 @@ export class UI {
     $('ride').onmousedown = (e) => e.preventDefault();
     $('ride').onclick = () => {
       $('ride').blur();
+      if (this.reelPressed) {
+        this.reelPressed = false;
+        return;
+      }
       this.sound.unlock();
       game.toggleRide();
+    };
+    // Fishing, the button is pressed and held, not clicked: down strikes
+    // the moment it goes, and held, it reels in (game.js updateFishing).
+    $('ride').onpointerdown = (e) => {
+      if (!game.fishing) return;
+      e.preventDefault();
+      this.sound.unlock();
+      this.reelPressed = true;
+      game.reelHeld = true;
+      $('ride').setPointerCapture?.(e.pointerId);
+      game.toggleRide();
+    };
+    $('ride').onpointerup = $('ride').onpointercancel = () => {
+      game.reelHeld = false;
     };
     $('next-stage').onmousedown = (e) => e.preventDefault();
     $('next-stage').onclick = () => {
@@ -4908,6 +4927,20 @@ export class UI {
     if (spins >= 0) el.textContent = `⭕ ${spins} ${spins === 1 ? 'spin' : 'spins'}`;
   }
 
+  // While a fish is on your line: how tight the line is (the needle over
+  // green, yellow and red) and how far it has to come in (the fish swimming
+  // in to the island), over the hotbar.
+  renderFishFight(g) {
+    const el = $('fishfight');
+    const f = g?.fishing?.phase === 'fight' ? g.fishing.fight : null;
+    el.hidden = !f;
+    if (!f) return;
+    el.querySelector('.fish-needle').style.left = `${(Math.min(1, f.tension) * 100).toFixed(1)}%`;
+    el.querySelector('.fish-fish').style.left = `${((1 - f.progress) * 100).toFixed(1)}%`;
+    el.classList.toggle('red', f.tension > FIGHT.red);
+    el.classList.toggle('running', f.pull > f.power * 0.5 && f.power > 0.2);
+  }
+
   // Sit (or Lie down), beside the chair, sofa or bed next to you, and Get up
   // while you sit there: the Ride button, for seats.
   seatButton(g, r) {
@@ -4957,18 +4990,22 @@ export class UI {
             ? ['🗝️ Open', 'Open the treasure chest with a key']
             : ['🔒 Locked', 'The treasure chest is locked: solve a quiz for a key']
           : t === g.fishTarget
-            ? g.fishing
-              ? g.fishing.biting
-                ? ['🎣 Reel!', 'A fish is biting: reel it in!']
-                : ['🎣 Reel', 'Reel the line in']
-              : ['🎣 Fish', 'Cast a fishing line onto the water']
+            ? !g.fishing
+              ? ['🎣 Fish', 'Cast a fishing line onto the water']
+              : g.fishing.phase === 'fight'
+                ? ['🎣 Hold to reel', 'Hold to reel the fish in; let go when the line goes red']
+                : g.fishing.phase === 'landed'
+                  ? ['🎉 Caught!', 'Caught!']
+                  : g.fishing.striking
+                    ? ['🎣 Strike!', 'A fish is biting: strike now!']
+                    : ['🎣 Wait…', 'Wait for the bobber to go right under']
             : null;
     const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.classList.toggle('biting', label === '🎣 Reel!');
+      el.classList.toggle('biting', label === '🎣 Strike!');
       el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
@@ -7829,6 +7866,7 @@ export class UI {
     this.renderHideSeek();
     this.renderRace(g);
     this.renderHoop(g);
+    this.renderFishFight(g);
     this.raceButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);

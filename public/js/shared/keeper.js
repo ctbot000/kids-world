@@ -181,7 +181,7 @@ export async function verifySignature(publicKey, peer, nonce, sig) {
 // game's own (stickers.js), so a new sticker or count needs no change here
 // and is kept even by a keeper running older code, while a made-up profile
 // stays small.
-export const KEPT_MAX = 256;
+export const KEPT_MAX = 512;
 
 // What is kept of a profile: your name and look, your basket, coins,
 // potions and gear from the shop, chest keys (the isle's own world of you), what you have done and the stickers it
@@ -285,7 +285,7 @@ export function mergeProfiles(mine, theirs) {
 }
 
 // Stats that are the best there has ever been, not a count to add up.
-const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest']);
+const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm']);
 
 // What you did as the guest on a device, added to the player you logged in
 // as there, once, when you say it was you: every sticker either has earned

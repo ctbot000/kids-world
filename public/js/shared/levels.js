@@ -108,8 +108,10 @@ export const XP_FOR = {
   photos: { xp: 5, cap: 100 },
   sown: { xp: 2 },
   harvested: { xp: 1 },
-  // Fish caught on a line (shared/fishing.js).
+  // Fish caught on a line (shared/fishing.js), and the longest one yet, in
+  // centimetres.
   fished: { xp: 3 },
+  fishcm: { xp: 0.5 },
   watered: { xp: 0.5, cap: 400 },
 };
 

@@ -943,6 +943,77 @@ body.fullscreen .full-icon .leave {
   font-weight: 600;
 }
 
+/* A fish on the line: how tight the line is, a needle over green, yellow
+   and red, and how far the fish has to come in, swimming in to the island. */
+.fish-bar {
+  align-items: center;
+}
+
+.fish-tension,
+.fish-way {
+  position: relative;
+  display: block;
+  width: min(30vw, 150px);
+  height: 14px;
+  border-radius: 999px;
+}
+
+.fish-tension {
+  background: linear-gradient(90deg, #6fd46f 0%, #6fd46f 60%, #ffd84d 72%, #ff5a4a 85%, #ff5a4a 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+
+.fish-needle {
+  position: absolute;
+  top: -4px;
+  width: 6px;
+  height: 22px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background: #3d2e4f;
+  box-shadow: 0 0 0 2px white;
+}
+
+.fish-bar.red .fish-tension {
+  animation: line-red 0.2s ease-in-out infinite alternate;
+}
+
+@keyframes line-red {
+  to {
+    box-shadow:
+      inset 0 0 0 2px white,
+      0 0 10px 3px rgba(255, 90, 74, 0.8);
+  }
+}
+
+.fish-way {
+  background: linear-gradient(90deg, #ffe7a8 0 12%, #5fc4f0 12% 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+
+.fish-shore,
+.fish-fish {
+  position: absolute;
+  top: 50%;
+  font-size: 1rem;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.fish-shore {
+  left: 6%;
+}
+
+.fish-bar.running .fish-fish {
+  animation: fish-run 0.12s linear infinite alternate;
+}
+
+@keyframes fish-run {
+  to {
+    transform: translate(-50%, -50%) rotate(14deg);
+  }
+}
+
 /* Hide and seek: the count, the time left and who is found, over the hotbar. */
 .hideseek-bar .found {
   color: #7b4fd0;
