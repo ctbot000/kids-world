@@ -23,6 +23,7 @@ import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { ANIM, Avatar, shirtHex, weapon } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
+import { RoboKits } from './robokits.js';
 import { GoBoards } from './go-boards.js';
 import { Screens } from './screens.js';
 import { Tornado } from './tornado-model.js';
@@ -166,6 +167,8 @@ export class Renderer {
     this.tornado = new Tornado(this.scene);
     this.drawings = new Drawings(this.scene, this.terrain);
     this.goBoards = new GoBoards(this.scene, this.terrain);
+    // The robots built at robot kits (shared/robokit.js).
+    this.robotKits = new RoboKits(this.scene);
     this.screens = new Screens(this.scene, this.terrain);
     this.env = {};
 

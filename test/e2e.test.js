@@ -12,7 +12,7 @@ import { after, afterEach, before, test as eachTest } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
-import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
+import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, ROBOT_KIT, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
@@ -6410,6 +6410,85 @@ test('a computer: Q by it opens typing practice, a line typed lights each next k
   await until(page, () => document.getElementById('modal').hidden);
   assert.equal(await page.evaluate(() => window.kidsWorld.game.computerAt), null);
   assert.equal(await page.evaluate(() => window.kidsWorld.ui.typeRain), null, 'its frames stop with the window');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a robot kit: Q opens it, a hub goes on the plate with a tap, a ready-made robot and blocks tapped and dragged in, and Run drives it on the mat; the island keeps it on the kit', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  const at = await page.evaluate((id) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], id);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id };
+  }, ROBOT_KIT);
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Build'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Robot Kit'));
+  // An empty kit has the hub in hand: a tap on the plate puts it there.
+  assert.ok(await page.evaluate(() => document.querySelector('.rk-part[data-part="hub"]').classList.contains('on')));
+  await until(page, () => document.querySelector('.rk-canvas')?.clientWidth > 100);
+  const box = await (await page.$('.rk-canvas')).boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await until(page, () => document.querySelector('.rk-status').textContent.includes('Ready to program'));
+  // A ready-made robot swaps it, at a second tap.
+  await page.click('.rk-template[data-template="car"]');
+  assert.match(await page.evaluate(() => document.querySelector('.rk-template[data-template="car"]').textContent), /again/);
+  await page.click('.rk-template[data-template="car"]');
+  await until(page, () => [...document.querySelectorAll('.rk-port b')].map((b) => b.textContent).join('') === 'AB');
+  // Its program, a block tapped in at the end and one dragged in at the top.
+  await page.click('.rk-tab[data-tab="code"]');
+  await until(page, () => document.querySelector('.rk-count').textContent.startsWith('6 /'));
+  await page.click('.rk-cat[data-cat="sound"]');
+  await page.click('.rk-palette-list .rk-block .rk-block-head');
+  await until(page, () => document.querySelector('.rk-count').textContent.startsWith('7 /'));
+  await page.click('.rk-cat[data-cat="light"]');
+  const from = await (await page.$('.rk-palette-list .rk-block')).boundingBox();
+  const first = await (await page.$('.rk-top > .rk-block')).boundingBox();
+  await page.mouse.move(from.x + 20, from.y + 15);
+  await page.mouse.down();
+  for (let k = 1; k <= 8; k++) await page.mouse.move(from.x + 20 + ((first.x + 20 - from.x - 20) * k) / 8, from.y + 15 + ((first.y + 2 - from.y - 15) * k) / 8);
+  await page.mouse.up();
+  await until(page, () => document.querySelector('.rk-count').textContent.startsWith('8 /'));
+  assert.match(await page.evaluate(() => document.querySelector('.rk-top > .rk-block').textContent), /show/, 'dragged in at the top');
+  // Run: on the mat, driving its square.
+  await page.click('.rk-run');
+  await until(page, () => document.querySelector('.rk-tab.on').dataset.tab === 'play' && /move forward/.test(document.querySelector('.rk-doing').textContent));
+  await until(page, () => /turn left/.test(document.querySelector('.rk-doing').textContent));
+  assert.ok(await page.evaluate(() => document.querySelectorAll('.rk-matrix span.on').length > 0), 'its light matrix showing a picture');
+  await page.click('.rk-tab[data-tab="code"]');
+  await until(page, () => /turn|move/.test(document.querySelector('.rk-block.running')?.textContent));
+  await page.click('.rk-stop');
+  await until(page, () => !document.querySelector('.rk-run').hidden);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.profile.data.stats.robotruns), 1);
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.kitAt), null);
+  // The island has it, and it stands on its kit.
+  await until(page, (at) => {
+    const kw = window.kidsWorld;
+    const kit = kw.session.link.room.kits.get(kw.session.link.room.world.index(at.x, at.y, at.z))?.kit;
+    return kit?.parts.length === 8 && kit.code.length === 6 && kw.renderer.robotKits.shown.size === 1;
+  }, at);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

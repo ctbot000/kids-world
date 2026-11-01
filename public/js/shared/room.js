@@ -18,6 +18,7 @@ import { HideSeekSim } from './hideseek.js';
 import { RaceSim, raceTrack } from './race.js';
 import { buildHouse, escapeHouse, houseCells, houseUsed, inHouse, puzzleAt, RESET_MS, useEscape } from './escape.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
+import { cleanKit, isKit, MAX_KITS } from './robokit.js';
 import * as B from './blocks.js';
 import { trainAt } from './coaster.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
@@ -187,6 +188,9 @@ export class Room {
     // The pictures on the island's drawing boards (drawing.js), by cell:
     // { x, y, z, px }. Saved with the island.
     this.drawings = new Map();
+    // The robots and programs at the island's robot kits (robokit.js), by
+    // cell: { x, y, z, kit }. Saved with the island.
+    this.kits = new Map();
     // What the computers on some desks show (whoever keeps the island sets
     // this, as the CTB island's office does with its workers' real work):
     // [{ x, y, z, name, issue, doing, steps, since }], or null for none.
@@ -318,6 +322,8 @@ export class Room {
       // A drawing board or a picture frame picked up (or painted over): its
       // picture goes with it.
       if (isPictureAt(before) && !isPictureAt(after)) this.drawings.delete(k);
+      // A robot kit picked up takes its robot and program with it.
+      if (isKit(before) && !isKit(after) && this.kits.delete(k)) this.broadcast({ t: 'kit', at: [x, y, z], kit: null });
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
@@ -533,6 +539,9 @@ export class Room {
       }
       case 'draw':
         this.draw(conn, p, msg);
+        break;
+      case 'kit':
+        this.kit(conn, p, msg);
         break;
       case 'look': {
         // A new look, and a new name with it when one comes (🎨 Change me while here).
@@ -808,6 +817,7 @@ export class Room {
       race: this.raceSim()?.pack(this.now()) ?? null,
       go: this.go.pack(),
       drawings: this.packDrawings(),
+      kits: this.packKits(),
       ...(this.screens ? { screens: this.screens } : {}),
       song: this.song ? { id: this.song.id, name: this.song.name } : null,
       // An island everybody owns (the public adventure island).
@@ -2675,6 +2685,35 @@ export class Room {
     this.changed();
   }
 
+  // ------------------------------------------------ robot kits
+
+  // A robot kit's robot and program changed by someone standing at it
+  // (robokit.js): kept, and passed on to everyone else.
+  kit(conn, p, msg) {
+    const at = msg.at;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isKit(this.world.get(...at))) return;
+    if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
+    if (this.ownerWho) {
+      this.notice(conn, `${this.world.name} stays just as it is — no building here!`);
+      return;
+    }
+    const k = this.world.index(...at);
+    const kit = cleanKit(msg.kit);
+    if (kit && !this.kits.has(k) && this.kits.size >= MAX_KITS) {
+      this.notice(conn, 'This island has all the robots it can keep. Empty another kit to build here!');
+      return;
+    }
+    if (kit) this.kits.set(k, { x: at[0], y: at[1], z: at[2], kit });
+    else this.kits.delete(k);
+    this.broadcast({ t: 'kit', pid: p.id, at, kit }, conn);
+    this.changed();
+  }
+
+  // The robots, as [x, y, z, { parts, code }] each.
+  packKits() {
+    return [...this.kits.values()].map((d) => [d.x, d.y, d.z, d.kit]);
+  }
+
   // The pictures, as [x, y, z, text] each.
   // New screens for the island's computers (see this.screens), told to everyone there.
   setScreens(list) {
@@ -2714,6 +2753,7 @@ export class Room {
       ...(this.adventure ? { adventure: this.adventure.save() } : {}),
       ...(this.defense ? { defense: this.defense.save() } : {}),
       ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
+      ...(this.kits.size ? { kits: this.packKits() } : {}),
     };
   }
 
@@ -2749,6 +2789,13 @@ export class Room {
       const [x, y, z, text] = row;
       const px = decodePicture(text);
       if (px && !isBlank(px) && isPictureAt(this.world.get(x, y, z))) this.drawings.set(this.world.index(x, y, z), { x, y, z, px });
+    }
+    // The robots, at the kits still there.
+    for (const row of Array.isArray(save.kits) ? save.kits.slice(0, MAX_KITS) : []) {
+      if (!Array.isArray(row) || !row.slice(0, 3).every(Number.isInteger)) continue;
+      const [x, y, z, raw] = row;
+      const kit = cleanKit(raw);
+      if (kit && isKit(this.world.get(x, y, z))) this.kits.set(this.world.index(x, y, z), { x, y, z, kit });
     }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';

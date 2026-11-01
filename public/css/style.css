@@ -5937,3 +5937,514 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
   width: 54px;
   height: 90px;
 }
+
+/* ---------------------------------------------------------- robot kits */
+
+.panel.rk-panel {
+  width: min(1120px, 100%);
+}
+
+.rk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rk-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rk-run-buttons .big {
+  width: auto;
+  padding: 10px 22px;
+  font-size: 1.2rem;
+}
+
+.rk-run-buttons .big .emoji {
+  font-size: 1.3rem;
+}
+
+.rk-stop {
+  background: #e8453c;
+  --shade: #b3271f;
+}
+
+.rk-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
+}
+
+.rk-main[hidden],
+.rk-code[hidden] {
+  display: none;
+}
+
+.rk-stage {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #dfe8f1;
+  box-shadow: 0 4px 0 var(--line);
+}
+
+.rk-canvas {
+  display: block;
+  width: 100%;
+  height: min(58vh, 540px);
+  min-height: 260px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.rk-no3d {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.rk-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rk-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.rk-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+}
+
+.rk-part {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px 6px;
+  border-radius: var(--radius-sm);
+  background: white;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+.rk-part .emoji {
+  font-size: 1.5rem;
+}
+
+.rk-part.on {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--sun-dark);
+}
+
+.rk-picked,
+.rk-status,
+.rk-hub {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: white;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+.rk-picked-name {
+  font-weight: 700;
+}
+
+.rk-about {
+  margin: 2px 0 8px;
+  font-size: 0.9rem;
+}
+
+.rk-picked-buttons,
+.rk-play-buttons,
+.rk-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rk-picked-buttons .chip,
+.rk-play-buttons .chip,
+.rk-templates .chip {
+  padding: 7px 12px;
+  font-size: 0.95rem;
+}
+
+.rk-status {
+  font-weight: 600;
+  background: #e6f7e9;
+}
+
+.rk-status.warn {
+  background: #fff1d6;
+}
+
+.rk-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.rk-port {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #3b4049;
+  color: white;
+  font-size: 0.85rem;
+}
+
+.rk-h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+/* The hub: white with a yellow band, its light matrix on a dark panel. */
+.rk-hub {
+  border: 4px solid #ffcf1f;
+}
+
+.rk-hub-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.rk-matrix {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  width: 132px;
+  padding: 9px;
+  margin: 0 auto 8px;
+  border-radius: 10px;
+  background: #3b4049;
+}
+
+.rk-matrix span {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: #555b65;
+}
+
+.rk-matrix span.on {
+  background: #fff6c8;
+  box-shadow: 0 0 8px #fff2a8;
+}
+
+.rk-readings {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.92rem;
+}
+
+.rk-reading {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.rk-reading b {
+  min-width: 1.4em;
+}
+
+.rk-reading span {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rk-doing {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  min-height: 1.3em;
+}
+
+/* The program: a palette of blocks beside the script. */
+.rk-code {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+  height: min(62vh, 600px);
+  min-height: 320px;
+}
+
+.rk-palette,
+.rk-script {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--radius-md);
+  background: #f4f6fa;
+  box-shadow: inset 0 0 0 2px #e3e8ef;
+}
+
+.rk-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 2px solid #e3e8ef;
+}
+
+.rk-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: white;
+}
+
+.rk-cat.on {
+  background: var(--cat);
+  color: white;
+}
+
+.rk-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cat);
+  box-shadow: 0 0 0 2px white;
+}
+
+.rk-palette-list,
+.rk-program {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px 24px;
+}
+
+.rk-palette-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rk-script-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e3e8ef;
+  min-height: 52px;
+}
+
+.rk-block-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.rk-block-bar .chip {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
+.rk-count {
+  font-size: 0.85rem;
+}
+
+/* A block, coloured by its category, with a tab underneath where the next
+   one clicks on, as in Scratch. */
+.rk-block {
+  position: relative;
+  width: max-content;
+  max-width: 100%;
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rk-block-head,
+.rk-block-foot {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  min-height: 40px;
+  border-radius: 8px;
+  background: var(--cat);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.16);
+  cursor: grab;
+  /* A finger sliding up or down scrolls the blocks; one sliding across drags. */
+  touch-action: pan-y;
+}
+
+.rk-block > .rk-block-head:last-child::after,
+.rk-block-foot::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  bottom: -6px;
+  width: 22px;
+  height: 8px;
+  border-radius: 0 0 5px 5px;
+  background: var(--cat);
+  z-index: 1;
+}
+
+.rk-block.holds > .rk-block-head {
+  border-radius: 8px 8px 8px 0;
+}
+
+.rk-block-foot {
+  min-height: 16px;
+  padding: 0;
+  width: 120px;
+  border-radius: 0 8px 8px 8px;
+}
+
+.rk-else {
+  border-radius: 0 8px 8px 0;
+  width: max-content;
+  min-width: 120px;
+}
+
+.rk-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 36px;
+  min-width: 140px;
+  padding: 6px 0 6px 18px;
+  border-left: 16px solid var(--cat);
+  cursor: pointer;
+}
+
+.rk-slot.rk-top {
+  border-left: 0;
+  padding-left: 0;
+  min-height: 120px;
+}
+
+.rk-hat > .rk-block-head {
+  border-radius: 20px 20px 8px 8px;
+  padding-top: 12px;
+  cursor: default;
+}
+
+.rk-word {
+  white-space: nowrap;
+}
+
+.rk-field {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  text-shadow: none;
+  max-width: 190px;
+}
+
+.rk-num {
+  width: 64px;
+  text-align: center;
+}
+
+.rk-test {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #3cb6d9;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.rk-from .rk-field,
+.rk-ghost .rk-field {
+  pointer-events: none;
+}
+
+.rk-from {
+  cursor: grab;
+}
+
+.rk-block.picked > .rk-block-head {
+  outline: 3px dashed var(--ink);
+  outline-offset: 2px;
+}
+
+.rk-block.running > .rk-block-head {
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.16),
+    0 0 0 3px white,
+    0 0 14px 4px #ffe14d;
+}
+
+.rk-block.rk-dragging {
+  opacity: 0.35;
+}
+
+.rk-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.25));
+}
+
+.rk-cursor,
+.rk-drop {
+  height: 5px;
+  width: 140px;
+  border-radius: 3px;
+  background: #ffd23f;
+  box-shadow: 0 0 8px #ffd23f;
+}
+
+.rk-drop {
+  background: #3d2e4f;
+  box-shadow: none;
+  opacity: 0.55;
+}
+
+@media (max-width: 800px) {
+  .rk-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rk-canvas {
+    height: min(46vh, 420px);
+  }
+
+  .rk-code {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(150px, 38%) minmax(0, 1fr);
+    height: min(72vh, 680px);
+  }
+}

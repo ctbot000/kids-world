@@ -874,6 +874,15 @@ export class Sound {
     this.noise(0.03, { type: 'bandpass', freq: f * 4, q: 1.5, gain: 0.04 * gain });
   }
 
+  // A robot hub's speaker beeping MIDI note n for sec seconds: a little
+  // square wave, buzzy as a small speaker is, with a soft edge.
+  beep(n, sec = 0.5) {
+    if (!this.ready) return;
+    const f = NOTE(n);
+    this.tone(f, { type: 'square', attack: 0.005, decay: Math.max(0.08, sec), gain: 0.06 });
+    this.tone(f * 2, { type: 'sine', attack: 0.005, decay: Math.max(0.06, sec * 0.6), gain: 0.03 });
+  }
+
   // A clap of thunder after lightning `distance` away: a crack when it is
   // close, then a long low rumble, later and softer the further off it is.
   thunder(distance = 80) {

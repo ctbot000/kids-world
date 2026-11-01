@@ -231,6 +231,11 @@ export const GO_BOARD = furniture(256, 'go-board', { name: 'Go Board', color: '#
 // A desk computer: a screen on a stand glowing with code, a keyboard and
 // a mouse, as CTB's workers have on their desks. After the Go board.
 export const COMPUTER = furniture(257, 'computer', { name: 'Computer', color: '#2c2f36', after: 256, light: 5, sound: 'glass' });
+// A robot kit (shared/robokit.js): a box of programmable robot parts, the
+// robot built from them standing on a little play mat in front. Walk up,
+// press Q, build a robot, program it and run it. It stands on a table too,
+// like the computer. After the computer.
+export const ROBOT_KIT = furniture(379, 'robot-kit', { name: 'Robot Kit', color: '#ffcf1f', after: 257, sound: 'stone' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

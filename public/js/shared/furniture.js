@@ -24,7 +24,7 @@ const BOOKS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#8c5bd6', '#f59331',
 // How high a table's top is: what stands on tables (a computer) in the cell
 // above one is drawn down on it (furnitureDrop).
 const TABLE_TOP = 0.82;
-const ON_TABLES = new Set(['computer']);
+const ON_TABLES = new Set(['computer', 'robot-kit']);
 
 const box = (x0, y0, z0, x1, y1, z1, color, tile = 'plain') => [x0, y0, z0, x1, y1, z1, color, tile];
 
@@ -857,6 +857,37 @@ const MODELS = {
       box(0.4, 0.54, 0.42, 0.54, 0.57, 0.45, '#3a73d8', 'plain'),
       box(0.6, 0.54, 0.42, 0.74, 0.57, 0.45, '#35a852', 'plain'),
     ];
+  },
+
+  // A robot kit (shared/robokit.js): a yellow box of parts at the back, its
+  // white trays sorted full of beams, wheels, motors and sensors, its lid
+  // leaning on the wall behind, and a little white play mat with a black
+  // line on it in front, where the robot built stands (render/robokits.js).
+  'robot-kit'() {
+    const YELLOW = '#ffcf1f';
+    const out = [
+      box(0.04, 0, 0.04, 0.96, 0.012, 0.6, WHITE, 'plain'),
+      box(0.1, 0.012, 0.47, 0.9, 0.016, 0.5, BLACK, 'plain'),
+      box(0.1, 0.012, 0.1, 0.13, 0.016, 0.5, BLACK, 'plain'),
+      box(0.87, 0.012, 0.1, 0.9, 0.016, 0.5, BLACK, 'plain'),
+      box(0.1, 0.012, 0.1, 0.9, 0.016, 0.13, BLACK, 'plain'),
+      box(0.06, 0, 0.64, 0.94, 0.22, 0.9, YELLOW, 'plain'),
+      box(0.08, 0.22, 0.66, 0.92, 0.23, 0.88, WHITE, 'plain'),
+      // The lid, leaning back.
+      box(0.06, 0.22, 0.9, 0.94, 0.56, 0.95, YELLOW, 'plain'),
+      box(0.12, 0.26, 0.895, 0.88, 0.52, 0.9, '#f0b800', 'plain'),
+    ];
+    // The trays' walls, and what is sorted into them.
+    for (const x of [0.36, 0.64]) out.push(box(x - 0.008, 0.23, 0.66, x + 0.008, 0.26, 0.88, WHITE, 'plain'));
+    out.push(box(0.08, 0.23, 0.765, 0.92, 0.26, 0.775, WHITE, 'plain'));
+    const bit = (x, z, w, d, h, color) => out.push(box(x, 0.23, z, x + w, 0.23 + h, z + d, color, 'plain'));
+    for (let k = 0; k < 4; k++) bit(0.11 + k * 0.06, 0.675, 0.045, 0.08, 0.025, '#2f9fe8');
+    for (let k = 0; k < 3; k++) bit(0.4 + k * 0.075, 0.68, 0.06, 0.06, 0.05, '#26282c');
+    for (let k = 0; k < 2; k++) bit(0.68 + k * 0.11, 0.675, 0.08, 0.08, 0.06, '#f6f6f2');
+    for (let k = 0; k < 3; k++) bit(0.11 + k * 0.08, 0.79, 0.06, 0.06, 0.04, '#202328');
+    bit(0.4, 0.79, 0.2, 0.08, 0.03, '#a9b0b9');
+    bit(0.68, 0.79, 0.2, 0.08, 0.04, '#ff8a1f');
+    return out;
   },
 
   // A Go board (shared/go.js): a thick block of golden wood on four short

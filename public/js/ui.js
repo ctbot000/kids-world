@@ -36,6 +36,7 @@ import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
 import { Kitchen3D } from './render/kitchen3d.js';
+import { robotKitDialog } from './ui-robokit.js';
 import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
@@ -3352,6 +3353,7 @@ export class UI {
     on('screen-open', () => this.screenDialog());
     on('screens', () => this.screenChanged?.());
     on('computer-open', () => this.computerDialog());
+    on('kit-open', () => this.robotKitDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
     on('cook-open', () => this.cookDialog());
@@ -4819,7 +4821,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -4937,7 +4939,7 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
@@ -4951,12 +4953,12 @@ export class UI {
             ? ['🗝️ Open', 'Open the treasure chest with a key']
             : ['🔒 Locked', 'The treasure chest is locked: solve a quiz for a key']
           : null;
-    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
@@ -6066,6 +6068,11 @@ export class UI {
         },
       },
     );
+  }
+
+  // A robot kit's window: build, program and run a robot (ui-robokit.js).
+  robotKitDialog() {
+    robotKitDialog(this);
   }
 
   // A box to type into, in the computer's window: no capitals or

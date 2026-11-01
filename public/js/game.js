@@ -13,6 +13,7 @@ import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
 import { computerNear } from './shared/typing.js';
+import { cleanKit, isKit, kitNear } from './shared/robokit.js';
 import { furnitureDrop } from './shared/furniture.js';
 import { stationNear } from './shared/station.js';
 import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
@@ -325,6 +326,11 @@ export class Game extends EventTarget {
     this.computerAt = null;
     // The fish tank or bowl beside you, to feed (shared/fishtank.js).
     this.tankTarget = null;
+    // The robot kit beside you, the one whose window is open, and the robots
+    // and programs at the island's kits, by cell key (shared/robokit.js).
+    this.kitTarget = null;
+    this.kitAt = null;
+    this.kits = new Map();
     // The broadcast station beside you, and the one you opened (shared/station.js).
     this.stationTarget = null;
     this.stationAt = null;
@@ -457,6 +463,9 @@ export class Game extends EventTarget {
         break;
       case 'draw':
         this.drawHeard(msg);
+        break;
+      case 'kit':
+        this.kitHeard(msg);
         break;
       case 'piano':
         this.pianoHeard(msg);
@@ -722,6 +731,7 @@ export class Game extends EventTarget {
     this.setHideSeek(msg.hideseek ?? null);
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
+    this.setKits(msg.kits ?? []);
     this.setEnv(msg.env);
     this.renderer.fires.reset(this.world, msg.fires ?? []);
     // The song goes on playing over a reconnect; its pieces come after this.
@@ -3123,6 +3133,87 @@ export class Game extends EventTarget {
     this.computerAt = null;
   }
 
+  // ------------------------------------------------ robot kits
+
+  // The robots at the island's kits, as the island tells of them on arrival.
+  setKits(rows) {
+    this.kits.clear();
+    this.renderer.robotKits.clear();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (!Array.isArray(row)) continue;
+      const [x, y, z, raw] = row;
+      this.showKit(x, y, z, cleanKit(raw));
+    }
+  }
+
+  showKit(x, y, z, kit) {
+    const key = keyOf(x, y, z);
+    const id = this.world?.get(x, y, z);
+    if (!kit || !isKit(id)) {
+      this.kits.delete(key);
+      this.renderer.robotKits.remove(key);
+      return;
+    }
+    this.kits.set(key, kit);
+    this.renderer.robotKits.show(key, id, this.world.get(x, y - 1, z), x, y, z, kit.parts);
+  }
+
+  // A kit's robot and program: nothing on it yet when none was built there.
+  kitOf(t) {
+    return this.kits.get(keyOf(t.x, t.y, t.z)) ?? { parts: [], code: [] };
+  }
+
+  // Q (or the 🤖 Build button) by a robot kit: its window opens.
+  openKit() {
+    const t = this.kitTarget;
+    if (!t) return;
+    if (this.settings.owned) {
+      this.emit('notice', { text: `${this.world.name} stays just as it is — no building here!`, level: 'info' });
+      return;
+    }
+    this.kitAt = t;
+    this.sound.play('ui');
+    this.emit('kit-open');
+  }
+
+  closeKit() {
+    this.kitAt = null;
+  }
+
+  // The open kit's robot or program changed: shown at once, and kept by the
+  // island for everyone.
+  saveKit(raw) {
+    const t = this.kitAt;
+    if (!t || !isKit(this.world.get(t.x, t.y, t.z))) return;
+    const kit = cleanKit(raw);
+    this.showKit(t.x, t.y, t.z, kit);
+    this.send({ t: 'kit', at: [t.x, t.y, t.z], kit });
+  }
+
+  // A friend changed a kit's robot or program.
+  kitHeard(msg) {
+    if (!Array.isArray(msg.at)) return;
+    const [x, y, z] = msg.at;
+    this.showKit(x, y, z, cleanKit(msg.kit));
+    this.emit('kit', keyOf(x, y, z));
+  }
+
+  // A program run on the play mat, counted for XP and the Robot Maker sticker.
+  ranRobot() {
+    this.profile.count('robotruns');
+  }
+
+  // Blocks changed: a kit picked up takes its robot with it, and one turned
+  // turns it round.
+  kitsChanged(cells) {
+    if (!this.kits.size || !cells) return;
+    for (let i = 0; i < cells.length; i += 4) {
+      const key = keyOf(cells[i], cells[i + 1], cells[i + 2]);
+      const kit = this.kits.get(key);
+      if (kit) this.showKit(cells[i], cells[i + 1], cells[i + 2], isKit(cells[i + 3]) ? kit : null);
+    }
+  }
+
   // ------------------------------------------------ feeding the fish
 
   // Q (or the 🐟 Feed button) beside a fish tank or a fish bowl: a pinch of
@@ -3792,6 +3883,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.tankTarget) {
       this.feedFish();
+      return;
+    }
+    if (!id && this.kitTarget) {
+      this.openKit();
       return;
     }
     if (!id) {
@@ -5031,6 +5126,7 @@ export class Game extends EventTarget {
     this.renderer.terrain.cellsChanged(cells);
     this.renderer.fires.changed();
     this.drawingsChanged(cells);
+    this.kitsChanged(cells);
     this.emit('cells', cells);
   }
 
@@ -5791,6 +5887,7 @@ export class Game extends EventTarget {
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
     this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
+    this.kitTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.dizzy && !on.flying && on.onGround ? kitNear(this.world, on) : null;
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
@@ -6343,6 +6440,10 @@ export class Game extends EventTarget {
     this.computerAt = null;
     this.computerTarget = null;
     this.tankTarget = null;
+    this.kitTarget = null;
+    this.kitAt = null;
+    this.kits.clear();
+    this.renderer.robotKits.clear();
     this.escapeTarget = null;
     this.chestTarget = null;
     this.chestAt = null;

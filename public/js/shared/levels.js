@@ -103,6 +103,8 @@ export const XP_FOR = {
   typed: { xp: 5, cap: 1000 },
   typewpm: { xp: 1 },
   rainbest: { xp: 2 },
+  // Programs run on a robot at a robot kit (shared/robokit.js).
+  robotruns: { xp: 3, cap: 500 },
   photos: { xp: 5, cap: 100 },
   sown: { xp: 2 },
   harvested: { xp: 1 },
