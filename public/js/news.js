@@ -5,7 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
-  { id: 'zoo', date: '2026-11-01', icon: '🦒', title: 'Zoo islands', text: 'Make a 🦒 Zoo Island: elephants, giraffes, penguins, seals and a polar bear in their pens, a petting farm to walk into and ponies to ride in the paddock!' },
+  { id: 'zoo', date: '2026-11-01', icon: '🦒', title: 'Zoo islands', text: 'Make a 🦒 Zoo Island: walk in under the ZOO gate to lions on their rock, tigers, elephants, giraffes and zebras on the savanna, pandas, a polar bear, penguins and hippos to watch under the water, monkey island and flamingos! New animals to ride and to bring from the toy box: lions, tigers, zebras, hippos, rhinos, pandas, flamingos, monkeys and kangaroos.' },
   { id: 'english-words', date: '2026-11-01', icon: '🔤', title: 'English Words quizzes', text: 'A new 🔤 English Words class at every chalkboard, and a quiz for extra credit on conquered adventure islands: what does the word mean? The questions come from the Kids Dictionary, and once you answer you see the word in Korean too!' },
   { id: 'millionaire', date: '2026-10-31', icon: '💰', title: 'The Millionaire sticker', text: 'Every coin you have ever earned now counts towards the legendary 💰 Millionaire sticker — a million coins in all! Selling in the shop, classes, races, hide and seek, pearls and monster prizes: they all add up, and spending never takes away from it.' },
   { id: 'hula-hoop', date: '2026-10-31', icon: '⭕', title: 'Hula hoops', text: 'Put down a ⭕ Hula Hoop from the toy box\'s 🚗 Vehicles tab, walk up and tap ⭕ Spin: round and round your waist it goes while you swing your hips! How many spins can you do before it drops?' },

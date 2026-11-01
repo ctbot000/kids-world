@@ -13,7 +13,9 @@
 // penguins and seals live on the shore and dive into the sea.
 //
 // And some are big enough to ride: ponies, cows, an elephant and a giraffe,
-// reindeer and polar bears on snowy islands, and unicorns on candy ones. They
+// reindeer and polar bears on snowy islands, and unicorns on candy ones;
+// and in a zoo (zoo.js), lions, tigers, zebras, hippos, rhinos and pandas,
+// with flamingos, monkeys and kangaroos. They
 // get about the way players do (physics.js), and someone riding one moves it
 // themselves (riding.js); the dolphins and the whale take riders too.
 //
@@ -37,7 +39,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -89,6 +91,19 @@ export const CRITTER_INFO = {
   // A big fluffy dog, gentle and glad to be ridden; faster than you run,
   // and it jumps higher too.
   dog: { name: 'Dog', icon: '🐶', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 10, swim: 3.5, jump: 11 }, names: ['Buddy', 'Rex', 'Biscuit', 'Waggles', 'Rosie', 'Bruno', 'Barnaby', 'Gus', 'Poppy', 'Muddy'] },
+  // The zoo's animals (zoo.js keeps them in their pens on a zoo island; the
+  // toy box brings them anywhere). The big ones ride like the rest.
+  lion: { name: 'Lion', icon: '🦁', speed: 1.1, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.05, radius: 0.44, height: 2.25, float: 0.8, spread: 0.9, walk: 5.5, run: 10, swim: 3, jump: 10.5 }, names: ['Leo', 'Simba', 'Sunny', 'Goldie', 'Mufasa', 'Nala', 'Rory', 'Marmalade', 'Honey', 'Kiara'] },
+  tiger: { name: 'Tiger', icon: '🐯', speed: 1.1, swims: true, flies: false, big: true, gallops: true, paddles: true, ride: { seat: 1.05, radius: 0.44, height: 2.2, float: 0.8, spread: 0.9, walk: 5.5, run: 10, swim: 4, jump: 10.5 }, names: ['Stripes', 'Rajah', 'Tigger', 'Amber', 'Shere', 'Mango', 'Ember', 'Pounce', 'Saffron', 'Raja'] },
+  zebra: { name: 'Zebra', icon: '🦓', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 9.5, swim: 3.5, jump: 10 }, names: ['Ziggy', 'Marty', 'Domino', 'Barcode', 'Zola', 'Humbug', 'Pinstripe', 'Zane', 'Oreo', 'Zuzu'] },
+  hippo: { name: 'Hippo', icon: '🦛', speed: 0.7, swims: true, flies: false, big: true, paddles: true, ride: { seat: 1.1, z: -0.05, radius: 0.62, height: 2.3, float: 0.7, spread: 0.6, walk: 3.5, run: 5.5, swim: 4, jump: 7 }, names: ['Gloria', 'Bubbles', 'Hugo', 'Pudding', 'Wallow', 'Muddy', 'Splash', 'Plum', 'Tubby', 'Hattie'] },
+  rhino: { name: 'Rhino', icon: '🦏', speed: 0.9, swims: true, flies: false, big: true, ride: { seat: 1.36, z: -0.05, radius: 0.6, height: 2.55, float: 0.9, spread: 0.6, walk: 4, run: 7.5, swim: 2.5, jump: 7.6 }, names: ['Rocky', 'Tank', 'Horace', 'Pebble', 'Boulder', 'Rhonda', 'Bruno', 'Thimble', 'Granite', 'Nubbin'] },
+  panda: { name: 'Panda', icon: '🐼', speed: 0.7, swims: true, flies: false, big: true, ride: { seat: 1.03, radius: 0.44, height: 2.2, float: 0.75, spread: 1, walk: 4, run: 6.5, swim: 2.5, jump: 8 }, names: ['Bao', 'Mei', 'Bamboo', 'Dumpling', 'Ling', 'Panko', 'Oreo', 'Momo', 'Yuki', 'Tofu'] },
+  // Flamingos wade into the shallow edge of a pond (wades, as the crab
+  // does); monkeys climb, a big step at a time; kangaroos hop about.
+  flamingo: { name: 'Flamingo', icon: '🦩', speed: 0.8, swims: false, flies: false, wades: true, home: 8, range: [1, 3], names: ['Rosie', 'Flora', 'Pinky', 'Blush', 'Coral', 'Fifi', 'Peaches', 'Mingo', 'Bubblegum', 'Lolly'] },
+  monkey: { name: 'Monkey', icon: '🐒', speed: 2, swims: false, flies: false, climb: 2.1, home: 8, range: [1.5, 5], names: ['Coco', 'Bobo', 'Banana', 'Mischief', 'Kiki', 'Jojo', 'Chimp', 'Momo', 'Peanut', 'Zippy'] },
+  kangaroo: { name: 'Kangaroo', icon: '🦘', speed: 1.8, swims: false, flies: false, home: 12, range: [2, 6], names: ['Joey', 'Skippy', 'Roo', 'Boing', 'Matilda', 'Hopper', 'Bounce', 'Kanga', 'Sheila', 'Pogo'] },
   // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
@@ -205,7 +220,9 @@ export const MAX_FIREFLIES = 20;
 // How many more animals a bigger island has than a cozy one (128 blocks
 // across), side to side: a big one half as many again, a huge one twice.
 const roomier = (world) => Math.max(1, Math.max(world.W, world.D) / 128);
-export const maxCritters = (world) => Math.round(MAX_CRITTERS * roomier(world));
+// (A zoo island has room for its zoo's animals on top: zoo.js.)
+export const ZOO_ROOM = 48;
+export const maxCritters = (world) => Math.round(MAX_CRITTERS * roomier(world)) + (world.theme === 'zoo' ? ZOO_ROOM : 0);
 // How many random spots to try in looking for somewhere: more on a bigger island, by area.
 const spots = (world, n) => Math.round(n * roomier(world) ** 2);
 export function scaleCounts(counts, world) {

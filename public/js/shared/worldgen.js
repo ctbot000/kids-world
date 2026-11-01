@@ -9,7 +9,7 @@ import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
 import { buildRace } from './race.js';
-import { buildZoo } from './zoo.js';
+import { buildZoo, ZOO_BLEND, ZOO_HALF } from './zoo.js';
 import * as B from './blocks.js';
 import { busesClearOf, CRITTER_INFO, maxCritters, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
@@ -24,7 +24,7 @@ export const THEMES = [
   { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
   { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
   { key: 'race', name: 'Racing Island', icon: '🏁', blurb: 'A race track with go-karts and lap times' },
-  { key: 'zoo', name: 'Zoo Island', icon: '🦒', blurb: 'Elephants, giraffes, penguins and a petting farm' },
+  { key: 'zoo', name: 'Zoo Island', icon: '🦒', blurb: 'Lions, elephants, giraffes, pandas, penguins and more' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -77,7 +77,10 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // On a fun park island, out past the park (and on a racing island, past
   // the race track, laid out on the same square).
   const plaza = theme === 'park' || theme === 'race' || theme === 'zoo';
-  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : plaza ? rng.range(0.34, 0.4) * W : rng.range(0.18, 0.3) * W;
+  // A zoo's square is bigger than a park's (zoo.js).
+  const half = theme === 'zoo' ? ZOO_HALF : PARK_HALF;
+  const blend = theme === 'zoo' ? ZOO_BLEND : PARK_BLEND;
+  const mDist = theme === 'volcano' ? rng.range(0.06, 0.12) * W : plaza ? rng.range(0.34, 0.4) * W + half - PARK_HALF : rng.range(0.18, 0.3) * W;
   const mx = cx + Math.cos(mAngle) * mDist;
   const mz = cz + Math.sin(mAngle) * mDist;
   const mHeight = theme === 'snowy' ? 24 : theme === 'volcano' ? 26 : 18;
@@ -90,12 +93,12 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     const a = rng.next() * Math.PI * 2;
     const r = rng.range(0.1, 0.32) * W;
     const m = { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, height: mHeight * rng.range(0.7, 1) };
-    if (Math.hypot(m.x - cx, m.z - cz) < (plaza ? PARK_HALF + 24 : 16) || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
+    if (Math.hypot(m.x - cx, m.z - cz) < (plaza ? half + 24 : 16) || mountains.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 44)) continue;
     mountains.push(m);
   }
   const nearMountain = (x, z, r) => mountains.some((m) => Math.hypot(x - m.x, z - m.z) < r);
   const parkLevel = sea + 4;
-  const park = plaza ? { cx: Math.floor(cx), cz: Math.floor(cz) } : null;
+  const park = plaza ? { cx: Math.floor(cx), cz: Math.floor(cz), half } : null;
   for (let x = 0; x < W; x++) {
     for (let z = 0; z < D; z++) {
       let h;
@@ -120,8 +123,8 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       // A fun park island's park is flat, the land easing into it round it
       // (and a racing island's race track).
       if (plaza) {
-        const edge = Math.max(Math.abs(x + 0.5 - cx), Math.abs(z + 0.5 - cz)) - PARK_HALF - 1;
-        h = parkLevel + (h - parkLevel) * smoothstep(0, PARK_BLEND, edge);
+        const edge = Math.max(Math.abs(x + 0.5 - cx), Math.abs(z + 0.5 - cz)) - half - 1;
+        h = parkLevel + (h - parkLevel) * smoothstep(0, blend, edge);
       }
       heights[x * D + z] = Math.max(2, Math.min(H - 12, Math.round(h)));
     }
@@ -295,7 +298,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // ---------------------------------------------------------------- the park
   // On a fun park island, the park in the middle, with its own way in; on a
   // racing island, the race track.
-  const built = park ? ({ race: buildRace, zoo: buildZoo }[theme] ?? buildPark)(world, { ...park, level: parkLevel, pal }) : null;
+  const built = park ? ({ race: buildRace, zoo: buildZoo }[theme] ?? buildPark)(world, { ...park, level: parkLevel, pal, seed }) : null;
 
   // ---------------------------------------------------------------- spawn
   const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);

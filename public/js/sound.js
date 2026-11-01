@@ -580,6 +580,38 @@ export class Sound {
         // A soft hum.
         this.tone(105 * r(), { type: 'triangle', attack: 0.2, decay: 0.7, gain: 0.08, vibrato: 3 });
         break;
+      case 'lion':
+      case 'tiger':
+        // A big friendly roar, rolling down.
+        this.tone((name === 'tiger' ? 150 : 130) * r(), { type: 'sawtooth', attack: 0.06, decay: 0.9, gain: 0.06, slide: 80, slideTime: 0.85, vibrato: 25 });
+        this.noise(0.8, { type: 'lowpass', freq: 600, gain: 0.1, attack: 0.05 });
+        break;
+      case 'zebra':
+        // A bark and a bray: hee-haw, quick.
+        for (let i = 0; i < 2; i++) this.tone((i ? 420 : 640) * r(), { at: i * 0.18, type: 'sawtooth', decay: 0.16, gain: 0.05, slide: i ? 300 : 520, vibrato: 12 });
+        break;
+      case 'hippo':
+      case 'rhino':
+        // A deep grunt.
+        this.tone(70 * r(), { type: 'sawtooth', attack: 0.03, decay: 0.4, gain: 0.08, slide: 55, vibrato: 8 });
+        this.noise(0.3, { type: 'lowpass', freq: 300, gain: 0.1 });
+        break;
+      case 'panda':
+        // A little bleat.
+        this.tone(330 * r(), { type: 'triangle', attack: 0.03, decay: 0.3, gain: 0.07, slide: 280, vibrato: 10 });
+        break;
+      case 'flamingo':
+        // Honk-honk, nasal.
+        for (let i = 0; i < 2; i++) this.tone(480 * r(), { at: i * 0.2, type: 'square', decay: 0.14, gain: 0.03, slide: 440 });
+        break;
+      case 'monkey':
+        // Ooh-ooh-aah-aah!
+        for (let i = 0; i < 4; i++) this.tone((i < 2 ? 520 : 880) * r(), { at: i * 0.14, type: 'triangle', decay: 0.12, gain: 0.07, slide: i < 2 ? 700 : 1100, slideTime: 0.1 });
+        break;
+      case 'kangaroo':
+        // A soft cough of a chuff.
+        for (let i = 0; i < 3; i++) this.noise(0.06, { at: i * 0.12, type: 'bandpass', freq: 700 * r(), q: 2, gain: 0.08 });
+        break;
       case 'polarbear':
         // A gentle rumble.
         this.tone(170 * r(), { type: 'sawtooth', attack: 0.08, decay: 0.55, gain: 0.04, slide: 120, vibrato: 18 });

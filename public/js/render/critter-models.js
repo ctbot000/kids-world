@@ -2,7 +2,9 @@
 // fluffy sheep, ducks that paddle about, butterflies that flutter, birds,
 // owls, bees and seagulls; in the sea, schools of fish, dolphins, a whale,
 // turtles, crabs and octopuses; big ones to ride: ponies, cows, an
-// elephant, a giraffe, reindeer, polar bears and unicorns. The vehicles,
+// elephant, a giraffe, reindeer, polar bears and unicorns; and the zoo's:
+// lions, tigers, zebras, hippos, rhinos, pandas, flamingos, monkeys and
+// kangaroos. The vehicles,
 // which live with them, are in vehicle-models.js. (The giant mosquito, the
 // one big animal that flies, is a monster now: mosquito-model.js.)
 import * as THREE from '../../vendor/three.module.js';
@@ -943,7 +945,10 @@ const RED_NOSE = '#ff3b3b';
 function pony(id, kind = 'pony') {
   const unicorn = kind === 'unicorn';
   const deer = kind === 'reindeer';
-  const k = unicorn
+  const zeb = kind === 'zebra';
+  const k = zeb
+    ? { coat: '#fbfbf7', mane: '#2b2530', nose: '#3a3438', hoof: '#2b2530' }
+    : unicorn
     ? { coat: '#fff7fb', mane: RAINBOW[0], nose: '#ffd9ea', hoof: '#f2b6d6' }
     : deer
       ? { coat: '#9c6b48', mane: '#ecdfca', nose: '#7b5236', tip: id % 4 === 1 ? RED_NOSE : '#2b2226', hoof: '#3b2f2a' }
@@ -995,7 +1000,8 @@ function pony(id, kind = 'pony') {
   n.add(head);
   head.add(mesh(sphere(), coat, 0, 0, 0.05, 0.13, 0.145, 0.21));
   // A blaze down the face, between the eyes.
-  if (!deer) patch(head, unicorn ? '#ffe9f4' : '#f3e9d8', [0.13, 0.145, 0.21], [0, 0.75, 1], 0.03, 0.09);
+  if (!deer && !zeb) patch(head, unicorn ? '#ffe9f4' : '#f3e9d8', [0.13, 0.145, 0.21], [0, 0.75, 1], 0.03, 0.09);
+  if (zeb) for (const y of [0.3, 0.55, 0.8]) for (const side of [-1, 1]) patch(head, BLACK, [0.13, 0.145, 0.21], [side, y, 0.1 + y * 0.6], 0.02, 0.08);
   head.add(mesh(sphere(), toon(k.nose), 0, -0.04, 0.22, 0.105, 0.095, 0.105));
   if (k.tip) head.add(mesh(sphere(), toon(k.tip, { emissive: k.tip === RED_NOSE ? 0.6 : 0 }), 0, -0.015, 0.315, 0.05, 0.04, 0.035));
   else for (const side of [-1, 1]) head.add(mesh(sphere(1, 8, 6), toon('#3a2a2a'), side * 0.045, -0.01, 0.32, 0.018, 0.024, 0.012));
@@ -1397,7 +1403,400 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+// ------------------------------------------------ the zoo's animals
+
+// How far out a body made of ellipsoids ([y, z, rx, ry, rz] each, round
+// its pivot) reaches at z, across and up: for stripes that wrap round it.
+const reach = (parts, z) => {
+  let rx = 0;
+  let ry = 0;
+  for (const [, cz, ax, ay, az] of parts) {
+    const k = 1 - ((z - cz) / az) ** 2;
+    if (k <= 0) continue;
+    rx = Math.max(rx, ax * Math.sqrt(k));
+    ry = Math.max(ry, ay * Math.sqrt(k));
+  }
+  return [rx, ry];
+};
+// Stripes wrapping round a body: a band at each z, over the top and down
+// the sides (arc: how far round, from the top).
+function stripes(pivot, parts, zs, color, arc = Math.PI * 1.3, tube = 0.022) {
+  const ink = toon(color);
+  for (const z of zs) {
+    const [rx, ry] = reach(parts, z);
+    if (!rx) continue;
+    const r = Math.max(rx, ry);
+    // Sunk into the body, so only its outer half shows, painted on.
+    const band = mesh(torus(1, tube / r, arc), ink, 0, 0, z, rx - tube * 0.35, ry - tube * 0.35, r);
+    band.rotation.z = Math.PI / 2 - arc / 2;
+    pivot.add(band);
+  }
+}
+
+// A big cat (the lion and the tiger): a long low body on padded paws, a
+// round head with a pale muzzle, round ears and whiskers, a long tail with
+// a tuft (the lion's) or rings (the tiger's). A lion has a big shaggy mane,
+// but for a lioness now and then; a tiger has black stripes over orange,
+// with white cheeks and belly.
+function bigCat(id, kind) {
+  const tiger = kind === 'tiger';
+  const lioness = !tiger && id % 3 === 2;
+  const COAT = tiger ? '#f08a2c' : '#d9a656';
+  const PALE = tiger ? '#fbf3e6' : '#f1dcb0';
+  const DARK = tiger ? '#2b2226' : '#8a5a2a';
+  const { g, body, pivot } = bigRig(0.72);
+  const coat = toon(COAT);
+  const R = [0.3, 0.28, 0.62];
+  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), coat, 0, 0.02, 0.3, 0.29, 0.28, 0.28));
+  pivot.add(mesh(sphere(), toon(PALE), 0, -0.12, 0.1, 0.2, 0.14, 0.42));
+  // Stripes over the back and down the sides, front to back.
+  if (tiger) stripes(pivot, [[0, 0, ...R], [0.02, 0.3, 0.29, 0.28, 0.28]], [0.4, 0.28, 0.16, 0.04, -0.08, -0.2, -0.32, -0.44], DARK, Math.PI * 1.1, 0.03);
+  const legs = fourLegs(pivot, { x: 0.17, front: 0.38, back: -0.4, hip: -0.16, len: 0.56, r: 0.085, color: COAT, paw: PALE });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.16, 0.5);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.5;
+  neck.add(n);
+  n.add(mesh(capsule(0.15, 0.14), coat, 0, 0.08, 0));
+  const head = new THREE.Group();
+  head.position.set(0, 0.26, 0.06);
+  head.rotation.x = -0.5;
+  n.add(head);
+  // The mane: shaggy puffs all round the face, darker at the back.
+  if (!tiger && !lioness) {
+    const mane = [];
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      for (const [r, z, k] of [[0.2, -0.04, 0.1], [0.15, -0.12, 0.11]]) {
+        mane.push({ g: sphere(1, 10, 8), m: new THREE.Matrix4().makeScale(k, k, k * 0.9).setPosition(Math.cos(a) * r, Math.sin(a) * r + 0.01, z) });
+      }
+    }
+    head.add(mesh(bakeCached('lion-mane', mane), toon(id % 2 ? '#a5622a' : '#b8742f')));
+  }
+  head.add(mesh(sphere(), coat, 0, 0, 0.02, 0.16, 0.15, 0.15));
+  head.add(mesh(sphere(), toon(PALE), 0, -0.05, 0.12, 0.1, 0.075, 0.08));
+  if (tiger) {
+    for (const side of [-1, 1]) {
+      head.add(mesh(sphere(), toon(PALE), side * 0.09, -0.04, 0.08, 0.07, 0.06, 0.06));
+      patch(head, DARK, [0.16, 0.15, 0.15], [side * 0.5, 1, 0.3], 0.015, 0.06);
+      patch(head, DARK, [0.16, 0.15, 0.15], [side, 0.3, 0.2], 0.012, 0.05);
+    }
+  }
+  head.add(mesh(sphere(), toon('#c9706a'), 0, -0.01, 0.2, 0.035, 0.025, 0.02));
+  for (const side of [-1, 1]) {
+    const ear = mesh(sphere(1, 10, 8), coat, side * 0.11, 0.12, -0.02, 0.05, 0.05, 0.025);
+    head.add(ear);
+    head.add(mesh(sphere(1, 8, 6), toon(tiger ? DARK : '#f2c4a0'), side * 0.11, 0.12, -0.005, 0.03, 0.03, 0.015));
+    for (const dy of [-0.01, 0.01]) head.add(mesh(cylinder(0.003, 0.003, 0.14, 4), toon(WHITE), side * 0.11, -0.05 + dy, 0.17).rotateZ(Math.PI / 2 + side * dy * 8));
+  }
+  const eyes = sideEyes(head, 0.08, 0.04, 0.12, 0.024);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.14, -0.6);
+  pivot.add(tail);
+  // Hanging down behind, a tuft (or a dark tip) on the end.
+  tail.add(mesh(cylinder(0.022, 0.03, 0.58, 8), coat, 0, -0.27, -0.1).rotateX(0.35));
+  tail.add(mesh(sphere(1, 10, 8), toon(tiger ? DARK : '#8a5a2a'), 0, -0.55, -0.2, 0.05, 0.07, 0.05));
+  const s = saddle(pivot, R[1], 0.27, 0.28);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.4, shadow: 0.6, pick: 0.75, center: 0.8, seen: 110, gait: { len: 0.56, run: 4.2, happy: 'hop', graze: 0.8 } };
+}
+const lion = (id) => bigCat(id, 'lion');
+const tiger = (id) => bigCat(id, 'tiger');
+
+// A zebra: a pony in black and white stripes, with a short black mane
+// standing up along its neck and a dark nose.
+function zebra(id) {
+  const z = pony(id, 'zebra');
+  // Black bands all the way round the body (its three parts: pony()).
+  stripes(z.pivot, [[0, 0, 0.3, 0.27, 0.58], [0.01, 0.3, 0.27, 0.27, 0.28], [0.02, -0.3, 0.29, 0.26, 0.28]], [0.48, 0.36, 0.24, 0.12, 0, -0.12, -0.24, -0.36, -0.48], BLACK, Math.PI * 2, 0.04);
+  return z;
+}
+
+// A hippo: a great round barrel of a body on short legs, a huge wide head
+// with its nostrils, eyes and little ears up on top (to peek out of the
+// water), a pink face and two stubby tusks.
+function hippo(id) {
+  const { g, body, pivot } = bigRig(0.62);
+  const SKIN = id % 2 ? '#8e7f96' : '#9a8a9c';
+  const skin = toon(SKIN);
+  const pink = toon('#e8a6b2');
+  const R = [0.5, 0.42, 0.78];
+  pivot.add(mesh(sphere(), skin, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), pink, 0, -0.18, 0.05, 0.38, 0.26, 0.62));
+  const legs = fourLegs(pivot, { x: 0.3, front: 0.46, back: -0.46, hip: -0.3, len: 0.34, r: 0.13, color: SKIN });
+  for (const leg of legs) for (const x of [-0.06, 0, 0.06]) leg.add(mesh(sphere(1, 8, 6), toon('#f2e8e0'), x, -0.31, 0.12, 0.03, 0.025, 0.02));
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.1, 0.72);
+  pivot.add(neck);
+  const head = new THREE.Group();
+  head.position.set(0, 0, 0.12);
+  neck.add(head);
+  head.add(mesh(sphere(), skin, 0, 0.04, 0, 0.32, 0.26, 0.28));
+  // The great wide muzzle, pink, with a mouth line and two tusks.
+  head.add(mesh(sphere(), pink, 0, -0.06, 0.26, 0.34, 0.2, 0.22));
+  head.add(mesh(torus(0.22, 0.012, Math.PI), toon('#6a4a58'), 0, -0.1, 0.33).rotateX(Math.PI).rotateZ(0));
+  for (const side of [-1, 1]) {
+    head.add(mesh(cone(0.025, 0.07, 6), toon('#fbf6ec'), side * 0.14, -0.04, 0.42));
+    head.add(mesh(sphere(1, 8, 6), toon('#6a4a58'), side * 0.1, 0.12, 0.42, 0.03, 0.02, 0.02));
+    head.add(mesh(sphere(1, 10, 8), skin, side * 0.15, 0.27, -0.08, 0.05, 0.06, 0.04));
+    head.add(mesh(sphere(1, 8, 6), pink, side * 0.15, 0.27, -0.06, 0.03, 0.035, 0.02));
+    head.add(mesh(sphere(1, 10, 8), skin, side * 0.14, 0.2, 0.05, 0.07, 0.06, 0.07));
+  }
+  const eyes = sideEyes(head, 0.15, 0.24, 0.1, 0.03);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.12, -0.78);
+  pivot.add(tail);
+  tail.add(mesh(cylinder(0.02, 0.04, 0.16, 6), skin, 0, -0.08, -0.02));
+  const s = saddle(pivot, R[1], 0.42, 0.42, -0.05, true);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.35, shadow: 0.85, pick: 0.95, center: 0.7, seen: 120, gait: { len: 0.34, run: 3, happy: 'hop', graze: 0.35 } };
+}
+
+// A rhino: a big grey body in folds of thick hide, column legs, a long low
+// head with a big horn and a little one, and tube ears that twitch.
+function rhino(id) {
+  const { g, body, pivot } = bigRig(0.88);
+  const SKIN = id % 2 ? '#9ea3a8' : '#a9a59f';
+  const skin = toon(SKIN);
+  const R = [0.42, 0.42, 0.75];
+  pivot.add(mesh(sphere(), skin, 0, 0, 0, ...R));
+  // Its shoulders and hips, humped up under thick hide.
+  pivot.add(mesh(sphere(), skin, 0, 0.06, 0.38, 0.38, 0.4, 0.3));
+  pivot.add(mesh(sphere(), skin, 0, 0.04, -0.4, 0.4, 0.4, 0.32));
+  const legs = fourLegs(pivot, { x: 0.25, front: 0.42, back: -0.42, hip: -0.32, len: 0.56, r: 0.12, color: SKIN });
+  for (const leg of legs) for (const x of [-0.05, 0.05]) leg.add(mesh(sphere(1, 8, 6), toon('#e9e4dc'), x, -0.53, 0.11, 0.03, 0.025, 0.02));
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.04, 0.68);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.35;
+  neck.add(n);
+  n.add(mesh(sphere(), skin, 0, 0, 0.04, 0.3, 0.3, 0.22));
+  const head = new THREE.Group();
+  head.position.set(0, -0.06, 0.16);
+  head.rotation.x = 0.1;
+  n.add(head);
+  head.add(mesh(sphere(), skin, 0, 0, 0.12, 0.2, 0.2, 0.3));
+  head.add(mesh(sphere(), skin, 0, -0.05, 0.34, 0.15, 0.13, 0.12));
+  const horn = toon('#e8dcc4');
+  const big = mesh(cone(0.07, 0.32, 10), horn, 0, 0.18, 0.38);
+  big.rotation.x = -0.35;
+  head.add(big);
+  const small = mesh(cone(0.05, 0.14, 10), horn, 0, 0.17, 0.18);
+  small.rotation.x = -0.25;
+  head.add(small);
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(1, 8, 6), toon('#555a60'), side * 0.06, -0.06, 0.45, 0.025, 0.018, 0.012));
+    const ear = new THREE.Group();
+    ear.position.set(side * 0.13, 0.18, -0.08);
+    ear.rotation.z = -side * 0.35;
+    ear.add(mesh(cylinder(0.035, 0.05, 0.12, 8), skin, 0, 0.06, 0));
+    ear.add(mesh(sphere(1, 8, 6), toon('#7a7e84'), 0, 0.12, 0.012, 0.03, 0.02, 0.015));
+    head.add(ear);
+  }
+  const eyes = sideEyes(head, 0.17, 0.04, 0.16, 0.022);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.16, -0.74);
+  pivot.add(tail);
+  tail.add(mesh(cylinder(0.015, 0.02, 0.3, 6), skin, 0, -0.15, -0.02));
+  tail.add(mesh(sphere(1, 8, 6), toon('#4a4450'), 0, -0.3, -0.02, 0.025, 0.05, 0.025));
+  const s = saddle(pivot, R[1], 0.38, 0.38, -0.05, true);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.55, shadow: 0.8, pick: 0.95, center: 0.9, seen: 120, gait: { len: 0.56, run: 3.4, happy: 'hop', graze: 0.4 } };
+}
+
+// A giant panda: round and white, with black legs, a black band over its
+// shoulders, black ears and the black patches round its eyes.
+function panda(id) {
+  const { g, body, pivot } = bigRig(0.62);
+  const fur = toon('#f7f5ef');
+  const ink = toon('#2f2b33');
+  const R = [0.38, 0.36, 0.55];
+  pivot.add(mesh(sphere(), fur, 0, 0, 0, ...R));
+  pivot.add(mesh(sphere(), ink, 0, 0.02, 0.3, 0.4, 0.37, 0.16));
+  const legs = fourLegs(pivot, { x: 0.22, front: 0.32, back: -0.32, hip: -0.22, len: 0.4, r: 0.12, color: '#2f2b33', paw: '#3c3740' });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.1, 0.48);
+  pivot.add(neck);
+  const head = new THREE.Group();
+  head.position.set(0, 0.04, 0.16);
+  neck.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.24, 0.22, 0.22));
+  head.add(mesh(sphere(), fur, 0, -0.06, 0.18, 0.11, 0.08, 0.09));
+  head.add(mesh(sphere(), ink, 0, -0.02, 0.27, 0.04, 0.03, 0.025));
+  for (const side of [-1, 1]) {
+    // The eye patches, tilted down and out, under the eyes.
+    const p = onSurface(0.24, 0.22, 0.22, side * 0.09, 0.04, 0.003);
+    const m = alongSurface(mesh(sphere(1, 12, 8), ink, 0, 0, 0, 0.06, 0.075, 0.02), 0.24, 0.22, 0.22, p);
+    m.position.copy(p);
+    m.rotateZ(side * 0.5);
+    head.add(m);
+    head.add(mesh(sphere(1, 10, 8), ink, side * 0.16, 0.17, -0.02, 0.075, 0.075, 0.05));
+  }
+  const eyes = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const p = onSurface(0.24, 0.22, 0.22, side * 0.09, 0.05, 0.022);
+    eyes.add(mesh(sphere(1, 10, 8), toon(BLACK), p.x, p.y, p.z, 0.02, 0.024, 0.012));
+    eyes.add(mesh(sphere(1, 6, 4), toon(WHITE, { emissive: 0.5 }), p.x + side * 0.004, p.y + 0.01, p.z + 0.008, 0.008));
+  }
+  head.add(eyes);
+  // A stick of bamboo to munch, now and then.
+  if (id % 2 === 0) {
+    const bamboo = mesh(cylinder(0.018, 0.018, 0.34, 8), toon('#8cc152'), 0.05, -0.12, 0.24);
+    bamboo.rotation.z = 1.2;
+    head.add(bamboo);
+    head.add(mesh(sphere(1, 8, 6), toon('#5fa34a'), 0.2, -0.04, 0.24, 0.05, 0.02, 0.03));
+  }
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.06, -0.55);
+  pivot.add(tail);
+  tail.add(mesh(sphere(1, 8, 6), fur, 0, 0, -0.02, 0.07));
+  const s = saddle(pivot, R[1], 0.33, 0.3);
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.2, shadow: 0.65, pick: 0.75, center: 0.65, seen: 110, gait: { len: 0.4, run: 3, happy: 'hop', graze: 0.5 } };
+}
+
+// A flamingo: pink, on long thin legs (it stands on one), with an S of a
+// neck and a bent beak, dark at the tip.
+function flamingo(id) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const pink = toon(id % 2 ? '#f78fa7' : '#f59db0');
+  body.add(mesh(sphere(), pink, 0, 0.62, -0.02, 0.13, 0.11, 0.2));
+  body.add(mesh(cone(0.08, 0.14, 8), toon('#e26c88'), 0, 0.64, -0.22).rotateX(-1.9));
+  for (const side of [-1, 1]) body.add(mesh(sphere(), toon('#e86f8c'), side * 0.11, 0.65, -0.04, 0.03, 0.08, 0.16));
+  const legs = [-1, 1].map((side) => {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.04, 0.54, 0);
+    leg.add(mesh(cylinder(0.011, 0.011, 0.52, 6), toon('#f07a94'), 0, -0.26, 0));
+    leg.add(mesh(sphere(1, 8, 6), toon('#e4607e'), 0, -0.26, 0, 0.018));
+    leg.add(mesh(sphere(), toon('#e4607e'), 0, -0.53, 0.03, 0.035, 0.012, 0.05));
+    body.add(leg);
+    return leg;
+  });
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.68, 0.16);
+  body.add(neck);
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.12, 0.08), new THREE.Vector3(0, 0.26, -0.02), new THREE.Vector3(0, 0.38, 0.02)]);
+  neck.add(mesh(new THREE.TubeGeometry(curve, 16, 0.022, 8), pink));
+  const head = new THREE.Group();
+  head.position.set(0, 0.4, 0.03);
+  neck.add(head);
+  head.add(mesh(sphere(), pink, 0, 0, 0, 0.045, 0.045, 0.05));
+  const beak = new THREE.Group();
+  beak.position.set(0, -0.005, 0.04);
+  beak.rotation.x = 0.6;
+  beak.add(mesh(cylinder(0.012, 0.022, 0.07, 8), toon('#fbe9d8'), 0, 0, 0.035).rotateX(Math.PI / 2));
+  beak.add(mesh(cone(0.013, 0.05, 8), toon(BLACK), 0, -0.004, 0.09).rotateX(Math.PI / 2 + 0.5));
+  head.add(beak);
+  const eyes = eyesOn(head, 0.045, 0.045, 0.05, 0.035, 0.012, 0.009);
+  return { group: g, body, neck, head, eyes, legs, height: 1.15, pick: 0.35, center: 0.6 };
+}
+
+// A monkey: brown, with a pale heart of a face, big ears, long arms and a
+// long tail curled up at the end.
+function monkey(id) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const FUR = ['#8a5a36', '#6e4a30', '#9a6a40'][id % 3];
+  const fur = toon(FUR);
+  const face = toon('#f0cfa4');
+  body.add(mesh(sphere(), fur, 0, 0.3, 0, 0.13, 0.16, 0.12));
+  body.add(mesh(sphere(), face, 0, 0.28, 0.07, 0.08, 0.1, 0.06));
+  const head = new THREE.Group();
+  head.position.set(0, 0.52, 0.02);
+  body.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.12, 0.11, 0.11));
+  head.add(mesh(sphere(), face, 0, -0.01, 0.07, 0.085, 0.08, 0.06));
+  head.add(mesh(sphere(), face, 0, -0.045, 0.1, 0.06, 0.04, 0.045));
+  head.add(mesh(sphere(1, 8, 6), toon('#5a3a2a'), 0, -0.035, 0.145, 0.03, 0.006, 0.01));
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(), fur, side * 0.12, 0.01, 0, 0.045, 0.05, 0.02));
+    head.add(mesh(sphere(), face, side * 0.123, 0.01, 0.006, 0.028, 0.032, 0.015));
+  }
+  const eyes = eyesOn(head, 0.085, 0.08, 0.06, 0.03, 0.02, 0.016);
+  eyes.position.z = 0.055;
+  const arm = (side) => {
+    const a = new THREE.Group();
+    a.position.set(side * 0.12, 0.4, 0);
+    a.add(mesh(capsule(0.03, 0.22, 4, 8), fur, 0, -0.13, 0));
+    a.add(mesh(sphere(1, 8, 6), face, 0, -0.27, 0.01, 0.035));
+    body.add(a);
+    return a;
+  };
+  const arms = [arm(-1), arm(1)];
+  const legs = [-1, 1].map((side) => {
+    const l = new THREE.Group();
+    l.position.set(side * 0.07, 0.18, 0);
+    l.add(mesh(capsule(0.035, 0.1, 4, 8), fur, 0, -0.07, 0));
+    l.add(mesh(sphere(), face, 0, -0.15, 0.03, 0.035, 0.02, 0.05));
+    body.add(l);
+    return l;
+  });
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.2, -0.1);
+  body.add(tail);
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -0.06, -0.15), new THREE.Vector3(0, 0.08, -0.3), new THREE.Vector3(0, 0.26, -0.3), new THREE.Vector3(0, 0.3, -0.2), new THREE.Vector3(0, 0.22, -0.16)]);
+  tail.add(mesh(new THREE.TubeGeometry(curve, 24, 0.016, 6), fur));
+  return { group: g, body, head, eyes, arms, legs, tail, height: 0.7, pick: 0.4, center: 0.35 };
+}
+
+// A kangaroo: up on big back feet and a thick tail, little arms held in
+// front, tall ears, and now and then a joey peeking out of its pouch.
+function kangaroo(id) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const FUR = id % 2 ? '#c4895a' : '#b97e52';
+  const fur = toon(FUR);
+  const pale = toon('#ecd2b0');
+  const trunk = mesh(sphere(), fur, 0, 0.48, -0.04, 0.17, 0.27, 0.16);
+  trunk.rotation.x = -0.35;
+  body.add(trunk);
+  body.add(mesh(sphere(), pale, 0, 0.42, 0.08, 0.11, 0.18, 0.07).rotateX(-0.35));
+  const legs = [-1, 1].map((side) => {
+    const l = new THREE.Group();
+    l.position.set(side * 0.1, 0.3, -0.1);
+    l.add(mesh(sphere(), fur, 0, -0.06, 0.02, 0.08, 0.13, 0.14));
+    l.add(mesh(capsule(0.03, 0.12, 4, 8), fur, 0, -0.2, -0.02).rotateX(0.5));
+    l.add(mesh(sphere(), fur, 0, -0.28, 0.06, 0.045, 0.025, 0.14));
+    body.add(l);
+    return l;
+  });
+  const arms = [-1, 1].map((side) => {
+    const a = new THREE.Group();
+    a.position.set(side * 0.1, 0.6, 0.1);
+    a.rotation.x = -0.8;
+    a.add(mesh(capsule(0.022, 0.1, 4, 6), fur, 0, -0.07, 0));
+    body.add(a);
+    return a;
+  });
+  if (id % 3 === 0) {
+    // A joey, peeking out.
+    body.add(mesh(sphere(), fur, 0, 0.44, 0.16, 0.05, 0.05, 0.05));
+    body.add(eyesOn(new THREE.Group(), 0.05, 0.05, 0.05, 0.03, 0.01, 0.008).translateY(0.44).translateZ(0.16));
+    for (const side of [-1, 1]) body.add(mesh(cone(0.015, 0.05, 6), fur, side * 0.025, 0.5, 0.15));
+  }
+  const head = new THREE.Group();
+  head.position.set(0, 0.78, 0.04);
+  body.add(head);
+  head.add(mesh(sphere(), fur, 0, 0, 0, 0.08, 0.08, 0.09));
+  head.add(mesh(sphere(), fur, 0, -0.025, 0.09, 0.05, 0.045, 0.07));
+  head.add(mesh(sphere(1, 8, 6), toon('#3a2a2a'), 0, -0.01, 0.16, 0.018, 0.014, 0.01));
+  for (const side of [-1, 1]) {
+    const ear = mesh(sphere(), fur, side * 0.05, 0.1, -0.02, 0.025, 0.075, 0.015);
+    ear.rotation.z = -side * 0.25;
+    head.add(ear);
+  }
+  const eyes = eyesOn(head, 0.08, 0.08, 0.09, 0.04, 0.02, 0.014);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.28, -0.18);
+  body.add(tail);
+  tail.add(mesh(cone(0.07, 0.5, 10), fur, 0, -0.06, -0.22).rotateX(-1.85));
+  return { group: g, body, head, eyes, legs, arms, tail, height: 0.95, pick: 0.42, center: 0.5 };
+}
+
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, lion, tiger, zebra, hippo, rhino, panda, flamingo, monkey, kangaroo, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1524,6 +1923,57 @@ export class CritterModel {
         break;
       case 'seal':
         this.flop(state, moving);
+        break;
+      case 'flamingo': {
+        // Standing about on one leg, the other tucked up; stepping along on
+        // both; dipping its head into the water to feed.
+        const [l, r] = this.legs;
+        if (moving) {
+          l.rotation.x = Math.sin(t * 6) * 0.4;
+          r.rotation.x = -Math.sin(t * 6) * 0.4;
+          r.scale.y = 1;
+        } else {
+          l.rotation.x = 0;
+          r.rotation.x = -0.5;
+          r.scale.y = 0.45;
+        }
+        this.neck.rotation.x = state === 'eat' ? 1.7 + Math.sin(t * 4) * 0.1 : Math.sin(t * 0.8 + this.id) * 0.06;
+        if (state === 'sleep') this.neck.rotation.x = -0.9;
+        break;
+      }
+      case 'monkey': {
+        // Bounding along on all fours and its tail swishing; sitting, it
+        // scratches its head now and then.
+        const [la, ra] = this.arms;
+        if (moving) {
+          this.hopPhase += dt * 9;
+          b.position.y = Math.abs(Math.sin(this.hopPhase)) * 0.12;
+          b.rotation.x = 0.35;
+          la.rotation.x = ra.rotation.x = -1 + Math.sin(this.hopPhase) * 0.6;
+        } else {
+          la.rotation.x = 0;
+          const scratch = Math.sin(t * 0.7 + this.id) > 0.6;
+          ra.rotation.set(scratch ? -2.6 + Math.sin(t * 14) * 0.15 : 0, 0, scratch ? 0.4 : 0);
+        }
+        if (state === 'eat') la.rotation.x = -1.8 + Math.sin(t * 6) * 0.2;
+        this.tail.rotation.y = Math.sin(t * 2 + this.id) * 0.4;
+        break;
+      }
+      case 'kangaroo':
+        // Big bounds on its back feet, tail out behind for balance.
+        if (moving) {
+          this.hopPhase += dt * 6;
+          const up = Math.abs(Math.sin(this.hopPhase));
+          b.position.y = up * 0.35;
+          b.rotation.x = 0.35 - up * 0.2;
+          for (const l of this.legs) l.rotation.x = -up * 0.6;
+          this.tail.rotation.x = up * 0.3;
+        } else {
+          for (const l of this.legs) l.rotation.x = 0;
+          this.tail.rotation.x = 0;
+        }
+        if (state === 'eat') b.rotation.x = 0.6;
+        for (const a of this.arms) a.rotation.x = -0.8 + Math.sin(t * 1.5 + this.id) * 0.1;
         break;
       default:
         break;

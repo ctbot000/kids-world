@@ -26,7 +26,8 @@ export const PARK_BLEND = 7;
 
 // Whether (x, z) is in the park (or its edge, `margin` more), where nothing
 // else grows or is put down: no trees, flowers or rocks of the island's own.
-export const inPark = (park, x, z, margin = 1) => Boolean(park) && Math.max(Math.abs(x - park.cx), Math.abs(z - park.cz)) <= PARK_HALF + margin;
+// (A zoo's square is bigger: park.half.)
+export const inPark = (park, x, z, margin = 1) => Boolean(park) && Math.max(Math.abs(x - park.cx), Math.abs(z - park.cz)) <= (park.half ?? PARK_HALF) + margin;
 
 // The roller coaster's corner of the park, a lawn inside its track; and
 // where the coaster stands (the middle of its station: coaster.js), from
