@@ -322,6 +322,17 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
       }
       return true;
     }
+    const unlimited = /^\/admin\/api\/devices\/([^/]+)\/unlimited$/.exec(pathname);
+    if (unlimited) {
+      // A test player whose coins never run out, or an ordinary one again.
+      if (req.method !== 'PUT') res.writeHead(405, { Allow: 'PUT' }).end();
+      else {
+        const body = await readJson(req);
+        const ok = await store.setUnlimited(unlimited[1], body?.on === true);
+        json(res, ok ? 200 : 404, { ok });
+      }
+      return true;
+    }
     const login = /^\/admin\/api\/devices\/([^/]+)\/login$/.exec(pathname);
     if (login) {
       const [, device] = login;

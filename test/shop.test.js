@@ -164,6 +164,30 @@ test('selling, buying and wearing through your profile', async () => {
   }
 });
 
+test('a test player’s coins never run out, whatever they buy', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    // A key of its own: storage.js remembers what it read, for the tests after this too.
+    const p = new Profile('tester');
+    let told = 0;
+    p.addEventListener('basket', () => told++);
+    p.setUnlimited(true);
+    assert.equal(p.data.coins, COINS_MAX);
+    assert.equal(told, 1, 'the page shows the coins at once');
+    for (const kind of ['shoes', 'shoes', 'weapon']) assert.equal(p.buy(kind), true);
+    assert.equal(p.data.gear.shoes, 2);
+    assert.equal(p.data.coins, COINS_MAX, 'topped up again');
+    assert.equal(new Profile('tester').data.coins, COINS_MAX, 'and kept so');
+    p.setUnlimited(false);
+    assert.equal(p.buy('weapon'), true);
+    assert.ok(p.data.coins < COINS_MAX, 'an ordinary player again pays');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
 test('coins and gear are kept at the keeper, from the device that changed them last, and added up for a guest', () => {
   const mine = { name: 'Sunny Otter', coins: 10, gear: { shoes: 1 }, changedAt: 100 };
   const theirs = { name: 'Sunny Otter', coins: 3, gear: { shoes: 2, wings: 1, off: { wings: true } }, changedAt: 200 };

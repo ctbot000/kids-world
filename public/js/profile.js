@@ -419,8 +419,16 @@ export class Profile extends EventTarget {
     this.timer = setTimeout(() => this.store(), 1500);
   }
 
+  // A test player (the keeper says so, see keeper.js): coins that never run
+  // out, kept topped up whatever is bought.
+  setUnlimited(on) {
+    this.unlimited = on;
+    if (on) this.shopped();
+  }
+
   store() {
     clearTimeout(this.timer);
+    if (this.unlimited) this.data.coins = COINS_MAX;
     if (!this.frozen) save(this.key, this.data);
   }
 

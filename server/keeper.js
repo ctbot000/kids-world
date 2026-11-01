@@ -832,6 +832,24 @@ export class KeeperStore extends EventEmitter {
 
   // A choice of a player with a login, kept with them (so it holds on all
   // their devices): off is written down, on is the way it starts.
+  // A test player (scripts/test-user.mjs, or the admin pages) whose coins
+  // never run out: their pages keep them topped up (profile.js). Returns
+  // whether there is such a player.
+  setUnlimited(device, on) {
+    if (!isDeviceId(device)) return Promise.resolve(false);
+    return this.serial(async () => {
+      if (!(await this.readLogin(device))) return false;
+      const file = this.path(device, 'device.json');
+      const { unlimited, ...record } = (await readJson(file)) ?? { id: device };
+      await this.write(file, JSON.stringify(on ? { ...record, unlimited: true } : record));
+      return true;
+    });
+  }
+
+  async isUnlimited(device) {
+    return isDeviceId(device) && (await readJson(this.path(device, 'device.json')))?.unlimited === true;
+  }
+
   setChoice(device, key, on) {
     if (!isDeviceId(device)) return Promise.resolve(false);
     return this.serial(async () => {
@@ -879,6 +897,7 @@ export class KeeperStore extends EventEmitter {
         ip4: info.ip4 ?? null,
         ranked: info.ranked !== false,
         findable: info.findable !== false,
+        unlimited: info.unlimited === true,
         // Never the hashes: when it was made, on how many devices it is, and
         // whether it has a password yet (one from before passwords has not).
         login: login
@@ -1820,6 +1839,7 @@ export class Keeper extends EventEmitter {
       this.from(conn, msg.device, ok ? player : null, ok ? token : null);
       const login = ok ? await this.store.readLogin(player) : null;
       const needsPassword = ok && login?.kind !== 'password';
+      const unlimited = ok && (await this.store.isUnlimited(player));
       // A page that knows TV broadcasts hears what is on, now and as it changes.
       conn.tv = msg.tv === true;
       // And one that knows broadcast stations, who is on air from one.
@@ -1830,6 +1850,7 @@ export class Keeper extends EventEmitter {
         t: 'me',
         ...(ok ? { player, username: login?.username ?? '' } : {}),
         ...(needsPassword ? { needsPassword } : {}),
+        ...(unlimited ? { unlimited } : {}),
         ...(conn.tv ? { tv: this.tvNow() } : {}),
         ...(conn.onAir ? { onAir: this.onAirNow() } : {}),
         ...(conn.lock ? { lock: this.lockNow() } : {}),
@@ -1884,7 +1905,8 @@ export class Keeper extends EventEmitter {
         // Pages from before usernames send the made-up name.
         const { player, token, username, profile } = await this.store.login(msg.username ?? msg.name, msg.password);
         this.from(conn, conn.device, player, token);
-        this.reply(conn, { t: 'login', player, token, username, profile });
+        const unlimited = await this.store.isUnlimited(player);
+        this.reply(conn, { t: 'login', player, token, username, profile, ...(unlimited ? { unlimited } : {}) });
         this.note({ device: player, what: 'login', player: profile?.name ?? '', username });
         break;
       }

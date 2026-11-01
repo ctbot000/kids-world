@@ -505,3 +505,37 @@ test('the admin pages give a player a new password, take their login away, or mo
     await server.shutdown();
   }
 });
+
+test('a test player has unlimited coins: the keeper tells their pages, and the admin pages turn it on or off', async () => {
+  const { keeper, store } = await keeperFor(await tempDir());
+  const device = KeeperStore.deviceId(TABLET);
+  const made = await store.makeLogin(device, PASSWORD, { name: 'Sunny Otter' }, { username: 'Tester' });
+  assert.equal(await store.setUnlimited(KeeperStore.deviceId(PHONE), true), false, 'only a player with a login');
+  const hello = async (login) => {
+    const tablet = await page(keeper);
+    await tablet.say({ t: 'hello', v: KEEPER_VERSION, nonce: 'd4'.repeat(16) });
+    return { tablet, me: await tablet.say({ t: 'me', device: TABLET, ...(login ? { login } : {}) }) };
+  };
+  assert.equal((await hello({ player: device, token: made.token })).me.unlimited, undefined, 'an ordinary player');
+
+  const server = createGameServer({ log: () => {}, admin: adminHandler({ store }) });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const base = `http://127.0.0.1:${server.address().port}/admin/api`;
+  const headers = { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' };
+  try {
+    assert.equal((await fetch(`${base}/devices/${device}/unlimited`, { method: 'PUT', headers, body: JSON.stringify({ on: true }) })).status, 200);
+    assert.equal((await (await fetch(`${base}/state`)).json()).devices.find((d) => d.id === device).unlimited, true);
+    assert.equal((await hello({ player: device, token: made.token })).me.unlimited, true);
+    const { tablet } = await hello(null);
+    assert.equal((await tablet.say({ t: 'login', username: 'tester', password: PASSWORD })).unlimited, true, 'told on logging in too');
+    assert.equal((await hello(null)).me.unlimited, undefined, 'never to a page with no login');
+    // Its profile copies, kept as ever, leave it one.
+    await store.keepProfileIn(device, { name: 'Sunny Otter', coins: 99999 });
+    assert.equal(await store.isUnlimited(device), true);
+    assert.equal((await fetch(`${base}/devices/${device}/unlimited`, { method: 'PUT', headers, body: JSON.stringify({ on: false }) })).status, 200);
+    assert.equal((await hello({ player: device, token: made.token })).me.unlimited, undefined);
+    assert.equal((await fetch(`${base}/devices/${KeeperStore.deviceId(PHONE)}/unlimited`, { method: 'PUT', headers, body: JSON.stringify({ on: true }) })).status, 404);
+  } finally {
+    await server.shutdown();
+  }
+});

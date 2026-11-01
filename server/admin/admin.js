@@ -343,8 +343,13 @@ function loginRow(device, players) {
     if (!res.ok) alert('That did not work. Is the keeper still running?');
     refresh(true);
   };
+  const coins = async () => {
+    const res = await api(`devices/${device.id}/unlimited`, { method: 'PUT', headers: { 'X-Kids-World-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ on: !device.unlimited }) });
+    if (!res.ok) alert('That did not work. Is the keeper still running?');
+    refresh(true);
+  };
   const words = login
-    ? `Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · no password yet (picture login)'} · ${device.ranked ? 'ranked' : 'excluded from ranking'}${device.findable === false ? ' · hidden from players list' : ''}`
+    ? `Logs in as ${login.username || name} on ${plural(login.devices, 'device', 'devices')}${login.password ? '' : ' · no password yet (picture login)'} · ${device.ranked ? 'ranked' : 'excluded from ranking'}${device.findable === false ? ' · hidden from players list' : ''}${device.unlimited ? ' · test player: unlimited coins' : ''}`
     : 'No login';
   return h(
     'div',
@@ -355,6 +360,7 @@ function loginRow(device, players) {
       h('span', {}, words),
       h('button', { type: 'button', onclick: type }, login ? (login.password ? 'Reset password' : 'Set password') : 'Create login'),
       login ? h('button', { type: 'button', onclick: rank }, device.ranked ? 'Exclude from ranking' : 'Include in ranking') : null,
+      login ? h('button', { type: 'button', onclick: coins }, device.unlimited ? 'Limit coins' : 'Unlimited coins') : null,
       login
         ? h(
             'button',

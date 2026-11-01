@@ -103,6 +103,9 @@ const ui = new UI({ profile, isle, sound, atlas, input });
 // and logged in, what your other devices sent comes back — the isle's own
 // world of you among them, kept and brought back the same way.
 const keeper = new KeeperClient({ profile, isle, login: who });
+keeper.addEventListener('unlimited', () => {
+  for (const p of [profile, isle]) p.setUnlimited(keeper.unlimited);
+});
 keeper.addEventListener('status', () => ui.renderKeeper());
 keeper.addEventListener('kept', () => ui.renderKeeper());
 keeper.addEventListener('config', () => {

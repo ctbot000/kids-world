@@ -116,6 +116,8 @@ export class KeeperClient extends EventTarget {
     this.profile = profile;
     this.isle = isle;
     this.login = login;
+    // A test player, as the keeper says: coins that never run out.
+    this.unlimited = false;
     this.configUrl = configUrl;
     this.config = null;
     this.publicKey = null;
@@ -845,6 +847,11 @@ export class KeeperClient extends EventTarget {
       if (this.login && typeof msg.username === 'string' && msg.username !== this.login.username) {
         this.login = { ...this.login, username: msg.username };
         this.emit('username');
+      }
+      // A test player's coins never run out (profile.js unlimited).
+      if (Boolean(msg.unlimited) !== this.unlimited) {
+        this.unlimited = Boolean(msg.unlimited);
+        this.emit('unlimited');
       }
       if (msg.needsPassword && !this.needsPassword) {
         this.needsPassword = true;
