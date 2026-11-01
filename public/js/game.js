@@ -21,7 +21,7 @@ import { cookBreakLeft, cookCoins, heatUp, makeLesson, pickItem, recipeByKey, st
 import { isTank, tankNear } from './shared/fishtank.js';
 import { biteWait, castSpot, catchFor, lineState, STAY } from './shared/fishing.js';
 import { FishingLine } from './render/fishing-rod.js';
-import { allByHeart, answerStudy, cleanNotebook, fileStudy, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
+import { allByHeart, answerStudy, cleanNotebook, fileAnswer, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
@@ -3080,8 +3080,9 @@ export class Game extends EventTarget {
   }
 
   // An answer typed: { right, fact }, or undefined for nothing to answer.
-  // With the last one the study is filed in your notebook, and what you
-  // learnt counts for XP and stickers.
+  // Each one is filed in your notebook straight away, so a study left half
+  // done still counts; with the last one, what you learnt counts for XP
+  // and stickers.
   studyAnswer(text) {
     const s = this.study;
     if (!s || s.done) return;
@@ -3089,10 +3090,10 @@ export class Game extends EventTarget {
     if (ask?.learn && !s.shown) return;
     const got = answerStudy(s, text);
     if (!got) return;
+    const notebook = this.notebook;
+    if (fileAnswer(notebook, s.book, ask, got.right)) s.learnt++;
+    save('notebook', notebook);
     if (s.done) {
-      const notebook = this.notebook;
-      s.learnt = fileStudy(notebook, s);
-      save('notebook', notebook);
       s.byHeart = allByHeart(notebook);
       s.xp = XP_FOR.studies.xp + s.right * XP_FOR.studyright.xp;
       this.profile.count('studies');
@@ -3105,7 +3106,8 @@ export class Game extends EventTarget {
     return got;
   }
 
-  // The study window closed: a study half done simply goes, unfiled.
+  // The study window closed: a study half done simply goes, what was
+  // answered already filed.
   closeStudy() {
     this.study = null;
   }

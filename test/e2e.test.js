@@ -5403,7 +5403,27 @@ test('studying: sitting at a study desk opens the workbooks, new facts are shown
   assert.ok(await page.evaluate(() => window.kidsWorld.game.seat));
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('.workbook[data-book="add"]'));
+  // The workbook's bar has moved on, and says what is being learnt.
+  const shown = await page.evaluate(() => {
+    const book = document.querySelector('.workbook[data-book="add"]');
+    return { bar: parseFloat(book.querySelector('.study-meter span').style.width), text: book.textContent };
+  });
+  assert.ok(shown.bar > 0, `the bar is ${shown.bar}% full`);
+  assert.ok(shown.text.includes(`${STUDY_SIZE} learning`), shown.text);
+  // A study left half done still keeps what was answered.
+  await page.click('.workbook[data-book="add"]');
+  await until(page, () => window.kidsWorld.game.study && document.querySelector('.study-q'));
+  const asked = await page.evaluate(() => {
+    const g = window.kidsWorld.game;
+    if (g.study.asks[0].learn) g.studySeen();
+    const { fact } = g.study.asks[0];
+    g.studyAnswer(fact.answer);
+    return fact.key;
+  });
   await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden && !window.kidsWorld.game.study);
+  assert.ok(await page.evaluate((key) => window.kidsWorld.game.notebook.add[key] >= 1, asked));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.studies), 1, 'not counted as a whole study');
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

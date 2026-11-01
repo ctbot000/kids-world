@@ -37,7 +37,7 @@ import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shar
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
 import { Kitchen3D } from './render/kitchen3d.js';
 import { robotKitDialog } from './ui-robokit.js';
-import { BY_HEART, factsOf, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
+import { BY_HEART, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
@@ -128,6 +128,9 @@ function ago(t) {
   if (hours < 24) return hours === 1 ? 'an hour ago' : `${hours} hours ago`;
   return `on ${new Date(t).toLocaleDateString()}`;
 }
+
+// How a workbook is going (shared/study.js workbookProgress), in words.
+const studyCount = (p) => `💡 ${p.byHeart} by heart · 📖 ${p.learning} learning · of ${p.total}`;
 
 // A tiny element builder: h('button', { class: 'chip', onclick }, 'Hi').
 export function h(tag, props = {}, ...children) {
@@ -2358,7 +2361,7 @@ export class UI {
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
-          card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right four times and you know it by heart! Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
+          card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. Free it, and a harder one takes its place — stage 2, stage 3 and on — and after the fireworks, everyone there goes on to it by themselves (or tap 🌟 Go now). Every day it begins again at stage 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there — though its helicopter and balloon fly as ever! And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
@@ -6848,15 +6851,15 @@ export class UI {
                 { class: 'quiz-level' },
                 h('span', {}, w.name),
                 h('span', { class: 'quiz-sub' }, w.how),
-                h('span', { class: 'study-meter', role: 'img', 'aria-label': `${p.byHeart} of ${p.total} known by heart` }, h('span', { style: `width: ${(100 * p.byHeart) / p.total}%` })),
-                h('span', { class: 'quiz-sub' }, `💡 ${p.byHeart} of ${p.total} by heart`),
+                h('span', { class: 'study-meter', role: 'img', 'aria-label': `${Math.round(100 * p.done)}% learnt` }, h('span', { style: `width: ${100 * p.done}%` })),
+                h('span', { class: 'quiz-sub' }, studyCount(p)),
               ),
             );
           }),
         );
         root.append(
           h('h2', {}, '📚 Study time'),
-          h('p', {}, `Pick a workbook. New facts are shown to you first, then you type the answers. Get a fact right ${BY_HEART} times and you know it by heart!`),
+          h('p', {}, `Pick a workbook. New facts are shown to you first, then you type the answers. Get a fact right in ${BY_HEART} studies and you know it by heart!`),
           list,
         );
       },
@@ -6901,7 +6904,7 @@ export class UI {
       (root) => {
         const status = h('div', { class: 'quiz-status' });
         const box = h('div', { class: 'study-box' });
-        this.studyEls = { study: s, status, box, miss: null, said: -1, cheer: '' };
+        this.studyEls = { study: s, status, box, miss: null, said: -1, cheer: '', start: workbookProgress(g.notebook, s.book) };
         root.append(h('h2', {}, `${book.icon} ${book.name}`), status, box);
       },
       {
@@ -6921,7 +6924,6 @@ export class UI {
     const els = this.studyEls;
     if (!s || els?.study !== s || !this.modalOpen) return;
     const book = workbookByKey(s.book);
-    const total = factsOf(s.book).length;
     // A fact shown with its answer, as on a card.
     const solved = (fact) => (book.words ? h('div', { class: 'study-q' }, h('span', { class: 'study-picture', 'aria-hidden': 'true' }, fact.picture), ` ${fact.answer}`) : h('div', { class: 'study-q' }, fact.q.replace('?', fact.answer)));
     const button = (label, cls, fn) => h('button', { class: `big ${cls}`, type: 'button', onclick: fn }, label);
@@ -6955,9 +6957,10 @@ export class UI {
       els.box.replaceChildren(
         h('div', { class: 'cook-dish', 'aria-hidden': 'true' }, s.missed.length ? '📚' : '🌟'),
         h('div', { class: `quiz-result${s.missed.length ? '' : ' perfect'}` }, s.missed.length ? 'Good studying!' : 'Every one right first time!'),
-        h('p', { class: 'quiz-credit' }, s.learnt ? `💡 ${s.learnt} more by heart! ` : '', `You know ${p.byHeart} of ${p.total} by heart.`, s.xp ? ` You earned ⭐ ${s.xp} XP.` : ''),
+        h('p', { class: 'quiz-credit' }, s.learnt ? `💡 ${s.learnt} more by heart! ` : '', `${book.name} is ${Math.round(100 * p.done)}% learnt (up ${Math.max(1, Math.round(100 * (p.done - els.start.done)))}%).`, s.xp ? ` You earned ⭐ ${s.xp} XP.` : ''),
         s.missed.length ? h('p', { class: 'study-hint' }, '📝 To practise: ', s.asks.filter((a) => !a.again && s.missed.includes(a.fact.key)).map((a) => (book.words ? a.fact.answer : a.fact.q.replace('?', a.fact.answer))).join(', ')) : '',
-        h('div', { class: 'study-meter big', role: 'img', 'aria-label': `${p.byHeart} of ${total} known by heart` }, h('span', { style: `width: ${(100 * p.byHeart) / total}%` })),
+        h('div', { class: 'study-meter wide', role: 'img', 'aria-label': `${Math.round(100 * p.done)}% learnt` }, h('span', { style: `width: ${100 * p.done}%` })),
+        h('p', { class: 'muted' }, studyCount(p)),
         button('🔁 Study again', 'blue', () => {
           this.sound.play('ui');
           g.startStudy(s.book);
@@ -7043,7 +7046,7 @@ export class UI {
       book.words ? h('p', { class: 'study-sentence' }, fact.q) : '',
       book.words ? button('🔊 Hear it', 'blue', () => this.sayWord(fact.say)) : '',
       h('form', { class: 'study-answer', onsubmit: (e) => (e.preventDefault(), check()) }, input, h('button', { class: 'big green', type: 'submit' }, 'Check')),
-      h('p', { class: 'muted' }, `💡 ${workbookProgress(g.notebook, s.book).byHeart} of ${total} by heart · a fact is by heart after ${BY_HEART} times right`),
+      h('p', { class: 'muted' }, `${studyCount(workbookProgress(g.notebook, s.book))} · a fact is by heart after ${BY_HEART} studies right`),
     );
     this.focusSoon(input, 50);
   }

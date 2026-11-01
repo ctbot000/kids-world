@@ -4,24 +4,28 @@
 // that remembers what you know: each fact sits in a box of its own in your
 // notebook, one box up when you get it right first time and back to the
 // first when you miss it, and a fact four boxes up is known by heart. A
-// study asks STUDY_SIZE facts, the ones you know least first, a few new
-// ones (shown to you before you are asked them) and an old one known by
-// heart now and then, so it does not slip away. You type the answer; a
-// miss shows the right one and a way to work it out, and the fact comes
-// back a little later in the same study, until you get it.
+// study asks STUDY_SIZE facts: the ones you are learning, nearest to known
+// by heart first, so they get there; a few new ones (shown to you before
+// you are asked them), fewer the more you are learning; and an old one
+// known by heart now and then, so it does not slip away. You type the
+// answer; a miss shows the right one and a way to work it out, and the
+// fact comes back a little later in the same study, until you get it.
 //
 // It all happens on your own page, and the notebook stays on this device
-// (game.js, storage.js); what you learn counts towards XP and stickers.
+// (game.js, storage.js), each answer filed as it is given; what you learn
+// counts towards XP and stickers.
 import { BLOCKS } from './blocks.js';
 import { Rng } from './rng.js';
 
 // Whether a block is a study desk (any way it faces).
 export const isStudyDesk = (id) => BLOCKS[id]?.model === 'study-desk';
 
-// How many facts a study asks, how many of them may be new, and the box a
-// fact known by heart is in.
+// How many facts a study asks, how many of them may be new (one fewer for
+// every NEW_SLOWER facts being learnt), and the box a fact known by heart
+// is in.
 export const STUDY_SIZE = 10;
 export const NEW_PER_STUDY = 3;
+export const NEW_SLOWER = 6;
 export const BY_HEART = 4;
 // How many questions later a fact missed comes back.
 export const AGAIN_AFTER = 3;
@@ -151,12 +155,16 @@ export function cleanNotebook(raw) {
   return out;
 }
 
-// How far along a workbook is: { byHeart, seen, total }.
+// How far along a workbook is: { byHeart, learning, total, done }, done
+// being how much of the way to knowing it all by heart (0 to 1), every box
+// a fact goes up counting, so it moves with every study.
 export function workbookProgress(notebook, book) {
   const page = notebook?.[book] ?? {};
   const total = factsOf(book).length;
   const boxes = Object.values(page);
-  return { byHeart: boxes.filter((b) => b >= BY_HEART).length, seen: boxes.length, total };
+  const byHeart = boxes.filter((b) => b >= BY_HEART).length;
+  const done = boxes.reduce((n, b) => n + Math.min(b, BY_HEART), 0) / (total * BY_HEART);
+  return { byHeart, learning: boxes.length - byHeart, total, done };
 }
 
 // Facts known by heart, in every workbook.
@@ -172,21 +180,22 @@ function shuffle(rng, list) {
 }
 
 // A study of a workbook: the facts to ask, in order, each { fact, learn }
-// (learn: a new one, shown before it is asked). The ones known least come
-// first in the choosing, ties by chance; new ones in the order they are
-// best learnt; and one known by heart to keep it fresh.
+// (learn: a new one, shown before it is asked). The ones being learnt
+// nearest to known by heart come first in the choosing, ties by chance,
+// so they get there rather than waiting behind every new one; new ones in
+// the order they are best learnt; and one known by heart to keep it fresh.
 export function makeStudy(book, notebook, seed, size = STUDY_SIZE) {
   const rng = new Rng(seed);
   const page = notebook?.[book] ?? {};
   const facts = factsOf(book);
   const fresh = facts.filter((f) => !page[f.key]);
-  const learning = shuffle(rng, facts.filter((f) => page[f.key] && page[f.key] < BY_HEART)).sort((a, b) => page[a.key] - page[b.key]);
+  const learning = shuffle(rng, facts.filter((f) => page[f.key] && page[f.key] < BY_HEART)).sort((a, b) => page[b.key] - page[a.key]);
   const known = shuffle(rng, facts.filter((f) => page[f.key] >= BY_HEART));
   const picked = [];
   const take = (list, n, learn) => {
     for (const fact of list.splice(0, Math.max(0, Math.min(n, size - picked.length)))) picked.push({ fact, learn });
   };
-  take(fresh, NEW_PER_STUDY, true);
+  take(fresh, Math.max(1, NEW_PER_STUDY - Math.floor(learning.length / NEW_SLOWER)), true);
   take(known, 1, false);
   take(learning, size, false);
   // Not enough to go over yet: more new ones, then more known by heart.
@@ -220,17 +229,14 @@ export function answerStudy(study, text) {
   return { right, fact };
 }
 
-// The notebook after a study: a fact right first time one box up (a new
-// one into the first), a missed one back to the first. Returns the facts
-// that came to be known by heart.
-export function fileStudy(notebook, study) {
-  const page = (notebook[study.book] ??= {});
-  let learnt = 0;
-  for (const { fact, again } of study.asks) {
-    if (again) continue;
-    const before = page[fact.key] ?? 0;
-    page[fact.key] = study.missed.includes(fact.key) ? 1 : Math.min(BY_HEART, before + 1);
-    if (before < BY_HEART && page[fact.key] >= BY_HEART) learnt++;
-  }
-  return learnt;
+// An answer filed in the notebook as it is given: right first time, the
+// fact one box up (a new one into the first); a miss, back to the first.
+// Asked again after a miss, it stays where it is. Returns whether it came
+// to be known by heart.
+export function fileAnswer(notebook, book, ask, right) {
+  if (ask.again) return false;
+  const page = (notebook[book] ??= {});
+  const before = page[ask.fact.key] ?? 0;
+  page[ask.fact.key] = right ? Math.min(BY_HEART, before + 1) : 1;
+  return before < BY_HEART && page[ask.fact.key] >= BY_HEART;
 }

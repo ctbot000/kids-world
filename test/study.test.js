@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { AGAIN_AFTER, allByHeart, answerStudy, BY_HEART, cleanNotebook, factsOf, fileStudy, isRight, isStudyDesk, makeStudy, NEW_PER_STUDY, STUDY_SIZE, workbookProgress, WORKBOOKS } from '../public/js/shared/study.js';
+import { AGAIN_AFTER, allByHeart, answerStudy, BY_HEART, cleanNotebook, factsOf, fileAnswer, isRight, isStudyDesk, makeStudy, NEW_PER_STUDY, NEW_SLOWER, STUDY_SIZE, workbookProgress, WORKBOOKS } from '../public/js/shared/study.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { XP_FOR } from '../public/js/shared/levels.js';
 
@@ -54,52 +54,79 @@ test('a first study shows new facts, in the order they are learnt, before asking
   );
 });
 
-test('later studies ask a few new facts, the ones known least, and one known by heart', () => {
+test('later studies ask the facts nearest to known by heart, fewer new ones the more are being learnt, and one known by heart', () => {
   const facts = factsOf('add');
   const page = {};
-  // 30 seen: 10 in each of boxes 1 and 2, 10 by heart.
-  facts.slice(0, 30).forEach((f, i) => (page[f.key] = i < 10 ? 1 : i < 20 ? 2 : BY_HEART));
+  // 30 seen: 10 in each of boxes 1 and 3, 10 by heart.
+  facts.slice(0, 30).forEach((f, i) => (page[f.key] = i < 10 ? 1 : i < 20 ? 3 : BY_HEART));
   const notebook = cleanNotebook({ add: page });
+  const fewer = NEW_PER_STUDY - Math.floor(20 / NEW_SLOWER);
   for (let seed = 1; seed < 20; seed++) {
     const s = makeStudy('add', notebook, seed);
     assert.equal(s.asks.length, STUDY_SIZE);
     const fresh = s.asks.filter((a) => a.learn);
-    assert.equal(fresh.length, NEW_PER_STUDY);
     assert.deepEqual(
       fresh.map((a) => a.fact.key),
-      facts.slice(30, 30 + NEW_PER_STUDY).map((f) => f.key),
-      'the next new ones',
+      facts.slice(30, 30 + Math.max(1, fewer)).map((f) => f.key),
+      'the next new ones, fewer with 20 being learnt',
     );
-    assert.ok(s.asks.slice(0, NEW_PER_STUDY).every((a) => a.learn), 'shown first');
+    assert.ok(s.asks.slice(0, fresh.length).every((a) => a.learn), 'shown first');
     const boxes = s.asks.filter((a) => !a.learn).map((a) => notebook.add[a.fact.key]);
     assert.equal(boxes.filter((b) => b === BY_HEART).length, 1, 'one known by heart, to keep it fresh');
-    assert.equal(boxes.filter((b) => b === 1).length, STUDY_SIZE - NEW_PER_STUDY - 1, 'the ones known least');
+    assert.ok(boxes.filter((b) => b < BY_HEART).every((b) => b === 3), 'the ones nearest to known by heart');
   }
+  // Learning only a few: the most new ones, and more to fill the study.
+  const few = cleanNotebook({ add: Object.fromEntries(facts.slice(0, 4).map((f) => [f.key, 2])) });
+  assert.equal(makeStudy('add', few, 1).asks.filter((a) => a.learn).length, STUDY_SIZE - 4);
 });
 
-test('a miss comes back a few questions later; the study files right ones a box up and misses back to the first', () => {
+test('a miss comes back a few questions later; each answer is filed as it is given, right ones a box up and misses back to the first', () => {
   const notebook = cleanNotebook({ add: { '1+1': 1, '1+2': BY_HEART - 1, '2+1': 2 } });
-  const s = makeStudy('add', notebook, 3);
-  const first = s.asks[0].fact;
-  assert.deepEqual(answerStudy(s, 'nope'), { right: false, fact: first });
-  assert.equal(s.asks.length, STUDY_SIZE + 1);
-  assert.equal(s.asks[1 + AGAIN_AFTER].fact, first, 'asked again later');
-  assert.ok(s.asks[1 + AGAIN_AFTER].again);
-  while (!s.done) answerStudy(s, s.asks[s.at].fact.answer);
-  assert.equal(s.right, STUDY_SIZE - 1, 'all but the miss right first time');
-  assert.deepEqual(s.missed, [first.key]);
-  assert.equal(answerStudy(s, '2'), undefined, 'nothing left to answer');
-
   const before = structuredClone(notebook.add);
-  const learnt = fileStudy(notebook, s);
-  assert.equal(notebook.add[first.key], 1, 'the miss back to the first box');
+  const s = makeStudy('add', notebook, 3);
+  const first = s.asks[0];
+  assert.deepEqual(answerStudy(s, 'nope'), { right: false, fact: first.fact });
+  assert.equal(fileAnswer(notebook, 'add', first, false), false);
+  assert.equal(notebook.add[first.fact.key], 1, 'the miss back to the first box, straight away');
+  assert.equal(s.asks.length, STUDY_SIZE + 1);
+  assert.equal(s.asks[1 + AGAIN_AFTER].fact, first.fact, 'asked again later');
+  assert.ok(s.asks[1 + AGAIN_AFTER].again);
+  let learnt = 0;
+  while (!s.done) {
+    const ask = s.asks[s.at];
+    answerStudy(s, ask.fact.answer);
+    if (fileAnswer(notebook, 'add', ask, true)) learnt++;
+  }
+  assert.equal(s.right, STUDY_SIZE - 1, 'all but the miss right first time');
+  assert.deepEqual(s.missed, [first.fact.key]);
+  assert.equal(answerStudy(s, '2'), undefined, 'nothing left to answer');
+  assert.equal(notebook.add[first.fact.key], 1, 'got right when asked again, it stays in the first box');
   for (const { fact } of s.asks) {
-    if (fact.key === first.key) continue;
+    if (fact.key === first.fact.key) continue;
     assert.equal(notebook.add[fact.key], Math.min(BY_HEART, (before[fact.key] ?? 0) + 1), `${fact.key} one box up`);
   }
-  assert.equal(learnt, first.key === '1+2' ? 0 : 1, '1 + 2 now known by heart');
+  assert.equal(learnt, first.fact.key === '1+2' ? 0 : 1, '1 + 2 now known by heart');
   assert.equal(workbookProgress(notebook, 'add').byHeart, learnt);
   assert.equal(allByHeart(notebook), learnt);
+});
+
+test('progress moves with every study, and the first facts are known by heart after four studies all right', () => {
+  const notebook = cleanNotebook({});
+  let last = workbookProgress(notebook, 'times');
+  assert.deepEqual(last, { byHeart: 0, learning: 0, total: 90, done: 0 });
+  for (let n = 1; n <= 4; n++) {
+    const s = makeStudy('times', notebook, n);
+    while (!s.done) {
+      const ask = s.asks[s.at];
+      answerStudy(s, ask.fact.answer);
+      fileAnswer(notebook, 'times', ask, true);
+    }
+    const p = workbookProgress(notebook, 'times');
+    assert.ok(p.done > last.done, `study ${n} moves it on`);
+    last = p;
+  }
+  assert.ok(last.byHeart >= 5, `${last.byHeart} by heart after four studies`);
+  assert.ok(last.done > 0 && last.done < 1);
 });
 
 test('a notebook kept keeps only real facts in real boxes', () => {

@@ -4813,13 +4813,13 @@ button.go-pt {
   background: #ffd84a;
 }
 
-.study-meter.big {
+.study-meter.wide {
   height: 14px;
   margin: 4px 0 14px;
   background: var(--line);
 }
 
-.study-meter.big > span {
+.study-meter.wide > span {
   background: var(--grass);
 }
 
