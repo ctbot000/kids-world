@@ -1,7 +1,8 @@
 // Fishing from the shore: stand at the edge of a pond or the sea, facing the
 // water, and tap 🎣 Fish (or press Q). Your rod comes out and its bobber
-// plops onto the water a few steps in front of you, and a fish's shadow comes
-// circling under it. It nibbles — the bobber twitches — but a nibble is not
+// plops onto the water a few steps in front of you, and the fish that will
+// bite (catchFor, settled now) comes swimming in under the water and circles
+// it: you can see what kind it is. It nibbles — the bobber twitches — but a nibble is not
 // a bite: pull then and you scare it off. When it really bites, the bobber
 // goes right under: tap 🎣 Strike! (or Q) quick to hook it, and the fight
 // is on. Hold 🎣 Reel (or Q) to wind it in, but when it runs the line pulls

@@ -182,14 +182,16 @@ test('a cast and a reel are passed on to everyone else, a cast only onto open wa
   const y = Math.floor(p.s[1]) - 1;
   w.set(x, y, z, B.WATER);
   w.set(x, y + 1, z, B.AIR);
-  room.receive(a, { t: 'rod', op: 'cast', at: [x, y, z] });
-  assert.deepEqual(b.all('rod'), [{ t: 'rod', pid, op: 'cast', at: [x, y, z] }]);
+  room.receive(a, { t: 'rod', op: 'cast', at: [x, y, z], fish: 'trout', cm: 37 });
+  assert.deepEqual(b.all('rod'), [{ t: 'rod', pid, op: 'cast', at: [x, y, z], fish: 'trout', cm: 37 }], 'with the fish that will bite');
   assert.equal(a.all('rod').length, 0, 'the caster draws their own line already');
+  room.receive(a, { t: 'rod', op: 'fish', fish: 'puffer', cm: 12 });
   room.receive(a, { t: 'rod', op: 'hook' });
   room.receive(a, { t: 'rod', op: 'pull', p: 0.456, pull: 7 });
   room.receive(a, { t: 'rod', op: 'land', caught: 'trout', cm: 37 });
   room.receive(a, { t: 'rod', op: 'reel', caught: 'trout' });
   assert.deepEqual(b.all('rod').slice(1), [
+    { t: 'rod', pid, op: 'fish', fish: 'puffer', cm: 12 },
     { t: 'rod', pid, op: 'hook' },
     { t: 'rod', pid, op: 'pull', p: 0.46, pull: 1 },
     { t: 'rod', pid, op: 'land', caught: 'trout', cm: 37 },
@@ -198,7 +200,7 @@ test('a cast and a reel are passed on to everyone else, a cast only onto open wa
   room.receive(a, { t: 'rod', op: 'reel', caught: { no: 1 }, lost: true });
   room.receive(a, { t: 'rod', op: 'land', caught: '<b>', cm: 1e9 });
   room.receive(a, { t: 'rod', op: 'pull', p: 'far' });
-  assert.deepEqual(b.all('rod').slice(5), [
+  assert.deepEqual(b.all('rod').slice(6), [
     { t: 'rod', pid, op: 'reel', caught: '', lost: true },
     { t: 'rod', pid, op: 'land', caught: '', cm: 99 },
     { t: 'rod', pid, op: 'pull', p: 0, pull: 0 },
@@ -213,7 +215,7 @@ test('a cast and a reel are passed on to everyone else, a cast only onto open wa
   p.s = [x + 20, y, z];
   room.receive(a, { t: 'rod', op: 'cast', at: [x, y, z] });
   room.receive(a, { t: 'rod', op: 'wiggle' });
-  assert.equal(b.all('rod').length, 8, 'nothing more passed on');
+  assert.equal(b.all('rod').length, 9, 'nothing more passed on');
 });
 
 test('fishing, the rod is in your hand pointing out over the water, its line out to the bobber', () => {
@@ -243,20 +245,26 @@ test('fishing, the rod is in your hand pointing out over the water, its line out
   assert.ok(a.weapon.parent, 'the sword back');
 
   // The line: the bobber flies out in an arc, then floats on the water with
-  // a fish's shadow circling it; it twitches at a nibble and goes under at
+  // the fish that will bite swimming in under the water and circling it; it
+  // twitches at a nibble and goes under at
   // a bite; hooked, the fish drags it about and in towards the shore.
   const line = new FishingLine(scene, { x: 5, y: 4, z: 9 });
   const from = new THREE.Vector3(5.5, 6, 5);
   const shore = new THREE.Vector3(5.5, 5, 5.5);
   line.update(from, line.flight / 2, 0, { phase: 'wait', shore });
   assert.ok(line.bobber.position.y > 6, 'up in the air on its way');
-  for (let i = 0; i < 30; i++) line.update(from, 0.05, 1 + i * 0.05, { phase: 'wait', shore });
+  line.update(from, line.flight, 0.5, { phase: 'wait', shore });
+  line.setFish('trout', 30, { x: 0, z: 1 });
+  assert.equal(line.fish.name, 'fish trout', 'the real fish');
+  assert.ok(line.fish.position.distanceTo(line.at) > 3, 'coming in from afar');
+  for (let i = 0; i < 80; i++) line.update(from, 0.05, 1 + i * 0.05, { phase: 'wait', shore });
   const floating = line.bobber.position.y;
   assert.ok(Math.abs(floating - (4 + 0.92)) < 0.05, `floating on the water (${floating})`);
-  const round = line.shadow.position.distanceTo(line.at);
-  assert.ok(line.shadow.visible && round > 0.5 && round < 1.6, `a shadow circling it (${round.toFixed(2)})`);
+  const round = line.fish.position.distanceTo(line.at);
+  assert.ok(round > 0.5 && round < 1.7, `circling it (${round.toFixed(2)})`);
+  assert.ok(line.fish.position.y < line.top - 0.1, 'under the water');
   for (let i = 0; i < 10; i++) line.update(from, 0.05, 3 + i * 0.05, { phase: 'nibble', shore });
-  assert.ok(line.shadow.position.distanceTo(line.at) < 0.35, 'in to nibble');
+  assert.ok(line.fish.position.distanceTo(line.at) < 0.45, 'in to nibble, nose to the bobber');
   line.update(from, 0.05, 4, { phase: 'strike', shore });
   assert.ok(line.bobber.position.y < floating - 0.1, 'under, with a fish on');
   const pos = line.line.geometry.attributes.position;
@@ -268,24 +276,30 @@ test('fishing, the rod is in your hand pointing out over the water, its line out
     return Math.hypot(line.hook.x - shore.x, line.hook.z - shore.z);
   };
   assert.ok(dist(0.9) < dist(0.1) - 1.5, 'reeled in towards the shore');
-  assert.ok(line.leap('trout', 30) && !line.leap('trout', 30), 'it leaps out, once at a time');
+  const fish = line.fish;
+  assert.ok(line.leap() && !line.leap(), 'it leaps out, once at a time');
   line.update(from, 0.35, 7, { phase: 'fight', progress: 0.9, pull: 0.8, shore });
-  assert.ok(line.leaping.position.y > line.top + 0.5, 'up out of the water');
+  assert.ok(fish.position.y > line.top + 0.4, 'up out of the water');
   // Landed: up out of the water and hanging from the line under the tip.
   line.land('trout', 30);
   for (let i = 0; i < 20; i++) line.update(from, 0.05, 8 + i * 0.05, { phase: 'landed', shore });
-  assert.ok(!line.leaping, 'the leap over');
+  assert.equal(line.caught, fish, 'the very fish that fought');
   assert.ok(line.caught.position.distanceTo(from) < 0.6 && line.caught.position.y < from.y, 'hanging under the tip');
-  assert.ok(!line.bobber.visible && !line.shadow.visible, 'the bobber and the shadow gone with it');
-  // A fish that got away: the shadow swims off and shrinks away.
+  assert.ok(!line.bobber.visible && !line.fish, 'the bobber gone with it');
+  // A fish that got away swims off and down out of sight.
   const lost = new FishingLine(scene, { x: 5, y: 4, z: 9 });
   for (let i = 0; i < 20; i++) lost.update(from, 0.05, i * 0.05, { phase: 'wait', shore });
-  const was = lost.shadow.position.clone();
+  lost.setFish('minnow', 7);
+  for (let i = 0; i < 20; i++) lost.update(from, 0.05, 1 + i * 0.05, { phase: 'wait', shore });
+  const was = lost.fish.position.clone();
   for (let i = 0; i < 18; i++) lost.update(from, 0.05, 2 + i * 0.05, { phase: 'lost', shore });
-  assert.ok(lost.shadow.position.distanceTo(was) > 2 && lost.shadow.scale.x < 0.5, 'off it goes');
+  assert.ok(lost.fish.position.distanceTo(was) > 2 && lost.fish.position.y < was.y - 0.5, 'off it goes');
+  // A snag has no fish.
+  lost.setFish('boot', 0);
+  assert.equal(lost.fish, null);
   lost.dispose();
   line.dispose();
-  assert.ok(!line.bobber.parent && !line.line.parent && !line.caught.parent && !line.shadow.parent, 'gone when reeled in');
+  assert.ok(!line.bobber.parent && !line.line.parent && !line.caught.parent, 'gone when reeled in');
 })
 
 test('every kind of fish is drawn, longer for a longer fish, and a pufferfish round', () => {

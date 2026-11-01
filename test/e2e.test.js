@@ -6775,7 +6775,7 @@ test('the admin page watches any island it kept: live while it is played, and it
   }
 });
 
-test('fishing: 🎣 Fish (Q) at the shore casts a line with a fish circling under it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
+test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // Level ground beside the start, cleared, with a pond dug in front, to the east.
@@ -6801,14 +6801,20 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line with a fish circling unde
     g.me.yaw = Math.PI / 2;
   });
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🎣 Fish'));
+  // What will bite is settled at the cast: a minnow, the most likely catch.
+  await page.evaluate(() => {
+    const random = Math.random;
+    Math.random = () => 0.01;
+    setTimeout(() => (Math.random = random), 100);
+  });
   await page.keyboard.press('KeyQ');
   await until(page, () => window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 1 && document.getElementById('ride').textContent.includes('Wait'));
-  // The rod held out (ANIM.fish), and a fish's shadow circling the bobber.
+  // The rod held out (ANIM.fish), and the fish that will bite circling the bobber.
   await until(page, () => window.kidsWorld.game.me.anim === 15);
   await until(page, () => {
     const g = window.kidsWorld.game;
     const line = g.lines.get(g.pid);
-    return line.shadow.visible && line.shadow.position.distanceTo(line.at) < 2;
+    return line.fish?.name === `fish ${g.fishing.catch.key}` && line.fish.position.distanceTo(line.at) < 2;
   });
   const out = await page.evaluate(() => {
     const g = window.kidsWorld.game;
@@ -6823,11 +6829,6 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line with a fish circling unde
     f.strikeAt = performance.now();
   });
   await until(page, () => window.kidsWorld.game.fishing?.striking && document.getElementById('ride').textContent.includes('🎣 Strike!'));
-  await page.evaluate(() => {
-    const random = Math.random;
-    Math.random = () => 0.01;
-    setTimeout(() => (Math.random = random), 100);
-  });
   await page.keyboard.down('KeyQ');
   await until(page, () => window.kidsWorld.game.fishing?.phase === 'fight' && !document.getElementById('fishfight').hidden && document.getElementById('ride').textContent.includes('Hold to reel'));
   assert.equal(await page.evaluate(() => window.kidsWorld.game.fishing.catch.key), 'minnow');

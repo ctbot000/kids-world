@@ -554,11 +554,13 @@ export class Room {
       case 'rod': {
         const word = (v) => (typeof v === 'string' && /^[a-z]{0,16}$/.test(v) ? v : '');
         const part = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(1, +v.toFixed(2))) : 0);
+        const cm = (v) => (Number.isInteger(v) ? Math.max(0, Math.min(99, v)) : 0);
         if (msg.op === 'cast') {
-          if (canFloat(this.world, msg.at, p.s)) this.broadcast({ t: 'rod', pid, op: 'cast', at: msg.at }, conn);
-        } else if (msg.op === 'hook') this.broadcast({ t: 'rod', pid, op: 'hook' }, conn);
+          if (canFloat(this.world, msg.at, p.s)) this.broadcast({ t: 'rod', pid, op: 'cast', at: msg.at, fish: word(msg.fish), cm: cm(msg.cm) }, conn);
+        } else if (msg.op === 'fish') this.broadcast({ t: 'rod', pid, op: 'fish', fish: word(msg.fish), cm: cm(msg.cm) }, conn);
+        else if (msg.op === 'hook') this.broadcast({ t: 'rod', pid, op: 'hook' }, conn);
         else if (msg.op === 'pull') this.broadcast({ t: 'rod', pid, op: 'pull', p: part(msg.p), pull: part(msg.pull) }, conn);
-        else if (msg.op === 'land') this.broadcast({ t: 'rod', pid, op: 'land', caught: word(msg.caught), cm: Number.isInteger(msg.cm) ? Math.max(0, Math.min(99, msg.cm)) : 0 }, conn);
+        else if (msg.op === 'land') this.broadcast({ t: 'rod', pid, op: 'land', caught: word(msg.caught), cm: cm(msg.cm) }, conn);
         else if (msg.op === 'reel') this.broadcast({ t: 'rod', pid, op: 'reel', caught: word(msg.caught), lost: msg.lost === true }, conn);
         break;
       }

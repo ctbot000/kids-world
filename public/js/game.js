@@ -4105,17 +4105,20 @@ export class Game extends EventTarget {
 
   // Q (or the 🎣 Fish button) facing water at the shore: the rod comes out
   // and the bobber flies out onto the water (shared/fishing.js), for everyone
-  // on the island to see, and a fish's shadow comes circling under it.
+  // on the island to see, and the fish that will bite comes swimming in under
+  // it — what comes up is settled now, so the fish you watch is the one you
+  // catch (a seashell, a pearl or a boot has none: the line snags on it).
   castLine() {
     const spot = this.fishTarget;
     const b = this.me.body;
     if (!spot || this.fishing) return;
     this.me.yaw = Math.atan2(spot.x + 0.5 - b.x, spot.z + 0.5 - b.z);
     const now = performance.now();
-    this.fishing = { spot, x: b.x, z: b.z, phase: 'wait', ...planBites(Math.random, now), nibbled: 0 };
+    const c = catchFor(Math.random(), Math.random());
+    this.fishing = { spot, x: b.x, z: b.z, phase: 'wait', ...planBites(Math.random, now), nibbled: 0, catch: c };
     this.lastCast = { x: b.x, z: b.z };
-    this.send({ t: 'rod', op: 'cast', at: [spot.x, spot.y, spot.z] });
-    this.showLine(this.pid, spot);
+    this.send({ t: 'rod', op: 'cast', at: [spot.x, spot.y, spot.z], fish: c.key, cm: c.length });
+    this.showLine(this.pid, spot, c);
     this.sound.play('cast');
     this.emit('fishing');
     if (!this.toldFishing) {
@@ -4158,7 +4161,7 @@ export class Game extends EventTarget {
       const running = f.fight.run > 0;
       if (running && !f.running && f.catch.cm && Math.random() < 0.6) {
         const line = this.lines.get(this.pid);
-        if (line?.leap(f.catch.key, f.catch.length)) {
+        if (line?.leap()) {
           this.sound.play('splash');
           this.renderer.effects.splash(line.hook.x, line.hook.y, line.hook.z);
         }
@@ -4191,7 +4194,11 @@ export class Game extends EventTarget {
       this.renderer.effects.splash(f.spot.x + 0.5, f.spot.y + 0.9, f.spot.z + 0.5);
       this.emit('fishing');
     } else if (state === 'gone') {
-      Object.assign(f, planBites(Math.random, now), { nibbled: 0, striking: false });
+      // That one swims off, and another comes along.
+      const c = catchFor(Math.random(), Math.random());
+      Object.assign(f, planBites(Math.random, now), { nibbled: 0, striking: false, catch: c });
+      this.send({ t: 'rod', op: 'fish', fish: c.key, cm: c.length });
+      this.lines.get(this.pid)?.setFish(c.key, c.length, this.outFrom(f.spot));
       this.emit('notice', { text: 'Too slow — it swam off! Wait for the next one…', level: 'info' });
       this.emit('fishing');
     }
@@ -4210,8 +4217,8 @@ export class Game extends EventTarget {
       this.loseFish('', '');
       return;
     }
-    const c = catchFor(Math.random(), Math.random());
-    Object.assign(f, { phase: 'fight', catch: c, fight: newFight(c.power, c.still) });
+    const c = f.catch;
+    Object.assign(f, { phase: 'fight', fight: newFight(c.power, c.still) });
     this.send({ t: 'rod', op: 'hook' });
     this.sound.play('splash');
     this.emit('fishing');
@@ -4258,7 +4265,7 @@ export class Game extends EventTarget {
   }
 
   // The line in, with what came up on it (a CATCHES key, or '' for nothing);
-  // `lost`, a fish that got away, its shadow swimming off first.
+  // `lost`, a fish that got away, swimming off first.
   stopFishing(caught, lost = false) {
     if (!this.fishing) return;
     this.fishing = null;
@@ -4274,10 +4281,12 @@ export class Game extends EventTarget {
   // fighting, landed, or the line reeled in.
   rodNews(msg) {
     if (msg.pid === this.pid) return;
-    if (msg.op === 'cast' && Array.isArray(msg.at)) this.showLine(msg.pid, { x: msg.at[0], y: msg.at[1], z: msg.at[2] });
+    const fish = msg.fish ? { key: msg.fish, length: msg.cm } : null;
+    if (msg.op === 'cast' && Array.isArray(msg.at)) this.showLine(msg.pid, { x: msg.at[0], y: msg.at[1], z: msg.at[2] }, fish);
     const line = this.lines.get(msg.pid);
     if (!line) return;
-    if (msg.op === 'hook') line.state = { phase: 'fight', progress: FIGHT.start, pull: 0 };
+    if (msg.op === 'fish' && fish) line.setFish(fish.key, fish.length);
+    else if (msg.op === 'hook') line.state = { phase: 'fight', progress: FIGHT.start, pull: 0 };
     else if (msg.op === 'pull' && line.state?.phase === 'fight') Object.assign(line.state, { progress: msg.p, pull: msg.pull });
     else if (msg.op === 'land') {
       line.state = { phase: 'landed' };
@@ -4287,11 +4296,21 @@ export class Game extends EventTarget {
     } else if (msg.op === 'reel') this.dropLine(msg.pid, msg.caught, msg.lost);
   }
 
-  showLine(pid, at) {
+  // A line out onto the water cell `at`, by player `pid`, with the fish that
+  // will bite, { key, length }, swimming in to it (once the bobber is down).
+  showLine(pid, at, fish = null) {
     this.lines.get(pid)?.dispose();
     const line = new FishingLine(this.renderer.scene, at);
     line.state = { phase: 'wait' };
+    line.coming = fish;
     this.lines.set(pid, line);
+  }
+
+  // The way out from the shore to the water cell `at`, from where you stand.
+  outFrom(at) {
+    const b = this.me.body;
+    const d = Math.hypot(at.x + 0.5 - b.x, at.z + 0.5 - b.z) || 1;
+    return { x: (at.x + 0.5 - b.x) / d, y: 0, z: (at.z + 0.5 - b.z) / d };
   }
 
   // A line reeled in: the reel's whirr, and a ripple where the bobber was;
@@ -4343,6 +4362,13 @@ export class Game extends EventTarget {
         const at = line.at;
         if (this.near(at.x, at.y, at.z, 24)) this.sound.play('plop');
         this.renderer.effects.ripple(at.x, at.y - 0.05, at.z);
+        // The fish that will bite comes swimming in, from out in the deep.
+        if (line.coming) {
+          const out = line.state.shore ? { x: at.x - line.state.shore.x, z: at.z - line.state.shore.z } : null;
+          const d = out ? Math.hypot(out.x, out.z) || 1 : 1;
+          line.setFish(line.coming.key, line.coming.length, out ? { x: out.x / d, z: out.z / d } : null);
+          line.coming = null;
+        }
       }
     }
   }

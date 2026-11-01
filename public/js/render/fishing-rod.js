@@ -1,15 +1,15 @@
 // Fishing (shared/fishing.js): the rod in a fisher's hand (render/avatar.js
-// ANIM.fish); the line from its tip out to the bobber on the water; the
-// shadow of a fish circling under it, nibbling, biting and fighting; and
-// what comes up, leaping out of the water and hanging from the line.
+// ANIM.fish); the line from its tip out to the bobber on the water; the fish
+// that will bite, swimming in under the water and circling it, nibbling,
+// biting and fighting, leaping out; and what comes up, hanging from the line.
 import * as THREE from '../../vendor/three.module.js';
 import { cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 
 // How long the rod is, from the grip in the hand to its tip.
 export const ROD_LEN = 1.35;
-// How far under the water's top the fish's shadow swims: a flat dark shape
-// lying just on it, as the water's ripples draw over anything lower.
-const DEEP = -0.07;
+// How far under the water's top the fish swims (its middle), where the
+// see-through water shows it, tinted, as it does the island's own fish.
+const DEEP = 0.17;
 // The water's top in a water cell, as critters.js has it.
 const TOP = 0.875;
 
@@ -48,11 +48,7 @@ export function fishingRod() {
 
 // How long a catch is drawn, from its length in centimetres: toy-sized, so
 // a minnow still shows and a big trout is not a shark.
-export const drawnLength = (cm) => 0.26 + Math.min(60, cm) * 0.008;
-
-// A fish's shadow in the water: dark and unlit, whatever the sun does, and
-// solid, so the see-through water is never drawn over it.
-const SHADOW = new THREE.MeshBasicMaterial({ color: '#245272' });
+export const drawnLength = (cm) => 0.3 + Math.min(60, cm) * 0.011;
 
 // Each kind's colours: body, belly, fins, and its stripes or spots.
 const FISH_LOOKS = {
@@ -65,18 +61,16 @@ const FISH_LOOKS = {
 };
 
 // A toy fish of kind `key`, `len` long, nose to tail along +z, its middle
-// at the origin; `shadow`, a dark one seen through the water.
-// Its tail (`tail`) wags.
-export function fishModel(key, len, shadow = false) {
+// at the origin. Its tail (`tail`) wags.
+export function fishModel(key, len) {
   const look = FISH_LOOKS[key] ?? FISH_LOOKS.minnow;
-  const dark = shadow ? SHADOW : null;
-  const m = (color, opts) => dark ?? toon(color, opts);
+  const m = (color, opts) => toon(color, opts);
   const g = new THREE.Group();
-  g.name = shadow ? 'fish shadow' : `fish ${key}`;
+  g.name = `fish ${key}`;
   // Its width, height and length: slim, or a ball for a pufferfish.
   const [w, h, l] = look.round ? [0.62 * len, 0.6 * len, 0.7 * len] : [0.22 * len, 0.34 * len, 0.86 * len];
   g.add(mesh(sphere(0.5, 20, 14), m(look.body, look.glow ? { emissive: 0.35 } : undefined), 0, 0, 0, w, h, l));
-  if (!shadow) {
+  {
     g.add(mesh(sphere(0.5, 16, 10), toon(look.belly), 0, -h * 0.16, 0, w * 0.92, h * 0.7, l * 0.86));
     // Eyes, either side near the nose.
     for (const s of [-1, 1]) {
@@ -140,10 +134,11 @@ const POINTS = 14;
 const ease = (u) => u * u * (3 - 2 * u);
 
 // A line out on the water, for whoever fishes: the bobber (red over white),
-// the line from the rod's tip down to it, a fish's shadow under the water,
-// and what comes up. Each frame update() is told how the line is going (see
-// game.js updateLines): { phase: 'wait' | 'nibble' | 'strike' | 'fight' |
-// 'landed' | 'lost', progress, pull, shore }. Lives in the scene till dispose().
+// the line from the rod's tip down to it, the fish that will bite, under the
+// water, and what comes up. Each frame update() is told how the line is
+// going (see game.js updateLines): { phase: 'wait' | 'nibble' | 'strike' |
+// 'fight' | 'landed' | 'lost', progress, pull, shore }. Lives in the scene
+// till dispose().
 export class FishingLine {
   constructor(scene, at) {
     this.scene = scene;
@@ -168,38 +163,53 @@ export class FishingLine {
     this.line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: '#f4f4f4', transparent: true, opacity: 0.9 }));
     this.line.frustumCulled = false;
     this.line.name = 'fishing line';
-    // The fish's shadow: a fish of no kind in particular, till it comes up.
-    this.shadow = fishModel('minnow', 0.8, true);
-    this.shadow.scale.set(1.7, 0.12, 1);
-    this.shadow.position.copy(this.at).setY(top - DEEP);
-    this.shadow.visible = false;
-    this.shadowAt = Math.random() * Math.PI * 2;
+    // The fish coming to the bobber (setFish), none till one is on its way.
+    this.fish = null;
+    this.fishAt = Math.random() * Math.PI * 2;
     // Where the hook is: at the bobber, till a fish is on and pulls it about.
     this.hook = this.at.clone();
     // Flying out from the rod to the water, when cast, for this long.
     this.flight = 0.45;
     this.age = 0;
     this.caught = null;
-    scene.add(this.bobber, this.ring, this.line, this.shadow);
+    scene.add(this.bobber, this.ring, this.line);
   }
 
-  // What came up: kind `key`, `cm` long (0 for what is not a fish). It
-  // leaps out of the water from the hook and swings up to hang from the line.
+  // The fish that will bite: kind `key`, `cm` long, swimming in from out in
+  // the deep under the water (from the way `out`, { x, z }, if known). A seashell, a
+  // pearl or a boot (cm 0) has no fish: the line snags on it.
+  setFish(key, cm, out = null) {
+    if (this.fish) this.scene.remove(this.fish);
+    this.fish = cm ? fishModel(key, drawnLength(cm)) : null;
+    if (!this.fish) return;
+    this.fishKey = key;
+    this.fishAt = Math.random() * Math.PI * 2;
+    const from = out ? new THREE.Vector3(out.x, 0, out.z) : new THREE.Vector3(Math.cos(this.fishAt), 0, Math.sin(this.fishAt));
+    this.fish.position.copy(this.at).addScaledVector(from, 4).setY(this.top - DEEP);
+    this.fish.userData.came = this.age;
+    this.scene.add(this.fish);
+  }
+
+  // What came up: kind `key`, `cm` long (0 for what is not a fish). The fish
+  // on the hook itself leaps out of the water and swings up to hang from the
+  // line; anything else comes up from under the bobber.
   land(key, cm) {
-    this.caught = cm ? fishModel(key, drawnLength(cm)) : thingModel(key);
-    this.caught.position.copy(this.hook);
+    if (this.fish && cm) {
+      this.caught = this.fish;
+      this.fish = null;
+    } else {
+      this.caught = cm ? fishModel(key, drawnLength(cm)) : thingModel(key);
+      this.scene.add(this.caught);
+    }
     this.landedAt = this.age;
-    this.from = this.hook.clone();
-    this.scene.add(this.caught);
+    this.from = this.hook.clone().setY(this.top - DEEP);
   }
 
-  // The fish on the hook leaping right out of the water as it runs: kind
-  // `key`, `cm` long, up in an arc over where the hook is and back in.
-  leap(key, cm) {
-    if (this.leaping) return false;
-    this.leaping = fishModel(key, drawnLength(cm));
-    this.leaping.userData.at = this.age;
-    this.scene.add(this.leaping);
+  // The fish on the hook leaping right out of the water as it runs, up in an
+  // arc over where the hook is and back in. Whether it did (not twice at once).
+  leap() {
+    if (!this.fish || this.leapAt !== undefined) return false;
+    this.leapAt = this.age;
     return true;
   }
 
@@ -210,7 +220,6 @@ export class FishingLine {
     this.age += dt;
     const fly = Math.min(1, this.age / this.flight);
     const b = this.bobber.position;
-    const sh = this.shadow;
     const phase = s.phase;
     const fighting = phase === 'fight';
     // Out from the shore, along the water: the way the fish runs.
@@ -224,19 +233,6 @@ export class FishingLine {
       const goal = far.lerp(near, s.progress ?? 0).addScaledVector(side, Math.sin(t * 2.6) * (0.25 + (s.pull ?? 0) * 0.9) + Math.sin(t * 9.1) * (s.pull ?? 0) * 0.15);
       this.hook.lerp(goal, Math.min(1, dt * 6));
     }
-    if (this.leaping) {
-      const u = (this.age - this.leaping.userData.at) / 0.75;
-      if (u >= 1 || phase !== 'fight') {
-        this.scene.remove(this.leaping);
-        this.leaping = null;
-      } else {
-        const lf = this.leaping;
-        lf.position.copy(this.hook).addScaledVector(out, (u - 0.5) * 0.6);
-        lf.position.y = this.top + Math.sin(u * Math.PI) * 0.9;
-        lf.rotation.set(-Math.cos(u * Math.PI) * 1.1, Math.atan2(out.x, out.z), Math.sin(t * 20) * 0.3);
-        lf.userData.tail.rotation.y = Math.sin(t * 30) * 0.7;
-      }
-    }
     if (phase === 'landed' && this.caught) {
       // Out of the water in an arc, then hanging from the line, wriggling.
       const u = Math.min(1, (this.age - this.landedAt) / 0.6);
@@ -247,7 +243,6 @@ export class FishingLine {
       const tail = this.caught.userData.tail;
       if (tail) tail.rotation.y = Math.sin(t * 22) * 0.6;
       this.bobber.visible = false;
-      sh.visible = false;
       this.ring.visible = false;
       this.drawLine(tip, this.caught.position.clone().add(new THREE.Vector3(0, (this.caught.userData.nose ?? 0.1) - 0.1, 0)), 0);
       return;
@@ -272,30 +267,67 @@ export class FishingLine {
     const ring = busy ? 1 + ((t * 3) % 1) * 0.7 : phase === 'nibble' ? 1 + ((t * 5) % 1) * 0.8 : 1 + ((t * 0.6) % 1) * 0.6;
     this.ring.scale.set(ring, ring, ring);
     this.ring.material.opacity = busy ? 0.7 : 0.35;
-    // The fish's shadow: circling the bobber, closer and closer, darting in
-    // to nibble, right under it to bite; on the hook, thrashing under it;
-    // got away, off out into the deep.
-    sh.visible = fly >= 1;
-    const tail = sh.userData.tail;
-    if (phase === 'lost') {
-      sh.position.addScaledVector(out, dt * 4);
-      sh.rotation.y = Math.atan2(out.x, out.z);
-      sh.scale.multiplyScalar(Math.max(0, 1 - dt * 1.5));
-      tail.rotation.y = Math.sin(t * 25) * 0.7;
-    } else if (fighting) {
-      sh.position.set(this.hook.x, this.top - DEEP, this.hook.z);
-      sh.rotation.y = Math.atan2(out.x, out.z) + Math.sin(t * 5) * 0.6;
-      tail.rotation.y = Math.sin(t * (14 + (s.pull ?? 0) * 16)) * 0.7;
-    } else {
-      // Round the bobber, a little closer each time; in to it to nibble or bite.
-      this.shadowAt += dt * 0.9;
-      const r = phase === 'nibble' || phase === 'strike' ? 0.18 : Math.max(0.6, 1.5 - this.age * 0.08);
-      const goal = new THREE.Vector3(this.at.x + Math.cos(this.shadowAt) * r, this.top - DEEP, this.at.z + Math.sin(this.shadowAt) * r);
-      sh.position.lerp(goal, Math.min(1, dt * (phase === 'wait' ? 3 : 8)));
-      sh.rotation.y = phase === 'wait' ? -this.shadowAt : Math.atan2(this.at.x - sh.position.x, this.at.z - sh.position.z);
-      tail.rotation.y = Math.sin(t * (phase === 'wait' ? 6 : 14)) * 0.45;
-    }
+    this.swim(dt, t, s, out, side);
     this.drawLine(tip, b, fighting ? 0 : phase === 'strike' ? 0.05 : 0.35 * fly);
+  }
+
+  // The fish under the water: swimming in and round the bobber, a little
+  // closer each time; in to it, nose first, to nibble or bite; on the hook,
+  // thrashing under it, leaping out now and then as it runs; got away, off
+  // out into the deep, down out of sight.
+  swim(dt, t, s, out, side) {
+    const f = this.fish;
+    if (!f) return;
+    const phase = s.phase;
+    const tail = f.userData.tail;
+    const deep = this.top - DEEP;
+    const p = f.position;
+    if (phase === 'lost') {
+      p.addScaledVector(out, dt * 4);
+      p.y -= dt * 0.8;
+      f.rotation.set(0.3, Math.atan2(out.x, out.z), 0);
+      tail.rotation.y = Math.sin(t * 25) * 0.7;
+      return;
+    }
+    if (phase === 'fight') {
+      if (this.leapAt !== undefined) {
+        // Up out of the water in an arc and back in, flipping as it goes.
+        const u = (this.age - this.leapAt) / 0.75;
+        if (u >= 1) this.leapAt = undefined;
+        else {
+          p.copy(this.hook).addScaledVector(out, (u - 0.5) * 0.6);
+          p.y = deep + Math.sin(u * Math.PI) * (0.9 + DEEP);
+          f.rotation.set(-Math.cos(u * Math.PI) * 1.1, Math.atan2(out.x, out.z), Math.sin(t * 20) * 0.3);
+          tail.rotation.y = Math.sin(t * 30) * 0.7;
+          return;
+        }
+      }
+      // Under the hook, its nose to it, pulling away out to sea.
+      const goal = this.hook.clone().addScaledVector(out, 0.15 + (f.userData.nose ?? 0.15)).setY(deep);
+      p.lerp(goal, Math.min(1, dt * 10));
+      f.rotation.set(0, Math.atan2(out.x, out.z) + Math.sin(t * 5) * 0.5, Math.sin(t * 13) * (s.pull ?? 0) * 0.4);
+      tail.rotation.y = Math.sin(t * (14 + (s.pull ?? 0) * 16)) * 0.7;
+      return;
+    }
+    const was = p.clone();
+    if (phase === 'nibble' || phase === 'strike') {
+      // Nose to the bobber, from where it was.
+      const from = new THREE.Vector3(p.x - this.at.x, 0, p.z - this.at.z);
+      if (from.lengthSq() < 1e-4) from.copy(out);
+      from.normalize().multiplyScalar(f.userData.nose ?? 0.15);
+      p.lerp(new THREE.Vector3(this.at.x + from.x, deep + (phase === 'strike' ? 0.05 : 0), this.at.z + from.z), Math.min(1, dt * 9));
+      f.rotation.set(phase === 'strike' ? -0.35 : -0.1, Math.atan2(-from.x, -from.z), 0);
+      tail.rotation.y = Math.sin(t * 18) * 0.5;
+      return;
+    }
+    // Round the bobber, closer and closer; swimming in from afar first.
+    this.fishAt += dt * 0.8;
+    const r = Math.max(0.7, 1.6 - (this.age - (f.userData.came ?? 0)) * 0.08);
+    const goal = new THREE.Vector3(this.at.x + Math.cos(this.fishAt) * r, deep, this.at.z + Math.sin(this.fishAt) * r);
+    p.lerp(goal, Math.min(1, dt * 1.5));
+    const go = p.clone().sub(was);
+    if (go.lengthSq() > 1e-8) f.rotation.set(0, Math.atan2(go.x, go.z), 0);
+    tail.rotation.y = Math.sin(t * 7) * 0.45;
   }
 
   // The line from the rod's tip to `to`, sagging `sag` in the middle.
@@ -311,9 +343,9 @@ export class FishingLine {
   }
 
   dispose() {
-    this.scene.remove(this.bobber, this.ring, this.line, this.shadow);
+    this.scene.remove(this.bobber, this.ring, this.line);
+    if (this.fish) this.scene.remove(this.fish);
     if (this.caught) this.scene.remove(this.caught);
-    if (this.leaping) this.scene.remove(this.leaping);
     this.line.geometry.dispose();
     this.line.material.dispose();
   }
