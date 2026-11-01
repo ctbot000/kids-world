@@ -1455,7 +1455,15 @@ export class UI {
         };
         const draw = () => {
           kinds.replaceChildren(
-            ...PETS.map((k) => h('button', { class: `choice${k.key === pet?.kind ? ' on' : ''}`, type: 'button', onclick: () => choose(k.key) }, h('span', { class: 'emoji' }, k.icon), k.name)),
+            // Each kind as it is: yours in its own colour, the rest in their first.
+            ...PETS.map((k) =>
+              h(
+                'button',
+                { class: `choice${k.key === pet?.kind ? ' on' : ''}`, type: 'button', onclick: () => choose(k.key) },
+                this.lookPic({ shirt: p.look.shirt, pet: { kind: k.key, coat: k.key === pet?.kind ? pet.coat : k.coats[0] } }, { pet: true, turn: 0.6, size: 128 }, h('span', { class: 'emoji' }, k.icon)),
+                k.name,
+              ),
+            ),
             h('button', { class: `choice${pet ? '' : ' on'}`, type: 'button', onclick: () => choose(null) }, h('span', { class: 'emoji' }, '🚫'), 'No pet'),
           );
           details.hidden = !pet;
