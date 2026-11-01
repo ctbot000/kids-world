@@ -50,6 +50,7 @@ export const ISLAND_WORDS = {
   volcano: ['Ember', 'Cinder', 'Lava', 'Magma', 'Smoky', 'Ash', 'Pepper', 'Flame', 'Toasty', 'Crater', 'Ruby', 'Spark'],
   park: ['Funland', 'Jolly', 'Whirly', 'Carnival', 'Popcorn', 'Lollipop', 'Ticket', 'Giggle', 'Wonder', 'Rollercoaster', 'Confetti', 'Merry'],
   race: ['Speedy', 'Zoom', 'Turbo', 'Checkered', 'Vroom', 'Thunder', 'Rocket', 'Nitro', 'Racer', 'Pitstop', 'Swift', 'Dash'],
+  escape: ['Mystery', 'Puzzle', 'Secret', 'Riddle', 'Hidden', 'Clue', 'Keyhole', 'Locked', 'Sneaky', 'Tricky', 'Puzzling', 'Treasure'],
   zoo: ['Safari', 'Jungle', 'Wild', 'Paws', 'Whisker', 'Pawprint', 'Roar', 'Tusk', 'Stripy', 'Spotty', 'Hoof', 'Feather'],
   flat: ['Builder', 'Brick', 'Meadow', 'Sunny', 'Happy', 'Grassy', 'Wide', 'Clover', 'Daisy', 'Breezy', 'Maple', 'Buttercup'],
 };
@@ -57,7 +58,7 @@ export const ISLAND_PLACES = ['Island', 'Cove', 'Bay', 'Isle', 'Meadow', 'Hills'
 
 export function randomIslandName(theme = 'sunny', random = Math.random) {
   const words = ISLAND_WORDS[theme] ?? ISLAND_WORDS.sunny;
-  const place = theme === 'flat' ? pick(['Meadow', 'Park', 'Fields', 'Village', 'Plains'], random) : theme === 'park' ? pick(['Park', 'Island', 'Fair', 'Land', 'Pier', 'Isle'], random) : theme === 'race' ? pick(['Speedway', 'Raceway', 'Circuit', 'Island', 'Isle', 'Track'], random) : theme === 'zoo' ? pick(['Zoo', 'Safari', 'Island', 'Isle', 'Park', 'Gardens'], random) : pick(ISLAND_PLACES, random);
+  const place = theme === 'flat' ? pick(['Meadow', 'Park', 'Fields', 'Village', 'Plains'], random) : theme === 'park' ? pick(['Park', 'Island', 'Fair', 'Land', 'Pier', 'Isle'], random) : theme === 'race' ? pick(['Speedway', 'Raceway', 'Circuit', 'Island', 'Isle', 'Track'], random) : theme === 'zoo' ? pick(['Zoo', 'Safari', 'Island', 'Isle', 'Park', 'Gardens'], random) : theme === 'escape' ? pick(['Manor', 'House', 'Island', 'Isle', 'Mansion', 'Hall'], random) : pick(ISLAND_PLACES, random);
   return `${pick(words, random)} ${place}`;
 }
 

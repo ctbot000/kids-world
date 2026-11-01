@@ -1978,6 +1978,220 @@ PAINT['rail-curve'] = (ctx) => {
   railBits(ctx, ties, [arc(18), arc(46)]);
 };
 
+// An escape island's escape house (shared/escape.js): its walls of deep
+// plum stone, gold trim, the locked doors with their padlocks, the EXIT
+// sign, and the puzzles: buttons, crates, a treasure map, star tiles and
+// number dials (the coloured ones painted white, for each block to tint).
+PAINT['escape-wall'] = (ctx) => {
+  fill(ctx, '#3b2a4f');
+  ctx.fillStyle = '#4e3866';
+  for (let row = 0; row < 4; row++) {
+    const off = row % 2 === 0 ? 0 : -16;
+    for (let col = 0; col < 3; col++) ctx.fillRect(off + col * 32 + 2, row * 16 + 2, 28, 12);
+  }
+  speckles(ctx, 314, ['#5a4275', '#33243f'], 40, [0.8, 2]);
+  bevel(ctx, 0.5);
+};
+PAINT['escape-trim'] = (ctx) => {
+  const g = ctx.createLinearGradient(0, 0, 0, TILE);
+  g.addColorStop(0, '#ffe58a');
+  g.addColorStop(0.5, '#e8b23a');
+  g.addColorStop(1, '#b9831f');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, TILE, TILE);
+  ctx.strokeStyle = 'rgba(120,70,10,0.5)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(9.5, 9.5, TILE - 19, TILE - 19);
+  bevel(ctx, 1);
+};
+function doorPanel(ctx) {
+  fill(ctx, '#7a4a2a');
+  ctx.fillStyle = '#8f5a34';
+  ctx.fillRect(8, 0, 22, TILE);
+  ctx.fillRect(34, 0, 22, TILE);
+  ctx.fillStyle = 'rgba(50,25,10,0.4)';
+  ctx.fillRect(31, 0, 2, TILE);
+  // Iron bands across.
+  ctx.fillStyle = '#4a4e57';
+  for (const y of [6, 52]) ctx.fillRect(0, y, TILE, 6);
+  ctx.fillStyle = '#9aa1ab';
+  for (const y of [9, 55]) for (const x of [6, 22, 42, 58]) ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+}
+PAINT['locked-door'] = (ctx) => {
+  doorPanel(ctx);
+  // A big golden padlock.
+  ctx.strokeStyle = '#8a8f99';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(32, 26, 8, Math.PI, 0);
+  ctx.lineTo(40, 32);
+  ctx.moveTo(24, 26);
+  ctx.lineTo(24, 32);
+  ctx.stroke();
+  ctx.fillStyle = '#f2c23a';
+  ctx.fillRect(20, 30, 24, 20);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(90,50,0,0.6)';
+  ctx.strokeRect(20, 30, 24, 20);
+  ctx.fillStyle = '#3a2a10';
+  ctx.beginPath();
+  ctx.arc(32, 38, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(31, 39, 2, 6);
+};
+PAINT['locked-door-top'] = (ctx) => {
+  doorPanel(ctx);
+  // A little barred window.
+  ctx.fillStyle = '#1f1830';
+  ctx.fillRect(20, 18, 24, 22);
+  ctx.fillStyle = '#9aa1ab';
+  for (const x of [26, 32, 38]) ctx.fillRect(x - 1, 18, 2, 22);
+};
+PAINT['exit-sign'] = (ctx) => {
+  fill(ctx, '#1f9d4a');
+  ctx.strokeStyle = '#e9fff0';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(4.5, 12.5, TILE - 9, TILE - 25);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('EXIT', 32, 33);
+  bevel(ctx, 0.6);
+};
+PAINT['escape-button'] = (ctx) => {
+  fill(ctx, '#8d8d94');
+  ctx.fillStyle = '#c9c9cf';
+  ctx.fillRect(8, 8, 48, 48);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.arc(34, 35, 17, 0, Math.PI * 2);
+  ctx.fill();
+  const g = ctx.createRadialGradient(27, 26, 3, 32, 32, 18);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(1, '#bfbfc4');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(32, 32, 16, 0, Math.PI * 2);
+  ctx.fill();
+  outline(ctx, 'rgba(0,0,0,0.45)', 2);
+  bevel(ctx, 0.8);
+};
+PAINT['escape-button-on'] = (ctx) => {
+  fill(ctx, '#d8d8dc');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(8, 8, 48, 48);
+  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.55, '#f4f4f4');
+  g.addColorStop(1, 'rgba(255,255,255,0.6)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(32, 33, 15, 0, Math.PI * 2);
+  ctx.fill();
+  outline(ctx, 'rgba(0,0,0,0.25)', 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 3;
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4;
+    ctx.beginPath();
+    ctx.moveTo(32 + Math.cos(a) * 20, 33 + Math.sin(a) * 20);
+    ctx.lineTo(32 + Math.cos(a) * 26, 33 + Math.sin(a) * 26);
+    ctx.stroke();
+  }
+  bevel(ctx, 0.5);
+};
+PAINT.crate = (ctx) => {
+  fill(ctx, '#c88d4e');
+  ctx.fillStyle = 'rgba(110,60,20,0.35)';
+  for (let y = 16; y < TILE; y += 16) ctx.fillRect(0, y - 1, TILE, 2);
+  ctx.strokeStyle = '#8a5428';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(3.5, 3.5, TILE - 7, TILE - 7);
+  ctx.beginPath();
+  ctx.moveTo(6, 6);
+  ctx.lineTo(58, 58);
+  ctx.moveTo(58, 6);
+  ctx.lineTo(6, 58);
+  ctx.stroke();
+  bevel(ctx, 0.7);
+};
+PAINT['crate-top'] = (ctx) => {
+  fill(ctx, '#c88d4e');
+  ctx.fillStyle = 'rgba(110,60,20,0.4)';
+  for (let x = 16; x < TILE; x += 16) ctx.fillRect(x - 1, 0, 2, TILE);
+  ctx.strokeStyle = '#8a5428';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(3.5, 3.5, TILE - 7, TILE - 7);
+  bevel(ctx, 0.7);
+};
+PAINT['crate-open'] = (ctx) => {
+  fill(ctx, '#8a5428');
+  ctx.fillStyle = '#3a2412';
+  ctx.fillRect(8, 8, 48, 48);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(8, 8, 48, 6);
+  // A little straw at the bottom.
+  ctx.strokeStyle = '#d9b75c';
+  ctx.lineWidth = 2;
+  const r = speckleRandom(330);
+  for (let i = 0; i < 14; i++) {
+    const x = 14 + r() * 36;
+    const y = 18 + r() * 32;
+    const a = r() * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7);
+    ctx.stroke();
+  }
+  bevel(ctx, 0.5);
+};
+PAINT['map-paper'] = (ctx) => {
+  fill(ctx, '#f1dfae');
+  speckles(ctx, 331, ['#e6cf93', '#f7ead0', '#dcc184'], 40, [1, 3]);
+  ctx.strokeStyle = 'rgba(140,100,40,0.35)';
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2, 2, TILE - 4, TILE - 4);
+  ctx.setLineDash([]);
+};
+PAINT['map-x'] = (ctx) => {
+  PAINT['map-paper'](ctx);
+  ctx.strokeStyle = '#d6322a';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(16, 16);
+  ctx.lineTo(48, 48);
+  ctx.moveTo(48, 16);
+  ctx.lineTo(16, 48);
+  ctx.stroke();
+};
+PAINT['star-tile'] = (ctx) => {
+  fill(ctx, '#3b2a4f');
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  star(ctx, 34, 35, 26, 11);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  star(ctx, 32, 33, 26, 11);
+  ctx.fill();
+  outline(ctx, 'rgba(0,0,0,0.35)', 2);
+};
+for (let d = 0; d <= 9; d++) {
+  PAINT[`digit-${d}`] = (ctx) => {
+    fill(ctx, '#ffffff');
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(5, 5, TILE - 10, TILE - 10);
+    ctx.fillStyle = '#1d1a24';
+    ctx.font = 'bold 46px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(d), 32, 35);
+    bevel(ctx, 0.6);
+  };
+}
+
 // Which painting each block face uses; blocks with studs get the version
 // with a bump painted on top ("name+stud").
 function tileNameFor(def, face) {

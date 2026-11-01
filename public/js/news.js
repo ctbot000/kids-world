@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'escape', date: '2026-11-01', icon: '🔐', title: 'Escape islands', text: 'Make a 🔐 Escape Island and solve its escape house with your friends: press the buttons in the order the stars show, find the key in the crate the treasure map marks, then count the stars and turn the dials to get out! Escape three times for the 🔐 Escape Artist sticker.' },
   { id: 'long-tailed-tit', date: '2026-11-01', icon: '🐦', title: 'A long-tailed tit pet', text: 'A new pet in 🐾 My pet: a fluffy little 🐦 long-tailed tit, round as a snowball with a tail longer than the rest of it! It flies round you and sits on your head when you stand still. Pick a snowy white, a rosy one with black stripes, or a creamy one.' },
   { id: 'zoo', date: '2026-11-01', icon: '🦒', title: 'Zoo islands', text: 'Make a 🦒 Zoo Island: walk in under the ZOO gate to lions on their rock, tigers, elephants, giraffes and zebras on the savanna, pandas, a polar bear, penguins and hippos to watch under the water, monkey island and flamingos! New animals to ride and to bring from the toy box: lions, tigers, zebras, hippos, rhinos, pandas, flamingos, monkeys and kangaroos.' },
   { id: 'english-words', date: '2026-11-01', icon: '🔤', title: 'English Words quizzes', text: 'A new 🔤 English Words class at every chalkboard, and a quiz for extra credit on conquered adventure islands: what does the word mean? The questions come from the Kids Dictionary, and once you answer you see the word in Korean too!' },

@@ -63,6 +63,7 @@ export const XP_FOR = {
   furnished: { xp: 2 },
   volcanohouses: { xp: 5 },
   laps: { xp: 10 },
+  escapes: { xp: 30 },
   races: { xp: 15 },
   racewins: { xp: 25 },
   coasters: { xp: 10 },

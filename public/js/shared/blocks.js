@@ -480,6 +480,50 @@ for (const d of defs) {
   DOOR_OPEN[d.id] = d.door === 'open' ? 1 : 0;
 }
 
+// ---------------------------------------------------------------- escape house
+// An escape island's escape house (escape.js), all of it island-only:
+// nobody digs through its walls or picks its puzzles apart, so the only way
+// out is to solve them. None of it is in the toy box.
+const ESC = { category: false, islandOnly: true };
+export const ESCAPE_WALL = def(314, 'escape-wall', { ...ESC, name: 'Escape House Wall', tiles: 'escape-wall', sound: 'stone' });
+export const ESCAPE_FLOOR = def(315, 'escape-floor', { ...ESC, name: 'Escape House Floor', tiles: 'planks', sound: 'wood' });
+export const ESCAPE_LAMP = def(316, 'escape-lamp', { ...ESC, name: 'Escape House Lamp', tiles: 'lamp', light: 15, sound: 'glass' });
+export const ESCAPE_TRIM = def(317, 'escape-trim', { ...ESC, name: 'Gold Trim', tiles: 'escape-trim', sound: 'stone' });
+// A locked door, two blocks high: it opens (and is gone) when the room's
+// puzzle is solved, and comes back when the house locks up again.
+export const LOCKED_DOOR = def(318, 'locked-door', { ...ESC, name: 'Locked Door', tiles: { top: 'escape-trim', side: 'locked-door' }, sound: 'wood' });
+export const LOCKED_DOOR_TOP = def(319, 'locked-door-top', { ...ESC, name: 'Locked Door', tiles: { top: 'escape-trim', side: 'locked-door-top' }, sound: 'wood' });
+export const EXIT_SIGN = def(320, 'exit-sign', { ...ESC, name: 'Exit Sign', tiles: 'exit-sign', light: 8, sound: 'glass' });
+// The puzzles' colours: red, yellow, green and blue, in that order.
+export const ESCAPE_COLORS = [
+  ['red', 'Red', '#ef4b3f'],
+  ['yellow', 'Yellow', '#ffd23a'],
+  ['green', 'Green', '#4cc35a'],
+  ['blue', 'Blue', '#3f7ee8'],
+];
+// Buttons in the wall, one of each colour, lit once pressed.
+export const ESCAPE_BUTTONS = ESCAPE_COLORS.map(([key, name, color], i) => def(321 + i, `escape-button-${key}`, { ...ESC, name: `${name} Button`, color, tiles: 'escape-button', sound: 'stone' }));
+export const ESCAPE_BUTTONS_ON = ESCAPE_COLORS.map(([key, name, color], i) => def(325 + i, `escape-button-${key}-on`, { ...ESC, name: `${name} Button`, color, tiles: 'escape-button-on', light: 9, sound: 'stone' }));
+// A wooden crate, shut or opened (and empty, or not).
+export const CRATE = def(329, 'escape-crate', { ...ESC, name: 'Crate', tiles: { top: 'crate-top', side: 'crate' }, sound: 'wood' });
+export const CRATE_OPEN = def(330, 'escape-crate-open', { ...ESC, name: 'Open Crate', tiles: { top: 'crate-open', side: 'crate', bottom: 'crate-top' }, sound: 'wood' });
+// A treasure map's squares: plain parchment, and the one with the X.
+export const MAP_PAPER = def(331, 'map-paper', { ...ESC, name: 'Treasure Map', tiles: 'map-paper', sound: 'cloth' });
+export const MAP_X = def(332, 'map-x', { ...ESC, name: 'Treasure Map', tiles: 'map-x', sound: 'cloth' });
+// Star tiles set in the walls, one per colour: the clues.
+export const STAR_TILES = ESCAPE_COLORS.map(([key, name, color], i) => def(333 + i, `star-tile-${key}`, { ...ESC, name: `${name} Star Tile`, color, tiles: 'star-tile', sound: 'stone' }));
+// Number tiles 1 to 4, under room one's clue.
+export const NUMBER_TILES = [1, 2, 3, 4].map((n, i) => def(337 + i, `number-tile-${n}`, { ...ESC, name: `Number ${n}`, tiles: `digit-${n}`, sound: 'stone' }));
+// Number dials, red, blue and yellow, each showing 0 to 9: a turn shows the
+// next number (escape.js), so each is ten ids in a row.
+export const DIAL_COLORS = [0, 3, 1];
+export const DIALS = DIAL_COLORS.map((c) => {
+  const [key, name, color] = ESCAPE_COLORS[c];
+  const base = 341 + DIAL_COLORS.indexOf(c) * 10;
+  for (let d = 0; d < 10; d++) def(base + d, `dial-${key}-${d}`, { ...ESC, name: `${name} Dial`, color, tiles: `digit-${d}`, light: 4, sound: 'stone' });
+  return base;
+});
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),

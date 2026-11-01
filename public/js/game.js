@@ -42,6 +42,7 @@ import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './
 import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './shared/race.js';
+import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
@@ -601,6 +602,9 @@ export class Game extends EventTarget {
       case 'rcfx':
         this.raceFx(msg);
         break;
+      case 'escfx':
+        this.escapeFx(msg);
+        break;
       case 'home':
         this.cameHome(msg);
         break;
@@ -675,6 +679,9 @@ export class Game extends EventTarget {
     // A racing island's track, to time laps round (race.js).
     this.raceTrack = raceTrack(this.world);
     this.lap = null;
+    // An escape island's escape house, its puzzles to use (escape.js).
+    this.escapeHouse = escapeHouse(this.world);
+    this.escapeRoom = 0;
     this.riding = null;
     this.aboard = null;
     this.pending.clear();
@@ -3632,6 +3639,10 @@ export class Game extends EventTarget {
       else this.standUp();
       return;
     }
+    if (this.escapeTarget) {
+      this.useEscape();
+      return;
+    }
     const id = this.rideTarget;
     if (!id && this.seatTarget) {
       this.sitDown(this.seatTarget);
@@ -4525,6 +4536,78 @@ export class Game extends EventTarget {
     if (ev.best) save('laps', { ...load('laps', {}), [key]: ev.lap });
     this.emit('toast', { icon: ev.best ? '🏆' : '🏁', text: `Lap: ${lapTime(ev.lap)}${ev.best ? ' — your best yet!' : ` (your best: ${lapTime(this.lap.best)})`}` });
     this.sound.play(ev.best ? 'fanfare' : 'ding');
+  }
+
+  // ------------------------------------------------ the escape house
+
+  // Q (or the Press, Open or Turn button) at a puzzle in an escape house
+  // (shared/escape.js): the island works out what it does, for everyone.
+  useEscape() {
+    const t = this.escapeTarget;
+    if (t) this.send({ t: 'escape', at: [t.x, t.y, t.z] });
+  }
+
+  // What came of someone using a puzzle in the escape house (or of it
+  // locking up again), as the island tells of it: heard and told by
+  // whoever is in or by the house.
+  escapeFx(msg) {
+    const b = this.me?.body;
+    const house = this.escapeHouse;
+    if (!b || !house) return;
+    const near = Math.hypot(b.x - house.cx, b.z - house.cz) < 30;
+    if (!near) return;
+    const at = Array.isArray(msg.at) ? msg.at : null;
+    const fx = at ? this.renderer.effects : null;
+    const toast = (icon, text) => this.emit('toast', { icon, text });
+    switch (msg.f) {
+      case 'press':
+        this.sound.play('ding');
+        fx?.sparkles(at[0] + 0.5, at[1] + 0.5, at[2] + 0.5, 6);
+        break;
+      case 'wrong':
+        this.sound.play('no');
+        toast('❌', 'Oops, not that one — the buttons all went dark. Look at the stars over 1, 2, 3, 4 again!');
+        break;
+      case 'empty':
+        this.sound.play('clack');
+        toast('📦', 'Empty! Look at the map again — which crate has the X?');
+        break;
+      case 'turn':
+        this.sound.play('clack');
+        break;
+      case 'open':
+        if (msg.out) {
+          this.sound.play('victory');
+          toast('🎉', `You escaped${Number.isFinite(msg.ms) ? ` in ${lapTime(msg.ms)}` : ''}! The way out is open!`);
+          if (roomAt(house, b.x, b.y, b.z) || this.escapeRoom) this.profile.count('escapes');
+        } else {
+          this.sound.play(msg.key ? 'fanfare' : 'open');
+          toast(msg.key ? '🗝️' : '🔓', msg.key ? 'You found the key! The door to room 3 is open!' : 'Click! The door to room 2 is open!');
+        }
+        if (fx) fx.sparkles(at[0] + 0.5, at[1] + 0.8, at[2] + 0.5, 20);
+        break;
+      case 'reset':
+        toast('🔐', 'The escape house is locked up again, with new puzzles inside!');
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Walking into a room of the escape house: what its puzzle is, unless
+  // it is solved already.
+  escapeHints() {
+    const b = this.me.body;
+    const room = roomAt(this.escapeHouse, b.x, b.y, b.z);
+    if (room === this.escapeRoom) return;
+    this.escapeRoom = room;
+    const tip = [
+      null,
+      ['🔴', 'Room 1: press the buttons (Q) in the order the stars over 1, 2, 3, 4 show!'],
+      ['🗺️', 'Room 2: the map shows which crate hides the key — open it (Q)!'],
+      ['🔢', 'Room 3: count the stars of each colour, then turn (Q) each dial to its number!'],
+    ][room];
+    if (tip && !doorOpen(this.world, this.escapeHouse, room)) this.emit('toast', { icon: tip[0], text: tip[1] });
   }
 
   // ------------------------------------------------ races
@@ -5614,6 +5697,9 @@ export class Game extends EventTarget {
     this.screenTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.dizzy && !on.flying && on.onGround ? screenNear(this.world, on, this.screens) : null;
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
     this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
+    // In an escape house, the puzzle you face: a button, a crate or a dial.
+    this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
+    if (this.escapeHouse) this.escapeHints();
     // A hula hoop put down beside you: in reach to spin it. Only on foot,
     // standing on the ground, and not spinning one already.
     this.hoopTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !this.hooping && !on.flying && on.onGround ? this.hoopNear(on) : 0;
@@ -6160,6 +6246,7 @@ export class Game extends EventTarget {
     this.computerAt = null;
     this.computerTarget = null;
     this.tankTarget = null;
+    this.escapeTarget = null;
     this.hooping = null;
     this.hoopTarget = 0;
     this.renderer.screens.clear();

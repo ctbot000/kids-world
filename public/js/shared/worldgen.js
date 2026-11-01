@@ -4,11 +4,13 @@
 // friends, and a spot for everyone to arrive at; on an adventure island, the
 // grumpy monsters' camps and King Grumble's castle too; on a fun park
 // island, the park in the middle (park.js); on a racing island, the race
-// track there instead (race.js).
+// track there instead (race.js); on an escape island, the escape house
+// (escape.js).
 import { buildCamps } from './adventure.js';
 import { buildDefense } from './defense.js';
 import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
 import { buildRace } from './race.js';
+import { buildEscape } from './escape.js';
 import { buildZoo, ZOO_BLEND, ZOO_HALF } from './zoo.js';
 import * as B from './blocks.js';
 import { busesClearOf, CRITTER_INFO, maxCritters, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
@@ -25,6 +27,7 @@ export const THEMES = [
   { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
   { key: 'race', name: 'Racing Island', icon: '🏁', blurb: 'A race track with go-karts and lap times' },
   { key: 'zoo', name: 'Zoo Island', icon: '🦒', blurb: 'Lions, elephants, giraffes, pandas, penguins and more' },
+  { key: 'escape', name: 'Escape Island', icon: '🔐', blurb: 'An escape house of puzzles to solve, to get out' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
 ];
 
@@ -76,7 +79,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   const mAngle = rng.next() * Math.PI * 2;
   // On a fun park island, out past the park (and on a racing island, past
   // the race track, laid out on the same square).
-  const plaza = theme === 'park' || theme === 'race' || theme === 'zoo';
+  const plaza = theme === 'park' || theme === 'race' || theme === 'zoo' || theme === 'escape';
   // A zoo's square is bigger than a park's (zoo.js).
   const half = theme === 'zoo' ? ZOO_HALF : PARK_HALF;
   const blend = theme === 'zoo' ? ZOO_BLEND : PARK_BLEND;
@@ -298,7 +301,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // ---------------------------------------------------------------- the park
   // On a fun park island, the park in the middle, with its own way in; on a
   // racing island, the race track.
-  const built = park ? ({ race: buildRace, zoo: buildZoo }[theme] ?? buildPark)(world, { ...park, level: parkLevel, pal, seed }) : null;
+  const built = park ? ({ race: buildRace, zoo: buildZoo, escape: buildEscape }[theme] ?? buildPark)(world, { ...park, level: parkLevel, pal, seed }) : null;
 
   // ---------------------------------------------------------------- spawn
   const overLava = (x, z) => lavaSpots.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 2);

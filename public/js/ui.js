@@ -2336,6 +2336,7 @@ export class UI {
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🎡', 'Fun park', ['A 🎡 Fun Park Island has a roller coaster, a Ferris wheel and a merry-go-round. Walk up to one and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride with your friends. Hop in the roller coaster’s train while it waits at the station: up the lift hill, down the drop and round the loop it goes, and you get off back at the station.']),
           card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. To race, tap 🏁 Race! in your kart: everyone in a go-kart lines up behind the line, the computer drives the karts left over, and after 3, 2, 1, GO! it is three laps — first over the line wins!']),
+          card('🔐', 'Escape house', ['A 🔐 Escape Island has an escape house of three locked rooms. Walk up to a puzzle and press ', h('kbd', {}, 'Q'), ' (or tap 👆 Press, 📦 Open or 🔢 Turn): in room 1, press the buttons in the order the stars over 1, 2, 3, 4 show; in room 2, open the crate the treasure map marks with an X to find the key; in room 3, count the stars of each colour and turn each dial to its number. Solve them together with friends! When everyone has left, it locks up again with new puzzles.']),
           card('🦒', 'Zoo', ['A 🦒 Zoo Island has a big zoo: come in under the ZOO gate, past the café and the gift shop, and walk the loop of path round the exhibits — giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (take the steps down to look in under the water), kangaroos, monkey island and the flamingo lagoon. Open the petting farm’s gate to go in and pet the animals. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and they are all in the toy box too!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
@@ -4812,6 +4813,10 @@ export class UI {
       this.seatButton(g, r);
       return;
     }
+    if (!g.riding && !g.aboard && !g.seat && g.escapeTarget) {
+      this.arcadeButton(g, r);
+      return;
+    }
     if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget)) {
       this.arcadeButton(g, r);
       return;
@@ -4930,18 +4935,19 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
+    const t = g.escapeTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
-    const label = t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const puzzle = t === g.escapeTarget ? { button: ['👆 Press', `Press the ${B.ESCAPE_COLORS[t.color]?.[1].toLowerCase()} button`], crate: ['📦 Open', 'Open the crate'], dial: ['🔢 Turn', 'Turn the dial to the next number'] }[t.kind] : null;
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;

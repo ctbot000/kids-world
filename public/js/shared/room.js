@@ -16,6 +16,7 @@ import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
 import { RaceSim, raceTrack } from './race.js';
+import { buildHouse, escapeHouse, houseCells, houseUsed, inHouse, puzzleAt, RESET_MS, useEscape } from './escape.js';
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import * as B from './blocks.js';
 import { trainAt } from './coaster.js';
@@ -579,6 +580,9 @@ export class Room {
         break;
       case 'race':
         this.raceOp(conn, p, msg);
+        break;
+      case 'escape':
+        this.escapeOp(conn, p, msg);
         break;
       case 'go':
         this.goOp(conn, p, msg);
@@ -1350,6 +1354,8 @@ export class Room {
       for (const fx of this.race.step(now, dt, where, drivers)) this.broadcast({ t: 'rcfx', ...fx });
       this.sendRace();
     }
+    // An escape island's house, locked up again once played and left.
+    this.stepEscape(now, where);
     // The games at the arcade machines, as they go.
     if (this.arcade.sessions.size) {
       for (const fx of this.arcade.step(now)) this.broadcast({ t: 'arcfx', ...fx });
@@ -2107,6 +2113,83 @@ export class Room {
     if (text === this.hsSent) return;
     this.hsSent = text;
     this.broadcast({ t: 'hs', s: pack });
+  }
+
+  // ------------------------------------------------ the escape house
+
+  // An escape island's escape house (escape.js): where it is, and when it
+  // was first played since it was last locked up and when last left. Null
+  // on any other island. Nothing of it is saved but the house itself.
+  escapeSim() {
+    if (this.escape === undefined) {
+      const house = escapeHouse(this.world);
+      this.escape = house ? { house, startedAt: 0, idleSince: 0 } : null;
+    }
+    return this.escape;
+  }
+
+  // A button pressed, a crate opened or a dial turned in the escape house,
+  // by someone standing at it: the house changes for everyone, and everyone
+  // hears what came of it ({ t: 'escfx' }: escape.js useEscape's fx, who did
+  // it, and on the way out, how long it took since the first puzzle).
+  escapeOp(conn, p, msg) {
+    const esc = this.escapeSim();
+    if (!esc || !Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) return;
+    const [x, y, z] = msg.at;
+    if (!puzzleAt(this.world, x, y, z)) return;
+    if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > REACH + 1 || Math.abs(p.s[1] - y) > 4) return;
+    const used = useEscape(this.world, esc.house, x, y, z);
+    if (!used) return;
+    const now = this.now();
+    if (!esc.startedAt) esc.startedAt = now;
+    this.islandCells(used.cells);
+    const fx = { t: 'escfx', ...used.fx, by: p.id, at: msg.at };
+    if (fx.out) fx.ms = now - esc.startedAt;
+    this.broadcast(fx);
+  }
+
+  // Blocks the island itself changes (x, y, z, id, …), for everyone.
+  islandCells(cells) {
+    const applied = [];
+    for (let i = 0; i < cells.length; i += 4) {
+      const [x, y, z, id] = cells.slice(i, i + 4);
+      if (this.world.get(x, y, z) === id) continue;
+      this.world.set(x, y, z, id);
+      applied.push(x, y, z, id);
+    }
+    if (!applied.length) return;
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: applied });
+    this.changed();
+  }
+
+  // Once the house has been played, and nobody has been in it for a while,
+  // it locks up again with new puzzles: everything in it built again, and
+  // whoever is about told so.
+  stepEscape(now, where) {
+    const esc = this.escapeSim();
+    if (!esc || now - (esc.checkedAt ?? 0) < 1000) return;
+    esc.checkedAt = now;
+    const inside = [...where.values()].some((w) => inHouse(esc.house, w.x, w.y, w.z));
+    if (inside || !houseUsed(this.world, esc.house)) {
+      esc.idleSince = 0;
+      return;
+    }
+    if (!esc.idleSince) esc.idleSince = now;
+    if (now - esc.idleSince < RESET_MS) return;
+    const cells = [...houseCells(esc.house)];
+    const before = cells.map(([x, y, z]) => this.world.get(x, y, z));
+    buildHouse(this.world, esc.house, new Rng((this.random() * 0x100000000) >>> 0));
+    const changed = [];
+    cells.forEach(([x, y, z], i) => {
+      const id = this.world.get(x, y, z);
+      if (id !== before[i]) changed.push(x, y, z, id);
+    });
+    if (changed.length) {
+      this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: changed });
+      this.changed();
+    }
+    Object.assign(esc, { startedAt: 0, idleSince: 0 });
+    this.broadcast({ t: 'escfx', f: 'reset' });
   }
 
   // ------------------------------------------------ races
