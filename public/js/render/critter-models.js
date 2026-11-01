@@ -357,6 +357,30 @@ function bee() {
   return { group: g, body, pivot, head, eyes, wings, folded: [], legs: null, tail: null, height: 0.16, shadow: 0, tiny: true, flapRate: 48 };
 }
 
+// The soft halo round a firefly's lantern: a warm dot that fades out at the
+// edge, added onto whatever is behind it so it shows from far off at night.
+let fireflyHalo = null;
+function haloMaterial() {
+  if (fireflyHalo) return fireflyHalo;
+  const glow = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+  // No page to paint on (the tests): a plain glow does.
+  if (typeof document === 'undefined') return (fireflyHalo = new THREE.SpriteMaterial(glow));
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,230,1)');
+  g.addColorStop(0.2, 'rgba(240,255,140,0.7)');
+  g.addColorStop(0.5, 'rgba(200,255,90,0.18)');
+  g.addColorStop(1, 'rgba(200,255,90,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  fireflyHalo = new THREE.SpriteMaterial({ map, ...glow });
+  return fireflyHalo;
+}
+
 // A firefly: a wee dark beetle whose abdomen glows, brighter as it pulses.
 // No wings to speak of — just a shell and a lantern, tiny like the bee's.
 function firefly() {
@@ -371,7 +395,13 @@ function firefly() {
   pivot.add(mesh(sphere(), toon('#5c4a3c'), 0, 0.01, 0.045, 0.04, 0.035, 0.03));
   // The lantern: a glowing tip, drawn bright so it shows after dark.
   const lantern = mesh(sphere(), toon('#ffe97a', { emissive: 1.6 }), 0, -0.005, -0.075, 0.032);
+  lantern.userData.size = 0.032;
   pivot.add(lantern);
+  // Its glow, sized in the lamp's own units so it swells and fades with it.
+  const halo = new THREE.Sprite(haloMaterial());
+  halo.scale.setScalar(9);
+  halo.raycast = () => {};
+  lantern.add(halo);
   const head = new THREE.Group();
   head.position.set(0, 0.005, 0.055);
   pivot.add(head);
@@ -2204,7 +2234,7 @@ export class CritterModel {
     const asleep = state === 'sleep';
     const sip = state === 'eat';
     const beat = asleep ? 0 : sip ? 0.72 + Math.sin(t * 5) * 0.28 : 0.5 + Math.sin(t * 2.2) * Math.sin(t * 0.9) * 0.5;
-    this.lantern.scale.setScalar(asleep ? 0.3 : Math.max(0.001, 0.5 + beat));
+    this.lantern.scale.setScalar(this.lantern.userData.size * (asleep ? 0.3 : Math.max(0.001, 0.5 + beat)));
     const a = asleep ? 0.1 : 0.3 + Math.sin(t * this.flapRate) * 0.2;
     for (const w of this.wings) w.rotation.z = w.userData.wing * a;
     this.pivot.rotation.z = asleep ? 0 : Math.sin(t * 2.1) * 0.12;

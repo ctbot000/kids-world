@@ -352,11 +352,14 @@ test('every flying model beats both wings together, up and down alike', () => {
 test('a firefly has a lantern that pulses awake and goes dark asleep, and it is never in the toy box', () => {
   const firefly = new CritterModel('firefly', 3);
   assert.ok(firefly.lantern, 'it has a lantern to pulse');
-  // Awake: the glow breathes — bigger at its brightest than at its dimmest.
+  // Awake: the glow breathes — bigger at its brightest than at its dimmest,
+  // measured against the lamp's own size, which stays a bug's.
+  const size = firefly.lantern.userData.size;
   const seen = new Set();
   for (let i = 0; i < 600; i++) {
     firefly.update(0.05, 'fly', false, 2);
-    seen.add(+firefly.lantern.scale.x.toFixed(2));
+    assert.ok(firefly.lantern.scale.x <= size * 1.6, `the lantern stays firefly-sized (${firefly.lantern.scale.x})`);
+    seen.add(+(firefly.lantern.scale.x / size).toFixed(2));
   }
   assert.ok(seen.size >= 4, `the lantern swells and fades (${seen.size} sizes)`);
   assert.ok(Math.max(...seen) > 1.1 && Math.min(...seen) < 0.9, 'it gets properly bright and properly dim');
