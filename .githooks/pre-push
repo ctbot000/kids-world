@@ -6,5 +6,5 @@ zero=0000000000000000000000000000000000000000
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$remote_ref" = refs/heads/main ] || continue
   [ "$local_sha" = "$zero" ] && continue
-  node "$(git rev-parse --show-toplevel)/scripts/check.mjs" "$local_sha" < /dev/null || exit 1
+  node "$(git rev-parse --show-toplevel)/scripts/check.mjs" "$local_sha" "$remote_sha" < /dev/null || exit 1
 done
