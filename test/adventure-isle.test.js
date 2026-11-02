@@ -11,6 +11,7 @@ import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { campCount, cleanStage, guardsFor, kingHearts, raiseSeconds } from '../public/js/shared/adventure.js';
+import { chapterOf } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
@@ -149,7 +150,9 @@ test('conquered: the next stage is up at once, the conquered one waits for its p
   const next = publicEntries(rooms)[0].room;
   assert.notEqual(next, room);
   assert.equal(next.stage, 2);
-  assert.equal(next.world.theme, 'snowy', 'each stage its own kind of island');
+  assert.equal(next.adventure.story.key, 'woods', 'each stage the next chapter of the story, on its own map');
+  assert.equal(next.world.theme, chapterOf(2).theme);
+  assert.notDeepEqual(next.adventure.camps.map((c) => [c.x, c.z]), room.adventure.camps.map((c) => [c.x, c.z]), 'not the same island again');
   assert.equal(next.adventure.stage, 2);
   assert.equal(next.world.name, PUBLIC_ISLAND_NAME);
   assert.deepEqual(next.listing().adventure, { camps: next.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 2 });
@@ -337,24 +340,23 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
 
 // The shared isle keeps its toy box shut and its players on their own feet:
 // nobody builds on it, nothing is brought to it or sent away (flying there
-// is a matter for each player's own page, not the island) — though its
-// helicopter and balloon are there to fly, as on any island.
+// is a matter for each player's own page, not the island), and it has no
+// helicopter or balloon to fly over its gates — though what it has, such
+// as the boat at Shipwreck Shore's pier, anyone rides.
 test('its toy box stays shut: nobody builds on it, nothing is brought to it or sent away', () => {
   const { isle: one } = isle();
   const room = one.room;
   const a = join(room, 'Sunny Otter');
   const w = room.world;
 
-  // Its helicopter and balloon are there to fly, as on any island, and
-  // anyone rides them (leaving one up in the air, each player's own page
-  // says whether they come down or fly).
-  for (const type of ['helicopter', 'balloon']) {
-    assert.ok(room.critters.list.some((c) => c.type === type), `the ${type} is there`);
-  }
-  const whirly = room.critters.list.find((c) => c.type === 'helicopter');
-  room.receive(a, { t: 'm', s: [whirly.x, whirly.y, whirly.z, 0, 0, 0] });
-  room.receive(a, { t: 'critter', op: 'ride', id: whirly.id });
-  assert.equal(whirly.rider, a.pid, 'flying its helicopter works as anywhere');
+  // No helicopter or balloon: it is an adventure on foot. Its boat sails,
+  // as on any island, for anyone.
+  for (const type of ['helicopter', 'balloon']) assert.equal(room.critters.list.some((c) => c.type === type), false, `no ${type}`);
+  const boat = room.critters.list.find((c) => c.type === 'boat');
+  assert.ok(boat, 'the boat at the pier');
+  room.receive(a, { t: 'm', s: [boat.x, boat.y, boat.z, 0, 0, 0] });
+  room.receive(a, { t: 'critter', op: 'ride', id: boat.id });
+  assert.equal(boat.rider, a.pid, 'sailing it works as anywhere');
   room.receive(a, { t: 'critter', op: 'off' });
 
   // But nothing is brought to it, animal or vehicle: its toy box stays shut.

@@ -7,29 +7,42 @@
 // a silver helmet with a red plume, a round shield on one side and a little
 // sword on the other; and a Stone Golem a great mossy lump of grey rock,
 // nearly twice a player's height, with stones stuck all over it and eyes
-// that glow like embers.
+// that glow like embers. On Adventure Isle (shared/isle-story.js) there
+// are three more: a Little Yeti, a great fluffy snowball of a monster with
+// a pale blue face and two little horns, crouching before it stomps; and a
+// Gummy Bear, a jelly bear in a sweet's bright colour with round ears and a
+// snout, which splits into two Gummy Cubs, little ones just like it.
 import * as THREE from '../../vendor/three.module.js';
 import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
-const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'], ghost: ['#ff7a2f', '#a3300c'] };
+const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'], ghost: ['#ff7a2f', '#a3300c'], yeti: ['#f4f7fb', '#cfd8e6'] };
+// Gummy Bears and their cubs come in the colours of the sweets.
+const GUMMY_JELLY = [
+  ['#ff5a6e', '#d6304a'],
+  ['#5fd36a', '#2f9a3d'],
+  ['#ffd23f', '#e0a800'],
+  ['#ff9a3d', '#d4621a'],
+];
 // Where a mouth is (mouthAt), worked out into this.
 const MOUTH_AT = new THREE.Vector3();
-const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25, ghost: 1.15 };
+const KIND_SCALE = { big: 1.62, spiky: 1.07, knight: 1.25, golem: 2.25, ghost: 1.15, yeti: 1.55, gummy: 1.15, cub: 0.66 };
 // A helmet's dome, a cap of moss, and a stone.
 const DOME = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
 const CAP = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.4);
 const ROCK = new THREE.DodecahedronGeometry(1, 0);
 // Kinds that are not jelly: solid all through.
-const SOLID_KIND = { golem: true };
+const SOLID_KIND = { golem: true, yeti: true };
 const R = 0.42;
 const H = 0.36;
 
 export class MonsterModel {
-  // kind: 'blob', 'big' or 'spiky' (shared/monsters.js).
-  constructor(theme = 'sunny', kind = 'blob') {
-    const [skin, core] = KIND_JELLY[kind] ?? JELLY[theme] ?? JELLY.sunny;
+  // kind: 'blob', 'big' or 'spiky' (shared/monsters.js); id: which one, for
+  // a Gummy Bear's colour.
+  constructor(theme = 'sunny', kind = 'blob', id = 1) {
+    const gummy = kind === 'gummy' || kind === 'cub';
+    const [skin, core] = gummy ? GUMMY_JELLY[Math.abs(id) % GUMMY_JELLY.length] : (KIND_JELLY[kind] ?? JELLY[theme] ?? JELLY.sunny);
     const k = KIND_SCALE[kind] ?? 1;
     this.group = new THREE.Group();
     this.group.scale.setScalar(k);
@@ -158,6 +171,32 @@ export class MonsterModel {
       this.eyeGlow = toon('#ff7a1a', { emissive: 1 });
       for (const eye of this.eyes) eye.material = this.eyeWhite;
     }
+    // A Little Yeti: a pale blue face round its eyes, two little horns, and
+    // tufts of fur all over its top; dark blue brows and eyes like ice.
+    if (kind === 'yeti') {
+      const p = onSurface(R, H, R, 0, 0.03, 0.002);
+      b.add(mesh(sphere(1, 16, 10), toon('#9cc8ef'), p.x, p.y + H, p.z - 0.04, 0.24, 0.17, 0.08));
+      for (const side of [-1, 1]) {
+        const horn = mesh(cone(0.045, 0.14, 8), toon('#e9dcc0'), side * 0.2, H * 1.82, 0.02);
+        horn.rotation.z = -side * 0.5;
+        b.add(horn);
+      }
+      for (let i = 0; i < 10; i++) {
+        const a = i * 2.39;
+        const el = 0.4 + (i % 3) * 0.3;
+        if (Math.cos(a) > 0.55 && el < 0.9) continue;
+        b.add(mesh(sphere(1, 8, 6), toon(i % 2 ? '#ffffff' : '#e8eef6'), R * Math.cos(el) * Math.sin(a), H + H * Math.sin(el), R * Math.cos(el) * Math.cos(a), 0.09, 0.08, 0.09));
+      }
+      for (const brow of this.brows) brow.mesh.material = toon('#2d4f8a');
+      this.eyeGlow = toon('#bfe8ff', { emissive: 1 });
+    }
+    // A Gummy Bear (and a cub): round ears on top and a paler snout.
+    if (gummy) {
+      for (const side of [-1, 1]) b.add(mesh(sphere(1, 12, 8), jelly(0.85), side * 0.22, H * 1.82, 0, 0.1, 0.1, 0.07));
+      const s = onSurface(R, H, R, 0, -0.06, 0.01);
+      b.add(mesh(sphere(1, 12, 8), toon('#ffffff', { transparent: true, opacity: 0.45 }), s.x, s.y + H, s.z - 0.02, 0.12, 0.08, 0.06));
+      b.add(mesh(sphere(1, 8, 6), toon(core), s.x, s.y + H + 0.03, s.z + 0.04, 0.035, 0.025, 0.02));
+    }
     // A Lava Ghost: ember eyes and a mouth that glows before it breathes fire.
     if (kind === 'ghost') {
       this.eyeWhite = toon('#ffb13b', { emissive: 0.7 });
@@ -197,6 +236,9 @@ export class MonsterModel {
     this.body.rotation.set(0, 0, 0);
     // A giggle: shaking side to side, mouth wide open.
     if (state === 'giggle') this.body.rotation.z = Math.sin(t * 22) * 0.18;
+    // Crouched to stomp (a Little Yeti), and rocking, dazed, after.
+    if (state === 'stomp') this.body.scale.set(sxz * 1.12, sy * 0.78, sxz * 1.12);
+    if (state === 'dazed') this.body.rotation.z = Math.sin(t * 6) * 0.14;
     // Mouth wide open giggling, and a Lava Ghost's breathing fire.
     this.mouth.scale.y = state === 'giggle' || state === 'breathe' ? 0.08 : 0.03;
     // Rearing back to breathe it.

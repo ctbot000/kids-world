@@ -45,8 +45,12 @@ export function chestTreasure(rand = Math.random, stage = 1) {
 }
 
 export class Chests {
-  constructor(seed = 1) {
+  // spots: where a chest may go ([x, y, z] each, on the ground beside the
+  // way through one of Adventure Isle's maps: isle-maps.js), or none for
+  // anywhere on open ground.
+  constructor(seed = 1, spots = null) {
     this.rng = new Rng(seed);
+    this.spots = Array.isArray(spots) && spots.length ? spots : null;
     // { x, y, z, openedAt (0: still locked) } each.
     this.list = [];
     // When the next one turns up (0: not counting yet); placed: whether the
@@ -99,10 +103,11 @@ export class Chests {
     const rng = this.rng;
     const edge = 4;
     for (let tries = 0; tries < 200; tries++) {
-      const x = rng.int(edge, world.W - 1 - edge);
-      const z = rng.int(edge, world.D - 1 - edge);
-      let y = world.H - 2;
-      while (y > 1 && world.get(x, y - 1, z) === B.AIR) y--;
+      const at = this.spots ? rng.pick(this.spots) : null;
+      const x = at ? at[0] : rng.int(edge, world.W - 1 - edge);
+      const z = at ? at[2] : rng.int(edge, world.D - 1 - edge);
+      let y = at ? at[1] : world.H - 2;
+      while (!at && y > 1 && world.get(x, y - 1, z) === B.AIR) y--;
       const under = world.get(x, y - 1, z);
       if (!B.SOLID[under] || B.TREE_PART[under] || B.CLOTH[under] || B.KIND[under] === B.K_FURNITURE || under === B.GLOOM) continue;
       if (y <= world.sea || world.get(x, y, z) !== B.AIR || world.get(x, y + 1, z) !== B.AIR) continue;

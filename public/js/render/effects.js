@@ -556,6 +556,29 @@ export class Effects {
     }
   }
 
+  // A Puffshroom's cloud of spores: soft yellow-green puffs rolling out all
+  // round it as far as reach, rising a little and fading, with a few motes.
+  spores(x, y, z, reach = 2.8) {
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
+      const s = reach * (1.2 + Math.random() * 0.8);
+      this.add('puff', x, y + 0.5 + Math.random() * 0.4, z, {
+        vx: Math.cos(a) * s,
+        vy: 0.3 + Math.random() * 0.8,
+        vz: Math.sin(a) * s,
+        size: 0.35 + Math.random() * 0.25,
+        life: 0.8 + Math.random() * 0.4,
+        grow: 2,
+        drag: 2.2,
+        color: ['#e6f28a', '#c9e46a', '#f4f7c0', '#b8d870'][i % 4],
+      });
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.add('sparkle', x, y + 0.8, z, { vx: Math.cos(a) * reach, vy: 1 + Math.random(), vz: Math.sin(a) * reach, size: 0.1, life: 0.9, drag: 1.4, color: '#fbffd0' });
+    }
+  }
+
   update(dt) {
     for (const s of this.slashes) {
       if (!s.group.visible) continue;

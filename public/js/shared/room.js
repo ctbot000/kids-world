@@ -29,13 +29,14 @@ import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
+import { buildIsle } from './isle-maps.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { CHEST_REACH } from './treasure.js';
-import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, STOMP } from './monsters.js';
+import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
 import { canFloat } from './fishing.js';
@@ -252,7 +253,11 @@ export class Room {
     } else {
       const s = seed >>> 0 || Math.floor(random() * 2 ** 31) + 1;
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
-      const made = generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
+      // The shared isle, Adventure Isle, is the map of its stage's chapter
+      // of the story (isle-maps.js), not a random island.
+      const story = this.shared && adventure;
+      const made = story ? buildIsle({ stage: this.stage, seed: s }) : generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
+      if (story) made.world.name = islandName;
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -260,7 +265,7 @@ export class Room {
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
-      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage }, s ^ 0x510e527f);
+      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, story, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
       if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
@@ -1524,9 +1529,17 @@ export class Room {
     // A Lava Ghost's breath of fire: the jet everyone sees, and whoever it
     // burned, with Knight Armor or a Fire Suit taking half of it.
     for (const m of this.monsters.takeFires()) this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: GHOST_FIRE.ms });
-    for (const { monster: m, pid } of this.monsters.takeBurns()) {
+    // A Puffshroom's cloud of spores: the puff everyone sees, and whoever
+    // was in it (Knight Armor takes half of that, too).
+    for (const u of this.monsters.takePuffs()) this.broadcast({ t: 'mfx', kind: 'spores', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
+    for (const { monster: m, pid, spores } of this.monsters.takeBurns()) {
       const p = this.players.get(pid);
       if (!p) continue;
+      if (spores) {
+        const half = hasPower(p.look, 'armor');
+        this.knock(p, now, hpAfterBump(p.hp, half ? SPORES.bumps / 2 : SPORES.bumps), { t: 'bump', pid, id: m.id, spores: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+        continue;
+      }
       const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
       this.knock(p, now, hpAfterBump(p.hp, half ? GHOST_FIRE.bumps / 2 : GHOST_FIRE.bumps), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
     }
@@ -1540,7 +1553,7 @@ export class Room {
     // King Grumble landing: a thump everyone sees, and a moment later, whoever
     // was on the ground near him then is knocked over.
     for (const s of this.monsters.takeStomps()) {
-      this.broadcast({ t: 'stomp', id: s.monster.id, x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2) });
+      this.broadcast({ t: 'stomp', id: s.monster.id, x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2), ...(s.reach !== STOMP.reach ? { r: s.reach } : {}) });
       this.stomps.push({ ...s, at: now + STOMP_SETTLE_MS });
     }
     for (const s of [...this.stomps]) {
@@ -1548,7 +1561,7 @@ export class Room {
       this.stomps.splice(this.stomps.indexOf(s), 1);
       for (const p of this.players.values()) {
         if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
-        if (Math.hypot(p.s[0] - s.x, p.s[2] - s.z) > STOMP.reach || Math.abs(p.s[1] - s.y) > 2) continue;
+        if (Math.hypot(p.s[0] - s.x, p.s[2] - s.z) > (s.reach ?? STOMP.reach) || Math.abs(p.s[1] - s.y) > 2) continue;
         if (now - (p.airAt ?? -Infinity) <= AIR_GRACE_MS) continue;
         this.hurt(p.id, s.monster, now, true);
       }
@@ -1657,10 +1670,25 @@ export class Room {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
         continue;
       }
-      this.monsters.remove(m.id);
-      const b = m.body;
-      this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
-      if (m.camp) this.adventure?.guardGone(m, now);
+      this.popMonster(p, m, now);
+    }
+  }
+
+  // A monster popped by someone (bopped, landed on, burned, blasted): gone,
+  // everyone told, a camp's to come back in a while — and a Gummy Bear
+  // split into two Gummy Cubs where it was, keeping to the same camp.
+  popMonster(p, m, now) {
+    this.monsters.remove(m.id);
+    const b = m.body;
+    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    if (m.camp) this.adventure?.guardGone(m, now);
+    if (m.kind === 'gummy') {
+      for (const side of [-1, 1]) {
+        const x = b.x + Math.cos(m.yaw) * side * 0.6;
+        const z = b.z - Math.sin(m.yaw) * side * 0.6;
+        const cub = this.monsters.add(this.world, x, b.y + 0.2, z, { camp: m.camp, kind: 'cub' });
+        if (cub) Object.assign(cub.body, { vx: Math.cos(m.yaw) * side * 3, vy: 5, vz: -Math.sin(m.yaw) * side * 3 });
+      }
     }
   }
 
@@ -1935,10 +1963,7 @@ export class Room {
         return;
       }
     }
-    this.monsters.remove(m.id);
-    const b = m.body;
-    this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
-    if (m.camp) this.adventure?.guardGone(m, now);
+    this.popMonster(p, m, now);
   }
 
   // A monster marching on a tower defense island tapped (or landed on):
@@ -1996,9 +2021,7 @@ export class Room {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
         continue;
       }
-      this.monsters.remove(m.id);
-      this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
-      if (m.camp) this.adventure?.guardGone(m, now);
+      this.popMonster(p, m, now);
     }
     // The gem rocks caught in it: their jewels, and the boom everyone hears.
     const plan = gemBlastEdit(this.world, x, y, z);
@@ -2385,7 +2408,8 @@ export class Room {
       this.broadcast({ t: 'pop', id: m.id, by: 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
     }
     this.ungloom(c);
-    this.broadcast({ t: 'freed', id: c.id, by: news.by, x: c.x, y: c.y, z: c.z });
+    const gate = this.openGates(news.gates);
+    this.broadcast({ t: 'freed', id: c.id, by: news.by, x: c.x, y: c.y, z: c.z, ...(gate ? { gate } : {}) });
     if (news.shieldDown) this.broadcast({ t: 'shield', up: false });
     if (news.won) {
       this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), x: c.x, y: c.y, z: c.z });
@@ -2422,6 +2446,18 @@ export class Room {
     this.changed();
   }
 
+  // Gates the adventure opened (Adventure Isle's, shut across its way until
+  // the camp before them is freed): their cells as they open, for everyone.
+  // Returns where the first one stood ([x, y, z]), or null for none.
+  openGates(gates = []) {
+    const cells = gates.flatMap((g) => g.cells);
+    if (!cells.length) return null;
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    const [g] = gates;
+    return [g.x, g.y, g.z];
+  }
+
   // The gloomy ground round a camp back to the island's own, with flowers.
   ungloom(c) {
     const cells = freeCells(this.world, c, palette(this.world.theme), this.adventure.rng);
@@ -2440,6 +2476,7 @@ export class Room {
     }
     const castle = adv.castle;
     if (castle) this.ungloom(castle);
+    this.openGates(adv.openGates());
     const b = king.body;
     this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), hero: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
     this.allWell();

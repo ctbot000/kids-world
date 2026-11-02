@@ -13,6 +13,7 @@ import { MONSTER_FIGURES } from '../shared/gashapon.js';
 import { KingModel } from './adventure-models.js';
 import { MonsterModel } from './monster-model.js';
 import { MoleModel } from './mole-model.js';
+import { ShroomModel, SnapperModel } from './isle-monsters.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { SpiderModel } from './spider-model.js';
 
@@ -42,7 +43,7 @@ function modelOf(kind, theme = 'sunny') {
     k.ring.visible = false;
     return k;
   }
-  const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel }[kind];
+  const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel, snapper: SnapperModel, shroom: ShroomModel }[kind];
   const m = make ? new make(theme, 1) : new MonsterModel(theme, kind);
   // (He comes up over a moment, so the moment is let go by.)
   m.update(kind === 'mole' ? 1 : 0, kind === 'mole' ? 'hop' : 'idle', 0, false);

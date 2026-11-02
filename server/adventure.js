@@ -15,17 +15,13 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { generateCode } from '../public/js/shared/codes.js';
+import { chapterOf } from '../public/js/shared/isle-story.js';
 import { Room } from '../public/js/shared/room.js';
 import { PeerHost } from './host.js';
 
 export const PUBLIC_ISLAND_NAME = 'Adventure Isle';
 // How long a retired island is kept after everyone leaves it.
 export const RETIRED_KEEP_MS = 10 * 60 * 1000;
-// The stages climb through the island kinds: sunny, snowy and candy round
-// about, and the island grows cozily big before it grows huge.
-const STAGE_THEMES = ['sunny', 'snowy', 'candy'];
-const stageTheme = (stage) => STAGE_THEMES[(stage - 1) % STAGE_THEMES.length];
-const stageSize = (stage) => (stage >= 6 ? 'huge' : stage >= 3 ? 'big' : 'small');
 
 // The day a moment is in, as the server sees days.
 const dayOf = (now) => {
@@ -117,10 +113,11 @@ export class PublicAdventure {
     this.day = day;
     this.keep();
     const code = this.freeCode();
+    // Each stage is a chapter of the isle's story, with its own map (the
+    // room makes it: shared/isle-maps.js).
     const room = new Room({
       code,
-      theme: stageTheme(stage),
-      size: stageSize(stage),
+      theme: chapterOf(stage).theme,
       name: PUBLIC_ISLAND_NAME,
       adventure: true,
       stage,

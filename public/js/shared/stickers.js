@@ -140,7 +140,7 @@ export const STICKERS = [
 // The monster collection of Adventure Isle (adventure.js MONSTER_BOOK):
 // every kind of monster, the easiest first, each counted twice, as seen
 // (seen<kind>, 1 once you have) and as popped (pop<kind>, how many).
-export const MONSTER_LOG = ['blob', 'mosquito', 'spiky', 'mole', 'spider', 'big', 'knight', 'ghost', 'golem', 'queen', 'king'];
+export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'golem', 'queen', 'king'];
 export const seenKey = (kind) => `seen${kind}`;
 export const popKey = (kind) => `pop${kind}`;
 

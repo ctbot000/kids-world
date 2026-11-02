@@ -29,10 +29,11 @@ import { CRITTER_INFO, critterBox, headTop, hoopTurn, mountUnder, riderAt, seats
 import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
+import { chapterOf, SHARDS } from './shared/isle-story.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, SPORES, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
@@ -667,6 +668,11 @@ export class Game extends EventTarget {
         if (msg.kind === 'dirt') {
           this.renderer.effects.dirt(msg.x, msg.y, msg.z);
           this.sound.play('mole');
+        }
+        // A Puffshroom puffing its cloud of spores.
+        if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
+          this.renderer.effects.spores(msg.x, msg.y, msg.z, SPORES.reach);
+          this.sound.play('blow');
         }
         break;
       case 'settings':
@@ -1345,6 +1351,14 @@ export class Game extends EventTarget {
     if (msg.spiky && !this.toldSpikes) {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
+    }
+    if (msg.spores && !this.toldSpores) {
+      this.toldSpores = true;
+      this.emit('toast', { icon: '🍄', text: 'Achoo, spores! When a Puffshroom swells up, step back out of its cloud — then bop it, or bounce on its cap.' });
+    }
+    if (msg.stomp && this.monsters.get(msg.id)?.kind === 'yeti' && !this.toldYeti) {
+      this.toldYeti = true;
+      this.emit('toast', { icon: '❄️', text: 'A yeti stomp! When a Little Yeti crouches, jump — its stomp misses anyone in the air.' });
     }
     if (msg.fire && msg.ghost && !this.toldGhostFire) {
       this.toldGhostFire = true;
@@ -2230,11 +2244,24 @@ export class Game extends EventTarget {
         const kind = c.kind === 'castle' ? 'castle' : 'camp';
         camps.set(c.id, { id: c.id, kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true, progress: Number(c.progress) || 0, friends: 0, guarded: false, flag: this.renderer.addFlag(c.id, kind) });
       }
-      // The public adventure island's stage, 1 on any other adventure island.
-      this.adventure = { camps, won: a.won === true, stage: Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1, king: null, shield: true };
+      // The public adventure island's stage, 1 on any other adventure island;
+      // there, the chapter of its story the stage is (shared/isle-story.js).
+      const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
+      this.adventure = { camps, won: a.won === true, stage, king: null, shield: true, story: this.shared ? chapterOf(stage) : null };
       this.adventureNews(a);
     }
     this.emit('adventure');
+    // On the isle, the chapter's story is told as you arrive (ui.js).
+    if (this.adventure?.story) this.emit('story');
+  }
+
+  // What a camp of the adventure is called: on the isle, its name in the
+  // story ('Seaside Village', the lair's for King Grumble's castle); on any
+  // other island, 'Camp 2' or 'King Grumble's castle'.
+  campLabel(c) {
+    const story = this.adventure?.story;
+    if (story) return c.kind === 'castle' ? story.lair : (story.camps[c.id - 1] ?? `Camp ${c.id}`);
+    return c.kind === 'castle' ? 'King Grumble’s castle' : `Camp ${c.id}`;
   }
 
   // How far up each flag is, how many friends are by it and whether its
@@ -2273,8 +2300,23 @@ export class Game extends EventTarget {
     }
     const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
     if (mine) this.profile.count('freed');
-    const more = left ? ` ${left === 1 ? 'One more camp' : `${left} more camps`} to free!` : '';
-    this.emit('toast', { icon: '🚩', text: mine ? `You freed Camp ${c.id}! It is a safe place now.${more}` : `Camp ${c.id} is free!${more}` });
+    // The gate it opened (Adventure Isle's), crumbling away in sparkles.
+    if (Array.isArray(msg.gate) && msg.gate.length === 3 && msg.gate.every(Number.isFinite)) {
+      const [x, y, z] = msg.gate;
+      if (this.near(x, y, z, 80)) {
+        this.renderer.effects.sparkles(x + 0.5, y + 1.5, z + 0.5, 40, ['#ffd84d', '#ffffff', '#b98cff', '#7fe08c']);
+        for (let i = 0; i < 6; i++) this.renderer.effects.dust(x + 0.5 + (Math.random() - 0.5) * 4, y, z + 0.5 + (Math.random() - 0.5) * 4);
+        this.sound.play('creak');
+      }
+    }
+    const story = adv.story;
+    const line = story?.freed[c.id - 1];
+    if (line) {
+      this.emit('toast', { icon: '🚩', text: `${line}${mine ? ' It is a safe place now.' : ''}` });
+    } else {
+      const more = left ? ` ${left === 1 ? 'One more camp' : `${left} more camps`} to free!` : '';
+      this.emit('toast', { icon: '🚩', text: mine ? `You freed ${this.campLabel(c)}! It is a safe place now.${more}` : `${this.campLabel(c)} is free!${more}` });
+    }
     this.emit('adventure');
   }
 
@@ -2288,7 +2330,8 @@ export class Game extends EventTarget {
       if (e.kind === 'king' && this.near(p.x, p.y, p.z, 60)) this.renderer.effects.sparkles(p.x, p.y + 1.2, p.z, 30, ['#cdeeff', '#ffffff', '#ffd84d']);
     }
     this.sound.play('shield');
-    this.emit('toast', { icon: '🫧', text: 'Every camp is free! King Grumble’s bubble popped. Off to his castle, and pop him!' });
+    const lair = adv.story ? `the ${adv.story.lair}` : 'his castle';
+    this.emit('toast', { icon: '🫧', text: `Every camp is free! King Grumble’s bubble popped. Off to ${lair}, and pop him!` });
     this.emit('adventure');
   }
 
@@ -2322,7 +2365,9 @@ export class Game extends EventTarget {
     if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.me) return;
     const d = Math.hypot(this.me.body.x - msg.x, this.me.body.z - msg.z);
     if (d > 60) return;
-    this.renderer.shockwave(msg.x, msg.y, msg.z, STOMP.reach);
+    // (A Little Yeti's stomp reaches less far than King Grumble's: msg.r.)
+    const reach = Number.isFinite(msg.r) ? msg.r : STOMP.reach;
+    this.renderer.shockwave(msg.x, msg.y, msg.z, reach);
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       this.renderer.effects.dust(msg.x + Math.cos(a) * 1.4, msg.y, msg.z + Math.sin(a) * 1.4);
@@ -2360,7 +2405,10 @@ export class Game extends EventTarget {
     }
     const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
     const what = hero ? `${hero} popped King Grumble!` : 'Every camp is free!';
-    this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    const story = adv?.story;
+    // On the isle, the chapter's ending, and the Star Shards won back so far.
+    if (story) this.emit('toast', { icon: '⭐', text: `${hero ? `${hero} gave King Grumble the last bop! ` : ''}${story.won} ${story.shards < SHARDS ? `${story.shards} of ${SHARDS} Star Shards back!` : `All ${SHARDS} Star Shards!`}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
   }
 
@@ -6487,7 +6535,8 @@ export class Game extends EventTarget {
     const b = this.me?.body;
     if (!b || this.dizzy) return;
     // The shared isle is an adventure on foot: you cannot fly there on
-    // your own (its helicopter and balloon fly as anywhere — ride them!).
+    // your own (and its maps have no helicopter or balloon to fly over
+    // their gates).
     // A watcher is nobody there, so it flies anywhere.
     if (this.shared && !this.watching) {
       this.emit('notice', { text: `No flying on your own on ${this.world.name} — it is an adventure on foot!`, level: 'info' });

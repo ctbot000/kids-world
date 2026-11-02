@@ -17,6 +17,7 @@ import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { latestNews, NEWS } from '../public/js/news.js';
+import { CHAPTERS } from '../public/js/shared/isle-story.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
 import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
 import { VESSEL } from '../public/js/render/kitchen.js';
@@ -135,16 +136,20 @@ async function openPlayer(url, profile = {}, init = null) {
   await page.evaluateOnNewDocument(() => (window.kidsWorldHurry = true));
   if (init) await page.evaluateOnNewDocument(init);
   // These players have seen every update too, unless profile.seenNews says
-  // the newest one they saw (null: none).
-  const { seenNews = latestNews(), ...rest } = profile;
+  // the newest one they saw (null: none); and every chapter of Adventure
+  // Isle's story, unless profile.seenStory is false (it opens by itself
+  // as you arrive on a stage, once a chapter).
+  const { seenNews = latestNews(), seenStory = true, ...rest } = profile;
   await page.evaluateOnNewDocument(
-    (p, seen) => {
+    (p, seen, story) => {
       const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
       localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
       if (seen !== null && localStorage.getItem('kidsworld.seenNews') === null) localStorage.setItem('kidsworld.seenNews', JSON.stringify(seen));
+      if (story && localStorage.getItem('kidsworld.isleStory') === null) localStorage.setItem('kidsworld.isleStory', JSON.stringify(story));
     },
     rest,
     seenNews,
+    seenStory ? CHAPTERS.map((c) => c.key) : null,
   );
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(url);
@@ -5606,6 +5611,49 @@ test('the shared isle is a way in of its own on the title screen, to the island 
   }
 });
 
+// Each stage of the isle is a chapter of its story: arriving on one opens
+// its page of the story by itself, once on a device; the island's card
+// names the chapter, its camps and its lair, and opens the page again.
+test('arriving on the shared isle tells its chapter of the story, once, and its card names the camps', { skip }, async () => {
+  const page = await openPlayer(base, { name: 'Brave Fox', seenStory: false });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal .story-title'));
+    const chapter = await page.evaluate(() => window.kidsWorld.game.adventure.story);
+    const title = await page.$eval('#modal .story-title', (el) => el.textContent);
+    assert.ok(title.includes(`Chapter ${chapter.n}: ${chapter.name}`), title);
+    const way = await page.$$eval('#modal .story-way li', (els) => els.map((el) => el.textContent));
+    assert.deepEqual(way.slice(0, chapter.camps.length).map((t) => t.replace(/^\S+ /, '')), chapter.camps, 'the camps along the way, in order');
+    assert.ok(way.at(-1).includes(chapter.lair), 'and King Grumble’s lair at the end');
+    await clickButton(page, 'Let’s go', '#modal');
+    await until(page, () => document.getElementById('modal').hidden);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleStory'))), [chapter.key], 'told once on this device');
+
+    // The island's card: the chapter, the camps by name, and the story again.
+    await page.click('#island-badge');
+    await until(page, () => document.querySelector('#modal .adventure-list'));
+    const card = await page.$eval('#modal', (el) => el.textContent);
+    assert.ok(card.includes(chapter.name) && card.includes(chapter.camps[0]) && card.includes(chapter.lair), card.slice(0, 300));
+    await clickButton(page, 'The story', '#modal');
+    await until(page, () => document.querySelector('#modal .story-title'));
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+
+    // Back again: not told a second time.
+    await page.click('#btn-settings');
+    await clickButton(page, 'Leave island', '#modal');
+    await until(page, () => !document.getElementById('title').hidden);
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await delay(1500);
+    assert.equal(await page.$eval('#modal', (el) => el.hidden), true, 'no page of the story the second time');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+  }
+});
+
 // The same login on two devices is one player on the isle: the device that
 // comes in last plays, and the other is sent back to the title, told why.
 test('the same login on two devices is on the shared isle once, the one in last', { skip }, async () => {
@@ -5824,7 +5872,7 @@ test('a conquered stage of the shared isle goes on to the next stage by itself',
     await eventually(() => games.publicAdventure.stage === 2);
     const second = games.publicAdventure.room;
     await until(page, () => !document.getElementById('next-stage').hidden);
-    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /Stage 2 in \d+/);
+    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /Stage 2, Whispering Woods, in \d+/, 'on to the next chapter');
     assert.equal(await page.evaluate(() => window.kidsWorld.session.link.state), 'online', 'still on the conquered island');
 
     // Never while a window is open.
@@ -6196,8 +6244,9 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   assert.ok(!(await own.evaluate(() => document.getElementById('modal').textContent.includes('👾 Monsters'))));
   await own.browserContext().close();
 
-  // Adventure Isle: into one of its camps, its monsters come out, and each
-  // kind near you is seen — in the isle's own world of you.
+  // Adventure Isle: into one of its camps, its monsters come out (on the
+  // first chapter's, a Snappy Crab among them), and each kind near you is
+  // seen — in the isle's own world of you.
   const page = await openPlayer(base, { name: 'Keen Owl' });
   await clickButton(page, '⚔️ Adventure');
   await clickButton(page, 'Adventure Isle');
@@ -6211,14 +6260,14 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
     Object.assign(kw.game.me.body, { x: c.x + 2, y: c.y + 1, z: c.z + 2, vx: 0, vy: 0, vz: 0 });
     kw.game.sendMove(true);
   }, { x: c.x, y: c.y, z: c.z });
-  await until(page, () => window.kidsWorld.isle.data.stats.seenblob === 1);
-  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.popblob), 0);
-  // A blob popped by you: defeated.
-  const m = room.monsters.list.find((o) => o.camp === c.id && o.kind === 'blob');
+  await until(page, () => window.kidsWorld.isle.data.stats.seensnapper === 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.popsnapper), 0);
+  // A crab popped by you: defeated.
+  const m = room.monsters.list.find((o) => o.camp === c.id && o.kind === 'snapper');
   room.monsters.remove(m.id);
   room.broadcast({ t: 'pop', id: m.id, by: pid, x: m.body.x, y: m.body.y, z: m.body.z });
-  await until(page, () => window.kidsWorld.isle.data.stats.popblob === 1);
-  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popblob), 0, 'your world everywhere else untouched');
+  await until(page, () => window.kidsWorld.isle.data.stats.popsnapper === 1);
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.popsnapper), 0, 'your world everywhere else untouched');
   await page.click('#island-badge');
   await clickButton(page, '👾 Monster collection', '#modal');
   await until(page, () => document.querySelector('#modal .monster-book'));
@@ -6226,26 +6275,26 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
   // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
-  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 11);
+  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 16);
   const seen = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
-    blob: document.querySelector('#modal .monster-book [data-kind="blob"]').textContent,
+    crab: document.querySelector('#modal .monster-book [data-kind="snapper"]').textContent,
     golem: document.querySelector('#modal .monster-book [data-kind="golem"]').textContent,
-    blobPic: document.querySelector('#modal .monster-book [data-kind="blob"] img').className,
+    crabPic: document.querySelector('#modal .monster-book [data-kind="snapper"] img').className,
     golemPic: document.querySelector('#modal .monster-book [data-kind="golem"] img').className,
   }));
-  assert.deepEqual([seen.blobPic, seen.golemPic], ['figure', 'figure shadow']);
-  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 11\)$/);
-  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 11)');
-  assert.equal(seen.blob, 'Grumpy Blob');
+  assert.deepEqual([seen.crabPic, seen.golemPic], ['figure', 'figure shadow']);
+  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 16\)$/);
+  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 16)');
+  assert.equal(seen.crab, 'Snappy Crab');
   assert.equal(seen.golem, '???');
   await page.click('#modal .tabs .chip[data-tab="defeated"]');
   await until(page, () => document.querySelector('#modal .monster-book').dataset.tab === 'defeated');
   const card = await page.evaluate(() => {
-    const el = document.querySelector('#modal .monster-book [data-kind="blob"]');
+    const el = document.querySelector('#modal .monster-book [data-kind="snapper"]');
     return { popped: el.querySelector('.popped').textContent, stats: Object.fromEntries([...el.querySelectorAll('.stat')].map((s) => [s.dataset.stat, s.querySelector('.stat-value').textContent])) };
   });
-  assert.deepEqual(card, { popped: 'Popped ×1', stats: { hp: '3', atk: '20', spd: '49%', jmp: 'Pops at once' } });
+  assert.deepEqual(card, { popped: 'Popped ×1', stats: { hp: '2', atk: '20', spd: '71%', jmp: 'Pops at once' } });
   assert.equal(await page.evaluate(() => document.querySelectorAll('#modal .monster-book .monster-stats').length), 1);
   await page.browserContext().close();
 });

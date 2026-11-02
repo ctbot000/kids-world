@@ -51,6 +51,17 @@
 // own trick: with nobody within a few steps of her for a few seconds, she gets
 // a heart back every two seconds, so friends have to keep at her together.
 //
+// And on Adventure Isle, the monsters of the corners of the isle its story
+// goes through (isle-story.js), among the camps' guards there: a Snappy
+// Crab on Shipwreck Shore, low and wide, that scuttles sideways quicker than
+// a blob hops (one jump on its shell pops it); a Puffshroom in the
+// Whispering Woods, a slow grumpy mushroom that now and then swells and
+// puffs a cloud of spores all round it (step back out of the cloud — or
+// bounce on its cap, twice); a Little Yeti on Frostpeak Pass, a fluffy
+// snow monster that stomps the ground as King Grumble does, nearer (jump,
+// and it misses you); and a Gummy Bear in Candy Canyon that splits into
+// two Gummy Cubs when it pops (room.js popMonster), each popped by a jump.
+//
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
@@ -140,6 +151,15 @@ export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 export const GOLEM_BODY = { radius: 0.85, height: 1.75 };
 // A Lava Ghost: a blob's width but taller, hanging in the air a little way.
 export const GHOST_BODY = { radius: 0.45, height: 0.95 };
+// A Snappy Crab: wider than a blob and lower.
+export const SNAPPER_BODY = { radius: 0.5, height: 0.6 };
+// A Puffshroom: a blob's width, a little taller, its cap on top.
+export const SHROOM_BODY = { radius: 0.5, height: 1.0 };
+// A Little Yeti: about as tall as you, and broad.
+export const YETI_BODY = { radius: 0.62, height: 1.35 };
+// A Gummy Bear: up to your middle and more; a Gummy Cub, half that.
+export const GUMMY_BODY = { radius: 0.48, height: 0.95 };
+export const CUB_BODY = { radius: 0.3, height: 0.55 };
 // King Grumble: as tall as a player and much wider, slower still, with
 // bigger hops.
 export const KING_BODY = { radius: 0.95, height: 1.8 };
@@ -158,6 +178,11 @@ const KING_MARCH = { walk: 1.4, run: 1.4, jump: 9 };
 // The crosser he gets, the sooner the next (every, by rage, from landing).
 export const STOMP = { every: 6500, windup: 900, reach: 6, jump: 10.5 };
 const STOMP_EVERY = [6500, 4500, 3200];
+// A Little Yeti stomps the same way, nearer and not as high; down from one,
+// it sits dazed a moment too, bumping nobody.
+export const YETI_STOMP = { every: 6000, windup: 850, reach: 3.5, jump: 8 };
+// Who stomps, and how.
+export const stompOf = (kind) => (kind === 'king' ? STOMP : kind === 'yeti' ? YETI_STOMP : null);
 export const DAZE_MS = 2200;
 export const DAZED_HIT = 3;
 // Bumping: how close (between middles, side to side) and how long it stops
@@ -237,6 +262,18 @@ export const KINDS = {
   // The Queen Mosquito: many hearts, a bump twice a giant mosquito's, and
   // nobody lands on her — she is up in the air, like her little cousins.
   queen: { hearts: 14, bump: 2, land: 0, move: { walk: 2, run: 5 }, cross: { walk: 2, run: 6.4 } },
+  // A Snappy Crab scuttles quicker than a blob hops (never as quick as you
+  // run), and pops at one landing on its shell.
+  snapper: { hearts: 2, bump: 1, land: Infinity, move: { walk: 2.4, run: 5, jump: 7 }, cross: { walk: 2.4, run: 6.4, jump: 7 } },
+  // A Puffshroom shuffles slowly, its spores doing most of the hurting
+  // (SPORES); its cap is bouncy, two landings.
+  shroom: { hearts: 4, bump: 1, land: 2, move: { walk: 1, run: 2.6, jump: 7 }, cross: { walk: 1, run: 3.6, jump: 7 } },
+  // A Little Yeti lumbers, and stomps (YETI_STOMP); three landings.
+  yeti: { hearts: 6, bump: 2, land: 2, move: { walk: 1.5, run: 3.6, jump: 9 }, cross: { walk: 1.5, run: 5, jump: 9 } },
+  // A Gummy Bear: two landings, and it splits in two (room.js).
+  gummy: { hearts: 4, bump: 1, land: 2, move: { walk: 1.8, run: 4, jump: 9 }, cross: { walk: 1.8, run: 5.6, jump: 9 } },
+  // A Gummy Cub: quick, one heart, one landing.
+  cub: { hearts: 1, bump: 1, land: Infinity, move: { walk: 2.4, run: 4.8, jump: 8 }, cross: { walk: 2.4, run: 6.2, jump: 8 } },
 };
 export const kindOf = (kind) => KINDS[kind] ?? KINDS.blob;
 // Which kind comes out, by day and at night: the rest are blobs. A giant
@@ -255,6 +292,11 @@ export const MOSQUITO_HOVER = { high: 2.3, low: 1.0, march: 1.1, up: 3 };
 // bumps' worth of HP (monsters.js BUMP_HP): half that in Knight Armor or a
 // Fire Suit. One breath every GHOST_FIRE.every while it is after someone.
 export const GHOST_FIRE = { first: 1500, every: 3200, windup: 750, ms: 1000, reach: 4.5, angle: 0.4, bumps: 1.5 };
+// A Puffshroom's cloud of spores: after a while chasing someone it swells up
+// (long enough to see it coming), then puffs a cloud as far as reach all
+// round it, taking this many bumps' worth of HP off whoever is in it, once.
+// The next one comes every this long.
+export const SPORES = { first: 1800, every: 4200, windup: 900, reach: 2.8, bumps: 1 };
 // How high a Lava Ghost floats over the ground (or the lava) beneath it: low
 // enough to bop, high enough that nobody lands on it by jumping.
 export const GHOST_HOVER = { high: 1.5, chase: 1.0, up: 2.5 };
@@ -264,15 +306,15 @@ export const GHOST_HOVER = { high: 1.5, chase: 1.0, up: 2.5 };
 const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
-export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen'];
+export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
 // it: up out of it he only ever hops or giggles (see step).
 export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
 // The heavy ones: a bigger knock when they bump you, and a bigger pop.
-export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem' || kind === 'queen';
+export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem' || kind === 'queen' || kind === 'yeti';
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -356,6 +398,8 @@ export class MonsterSim {
     this.ups = [];
     // And the hearts the Queen Mosquito got back (see takeHealed).
     this.healed = [];
+    // And the Puffshrooms' clouds of spores (see takePuffs).
+    this.puffs = [];
   }
 
   get(id) {
@@ -443,9 +487,18 @@ export class MonsterSim {
     return out;
   }
 
+  // Who a Lava Ghost's fire burned, or a Puffshroom's spores got: { monster,
+  // pid, spores }.
   takeBurns() {
     const out = this.burns;
     this.burns = [];
+    return out;
+  }
+
+  // The clouds of spores puffed: { monster, x, y, z } each.
+  takePuffs() {
+    const out = this.puffs;
+    this.puffs = [];
     return out;
   }
 
@@ -581,14 +634,17 @@ export class MonsterSim {
       // King Grumble's stomp only ever counts down while he is after someone.
       if (!target) m.stompAt = 0;
       // A Lava Ghost's breath of fire counts down only while it is after
-      // someone too: with nobody to breathe at, it gives up on one.
-      if (!target && m.kind === 'ghost') {
+      // someone too: with nobody to breathe at, it gives up on one (and a
+      // Puffshroom on its spores).
+      if (!target && (m.kind === 'ghost' || m.kind === 'shroom')) {
         m.windup = 0;
         m.fireAt = 0;
       }
       let mx = 0;
       let mz = 0;
-      const every = STOMP_EVERY[m.rage ?? 0] ?? STOMP.every;
+      // How it stomps, if it does (King Grumble crosser, the sooner).
+      const stomp = stompOf(m.kind);
+      const every = m.kind === 'king' ? (STOMP_EVERY[m.rage ?? 0] ?? STOMP.every) : (stomp?.every ?? STOMP.every);
       if (now < (m.dazed ?? 0)) {
         m.state = 'dazed';
       } else if (now < m.giggle) {
@@ -597,10 +653,21 @@ export class MonsterSim {
         // Crouched for a stomp, then up he goes, straight up, so he comes
         // down just where the ring on the ground said he would.
         // (A Lava Ghost rearing back to breathe fire uses the same windup.)
-        m.state = m.windup ? (m.kind === 'ghost' ? 'breathe' : 'stomp') : 'chase';
+        m.state = m.windup ? (m.kind === 'ghost' ? 'breathe' : m.kind === 'shroom' ? 'puff' : 'stomp') : 'chase';
         if (m.windup && now >= m.windup) {
           m.windup = 0;
-          if (m.kind === 'ghost') {
+          if (m.kind === 'shroom') {
+            // Swollen up: out puffs its cloud of spores, all round it, and
+            // whoever is in it gets a lungful (see takePuffs and takeBurns).
+            m.state = 'puff';
+            m.fireAt = now + SPORES.every;
+            this.puffs.push({ monster: m, x: b.x, y: b.y, z: b.z });
+            for (const p of people) {
+              if (p.riding || p.dizzy || sheltered(p) || now < (p.safeUntil ?? 0)) continue;
+              if (Math.hypot(p.x - b.x, p.z - b.z) > SPORES.reach || Math.abs(p.y - b.y) > 2) continue;
+              this.burns.push({ monster: m, pid: p.id, spores: true });
+            }
+          } else if (m.kind === 'ghost') {
             // Rearing back is over: the jet of fire pours out now, the way it
             // faced (see fires, which the host tells everyone about).
             m.state = 'breathe';
@@ -613,7 +680,7 @@ export class MonsterSim {
             m.slam = true;
             b.vx = 0;
             b.vz = 0;
-            b.vy = STOMP.jump;
+            b.vy = (stomp ?? STOMP).jump;
             b.onGround = false;
           }
         }
@@ -658,11 +725,22 @@ export class MonsterSim {
             mz = 0;
           }
         }
-        if (m.kind === 'king' && b.onGround && !m.slam) {
+        // A Puffshroom swells up to puff its spores at whoever is near.
+        if (m.kind === 'shroom' && !m.windup) {
+          if (!m.fireAt) m.fireAt = now + SPORES.first;
+          else if (now >= m.fireAt && d < SPORES.reach + 0.5) {
+            m.fireAt = 0;
+            m.windup = now + SPORES.windup;
+            m.state = 'puff';
+            mx = 0;
+            mz = 0;
+          }
+        }
+        if (stomp && b.onGround && !m.slam) {
           if (!m.stompAt) m.stompAt = now + every * 0.6;
-          else if (now >= m.stompAt && d < STOMP.reach + 2) {
+          else if (now >= m.stompAt && d < stomp.reach + 2) {
             m.stompAt = 0;
-            m.windup = now + STOMP.windup;
+            m.windup = now + stomp.windup;
             m.state = 'stomp';
             mx = 0;
             mz = 0;
@@ -798,7 +876,7 @@ export class MonsterSim {
         m.slam = false;
         m.stompAt = now + every;
         m.dazed = now + DAZE_MS;
-        this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z });
+        this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z, reach: (stomp ?? STOMP).reach });
       }
       // Stuck at a wall while chasing: off to one side for a moment.
       if (events.bumped && m.state === 'chase' && !(m.detour && now < m.detour.until) && Math.hypot(b.vx, b.vz) < 0.5) {

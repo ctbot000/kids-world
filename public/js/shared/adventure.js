@@ -36,6 +36,7 @@ import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
 import { Chests } from './treasure.js';
+import { chapterOf } from './isle-story.js';
 
 // A camp's fence goes round this far from its flag; King Grumble's castle
 // is a square this far from its middle to its walls.
@@ -135,6 +136,11 @@ const BOOK = {
   ghost: { icon: '👻', name: 'Lava Ghost' },
   golem: { icon: '🗿', name: 'Stone Golem' },
   queen: { icon: '👑', name: 'Queen Mosquito' },
+  snapper: { icon: '🦀', name: 'Snappy Crab' },
+  shroom: { icon: '🍄', name: 'Puffshroom' },
+  yeti: { icon: '❄️', name: 'Little Yeti' },
+  gummy: { icon: '🧸', name: 'Gummy Bear' },
+  cub: { icon: '🍬', name: 'Gummy Cub' },
   king: { icon: '🤴', name: 'King Grumble' },
 };
 export const MONSTER_BOOK = MONSTER_LOG.map((kind) => ({ kind, ...BOOK[kind] }));
@@ -268,7 +274,10 @@ function choose(world, map, rng, { r, square, far, taken, mines, vehicles }) {
 // is, it stays), and lays the gloomy ground: all of the camp, and some
 // round it, ragged at the edge. Nothing stays standing on it, and no jewel
 // shows in it.
-function flatten(world, map, pal, spot) {
+// sheer (Adventure Isle's maps): round its edge, land much higher or lower
+// than the camp is left as it is — a cliff stays a cliff — rather than eased
+// into a slope (one that would be a way up it).
+export function flatten(world, map, pal, spot, sheer = false) {
   const { cx, cz, level, r, square } = spot;
   const { H, D } = world;
   const outer = r + 3;
@@ -283,6 +292,7 @@ function flatten(world, map, pal, spot) {
       if (wet && d > r + 1) continue;
       const g = map.ground[k];
       const t = d <= r + 1 ? 0 : Math.min(1, (d - (r + 1)) / (outer + 0.5 - (r + 1)));
+      if (sheer && t > 0 && Math.abs(g - level) >= 3) continue;
       const target = wet ? level : Math.round(level + (g - level) * t * t * (3 - 2 * t));
       for (let y = target + 1; y < H; y++) if (world.get(x, y, z) !== B.AIR) world.set(x, y, z, B.AIR);
       if (target > g) for (let y = g + 1; y <= target; y++) world.set(x, y, z, y === target ? pal.top : pal.under);
@@ -296,19 +306,23 @@ function flatten(world, map, pal, spot) {
 // A camp's fence: logs round it, every other one a little taller, with two
 // ways in (one facing the start, one behind), each with a lamp on a post at
 // either side; a little stone floor for the flag in the middle, and hay
-// bales for the monsters to sleep on.
-function campFence(world, rng, spot, gate) {
+// bales for the monsters to sleep on. gate: the way in facing the start (the
+// other is behind), or the angle of every way in; style: what the fence is
+// made of, its posts, lamps, floor and beds (Adventure Isle's camps are
+// each made of what their corner of the isle has, isle-maps.js).
+export function campFence(world, rng, spot, gate, style = {}) {
+  const { post = B.WOOD, lamp = B.LAMP, floor = B.PEBBLES, bed = B.HAY } = style;
   const { cx, cz, r } = spot;
   const y0 = spot.level + 1;
   const half = 1.6 / r;
-  const ways = [gate, gate + Math.PI];
+  const ways = Array.isArray(gate) ? gate : [gate, gate + Math.PI];
   for (let dx = -r - 1; dx <= r + 1; dx++) {
     for (let dz = -r - 1; dz <= r + 1; dz++) {
       const d = Math.hypot(dx, dz);
       const a = Math.atan2(dz, dx);
       if (d < r - 0.5 || d >= r + 0.5 || ways.some((w) => Math.abs(wrap(a - w)) < half)) continue;
       const tall = ((dx + dz) & 1) === 0 ? 3 : 2;
-      for (let y = 0; y < tall; y++) world.set(cx + dx, y0 + y, cz + dz, B.WOOD);
+      for (let y = 0; y < tall; y++) world.set(cx + dx, y0 + y, cz + dz, post);
     }
   }
   for (const w of ways) {
@@ -316,11 +330,11 @@ function campFence(world, rng, spot, gate) {
       const a = w + side * (half + 0.9 / r);
       const x = cx + Math.round(Math.cos(a) * r);
       const z = cz + Math.round(Math.sin(a) * r);
-      for (let y = 0; y < 3; y++) world.set(x, y0 + y, z, B.WOOD);
-      world.set(x, y0 + 3, z, B.LAMP);
+      for (let y = 0; y < 3; y++) world.set(x, y0 + y, z, post);
+      world.set(x, y0 + 3, z, lamp);
     }
   }
-  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(cx + dx, y0, cz + dz, B.PEBBLES);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(cx + dx, y0, cz + dz, floor);
   for (let tries = 0, hay = 0; tries < 40 && hay < 3; tries++) {
     const a = rng.range(-Math.PI, Math.PI);
     if (ways.some((w) => Math.abs(wrap(a - w)) < 0.8)) continue;
@@ -328,7 +342,7 @@ function campFence(world, rng, spot, gate) {
     const x = cx + Math.round(Math.cos(a) * d);
     const z = cz + Math.round(Math.sin(a) * d);
     if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) <= 2 || world.get(x, y0, z) !== B.AIR) continue;
-    world.set(x, y0, z, B.HAY);
+    world.set(x, y0, z, bed);
     hay++;
   }
 }
@@ -336,8 +350,11 @@ function campFence(world, rng, spot, gate) {
 // King Grumble's castle: stone walls five high with battlements and a purple
 // stripe, a tower at each corner with a lamp on top, lamps in the middle of
 // the walls, and a way in, three wide and four high, in the wall facing the
-// start; the stone floor for his flag in the middle of the yard.
-function castleWalls(world, spot, side) {
+// start; the stone floor for his flag in the middle of the yard. style:
+// what it is made of (Adventure Isle's lairs, isle-maps.js): its walls, the
+// stripe along them, its towers, lamps and floor.
+export function castleWalls(world, spot, side, style = {}) {
+  const { wall = B.BRICK_WALL, stripe = PURPLE, tower = wall, lamp = B.LAMP, floor = B.PEBBLES } = style;
   const { cx, cz, r: R } = spot;
   const y0 = spot.level + 1;
   for (let dx = -R - 1; dx <= R + 1; dx++) {
@@ -347,14 +364,14 @@ function castleWalls(world, spot, side) {
       const x = cx + dx;
       const z = cz + dz;
       if (ax >= R - 1 && az >= R - 1) {
-        for (let y = 0; y < 8; y++) world.set(x, y0 + y, z, B.BRICK_WALL);
-        if (ax === R && az === R) world.set(x, y0 + 8, z, B.LAMP);
-        else if (((dx + dz) & 1) === 0) world.set(x, y0 + 8, z, B.BRICK_WALL);
+        for (let y = 0; y < 8; y++) world.set(x, y0 + y, z, tower);
+        if (ax === R && az === R) world.set(x, y0 + 8, z, lamp);
+        else if (((dx + dz) & 1) === 0) world.set(x, y0 + 8, z, tower);
         continue;
       }
       if (Math.max(ax, az) !== R) continue;
-      for (let y = 0; y < 5; y++) world.set(x, y0 + y, z, y === 3 && ((dx + dz) & 3) === 0 ? PURPLE : B.BRICK_WALL);
-      if (((dx + dz) & 1) === 0) world.set(x, y0 + 5, z, B.BRICK_WALL);
+      for (let y = 0; y < 5; y++) world.set(x, y0 + y, z, y === 3 && ((dx + dz) & 3) === 0 ? stripe : wall);
+      if (((dx + dz) & 1) === 0) world.set(x, y0 + 5, z, wall);
     }
   }
   for (const [sx, sz] of [
@@ -368,10 +385,10 @@ function castleWalls(world, spot, side) {
     if (sx === side[0] && sz === side[1]) {
       for (let p = -1; p <= 1; p++) for (let y = 0; y < 4; y++) world.set(x + (sz ? p : 0), y0 + y, z + (sx ? p : 0), B.AIR);
     } else {
-      world.set(x, y0 + 2, z, B.LAMP);
+      world.set(x, y0 + 2, z, lamp);
     }
   }
-  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(cx + dx, y0, cz + dz, B.PEBBLES);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(cx + dx, y0, cz + dz, floor);
 }
 
 // Builds an adventure island's camps and King Grumble's castle on a newly
@@ -449,10 +466,18 @@ const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), h
 export class AdventureSim {
   // camps: as buildCamps makes them (and saves keep them), with whether
   // each is free; won: King Grumble popped, and the whole island free;
-  // stage: the public adventure island's, for how hard its monsters are.
-  constructor({ camps = [], won = false, stage = 1 } = {}, seed = 1) {
+  // stage: the public adventure island's, for how hard its monsters are;
+  // story: whether this is that island, a chapter of its story with a map
+  // of its own (isle-maps.js), whose monsters the chapter has (its guards,
+  // and the helpers King Grumble calls), and gates: the gates shut across
+  // its way, each { camp, x, y, z, cells } — freeing that camp opens it
+  // (cells, an edit, are what it becomes); chestSpots: where its treasure
+  // chests may turn up, beside its way (treasure.js).
+  constructor({ camps = [], won = false, stage = 1, story = false, gates = [], chestSpots = null } = {}, seed = 1) {
     this.rng = new Rng(seed);
     this.stage = cleanStage(stage);
+    this.story = story ? chapterOf(this.stage) : null;
+    this.gates = gates.map((g) => ({ ...g, open: Boolean(won) }));
     this.camps = camps.map((c) => {
       const freed = Boolean(c.freed) || Boolean(won);
       return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false, queen: false };
@@ -471,7 +496,7 @@ export class AdventureSim {
     this.gashaRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
     // The treasure chests (treasure.js), on the shared isle only, with
     // randomness of their own too.
-    this.chests = new Chests((seed ^ 0x85ebca6b) >>> 0);
+    this.chests = new Chests((seed ^ 0x85ebca6b) >>> 0, chestSpots);
   }
 
   // The treasure chests, now and then (the room asks only on the shared
@@ -619,14 +644,16 @@ export class AdventureSim {
   }
 
   // Which kind a camp needs next: its mosquito, then whichever of the
-  // stage's tough ones it is missing, then a blob. The queen is not one of
-  // them: she is the deepest camp's own extra guard (addQueen).
+  // chapter's own monsters (on Adventure Isle) and the stage's tough ones it
+  // is missing, then a blob. The queen is not one of them: she is the
+  // deepest camp's own extra guard (addQueen).
   guardKind(c, monsters) {
     const here = monsters.list.filter((m) => m.camp === c.id && m.kind !== 'queen').map((m) => m.kind);
     if (!here.includes('mosquito')) return 'mosquito';
     const have = new Map();
     for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
-    for (const k of toughGuards(this.stage)) {
+    have.set('mosquito', have.get('mosquito') - 1);
+    for (const k of [...(this.story?.guards ?? []), ...toughGuards(this.stage)]) {
       if ((have.get(k) ?? 0) > 0) have.set(k, have.get(k) - 1);
       else return k;
     }
@@ -662,7 +689,7 @@ export class AdventureSim {
     const by = people.filter((p) => campDistance(c, p.x, p.z) <= c.r + 12).map((p) => p.id);
     const won = !this.castle && this.camps.every((o) => o.freed);
     if (won) this.won = true;
-    return { t: 'freed', camp: c, by, gone, shieldDown: shielded && !this.shielded, won };
+    return { t: 'freed', camp: c, by, gone, shieldDown: shielded && !this.shielded, won, gates: this.openGates(c.id) };
   }
 
   // King Grumble's yard: in his bubble he is no trouble; out of it, he calls
@@ -693,9 +720,17 @@ export class AdventureSim {
         const x = king.body.x + Math.sin(a) * 2.2;
         const z = king.body.z + Math.cos(a) * 2.2;
         const y = standHeight(world, x, z, king.body.y + 1) ?? king.body.y;
-        monsters.add(world, x, y, z, { camp: c.id });
+        monsters.add(world, x, y, z, { camp: c.id, kind: this.story?.minion ?? 'blob' });
       }
     }
+  }
+
+  // The gates freeing camp `id` opens (all still shut, with none): opened
+  // now, for the room to open on the island.
+  openGates(id = 0) {
+    const out = this.gates.filter((g) => !g.open && (!id || g.camp === id));
+    for (const g of out) g.open = true;
+    return out;
   }
 
   // The Monster Gashapon, now and then (the room asks only on the shared
@@ -758,10 +793,11 @@ export class AdventureSim {
 
   // One of a camp's monsters popped (or gone by itself): back it comes in a
   // while, while the camp is not free. King Grumble's helpers and the Queen
-  // Mosquito do not: popping her is that camp's own little victory.
+  // Mosquito do not: popping her is that camp's own little victory. Nor do
+  // Gummy Cubs: a Gummy Bear split into them, and it comes back whole.
   guardGone(m, now) {
     const c = this.campById(m.camp);
-    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king' || m.kind === 'queen') return;
+    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king' || m.kind === 'queen' || m.kind === 'cub') return;
     c.back.push(now + GUARD_BACK_MS);
   }
 
