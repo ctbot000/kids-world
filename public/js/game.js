@@ -35,6 +35,7 @@ import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, SPORES, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
+import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
@@ -6362,6 +6363,32 @@ export class Game extends EventTarget {
     return { jumped: false, landed: 0, splashed: false, bumped: false };
   }
 
+  // Come onto an escalator's steps (from fromY, where your feet were before
+  // this step): from now on they carry you.
+  boardEscalator(fromY) {
+    const ride = boardEscalator(this.world, this.me.body, fromY);
+    if (!ride) return;
+    this.escalator = ride;
+    this.sound.play('escalator', { up: ride.way > 0 });
+    this.profile.count('escalators');
+    if (!this.toldEscalator) {
+      this.toldEscalator = true;
+      this.emit('toast', { icon: '↗️', text: `An escalator! Stand still and it carries you ${ride.way > 0 ? 'up' : 'down'} — walk along it to go quicker.` });
+    }
+  }
+
+  // Carried along the escalator you are on, walking along it (the part of
+  // where you head that goes along it) and hopping as you like; at its end,
+  // or with the steps gone from under you, off you go on your own.
+  rideEscalator(dt, mx, mz, jump, run, gear) {
+    const move = { ...MOVE, ...gear };
+    const ride = this.escalator;
+    const walk = (mx * ride.dx + mz * ride.dz) * (run ? move.run : move.walk);
+    const events = stepEscalator(this.world, this.me.body, ride, dt, { walk, jump: jump ? move.jump : 0, accel: move.groundAccel, gravity: move.gravity });
+    if (events.off || events.gone) this.escalator = null;
+    return events;
+  }
+
   // Hidden while you look through your own eyes, and blinking for a moment
   // after a monster bumps into you.
   selfVisible(on) {
@@ -6440,12 +6467,21 @@ export class Game extends EventTarget {
     const gear = gearMove(this.profile.data.gear, MOVE);
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
-    const events = this.lift ? this.rideLift(dt) : !still && this.boardLift(input) ? this.rideLift(dt) : stepBody(w, b, { mx, mz, jump: !still && input.jump && !this.liftLatch, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true, move: gear });
+    const jump = !still && input.jump && !this.liftLatch;
+    const fromY = b.y;
+    const events = this.lift
+      ? this.rideLift(dt)
+      : !still && this.boardLift(input)
+        ? this.rideLift(dt)
+        : this.escalator
+          ? this.rideEscalator(dt, mx, mz, jump, input.run, gear)
+          : stepBody(w, b, { mx, mz, jump, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true, move: gear });
+    if (!this.lift && !this.escalator && !events.off) this.boardEscalator(fromY);
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
     if (this.monsters.size) this.stomp();
     // Walked into someone, an animal, a monster or a pet: back out of them.
-    if (!this.lift) keepApart(w, b, this.standing(), `p${this.pid}`);
+    if (!this.lift && !this.escalator) keepApart(w, b, this.standing(), `p${this.pid}`);
     if (!this.toldLift && !this.lift && padUnder(w, b)) {
       this.toldLift = true;
       this.emit('toast', { icon: '🛗', text: `An elevator! ${this.touch ? 'Jump' : 'Press Space'} to go up, ${this.touch ? '⬇️' : 'Shift'} to go down.` });
@@ -6454,8 +6490,11 @@ export class Game extends EventTarget {
       this.toldBounce = true;
       this.emit('toast', { icon: '🤸', text: `A trampoline! Hold ${this.touch ? 'jump' : 'Space'} to bounce higher and higher, ${this.touch ? '⬇️' : 'Shift'} to stop.` });
     }
-    const speed = Math.hypot(b.vx, b.vz);
-    if (speed > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
+    // On an escalator you face the way you go, but your feet only walk as
+    // fast as you walk along its steps.
+    const going = Math.hypot(b.vx, b.vz);
+    if (going > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
+    const speed = this.escalator ? Math.abs(this.escalator.v - this.escalator.way * ESCALATOR_SPEED) : going;
     me.speed = speed;
     // Hooping, the hips swing on the spot; walking or jumping drops the hoop.
     if (this.hooping && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;

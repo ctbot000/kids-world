@@ -159,6 +159,14 @@ export class Sound {
         this.noise(0.5, { freq: 500, gain: 0.04 });
         break;
       }
+      case 'escalator': {
+        // Onto the moving steps: a soft clack, and a little hum going up
+        // (or down) with them.
+        const up = opts.up !== false;
+        this.noise(0.05, { type: 'bandpass', freq: 1800, q: 1.2, gain: 0.08 });
+        this.tone(up ? 200 : 250, { type: 'triangle', attack: 0.05, decay: 0.5, gain: 0.05, slide: up ? 250 : 200 });
+        break;
+      }
       case 'ding':
         this.tone(1320, { decay: 0.5, gain: 0.12 });
         this.tone(1760, { at: 0.12, decay: 0.6, gain: 0.1 });

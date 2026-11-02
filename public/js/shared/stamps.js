@@ -454,6 +454,54 @@ function elevatorTower() {
   return c.list();
 }
 
+// A shopping mall: an up escalator straight ahead and a down one beside it
+// to its right, from the floor up to the mall's upper floor and back down.
+// Up there, glass round its edge, a café of two tea tables, a gashapon
+// machine and an arcade machine; down under it, a shop counter with shelves
+// behind it. Lamps in the ceiling and by the walls, plants by the pillars.
+function mall() {
+  const c = new Cells();
+  // Room to walk and to ride, on a floor of tiles.
+  c.box(-4, 0, 0, 5, 7, 12, B.AIR);
+  c.box(-4, -1, 0, 5, -1, 12, B.CHECKER_FLOOR);
+  // The upper floor on a pillar at each corner, with lamps in its ceiling,
+  // and glass round its edge, but where the escalators come up.
+  c.box(-4, 4, 7, 5, 4, 12, B.CHECKER_FLOOR);
+  for (const x of [-4, 5]) for (const z of [7, 12]) c.box(x, 0, z, x, 3, z, WHITE);
+  for (const x of [-2, 3]) c.put(x, 4, 10, B.LAMP);
+  for (let x = -4; x <= 5; x++) {
+    if (x !== 0 && x !== 1) c.put(x, 5, 7, B.GLASS);
+    c.put(x, 5, 12, B.GLASS);
+  }
+  for (let z = 8; z < 12; z++) {
+    c.put(-4, 5, z, B.GLASS);
+    c.put(5, 5, z, B.GLASS);
+  }
+  // The escalators, a step up and along at a time, five steps high.
+  for (let i = 0; i < 5; i++) {
+    c.put(0, i, 2 + i, B.ESCALATOR);
+    c.put(1, i, 2 + i, B.ESCALATOR_DOWN);
+  }
+  // Upstairs: two tea tables with a chair either side, and the machines.
+  for (const z of [8, 10]) {
+    c.put(-2, 5, z, B.TEA_TABLE);
+    c.put(-3, 5, z, B.turnedTo(B.CHAIR, 0));
+    c.put(-1, 5, z, B.turnedTo(B.CHAIR, 2));
+  }
+  c.put(3, 5, 11, B.GASHAPON);
+  c.put(4, 5, 11, B.ARCADE_BLOB);
+  c.put(-3, 5, 11, B.FLOOR_LAMP);
+  c.put(4, 5, 8, B.POTTED_PLANT);
+  // Downstairs: a shop counter, shelves behind it, a lamp and plants.
+  for (let x = -3; x <= -1; x++) {
+    c.put(x, 0, 10, B.COUNTER);
+    c.put(x, 0, 11, B.BOOKSHELF);
+  }
+  c.put(4, 0, 11, B.FLOOR_LAMP);
+  for (const x of [-3, 4]) c.put(x, 0, 7, B.POTTED_PLANT);
+  return c.list();
+}
+
 // A bouncy castle: a floor of trampolines inside soft walls, with a turret
 // at each corner and the way in at the front.
 function bouncyCastle() {
@@ -953,6 +1001,7 @@ export const STAMPS = [
   { key: 'katsura', name: 'Katsura Tree', icon: '🍂', cells: katsura() },
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
+  { key: 'mall', name: 'Shopping Mall', icon: '🏬', cells: mall() },
   { key: 'bouncy-castle', name: 'Bouncy Castle', icon: '🤸', cells: bouncyCastle() },
   { key: 'circus-tent', name: 'Circus Tent', icon: '🎪', cells: circusTent() },
   { key: 'camping-tent', name: 'Camping Tent', icon: '⛺', cells: campingTent() },

@@ -4,6 +4,7 @@
 // fruit to face you, ripple the water and drift the lava.
 import * as THREE from '../../vendor/three.module.js';
 import { BLOCKS, isTreeFoot } from '../shared/blocks.js';
+import { piecesBeside } from '../shared/escalator.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
 import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
@@ -12,6 +13,7 @@ import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { tankMaterials, tankModel } from './fishtank-model.js';
 import { clockMaterials, clockModel } from './clock-model.js';
 import { campfireMaterials, campfireModel } from './campfire-model.js';
+import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
@@ -695,7 +697,7 @@ export class Terrain {
     // Furniture drawn as real models (a gashapon), each turned to face the
     // way it does.
     for (const [x, y, z, id] of data.reals) {
-      const model = this.realModel(BLOCKS[id].real);
+      const model = this.realModel(BLOCKS[id].real, [x, y, z, id]);
       if (!model) continue;
       model.position.set(x + 0.5, y, z + 0.5);
       model.rotation.y = FACING[BLOCKS[id].front] ?? 0;
@@ -704,8 +706,9 @@ export class Terrain {
       model.traverse((o) => (o.matrixAutoUpdate = false));
       group.add(model);
       // A fan's blades go round, a tank's fish swim and a clock's pendulum
-      // swings, each at a time of its own.
-      if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
+      // swings, each at a time of its own; an escalator's steps go along
+      // together, from piece to piece.
+      if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : model.userData.together ? 0 : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
       // A tank, to be fed by its cell (game.js feedFish).
       if (model.userData.feed) this.tanks.set(`${x},${y},${z}`, model);
       if (model.userData.campfire) {
@@ -718,8 +721,14 @@ export class Terrain {
   }
 
   // A real model of a piece of furniture, by what it is, in materials made
-  // once for the island's light.
-  realModel(kind) {
+  // once for the island's light. cell: where it stands, [x, y, z, block],
+  // for one that joins up with the pieces beside it (an escalator).
+  realModel(kind, cell = null) {
+    if (kind === 'escalator') {
+      this.escalatorMaterials ??= escalatorMaterials(toyMaterial);
+      const [x, y, z, id] = cell;
+      return escalatorModel(this.escalatorMaterials, { way: BLOCKS[id].escalator, ...piecesBeside(this.world, x, y, z) });
+    }
     if (kind === 'gashapon') {
       this.gashaponMaterials ??= gashaponMaterials(toyMaterial);
       return gashaponModel(this.gashaponMaterials);
@@ -757,6 +766,8 @@ export class Terrain {
     // A real model's shapes are shared by all of them, and kept.
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
     for (const cell of chunk.campfires ?? []) this.campfires.delete(cell);
+    // What a model keeps of its own (where an escalator's steps are).
+    for (const { model } of chunk.movers) model.userData.dispose?.();
     for (const { model } of chunk.movers) if (model.userData.feed) {
       for (const [cell, m] of this.tanks) if (m === model) this.tanks.delete(cell);
     }

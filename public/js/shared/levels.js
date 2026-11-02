@@ -42,6 +42,7 @@ export const XP_FOR = {
   drilled: { xp: 0.2 },
   railed: { xp: 0.1 },
   lifts: { xp: 2, cap: 100 },
+  escalators: { xp: 2, cap: 100 },
   bounces: { xp: 0.5, cap: 400 },
   campouts: { xp: 10 },
   freed: { xp: 50 },

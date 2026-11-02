@@ -68,6 +68,28 @@ const chestBody = () => [box(0.12, 0, 0.22, 0.88, 0.46, 0.82, '#a8692f', 'planks
 const chestBands = (top) =>
   [0.2, 0.72].flatMap((x) => [box(x, 0, 0.2, x + 0.08, top, 0.21, GOLD, 'plain'), box(x, top, 0.2, x + 0.08, top + 0.01, 0.84, GOLD, 'plain'), box(x, 0, 0.83, x + 0.08, top, 0.84, GOLD, 'plain')]);
 
+// An escalator's boxes (MODELS.escalator), going up (way 1) or down: its
+// steps between low steel sides, each topped with a black handrail, and a
+// green arrow on the floor where you get on, pointing the way it goes.
+function escalatorBoxes(way) {
+  const out = [];
+  for (let j = 0; j < 4; j++) {
+    const [z0, z1, top] = [j / 4, (j + 1) / 4, (j + 0.5) / 4];
+    out.push(box(0.18, 0, z0, 0.82, top, z1, '#9aa3ad', 'plain'), box(0.18, top, z0, 0.82, top + 0.015, z0 + 0.04, '#ffc928', 'plain'));
+    for (const x of [0.1, 0.82]) out.push(box(x, 0, z0, x + 0.08, top + 0.26, z1, STEEL, 'plain'), box(x - 0.01, top + 0.26, z0, x + 0.09, top + 0.31, z1, BLACK, 'plain'));
+  }
+  // The arrow: its shaft, then its head in two widths, along z the way it
+  // points, on the floor before the foot of an up one or past the top of a
+  // down one.
+  const [y, from, dir] = way > 0 ? [0, -0.36, 1] : [1, 1.36, -1];
+  const along = (a, b) => [Math.min(from + dir * a, from + dir * b), Math.max(from + dir * a, from + dir * b)];
+  for (const [x0, x1, a, b] of [[0.45, 0.55, 0, 0.2], [0.36, 0.64, 0.2, 0.26], [0.42, 0.58, 0.26, 0.32]]) {
+    const [z0, z1] = along(a, b);
+    out.push(box(x0, y, z0, x1, y + 0.012, z1, '#3fe07c', 'glow'));
+  }
+  return out;
+}
+
 const MODELS = {
   chair() {
     const out = [];
@@ -458,6 +480,14 @@ const MODELS = {
       box(0.42, 0.52, 0.26, 0.56, 0.6, 0.27, '#ff8a2a', 'glow'),
     ];
   },
+
+  // The escalators' boxes, for their pictures (render/escalator-model.js
+  // draws them for real): four steps from the floor at the front up to the
+  // back, edged in yellow, steel skirts up both sides, and a black handrail
+  // over each on two posts; a green light on the floor at the way on, at
+  // the foot of an up escalator and the top of a down one.
+  escalator: () => escalatorBoxes(1),
+  'escalator-down': () => escalatorBoxes(-1),
 
   // The campfire's boxes, for its picture (render/campfire-model.js draws
   // it for real): a ring of stones, logs crossed over embers, and flames.

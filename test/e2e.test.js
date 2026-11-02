@@ -1206,6 +1206,71 @@ test('on an elevator pad, Space rides up to the pad above and Shift back down, w
   await page.browserContext().close();
 });
 
+test('an Up Escalator from the toy box goes down with a click, two more clicks on it build it two steps higher, and its steps carry you up it onto the floor at the top, with a hint and a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Building', '#modal');
+  await until(page, () => [...document.querySelectorAll('#modal .choice img')].some((i) => i.alt === 'Up Escalator' && i.src.startsWith('data:image')));
+  await clickButton(page, 'Up Escalator', '#modal');
+  const up = await page.evaluate(async () => (await import('/js/shared/blocks.js')).ESCALATOR);
+  await until(page, (id) => window.kidsWorld.game.selectedBlock() === id, up);
+  const { cell, at } = await spotNear(page, 3, 0, { bare: true });
+  const foot = { ...cell, y: cell.y + 1 };
+  await page.mouse.click(at.x, at.y);
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) !== 0, foot);
+  // Its way up, away from its front (which faces you).
+  const [rx, rz] = await page.evaluate(async (c) => (await import('/js/shared/escalator.js')).runOf(window.kidsWorld.game.world.get(c.x, c.y, c.z)), foot);
+  // A click on the piece itself, wherever the camera sees it best: the next
+  // step goes on top of the escalator, a step up and along.
+  for (let n = 1; n <= 2; n++) {
+    const spot = await page.evaluate((c) => {
+      const kw = window.kidsWorld;
+      const r = kw.renderer;
+      for (let k = 0; k < 16; k++) {
+        r.view.yaw = (k * Math.PI) / 8;
+        r.view.pitch = 0.6;
+        r.view.dist = 6;
+        kw.step(1 / 60, 30);
+        const p = r.project(c.x + 0.5, c.y + 0.5, c.z + 0.5);
+        const rect = r.canvas.getBoundingClientRect();
+        const hit = kw.game.aim({ x: (p.x / rect.width) * 2 - 1, y: -(p.y / rect.height) * 2 + 1 })?.hit;
+        if (hit && hit.x === c.x && hit.y === c.y && hit.z === c.z && hit.ny !== -1 && document.elementFromPoint(rect.left + p.x, rect.top + p.y) === r.canvas) return { x: rect.left + p.x, y: rect.top + p.y };
+      }
+      return null;
+    }, foot);
+    assert.ok(spot, 'the escalator can be clicked');
+    await page.mouse.click(spot.x, spot.y);
+    await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === window.kidsWorld.game.world.get(c.fx, c.fy, c.fz), { x: foot.x + rx * n, y: foot.y + n, z: foot.z + rz * n, fx: foot.x, fy: foot.y, fz: foot.z });
+  }
+  // A deck at the top to step off onto, put down by the island.
+  await page.evaluate(
+    (c) => {
+      const room = window.kidsWorld.session.link.room;
+      for (let a = 3; a <= 5; a++) for (let s = -1; s <= 1; s++) room.natureCell([c.x + c.rx * a + c.rz * s, c.y + 2, c.z + c.rz * a + c.rx * s], 12);
+    },
+    { ...foot, rx, rz },
+  );
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) === 12, { x: foot.x + rx * 5, y: foot.y + 2, z: foot.z + rz * 5 });
+  // Standing in at its foot, still: up it goes, and off at the top.
+  await page.evaluate((c) => Object.assign(window.kidsWorld.game.me.body, { x: c.x + 0.5 - c.rx * 0.4, y: c.y, z: c.z + 0.5 - c.rz * 0.4, vx: 0, vy: 0, vz: 0 }), { ...foot, rx, rz });
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 20));
+  const riding = await page.evaluate(() => ({ on: Boolean(window.kidsWorld.game.escalator), y: window.kidsWorld.game.me.body.y }));
+  assert.ok(riding.on && riding.y > foot.y, `on its steps (${JSON.stringify(riding)})`);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('An escalator!')));
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
+  const top = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    return { y: b.y, on: Boolean(kw.game.escalator), sticker: Boolean(kw.profile.data.stickers['moving-stairs']) };
+  });
+  assert.equal(top.y, foot.y + 3, 'on the deck');
+  assert.ok(!top.on, 'stepped off');
+  assert.ok(top.sticker, 'a sticker for the ride');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on a trampoline, Space held bounces you higher and higher and a press of Shift stops you, with a hint and a sticker', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

@@ -470,6 +470,15 @@ export const DOORS = DOOR_COLORS.map(([key, name, color], i) => {
 // and a soft crackle beside it. It lights up the camp at night and burns
 // nothing. After the tent cloths, to camp by.
 export const CAMPFIRE = furniture(384, 'campfire', { name: 'Campfire', color: '#ff8a2a', after: CLOTHS[CLOTHS.length - 1], category: 'building', turns: false, light: 14, sound: 'wood', real: 'campfire' });
+// Escalators (shared/escalator.js, render/escalator-model.js): moving
+// stairs, a slope of steps across the cell from the floor at its front (its
+// foot, turned to face you) up to the floor of the cell above at its back.
+// Put the next one up a step and along from the last (a tap on one does)
+// for one as long as you like. Stand on one and its steps carry you up it,
+// or down a down one. Not solid: you are carried along its steps, not
+// stood on a block. After the elevator.
+export const ESCALATOR = furniture(385, 'escalator', { name: 'Up Escalator', color: '#aab3bf', after: ELEVATOR, category: 'building', solid: false, sound: 'stone', real: 'escalator', escalator: 1 });
+export const ESCALATOR_DOWN = furniture(389, 'escalator-down', { name: 'Down Escalator', color: '#aab3bf', after: 385, category: 'building', solid: false, sound: 'stone', real: 'escalator', escalator: -1 });
 // The block of the same door the other way round: swung open, or shut again.
 export const turnedDoor = (id) => {
   const d = BLOCKS[id];

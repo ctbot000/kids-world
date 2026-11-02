@@ -4,6 +4,7 @@
 //
 // An edit is a flat array [x, y, z, block, x, y, z, block, ...].
 import * as B from './blocks.js';
+import { runOf } from './escalator.js';
 import { cellHitsBody } from './physics.js';
 import { grownTree, placeTemplate, stampByKey } from './stamps.js';
 
@@ -143,9 +144,32 @@ export function furnitureFront(hit, id, facing) {
   return (((3 - facing) % 4) + 4) % 4;
 }
 
+// An escalator put down with a tap on an escalator carries on from it,
+// turned the same way: on its side, alongside it (a down one beside an up
+// one, say); anywhere else, a step up and along from the top of it, to make
+// it longer (only the same kind: an up one on an up one). Where it goes and
+// the block, turned, or null to put it down as anything else.
+export function escalatorBuild(world, hit, id) {
+  const on = B.block(hit.id);
+  if (!B.block(id).escalator || !on.escalator || hit.ny === -1) return null;
+  const [rx, rz] = runOf(hit.id);
+  const turned = B.turnedTo(id, on.front);
+  if (hit.ny === 0 && hit.nx * rx + hit.nz * rz === 0) return [hit.x + hit.nx, hit.y, hit.z + hit.nz, turned];
+  if (B.baseOf(id) !== on.base) return null;
+  let [x, y, z] = [hit.x, hit.y, hit.z];
+  while (world.get(x + rx, y + 1, z + rz) === hit.id) [x, y, z] = [x + rx, y + 1, z + rz];
+  return [x + rx, y + 1, z + rz, turned];
+}
+
 export function buildEdit(world, hit, id, size = 1, bodies = [], facing = 0) {
-  id = B.turnedTo(id, furnitureFront(hit, id, facing));
   const o = new Overlay(world);
+  const next = escalatorBuild(world, hit, id);
+  if (next) {
+    const [x, y, z, turned] = next;
+    if (world.inBounds(x, y, z) && y > 0 && B.isReplaceable(o.get(x, y, z))) o.set(x, y, z, turned);
+    return { cells: o.cells(), collected: [] };
+  }
+  id = B.turnedTo(id, furnitureFront(hit, id, facing));
   const [ox, oy, oz] = buildOrigin(hit);
   const kind = B.KIND[id];
   const small = kind === B.K_PLANT || kind === B.K_ITEM;
