@@ -459,6 +459,25 @@ const MODELS = {
     ];
   },
 
+  // The campfire's boxes, for its picture (render/campfire-model.js draws
+  // it for real): a ring of stones, logs crossed over embers, and flames.
+  campfire() {
+    const out = [box(0.18, 0, 0.18, 0.82, 0.02, 0.82, '#3a3431', 'plain')];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const x = 0.5 + Math.cos(a) * 0.32;
+      const z = 0.5 + Math.sin(a) * 0.32;
+      out.push(box(x - 0.07, 0, z - 0.07, x + 0.07, 0.11, z + 0.07, '#9aa0a8', 'stone'));
+    }
+    out.push(
+      box(0.26, 0.03, 0.46, 0.74, 0.11, 0.54, DARK_WOOD, 'wood-side'),
+      box(0.46, 0.03, 0.26, 0.54, 0.11, 0.74, DARK_WOOD, 'wood-side'),
+      box(0.36, 0.11, 0.36, 0.64, 0.4, 0.64, '#ff8a2a', 'glow'),
+      box(0.42, 0.4, 0.42, 0.58, 0.66, 0.58, '#ffd166', 'glow'),
+    );
+    return out;
+  },
+
   // The clocks' boxes, for their pictures (render/clock-model.js draws
   // them for real). A cuckoo clock on the wall: a wooden house, its roof,
   // a round face and a pendulum and weights hanging under it.

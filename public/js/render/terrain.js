@@ -11,6 +11,7 @@ import { gashaponMaterials, gashaponModel } from './gashapon-model.js';
 import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { tankMaterials, tankModel } from './fishtank-model.js';
 import { clockMaterials, clockModel } from './clock-model.js';
+import { campfireMaterials, campfireModel } from './campfire-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
 import { TILE } from './atlas.js';
@@ -430,6 +431,9 @@ export class Terrain {
     this.dirty = new Set();
     // The fish tanks and bowls, by their cells, to feed (game.js feedFish).
     this.tanks = new Map();
+    // The campfires drawn, by their cells, for their sparks and crackle
+    // (render/renderer.js): each its { x, y, z } cell.
+    this.campfires = new Map();
     this.world = null;
     this.light = null;
     this.studsOn = true;
@@ -704,6 +708,10 @@ export class Terrain {
       if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
       // A tank, to be fed by its cell (game.js feedFish).
       if (model.userData.feed) this.tanks.set(`${x},${y},${z}`, model);
+      if (model.userData.campfire) {
+        this.campfires.set(`${x},${y},${z}`, { x, y, z });
+        chunk.campfires = (chunk.campfires ?? []).concat(`${x},${y},${z}`);
+      }
     }
     this.group.add(group);
     this.chunks.set(key, chunk);
@@ -732,6 +740,10 @@ export class Terrain {
       this.clockMaterials ??= clockMaterials(toyMaterial);
       return clockModel(this.clockMaterials, kind);
     }
+    if (kind === 'campfire') {
+      this.campfireMaterials ??= campfireMaterials(toyMaterial);
+      return campfireModel(this.campfireMaterials);
+    }
     if (kind === 'rocking-chair') {
       this.rockingMaterials ??= rockingMaterials(toyMaterial);
       return rockingModel(this.rockingMaterials);
@@ -744,6 +756,7 @@ export class Terrain {
     this.group.remove(chunk.group);
     // A real model's shapes are shared by all of them, and kept.
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
+    for (const cell of chunk.campfires ?? []) this.campfires.delete(cell);
     for (const { model } of chunk.movers) if (model.userData.feed) {
       for (const [cell, m] of this.tanks) if (m === model) this.tanks.delete(cell);
     }

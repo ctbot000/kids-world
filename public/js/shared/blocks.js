@@ -465,6 +465,11 @@ export const DOORS = DOOR_COLORS.map(([key, name, color], i) => {
   furniture(id + DOOR_STEP, `door-${key}-open`, { name: `${name} Door`, color, after: id, category: false, sound: 'wood', door: 'open', solid: false });
   return shut;
 });
+// A campfire (render/campfire-model.js): a ring of stones round logs
+// leaning together, flames licking up out of them, sparks and smoke rising
+// and a soft crackle beside it. It lights up the camp at night and burns
+// nothing. After the tent cloths, to camp by.
+export const CAMPFIRE = furniture(384, 'campfire', { name: 'Campfire', color: '#ff8a2a', after: CLOTHS[CLOTHS.length - 1], category: 'building', turns: false, light: 14, sound: 'wood', real: 'campfire' });
 // The block of the same door the other way round: swung open, or shut again.
 export const turnedDoor = (id) => {
   const d = BLOCKS[id];

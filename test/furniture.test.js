@@ -570,3 +570,30 @@ test('in a rocking chair you rock with it: leaned the way it leans, your hips on
     }
   }
 });
+
+test('campfire: a ring of stones and flickering flames after the tent cloth that lights the camp, drawn as a real model', async () => {
+  const building = B.blocksIn('building');
+  assert.equal(building[building.indexOf(B.CLOTHS.at(-1)) + 1], B.CAMPFIRE, 'right after the tent cloth');
+  assert.ok(!B.block(B.CAMPFIRE).turns && B.block(B.CAMPFIRE).light >= 12);
+  for (const [x0, y0, z0, x1, y1, z1] of modelBoxes(B.CAMPFIRE)) assert.ok(x0 >= 0 && z0 >= 0 && y0 >= 0 && x1 <= 1 && y1 <= 1 && z1 <= 1, 'its picture inside its cell');
+
+  const THREE = await import('../public/vendor/three.module.js');
+  const { campfireMaterials, campfireModel, RING } = await import('../public/js/render/campfire-model.js');
+  const materials = campfireMaterials();
+  const model = campfireModel(materials);
+  const size = new THREE.Box3().setFromObject(model);
+  assert.ok(size.min.y >= 0 && size.max.y <= 1 && size.min.x >= -0.5 && size.max.x <= 0.5 && size.min.z >= -0.5 && size.max.z <= 0.5, 'it fits its cell');
+  assert.ok(RING.r + 0.1 < 0.5, 'its stones inside it');
+  assert.ok(model.children.some((m) => m.userData.flames), 'it has flames');
+  model.userData.tick(3.5);
+  assert.equal(materials.flame.uniforms.uTime.value, 3.5, 'they flicker');
+
+  // The mesher leaves its boxes out and says where it stands.
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1 });
+  w.set(5, 3, 6, B.CAMPFIRE);
+  const light = new LightMap(w);
+  light.computeAll();
+  const visuals = { faceLayer: new Int16Array(256 * 3), tint: new Uint8Array(256 * 3).fill(255), studTint: new Uint8Array(256 * 3).fill(200) };
+  assert.deepEqual(meshChunk(w, light, visuals, 0, 0).reals, [[5, 3, 6, B.CAMPFIRE]]);
+  assert.ok(light.lampAt(7, 3, 6) > 0, 'it lights the camp round it');
+});

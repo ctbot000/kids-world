@@ -796,6 +796,46 @@ export class Renderer {
   // A pinch of fish food on the tank or bowl in cell (x, y, z): its flakes
   // come down and its fish dart over to them (render/terrain.js). Whether the
   // tank was found and fed.
+  // Sparks fly up off the campfires near you, and a wisp of pale smoke.
+  campfireSparks(dt, focus) {
+    const fx = this.effects;
+    for (const f of this.terrain.campfires.values()) {
+      if (Math.hypot(f.x - focus.x, f.z - focus.z) > 40) continue;
+      const x = f.x + 0.5;
+      const z = f.z + 0.5;
+      if (Math.random() < dt * 3) {
+        fx.add('square', x + (Math.random() - 0.5) * 0.25, f.y + 0.5 + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.25, {
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: 1.2 + Math.random() * 1.2,
+          vz: (Math.random() - 0.5) * 0.6,
+          size: 0.025 + Math.random() * 0.025,
+          drag: 0.8,
+          life: 0.7 + Math.random() * 0.7,
+          color: ['#ffd27a', '#ff9a2e', '#ffef9a'][Math.floor(Math.random() * 3)],
+        });
+      }
+      if (Math.random() < dt * 0.6) {
+        fx.add('puff', x + (Math.random() - 0.5) * 0.2, f.y + 1.1, z + (Math.random() - 0.5) * 0.2, {
+          vx: (Math.random() - 0.5) * 0.2,
+          vy: 0.6 + Math.random() * 0.3,
+          vz: (Math.random() - 0.5) * 0.2,
+          size: 0.14 + Math.random() * 0.08,
+          grow: 0.25,
+          drag: 0.2,
+          life: 1.6 + Math.random() * 0.8,
+          color: ['#b8b3ae', '#c6c1bc', '#a8a39e'][Math.floor(Math.random() * 3)],
+        });
+      }
+    }
+  }
+
+  // How far the nearest campfire is from (x, y, z), or Infinity.
+  nearestCampfire(x, y, z) {
+    let best = Infinity;
+    for (const f of this.terrain.campfires.values()) best = Math.min(best, Math.hypot(f.x + 0.5 - x, f.y + 0.5 - y, f.z + 0.5 - z));
+    return best;
+  }
+
   feedFish(x, y, z) {
     return this.terrain.feedFish(x, y, z);
   }
@@ -965,6 +1005,7 @@ export class Renderer {
     this.terrain.updateVisibility(this.camera.position, fogFar);
     this.terrain.animate(this.time, state.time, state.satIn);
     this.fires.update(dt, state.focus);
+    this.campfireSparks(dt, state.focus);
     this.effects.update(dt);
     this.drawings.update();
     this.goBoards.update();

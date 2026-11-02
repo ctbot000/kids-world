@@ -6277,8 +6277,10 @@ export class Game extends EventTarget {
     this.selfVisible(this.renderer.camDist > 1.3);
     this.renderer.frame(dt, { time: env.time, weather: env.weather, tornado: foot, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
     // The roar and crackle of a fire, louder the closer you are.
+    // A campfire crackles softly, only close by.
     const fire = this.renderer.fires.nearest(b.x, b.y, b.z);
-    this.sound.fireLoop(fire < 24 ? Math.min(1, 3 / Math.max(1, fire)) : 0);
+    const camp = this.renderer.nearestCampfire(b.x, b.y, b.z);
+    this.sound.fireLoop(Math.max(fire < 24 ? Math.min(1, 3 / Math.max(1, fire)) : 0, camp < 8 ? 0.35 * Math.min(1, 1.5 / Math.max(1, camp)) : 0));
     this.observe();
   }
 

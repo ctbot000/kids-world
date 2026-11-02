@@ -24,7 +24,8 @@ const VERT = /* glsl */ `
   }
 `;
 
-const FRAG = /* glsl */ `
+// Also the campfire's flames (render/campfire-model.js).
+export const FLAME_FRAG = /* glsl */ `
   uniform float uTime;
   varying vec2 vUv;
   varying float vSeed;
@@ -96,7 +97,7 @@ export class FireView {
     this.material = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
       vertexShader: VERT,
-      fragmentShader: FRAG,
+      fragmentShader: FLAME_FRAG,
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
