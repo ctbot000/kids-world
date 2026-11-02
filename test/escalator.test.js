@@ -1,10 +1,11 @@
 // Escalators: moving stairs that carry you up (or down) their steps, built a
 // step up and along at a time, the Shopping Mall stamp with one each way,
-// and the sticker for riding one.
+// and the sticker for riding one; and moving walkways, flat ones, with the
+// Airport Walkway stamp and a sticker of their own.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { boardEscalator, ESCALATOR_SPEED, escalatorOf, piecesBeside, STEP_OFF, stepEscalator } from '../public/js/shared/escalator.js';
+import { BELT, boardEscalator, ESCALATOR_SPEED, escalatorOf, piecesBeside, STEP_OFF, stepEscalator } from '../public/js/shared/escalator.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
 import { bodyOverlapsSolid, makeBody, MOVE, stepBody } from '../public/js/shared/physics.js';
 import { placeTemplate, stampByKey } from '../public/js/shared/stamps.js';
@@ -247,5 +248,93 @@ test('the Shopping Mall stamp: up its up escalator from the floor to the upper f
 test('riding an escalator earns a sticker', () => {
   assert.ok(STAT_KEYS.includes('escalators'));
   const earned = (n) => STICKERS.find((s) => s.key === 'moving-stairs').test(Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'escalators' ? n : 0])));
+  assert.ok(earned(1) && !earned(0));
+});
+
+// A moving walkway of `long` pieces on the grass from x = 10 along +x (its
+// front, its foot, towards -x).
+function withWalkway(long = 6) {
+  const w = meadow();
+  for (let i = 0; i < long; i++) w.set(10 + i, 6, 10, B.turnedTo(B.WALKWAY, 2));
+  return w;
+}
+
+test('a moving walkway: in the Building tab right after the escalators, flat, not solid, turned to face you', () => {
+  const building = B.blocksIn('building');
+  assert.equal(building[building.indexOf(B.ESCALATOR_DOWN) + 1], B.WALKWAY);
+  const d = B.block(B.WALKWAY);
+  assert.ok(!d.solid && d.turns && d.flat && d.real === 'escalator' && d.escalator === 1);
+  assert.ok(modelBoxes(B.WALKWAY).length > 8, 'a picture for the toy box');
+});
+
+test('walking in at the foot of a moving walkway, its belt carries you along it on the level and off onto the floor past its end', () => {
+  const w = withWalkway();
+  const b = makeBody(10.05, 6, 10.5);
+  let worst = 0;
+  let on = 0;
+  let was = null;
+  play(w, b, { mx: 1e-9 }, 5, (body, ride, t) => {
+    // From the step after it comes on (the step it does comes first).
+    if (ride && was) {
+      on = t;
+      worst = Math.max(worst, Math.abs(body.y - (6 + BELT)), Math.abs(body.z - 10.5));
+    }
+    was = ride;
+  });
+  assert.ok(on > 0, 'on it');
+  assert.ok(worst < 0.02, `on its belt all the way (${worst})`);
+  assert.ok(b.x > 16 + STEP_OFF - 0.01 && b.x < 17, `off past its end (${b.x})`);
+  assert.ok(Math.abs(b.y - 6) < 0.01, 'down on the grass');
+  assert.ok(on > 6 / ESCALATOR_SPEED - 0.5 && on < 6 / ESCALATOR_SPEED + 0.5, `${on}s on it`);
+  // Walking along it is quicker than walking on the grass, and walking
+  // back against it still gets you back.
+  const quick = makeBody(10.05, 6, 10.5);
+  let t = Infinity;
+  play(w, quick, { mx: 1 }, 3, (body, ride, at) => {
+    if (t === Infinity && body.x > 16) t = at;
+  });
+  assert.ok(t < 6 / (MOVE.walk + ESCALATOR_SPEED) + 0.3, `walked it in ${t}s`);
+  const back = makeBody(16.4, 6, 10.5);
+  play(w, back, { mx: -1 }, 4);
+  assert.ok(back.x < 10, `walked back against it (${back.x})`);
+});
+
+test('a moving walkway is built a piece along from its end with a tap on it, or alongside from its side; escalatorOf finds it all, on the level', () => {
+  const w = withWalkway(3);
+  const turned = B.turnedTo(B.WALKWAY, 2);
+  const hit = { x: 10, y: 6, z: 10, nx: 0, ny: 1, nz: 0, id: turned };
+  assert.deepEqual(buildEdit(w, hit, B.WALKWAY, 1, [], 1).cells, [13, 6, 10, turned]);
+  assert.deepEqual(buildEdit(w, { ...hit, x: 12, nx: 1, ny: 0 }, B.WALKWAY, 1, [], 0).cells, [13, 6, 10, turned]);
+  assert.deepEqual(buildEdit(w, { ...hit, x: 11, ny: 0, nz: -1 }, B.WALKWAY, 1, [], 0).cells, [11, 6, 9, turned]);
+  // An escalator on it goes on top of it, as anything does.
+  assert.deepEqual(buildEdit(w, hit, B.ESCALATOR, 1, [], 1).cells, [10, 7, 10, B.turnedTo(B.ESCALATOR, 2)]);
+  const e = escalatorOf(w, 11, 6, 10);
+  assert.deepEqual([e.from, e.to, e.slope, e.way, e.dx, e.dz], [10, 13, 0, 1, 1, 0]);
+  assert.deepEqual(piecesBeside(w, 10, 6, 10), { below: false, above: true });
+  assert.deepEqual(piecesBeside(w, 12, 6, 10), { below: true, above: false });
+});
+
+test('the Airport Walkway stamp: along one walkway to the far end of the hall, and back along the other', () => {
+  const w = meadow();
+  const cells = stampByKey('walkway').cells;
+  for (const [x, y, z, id] of placeTemplate(cells, 10, 6, 4, 0)) w.set(x, y, z, id);
+  assert.equal(cells.filter(([, , , id]) => B.baseOf(id) === B.WALKWAY).length, 18);
+  // In straight ahead, then standing still: to the far end.
+  const b = makeBody(10.5, 6, 4.5);
+  assert.ok(play(w, b, { mz: 1 }, 1).rode);
+  play(w, b, {}, 6);
+  assert.ok(b.z > 15 && b.z < 16.5 && Math.abs(b.y - 6) < 0.01, `at the far end (${b.z})`);
+  // Over to the other one (beside it to the right as you came, which is
+  // towards -x here), and back.
+  const c = makeBody(9.5, 6, 16);
+  assert.ok(play(w, c, { mz: -1 }, 0.6).rode);
+  play(w, c, {}, 7);
+  assert.ok(c.z < 6 && c.z > 4.5, `back at the start (${c.z})`);
+  assert.ok(!bodyOverlapsSolid(w, c));
+});
+
+test('riding a moving walkway earns a sticker of its own', () => {
+  assert.ok(STAT_KEYS.includes('walkways'));
+  const earned = (n) => STICKERS.find((s) => s.key === 'speed-walker').test(Object.fromEntries(STAT_KEYS.map((k) => [k, k === 'walkways' ? n : 0])));
   assert.ok(earned(1) && !earned(0));
 });

@@ -8,6 +8,11 @@
 // rounded end the handrail loops round; a green arrow on the floor shows
 // the way on.
 //
+// A moving walkway (blocks.js WALKWAY) is drawn the same, but flat: a belt
+// of grooved pallets gliding along the floor a little over it, a ramp up
+// onto it at each end and a comb plate over its ends, which the pallets go
+// under.
+//
 // Laid out in a cell's units, its foot in the middle of the floor at the
 // origin, facing -z like all furniture (shared/furniture.js): the steps go
 // from the floor at the front (z = -0.5) up to the floor of the cell above
@@ -17,7 +22,7 @@
 // carries you (shared/escalator.js).
 import * as THREE from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/three-addons/utils/BufferGeometryUtils.js';
-import { ESCALATOR_SPEED } from '../shared/escalator.js';
+import { BELT, ESCALATOR_SPEED } from '../shared/escalator.js';
 import { at, bake } from './gashapon-model.js';
 
 // How each part takes the light: three's physical material settings. The
@@ -51,6 +56,10 @@ export const STEPS = 4;
 export const SIZE = { width: 0.64, side: 0.352, rail: 0.64, truss: 0.4, end: 0.12 };
 const STEP = 1 / STEPS;
 const SKIRT = 0.1;
+// A walkway's pallets: how thick, and how far over each end of the belt its
+// comb plate lies.
+const PALLET = 0.04;
+const COMB = STEP;
 
 // A slanted plate: from (z0, y0) to (z1, y1) along its middle, with ends
 // cut upright, `low` under that line and `high` over it, `thick` across in
@@ -80,8 +89,9 @@ function bar(x, z0, y0, z1, y1, w, h) {
 
 // A step, its middle at the origin, a quarter of a block deep and high: a
 // block of aluminium, its tread ridged with grooves, edged with yellow along
-// its front and down both sides of it.
-function stepShape() {
+// its front and down both sides of it. A walkway's pallet (flat) is a thin
+// plate of the same, with no yellow.
+function stepShape(flat = false) {
   const W = SIZE.width;
   const colour = (g, hex) => {
     const c = new THREE.Color(hex);
@@ -93,10 +103,14 @@ function stepShape() {
     return g;
   };
   const box = (w, h, d, x, y, z, hex) => colour(bake([{ g: new THREE.BoxGeometry(w, h, d), m: at(x, y, z) }]), hex);
-  const top = STEP / 2;
-  const parts = [box(W, STEP, STEP, 0, 0, 0, '#98a1ab'), box(W - 0.02, 0.012, 0.032, 0, top + 0.005, -STEP / 2 + 0.017, '#ffc928')];
-  for (const x of [-1, 1]) parts.push(box(0.026, 0.012, STEP - 0.034, x * (W / 2 - 0.014), top + 0.005, 0.016, '#ffc928'));
-  for (let i = 1; i < 8; i++) parts.push(box(0.008, 0.006, STEP - 0.05, -W / 2 + 0.03 + (i * (W - 0.06)) / 8, top + 0.002, 0.016, '#7f8893'));
+  const h = flat ? PALLET : STEP;
+  const top = h / 2;
+  const parts = [box(W, h, STEP - (flat ? 0.006 : 0), 0, 0, 0, '#98a1ab')];
+  if (!flat) {
+    parts.push(box(W - 0.02, 0.012, 0.032, 0, top + 0.005, -STEP / 2 + 0.017, '#ffc928'));
+    for (const x of [-1, 1]) parts.push(box(0.026, 0.012, STEP - 0.034, x * (W / 2 - 0.014), top + 0.005, 0.016, '#ffc928'));
+  }
+  for (let i = 1; i < 8; i++) parts.push(box(0.008, 0.006, STEP - 0.05, -W / 2 + 0.03 + (i * (W - 0.06)) / 8, top + 0.002, flat ? 0 : 0.016, '#7f8893'));
   return mergeGeometries(parts);
 }
 
@@ -105,46 +119,57 @@ const shapes = {};
 // What stands still: the skirts over the truss, the glass and the handrail
 // on each side, the truss's underside, and at an end the escalator has
 // (below: no piece before it, above: none after it) its comb plate and the
-// balustrades' rounded ends. One shape for each part, baked together.
-function bodyShapes(below, above) {
-  const key = `${below}${above}`;
+// balustrades' rounded ends. One shape for each part, baked together. A
+// walkway's (flat) lie along the floor, all of it its belt higher.
+function bodyShapes(below, above, flat) {
+  const key = `${below}${above}${flat}`;
   if (shapes[key]) return shapes[key];
   const { side, rail, truss, end, width } = SIZE;
+  const [climb, deck] = flat ? [0, BELT] : [1, 0];
   const parts = { steel: [], truss: [], glass: [], rail: [] };
   const add = (k, g) => parts[k].push({ g, m: new THREE.Matrix4() });
   for (const s of [-1, 1]) {
     const x = s * side;
     // The skirt, down over the truss, and the glass standing on it.
-    add('steel', slab(x, 0.05, -0.5, 0, 0.5, 1, truss, SKIRT));
-    add('glass', slab(x, 0.02, -0.5, SKIRT, 0.5, 1 + SKIRT, 0, rail - SKIRT));
-    add('rail', bar(x, -0.5, rail + 0.025, 0.5, 1 + rail + 0.025, 0.062, 0.05));
+    add('steel', slab(x, 0.05, -0.5, 0, 0.5, climb, flat ? 0 : truss, deck + SKIRT));
+    add('glass', slab(x, 0.02, -0.5, deck + SKIRT, 0.5, climb + deck + SKIRT, 0, rail - SKIRT));
+    add('rail', bar(x, -0.5, deck + rail + 0.025, 0.5, climb + deck + rail + 0.025, 0.062, 0.05));
     // An end: the skirt and glass run on level over the floor, and the
     // handrail with them, to loop round the end and back in under itself.
     for (const [on, y, z0, z1, out] of [
       [!below, 0, -0.5 - end, -0.5, -1],
-      [!above, 1, 0.5, 0.5 + end, 1],
+      [!above, climb, 0.5, 0.5 + end, 1],
     ]) {
       if (!on) continue;
-      add('steel', slab(x, 0.05, z0, y, z1, y, 0, SKIRT));
-      add('glass', slab(x, 0.02, z0, y + SKIRT, z1, y + SKIRT, 0, rail - SKIRT));
-      add('rail', bar(x, z0, y + rail + 0.025, z1, y + rail + 0.025, 0.062, 0.05));
+      const top = y + deck + rail + 0.025;
+      add('steel', slab(x, 0.05, z0, y, z1, y, 0, deck + SKIRT));
+      add('glass', slab(x, 0.02, z0, y + deck + SKIRT, z1, y + deck + SKIRT, 0, rail - SKIRT));
+      add('rail', bar(x, z0, top, z1, top, 0.062, 0.05));
       const r = (rail - SKIRT) / 2;
       const loop = new THREE.TorusGeometry(r, 0.028, 8, 18, Math.PI);
       loop.rotateZ(-Math.PI / 2);
       loop.rotateY(out < 0 ? Math.PI / 2 : -Math.PI / 2);
-      loop.translate(x, y + rail + 0.025 - r, out < 0 ? z0 : z1);
+      loop.translate(x, top - r, out < 0 ? z0 : z1);
       add('rail', loop);
       // The glass's rounded end, a half disc under the loop.
       const cap = new THREE.CircleGeometry(r - 0.02, 16, -Math.PI / 2, Math.PI);
       cap.rotateY(out < 0 ? Math.PI / 2 : -Math.PI / 2);
-      cap.translate(x, y + rail + 0.025 - r, out < 0 ? z0 : z1);
+      cap.translate(x, top - r, out < 0 ? z0 : z1);
       add('glass', cap);
-      // The comb plate the steps come up from (or go under), on the floor.
-      if (s > 0) add('steel', new THREE.BoxGeometry(width + 0.04, 0.02, end + 0.04).translate(0, y + 0.01, (z0 + z1) / 2 - out * 0.02));
+      if (s < 0) continue;
+      // The comb plate the steps come up from (or go under), on the floor;
+      // on a walkway, a ramp from the floor up to its belt and a plate over
+      // the end of the belt, the pallets going under it.
+      if (!flat) add('steel', new THREE.BoxGeometry(width + 0.04, 0.02, end + 0.04).translate(0, y + 0.01, (z0 + z1) / 2 - out * 0.02));
+      else {
+        const edge = out < 0 ? z1 : z0;
+        add('steel', out < 0 ? slab(0, width + 0.04, z0, y, edge, y + deck, 0, 0.02) : slab(0, width + 0.04, edge, y + deck, z1, y, 0, 0.02));
+        add('steel', new THREE.BoxGeometry(width + 0.04, 0.02, COMB).translate(0, y + deck + 0.01, edge - (out * COMB) / 2));
+      }
     }
   }
-  // The truss's underside, between the skirts.
-  add('truss', slab(0, side * 2, -0.5, 0, 0.5, 1, truss, -truss + 0.04));
+  // The truss's underside, between the skirts (a walkway's, on the floor).
+  add('truss', flat ? slab(0, side * 2, -0.5, 0, 0.5, 0, 0, 0.02) : slab(0, side * 2, -0.5, 0, 0.5, 1, truss, -truss + 0.04));
   const body = {};
   for (const [k, l] of Object.entries(parts)) if (l.length) body[k] = bake(l);
   shapes[key] = body;
@@ -185,11 +210,11 @@ export function stepsAt(time, way, below) {
 
 // A whole piece of escalator in the materials given (escalatorMaterials):
 // going up (way 1) or down (-1), with a piece before it (below) or after it
-// (above) or not, which decides its ends.
-export function escalatorModel(materials, { way = 1, below = false, above = false } = {}) {
+// (above) or not, which decides its ends; flat for a moving walkway.
+export function escalatorModel(materials, { way = 1, below = false, above = false, flat = false } = {}) {
   const group = new THREE.Group();
-  group.name = 'escalator';
-  for (const [k, g] of Object.entries(bodyShapes(below, above))) {
+  group.name = flat ? 'walkway' : 'escalator';
+  for (const [k, g] of Object.entries(bodyShapes(below, above, flat))) {
     const m = new THREE.Mesh(g, materials[k]);
     m.userData.shared = true;
     group.add(m);
@@ -199,27 +224,34 @@ export function escalatorModel(materials, { way = 1, below = false, above = fals
   if (way > 0 ? !below : !above) {
     const arrow = new THREE.Mesh(arrowShape(), materials.arrow);
     arrow.userData.shared = true;
-    arrow.position.set(0, way > 0 ? 0.022 : 1.022, way > 0 ? -0.74 : 0.74);
+    // On its comb plate there, clear of the floor's studs (a walkway's, the
+    // one over the end of its belt).
+    const [y, z, size] = flat ? [BELT + 0.021, -0.5 + COMB / 2, 0.75] : way > 0 ? [0.021, -0.55, 0.55] : [1.021, 0.55, 0.55];
+    arrow.position.set(0, y, z);
+    arrow.scale.setScalar(size);
     if (way < 0) arrow.rotation.y = Math.PI;
     arrow.updateMatrix();
     group.add(arrow);
   }
   // The steps: one shape, drawn where each one is.
-  shapes.step ??= stepShape();
-  const steps = new THREE.InstancedMesh(shapes.step, materials.step, STEPS + 1);
+  const kind = flat ? 'pallet' : 'step';
+  shapes[kind] ??= stepShape(flat);
+  const steps = new THREE.InstancedMesh(shapes[kind], materials.step, STEPS + 1);
   steps.frustumCulled = false;
   group.add(steps);
   const m = new THREE.Matrix4();
   group.userData.together = true;
   group.userData.tick = (time) => {
-    const list = stepsAt(time, way, below);
-    list.forEach((u, i) => {
+    let n = 0;
+    for (const u of stepsAt(time, way, below || flat)) {
       // At the top the steps level out, just under the floor there, and
-      // slide in under it.
-      const y = above ? u : Math.min(u, 1 - STEP / 2 - 0.006);
-      steps.setMatrixAt(i, m.makeTranslation(0, y, u - 0.5 + STEP / 2));
-    });
-    steps.count = list.length;
+      // slide in under it. A walkway's pallets go under its comb plate at
+      // its end, never out past it.
+      if (flat && !above && u + STEP > 1 + 1e-9) continue;
+      const y = flat ? BELT - PALLET / 2 : above ? u : Math.min(u, 1 - STEP / 2 - 0.006);
+      steps.setMatrixAt(n++, m.makeTranslation(0, y, u - 0.5 + STEP / 2));
+    }
+    steps.count = n;
     steps.instanceMatrix.needsUpdate = true;
   };
   group.userData.tick(0);

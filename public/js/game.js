@@ -6363,17 +6363,19 @@ export class Game extends EventTarget {
     return { jumped: false, landed: 0, splashed: false, bumped: false };
   }
 
-  // Come onto an escalator's steps (from fromY, where your feet were before
-  // this step): from now on they carry you.
+  // Come onto an escalator's steps or a moving walkway's belt (from fromY,
+  // where your feet were before this step): from now on they carry you.
   boardEscalator(fromY) {
     const ride = boardEscalator(this.world, this.me.body, fromY);
     if (!ride) return;
     this.escalator = ride;
+    const flat = ride.slope === 0;
     this.sound.play('escalator', { up: ride.way > 0 });
-    this.profile.count('escalators');
-    if (!this.toldEscalator) {
-      this.toldEscalator = true;
-      this.emit('toast', { icon: '↗️', text: `An escalator! Stand still and it carries you ${ride.way > 0 ? 'up' : 'down'} — walk along it to go quicker.` });
+    this.profile.count(flat ? 'walkways' : 'escalators');
+    const told = flat ? 'toldWalkway' : 'toldEscalator';
+    if (!this[told]) {
+      this[told] = true;
+      this.emit('toast', flat ? { icon: '➡️', text: 'A moving walkway! Stand still and it carries you along — walk along it to go even quicker.' } : { icon: '↗️', text: `An escalator! Stand still and it carries you ${ride.way > 0 ? 'up' : 'down'} — walk along it to go quicker.` });
     }
   }
 

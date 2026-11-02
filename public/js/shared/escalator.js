@@ -11,15 +11,22 @@
 // anything: the cells are not solid, and everyone just sees the rider's
 // position change.
 //
+// A moving walkway (blocks.js WALKWAY) is an escalator that does not climb:
+// its pieces lie flat, one along from the last at the same height, and its
+// belt carries you along the floor, a little over it, the way it runs.
+//
 // Along an escalator a point is measured by `a`, how far it is along the
 // escalator's run (from its foot towards its head) in blocks: every piece's
-// foot is at a whole number, and feet on its steps are as high as `a` plus
-// the escalator's `rise`.
+// foot is at a whole number, and feet on its steps are as high as `a` (on a
+// walkway, none of it) plus the escalator's `rise`, and on a walkway's belt
+// `lift` more.
 import { BLOCKS } from './blocks.js';
 import { bodyOverlapsSolid, MOVE } from './physics.js';
 
 // How fast the steps go: blocks a second along, and as many up (or down).
 export const ESCALATOR_SPEED = 1.8;
+// How high a moving walkway's belt is over the floor of its cells.
+export const BELT = 0.06;
 // How far past an end the steps carry you, out onto the floor beyond, before
 // you are let go to walk on by yourself: far enough for all of you to be off.
 export const STEP_OFF = 0.45;
@@ -37,8 +44,13 @@ const DIRS = [
   [0, -1],
 ];
 
-// Up (1), down (-1), or no escalator at all (0).
+// Up (1), down (-1), or no escalator at all (0). A moving walkway goes
+// along (1).
 export const escalatorWay = (id) => BLOCKS[id]?.escalator ?? 0;
+
+// How far a piece climbs, from its foot to its head: a block, or none for a
+// moving walkway.
+export const slopeOf = (id) => (BLOCKS[id]?.flat ? 0 : 1);
 
 // The way a piece runs (dx, dz), from its foot up to its head: away from
 // its front, which faces whoever put it down.
@@ -48,7 +60,7 @@ export const runOf = (id) => DIRS[((BLOCKS[id]?.front ?? 3) + 2) % 4];
 function cellOf(e, k) {
   const along = e.s > 0 ? k : -k - 1;
   const across = e.mid - 0.5;
-  return e.alongX ? [along, k + e.rise, across] : [across, k + e.rise, along];
+  return e.alongX ? [along, k * e.slope + e.rise, across] : [across, k * e.slope + e.rise, along];
 }
 
 const pieceAt = (world, e, k) => {
@@ -67,9 +79,10 @@ function reach(world, e, k) {
 }
 
 // The escalator the piece in cell (x, y, z) is part of, or null: its block
-// (every piece of one is the same), up or down (way), the way it runs, the
-// line along its middle (mid, across it), how high feet are along it (a +
-// rise), and where it starts and ends (from, to).
+// (every piece of one is the same), up or down (way), the way it runs, how
+// much it climbs (slope), the line along its middle (mid, across it), how
+// high feet are along it (a × slope + rise + lift), and where it starts and
+// ends (from, to).
 export function escalatorOf(world, x, y, z) {
   const id = world.get(x, y, z);
   const way = escalatorWay(id);
@@ -77,8 +90,9 @@ export function escalatorOf(world, x, y, z) {
   const [dx, dz] = runOf(id);
   const alongX = dx !== 0;
   const s = dx || dz;
+  const slope = slopeOf(id);
   const foot = (alongX ? x : z) * s - (s < 0 ? 1 : 0);
-  const e = { id, way, dx, dz, alongX, s, mid: (alongX ? z : x) + 0.5, rise: y - foot, from: foot, to: foot + 1 };
+  const e = { id, way, dx, dz, alongX, s, slope, lift: slope ? 0 : BELT, mid: (alongX ? z : x) + 0.5, rise: y - foot * slope, from: foot, to: foot + 1 };
   return reach(world, e, foot);
 }
 
@@ -86,17 +100,19 @@ export function escalatorOf(world, x, y, z) {
 export const alongOf = (e, x, z) => (e.alongX ? x : z) * e.s;
 
 // How high feet are at a along escalator e: on its steps, and on the floor
-// past either end.
-export const feetAt = (e, a) => Math.min(e.to, Math.max(e.from, a)) + e.rise;
+// past either end (on a walkway's belt, all the way along it).
+export const feetAt = (e, a) => Math.min(e.to, Math.max(e.from, a)) * e.slope + e.rise + e.lift;
 
 // Whether the pieces before and after the one in cell (x, y, z) are there
-// (the same piece, one down and back, one up and along): the first of an
-// escalator has its steps come up out of the floor, the last has them go
-// under the floor at the top (render/escalator-model.js).
+// (the same piece, one down and back, one up and along; on a walkway, one
+// back and one along): the first of an escalator has its steps come up out
+// of the floor, the last has them go under the floor at the top
+// (render/escalator-model.js).
 export function piecesBeside(world, x, y, z) {
   const id = world.get(x, y, z);
   const [dx, dz] = runOf(id);
-  return { below: world.get(x - dx, y - 1, z - dz) === id, above: world.get(x + dx, y + 1, z + dz) === id };
+  const up = slopeOf(id);
+  return { below: world.get(x - dx, y - up, z - dz) === id, above: world.get(x + dx, y + up, z + dz) === id };
 }
 
 // The ride a body takes on the escalator in its cell, when it stands on its

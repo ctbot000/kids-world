@@ -479,6 +479,12 @@ export const CAMPFIRE = furniture(384, 'campfire', { name: 'Campfire', color: '#
 // stood on a block. After the elevator.
 export const ESCALATOR = furniture(385, 'escalator', { name: 'Up Escalator', color: '#aab3bf', after: ELEVATOR, category: 'building', solid: false, sound: 'stone', real: 'escalator', escalator: 1 });
 export const ESCALATOR_DOWN = furniture(389, 'escalator-down', { name: 'Down Escalator', color: '#aab3bf', after: 385, category: 'building', solid: false, sound: 'stone', real: 'escalator', escalator: -1 });
+// A moving walkway (shared/escalator.js): a flat escalator, its belt along
+// the floor carrying you away from its front (turned to face you, so away
+// from where you put it down). Pieces in a row the same way round are one
+// long one; one alongside the other way round brings you back. After the
+// escalators.
+export const WALKWAY = furniture(393, 'walkway', { name: 'Moving Walkway', color: '#aab3bf', after: 389, category: 'building', solid: false, sound: 'stone', real: 'escalator', escalator: 1, flat: true });
 // The block of the same door the other way round: swung open, or shut again.
 export const turnedDoor = (id) => {
   const d = BLOCKS[id];

@@ -722,12 +722,13 @@ export class Terrain {
 
   // A real model of a piece of furniture, by what it is, in materials made
   // once for the island's light. cell: where it stands, [x, y, z, block],
-  // for one that joins up with the pieces beside it (an escalator).
+  // for one that joins up with the pieces beside it (an escalator, a moving
+  // walkway).
   realModel(kind, cell = null) {
     if (kind === 'escalator') {
       this.escalatorMaterials ??= escalatorMaterials(toyMaterial);
       const [x, y, z, id] = cell;
-      return escalatorModel(this.escalatorMaterials, { way: BLOCKS[id].escalator, ...piecesBeside(this.world, x, y, z) });
+      return escalatorModel(this.escalatorMaterials, { way: BLOCKS[id].escalator, flat: Boolean(BLOCKS[id].flat), ...piecesBeside(this.world, x, y, z) });
     }
     if (kind === 'gashapon') {
       this.gashaponMaterials ??= gashaponMaterials(toyMaterial);

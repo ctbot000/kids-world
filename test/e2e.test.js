@@ -1271,6 +1271,43 @@ test('an Up Escalator from the toy box goes down with a click, two more clicks o
   await page.browserContext().close();
 });
 
+test('a moving walkway carries you along its belt as you stand still and off at its far end, with a hint and a sticker', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Four pieces in a row a few steps away along +x, each turned to run that
+  // way (their fronts, their feet, towards -x), and you standing in the first.
+  const foot = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const B = await import('/js/shared/blocks.js');
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const x = Math.floor(b.x) + 3;
+    const z = Math.floor(b.z);
+    const y = room.world.top(x, z) + 1;
+    // Clear ground for it, and past its end.
+    for (let i = -1; i < 7; i++) for (let h = 0; h < 3; h++) if (room.world.get(x + i, y + h, z)) room.natureCell([x + i, y + h, z], 0);
+    for (let i = 0; i < 4; i++) room.natureCell([x + i, y, z], B.turnedTo(B.WALKWAY, 2));
+    return { x, y, z };
+  });
+  await until(page, (c) => window.kidsWorld.game.world.get(c.x + 3, c.y, c.z) !== 0, foot);
+  await page.evaluate((c) => Object.assign(window.kidsWorld.game.me.body, { x: c.x + 0.1, y: c.y, z: c.z + 0.5, vx: 0, vy: 0, vz: 0 }), foot);
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 20));
+  const on = await page.evaluate(() => ({ riding: Boolean(window.kidsWorld.game.escalator), x: window.kidsWorld.game.me.body.x }));
+  assert.ok(on.riding && on.x > foot.x + 0.4, `carried along (${JSON.stringify(on)})`);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('A moving walkway!')));
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 150));
+  const end = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    return { x: b.x, y: b.y, riding: Boolean(kw.game.escalator), sticker: Boolean(kw.profile.data.stickers['speed-walker']) };
+  });
+  assert.ok(!end.riding && end.x > foot.x + 4.3 && end.x < foot.x + 5, `off past its end (${JSON.stringify(end)})`);
+  assert.equal(end.y, foot.y, 'on the ground');
+  assert.ok(end.sticker, 'a sticker for the ride');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on a trampoline, Space held bounces you higher and higher and a press of Shift stops you, with a hint and a sticker', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

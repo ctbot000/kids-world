@@ -502,6 +502,28 @@ function mall() {
   return c.list();
 }
 
+// An airport walkway: two moving walkways side by side down a hall, one
+// carrying you away from where you stand and one bringing you back, on a
+// floor of white bricks between walls of glass, with seats facing them,
+// lamps and plants.
+function airportWalkway() {
+  const c = new Cells();
+  c.box(-3, 0, 0, 4, 4, 13, B.AIR);
+  c.box(-3, -1, 0, 4, -1, 13, WHITE);
+  for (const x of [-3, 4]) c.box(x, 0, 0, x, 1, 13, B.GLASS);
+  for (let z = 2; z <= 10; z++) {
+    c.put(0, 0, z, B.WALKWAY);
+    c.put(1, 0, z, B.turnedTo(B.WALKWAY, 1));
+  }
+  // Seats along the walls, turned to face the walkways, two together.
+  for (const z of [5, 6, 9, 10]) c.put(-2, 0, z, B.turnedTo(B.SOFA, 0));
+  for (const z of [3, 4, 7, 8]) c.put(3, 0, z, B.turnedTo(B.SOFA, 2));
+  for (const [x, z] of [[-2, 1], [3, 1], [-2, 12], [3, 12]]) c.put(x, 0, z, B.POTTED_PLANT);
+  c.put(-2, 0, 3, B.FLOOR_LAMP);
+  c.put(3, 0, 10, B.FLOOR_LAMP);
+  return c.list();
+}
+
 // A bouncy castle: a floor of trampolines inside soft walls, with a turret
 // at each corner and the way in at the front.
 function bouncyCastle() {
@@ -1002,6 +1024,7 @@ export const STAMPS = [
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
   { key: 'mall', name: 'Shopping Mall', icon: '🏬', cells: mall() },
+  { key: 'walkway', name: 'Airport Walkway', icon: '🛫', cells: airportWalkway() },
   { key: 'bouncy-castle', name: 'Bouncy Castle', icon: '🤸', cells: bouncyCastle() },
   { key: 'circus-tent', name: 'Circus Tent', icon: '🎪', cells: circusTent() },
   { key: 'camping-tent', name: 'Camping Tent', icon: '⛺', cells: campingTent() },

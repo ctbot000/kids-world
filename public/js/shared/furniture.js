@@ -70,7 +70,8 @@ const chestBands = (top) =>
 
 // An escalator's boxes (MODELS.escalator), going up (way 1) or down: its
 // steps between low steel sides, each topped with a black handrail, and a
-// green arrow on the floor where you get on, pointing the way it goes.
+// green arrow on the floor where you get on (on the floor before the foot
+// of an up one, or past the top of a down one), pointing the way it goes.
 function escalatorBoxes(way) {
   const out = [];
   for (let j = 0; j < 4; j++) {
@@ -78,16 +79,27 @@ function escalatorBoxes(way) {
     out.push(box(0.18, 0, z0, 0.82, top, z1, '#9aa3ad', 'plain'), box(0.18, top, z0, 0.82, top + 0.015, z0 + 0.04, '#ffc928', 'plain'));
     for (const x of [0.1, 0.82]) out.push(box(x, 0, z0, x + 0.08, top + 0.26, z1, STEEL, 'plain'), box(x - 0.01, top + 0.26, z0, x + 0.09, top + 0.31, z1, BLACK, 'plain'));
   }
-  // The arrow: its shaft, then its head in two widths, along z the way it
-  // points, on the floor before the foot of an up one or past the top of a
-  // down one.
-  const [y, from, dir] = way > 0 ? [0, -0.36, 1] : [1, 1.36, -1];
+  return [...out, ...(way > 0 ? floorArrow(0, -0.36, 1) : floorArrow(1, 1.36, -1))];
+}
+
+// A moving walkway's boxes (MODELS.walkway): its grooved belt along the
+// floor between low steel sides, a black handrail on each, and the green
+// arrow on the floor at its foot.
+function walkwayBoxes() {
+  const out = [box(0.18, 0, 0, 0.82, 0.06, 1, '#9aa3ad', 'plain')];
+  for (let i = 1; i < 6; i++) out.push(box(0.175 + i * 0.107, 0.06, 0.04, 0.185 + i * 0.107, 0.066, 0.96, '#7f8893', 'plain'));
+  for (const x of [0.1, 0.82]) out.push(box(x, 0, 0, x + 0.08, 0.32, 1, STEEL, 'plain'), box(x - 0.01, 0.32, 0, x + 0.09, 0.37, 1, BLACK, 'plain'));
+  return [...out, ...floorArrow(0, -0.36, 1)];
+}
+
+// A green arrow lying on the floor at height y, from z `from` the way dir
+// points along z: its shaft, then its head in two widths.
+function floorArrow(y, from, dir) {
   const along = (a, b) => [Math.min(from + dir * a, from + dir * b), Math.max(from + dir * a, from + dir * b)];
-  for (const [x0, x1, a, b] of [[0.45, 0.55, 0, 0.2], [0.36, 0.64, 0.2, 0.26], [0.42, 0.58, 0.26, 0.32]]) {
+  return [[0.45, 0.55, 0, 0.2], [0.36, 0.64, 0.2, 0.26], [0.42, 0.58, 0.26, 0.32]].map(([x0, x1, a, b]) => {
     const [z0, z1] = along(a, b);
-    out.push(box(x0, y, z0, x1, y + 0.012, z1, '#3fe07c', 'glow'));
-  }
-  return out;
+    return box(x0, y, z0, x1, y + 0.012, z1, '#3fe07c', 'glow');
+  });
 }
 
 const MODELS = {
@@ -488,6 +500,7 @@ const MODELS = {
   // the foot of an up escalator and the top of a down one.
   escalator: () => escalatorBoxes(1),
   'escalator-down': () => escalatorBoxes(-1),
+  walkway: walkwayBoxes,
 
   // The campfire's boxes, for its picture (render/campfire-model.js draws
   // it for real): a ring of stones, logs crossed over embers, and flames.

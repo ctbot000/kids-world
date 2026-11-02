@@ -4,7 +4,7 @@
 //
 // An edit is a flat array [x, y, z, block, x, y, z, block, ...].
 import * as B from './blocks.js';
-import { runOf } from './escalator.js';
+import { runOf, slopeOf } from './escalator.js';
 import { cellHitsBody } from './physics.js';
 import { grownTree, placeTemplate, stampByKey } from './stamps.js';
 
@@ -147,8 +147,9 @@ export function furnitureFront(hit, id, facing) {
 // An escalator put down with a tap on an escalator carries on from it,
 // turned the same way: on its side, alongside it (a down one beside an up
 // one, say); anywhere else, a step up and along from the top of it, to make
-// it longer (only the same kind: an up one on an up one). Where it goes and
-// the block, turned, or null to put it down as anything else.
+// it longer (only the same kind: an up one on an up one). A moving walkway
+// does the same, but along the floor. Where it goes and the block, turned,
+// or null to put it down as anything else.
 export function escalatorBuild(world, hit, id) {
   const on = B.block(hit.id);
   if (!B.block(id).escalator || !on.escalator || hit.ny === -1) return null;
@@ -156,9 +157,10 @@ export function escalatorBuild(world, hit, id) {
   const turned = B.turnedTo(id, on.front);
   if (hit.ny === 0 && hit.nx * rx + hit.nz * rz === 0) return [hit.x + hit.nx, hit.y, hit.z + hit.nz, turned];
   if (B.baseOf(id) !== on.base) return null;
+  const up = slopeOf(hit.id);
   let [x, y, z] = [hit.x, hit.y, hit.z];
-  while (world.get(x + rx, y + 1, z + rz) === hit.id) [x, y, z] = [x + rx, y + 1, z + rz];
-  return [x + rx, y + 1, z + rz, turned];
+  while (world.get(x + rx, y + up, z + rz) === hit.id) [x, y, z] = [x + rx, y + up, z + rz];
+  return [x + rx, y + up, z + rz, turned];
 }
 
 export function buildEdit(world, hit, id, size = 1, bodies = [], facing = 0) {
