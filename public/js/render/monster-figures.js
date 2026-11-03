@@ -11,6 +11,8 @@ import * as THREE from '../../vendor/three.module.js';
 import { MONSTER_KINDS, STOMP } from '../shared/monsters.js';
 import { MONSTER_FIGURES } from '../shared/gashapon.js';
 import { KingModel } from './adventure-models.js';
+import { makeBoss } from './boss-models.js';
+import { isBoss } from '../shared/bosses.js';
 import { MonsterModel } from './monster-model.js';
 import { MoleModel } from './mole-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
@@ -35,12 +37,12 @@ export function shownBox(obj) {
 // A monster's model by its kind, stood still: in its idle pose, but Mr.
 // Mole up out of the ground, his mound left out.
 function modelOf(kind, theme = 'sunny') {
-  if (kind === 'king') {
-    const k = new KingModel(theme, STOMP.reach);
+  if (isBoss(kind)) {
+    const k = kind === 'king' ? new KingModel(theme, STOMP.reach) : makeBoss(kind, theme);
     k.update(0, 'idle', 0, false, false);
     k.bubble.visible = false;
     k.bubbleRim.visible = false;
-    k.ring.visible = false;
+    if (k.ring) k.ring.visible = false;
     return k;
   }
   const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel, snapper: SnapperModel, shroom: ShroomModel }[kind];

@@ -48,9 +48,9 @@ function meadowRoom() {
 const onFoot = (id, x, z, y = 11) => ({ id, x, y, z, flying: false, riding: false, dizzy: false, safeUntil: 0 });
 
 test('the isle’s monsters go on the end of the kinds, never roam by themselves, and are in the monster collection', () => {
-  assert.deepEqual(MONSTER_KINDS.slice(-NEW.length), NEW, 'new kinds go on the end: the wire sends the index');
+  assert.deepEqual(MONSTER_KINDS.slice(11, 11 + NEW.length), NEW, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('queen'), 10, 'the old ones where they were');
-  assert.equal(MONSTER_STATES.at(-1), 'puff');
+  assert.equal(MONSTER_STATES.indexOf('puff'), 8);
   assert.deepEqual(NEW.map((k) => [KINDS[k].hearts, KINDS[k].bump, KINDS[k].land]), [
     [2, 1, Infinity],
     [4, 1, 2],

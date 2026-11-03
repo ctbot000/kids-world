@@ -39,10 +39,12 @@ const H = 0.36;
 
 export class MonsterModel {
   // kind: 'blob', 'big' or 'spiky' (shared/monsters.js); id: which one, for
-  // a Gummy Bear's colour.
-  constructor(theme = 'sunny', kind = 'blob', id = 1) {
+  // a Gummy Bear's colour; look: colours of its own, for a boss grown from
+  // one (boss-models.js): { skin, core } for its jelly, and for a Stone
+  // Golem { stones, top, glow } (glow: its top glows, as lava).
+  constructor(theme = 'sunny', kind = 'blob', id = 1, look = {}) {
     const gummy = kind === 'gummy' || kind === 'cub';
-    const [skin, core] = gummy ? GUMMY_JELLY[Math.abs(id) % GUMMY_JELLY.length] : (KIND_JELLY[kind] ?? JELLY[theme] ?? JELLY.sunny);
+    const [skin, core] = look.skin ? [look.skin, look.core ?? look.skin] : gummy ? GUMMY_JELLY[Math.abs(id) % GUMMY_JELLY.length] : (KIND_JELLY[kind] ?? JELLY[theme] ?? JELLY.sunny);
     const k = KIND_SCALE[kind] ?? 1;
     this.group = new THREE.Group();
     this.group.scale.setScalar(k);
@@ -150,7 +152,7 @@ export class MonsterModel {
     }
     // A Stone Golem: stones stuck all over it, moss on top, and ember eyes.
     if (kind === 'golem') {
-      const stones = ['#a2a7b0', '#767b85', '#b4b0a6'];
+      const stones = look.stones ?? ['#a2a7b0', '#767b85', '#b4b0a6'];
       for (let i = 0; i < 14; i++) {
         const a = i * 2.4;
         const el = -0.2 + ((i * 0.37) % 1.2);
@@ -162,10 +164,10 @@ export class MonsterModel {
         s.rotation.set(i, i * 2, 0);
         b.add(s);
       }
-      b.add(mesh(CAP, toon('#5f9e4a'), 0, H, 0, R * 1.04, H * 1.04, R * 1.04));
+      b.add(mesh(CAP, toon(look.top ?? '#5f9e4a', { emissive: look.glow ? 0.8 : 0 }), 0, H, 0, R * 1.04, H * 1.04, R * 1.04));
       for (const side of [-1, 1]) {
         b.add(mesh(sphere(1, 12, 8), toon(skin), side * R * 0.95, H * 0.85, 0.05, 0.13, 0.16, 0.13));
-        b.add(mesh(ROCK, toon('#6d727c'), side * R * 1.05, H * 0.5, 0.1, 0.12));
+        b.add(mesh(ROCK, toon(look.stones?.[1] ?? '#6d727c'), side * R * 1.05, H * 0.5, 0.1, 0.12));
       }
       this.eyeWhite = toon('#ffb13b', { emissive: 0.7 });
       this.eyeGlow = toon('#ff7a1a', { emissive: 1 });

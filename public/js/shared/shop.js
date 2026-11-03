@@ -98,10 +98,10 @@ export const GEAR = [
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, reach: 1, king: 1, uses: 60, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, uses: 80, does: 'Two bubbles pop a monster, a few steps in front of you.' },
-      { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, uses: 100, does: 'One bop pops a monster right in front of you, and King Grumble feels every bop twice.' },
-      { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, uses: 120, does: 'One bop pops any monster from a step away, and King Grumble feels every bop three times over.' },
+      { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, reach: 0.6, king: 2, uses: 100, does: 'One bop pops a monster right in front of you, and a boss feels every bop twice.' },
+      { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, reach: 1.2, king: 3, uses: 120, does: 'One bop pops any monster from a step away, and a boss feels every bop three times over.' },
       { key: 'bombrod', name: 'Bomb Rod', icon: '💣', price: 450, power: 2, reach: 3.7, king: 1, uses: 70, does: 'Lobs a small bomb a few steps ahead: its pop bops every monster in the blast and shakes jewels out of gem rocks, without digging the ground.' },
-      { key: 'bow', name: 'Toy Bow', icon: '🏹', price: 500, power: 3, reach: 3.8, king: 2, uses: 90, does: 'Shoots a suction-cup arrow at the monster in front of you: one pops it from further off than anything else, and King Grumble feels it twice.' },
+      { key: 'bow', name: 'Toy Bow', icon: '🏹', price: 500, power: 3, reach: 3.8, king: 2, uses: 90, does: 'Shoots a suction-cup arrow at the monster in front of you: one pops it from further off than anything else, and a boss feels it twice.' },
     ],
   },
 ];
@@ -115,7 +115,7 @@ export const GEAR = [
 export const CLOTHES = [
   { key: 'scarf', name: 'Cozy Scarf', icon: '🧣', price: 15, does: 'Just for looks: a stripy scarf that flaps as you run.' },
   { key: 'cape', name: 'Hero Cape', icon: '🦸', price: 120, power: 'jump', jump: 10.6, does: 'Jump half as high again: right up onto a wall two blocks tall!' },
-  { key: 'armor', name: 'Knight Armor', icon: '🛡️', price: 180, power: 'armor', does: 'Monster bumps and King Grumble’s stomps take only half as much HP.' },
+  { key: 'armor', name: 'Knight Armor', icon: '🛡️', price: 180, power: 'armor', does: 'Monster bumps and bosses’ stomps take only half as much HP.' },
   { key: 'firesuit', name: 'Fire Suit', icon: '🧑‍🚒', price: 220, power: 'fireproof', does: 'Lava never burns you: swim in it on a volcano island!' },
   { key: 'robe', name: 'Royal Robe', icon: '👑', price: 500, does: 'Just for looks: a long velvet robe with a fluffy white collar, fit for a king or a queen.' },
   { key: 'hoodie', name: 'Comfy Hoodie', icon: '🧥', price: 30, does: 'Just for looks: a soft blue hoodie with a pouch pocket, drawstrings and its hood down.' },

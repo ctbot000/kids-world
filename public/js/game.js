@@ -30,6 +30,7 @@ import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, SHARDS } from './shared/isle-story.js';
+import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
@@ -89,7 +90,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, not
 // only once the host's next update says so.
@@ -178,7 +179,17 @@ const TOUGH_TOLD = {
   ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
   mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
   queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
+  // The bosses of Adventure Isle (shared/bosses.js), and how to beat each.
+  clawbeard: { icon: '🦀', text: 'Captain Clawbeard! When he rears back and a strip shows on the ground, step out of his way — charging into a wall, he sits dazed: bop him then!' },
+  puffcap: { icon: '🍄', text: 'Old Puffcap! When he swells up, step back out of his cloud of spores — and run out of the red rings, where his spore pods come down!' },
+  frostfang: { icon: '❄️', text: 'Frostfang! Jump when he crouches — his stomp misses anyone in the air — and run out of the red rings, where his snowballs come down!' },
+  gumbo: { icon: '🧸', text: 'Gumbo the Gummy Giant! When a red ring shows round you, he is about to come down on it: run out of it, or jump!' },
+  bogmaw: { icon: '🐸', text: 'Bogmaw the Bog Toad! Run out of the red rings where he leaps and his mud comes down — and step back when he puffs himself up!' },
+  moltok: { icon: '🌋', text: 'Moltok the Lava Golem! Get out of the way he faces when he rears back, jump when he crouches, and run out of the red rings!' },
 };
+// What each thing a boss throws looks like coming down (see bossFx), and
+// the sound of it.
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom' };
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
@@ -670,11 +681,14 @@ export class Game extends EventTarget {
           this.renderer.effects.dirt(msg.x, msg.y, msg.z);
           this.sound.play('mole');
         }
-        // A Puffshroom puffing its cloud of spores.
+        // A Puffshroom puffing its cloud of spores (a boss's reaching
+        // further, and Bogmaw's swamp gas).
         if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
-          this.renderer.effects.spores(msg.x, msg.y, msg.z, SPORES.reach);
+          this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, msg.what === 'gas');
           this.sound.play('blow');
         }
+        // A boss's moves (shared/bosses.js): what shows before they come.
+        if (msg.kind === 'hurl' || msg.kind === 'leap' || msg.kind === 'rear' || msg.kind === 'bonk') this.bossFx(msg);
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -1357,6 +1371,14 @@ export class Game extends EventTarget {
       this.toldSpores = true;
       this.emit('toast', { icon: '🍄', text: 'Achoo, spores! When a Puffshroom swells up, step back out of its cloud — then bop it, or bounce on its cap.' });
     }
+    if (msg.hurl && !this.toldHurl) {
+      this.toldHurl = true;
+      this.emit('toast', { icon: '🎯', text: 'Ouch! When a red ring shows on the ground under you, run out of it — something is about to come down there!' });
+    }
+    if (msg.charge && !this.toldCharge) {
+      this.toldCharge = true;
+      this.emit('toast', { icon: '💨', text: 'Ouch, a charge! When a boss rears back, step out of the strip on the ground in front of it.' });
+    }
     if (msg.stomp && this.monsters.get(msg.id)?.kind === 'yeti' && !this.toldYeti) {
       this.toldYeti = true;
       this.emit('toast', { icon: '❄️', text: 'A yeti stomp! When a Little Yeti crouches, jump — its stomp misses anyone in the air.' });
@@ -1443,7 +1465,8 @@ export class Game extends EventTarget {
     const p = entry?.model.group.position ?? { x: msg.x, y: msg.y, z: msg.z };
     const fx = this.renderer.effects;
     const here = [p.x, p.y, p.z].every(Number.isFinite);
-    const near = here && this.near(p.x, p.y, p.z, entry?.kind === 'king' || entry?.kind === 'queen' ? 120 : 40);
+    const boss = isBoss(entry?.kind);
+    const near = here && this.near(p.x, p.y, p.z, boss || entry?.kind === 'queen' ? 120 : 40);
     if (near) {
       fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
       fx.dust(p.x, p.y, p.z);
@@ -1454,7 +1477,7 @@ export class Game extends EventTarget {
         fx.sparkles(p.x, p.y + 1.1, p.z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
         fx.firework(p.x, p.y + 2, p.z);
       }
-      if (entry?.kind === 'king') {
+      if (boss) {
         fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
         fx.firework(p.x, p.y + 2, p.z);
       }
@@ -1480,9 +1503,9 @@ export class Game extends EventTarget {
       // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
       // gave (levels.js), so what it says is what you got.
       const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
-      if (near) fx.stars(p.x, p.y + (entry?.kind === 'king' ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
+      if (near) fx.stars(p.x, p.y + (boss ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
       if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
-      if (first && entry?.kind !== 'king') this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
+      if (first && !boss) this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
   }
 
@@ -1495,6 +1518,9 @@ export class Game extends EventTarget {
     if (!entry) return;
     entry.fireYaw = Number(msg.yaw) || 0;
     entry.fireUntil = performance.now() + (Number(msg.ms) || GHOST_FIRE.ms);
+    // (A boss's breath reaches as far and as wide as its own: msg.r, msg.a.)
+    entry.fireReach = Number.isFinite(msg.r) ? msg.r : GHOST_FIRE.reach;
+    entry.fireAngle = Number.isFinite(msg.a) ? msg.a : GHOST_FIRE.angle;
     const p = entry.model.group.position;
     if (this.near(p.x, p.y, p.z, 30)) this.sound.play('fire');
   }
@@ -1733,7 +1759,7 @@ export class Game extends EventTarget {
     let landed = 0;
     for (const hit of hits) {
       const entry = this.monsters.get(hit.id);
-      if (!entry || (entry.kind === 'king' && this.adventure?.shield)) continue;
+      if (!entry || (isBoss(entry.kind) && this.adventure?.shield)) continue;
       const m = entry.model.group.position;
       const dx = m.x - b.x;
       const dz = m.z - b.z;
@@ -2146,7 +2172,7 @@ export class Game extends EventTarget {
     if (recoil) {
       const k = (performance.now() - recoil.at) / 1000 / RECOIL_SECS;
       if (k >= 1) entry.recoil = null;
-      else if (k > 0) y += KICK_HOP * (entry.kind === 'king' ? 0 : entry.kind === 'golem' ? 0.2 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
+      else if (k > 0) y += KICK_HOP * (isBoss(entry.kind) ? 0 : entry.kind === 'golem' ? 0.2 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
     }
     // Never inside you: right up against you at the most.
     const me = this.me?.body;
@@ -2184,7 +2210,7 @@ export class Game extends EventTarget {
       // Leaning back from the blow, top first, and springing upright.
       const recoil = entry.recoil;
       const k = recoil ? (now - recoil.at) / 1000 / RECOIL_SECS : 1;
-      const lean = k > 0 && k < 1 ? KICK_LEAN * (entry.kind === 'king' ? 0.3 : 1) * Math.sin(Math.PI * Math.sqrt(k)) * (1 - k) : 0;
+      const lean = k > 0 && k < 1 ? KICK_LEAN * (isBoss(entry.kind) ? 0.3 : 1) * Math.sin(Math.PI * Math.sqrt(k)) * (1 - k) : 0;
       const c = Math.cos(s.yaw);
       const sn = Math.sin(s.yaw);
       m.group.rotation.x = lean ? lean * (recoil.x * sn + recoil.z * c) : 0;
@@ -2203,17 +2229,18 @@ export class Game extends EventTarget {
       // A Lava Ghost's flames, from its mouth, while it breathes them.
       if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
         const at = m.mouthAt();
-        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, GHOST_FIRE.reach, GHOST_FIRE.angle);
+        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, entry.fireReach ?? GHOST_FIRE.reach, entry.fireAngle ?? GHOST_FIRE.angle);
       }
-      const king = entry.kind === 'king';
+      const boss = isBoss(entry.kind);
       const big = isHeavy(entry.kind);
-      // King Grumble dazed from a stomp: stars round his crown, and the first
-      // time you see it near, how to make the most of it.
-      if (king && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
-        this.renderer.effects.dizzy(s.x, s.y + 2.2, s.z, now / 1000, 0.75);
+      // A boss dazed from a stomp (or a leap, or a charge into a wall): stars
+      // round its head, and the first time you see it near, how to make the
+      // most of it.
+      if (boss && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
+        this.renderer.effects.dizzy(s.x, s.y + (m.height ?? 1.8) + 0.4, s.z, now / 1000, 0.75);
         if (!this.toldDazed && this.near(s.x, s.y, s.z, 20)) {
           this.toldDazed = true;
-          this.emit('toast', { icon: '💫', text: 'King Grumble is dazed after his stomp! Bop him now: every bop counts three times.' });
+          this.emit('toast', { icon: '💫', text: `${this.bossInfo().name} is dazed! Bop now: every bop counts three times.` });
         }
       }
       if (s.state === 'chase' && now > entry.grumbleAt && this.near(s.x, s.y, s.z, big ? 24 : 10)) {
@@ -2263,6 +2290,14 @@ export class Game extends EventTarget {
     const story = this.adventure?.story;
     if (story) return c.kind === 'castle' ? story.lair : (story.camps[c.id - 1] ?? `Camp ${c.id}`);
     return c.kind === 'castle' ? 'King Grumble’s castle' : `Camp ${c.id}`;
+  }
+
+  // Who holds the castle (shared/bosses.js): on the isle the chapter's boss,
+  // anywhere else King Grumble; { kind, icon, name, moves, ... }.
+  bossInfo() {
+    const story = this.adventure?.story;
+    const kind = story?.boss ?? 'king';
+    return { kind, ...planOf(kind, Boolean(story)) };
   }
 
   // How far up each flag is, how many friends are by it and whether its
@@ -2328,11 +2363,12 @@ export class Game extends EventTarget {
     adv.shield = false;
     for (const e of this.monsters.values()) {
       const p = e.model.group.position;
-      if (e.kind === 'king' && this.near(p.x, p.y, p.z, 60)) this.renderer.effects.sparkles(p.x, p.y + 1.2, p.z, 30, ['#cdeeff', '#ffffff', '#ffd84d']);
+      if (isBoss(e.kind) && this.near(p.x, p.y, p.z, 60)) this.renderer.effects.sparkles(p.x, p.y + 1.2, p.z, 30, ['#cdeeff', '#ffffff', '#ffd84d']);
     }
     this.sound.play('shield');
+    const boss = this.bossInfo();
     const lair = adv.story ? `the ${adv.story.lair}` : 'his castle';
-    this.emit('toast', { icon: '🫧', text: `Every camp is free! King Grumble’s bubble popped. Off to ${lair}, and pop him!` });
+    this.emit('toast', { icon: '🫧', text: `Every camp is free! ${boss.name}’s bubble popped. Off to ${lair}, and pop ${boss.kind === 'moltok' ? 'it' : 'him'}!` });
     this.emit('adventure');
   }
 
@@ -2345,7 +2381,7 @@ export class Game extends EventTarget {
       if (p && this.near(p.x, p.y, p.z, 30)) this.sound.play('bubble');
       if (msg.by === this.pid && performance.now() > (this.toldBubble ?? 0)) {
         this.toldBubble = performance.now() + 8000;
-        this.emit('toast', { icon: '🫧', text: 'King Grumble is safe in his bubble until every camp is free!' });
+        this.emit('toast', { icon: '🫧', text: `${this.bossInfo().name} is safe in a bubble until every camp is free!` });
       }
       return;
     }
@@ -2377,6 +2413,49 @@ export class Game extends EventTarget {
     if (d < 14) this.renderer.shake(0.3 * (1 - d / 14));
   }
 
+  // A boss's move coming (shared/bosses.js), as the host tells of it: red
+  // rings on the ground where what it threw comes down (and it flying
+  // there), or where it will land from a leap; a strip on the ground the
+  // way it is about to charge; or a bonk, charging into a wall.
+  bossFx(msg) {
+    const fx = this.renderer.effects;
+    const spot = (a) => Array.isArray(a) && a.length === 3 && a.every(Number.isFinite);
+    const ms = Math.min(4000, Math.max(100, Number(msg.ms) || 1000));
+    const r = Math.min(9, Math.max(0.5, Number(msg.r) || 2));
+    if (msg.kind === 'hurl') {
+      if (!spot(msg.from) || !Array.isArray(msg.to)) return;
+      const to = msg.to.filter(spot).slice(0, 8);
+      if (!this.near(msg.from[0], msg.from[1], msg.from[2], 80)) return;
+      this.monsters.get(msg.id)?.model.thrown?.();
+      const what = THROWN_SOUND[msg.what] ? msg.what : 'bomb';
+      this.renderer.hurl(msg.from, to, ms, r, what, ([x, y, z]) => {
+        if (this.near(x, y, z, 40)) this.sound.play(THROWN_SOUND[what], { near: 0.8 });
+      });
+      this.sound.play('swish');
+      return;
+    }
+    if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.near(msg.x, msg.y, msg.z, 80)) return;
+    if (msg.kind === 'leap') {
+      this.renderer.warnRing(msg.x, msg.y, msg.z, r, ms);
+      this.sound.play('boing');
+    } else if (msg.kind === 'rear') {
+      const d = Math.min(24, Math.max(1, Number(msg.d) || 10));
+      const w = Math.min(4, Math.max(0.5, Number(msg.w) || 2));
+      this.renderer.warnStrip(msg.x, msg.y, msg.z, Number(msg.yaw) || 0, d, w, ms);
+      this.sound.play('grumble', { big: true });
+    } else if (msg.kind === 'bonk') {
+      for (let i = 0; i < 8; i++) fx.dust(msg.x + (Math.random() - 0.5) * 2, msg.y, msg.z + (Math.random() - 0.5) * 2);
+      fx.stars(msg.x, msg.y + 2, msg.z, 6);
+      this.sound.play('whack');
+      const d = this.me ? Math.hypot(this.me.body.x - msg.x, this.me.body.z - msg.z) : Infinity;
+      if (d < 14) this.renderer.shake(0.25 * (1 - d / 14));
+      if (!this.toldBonk && d < 30) {
+        this.toldBonk = true;
+        this.emit('toast', { icon: '💥', text: `Bonk! ${this.bossInfo().name} charged into the wall and is dazed — bop now!` });
+      }
+    }
+  }
+
   // The whole island free: fireworks, a fanfare, and for everyone who was
   // there, a sticker and a diamond.
   islandWon(msg) {
@@ -2405,10 +2484,11 @@ export class Game extends EventTarget {
       this.emit('dizzy', false);
     }
     const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
-    const what = hero ? `${hero} popped King Grumble!` : 'Every camp is free!';
+    const boss = this.bossInfo();
+    const what = hero ? `${hero} popped ${boss.name}!` : 'Every camp is free!';
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards won back so far.
-    if (story) this.emit('toast', { icon: '⭐', text: `${hero ? `${hero} gave King Grumble the last bop! ` : ''}${story.won} ${story.shards < SHARDS ? `${story.shards} of ${SHARDS} Star Shards back!` : `All ${SHARDS} Star Shards!`}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    if (story) this.emit('toast', { icon: '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${story.shards < SHARDS ? `${story.shards} of ${SHARDS} Star Shards back!` : `All ${SHARDS} Star Shards!`}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
   }

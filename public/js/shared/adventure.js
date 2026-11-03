@@ -30,7 +30,8 @@
 // a stage number scales everything below that says so.
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
-import { BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, KING_MOVES, kindOf, SAFE_RADIUS } from './monsters.js';
+import { BOSSES, breathMove, isBoss, planOf } from './bosses.js';
+import { BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, kindOf, SAFE_RADIUS } from './monsters.js';
 import { MOVE } from './physics.js';
 import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
@@ -59,6 +60,8 @@ export const guardsFor = (players, stage = 1) => stageGuards(Math.min(5, 1 + Mat
 // can bop him once in this long. Nobody bopping him for KING_HEAL_MS, he
 // gets a heart back, and another every KING_HEAL_EVERY after.
 export const kingHearts = (players, stage = 1) => stageKing(12 + 6 * Math.min(8, Math.max(1, players)), stage);
+// A boss's (bosses.js), which has as many again as its hearts say.
+export const bossHearts = (plan, players, stage = 1) => Math.round(kingHearts(players, stage) * (plan?.hearts ?? 1));
 export const KING_HIT_MS = 800;
 export const KING_HEAL_MS = 8000;
 const KING_HEAL_EVERY = 2000;
@@ -141,6 +144,8 @@ const BOOK = {
   yeti: { icon: '❄️', name: 'Little Yeti' },
   gummy: { icon: '🧸', name: 'Gummy Bear' },
   cub: { icon: '🍬', name: 'Gummy Cub' },
+  // The bosses, by their names and icons (bosses.js).
+  ...Object.fromEntries(Object.entries(BOSSES).map(([kind, b]) => [kind, { icon: b.icon, name: b.name }])),
   king: { icon: '🤴', name: 'King Grumble' },
 };
 export const MONSTER_BOOK = MONSTER_LOG.map((kind) => ({ kind, ...BOOK[kind] }));
@@ -148,12 +153,14 @@ export const MONSTER_BOOK = MONSTER_LOG.map((kind) => ({ kind, ...BOOK[kind] }))
 // A monster's stats, as the collection shows them: its hearts (HP), the HP
 // a bump of it takes off you (ATK, fire for a Lava Ghost), what jumping on
 // it does (JMP) and how quick it comes after you (before a bop makes it
-// cross), against how quick you run (SPD). King Grumble's hearts are for one friend on stage 1: more friends,
-// and higher stages, give him more.
+// cross), against how quick you run (SPD). A boss's hearts are for one
+// friend on stage 1, as it is on the isle: more friends, and higher stages,
+// give it more.
 export function monsterStats(kind) {
   const pct = (run) => Math.round((100 * run) / MOVE.run);
-  if (kind === 'king') {
-    return { hp: kingHearts(1), atk: BUMP_HP, fire: false, jump: 'Counts as a bop', speed: pct(KING_MOVES[0].run) };
+  if (isBoss(kind)) {
+    const plan = planOf(kind, true);
+    return { hp: bossHearts(plan, 1), atk: Math.round(plan.bump * BUMP_HP), fire: Boolean(breathMove(plan)), jump: 'Counts as a bop', speed: pct(plan.run[0]) };
   }
   const k = kindOf(kind);
   const jump = k.land === Infinity ? 'Pops at once' : k.land ? `${Math.ceil(k.hearts / k.land)} jumps` : 'No jumping!';
@@ -465,7 +472,7 @@ const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), h
 
 export class AdventureSim {
   // camps: as buildCamps makes them (and saves keep them), with whether
-  // each is free; won: King Grumble popped, and the whole island free;
+  // each is free; won: the castle's boss popped, and the whole island free;
   // stage: the public adventure island's, for how hard its monsters are;
   // story: whether this is that island, a chapter of its story with a map
   // of its own (isle-maps.js), whose monsters the chapter has (its guards,
@@ -477,6 +484,10 @@ export class AdventureSim {
     this.rng = new Rng(seed);
     this.stage = cleanStage(stage);
     this.story = story ? chapterOf(this.stage) : null;
+    // Who holds the castle (bosses.js): the chapter's boss on the isle,
+    // King Grumble with his stomp alone anywhere else.
+    this.boss = this.story?.boss ?? 'king';
+    this.plan = planOf(this.boss, Boolean(this.story));
     this.gates = gates.map((g) => ({ ...g, open: Boolean(won) }));
     this.camps = camps.map((c) => {
       const freed = Boolean(c.freed) || Boolean(won);
@@ -578,17 +589,19 @@ export class AdventureSim {
     return news;
   }
 
-  // Someone came near: out come its monsters (or King Grumble, with his
-  // hearts for as many friends as are on the island now). The deepest camp
+  // Someone came near: out come its monsters (or the castle's boss — King
+  // Grumble, or on the isle the chapter's, bosses.js — with its hearts for
+  // as many friends as are on the island now). The deepest camp
   // wakes the Queen Mosquito too, as a tougher extra guard.
   wake(world, c, people, monsters, players) {
     c.awake = true;
     c.back = [];
     if (c.kind === 'castle') {
       const at = this.kingSpot(world, c);
-      const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: 'king' });
+      const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: this.boss, plan: this.plan });
       m.passive = this.shielded;
-      this.king = { ...noKing(), id: m.id, hearts: kingHearts(players, this.stage), max: kingHearts(players, this.stage) };
+      const hearts = bossHearts(this.plan, players, this.stage);
+      this.king = { ...noKing(), id: m.id, hearts, max: hearts };
       return;
     }
     for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
@@ -692,17 +705,18 @@ export class AdventureSim {
     return { t: 'freed', camp: c, by, gone, shieldDown: shielded && !this.shielded, won, gates: this.openGates(c.id) };
   }
 
-  // King Grumble's yard: in his bubble he is no trouble; out of it, he calls
-  // two little monsters to help him when he is down to two thirds of his
-  // hearts, and two more at a third, getting crosser each time; and left
-  // alone a while, he gets his hearts back one by one.
+  // The castle's yard: in its bubble the boss is no trouble; out of it, it
+  // calls two of its minions (bosses.js) to help it when it is down to two
+  // thirds of its hearts, and two more at a third, getting crosser each time
+  // (rage: its moves come sooner, more of them, and it gets about quicker);
+  // and left alone a while, it gets its hearts back one by one.
   stepCastle(world, c, now, monsters) {
     const k = this.king;
     let king = monsters.get(k.id);
     // Gone by himself (into water someone poured in): back in his yard, as he was.
     if (!king) {
       const at = this.kingSpot(world, c);
-      king = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: 'king' });
+      king = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: this.boss, plan: this.plan });
       k.id = king.id;
     }
     king.passive = this.shielded;
@@ -720,7 +734,7 @@ export class AdventureSim {
         const x = king.body.x + Math.sin(a) * 2.2;
         const z = king.body.z + Math.cos(a) * 2.2;
         const y = standHeight(world, x, z, king.body.y + 1) ?? king.body.y;
-        monsters.add(world, x, y, z, { camp: c.id, kind: this.story?.minion ?? 'blob' });
+        monsters.add(world, x, y, z, { camp: c.id, kind: this.plan.minion ?? 'blob' });
       }
     }
   }
@@ -797,12 +811,13 @@ export class AdventureSim {
   // Gummy Cubs: a Gummy Bear split into them, and it comes back whole.
   guardGone(m, now) {
     const c = this.campById(m.camp);
-    if (!c || c.freed || !c.awake || c.kind !== 'camp' || m.kind === 'king' || m.kind === 'queen' || m.kind === 'cub') return;
+    if (!c || c.freed || !c.awake || c.kind !== 'camp' || isBoss(m.kind) || m.kind === 'queen' || m.kind === 'cub') return;
     c.back.push(now + GUARD_BACK_MS);
   }
 
-  // A friend bopping King Grumble: nothing gets through his bubble, each
-  // friend can bop him once a moment, and while he sits dazed a bop takes
+  // A friend bopping the castle's boss (King Grumble, or on the isle the
+  // chapter's: bosses.js): nothing gets through its bubble, each
+  // friend can bop it once a moment, and while it sits dazed a bop takes
   // DAZED_HIT hearts; times: how many times over a bop counts (a Star
   // Hammer's, see shop.js). Returns { shielded }, { wait }, or
   // { hit, hearts, max, beaten, dazed }.
@@ -817,7 +832,7 @@ export class AdventureSim {
     return { hit: true, hearts: k.hearts, max: k.max, beaten: k.hearts <= 0, dazed };
   }
 
-  // King Grumble popped: the whole island is free. Every monster of every
+  // The castle's boss popped: the whole island is free. Every monster of every
   // camp goes; returns them.
   win(monsters) {
     this.won = true;

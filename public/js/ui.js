@@ -30,6 +30,7 @@ import { SIZES, THEMES } from './shared/worldgen.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
+import { isBoss } from './shared/bosses.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
@@ -1567,7 +1568,7 @@ export class UI {
       'div',
       { class: 'stats-card', role: 'group', 'aria-label': 'My stats' },
       stat('hp', '❤️', 'HP', now < s.hp ? `${now}/${s.hp}` : String(s.hp), `${maxHp(1)} at level 1, +${maxHp(2) - maxHp(1)} each level up`),
-      stat('ap', '⚔️', 'AP', String(s.ap), s.weapon ? `${s.weapon.icon} ${s.weapon.name} · King Grumble ${s.king}` : '👊 Bare paws: hold a toy weapon'),
+      stat('ap', '⚔️', 'AP', String(s.ap), s.weapon ? `${s.weapon.icon} ${s.weapon.name} · bosses ×${s.king}` : '👊 Bare paws: hold a toy weapon'),
       stat('def', '🛡️', 'DEF', `${s.def}%`, s.def ? '🛡️ Knight Armor: bumps take half' : s.fireproof ? '🧑‍🚒 Fire Suit: lava never burns' : 'Knight Armor halves bumps'),
       stat('spd', '👟', 'SPD', `${s.speed}%`, s.speed > 100 ? 'Faster with your shoes or skates' : 'Running shoes go faster'),
       stat('jmp', '🦘', 'JMP', `${s.jump}%`, s.jump > 100 ? '🦸 Hero Cape: higher jumps' : 'The Hero Cape jumps higher'),
@@ -1603,7 +1604,7 @@ export class UI {
           h(
             'ol',
             { class: 'story-way' },
-            ...camps.map((c) => h('li', { class: c.freed ? 'free' : '' }, c.kind === 'castle' ? '👑 ' : c.freed ? '🚩 ' : '🏴 ', c.kind === 'castle' ? `King Grumble in the ${story.lair}` : this.game.campLabel(c), c.freed ? ' ✓' : '')),
+            ...camps.map((c) => h('li', { class: c.freed ? 'free' : '' }, c.kind === 'castle' ? `${this.game.bossInfo().icon} ` : c.freed ? '🚩 ' : '🏴 ', c.kind === 'castle' ? `${this.game.bossInfo().name} in the ${story.lair}` : this.game.campLabel(c), c.freed ? ' ✓' : '')),
           ),
           h('button', { class: `big ${adv.won ? 'green' : 'blue'}`, type: 'button', onclick: () => this.closeModal() }, adv.won ? '👍 OK' : '⚔️ Let’s go!'),
         );
@@ -1688,7 +1689,7 @@ export class UI {
               h(
                 'div',
                 { class: 'monster-stats' },
-                stat('hp', '❤️ HP', m.kind === 'king' ? `${s.hp}+` : String(s.hp)),
+                stat('hp', '❤️ HP', isBoss(m.kind) ? `${s.hp}+` : String(s.hp)),
                 stat('atk', s.fire ? '🔥 ATK' : '💥 ATK', String(s.atk)),
                 stat('spd', '👟 SPD', `${s.speed}%`),
                 stat('jmp', '🦘 JMP', s.jump),
@@ -2404,7 +2405,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner King Grumble goes pop. It has a story, 📖 The Star of Adventure Isle: King Grumble broke the lighthouse’s Star into seven Star Shards, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Misty Marsh, Ember Mountain and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and King Grumble waits at the end. Pop him for a Star Shard, and the next chapter is up, a little harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). Every day it begins again at chapter 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle: King Grumble broke the lighthouse’s Star into seven Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Misty Marsh, Ember Mountain and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s six captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, a little harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). Every day it begins again at chapter 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -4133,7 +4134,7 @@ export class UI {
               ...camps
                 .filter((c) => c.kind === 'camp')
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` ${g.campLabel(c)}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
-              castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, '👑', story ? ` King Grumble, ${story.lair}` : ' King Grumble', h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in his bubble 🫧' : 'ready to pop!')) : '',
+              castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, g.bossInfo().icon, story ? ` ${g.bossInfo().name}, ${story.lair}` : ` ${g.bossInfo().name}`, h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in a bubble 🫧' : 'ready to pop!')) : '',
             ),
             adv.won && g.quizOffer && (!g.quizOffer.taken.junior || !g.quizOffer.taken.senior)
               ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag: one at elementary school Year 2 level, one at middle school Year 3. Every answer right pays!')
@@ -4857,9 +4858,9 @@ export class UI {
       el.textContent = pet && kind ? `${kind.icon} ${pet.name}${owner ? ` (${owner}'s ${kind.name.toLowerCase()})` : ''} — tap to pet` : '';
       el.hidden = !pet || !kind;
     } else if (aim?.kind === 'monster') {
-      const king = g.monsters.get(aim.id)?.kind === 'king';
+      const boss = isBoss(g.monsters.get(aim.id)?.kind) ? g.bossInfo() : null;
       const press = g.touch ? `press ${$('btn-attack').textContent}` : 'press X';
-      el.textContent = !king ? `👾 Monster — walk up and ${press} to bop it!` : g.adventure?.shield ? '🫧 King Grumble is in his bubble' : `👑 King Grumble — walk up and ${press} to bop him!`;
+      el.textContent = !boss ? `👾 Monster — walk up and ${press} to bop it!` : g.adventure?.shield ? `🫧 ${boss.name} is in a bubble` : `${boss.icon} ${boss.name} — walk up and ${press} to bop!`;
       el.hidden = false;
     } else if (aim?.kind === 'friend') {
       el.textContent = `🤝 ${g.players.get(aim.pid)?.name ?? 'A friend'} is dizzy — tap to help them up!`;
@@ -7713,8 +7714,9 @@ export class UI {
   }
 
   // On an adventure island: over each camp near you, how its flag is going
-  // (or what to do there), and over King Grumble, his hearts (or his bubble);
-  // over any other monster, its hearts.
+  // (or what to do there), and over the castle's boss (King Grumble, or on
+  // the isle the chapter's), its hearts (or its bubble); over any other
+  // monster, its hearts.
   adventureTags(g, r) {
     const seen = new Set();
     const adv = g.adventure;
@@ -7762,7 +7764,7 @@ export class UI {
         const p = c.flag.group.position;
         const pct = Math.floor(c.progress * 100);
         let label;
-        if (c.kind === 'castle') label = adv.shield ? '🫧 Free every camp first!' : '👑 Pop King Grumble!';
+        if (c.kind === 'castle') label = adv.shield ? '🫧 Free every camp first!' : `${g.bossInfo().icon} Pop ${g.bossInfo().name}!`;
         else if (c.friends && c.guarded) label = '👾 Pop the monsters first!';
         else if (c.friends) label = `🚩 ${pct}%${c.friends > 1 ? ` · ${c.friends} friends` : ''}`;
         else if (far < c.r + 3) label = '🚩 Stand by the flag!';
@@ -7770,11 +7772,13 @@ export class UI {
         // Over the heads of friends standing by it.
         tag(`camp-${c.id}`, p.x, p.y + 2.8, p.z, `${label}|${pct}`, () => [h('div', { class: 'label' }, label), c.kind === 'camp' && pct > 0 ? bar(c.progress, 'flag') : '']);
       }
-      const king = [...g.monsters.values()].find((e) => e.kind === 'king');
+      const king = [...g.monsters.values()].find((e) => isBoss(e.kind));
       const p = king?.model.group.position;
       if (p && adv.king && Math.hypot(p.x - me.x, p.z - me.z) < 45) {
         const { hearts, max } = adv.king;
-        tag('king', p.x, p.y + 2.9, p.z, `${hearts}|${max}|${adv.shield}`, () => [h('div', { class: 'label' }, adv.shield ? '👑 King Grumble 🫧' : '👑 King Grumble'), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
+        const boss = g.bossInfo();
+        const label = `${boss.icon} ${boss.name}${adv.shield ? ' 🫧' : ''}`;
+        tag('king', p.x, p.y + (king.model.height ?? 1.8) + 1.1, p.z, `${hearts}|${max}|${label}`, () => [h('div', { class: 'label' }, label), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
       }
     }
     // A conquered island's extra-credit quizzes wait by its flag — the
@@ -7801,12 +7805,12 @@ export class UI {
     // Over every other monster near you, a bar of the hearts it has left.
     if (me) {
       for (const e of g.monsters.values()) {
-        if (adv && e.kind === 'king') continue;
+        if (adv && isBoss(e.kind)) continue;
         const p = e.model.group.position;
         if (Math.hypot(p.x - me.x, p.z - me.z) > 30) continue;
         const max = Math.max(1, e.max ?? 1);
         const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
-        const top = e.kind === 'king' ? 2.9 : bodyOf(e.kind).height + 0.3;
+        const top = isBoss(e.kind) ? (e.model.height ?? 1.8) + 1.1 : bodyOf(e.kind).height + 0.3;
         tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => [bar(hearts / max, 'monster')], 'mon');
       }
     }

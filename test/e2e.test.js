@@ -3822,7 +3822,7 @@ test('the admin page shows each player, their login and their islands, folded aw
     await until(page, () => document.querySelector('.isle-world > summary')?.textContent.includes('level 3'));
     await page.click('.isle-world > summary');
     assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /12 monsters popped/);
-    assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /1 King Grumble popped/);
+    assert.match(await page.$eval('.isle-world .facts', (el) => el.textContent), /1 boss popped/);
 
     // The visitors' log, a tab of its own: pages that came by with no login, no players.
     await store.noteVisit(KeeperStore.deviceId('a7'.repeat(16)), { agent: 'Mozilla/5.0 (iPad)', screen: '1024×768 @2x', touch: true, language: 'ko-KR', page: 'http://x/?ctb' });
@@ -5728,7 +5728,7 @@ test('arriving on the shared isle tells its chapter of the story, once, and its 
     assert.ok(title.includes(`Chapter ${chapter.n}: ${chapter.name}`), title);
     const way = await page.$$eval('#modal .story-way li', (els) => els.map((el) => el.textContent));
     assert.deepEqual(way.slice(0, chapter.camps.length).map((t) => t.replace(/^\S+ /, '')), chapter.camps, 'the camps along the way, in order');
-    assert.ok(way.at(-1).includes(chapter.lair), 'and King Grumble’s lair at the end');
+    assert.ok(way.at(-1).includes(chapter.lair), 'and the boss’s lair at the end');
     await clickButton(page, 'Let’s go', '#modal');
     await until(page, () => document.getElementById('modal').hidden);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleStory'))), [chapter.key], 'told once on this device');
@@ -6377,7 +6377,7 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
   // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
-  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 16);
+  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 22);
   const seen = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
     crab: document.querySelector('#modal .monster-book [data-kind="snapper"]').textContent,
@@ -6386,8 +6386,8 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
     golemPic: document.querySelector('#modal .monster-book [data-kind="golem"] img').className,
   }));
   assert.deepEqual([seen.crabPic, seen.golemPic], ['figure', 'figure shadow']);
-  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 16\)$/);
-  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 16)');
+  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 22\)$/);
+  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 22)');
   assert.equal(seen.crab, 'Snappy Crab');
   assert.equal(seen.golem, '???');
   await page.click('#modal .tabs .chip[data-tab="defeated"]');
@@ -6455,6 +6455,52 @@ test('a treasure chest on Adventure Isle: Q with no key offers a quiz, one answe
   // Open, it has no button.
   await until(page, () => document.getElementById('ride').hidden || !document.getElementById('ride').textContent.includes('Locked'));
   await page.browserContext().close();
+});
+
+// Each chapter's lair on the isle is held by a boss of its own
+// (shared/bosses.js), with moves of its own that show before they come.
+test('the isle’s lair holds its chapter’s boss, named over its head, and what it throws shows a ring where it comes down, until it does', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  // On to stage 3, Frostpeak Pass: Frostfang's Ice Palace.
+  for (let s = 1; s < 3; s++) {
+    isle.room.adventure.win(isle.room.monsters);
+    isle.tick();
+  }
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    const room = isle.room;
+    const adv = room.adventure;
+    assert.equal(adv.boss, 'frostfang');
+    for (const c of adv.camps) if (c.kind === 'camp') room.campFreed(adv.free(c, [], room.monsters));
+    for (const p of room.players.values()) p.safeUntil = Infinity;
+    const c = adv.castle;
+    await page.evaluate((c) => {
+      const kw = window.kidsWorld;
+      Object.assign(kw.game.me.body, { x: c.x + 3, y: c.y + 1, z: c.z, vx: 0, vy: 0, vz: 0 });
+      kw.game.sendMove(true);
+    }, { x: c.x, y: c.y, z: c.z });
+    await until(page, () => [...window.kidsWorld.game.monsters.values()].some((m) => m.kind === 'frostfang'));
+    assert.ok(await page.evaluate(() => Boolean([...window.kidsWorld.game.monsters.values()].find((m) => m.kind === 'frostfang').model.held)), 'his own model, a snowball to hold up');
+    await until(page, () => [...document.querySelectorAll('.adv-tag .label')].some((el) => el.textContent.includes('❄️ Frostfang')));
+    // A snowball thrown at you: a ring under you until it comes down.
+    const boss = room.monsters.list.find((m) => m.kind === 'frostfang');
+    const [me] = [...room.players.values()];
+    room.broadcast({ t: 'mfx', kind: 'hurl', id: boss.id, what: 'snowball', from: [boss.body.x, boss.body.y + 3, boss.body.z], to: [me.s.slice(0, 3)], ms: 1300, r: 2 });
+    await until(page, () => window.kidsWorld.renderer.bossFx.length === 1);
+    await until(page, () => window.kidsWorld.renderer.bossFx.length === 0);
+    // And the strip a charge is coming along.
+    room.broadcast({ t: 'mfx', kind: 'rear', id: boss.id, x: boss.body.x, y: boss.body.y, z: boss.body.z, yaw: 0, d: 16, w: 2, ms: 1000 });
+    await until(page, () => window.kidsWorld.renderer.bossFx.length === 1);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
 });
 
 test('a tornado sweeps you up out in the open, spins you round and flings you out; a roof over your head keeps you safe', { skip }, async () => {

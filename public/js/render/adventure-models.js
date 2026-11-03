@@ -6,6 +6,7 @@
 // rushing out over the ground.
 import * as THREE from '../../vendor/three.module.js';
 import { cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
+import { addBossParts, bossPose, disposeBossParts, underState } from './boss-models.js';
 import { MonsterModel } from './monster-model.js';
 
 // The flags, drawn once: [width, height] of the cloth by the kind of camp.
@@ -159,7 +160,8 @@ const KING_SCALE = [2.3, 2.5];
 
 // King Grumble: a monster blob grown big, with a golden crown, in a bubble
 // while any camp is not free, and a ring on the ground as far as his stomp
-// reaches while he crouches for one.
+// reaches while he crouches for one — with a grumble bomb held up over his
+// head before he throws it, on Gloom Rock (boss-models.js addBossParts).
 export class KingModel extends MonsterModel {
   constructor(theme, reach) {
     super(theme);
@@ -183,56 +185,25 @@ export class KingModel extends MonsterModel {
     }
     this.body.add(crown);
     this.crown = crown;
-    this.bubble = mesh(sphere(1, 28, 20), new THREE.MeshBasicMaterial({ color: '#cdeeff', transparent: true, opacity: 0.22, depthWrite: false }), 0, 0.95, 0, 1.55);
-    this.bubbleRim = mesh(sphere(1, 28, 20), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.18, depthWrite: false, side: THREE.BackSide }), 0, 0.95, 0, 1.6);
-    this.group.add(this.bubble, this.bubbleRim);
-    this.ring = new THREE.Mesh(new THREE.RingGeometry(reach - 0.35, reach, 56), new THREE.MeshBasicMaterial({ color: '#ff6a3d', transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
-    this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.y = 0.06;
-    this.ring.renderOrder = 2;
-    this.group.add(this.ring);
+    addBossParts(this, { bubble: 1.55, y: 0.95, reach, hurl: 'bomb', top: 1.8 });
     this.height = 1.8;
     this.center = 0.9;
     this.pick = 1.15;
     this.seen = 140;
     this.shadowScale = 2.4;
-    this.bounce = 0;
   }
 
-  // His bubble shaking off a bop.
-  bubbleBounce() {
-    this.bounce = 0.6;
-  }
-
+  // As every boss stands for its moves (boss-models.js bossPose), the blob
+  // underneath only cross.
   update(dt, state, air = 0, night = false, shielded = false) {
-    super.update(dt, state, air, night);
-    const t = this.time;
-    this.bounce = Math.max(0, this.bounce - dt);
-    const wobble = 1 + Math.sin(t * 2.2) * 0.025 + Math.sin(this.bounce * 18) * this.bounce * 0.12;
-    this.bubble.visible = shielded;
-    this.bubbleRim.visible = shielded;
-    this.bubble.scale.setScalar(1.55 * wobble);
-    this.bubbleRim.scale.setScalar(1.6 * wobble);
-    this.ring.visible = state === 'stomp' && air < 0.1;
-    this.ring.material.opacity = 0.35 + 0.3 * Math.abs(Math.sin(t * 9));
-    // Crouched to stomp: down low, shaking.
-    if (state === 'stomp') {
-      this.body.scale.y *= 0.72;
-      this.body.rotation.z = Math.sin(t * 30) * 0.05;
-    }
-    // Dazed from a stomp: sagging, swaying slowly, mouth hanging open.
-    if (state === 'dazed') {
-      this.body.scale.y *= 0.88;
-      this.body.rotation.z = Math.sin(t * 3) * 0.12;
-      this.mouth.scale.y = 0.07;
-    }
-    this.crown.rotation.z = Math.sin(t * 3) * 0.06;
+    super.update(dt, underState(state), air, night);
+    bossPose(this, dt, state, air, shielded);
+    this.crown.rotation.z = Math.sin(this.time * 3) * 0.06;
   }
 
   dispose() {
     super.dispose();
-    this.ring.geometry.dispose();
-    this.ring.material.dispose();
+    disposeBossParts(this);
   }
 }
 

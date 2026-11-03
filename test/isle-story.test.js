@@ -6,7 +6,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { AdventureSim, CAMP_RADIUS } from '../public/js/shared/adventure.js';
+import { AdventureSim, CAMP_RADIUS, kingHearts } from '../public/js/shared/adventure.js';
+import { BOSSES, isBoss } from '../public/js/shared/bosses.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
 import { campName, CHAPTERS, chapterOf, introOf, SHARDS } from '../public/js/shared/isle-story.js';
@@ -25,8 +26,14 @@ test('the story has a chapter for every Star Shard, each told in full', () => {
     assert.equal(ch.camps.length, 3, `${ch.key}: three camps along the way`);
     assert.equal(ch.freed.length, ch.camps.length, `${ch.key}: a line for each camp freed`);
     ch.freed.forEach((line, i) => assert.ok(line.includes(ch.camps[i].replace(/^The /, '')), `${ch.key}: freeing ${ch.camps[i]} says so`));
-    for (const kind of [...ch.guards, ch.minion]) assert.ok(MONSTER_KINDS.includes(kind), `${ch.key}: ${kind} is a monster`);
+    for (const kind of ch.guards) assert.ok(MONSTER_KINDS.includes(kind), `${ch.key}: ${kind} is a monster`);
+    // Its boss, one of its own, calling monsters of the isle to help it.
+    assert.ok(isBoss(ch.boss) && MONSTER_KINDS.includes(ch.boss), `${ch.key}: ${ch.boss} is a boss`);
+    assert.ok(MONSTER_KINDS.includes(BOSSES[ch.boss].minion) && !isBoss(BOSSES[ch.boss].minion), `${ch.key}: its minions`);
+    assert.ok(ch.intro.includes(BOSSES[ch.boss].name.split(' the ')[0]), `${ch.key}: the story tells of ${BOSSES[ch.boss].name}`);
   }
+  assert.equal(new Set(CHAPTERS.map((c) => c.boss)).size, SHARDS, 'a boss of its own for every chapter');
+  assert.equal(CHAPTERS.at(-1).boss, 'king', 'King Grumble himself at the last');
   // The last chapter ends the story: King Grumble popped for good, the Star whole.
   assert.match(CHAPTERS.at(-1).won, /once and for all/);
 });
@@ -196,7 +203,7 @@ test('on the isle, freeing a camp opens its gate for everyone', () => {
   isle.stop();
 });
 
-test('a chapter’s own monsters come out among its camps’ guards, and King Grumble calls its helpers', () => {
+test('a chapter’s own monsters come out among its camps’ guards, and its boss holds the lair and calls its helpers', () => {
   const world = buildIsle({ stage: 1, seed: 7 }).world;
   const camps = buildIsle({ stage: 1, seed: 7 }).camps;
   const sim = new AdventureSim({ camps, stage: 1, story: true }, 1);
@@ -209,7 +216,8 @@ test('a chapter’s own monsters come out among its camps’ guards, and King Gr
   const theirs = new MonsterSim(1);
   plain.wake(world, plain.campById(1), [], theirs, 2);
   assert.ok(!theirs.list.some((m) => m.kind === 'snapper'));
-  // The Whispering Woods' camps keep Puffshrooms; its King Grumble calls spiders.
+  // The Whispering Woods' camps keep Puffshrooms; Old Puffcap holds its
+  // lair, and calls more of them.
   const woods = buildIsle({ stage: 2, seed: 7 });
   const w2 = new AdventureSim({ camps: woods.camps, stage: 2, story: true }, 1);
   const m2 = new MonsterSim(1);
@@ -217,8 +225,19 @@ test('a chapter’s own monsters come out among its camps’ guards, and King Gr
   assert.ok(m2.list.some((m) => m.kind === 'shroom'));
   for (const c of w2.camps) if (c.kind === 'camp') c.freed = true;
   w2.wake(woods.world, w2.castle, [], m2, 1);
+  const boss = m2.list.find((m) => m.camp === w2.castle.id);
+  assert.equal(boss.kind, 'puffcap');
+  assert.equal(boss.plan, BOSSES.puffcap, 'fighting as the chapter has it');
+  assert.equal(w2.king.max, Math.round(kingHearts(1, 2) * BOSSES.puffcap.hearts));
   w2.king.hearts = 1;
   w2.stepCastle(woods.world, w2.castle, 1000, m2);
-  assert.deepEqual(m2.list.filter((m) => m.camp === w2.castle.id && m.kind !== 'king').map((m) => m.kind), ['spider', 'spider', 'spider', 'spider']);
-  assert.ok(kindOf('spider').hearts > 0);
+  assert.deepEqual(m2.list.filter((m) => m.camp === w2.castle.id && m !== boss).map((m) => m.kind), ['shroom', 'shroom', 'shroom', 'shroom']);
+  assert.ok(kindOf('shroom').hearts > 0);
+  // Anywhere else, King Grumble holds the castle, stomping and only that.
+  const own = new AdventureSim({ camps: woods.camps, stage: 2 }, 1);
+  const m3 = new MonsterSim(1);
+  for (const c of own.camps) if (c.kind === 'camp') c.freed = true;
+  own.wake(woods.world, own.castle, [], m3, 1);
+  assert.equal(m3.list[0].kind, 'king');
+  assert.deepEqual(m3.list[0].plan.moves.map((v) => v.move), ['stomp']);
 });

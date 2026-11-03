@@ -552,7 +552,7 @@ function isleWorld(device) {
       fact(stickers.length, `of ${STICKERS.length} stickers`, stickers.map((s) => s.name).join(', ') || 'No stickers there yet'),
       fact(p.stats?.popped ?? 0, (p.stats?.popped ?? 0) === 1 ? 'monster popped' : 'monsters popped'),
       fact(p.stats?.freed ?? 0, (p.stats?.freed ?? 0) === 1 ? 'camp freed' : 'camps freed'),
-      fact(p.stats?.kings ?? 0, (p.stats?.kings ?? 0) === 1 ? 'King Grumble popped' : 'King Grumbles popped'),
+      fact(p.stats?.kings ?? 0, (p.stats?.kings ?? 0) === 1 ? 'boss popped' : 'bosses popped'),
       fact(treasures, treasures === 1 ? 'treasure' : 'treasures'),
       fact(p.coins ?? 0, 'coins'),
     ),

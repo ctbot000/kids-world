@@ -10,8 +10,9 @@
 // and all of it kept when saved, and on the list of open islands.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
+import { bossHearts, CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
 import { keptProfile } from '../public/js/shared/keeper.js';
+import { BOSSES } from '../public/js/shared/bosses.js';
 import { MONSTER_KINDS } from '../public/js/shared/monsters.js';
 import { popKey, seenKey, STAT_KEYS } from '../public/js/shared/stickers.js';
 import * as B from '../public/js/shared/blocks.js';
@@ -613,7 +614,10 @@ test('the monster book has every kind of monster, each with a name and stats, co
   assert.deepEqual(monsterStats('golem'), { hp: 12, atk: 60, fire: false, jump: '6 jumps', speed: 46 });
   assert.equal(monsterStats('spiky').jump, 'No jumping!');
   assert.deepEqual([monsterStats('ghost').atk, monsterStats('ghost').fire], [30, true]);
-  assert.equal(monsterStats('king').hp, kingHearts(1));
+  // A boss's, as it is on the isle: King Grumble on Gloom Rock has more.
+  assert.equal(monsterStats('king').hp, bossHearts(BOSSES.king, 1));
+  assert.ok(monsterStats('king').hp > kingHearts(1));
+  assert.equal(monsterStats('moltok').fire, true, 'Moltok breathes fire');
   // The keeper keeps every count, these with the rest.
   const stats = Object.fromEntries(STAT_KEYS.map((k) => [k, 1]));
   assert.deepEqual(keptProfile({ name: 'Keen Owl', stats }).stats, stats);

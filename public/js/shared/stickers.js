@@ -70,9 +70,9 @@ export const STICKERS = [
   { key: 'camp-liberator', icon: '🎖️', name: 'Camp Liberator', text: 'Free 50 monster camps on adventure islands', test: (s) => s.freed >= 50 },
   { key: 'freedom-legend', icon: '🕊️', name: 'Freedom Legend', text: 'Free 500 monster camps on adventure islands', test: (s) => s.freed >= 500 },
   { key: 'helping-hand', icon: '🤝', name: 'Helping Hand', text: 'Help a dizzy friend up', test: (s) => s.helped >= 1 },
-  { key: 'island-hero', icon: '👑', name: 'Island Hero', text: 'Pop King Grumble and free a whole adventure island', test: (s) => s.kings >= 1 },
-  { key: 'grumble-buster', icon: '🏆', name: 'Grumble Buster', text: 'Pop King Grumble and free 10 adventure islands', test: (s) => s.kings >= 10 },
-  { key: 'king-of-kings', icon: '🫅', name: 'King of Kings', text: 'Pop King Grumble and free 100 adventure islands', test: (s) => s.kings >= 100 },
+  { key: 'island-hero', icon: '👑', name: 'Island Hero', text: 'Pop the boss and free a whole adventure island', test: (s) => s.kings >= 1 },
+  { key: 'grumble-buster', icon: '🏆', name: 'Grumble Buster', text: 'Pop the boss and free 10 adventure islands', test: (s) => s.kings >= 10 },
+  { key: 'king-of-kings', icon: '🫅', name: 'King of Kings', text: 'Pop the boss and free 100 adventure islands', test: (s) => s.kings >= 100 },
   { key: 'tower-builder', icon: '🗼', name: 'Tower Builder', text: 'Build a tower on a tower defense island', test: (s) => s.towers >= 1 },
   { key: 'star-keeper', icon: '🌟', name: 'Star Keeper', text: 'See off every wave on a tower defense island', test: (s) => s.defended >= 1 },
   { key: 'fortress-guard', icon: '🛡️', name: 'Fortress Guard', text: 'See off every wave on 5 tower defense islands', test: (s) => s.defended >= 5 },
@@ -140,9 +140,10 @@ export const STICKERS = [
 ];
 
 // The monster collection of Adventure Isle (adventure.js MONSTER_BOOK):
-// every kind of monster, the easiest first, each counted twice, as seen
+// every kind of monster, the easiest first (the bosses last, in the order
+// of the chapters they hold: bosses.js), each counted twice, as seen
 // (seen<kind>, 1 once you have) and as popped (pop<kind>, how many).
-export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'golem', 'queen', 'king'];
+export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'golem', 'queen', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'king'];
 export const seenKey = (kind) => `seen${kind}`;
 export const popKey = (kind) => `pop${kind}`;
 

@@ -35,7 +35,7 @@ export const ISLE_BOARDS = [
   { key: 'stickers', icon: '⭐', name: 'Stickers', text: 'Most stickers on the isle', hint: 'Earn a sticker there', score: (p) => STICKERS.filter((s) => p.stickers[s.key]).length },
   { key: 'monsters', icon: '👾', name: 'Monsters', text: 'Most monsters popped on the isle', hint: 'Pop a monster', score: (p) => count(p.stats.popped) },
   { key: 'camps', icon: '🏕️', name: 'Camps', text: 'Most camps freed on the isle', hint: 'Free a camp', score: (p) => count(p.stats.freed) },
-  { key: 'kings', icon: '👑', name: 'Kings', text: 'Most King Grumbles popped on the isle', hint: 'Pop King Grumble', score: (p) => count(p.stats.kings) },
+  { key: 'kings', icon: '👑', name: 'Bosses', text: 'Most bosses popped on the isle', hint: 'Pop a boss', score: (p) => count(p.stats.kings) },
   { key: 'explorers', icon: '🧭', name: 'Explorers', text: 'Most steps walked on the isle', hint: 'Go for a walk', score: (p) => count(p.stats.steps) },
   { key: 'levels', icon: '🎖️', name: 'Levels', text: 'Most XP on the isle, from everything they did there', hint: 'Play the isle a little', score: (p) => count(xpOf(p.stats, p.stickers)) },
 ];

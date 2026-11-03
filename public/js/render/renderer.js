@@ -23,6 +23,9 @@ import { MAX_EDIT_CELLS } from '../shared/tools.js';
 import { lookHair, lookTall } from '../shared/words.js';
 import { World } from '../shared/world.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
+import { makeBoss } from './boss-models.js';
+import { Thrown, WarnRing, WarnStrip } from './boss-fx.js';
+import { isBoss } from '../shared/bosses.js';
 import { ANIM, Avatar, shirtHex, weapon } from './avatar.js';
 import { CritterModel } from './critter-models.js';
 import { Drawings } from './drawings.js';
@@ -207,6 +210,8 @@ export class Renderer {
     // An adventure island's flags, by camp, and stomps rushing out over the ground.
     this.flags = new Map();
     this.shockwaves = [];
+    // What shows of the bosses' moves before they come (boss-fx.js).
+    this.bossFx = [];
 
     // What a tool is about to do: see-through blocks, or outlines for removal.
     const box = new THREE.BoxGeometry(1.02, 1.02, 1.02);
@@ -599,10 +604,11 @@ export class Renderer {
   // kind: 'blob', 'big' or 'spiky', 'king' for King Grumble, 'mosquito' for
   // the giant mosquito, 'queen' for the Queen Mosquito, 'spider' for the
   // giant spider, 'mole' for Mr. Mole, 'snapper' for a Snappy Crab and
-  // 'shroom' for a Puffshroom (isle-monsters.js).
+  // 'shroom' for a Puffshroom (isle-monsters.js), and the other bosses'
+  // (boss-models.js).
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
@@ -641,6 +647,23 @@ export class Renderer {
   // King Grumble landing: a ring rushing out over the ground, as far as his stomp reaches.
   shockwave(x, y, z, reach = STOMP.reach) {
     this.shockwaves.push(new Shockwave(this.scene, x, y, z, reach));
+  }
+
+  // A boss's moves coming (boss-fx.js): a red ring as wide as r on the
+  // ground at (x, y, z) for ms, where it will come down from a leap; a strip
+  // from there the way yaw faces, d long and w wide, where it will charge;
+  // and what it threw (what) flying from `from` to each of `to` in ms, with a
+  // ring where each comes down, land(at) told as each lands.
+  warnRing(x, y, z, r, ms) {
+    this.bossFx.push(new WarnRing(this.scene, x, y, z, r, ms));
+  }
+
+  warnStrip(x, y, z, yaw, d, w, ms) {
+    this.bossFx.push(new WarnStrip(this.scene, x, y, z, yaw, d, w, ms));
+  }
+
+  hurl(from, to, ms, r, what, land) {
+    this.bossFx.push(new Thrown(this.scene, this.effects, from, to, ms, r, what, land));
   }
 
   // Where the ground is under something, for its round shadow.
@@ -1013,6 +1036,7 @@ export class Renderer {
     this.goBoards.update();
     this.robotKits.update(dt);
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
+    this.bossFx = this.bossFx.filter((f) => f.update(dt));
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;
     if (this.drawing) {

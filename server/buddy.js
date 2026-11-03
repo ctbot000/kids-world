@@ -51,7 +51,8 @@ import { HELP_REACH } from '../public/js/shared/adventure.js';
 import { BLACK, gameOf, lessonsOf, NO_MOVE, pickFor, placeName, REACH as GO_REACH, WHITE } from '../public/js/shared/go.js';
 import { critterBox, CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { isNight } from '../public/js/shared/env.js';
-import { MONSTER_KINDS } from '../public/js/shared/monsters.js';
+import { isBoss } from '../public/js/shared/bosses.js';
+import { bodyOf, MONSTER_KINDS } from '../public/js/shared/monsters.js';
 import { BODY, keepApart, makeBody, stepBody, unstick } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { FACING, facingFromYaw, STAMPS } from '../public/js/shared/stamps.js';
@@ -1012,15 +1013,18 @@ export class Visit extends EventEmitter {
         }
       }
       if (threat) {
-        this.doing = `Bopping a${threat.kind === 'king' ? ' king' : ''} monster coming at ${target.me ? 'it' : target.p.name}`;
+        // A boss (King Grumble, or one of the isle's: bosses.js) is big, so
+        // near enough to bop from further off.
+        const size = isBoss(threat.kind) ? bodyOf(threat.kind).radius : 0;
+        this.doing = `Bopping a${size ? ' boss' : ''} monster coming at ${target.me ? 'it' : target.p.name}`;
         const gap = Math.hypot(threat.x - b.x, threat.z - b.z);
-        if (gap < (threat.kind === 'king' ? 3.6 : 2) && now - this.bopAt > BOP_MS) {
+        if (gap < (size ? size + 2.65 : 2) && now - this.bopAt > BOP_MS) {
           this.bopAt = now;
           this.yaw = yawTowards(threat.x - b.x, threat.z - b.z);
           this.link.send({ t: 'swing' });
           this.link.send({ t: 'bop', id: threat.id });
         }
-        return { x: threat.x, y: threat.y, z: threat.z, reach: threat.kind === 'king' ? 2.8 : 1.2 };
+        return { x: threat.x, y: threat.y, z: threat.z, reach: size ? size + 1.85 : 1.2 };
       }
     }
     const go = this.goGoal(now);

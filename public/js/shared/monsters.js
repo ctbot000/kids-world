@@ -79,7 +79,8 @@
 // as they see the animals. They are never saved: turning monsters off, or
 // opening the island again, starts it without any.
 import * as B from './blocks.js';
-import { makeBody, pushOut, shove, stepBody } from './physics.js';
+import { BOSSES, isBoss, KING_BODY, planOf, STOMP } from './bosses.js';
+import { makeBody, MOVE as BODY_MOVE, pushOut, shove, stepBody } from './physics.js';
 import { MAX_LEVEL } from './levels.js';
 import { Rng } from './rng.js';
 import { underTent } from './tents.js';
@@ -160,29 +161,28 @@ export const YETI_BODY = { radius: 0.62, height: 1.35 };
 // A Gummy Bear: up to your middle and more; a Gummy Cub, half that.
 export const GUMMY_BODY = { radius: 0.48, height: 0.95 };
 export const CUB_BODY = { radius: 0.3, height: 0.55 };
-// King Grumble: as tall as a player and much wider, slower still, with
-// bigger hops.
-export const KING_BODY = { radius: 0.95, height: 1.8 };
-// The crosser he gets (rage: 0, 1 at two thirds of his hearts, 2 at a
-// third), the quicker: at the last as quick as you walk, never as you run.
-export const KING_MOVES = [3, 3.8, 4.6].map((run) => ({ walk: 1.8, run, jump: 9 }));
+// King Grumble and the other bosses (bosses.js): big, slow and with bigger
+// hops, getting about the quicker the crosser they get (rage: 0, 1 at two
+// thirds of their hearts, 2 at a third), never as quick as you run.
+export { KING_BODY, STOMP };
+export const bossPace = (m) => ({ walk: 1.8, run: m.plan.run[m.rage ?? 0] ?? m.plan.run[m.plan.run.length - 1], jump: 9 });
 // Marching along a tower defense island's road: a little quicker than they
 // hop about, and King Grumble slower.
 const MARCH = { walk: 2.5, run: 2.5, jump: 8 };
 const KING_MARCH = { walk: 1.4, run: 1.4, jump: 9 };
-// His stomp: now and then, near whoever he is after, he crouches (long
-// enough to see it coming, with a ring on the ground as far as it reaches),
-// jumps straight up and lands with a thump that knocks over anyone on the
-// ground that near. Anyone in the air then is missed. Down from one, he sits
-// dazed a moment: he bumps nobody, and a bop then takes DAZED_HIT hearts.
-// The crosser he gets, the sooner the next (every, by rage, from landing).
-export const STOMP = { every: 6500, windup: 900, reach: 6, jump: 10.5 };
-const STOMP_EVERY = [6500, 4500, 3200];
-// A Little Yeti stomps the same way, nearer and not as high; down from one,
-// it sits dazed a moment too, bumping nobody.
+// A Little Yeti stomps the way King Grumble does (bosses.js STOMP), nearer
+// and not as high; down from one, it sits dazed a moment too, bumping nobody.
 export const YETI_STOMP = { every: 6000, windup: 850, reach: 3.5, jump: 8 };
-// Who stomps, and how.
+// Who stomps, and how (a boss as its moves say: bosses.js).
 export const stompOf = (kind) => (kind === 'king' ? STOMP : kind === 'yeti' ? YETI_STOMP : null);
+// What a boss shows as it winds up for each of its moves (MONSTER_STATES).
+const WINDUP_STATE = { stomp: 'stomp', leap: 'leap', charge: 'rear', hurl: 'hurl', puff: 'puff', breath: 'breathe' };
+// How far off whoever a boss is after can be for each move to be started at
+// them, from what the move reaches.
+const moveRange = (mv) => (mv.move === 'stomp' ? mv.reach + 2 : mv.move === 'puff' ? mv.reach + 0.5 : mv.move === 'breath' ? mv.reach + 1.5 : mv.far);
+// A boss charging at someone stuck against a wall this long: bonk, and it
+// sits dazed.
+const BONK_SECS = 0.12;
 export const DAZE_MS = 2200;
 export const DAZED_HIT = 3;
 // Bumping: how close (between middles, side to side) and how long it stops
@@ -306,15 +306,15 @@ export const GHOST_HOVER = { high: 1.5, chase: 1.0, up: 2.5 };
 const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
-export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub'];
+export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff', 'rear', 'charge', 'hurl', 'leap'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok'];
 
-export const bodyOf = (kind) => ({ king: KING_BODY, big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => BOSSES[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
 // it: up out of it he only ever hops or giggles (see step).
 export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
 // The heavy ones: a bigger knock when they bump you, and a bigger pop.
-export const isHeavy = (kind) => kind === 'king' || kind === 'big' || kind === 'golem' || kind === 'queen' || kind === 'yeti';
+export const isHeavy = (kind) => isBoss(kind) || kind === 'big' || kind === 'golem' || kind === 'queen' || kind === 'yeti';
 
 const FL = Math.floor;
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
@@ -361,18 +361,28 @@ function wet(world, x, y, z, overLava = false) {
   return false;
 }
 
+// How long something jumping up at speed vy is in the air till it comes
+// down to dy above where it left from, in seconds; null if it never gets
+// that high.
+function flightSecs(vy, dy) {
+  const g = BODY_MOVE.gravity;
+  const disc = vy * vy - 2 * g * dy;
+  return disc < 0 ? null : (vy + Math.sqrt(disc)) / g;
+}
+
 // The safe places of an island without camps: just its start.
 const startOnly = (world) => [{ x: world.spawn.x, z: world.spawn.z, r: SAFE_RADIUS }];
 
 // Whether a point (x, y, z) is in a Lava Ghost's jet of fire, breathed from
-// its body b the way yaw faces (dragon.js inFlames, drawn smaller).
-export function inGhostFlames(b, yaw, x, y, z) {
+// its body b the way yaw faces (dragon.js inFlames, drawn smaller), or in a
+// boss's (fire: its breath, bosses.js), as far and as wide as that reaches.
+export function inGhostFlames(b, yaw, x, y, z, fire = GHOST_FIRE) {
   const dx = x - b.x;
   const dz = z - b.z;
   const d = Math.hypot(dx, dz);
-  if (d > GHOST_FIRE.reach || y < b.y - 1.5 || y > b.y + 2.5) return false;
-  if (d < 1) return true;
-  return Math.abs(wrap(Math.atan2(dx, dz) - yaw)) <= GHOST_FIRE.angle;
+  if (d > fire.reach || y < b.y - 1.5 || y > b.y + Math.max(2.5, b.height + 0.7)) return false;
+  if (d < Math.max(1, b.radius + 0.5)) return true;
+  return Math.abs(wrap(Math.atan2(dx, dz) - yaw)) <= fire.angle;
 }
 
 export class MonsterSim {
@@ -400,6 +410,13 @@ export class MonsterSim {
     this.healed = [];
     // And the Puffshrooms' clouds of spores (see takePuffs).
     this.puffs = [];
+    // And the bosses' moves as they come (bosses.js): things thrown, charges
+    // and leaps about to come, and bonks into a wall (see takeHurls,
+    // takeRears, takeLeaps and takeBonks).
+    this.hurls = [];
+    this.rears = [];
+    this.leaps = [];
+    this.bonks = [];
   }
 
   get(id) {
@@ -416,8 +433,9 @@ export class MonsterSim {
 
   // camp: the id of the camp it keeps to (0: none); kind: 'blob' or 'king';
   // march: the way it marches along, as [{ x, y, z }] (a tower defense
-  // island's road, see defense.js), or null.
-  add(world, x, y, z, { camp = 0, kind = 'blob', march = null } = {}) {
+  // island's road, see defense.js), or null; plan: how a boss fights
+  // (bosses.js planOf: King Grumble with his stomp alone, unless told).
+  add(world, x, y, z, { camp = 0, kind = 'blob', march = null, plan = planOf(kind) } = {}) {
     if (!camp && !march && this.roaming >= MAX_MONSTERS) return null;
     const size = bodyOf(kind);
     const body = makeBody(x, y, z);
@@ -431,6 +449,9 @@ export class MonsterSim {
     const m = { id: this.nextId++, body, yaw: rng.range(-Math.PI, Math.PI), state: 'idle', target: 0, wander: null, rest: rng.range(0.5, 2), lonely: 0, giggle: 0, hearts, max: hearts, hits: new Map(), hitAt: 0, healAt: 0, cross: 0, camp, kind: MONSTER_KINDS.includes(kind) ? kind : 'blob' };
     // Mr. Mole comes out under the ground, as a mound of dirt on the move.
     if (kind === 'mole') Object.assign(m, { under: true, up: 0 });
+    // A boss, with its moves: none under way, the first due once it is
+    // after someone (see bossMove).
+    if (plan && isBoss(m.kind)) Object.assign(m, { plan, move: null, moveAt: 0, turn: 0 });
     if (march) Object.assign(m, { march, leg: 1, along: 0, stuck: 0, arrived: false, passive: true });
     this.list.push(m);
     return m;
@@ -495,10 +516,42 @@ export class MonsterSim {
     return out;
   }
 
-  // The clouds of spores puffed: { monster, x, y, z } each.
+  // The clouds of spores puffed: { monster, x, y, z } each (and a boss's
+  // reach, and what the cloud is: spores, or swamp gas).
   takePuffs() {
     const out = this.puffs;
     this.puffs = [];
+    return out;
+  }
+
+  // Things the bosses threw, since last asked: { monster, what, from, to,
+  // ms, reach, bumps }, coming down at each of to ({ x, y, z }) ms after.
+  takeHurls() {
+    const out = this.hurls;
+    this.hurls = [];
+    return out;
+  }
+
+  // Bosses rearing back to charge: { monster, yaw, far, ms }, off the way
+  // yaw faces as far as far, in ms.
+  takeRears() {
+    const out = this.rears;
+    this.rears = [];
+    return out;
+  }
+
+  // Bosses crouching to leap: { monster, x, y, z, reach, ms }, coming down
+  // there in about ms.
+  takeLeaps() {
+    const out = this.leaps;
+    this.leaps = [];
+    return out;
+  }
+
+  // Bosses that charged into a wall: { monster, x, y, z }.
+  takeBonks() {
+    const out = this.bonks;
+    this.bonks = [];
     return out;
   }
 
@@ -642,13 +695,19 @@ export class MonsterSim {
       }
       let mx = 0;
       let mz = 0;
-      // How it stomps, if it does (King Grumble crosser, the sooner).
-      const stomp = stompOf(m.kind);
-      const every = m.kind === 'king' ? (STOMP_EVERY[m.rage ?? 0] ?? STOMP.every) : (stomp?.every ?? STOMP.every);
+      // How it stomps, if it does (a boss as its moves say, in bossMove).
+      const stomp = m.plan ? null : stompOf(m.kind);
+      const every = stomp?.every ?? STOMP.every;
+      // A boss busy with one of its moves, or starting one at whoever it is
+      // after (bosses.js): which way it goes, and how.
+      const busy = m.plan && now >= (m.dazed ?? 0) && now >= m.giggle ? this.bossMove(world, m, target, people, now, havens, sheltered) : null;
       if (now < (m.dazed ?? 0)) {
         m.state = 'dazed';
       } else if (now < m.giggle) {
         m.state = 'giggle';
+      } else if (busy) {
+        mx = busy.mx;
+        mz = busy.mz;
       } else if (m.windup || m.slam) {
         // Crouched for a stomp, then up he goes, straight up, so he comes
         // down just where the ring on the ground said he would.
@@ -805,7 +864,10 @@ export class MonsterSim {
           if (m.state === 'hop') m.state = 'idle';
         }
       }
-      const pace = m.kind === 'king' ? KING_MOVES[m.rage ?? 0] : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
+      const pace = m.plan ? bossPace(m) : now < m.cross ? kindOf(m.kind).cross : kindOf(m.kind).move;
+      // A boss charging stops short of a safe place or the water (the check
+      // above): no bonk, it just stops.
+      if (busy?.dash && !mx && !mz) this.moveDone(m, now);
       let events;
       if (m.kind === 'mole') {
         // Mr. Mole: under the ground his mound of dirt glides along, up and
@@ -866,17 +928,39 @@ export class MonsterSim {
         }
         const want = base + hover;
         events = stepBody(world, b, { mx, mz, jump: b.y < want - 0.2, down: b.y > want + 0.2, run: false }, dt, { move: { fly: m.state === 'chase' ? pace.run : pace.walk, flyUp: fly ? MOSQUITO_HOVER.up : GHOST_HOVER.up } });
+      } else if (busy?.move) {
+        // A boss charging along (no hops: it rushes, up a step at most), or
+        // up in the air on a leap or a stomp, keeping the speed it left with.
+        events = stepBody(world, b, { mx, mz, jump: false, run: true }, dt, { autoJump: true, move: busy.move });
       } else {
         // The others get about in hops.
         events = stepBody(world, b, { mx, mz, jump: (mx || mz) && b.onGround, run: m.state === 'chase' }, dt, { autoJump: true, move: pace });
       }
       if (events.bumped && m.state === 'hop') m.rest = 0;
-      // Down from a stomp: the thump (see takeStomps), and a while till the next.
+      // Charging into a wall, held there a moment (or sliding along it,
+      // hardly getting on the way it charges): bonk, and dazed.
+      if (busy?.dash && m.dash) {
+        const along = b.vx * m.dash.x + b.vz * m.dash.z;
+        m.dash.stuck = along < busy.move.run * 0.4 ? m.dash.stuck + dt : 0;
+        if (m.dash.stuck >= BONK_SECS) {
+          this.moveDone(m, now);
+          m.dazed = now + DAZE_MS;
+          this.bonks.push({ monster: m, x: b.x, y: b.y, z: b.z });
+        }
+      }
+      // Down from a stomp (or a boss's leap): the thump (see takeStomps),
+      // and a while till the next.
       if (m.slam && b.onGround) {
         m.slam = false;
-        m.stompAt = now + every;
         m.dazed = now + DAZE_MS;
-        this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z, reach: (stomp ?? STOMP).reach });
+        if (m.plan) {
+          const mv = m.move;
+          this.moveDone(m, now);
+          this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z, reach: mv?.reach ?? STOMP.reach, bumps: mv?.bumps ?? 1, ...(mv?.move === 'leap' ? { leap: true } : {}) });
+        } else {
+          m.stompAt = now + every;
+          this.stomps.push({ monster: m, x: b.x, y: b.y, z: b.z, reach: (stomp ?? STOMP).reach });
+        }
       }
       // Stuck at a wall while chasing: off to one side for a moment.
       if (events.bumped && m.state === 'chase' && !(m.detour && now < m.detour.until) && Math.hypot(b.vx, b.vz) < 0.5) {
@@ -896,7 +980,9 @@ export class MonsterSim {
           // bop), unless it is a Spiky, which nobody lands on.
           const top = kindOf(m.kind).land ? b.height - 0.25 : b.height + 0.3;
           if (p.y > b.y + top || p.y + 1.5 < b.y) continue;
-          bumps.push({ monster: m, pid: p.id });
+          // A boss charging into someone: harder, and that is its charge done.
+          bumps.push({ monster: m, pid: p.id, ...(m.dash ? { bumps: m.dash.bumps, charge: true } : {}) });
+          if (m.dash) this.moveDone(m, now);
           m.giggle = now + GIGGLE_MS;
           m.target = 0;
           m.yaw = Math.atan2(p.x - b.x, p.z - b.z);
@@ -905,6 +991,173 @@ export class MonsterSim {
       }
     }
     return bumps;
+  }
+
+  // A boss (bosses.js) busy with one of its moves, or starting one at
+  // target, whoever it is after: which way it goes this moment, as
+  // { mx, mz }, with move, how (physics.js stepBody) while it charges or is
+  // up in the air, and dash while it charges; or null when it is free to come
+  // after them (or, with nobody to come after, to keep to its camp).
+  bossMove(world, m, target, people, now, havens, sheltered) {
+    const b = m.body;
+    const mv = m.move;
+    // Up in the air on a stomp or a leap, keeping the speed it left with
+    // until it comes down (step sees to the landing).
+    if (m.slam) {
+      m.state = mv?.move === 'leap' ? 'leap' : 'chase';
+      return { mx: 0, mz: 0, move: { ...bossPace(m), airAccel: 0 } };
+    }
+    // Charging along the way it reared back to go, until it has gone as
+    // far as the move goes (or step sees it stuck against a wall).
+    if (m.dash) {
+      m.state = 'charge';
+      if (now < m.dash.until) return { mx: m.dash.x, mz: m.dash.z, dash: true, move: { walk: mv.speed, run: mv.speed, jump: 9, groundAccel: 120, airAccel: 120 } };
+      this.moveDone(m, now);
+      return null;
+    }
+    // Breathing fire, standing still while it lasts, burning each of the
+    // people in the flames once.
+    if (m.breath) {
+      m.state = 'breathe';
+      for (const p of people) {
+        if (p.riding || p.dizzy || m.burned.has(p.id) || sheltered(p) || now < (p.safeUntil ?? 0)) continue;
+        if (!inGhostFlames(b, m.yaw, p.x, p.y, p.z, mv)) continue;
+        m.burned.add(p.id);
+        this.burns.push({ monster: m, pid: p.id, bumps: mv.bumps });
+      }
+      if (now >= m.breath) {
+        m.breath = 0;
+        this.moveDone(m, now);
+      }
+      return { mx: 0, mz: 0 };
+    }
+    // Winding up, standing still (and showing it: see WINDUP_STATE); then
+    // the move itself.
+    if (m.windup) {
+      m.state = WINDUP_STATE[mv.move];
+      if (now < m.windup) return { mx: 0, mz: 0 };
+      m.windup = 0;
+      this.bossAct(world, m, people, now, havens, sheltered);
+      return { mx: 0, mz: 0, ...(m.slam ? { move: { ...bossPace(m), airAccel: 0 } } : {}) };
+    }
+    // Free: the next move, once it is due, at whoever it is after (the first
+    // a moment after it starts coming after them).
+    if (!target) {
+      m.moveAt = 0;
+      return null;
+    }
+    if (!m.moveAt) m.moveAt = now + this.gapOf(m) * 0.6;
+    if (now < m.moveAt || !b.onGround) return null;
+    const next = this.nextMove(world, m, target, havens);
+    if (!next) return null;
+    m.move = next;
+    m.windup = now + next.windup;
+    m.state = WINDUP_STATE[next.move];
+    m.yaw = Math.atan2(target.x - b.x, target.z - b.z);
+    if (next.move === 'charge') {
+      // The way it will charge, shown on the ground while it rears back.
+      this.rears.push({ monster: m, yaw: m.yaw, far: next.far, ms: next.windup });
+    } else if (next.move === 'leap') {
+      // Where it will come down, shown there while it crouches and flies.
+      const to = m.leapTo;
+      this.leaps.push({ monster: m, x: to.x, y: to.y, z: to.z, reach: next.reach, ms: next.windup + to.ms });
+    }
+    return { mx: 0, mz: 0 };
+  }
+
+  // A boss's wind-up over: the move itself (see bossMove).
+  bossAct(world, m, people, now, havens, sheltered) {
+    const b = m.body;
+    const mv = m.move;
+    const fair = (p) => !p.riding && !p.dizzy && !sheltered(p) && now >= (p.safeUntil ?? 0);
+    if (mv.move === 'stomp') {
+      // Straight up, so it comes down just where the ring said it would.
+      Object.assign(b, { vx: 0, vz: 0, vy: mv.jump, onGround: false });
+      m.slam = true;
+    } else if (mv.move === 'leap') {
+      // Up and over to where it is coming down: as fast along as gets it
+      // there by the time it falls back to that height.
+      const to = m.leapTo;
+      const dx = to.x - b.x;
+      const dz = to.z - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const t = flightSecs(mv.jump, to.y - b.y) ?? 0;
+      const v = t ? d / t : 0;
+      Object.assign(b, { vx: (dx / d) * v, vz: (dz / d) * v, vy: mv.jump, onGround: false });
+      m.slam = true;
+    } else if (mv.move === 'charge') {
+      m.dash = { x: Math.sin(m.yaw), z: Math.cos(m.yaw), until: now + (mv.far / mv.speed) * 1000, stuck: 0, bumps: mv.bumps };
+    } else if (mv.move === 'breath') {
+      m.breath = now + mv.ms;
+      m.burned = new Set();
+      this.fires.push(m);
+    } else if (mv.move === 'puff') {
+      // All round it, once: whoever is in the cloud gets a lungful.
+      this.puffs.push({ monster: m, x: b.x, y: b.y, z: b.z, reach: mv.reach, what: mv.what });
+      for (const p of people) {
+        if (!fair(p) || Math.hypot(p.x - b.x, p.z - b.z) > mv.reach + 0.3 || Math.abs(p.y - b.y) > 2.5) continue;
+        this.burns.push({ monster: m, pid: p.id, spores: true, bumps: mv.bumps });
+      }
+      this.moveDone(m, now);
+    } else if (mv.move === 'hurl') {
+      // One at each of the nearest few within reach (not in a safe place),
+      // coming down where they stand now: they have till then to get out of
+      // the way (room.js works out who it hits).
+      const near = people
+        .filter((p) => fair(p) && Math.abs(p.y - b.y) < 6 && Math.hypot(p.x - b.x, p.z - b.z) <= mv.far + 2 && !havens.some((h) => campDistance(h, p.x, p.z) < h.r))
+        .sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z))
+        .slice(0, mv.count);
+      if (near.length) {
+        const top = b.y + b.height + 0.6;
+        this.hurls.push({ monster: m, what: mv.what, from: { x: b.x, y: top, z: b.z }, to: near.map((p) => ({ x: p.x, y: p.y, z: p.z })), ms: mv.ms, reach: mv.reach, bumps: mv.bumps });
+      }
+      this.moveDone(m, now);
+    }
+  }
+
+  // A boss's move over: the next a while after (gapOf).
+  moveDone(m, now) {
+    m.move = null;
+    m.dash = null;
+    m.windup = 0;
+    m.moveAt = now + this.gapOf(m);
+  }
+
+  // How long a boss waits between its moves: the crosser, the less.
+  gapOf(m) {
+    const gap = m.plan.gap;
+    return gap[m.rage ?? 0] ?? gap[gap.length - 1];
+  }
+
+  // The next of a boss's moves it can start at target: in turn from the one
+  // after the last it did, the first it is cross enough for, with target in
+  // range for it (and for a leap, somewhere to come down beside them).
+  nextMove(world, m, target, havens) {
+    const b = m.body;
+    const moves = m.plan.moves.filter((mv) => mv.from <= (m.rage ?? 0));
+    const d = Math.hypot(target.x - b.x, target.z - b.z);
+    for (let i = 0; i < moves.length; i++) {
+      const k = (m.turn + i) % moves.length;
+      const mv = moves[k];
+      if (d < (mv.near ?? 0) || d > moveRange(mv)) continue;
+      if (mv.move === 'leap') {
+        m.leapTo = this.leapSpot(world, m, mv, target, havens);
+        if (!m.leapTo) continue;
+      }
+      m.turn = k + 1;
+      return mv;
+    }
+    return null;
+  }
+
+  // Where a boss leaping at target comes down: where they stand, on the
+  // ground (not the water, a tree or a safe place), and not too high to
+  // get up to; with how long it is in the air, in ms. Null if nowhere.
+  leapSpot(world, m, mv, target, havens) {
+    const y = groundAt(world, target.x, target.z);
+    if (y === null || wet(world, target.x, y, target.z) || havens.some((h) => campDistance(h, target.x, target.z) < h.r + 1)) return null;
+    const t = flightSecs(mv.jump, y - m.body.y);
+    return t === null ? null : { x: target.x, y, z: target.z, ms: Math.round(t * 1000) };
   }
 
   // Where each one is, for keeping things out of it (see physics.js pushOut).

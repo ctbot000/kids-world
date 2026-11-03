@@ -36,6 +36,7 @@ import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RI
 import { underTent } from './tents.js';
 import { isMonsterGashapon } from './gashapon.js';
 import { CHEST_REACH } from './treasure.js';
+import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
@@ -123,6 +124,9 @@ const MAX_PASSES = 16;
 // in the air within this long of then is missed.
 const STOMP_SETTLE_MS = 250;
 const AIR_GRACE_MS = 500;
+// Something a boss threw (bosses.js hurl) hits whoever is this near level
+// with where it comes down, as well as within its reach.
+const HURL_HIGH = 2.5;
 
 export function randomToken() {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
@@ -226,6 +230,8 @@ export class Room {
     this.adventure = null;
     this.advSent = '';
     this.stomps = [];
+    // And the things the bosses threw, still in the air (see stepBossMoves).
+    this.thrown = [];
     // The road, the towers and the waves, on a tower defense island (defense.js).
     this.defense = null;
     this.defSent = '';
@@ -1528,23 +1534,31 @@ export class Room {
     if (healed.length) this.broadcast({ t: 'mheal', m: healed });
     // A Lava Ghost's breath of fire: the jet everyone sees, and whoever it
     // burned, with Knight Armor or a Fire Suit taking half of it.
-    for (const m of this.monsters.takeFires()) this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: GHOST_FIRE.ms });
+    // (A boss's breath, as far and as wide as its own: bosses.js.)
+    for (const m of this.monsters.takeFires()) {
+      const breath = m.plan ? m.move : null;
+      this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: breath?.ms ?? GHOST_FIRE.ms, ...(breath ? { r: breath.reach, a: breath.angle } : {}) });
+    }
     // A Puffshroom's cloud of spores: the puff everyone sees, and whoever
-    // was in it (Knight Armor takes half of that, too).
-    for (const u of this.monsters.takePuffs()) this.broadcast({ t: 'mfx', kind: 'spores', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
-    for (const { monster: m, pid, spores } of this.monsters.takeBurns()) {
+    // was in it (Knight Armor takes half of that, too). A boss's reaches
+    // further (and Bogmaw's is swamp gas).
+    for (const u of this.monsters.takePuffs()) this.broadcast({ t: 'mfx', kind: 'spores', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2), ...(u.reach ? { r: u.reach } : {}), ...(u.what && u.what !== 'spores' ? { what: u.what } : {}) });
+    for (const { monster: m, pid, spores, bumps } of this.monsters.takeBurns()) {
       const p = this.players.get(pid);
       if (!p) continue;
       if (spores) {
         const half = hasPower(p.look, 'armor');
-        this.knock(p, now, hpAfterBump(p.hp, half ? SPORES.bumps / 2 : SPORES.bumps), { t: 'bump', pid, id: m.id, spores: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+        const n = bumps ?? SPORES.bumps;
+        this.knock(p, now, hpAfterBump(p.hp, half ? n / 2 : n), { t: 'bump', pid, id: m.id, spores: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
         continue;
       }
       const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
-      this.knock(p, now, hpAfterBump(p.hp, half ? GHOST_FIRE.bumps / 2 : GHOST_FIRE.bumps), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+      const n = bumps ?? GHOST_FIRE.bumps;
+      this.knock(p, now, hpAfterBump(p.hp, half ? n / 2 : n), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
     }
+    this.stepBossMoves(now, riding);
     if (this.defense) this.stepDefense(now);
-    for (const { monster, pid } of bumps) this.hurt(pid, monster, now);
+    for (const { monster, pid, bumps: n, charge } of bumps) this.hurt(pid, monster, now, { bumps: n, charge });
     // Mr. Mole coming up out of the ground beside someone: a burst of dirt
     // everyone sees, and his little grunt of arrival.
     for (const u of this.monsters.takeUps()) {
@@ -1563,27 +1577,58 @@ export class Room {
         if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
         if (Math.hypot(p.s[0] - s.x, p.s[2] - s.z) > (s.reach ?? STOMP.reach) || Math.abs(p.s[1] - s.y) > 2) continue;
         if (now - (p.airAt ?? -Infinity) <= AIR_GRACE_MS) continue;
-        this.hurt(p.id, s.monster, now, true);
+        this.hurt(p.id, s.monster, now, { stomp: true, bumps: s.bumps });
       }
     }
   }
 
-  // A monster bumped into someone (stomp: King Grumble's landing knocked
-  // them over): some HP gone, and all that follows (see knock).
-  hurt(pid, monster, now, stomp = false) {
+  // The bosses' moves as they come (bosses.js, monsters.js bossMove): a
+  // charge or a leap about to come, shown to everyone before it does; a
+  // bonk into a wall; and things thrown, shown flying, which a moment later
+  // come down and hit whoever is still where each one comes down.
+  stepBossMoves(now, riding) {
+    for (const r of this.monsters.takeRears()) {
+      const b = r.monster.body;
+      this.broadcast({ t: 'mfx', kind: 'rear', id: r.monster.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), yaw: +r.yaw.toFixed(3), d: r.far, w: +(b.radius * 2).toFixed(2), ms: r.ms });
+    }
+    for (const l of this.monsters.takeLeaps()) this.broadcast({ t: 'mfx', kind: 'leap', id: l.monster.id, x: +l.x.toFixed(2), y: +l.y.toFixed(2), z: +l.z.toFixed(2), r: l.reach, ms: l.ms });
+    for (const k of this.monsters.takeBonks()) this.broadcast({ t: 'mfx', kind: 'bonk', id: k.monster.id, x: +k.x.toFixed(2), y: +k.y.toFixed(2), z: +k.z.toFixed(2) });
+    for (const h of this.monsters.takeHurls()) {
+      const at = (q) => [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2)];
+      this.broadcast({ t: 'mfx', kind: 'hurl', id: h.monster.id, what: h.what, from: at(h.from), to: h.to.map(at), ms: h.ms, r: h.reach });
+      this.thrown.push({ ...h, at: now + h.ms });
+    }
+    for (const h of [...this.thrown]) {
+      if (h.at > now) continue;
+      this.thrown.splice(this.thrown.indexOf(h), 1);
+      for (const p of this.players.values()) {
+        if (!p.online || riding.has(p.id) || (p.dizzyUntil ?? 0) > now || now < (p.safeUntil ?? 0)) continue;
+        const spot = h.to.find((q) => Math.hypot(p.s[0] - q.x, p.s[2] - q.z) <= h.reach && Math.abs(p.s[1] - q.y) <= HURL_HIGH);
+        if (spot) this.hurt(p.id, h.monster, now, { bumps: h.bumps, hurl: h.what, x: spot.x, z: spot.z });
+      }
+    }
+  }
+
+  // A monster bumped into someone, or its move hit them (how: stomp, King
+  // Grumble's landing knocked them over; charge, a boss rushed into them;
+  // hurl, what a boss threw came down on them, at x, z; bumps, how hard, if
+  // not as hard as its bumps): some HP gone, and all that follows (see knock).
+  hurt(pid, monster, now, how = {}) {
     const p = this.players.get(pid);
     if (!p) return;
+    const bumps = how.bumps ?? monster.plan?.bump ?? kindOf(monster.kind).bump;
     const dragon = this.dragonUnder(pid);
     if (dragon) {
-      this.bumpRide(dragon, monster.kind === 'king' ? 1 : kindOf(monster.kind).bump, now);
+      this.bumpRide(dragon, Math.ceil(bumps), now);
       return;
     }
-    const b = monster.body;
-    const msg = { t: 'bump', pid, id: monster.id, x: +b.x.toFixed(2), z: +b.z.toFixed(2) };
+    const from = how.hurl ? how : monster.body;
+    const msg = { t: 'bump', pid, id: monster.id, x: +from.x.toFixed(2), z: +from.z.toFixed(2) };
     if (isHeavy(monster.kind)) msg.big = true;
     if (monster.kind === 'spiky') msg.spiky = true;
-    if (stomp) msg.stomp = true;
-    const bumps = monster.kind === 'king' ? 1 : kindOf(monster.kind).bump;
+    if (how.stomp) msg.stomp = true;
+    if (how.charge) msg.charge = true;
+    if (how.hurl) msg.hurl = how.hurl;
     // Knight Armor (shop.js CLOTHES) takes half of it.
     this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? bumps / 2 : bumps), msg);
   }
@@ -1659,7 +1704,7 @@ export class Room {
         if (this.inFlamesOf(c, m.body)) this.bopMarcher(p, m, now, 1);
         continue;
       }
-      if (m.kind === 'king') {
+      if (isBoss(m.kind)) {
         if (this.inFlamesOf(c, m.body)) this.bopKing(p, m, now, 1);
         continue;
       }
@@ -1949,7 +1994,7 @@ export class Room {
       this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
       return;
     }
-    if (m.kind === 'king') {
+    if (isBoss(m.kind)) {
       this.bopKing(p, m, now, weapon?.king ?? 1);
       return;
     }
@@ -2011,7 +2056,7 @@ export class Room {
         this.bopMarcher(p, m, now, weaponOf('bombrod').power);
         continue;
       }
-      if (m.kind === 'king') {
+      if (isBoss(m.kind)) {
         this.bopKing(p, m, now, weaponOf('bombrod').king);
         continue;
       }
@@ -2382,9 +2427,10 @@ export class Room {
     this.broadcast({ t: 'arc', s: pack });
   }
 
-  // A bop for King Grumble: nothing in his bubble, otherwise a heart (three
-  // while he sits dazed from a stomp; he is too big to knock back); with none
-  // left he goes pop, and the whole island is free.
+  // A bop for the castle's boss (King Grumble, or on the isle the chapter's:
+  // bosses.js): nothing in its bubble, otherwise a heart (three while it
+  // sits dazed; it is too big to knock back); with none left it goes pop,
+  // and the whole island is free.
   bopKing(p, m, now, times = 1) {
     const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0), times);
     if (!hit || hit.wait) return;
@@ -2466,7 +2512,8 @@ export class Room {
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
   }
 
-  // King Grumble popped: every camp's monster goes, his castle is free, and
+  // The castle's boss popped (King Grumble, or on the isle the chapter's):
+  // every camp's monster goes, its castle is free, and
   // so is the island, for everyone on it.
   winAdventure(p, king) {
     const adv = this.adventure;
