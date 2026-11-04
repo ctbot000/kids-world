@@ -12,6 +12,25 @@ const MUSIC_GAIN = 0.6;
 // C major pentatonic, the notes that always sound nice together.
 const PENTA = [0, 2, 4, 7, 9];
 
+// Happy Birthday, in C: [its MIDI note, how many beats], and each bar's low
+// note and chord, in three time from the two notes before the first bar.
+const BIRTHDAY_TUNE = [
+  [67, 0.75], [67, 0.25], [69, 1], [67, 1], [72, 1], [71, 2],
+  [67, 0.75], [67, 0.25], [69, 1], [67, 1], [74, 1], [72, 2],
+  [67, 0.75], [67, 0.25], [79, 1], [76, 1], [72, 1], [71, 1], [69, 1],
+  [77, 0.75], [77, 0.25], [76, 1], [72, 1], [74, 1], [72, 3],
+];
+const BIRTHDAY_BARS = [
+  [48, [52, 55, 60]],
+  [43, [53, 55, 59]],
+  [43, [53, 55, 59]],
+  [48, [52, 55, 60]],
+  [48, [52, 55, 60]],
+  [41, [53, 57, 60]],
+  [48, [52, 55, 60]],
+  [48, [52, 55, 60]],
+];
+
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -65,7 +84,7 @@ export class Sound {
     if (music !== undefined) this.musicLevel = music;
     if (this.ctx) {
       this.sfx.gain.setTargetAtTime(this.sfxLevel * SFX_GAIN, this.ctx.currentTime, 0.05);
-      this.music.gain.setTargetAtTime(this.hushed ? 0 : this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
+      this.music.gain.setTargetAtTime(this.hushed || this.singing ? 0 : this.musicLevel * MUSIC_GAIN, this.ctx.currentTime, 0.05);
     }
   }
 
@@ -414,6 +433,23 @@ export class Sound {
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });
+        break;
+      // Blowing out birthday candles: a long breath, and hooray! A party horn
+      // and a run of chimes over the paper of the confetti going up.
+      case 'wish':
+        this.noise(0.45, { type: 'bandpass', freq: 1500, sweep: 700, q: 0.5, gain: 0.16, attack: 0.08 });
+        this.noise(0.08, { at: 0.42, type: 'highpass', freq: 2200, gain: 0.2 });
+        for (const at of [0.45, 0.72]) this.tone(NOTE(74), { at, type: 'sawtooth', attack: 0.02, decay: 0.2, gain: 0.05, slide: NOTE(79), slideTime: 0.14 });
+        [72, 76, 79, 84, 88].forEach((n, i) => this.tone(NOTE(n), { at: 0.5 + i * 0.08, decay: 0.5, gain: 0.08, type: 'triangle' }));
+        break;
+      // A slip of paper and a little chime: a present opening.
+      case 'present':
+        this.noise(0.22, { type: 'bandpass', freq: 3200, sweep: 1400, q: 0.7, gain: 0.12 });
+        [79, 84, 88].forEach((n, i) => this.tone(NOTE(n), { at: 0.12 + i * 0.09, decay: 0.45, gain: 0.09, type: 'triangle' }));
+        break;
+      case 'balloon-pop':
+        this.noise(0.05, { type: 'highpass', freq: 1500, gain: 0.32 });
+        this.tone(1000 * r(), { decay: 0.05, gain: 0.16, slide: 220 });
         break;
       case 'shield':
         this.noise(0.25, { type: 'bandpass', freq: 2500, sweep: 6000, gain: 0.18 });
@@ -900,14 +936,51 @@ export class Sound {
   // hammer strike that rings on, the high notes dying away sooner, with a
   // little of the octave and the twelfth over it and a soft thump of the
   // hammer; a grand rings a little longer.
-  piano(n, { gain = 1, grand = false } = {}) {
+  piano(n, { gain = 1, grand = false, at = 0, dest = null } = {}) {
     if (!this.ready) return;
     const f = NOTE(n);
     const ring = (grand ? 1.8 : 1.4) * 2 ** ((60 - n) / 24);
-    this.tone(f, { type: 'triangle', attack: 0.004, decay: ring, gain: 0.2 * gain });
-    this.tone(f * 2, { attack: 0.004, decay: ring * 0.5, gain: 0.07 * gain });
-    this.tone(f * 3, { attack: 0.004, decay: ring * 0.2, gain: 0.03 * gain });
-    this.noise(0.03, { type: 'bandpass', freq: f * 4, q: 1.5, gain: 0.04 * gain });
+    this.tone(f, { type: 'triangle', at, dest, attack: 0.004, decay: ring, gain: 0.2 * gain });
+    this.tone(f * 2, { at, dest, attack: 0.004, decay: ring * 0.5, gain: 0.07 * gain });
+    this.tone(f * 3, { at, dest, attack: 0.004, decay: ring * 0.2, gain: 0.03 * gain });
+    this.noise(0.03, { at, dest, type: 'bandpass', freq: f * 4, q: 1.5, gain: 0.04 * gain });
+  }
+
+  // Happy Birthday on the piano round a cake (shared/party.js SONG_MS), an
+  // oom-pah-pah under the tune, the island's music quiet until it is over. Says
+  // how to stop it (faded away) before it is.
+  birthday() {
+    if (!this.ready) return () => {};
+    const bus = this.ctx.createGain();
+    bus.connect(this.sfx);
+    const BEAT = 0.4;
+    // Each note of the tune and its beats, on from the two notes before the
+    // first bar; and each bar's chord: its low note and the two beats after it.
+    let at = 0;
+    for (const [n, beats] of BIRTHDAY_TUNE) {
+      this.piano(n, { at: at * BEAT, dest: bus });
+      at += beats;
+    }
+    BIRTHDAY_BARS.forEach(([bass, chord], i) => {
+      const bar = 1 + i * 3;
+      this.piano(bass, { at: bar * BEAT, dest: bus, gain: 0.3 });
+      const last = i === BIRTHDAY_BARS.length - 1;
+      for (const beat of last ? [0] : [1, 2]) for (const n of chord) this.piano(n, { at: (bar + beat) * BEAT, dest: bus, gain: last ? 0.2 : 0.1 });
+    });
+    this.singing = true;
+    this.setLevels({});
+    let over = false;
+    const stop = (fade = true) => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      this.singing = false;
+      this.setLevels({});
+      if (fade) bus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.06);
+      setTimeout(() => bus.disconnect(), 1500);
+    };
+    const timer = setTimeout(() => stop(false), (at * BEAT + 1) * 1000);
+    return stop;
   }
 
   // A robot hub's speaker beeping MIDI note n for sec seconds: a little

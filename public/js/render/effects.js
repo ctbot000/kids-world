@@ -351,6 +351,27 @@ export class Effects {
     }
   }
 
+  // Confetti: bits of coloured paper bursting up out of (x, y, z) and
+  // fluttering slowly down, wide across (spread) as far as it should go.
+  confetti(x, y, z, count = 110, spread = 1) {
+    const colors = ['#ff5f8f', '#ffd84d', '#7cc4ff', '#7fe08c', '#c78cff', '#ff9a3d', '#ffffff'];
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = (0.6 + Math.random() * 3.4) * spread;
+      this.add('square', x, y, z, {
+        vx: Math.cos(a) * s,
+        vy: 3 + Math.random() * 4.5,
+        vz: Math.sin(a) * s,
+        size: 0.06 + Math.random() * 0.07,
+        life: 2.2 + Math.random() * 1.6,
+        gravity: 3.4,
+        drag: 1.3,
+        delay: Math.random() * 0.12,
+        color: colors[i % colors.length],
+      });
+    }
+  }
+
   notes(x, y, z) {
     this.add('note', x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5, {
       vy: 0.9,

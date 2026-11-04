@@ -94,7 +94,7 @@ export const PHRASES = [
   'Hi!', 'Hello, friend!', 'Bye bye!', 'Thank you!', "You're welcome!", 'Yes!', 'No, thanks.', 'Wow!',
   'So cool!', 'I love it!', 'Good job!', "Let's build!", 'Come here!', 'Follow me!', 'Look at this!', 'Wait for me!',
   'Help, please!', 'Oops!', "Let's play!", 'Hooray!', 'Good morning!', 'Good night!', "Let's be friends!", 'Nice house!',
-  'What should we build?', "Let's go swimming!", 'I found fruit!', 'Race you!', 'Ready?', 'High five!', 'Sorry!', 'Take a picture!', 'Tea time!',
+  'What should we build?', "Let's go swimming!", 'I found fruit!', 'Race you!', 'Ready?', 'High five!', 'Sorry!', 'Take a picture!', 'Tea time!', 'Happy birthday!', 'Make a wish!',
 ];
 
 export const STICKERS = ['😀', '😂', '😍', '🥰', '😮', '😴', '🤔', '😎', '👍', '👋', '❤️', '⭐', '🌈', '🎉', '🍎', '🌸', '🐰', '🏠', '🎵', '✨'];

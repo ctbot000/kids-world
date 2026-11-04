@@ -72,18 +72,19 @@ export const arcadeNear = (world, body, reach = 2.2) => cellNear(world, body, (i
 
 // The cell nearest a body standing beside it (or on it), within `reach`
 // blocks, of those `pick` says yes to (with what it says of the cell, an
-// object, or null for no): { x, y, z, key, ...what pick said }, or null.
-// Cells from the one under your feet up to `up` over them are looked at.
-export function cellNear(world, body, pick, reach = 2.2, up = 0) {
+// object, or null for no; it is given the cell after the block): { x, y, z,
+// key, ...what pick said }, or null. Cells from the one under your feet up to
+// `up` over them are looked at, `span` cells to each side.
+export function cellNear(world, body, pick, reach = 2.2, up = 0, span = 2) {
   const bx = Math.floor(body.x);
   const bz = Math.floor(body.z);
   const by = Math.floor(body.y + 0.05);
   let best = null;
   let near = reach;
-  for (let x = bx - 2; x <= bx + 2; x++) {
-    for (let z = bz - 2; z <= bz + 2; z++) {
+  for (let x = bx - span; x <= bx + span; x++) {
+    for (let z = bz - span; z <= bz + span; z++) {
       for (let y = by - 1; y <= by + up; y++) {
-        const found = pick(world.get(x, y, z));
+        const found = pick(world.get(x, y, z), x, y, z);
         if (!found) continue;
         const d = Math.hypot(x + 0.5 - body.x, z + 0.5 - body.z);
         if (d < near) {

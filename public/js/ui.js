@@ -2388,6 +2388,7 @@ export class UI {
           card('➡️', 'Moving walkways', ['Put down a Moving Walkway from the toy box\'s 🏠 Building tab: it carries you along the floor, away from where you put it down. Tap it to make it longer, and put one beside it the other way round to come back. Or stamp an 🛫 Airport Walkway with one each way.']),
           card('🤸', 'Trampolines', ['Jump on a trampoline and bounce! Hold jump (', h('kbd', {}, 'Space'), ') to bounce higher and higher, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to stop. Stamp a Bouncy Castle to bounce with friends.']),
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
+          card('🎂', 'Birthday party', ['Stamp a 🎂 Birthday Party, a house like a giant cake, or make your own from the toy box\'s 🛋️ Home tab: a Party Table, a Birthday Cake (it stands on the table), Presents, Balloons and a Birthday Banner for the wall (seven side by side say HAPPY BIRTHDAY). Walk up to the cake and press ', h('kbd', {}, 'Q'), ' (or tap 🎂 Sing): everyone near hears the song. When it ends, 🌬️ Blow! blows out the candles in a burst of confetti, and then 🍰 Eat has a slice. 🎁 Open a present for a surprise and a few coins, and 🎈 Pop the balloons, with a tap or a swing.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in 🧸 My collection.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
@@ -4885,8 +4886,15 @@ export class UI {
   // you ride (or near the top, seeing through your own eyes): kept on the
   // screen, clear of the top bar, the toasts and the hotbar.
   rideButton(g, r) {
+    // Only 🎣 Strike! and 🌬️ Blow! flash, as arcadeButton says of them: nothing
+    // else the button goes on to be.
+    if (!g.partyTarget && !g.fishTarget) $('ride').classList.remove('biting');
     if (!g.riding && !g.aboard && !g.seat && (g.hooping || g.hoopTarget)) {
       this.hoopButton(g, r);
+      return;
+    }
+    if (!g.riding && !g.aboard && !g.rideTarget && g.partyTarget) {
+      this.arcadeButton(g, r);
       return;
     }
     if (!g.riding && !g.aboard && (g.seat || (!g.rideTarget && g.seatTarget))) {
@@ -5029,14 +5037,16 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.fishTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.fishTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
     }
     const touch = this.input.touchMode;
     const puzzle =
-      t === g.escapeTarget
+      t === g.partyTarget
+        ? g.partyButton(t)
+        : t === g.escapeTarget
         ? { button: ['👆 Press', `Press the ${B.ESCAPE_COLORS[t.color]?.[1].toLowerCase()} button`], crate: ['📦 Open', 'Open the crate'], dial: ['🔢 Turn', 'Turn the dial to the next number'] }[t.kind]
         : t === g.chestTarget
           ? g.profile.data.keys > 0
@@ -5058,9 +5068,9 @@ export class UI {
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.classList.toggle('biting', label === '🎣 Strike!');
       el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
+    el.classList.toggle('biting', label === '🎣 Strike!' || label === '🌬️ Blow!');
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
     const w = r.canvas.clientWidth;
     const hgt = r.canvas.clientHeight;

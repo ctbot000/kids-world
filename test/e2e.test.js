@@ -1308,6 +1308,177 @@ test('a moving walkway carries you along its belt as you stand still and off at 
   await page.browserContext().close();
 });
 
+test('a birthday party: a friend hears the song round the cake, and with the button beside each it is blown out, eaten at the table, a present opened and balloons popped', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  await makeIsland(host, { online: true, theme: 'Flat Land' });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // A table with the cake on it and a chair at it, a present along one way and
+  // balloons along the other, on clear ground with nothing else about.
+  const at = await host.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const B = await import('/js/shared/blocks.js');
+    const room = kw.session.link.room;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const b = kw.game.me.body;
+    const x = Math.floor(b.x) + 3;
+    const z = Math.floor(b.z);
+    const y = room.world.top(x, z) + 1;
+    for (let dx = -7; dx <= 7; dx++) for (let dz = -3; dz <= 3; dz++) for (let h = 0; h < 4; h++) if (room.world.get(x + dx, y + h, z + dz)) room.natureCell([x + dx, y + h, z + dz], 0);
+    room.natureCell([x, y, z], B.PARTY_TABLE);
+    room.natureCell([x, y, z + 1], B.PARTY_TABLE);
+    room.natureCell([x, y + 1, z], B.BIRTHDAY_CAKE);
+    room.natureCell([x + 1, y, z + 1], B.turnedTo(B.CHAIR, 2));
+    room.natureCell([x + 5, y, z], B.PRESENT);
+    room.natureCell([x - 5, y, z], B.BALLOONS);
+    return { x, y, z, key: `${x},${y + 1},${z}`, cake: B.BIRTHDAY_CAKE };
+  });
+  for (const page of [host, guest]) await until(page, (a) => window.kidsWorld.game.critters.size === 0 && window.kidsWorld.game.world.get(a.x, a.y + 1, a.z) === a.cake && window.kidsWorld.game.world.get(a.x - 5, a.y, a.z) !== 0, at);
+  // Puts a page's player on the ground there, the island told, and tells of it.
+  const put = async (page, x, z, yaw = 0) => {
+    await page.evaluate(
+      ([x, y, z, yaw]) => {
+        const g = window.kidsWorld.game;
+        Object.assign(g.me.body, { x, y, z, vx: 0, vy: 0, vz: 0 });
+        g.me.yaw = yaw;
+        g.sendMove?.(true);
+        window.kidsWorld.step(1 / 60, 5);
+      },
+      [x, at.y, z, yaw],
+    );
+    await delay(150);
+  };
+  const button = (page, word) => until(page, (w) => {
+    window.kidsWorld.step(1 / 60, 1);
+    const el = document.getElementById('ride');
+    return !el.hidden && el.textContent.includes(w);
+  }, word);
+  // The button itself, whatever a toast may be lying over it.
+  const tap = (page) => page.evaluate(() => document.getElementById('ride').click());
+  const toasted = (page, words) => until(page, (w) => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes(w)), words);
+  const stat = (page, key) => page.evaluate((k) => window.kidsWorld.profile.data.stats[k], key);
+  const cake = (page) => page.evaluate((key) => {
+    const kw = window.kidsWorld;
+    return kw.renderer.terrain.party.cake(key, kw.game.partyNow);
+  }, at.key);
+
+  // The host starts the song, and everyone near hears of it.
+  await put(host, at.x + 1.5, at.z + 0.4);
+  await put(guest, at.x - 1, at.z + 0.4);
+  await button(host, '🎂 Sing');
+  await button(guest, '🎂 Sing');
+  await tap(host);
+  await toasted(host, 'Happy birthday to you!');
+  await toasted(guest, 'Sunny Otter started the birthday song');
+  await button(host, '🎵 Sing along');
+  await button(guest, '🎵 Sing along');
+  assert.equal((await cake(guest)).phase, 'song');
+  // Nothing but singing until it is over, however often you tap.
+  await tap(guest);
+  await delay(200);
+  assert.equal((await cake(host)).phase, 'song', 'still singing');
+  // It ends, and the guest blows them out, in a burst of confetti for both.
+  for (const page of [host, guest]) await page.evaluate(() => (window.kidsWorld.renderer.time += 10.7));
+  await button(guest, '🌬️ Blow!');
+  await toasted(guest, 'Now blow out the candles!');
+  assert.ok(await guest.$eval('#ride', (el) => el.classList.contains('biting')), 'the button flashes to say blow now');
+  await tap(guest);
+  await toasted(guest, 'You blew out the candles!');
+  await toasted(host, 'Brave Fox blew out the candles!');
+  assert.ok((await host.evaluate(() => window.kidsWorld.renderer.effects.list.length)) > 40, 'confetti');
+  await until(guest, () => window.kidsWorld.profile.data.stickers['make-a-wish']);
+  assert.equal(await stat(guest, 'wishes'), 1);
+  assert.equal(await stat(host, 'wishes'), 0, 'for whoever blew');
+  assert.equal((await cake(host)).phase, 'out');
+  // A slice, standing up.
+  await button(host, '🍰 Eat');
+  assert.ok(!(await host.$eval('#ride', (el) => el.classList.contains('biting'))), 'and no longer');
+  await tap(host);
+  await until(host, () => window.kidsWorld.profile.data.stats.slices === 1);
+  await until(guest, (key) => window.kidsWorld.renderer.terrain.party.cake(key, window.kidsWorld.game.partyNow).slices === 7, at.key);
+  // Nearer the chair than the cake, it is the chair; sat down, the cake again,
+  // from there, and you stay in your seat.
+  await put(host, at.x + 1.5, at.z + 1.5);
+  await button(host, '🪑 Sit');
+  await tap(host);
+  await until(host, () => window.kidsWorld.game.seat);
+  await button(host, '🍰 Eat');
+  await tap(host);
+  await until(host, () => window.kidsWorld.profile.data.stats.slices === 2);
+  assert.ok(await host.evaluate(() => Boolean(window.kidsWorld.game.seat)), 'still sitting');
+  await host.evaluate(() => window.kidsWorld.game.standUp());
+
+  // A present: a surprise and a few coins, for whoever opened it.
+  await put(host, at.x + 5.5, at.z - 0.8);
+  await button(host, '🎁 Open');
+  const coins = await host.evaluate(() => window.kidsWorld.profile.data.coins);
+  await tap(host);
+  await toasted(host, 'Surprise!');
+  const more = (await host.evaluate(() => window.kidsWorld.profile.data.coins)) - coins;
+  assert.ok(more >= 1 && more <= 3, `${more} coins`);
+  assert.equal(await stat(host, 'presents'), 1);
+  await until(host, () => {
+    window.kidsWorld.step(1 / 60, 1);
+    const el = document.getElementById('ride');
+    return el.hidden || !el.textContent.includes('Open');
+  });
+
+  // Balloons: one with the button, one with a swing and one more; then none.
+  await put(host, at.x - 4.5, at.z - 0.9, 0);
+  await button(host, '🎈 Pop');
+  await tap(host);
+  await until(host, () => window.kidsWorld.profile.data.stats.balloons === 1);
+  await host.evaluate(() => window.kidsWorld.game.attack());
+  await until(host, () => window.kidsWorld.profile.data.stats.balloons === 2);
+  await tap(host);
+  await until(host, () => window.kidsWorld.profile.data.stats.balloons === 3);
+  await until(host, () => {
+    window.kidsWorld.step(1 / 60, 1);
+    return window.kidsWorld.game.partyTarget === null;
+  });
+  assert.deepEqual(pageErrors, []);
+  await guest.browserContext().close();
+  await host.browserContext().close();
+});
+
+test('the Birthday Party stamp from the toy box goes down with a click, and its cake is ready to sing to', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Stamps', '#modal');
+  await clickButton(page, 'Birthday Party', '#modal');
+  await until(page, () => window.kidsWorld.game.tool === 'stamp' && window.kidsWorld.game.stamp === 'birthday-party');
+  const { cell, at } = await spotNear(page, 4, 0);
+  await page.mouse.click(at.x, at.y);
+  // The room goes away from the camera, its way in where the click was.
+  const spot = await page.evaluate(async (c) => {
+    const { FACING, facingFromYaw } = await import('/js/shared/stamps.js');
+    const B = await import('/js/shared/blocks.js');
+    const { f, r } = FACING[facingFromYaw(window.kidsWorld.renderer.view.yaw)];
+    return { x: c.x + f[0] * 6, y: c.y + 2, z: c.z + f[1] * 6, r, cake: B.BIRTHDAY_CAKE };
+  }, cell);
+  await until(page, (s) => window.kidsWorld.game.world.get(s.x, s.y, s.z) === s.cake, spot);
+  // Drawn: the banners in their rows; and beside the cake, its button.
+  await until(page, () => {
+    window.kidsWorld.step(1 / 60, 1);
+    return window.kidsWorld.renderer.terrain.banners.size === 14;
+  });
+  await page.evaluate((s) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: s.x + 0.5 + s.r[0] * 1.2, y: s.y - 1, z: s.z + 0.5 + s.r[1] * 1.2, vx: 0, vy: 0, vz: 0 });
+    kw.step(1 / 60, 5);
+  }, spot);
+  await until(page, () => {
+    window.kidsWorld.step(1 / 60, 1);
+    return window.kidsWorld.game.partyTarget?.kind === 'cake' && document.getElementById('ride').textContent.includes('🎂 Sing');
+  });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('on a trampoline, Space held bounces you higher and higher and a press of Shift stops you, with a hint and a sticker', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

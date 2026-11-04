@@ -5,6 +5,8 @@
 import * as THREE from '../../vendor/three.module.js';
 import { BLOCKS, isTreeFoot } from '../shared/blocks.js';
 import { piecesBeside } from '../shared/escalator.js';
+import { furnitureDrop } from '../shared/furniture.js';
+import { Party, isBanner } from '../shared/party.js';
 import { LightMap, LIGHT_REACH } from '../shared/light.js';
 import { CHUNK } from '../shared/world.js';
 import { meshChunk, TREE_REACH, WATER_TOP } from './mesher.js';
@@ -13,6 +15,7 @@ import { fanMaterials, fanModel, swayAt } from './fan-model.js';
 import { tankMaterials, tankModel } from './fishtank-model.js';
 import { clockMaterials, clockModel } from './clock-model.js';
 import { campfireMaterials, campfireModel } from './campfire-model.js';
+import { PARTY_KINDS, partyMaterials, partyModel } from './party-model.js';
 import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
@@ -436,6 +439,12 @@ export class Terrain {
     // The campfires drawn, by their cells, for their sparks and crackle
     // (render/renderer.js): each its { x, y, z } cell.
     this.campfires = new Map();
+    // How the birthday cakes, presents and balloons are going, as the island
+    // tells it (game.js partyNews), for their models to show.
+    this.party = new Party();
+    // The birthday banners drawn, by their cells: what spells on along a row
+    // reaches past its chunk (cellsChanged).
+    this.banners = new Set();
     this.world = null;
     this.light = null;
     this.studsOn = true;
@@ -507,6 +516,7 @@ export class Terrain {
 
   setWorld(world) {
     this.clear();
+    this.party = new Party();
     this.world = world;
     this.light = new LightMap(world);
     this.light.computeAll();
@@ -606,6 +616,11 @@ export class Terrain {
           for (let tz = Math.floor((z - TREE_REACH) / CHUNK); tz <= Math.floor((z + TREE_REACH) / CHUNK); tz++) this.dirty.add(`${tx},${tz}`);
         }
       }
+      // A birthday banner spells its words along its row, so a piece put down
+      // or taken away changes the letters further along it.
+      if (isBanner(cells[i + 3]) || this.banners.has(`${x},${cells[i + 1]},${z}`)) {
+        for (let tx = cx - 1; tx <= cx + 1; tx++) for (let tz = cz - 1; tz <= cz + 1; tz++) this.dirty.add(`${tx},${tz}`);
+      }
       if (x % CHUNK === 0) this.dirty.add(`${cx - 1},${cz}`);
       if (x % CHUNK === CHUNK - 1) this.dirty.add(`${cx + 1},${cz}`);
       if (z % CHUNK === 0) this.dirty.add(`${cx},${cz - 1}`);
@@ -699,7 +714,8 @@ export class Terrain {
     for (const [x, y, z, id] of data.reals) {
       const model = this.realModel(BLOCKS[id].real, [x, y, z, id]);
       if (!model) continue;
-      model.position.set(x + 0.5, y, z + 0.5);
+      // On a table, it stands down on the table's top.
+      model.position.set(x + 0.5, y + furnitureDrop(id, this.world.get(x, y - 1, z)), z + 0.5);
       model.rotation.y = FACING[BLOCKS[id].front] ?? 0;
       model.updateMatrixWorld(true);
       model.matrixAutoUpdate = false;
@@ -714,6 +730,10 @@ export class Terrain {
       if (model.userData.campfire) {
         this.campfires.set(`${x},${y},${z}`, { x, y, z });
         chunk.campfires = (chunk.campfires ?? []).concat(`${x},${y},${z}`);
+      }
+      if (model.userData.banner) {
+        this.banners.add(`${x},${y},${z}`);
+        chunk.banners = (chunk.banners ?? []).concat(`${x},${y},${z}`);
       }
     }
     this.group.add(group);
@@ -758,6 +778,10 @@ export class Terrain {
       this.rockingMaterials ??= rockingMaterials(toyMaterial);
       return rockingModel(this.rockingMaterials);
     }
+    if (PARTY_KINDS.has(kind)) {
+      this.partyMaterials ??= partyMaterials(toyMaterial);
+      return partyModel(this.partyMaterials, kind, cell, this.world, this.party);
+    }
     return null;
   }
 
@@ -767,6 +791,7 @@ export class Terrain {
     // A real model's shapes are shared by all of them, and kept.
     for (const mesh of chunk.group.children) if (mesh.isMesh) mesh.geometry.dispose();
     for (const cell of chunk.campfires ?? []) this.campfires.delete(cell);
+    for (const cell of chunk.banners ?? []) this.banners.delete(cell);
     // What a model keeps of its own (where an escalator's steps are).
     for (const { model } of chunk.movers) model.userData.dispose?.();
     for (const { model } of chunk.movers) if (model.userData.feed) {

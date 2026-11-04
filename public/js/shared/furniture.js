@@ -24,7 +24,8 @@ const BOOKS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#8c5bd6', '#f59331',
 // How high a table's top is: what stands on tables (a computer) in the cell
 // above one is drawn down on it (furnitureDrop).
 const TABLE_TOP = 0.82;
-const ON_TABLES = new Set(['computer', 'robot-kit']);
+const ON_TABLES = new Set(['computer', 'robot-kit', 'birthday-cake', 'present', 'balloons']);
+const TABLES = new Set(['table', 'party-table']);
 
 const box = (x0, y0, z0, x1, y1, z1, color, tile = 'plain') => [x0, y0, z0, x1, y1, z1, color, tile];
 
@@ -501,6 +502,100 @@ const MODELS = {
   escalator: () => escalatorBoxes(1),
   'escalator-down': () => escalatorBoxes(-1),
   walkway: walkwayBoxes,
+
+  // A birthday party's boxes, for their pictures (render/party-model.js
+  // draws them for real). A table under a white cloth with a pink band round
+  // its skirt, joining up with the one beside it.
+  'party-table'(same) {
+    const PINK = '#f7a8c9';
+    const l = same(-1, 0);
+    const r = same(1, 0);
+    const f = same(0, -1);
+    const b = same(0, 1);
+    const out = [box(l ? 0 : 0.02, TABLE_TOP - 0.06, f ? 0 : 0.02, r ? 1 : 0.98, TABLE_TOP, b ? 1 : 0.98, WHITE, 'plain')];
+    for (const [x0, z0, x1, z1, open] of [
+      [0.03, 0.03, 0.97, 0.05, !f],
+      [0.03, 0.95, 0.97, 0.97, !b],
+      [0.03, 0.03, 0.05, 0.97, !l],
+      [0.95, 0.03, 0.97, 0.97, !r],
+    ]) {
+      if (!open) continue;
+      out.push(box(x0, 0.36, z0, x1, TABLE_TOP - 0.06, z1, WHITE, 'plain'), box(x0 - 0.005, 0.5, z0 - 0.005, x1 + 0.005, 0.62, z1 + 0.005, PINK, 'plain'), box(x0 - 0.005, 0.36, z0 - 0.005, x1 + 0.005, 0.42, z1 + 0.005, '#7cc4ff', 'plain'));
+    }
+    // A cupcake on a plate, and a party hat.
+    out.push(
+      box(0.2, TABLE_TOP, 0.3, 0.56, TABLE_TOP + 0.02, 0.66, '#fffdf8', 'plain'),
+      box(0.3, TABLE_TOP + 0.02, 0.4, 0.46, TABLE_TOP + 0.08, 0.56, '#ffd84d', 'plain'),
+      box(0.3, TABLE_TOP + 0.08, 0.4, 0.46, TABLE_TOP + 0.13, 0.56, PINK, 'plain'),
+      box(0.66, TABLE_TOP, 0.5, 0.82, TABLE_TOP + 0.05, 0.66, '#7cc4ff', 'plain'),
+      box(0.69, TABLE_TOP + 0.05, 0.53, 0.79, TABLE_TOP + 0.1, 0.63, '#ffffff', 'plain'),
+      box(0.71, TABLE_TOP + 0.1, 0.55, 0.77, TABLE_TOP + 0.15, 0.61, '#7cc4ff', 'plain'),
+    );
+    return out;
+  },
+
+  // A cake of two tiers on a plate, its candles lit.
+  'birthday-cake'() {
+    const out = [
+      box(0.08, 0, 0.08, 0.92, 0.07, 0.92, WHITE, 'plain'),
+      box(0.16, 0.07, 0.16, 0.84, 0.3, 0.84, '#f7a8c9', 'plain'),
+      box(0.14, 0.26, 0.14, 0.86, 0.32, 0.86, WHITE, 'plain'),
+      box(0.3, 0.32, 0.3, 0.7, 0.52, 0.7, '#fff1da', 'plain'),
+      box(0.28, 0.48, 0.28, 0.72, 0.54, 0.72, '#f7a8c9', 'plain'),
+    ];
+    [[0.36, '#7cc4ff'], [0.48, '#ffd84d'], [0.6, '#ff8fc4']].forEach(([x, color]) => {
+      out.push(box(x, 0.54, 0.48, x + 0.04, 0.7, 0.52, color, 'plain'), box(x + 0.005, 0.7, 0.485, x + 0.035, 0.78, 0.515, '#ffd166', 'glow'));
+    });
+    return out;
+  },
+
+  // A box in red paper with a gold ribbon round it and a bow on its lid.
+  present() {
+    const RED = '#ef5b6b';
+    const GOLD = '#ffd166';
+    return [
+      box(0.14, 0, 0.14, 0.86, 0.52, 0.86, RED, 'plain'),
+      box(0.1, 0.48, 0.1, 0.9, 0.64, 0.9, RED, 'plain'),
+      box(0.44, 0, 0.13, 0.56, 0.52, 0.87, GOLD, 'plain'),
+      box(0.13, 0, 0.44, 0.87, 0.52, 0.56, GOLD, 'plain'),
+      box(0.44, 0.48, 0.09, 0.56, 0.65, 0.91, GOLD, 'plain'),
+      box(0.09, 0.48, 0.44, 0.91, 0.65, 0.56, GOLD, 'plain'),
+      box(0.24, 0.65, 0.42, 0.44, 0.76, 0.58, GOLD, 'plain'),
+      box(0.56, 0.65, 0.42, 0.76, 0.76, 0.58, GOLD, 'plain'),
+      box(0.44, 0.65, 0.44, 0.56, 0.74, 0.56, GOLD, 'plain'),
+    ];
+  },
+
+  // Three balloons on strings from a little gold weight.
+  balloons() {
+    const out = [box(0.42, 0, 0.42, 0.58, 0.07, 0.58, '#ffd166', 'plain')];
+    for (const [x, y, color] of [
+      [0.26, 0.5, '#ef4b5f'],
+      [0.74, 0.58, '#3f9be8'],
+      [0.5, 0.76, '#ffc93c'],
+    ]) {
+      out.push(
+        box(x - 0.13, y - 0.14, 0.44, x + 0.13, y + 0.14, 0.7, color, 'plain'),
+        box(x - 0.09, y - 0.2, 0.48, x + 0.09, y + 0.2, 0.66, color, 'plain'),
+        box(Math.min(x, 0.5) - 0.006, 0.07, 0.49, Math.max(x, 0.5) + 0.006, 0.09, 0.51, WHITE, 'plain'),
+        box(x - 0.006, 0.07, 0.49, x + 0.006, y - 0.18, 0.51, WHITE, 'plain'),
+      );
+    }
+    return out;
+  },
+
+  // A string of two flags against the wall behind it, a heart on each.
+  'party-banner'() {
+    const out = [box(0, 0.9, 0.94, 1, 0.93, 0.97, WHITE, 'plain')];
+    for (const [x, color] of [
+      [0.27, '#ee5fa7'],
+      [0.73, '#4a90e8'],
+    ]) {
+      for (let i = 0; i < 4; i++) out.push(box(x - 0.2 + i * 0.05, 0.86 - (i + 1) * 0.13, 0.95, x + 0.2 - i * 0.05, 0.86 - i * 0.13, 0.98, color, 'plain'));
+      out.push(box(x - 0.08, 0.68, 0.94, x + 0.08, 0.78, 0.95, WHITE, 'plain'), box(x - 0.04, 0.62, 0.94, x + 0.04, 0.68, 0.95, WHITE, 'plain'));
+    }
+    return out;
+  },
 
   // The campfire's boxes, for its picture (render/campfire-model.js draws
   // it for real): a ring of stones, logs crossed over embers, and flames.
@@ -1154,7 +1249,7 @@ export function furniturePoint(id, x, y, z, px, py, pz, drop = 0) {
 // How far down the piece with block `id` is drawn, standing on the block
 // `below` it: onto the top of a table, for what stands on tables, or not at all.
 export function furnitureDrop(id, below) {
-  return ON_TABLES.has(BLOCKS[id]?.model) && BLOCKS[below]?.model === 'table' ? TABLE_TOP - 1 : 0;
+  return ON_TABLES.has(BLOCKS[id]?.model) && TABLES.has(BLOCKS[below]?.model) ? TABLE_TOP - 1 : 0;
 }
 
 // The boxes of the piece of furniture with block `id` at cell (x, y, z) of

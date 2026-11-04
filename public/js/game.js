@@ -40,7 +40,7 @@ import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalat
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
 import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
-import { freeSpot, scootsAt, seatNear, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
+import { freeSpot, scootsAt, seatNear, seatOf, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
@@ -53,6 +53,7 @@ import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { chestNear, chestTreasure } from './shared/treasure.js';
+import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
@@ -341,6 +342,10 @@ export class Game extends EventTarget {
     this.computerAt = null;
     // The fish tank or bowl beside you, to feed (shared/fishtank.js).
     this.tankTarget = null;
+    // The birthday cake, present or balloons beside you (shared/party.js), and
+    // the song you can hear going: { key, x, y, z, stop, until, notes }.
+    this.partyTarget = null;
+    this.partySong = null;
     // Fishing (shared/fishing.js): your line out on the water, { spot, x, z,
     // phase, nibbles, strikeAt, catch, fight }, the water in front of you to
     // cast onto, every line out on the island (yours too), by player, and
@@ -513,6 +518,9 @@ export class Game extends EventTarget {
       // there: its flakes and darting fish, for everyone to see.
       case 'fish':
         this.pinchTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2] });
+        break;
+      case 'party':
+        this.partyNews(msg);
         break;
       case 'swing': {
         const avatar = this.players.get(msg.pid)?.avatar;
@@ -2018,6 +2026,8 @@ export class Game extends EventTarget {
     // Nothing to bop but perhaps a door: one the swing passes through swings
     // open, and the next bop shuts it again.
     if (this.bopDoor(b, fx, fz, reach)) return null;
+    // Or balloons: a swing pops one.
+    if (this.bopBalloons(b, fx, fz, reach)) return null;
     // A monster you can see but not reach: say how bopping works, now and then.
     const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
     if (near && now > (this.toldReach ?? 0)) {
@@ -2041,6 +2051,17 @@ export class Game extends EventTarget {
     // never takes it back.
     if (!this.edit('door', cells, { undoable: false, anyone: true })) return false;
     this.sound.play('place', { kind: B.block(cells[3]).sound });
+    return true;
+  }
+
+  // Balloons the swing of the fist (👊 or X) passes through, a step in front
+  // of you: one of them pops, as a tap on 🎈 Pop does. Returns true when so.
+  bopBalloons(b, fx, fz, reach) {
+    if (!this.world || this.watching) return false;
+    const stop = (id) => isBalloons(id) || B.SOLID[id] === 1;
+    const hit = raycast(this.world, b.x, b.y + 0.5, b.z, fx, 0, fz, Math.max(1.8, reach + 0.6), stop);
+    if (!hit || !isBalloons(hit.id) || !this.renderer.terrain.party.balloonsUp(keyOf(hit.x, hit.y, hit.z), this.partyNow)) return false;
+    this.send({ t: 'party', at: [hit.x, hit.y, hit.z] });
     return true;
   }
 
@@ -3420,6 +3441,166 @@ export class Game extends EventTarget {
     this.renderer.effects.hearts(t.x + 0.5, t.y + 0.9, t.z + 0.5, 2);
   }
 
+  // ------------------------------------------------ a birthday party
+
+  // The clock a party goes by here (shared/party.js): the renderer's, so it
+  // keeps to what is drawn.
+  get partyNow() {
+    return this.renderer.time * 1000;
+  }
+
+  // What of a birthday party is beside you to use, or null. A chair plainly
+  // nearer to you than it wins, so you can walk up to one at the table and
+  // sit; otherwise it is the chair that waits, as the gap beside the cake has
+  // chairs either side of it.
+  partyBeside(on) {
+    if (this.watching || this.riding || this.aboard || this.dizzy || this.hooping || on.flying || this.atStudyDesk || (!this.seat && !on.onGround)) return null;
+    // Sitting up at a table, that is: not from your bed or the hot tub.
+    if (this.seat && seatOf(this.world.get(this.seat.x, this.seat.y, this.seat.z))?.pose !== 'sit') return null;
+    const t = partyNear(this.world, on, this.renderer.terrain.party, this.partyNow, Boolean(this.seat));
+    if (!t) return null;
+    const s = this.seatTarget;
+    if (s) {
+      if (Math.hypot(s.x + 0.5 - on.x, s.z + 0.5 - on.z) + 0.35 < Math.hypot(t.x + 0.5 - on.x, t.z + 0.5 - on.z)) return null;
+      this.seatTarget = null;
+    }
+    return t;
+  }
+
+  // What the button beside it says, and says to a screen reader.
+  partyButton(t) {
+    if (t.kind === 'present') return ['🎁 Open', 'Open the present'];
+    if (t.kind === 'balloons') return ['🎈 Pop', 'Pop a balloon'];
+    const { phase } = this.renderer.terrain.party.cake(t.key, this.partyNow);
+    if (phase === 'song') return ['🎵 Sing along', 'Everyone is singing Happy Birthday'];
+    if (phase === 'blow') return ['🌬️ Blow!', 'Blow out the candles'];
+    return phase === 'out' ? ['🍰 Eat', 'Have a slice of cake'] : ['🎂 Sing', 'Sing Happy Birthday'];
+  }
+
+  // Q, or that button: the island is asked, and says what happened
+  // (partyNews). While the song goes on there is nothing to do but sing.
+  useParty() {
+    const t = this.partyTarget;
+    if (!t) return;
+    if (t.kind === 'cake' && this.renderer.terrain.party.cake(t.key, this.partyNow).phase === 'song') return;
+    this.send({ t: 'party', at: [t.x, t.y, t.z] });
+  }
+
+  // Something happened at a birthday party, as the island tells it.
+  partyNews(msg) {
+    if (!Array.isArray(msg.at) || !msg.at.every(Number.isInteger)) return;
+    const [x, y, z] = msg.at;
+    const key = keyOf(x, y, z);
+    this.renderer.terrain.party.hear(key, msg, this.partyNow);
+    const here = this.near(x + 0.5, y, z + 0.5, 30);
+    const me = msg.pid === this.pid;
+    const who = this.players.get(msg.pid)?.name ?? 'Someone';
+    const fx = this.renderer.effects;
+    // Where its foot is: down on the table, on a table.
+    const foot = y + furnitureDrop(this.world.get(x, y, z), this.world.get(x, y - 1, z));
+    const cx = x + 0.5;
+    const cz = z + 0.5;
+    switch (msg.op) {
+      case 'sing': {
+        if (!here) return;
+        this.endPartySong();
+        this.partySong = { key, x: cx, y: foot + CANDLE_TOP, z: cz, stop: this.sound.birthday(), until: this.partyNow + SONG_MS, notes: 0 };
+        this.emit('toast', { icon: '🎵', text: me ? 'Happy birthday to you! Sing along, and blow out the candles when the song ends.' : `${who} started the birthday song! Sing along, and blow out the candles when it ends.` });
+        return;
+      }
+      case 'blow': {
+        if (this.partySong?.key === key) this.endPartySong();
+        if (here) {
+          for (let i = 0; i < SLICES; i++) {
+            const [dx, dz] = candleSpot(i);
+            fx.add('puff', cx + dx, foot + CANDLE_TOP + 0.05, cz + dz, { vx: (Math.random() - 0.5) * 0.25, vy: 0.5 + Math.random() * 0.3, vz: (Math.random() - 0.5) * 0.25, size: 0.09, grow: 0.3, drag: 0.4, life: 1.4 + Math.random() * 0.5, color: '#d9d5d0' });
+          }
+          fx.confetti(cx, foot + 0.9, cz);
+          fx.sparkles(cx, foot + 0.8, cz, 14);
+          this.sound.play('wish');
+          this.emit('toast', { icon: '🎂', text: me ? 'You blew out the candles! Make a wish — and now, cake!' : `${who} blew out the candles! Happy birthday! Now, cake!` });
+        }
+        if (me) {
+          this.partyCount('wishes', cx, foot + 1, cz);
+          if (!this.seat) this.emote('cheer');
+        }
+        return;
+      }
+      case 'eat': {
+        if (here) {
+          fx.hearts(cx, foot + 0.7, cz, 2);
+          this.sound.play('yum');
+        }
+        if (me) this.partyCount('slices', cx, foot + 1, cz);
+        return;
+      }
+      case 'open': {
+        if (here) {
+          fx.confetti(cx, foot + 0.6, cz, 36, 0.55);
+          fx.sparkles(cx, foot + 0.7, cz, 8);
+          this.sound.play('present');
+        }
+        if (me) {
+          const toy = SURPRISES[this.renderer.terrain.party.present(key, this.partyNow)?.toy ?? 0];
+          const coins = presentCoins();
+          this.profile.earn(coins);
+          this.partyCount('presents', cx, foot + 1, cz);
+          this.emit('toast', { icon: '🎁', text: `Surprise! ${toy.icon} ${toy.name} says hello, and there ${coins === 1 ? 'is' : 'are'} 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'} inside!` });
+        }
+        return;
+      }
+      case 'pop': {
+        const spot = balloonSpots(!B.SOLID[this.world.get(x, y + 1, z)])[msg.i];
+        if (here && spot) {
+          const color = balloonColors(x, y, z)[msg.i];
+          fx.add('bang', cx + spot[0], foot + spot[1], cz + spot[2], { size: 0.5, life: 0.16, grow: 2.4, color: '#ffffff' });
+          for (let i = 0; i < 12; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const s = 1 + Math.random() * 2;
+            fx.add('square', cx + spot[0], foot + spot[1], cz + spot[2], { vx: Math.cos(a) * s, vy: (Math.random() - 0.3) * 3, vz: Math.sin(a) * s, size: 0.06 + Math.random() * 0.06, life: 0.5 + Math.random() * 0.4, gravity: 7, drag: 1.5, color });
+          }
+          this.sound.play('balloon-pop');
+        }
+        if (me) this.profile.count('balloons');
+        return;
+      }
+    }
+  }
+
+  // One more of what you did at a party, and the XP for it rising from there,
+  // while it still earns any.
+  partyCount(stat, x, y, z) {
+    if (this.profile.data.stats[stat] < XP_FOR[stat].cap) this.emit('reward', { x, y, z, xp: XP_FOR[stat].xp });
+    this.profile.count(stat);
+  }
+
+  // The song going: notes rising off the cake, stopped if you go too far away
+  // to hear it, and at the end of it, the word to blow out the candles.
+  updatePartySong() {
+    const song = this.partySong;
+    if (!song) return;
+    if (!this.near(song.x, song.y, song.z, 40)) {
+      this.endPartySong();
+      return;
+    }
+    const left = song.until - this.partyNow;
+    if (left <= 0) {
+      this.endPartySong();
+      if (this.renderer.terrain.party.cake(song.key, this.partyNow).phase === 'blow') this.emit('toast', { icon: '🌬️', text: 'Now blow out the candles!' });
+      return;
+    }
+    const due = Math.floor((SONG_MS - left) / 450);
+    if (due >= song.notes) {
+      song.notes = due + 1;
+      this.renderer.effects.notes(song.x, song.y + 0.2, song.z);
+    }
+  }
+
+  endPartySong() {
+    this.partySong?.stop();
+    this.partySong = null;
+  }
+
   // A typing lesson finished at `wpm` words a minute with `accuracy` (0-100)
   // per cent right: it counts for XP and stickers. The XP it earned.
   typingDone(wpm, accuracy) {
@@ -4005,8 +4186,11 @@ export class Game extends EventTarget {
       return;
     }
     if (this.seat) {
-      // At a study desk Q opens your workbooks; walking gets you up.
+      // At a study desk Q opens your workbooks; at a table with a birthday
+      // cake on it, it sings to it or blows it out from where you sit, and
+      // walking gets you up.
       if (this.atStudyDesk) this.openStudy();
+      else if (this.partyTarget) this.useParty();
       else this.standUp();
       return;
     }
@@ -4016,6 +4200,10 @@ export class Game extends EventTarget {
     }
     if (this.chestTarget && !this.rideTarget) {
       this.useChest();
+      return;
+    }
+    if (this.partyTarget && !this.rideTarget) {
+      this.useParty();
       return;
     }
     const id = this.rideTarget;
@@ -6341,6 +6529,7 @@ export class Game extends EventTarget {
     this.rideTarget = this.findRideable();
     const on = this.me.body;
     this.seatTarget = !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying && on.onGround ? seatNear(this.world, on, undefined, (x, y, z) => this.seatTaken(x, y, z)) : null;
+    this.partyTarget = this.partyBeside(on);
     this.arcadeTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.dizzy && !on.flying && on.onGround ? arcadeNear(this.world, on) : null;
     this.gashaTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.dizzy && !on.flying && on.onGround ? gashaponNear(this.world, on) : null;
     this.pianoTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.dizzy && !on.flying && on.onGround ? pianoNear(this.world, on) : null;
@@ -6376,6 +6565,7 @@ export class Game extends EventTarget {
     this.danceLoop();
     if (this.seat) this.checkTeaParty();
     this.updateHotTubs();
+    this.updatePartySong();
     this.updateLines(dt);
     this.updateCritters(dt);
     this.seatPassengers(dt);
@@ -6960,6 +7150,8 @@ export class Game extends EventTarget {
     this.computerAt = null;
     this.computerTarget = null;
     this.tankTarget = null;
+    this.partyTarget = null;
+    this.endPartySong();
     this.kitTarget = null;
     this.kitAt = null;
     this.kits.clear();

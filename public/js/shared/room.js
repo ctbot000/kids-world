@@ -40,6 +40,7 @@ import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
 import { feedTank, isTank } from './fishtank.js';
+import { Party } from './party.js';
 import { canFloat } from './fishing.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
@@ -278,6 +279,7 @@ export class Room {
     this.monsters = new MonsterSim((this.world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
     this.monstersSent = false;
     this.arcade = new ArcadeSim((this.world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
+    this.party = new Party();
     this.hookWorld();
   }
 
@@ -555,6 +557,15 @@ export class Room {
         const fed = feedTank({ x: msg.at[0], y: msg.at[1], z: msg.at[2], key: keyOf(...msg.at) }, (this.fedFish ??= new Map()), this.now());
         if (fed.full) this.sendTo(conn, { t: 'notice', text: 'The fish are full — they will be hungry again in a little while.', level: 'info' });
         else this.broadcast({ t: 'fish', pid, at: msg.at });
+        break;
+      }
+      // Someone at a birthday party (party.js) sang to a cake, blew it out or
+      // had a slice, opened a present or popped a balloon, for everyone to see.
+      case 'party': {
+        if (!Array.isArray(msg.at) || msg.at.length !== 3 || !msg.at.every(Number.isInteger)) break;
+        if (Math.hypot(p.s[0] - msg.at[0] - 0.5, p.s[2] - msg.at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - msg.at[1]) > 4) break;
+        const news = this.party.tap(this.world.get(...msg.at), keyOf(...msg.at), this.now(), () => this.rng.next());
+        if (news) this.broadcast({ t: 'party', pid, at: msg.at, ...news });
         break;
       }
       // A fishing line (fishing.js) cast onto the water, a fish hooked, how

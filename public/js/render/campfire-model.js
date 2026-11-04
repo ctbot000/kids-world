@@ -27,7 +27,7 @@ export const CAMPFIRE_FINISH = {
 
 // Upright: each flame turned round to the camera about its own root, which
 // the model's matrix puts wherever the campfire stands.
-const FLAME_VERT = /* glsl */ `
+export const FLAME_VERT = /* glsl */ `
   attribute vec3 center;
   attribute vec3 shape; // width, height, seed
   varying vec2 vUv;
@@ -43,15 +43,10 @@ const FLAME_VERT = /* glsl */ `
   }
 `;
 
-// Materials for every part, each made by `make` from its settings, and the
-// flames' own, whose uTime the ticks move.
-export function campfireMaterials(make = (f) => new THREE.MeshPhysicalMaterial({ metalness: 0, ...f })) {
-  const out = {};
-  for (const [k, f] of Object.entries(CAMPFIRE_FINISH)) {
-    const { basic, ...rest } = f;
-    out[k] = basic ? new THREE.MeshBasicMaterial(rest) : make(rest);
-  }
-  out.flame = new THREE.ShaderMaterial({
+// What flames are drawn in, its uTime moved by the ticks: also the candles'
+// on a birthday cake (render/party-model.js).
+export const flameMaterial = () =>
+  new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 } },
     vertexShader: FLAME_VERT,
     fragmentShader: FLAME_FRAG,
@@ -62,6 +57,41 @@ export function campfireMaterials(make = (f) => new THREE.MeshPhysicalMaterial({
     blendSrc: THREE.OneFactor,
     blendDst: THREE.OneMinusSrcAlphaFactor,
   });
+
+// Flames as a shape, one quad each ([x, y, z, width, height, seed]: its root,
+// and how big): its corners in position, its root and size beside them, for
+// the shader to stand up and turn to the camera.
+export function flameQuads(list) {
+  const corners = [[-0.5, -0.5, 0, 0], [0.5, -0.5, 1, 0], [0.5, 0.5, 1, 1], [-0.5, -0.5, 0, 0], [0.5, 0.5, 1, 1], [-0.5, 0.5, 0, 1]];
+  const pos = [];
+  const uv = [];
+  const center = [];
+  const shape = [];
+  for (const [x, y, z, w, h, seed] of list) {
+    for (const [cx, cy, u, v] of corners) {
+      pos.push(cx, cy, 0);
+      uv.push(u, v);
+      center.push(x, y, z);
+      shape.push(w, h, seed);
+    }
+  }
+  const flames = new THREE.BufferGeometry();
+  flames.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  flames.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  flames.setAttribute('center', new THREE.Float32BufferAttribute(center, 3));
+  flames.setAttribute('shape', new THREE.Float32BufferAttribute(shape, 3));
+  return flames;
+}
+
+// Materials for every part, each made by `make` from its settings, and the
+// flames' own, whose uTime the ticks move.
+export function campfireMaterials(make = (f) => new THREE.MeshPhysicalMaterial({ metalness: 0, ...f })) {
+  const out = {};
+  for (const [k, f] of Object.entries(CAMPFIRE_FINISH)) {
+    const { basic, ...rest } = f;
+    out[k] = basic ? new THREE.MeshBasicMaterial(rest) : make(rest);
+  }
+  out.flame = flameMaterial();
   return out;
 }
 
@@ -126,26 +156,7 @@ function campfireShapes() {
   }
   const body = {};
   for (const [k, l] of Object.entries(parts)) if (l.length) body[k] = bake(l);
-  // The flames: one quad each, its corners in position, its root and size
-  // beside them, for the shader to stand up and turn to the camera.
-  const corners = [[-0.5, -0.5, 0, 0], [0.5, -0.5, 1, 0], [0.5, 0.5, 1, 1], [-0.5, -0.5, 0, 0], [0.5, 0.5, 1, 1], [-0.5, 0.5, 0, 1]];
-  const pos = [];
-  const uv = [];
-  const center = [];
-  const shape = [];
-  for (const [x, z, w, h, seed] of FLAMES) {
-    for (const [cx, cy, u, v] of corners) {
-      pos.push(cx, cy, 0);
-      uv.push(u, v);
-      center.push(x, 0.04, z);
-      shape.push(w, h, seed);
-    }
-  }
-  const flames = new THREE.BufferGeometry();
-  flames.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  flames.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  flames.setAttribute('center', new THREE.Float32BufferAttribute(center, 3));
-  flames.setAttribute('shape', new THREE.Float32BufferAttribute(shape, 3));
+  const flames = flameQuads(FLAMES.map(([x, z, w, h, seed]) => [x, 0.04, z, w, h, seed]));
   // Where the flames are, whichever way they turn.
   flames.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.45, 0), 0.6);
   flames.boundingBox = new THREE.Box3(new THREE.Vector3(-0.25, 0, -0.25), new THREE.Vector3(0.25, 0.9, 0.25));

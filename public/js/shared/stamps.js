@@ -782,6 +782,89 @@ function teaParty() {
   return c.list();
 }
 
+// A birthday party room, a house like a great big birthday cake: tiers of
+// frosting for a roof with candles along the top, a banner over its wide way
+// in with balloons either side, and windows all round. Inside, under long
+// skylights and between walls of confetti, a long party table down the
+// middle laid for ten, the birthday cake in the middle of it, with a gap at its
+// sides to walk up to it; a banner along the back wall saying HAPPY BIRTHDAY
+// over a pile of presents and a piano to play the song on; and more balloons
+// in the corners, on a wood floor with a big pink carpet.
+function birthdayParty() {
+  const c = new Cells();
+  // Room to walk in, and the floor.
+  c.box(-6, 0, 0, 6, 5, 12, B.AIR);
+  c.box(-6, -1, 0, 6, -1, 12, B.PARQUET);
+  c.box(-4, -1, 2, 4, -1, 10, B.CARPETS[2]);
+  // The walls: a white skirting, confetti wallpaper and a pink band along the top.
+  for (let y = 0; y <= 4; y++) {
+    const wall = y === 0 ? WHITE : y === 4 ? PINK : B.PARTY_WALLPAPER;
+    for (let x = -6; x <= 6; x++) {
+      c.put(x, y, 0, wall);
+      c.put(x, y, 12, wall);
+    }
+    for (let z = 1; z < 12; z++) {
+      c.put(-6, y, z, wall);
+      c.put(6, y, z, wall);
+    }
+  }
+  // Windows down the sides and either side of the way in, three wide and three
+  // high, with the banner over it outside too.
+  for (const y of [1, 2]) {
+    for (const z of [3, 4, 8, 9]) {
+      c.put(-6, y, z, B.GLASS);
+      c.put(6, y, z, B.GLASS);
+    }
+    for (const x of [-4, -3, 3, 4]) c.put(x, y, 0, B.GLASS);
+  }
+  for (let x = -1; x <= 1; x++) c.box(x, 0, 0, x, 2, 0, B.AIR);
+  // The ceiling, lamps down its middle, and long skylights either side of them
+  // so the daylight comes in; floor lamps down the walls for after dark.
+  c.box(-6, 5, 0, 6, 5, 12, WHITE);
+  for (const side of [-1, 1]) c.box(side * 3, 5, 1, side * 5, 5, 11, B.GLASS);
+  for (const x of [-2, 2]) for (const z of [2, 6, 10]) c.put(x, 5, z, B.LAMP);
+  for (const x of [-5, 5]) for (const z of [4, 8]) c.put(x, 0, z, B.FLOOR_LAMP);
+  // The roof, open over the skylights: sponge under frosting that overhangs it
+  // all round its edge, and on the middle another tier the same, with candles
+  // along the top lit by star blocks.
+  for (let x = -7; x <= 7; x++) {
+    for (let z = -1; z <= 13; z++) {
+      const well = Math.abs(x) >= 3 && Math.abs(x) <= 5 && z >= 1 && z <= 11;
+      if (well) continue;
+      c.put(x, 7, z, B.FROSTING);
+      if (Math.abs(x) <= 6 && z >= 0 && z <= 12) c.put(x, 6, z, B.COOKIE);
+    }
+  }
+  c.box(-2, 8, 2, 2, 8, 10, B.COOKIE);
+  c.box(-2, 9, 1, 2, 9, 11, B.FROSTING);
+  for (const x of [-2, 0, 2]) {
+    c.put(x, 10, 6, x ? SKY : YELLOW);
+    c.put(x, 11, 6, WHITE);
+    c.put(x, 12, 6, B.STAR_BLOCK);
+  }
+  // The party table, the cake on it, and a chair for everyone but where you
+  // walk up to the cake.
+  for (let z = 4; z <= 8; z++) c.put(0, 0, z, B.PARTY_TABLE);
+  c.put(0, 1, 6, B.BIRTHDAY_CAKE);
+  for (const z of [4, 5, 7, 8]) {
+    c.put(-1, 0, z, B.turnedTo(B.CHAIR, 0));
+    c.put(1, 0, z, B.turnedTo(B.CHAIR, 2));
+  }
+  c.put(0, 0, 3, B.turnedTo(B.CHAIR, 1));
+  c.put(0, 0, 9, B.CHAIR);
+  // The banner along the back wall, over the presents and the piano, and
+  // outside over the way in.
+  for (let x = -3; x <= 3; x++) {
+    c.put(x, 3, 11, B.PARTY_BANNER);
+    c.put(x, 3, -1, B.PARTY_BANNER);
+  }
+  for (const [x, y, z] of [[-4, 0, 11], [-3, 0, 11], [-2, 0, 11], [-4, 0, 10], [-3, 0, 10], [-5, 0, 10], [-4, 1, 11]]) c.put(x, y, z, B.PRESENT);
+  c.put(3, 0, 11, B.PIANO);
+  // Balloons in the corners and beside the table, and outside by the way in.
+  for (const [x, z] of [[-5, 1], [5, 1], [-5, 11], [5, 11], [-4, 6], [4, 6], [-2, -1], [2, -1]]) c.put(x, 0, z, B.BALLOONS);
+  return c.list();
+}
+
 // A video arcade: a little hall with a checked floor, a striped awning over
 // its open front and star-topped posts, lit inside, with three arcade
 // machines down each side facing in — Bop-a-Blob and Picture Pairs — for
@@ -1040,6 +1123,7 @@ export const STAMPS = [
   { key: 'pyramid', name: 'Pyramid', icon: '🔺', cells: pyramid() },
   { key: 'picnic', name: 'Picnic', icon: '🧺', cells: picnic() },
   { key: 'tea-party', name: 'Tea Party', icon: '🫖', cells: teaParty() },
+  { key: 'birthday-party', name: 'Birthday Party', icon: '🎂', cells: birthdayParty() },
   { key: 'video-arcade', name: 'Video Arcade', icon: '🕹️', cells: videoArcade() },
   { key: 'school', name: 'School', icon: '🏫', cells: school() },
   { key: 'cooking-school', name: 'Cooking School', icon: '🍳', cells: cookingSchool() },

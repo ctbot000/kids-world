@@ -1124,6 +1124,28 @@ const PAINT = {
     }
     bevel(ctx, 0.2);
   },
+  // Bits of confetti on a warm cream, for a birthday party.
+  'wallpaper-party'(ctx) {
+    fill(ctx, '#fff3cf');
+    const colors = ['#f47fb8', '#5fb8f0', '#ffc93c', '#6fd08c', '#b48cf0', '#ff9a5c'];
+    [
+      [10, 8, 0.5], [30, 14, 2.2], [52, 6, 1.1], [18, 28, 1.6], [42, 30, 0.2], [58, 26, 2.6],
+      [6, 46, 2.9], [26, 50, 0.8], [46, 48, 1.9], [60, 56, 0.4], [34, 60, 2.4], [14, 60, 1.3],
+    ].forEach(([x, y, turn], i) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(turn);
+      ctx.fillStyle = colors[i % colors.length];
+      if (i % 3 === 2) {
+        ellipse(ctx, 0, 0, 2.6, 2.6);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-3.6, -1.8, 7.2, 3.6);
+      }
+      ctx.restore();
+    });
+    bevel(ctx, 0.2);
+  },
   'wallpaper-stars'(ctx) {
     fill(ctx, '#2f3a6b');
     speckles(ctx, 403, ['rgba(255,255,255,0.5)'], 18, [0.6, 1.2]);

@@ -295,6 +295,20 @@ export const MONSTER_GASHAPON = furniture(240, 'monster-gashapon', { name: 'Mons
 // Pianos (shared/piano.js): walk up, press Q and play. After the gashapon.
 export const PIANO = furniture(208, 'piano', { name: 'Piano', color: '#3b2a24', after: 204, sound: 'wood' });
 export const GRAND_PIANO = furniture(212, 'grand-piano', { name: 'Grand Piano', color: '#23252b', after: 208, sound: 'wood' });
+// A birthday party (shared/party.js), all drawn as real models
+// (render/party-model.js), last in the tab. A Party Table, its cloth joining
+// up with the one beside it and its places laid for the party; a Birthday
+// Cake, on a table or anywhere, its candles to sing to and blow out and its
+// slices to eat; a Present to open; a bunch of Balloons on their strings, to
+// walk through, or to pop; and a Birthday Banner that hangs on a wall, piece
+// by piece along it spelling HAPPY BIRTHDAY in flags. And wallpaper to go with
+// them, after the others.
+export const PARTY_WALLPAPER = def(405, 'wallpaper-party', { name: 'Confetti Wallpaper', category: 'home', after: 153, tiles: 'wallpaper-party', sound: 'wood' });
+export const PARTY_TABLE = furniture(397, 'party-table', { name: 'Party Table', color: '#f7a8c9', turns: false, sound: 'cloth', real: 'party-table' });
+export const BIRTHDAY_CAKE = furniture(398, 'birthday-cake', { name: 'Birthday Cake', color: '#f7a8c9', turns: false, light: 6, sound: 'candy', real: 'birthday-cake' });
+export const PRESENT = furniture(399, 'present', { name: 'Present', color: '#ef5b6b', turns: false, sound: 'cloth', real: 'present' });
+export const BALLOONS = furniture(400, 'balloons', { name: 'Balloons', color: '#ef6fb0', turns: false, solid: false, sound: 'soft', real: 'balloons' });
+export const PARTY_BANNER = furniture(401, 'party-banner', { name: 'Birthday Banner', color: '#ee5fa7', solid: false, wall: true, sound: 'cloth', real: 'party-banner' });
 
 // ---------------------------------------------------------------- candy
 export const FROSTING = def(19, 'frosting', { name: 'Frosting', category: 'candy', tiles: { top: 'frosting', side: 'frosting-side', bottom: 'cookie' }, studs: true, sound: 'candy', under: 20 });
