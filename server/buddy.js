@@ -65,7 +65,7 @@ import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKe
 import { LocalLink, PeerLink } from './dialer.js';
 import { PeerHost } from './host.js';
 import { friendId } from './keeper.js';
-import { isMbtiAsk, nextQuestion, People, PICK_SCHEMA, pickMessages, plainPick, questionsLeft, questionText, tellLine } from './personality.js';
+import { friendWho, isMbtiAsk, nextQuestion, People, PICK_SCHEMA, pickMessages, plainPick, questionsLeft, questionText, tellLine } from './personality.js';
 
 export const DEFAULT_NAME = 'Pip 🤖';
 // A kid in headphones and a sky-blue T-shirt, with a baby dragon.
@@ -106,6 +106,8 @@ const LISTEN_MS = 1300;
 const TALK_GAP_MS = 2500;
 // From what it says to a question it then asks, as if typing it.
 const QUESTION_GAP_MS = 1500;
+// How long it goes by the logins it last read.
+const USERNAMES_MS = 60000;
 export const BYE_MS = 2500;
 const QUIET_MS = [100000, 170000];
 const BUILD_GAP_MS = 20000;
@@ -246,9 +248,11 @@ export class Buddy extends EventEmitter {
   // server's rooms. rtc: node-datachannel, to visit islands peer to peer.
   // home: whether it keeps an island of its own on this server, saved in homeFile.
   // peopleFile: where what it knows of its friends' personalities is saved.
+  // logins: the keeper's logins, [{ device, login: { username } }], to know
+  // its friends by.
   // pauses: how long its pauses in talking are (listening for more, typing,
   // the moment before it goes), as a part of the real ones; tests shorten them.
-  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, peopleFile = null, random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS, pauses = 1 }) {
+  constructor({ llm, keeper = null, rooms = null, rtc = null, server = null, iceServers, name = DEFAULT_NAME, look = DEFAULT_LOOK, maxVisits = 2, wander = true, home = false, homeFile = null, peopleFile = null, logins = () => keeper?.store?.logins() ?? [], random = Math.random, now = () => Date.now(), log = (...args) => console.log(...args), tickMs = TICK_MS, layerMs = LAYER_MS, firstBuildMs = FIRST_BUILD_MS, pauses = 1 }) {
     super();
     this.llm = llm;
     this.keeper = keeper;
@@ -297,6 +301,10 @@ export class Buddy extends EventEmitter {
     this.homeToken = '';
     this.builds = [];
     this.people = new People({ file: peopleFile, log: this.log, now });
+    this.logins = logins;
+    // friendWho → username, as the keeper's logins were a moment ago.
+    this.usernames = new Map();
+    this.usernamesAt = -Infinity;
     this.saving = Promise.resolve();
     this.stopped = false;
   }
@@ -321,6 +329,21 @@ export class Buddy extends EventEmitter {
     this.timers.push(setInterval(() => this.saveHome(), SAVE_MS));
     for (const t of this.timers) t.unref?.();
     if (this.keeper) this.keeper.buddy = this;
+  }
+
+  // The username of a login, from what its pages call it to the AI friend;
+  // '' if there is none. A new login, or a changed username, is found soon.
+  async usernameOf(who) {
+    if (!this.usernames.has(who) || this.now() - this.usernamesAt > USERNAMES_MS) {
+      this.usernamesAt = this.now();
+      try {
+        const logins = await this.logins();
+        this.usernames = new Map(logins.filter((l) => l.login.username).map((l) => [friendWho(l.device), l.login.username]));
+      } catch (error) {
+        this.log(`AI friend: the logins could not be read (${error.message}).`);
+      }
+    }
+    return this.usernames.get(who) ?? '';
   }
 
   // An answer from the model, counted, timed and kept in the model log;
@@ -609,8 +632,13 @@ export class Visit extends EventEmitter {
     this.defense = null;
     this.chat = [];
     // The personality question asked of each friend and not answered yet:
-    // name → { q, misses }.
+    // their id (personOf) → { q, misses }.
     this.quizzes = new Map();
+    // Friends here by their usernames: pid → username, with the looking up
+    // still going on; and what it learns of a guest, forgotten when it goes.
+    this.usernames = new Map();
+    this.lookingUp = Promise.resolve();
+    this.guests = new People();
     // Lines the admin page had it say, until the island says them back.
     this.forAdmin = [];
     this.body = null;
@@ -722,6 +750,9 @@ export class Visit extends EventEmitter {
       case 'error':
         // Kicked, closed, full, a passcode, a newer game: off home.
         this.end(msg.code === 'kicked' ? 'kicked' : 'refused', { quiet: true });
+        break;
+      case 'friendWho':
+        this.lookingUp = this.lookingUp.then(() => this.lookUp(msg.who));
         break;
       case 'joined':
         if (msg.player?.id && msg.player.id !== this.me) {
@@ -849,7 +880,7 @@ export class Visit extends EventEmitter {
     // What was said before it came, so it knows what is going on.
     for (const entry of (msg.chat ?? []).slice(-6)) {
       const text = this.textOf(entry);
-      if (text) this.chat.push({ name: entry.name, text, mine: entry.pid === this.me });
+      if (text) this.chat.push({ pid: entry.pid, name: entry.name, text, mine: entry.pid === this.me });
     }
     const s = this.players.get(this.me)?.s ?? [this.world.spawn.x, this.world.spawn.y, this.world.spawn.z, 0];
     this.body = makeBody(s[0], s[1], s[2]);
@@ -889,7 +920,7 @@ export class Visit extends EventEmitter {
     const mine = entry.pid === this.me;
     const k = mine ? this.forAdmin.indexOf(text) : -1;
     if (k >= 0) this.forAdmin.splice(k, 1);
-    this.chat.push({ name: entry.name, text, mine, ...(k >= 0 ? { admin: true } : {}) });
+    this.chat.push({ pid: entry.pid, name: entry.name, text, mine, ...(k >= 0 ? { admin: true } : {}) });
     if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
     if (mine) return;
     const now = this.now();
@@ -1348,6 +1379,21 @@ export class Visit extends EventEmitter {
     return this.buddy.ask(messages, ANSWER_SCHEMA, `what to say on “${this.world?.name ?? this.island.name}”${ask.admin ? ', asked from the admin page' : ''}${ask.then === 'leave' ? ', leaving' : ''}`);
   }
 
+  // Friends' usernames, from what the island says of them.
+  async lookUp(who) {
+    for (const [pid, hash] of Object.entries(who ?? {})) {
+      const username = typeof hash === 'string' ? await this.buddy.usernameOf(hash) : '';
+      if (username) this.usernames.set(Number(pid), username);
+    }
+  }
+
+  // Where what it knows of a friend is kept, and by what id: their username,
+  // or for a guest (or the admin page) just for this visit.
+  personOf(pid) {
+    const username = this.usernames.get(pid);
+    return username ? { people: this.buddy.people, id: username } : { people: this.guests, id: `#${pid ?? 'admin'}` };
+  }
+
   // Asked for their MBTI, or answering a question it asked to find it: what
   // to tell the model about it, read from what they just said.
   async personality(ask) {
@@ -1355,40 +1401,41 @@ export class Visit extends EventEmitter {
     if (ask.why || !theirs || theirs.mine || theirs === this.quizRead) return [];
     this.quizRead = theirs;
     const name = theirs.name;
-    const people = this.buddy.people;
-    const quiz = this.quizzes.get(name);
+    await this.lookingUp;
+    const { people, id } = this.personOf(theirs.pid);
+    const quiz = this.quizzes.get(id);
     // An answer of just "1" is in the language the question was asked in.
     const lang = quiz && !/\p{L}{2}/u.test(theirs.text) ? quiz.lang : languageOf(theirs.text);
     ask.lang = lang;
     if (quiz) {
       const pick = plainPick(quiz.q, theirs.text) || (await this.readPick(quiz.q, theirs.text));
       if (pick) {
-        await people.answer(name, quiz.q.id, pick);
-        this.quizzes.delete(name);
+        await people.answer(id, quiz.q.id, pick);
+        this.quizzes.delete(id);
         const [, a, b] = quiz.q.en;
-        const next = nextQuestion(people.answersOf(name));
-        if (!next) return [tellLine(`${name} just answered your last question to find their MBTI (${pick === 'a' ? a : b}).`, people.typeOf(name), lang)];
-        this.quizzes.set(name, { q: next, misses: 0, lang });
+        const next = nextQuestion(people.answersOf(id));
+        if (!next) return [tellLine(`${name} just answered your last question to find their MBTI (${pick === 'a' ? a : b}).`, people.typeOf(id), lang)];
+        this.quizzes.set(id, { q: next, misses: 0, lang });
         ask.question = questionText(next, lang);
-        return [`${name} answered your question to find their MBTI: ${pick === 'a' ? a : b}. Say something short and kind about that answer, and nothing more: you ask the next question (${questionsLeft(people.answersOf(name))} more at most) right after, by itself.`];
+        return [`${name} answered your question to find their MBTI: ${pick === 'a' ? a : b}. Say something short and kind about that answer, and nothing more: you ask the next question (${questionsLeft(people.answersOf(id))} more at most) right after, by itself.`];
       }
       quiz.misses++;
       if (quiz.misses >= 2 && !isMbtiAsk(theirs.text)) {
-        this.quizzes.delete(name);
+        this.quizzes.delete(id);
         return [`You were asking ${name} questions to find their MBTI, but they are talking about something else now. Answer what they said; leave the questions for when they ask for their MBTI again.`];
       }
       ask.question = questionText(quiz.q, lang);
-      if (isMbtiAsk(theirs.text)) return [`${name} is asking for their MBTI again. Say you need a few more answers first (${questionsLeft(people.answersOf(name))} at most), and nothing more: you ask the question again right after, by itself.`];
+      if (isMbtiAsk(theirs.text)) return [`${name} is asking for their MBTI again. Say you need a few more answers first (${questionsLeft(people.answersOf(id))} at most), and nothing more: you ask the question again right after, by itself.`];
       return [`You asked ${name} a question to find their MBTI ("${quiz.q.en[0]}") and they did not pick a choice yet. Say one short, friendly thing back to what they said, in your own words (not theirs), and nothing more: you ask the question again right after, by itself.`];
     }
     if (!isMbtiAsk(theirs.text)) return [];
-    const type = people.typeOf(name);
+    const type = people.typeOf(id);
     if (type) return [tellLine(`${name} is asking for their MBTI.`, type, lang)];
-    const next = nextQuestion(people.answersOf(name));
-    this.quizzes.set(name, { q: next, misses: 0, lang });
+    const next = nextQuestion(people.answersOf(id));
+    this.quizzes.set(id, { q: next, misses: 0, lang });
     ask.question = questionText(next, lang);
     const started = next.id !== 'EI0';
-    return [`${name} is asking for their MBTI, but you do not know them well enough yet. ${started ? 'Say you will finish the questions you started last time' : 'Say you will ask a few fun questions first to find out'} (${questionsLeft(people.answersOf(name))} at most), and nothing more: you ask the first question right after, by itself.`];
+    return [`${name} is asking for their MBTI, but you do not know them well enough yet. ${started ? 'Say you will finish the questions you started last time' : 'Say you will ask a few fun questions first to find out'} (${questionsLeft(people.answersOf(id))} at most), and nothing more: you ask the first question right after, by itself.`];
   }
 
   // Which choice their answer picked ('a' or 'b'), or '' for neither.
@@ -1427,7 +1474,8 @@ export class Visit extends EventEmitter {
       if (p.dizzy) bits.push('dizzy');
       else if (p.s[5] & 1) bits.push('flying');
       if (p.look?.pet) bits.push(`with a pet ${p.look.pet.kind} called ${p.look.pet.name}`);
-      const type = this.buddy.people.typeOf(p.name);
+      const person = this.personOf(p.id);
+      const type = person.people.typeOf(person.id);
       if (type) bits.push(`MBTI ${type}`);
       return `${p.name} (${bits.join(', ')})`;
     });

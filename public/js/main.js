@@ -42,9 +42,11 @@ storage.useSpace(who?.player ?? null);
 // device you log in on, so an island knows you are already there instead of
 // letting you in twice. A hash of the login's folder, which stays a secret
 // (the island's owner hears this, and peer to peer that is someone's page).
-const islandWho = who && crypto.subtle
-  ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kids-world island player ${who.player}`))), (b) => b.toString(16).padStart(2, '0')).join('')
-  : '';
+const sha256 = async (text) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))), (b) => b.toString(16).padStart(2, '0')).join('');
+const islandWho = who && crypto.subtle ? await sha256(`kids-world island player ${who.player}`) : '';
+// Who you are to the AI friend, which finds your username from it at the
+// keeper; only it is told (server/personality.js friendWho).
+const friendWho = who && crypto.subtle ? await sha256(`kids-world ai friend player ${who.player}`) : '';
 const profile = new Profile();
 // The shared isle is a world of its own, so it keeps a world of you: the ⭐
 // experience, level and stickers, the 🪙 coins, the basket's treasures and
@@ -408,6 +410,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
   game.watchLabel = watching || '';
   game.token = profile.token(key);
   game.who = islandWho;
+  game.friendWho = friendWho;
   game.typedPasscode = passcode;
   game.invitePass = pass;
   renderer.removeAvatar(-1);

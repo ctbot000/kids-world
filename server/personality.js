@@ -2,13 +2,21 @@
 // MBTI?", it tells a friend it knows well enough, and asks one it does not a
 // few two-choice questions first — at least two for each of the four letters,
 // a third where those two disagree — one at a time, between other talk. What
-// they answered is saved in the keeper's data folder, by name (all that the
-// islands it visits tell it of a player), so it remembers them next time and
-// carries on with the questions where they left off.
+// they answered is saved in the keeper's data folder, by username, so it
+// remembers them next time, whatever name they go by then, and carries on with
+// the questions where they left off. A logged-in player's page tells islands a
+// hash of their login (friendWho), passed on to the AI friend alone, which finds
+// their username from it at the keeper. A guest has no username: it asks them
+// the same, and forgets when it goes.
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { usernameKey } from '../public/js/shared/keeper.js';
 
 export const PEOPLE_FILE = 'ai-friend-people.json';
+
+// Who a login is to the AI friend, as its pages say (main.js friendWho).
+export const friendWho = (player) => createHash('sha256').update(`kids-world ai friend player ${player}`).digest('hex');
 
 const MBTI_ASK = /mbti|엠비티아이|personality type|성격 ?유형/iu;
 
@@ -131,9 +139,7 @@ export const questionText = (q, lang) => {
   return lang === 'Korean' ? `${ask} ① ${a}? ② ${b}?` : `${ask} (1) ${a}, or (2) ${b}?`;
 };
 
-const keyOf = (name) => String(name).trim().toLowerCase();
-
-// Everyone it has asked, kept in file: name → { name, answers, at }.
+// Everyone it has asked, kept in file: username → { username, answers, at }.
 export class People {
   constructor({ file = null, log = () => {}, now = () => Date.now() } = {}) {
     this.file = file;
@@ -148,7 +154,7 @@ export class People {
     try {
       const kept = JSON.parse(await readFile(this.file, 'utf8'));
       for (const p of Object.values(kept?.people ?? {})) {
-        if (p && typeof p.name === 'string' && p.answers && typeof p.answers === 'object') this.people.set(keyOf(p.name), { name: p.name, answers: { ...p.answers }, at: p.at ?? 0 });
+        if (p && typeof p.username === 'string' && p.answers && typeof p.answers === 'object') this.people.set(usernameKey(p.username), { username: p.username, answers: { ...p.answers }, at: p.at ?? 0 });
       }
     } catch (error) {
       if (error.code !== 'ENOENT') this.log(`AI friend: what it knows of its friends, in ${this.file}, could not be read (${error.message}).`);
@@ -156,17 +162,17 @@ export class People {
     return this;
   }
 
-  answersOf(name) {
-    return this.people.get(keyOf(name))?.answers ?? {};
+  answersOf(username) {
+    return this.people.get(usernameKey(username))?.answers ?? {};
   }
 
-  typeOf(name) {
-    return typeOf(this.answersOf(name));
+  typeOf(username) {
+    return typeOf(this.answersOf(username));
   }
 
-  answer(name, id, pick) {
-    const key = keyOf(name);
-    const p = this.people.get(key) ?? { name, answers: {}, at: 0 };
+  answer(username, id, pick) {
+    const key = usernameKey(username);
+    const p = this.people.get(key) ?? { username, answers: {}, at: 0 };
     p.answers[id] = pick;
     p.at = this.now();
     this.people.set(key, p);

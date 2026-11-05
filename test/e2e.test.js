@@ -33,6 +33,7 @@ import { shareTheIsle } from '../server/adventure.js';
 import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOptions } from '../server/keeper.js';
 import { Office } from '../server/ctb-office.js';
 import { Company, defaultSettings } from '../server/ctb.js';
+import { friendWho } from '../server/personality.js';
 import { createGameServer } from '../server/server.js';
 import { COINS, fakeFeed } from './fixtures/market.js';
 
@@ -3431,6 +3432,33 @@ async function reloadsAfter(page, fn) {
 }
 
 const islandNames = (page) => page.evaluate(() => window.kidsWorld.ui.handlers.islands().map((i) => i.name));
+
+test('a login’s page tells islands who it is to the AI friend, the hash the AI friend finds its username by', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const identity = await createIdentity(dir);
+  const keeper = await keeperOnline(identity, dir);
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const url = `http://127.0.0.1:${games.address().port}/?p2p=1&signal=${encodeURIComponent(signal)}`;
+  const page = await openPlayer(url, { name: 'Sunny Otter', look: { animal: 'fox', fur: 'orange', shirt: 3, hat: 'crown' } });
+  try {
+    await clickButton(page, 'Log in');
+    await clickButton(page, 'Make my login', '#modal');
+    await typeInto(page, 'Otter Fan 7', 'rocket-apple7', 'rocket-apple7');
+    await clickButton(page, 'Make my login', '#modal');
+    await until(page, () => document.querySelector('#modal .login-note')?.textContent.includes('Your login is ready'));
+    await reloadsAfter(page, () => clickButton(page, 'Got it', '#modal'));
+    await until(page, () => document.getElementById('btn-login').textContent.includes('My login'));
+    const player = await page.evaluate(() => window.kidsWorld.keeper.login.player);
+    await makeIsland(page, { online: false, theme: 'Flat Land' });
+    assert.equal(await page.evaluate(() => window.kidsWorld.game.joinMessage().friendWho), friendWho(player));
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test('a login made on one device logs in another: what each made comes along, the same both ways, until logging out', { skip }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));

@@ -3,7 +3,7 @@
 // model was told about it), builds when asked, walks after its friend and
 // flies to one far away, helps a dizzy friend up and bops a monster coming at
 // one, asked for their MBTI, asks a friend a few questions first and
-// remembers the answers; it goes home when asked, when left alone, and stays away from an island
+// remembers the answers by their username; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
 // its own words, talks with it there as a player would (the model's answer
@@ -28,7 +28,7 @@ import { dayOf, FriendControl, TokenUsage, USAGE_FILE } from '../server/friend.j
 import { createIdentity, Keeper, KeeperStore } from '../server/keeper.js';
 import { createGameServer } from '../server/server.js';
 import { Ollama } from '../server/llm.js';
-import { isMbtiAsk, nextQuestion, People, plainPick, QUESTIONS, questionsLeft, questionText, typeOf } from '../server/personality.js';
+import { friendWho, isMbtiAsk, nextQuestion, People, plainPick, QUESTIONS, questionsLeft, questionText, typeOf } from '../server/personality.js';
 import { CHAT_MAX } from '../public/js/shared/words.js';
 
 const dirs = [];
@@ -66,11 +66,11 @@ function server(options = {}) {
 }
 
 // A child's page on the island.
-function child(room, name = 'Minji', look = { animal: 'bunny', pet: { kind: 'puppy', coat: 'tan', name: 'Biscuit' } }) {
+function child(room, name = 'Minji', look = { animal: 'bunny', pet: { kind: 'puppy', coat: 'tan', name: 'Biscuit' } }, join = {}) {
   const heard = [];
   const conn = { send: (text) => heard.push(JSON.parse(text)) };
   room.attach(conn);
-  room.receive(conn, { t: 'join', protocol: PROTOCOL, name, look });
+  room.receive(conn, { t: 'join', protocol: PROTOCOL, name, look, ...join });
   const me = heard.find((m) => m.t === 'welcome').you;
   return { conn, heard, me, say: (msg) => room.receive(conn, msg), of: (t) => heard.filter((m) => m.t === t) };
 }
@@ -413,17 +413,18 @@ test('a type takes two answers that agree for each letter, or a third where they
 test('asked for their MBTI, it asks a friend questions until it knows, remembers the answers and tells them next time at once', async () => {
   const dir = await tempDir();
   const peopleFile = join(dir, 'ai-friend-people.json');
-  // The island's clock a second on for each line said, past its limit on
-  // how fast anyone talks.
+  // The island's clock two seconds on for each line said (it answers with
+  // two), past its limit on how fast anyone talks.
   let skew = 0;
   const { room, rooms, island } = server({ now: () => Date.now() + skew });
-  const minji = child(room);
+  const logins = async () => [{ device: 'minji-device', login: { username: 'minji_01' } }, { device: 'theo-device', login: { username: 'theo' } }];
+  let minji = child(room, 'Minji', undefined, { friendWho: friendWho('minji-device') });
   const llm = model((prompt) => {
     if (prompt.includes('The child said: "친구들이랑 노는 게 좋아"')) return { pick: 'a' };
     if (prompt.includes('The child said:')) return { pick: 'none' };
     return { say: '음!', action: 'none', stamp: 'none' };
   });
-  const buddy = friend({ llm, rooms, peopleFile });
+  const buddy = friend({ llm, rooms, peopleFile, logins });
   await buddy.start();
   assert.equal(buddy.invited(island, 'Minji'), '');
   let pip = await eventually(() => buddyIn(room));
@@ -435,7 +436,7 @@ test('asked for their MBTI, it asks a friend questions until it knows, remembers
   const said = async (text) => {
     const before = llm.asked.length;
     const answered = pipLines().length;
-    skew += 1000;
+    skew += 2000;
     minji.say({ t: 'say', text });
     await eventually(() => pipLines().length > answered);
     const prompt = llm.asked.slice(before).find((p) => p.includes('Write "say"'));
@@ -460,15 +461,15 @@ test('asked for their MBTI, it asks a friend questions until it knows, remembers
   for (const text of ['2', '1']) prompt = await said(text);
   assert.match(prompt, /Write "say" in Korean\./, 'a bare "1" answered in the language the question was asked in');
   const kept = JSON.parse(await readFile(peopleFile, 'utf8'));
-  assert.deepEqual(kept.people.minji.answers, { EI0: 'a', SN0: 'b', TF0: 'a' }, 'saved as they answer');
+  assert.deepEqual(kept.people.minji_01, { username: 'minji_01', answers: { EI0: 'a', SN0: 'b', TF0: 'a' }, at: kept.people.minji_01.at }, 'saved by username as they answer');
 
   // Pip goes, and a new one starts from the same file: it carries on
   // where they left off, then tells them.
   buddy.stop();
   await eventually(() => !buddyIn(room));
-  const again = friend({ llm, rooms, peopleFile });
+  const again = friend({ llm, rooms, peopleFile, logins });
   await again.start();
-  assert.deepEqual(again.people.answersOf('Minji'), { EI0: 'a', SN0: 'b', TF0: 'a' });
+  assert.deepEqual(again.people.answersOf('MINJI_01'), { EI0: 'a', SN0: 'b', TF0: 'a' });
   assert.equal(again.invited(island, 'Minji'), '');
   pip = await eventually(() => buddyIn(room));
   await eventually(() => minji.of('say').find((m) => m.pid === pip.id));
@@ -486,9 +487,56 @@ test('asked for their MBTI, it asks a friend questions until it knows, remembers
 
   const later = new People({ file: peopleFile });
   await later.load();
-  assert.equal(later.typeOf('MINJI'), 'ENTP', 'known by name, whatever the case');
+  assert.equal(later.typeOf('MINJI_01'), 'ENTP', 'known by username, whatever the case');
+  assert.equal(later.typeOf('Minji'), '', 'and not by the name they go by');
   prompt = await said('내 MBTI 뭐였지?');
   assert.match(prompt, /Minji is asking for their MBTI\. From their answers to your questions, their own MBTI is ENTP .*like "너의 MBTI는 ENTP! 새 아이디어가 가득한 발명가야!/);
+
+  // The island hears who everyone is, but only the AI friend is told.
+  assert.ok(room.players.get(pip.id).ai);
+  assert.equal(minji.of('friendWho').length, 0);
+  assert.ok(!JSON.stringify(minji.heard).includes(friendWho('minji-device')));
+
+  // Minji goes by another name now, and Theo takes the name Minji: it goes
+  // by their usernames. A guest, also of a name it knows, starts afresh.
+  minji.say({ t: 'leave' });
+  await eventually(() => !room.onlinePlayers().some((p) => p.id === minji.me));
+  const theo = child(room, 'Minji', undefined, { friendWho: friendWho('theo-device') });
+  minji = theo;
+  await eventually(() => minji.of('say').some((m) => m.pid === pip.id));
+  prompt = await said('What is my MBTI?');
+  assert.match(prompt, /Minji is asking for their MBTI, but you do not know them well enough yet\. Say you will ask a few fun questions first/, 'the name is another\'s');
+  assert.doesNotMatch(prompt, /MBTI ENTP/);
+  minji.say({ t: 'leave' });
+  await eventually(() => !room.onlinePlayers().some((p) => p.id === theo.me));
+  minji = child(room, 'Star', undefined, { friendWho: friendWho('minji-device') });
+  await eventually(() => minji.of('say').some((m) => m.pid === pip.id));
+  prompt = await said('What is my MBTI?');
+  assert.match(prompt, /Star is asking for their MBTI\. From their answers to your questions, their own MBTI is ENTP/, 'known under a new name');
+  assert.match(prompt, /Star \([^)]*MBTI ENTP\)/);
+  minji.say({ t: 'leave' });
+  const star = minji;
+  await eventually(() => !room.onlinePlayers().some((p) => p.id === star.me));
+  minji = child(room, 'Star');
+  await eventually(() => minji.of('say').some((m) => m.pid === pip.id));
+  prompt = await said('What is my MBTI?');
+  assert.match(prompt, /you do not know them well enough yet/, 'a guest is not known by a name');
+  await said('1');
+  assert.deepEqual([...again.people.people.keys()], ['minji_01'], 'and is not saved');
+});
+
+test('it finds a friend’s username at the keeper, and a changed one soon after', async () => {
+  const store = await new KeeperStore(join(await tempDir(), 'keep')).open();
+  const device = KeeperStore.deviceId('ab'.repeat(16));
+  await store.makeLogin(device, 'rocket-apple7', { name: 'Sunny Otter' }, { username: 'Otter Fan 7' });
+  let at = 1000;
+  const buddy = friend({ llm: model(), keeper: { store }, now: () => at });
+  assert.equal(await buddy.usernameOf(friendWho(device)), 'Otter Fan 7');
+  assert.equal(await buddy.usernameOf(friendWho('nobody')), '', 'a hash of no login');
+  await store.makeLogin(device, 'rocket-apple7', null, { username: 'Otter Fan 8' });
+  assert.equal(await buddy.usernameOf(friendWho(device)), 'Otter Fan 7', 'as it last read them');
+  at += 61000;
+  assert.equal(await buddy.usernameOf(friendWho(device)), 'Otter Fan 8');
 });
 
 test('the admin page saves its settings and applies them, shows where it is and what is said, has it say something, and sends it home', async () => {

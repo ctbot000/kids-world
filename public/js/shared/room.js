@@ -706,6 +706,7 @@ export class Room {
     }
     const look = cleanLook(msg.look, this.random);
     const wanted = nameOf(msg.name) || randomName(this.random);
+    const friendWho = isWho(msg.friendWho) ? msg.friendWho : '';
     if (p) {
       // Coming back: whoever was using this player in another tab is replaced.
       for (const [other, oc] of this.clients) {
@@ -721,9 +722,10 @@ export class Room {
       p.dizzyUntil = 0;
       p.name = this.uniqueName(wanted, p.id);
       p.ai = msg.ai === true;
+      p.friendWho = friendWho;
     } else {
       const spawn = this.world.spawn;
-      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], ...(who ? { who } : {}), ...(msg.ai === true ? { ai: true } : {}) };
+      p = { id: this.nextPid++, name: this.uniqueName(wanted, 0), look, online: true, s: [spawn.x, spawn.y, spawn.z, 0, 0, 0], ...(who ? { who } : {}), friendWho, ...(msg.ai === true ? { ai: true } : {}) };
       p.hp = p.maxHp = hpFor(p);
       this.players.set(p.id, p);
       this.prunePlayers();
@@ -749,7 +751,17 @@ export class Room {
     c.token = token;
     this.sendWelcome(conn, c);
     this.sendSong(conn);
+    this.tellFriendWho();
     this.changed();
+  }
+
+  // Who each logged-in player here is, for the AI friend alone, which knows
+  // them by their logins (server/personality.js friendWho): nobody else needs it.
+  tellFriendWho() {
+    const who = Object.fromEntries(this.onlinePlayers().filter((p) => p.friendWho).map((p) => [p.id, p.friendWho]));
+    for (const [conn, c] of this.clients) {
+      if (this.players.get(c.pid)?.ai) this.sendTo(conn, { t: 'friendWho', who });
+    }
   }
 
   // The keeper's admin page watching the island unseen, with a ticket the
