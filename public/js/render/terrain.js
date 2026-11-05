@@ -16,6 +16,7 @@ import { tankMaterials, tankModel } from './fishtank-model.js';
 import { clockMaterials, clockModel } from './clock-model.js';
 import { campfireMaterials, campfireModel } from './campfire-model.js';
 import { PARTY_KINDS, partyMaterials, partyModel } from './party-model.js';
+import { STOCK_KINDS, stockMaterials, stockModel } from './stock-model.js';
 import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
@@ -781,6 +782,10 @@ export class Terrain {
     if (PARTY_KINDS.has(kind)) {
       this.partyMaterials ??= partyMaterials(toyMaterial);
       return partyModel(this.partyMaterials, kind, cell, this.world, this.party);
+    }
+    if (STOCK_KINDS.has(kind)) {
+      this.stockMaterials ??= stockMaterials(toyMaterial);
+      return stockModel(this.stockMaterials, kind, cell);
     }
     return null;
   }

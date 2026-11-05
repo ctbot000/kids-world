@@ -39,6 +39,7 @@ import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shar
 import { drawKitchen, KITCHEN_H, KITCHEN_W, rubPoints, VESSEL } from './render/kitchen.js';
 import { Kitchen3D } from './render/kitchen3d.js';
 import { robotKitDialog } from './ui-robokit.js';
+import { stockDialog } from './ui-stocks.js';
 import { BY_HEART, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
@@ -1906,7 +1907,7 @@ export class UI {
         // append() writes a null out as "null": only what is there.
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins, h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🛒 Shop'), coins, h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack'), farming ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'Adventure Isle is a world of its own: these coins, these treasures, potions and gear are the isle’s, apart from yours everywhere else.') : null,
             h('p', { class: 'muted' }, 'What you buy goes in your 🎒 backpack, and on you straight away: put things on and take them off there.'),
             h('h3', {}, 'Sell your treasures'),
@@ -1995,7 +1996,7 @@ export class UI {
         draw();
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection')),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             stats,
@@ -2390,6 +2391,7 @@ export class UI {
           card('🙈', 'Hide and seek', ['With friends on the island, tap 😊 (or the island’s name) and 🙈 I’ll be it! You shut your eyes and count to 20 while everyone hides, then you have 3 minutes to find them: come close with nothing in the way and they are found. Hiders never found earn 🪙 3 coins, and the seeker a coin for each friend found.']),
           card('🎂', 'Birthday party', ['Stamp a 🎂 Birthday Party, a house like a giant cake, or make your own from the toy box\'s 🛋️ Home tab: a Party Table, a Birthday Cake (it stands on the table), Presents, Balloons and a Birthday Banner for the wall (seven side by side say HAPPY BIRTHDAY). Walk up to the cake and press ', h('kbd', {}, 'Q'), ' (or tap 🎂 Sing): everyone near hears the song. When it ends, 🌬️ Blow! blows out the candles in a burst of confetti, and then 🍰 Eat has a slice. 🎁 Open a present for a surprise and a few coins, and 🎈 Pop the balloons, with a tap or a swing.']),
           card('🕹️', 'Video arcade', ['Put down an arcade machine from the toy box\'s 🛋️ Home tab, or a whole arcade of six with the 🕹️ Video Arcade stamp. Walk up to a machine and press ', h('kbd', {}, 'Q'), ' (or tap Play) for its game: on the purple one, bop the blobs that pop up — the gold ones are worth three; on the teal one, take turns flipping cards to find pairs. Everyone at a machine plays together, and a good game pays out a few coins!']),
+          card('📈', 'Stock market', ['Open 📈 Stocks in the 🛒 shop, or walk up to a Stock Terminal (in the toy box\'s 🛋️ Home tab, or stamp a 🏦 Stock Exchange) and press ', h('kbd', {}, 'Q'), ' (or tap 📈 Trade). Buy shares of a company with your coins and sell them again later: every player sees the same prices, and the 📰 news moves them. Buy low, sell high! 🐢 Steady and 🐇 Bouncy companies pay a dividend every day just for owning them, so come back to collect it.']),
           card('🎁', 'Gashapon', ['Walk up to a gashapon machine (in the toy box\'s 🛋️ Home tab, and at the back of the 🕹️ Video Arcade) and press ', h('kbd', {}, 'Q'), ' (or tap Turn). Put in 🪙 ' + GASHA_PRICE + ' coins and turn the handle: a capsule rolls out with a surprise toy inside! Collect all ' + TOYS.length + ' — ★★ rare ones and ★★★ super rare ones too. Your toys are in 🧸 My collection.']),
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! On 🪩 Dance Party you dance along until you flip away. When the grown-ups put a show on, every TV gets 📡 Live after those.']),
@@ -3421,6 +3423,7 @@ export class UI {
     on('screen-open', () => this.screenDialog());
     on('screens', () => this.screenChanged?.());
     on('computer-open', () => this.computerDialog());
+    on('stocks-open', () => this.stockDialog());
     on('kit-open', () => this.robotKitDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
@@ -4905,7 +4908,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.fishTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.fishTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -5037,7 +5040,7 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.fishTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.fishTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
@@ -5063,12 +5066,12 @@ export class UI {
                     ? ['🎣 Strike!', 'A fish is biting: strike now!']
                     : ['🎣 Wait…', 'Wait for the bobber to go right under']
             : null;
-    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t === g.stockTarget ? 'Buy and sell shares at the stock terminal' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     el.classList.toggle('biting', label === '🎣 Strike!' || label === '🌬️ Blow!');
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
@@ -6184,6 +6187,11 @@ export class UI {
   // A robot kit's window: build, program and run a robot (ui-robokit.js).
   robotKitDialog() {
     robotKitDialog(this);
+  }
+
+  // The stock market's window: buy and sell shares (ui-stocks.js).
+  stockDialog(key = null) {
+    stockDialog(this, key);
   }
 
   // A box to type into, in the computer's window: no capitals or

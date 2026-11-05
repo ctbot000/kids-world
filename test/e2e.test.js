@@ -4629,6 +4629,257 @@ test('hide and seek: 🙈 I’ll be it! shuts the seeker’s eyes while a friend
   await guest.close();
 });
 
+test('a stock terminal: Q by it opens the market, and shares are bought and sold with its buttons, dividends paid and a chart drawn', { skip }, async () => {
+  const toasted = (page, words) => until(page, (w) => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes(w)), words);
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A terminal beside the start, on ground level with the cell beside it, and
+  // nothing rideable near it to take the button.
+  const at = await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], B.STOCK_TERMINAL);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id: B.STOCK_TERMINAL };
+  });
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.profile.earn(1000);
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('📈 Trade'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Stock Market'));
+  // Every company is there with its price and a line of its last day, and you
+  // own nothing yet.
+  const list = await page.evaluate(async () => {
+    const { COMPANIES } = await import('/js/shared/stocks.js');
+    const rows = [...document.querySelectorAll('.stock-row')];
+    return {
+      companies: COMPANIES.length,
+      rows: rows.length,
+      lines: rows.filter((r) => r.querySelector('polyline').getAttribute('points').split(' ').length === 49).length,
+      named: COMPANIES.every((c, i) => rows[i].textContent.includes(c.name) && rows[i].textContent.includes(c.ticker)),
+      mine: document.querySelector('.stock-mine').textContent,
+      mood: document.querySelector('.stock-mood').textContent,
+      news: document.querySelectorAll('.stock-news li').length,
+      how: document.querySelector('.stock-how summary').textContent,
+    };
+  });
+  assert.equal(list.rows, list.companies);
+  assert.equal(list.lines, list.companies, 'a line for each');
+  assert.ok(list.named);
+  assert.ok(list.mine.includes('no shares'));
+  assert.ok(/market/i.test(list.mood) && list.mood.includes('Index'));
+  assert.ok(list.news > 0, 'the news');
+  assert.ok(list.how.includes('How does it work'));
+  // One company up close: its chart, drawn by Chart.js, and what it costs.
+  await page.evaluate(() => document.querySelector('.stock-row[data-key="burrow"]').click());
+  await until(page, () => window.Chart && document.querySelector('.stock-chart canvas')?.getAttribute('aria-label')?.includes('1 day'));
+  assert.ok(await page.evaluate(() => {
+    const c = document.querySelector('.stock-chart canvas');
+    return c.width > 100 && c.height > 50 && window.Chart.getChart(c).data.datasets[0].data.length === 97;
+  }), 'a chart of the day');
+  await page.evaluate(() => document.querySelector('.stock-span[data-span="week"]').click());
+  await until(page, () => document.querySelector('.stock-chart canvas').getAttribute('aria-label').includes('1 week') && document.querySelector('.stock-span[data-span="week"]').classList.contains('on'));
+  const trade = (label) => page.evaluate((label) => [...document.querySelectorAll('.stock-trade')].find((b) => b.textContent.startsWith(label)).click(), label);
+  const me = () => page.evaluate(() => {
+    const p = window.kidsWorld.profile.data;
+    return { coins: p.coins, held: p.gear.stocks.burrow?.n ?? 0, paid: p.gear.stocks.burrow?.paid ?? 0, earned: p.stats.earned, sellDisabled: [...document.querySelectorAll('.stock-trade')].find((b) => b.textContent.startsWith('Sell all')).disabled };
+  });
+  const start = await me();
+  assert.equal(start.held, 0);
+  assert.ok(start.sellDisabled, 'nothing to sell yet');
+  // Buy one, and it is yours: the coins go down by what it cost.
+  await trade('Buy 1');
+  await until(page, () => window.kidsWorld.profile.data.gear.stocks.burrow?.n === 1);
+  let now = await me();
+  assert.equal(now.coins, start.coins - now.paid);
+  assert.ok(now.paid > 0 && !now.sellDisabled);
+  assert.equal(now.earned, start.earned, 'spending earns nothing');
+  await toasted(page, 'You bought 1 share of Bunny Burrows');
+  await until(page, () => document.querySelector('.stock-holding').textContent.includes('You own 1 share'));
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['first-share']), 'the sticker');
+  // All the coins buy.
+  await trade('Buy all I can');
+  await until(page, () => window.kidsWorld.profile.data.gear.stocks.burrow?.n > 1);
+  now = await me();
+  assert.equal(now.coins, start.coins - now.paid);
+  const buy = await page.evaluate(async () => (await import('/js/shared/stocks.js')).quote('burrow', Date.now()).buy);
+  assert.ok(now.coins < buy + 3, `only a coin or two left (${now.coins} against ${buy})`);
+  assert.ok(await page.evaluate(() => document.querySelector('.stock-hint').textContent.includes('more coin')), 'and what it takes to buy more');
+  // Sold again straight away: back with a little less, and nothing earned.
+  await trade('Sell 1');
+  await until(page, (held) => window.kidsWorld.profile.data.gear.stocks.burrow?.n === held - 1, now.held);
+  await trade('Sell all');
+  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.burrow);
+  now = await me();
+  assert.ok(now.coins < start.coins && now.coins > start.coins * 0.9, `${now.coins} of ${start.coins}: the gap costs a little`);
+  assert.equal(now.earned, start.earned, 'your own coins are not earned');
+  await toasted(page, 'less than you paid');
+  // Bought cheap some time ago: selling them now is a profit, all of it earned.
+  await page.evaluate(() => {
+    const p = window.kidsWorld.profile;
+    p.data.gear.stocks = { burrow: { n: 2, paid: 2 } };
+    p.shopped();
+  });
+  await page.evaluate(() => document.querySelector('.stock-back').click());
+  await until(page, () => document.querySelector('.stock-row[data-key="burrow"] .stock-owned').textContent.includes('You own 2') && document.querySelector('.stock-mine').textContent.includes('up'));
+  await page.evaluate(() => document.querySelector('.stock-row[data-key="burrow"]').click());
+  await until(page, () => [...document.querySelectorAll('.stock-trade')].some((b) => b.textContent === 'Sell all (2)'));
+  const before = await me();
+  await trade('Sell all');
+  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.burrow);
+  now = await me();
+  assert.equal(now.earned - before.earned, now.coins - before.coins - 2, 'the profit is what is earned');
+  assert.ok(now.earned > before.earned);
+  await toasted(page, 'profit');
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['buy-low']), 'the sticker');
+  // Come back another day: a steady company has paid you.
+  await page.evaluate(async () => {
+    const { marketDay } = await import('/js/shared/stocks.js');
+    const kw = window.kidsWorld;
+    kw.ui.closeModal();
+    const g = kw.profile.data.gear;
+    g.stocks = { brick: { n: 10, paid: 1200 } };
+    g.divDay = marketDay(Date.now()) - 2;
+    kw.profile.shopped();
+    window.coinsBefore = kw.profile.data.coins;
+    kw.ui.stockDialog();
+  });
+  await toasted(page, 'Dividends!');
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.coins - window.coinsBefore), 12, 'six coins a day, for two days');
+  assert.ok(await page.evaluate(() => document.querySelector('.stock-mine').textContent.includes('6 a day')));
+  // The prices move on while it is open, and it keeps up; closing it stops that.
+  await page.evaluate(() => {
+    window.realNow = Date.now;
+    const later = Date.now() + 90 * 60 * 1000;
+    Date.now = () => later;
+  });
+  await until(page, async () => {
+    const { quote } = await import('/js/shared/stocks.js');
+    const price = quote('rocket', Date.now()).price;
+    return document.querySelector('.stock-row[data-key="rocket"] .stock-price').textContent.includes(price.toLocaleString());
+  });
+  await page.evaluate(() => {
+    Date.now = window.realNow;
+    window.kidsWorld.ui.closeModal();
+  });
+  await until(page, () => document.getElementById('modal').hidden);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('the market is in the shop and the backpack from the title screen, and not in Adventure Isle\'s', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  const chips = () => page.evaluate(() => [...document.querySelectorAll('#modal .dialog-head button')].map((b) => b.textContent));
+  await page.evaluate(() => window.kidsWorld.ui.shopDialog());
+  await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Shop'));
+  assert.ok((await chips()).includes('📈 Stocks'));
+  await clickButton(page, '📈 Stocks', '#modal');
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('Stock Market') && document.querySelectorAll('.stock-row').length === 8);
+  await clickButton(page, '🛒 Shop', '#modal');
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('Shop'));
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Backpack'));
+  assert.ok((await chips()).includes('📈 Stocks'));
+  // The isle's own world of you keeps to its own treasures.
+  await page.evaluate(() => {
+    const ui = window.kidsWorld.ui;
+    window.homeProfile = ui.profile;
+    ui.profile = ui.isle;
+    ui.shopDialog();
+  });
+  await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Shop') && document.querySelector('#modal').textContent.includes('world of its own'));
+  assert.ok(!(await chips()).includes('📈 Stocks'));
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Backpack'));
+  assert.ok(!(await chips()).includes('📈 Stocks'));
+  await page.evaluate(() => {
+    const ui = window.kidsWorld.ui;
+    ui.profile = window.homeProfile;
+    ui.closeModal();
+  });
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('the Stock Exchange stamp from the toy box goes down with a click: its tickers scroll real prices, and a terminal is ready to trade at', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1');
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  await page.click('#btn-toybox');
+  await clickButton(page, 'Stamps', '#modal');
+  await clickButton(page, 'Stock Exchange', '#modal');
+  await until(page, () => window.kidsWorld.game.tool === 'stamp' && window.kidsWorld.game.stamp === 'stock-exchange');
+  const { cell, at } = await spotNear(page, 4, 0);
+  await page.mouse.click(at.x, at.y);
+  // The hall goes away from the camera, its way in where the click was: a
+  // terminal is three along and six in.
+  const spot = await page.evaluate(async (c) => {
+    const { FACING, facingFromYaw } = await import('/js/shared/stamps.js');
+    const B = await import('/js/shared/blocks.js');
+    const { f, r } = FACING[facingFromYaw(window.kidsWorld.renderer.view.yaw)];
+    return { x: c.x + r[0] * 3 + f[0] * 6, y: c.y + 1, z: c.z + r[1] * 3 + f[1] * 6, f, base: B.STOCK_TERMINAL };
+  }, cell);
+  await until(page, (s) => window.kidsWorld.game.world.get(s.x, s.y, s.z) !== 0, spot);
+  assert.equal(await page.evaluate(async (s) => {
+    const B = await import('/js/shared/blocks.js');
+    return B.baseOf(window.kidsWorld.game.world.get(s.x, s.y, s.z));
+  }, spot), spot.base);
+  // Walk in front of it: its button.
+  await page.evaluate((s) => {
+    const kw = window.kidsWorld;
+    Object.assign(kw.game.me.body, { x: s.x + 0.5 - s.f[0] * 1.3, y: s.y, z: s.z + 0.5 - s.f[1] * 1.3, vx: 0, vy: 0, vz: 0 });
+    kw.step(1 / 60, 5);
+  }, spot);
+  await until(page, () => {
+    window.kidsWorld.step(1 / 60, 1);
+    return window.kidsWorld.game.stockTarget && document.getElementById('ride').textContent.includes('📈 Trade');
+  });
+  // Drawn: the tickers in sight, with the prices painted on their one strip,
+  // and scrolling along as the time goes.
+  const painted = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const { strip, screen } = kw.renderer.terrain.stockMaterials;
+    const { COMPANIES } = await import('/js/shared/stocks.js');
+    let tickers = 0;
+    kw.renderer.terrain.group.traverse((o) => {
+      if (o.isMesh && o.material === strip) tickers++;
+    });
+    const ink = (canvas) => {
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      const seen = new Set();
+      for (let i = 0; i < data.length; i += 4 * 97) seen.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+      return seen.size;
+    };
+    const was = strip.map.offset.x;
+    kw.step(1 / 60, 30);
+    return { tickers, strip: ink(strip.map.image), screen: ink(screen.map.image), moved: strip.map.offset.x !== was, companies: COMPANIES.length };
+  });
+  assert.ok(painted.tickers >= 40, `${painted.tickers} tickers`);
+  assert.ok(painted.strip > 8 && painted.screen > 8, `something painted: ${JSON.stringify(painted)}`);
+  assert.ok(painted.moved, 'scrolling along');
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Stock Market'));
+  await page.evaluate(() => window.kidsWorld.ui.closeModal());
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
 test('a gashapon: Q by the machine opens it, a turn of the handle takes coins and a capsule toy comes out into your collection', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

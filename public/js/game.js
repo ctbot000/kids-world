@@ -54,6 +54,7 @@ import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowE
 import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
 import { chestNear, chestTreasure } from './shared/treasure.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
+import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
@@ -342,6 +343,8 @@ export class Game extends EventTarget {
     this.computerAt = null;
     // The fish tank or bowl beside you, to feed (shared/fishtank.js).
     this.tankTarget = null;
+    // The stock terminal beside you, to trade at (shared/stocks.js).
+    this.stockTarget = null;
     // The birthday cake, present or balloons beside you (shared/party.js), and
     // the song you can hear going: { key, x, y, z, stop, until, notes }.
     this.partyTarget = null;
@@ -3310,6 +3313,15 @@ export class Game extends EventTarget {
     this.computerAt = null;
   }
 
+  // ------------------------------------------------ the stock market
+
+  // Q (or the Trade button) by a stock terminal: the market's window opens.
+  openStocks() {
+    if (!this.stockTarget) return;
+    this.sound.play('ui');
+    this.emit('stocks-open');
+  }
+
   // ------------------------------------------------ robot kits
 
   // The robots at the island's kits, as the island tells of them on arrival.
@@ -4265,6 +4277,10 @@ export class Game extends EventTarget {
     }
     if (!id && this.kitTarget) {
       this.openKit();
+      return;
+    }
+    if (!id && this.stockTarget) {
+      this.openStocks();
       return;
     }
     if (!id && this.fishTarget) {
@@ -6544,6 +6560,7 @@ export class Game extends EventTarget {
     this.computerTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.dizzy && !on.flying && on.onGround ? computerNear(this.world, on) : null;
     this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
     this.kitTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.dizzy && !on.flying && on.onGround ? kitNear(this.world, on) : null;
+    this.stockTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.dizzy && !on.flying && on.onGround ? terminalNear(this.world, on) : null;
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
@@ -6557,7 +6574,7 @@ export class Game extends EventTarget {
     // else beside you to use; while your line is out, where its bobber is.
     this.fishTarget = this.fishing
       ? this.fishing.spot
-      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
+      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
         ? castSpot(this.world, on, this.me.yaw)
         : null;
     this.sendMove();
@@ -7150,6 +7167,7 @@ export class Game extends EventTarget {
     this.computerAt = null;
     this.computerTarget = null;
     this.tankTarget = null;
+    this.stockTarget = null;
     this.partyTarget = null;
     this.endPartySong();
     this.kitTarget = null;

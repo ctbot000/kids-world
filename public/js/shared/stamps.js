@@ -1097,6 +1097,83 @@ function office() {
   return c.list();
 }
 
+// A stock exchange, a grand hall of white stone: six columns along its front
+// under a great gable with a gold coin on it and a ticker running under that,
+// a little checked square in front with a golden bull on one side and a bronze
+// bear on the other, and a way in three wide. Inside, under a long skylight,
+// eight stock terminals in two rows face you as you come in, on a checked floor
+// with a red carpet up the middle; tickers run along the walls, two rows of them
+// on the wall at the back, with sofas and potted plants down the sides and floor
+// lamps for after dark.
+function stockExchange() {
+  const c = new Cells();
+  // The air in front and on the porch, and the room inside.
+  c.box(-8, 0, -2, 8, 10, -1, B.AIR);
+  c.box(-8, 0, 0, 8, 4, 2, B.AIR);
+  c.box(-7, 0, 4, 7, 4, 12, B.AIR);
+  // The floor, and the carpet from the square to the back wall.
+  c.box(-8, -1, -2, 8, -1, 13, B.CHECKER_FLOOR);
+  c.box(-1, -1, -2, 1, -1, 12, B.CARPETS[0]);
+  // The walls, windows down the sides and either side of the way in.
+  for (let y = 0; y <= 4; y++) {
+    for (let x = -8; x <= 8; x++) {
+      c.put(x, y, 3, WHITE);
+      c.put(x, y, 13, WHITE);
+    }
+    for (let z = 4; z < 13; z++) {
+      c.put(-8, y, z, WHITE);
+      c.put(8, y, z, WHITE);
+    }
+  }
+  for (const y of [1, 2]) {
+    for (const z of [5, 6, 10, 11]) {
+      c.put(-8, y, z, B.GLASS);
+      c.put(8, y, z, B.GLASS);
+    }
+    for (const x of [-6, -5, -4, 4, 5, 6]) c.put(x, y, 3, B.GLASS);
+  }
+  for (let x = -1; x <= 1; x++) c.box(x, 0, 3, x, 2, 3, B.AIR);
+  // The columns, with a grey foot and a gold top.
+  for (const x of [-8, -5, -2, 2, 5, 8]) {
+    c.put(x, 0, 0, GRAY);
+    for (let y = 1; y <= 3; y++) c.put(x, y, 0, WHITE);
+    c.put(x, 4, 0, YELLOW);
+  }
+  // The roof, with glass down the middle of the hall and lamps for the dark.
+  for (let x = -8; x <= 8; x++) {
+    for (let z = 0; z <= 13; z++) c.put(x, 5, z, Math.abs(x) <= 4 && z >= 5 && z <= 11 ? B.GLASS : WHITE);
+  }
+  for (const x of [-6, 6]) for (const z of [5, 8, 11]) c.put(x, 5, z, B.LAMP);
+  // The great gable over the front, each step in, with a gold coin on it, a ring
+  // in the coin and a star at its heart that shines at night.
+  for (const [y, half] of [[6, 8], [7, 6], [8, 5], [9, 3], [10, 1]]) c.box(-half, y, 0, half, y, 0, WHITE);
+  for (const [y, half] of [[6, 1], [7, 2], [8, 2], [9, 2], [10, 1]]) c.box(-half, y, -1, half, y, -1, YELLOW);
+  c.box(-1, 7, -1, 1, 9, -1, ORANGE);
+  c.put(0, 8, -1, B.STAR_BLOCK);
+  // The ticker along the front, under the gable, and one over the way in.
+  for (let x = -8; x <= 8; x++) c.put(x, 5, -1, B.STOCK_TICKER);
+  for (let x = -3; x <= 3; x++) c.put(x, 3, 2, B.STOCK_TICKER);
+  // Outside: the bull and the bear, either side of the carpet.
+  c.put(-4, 0, -2, B.BULL_STATUE);
+  c.put(4, 0, -2, B.BEAR_STATUE);
+  // The terminals, in two rows either side of the carpet.
+  for (const z of [6, 10]) for (const x of [-6, -3, 3, 6]) c.put(x, 0, z, B.STOCK_TERMINAL);
+  // Two rows of tickers on the wall at the back, and one down each side.
+  for (const y of [2, 3]) for (let x = -7; x <= 7; x++) c.put(x, y, 12, B.STOCK_TICKER);
+  for (let z = 4; z <= 12; z++) {
+    c.put(-7, 3, z, B.turnedTo(B.STOCK_TICKER, 0));
+    c.put(7, 3, z, B.turnedTo(B.STOCK_TICKER, 2));
+  }
+  // Somewhere to sit and think: a sofa on each side, and potted plants.
+  for (const z of [8, 9]) {
+    c.put(-7, 0, z, B.turnedTo(B.SOFA, 0));
+    c.put(7, 0, z, B.turnedTo(B.SOFA, 2));
+  }
+  for (const [x, z] of [[-3, 12], [3, 12], [-7, 11], [7, 11]]) c.put(x, 0, z, B.POTTED_PLANT);
+  for (const [x, z] of [[-7, 4], [7, 4], [-7, 12], [7, 12]]) c.put(x, 0, z, B.FLOOR_LAMP);
+  return c.list();
+}
+
 export const STAMPS = [
   { key: 'house', name: 'Cozy House', icon: '🏠', cells: house() },
   { key: 'log-cabin', name: 'Log Cabin', icon: '🪵', cells: cabin() },
@@ -1128,6 +1205,7 @@ export const STAMPS = [
   { key: 'school', name: 'School', icon: '🏫', cells: school() },
   { key: 'cooking-school', name: 'Cooking School', icon: '🍳', cells: cookingSchool() },
   { key: 'office', name: 'Office', icon: '🏢', cells: office() },
+  { key: 'stock-exchange', name: 'Stock Exchange', icon: '🏦', cells: stockExchange() },
 ];
 export const stampByKey = (key) => STAMPS.find((s) => s.key === key) ?? null;
 

@@ -68,6 +68,7 @@ import { CHUNK } from './framing.js';
 import { addToys } from './gashapon.js';
 import { cleanGallery, joinGalleries } from './drawing.js';
 import { cleanCoins, cleanGear, cleanKeys, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
+import { addStocks } from './stocks.js';
 import { cleanLook, isMadeUpName, isValidName } from './words.js';
 
 export const KEEPER_VERSION = 2;
@@ -292,8 +293,8 @@ const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew, the facts known by heart and the
 // best typing, the higher of the two), and the better gear of each kind, and the clothes
-// and capsule toys of both, the dragons both tamed, and the pictures in
-// both galleries.
+// and capsule toys of both, the dragons both tamed, the shares both own, and
+// the pictures in both galleries.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -308,6 +309,8 @@ export function addProgress(player, guest) {
   gear.clothes = cleanGear({ clothes: [...gear.clothes, ...b.gear.clothes] }).clothes;
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
+  gear.stocks = addStocks(gear.stocks, b.gear.stocks);
+  gear.divDay = Math.max(gear.divDay, b.gear.divDay);
   return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 

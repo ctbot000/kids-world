@@ -236,6 +236,16 @@ export const COMPUTER = furniture(257, 'computer', { name: 'Computer', color: '#
 // press Q, build a robot, program it and run it. It stands on a table too,
 // like the computer. After the computer.
 export const ROBOT_KIT = furniture(379, 'robot-kit', { name: 'Robot Kit', color: '#ffcf1f', after: 257, sound: 'stone' });
+// The stock market (shared/stocks.js), all drawn as real models
+// (render/stock-model.js). A Stock Terminal, a kiosk with today's prices on its
+// screen: walk up, press Q and buy and sell shares. A Stock Ticker that hangs
+// on a wall, the prices scrolling along it and on along the next one beside
+// it. And the market's two statues: a Golden Bull and a Bronze Bear. After the
+// robot kit.
+export const STOCK_TERMINAL = furniture(406, 'stock-terminal', { name: 'Stock Terminal', color: '#2b3a55', after: 379, light: 6, sound: 'glass', real: 'stock-terminal' });
+export const STOCK_TICKER = furniture(410, 'stock-ticker', { name: 'Stock Ticker', color: '#1c2230', after: 406, solid: false, wall: true, light: 6, sound: 'glass', real: 'stock-ticker' });
+export const BULL_STATUE = furniture(414, 'bull-statue', { name: 'Golden Bull', color: '#e0b04c', after: 410, sound: 'stone', real: 'bull-statue' });
+export const BEAR_STATUE = furniture(418, 'bear-statue', { name: 'Bronze Bear', color: '#8f5a34', after: 414, sound: 'stone', real: 'bear-statue' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });

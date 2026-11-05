@@ -302,6 +302,25 @@ export class Sound {
         this.tone(NOTE(88), { decay: 0.12, gain: 0.14, type: 'triangle' });
         this.tone(NOTE(93), { at: 0.07, decay: 0.3, gain: 0.14, type: 'triangle' });
         break;
+      // Shares bought: a coin dropping in and a little climb, hopeful. Sold for
+      // more than they cost: a till's bell and coins pouring out. Sold for less:
+      // a soft low note, coins all the same. A dividend: a few coins, chiming.
+      case 'stock-buy':
+        this.tone(1900, { decay: 0.07, gain: 0.08, slide: 1600 });
+        [72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: 0.1 + i * 0.07, decay: 0.16, gain: 0.08, type: 'triangle' }));
+        break;
+      case 'stock-win':
+        this.tone(NOTE(88), { decay: 0.5, gain: 0.1 });
+        this.tone(NOTE(84), { at: 0.1, decay: 0.6, gain: 0.08 });
+        for (let i = 0; i < 6; i++) this.tone((1700 + i * 130) * r(), { at: 0.16 + i * 0.05, decay: 0.07, gain: 0.05, slide: 1300 });
+        break;
+      case 'stock-loss':
+        this.tone(NOTE(62), { decay: 0.32, gain: 0.1, type: 'triangle', slide: NOTE(57) });
+        for (let i = 0; i < 3; i++) this.tone((1500 + i * 90) * r(), { at: 0.12 + i * 0.06, decay: 0.06, gain: 0.04, slide: 1200 });
+        break;
+      case 'stock-pay':
+        for (let i = 0; i < 4; i++) this.tone(NOTE(79 + i * 2), { at: i * 0.07, decay: 0.22, gain: 0.07 });
+        break;
       // A gashapon's handle turned: a coin dropping in, the handle's
       // ratchet clicking round, and a capsule thunking down the chute.
       case 'gasha':

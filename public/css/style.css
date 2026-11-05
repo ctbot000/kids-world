@@ -6600,3 +6600,350 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
     height: min(72vh, 680px);
   }
 }
+
+/* ------------------------------------------------ the stock market */
+
+/* The market's window: every company in a list, and one up close. */
+.stock-up {
+  color: #1f9d6b;
+}
+
+.stock-down {
+  color: #d9453d;
+}
+
+.stock-change {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-view[hidden] {
+  display: none;
+}
+
+.stock-mood,
+.stock-mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+
+.stock-index {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.panel p.stock-note {
+  margin: 10px 0 8px;
+}
+
+.stock-list {
+  display: grid;
+  gap: 6px;
+}
+
+.stock-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 96px 92px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--line);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.12s, transform 0.12s;
+}
+
+.stock-row:hover {
+  box-shadow: inset 0 0 0 2px var(--sky);
+}
+
+.stock-row:active {
+  transform: scale(0.99);
+}
+
+.stock-icon {
+  font-size: 30px;
+  line-height: 1;
+  text-align: center;
+}
+
+.stock-icon.small {
+  font-size: 20px;
+}
+
+.stock-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.stock-name b {
+  overflow-wrap: anywhere;
+}
+
+.stock-name .muted {
+  font-size: 13px;
+}
+
+.stock-owned {
+  color: var(--grape-dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stock-owned:empty {
+  display: none;
+}
+
+/* Both its sizes set, so its viewBox has no say in how big it is. */
+.stock-spark {
+  display: block;
+  width: 96px;
+  height: 32px;
+}
+
+.stock-spark polyline {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.stock-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-price {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stock-moved {
+  font-size: 13px;
+}
+
+.stock-news {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stock-news li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.7);
+  line-height: 1.3;
+}
+
+.stock-news li.fresh {
+  animation: stock-news-in 1.4s ease-out;
+}
+
+@keyframes stock-news-in {
+  from {
+    background: var(--select);
+    transform: scale(1.02);
+  }
+}
+
+.stock-when {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.stock-how {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.stock-how summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stock-how ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding-left: 20px;
+  line-height: 1.35;
+}
+
+/* One company up close: back, who it is and its price along the top, so buying
+   and selling is in sight under the chart on most screens. */
+.stock-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.stock-back {
+  flex: none;
+}
+
+.stock-title {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stock-big {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: auto;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.stock-big b {
+  font-size: 26px;
+}
+
+.stock-spans {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+/* Chart.js fills its box, so the box sets the height. */
+.stock-chart {
+  position: relative;
+  height: clamp(130px, 26vh, 220px);
+}
+
+.stock-chart[hidden] {
+  display: none;
+}
+
+/* Where the price is between the week's lowest and highest. */
+.stock-meter {
+  display: grid;
+  grid-template-columns: auto minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.stock-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.stock-dot {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: #2d7fc4;
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+.stock-holding {
+  margin-bottom: 10px;
+  line-height: 1.35;
+}
+
+.stock-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stock-side {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+
+.stock-side-title {
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.panel p.stock-hint {
+  margin: 8px 0 0;
+}
+
+.stock-about {
+  margin-top: 12px;
+}
+
+.stock-about p {
+  margin: 0 0 6px;
+}
+
+@media (max-width: 520px) {
+  .stock-row {
+    grid-template-columns: 34px minmax(0, 1fr) 52px 80px;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .stock-icon {
+    font-size: 24px;
+  }
+
+  .stock-spark {
+    width: 52px;
+  }
+
+  .stock-sides {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-big {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    margin-left: 0;
+  }
+
+  .stock-index {
+    margin-left: 0;
+  }
+}

@@ -597,6 +597,66 @@ const MODELS = {
     return out;
   },
 
+  // The stock market's boxes, for their pictures (render/stock-model.js draws
+  // them for real). A kiosk with prices glowing on a screen tilted up at you.
+  'stock-terminal'() {
+    const NAVY = '#2b3a55';
+    return [
+      box(0.12, 0, 0.14, 0.88, 0.06, 0.86, BLACK, 'plain'),
+      box(0.2, 0.06, 0.26, 0.8, 0.56, 0.8, NAVY, 'plain'),
+      box(0.14, 0.56, 0.28, 0.86, 0.98, 0.5, NAVY, 'plain'),
+      box(0.18, 0.6, 0.27, 0.82, 0.94, 0.28, '#10202f', 'glow'),
+      box(0.22, 0.86, 0.265, 0.6, 0.9, 0.27, '#4be38a', 'glow'),
+      box(0.22, 0.78, 0.265, 0.74, 0.82, 0.27, '#ff6b6b', 'glow'),
+      box(0.22, 0.7, 0.265, 0.5, 0.74, 0.27, '#4be38a', 'glow'),
+      box(0.22, 0.63, 0.265, 0.66, 0.66, 0.27, '#ffd166', 'glow'),
+      box(0.2, 0.3, 0.255, 0.8, 0.34, 0.26, '#e0b04c', 'plain'),
+    ];
+  },
+
+  // A long dark board on the wall, the prices glowing along it.
+  'stock-ticker'() {
+    return [
+      box(0, 0.3, 0.93, 1, 0.76, 1, BLACK, 'plain'),
+      box(0, 0.34, 0.92, 1, 0.72, 0.93, '#10202f', 'glow'),
+      box(0.06, 0.48, 0.915, 0.42, 0.58, 0.92, '#4be38a', 'glow'),
+      box(0.56, 0.48, 0.915, 0.94, 0.58, 0.92, '#ff6b6b', 'glow'),
+    ];
+  },
+
+  // A golden bull on a stone block, its head down and its horns out.
+  'bull-statue'() {
+    const GOLD = '#e0b04c';
+    return [
+      box(0.08, 0, 0.08, 0.92, 0.1, 0.92, '#8d8f98', 'plain'),
+      box(0.3, 0.32, 0.26, 0.7, 0.66, 0.9, GOLD, 'plain'),
+      box(0.27, 0.42, 0.2, 0.73, 0.74, 0.5, GOLD, 'plain'),
+      box(0.36, 0.3, 0.02, 0.64, 0.58, 0.26, GOLD, 'plain'),
+      box(0.2, 0.52, 0.1, 0.36, 0.58, 0.16, WHITE, 'plain'),
+      box(0.64, 0.52, 0.1, 0.8, 0.58, 0.16, WHITE, 'plain'),
+      box(0.18, 0.56, 0.1, 0.24, 0.68, 0.16, WHITE, 'plain'),
+      box(0.76, 0.56, 0.1, 0.82, 0.68, 0.16, WHITE, 'plain'),
+      ...[[0.3, 0.2], [0.58, 0.2], [0.3, 0.76], [0.58, 0.76]].map(([x, z]) => box(x, 0.1, z, x + 0.12, 0.34, z + 0.12, GOLD, 'plain')),
+    ];
+  },
+
+  // A bronze bear on a stone block, up on its hind legs, one paw raised.
+  'bear-statue'() {
+    const BRONZE = '#8f5a34';
+    return [
+      box(0.08, 0, 0.08, 0.92, 0.1, 0.92, '#8d8f98', 'plain'),
+      box(0.3, 0.1, 0.34, 0.46, 0.3, 0.66, BRONZE, 'plain'),
+      box(0.54, 0.1, 0.34, 0.7, 0.3, 0.66, BRONZE, 'plain'),
+      box(0.28, 0.28, 0.32, 0.72, 0.72, 0.7, BRONZE, 'plain'),
+      box(0.34, 0.68, 0.28, 0.66, 0.94, 0.62, BRONZE, 'plain'),
+      box(0.42, 0.72, 0.2, 0.58, 0.82, 0.3, '#c99a6b', 'plain'),
+      box(0.32, 0.92, 0.4, 0.42, 1, 0.5, BRONZE, 'plain'),
+      box(0.58, 0.92, 0.4, 0.68, 1, 0.5, BRONZE, 'plain'),
+      box(0.14, 0.62, 0.42, 0.28, 0.92, 0.56, BRONZE, 'plain'),
+      box(0.72, 0.42, 0.42, 0.86, 0.68, 0.56, BRONZE, 'plain'),
+    ];
+  },
+
   // The campfire's boxes, for its picture (render/campfire-model.js draws
   // it for real): a ring of stones, logs crossed over embers, and flames.
   campfire() {
