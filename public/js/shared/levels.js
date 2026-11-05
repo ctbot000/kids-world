@@ -75,7 +75,7 @@ export const XP_FOR = {
   stockwins: { xp: 5, cap: 100 },
   stockgain: { xp: 0.02, cap: 25000 },
   stocksheld: { xp: 5, cap: 8 },
-  dividends: { xp: 0.2, cap: 500 },
+  stockworld: { xp: 10, cap: 3 },
   wishes: { xp: 10, cap: 30 },
   slices: { xp: 1, cap: 40 },
   presents: { xp: 3, cap: 60 },

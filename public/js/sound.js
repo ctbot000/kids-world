@@ -304,7 +304,7 @@ export class Sound {
         break;
       // Shares bought: a coin dropping in and a little climb, hopeful. Sold for
       // more than they cost: a till's bell and coins pouring out. Sold for less:
-      // a soft low note, coins all the same. A dividend: a few coins, chiming.
+      // a soft low note, coins all the same.
       case 'stock-buy':
         this.tone(1900, { decay: 0.07, gain: 0.08, slide: 1600 });
         [72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: 0.1 + i * 0.07, decay: 0.16, gain: 0.08, type: 'triangle' }));
@@ -317,9 +317,6 @@ export class Sound {
       case 'stock-loss':
         this.tone(NOTE(62), { decay: 0.32, gain: 0.1, type: 'triangle', slide: NOTE(57) });
         for (let i = 0; i < 3; i++) this.tone((1500 + i * 90) * r(), { at: 0.12 + i * 0.06, decay: 0.06, gain: 0.04, slide: 1200 });
-        break;
-      case 'stock-pay':
-        for (let i = 0; i < 4; i++) this.tone(NOTE(79 + i * 2), { at: i * 0.07, decay: 0.22, gain: 0.07 });
         break;
       // A gashapon's handle turned: a coin dropping in, the handle's
       // ratchet clicking round, and a capsule thunking down the chute.

@@ -34,6 +34,7 @@ import { createIdentity, KeepError, Keeper, KeeperStore, publicConfig, signalOpt
 import { Office } from '../server/ctb-office.js';
 import { Company, defaultSettings } from '../server/ctb.js';
 import { createGameServer } from '../server/server.js';
+import { COINS, fakeFeed } from './fixtures/market.js';
 
 const CHROME = [
   process.env.CHROME_PATH,
@@ -67,7 +68,7 @@ const pageErrors = [];
 
 before(async () => {
   if (skip) return;
-  server = createGameServer({ log: () => {} });
+  server = createGameServer({ log: () => {}, market: fakeFeed() });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   base = `http://127.0.0.1:${server.address().port}/`;
   signalServer = await new Promise((done) => PeerServer({ port: 0, host: '127.0.0.1', path: '/' }, done));
@@ -4629,7 +4630,7 @@ test('hide and seek: 🙈 I’ll be it! shuts the seeker’s eyes while a friend
   await guest.close();
 });
 
-test('a stock terminal: Q by it opens the market, and shares are bought and sold with its buttons, dividends paid and a chart drawn', { skip }, async () => {
+test('a stock terminal: Q by it opens the market at real prices, and shares are bought and sold with its buttons, split, and not traded at when old', { skip }, async () => {
   const toasted = (page, words) => until(page, (w) => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes(w)), words);
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
@@ -4664,121 +4665,126 @@ test('a stock terminal: Q by it opens the market, and shares are bought and sold
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('📈 Trade'));
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Stock Market'));
-  // Every company is there with its price and a line of its last day, and you
-  // own nothing yet.
+  await until(page, () => document.querySelector('.stock-row[data-key="mattel"] .stock-price').textContent.includes('15.46'));
+  // Every exchange with its companies, each with its real price in coins and a
+  // line of its last month, and you own nothing yet.
   const list = await page.evaluate(async () => {
     const { COMPANIES } = await import('/js/shared/stocks.js');
     const rows = [...document.querySelectorAll('.stock-row')];
     return {
       companies: COMPANIES.length,
       rows: rows.length,
-      lines: rows.filter((r) => r.querySelector('polyline').getAttribute('points').split(' ').length === 49).length,
+      lines: rows.filter((r) => r.querySelector('polyline').getAttribute('points').split(' ').length === 23).length,
       named: COMPANIES.every((c, i) => rows[i].textContent.includes(c.name) && rows[i].textContent.includes(c.ticker)),
       mine: document.querySelector('.stock-mine').textContent,
       mood: document.querySelector('.stock-mood').textContent,
-      news: document.querySelectorAll('.stock-news li').length,
-      how: document.querySelector('.stock-how summary').textContent,
+      markets: [...document.querySelectorAll('.stock-market-head')].map((m) => m.textContent),
+      how: document.querySelector('.stock-how').textContent,
+      credit: document.querySelector('.stock-credit').textContent,
+      notice: document.querySelector('.stock-notice').hidden,
     };
   });
   assert.equal(list.rows, list.companies);
   assert.equal(list.lines, list.companies, 'a line for each');
   assert.ok(list.named);
   assert.ok(list.mine.includes('no shares'));
-  assert.ok(/market/i.test(list.mood) && list.mood.includes('Index'));
-  assert.ok(list.news > 0, 'the news');
-  assert.ok(list.how.includes('How does it work'));
+  assert.ok(list.mood.includes('Bull market'));
+  assert.equal(list.markets.length, 3);
+  assert.ok(list.markets[0].includes('Seoul') && list.markets[0].includes('KOSPI') && list.markets[0].includes('Open'));
+  assert.ok(list.markets[1].includes('Tokyo') && list.markets[1].includes('Nikkei 225'));
+  assert.ok(list.markets[2].includes('New York') && list.markets[2].includes('S&P 500'));
+  assert.ok(list.how.includes('pretend') && list.how.includes('one US dollar'), 'what is real, and what is not');
+  assert.ok(list.credit.includes('Naver') && list.credit.includes('not advice'));
+  assert.ok(list.notice, 'nothing wrong with the prices');
   // One company up close: its chart, drawn by Chart.js, and what it costs.
-  await page.evaluate(() => document.querySelector('.stock-row[data-key="burrow"]').click());
-  await until(page, () => window.Chart && document.querySelector('.stock-chart canvas')?.getAttribute('aria-label')?.includes('1 day'));
+  await page.evaluate(() => document.querySelector('.stock-row[data-key="mattel"]').click());
+  await until(page, () => window.Chart && document.querySelector('.stock-chart canvas')?.getAttribute('aria-label')?.includes('Today'));
   assert.ok(await page.evaluate(() => {
     const c = document.querySelector('.stock-chart canvas');
-    return c.width > 100 && c.height > 50 && window.Chart.getChart(c).data.datasets[0].data.length === 97;
-  }), 'a chart of the day');
-  await page.evaluate(() => document.querySelector('.stock-span[data-span="week"]').click());
-  await until(page, () => document.querySelector('.stock-chart canvas').getAttribute('aria-label').includes('1 week') && document.querySelector('.stock-span[data-span="week"]').classList.contains('on'));
+    return c.width > 100 && c.height > 50 && window.Chart.getChart(c).data.datasets[0].data.length === 30;
+  }), 'a chart of today');
+  assert.ok(await page.evaluate(() => document.querySelector('.stock-place').textContent.includes('New York') && document.querySelector('.stock-place').textContent.includes('$15.46')), 'its own money too');
+  await page.evaluate(() => document.querySelector('.stock-span[data-span="year"]').click());
+  await until(page, () => document.querySelector('.stock-chart canvas').getAttribute('aria-label').includes('1 year') && document.querySelector('.stock-span[data-span="year"]').classList.contains('on'));
+  assert.equal(await page.evaluate(() => window.Chart.getChart(document.querySelector('.stock-chart canvas')).data.datasets[0].data.length), 120);
   const trade = (label) => page.evaluate((label) => [...document.querySelectorAll('.stock-trade')].find((b) => b.textContent.startsWith(label)).click(), label);
   const me = () => page.evaluate(() => {
     const p = window.kidsWorld.profile.data;
-    return { coins: p.coins, held: p.gear.stocks.burrow?.n ?? 0, paid: p.gear.stocks.burrow?.paid ?? 0, earned: p.stats.earned, sellDisabled: [...document.querySelectorAll('.stock-trade')].find((b) => b.textContent.startsWith('Sell all')).disabled };
+    return { coins: p.coins, held: p.gear.stocks.mattel?.n ?? 0, paid: p.gear.stocks.mattel?.paid ?? 0, earned: p.stats.earned, sellDisabled: [...document.querySelectorAll('.stock-trade')].find((b) => b.textContent.startsWith('Sell all')).disabled };
   });
   const start = await me();
   assert.equal(start.held, 0);
   assert.ok(start.sellDisabled, 'nothing to sell yet');
-  // Buy one, and it is yours: the coins go down by what it cost.
+  // Buy one, and it is yours: the coins go down by what it cost, rounded up.
   await trade('Buy 1');
-  await until(page, () => window.kidsWorld.profile.data.gear.stocks.burrow?.n === 1);
+  await until(page, () => window.kidsWorld.profile.data.gear.stocks.mattel?.n === 1);
   let now = await me();
+  assert.equal(now.paid, Math.ceil(COINS.mattel));
   assert.equal(now.coins, start.coins - now.paid);
-  assert.ok(now.paid > 0 && !now.sellDisabled);
+  assert.ok(!now.sellDisabled);
   assert.equal(now.earned, start.earned, 'spending earns nothing');
-  await toasted(page, 'You bought 1 share of Bunny Burrows');
+  await toasted(page, 'You bought 1 share of Mattel');
   await until(page, () => document.querySelector('.stock-holding').textContent.includes('You own 1 share'));
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['first-share']), 'the sticker');
   // All the coins buy.
   await trade('Buy all I can');
-  await until(page, () => window.kidsWorld.profile.data.gear.stocks.burrow?.n > 1);
+  await until(page, () => window.kidsWorld.profile.data.gear.stocks.mattel?.n > 1);
   now = await me();
   assert.equal(now.coins, start.coins - now.paid);
-  const buy = await page.evaluate(async () => (await import('/js/shared/stocks.js')).quote('burrow', Date.now()).buy);
-  assert.ok(now.coins < buy + 3, `only a coin or two left (${now.coins} against ${buy})`);
+  assert.ok(now.coins < Math.ceil(COINS.mattel), `not enough left for another (${now.coins})`);
   assert.ok(await page.evaluate(() => document.querySelector('.stock-hint').textContent.includes('more coin')), 'and what it takes to buy more');
-  // Sold again straight away: back with a little less, and nothing earned.
+  // Sold again at the same price: back with a coin or two less, and nothing earned.
   await trade('Sell 1');
-  await until(page, (held) => window.kidsWorld.profile.data.gear.stocks.burrow?.n === held - 1, now.held);
+  await until(page, (held) => window.kidsWorld.profile.data.gear.stocks.mattel?.n === held - 1, now.held);
   await trade('Sell all');
-  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.burrow);
+  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.mattel);
   now = await me();
-  assert.ok(now.coins < start.coins && now.coins > start.coins * 0.9, `${now.coins} of ${start.coins}: the gap costs a little`);
+  assert.ok(now.coins <= start.coins && now.coins >= start.coins - 3, `${now.coins} of ${start.coins}: only the rounding`);
   assert.equal(now.earned, start.earned, 'your own coins are not earned');
   await toasted(page, 'less than you paid');
   // Bought cheap some time ago: selling them now is a profit, all of it earned.
   await page.evaluate(() => {
     const p = window.kidsWorld.profile;
-    p.data.gear.stocks = { burrow: { n: 2, paid: 2 } };
+    p.data.gear.stocks = { mattel: { n: 2, paid: 2, at: Date.now() } };
     p.shopped();
   });
   await page.evaluate(() => document.querySelector('.stock-back').click());
-  await until(page, () => document.querySelector('.stock-row[data-key="burrow"] .stock-owned').textContent.includes('You own 2') && document.querySelector('.stock-mine').textContent.includes('up'));
-  await page.evaluate(() => document.querySelector('.stock-row[data-key="burrow"]').click());
+  await until(page, () => document.querySelector('.stock-row[data-key="mattel"] .stock-owned').textContent.includes('You own 2') && document.querySelector('.stock-mine').textContent.includes('up'));
+  await page.evaluate(() => document.querySelector('.stock-row[data-key="mattel"]').click());
   await until(page, () => [...document.querySelectorAll('.stock-trade')].some((b) => b.textContent === 'Sell all (2)'));
   const before = await me();
   await trade('Sell all');
-  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.burrow);
+  await until(page, () => !window.kidsWorld.profile.data.gear.stocks.mattel);
   now = await me();
-  assert.equal(now.earned - before.earned, now.coins - before.coins - 2, 'the profit is what is earned');
-  assert.ok(now.earned > before.earned);
+  assert.equal(now.coins - before.coins, Math.floor(COINS.mattel * 2));
+  assert.equal(now.earned - before.earned, Math.floor(COINS.mattel * 2) - 2, 'the profit is what is earned');
   await toasted(page, 'profit');
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['buy-low']), 'the sticker');
-  // Come back another day: a steady company has paid you.
-  await page.evaluate(async () => {
-    const { marketDay } = await import('/js/shared/stocks.js');
+  // A company that split its shares since you bought them: you own more of them.
+  await page.evaluate(() => {
     const kw = window.kidsWorld;
     kw.ui.closeModal();
-    const g = kw.profile.data.gear;
-    g.stocks = { brick: { n: 10, paid: 1200 } };
-    g.divDay = marketDay(Date.now()) - 2;
-    kw.profile.shopped();
-    window.coinsBefore = kw.profile.data.coins;
+    const t = Date.now();
+    kw.market.snapshot.stocks.netflix.splits = [[t - 1000, 10]];
+    kw.profile.data.gear.stocks = { netflix: { n: 2, paid: 132, at: t - 5000 } };
     kw.ui.stockDialog();
   });
-  await toasted(page, 'Dividends!');
-  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.coins - window.coinsBefore), 12, 'six coins a day, for two days');
-  assert.ok(await page.evaluate(() => document.querySelector('.stock-mine').textContent.includes('6 a day')));
-  // The prices move on while it is open, and it keeps up; closing it stops that.
+  await toasted(page, 'Netflix split its shares: your 2 shares became 20 shares');
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.gear.stocks.netflix.n), 20);
+  // Old prices are shown, and not traded at; new ones come when they can.
   await page.evaluate(() => {
-    window.realNow = Date.now;
-    const later = Date.now() + 90 * 60 * 1000;
-    Date.now = () => later;
+    const { market, ui } = window.kidsWorld;
+    ui.closeModal();
+    window.freshAt = market.snapshot.at;
+    market.snapshot = { ...market.snapshot, at: Date.now() - 7 * 3600000 };
+    market.askedAt = Date.now();
+    ui.stockDialog('netflix');
   });
-  await until(page, async () => {
-    const { quote } = await import('/js/shared/stocks.js');
-    const price = quote('rocket', Date.now()).price;
-    return document.querySelector('.stock-row[data-key="rocket"] .stock-price').textContent.includes(price.toLocaleString());
-  });
-  await page.evaluate(() => {
-    Date.now = window.realNow;
-    window.kidsWorld.ui.closeModal();
-  });
+  await until(page, () => !document.querySelector('.stock-notice').hidden && document.querySelector('.stock-notice').textContent.includes('7 hours old'));
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.stock-trade')].every((b) => b.disabled)), 'no trading at them');
+  await page.evaluate(() => window.kidsWorld.market.refresh());
+  await until(page, () => document.querySelector('.stock-notice').hidden && [...document.querySelectorAll('.stock-trade')].some((b) => !b.disabled));
+  await page.evaluate(() => window.kidsWorld.ui.closeModal());
   await until(page, () => document.getElementById('modal').hidden);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
@@ -4791,7 +4797,7 @@ test('the market is in the shop and the backpack from the title screen, and not 
   await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Shop'));
   assert.ok((await chips()).includes('📈 Stocks'));
   await clickButton(page, '📈 Stocks', '#modal');
-  await until(page, () => document.querySelector('#modal h2').textContent.includes('Stock Market') && document.querySelectorAll('.stock-row').length === 8);
+  await until(page, () => document.querySelector('#modal h2').textContent.includes('Stock Market') && document.querySelectorAll('.stock-row').length === 20);
   await clickButton(page, '🛒 Shop', '#modal');
   await until(page, () => document.querySelector('#modal h2').textContent.includes('Shop'));
   await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
@@ -4816,6 +4822,56 @@ test('the market is in the shop and the backpack from the title screen, and not 
   });
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
+});
+
+test('a page with nowhere to get prices says so and trades nothing', { skip }, async () => {
+  const games = createGameServer({ log: () => {} });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1`);
+  try {
+    await page.evaluate(() => window.kidsWorld.ui.stockDialog());
+    await until(page, () => document.querySelector('.stock-notice')?.textContent.includes('island keeper'));
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.stock-price')].every((p) => p.textContent === '—')), 'no prices');
+    await page.evaluate(() => document.querySelector('.stock-row[data-key="apple"]').click());
+    await until(page, () => [...document.querySelectorAll('.stock-trade')].length > 0);
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('.stock-trade')].every((b) => b.disabled)), 'nothing to trade at');
+    assert.ok(await page.evaluate(() => document.querySelector('.stock-chart').hidden), 'and no chart');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+test('a page gets the prices and charts through the keeper, from anywhere, and keeps them for next time', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-market-'));
+  const store = await new KeeperStore(dir).open();
+  const identity = await createIdentity(dir);
+  const keeper = new Keeper({ store, identity, signal, iceServers: [], log: () => {} });
+  keeper.market = fakeFeed();
+  await keeper.start();
+  const games = createGameServer({ log: () => {}, keeperConfig: publicConfig(identity, signal) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/?p2p=1`);
+  try {
+    await until(page, () => window.kidsWorld.keeper.config);
+    await page.evaluate(() => window.kidsWorld.ui.stockDialog());
+    await until(page, () => document.querySelector('.stock-row[data-key="mattel"] .stock-price').textContent.includes('15.46'));
+    await page.evaluate(() => document.querySelector('.stock-row[data-key="mattel"]').click());
+    await until(page, () => window.Chart && window.Chart.getChart(document.querySelector('.stock-chart canvas'))?.data.datasets[0].data.length === 30);
+    // Reloaded with the keeper gone: last time's prices, there at once.
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    await keeper.stop();
+    await page.reload();
+    await until(page, () => window.kidsWorld?.ui);
+    assert.ok(await page.evaluate(() => window.kidsWorld.market.snapshot?.stocks.mattel.p === 15.46), 'kept on this device');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await keeper.stop();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('the Stock Exchange stamp from the toy box goes down with a click: its tickers scroll real prices, and a terminal is ready to trade at', { skip }, async () => {
@@ -4852,6 +4908,7 @@ test('the Stock Exchange stamp from the toy box goes down with a click: its tick
   });
   // Drawn: the tickers in sight, with the prices painted on their one strip,
   // and scrolling along as the time goes.
+  await until(page, () => window.kidsWorld.market.snapshot);
   const painted = await page.evaluate(async () => {
     const kw = window.kidsWorld;
     const { strip, screen } = kw.renderer.terrain.stockMaterials;

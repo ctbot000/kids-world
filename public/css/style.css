@@ -6634,9 +6634,55 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
   box-shadow: inset 0 0 0 2px var(--line);
 }
 
+/* Each exchange: where, whether it is open, and how its whole market is doing. */
+.stock-market {
+  margin-top: 14px;
+}
+
+.stock-market-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 6px;
+}
+
+.panel .stock-market-head h3 {
+  margin: 0;
+}
+
+.stock-status {
+  font-size: 14px;
+}
+
 .stock-index {
   margin-left: auto;
+  font-size: 14px;
   white-space: nowrap;
+}
+
+.panel p.stock-notice {
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--select);
+  font-weight: 600;
+}
+
+.stock-notice[hidden],
+.stock-mood[hidden],
+.stock-meter[hidden] {
+  display: none;
+}
+
+.panel p.stock-credit {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.panel p.stock-place {
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 
 .panel p.stock-note {
@@ -6739,41 +6785,6 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
 
 .stock-moved {
   font-size: 13px;
-}
-
-.stock-news {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stock-news li {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.7);
-  line-height: 1.3;
-}
-
-.stock-news li.fresh {
-  animation: stock-news-in 1.4s ease-out;
-}
-
-@keyframes stock-news-in {
-  from {
-    background: var(--select);
-    transform: scale(1.02);
-  }
-}
-
-.stock-when {
-  font-size: 13px;
-  white-space: nowrap;
 }
 
 .stock-how {

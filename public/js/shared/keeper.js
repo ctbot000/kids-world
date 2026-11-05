@@ -310,7 +310,6 @@ export function addProgress(player, guest) {
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
   gear.stocks = addStocks(gear.stocks, b.gear.stocks);
-  gear.divDay = Math.max(gear.divDay, b.gear.divDay);
   return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 

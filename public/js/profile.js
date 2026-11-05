@@ -12,7 +12,7 @@ import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, to
 import { mergeProfiles } from './shared/keeper.js';
 import { progressOf } from './shared/levels.js';
 import { CLOTHES, cleanCoins, cleanGear, cleanTames, cleanKeys, cleanPotions, COINS_MAX, KEYS_MAX, fixPrice, ISLAND_PRICE, isBroken, lookWithGear, nextLevel, POTION, sale, SEED_PACK, seedPrice, usesLeft, WEAPONS, weaponOf, wornWeapon } from './shared/shop.js';
-import { buying, companiesHeld, dividendsDue, marketDay, selling } from './shared/stocks.js';
+import { buying, companiesHeld, marketsHeld, oldSharesPaid, selling, splitting } from './shared/stocks.js';
 import { STAT_KEYS, STICKERS } from './shared/stickers.js';
 import { cleanLook, isValidName, randomLook, randomName } from './shared/words.js';
 import { load, save } from './storage.js';
@@ -36,7 +36,9 @@ function clean(raw) {
     look: p.look ? cleanLook(p.look) : randomLook(),
     settings,
     basket,
-    coins: cleanCoins(p.coins),
+    // With what any shares of the market's first, make-believe companies cost:
+    // they are gone, and nobody loses by it.
+    coins: cleanCoins((Number.isInteger(p.coins) ? p.coins : 0) + oldSharesPaid(p.gear?.stocks)),
     potions: cleanPotions(p.potions),
     // Keys for Adventure Isle's treasure chests (treasure.js), earned by
     // solving quizzes there: only ever in the isle's own world of you.
@@ -51,7 +53,7 @@ function clean(raw) {
     made: p.made === true,
     // When your name, look, basket, coins, potions, keys or gear last changed: 0 for a profile nobody has
     // touched yet, which loses to any other when two are merged.
-    changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
+    changedAt: oldSharesPaid(p.gear?.stocks) ? Date.now() : Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
 }
 
@@ -258,38 +260,36 @@ export class Profile extends EventTarget {
     this.count('capsuletoys', toysFound(this.data.gear.toys), { max: true });
   }
 
-  // The stock market (shared/stocks.js), at time t. Buying n shares of a
-  // company: { n, cost }, or null without the coins or the room. Whatever
-  // dividends your shares have earned come first, as the new shares earned
-  // none of them.
-  buyShares(key, n, t = Date.now()) {
-    this.collectDividends(t);
+  // The stock market (shared/stocks.js), at the prices in `snapshot`, at time t.
+  // Buying n shares of a company: { n, cost }, or null without the coins, the room
+  // or a recent price.
+  buyShares(key, n, snapshot, t = Date.now()) {
+    this.settleShares(snapshot);
     const g = this.data.gear;
-    const got = buying(g.stocks, key, n, this.data.coins, t);
+    const got = buying(g.stocks, key, n, this.data.coins, snapshot, t);
     if (!got) return null;
     this.data.coins -= got.cost;
     g.stocks = got.stocks;
-    // Your first shares start paying from tomorrow.
-    g.divDay ||= marketDay(t);
     this.shopped();
     this.count('stockbuys');
     this.count('stocksheld', companiesHeld(g.stocks), { max: true });
+    this.count('stockworld', marketsHeld(g.stocks), { max: true });
     return { n: got.n, cost: got.cost };
   }
 
-  // Selling n shares of a company: { n, coins, profit } (a loss, below 0), or
-  // null without them. Only the profit counts as coins earned: the rest is
-  // your own coins coming back. The coins never go past what your purse holds,
-  // so what will not fit stays as shares: fewer are sold, or none, and { full }
-  // says so (a test player's coins are always full, so it sells anyway).
-  sellShares(key, n, t = Date.now()) {
-    this.collectDividends(t);
+  // Selling n shares of a company: { n, coins, profit } (a loss, below 0), or null
+  // without them or a recent price. Only the profit counts as coins earned: the
+  // rest is your own coins coming back. The coins never go past what your purse
+  // holds, so what will not fit stays as shares: fewer are sold, or none, and
+  // { full } says so (a test player's coins are always full, so it sells anyway).
+  sellShares(key, n, snapshot, t = Date.now()) {
+    this.settleShares(snapshot);
     const g = this.data.gear;
-    let got = selling(g.stocks, key, n, t);
+    let got = selling(g.stocks, key, n, snapshot, t);
     if (!got) return null;
     if (!this.unlimited && this.data.coins + got.coins > COINS_MAX) {
       const fits = Math.floor(((COINS_MAX - this.data.coins) * n) / got.coins);
-      got = fits > 0 ? selling(g.stocks, key, fits, t) : null;
+      got = fits > 0 ? selling(g.stocks, key, fits, snapshot, t) : null;
       if (!got) return { full: true };
     }
     this.data.coins = Math.min(COINS_MAX, this.data.coins + got.coins);
@@ -303,27 +303,16 @@ export class Profile extends EventTarget {
     return { n: got.n, coins: got.coins, profit: got.profit };
   }
 
-  // The dividends your shares have earned since you were last paid, up to
-  // today: { coins, days } if there were any, or null. A clock put back leaves
-  // nobody waiting for a day it has passed: it is paid up to the day it says.
-  collectDividends(t = Date.now()) {
+  // Companies that split their shares since you got yours: you own more of them,
+  // each worth that much less. The ones it happened to: [{ key, from, to }].
+  settleShares(snapshot) {
     const g = this.data.gear;
-    const today = marketDay(t);
-    // With no shares, nothing is owed, whenever you next buy some.
-    if (!companiesHeld(g.stocks)) {
-      g.divDay = 0;
-      return null;
-    }
-    if (g.divDay === today) return null;
-    const { coins, days } = dividendsDue(g.stocks, g.divDay, today);
-    g.divDay = today;
-    if (!coins) {
+    const { stocks, done } = splitting(g.stocks, snapshot);
+    if (done.length) {
+      g.stocks = stocks;
       this.shopped();
-      return null;
     }
-    this.earn(coins);
-    this.count('dividends', coins);
-    return { coins, days };
+    return done;
   }
 
   // A key for a treasure chest (treasure.js): one more earned, or one used

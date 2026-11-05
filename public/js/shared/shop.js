@@ -13,7 +13,7 @@ import { COLLECTABLES } from './blocks.js';
 import { cleanToys } from './gashapon.js';
 import { maxHp } from './monsters.js';
 import { MOVE } from './physics.js';
-import { cleanDivDay, cleanStocks } from './stocks.js';
+import { cleanStocks } from './stocks.js';
 
 export const COINS_MAX = 99999;
 // A new island: your first is free, and each after it costs this.
@@ -232,8 +232,8 @@ export const gearKind = (key) => GEAR.find((g) => g.key === key) ?? null;
 // have (in CLOTHES order) and the ones you have on ('' for none); and the
 // capsule toys from gashapon machines, how many of each (gashapon.js); how
 // worn each weapon you own is (wear); how many times you have tamed a
-// volcano island's dragon (dragon.js); and your shares at the stock market,
-// with the market day they last paid you a dividend for (stocks.js).
+// volcano island's dragon (dragon.js); and your shares at the stock market
+// (stocks.js).
 export function cleanGear(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = { off: {}, pick: {} };
@@ -255,7 +255,6 @@ export function cleanGear(raw) {
   out.toys = cleanToys(p.toys);
   out.tames = cleanTames(p.tames);
   out.stocks = cleanStocks(p.stocks);
-  out.divDay = cleanDivDay(p.divDay);
   return out;
 }
 

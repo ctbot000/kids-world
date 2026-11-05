@@ -9,6 +9,7 @@ import { fitHomeScreenApp } from './fullscreen.js';
 import { hurried } from './hurry.js';
 import { Input } from './input.js';
 import { KeeperClient, KeeperProblem } from './keeper.js';
+import { market } from './market.js';
 import { LockScreen } from './lock-screen.js';
 import { GuestLink, HostLink, signalingOptions, WsLink } from './net.js';
 import { latestNews, newsSince } from './news.js';
@@ -106,6 +107,7 @@ const keeper = new KeeperClient({ profile, isle, login: who });
 keeper.addEventListener('unlimited', () => {
   for (const p of [profile, isle]) p.setUnlimited(keeper.unlimited);
 });
+market.useKeeper(keeper);
 keeper.addEventListener('status', () => ui.renderKeeper());
 keeper.addEventListener('kept', () => ui.renderKeeper());
 keeper.addEventListener('config', () => {
@@ -1136,6 +1138,7 @@ function frame(now) {
 
 // For automated tests: the running pieces, and a way to step time without frames.
 window.kidsWorld = {
+  market,
   profile,
   isle,
   renderer,

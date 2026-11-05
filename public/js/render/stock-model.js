@@ -2,9 +2,8 @@
 // STOCK_TERMINAL, STOCK_TICKER, BULL_STATUE, BEAR_STATUE), not made of boxes.
 //
 // - A terminal: a navy kiosk on a plinth, a gold band round it, its screen
-//   tilted up at you with every company's price on it and how the whole market
-//   has gone over the last day, the real ones (shared/stocks.js), and a little
-//   keypad.
+//   tilted up at you with the companies' real prices on it, a few at a time
+//   (shared/stocks.js), and a little keypad.
 // - A ticker: a long dark board hanging on a wall, the real prices scrolling
 //   along it from right to left. Every ticker shows the one long strip, each at
 //   the part of it its place in the world says, so pieces side by side make one
@@ -20,7 +19,8 @@
 // sight (group.userData.tick, which render/terrain.js calls each frame).
 import * as THREE from '../../vendor/three.module.js';
 import { BLOCKS } from '../shared/blocks.js';
-import { COMPANIES, DAY, dayChange, indexAt, moodAt, quote, TICK_MS } from '../shared/stocks.js';
+import { market } from '../market.js';
+import { COMPANIES, MINUTE, moodOf, quote, TICK_MS } from '../shared/stocks.js';
 import { at, bake, roundedBox } from './gashapon-model.js';
 
 export const STOCK_KINDS = new Set(['stock-terminal', 'stock-ticker', 'bull-statue', 'bear-statue']);
@@ -42,10 +42,11 @@ export const STOCK_FINISH = {
 // ---------------------------------------------------------------- the canvases
 
 // The strip of prices a ticker shows: a slot for each company, as many blocks
-// long in all as TICKER_BLOCKS, scrolling TICKER_SPEED blocks a second.
-export const TICKER_W = 4096;
+// long in all as TICKER_BLOCKS, scrolling TICKER_SPEED blocks a second. (Three
+// makes it smaller for a graphics card that cannot take one so long.)
+export const TICKER_W = 8192;
 export const TICKER_H = 64;
-export const TICKER_BLOCKS = 27;
+export const TICKER_BLOCKS = 54;
 export const TICKER_SPEED = 0.9;
 const SLOT = TICKER_W / COMPANIES.length;
 
@@ -53,78 +54,88 @@ const FONT = "'Fredoka', ui-rounded, 'Arial Rounded MT Bold', system-ui, sans-se
 const UP = '#4be38a';
 const DOWN = '#ff6b6b';
 const INK = '#eaf2ff';
+const COIN = '#ffd166';
 
-// The change in a price, as it is shown: "1.2%".
+// The move in a price, as it is shown: "1.2%".
 const pct = (change) => `${Math.abs(change * 100).toFixed(1)}%`;
+// A price in coins, as much as fits: no cents on a big one.
+const priced = (coins) => (coins >= 1000 ? Math.round(coins).toLocaleString('en-US') : coins.toFixed(coins >= 100 ? 1 : 2));
 
-// Paints the strip of prices for time t.
-export function paintTicker(ctx, t) {
+// Paints the strip of prices from a snapshot, or while there is none, a word that
+// they are on the way.
+export function paintTicker(ctx, snapshot) {
   ctx.fillStyle = '#0d1520';
   ctx.fillRect(0, 0, TICKER_W, TICKER_H);
   ctx.textBaseline = 'middle';
   const y = TICKER_H / 2 + 2;
   COMPANIES.forEach((c, i) => {
-    const change = dayChange(c.key, t);
-    const up = change >= 0;
-    let x = i * SLOT + 18;
+    const q = quote(snapshot, c.key);
+    let x = i * SLOT + 16;
     const put = (text, color, font) => {
       ctx.font = font;
       ctx.fillStyle = color;
       ctx.fillText(text, x, y);
-      x += ctx.measureText(text).width + 14;
+      x += ctx.measureText(text).width + 12;
     };
     put(c.icon, INK, `38px ${FONT}`);
-    put(c.ticker, INK, `600 40px ${FONT}`);
-    put(String(quote(c.key, t).price), '#ffd166', `600 40px ${FONT}`);
-    put(`${up ? '▲' : '▼'}${pct(change)}`, up ? UP : DOWN, `600 36px ${FONT}`);
+    put(c.ticker, INK, `600 38px ${FONT}`);
+    if (!q) {
+      put('...', '#8fa3bd', `600 38px ${FONT}`);
+      return;
+    }
+    const up = q.change >= 0;
+    put(priced(q.coins), COIN, `600 38px ${FONT}`);
+    put(`${up ? '▲' : '▼'}${pct(q.change)}`, up ? UP : DOWN, `600 34px ${FONT}`);
   });
 }
 
-// The terminal's screen.
+// The terminal's screen, and how many companies it shows at a time.
 export const SCREEN_W = 512;
 export const SCREEN_H = 340;
+export const SCREEN_ROWS = 8;
 
-// Paints the screen for time t: a row for each company over a faint line of how
-// the whole market has gone in the last day.
-export function paintTerminal(ctx, t) {
+// Paints the screen from a snapshot, the companies `page` pages along: how the
+// markets are doing along the top, and a row for each company, a faint line of the
+// last month of the first of them behind it all.
+export function paintTerminal(ctx, snapshot, page = 0) {
   const W = SCREEN_W;
   const H = SCREEN_H;
   ctx.fillStyle = '#0d1520';
   ctx.fillRect(0, 0, W, H);
-  // The last day of the Kids World Index, behind it all.
-  const points = 64;
-  const line = [];
-  for (let i = 0; i < points; i++) line.push(indexAt(t - DAY + (DAY * i) / (points - 1)));
-  const lo = Math.min(...line);
-  const hi = Math.max(...line);
-  const y = (v) => H - 14 - ((v - lo) / Math.max(0.5, hi - lo)) * (H - 90);
-  ctx.beginPath();
-  line.forEach((v, i) => ctx.lineTo((W * i) / (points - 1), y(v)));
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = 'rgba(99, 170, 255, 0.34)';
-  ctx.stroke();
-  ctx.lineTo(W, H);
-  ctx.lineTo(0, H);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(99, 170, 255, 0.1)';
-  ctx.fill();
+  const pages = Math.ceil(COMPANIES.length / SCREEN_ROWS);
+  const from = ((page % pages) + pages) % pages;
+  const shown = COMPANIES.slice(from * SCREEN_ROWS, (from + 1) * SCREEN_ROWS);
+  const line = snapshot?.stocks?.[shown[0].key]?.month ?? [];
+  if (line.length > 1) {
+    const lo = Math.min(...line);
+    const hi = Math.max(...line);
+    const at = (v) => H - 14 - ((v - lo) / Math.max(1e-6, hi - lo)) * (H - 90);
+    ctx.beginPath();
+    line.forEach((v, i) => ctx.lineTo((W * i) / (line.length - 1), at(v)));
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(99, 170, 255, 0.34)';
+    ctx.stroke();
+    ctx.lineTo(W, H);
+    ctx.lineTo(0, H);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(99, 170, 255, 0.1)';
+    ctx.fill();
+  }
   // The top line.
-  const mood = moodAt(t);
+  const mood = moodOf(snapshot);
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.font = `600 30px ${FONT}`;
   ctx.fillStyle = INK;
   ctx.fillText('📈 Stocks', 14, 28);
   ctx.textAlign = 'right';
-  ctx.fillText(`${mood.icon} ${indexAt(t).toFixed(1)}`, W - 14, 28);
+  if (mood) ctx.fillText(mood.icon, W - 14, 28);
   ctx.fillStyle = 'rgba(234, 242, 255, 0.28)';
   ctx.fillRect(14, 50, W - 28, 2);
   // A row for each company.
-  const rows = COMPANIES.length;
-  const row = (H - 58) / rows;
-  COMPANIES.forEach((c, i) => {
-    const change = dayChange(c.key, t);
-    const up = change >= 0;
+  const row = (H - 58) / SCREEN_ROWS;
+  shown.forEach((c, i) => {
+    const q = quote(snapshot, c.key);
     const ry = 58 + row * (i + 0.5);
     ctx.textAlign = 'left';
     ctx.font = `26px ${FONT}`;
@@ -133,10 +144,16 @@ export function paintTerminal(ctx, t) {
     ctx.font = `600 27px ${FONT}`;
     ctx.fillText(c.ticker, 56, ry);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffd166';
-    ctx.fillText(String(quote(c.key, t).price), 320, ry);
+    if (!q) {
+      ctx.fillStyle = '#8fa3bd';
+      ctx.fillText('...', W - 14, ry);
+      return;
+    }
+    const up = q.change >= 0;
+    ctx.fillStyle = COIN;
+    ctx.fillText(priced(q.coins), 340, ry);
     ctx.fillStyle = up ? UP : DOWN;
-    ctx.fillText(`${up ? '▲' : '▼'} ${pct(change)}`, W - 14, ry);
+    ctx.fillText(`${up ? '▲' : '▼'} ${pct(q.change)}`, W - 14, ry);
   });
 }
 
@@ -153,13 +170,17 @@ function board(w, h, paint, wrap = false) {
   texture.anisotropy = 8;
   if (wrap) texture.wrapS = THREE.RepeatWrapping;
   let tick = null;
+  // In sight, it wants prices no older than a few minutes (market.js), and
+  // paints them as soon as they come, and at each tick, a screen going on a page.
   const update = () => {
     const now = Math.floor(Date.now() / TICK_MS);
     if (now === tick) return;
     tick = now;
-    paint(ctx, Date.now());
+    market.want(5 * MINUTE);
+    paint(ctx, market.snapshot, now);
     texture.needsUpdate = true;
   };
+  market.addEventListener('change', () => (tick = null));
   update();
   return { texture, update };
 }

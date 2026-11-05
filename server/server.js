@@ -28,6 +28,7 @@ import { Buddy } from './buddy.js';
 import { CtbControl } from './ctb.js';
 import { FriendControl } from './friend.js';
 import { DEFAULT_DATA_DIR, ICE_SERVERS, Keeper, KeeperStore, loadIdentity, PUBLIC_CONFIG, readPublicConfig, sameKeeper } from './keeper.js';
+import { MarketFeed } from './market.js';
 import { DEFAULT_CTB_MODEL, Fallback, Ollama, Zai } from './llm.js';
 import { WebSocketServer } from 'ws';
 
@@ -58,6 +59,8 @@ export function createGameServer({
   keeperConfig = null,
   // The admin pages' handler, from adminHandler().
   admin = null,
+  // The stock market's real prices (market.js), for this server's own pages.
+  market = null,
 } = {}) {
   // The files in public/, never cached, so a restart serves new code at once.
   // Paths that climb out of it get 403; dotfiles, like missing files, 404.
@@ -97,6 +100,15 @@ export function createGameServer({
       const body = keeperConfig ? JSON.stringify(keeperConfig) : null;
       if (body) res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(body);
       else res.writeHead(404, { 'Content-Type': TEXT_TYPE, 'Cache-Control': 'no-store' }).end('No keeper here');
+      return;
+    }
+    // The stock market's prices and charts, for pages of this server that
+    // have no keeper to ask (js/market.js).
+    if (market && (pathname === '/market.json' || pathname === '/market-chart.json')) {
+      const query = new URL(req.url, 'http://localhost').searchParams;
+      const answer = pathname === '/market.json' ? await market.snapshot() : await market.chart(query.get('key'), query.get('span'));
+      if (answer) res.writeHead(200, { 'Content-Type': JSON_TYPE, 'Cache-Control': 'no-store' }).end(JSON.stringify(answer));
+      else res.writeHead(404, { 'Content-Type': TEXT_TYPE, 'Cache-Control': 'no-store' }).end('No prices');
       return;
     }
     if (pathname === '/api/info') {
@@ -361,7 +373,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     // The AI friend, whom the workers never answer: it would answer them back.
     friendName: () => friend.settings.name,
   });
-  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb }) });
+  // The stock market's real prices, fetched when pages ask for them.
+  const market = new MarketFeed({ file: join(store.dir, 'market.json') });
+  if (keeper) keeper.market = market;
+  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb }), market });
   ctb.rooms = server.rooms;
   // The shared isle hosted peer to peer too, so pages anywhere can conquer
   // it together (see shareTheIsle).

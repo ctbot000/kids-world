@@ -1484,6 +1484,8 @@ export class Keeper extends EventEmitter {
     this.log = log;
     this.conns = new Map();
     this.recent = [];
+    // Where the stock market's prices come from (market.js), if anywhere.
+    this.market = null;
     // Kinds of message pages sent that this keeper does not know (see unknown()).
     this.unknownKinds = new Set();
     this.since = 0;
@@ -1991,6 +1993,13 @@ export class Keeper extends EventEmitter {
         break;
       case 'islands':
         this.reply(conn, { t: 'islands', islands: this.openIslands() });
+        break;
+      // The stock market's real prices and charts (market.js), for any page.
+      case 'market':
+        this.reply(conn, { t: 'market', market: (await this.market?.snapshot()) ?? null });
+        break;
+      case 'market-chart':
+        this.reply(conn, { t: 'market-chart', chart: (await this.market?.chart(msg.key, msg.span)) ?? null });
         break;
       case 'onair':
         // Going live at a broadcast station (shared/station.js), or off air.
