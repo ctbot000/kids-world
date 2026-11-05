@@ -52,7 +52,7 @@ import { World } from '../public/js/shared/world.js';
 import { COINS, fakeSnapshot, FX, native } from './fixtures/market.js';
 
 const THREE = await import('../public/vendor/three.module.js');
-const { paintTerminal, paintTicker, SCREEN, SCREEN_ROWS, STOCK_KINDS, TICKER, TICKER_BLOCKS, stockMaterials, stockModel, tickerPlace, tickerStrip } = await import('../public/js/render/stock-model.js');
+const { paintTerminal, paintTicker, SCREEN, SCREEN_ROWS, STOCK_KINDS, TICKER, TICKER_BLOCKS, TICKER_W, stockMaterials, stockModel, tickerPlace, tickerStrip } = await import('../public/js/render/stock-model.js');
 const PIECES = [B.STOCK_TERMINAL, B.STOCK_TICKER, B.BULL_STATUE, B.BEAR_STATUE];
 
 const NOW = Date.UTC(2026, 10, 5, 15);
@@ -462,20 +462,24 @@ test('owning eight companies, owning on all three exchanges and big profits earn
   await withProfile(async (p) => {
     p.earn(COINS_MAX);
     const t = NOW;
-    COMPANIES.slice(0, 8).forEach((c, i) => {
+    // Eight of them, on no more than two exchanges.
+    const eight = COMPANIES.filter((c) => c.market !== 'newyork').slice(0, 8);
+    assert.equal(eight.length, 8);
+    eight.forEach((c, i) => {
       assert.ok(!p.data.stickers['every-basket'], `not with ${i}`);
       assert.ok(p.buyShares(c.key, 1, SNAP, t));
     });
     assert.ok(p.data.stickers['every-basket']);
     assert.equal(p.data.stats.stocksheld, 8);
-    assert.ok(!p.data.stickers['around-the-world'], 'not with Seoul and Tokyo alone');
-    assert.equal(p.data.stats.stockworld, 2);
-    assert.ok(p.buyShares('apple', 1, SNAP, t));
+    assert.ok(!p.data.stickers['around-the-world'], 'not with New York missing');
+    assert.equal(p.data.stats.stockworld, marketsHeld(p.data.gear.stocks));
+    for (const key of ['samsung', 'nintendo', 'apple']) assert.ok(p.buyShares(key, 1, SNAP, t));
     assert.ok(p.data.stickers['around-the-world']);
+    const held = Object.keys(p.data.gear.stocks).length;
     // Selling them does not take them back, nor the counts.
     p.data.coins = 0;
-    for (const key of Object.keys(p.data.gear.stocks)) assert.equal(p.sellShares(key, 1, SNAP, t).n, 1);
-    assert.equal(p.data.stats.stocksheld, 9);
+    for (const [key, { n }] of Object.entries(p.data.gear.stocks)) assert.equal(p.sellShares(key, n, SNAP, t).n, n);
+    assert.equal(p.data.stats.stocksheld, held);
     assert.equal(p.data.stats.stockworld, 3);
     assert.deepEqual(p.data.gear.stocks, {});
     // Big profits.
@@ -702,6 +706,35 @@ test('its screens paint the prices, with or without any, and the terminal goes t
   assert.ok(said.includes('15.46'), 'its price in coins');
   assert.ok(said.includes('352.0'), 'a dear one with less after the point');
   assert.ok(said.some((t) => t === '▲1.0%'));
+  // Every company's words end before the next one's start, and the last ones end
+  // inside the strip, so it loops round without running into itself, however long
+  // the prices: the words get smaller if they must.
+  const placed = [];
+  const room = { font: '' };
+  const widthOf = (text, font) => [...String(text)].length * parseFloat(font.match(/([\d.]+)px/)[1]);
+  const measuring = new Proxy(
+    { fillText: (text, x) => placed.push({ x, end: x + widthOf(text, room.font) }), measureText: (text) => ({ width: widthOf(text, room.font) }) },
+    {
+      get: (o, k) => (k === 'font' ? room.font : (o[k] ?? (() => {}))),
+      set: (o, k, v) => {
+        if (k === 'font') room.font = v;
+        return true;
+      },
+    },
+  );
+  for (const p of [10, 1234567]) {
+    placed.length = 0;
+    paintTicker(measuring, fakeSnapshot(NOW, { stocks: Object.fromEntries(COMPANIES.map((c) => [c.key, { p }])) }));
+    assert.equal(placed.length, COMPANIES.length * 4);
+    for (let i = 1; i < placed.length; i++) assert.ok(placed[i].x >= placed[i - 1].end, `word ${i} starts after the one before ends, with prices of ${p}`);
+    assert.ok(placed[0].x > 0, 'a gap at the start');
+    assert.ok(placed.at(-1).end <= TICKER_W, 'and the last ends inside the strip');
+    // An even gap, there and at the join.
+    const gaps = COMPANIES.slice(1).map((_, i) => placed[(i + 1) * 4].x - placed[(i + 1) * 4 - 1].end);
+    assert.ok(Math.max(...gaps) - Math.min(...gaps) < 1e-6, 'even gaps');
+    assert.ok(Math.abs(TICKER_W - placed.at(-1).end + placed[0].x - gaps[0]) < 1e-6, 'the same across the join');
+    assert.ok(gaps[0] >= 30, `a real gap (${gaps[0]})`);
+  }
   said.length = 0;
   paintTicker(ctx, null);
   assert.ok(said.includes('AAPL') && said.includes('...'), 'waiting for prices');

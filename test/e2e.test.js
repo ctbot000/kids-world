@@ -4797,7 +4797,7 @@ test('the market is in the shop and the backpack from the title screen, and not 
   await until(page, () => document.querySelector('#modal h2')?.textContent.includes('Shop'));
   assert.ok((await chips()).includes('📈 Stocks'));
   await clickButton(page, '📈 Stocks', '#modal');
-  await until(page, () => document.querySelector('#modal h2').textContent.includes('Stock Market') && document.querySelectorAll('.stock-row').length === 20);
+  await until(page, (n) => document.querySelector('#modal h2').textContent.includes('Stock Market') && document.querySelectorAll('.stock-row').length === n, Object.keys(COINS).length);
   await clickButton(page, '🛒 Shop', '#modal');
   await until(page, () => document.querySelector('#modal h2').textContent.includes('Shop'));
   await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
@@ -4896,9 +4896,14 @@ test('the Stock Exchange stamp from the toy box goes down with a click: its tick
     const B = await import('/js/shared/blocks.js');
     return B.baseOf(window.kidsWorld.game.world.get(s.x, s.y, s.z));
   }, spot), spot.base);
-  // Walk in front of it: its button.
+  // Walk in front of it: its button, with no animal about to take it.
   await page.evaluate((s) => {
     const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    for (const c of [...room.critters.list]) {
+      room.critters.remove(c.id);
+      room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+    }
     Object.assign(kw.game.me.body, { x: s.x + 0.5 - s.f[0] * 1.3, y: s.y, z: s.z + 0.5 - s.f[1] * 1.3, vx: 0, vy: 0, vz: 0 });
     kw.step(1 / 60, 5);
   }, spot);

@@ -4,8 +4,8 @@
 // prices come through js/market.js, and it asks for new ones while it is open.
 //
 // The big chart is Chart.js (public/vendor), loaded the first time it is wanted;
-// the little lines in the list are plain SVG, as twenty charts' worth of axes and
-// tooltips would only get in the way there.
+// the little lines in the list are plain SVG, as a chart apiece, with axes and
+// tooltips, would only get in the way there.
 import { market } from './market.js';
 import { h } from './ui.js';
 import {

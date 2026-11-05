@@ -6,6 +6,8 @@ export const FX = { KRW: 1300, JPY: 150 };
 // What each company costs in coins.
 export const COINS = {
   samsung: 150,
+  skhynix: 410.5,
+  naver: 137.2,
   kakao: 24.2,
   hyundai: 218.9,
   hybe: 110.7,

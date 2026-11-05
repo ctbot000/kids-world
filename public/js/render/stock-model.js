@@ -41,14 +41,13 @@ export const STOCK_FINISH = {
 
 // ---------------------------------------------------------------- the canvases
 
-// The strip of prices a ticker shows: a slot for each company, as many blocks
-// long in all as TICKER_BLOCKS, scrolling TICKER_SPEED blocks a second. (Three
-// makes it smaller for a graphics card that cannot take one so long.)
+// The strip of prices a ticker shows, as many blocks long in all as TICKER_BLOCKS,
+// scrolling TICKER_SPEED blocks a second. (Three makes it smaller for a graphics
+// card that cannot take one so long.)
 export const TICKER_W = 8192;
 export const TICKER_H = 64;
 export const TICKER_BLOCKS = 54;
 export const TICKER_SPEED = 0.9;
-const SLOT = TICKER_W / COMPANIES.length;
 
 const FONT = "'Fredoka', ui-rounded, 'Arial Rounded MT Bold', system-ui, sans-serif";
 const UP = '#4be38a';
@@ -61,32 +60,54 @@ const pct = (change) => `${Math.abs(change * 100).toFixed(1)}%`;
 // A price in coins, as much as fits: no cents on a big one.
 const priced = (coins) => (coins >= 1000 ? Math.round(coins).toLocaleString('en-US') : coins.toFixed(coins >= 100 ? 1 : 2));
 
+// The most a strip's words are, and the least space round each company's.
+const TICKER_FONT = 38;
+const TICKER_GAP = 36;
+const TICKER_SPACE = 12;
+
 // Paints the strip of prices from a snapshot, or while there is none, a word that
-// they are on the way.
+// they are on the way. The companies share out its length by what each measures,
+// with even gaps, and the words get smaller if that is what it takes to fit: it
+// is one long loop, so what ends it must fit up to what starts it.
 export function paintTicker(ctx, snapshot) {
   ctx.fillStyle = '#0d1520';
   ctx.fillRect(0, 0, TICKER_W, TICKER_H);
   ctx.textBaseline = 'middle';
-  const y = TICKER_H / 2 + 2;
-  COMPANIES.forEach((c, i) => {
+  const entries = COMPANIES.map((c) => {
     const q = quote(snapshot, c.key);
-    let x = i * SLOT + 16;
-    const put = (text, color, font) => {
-      ctx.font = font;
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, y);
-      x += ctx.measureText(text).width + 12;
-    };
-    put(c.icon, INK, `38px ${FONT}`);
-    put(c.ticker, INK, `600 38px ${FONT}`);
-    if (!q) {
-      put('...', '#8fa3bd', `600 38px ${FONT}`);
-      return;
-    }
-    const up = q.change >= 0;
-    put(priced(q.coins), COIN, `600 38px ${FONT}`);
-    put(`${up ? '▲' : '▼'}${pct(q.change)}`, up ? UP : DOWN, `600 34px ${FONT}`);
+    const parts = [
+      { text: c.icon, color: INK, weight: '', scale: 1 },
+      { text: c.ticker, color: INK, weight: '600 ', scale: 1 },
+    ];
+    if (q) {
+      const up = q.change >= 0;
+      parts.push({ text: priced(q.coins), color: COIN, weight: '600 ', scale: 1 }, { text: `${up ? '▲' : '▼'}${pct(q.change)}`, color: up ? UP : DOWN, weight: '600 ', scale: 0.9 });
+    } else parts.push({ text: '...', color: '#8fa3bd', weight: '600 ', scale: 1 });
+    return parts;
   });
+  const fontOf = (part, size) => `${part.weight}${size * part.scale}px ${FONT}`;
+  // What the words measure at a size, without the fixed space between them.
+  const wordsAt = (size) =>
+    entries.flat().reduce((sum, part) => {
+      ctx.font = fontOf(part, size);
+      return sum + ctx.measureText(part.text).width;
+    }, 0);
+  const spaces = entries.reduce((sum, parts) => sum + TICKER_SPACE * (parts.length - 1), 0);
+  // What there is for the words, with at least a gap after each company.
+  const room = TICKER_W - spaces - TICKER_GAP * entries.length;
+  const size = Math.min(TICKER_FONT, TICKER_FONT * (room / wordsAt(TICKER_FONT)));
+  const gap = (TICKER_W - spaces - wordsAt(size)) / entries.length;
+  const y = TICKER_H / 2 + 2;
+  let x = gap / 2;
+  for (const parts of entries) {
+    for (const part of parts) {
+      ctx.font = fontOf(part, size);
+      ctx.fillStyle = part.color;
+      ctx.fillText(part.text, x, y);
+      x += ctx.measureText(part.text).width + TICKER_SPACE;
+    }
+    x += gap - TICKER_SPACE;
+  }
 }
 
 // The terminal's screen, and how many companies it shows at a time.

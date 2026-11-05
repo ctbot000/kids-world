@@ -52,6 +52,8 @@ export const marketOf = (key) => MARKET_BY_KEY.get(key) ?? null;
 // what the market calls it.
 export const COMPANIES = [
   { key: 'samsung', code: '005930', ticker: '005930', icon: '📱', name: 'Samsung Electronics', market: 'seoul', what: 'Phones, TVs and the chips inside them.' },
+  { key: 'skhynix', code: '000660', ticker: '000660', icon: '💾', name: 'SK Hynix', market: 'seoul', what: 'Memory chips for phones and computers.' },
+  { key: 'naver', code: '035420', ticker: '035420', icon: '🌐', name: 'Naver', market: 'seoul', what: 'Korea’s biggest search site, with maps and webtoons.' },
   { key: 'kakao', code: '035720', ticker: '035720', icon: '💬', name: 'Kakao', market: 'seoul', what: 'KakaoTalk, the chat app, and the Kakao Friends.' },
   { key: 'hyundai', code: '005380', ticker: '005380', icon: '🚗', name: 'Hyundai Motor', market: 'seoul', what: 'Cars, buses and trucks.' },
   { key: 'hybe', code: '352820', ticker: '352820', icon: '🎤', name: 'HYBE', market: 'seoul', what: 'The music company behind BTS.' },
