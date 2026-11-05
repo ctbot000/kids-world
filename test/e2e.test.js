@@ -4835,7 +4835,7 @@ test('a page with nowhere to get prices says so and trades nothing', { skip }, a
     await page.evaluate(() => document.querySelector('.stock-row[data-key="apple"]').click());
     await until(page, () => [...document.querySelectorAll('.stock-trade')].length > 0);
     assert.ok(await page.evaluate(() => [...document.querySelectorAll('.stock-trade')].every((b) => b.disabled)), 'nothing to trade at');
-    assert.ok(await page.evaluate(() => document.querySelector('.stock-chart').hidden), 'and no chart');
+    await until(page, () => document.querySelector('.stock-chart').hidden);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
