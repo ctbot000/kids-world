@@ -39,7 +39,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo', 'rope'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -144,6 +144,12 @@ export const CRITTER_INFO = {
   // a second). Nobody rides it — it is a toy to spin, not a vehicle to
   // drive, so it has no ride, only the box it lies in on the ground (box).
   hoop: { name: 'Hula Hoop', icon: '⭕', speed: 0, swims: true, flies: false, vehicle: 'land', hoop: { spin: 11, wobble: 2.5, rate: 6 }, box: { radius: 0.45, height: 0.15, float: 0.1, walk: 0, run: 0, swim: 0, jump: 0 }, names: ['Twirly', 'Spinny', 'Whirly', 'Loop-De-Loop', 'Whizzy', 'Ringy', 'Swishy', 'Dizzy', 'Roundabout', 'Ollie'] },
+  // A jump rope (rope: you jump over it — see shared/jump-rope.js). Put it
+  // down like a hula hoop, walk up and tap Jump: it is in your hands, going
+  // over your head and under your feet, and you hop over it each time it
+  // comes round, until it catches your feet and drops, ready to go again.
+  // Nobody rides it either, so it has only the box it lies in on the ground.
+  rope: { name: 'Jump Rope', icon: '🪢', speed: 0, swims: true, flies: false, vehicle: 'land', rope: true, box: { radius: 0.45, height: 0.15, float: 0.1, walk: 0, run: 0, swim: 0, jump: 0 }, names: ['Skippy', 'Hopper', 'Twisty', 'Swishy', 'Noodle', 'Zippy', 'Bouncy', 'Loopy', 'Tippy', 'Whippy'] },
   // The paint van (ride.paint: it paints — see riding.js). Driving it paints
   // the natural ground it rolls over, a swath a few blocks wide, in the colour
   // picked with the Paint tool. It paints only natural ground, never anything
@@ -212,6 +218,10 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // their island's own (the dragon), to invite only once tamed — and without
 // the look-only ones that come and go on their own (the firefly).
 export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
+// What is taken up in your hands or round your waist from where it was put
+// down, rather than ridden: a hula hoop and a jump rope. The island moves one
+// with whoever has it (their hooper) until it drops.
+export const heldToy = (type) => Boolean(CRITTER_INFO[type]?.hoop || CRITTER_INFO[type]?.rope);
 // New states go on the end too.
 export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race', 'hoop'];
 export const MAX_CRITTERS = 64;
@@ -251,7 +261,8 @@ export function critterBox(type) {
   if (!info || info.flies) return null;
   if (SMALL_BOX[type]) return { radius: SMALL_BOX[type][0], height: SMALL_BOX[type][1] };
   if (info.vehicle === 'sea') return { radius: info.ride.radius, height: 1 };
-  // A hula hoop lies flat: you walk over it, and spun it is round you.
+  // A hula hoop lies flat: you walk over it, and spun it is round you. So
+  // does a jump rope.
   if (info.box) return null;
   if (info.big || info.vehicle) return { radius: info.ride.radius, height: info.ride.height };
   return null;
@@ -992,8 +1003,9 @@ export class CritterSim {
       }
       this.letGo(c);
     }
-    // A hula hoop being spun goes round with its spinner, until it drops
-    // (or they are gone) and lies on the ground where they stood.
+    // A hula hoop being spun goes round with its spinner, and a jump rope
+    // with its jumper, until it drops (or they are gone) and lies on the
+    // ground where they stood.
     if (c.hooper) {
       const spinner = players.get(c.hooper);
       if (spinner && now < (c.hoopUntil ?? Infinity)) {

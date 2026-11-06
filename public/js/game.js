@@ -25,7 +25,8 @@ import { allByHeart, answerStudy, cleanNotebook, fileAnswer, isStudyDesk, makeSt
 import { load, save } from './storage.js';
 import { applyStroke, blankPicture, boardNear, cleanStroke, decodePicture, frameNear, isBlank, isBoard, isFrame, isPictureAt } from './shared/drawing.js';
 import { DRAGON_HEARTS, FIRE, RIDE_FIRE, RIDE_HEARTS, TAMES_TO_INVITE } from './shared/dragon.js';
-import { CRITTER_INFO, critterBox, headTop, hoopTurn, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { CRITTER_INFO, critterBox, headTop, heldToy, hoopTurn, mountUnder, riderAt, seatsFor, SURFACE, unpackCritter, waterColumn } from './shared/critters.js';
+import { newRope, packTurn, ROPE, stepRope, unpackTurn } from './shared/jump-rope.js';
 import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
@@ -291,7 +292,8 @@ export class Game extends EventTarget {
     // enough to sit on.
     this.seat = null;
     this.seatTarget = null;
-    // The hula hoop you are spinning (critters.js hoop): which one, when it
+    // The hula hoop you are spinning (critters.js hoop), or the jump rope in
+    // your hands (with rope, as shared/jump-rope.js has it): which one, when it
     // wobbles down and drops, how far round it is and how many turns it has
     // done. Also the hoop beside you, close enough to spin.
     this.hooping = null;
@@ -925,7 +927,7 @@ export class Game extends EventTarget {
       const b = snaps[i];
       if (b.t >= t) {
         const k = (t - a.t) / Math.max(1, b.t - a.t);
-        return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: lerpAngle(a.yaw, b.yaw, k), anim: b.anim, state: b.state, flags: b.flags };
+        return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: lerpAngle(a.yaw, b.yaw, k), anim: b.anim, state: b.state, flags: b.flags, was: a.flags, k };
       }
       a = b;
     }
@@ -983,9 +985,9 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
       this.sound.play(entry.type);
-      this.emit('toast', { icon: info.icon, text: `${msg.critter.name} the ${info.name.toLowerCase()} ${info.hoop ? 'is here! Walk up to it and spin it.' : info.vehicle ? 'is here! Walk up to it to drive it.' : 'moved in!'}` });
-      // A hoop you put down, Undo takes away again (while nobody spins it).
-      if (info.hoop) {
+      this.emit('toast', { icon: info.icon, text: `${msg.critter.name} the ${info.name.toLowerCase()} ${info.hoop ? 'is here! Walk up to it and spin it.' : info.rope ? 'is here! Walk up to it and jump.' : info.vehicle ? 'is here! Walk up to it to drive it.' : 'moved in!'}` });
+      // A hoop or a rope you put down, Undo takes away again (while nobody has it).
+      if (heldToy(entry.type)) {
         this.undoStack.push({ kind: 'hoop', critter: entry.id, cells: [] });
         if (this.undoStack.length > UNDO_KEEP) this.undoStack.shift();
         this.emit('undo', this.undoStack.length);
@@ -4341,7 +4343,7 @@ export class Game extends EventTarget {
     let best = 0;
     let near = Infinity;
     for (const c of this.critters.values()) {
-      if (c.type !== 'hoop' || c.hooper || !c.model.group.visible) continue;
+      if (!heldToy(c.type) || c.hooper || !c.model.group.visible) continue;
       const p = c.model.group.position;
       const d = Math.hypot(p.x - b.x, p.z - b.z);
       if (d < 1.6 && Math.abs(p.y - b.y) < 1 && d < near) {
@@ -4383,6 +4385,15 @@ export class Game extends EventTarget {
     c.hooper = pid;
     c.spinAt = performance.now();
     if (pid !== this.pid) return;
+    if (c.type === 'rope') {
+      this.hooping = { id: c.id, rope: newRope(), best: this.profile.data.stats.ropebest };
+      this.emit('hoop');
+      if (!this.toldRope) {
+        this.toldRope = true;
+        this.emit('toast', { icon: '🪢', text: `Round it goes! ${this.touch ? 'Tap ⤴️' : 'Press Space'} to hop over it each time it comes down to your feet.` });
+      }
+      return;
+    }
     this.hooping = { id: c.id, at: c.spinAt, spins: 0 };
     this.emit('hoop');
     if (!this.toldHoop) {
@@ -4400,24 +4411,30 @@ export class Game extends EventTarget {
     c.model.hoopTilt = 0;
     c.model.hoopOrbit = 0;
     const at = c.model.group.position;
-    if (this.near(at.x, at.y, at.z, 24)) this.sound.play('hoop', { drop: true });
+    if (this.near(at.x, at.y, at.z, 24)) this.sound.play(c.type, { drop: true });
     this.renderer.effects.dust(at.x, at.y + 0.1, at.z);
     if (pid === this.pid && this.hooping) {
+      const h = this.hooping;
       this.hooping = null;
       this.emit('hoop');
+      if (h.rope) this.ropeDone(h);
     }
   }
 
   // Each frame while you hoop: the turns counted, a whoosh each time round,
   // and down it comes when its time is up, or you walk, jump or press Shift
   // (as you get up from a seat).
-  updateHoop(input) {
+  updateHoop(dt, input) {
     const h = this.hooping;
     if (!h) return;
     const c = this.critters.get(h.id);
     if (!c || c.hooper !== this.pid) {
       this.hooping = null;
       this.emit('hoop');
+      return;
+    }
+    if (h.rope) {
+      this.updateRope(dt, input, h);
       return;
     }
     const spin = CRITTER_INFO.hoop.hoop;
@@ -4433,6 +4450,70 @@ export class Game extends EventTarget {
       this.sound.play('hoop', { soft: secs > spin.spin });
       this.emit('hoop');
     }
+  }
+
+  // ------------------------------------------------ jump ropes
+
+  // Each frame with a jump rope in your hands (shared/jump-rope.js): round it
+  // goes, jump presses hop you over it (moveMe, which has the hop go), and
+  // the jumps are counted, until it catches your feet. It stays in your hands
+  // only while you stay put on the ground: walking, flying, falling, sinking
+  // or Shift drop it.
+  updateRope(dt, input, h) {
+    const b = this.me.body;
+    const move = input.readMove();
+    h.presses ??= input.jumpPresses;
+    const pressed = input.jumpPresses !== h.presses;
+    h.presses = input.jumpPresses;
+    if (this.dizzy || this.counting || this.lift || this.escalator || b.flying || b.inWater || b.vy < -ROPE.hop * 1.5 || Math.hypot(move.x, move.y) > 0.3 || input.down) {
+      this.dropHoop();
+      return;
+    }
+    const r = h.rope;
+    const was = r.jumps;
+    const now = stepRope(r, dt, { up: !b.onGround, pressed });
+    h.hop = now.hop;
+    if (now.caught) {
+      h.caught = true;
+      this.dropHoop();
+      return;
+    }
+    if (now.passed) this.sound.play('rope');
+    if (r.jumps === was) return;
+    this.profile.count('ropejumps');
+    this.profile.count('ropebest', r.jumps, { max: true });
+    // Every ten in a row, a little cheer.
+    if (r.jumps % 10 === 0) {
+      this.sound.play('ding');
+      this.renderer.effects.sparkles(b.x, b.y + 0.3, b.z, 12);
+    }
+  }
+
+  // How it went, once the rope is down.
+  ropeDone(h) {
+    const { jumps } = h.rope;
+    const said = `${jumps} ${jumps === 1 ? 'jump' : 'jumps'}`;
+    if (jumps > h.best) this.emit('toast', { icon: '🪢', text: `${said} in a row: your best yet!` });
+    else if (jumps) this.emit('toast', { icon: '🪢', text: `${said} in a row! Your best is ${h.best}.` });
+    else if (h.caught) this.emit('toast', { icon: '🪢', text: `Oops, it caught your feet! ${this.touch ? 'Tap ⤴️' : 'Press Space'} just before it gets to them.` });
+  }
+
+  // A friend's rope, for their avatar to turn as far round as their moves say
+  // (s: as they are drawn, a moment behind them, so it goes under their feet
+  // just as they hop over it) and to reach the ground under them, slapping it
+  // each time round if you are near.
+  friendsRope(a, s) {
+    const to = unpackTurn(s.flags);
+    const turn = (lerpAngle(unpackTurn(s.was ?? s.flags), to, s.k ?? 1) + Math.PI * 2) % (Math.PI * 2);
+    if (turn < (a.ropeTurn ?? 0) - Math.PI && this.near(s.x, s.y, s.z, 16)) this.sound.play('rope', { soft: true });
+    a.ropeTurn = turn;
+    a.ropeAir = this.airOver(s);
+  }
+
+  // How far over the ground someone's feet are.
+  airOver({ x, y, z }) {
+    const ground = this.renderer.groundUnder(x, y, z);
+    return ground === null ? 0 : Math.max(0, y - ground);
   }
 
   // ------------------------------------------------ fishing
@@ -6537,7 +6618,7 @@ export class Game extends EventTarget {
     } else if (this.riding) this.moveRide(dt, input);
     else if (this.aboard) this.rideAlong(input);
     else {
-      this.updateHoop(input);
+      this.updateHoop(dt, input);
       this.moveMe(dt, input);
       this.updateFishing(dt, input);
     }
@@ -6757,15 +6838,18 @@ export class Game extends EventTarget {
     const gear = gearMove(this.profile.data.gear, MOVE);
     // Jump still held on getting off a lift does not also hop.
     if (!input.jump) this.liftLatch = false;
-    const jump = !still && input.jump && !this.liftLatch;
+    // With a jump rope in your hands, only the little hops updateRope says
+    // to, and pressing jump on a lift or a trampoline is only one more of them.
+    const rope = this.hooping?.rope ? this.hooping : null;
+    const jump = rope ? Boolean(rope.hop) : !still && input.jump && !this.liftLatch;
     const fromY = b.y;
     const events = this.lift
       ? this.rideLift(dt)
-      : !still && this.boardLift(input)
+      : !still && !rope && this.boardLift(input)
         ? this.rideLift(dt)
         : this.escalator
           ? this.rideEscalator(dt, mx, mz, jump, input.run, gear)
-          : stepBody(w, b, { mx, mz, jump, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: true, move: gear });
+          : stepBody(w, b, { mx, mz, jump, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: !rope, move: rope ? { ...gear, jump: ROPE.hop } : gear });
     if (!this.lift && !this.escalator && !events.off) this.boardEscalator(fromY);
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;
@@ -6786,8 +6870,10 @@ export class Game extends EventTarget {
     if (going > 0.3) me.yaw = lerpAngle(me.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 12));
     const speed = this.escalator ? Math.abs(this.escalator.v - this.escalator.way * ESCALATOR_SPEED) : going;
     me.speed = speed;
+    // With a jump rope, up and down on the spot, in the air or not.
+    if (rope && !still && !b.inWater) me.anim = ANIM.rope;
     // Hooping, the hips swing on the spot; walking or jumping drops the hoop.
-    if (this.hooping && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;
+    else if (this.hooping && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;
     // Fishing, the rod held out over the water; walking off reels it in.
     else if (this.fishing && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.fish;
     else me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
@@ -6797,7 +6883,7 @@ export class Game extends EventTarget {
       fxs.boing(b.x, events.bouncedAt, b.z, events.bounced >= BOUNCE.max);
       this.profile.count('bounces');
     } else if (events.jumped) {
-      this.sound.play('jump');
+      this.sound.play(rope ? 'rope' : 'jump', { hop: true });
     }
     // Not on whether you were on the ground before this frame: just over it
     // counts as on it, and a fall can end there a frame before it lands.
@@ -6840,6 +6926,10 @@ export class Game extends EventTarget {
       a.root.position.set(b.x, b.y, b.z);
       a.root.rotation.y = me.yaw;
       a.root.rotation.x = 0;
+      if (rope) {
+        a.ropeTurn = rope.rope.turn;
+        a.ropeAir = this.airOver(b);
+      }
       // Your swing stops dead a moment as it lands on a monster (strike).
       a.update(performance.now() < (this.hitStopUntil ?? 0) ? 0 : dt, me.anim, speed);
       this.renderer.placeShadow(a.shadow, b.x, b.y, b.z);
@@ -6894,7 +6984,8 @@ export class Game extends EventTarget {
     const now = performance.now();
     if (!force && now - this.lastMoveSent < MOVE_SEND_MS) return;
     const b = this.me.body;
-    const s = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2), +this.me.yaw.toFixed(2), this.me.anim, b.flying ? 1 : 0];
+    const rope = this.hooping?.rope;
+    const s = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2), +this.me.yaw.toFixed(2), this.me.anim, (b.flying ? 1 : 0) | (rope ? packTurn(rope.turn) : 0)];
     const key = s.join(',');
     if (!force && key === this.lastState && now - this.lastMoveSent < 1000) return;
     this.lastState = key;
@@ -6931,6 +7022,7 @@ export class Game extends EventTarget {
       p.inSeat = p.sitting || s.anim === ANIM.lie || s.anim === ANIM.curl;
       const mount = p.seated ? [...this.critters.values()].find((c) => c.rider === p.id || c.lastRider === p.id || c.passengers.includes(p.id)) : null;
       a.ride = mount ? CRITTER_INFO[mount.type].ride : null;
+      if (s.anim === ANIM.rope) this.friendsRope(a, s);
       a.update(dt, s.anim, Math.min(speed, 12));
       this.renderer.placeShadow(a.shadow, s.x, s.y, s.z);
       if (p.seated || p.inSeat || s.anim === ANIM.piano) a.shadow.visible = false;
@@ -6977,6 +7069,8 @@ export class Game extends EventTarget {
       // small to see, and is not drawn.
       const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
       m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      // A jump rope in someone's hands is drawn there (render/avatar.js).
+      if (c.type === 'rope' && (c.hooper || state === 'hoop')) m.group.visible = false;
       // A go-kart racing with nobody in it has the computer's driver at the wheel.
       if (m.robot) m.robot.visible = state === 'race' && !c.rider;
       if (m.group.visible) {

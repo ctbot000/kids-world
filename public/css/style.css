@@ -943,6 +943,21 @@ body.fullscreen .full-icon .leave {
   font-weight: 600;
 }
 
+/* A jump rope in your hands: it lights up as the rope comes down to your
+   feet, time to hop (hidden, not gone, so the bar keeps its width). */
+.hoop-bar .rope-now {
+  visibility: hidden;
+  color: #d81b60;
+}
+
+.hoop-bar.due {
+  background: rgba(255, 236, 140, 0.92);
+}
+
+.hoop-bar.due .rope-now {
+  visibility: visible;
+}
+
 /* A fish on the line: how tight the line is, a needle over green, yellow
    and red, and how far the fish has to come in, swimming in to the island. */
 .fish-bar {

@@ -5664,6 +5664,206 @@ test('a hula hoop: put down from the toy box, ⭕ Spin (Q) puts it round your wa
   await page.browserContext().close();
 });
 
+// A player keeping time with the jump rope in their hands: a real Space once a
+// turn, a fifth of a second before the rope gets to their feet, frame after
+// frame while the page goes on (so a test taking its time is not caught out)
+// and from jumpTo at each step of its own, until stopped with stopJumping.
+const keepTime = (page) =>
+  page.evaluate(async () => {
+    const { ropeRate } = await import('/js/shared/jump-rope.js');
+    const g = window.kidsWorld.game;
+    let pressed = -1;
+    window.ropeBot = () => {
+      const r = g.hooping?.rope;
+      if (!r || pressed === r.passes || (Math.PI * 2 * (r.passes + 1) - r.turn) / ropeRate(r.secs) > 0.2) return;
+      pressed = r.passes;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+    };
+    const go = () => {
+      window.ropeBot?.();
+      if (window.ropeBot) requestAnimationFrame(go);
+    };
+    go();
+  });
+const jumpTo = (page, jumps) =>
+  page.evaluate((jumps) => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const r = g.hooping.rope;
+    let high = 0;
+    for (let i = 0; i < 4000 && g.hooping && r.jumps < jumps; i++) {
+      window.ropeBot();
+      kw.step(1 / 20, 1);
+      high = Math.max(high, g.airOver(g.me.body));
+    }
+    return { jumps: r.jumps, high, holding: Boolean(g.hooping) };
+  }, jumps);
+const stopJumping = (page) => page.evaluate(() => delete window.ropeBot);
+
+test('a jump rope: put down from the toy box, 🪢 Jump (Q) puts it in your hands, hops in time are counted, it catches your feet when you stop, and Undo takes it away', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // Level ground beside the start, cleared, with nobody else about.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const g = kw.game;
+    const b = g.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && [-2, -1, 0, 1, 2].some((d) => room.world.top(x + d, z) !== ground || room.world.top(x, z + d) !== ground)) x++;
+    for (let dx = -2; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = ground + 1; y < ground + 8; y++) if (room.world.get(x + dx, y, z + dz)) room.natureCell([x + dx, y, z + dz], 0);
+    for (const c of [...room.critters.list]) {
+      room.critters.remove(c.id);
+      room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+    }
+    Object.assign(b, { x: x + 0.5, y: ground + 1, z: z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    g.sendMove(true);
+    for (let i = 0; i < 30; i++) kw.step(1 / 60, 1);
+    // Put down from the toy box's Vehicles tab, a step ahead.
+    g.critterType = 'rope';
+    g.send({ t: 'critter', op: 'invite', type: 'rope', x: x + 1.7, y: ground + 1, z: z + 0.5 });
+  });
+  await until(page, () => [...window.kidsWorld.game.critters.values()].some((c) => c.type === 'rope') && window.kidsWorld.game.undoStack.length === 1);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Jump'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.hooping?.rope && document.getElementById('ride').textContent.includes('Drop'));
+  await keepTime(page);
+  // In your hands now, not on the ground, and over the hotbar.
+  await page.evaluate(() => window.kidsWorld.step(1 / 60, 2));
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const g = window.kidsWorld.game;
+      const rope = [...g.critters.values()].find((c) => c.type === 'rope');
+      const a = g.players.get(g.pid).avatar;
+      return { anim: g.me.anim, onGround: rope.model.group.visible, inHands: Boolean(a.rope?.parent), hidden: document.getElementById('hoop').hidden };
+    }),
+    { anim: 16, onGround: false, inHands: true, hidden: false },
+  );
+  // Over it every time, a little hop, the jumps counted beside your best, with
+  // a sticker at ten.
+  const kept = await jumpTo(page, 11);
+  assert.equal(kept.holding, true);
+  assert.equal(kept.jumps, 11);
+  assert.ok(kept.high > 0.3 && kept.high < 0.6, `a little hop: ${kept.high}`);
+  await until(page, () => /🪢 1\d jumps/.test(document.getElementById('hoop').textContent) && /Best 1\d/.test(document.getElementById('hoop').textContent));
+  const done = await page.evaluate(() => {
+    const { stats, stickers } = window.kidsWorld.game.profile.data;
+    return { total: stats.ropejumps, best: stats.ropebest, sticker: Boolean(stickers['skip-to-it']) };
+  });
+  assert.ok(done.total >= 11 && done.best === done.total && done.sticker, JSON.stringify(done));
+  // Lit up as it comes down to your feet, time to hop, and not as it goes up.
+  const lit = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const { ropeDue } = await import('/js/shared/jump-rope.js');
+    const r = kw.game.hooping.rope;
+    const seen = {};
+    for (let i = 0; i < 90 && Object.keys(seen).length < 2; i++) {
+      window.ropeBot();
+      kw.step(1 / 30, 1);
+      if (kw.game.me.body.onGround) seen[ropeDue(r)] = document.getElementById('hoop').classList.contains('due');
+    }
+    return seen;
+  });
+  assert.deepEqual(lit, { true: true, false: false });
+  // Stop jumping and it catches your feet: down it comes, ready to go again.
+  await stopJumping(page);
+  await until(page, () => !window.kidsWorld.game.hooping && document.getElementById('hoop').hidden);
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => /1\d jumps in a row: your best yet!/.test(t.textContent)));
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Jump'));
+  await until(page, () => [...window.kidsWorld.game.critters.values()].find((c) => c.type === 'rope').model.group.visible);
+  assert.equal(await page.evaluate(() => Boolean(window.kidsWorld.game.players.get(window.kidsWorld.game.pid).avatar.rope.parent)), false, 'out of your hands');
+  // Again, and Shift drops it sooner.
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.game.hooping?.rope);
+  await page.keyboard.down('ShiftLeft');
+  await until(page, () => !window.kidsWorld.game.hooping);
+  await page.keyboard.up('ShiftLeft');
+  // With nothing in your hands, a jump is a whole jump again.
+  const hopped = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const b = kw.game.me.body;
+    let high = 0;
+    kw.input.keys.add('Space');
+    kw.step(1 / 60, 2);
+    kw.input.keys.delete('Space');
+    for (let i = 0; i < 40; i++) {
+      kw.step(1 / 60, 1);
+      high = Math.max(high, kw.game.airOver(b));
+    }
+    return high;
+  });
+  assert.ok(hopped > 1, `a whole jump: ${hopped}`);
+  // Undo takes it away again.
+  await page.evaluate(() => window.kidsWorld.game.undo());
+  await until(page, () => ![...window.kidsWorld.game.critters.values()].some((c) => c.type === 'rope'));
+  await until(page, () => document.getElementById('ride').hidden);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a friend sees your jump rope: in your hands and going round as far as it is on your page, not on the ground, and back on the ground when it drops', { skip }, async () => {
+  const a = await openPlayer(base, { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(a, { online: true, theme: 'Flat Land' });
+  const code = await a.evaluate(() => window.kidsWorld.game.code);
+  const b = await openPlayer(`${base}?code=${code}`, { name: 'Brave Otter' });
+  await clickButton(b, 'go!', '#modal');
+  await inGame(b);
+  const pid = await a.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const me = g.me.body;
+    g.send({ t: 'critter', op: 'invite', type: 'rope', x: me.x + 1.2, y: me.y, z: me.z });
+    return g.pid;
+  });
+  await until(a, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Jump'));
+  await until(b, () => [...window.kidsWorld.game.critters.values()].find((c) => c.type === 'rope')?.model.group.visible);
+  await a.keyboard.press('KeyQ');
+  await until(a, () => window.kidsWorld.game.hooping?.rope);
+  await keepTime(a);
+  await until(b, (pid) => window.kidsWorld.game.players.get(pid).avatar.rope?.parent, pid);
+  await until(b, () => ![...window.kidsWorld.game.critters.values()].find((c) => c.type === 'rope').model.group.visible);
+  assert.equal(await b.evaluate((pid) => window.kidsWorld.game.players.get(pid).avatar.anim, pid), 16);
+  // Going round on the friend's page too, and as far round as it is on yours:
+  // held still at the last move your page tells of, it comes to rest there.
+  await until(
+    b,
+    (pid) => {
+      const seen = (window.seenTurns ??= new Set());
+      seen.add(window.kidsWorld.game.players.get(pid).avatar.ropeTurn);
+      return seen.size > 5;
+    },
+    pid,
+  );
+  const told = await a.evaluate(() => {
+    const g = window.kidsWorld.game;
+    g.sendMove(true);
+    g.sendMove = () => {};
+    return g.hooping.rope.turn;
+  });
+  await until(
+    b,
+    ({ pid, told }) => {
+      const off = Math.abs(window.kidsWorld.game.players.get(pid).avatar.ropeTurn - (told % (Math.PI * 2)));
+      return Math.min(off, Math.PI * 2 - off) < 0.1;
+    },
+    { pid, told },
+  );
+  await a.evaluate(() => delete window.kidsWorld.game.sendMove);
+  // Stop jumping, and it catches your feet, back on the ground for the friend too.
+  await stopJumping(a);
+  await until(a, () => !window.kidsWorld.game.hooping);
+  await until(b, (pid) => !window.kidsWorld.game.players.get(pid).avatar.rope?.parent, pid);
+  await until(b, () => {
+    const rope = [...window.kidsWorld.game.critters.values()].find((c) => c.type === 'rope');
+    return rope.model.group.visible && !rope.hooper;
+  });
+  assert.deepEqual(pageErrors, []);
+  await a.browserContext().close();
+  await b.browserContext().close();
+});
+
 test('a TV: Q by it opens its picture, ◀ ▶, a tap and the number keys flip the channel, every show is drawn, and the next TV opens on the channel last watched', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });

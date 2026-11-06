@@ -286,7 +286,7 @@ export function mergeProfiles(mine, theirs) {
 }
 
 // Stats that are the best there has ever been, not a count to add up.
-const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm']);
+const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm', 'ropebest']);
 
 // What you did as the guest on a device, added to the player you logged in
 // as there, once, when you say it was you: every sticker either has earned

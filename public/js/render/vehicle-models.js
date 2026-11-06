@@ -14,6 +14,7 @@
 // What is up over the seats (a rotor, a balloon) is in v.over.
 import * as THREE from '../../vendor/three.module.js';
 import { CRITTER_INFO } from '../shared/critters.js';
+import { GRIP_TONE, ROPE_TONE } from './jump-rope.js';
 import { bakeCached, cone, cylinder, geo, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
@@ -319,6 +320,30 @@ function hoop(id) {
   ring.add(mesh(torus(0.42, 0.042), toon('#f2b53c')));
   for (let i = 0; i < 4; i++) ring.add(mesh(torus(0.42, 0.045, Math.PI / 4), toon('#e8453c')).rotateZ((i / 4) * Math.PI * 2 + Math.PI / 8));
   return { ...v, hoopRing: turn, height: 0.12, center: 0.06, pick: 0.45, shadow: 0.45, seen: 80 };
+}
+
+// A jump rope, coiled up on the grass with its grips on top, until someone
+// walks up and takes it in their hands, where it is drawn on them instead
+// (render/jump-rope.js).
+function rope(id) {
+  const v = rig();
+  const line = toon(ROPE_TONE);
+  const grip = toon(GRIP_TONE);
+  for (const [r, x, y, z] of [
+    [0.31, 0, 0.022, 0],
+    [0.27, 0.03, 0.058, -0.02],
+    [0.29, -0.02, 0.094, 0.02],
+  ]) {
+    const loop = mesh(torus(r, 0.02), line, x, y, z);
+    loop.rotation.x = Math.PI / 2;
+    v.body.add(loop);
+  }
+  for (const side of [-1, 1]) {
+    const held = mesh(cylinder(0.03, 0.03, 0.2, 10), grip, side * 0.25, 0.125, side * 0.13);
+    held.rotation.set(Math.PI / 2, 0, side * 0.9);
+    v.body.add(held);
+  }
+  return { ...v, height: 0.16, center: 0.08, pick: 0.45, shadow: 0.42, seen: 80 };
 }
 
 // A little wooden sled: two runners with a curl up in front (a rod bent
@@ -830,7 +855,7 @@ function kart(id) {
   return { ...v, height: 0.75, center: 0.35, pick: 0.6, shadow: 0.7, seen: 110 };
 }
 
-export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, hoop, bus, ferry, helicopter, balloon, paintvan, mower, kart };
+export const VEHICLE_BUILDERS = { car, boat, digger, minecart, scooter, sled, hoop, rope, bus, ferry, helicopter, balloon, paintvan, mower, kart };
 
 // One frame of a vehicle: its wheels (and tracks) turning as far as it went,
 // the digger's drill and the boat's propeller going round while it moves,

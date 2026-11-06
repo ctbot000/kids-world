@@ -17,6 +17,7 @@ import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
 import { FIGHT } from './shared/fishing.js';
+import { ropeDue } from './shared/jump-rope.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
 import { prettyCode } from './shared/codes.js';
@@ -2377,7 +2378,7 @@ export class UI {
           card('🐬', 'Sea friends', ['Fish, dolphins, a whale, turtles, crabs and an octopus live in and by the sea, and penguins and seals on snowy islands. Swim out to meet them!']),
           card('🐴', 'Ride', ['Walk up to a pony, a cow, an elephant, a giraffe, a reindeer, a polar bear, a unicorn or a big dog, and tap Ride (or press ', h('kbd', {}, 'Q'), '). Swim out to a dolphin or the whale and ride them too! Jump to jump, leap, blow water or spray it. ', h('kbd', {}, 'Q'), ' or 👋 gets you off.']),
           card('🐲', 'The dragon', ['Every 🌋 volcano island has a great green dragon, asleep near the crater. Go near and it wakes up and breathes fire: when it rears back, run out of the way it faces! Bop it (', h('kbd', {}, 'X'), ') until it is tired out and it is tame — walk up, tap Ride and hold jump to fly. Tame a dragon ' + TAMES_TO_INVITE + ' times and your own is in the toy box, to bring to any island.']),
-          card('🚗', 'Vehicles', ['Walk up to the car, the go-kart, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. A sled is quicker on snow than on grass, and slides down hills — bring one from the toy box. A hula hoop from the toy box goes round your waist: walk up to it and tap ⭕ Spin (or press Q), and keep still to keep it up! Bring the paint van from the toy box too: pick a colour with the Paint tool and drive round, and it paints the ground as you go. The lawn mower cuts the grass it rolls over into a short stripe, and the flowers in its path go in your basket — but it never cuts anything anyone built, nor a crop on the farmland. More are in the toy box.']),
+          card('🚗', 'Vehicles', ['Walk up to the car, the go-kart, the boat, the digger, a mine cart or the kick scooter and tap Drive (or press ', h('kbd', {}, 'Q'), '). Jump to honk! The scooter is quicker than you run, and its bell goes ring-ring. Drive the digger into a hill to dig a tunnel and find jewels, and push a mine cart along its rails. A sled is quicker on snow than on grass, and slides down hills — bring one from the toy box. A hula hoop from the toy box goes round your waist: walk up to it and tap ⭕ Spin (or press Q), and keep still to keep it up! Jump over a jump rope from the toy box too: walk up to it and tap 🪢 Jump (or press Q), then jump each time the rope comes round to your feet. How many in a row can you do? Bring the paint van from the toy box too: pick a colour with the Paint tool and drive round, and it paints the ground as you go. The lawn mower cuts the grass it rolls over into a short stripe, and the flowers in its path go in your basket — but it never cuts anything anyone built, nor a crop on the farmland. More are in the toy box.']),
           card('🚌', 'Ride together', ['The bus and the ferry have seats for six friends. One of you drives; the others walk up and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride along. Jump to honk!']),
           card('🚁', 'Fly', ['Get in the helicopter or the hot-air balloon and hold jump (', h('kbd', {}, 'Space'), ') to fly up, and ⬇️ (', h('kbd', {}, 'Shift'), ') to come down. Friends can hop on too: two in the helicopter, four in the balloon.']),
           card('🎡', 'Fun park', ['A 🎡 Fun Park Island has a roller coaster, a Ferris wheel and a merry-go-round. Walk up to one and tap Hop on (or press ', h('kbd', {}, 'Q'), ') to ride with your friends. Hop in the roller coaster’s train while it waits at the station: up the lift hill, down the drop and round the loop it goes, and you get off back at the station.']),
@@ -3311,6 +3312,7 @@ export class UI {
     hold($('btn-jump'), 'jumpHeld');
     hold($('btn-down'), 'downHeld');
     $('btn-down').addEventListener('pointerdown', () => game.pressDown());
+    $('btn-jump').addEventListener('pointerdown', () => this.input.jumpPresses++);
     $('btn-fly').onclick = () => game.toggleFly();
     $('btn-attack').onpointerdown = (e) => {
       e.preventDefault();
@@ -4948,7 +4950,8 @@ export class UI {
   }
 
   // ⭕ Spin, beside a hula hoop put down next to you, and 👋 Drop while it
-  // goes round your waist: the Ride button, for hoops.
+  // goes round your waist: the Ride button, for hoops. 🪢 Jump and 👋 Drop for
+  // a jump rope.
   hoopButton(g, r) {
     const el = $('ride');
     const c = g.critters.get(g.hooping?.id ?? g.hoopTarget);
@@ -4958,14 +4961,16 @@ export class UI {
       return;
     }
     const touch = this.input.touchMode;
-    const label = g.hooping ? '👋 Drop' : '⭕ Spin';
+    const rope = c.type === 'rope';
+    const label = g.hooping ? '👋 Drop' : rope ? '🪢 Jump' : '⭕ Spin';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', g.hooping ? 'Drop the hula hoop' : `Spin ${c.name || 'the hula hoop'}`);
+      el.setAttribute('aria-label', g.hooping ? `Drop the ${rope ? 'jump rope' : 'hula hoop'}` : rope ? `Jump with ${c.name || 'the jump rope'}` : `Spin ${c.name || 'the hula hoop'}`);
     }
-    const scr = r.project(at.x, at.y + (g.hooping ? 1 : 0.3), at.z);
+    // (Held as you hop over a rope, staying where it is to be tapped.)
+    const scr = r.project(at.x, at.y + (g.hooping ? 1 - (rope ? g.airOver(at) : 0) : 0.3), at.z);
     if (!scr.visible && !g.hooping) {
       el.hidden = true;
       return;
@@ -4980,15 +4985,23 @@ export class UI {
   }
 
   // While a hula hoop goes round your waist: how many times round, over the
-  // hotbar.
+  // hotbar. With a jump rope in your hands: how many jumps, your best, and,
+  // lit up as it comes down to your feet, that it is time to hop.
   renderHoop(g) {
     const el = $('hoop');
-    const spins = g?.hooping ? g.hooping.spins : -1;
-    const key = String(spins);
+    const held = g?.hooping;
+    const r = held?.rope;
+    const best = r ? g.profile.data.stats.ropebest : 0;
+    const due = Boolean(r && g.me.body.onGround && ropeDue(r));
+    const key = r ? `${r.jumps}|${r.passes > 0}|${best}|${due}` : String(held ? held.spins : -1);
     if (el.dataset.key === key) return;
     el.dataset.key = key;
-    el.hidden = spins < 0;
-    if (spins >= 0) el.textContent = `⭕ ${spins} ${spins === 1 ? 'spin' : 'spins'}`;
+    el.hidden = !held;
+    el.classList.toggle('due', due);
+    if (r) {
+      const count = r.jumps || r.passes ? `🪢 ${r.jumps} ${r.jumps === 1 ? 'jump' : 'jumps'}` : '🪢 Get ready…';
+      el.replaceChildren(count, ...(best ? [h('span', { class: 'muted' }, `Best ${best}`)] : []), h('span', { class: 'rope-now' }, g.touch ? 'Jump! ⤴️' : 'Jump!'));
+    } else if (held) el.textContent = `⭕ ${held.spins} ${held.spins === 1 ? 'spin' : 'spins'}`;
   }
 
   // While a fish is on your line: how tight the line is (the needle over

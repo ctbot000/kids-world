@@ -45,6 +45,8 @@ export const XP_FOR = {
   escalators: { xp: 2, cap: 100 },
   walkways: { xp: 2, cap: 100 },
   bounces: { xp: 0.5, cap: 400 },
+  ropejumps: { xp: 0.5, cap: 400 },
+  ropebest: { xp: 1, cap: 100 },
   campouts: { xp: 10 },
   freed: { xp: 50 },
   helped: { xp: 20 },

@@ -21,7 +21,7 @@ import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import { BLOCK_CM, cleanKit, IslandEnv, isKit, MAX_BOTS, MAX_KITS, problems, RobotSim, startFrom } from './robokit.js';
 import * as B from './blocks.js';
 import { trainAt } from './coaster.js';
-import { CRITTER_INFO, CritterSim, FLOWERS, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
+import { CRITTER_INFO, CritterSim, FLOWERS, heldToy, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
 import { Rng } from './rng.js';
 import { FIRE as BLAZE, Fires, strikeSpot } from './fire.js';
@@ -510,18 +510,20 @@ export class Room {
       // A hula hoop spun round the waist (critters.js hoop), and dropped:
       // everyone's copy of the island draws the hoop at their friend's waist,
       // swinging their hips, until it drops. The hoop itself stays where it
-      // was put down on the ground, so nothing more needs saying.
+      // was put down on the ground, so nothing more needs saying. A jump rope
+      // taken up in the hands (critters.js rope) goes the same way.
       case 'hoop': {
         const c = this.critters.get(msg.id);
-        if (!c || c.type !== 'hoop') break;
+        if (!c || !heldToy(c.type)) break;
         if (msg.op === 'spin') {
           // Only a hoop nobody else is spinning, lying beside you, and only
           // one at a time: it goes round with you (critters.js) until it
-          // drops, by itself at the latest when its time is up.
+          // drops, a hoop by itself at the latest when its time is up (a
+          // rope goes on for as long as you keep hopping over it).
           if ((c.hooper && c.hooper !== pid) || Math.hypot(c.x - p.s[0], c.z - p.s[2]) > 3 || Math.abs(c.y - p.s[1]) > 2) break;
           this.unhoop(pid);
-          const spin = CRITTER_INFO.hoop.hoop;
-          Object.assign(c, { hooper: pid, state: 'hoop', hoopUntil: this.now() + (spin.spin + spin.wobble + 2) * 1000 });
+          const spin = CRITTER_INFO[c.type].hoop;
+          Object.assign(c, { hooper: pid, state: 'hoop', hoopUntil: spin ? this.now() + (spin.spin + spin.wobble + 2) * 1000 : Infinity });
           this.broadcast({ t: 'hoop', op: 'spin', id: c.id, pid });
         } else if (msg.op === 'drop' && c.hooper === pid) {
           this.unhoop(pid);
@@ -898,7 +900,7 @@ export class Room {
     const x = Math.min(w.W, Math.max(0, s[0]));
     const y = Math.min(w.H + 8, Math.max(0, s[1]));
     const z = Math.min(w.D, Math.max(0, s[2]));
-    const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(15, s[4] | 0)), s[5] & 0xff];
+    const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(16, s[4] | 0)), s[5] & 0xff];
     p.s = state;
     // Up in the air (or flying, or swimming), for King Grumble's stomp to miss.
     if (this.adventure) {
@@ -1113,7 +1115,7 @@ export class Room {
         }
         const riding = this.critters.get(msg.id);
         if (riding?.rider || riding?.passengers?.some(Boolean) || riding?.hooper) {
-          this.notice(conn, riding.hooper ? `Someone is spinning ${riding.name}! Wait until it drops.` : `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
+          this.notice(conn, riding.hooper ? `Someone is ${riding.type === 'rope' ? 'jumping with' : 'spinning'} ${riding.name}! Wait until it drops.` : `Someone is riding ${riding.name}! Wait until they get off.`, 'info');
           return;
         }
         // The island's own dragon stays: the volcano island would not be
@@ -1223,11 +1225,12 @@ export class Room {
     }
   }
 
-  // Whatever hula hoop pid was spinning drops where they stand: nobody's
-  // hooping it now, and everyone is told.
+  // Whatever hula hoop pid was spinning, or jump rope they had in their
+  // hands, drops where they stand: nobody's hooping it now, and everyone is
+  // told.
   unhoop(pid) {
     for (const c of this.critters.list) {
-      if (c.type !== 'hoop' || c.hooper !== pid) continue;
+      if (c.hooper !== pid) continue;
       Object.assign(c, { hooper: 0, state: 'idle', body: null });
       this.broadcast({ t: 'hoop', op: 'drop', id: c.id, pid });
     }

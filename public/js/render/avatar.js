@@ -12,6 +12,7 @@ import { HIPS } from '../shared/critters.js';
 import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { buildOf, FUR_COLORS, GROWN_UP, HAIR_COLORS, headOf, isPerson, lookScale, lookTall, SKIN_TONES } from '../shared/words.js';
 import { fishingRod } from './fishing-rod.js';
+import { heldRope, placeRope } from './jump-rope.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
 // A King Punch's charge (game.js chargeBop): how long it takes, and how far
@@ -308,7 +309,7 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // enough to fit in it, the root in the middle of the bed (shared/seats.js);
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14, fish: 15 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14, fish: 15, rope: 16 };
 // How long someone on a coffee break waits between sips, at least and at
 // most, each wait picked at random so no two people sip together; and how
 // long a sip takes (s).
@@ -2808,6 +2809,22 @@ export class Avatar {
       [armFwdL, armTwistL, armRaiseL, bendL] = this.reachTo([-0.05 * k, B.shoulder[0] * 0.3, 0.17 * k]);
       headNod = 0.16 + dip * 0.1;
       headTilt = dip ? 0 : Math.sin((t + this.quirk) * 0.5) * 0.05;
+    } else if (anim === ANIM.rope) {
+      // Jumping rope: hands out by the hips, the wrists going round with the
+      // rope (holdRope), feet together, the knees tucking up in the air and
+      // soft on the ground, looking down at your feet.
+      const k = B.arm[0] / 0.3;
+      const turn = this.ropeTurn ?? 0;
+      const air = Math.min(1, (this.ropeAir ?? 0) / 0.4);
+      const hand = this.reachTo([B.shoulder[1] + 0.2 * k, 0.05 * k - Math.cos(turn) * 0.03 * k, 0.12 * k - Math.sin(turn) * 0.03 * k]);
+      [armFwdR, armTwistR, armRaiseR, bendR] = hand;
+      [armFwdL, armTwistL, armRaiseL, bendL] = hand;
+      legs = [
+        [-0.12 - air * 0.5, -0.03, 0.24 + air * 0.8, 0],
+        [-0.12 - air * 0.5, 0.03, 0.24 + air * 0.8, 0],
+      ];
+      bob = -0.012;
+      headNod = 0.1;
     } else if (anim === ANIM.hoop) {
       // Spinning a hula hoop round the waist: the hips swing side to side to
       // keep it up, knees soft, arms out for balance and the head steady. The
@@ -3028,6 +3045,7 @@ export class Avatar {
     this.holdMug(anim === ANIM.coffee);
     this.holdBars(riding && Boolean(this.ride?.grips) && !this.emote && swung >= swing.secs, lean);
     this.holdRod(anim === ANIM.fish && !this.emote);
+    this.holdRope(anim === ANIM.rope && !this.emote);
     if (anim === ANIM.type) this.typeHands(lean, twist, t + this.quirk);
     this.body.position.y = bob + hop + dip;
     // In bed, the whole of you tips back about your feet, face up, and sinks
@@ -3289,6 +3307,32 @@ export class Avatar {
     if (!tip) return null;
     tip.updateWorldMatrix(true, false);
     return tip.getWorldPosition(out);
+  }
+
+  // Jumping rope (ANIM.rope), a grip in each hand and a weapon put away
+  // meanwhile. The rope hangs on the body between where the hands are, as far
+  // round as ropeTurn says, reaching down to the ground from them however high
+  // you hop (ropeAir: how high), and up over your head and any hat.
+  holdRope(holding) {
+    const hand = this.hands[1];
+    if (holding !== Boolean(this.rope?.parent)) {
+      if (holding) {
+        this.rope ??= heldRope();
+        this.body.add(this.rope);
+        this.weapon?.removeFromParent();
+      } else {
+        this.rope.removeFromParent();
+        if (this.weapon && !this.handsPlaying && !this.barsHeld && !this.mug?.parent?.parent) hand.add(this.weapon);
+      }
+    }
+    if (!holding) return;
+    const [left, right] = (this.ropeHands ??= [new THREE.Vector3(), new THREE.Vector3()]);
+    this.hands[0].updateWorldMatrix(true, false);
+    hand.updateWorldMatrix(true, false);
+    this.body.worldToLocal(this.hands[0].getWorldPosition(left));
+    this.body.worldToLocal(hand.getWorldPosition(right));
+    left.y = right.y = (left.y + right.y) / 2 - 0.03 * this.build.hand;
+    placeRope(this.rope, left, right, this.ropeTurn ?? 0, left.y + (this.ropeAir ?? 0) / this.size, (1.41 + this.tall + 0.2) / this.size - left.y);
   }
 
   // The right arm's angles (the left's mirror them) to hold the scooter's

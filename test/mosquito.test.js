@@ -81,8 +81,8 @@ test('the mosquito is a monster now, and no animal any more', () => {
   // clam after that, a sea creature like the octopus, the big
   // friendly dog after that, the sled after that, the paint van after
   // that, the lawn mower after that, the go-kart after that, the roller
-  // coaster after that, the hula hoop after that, and the zoo's animals on
-  // the end of all of them.)
+  // coaster after that, the hula hoop after that, and the zoo's animals
+  // and the jump rope on the end of all of them.)
   assert.deepEqual(CRITTER_TYPES.slice(CRITTER_TYPES.indexOf('carousel'), CRITTER_TYPES.indexOf('hoop') + 1), ['carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop']);
   const sim = new MonsterSim(1);
   const w = meadow();

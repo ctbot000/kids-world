@@ -12,6 +12,9 @@ export class Input {
     this.keys = new Set();
     this.move = { x: 0, y: 0 };
     this.jumpHeld = false;
+    // How many times jump has gone down: a press too quick for a frame to
+    // see it held still counts (a jump rope wants each one).
+    this.jumpPresses = 0;
     this.downHeld = false;
     this.bopHeld = false;
     this.pointer = { x: 0, y: 0, inside: false };
@@ -90,6 +93,7 @@ export class Input {
       if (!this.enabled) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(code)) e.preventDefault();
       if (!e.repeat) {
+        if (code === 'Space') this.jumpPresses++;
         const handled = this.emit('key', code, e);
         if (handled) e.preventDefault();
       }

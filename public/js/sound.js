@@ -225,6 +225,16 @@ export class Sound {
         this.noise(0.4, { type: 'bandpass', freq: 520, sweep: 340, q: 1.2, gain: 0.07 * (opts.soft ? 0.5 : 1), attack: 0.08 });
         if (opts.drop) this.tone(190, { decay: 0.24, gain: 0.14, slide: 110, type: 'triangle' });
         break;
+      case 'rope':
+        // A jump rope: a little hop over it, a thud when it drops, and
+        // otherwise the slap of it on the ground as it comes round.
+        if (opts.hop) this.tone(330 * r(), { decay: 0.09, gain: 0.08, slide: 520, slideTime: 0.07 });
+        else if (opts.drop) this.tone(170, { decay: 0.22, gain: 0.14, slide: 90, type: 'triangle' });
+        else {
+          this.noise(0.05, { type: 'highpass', freq: 2200, gain: 0.14 * (opts.soft ? 0.4 : 1) });
+          this.noise(0.16, { type: 'bandpass', freq: 800, sweep: 300, q: 1.2, gain: 0.05 * (opts.soft ? 0.4 : 1) });
+        }
+        break;
       case 'jump':
         this.tone(260 * r(), { decay: 0.16, gain: 0.16, slide: 560, slideTime: 0.12 });
         break;
