@@ -134,7 +134,9 @@ test('an island turns away a watcher without a good ticket', async () => {
     joinAs(room, 'Happy Panda');
     const ticket = await keeper.watchTicket(CODE);
     const [until, sig] = ticket.split('.');
-    const bad = [undefined, '', 'nope', `${until}.${sig.slice(0, -2)}AA`, `${Number(until) + 1}.${sig}`, `${until}.${sig}x`];
+    // (Not AA over a signature that may end in AA already, 1 time in 256.)
+    const other = sig.endsWith('AA') ? 'QQ' : 'AA';
+    const bad = [undefined, '', 'nope', `${until}.${sig.slice(0, -2)}${other}`, `${Number(until) + 1}.${sig}`, `${until}.${sig}x`];
     for (const t of bad) {
       const c = await watchWith(room, t);
       assert.equal(c.last('welcome'), undefined, `not with ${t}`);

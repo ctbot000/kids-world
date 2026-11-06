@@ -147,7 +147,14 @@ async function openPlayer(url, profile = {}, init = null) {
       const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
       localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
       if (seen !== null && localStorage.getItem('kidsworld.seenNews') === null) localStorage.setItem('kidsworld.seenNews', JSON.stringify(seen));
-      if (story && localStorage.getItem('kidsworld.isleStory') === null) localStorage.setItem('kidsworld.isleStory', JSON.stringify(story));
+      // (Logged in, a player has a space of their own, so as soon as this page
+      // comes back as them: else the story opens as they arrive, shutting out
+      // the keys a test goes on to hold, whenever it gets there first.)
+      const who = JSON.parse(localStorage.getItem('kidsworld.who') ?? 'null');
+      for (const space of ['', ...(who?.player ? [`@${who.player}.`] : [])]) {
+        const key = `kidsworld.${space}isleStory`;
+        if (story && localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(story));
+      }
     },
     rest,
     seenNews,
@@ -173,7 +180,7 @@ async function until(page, fn, arg, timeout = 30000 * SLOW) {
         // An open dialog: what it says of how it is going, and what is in its boxes.
         dialog: document.getElementById('modal').hidden
           ? undefined
-          : { note: document.querySelector('#modal .login-note')?.textContent, boxes: [...document.querySelectorAll('#modal input')].map((b) => b.value) },
+          : { note: document.querySelector('#modal .login-note')?.textContent, boxes: [...document.querySelectorAll('#modal input')].map((b) => b.value), says: document.getElementById('modal').textContent.trim().replace(/\s+/g, ' ').slice(0, 120) },
       }))
       .catch(() => null);
     error.message += ` while waiting for ${String(fn).slice(0, 160)}; page: ${JSON.stringify(state)}`;
