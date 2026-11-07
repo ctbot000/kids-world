@@ -31,11 +31,12 @@ import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, SHARDS } from './shared/isle-story.js';
+import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, SPORES, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, maxHp, moleUnder, SPORES, staggerOf, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -94,7 +95,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl', 'heap', 'howl', 'blink']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, for
 // KICK_HOLD_SECS at most, not only once the host's updates say so.
@@ -215,7 +216,7 @@ const FLING_SPIN = 2.6;
 // higher than the last, and from the third on says how many.
 const CHAIN_MS = 1500;
 // What a blow sounds on, for those not made of jelly (sound.js whack).
-const HIT_ON = { knight: 'metal', golem: 'stone', moltok: 'stone' };
+const HIT_ON = { knight: 'metal', golem: 'stone', moltok: 'stone', rattle: 'stone', stinger: 'metal', mimic: 'metal', oak: 'stone' };
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
 // How high round a kid's middle a hula hoop goes, above their feet (a
@@ -239,6 +240,17 @@ const TOUGH_TOLD = {
   ghost: { icon: '👻', text: 'A Lava Ghost! It floats after you and breathes fire. When it rears back, get out of the way it is facing — then bop it three times!' },
   mole: { icon: '🐹', text: 'Mr. Mole! He burrows under the ground — you can’t bop him there. When he pops up beside you, bop him three times or jump on him!' },
   queen: { icon: '👑', text: 'The Queen Mosquito! She darts down out of the air and bumps twice as hard as her little cousins, and nobody can jump on her. Keep at her with your friends: left alone, she gets her hearts back!' },
+  // The beasts (shared/beasts.js), and how to beat each.
+  rattle: { icon: '💀', text: 'Rattlebones! Knock it to pieces, then bop the heap of bones quickly, before it pulls itself back together. A hammer does it twice as fast!' },
+  stinger: { icon: '🦂', text: 'A Stingtail! Don’t jump on it, its armour bites back. When it rears up and a strip shows on the ground, step aside — then bop it.' },
+  wolf: { icon: '🐺', text: 'A Shadow Wolf! Wolves hunt in twos, nearly as quick as you run. Get out of the red ring when one crouches to pounce — and hurt, it howls for another!' },
+  hawk: { icon: '🦅', text: 'A Thunderhawk! It calls lightning down on the red rings, so run out of them. It is out of reach up there: bop it when it swoops down at you.' },
+  mimic: { icon: '🎁', text: 'A Mimic! That was no treasure chest! Bop it or jump on it: it is full of coins.' },
+  oak: { icon: '🌳', text: 'A Grumble Oak! Very slow, but its roots burst up out of the ground on the red rings. It hates fire: a Lava Blade or a dragon’s breath does twice the harm.' },
+  wizard: { icon: '🧙', text: 'A Grumble Wizard! Run out of the red rings where his stars fall. Bop him and he blinks away, so keep after him — or bop him from afar.' },
+  hydra: { icon: '🐍', text: 'A Swamp Hydra, with three heads! When they reach forward together, get out of the way of their venom. Nobody can jump that high: bop it!' },
+  cyclops: { icon: '👁️', text: 'A Cyclops! Watch for its boulders coming down on the red rings, and jump when it raises its club: its stomp misses anyone in the air.' },
+  rex: { icon: '🦖', text: 'Rumble Rex! A bump takes a lot of HP, so keep away and bring your mightiest weapon. Step out of the strip when it rears up, and jump when it crouches!' },
   // The bosses of Adventure Isle (shared/bosses.js), and how to beat each.
   clawbeard: { icon: '🦀', text: 'Captain Clawbeard! When he rears back and a strip shows on the ground, step out of his way — charging into a wall, he sits dazed: bop him then!' },
   puffcap: { icon: '🍄', text: 'Old Puffcap! When he swells up, step back out of his cloud of spores — and run out of the red rings, where his spore pods come down!' },
@@ -249,7 +261,11 @@ const TOUGH_TOLD = {
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
-const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom' };
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak' };
+// What a Swamp Hydra breathes (and anything else that is no fire).
+const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
+// What each beast says as it comes at you.
+const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
@@ -765,12 +781,18 @@ export class Game extends EventTarget {
         }
         // A Puffshroom puffing its cloud of spores (a boss's reaching
         // further, and Bogmaw's swamp gas).
-        if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
+        // (Rumble Rex's roar is a ring rushing out, and no cloud.)
+        if (msg.kind === 'spores' && msg.what === 'roar') {
+          this.stomped(msg);
+          this.sound.play('roar');
+        } else if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
           this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, msg.what === 'gas');
           this.sound.play('blow');
         }
         // A boss's moves (shared/bosses.js): what shows before they come.
         if (msg.kind === 'hurl' || msg.kind === 'leap' || msg.kind === 'rear' || msg.kind === 'bonk') this.bossFx(msg);
+        // A beast's (shared/beasts.js).
+        if (msg.kind === 'howl' || msg.kind === 'blink' || msg.kind === 'rise') this.beastFx(msg);
         break;
       case 'settings':
         this.settings = msg.settings;
@@ -1379,16 +1401,28 @@ export class Game extends EventTarget {
         entry = { id: m.id, kind: m.kind, snaps: [], model: this.renderer.addMonster(m.id, m.kind), grumbleAt: now + Math.random() * 4000 };
         this.monsters.set(m.id, entry);
         if (this.near(m.x, m.y, m.z, 40)) this.renderer.effects.dust(m.x, m.y, m.z);
-        // The first tough one near you this time: what it is.
-        const told = TOUGH_TOLD[m.kind];
-        if (told && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
-          (this.toldKinds ??= new Set()).add(m.kind);
-          this.emit('toast', told);
+      }
+      // A Mimic is nothing but a treasure chest until it opens up.
+      const hidden = m.kind === 'mimic' && m.state === 'idle' && m.hearts === m.max;
+      // The first tough one near you this time: what it is.
+      const told = TOUGH_TOLD[m.kind];
+      if (told && !hidden && !this.toldKinds?.has(m.kind) && this.near(m.x, m.y, m.z, 30)) {
+        (this.toldKinds ??= new Set()).add(m.kind);
+        this.emit('toast', told);
+      }
+      // Rattlebones falling apart.
+      if (m.state === 'heap' && entry.lastState !== 'heap' && this.near(m.x, m.y, m.z, 40)) {
+        this.sound.play('rattle');
+        this.renderer.effects.dust(m.x, m.y, m.z);
+        if (!this.toldHeap) {
+          this.toldHeap = true;
+          this.emit('toast', { icon: '💀', text: 'It fell apart! Bop the heap of bones quickly, before it gets up again.' });
         }
       }
+      entry.lastState = m.state;
       // On Adventure Isle, one near you goes in your monster collection as
       // seen (ui.js monsterBook), whether it came out there or came up to you.
-      if (this.shared && this.adventure && !this.profile.data.stats[seenKey(m.kind)] && this.near(m.x, m.y, m.z, 30)) this.profile.count(seenKey(m.kind), 1, { max: true });
+      if (this.shared && this.adventure && !hidden && !this.profile.data.stats[seenKey(m.kind)] && this.near(m.x, m.y, m.z, 30)) this.profile.count(seenKey(m.kind), 1, { max: true });
       entry.snaps.push({ t: now, x: m.x, y: m.y, z: m.z, yaw: m.yaw, state: m.state });
       entry.hearts = m.hearts;
       entry.max = m.max;
@@ -1449,7 +1483,11 @@ export class Game extends EventTarget {
       this.toldSpikes = true;
       this.emit('toast', { icon: '🦔', text: 'Ouch, spikes! Bop a Spiky instead of jumping on it.' });
     }
-    if (msg.spores && !this.toldSpores) {
+    if (msg.what === 'venom' && !this.toldVenom) {
+      this.toldVenom = true;
+      this.emit('toast', { icon: '🐍', text: 'Ouch, venom! When a Swamp Hydra’s heads reach forward, get out of the way they are facing.' });
+    }
+    if (msg.spores && !msg.what && !this.toldSpores) {
       this.toldSpores = true;
       this.emit('toast', { icon: '🍄', text: 'Achoo, spores! When a Puffshroom swells up, step back out of its cloud — then bop it, or bounce on its cap.' });
     }
@@ -1550,14 +1588,16 @@ export class Game extends EventTarget {
     const fx = this.renderer.effects;
     const here = [p.x, p.y, p.z].every(Number.isFinite);
     const boss = isBoss(entry?.kind);
-    const near = here && this.near(p.x, p.y, p.z, boss || entry?.kind === 'queen' ? 120 : 40);
+    const beast = BEASTS[entry?.kind];
+    const near = here && this.near(p.x, p.y, p.z, boss || entry?.kind === 'queen' || beast?.tier === 2 ? 120 : 40);
     const mine = msg.by === this.pid;
     // The last of its hearts it lost: only you hear how many.
     if (mine && near && entry?.hearts > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: entry.hearts });
     // Off the end of a swing it flies off, and goes pop as it lands (fling).
-    const away = near && entry && !boss ? this.blownAway(entry, msg.by) : null;
+    // (The mightiest beasts are too heavy to fly anywhere: they go pop where they stand.)
+    const away = near && entry && !boss && beast?.tier !== 2 ? this.blownAway(entry, msg.by) : null;
     const queen = entry?.kind === 'queen';
-    const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
+    const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0) + (beast ? XP_FOR.beasts.xp : 0);
     const pop = (x, y, z) => {
       if (near) this.popBurst(entry, x, y, z);
       // The reward for it, where it happened: stars out of the monster, and
@@ -1595,6 +1635,12 @@ export class Game extends EventTarget {
         this.profile.count('queens');
         this.profile.earn(QUEEN_POP.coins);
       }
+      // And a beast, each worth a few coins of its own (a Mimic, a lot).
+      if (beast) {
+        this.profile.count('beasts');
+        this.profile.earn(beast.coins);
+        if (entry.kind === 'mimic' && near) fx.sparkles(p.x, p.y + 0.8, p.z, 40, ['#ffd84d', '#ffcc33', '#ffffff']);
+      }
       if (first && !boss) this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
   }
@@ -1630,6 +1676,11 @@ export class Game extends EventTarget {
     fx.dust(x, y, z);
     // King Grumble goes with a much bigger pop.
     if (kind === 'big' || kind === 'knight' || kind === 'golem') fx.sparkles(x, y + 0.9, z, 30, kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
+    // The mightiest beasts go with a big pop of their own.
+    if (BEASTS[kind]?.tier === 2) {
+      fx.sparkles(x, y + 1.4, z, 60, ['#ffd84d', '#ffffff', '#ff8fc4', '#7fe08c']);
+      fx.firework(x, y + 3, z);
+    }
     // The Queen Mosquito goes with a big pop of her own, crown and all.
     if (kind === 'queen') {
       fx.sparkles(x, y + 1.1, z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
@@ -1717,8 +1768,9 @@ export class Game extends EventTarget {
     // (A boss's breath reaches as far and as wide as its own: msg.r, msg.a.)
     entry.fireReach = Number.isFinite(msg.r) ? msg.r : GHOST_FIRE.reach;
     entry.fireAngle = Number.isFinite(msg.a) ? msg.a : GHOST_FIRE.angle;
+    entry.fireColors = msg.what === 'venom' ? VENOM_COLORS : undefined;
     const p = entry.model.group.position;
-    if (this.near(p.x, p.y, p.z, 30)) this.sound.play('fire');
+    if (this.near(p.x, p.y, p.z, 30)) this.sound.play(msg.what === 'venom' ? 'hiss' : 'fire');
   }
 
   monsterHit(msg) {
@@ -1763,7 +1815,7 @@ export class Game extends EventTarget {
         at: Math.max(now, entry.stopUntil ?? 0),
         fromX: entry.drawn.x - (entry.err?.x ?? 0),
         fromZ: entry.drawn.z - (entry.err?.z ?? 0),
-        dist: KICK_DIST * ((weaponOf(kind)?.push ?? HIT_PUSH) / HIT_PUSH),
+        dist: KICK_DIST * ((weaponOf(kind)?.push ?? HIT_PUSH) / HIT_PUSH) * staggerOf(entry.kind),
       };
     }
     const p = entry?.model.group.position;
@@ -1785,7 +1837,8 @@ export class Game extends EventTarget {
       this.toldHit = performance.now() + 20000;
       const n = msg.hearts | 0;
       const more = n === 1 ? 'One more bop' : `${n} more bops`;
-      const jump = { big: 'Jumping on it takes three.', spiky: 'Don’t jump on it, though!' }[entry?.kind] ?? 'Jumping on it pops it at once.';
+      const land = kindOf(entry?.kind).land;
+      const jump = isBeast(entry?.kind) ? (land ? 'Jumping on it hurts it too.' : 'Don’t jump on it, though!') : ({ big: 'Jumping on it takes three.', spiky: 'Don’t jump on it, though!' }[entry?.kind] ?? 'Jumping on it pops it at once.');
       this.emit('toast', { icon: '👾', text: msg.march ? `Bonk! ${more} and it pops. Jumping on it takes three!` : `Bonk! ${more} and it pops. Watch out, it’s cross now! ${jump}` });
     }
   }
@@ -2545,15 +2598,16 @@ export class Game extends EventTarget {
       // King Grumble can be landed on again and again (and so can one
       // marching on a tower defense island, which a landing only hurts).
       if (entry.stomped && now < entry.stomped) continue;
-      // Nobody lands on a Spiky: the host counts it as a bump. Nor on Mr.
-      // Mole under the ground.
-      if (entry.kind === 'spiky' || moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
+      // Nobody lands on a Spiky, or on a beast too tall or too sharp for it: the
+      // host counts it as a bump. Nor on Mr. Mole under the ground.
+      if (entry.kind === 'spiky' || (isBeast(entry.kind) && !kindOf(entry.kind).land) || moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
       if (Math.hypot(m.x - b.x, m.z - b.z) > size.radius + BODY.radius) continue;
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
-      entry.stomped = isHeavy(entry.kind) || entry.kind === 'knight' || this.defense ? now + 500 : Infinity;
+      // (Only one that pops at once is landed on just the once.)
+      entry.stomped = isHeavy(entry.kind) || entry.kind === 'knight' || kindOf(entry.kind).land !== Infinity || this.defense ? now + 500 : Infinity;
       this.stompLands(entry, m, size);
       this.bop(entry.id, true);
       b.vy = 9;
@@ -2627,7 +2681,7 @@ export class Game extends EventTarget {
     if (recoil) {
       const k = (performance.now() - recoil.at) / 1000 / RECOIL_SECS;
       if (k >= 1) entry.recoil = null;
-      else if (k > 0) y += KICK_HOP * (isBoss(entry.kind) ? 0 : entry.kind === 'golem' ? 0.2 : entry.kind === 'big' ? 0.4 : 1) * 4 * k * (1 - k);
+      else if (k > 0) y += KICK_HOP * (isBoss(entry.kind) ? 0 : entry.kind === 'golem' ? 0.2 : entry.kind === 'big' ? 0.4 : staggerOf(entry.kind)) * 4 * k * (1 - k);
     }
     // Never inside you: right up against you at the most.
     const me = this.me?.body;
@@ -2669,7 +2723,7 @@ export class Game extends EventTarget {
       // Leaning back from the blow, top first, and springing upright.
       const recoil = entry.recoil;
       const k = recoil ? (now - recoil.at) / 1000 / RECOIL_SECS : 1;
-      const lean = k > 0 && k < 1 ? KICK_LEAN * (isBoss(entry.kind) ? 0.3 : 1) * Math.sin(Math.PI * Math.sqrt(k)) * (1 - k) : 0;
+      const lean = k > 0 && k < 1 ? KICK_LEAN * (isBoss(entry.kind) ? 0.3 : Math.max(0.3, staggerOf(entry.kind))) * Math.sin(Math.PI * Math.sqrt(k)) * (1 - k) : 0;
       const c = Math.cos(s.yaw);
       const sn = Math.sin(s.yaw);
       m.group.rotation.x = lean ? lean * (recoil.x * sn + recoil.z * c) : 0;
@@ -2685,19 +2739,24 @@ export class Game extends EventTarget {
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
-      // A Lava Ghost's flames, from its mouth, while it breathes them.
-      if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
+      // A Lava Ghost's flames, from its mouth, while it breathes them (and a
+      // Swamp Hydra's venom, from all three, each its own way).
+      if (now < (entry.fireUntil ?? 0) && m.mouthsAt) {
+        const mouths = m.mouthsAt();
+        const { at, off } = mouths[(entry.mouthTurn = ((entry.mouthTurn ?? 0) + 1) % mouths.length)];
+        this.renderer.effects.flames(at.x, at.y, at.z, (entry.fireYaw ?? s.yaw) + off, entry.fireReach ?? GHOST_FIRE.reach, (entry.fireAngle ?? GHOST_FIRE.angle) * 0.5, entry.fireColors);
+      } else if (now < (entry.fireUntil ?? 0) && m.mouthAt) {
         const at = m.mouthAt();
-        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, entry.fireReach ?? GHOST_FIRE.reach, entry.fireAngle ?? GHOST_FIRE.angle);
+        this.renderer.effects.flames(at.x, at.y, at.z, entry.fireYaw ?? s.yaw, entry.fireReach ?? GHOST_FIRE.reach, entry.fireAngle ?? GHOST_FIRE.angle, entry.fireColors);
       }
       const boss = isBoss(entry.kind);
       const big = isHeavy(entry.kind);
       // A boss dazed from a stomp (or a leap, or a charge into a wall): stars
       // round its head, and the first time you see it near, how to make the
       // most of it.
-      if (boss && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
+      if ((boss || isBeast(entry.kind)) && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
         this.renderer.effects.dizzy(s.x, s.y + (m.height ?? 1.8) + 0.4, s.z, now / 1000, 0.75);
-        if (!this.toldDazed && this.near(s.x, s.y, s.z, 20)) {
+        if (boss && !this.toldDazed && this.near(s.x, s.y, s.z, 20)) {
           this.toldDazed = true;
           this.emit('toast', { icon: '💫', text: `${this.bossInfo().name} is dazed! Bop now: every bop counts three times.` });
         }
@@ -2709,6 +2768,7 @@ export class Game extends EventTarget {
         if (entry.kind === 'mosquito') this.sound.play('mosquito');
         else if (entry.kind === 'queen') this.sound.play('queen');
         else if (entry.kind === 'spider') this.sound.play('spider');
+        else if (BEAST_SOUND[entry.kind]) this.sound.play(BEAST_SOUND[entry.kind]);
         else this.sound.play('grumble', { big });
       }
     }
@@ -2870,6 +2930,32 @@ export class Game extends EventTarget {
     }
     this.sound.play('stomp', { near: Math.max(0.2, 1 - d / 60) });
     if (d < 14) this.renderer.shake(0.3 * (1 - d / 14));
+  }
+
+  // A beast's own moves (shared/beasts.js), as the host tells of them: a howl
+  // or a chant for help, a blink away (sparkles where it was and where it is
+  // now), and a heap of bones getting up again.
+  beastFx(msg) {
+    const fx = this.renderer.effects;
+    const spot = (a) => Array.isArray(a) && a.length === 3 && a.every(Number.isFinite);
+    if (msg.kind === 'blink') {
+      if (!spot(msg.from) || !spot(msg.to) || !this.near(msg.to[0], msg.to[1], msg.to[2], 60)) return;
+      const colors = ['#b18cff', '#ffffff', '#7ae0ff', '#ffd84d'];
+      fx.sparkles(msg.from[0], msg.from[1] + 0.9, msg.from[2], 26, colors);
+      fx.sparkles(msg.to[0], msg.to[1] + 0.9, msg.to[2], 26, colors);
+      this.sound.play('blink');
+      return;
+    }
+    if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.near(msg.x, msg.y, msg.z, 60)) return;
+    if (msg.kind === 'rise') {
+      fx.dust(msg.x, msg.y, msg.z);
+      this.sound.play('rattle');
+    } else if (this.monsters.get(msg.id)?.kind === 'wizard') {
+      fx.sparkles(msg.x, msg.y + 1.2, msg.z, 40, ['#b18cff', '#ffffff', '#7ae0ff']);
+      this.sound.play('chant');
+    } else {
+      this.sound.play('howl');
+    }
   }
 
   // A boss's move coming (shared/bosses.js), as the host tells of it: red

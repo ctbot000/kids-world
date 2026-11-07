@@ -28,7 +28,10 @@ export const STORY_TITLE = 'The Star of Adventure Isle';
 // (bosses.js BOSSES, with the minions it calls to help it), what is told
 // on arriving, as each camp is freed (and the gate it opens) and when the
 // boss is popped. guards: the chapter's own monsters, coming out first among
-// each camp's guards after the mosquito (adventure.js guardKind).
+// each camp's guards after the mosquito (adventure.js guardKind); champions: the
+// beasts (beasts.js) that hold its second camp and its third, one each, as extra
+// guards that do not come back (adventure.js championOf; on the very first stage,
+// only the first of them).
 export const CHAPTERS = [
   {
     key: 'shore',
@@ -39,6 +42,7 @@ export const CHAPTERS = [
     lair: 'Driftwood Fort',
     boss: 'clawbeard',
     guards: ['snapper'],
+    champions: ['rattle', 'stinger'],
     intro:
       'A storm has washed your boat up on Adventure Isle! Its lighthouse has gone dark: King Grumble stole the Star from the top, broke it into seven Star Shards and gave them to his captains to keep. The first is with Captain Clawbeard, a giant pirate crab, in his Driftwood Fort out on Crab Point. Free Seaside Village and the rest of the shore, then go and get it back — and step aside when he charges!',
     freed: [
@@ -57,6 +61,7 @@ export const CHAPTERS = [
     lair: 'Hollow Tree Hideout',
     boss: 'puffcap',
     guards: ['shroom', 'spider'],
+    champions: ['wolf', 'oak'],
     intro:
       'The first Star Shard glows and points into the Whispering Woods, where the trees grow so tall it is dim at noon. Old Puffcap, the grumpiest mushroom of them all, keeps the second shard in the hollow of the oldest tree. Follow the old path — and keep away from the mushrooms that puff!',
     freed: [
@@ -75,6 +80,7 @@ export const CHAPTERS = [
     lair: 'Ice Palace',
     boss: 'frostfang',
     guards: ['yeti'],
+    champions: ['hawk', 'cyclops'],
     intro:
       'Two Star Shards! They point up to Frostpeak, the tallest mountain on the isle, where Frostfang, the biggest yeti there ever was, keeps the third shard in his Ice Palace at the top. The only way up is the icy pass, where little yetis stomp about — jump when a yeti stomps!',
     freed: [
@@ -93,6 +99,7 @@ export const CHAPTERS = [
     lair: 'Candy Castle',
     boss: 'gumbo',
     guards: ['gummy'],
+    champions: ['mimic', 'wizard'],
     intro:
       'Down the far side of Frostpeak lies Candy Canyon, the sweetest place on the isle — but Gumbo the Gummy Giant has the fourth shard in his Candy Castle, and his gang has taken over the Gumdrop Factory to make grumpy gummy bears! Pop a gummy bear and it splits into two little ones, so pop those too.',
     freed: [
@@ -111,6 +118,7 @@ export const CHAPTERS = [
     lair: 'Bog Fort',
     boss: 'bogmaw',
     guards: ['mosquito'],
+    champions: ['stinger', 'hydra'],
     intro:
       'The Star Shards lead into Misty Marsh, where boardwalks wind between the pools and the mist hangs low. Bogmaw the Bog Toad sits on the fifth shard in his Bog Fort — and the Queen Mosquito herself keeps a nest here! Keep to the boardwalks, and pop her together.',
     freed: [
@@ -129,6 +137,7 @@ export const CHAPTERS = [
     lair: 'Fire Fort',
     boss: 'moltok',
     guards: ['ghost', 'golem'],
+    champions: ['rattle', 'rex'],
     intro:
       'The sixth Star Shard is up on Ember Mountain, the volcano, in the Fire Fort of Moltok the Lava Golem. Rivers of lava run down its sides, Lava Ghosts drift over them and Stone Golems stand guard. Keep to the path and the bridges — lava is hot!',
     freed: [
@@ -147,6 +156,7 @@ export const CHAPTERS = [
     lair: 'Throne Yard',
     boss: 'king',
     guards: ['knight'],
+    champions: ['wizard', 'cyclops'],
     intro:
       'Six Star Shards shine! The last one is with King Grumble himself, in his own castle on Gloom Rock — and he knows every one of his captains’ tricks. Break through the castle gates, climb the great stairs and pop him once and for all!',
     freed: [

@@ -751,6 +751,56 @@ export class Sound {
           this.tone(1300 - i * 80, { at, decay: 0.028, gain: 0.026, slide: 700, slideTime: 0.028 });
         }
         break;
+      case 'rattle':
+        // Clack-a-clack-a-clack: Rattlebones' bones, falling apart or coming at you.
+        for (let i = 0; i < 7; i++) {
+          const at = i * 0.055 + Math.random() * 0.015;
+          this.noise(0.012, { at, type: 'bandpass', freq: 1500 + Math.random() * 1500, q: 4, gain: 0.2 });
+          this.tone((640 + Math.random() * 500) * r(), { at, decay: 0.03, gain: 0.04, type: 'square' });
+        }
+        break;
+      case 'growl':
+        // Grrrr: a Shadow Wolf closing in.
+        this.tone(88 * r(), { type: 'sawtooth', attack: 0.06, decay: 0.6, gain: 0.06, slide: 76, vibrato: 26 });
+        this.tone(176 * r(), { type: 'square', attack: 0.08, decay: 0.45, gain: 0.014, vibrato: 26 });
+        break;
+      case 'howl':
+        // Aroooo: up, held, and away.
+        this.tone(300 * r(), { type: 'sawtooth', attack: 0.25, decay: 1.7, gain: 0.03, slide: 620, slideTime: 0.55, vibrato: 5 });
+        this.tone(600 * r(), { type: 'sine', attack: 0.25, decay: 1.6, gain: 0.05, slide: 1200, slideTime: 0.55, vibrato: 5 });
+        break;
+      case 'caw':
+        // A Thunderhawk's screech, from high up, and a crackle under it.
+        this.tone(1500 * r(), { type: 'sawtooth', attack: 0.02, decay: 0.42, gain: 0.03, slide: 720, slideTime: 0.36, vibrato: 30 });
+        this.noise(0.2, { type: 'bandpass', freq: 3200, q: 2, gain: 0.05 });
+        break;
+      case 'hiss':
+        // Ssss: a Stingtail's tail, or three heads of a Swamp Hydra.
+        this.noise(0.5, { type: 'highpass', freq: 4200, sweep: 6400, gain: 0.08, attack: 0.05 });
+        this.tone(170 * r(), { type: 'sawtooth', attack: 0.04, decay: 0.3, gain: 0.018, vibrato: 18 });
+        break;
+      case 'chomp':
+        // Clop-clop: a Mimic's lid coming down on its teeth.
+        for (let i = 0; i < 2; i++) {
+          this.noise(0.03, { at: i * 0.14, type: 'bandpass', freq: 900, q: 2, gain: 0.3 });
+          this.tone(150 * r(), { at: i * 0.14, decay: 0.08, gain: 0.14, slide: 80, slideTime: 0.06, attack: 0.002 });
+        }
+        break;
+      case 'chant':
+        // A Grumble Wizard muttering his magic: strange little notes going up.
+        [71, 75, 78, 83, 87].forEach((n, i) => this.tone(NOTE(n) * r(), { at: i * 0.08, decay: 0.3, gain: 0.05, type: 'triangle', vibrato: 12 }));
+        this.noise(0.5, { type: 'highpass', freq: 6000, sweep: 9000, gain: 0.03 });
+        break;
+      case 'blink':
+        // Pwip: gone, and back somewhere else.
+        this.tone(320 * r(), { decay: 0.16, gain: 0.08, slide: 2200, slideTime: 0.14, type: 'triangle' });
+        this.noise(0.1, { type: 'highpass', freq: 5000, gain: 0.05 });
+        break;
+      case 'bellow':
+        // A great slow grumble: a Cyclops or a Grumble Oak, deep down.
+        this.tone(52 * r(), { type: 'sawtooth', attack: 0.12, decay: 0.9, gain: 0.09, slide: 42, vibrato: 7 });
+        this.tone(104 * r(), { type: 'triangle', attack: 0.12, decay: 0.8, gain: 0.05, slide: 84, vibrato: 7 });
+        break;
       case 'mole':
         // Shff-shff-pop! Mr. Mole coming up out of his burrow: earth
         // shifting under the ground, then the burst of dirt as he breaks

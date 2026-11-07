@@ -45,6 +45,8 @@ import { PetModel, petSeat } from './pet-models.js';
 import { SpiderModel } from './spider-model.js';
 import { MoleModel } from './mole-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
+import { makeBeast } from './beasts.js';
+import { isBeast } from '../shared/beasts.js';
 import { environment, Sky } from './sky.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
@@ -612,11 +614,11 @@ export class Renderer {
   // kind: 'blob', 'big' or 'spiky', 'king' for King Grumble, 'mosquito' for
   // the giant mosquito, 'queen' for the Queen Mosquito, 'spider' for the
   // giant spider, 'mole' for Mr. Mole, 'snapper' for a Snappy Crab and
-  // 'shroom' for a Puffshroom (isle-monsters.js), and the other bosses'
-  // (boss-models.js).
+  // 'shroom' for a Puffshroom (isle-monsters.js), the other bosses'
+  // (boss-models.js) and the beasts' (beasts.js).
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
+    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : isBeast(kind) ? makeBeast(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
@@ -688,7 +690,12 @@ export class Renderer {
   }
 
   hurl(from, to, ms, r, what, land) {
-    this.bossFx.push(new Thrown(this.scene, this.effects, from, to, ms, r, what, land));
+    // A bolt comes down out of the sky as it lands, on the ring it was aimed at.
+    const strike = what === 'bolt' ? (at) => this.zapBolt([{ x: at[0], y: at[1] + 26, z: at[2] }, { x: at[0], y: at[1], z: at[2] }]) : null;
+    this.bossFx.push(new Thrown(this.scene, this.effects, from, to, ms, r, what, (at) => {
+      strike?.(at);
+      land?.(at);
+    }));
   }
 
   // The shows of the mightiest toy weapons (weapon-fx.js): a bolt of lightning

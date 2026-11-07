@@ -10,6 +10,8 @@
 // - Anyone presses Start for the next wave. Its monsters come out of the
 //   gate one after another, more of them and with more hearts each wave,
 //   and King Grumble himself in the middle and last wave, big and slow.
+//   From the fourth, beasts (beasts.js) come among them too, each one for
+//   two blobs, with as many hearts and more, each going at its own pace.
 //   From the second wave a few giant mosquitos fly among them, quicker
 //   along the road, more of them each wave. Friends can pop them too, as
 //   anywhere: bop them, or jump on them.
@@ -28,6 +30,7 @@
 // The island is made with its road (buildDefense, from worldgen.js), and
 // the host runs the rest (DefenseSim, from room.js), as it runs the monsters.
 import { groundMap } from './adventure.js';
+import { BEASTS, isBeast } from './beasts.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
 import { HIT_MS } from './monsters.js';
@@ -54,7 +57,9 @@ export const START_MS = 3000;
 // Hearts the Star Stone gets back with each wave seen off.
 export const STONE_BACK = 2;
 // How many hearts a monster takes off the Star Stone, getting there.
-export const LEAK = { blob: 1, mosquito: 1, king: 5 };
+export const LEAK = { blob: 1, mosquito: 1, king: 5, stinger: 2, cyclops: 3, rex: 3 };
+// The beasts among the blobs of each wave, each taking the place of two.
+export const WAVE_BEASTS = { 4: ['wolf'], 5: ['rattle'], 6: ['wolf', 'stinger'], 7: ['hawk', 'rattle'], 8: ['stinger', 'wolf', 'hawk'], 9: ['cyclops', 'wolf'], 10: ['rex', 'hawk', 'stinger'] };
 // What comes in wave n (1 to WAVES): how many little monsters (and one
 // more for each friend past the first, up to four), how many hearts each
 // has, how long between them, King Grumble's hearts (0: he stays home),
@@ -67,6 +72,7 @@ export function waveOf(n, players = 1) {
     every: Math.max(700, 1500 - 70 * n),
     king: n === Math.ceil(WAVES / 2) ? 40 : n === WAVES ? 120 : 0,
     mosquitos: n < 2 ? 0 : Math.min(5, 1 + Math.floor((n - 2) / 2)),
+    beasts: WAVE_BEASTS[n] ?? [],
   };
 }
 // The states a defense goes through: waiting for Start, a wave marching,
@@ -548,6 +554,14 @@ export class DefenseSim {
     const total = w.blobs + w.mosquitos;
     const at = new Set(Array.from({ length: w.mosquitos }, (_, i) => Math.round(((i + 1) * total) / (w.mosquitos + 1)) - 1));
     this.queue = Array.from({ length: total }, (_, i) => (at.has(i) ? 'mosquito' : 'blob'));
+    // The beasts spread through the back half of the wave, each for two blobs.
+    w.beasts.forEach((kind, i) => {
+      const at = this.queue.lastIndexOf('blob', Math.floor((total * (i + 1.5)) / (w.beasts.length + 1)));
+      if (at < 1) return;
+      this.queue[at] = kind;
+      const other = this.queue.lastIndexOf('blob', at - 1);
+      if (other > 0) this.queue.splice(other, 1);
+    });
     if (w.king) this.queue.splice(Math.floor(w.blobs * 0.6), 0, 'king');
     this.blobHearts = w.hearts;
     this.kingHearts = w.king;
@@ -595,7 +609,7 @@ export class DefenseSim {
       const kind = this.queue.shift();
       const at = this.route[0];
       const m = monsters.add(world, at.x, standHeight(world, at.x, at.z, at.y + 1) ?? at.y, at.z, { kind, march: this.route });
-      m.hearts = kind === 'king' ? this.kingHearts : this.blobHearts;
+      m.hearts = kind === 'king' ? this.kingHearts : Math.round(this.blobHearts * (BEASTS[kind]?.marchHearts ?? 1));
       m.max = m.hearts;
       this.spawnAt = now + this.every * (kind === 'king' ? 2 : 1);
     }
@@ -650,7 +664,7 @@ export class DefenseSim {
   // bricks for it. Returns { t: 'pop', monster, bricks }.
   popped(m, monsters) {
     monsters.remove(m.id);
-    const bricks = m.kind === 'king' ? KING_BRICKS : POP_BRICKS;
+    const bricks = m.kind === 'king' ? KING_BRICKS : isBeast(m.kind) ? POP_BRICKS * 2 : POP_BRICKS;
     this.bricks += bricks;
     return { t: 'pop', monster: m, bricks };
   }

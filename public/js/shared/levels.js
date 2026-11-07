@@ -52,6 +52,7 @@ export const XP_FOR = {
   helped: { xp: 20 },
   kings: { xp: 200 },
   queens: { xp: 60 },
+  beasts: { xp: 30 },
   towers: { xp: 10 },
   defended: { xp: 200 },
   said: { xp: 1, cap: 200 },

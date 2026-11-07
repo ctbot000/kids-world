@@ -28,11 +28,12 @@
 // The dedicated server also keeps one public adventure island for everyone,
 // conquered stage by stage, each harder than the last (server/adventure.js);
 // a stage number scales everything below that says so.
+import { BEASTS, beastsOfTier, isBeast } from './beasts.js';
 import * as B from './blocks.js';
 import { CRITTER_INFO, standHeight } from './critters.js';
 import { BOSSES, breathMove, isBoss, planOf } from './bosses.js';
-import { BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, kindOf, SAFE_RADIUS } from './monsters.js';
-import { MOVE } from './physics.js';
+import { bodyOf, BUMP_HP, campDistance, DAZED_HIT, GHOST_FIRE, kindOf, SAFE_RADIUS } from './monsters.js';
+import { bodyOverlapsSolid, MOVE } from './physics.js';
 import { MONSTER_LOG } from './stickers.js';
 import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
@@ -85,9 +86,11 @@ export const STAGE_CAMPS = 4;
 // guards (monsters.js), more of them and tougher the higher the stage: a
 // Spiky from stage 2, a Grumble Knight from 3, a Big Bruiser from 4, a
 // Stone Golem from 5, then another Knight at 7, another Golem at 9 and a
-// Giant Spider at 11. They take the place of blobs, so a camp keeps as many
-// guards as before (and its mosquito); with fewer guards than that, the
-// toughest go first.
+// Giant Spider at 11; and from the second time round the story, the beasts
+// (beasts.js): a Shadow Wolf at 13, a Stingtail at 15, Rattlebones at 17, a
+// Thunderhawk at 19 and a Mimic at 21. They take the place of blobs, so a camp
+// keeps as many guards as before (and its mosquito); with fewer guards than
+// that, the toughest go first.
 export const STAGE_TOUGH = [
   [2, 'spiky'],
   [3, 'knight'],
@@ -96,11 +99,16 @@ export const STAGE_TOUGH = [
   [7, 'knight'],
   [9, 'golem'],
   [11, 'spider'],
+  [13, 'wolf'],
+  [15, 'stinger'],
+  [17, 'rattle'],
+  [19, 'hawk'],
+  [21, 'mimic'],
 ];
 // The kinds among a camp's guards at a stage, toughest first.
 export const toughGuards = (stage) => {
   const s = cleanStage(stage);
-  const rank = { golem: 0, knight: 1, big: 2, spider: 3, spiky: 4 };
+  const rank = { golem: 0, stinger: 1, wolf: 2, hawk: 3, mimic: 4, rattle: 5, knight: 6, big: 7, spider: 8, spiky: 9 };
   return STAGE_TOUGH.filter(([from]) => s >= from)
     .map(([, kind]) => kind)
     .sort((a, b) => rank[a] - rank[b]);
@@ -144,6 +152,8 @@ const BOOK = {
   yeti: { icon: '❄️', name: 'Little Yeti' },
   gummy: { icon: '🧸', name: 'Gummy Bear' },
   cub: { icon: '🍬', name: 'Gummy Cub' },
+  // The beasts, by their names and icons (beasts.js).
+  ...Object.fromEntries(Object.entries(BEASTS).map(([kind, b]) => [kind, { icon: b.icon, name: b.name }])),
   // The bosses, by their names and icons (bosses.js).
   ...Object.fromEntries(Object.entries(BOSSES).map(([kind, b]) => [kind, { icon: b.icon, name: b.name }])),
   king: { icon: '🤴', name: 'King Grumble' },
@@ -606,6 +616,7 @@ export class AdventureSim {
     }
     for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
     if (c.queen) this.addQueen(world, c, people, monsters);
+    this.addChampion(world, c, people, monsters, players);
   }
 
   // Nobody near for a while: its monsters go back in, and come out afresh
@@ -642,6 +653,8 @@ export class AdventureSim {
       const y = standHeight(world, x, z, c.y + 2);
       if (y === null || Math.abs(y - c.y) > 3) continue;
       if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 3)) continue;
+      // (A beast is wide: on ground it fits, not half in a fence.)
+      if (isBeast(bug) && bodyOverlapsSolid(world, { x, y, z, ...bodyOf(bug) })) continue;
       return monsters.add(world, x, y, z, { camp: c.id, kind: bug });
     }
     return monsters.add(world, c.x + 2.5, c.y, c.z, { camp: c.id, kind: bug });
@@ -653,6 +666,60 @@ export class AdventureSim {
   addQueen(world, c, people, monsters) {
     const m = monsters.add(world, c.x, c.y + 1, c.z, { camp: c.id, kind: 'queen' });
     if (m) m.queen = true;
+    return m;
+  }
+
+  // The beast (beasts.js) that is a camp's champion, or null. On Adventure Isle
+  // each chapter has its own, from its second camp on (from its first, the
+  // second time round the story). On any other adventure island the camps after
+  // the first have one of the first tier, by the island's luck. Where the Queen
+  // Mosquito is enough for anyone, the deepest camp of an island of your own and
+  // of the isle's very first stage, there is none.
+  championOf(world, c) {
+    const camps = this.camps.filter((o) => o.kind === 'camp');
+    const i = camps.indexOf(c);
+    if (i < 0) return null;
+    if (this.story) {
+      if (this.stage === 1 && c.queen) return null;
+      const own = this.story.champions ?? [];
+      return (this.story.round > 1 ? own[Math.min(i, own.length - 1)] : own[i - 1]) ?? null;
+    }
+    if (i === 0 || c.queen) return null;
+    const list = beastsOfTier(1);
+    return list[Math.floor(hash2(world.seed + 131, c.id, 7) * list.length)];
+  }
+
+  // A camp's champion out as the camp wakes, an extra guard as the Queen Mosquito
+  // is (and popped, it is gone for good until the camp next sleeps): in the camp,
+  // on ground it fits, a Mimic not far from the flag, where whoever comes to raise
+  // it will find it. Young on the isle's first stages, full grown from the sixth,
+  // and tougher with more friends on the island, so the way never closes on anyone
+  // by themselves, and a gang does not walk through it.
+  addChampion(world, c, people, monsters, players = 1) {
+    const kind = this.championOf(world, c);
+    if (!kind) return null;
+    const size = bodyOf(kind);
+    const far = kindOf(kind).shut ? 3.5 : Math.max(3, c.r - 2.5);
+    let spot = { x: c.x + 2.5, y: c.y, z: c.z };
+    for (let tries = 0; tries < 30; tries++) {
+      const a = this.rng.range(-Math.PI, Math.PI);
+      const d = this.rng.range(2.5, far);
+      const x = FL(c.x + Math.cos(a) * d) + 0.5;
+      const z = FL(c.z + Math.sin(a) * d) + 0.5;
+      const y = standHeight(world, x, z, c.y + 2);
+      if (y === null || Math.abs(y - c.y) > 3) continue;
+      if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 4)) continue;
+      if (bodyOverlapsSolid(world, { x, y, z, radius: size.radius, height: size.height })) continue;
+      spot = { x, y, z };
+      break;
+    }
+    const m = monsters.add(world, spot.x, spot.y, spot.z, { camp: c.id, kind });
+    if (m) {
+      m.champion = true;
+      const grown = this.story ? Math.min(1, 0.4 + 0.1 * this.stage) : 0.6;
+      m.hearts = Math.max(3, Math.round(kindOf(kind).hearts * grown * (1 + 0.3 * (Math.min(8, Math.max(1, players)) - 1))));
+      m.max = m.hearts;
+    }
     return m;
   }
 
@@ -685,7 +752,9 @@ export class AdventureSim {
     // A friend came to the island: one more on its way.
     if (count + c.back.length < want) c.back.push(now + GUARD_BACK_MS);
     c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
-    c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5);
+    // (A Mimic still shut guards nothing: nobody could tell what was holding the
+    // flag down. Still, whoever comes to raise it is near enough to wake it.)
+    c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5 && !(kindOf(m.kind).shut && m.state === 'idle'));
     if (!c.holders || c.guarded) return;
     c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.stage));
     if (c.progress >= 1) news.push(this.free(c, people, monsters));
@@ -807,11 +876,12 @@ export class AdventureSim {
 
   // One of a camp's monsters popped (or gone by itself): back it comes in a
   // while, while the camp is not free. King Grumble's helpers and the Queen
-  // Mosquito do not: popping her is that camp's own little victory. Nor do
-  // Gummy Cubs: a Gummy Bear split into them, and it comes back whole.
+  // Mosquito do not: popping her is that camp's own little victory. Nor does its
+  // champion, nor a beast's helpers. Nor do Gummy Cubs: a Gummy Bear split into
+  // them, and it comes back whole.
   guardGone(m, now) {
     const c = this.campById(m.camp);
-    if (!c || c.freed || !c.awake || c.kind !== 'camp' || isBoss(m.kind) || m.kind === 'queen' || m.kind === 'cub') return;
+    if (!c || c.freed || !c.awake || c.kind !== 'camp' || isBoss(m.kind) || m.kind === 'queen' || m.kind === 'cub' || m.champion || m.helper) return;
     c.back.push(now + GUARD_BACK_MS);
   }
 

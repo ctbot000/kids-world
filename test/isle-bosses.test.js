@@ -76,9 +76,9 @@ function run(sim, w, people, done, ms = 20000) {
 }
 
 test('every chapter has a boss of its own, on the end of the kinds, in the collection, with its own moves, none of them quicker than you run', () => {
-  assert.deepEqual(MONSTER_KINDS.slice(16), KINDS, 'new kinds go on the end: the wire sends the index');
+  assert.deepEqual(MONSTER_KINDS.slice(16, 16 + KINDS.length), KINDS, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
-  assert.deepEqual(MONSTER_STATES.slice(9), ['rear', 'charge', 'hurl', 'leap']);
+  assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
   assert.deepEqual(CHAPTERS.map((c) => c.boss), [...KINDS, 'king']);
   for (const kind of [...KINDS, 'king']) {
     const plan = BOSSES[kind];

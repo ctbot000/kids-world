@@ -25,9 +25,9 @@ function flat(W = 64, D = 64) {
   return w;
 }
 
-test('the monster figures are the island’s own monsters, five common, three rare and two super rare', () => {
-  assert.equal(MONSTER_FIGURES.length, 10);
-  assert.deepEqual([0, 1, 2].map((r) => MONSTER_FIGURES.filter((f) => f.rare === r).length), [5, 3, 2]);
+test('the monster figures are the island’s own monsters, ten common, six rare and four super rare', () => {
+  assert.equal(MONSTER_FIGURES.length, 20);
+  assert.deepEqual([0, 1, 2].map((r) => MONSTER_FIGURES.filter((f) => f.rare === r).length), [10, 6, 4]);
   for (const f of MONSTER_FIGURES) {
     assert.ok(MONSTER_KINDS.includes(f.monster), `${f.key} is a real monster`);
     assert.ok(f.key.startsWith('m-'));

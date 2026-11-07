@@ -9,6 +9,12 @@ import { cone, cylinder, mesh, sphere, toon } from './toon.js';
 const WARN = '#ff4a3d';
 // A lava rock's shape.
 const ROCK = new THREE.DodecahedronGeometry(1, 0);
+// What does not fly there from whoever threw it: a bolt or a star comes down out
+// of the sky, a root up out of the ground.
+const FROM_SKY = { star: true };
+const FROM_GROUND = { root: true };
+// A bolt is only the ring until it strikes (renderer.js hurl draws it).
+const UNSEEN = { bolt: true };
 
 // A ring flat on the ground at (x, y, z), as wide as r, pulsing, with a
 // disc inside it growing out to its edge as the moment it shows comes.
@@ -109,9 +115,51 @@ export class WarnStrip {
 
 // What a boss throws (bosses.js hurl what), as a little group about a unit
 // across at most: a coconut, a spore pod, a snowball, a gumdrop, a ball of
-// mud, a lava rock or a grumble bomb.
+// mud, a lava rock or a grumble bomb; or a beast's (beasts.js): a boulder, a bone,
+// a glob of venom, a falling star or a root.
 export function thrownMesh(what) {
   const g = new THREE.Group();
+  if (what === 'boulder') {
+    g.add(mesh(ROCK, toon('#8d929c'), 0, 0, 0, 0.42));
+    g.add(mesh(ROCK, toon('#a2a7b0'), 0.14, 0.14, 0.12, 0.26));
+    g.add(mesh(ROCK, toon('#6d727c'), -0.16, -0.08, 0.1, 0.22));
+    g.add(mesh(sphere(1, 8, 6), toon('#5f9e4a'), 0.05, 0.3, -0.06, 0.2, 0.08, 0.2));
+    return g;
+  }
+  if (what === 'bone') {
+    const bone = toon('#f3ead2');
+    g.add(mesh(cylinder(0.05, 0.05, 0.5, 8), bone, 0, 0, 0));
+    for (const y of [-0.27, 0.27]) for (const x of [-0.055, 0.055]) g.add(mesh(sphere(1, 8, 6), bone, x, y, 0, 0.075));
+    return g;
+  }
+  if (what === 'venom') {
+    const venom = toon('#a6e04a', { transparent: true, opacity: 0.85 });
+    g.add(mesh(sphere(1, 14, 10), venom, 0, 0, 0, 0.26));
+    g.add(mesh(sphere(1, 8, 6), venom, 0.2, 0.14, -0.1, 0.09));
+    g.add(mesh(sphere(1, 8, 6), venom, -0.18, -0.12, 0.12, 0.07));
+    g.add(mesh(sphere(1, 8, 6), toon('#ffffff', { emissive: 0.5, transparent: true, opacity: 0.6 }), -0.08, 0.1, 0.18, 0.05));
+    return g;
+  }
+  if (what === 'star') {
+    const gold = toon('#ffe14d', { emissive: 0.9 });
+    g.add(mesh(sphere(1, 12, 8), gold, 0, 0, 0, 0.17));
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const spike = mesh(cone(0.12, 0.34, 6), gold, Math.sin(a) * 0.22, Math.cos(a) * 0.22, 0, 1, 1, 0.5);
+      spike.rotation.z = -a;
+      g.add(spike);
+    }
+    return g;
+  }
+  if (what === 'root') {
+    const wood = toon('#6b4a2f');
+    for (const [x, z, tilt, h] of [[0, 0, 0, 1.3], [0.34, 0.1, -0.35, 0.95], [-0.3, 0.16, 0.35, 0.85], [0.05, -0.34, 0.3, 0.9]]) {
+      const root = mesh(cone(0.17, h, 8), wood, x, h / 2, z);
+      root.rotation.set(tilt * (z < 0 ? -1 : 0.4), 0, tilt);
+      g.add(root);
+    }
+    return g;
+  }
   if (what === 'coconut') {
     g.add(mesh(sphere(1, 14, 10), toon('#7a4a26'), 0, 0, 0, 0.3, 0.27, 0.3));
     for (const [x, z] of [[0.08, 0.26], [-0.08, 0.26], [0, 0.29]]) g.add(mesh(sphere(1, 6, 4), toon('#3a2414'), x, 0.08, z * 0.95, 0.04));
@@ -156,8 +204,11 @@ export class Thrown {
     this.effects = effects;
     this.what = what;
     this.land = land;
+    this.spots = to;
     this.rings = to.map(([x, y, z]) => new WarnRing(scene, x, y, z, r, ms));
-    this.shots = to.map((at) => {
+    this.sky = FROM_SKY[what];
+    this.ground = FROM_GROUND[what];
+    this.shots = (UNSEEN[what] ? [] : to).map((at) => {
       const g = thrownMesh(what);
       g.position.set(...from);
       scene.add(g);
@@ -170,7 +221,25 @@ export class Thrown {
   update(dt) {
     this.age += dt;
     const k = Math.min(1, this.age / this.life);
-    for (const s of this.shots) {
+    // Roots burst up as it lands, and sink back: the show goes on a while after.
+    if (this.ground) {
+      for (const s of this.shots) {
+        const after = this.age - this.life;
+        const up = after < 0 ? Math.max(0, (k - 0.82) / 0.18) * 0.12 : after < 0.12 ? 0.12 + (after / 0.12) * 0.88 : Math.max(0, 1 - (after - 0.3) / 0.35);
+        s.g.position.set(s.at[0], s.at[1], s.at[2]);
+        s.g.scale.set(Math.max(0.01, up), Math.max(0.01, up), Math.max(0.01, up));
+      }
+    }
+    if (this.sky) {
+      for (const s of this.shots) {
+        // Out of the sky, late and fast, spinning as it comes.
+        const fall = Math.max(0, (k - 0.25) / 0.75);
+        s.g.position.set(s.at[0] + (1 - fall) * 3, s.at[1] + 0.4 + (1 - fall * fall) * 18, s.at[2] - (1 - fall) * 2);
+        s.g.rotation.z += dt * 9;
+        if (Math.random() < 0.6) this.effects.add('sparkle', s.g.position.x, s.g.position.y + 0.3, s.g.position.z, { vy: 1, size: 0.14, life: 0.45, color: '#ffef9a' });
+      }
+    }
+    for (const s of this.sky || this.ground ? [] : this.shots) {
       const [fx, fy, fz] = this.from;
       const [tx, ty, tz] = s.at;
       // Along a curve up to high and down again (a quadratic, through the
@@ -183,11 +252,15 @@ export class Thrown {
     }
     this.rings = this.rings.filter((r) => r.update(dt));
     if (k < 1) return true;
-    for (const s of this.shots) {
-      this.burst(s.at);
-      this.land?.(s.at);
-      s.g.removeFromParent();
+    if (!this.landed) {
+      this.landed = true;
+      for (const at of this.spots) {
+        this.burst(at);
+        this.land?.(at);
+      }
     }
+    if (this.ground && this.age - this.life < 0.65) return true;
+    for (const s of this.shots) s.g.removeFromParent();
     for (const r of this.rings) r.dispose();
     return false;
   }
@@ -196,14 +269,14 @@ export class Thrown {
   // spores, a puff of smoke and sparks.
   burst([x, y, z]) {
     const fx = this.effects;
-    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'] }[this.what] ?? ['#ffffff'];
+    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'], boulder: ['#8d929c', '#a2a7b0', '#6d727c'], bone: ['#f3ead2', '#d9ccab', '#ffffff'], venom: ['#a6e04a', '#d6ff5a', '#6f9440'], bolt: ['#ffffff', '#ffe14d', '#59c7ff'], star: ['#ffe14d', '#ffffff', '#ffb13b'], root: ['#6b4a2f', '#8a6a48', '#4f3620'] }[this.what] ?? ['#ffffff'];
     if (this.what === 'pod') fx.spores(x, y, z, 1.6);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2;
       const s = 2 + Math.random() * 2.5;
       fx.add(i % 3 ? 'square' : 'puff', x, y + 0.3, z, { vx: Math.cos(a) * s, vy: 2.5 + Math.random() * 3, vz: Math.sin(a) * s, size: i % 3 ? 0.1 : 0.3, life: 0.6, gravity: 12, drag: 0.8, color: colors[i % colors.length] });
     }
-    if (this.what === 'bomb' || this.what === 'lava') fx.bang(x, y + 0.8, z);
+    if (this.what === 'bomb' || this.what === 'lava' || this.what === 'boulder' || this.what === 'bolt' || this.what === 'star') fx.bang(x, y + 0.8, z);
     fx.dust(x, y, z);
   }
 }

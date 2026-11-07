@@ -32,6 +32,7 @@ import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
+import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
 import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
@@ -7884,7 +7885,9 @@ export class UI {
         if (Math.hypot(p.x - me.x, p.z - me.z) > 30) continue;
         const max = Math.max(1, e.max ?? 1);
         const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
-        const top = isBoss(e.kind) ? (e.model.height ?? 1.8) + 1.1 : bodyOf(e.kind).height + 0.3;
+        // (A Mimic not found out yet: only a treasure chest, with no bar over it.)
+        if (e.kind === 'mimic' && hearts === max && e.snaps.at(-1)?.state === 'idle') continue;
+        const top = isBoss(e.kind) ? (e.model.height ?? 1.8) + 1.1 : isBeast(e.kind) ? e.model.height + 0.3 : bodyOf(e.kind).height + 0.3;
         // Hearts just lost stay on the bar in white a moment, and drain away.
         tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => {
           const was = Math.min(max, e.barWas ?? hearts);

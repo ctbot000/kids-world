@@ -14,6 +14,8 @@ import { PeerServer } from 'peer';
 import puppeteer from 'puppeteer-core';
 import { ARCADE_BLOB, ARCADE_PAIRS, BROADCAST_STATION, CANDY_CANE, CHALKBOARD, CLOTH, COMPUTER, CROP_STAGES, DRAWING_BOARD, FARMLAND, GASHAPON, GO_BOARD, GRAND_PIANO, MONSTER_GASHAPON, LEAVES, RETRO_TV, ROBOT_KIT, STOVE, STUDY_DESK, TALL_GRASS, TREE_PART, TULIP, WATER, WATERING_CAN, WET_FARMLAND } from '../public/js/shared/blocks.js';
 import { GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOYS } from '../public/js/shared/gashapon.js';
+import { BEASTS } from '../public/js/shared/beasts.js';
+import { BUMP_HP } from '../public/js/shared/monsters.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { latestNews, NEWS } from '../public/js/news.js';
@@ -2511,6 +2513,225 @@ test('a friend’s mighty weapons show on your screen too: their bolt, their bea
   assert.deepEqual(errors, []);
   await guest.browserContext().close();
   await host.browserContext().close();
+});
+
+test('the beasts in a real page: each one drawn and told of, a Mimic a chest until you are near, bones that fall apart, rings before their moves, and what popping one pays', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Bold Badger' });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  // A clearing with you in it, well away from the safe start, kept in good
+  // health, and what the page shows and says written down as it goes.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 24;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 22; cx <= x + 22; cx++) {
+      for (let cz = z - 24; cz <= z + 12; cz++) {
+        for (let cy = y; cy < y + 14; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+      }
+    }
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.sendMove(true);
+    window.spot = { x: x + 0.5, y, z: z + 0.5 };
+    window.seen = { toasts: [], sounds: [], hurls: [], zaps: 0 };
+    const hurl = kw.renderer.hurl.bind(kw.renderer);
+    kw.renderer.hurl = (from, to, ms, r, what, land) => {
+      window.seen.hurls.push({ what, to: to.length, ms, r });
+      return hurl(from, to, ms, r, what, land);
+    };
+    const zap = kw.renderer.zapBolt.bind(kw.renderer);
+    kw.renderer.zapBolt = (...args) => {
+      window.seen.zaps++;
+      return zap(...args);
+    };
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.seen.sounds.push(name);
+      return play(name, opts);
+    };
+    const emit = g.emit.bind(g);
+    g.emit = (name, detail) => {
+      if (name === 'toast') window.seen.toasts.push(detail.text);
+      return emit(name, detail);
+    };
+    // Whoever is about keeps all their HP, so nobody is sent home in the middle.
+    window.mend = setInterval(() => {
+      for (const p of room.players.values()) p.hp = p.maxHp;
+    }, 100);
+  });
+  await until(page, () => window.kidsWorld.game.critters.size === 0);
+  const kinds = ['rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex'];
+  // Each in a row, far enough off to take no notice, each drawn as itself.
+  const drawn = await page.evaluate((kinds) => {
+    const room = window.kidsWorld.session.link.room;
+    const { x, y, z } = window.spot;
+    window.beasts = {};
+    kinds.forEach((kind, i) => {
+      window.beasts[kind] = room.monsters.add(room.world, x + (i - 4.5) * 4, y, z - 20, { kind });
+      // (Standing where they are for now, all but the Mimic.)
+      if (kind !== 'mimic') window.beasts[kind].giggle = Infinity;
+    });
+    return Object.fromEntries(kinds.map((k) => [k, window.beasts[k].id]));
+  }, kinds);
+  await until(page, (n) => window.kidsWorld.game.monsters.size >= n, kinds.length);
+  const models = await page.evaluate((drawn) => Object.fromEntries(Object.entries(drawn).map(([k, id]) => {
+    const e = window.kidsWorld.game.monsters.get(id);
+    let meshes = 0;
+    e.model.group.traverse((o) => { if (o.isMesh) meshes++; });
+    return [k, { kind: e.kind, height: e.model.height, meshes, hearts: e.hearts, max: e.max }];
+  })), drawn);
+  for (const k of kinds) {
+    assert.equal(models[k].kind, k);
+    assert.ok(models[k].meshes > 10, `${k} is more than a blob: ${models[k].meshes} parts`);
+    assert.ok(models[k].height > 1);
+    assert.equal(models[k].hearts, models[k].max);
+  }
+  // Told what each is, near you, the first time: but a Mimic not, nor a bar over it.
+  await page.evaluate(() => {
+    const { x, y, z } = window.spot;
+    for (const m of Object.values(window.beasts)) Object.assign(m.body, { x: m.body.x, z: z - 26 });
+    Object.assign(window.kidsWorld.game.me.body, { x, y, z: z - 16.5 });
+    window.kidsWorld.game.sendMove(true);
+  });
+  await until(page, () => window.seen.toasts.some((t) => t.includes('Rumble Rex')) && window.seen.toasts.some((t) => t.includes('Rattlebones')));
+  assert.ok(!(await page.evaluate(() => window.seen.toasts.some((t) => t.includes('Mimic')))), 'no word of a Mimic yet');
+  const shut = await page.evaluate(() => ({ state: window.beasts.mimic.state, open: window.kidsWorld.game.monsters.get(window.beasts.mimic.id).model.open, bar: window.kidsWorld.ui.advTags.has(`mon-${window.beasts.mimic.id}`) }));
+  assert.equal(shut.state, 'idle');
+  assert.ok(shut.open < 0.5, 'shut');
+  assert.equal(shut.bar, false, 'no bar over a chest');
+  // Only the Mimic left, you beside it: open it comes, and the bar with it.
+  await page.evaluate(() => {
+    const room = window.kidsWorld.session.link.room;
+    for (const [k, m] of Object.entries(window.beasts)) if (k !== 'mimic') room.monsters.remove(m.id);
+    const m = window.beasts.mimic.body;
+    Object.assign(window.kidsWorld.game.me.body, { x: m.x, y: m.y, z: m.z + 3.5 });
+    window.kidsWorld.game.sendMove(true);
+  });
+  await until(page, () => window.beasts.mimic.state !== 'idle' && window.seen.toasts.some((t) => t.includes('Mimic')));
+  await until(page, () => window.kidsWorld.game.monsters.get(window.beasts.mimic.id).model.open > 0.3 && window.kidsWorld.ui.advTags.has(`mon-${window.beasts.mimic.id}`));
+  // Rattlebones with one heart left: a bop knocks it into a heap, told and
+  // heard; another pops it, with what it pays.
+  const before = await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    room.monsters.remove(window.beasts.mimic.id);
+    const { x, y, z } = window.spot;
+    const m = room.monsters.add(room.world, x, y, z - 1.5, { kind: 'rattle' });
+    m.hearts = 1;
+    m.giggle = Infinity;
+    window.bones = m;
+    Object.assign(kw.game.me.body, { x, y, z });
+    kw.game.sendMove(true);
+    return { beasts: kw.profile.data.stats.beasts ?? 0, popped: kw.profile.data.stats.popped ?? 0, coins: kw.profile.data.coins };
+  });
+  const bones = await page.evaluate(() => window.bones.id);
+  await until(page, (id) => window.kidsWorld.game.monsters.has(id), bones);
+  await page.evaluate((id) => window.kidsWorld.game.bop(id), bones);
+  await until(page, () => window.bones.state === 'heap');
+  // (A slow page gets the time to see it down.)
+  await page.evaluate(() => {
+    window.bones.heap = Date.now() + 1e7;
+    window.bones.dazed = window.bones.heap;
+  });
+  await until(page, (id) => window.kidsWorld.game.monsters.get(id)?.model.fall > 0.8, bones);
+  assert.ok(await page.evaluate(() => window.seen.toasts.some((t) => t.includes('fell apart')) && window.seen.sounds.includes('rattle')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.beasts ?? 0), before.beasts, 'not popped yet');
+  await new Promise((r) => setTimeout(r, 500));
+  await page.evaluate((id) => window.kidsWorld.game.bop(id), bones);
+  await until(page, (id) => !window.kidsWorld.game.monsters.has(id), bones);
+  const after = await page.evaluate(() => ({ beasts: window.kidsWorld.profile.data.stats.beasts, popped: window.kidsWorld.profile.data.stats.popped, coins: window.kidsWorld.profile.data.coins }));
+  assert.equal(after.beasts, before.beasts + 1);
+  assert.equal(after.popped, before.popped + 1);
+  assert.equal(after.coins, before.coins + BEASTS.rattle.coins);
+  // Each move shows first, on your page: rings for what comes down, a bolt out
+  // of the sky, and stars for one that blinks away.
+  const force = (kind, turn, opts = {}) => page.evaluate((kind, turn, opts) => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    for (const m of [...room.monsters.list]) room.monsters.remove(m.id);
+    const { x, y, z } = window.spot;
+    Object.assign(kw.game.me.body, { x, y, z, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+    const m = room.monsters.add(room.world, x, y, z - (opts.dist ?? 7), { kind });
+    if (opts.hearts) {
+      m.hearts = opts.hearts;
+      m.hitAt = Date.now() + 1e7;
+    }
+    m.turn = turn;
+    m.moveAt = 1;
+    window.fighter = m;
+    window.seen.hurls.length = 0;
+    window.seen.sounds.length = 0;
+  }, kind, turn, opts);
+  await force('hawk', 0);
+  await until(page, () => window.seen.hurls.some((h) => h.what === 'bolt' && h.to === 3));
+  const zaps = await page.evaluate(() => window.seen.zaps);
+  await until(page, (n) => window.seen.zaps >= n + 3, zaps);
+  await force('cyclops', 0, { dist: 12 });
+  await until(page, () => window.seen.hurls.some((h) => h.what === 'boulder'));
+  await until(page, () => window.seen.sounds.includes('boom'));
+  await force('oak', 0);
+  await until(page, () => window.seen.hurls.some((h) => h.what === 'root' && h.to === 3));
+  await force('wizard', 1);
+  await until(page, () => window.seen.sounds.includes('blink'));
+  await force('wizard', 2, { hearts: 4 });
+  await until(page, () => window.kidsWorld.session.link.room.monsters.list.filter((m) => m.kind === 'blob').length === 2);
+  await until(page, () => window.seen.sounds.includes('chant'));
+  await force('wolf', 1, { hearts: 3 });
+  await until(page, () => window.seen.sounds.includes('howl'));
+  await force('hydra', 0, { dist: 5 });
+  await until(page, (kind) => [...window.kidsWorld.game.monsters.values()].some((e) => e.kind === kind && e.fireColors), 'hydra');
+  await force('rex', 2, { hearts: 10, dist: 5 });
+  await until(page, () => window.seen.sounds.includes('roar'));
+  // Rumble Rex's bump: a real one, knocking you back. (Mended after.)
+  const hurt = await page.evaluate(async () => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    clearInterval(window.mend);
+    const p = room.players.get(kw.game.pid);
+    p.hp = p.maxHp;
+    p.safeUntil = 0;
+    window.fighter.moveAt = Date.now() + 1e7;
+    window.fighter.giggle = 0;
+    window.fighter.dazed = 0;
+    const { x, y, z } = window.spot;
+    Object.assign(window.fighter.body, { x, y, z: z - 1.6 });
+    const bumped = kw.game.bumped.bind(kw.game);
+    kw.game.bumped = (msg) => {
+      if (msg.big && msg.pid === kw.game.pid) window.bigBump = msg;
+      return bumped(msg);
+    };
+    return p.maxHp;
+  });
+  await until(page, () => window.bigBump);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.hp), Math.max(0, hurt - BEASTS.rex.bump * BUMP_HP));
+  // In the collection: its name and its stats, with a picture of the real thing.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    for (const m of [...kw.session.link.room.monsters.list]) kw.session.link.room.monsters.remove(m.id);
+    kw.profile.count('poprex', 2);
+    kw.profile.count('seenrex', 1, { max: true });
+    kw.ui.monsterBook('defeated');
+  });
+  await until(page, () => document.querySelector('#modal .monster-book [data-kind="rex"] img'));
+  const card = await page.evaluate(() => document.querySelector('#modal .monster-book [data-kind="rex"]').textContent);
+  assert.ok(card.includes('Rumble Rex') && card.includes('×2') && card.includes('36') && card.includes('80'), card);
+  assert.deepEqual(pageErrors, []);
+  await page.close();
 });
 
 test('the shop sells, the 🎒 backpack is where you put things on and take them off', { skip }, async () => {
@@ -7644,7 +7865,7 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
   // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
-  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 22);
+  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 32);
   const seen = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
     crab: document.querySelector('#modal .monster-book [data-kind="snapper"]').textContent,
@@ -7653,8 +7874,8 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
     golemPic: document.querySelector('#modal .monster-book [data-kind="golem"] img').className,
   }));
   assert.deepEqual([seen.crabPic, seen.golemPic], ['figure', 'figure shadow']);
-  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 22\)$/);
-  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 22)');
+  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 32\)$/);
+  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 32)');
   assert.equal(seen.crab, 'Snappy Crab');
   assert.equal(seen.golem, '???');
   await page.click('#modal .tabs .chip[data-tab="defeated"]');

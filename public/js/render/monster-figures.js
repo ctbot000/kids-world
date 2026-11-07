@@ -13,6 +13,8 @@ import { MONSTER_FIGURES } from '../shared/gashapon.js';
 import { KingModel } from './adventure-models.js';
 import { makeBoss } from './boss-models.js';
 import { isBoss } from '../shared/bosses.js';
+import { isBeast } from '../shared/beasts.js';
+import { makeBeast } from './beasts.js';
 import { MonsterModel } from './monster-model.js';
 import { MoleModel } from './mole-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
@@ -44,6 +46,11 @@ function modelOf(kind, theme = 'sunny') {
     k.bubbleRim.visible = false;
     if (k.ring) k.ring.visible = false;
     return k;
+  }
+  if (isBeast(kind)) {
+    const b = makeBeast(kind, theme);
+    b.figurePose();
+    return b;
   }
   const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel, snapper: SnapperModel, shroom: ShroomModel }[kind];
   const m = make ? new make(theme, 1) : new MonsterModel(theme, kind);

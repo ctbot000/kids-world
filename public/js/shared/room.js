@@ -1576,19 +1576,21 @@ export class Room {
     // (A boss's breath, as far and as wide as its own: bosses.js.)
     for (const m of this.monsters.takeFires()) {
       const breath = m.plan ? m.move : null;
-      this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: breath?.ms ?? GHOST_FIRE.ms, ...(breath ? { r: breath.reach, a: breath.angle } : {}) });
+      this.broadcast({ t: 'mfire', id: m.id, yaw: +m.yaw.toFixed(3), ms: breath?.ms ?? GHOST_FIRE.ms, ...(breath ? { r: breath.reach, a: breath.angle } : {}), ...(breath?.what ? { what: breath.what } : {}) });
     }
     // A Puffshroom's cloud of spores: the puff everyone sees, and whoever
     // was in it (Knight Armor takes half of that, too). A boss's reaches
     // further (and Bogmaw's is swamp gas).
     for (const u of this.monsters.takePuffs()) this.broadcast({ t: 'mfx', kind: 'spores', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2), ...(u.reach ? { r: u.reach } : {}), ...(u.what && u.what !== 'spores' ? { what: u.what } : {}) });
-    for (const { monster: m, pid, spores, bumps } of this.monsters.takeBurns()) {
+    for (const { monster: m, pid, spores, bumps, what } of this.monsters.takeBurns()) {
       const p = this.players.get(pid);
       if (!p) continue;
-      if (spores) {
+      // (A Swamp Hydra's venom and Rumble Rex's roar are no fire either.)
+      const other = what === 'venom' || what === 'roar' ? what : null;
+      if (spores || other) {
         const half = hasPower(p.look, 'armor');
         const n = bumps ?? SPORES.bumps;
-        this.knock(p, now, hpAfterBump(p.hp, half ? n / 2 : n), { t: 'bump', pid, id: m.id, spores: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
+        this.knock(p, now, hpAfterBump(p.hp, half ? n / 2 : n), { t: 'bump', pid, id: m.id, spores: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2), ...(other ? { what: other } : {}) });
         continue;
       }
       const half = hasPower(p.look, 'armor') || hasPower(p.look, 'fireproof');
@@ -1596,6 +1598,14 @@ export class Room {
       this.knock(p, now, hpAfterBump(p.hp, half ? n / 2 : n), { t: 'bump', pid, id: m.id, fire: true, ghost: true, x: +m.body.x.toFixed(2), z: +m.body.z.toFixed(2) });
     }
     this.stepBossMoves(now, riding);
+    // The beasts' own (beasts.js): a howl for help, a blink away, and a heap of
+    // bones getting up again.
+    for (const u of this.monsters.takeCalls()) this.broadcast({ t: 'mfx', kind: 'howl', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
+    for (const u of this.monsters.takeBlinks()) {
+      const at = (q) => [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2)];
+      this.broadcast({ t: 'mfx', kind: 'blink', id: u.monster.id, from: at(u.from), to: at(u.to) });
+    }
+    for (const u of this.monsters.takeRises()) this.broadcast({ t: 'mfx', kind: 'rise', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
     if (this.defense) this.stepDefense(now);
     for (const { monster, pid, bumps: n, charge } of bumps) this.hurt(pid, monster, now, { bumps: n, charge });
     // Mr. Mole coming up out of the ground beside someone: a burst of dirt
@@ -1748,7 +1758,7 @@ export class Room {
         continue;
       }
       if (!this.inFlamesOf(c, m.body)) continue;
-      const hit = this.monsters.hit(m, p.id, { x: c.x, y: c.y, z: c.z }, now, 1);
+      const hit = this.monsters.hit(m, p.id, { x: c.x, y: c.y, z: c.z }, now, 1, undefined, 'fire');
       if (hit.wait) continue;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -2046,7 +2056,7 @@ export class Room {
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push);
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -2083,7 +2093,7 @@ export class Room {
       this.bopKing(p, m, now, weapon.king);
       return;
     }
-    const hit = this.monsters.hit(m, p.id, from, now, weapon.power, weapon.push);
+    const hit = this.monsters.hit(m, p.id, from, now, weapon.power, weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
