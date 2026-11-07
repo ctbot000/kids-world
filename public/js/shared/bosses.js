@@ -1,7 +1,7 @@
 // The bosses: whoever holds an adventure island's castle (adventure.js).
 // On any adventure island that is King Grumble, who stomps. On Adventure
 // Isle (isle-story.js) each chapter's lair is held by a boss of its own —
-// one of King Grumble's six captains, each keeping a Star Shard for him —
+// one of King Grumble's eleven captains, each keeping a Star Shard for him —
 // and King Grumble himself waits on Gloom Rock at the end of the story,
 // knowing every one of his captains' tricks.
 //
@@ -181,23 +181,130 @@ export const BOSSES = {
       { move: 'charge', from: 2, windup: 1100, speed: 11, far: 14, near: 3, bumps: 2 },
     ],
   },
+  // Sir Scarabold, of the Sunken Pyramid in Sunscorch Dunes: a great golden
+  // scarab beetle in polished armour, with a horn on his nose and a plume on
+  // his helmet. He charges horn first, throws balls of sand that come down
+  // round you, and when he is cross he flies up on his wings and comes down
+  // on you. His minions: Spikies, as prickly as cactus.
+  scarabold: {
+    icon: '🪲',
+    name: 'Sir Scarabold',
+    body: { radius: 1.2, height: 1.7 },
+    hearts: 1.15,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3500, 2800, 2200],
+    minion: 'spiky',
+    moves: [
+      { move: 'charge', from: 0, windup: 1000, speed: 13, far: 16, near: 3, bumps: 1.5 },
+      { move: 'hurl', from: 0, windup: 850, what: 'sandball', count: 2, scatter: 1, reach: 1.8, ms: 1300, far: 18, bumps: 1 },
+      { move: 'leap', from: 1, windup: 850, reach: 4.5, jump: 12, far: 15, bumps: 1.5 },
+      { move: 'stomp', from: 2, windup: 850, reach: 5, jump: 9.5, bumps: 1 },
+    ],
+  },
+  // Old Glimmershell, of the Crystal Grotto in the Crystal Caverns: a tortoise
+  // older than the isle, his shell grown all over with glowing crystals. Slow
+  // on his feet, he stomps the cave floor so the crystals ring, throws
+  // crystals from his back, and when he is cross pulls in his head and spins
+  // along in his shell. His minions: giant spiders.
+  glimmershell: {
+    icon: '🐢',
+    name: 'Old Glimmershell',
+    body: { radius: 1.3, height: 1.9 },
+    hearts: 1.3,
+    bump: 1.5,
+    run: [2.6, 3.4, 4.2],
+    gap: [3400, 2700, 2100],
+    minion: 'spider',
+    moves: [
+      { move: 'stomp', from: 0, windup: 900, reach: 6.5, jump: 9, bumps: 1.5 },
+      { move: 'hurl', from: 0, windup: 900, what: 'crystal', count: 3, scatter: 1, reach: 2, ms: 1400, far: 20, bumps: 1 },
+      { move: 'charge', from: 1, windup: 1100, speed: 12, far: 18, near: 3, bumps: 2 },
+      { move: 'call', from: 2, windup: 900, kind: 'spider', count: 2, most: 1, far: 22 },
+    ],
+  },
+  // Baron Boo, of Creaky Manor in Haunted Hollow: the grandest ghost on the
+  // isle, in a top hat and a cape, a Star Shard for his monocle. He vanishes
+  // and pops up somewhere else, throws grinning pumpkins and blows a cold mist
+  // all round him; when he is cross he calls up Rattlebones to help. His
+  // minions: Lava Ghosts, his little cousins.
+  baronboo: {
+    icon: '🎩',
+    name: 'Baron Boo',
+    body: { radius: 1.0, height: 2.4 },
+    hearts: 1.35,
+    bump: 1,
+    run: [3.6, 4.4, 5.2],
+    gap: [3200, 2600, 2000],
+    minion: 'ghost',
+    moves: [
+      { move: 'hurl', from: 0, windup: 850, what: 'pumpkin', count: 3, reach: 2, ms: 1300, far: 18, bumps: 1 },
+      { move: 'blink', from: 0, windup: 800, to: [5, 9], far: 40 },
+      { move: 'puff', from: 1, windup: 1000, what: 'mist', reach: 5.5, bumps: 1.5 },
+      { move: 'call', from: 2, windup: 900, kind: 'rattle', count: 1, most: 2, far: 24 },
+    ],
+  },
+  // Big Sprocket, of Mainspring Hall in Cogwheel City: a wind-up tin giant as
+  // tall as a house, a great key turning in his back. He stomps, throws gears
+  // that rain down round you, blows a jet of steam from his funnel when he is
+  // cross, and when his spring is wound right up he charges. His minions:
+  // Grumble Knights, fresh off the line.
+  sprocket: {
+    icon: '🤖',
+    name: 'Big Sprocket',
+    body: { radius: 1.15, height: 2.7 },
+    hearts: 1.4,
+    bump: 1.5,
+    run: [3.0, 3.9, 4.8],
+    gap: [3000, 2400, 1900],
+    minion: 'knight',
+    moves: [
+      { move: 'stomp', from: 0, windup: 850, reach: 6, jump: 10, bumps: 1.5 },
+      { move: 'hurl', from: 0, windup: 850, what: 'gear', count: 3, scatter: 1, reach: 2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'breath', from: 1, windup: 900, what: 'steam', ms: 1300, reach: 7.5, angle: 0.5, bumps: 1.5 },
+      { move: 'charge', from: 2, windup: 1000, speed: 14, far: 18, near: 3, bumps: 2 },
+    ],
+  },
+  // Old Nimbus, of the Thunderhead Temple at the top of the Stormcloud Spires:
+  // a great grumpy thundercloud with a face, never touching the ground. He
+  // calls lightning down on red rings round you, blows a gale all round him,
+  // drifts off and comes back somewhere else, and when he is very cross he
+  // comes down on you like a hailstorm. His minions: giant mosquitoes.
+  nimbus: {
+    icon: '🌩️',
+    name: 'Old Nimbus',
+    body: { radius: 1.2, height: 2.5 },
+    hearts: 1.45,
+    bump: 1,
+    run: [3.6, 4.4, 5.2],
+    gap: [3000, 2400, 1900],
+    minion: 'mosquito',
+    moves: [
+      { move: 'hurl', from: 0, windup: 900, what: 'bolt', count: 3, scatter: 2, reach: 2, ms: 1200, far: 22, bumps: 1.5 },
+      { move: 'puff', from: 0, windup: 1000, what: 'gust', reach: 6, bumps: 1.5 },
+      { move: 'blink', from: 1, windup: 800, to: [6, 10], far: 40 },
+      { move: 'leap', from: 2, windup: 850, reach: 5, jump: 13, far: 16, bumps: 2 },
+    ],
+  },
   // King Grumble on Gloom Rock, at the end of the story: all his captains'
   // tricks. He stomps and throws grumble bombs, leaps at you when he is
-  // cross, and charges when he is very cross. His minions: Spikies.
+  // cross, charges and calls his knights when he is very cross. His minions:
+  // Spikies.
   king: {
     icon: '👑',
     name: 'King Grumble',
     body: KING_BODY,
-    hearts: 1.5,
-    bump: 1,
+    hearts: 1.6,
+    bump: 1.5,
     run: [3.4, 4.2, 5],
-    gap: [3600, 2800, 2100],
+    gap: [3200, 2500, 1900],
     minion: 'spiky',
     moves: [
       { move: 'stomp', from: 0, windup: STOMP.windup, reach: STOMP.reach, jump: 11, bumps: 1.5 },
-      { move: 'hurl', from: 0, windup: 800, what: 'bomb', count: 3, reach: 2.2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'hurl', from: 0, windup: 800, what: 'bomb', count: 3, scatter: 1, reach: 2.2, ms: 1300, far: 20, bumps: 1.5 },
       { move: 'leap', from: 1, windup: 800, reach: 5, jump: 13, far: 15, bumps: 1.5 },
       { move: 'charge', from: 2, windup: 1000, speed: 13, far: 16, near: 3, bumps: 2 },
+      { move: 'call', from: 2, windup: 900, kind: 'knight', count: 2, most: 1, far: 24 },
     ],
   },
 };

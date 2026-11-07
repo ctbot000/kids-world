@@ -1,7 +1,8 @@
 // The public adventure island: the one adventure island the dedicated server
 // keeps for everyone to conquer together, on the list of open islands even
-// while nobody is on it; its stages one after another, each a little harder,
-// on and on; the beginning of a day back at stage 1; nobody owning it, so
+// while nobody is on it; its stages one after another, each harder than the
+// last, up to the last chapter of its story, and that one won, a new journey
+// from stage 1 (and nothing else starting it over); nobody owning it, so
 // nobody can be turned away; and the conquered island waiting for its players
 // before it goes.
 import assert from 'node:assert/strict';
@@ -10,8 +11,8 @@ import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { campCount, cleanStage, guardsFor, kingHearts, raiseSeconds } from '../public/js/shared/adventure.js';
-import { chapterOf } from '../public/js/shared/isle-story.js';
+import { ambushFor, campCount, cleanStage, guardBackMs, guardsFor, hazardEvery, kingHearts, raiseSeconds, reserveFor, slideFor, stageGap } from '../public/js/shared/adventure.js';
+import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
@@ -56,7 +57,7 @@ const publicEntries = (rooms) => [...rooms.values()].filter((e) => e.public);
 
 // ------------------------------------------------ how the stages grow harder
 
-test('each stage is a little harder than the last, and none is ever hopeless', () => {
+test('each stage is harder than the last, up to the last, and none is ever hopeless', () => {
   // A stage as told: none or nonsense is stage 1, and no stage goes past 9999.
   assert.equal(cleanStage(undefined), 1);
   assert.equal(cleanStage(0), 1);
@@ -70,17 +71,28 @@ test('each stage is a little harder than the last, and none is ever hopeless', (
   assert.equal(campCount(cozy), campCount(cozy, 1), 'an island on its own is stage 1');
 
   // Guards in a camp: one more than there are friends (up to five), one more
-  // again every third stage, eight at the most.
+  // again every second stage, nine at the most.
   assert.deepEqual([1, 2, 3, 4, 8].map((n) => guardsFor(n)), [2, 3, 4, 5, 5]);
-  assert.deepEqual([1, 4, 7, 10, 40].map((s) => guardsFor(2, s)), [3, 4, 5, 6, 8]);
+  assert.deepEqual([1, 3, 5, 7, 40].map((s) => guardsFor(2, s)), [3, 4, 5, 6, 9]);
 
-  // King Grumble: a fifth more hearts each stage, four times as many at most.
+  // The boss: a quarter more hearts each stage, four times as many at most,
+  // and quicker with its moves.
   assert.equal(kingHearts(1), 18);
   assert.equal(kingHearts(1, 1), 18);
-  assert.equal(kingHearts(1, 6), 36);
+  assert.equal(kingHearts(1, 5), 36);
   assert.equal(kingHearts(4, 1), 36);
-  assert.equal(kingHearts(4, 16), 144);
+  assert.equal(kingHearts(4, STAGES), 135);
   assert.equal(kingHearts(4, 400), 144, 'no harder than four times');
+  assert.deepEqual([1, 12, 400].map(stageGap), [1, 0.725, 2 / 3]);
+
+  // On the isle: popped monsters back sooner, but only so many times from the
+  // third stage (so a camp is never hopeless); a flag sliding back while they
+  // hold it from the second, and an ambush half way up it from the third.
+  assert.deepEqual([[1, true], [12, true], [12, false]].map(([s, isle]) => guardBackMs(s, isle)), [20000, 13400, 20000]);
+  assert.deepEqual([[1, 2, true], [1, 3, true], [1, 12, true], [1, 12, false]].map(([n, s, isle]) => reserveFor(n, s, isle)), [Infinity, 3, 14, Infinity]);
+  assert.deepEqual([[1, true], [2, true], [12, true], [12, false]].map(([s, isle]) => slideFor(s, isle)), [0, 0.01, 0.04, 0]);
+  assert.deepEqual([[1, 2], [1, 3], [3, 12], [8, 400]].map(([n, s]) => ambushFor(n, s)), [0, 1, 6, 6]);
+  assert.deepEqual([2, 12].map(hazardEvery), [12000, 5000]);
 
   // Flags: a tenth longer to raise each stage, twice as long at most.
   assert.deepEqual([1, 2, 3, 4, 6].map((n) => raiseSeconds(n)), [10, 6, 4.5, 4, 4]);
@@ -192,7 +204,15 @@ test('conquered: the next stage is up at once, the conquered one waits for its p
   assert.equal(publicEntries(rooms)[0].room.adventure.stage, 4);
 });
 
-test('the stage is kept over a restart that day, and starts over at 1 the next day', (t) => {
+// Every stage won, one after another, up to the last.
+function winAll(one, time, upTo = STAGES) {
+  while (one.stage < upTo) {
+    one.room.adventure.win(one.room.monsters);
+    one.tick(time.now());
+  }
+}
+
+test('the journey, the stage and the camps freed are kept over a restart, whatever the day', (t) => {
   const dir = mkdtempSync(joinPath(tmpdir(), 'kw-isle-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = joinPath(dir, 'adventure-isle.json');
@@ -200,106 +220,62 @@ test('the stage is kept over a restart that day, and starts over at 1 the next d
   const make = () => new PublicAdventure({ rooms: new Map(), now: time.now, log: () => {}, file }).start();
 
   const one = make();
-  assert.equal(one.stage, 1);
-  for (let i = 0; i < 2; i++) {
-    one.room.adventure.win(one.room.monsters);
-    one.tick(time.now());
-  }
-  assert.equal(one.stage, 3);
+  assert.deepEqual([one.stage, one.journey], [1, 1]);
+  winAll(one, time, 3);
+  // A camp freed on stage 3 is kept as soon as it is.
+  const adv = one.room.adventure;
+  one.room.campFreed(adv.free(adv.campById(1), [], one.room.monsters));
+  one.tick(time.now());
   const seed = one.room.world.seed;
   one.stop();
 
-  // The server starts again that day: on at stage 3, the very same island.
+  // The server starts again, days later: on at stage 3, the very same island,
+  // with its first camp still free and its gate open.
+  time.advance(3 * 24 * 60 * 60 * 1000);
   const again = make();
-  assert.equal(again.stage, 3);
-  assert.equal(again.room.stage, 3);
-  assert.equal(again.room.world.seed, seed);
+  assert.deepEqual([again.stage, again.journey, again.room.stage, again.room.world.seed], [3, 1, 3, seed]);
+  assert.deepEqual(again.room.adventure.camps.filter((c) => c.freed).map((c) => c.id), [1]);
+  assert.equal(again.room.adventure.gates[0].open, true);
   again.stop();
 
-  // The next day it starts over, and that is kept too.
-  time.advance(24 * 60 * 60 * 1000);
-  const tomorrow = make();
-  assert.equal(tomorrow.stage, 1);
-  tomorrow.stop();
-  assert.equal(make().stage, 1);
+  // From before journeys, a file that has only a day and a stage: on from
+  // that stage; one past the last chapter, a new journey.
+  writeFileSync(file, JSON.stringify({ day: '2026-10-11', stage: 4 }));
+  assert.deepEqual((({ stage, journey }) => [stage, journey])(make()), [4, 1]);
+  writeFileSync(file, JSON.stringify({ day: '2026-10-11', stage: STAGES + 3 }));
+  assert.deepEqual((({ stage, journey }) => [stage, journey])(make()), [1, 2]);
 
   // Nonsense in the file is stage 1, not a crash.
   writeFileSync(file, 'not json');
   assert.equal(make().stage, 1);
 });
 
-test('the beginning of a day starts the stages over at 1', () => {
+test('nothing starts the stages over but the last stage won: then a new journey begins at stage 1', () => {
   const { rooms, time, isle: one } = isle();
-  let room = one.room;
-  for (const stage of [2, 3]) {
-    room.adventure.win(room.monsters);
-    one.tick(time.now());
-    room = one.room;
-  }
-  assert.equal(one.stage, 3);
-  const b = join(room, 'Brave Fox');
-
-  // However the third stage was going, the day after begins at stage 1.
-  const midnight = new Date(time.t);
-  midnight.setHours(24, 0, 0, 0);
-  time.t = midnight.getTime();
+  winAll(one, time, 4);
+  // Midnight, and days after: still the same stage.
+  time.advance(2 * 24 * 60 * 60 * 1000);
   one.tick(time.now());
-  assert.equal(one.stage, 1);
+  assert.deepEqual([one.stage, one.journey], [4, 1]);
+
+  winAll(one, time);
+  assert.equal(one.stage, STAGES);
+  assert.equal(one.room.adventure.story.final, true, 'the last chapter');
+  assert.equal(one.room.adventure.describe().final, true, 'and the pages are told so');
+  const last = one.room;
+  const b = join(last, 'Brave Fox');
+  last.adventure.win(last.monsters);
+  one.tick(time.now());
+  assert.deepEqual([one.stage, one.journey], [1, 2], 'a new journey');
+  assert.equal(one.room.adventure.describe().journey, 2);
   assert.equal(publicEntries(rooms).length, 1);
-  assert.equal(one.room.adventure.stage, 1);
-  assert.ok(b.last('notice').text.includes('stage 1'), 'those there hear the new day');
-  // The same day keeps its stages: a tick that stays in the day changes
-  // nothing, and the retired one with a player waits for them (the ones
-  // empty since before the day are long past their while).
+  assert.deepEqual(b.last('next'), { t: 'next', code: one.room.code, stage: 1 }, 'those there sent on to it, after the ending');
+  assert.match(b.last('notice').text, /shines again/);
+  // The new journey's islands are their own, its maps turned over.
+  assert.notDeepEqual(one.room.adventure.camps.map((c) => [c.x, c.z]), last.adventure.camps.map((c) => [c.x, c.z]));
+  one.room.adventure.win(one.room.monsters);
   one.tick(time.now());
-  assert.equal(one.stage, 1);
-  assert.equal(rooms.size, publicEntries(rooms).length + 1, 'the retired one waits for its player');
-
-  // The new day's stage 1 is its own island, not the day before's come again.
-  const yesterday = one.room;
-  yesterday.adventure.win(yesterday.monsters);
-  one.tick(time.now());
-  assert.equal(one.stage, 2, 'and on the stages go');
-});
-
-test('a stage won at midnight goes on to the new day\'s stage 1, not nowhere', () => {
-  // Won just at midnight: the day turns before the next stage opens, and
-  // those on it go on to stage 1 as after any win.
-  const { time, isle: one } = isle();
-  let room = one.room;
-  room.adventure.win(room.monsters);
-  one.tick(time.now());
-  room = one.room;
-  assert.equal(one.stage, 2);
-  const a = join(room, 'Brave Fox');
-  room.adventure.win(room.monsters);
-  const midnight = new Date(time.t);
-  midnight.setHours(24, 0, 0, 0);
-  time.t = midnight.getTime();
-  one.tick(time.now());
-  assert.equal(one.stage, 1);
-  assert.deepEqual(a.last('next'), { t: 'next', code: one.room.code, stage: 1 }, 'sent on to stage 1');
-
-  // Won just before midnight: its players fly on to the next stage's
-  // island, which the day turning has retired by the time they get there;
-  // it sends them on to stage 1. Those there mid-stage are only told.
-  const { time: t2, isle: two } = isle();
-  const first = two.room;
-  const b = join(first, 'Happy Panda');
-  first.adventure.win(first.monsters);
-  two.tick(t2.now());
-  const second = two.room;
-  assert.deepEqual(b.last('next'), { t: 'next', code: second.code, stage: 2 });
-  const c = join(second, 'Quick Owl');
-  const midnight2 = new Date(t2.t);
-  midnight2.setHours(24, 0, 0, 0);
-  t2.t = midnight2.getTime();
-  two.tick(t2.now());
-  assert.equal(two.stage, 1);
-  assert.equal(c.last('next'), undefined, 'mid-stage, only told of the new day');
-  assert.ok(c.last('notice').text.includes('stage 1'));
-  const late = join(second, 'Late Bear');
-  assert.deepEqual(late.last('welcome').next, { code: two.room.code, stage: 1 }, 'arriving after midnight, sent on to stage 1');
+  assert.deepEqual([one.stage, one.journey], [2, 2], 'and on the stages go');
 });
 
 test('each island as it comes and goes, told to whoever wants it (the server, to host it peer to peer)', () => {
@@ -321,13 +297,12 @@ test('each island as it comes and goes, told to whoever wants it (the server, to
   assert.deepEqual(gone, [], 'not gone yet: whoever is on it stays on it, peer to peer too');
 
   const second = one.room;
-  const midnight = new Date(time.t);
-  midnight.setHours(24, 0, 0, 0);
-  time.t = midnight.getTime();
+  second.adventure.win(second.monsters);
+  time.advance(61 * 1000);
   one.tick(time.now());
-  assert.deepEqual(opened, [second, one.room], 'the new day opened');
-  assert.deepEqual(retired, [first, second], 'the day\'s last one retired');
-  assert.equal(rooms.has(first.code), false, 'the first one swept in the night');
+  assert.deepEqual(opened, [second, one.room], 'the third stage opened');
+  assert.deepEqual(retired, [first, second]);
+  assert.equal(rooms.has(first.code), false, 'the first one swept once its while was past');
   assert.deepEqual(gone, [first], 'and told of, so its sharing stops');
   assert.equal(rooms.has(second.code), true, 'the second one waits for its while');
 

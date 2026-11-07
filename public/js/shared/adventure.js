@@ -64,6 +64,9 @@ export const kingHearts = (players, stage = 1) => stageKing(12 + 6 * Math.min(8,
 // A boss's (bosses.js), which has as many again as its hearts say.
 export const bossHearts = (plan, players, stage = 1) => Math.round(kingHearts(players, stage) * (plan?.hearts ?? 1));
 export const KING_HIT_MS = 800;
+// How many of his hearts King Grumble gets back as he puffs himself up, at
+// the end of the story (hitKing).
+export const SECOND_WIND = 0.6;
 export const KING_HEAL_MS = 8000;
 const KING_HEAL_EVERY = 2000;
 // Out of HP with a friend about: dizzy this long, unless a friend this
@@ -74,36 +77,40 @@ export const HELP_SHARE = 0.6;
 export const helpHp = (max) => Math.round(max * HELP_SHARE);
 
 // The public adventure island the dedicated server keeps for everyone
-// (server/adventure.js) is conquered stage by stage, each stage a little
-// harder, on and on without end. Stage 1 plays as any adventure island;
-// every stage after has more camps (up to four more), one more guard in
-// each of them every third stage (up to eight), King Grumble with a fifth
-// more hearts each stage (up to four times as many), and flags that take a
-// tenth longer to raise each stage (up to twice as long). Past those the
-// stages go on as hard as they ever get, so none is ever hopeless.
+// (server/adventure.js) is conquered stage by stage, each stage harder than
+// the last, up to the last chapter of its story (isle-story.js). Stage 1
+// plays as any adventure island; every stage after has one more guard in
+// each camp every second stage (up to nine), its boss with a quarter more
+// hearts each stage (up to four times as many) and quicker with its moves,
+// and flags that take a tenth longer to raise each stage (up to twice as
+// long). On the isle, from the second stage, a flag slides back down while
+// the camp's monsters hold it, hazards come down on the way between the
+// camps, and from the third a camp's monsters come back quicker but only so
+// many times (its reserve: once that is gone, a monster popped stays popped,
+// so a camp is never hopeless), and half way up its flag they ambush whoever
+// is raising it. (Random adventure islands are stage 1, and keep to it.)
 export const STAGE_CAMPS = 4;
 // And on the stages after the first, tougher monsters among each camp's
 // guards (monsters.js), more of them and tougher the higher the stage: a
 // Spiky from stage 2, a Grumble Knight from 3, a Big Bruiser from 4, a
-// Stone Golem from 5, then another Knight at 7, another Golem at 9 and a
-// Giant Spider at 11; and from the second time round the story, the beasts
-// (beasts.js): a Shadow Wolf at 13, a Stingtail at 15, Rattlebones at 17, a
-// Thunderhawk at 19 and a Mimic at 21. They take the place of blobs, so a camp
-// keeps as many guards as before (and its mosquito); with fewer guards than
-// that, the toughest go first.
+// Stone Golem from 5, then another Knight at 6, and a
+// Giant Spider at 7; and the beasts (beasts.js): a Shadow Wolf at 8, a
+// Stingtail at 9, Rattlebones at 10, a Thunderhawk at 11 and a Mimic at 12,
+// the last. They take the place of blobs, so a camp keeps as many guards as
+// before (and its mosquito); with fewer guards than that, the toughest go
+// first.
 export const STAGE_TOUGH = [
   [2, 'spiky'],
   [3, 'knight'],
   [4, 'big'],
   [5, 'golem'],
-  [7, 'knight'],
-  [9, 'golem'],
-  [11, 'spider'],
-  [13, 'wolf'],
-  [15, 'stinger'],
-  [17, 'rattle'],
-  [19, 'hawk'],
-  [21, 'mimic'],
+  [6, 'knight'],
+  [7, 'spider'],
+  [8, 'wolf'],
+  [9, 'stinger'],
+  [10, 'rattle'],
+  [11, 'hawk'],
+  [12, 'mimic'],
 ];
 // The kinds among a camp's guards at a stage, toughest first.
 export const toughGuards = (stage) => {
@@ -113,7 +120,7 @@ export const toughGuards = (stage) => {
     .map(([, kind]) => kind)
     .sort((a, b) => rank[a] - rank[b]);
 };
-export const STAGE_GUARDS = 8;
+export const STAGE_GUARDS = 9;
 export const STAGE_KING = 4;
 export const STAGE_RAISE = 2;
 // How long after a stage of the public adventure island is conquered the
@@ -124,8 +131,39 @@ export const NEXT_STAGE_SECONDS = 15;
 // A stage as told: 1 when it is none or nonsense, and never past 9999.
 export const cleanStage = (stage) => (Number.isInteger(stage) && stage >= 1 ? Math.min(stage, 9999) : 1);
 export const stageCamps = (base, stage) => base + Math.min(STAGE_CAMPS, Math.floor((cleanStage(stage) - 1) / 2));
-export const stageGuards = (base, stage) => Math.min(STAGE_GUARDS, base + Math.floor((cleanStage(stage) - 1) / 3));
-export const stageKing = (base, stage) => Math.round(base * Math.min(STAGE_KING, 1 + (cleanStage(stage) - 1) / 5));
+export const stageGuards = (base, stage) => Math.min(STAGE_GUARDS, base + Math.floor((cleanStage(stage) - 1) / 2));
+export const stageKing = (base, stage) => Math.round(base * Math.min(STAGE_KING, 1 + (cleanStage(stage) - 1) / 4));
+// How much sooner a boss's moves come on a stage, against stage 1's: a
+// fortieth sooner each stage, up to a third (monsters.js gapOf).
+export const stageGap = (stage) => Math.max(2 / 3, 1 - (cleanStage(stage) - 1) / 40);
+
+// ------------------------------------------------ the isle's own dangers
+
+// A camp's monster popped comes back sooner on the isle's higher stages: 600
+// ms a stage, down to 12 seconds.
+export const guardBackMs = (stage = 1, isle = false) => (isle ? Math.max(12000, GUARD_BACK_MS - 600 * (cleanStage(stage) - 1)) : GUARD_BACK_MS);
+// From stage RESERVE_FROM on the isle, how many times a camp's monsters come
+// back in all: as many as guard it, and a third again on the higher stages.
+// Once they have, a monster popped stays popped (Infinity: always back).
+export const RESERVE_FROM = 3;
+export const reserveFor = (players, stage = 1, isle = false) => (isle && cleanStage(stage) >= RESERVE_FROM ? Math.round(guardsFor(players, stage) * (1 + (cleanStage(stage) - RESERVE_FROM) / 9)) : Infinity);
+// From stage 2 on the isle a flag slides back down while the camp's
+// monsters hold it, this much of the way a second (and never below nought).
+export const slideFor = (stage = 1, isle = false) => (isle && cleanStage(stage) >= 2 ? 0.01 + 0.003 * (cleanStage(stage) - 2) : 0);
+// From stage AMBUSH_FROM on the isle, half way up a camp's flag its monsters
+// ambush whoever is raising it: this many more come running, once a camp.
+export const AMBUSH_FROM = 3;
+export const AMBUSH_AT = 0.5;
+export const ambushFor = (players, stage = 1) => (cleanStage(stage) >= AMBUSH_FROM ? Math.min(6, 1 + Math.floor((cleanStage(stage) - 1) / 3) + Math.min(2, Math.max(0, players - 1))) : 0);
+// From stage 2 on the isle, hazards come down on whoever is out on the way
+// between the camps (isle-story.js, each chapter's own: coconuts, snowballs,
+// bolts of lightning…): a red ring where each comes down, a moment ahead,
+// on each of them about every this long (ms), sooner the higher the stage,
+// more of them at once on the highest, each this many bumps of HP.
+export const HAZARD = { from: 2, ms: 1500, reach: 1.8, high: 22 };
+export const hazardEvery = (stage) => Math.max(5000, 12000 - 700 * (cleanStage(stage) - 2));
+export const hazardCount = (stage) => 1 + Math.floor((cleanStage(stage) - 1) / 5);
+export const hazardBumps = (stage) => (cleanStage(stage) >= 8 ? 1 : 0.5);
 export const stageRaise = (base, stage) => {
   const by = Math.min(STAGE_RAISE, 1 + (cleanStage(stage) - 1) / 10);
   return by === 1 ? base : Math.round(base * by);
@@ -490,9 +528,10 @@ export class AdventureSim {
   // its way, each { camp, x, y, z, cells } — freeing that camp opens it
   // (cells, an edit, are what it becomes); chestSpots: where its treasure
   // chests may turn up, beside its way (treasure.js).
-  constructor({ camps = [], won = false, stage = 1, story = false, gates = [], chestSpots = null } = {}, seed = 1) {
+  constructor({ camps = [], won = false, stage = 1, journey = 1, story = false, gates = [], chestSpots = null } = {}, seed = 1) {
     this.rng = new Rng(seed);
     this.stage = cleanStage(stage);
+    this.journey = Number.isInteger(journey) && journey >= 1 ? journey : 1;
     this.story = story ? chapterOf(this.stage) : null;
     // Who holds the castle (bosses.js): the chapter's boss on the isle,
     // King Grumble with his stomp alone anywhere else.
@@ -501,7 +540,7 @@ export class AdventureSim {
     this.gates = gates.map((g) => ({ ...g, open: Boolean(won) }));
     this.camps = camps.map((c) => {
       const freed = Boolean(c.freed) || Boolean(won);
-      return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false, queen: false };
+      return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false, queen: false, reserve: Infinity, ambushed: false };
     });
     // The deepest camp — the one furthest from the start — wakes the Queen
     // Mosquito with its own monsters, as a tougher extra guard.
@@ -518,6 +557,10 @@ export class AdventureSim {
     // The treasure chests (treasure.js), on the shared isle only, with
     // randomness of their own too.
     this.chests = new Chests((seed ^ 0x85ebca6b) >>> 0, chestSpots);
+    // The isle's hazards on the way (stepHazards): when each person is next
+    // in for one, by id, with randomness of their own as well.
+    this.hazardAt = new Map();
+    this.hazardRng = new Rng((seed ^ 0xc2b2ae35) >>> 0);
   }
 
   // The treasure chests, now and then (the room asks only on the shared
@@ -610,11 +653,16 @@ export class AdventureSim {
       const at = this.kingSpot(world, c);
       const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: this.boss, plan: this.plan });
       m.passive = this.shielded;
+      // On the isle, quicker with its moves the higher the stage.
+      if (this.story) m.gapScale = stageGap(this.stage);
       const hearts = bossHearts(this.plan, players, this.stage);
       this.king = { ...noKing(), id: m.id, hearts, max: hearts };
       return;
     }
     for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
+    // (Their reserve is set once, the first time they come out: it does
+    // not fill up again as they go back to sleep and wake.)
+    if (c.reserve === Infinity) c.reserve = reserveFor(players, this.stage, Boolean(this.story));
     if (c.queen) this.addQueen(world, c, people, monsters);
     this.addChampion(world, c, people, monsters, players);
   }
@@ -670,11 +718,10 @@ export class AdventureSim {
   }
 
   // The beast (beasts.js) that is a camp's champion, or null. On Adventure Isle
-  // each chapter has its own, from its second camp on (from its first, the
-  // second time round the story). On any other adventure island the camps after
-  // the first have one of the first tier, by the island's luck. Where the Queen
-  // Mosquito is enough for anyone, the deepest camp of an island of your own and
-  // of the isle's very first stage, there is none.
+  // each chapter has its own, from its second camp on. On any other adventure
+  // island the camps after the first have one of the first tier, by the island's
+  // luck. Where the Queen Mosquito is enough for anyone, the deepest camp of an
+  // island of your own and of the isle's very first stage, there is none.
   championOf(world, c) {
     const camps = this.camps.filter((o) => o.kind === 'camp');
     const i = camps.indexOf(c);
@@ -682,7 +729,7 @@ export class AdventureSim {
     if (this.story) {
       if (this.stage === 1 && c.queen) return null;
       const own = this.story.champions ?? [];
-      return (this.story.round > 1 ? own[Math.min(i, own.length - 1)] : own[i - 1]) ?? null;
+      return own[i - 1] ?? null;
     }
     if (i === 0 || c.queen) return null;
     const list = beastsOfTier(1);
@@ -749,15 +796,72 @@ export class AdventureSim {
       c.back.shift();
       if (count < want && this.addGuard(world, c, people, monsters)) count++;
     }
-    // A friend came to the island: one more on its way.
-    if (count + c.back.length < want) c.back.push(now + GUARD_BACK_MS);
+    // A friend came to the island: one more on its way (out of the reserve,
+    // on the isle's higher stages, while there is one).
+    if (count + c.back.length < want && c.reserve > 0) {
+      c.back.push(now + guardBackMs(this.stage, Boolean(this.story)));
+      c.reserve--;
+    }
     c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
     // (A Mimic still shut guards nothing: nobody could tell what was holding the
     // flag down. Still, whoever comes to raise it is near enough to wake it.)
     c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5 && !(kindOf(m.kind).shut && m.state === 'idle'));
+    // On the isle the monsters pull a flag they hold back down.
+    if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.stage, Boolean(this.story)));
     if (!c.holders || c.guarded) return;
     c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.stage));
+    // Half way up, on the isle's higher stages: an ambush, once a camp.
+    if (this.story && !c.ambushed && c.progress >= AMBUSH_AT) {
+      const n = ambushFor(people.length, this.stage);
+      if (n) {
+        c.ambushed = true;
+        for (let i = 0; i < n; i++) {
+          const m = this.addGuard(world, c, people.filter((p) => campDistance(c, p.x, p.z) <= c.r + 2), monsters);
+          // (They come only the once: popped, they stay popped.)
+          if (m) m.helper = true;
+        }
+        news.push({ t: 'ambush', camp: c, count: n });
+        return;
+      }
+    }
     if (c.progress >= 1) news.push(this.free(c, people, monsters));
+  }
+
+  // The isle's hazards on the way between the camps (HAZARD, the chapter's
+  // own: isle-story.js), now and then on each person out there on foot — not
+  // in a safe place, a camp or the lair, nor up on a ride or dizzy: where each
+  // comes down, a moment ahead, for the room to show and work out. Returns
+  // [{ pid, what, to: [{ x, y, z }], ms, reach, bumps }].
+  stepHazards(world, now, people) {
+    if (!this.story?.hazard || this.stage < HAZARD.from || this.won) return [];
+    const out = [];
+    const havens = this.havens(world);
+    for (const p of people) {
+      if (p.flying || p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
+      const near = this.camps.some((c) => campDistance(c, p.x, p.z) <= c.r + 4) || havens.some((h) => campDistance(h, p.x, p.z) < h.r + 2);
+      const due = this.hazardAt.get(p.id);
+      if (near || due === undefined) {
+        // Not out on the way (or just come out on it): the wait starts again.
+        this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.6 + 0.6 * this.hazardRng.next()));
+        continue;
+      }
+      if (now < due) continue;
+      this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.8 + 0.4 * this.hazardRng.next()));
+      const to = [];
+      for (let i = 0; i < hazardCount(this.stage) * 3 && to.length < hazardCount(this.stage); i++) {
+        // On them the first time, and round them after.
+        const a = this.hazardRng.range(-Math.PI, Math.PI);
+        const d = to.length ? this.hazardRng.range(2.5, 4.5) : 0;
+        const x = p.x + Math.sin(a) * d;
+        const z = p.z + Math.cos(a) * d;
+        const y = standHeight(world, x, z, p.y + 2);
+        if (y === null || Math.abs(y - p.y) > 3 || havens.some((h) => campDistance(h, x, z) < h.r)) continue;
+        to.push({ x, y, z });
+      }
+      if (to.length) out.push({ pid: p.id, what: this.story.hazard, to, ms: HAZARD.ms, reach: HAZARD.reach, bumps: hazardBumps(this.stage) });
+    }
+    for (const id of [...this.hazardAt.keys()]) if (!people.some((p) => p.id === id)) this.hazardAt.delete(id);
+    return out;
   }
 
   // The camp is free: its monsters go, and whoever was there helped. With
@@ -794,8 +898,9 @@ export class AdventureSim {
       k.hearts++;
       k.healAt = now;
     }
-    const due = k.hearts <= k.max / 3 ? 2 : k.hearts <= (k.max * 2) / 3 ? 1 : 0;
+    const due = k.second ? 2 : k.hearts <= k.max / 3 ? 2 : k.hearts <= (k.max * 2) / 3 ? 1 : 0;
     king.rage = due;
+    king.second = Boolean(k.second);
     while (k.minions < due) {
       k.minions++;
       for (const side of [-1, 1]) {
@@ -882,7 +987,10 @@ export class AdventureSim {
   guardGone(m, now) {
     const c = this.campById(m.camp);
     if (!c || c.freed || !c.awake || c.kind !== 'camp' || isBoss(m.kind) || m.kind === 'queen' || m.kind === 'cub' || m.champion || m.helper) return;
-    c.back.push(now + GUARD_BACK_MS);
+    // (On the isle's higher stages, only while its reserve lasts.)
+    if (c.reserve <= 0) return;
+    c.reserve--;
+    c.back.push(now + guardBackMs(this.stage, Boolean(this.story)));
   }
 
   // A friend bopping the castle's boss (King Grumble, or on the isle the
@@ -899,6 +1007,14 @@ export class AdventureSim {
     k.hits.set(pid, now);
     k.hearts = Math.max(0, k.hearts - (dazed ? DAZED_HIT : 1) * times);
     k.hitAt = now;
+    // King Grumble, at the very end of the story, is not done the first time:
+    // he puffs himself up bigger and grumpier, with more than half his hearts
+    // back (SECOND_WIND), as cross as he ever gets.
+    if (k.hearts <= 0 && this.story?.final && !k.second) {
+      k.second = true;
+      k.hearts = Math.round(k.max * SECOND_WIND);
+      return { hit: true, hearts: k.hearts, max: k.max, beaten: false, dazed, second: true };
+    }
     return { hit: true, hearts: k.hearts, max: k.max, beaten: k.hearts <= 0, dazed };
   }
 
@@ -919,6 +1035,7 @@ export class AdventureSim {
       camps: this.camps.map((c) => ({ id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed, progress: +c.progress.toFixed(3) })),
       won: this.won,
       stage: this.stage,
+      ...(this.story ? { journey: this.journey, final: this.story.final } : {}),
       ...this.pack(),
     };
   }
@@ -929,7 +1046,7 @@ export class AdventureSim {
   pack() {
     return {
       c: this.camps.filter((c) => !c.freed && (c.awake || c.progress > 0)).map((c) => [c.id, Math.floor(c.progress * 100), c.holders, c.guarded ? 1 : 0]),
-      k: this.king.id ? [this.king.hearts, this.king.max] : null,
+      k: this.king.id ? [this.king.hearts, this.king.max, ...(this.king.second ? [1] : [])] : null,
       shield: this.shielded,
     };
   }

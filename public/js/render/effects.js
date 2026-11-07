@@ -839,9 +839,11 @@ export class Effects {
 
   // A Puffshroom's cloud of spores: soft yellow-green puffs rolling out all
   // round it as far as reach, rising a little and fading, with a few motes;
-  // gas, Bogmaw's burp of swamp gas instead, murky green.
-  spores(x, y, z, reach = 2.8, gas = false) {
-    const colors = gas ? ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'] : ['#e6f28a', '#c9e46a', '#f4f7c0', '#b8d870'];
+  // what, if not spores: 'gas', Bogmaw's burp of swamp gas, murky green;
+  // 'mist', Baron Boo's cold mist, pale and blue; 'gust', Old Nimbus's gale,
+  // white (true, from before: gas).
+  spores(x, y, z, reach = 2.8, what = 'spores') {
+    const colors = { true: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], gas: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], mist: ['#dfe9ff', '#b8c8f0', '#f4f7ff', '#9fb4e8'], gust: ['#ffffff', '#eef4fb', '#dfe9f5', '#ffffff'] }[what] ?? ['#e6f28a', '#c9e46a', '#f4f7c0', '#b8d870'];
     for (let i = 0; i < 22; i++) {
       const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
       const s = reach * (1.2 + Math.random() * 0.8);

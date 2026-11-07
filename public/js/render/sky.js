@@ -85,6 +85,14 @@ const GRAY_DAY = new THREE.Color('#9fb0c4');
 const GRAY_NIGHT = new THREE.Color('#1c2236');
 const CANDY_TINT = new THREE.Color('#ffb3d9');
 const VOLCANO_TINT = new THREE.Color('#ff8a5c');
+// Adventure Isle's own corners (shared/isle-story.js): warm over the dunes,
+// purple over the haunted hollow and the caverns, smoky over the clockwork
+// city, and deep blue up over the spires.
+const DUNES_TINT = new THREE.Color('#ffc98a');
+const HOLLOW_TINT = new THREE.Color('#5a3f8a');
+const CRYSTAL_TINT = new THREE.Color('#5f4fd6');
+const WORKS_TINT = new THREE.Color('#c9a06a');
+const SPIRES_TINT = new THREE.Color('#2f6fff');
 
 // Everything the scene's lighting needs for a moment of the day.
 export function environment(time, weather, theme, out = {}) {
@@ -103,6 +111,21 @@ export function environment(time, weather, theme, out = {}) {
   if (theme === 'volcano') {
     horizon.lerp(VOLCANO_TINT, 0.22 + 0.18 * day);
     top.lerp(VOLCANO_TINT, 0.1 * day);
+  }
+  if (theme === 'dunes') {
+    horizon.lerp(DUNES_TINT, 0.4 * day);
+    top.lerp(DUNES_TINT, 0.08 * day);
+  } else if (theme === 'hollow') {
+    horizon.lerp(HOLLOW_TINT, 0.45);
+    top.lerp(HOLLOW_TINT, 0.3);
+  } else if (theme === 'crystal') {
+    horizon.lerp(CRYSTAL_TINT, 0.4);
+    top.lerp(CRYSTAL_TINT, 0.25);
+  } else if (theme === 'works') {
+    horizon.lerp(WORKS_TINT, 0.35);
+    top.lerp(WORKS_TINT, 0.12);
+  } else if (theme === 'spires') {
+    top.lerp(SPIRES_TINT, 0.25 * day);
   }
   const sunAngle = (time - 0.25) * Math.PI * 2;
   out.sunDir = (out.sunDir ?? new THREE.Vector3()).set(Math.cos(sunAngle), Math.sin(sunAngle), 0.32).normalize();

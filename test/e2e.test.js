@@ -19,7 +19,8 @@ import { BUMP_HP } from '../public/js/shared/monsters.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { latestNews, NEWS } from '../public/js/news.js';
-import { CHAPTERS } from '../public/js/shared/isle-story.js';
+import { CHAPTERS, STAGES } from '../public/js/shared/isle-story.js';
+import { MONSTER_LOG } from '../public/js/shared/stickers.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
 import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
 import { VESSEL } from '../public/js/render/kitchen.js';
@@ -142,10 +143,11 @@ async function openPlayer(url, profile = {}, init = null) {
   // These players have seen every update too, unless profile.seenNews says
   // the newest one they saw (null: none); and every chapter of Adventure
   // Isle's story, unless profile.seenStory is false (it opens by itself
-  // as you arrive on a stage, once a chapter).
-  const { seenNews = latestNews(), seenStory = true, ...rest } = profile;
+  // as you arrive on a stage, once a chapter); and the isle's films, unless
+  // profile.seenFilms is false (its intro plays the first time you come).
+  const { seenNews = latestNews(), seenStory = true, seenFilms = true, ...rest } = profile;
   await page.evaluateOnNewDocument(
-    (p, seen, story) => {
+    (p, seen, story, films) => {
       const saved = { ...p, seenHelp: true, settings: { studs: false, music: 0, sound: 0, quality: 'low', ...p.settings } };
       localStorage.setItem('kidsworld.profile', JSON.stringify(saved));
       if (seen !== null && localStorage.getItem('kidsworld.seenNews') === null) localStorage.setItem('kidsworld.seenNews', JSON.stringify(seen));
@@ -156,11 +158,14 @@ async function openPlayer(url, profile = {}, init = null) {
       for (const space of ['', ...(who?.player ? [`@${who.player}.`] : [])]) {
         const key = `kidsworld.${space}isleStory`;
         if (story && localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(story));
+        const filmKey = `kidsworld.${space}isleFilms`;
+        if (films && localStorage.getItem(filmKey) === null) localStorage.setItem(filmKey, JSON.stringify(['intro', 'ending']));
       }
     },
     rest,
     seenNews,
     seenStory ? CHAPTERS.map((c) => c.key) : null,
+    seenFilms,
   );
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(url);
@@ -7244,6 +7249,59 @@ test('arriving on the shared isle tells its chapter of the story, once, and its 
   }
 });
 
+// Adventure Isle's films (scripts/films, public/video): the intro the first
+// time you come to the isle, before its story, skipped with Skip; and once the
+// last stage is won, the ending, and after it a new journey from stage 1.
+test('the isle’s intro plays the first time you come, before its story, and the ending once its last stage is won', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  // On to the last stage, King Grumble's own Gloom Rock.
+  while (isle.stage < STAGES) {
+    isle.room.adventure.win(isle.room.monsters);
+    isle.tick();
+  }
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenStory: false, seenFilms: false });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await until(page, () => document.querySelector('#modal.film video.film-video'));
+    assert.equal(await page.$eval('#modal video', (v) => v.getAttribute('src')), 'video/isle-intro.mp4');
+    // It plays (with sound, or muted with a button for it).
+    await until(page, () => document.querySelector('#modal video')?.currentTime > 0.3);
+    assert.equal(await page.evaluate(() => window.kidsWorld.ui.modalOpen), true);
+    await page.click('#modal .film-skip');
+    // Then the chapter's page of the story.
+    await until(page, () => document.querySelector('#modal .story-title'));
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro'], 'seen once on this device');
+    assert.ok((await page.$eval('#modal', (el) => el.textContent)).includes('Watch the intro'));
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+
+    // The last stage won: the ending, a moment after the fireworks.
+    const room = isle.room;
+    const [p] = [...room.players.values()];
+    room.adventure.win(room.monsters);
+    room.broadcast({ t: 'won', by: [p.id], hero: p.id, x: room.adventure.castle.x, y: room.adventure.castle.y, z: room.adventure.castle.z });
+    await until(page, () => document.querySelector('#modal.film video')?.getAttribute('src') === 'video/isle-ending.mp4');
+    // Meanwhile a new journey is up: on to stage 1, held while the film plays.
+    isle.tick();
+    assert.deepEqual([isle.stage, isle.journey], [1, 2]);
+    await until(page, () => !document.getElementById('next-stage').hidden);
+    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /A new journey! Stage 1, Shipwreck Shore/);
+    await page.evaluate(() => (window.kidsWorld.ui.nextGo.left = 1));
+    await delay(2500);
+    assert.equal(await page.evaluate((code) => window.kidsWorld.game.code === code, room.code), true, 'held while the ending plays');
+    await page.click('#modal .film-skip');
+    await until(page, () => document.getElementById('modal').hidden);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending']);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
 // The same login on two devices is one player on the isle: the device that
 // comes in last plays, and the other is sent back to the title, told why.
 test('the same login on two devices is on the shared isle once, the one in last', { skip }, async () => {
@@ -7865,7 +7923,7 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.click('#btn-stickers-hud');
   await clickButton(page, '👾 Monsters', '#modal');
   // Each monster as it really looks (its 3D model), and one not seen yet its shadow.
-  await until(page, () => document.querySelectorAll('#modal .monster-book img.figure').length === 32);
+  await until(page, (n) => document.querySelectorAll('#modal .monster-book img.figure').length === n, MONSTER_LOG.length);
   const seen = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll('#modal .tabs .chip')].map((b) => b.textContent),
     crab: document.querySelector('#modal .monster-book [data-kind="snapper"]').textContent,
@@ -7874,8 +7932,8 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
     golemPic: document.querySelector('#modal .monster-book [data-kind="golem"] img').className,
   }));
   assert.deepEqual([seen.crabPic, seen.golemPic], ['figure', 'figure shadow']);
-  assert.match(seen.tabs[0], /^👀 Seen \([1-9]\d* of 32\)$/);
-  assert.equal(seen.tabs[1], '🏆 Defeated (1 of 32)');
+  assert.match(seen.tabs[0], new RegExp(`^👀 Seen \\([1-9]\\d* of ${MONSTER_LOG.length}\\)$`));
+  assert.equal(seen.tabs[1], `🏆 Defeated (1 of ${MONSTER_LOG.length})`);
   assert.equal(seen.crab, 'Snappy Crab');
   assert.equal(seen.golem, '???');
   await page.click('#modal .tabs .chip[data-tab="defeated"]');

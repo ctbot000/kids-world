@@ -13,8 +13,8 @@
 // bridges and through tunnels), the blocks, the landmarks, the camps and the
 // lair (adventure.js builds those), the gates, and last the trees, flowers
 // and animals. The plans are in island blocks on a cozy island 128 across.
-// The same stage of the same day is the same island (its seed), and a
-// chapter told again on a later round is its own map turned over, so the
+// The same stage of the same journey is the same island (its seed), and a
+// chapter told again on a later journey is its own map turned over, so the
 // way goes the other way round (see mirror).
 import * as B from './blocks.js';
 import { CAMP_RADIUS, CASTLE_RADIUS, campFence, castleWalls, flatten, groundMap } from './adventure.js';
@@ -1805,7 +1805,634 @@ function castle(m) {
   return { fruit: B.FRUIT_ITEMS[0] };
 }
 
-const CHAPTER_MAPS = { shore, woods, frost, candy, marsh, ember, castle };
+// ---------------------------------------------------------------- terraces
+
+// Terraces along the way, for the later chapters: each column of the map is
+// on the terrace of the stretch of the way nearest it (its nodes' t), so the
+// way between one gate and the next runs over a terrace of its own, a sheer
+// cliff wherever it meets another, and climbs from one to the next on a ramp
+// (where the gate goes, see rampGate). Returns tierAt(x, z).
+function terraces(m, nodes) {
+  const pts = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const a = nodes[i];
+    const b = nodes[i + 1];
+    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z)));
+    for (let j = 0; j < n; j++) {
+      const f = j / n;
+      pts.push({ x: lerp(a.x, b.x, f), z: lerp(a.z, b.z, f), t: f < 0.5 ? a.t : b.t });
+    }
+  }
+  const end = nodes.at(-1);
+  pts.push({ x: end.x, z: end.z, t: end.t });
+  const S = m.S;
+  const tier = new Uint8Array(S * S);
+  const dist = new Float32Array(S * S);
+  for (let x = 0; x < S; x++) {
+    for (let z = 0; z < S; z++) {
+      let best = Infinity;
+      let t = 0;
+      for (const p of pts) {
+        const d = (p.x - x - 0.5) ** 2 + (p.z - z - 0.5) ** 2;
+        if (d < best) {
+          best = d;
+          t = p.t;
+        }
+      }
+      tier[m.k(x, z)] = t;
+      dist[m.k(x, z)] = Math.sqrt(best);
+    }
+  }
+  const at = (x, z) => m.k(Math.max(0, Math.min(S - 1, Math.floor(x))), Math.max(0, Math.min(S - 1, Math.floor(z))));
+  const tierAt = (x, z) => tier[at(x, z)];
+  // (And how far each column is from the way: canyons, the caverns' own.)
+  tierAt.dist = (x, z) => dist[at(x, z)];
+  return tierAt;
+}
+
+// The way's nodes for route(), each camp's (and the lair's) at the height of
+// its terrace there: height(x, z) is the map's.
+const onTerraces = (nodes, height) => nodes.map(({ t, camp, ...n }) => (camp ? { ...n, y: Math.round(height(n.x, n.z)) } : n));
+
+// A gate halfway up the ramp that starts at a node (from one terrace to the
+// next): in the cut, or on the causeway, with nothing either side to step
+// round it by.
+function rampGate(m, path, node, camp, make, opts = {}) {
+  const a = path.find((q) => q.node === node);
+  const b = path.find((q) => q.node === node + 1);
+  m.gate(path, node, camp, make, { high: 4, span: 4, ahead: (b.s - a.s) / 2, ...opts });
+}
+
+// A stepped pyramid of sandstone round (cx, cz), its base half as wide as
+// half, each step two blocks high (too high to climb), a gold star on top.
+function pyramid(m, cx, cz, half, y0, mat = TAN, trim = ORANGE) {
+  const { world } = m;
+  let y = y0;
+  for (let r = half; r >= 1; r--) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      for (let z = cz - r; z <= cz + r; z++) {
+        if (!m.inside(x, z, 0)) continue;
+        for (let dy = 0; dy < 2; dy++) world.set(x, y + dy, z, dy === 1 && (Math.abs(x - cx) === r || Math.abs(z - cz) === r) && (x + z) % 3 === 0 ? trim : mat);
+      }
+    }
+    y += 2;
+  }
+  world.set(cx, y, cz, B.STAR_BLOCK);
+  m.claim(cx, cz, half * 1.5, 3);
+}
+
+// An obelisk: a tall square column of sandstone with a gold top; broken, it
+// stops short with its top lying beside it.
+function obelisk(m, x, z, high, broken = false) {
+  const { world } = m;
+  const g = m.ground(x, z);
+  for (let y = 1; y <= high; y++) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) world.set(x + dx, g + y, z + dz, y % 4 === 0 ? ORANGE : TAN);
+  if (broken) {
+    for (let i = 0; i < 3; i++) world.set(x + 3 + i, m.ground(x + 3 + i, z) + 1, z, i === 2 ? B.STAR_BLOCK : TAN);
+  } else {
+    world.set(x, g + high + 1, z, B.STAR_BLOCK);
+    world.set(x + 1, g + high + 1, z + 1, B.STAR_BLOCK);
+  }
+  m.claim(x + 0.5, z + 0.5, 3, 3);
+}
+
+// A cactus: a green column with an arm or two.
+function cactus(rng) {
+  const cells = [];
+  const h = rng.int(3, 5);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, GREEN]);
+  if (rng.chance(0.7)) cells.push([1, 1, 0, GREEN], [2, 1, 0, GREEN], [2, 2, 0, GREEN]);
+  if (rng.chance(0.5)) cells.push([0, 2, -1, GREEN], [0, 2, -2, GREEN], [0, 3, -2, GREEN]);
+  return cells;
+}
+
+// ---------------------------------------------------------------- chapter 5
+
+// Chapter 5, Sunscorch Dunes: rolling sand rising in great terraces of
+// sandstone, each a cliff too high to climb. From the beach in the south-west
+// the way goes by the Palm Oasis, up the first ramp to the Scorpion Pit, along
+// the northern mesa to the Broken Obelisk, round and up to the Sandstone Steps
+// and last of all up to the Sunken Pyramid in the middle, on the highest
+// terrace of all.
+function dunes(m) {
+  const { seed } = m;
+  m.pal.path = TAN;
+  m.pal.cliff = TAN;
+  m.pal.deep = TAN;
+  m.pal.rockAt = 99;
+  m.pal.deck = TAN;
+  const nodes = [
+    { x: 16, z: 112, t: 0 },
+    { x: 24, z: 104, t: 0 },
+    { x: 32, z: 95, t: 0, camp: true },
+    { x: 26, z: 82, t: 0 },
+    { x: 20, z: 70, t: 0 },
+    { x: 20, z: 56, t: 1 },
+    { x: 22, z: 44, t: 1 },
+    { x: 31, z: 31, t: 1, camp: true },
+    { x: 45, z: 21, t: 1 },
+    { x: 58, z: 17, t: 1 },
+    { x: 73, z: 17, t: 2 },
+    { x: 86, z: 23, t: 2 },
+    { x: 98, z: 34, t: 2, camp: true },
+    { x: 105, z: 48, t: 2 },
+    { x: 105, z: 63, t: 3 },
+    { x: 101, z: 77, t: 3 },
+    { x: 92, z: 92, t: 3, camp: true },
+    { x: 78, z: 96, t: 3 },
+    { x: 64, z: 92, t: 4 },
+    { x: 60, z: 79, t: 4 },
+    { x: 60, z: 63, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const LIFT = 5;
+  const height = (x, z) => {
+    const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.08;
+    const dx = Math.abs(x - 64) / 61;
+    const dz = Math.abs(z - 64) / 61;
+    const edge = 1 - (dx ** 4 + dz ** 4) ** 0.25 + n;
+    const land = smooth(edge / 0.16);
+    // Dunes rippling over each terrace.
+    const dune = 1.5 + fbm(seed + 23, x / 14, z / 9, 3) * 1.1;
+    // (The terraces drop sheer into the sea: no slope along the shore to
+    // climb from one to the next.)
+    return SEA - 5 + land * (6 + dune) + (edge > 0 ? LIFT * tierAt(x, z) : 0);
+  };
+  m.shape(height);
+  // The oasis: a pool by the first camp.
+  m.pond(14, 86, 5, SEA + 2, 2);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const tan = { post: TAN, lamp: B.LAMP, floor: B.SAND, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: { ...tan, post: B.WOOD } });
+  m.camp(path, 7, { blend: 2, style: tan });
+  const obeliskCamp = m.camp(path, 12, { blend: 2, style: tan });
+  m.camp(path, 16, { blend: 2, style: tan });
+  const lair = m.camp(path, 20, { kind: 'castle', blend: 2, style: { wall: TAN, tower: ORANGE, stripe: B.STAR_BLOCK, top: TAN, floor: B.SAND } });
+  m.finish();
+  // The Sunken Pyramid rising behind the lair, and the obelisks.
+  pyramid(m, lair.cx, lair.cz - 19, 7, m.ground(lair.cx, lair.cz - 19) + 1);
+  obelisk(m, Math.floor(obeliskCamp.x) + 11, Math.floor(obeliskCamp.z) - 2, 9, true);
+  obelisk(m, 40, 102, 7);
+  obelisk(m, 114, 70, 8);
+  // A drift of sand on the first ramp, a stone door on the second, the
+  // sun-stone wall on the third and the pyramid's doors on the last.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 3 + ((x * 3 + z) & 1) ? B.SAND : 0));
+  rampGate(m, path, 9, 2, (x, y, z, i) => (i === 3 ? ORANGE : TAN), { thick: 1 });
+  rampGate(m, path, 13, 3, (x, y, z, i) => (i === 2 ? B.STAR_BLOCK : (x + z + i) % 2 ? TAN : YELLOW), { thick: 1 });
+  rampGate(m, path, 17, 4, (x, y, z, i) => (i === 3 ? B.STAR_BLOCK : TAN), { thick: 1, high: 5 });
+  m.trees(1800, 6, (x, z, y, rng) => (m.world.get(x, y, z) !== B.SAND ? null : Math.hypot(x - 14, z - 86) < 12 ? palmTree(rng) : rng.chance(0.45) ? cactus(rng) : null));
+  m.flowers(6);
+  m.animals({ zebra: 2, giraffe: 1 }, (x, z) => Math.hypot(x - 20, z - 92) < 26);
+  return { fruit: B.FRUIT_ITEMS[3 % B.FRUIT_ITEMS.length] };
+}
+
+// ---------------------------------------------------------------- chapter 7
+
+// A cluster of glowing crystals standing on the ground, as tall as h.
+function crystalCluster(rng, h = 3) {
+  const cells = [];
+  const id = rng.chance(0.5) ? B.CRYSTAL : B.CRYSTAL_BLUE;
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, id]);
+  if (rng.chance(0.7)) for (let y = 0; y < h - 1; y++) cells.push([1, y, 0, id]);
+  if (rng.chance(0.5)) cells.push([0, 0, 1, id === B.CRYSTAL ? B.CRYSTAL_BLUE : B.CRYSTAL]);
+  return cells;
+}
+
+// Chapter 7, the Crystal Caverns: canyons cut deep into a great block of
+// rock, open to the night sky, their walls glittering with crystals. From the
+// cove in the south the miners' road winds through the caverns, each one a
+// step up from the last, by the Miners' Camp, the Glowing Gallery, Spider
+// Bridge and the Deep Diggings, to the Crystal Grotto in the heart of the rock.
+function caverns(m) {
+  const { seed } = m;
+  m.pal.path = B.PEBBLES;
+  m.pal.cliff = B.STONE;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 64, z: 118, t: 0 },
+    { x: 64, z: 106, t: 0 },
+    { x: 60, z: 94, t: 0, camp: true },
+    { x: 46, z: 88, t: 0 },
+    { x: 33, z: 85, t: 0 },
+    { x: 21, z: 75, t: 1 },
+    { x: 18, z: 61, t: 1 },
+    { x: 24, z: 46, t: 1, camp: true },
+    { x: 35, z: 37, t: 1 },
+    { x: 48, z: 32, t: 2 },
+    { x: 62, z: 28, t: 2 },
+    { x: 76, z: 33, t: 2, camp: true },
+    { x: 88, z: 41, t: 2 },
+    { x: 97, z: 54, t: 3 },
+    { x: 101, z: 68, t: 3 },
+    { x: 97, z: 82, t: 3, camp: true },
+    { x: 85, z: 91, t: 3 },
+    { x: 77, z: 81, t: 4 },
+    { x: 71, z: 71, t: 4 },
+    { x: 63, z: 61, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const camps = nodes.filter((n) => n.camp);
+  const lair = camps.at(-1);
+  // In a canyon: near the way, round a camp, or the lair's cavern.
+  const open = (x, z) => tierAt.dist(x, z) < 5.5 || camps.some((c) => c !== lair && Math.hypot(x - c.x, z - c.z) < 11.5) || Math.max(Math.abs(x - lair.x), Math.abs(z - lair.z)) < 15;
+  const height = (x, z) => {
+    const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.08;
+    const dx = Math.abs(x - 64) / 62;
+    const dz = Math.abs(z - 64) / 62;
+    const edge = 1 - (dx ** 4 + dz ** 4) ** 0.25 + n;
+    // The cove where everyone lands, open to the sea.
+    if (Math.hypot(x - 64, z - 122) < 9) return SEA + 2 + smooth((9 - Math.hypot(x - 64, z - 122)) / 9) * 2;
+    if (edge < 0) return SEA - 4;
+    const floor = SEA + 4 + 5 * tierAt(x, z) + fbm(seed + 23, x / 9, z / 9, 2) * 0.6;
+    return open(x, z) ? floor : SEA + 34 + fbm(seed + 31, x / 12, z / 12, 3) * 2;
+  };
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const rock = { post: B.STONE, lamp: B.CRYSTAL, floor: B.PEBBLES, bed: B.HAY };
+  m.camp(path, 2, { blend: 1, style: { ...rock, post: B.WOOD, lamp: B.LAMP } });
+  m.camp(path, 7, { blend: 1, style: { ...rock, lamp: B.CRYSTAL_BLUE } });
+  const bridge = m.camp(path, 11, { blend: 1, style: rock });
+  m.camp(path, 15, { blend: 1, style: rock });
+  m.camp(path, 19, { kind: 'castle', blend: 1, style: { wall: B.STONE, tower: B.CRYSTAL, stripe: B.CRYSTAL_BLUE, top: B.STONE, floor: B.CRYSTAL_BLUE } });
+  m.finish();
+  // Crystals set into the canyon walls (flush with them: nothing to climb),
+  // and miners' lamps set into the floor by the road.
+  const { world } = m;
+  for (let x = 1; x < m.S - 1; x++) {
+    for (let z = 1; z < m.S - 1; z++) {
+      const g = m.ground(x, z);
+      if (g < SEA + 20) continue;
+      const below = Math.min(...[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => m.ground(x + dx, z + dz)));
+      if (below > g - 6) continue;
+      for (let y = below + 2; y < g - 1; y++) if (hash2(seed + 97, x * 64 + y, z) < 0.06) world.set(x, y, z, hash2(seed + 98, x, z * 64 + y) < 0.5 ? B.CRYSTAL : B.CRYSTAL_BLUE);
+    }
+  }
+  for (const [i, p] of path.entries()) {
+    if (i % 14 || p.bridge || p.tunnel) continue;
+    const a = path[Math.max(0, i - 1)];
+    const b = path[Math.min(path.length - 1, i + 1)];
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    const x = Math.floor(p.x - ((b.z - a.z) / len) * 2.5);
+    const z = Math.floor(p.z + ((b.x - a.x) / len) * 2.5);
+    if (m.ground(x, z) === p.y && m.keep[m.k(x, z)] !== 3) world.set(x, p.y, z, B.LAMP);
+  }
+  // Webs across Spider Bridge's cavern.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.6;
+    web(m, bridge.x + Math.cos(a) * 9.5, bridge.level + 4, bridge.z + Math.sin(a) * 9.5, -Math.sin(a), Math.cos(a));
+  }
+  // The rockfall on the first ramp, the crystal doors on the second, the
+  // webs on the third, and a wall of rock on the last.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 4 ? ((x + z + i) % 3 ? B.STONE : B.PEBBLES) : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => ((x + z + i) % 2 ? B.CRYSTAL : B.CRYSTAL_BLUE), { thick: 1 });
+  rampGate(m, path, 12, 3, () => WHITE_CLOTH, { thick: 1 });
+  rampGate(m, path, 16, 4, (x, y, z, i) => (i === 2 ? B.CRYSTAL : B.STONE), { thick: 2, high: 5 });
+  m.trees(1400, 6, (x, z, y, rng) => (y > SEA + 30 || m.world.get(x, y, z) !== B.STONE ? null : rng.chance(0.55) ? crystalCluster(rng, rng.int(2, 4)) : rng.chance(0.4) ? giantMushroomCells(rng) : null));
+  m.flowers(4, { extra: B.MUSHROOM, rare: 0.97 });
+  m.animals({ bunny: 2 }, (x, z) => z > 100);
+  return { fruit: B.FRUIT_ITEMS[4 % B.FRUIT_ITEMS.length] };
+}
+
+// A little glowing mushroom, as a tree (cells from its foot).
+function giantMushroomCells(rng) {
+  const h = rng.int(2, 3);
+  const cells = [];
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, WHITE]);
+  for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) cells.push([dx, h, dz, rng.chance(0.5) ? PURPLE : SKY]);
+  return cells;
+}
+
+// ---------------------------------------------------------------- chapter 8
+
+// A gravestone: a rounded slab of stone, two high, by (x, z).
+function gravestone(m, x, z) {
+  const g = m.ground(x, z);
+  if (g < SEA || m.keep[m.k(x, z)] === 1) return;
+  m.world.set(x, g + 1, z, GRAY);
+  m.world.set(x, g + 2, z, B.STONE);
+  m.claim(x + 0.5, z + 0.5, 1.5, 3);
+}
+
+// A crooked lamp post: a fence post with a lamp, as a tree.
+const lampPost = () => [[0, 0, 0, B.FENCE], [0, 1, 0, B.FENCE], [0, 2, 0, B.LAMP]];
+
+// Chapter 8, Haunted Hollow: a dark valley where the sun never shines, its
+// dead trees crooked, its terraces stepping up and up. From the gate in the
+// south-east the way goes past the Crooked Gate, through the Old Graveyard,
+// the Pumpkin Patch and round the Witch's Well to Creaky Manor at the top.
+function hollow(m) {
+  const { seed } = m;
+  m.pal.path = GRAY;
+  m.pal.cliff = B.STONE;
+  m.pal.rockAt = 99;
+  m.pal.rail = B.FENCE;
+  const nodes = [
+    { x: 112, z: 116, t: 0 },
+    { x: 104, z: 106, t: 0 },
+    { x: 93, z: 96, t: 0, camp: true },
+    { x: 82, z: 103, t: 0 },
+    { x: 70, z: 108, t: 1 },
+    { x: 57, z: 104, t: 1, camp: true },
+    { x: 44, z: 100, t: 1 },
+    { x: 33, z: 96, t: 2 },
+    { x: 25, z: 85, t: 2, camp: true },
+    { x: 20, z: 72, t: 2 },
+    { x: 20, z: 59, t: 3 },
+    { x: 26, z: 45, t: 3, camp: true },
+    { x: 39, z: 37, t: 3 },
+    { x: 52, z: 35, t: 4 },
+    { x: 64, z: 39, t: 4 },
+    { x: 76, z: 46, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = (x, z) => {
+    const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.08;
+    const dx = Math.abs(x - 64) / 61;
+    const dz = Math.abs(z - 64) / 61;
+    const edge = 1 - (dx ** 4 + dz ** 4) ** 0.25 + n;
+    const land = smooth(edge / 0.16);
+    const hills = 2 + fbm(seed + 23, x / 18, z / 18, 3) * 1.2;
+    return SEA - 5 + land * (7 + hills) + (edge > 0 ? 5 * tierAt(x, z) : 0);
+  };
+  m.shape(height);
+  m.pond(30, 30, 4, Math.round(height(30, 30)) + 1, 2);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const iron = { post: CHARCOAL, lamp: B.LAMP, floor: GRAY, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: iron });
+  const yard = m.camp(path, 5, { blend: 2, style: iron });
+  const patch = m.camp(path, 8, { blend: 2, style: { ...iron, post: B.WOOD } });
+  const well = m.camp(path, 11, { blend: 2, style: iron });
+  m.camp(path, 15, { kind: 'castle', blend: 2, style: { wall: CHARCOAL, tower: PURPLE, stripe: LAVENDER, top: CHARCOAL, floor: B.CHECKER_FLOOR } });
+  m.finish();
+  // Gravestones round the Old Graveyard, pumpkins and a scarecrow in the
+  // Pumpkin Patch, and the Witch's Well: a ring of stone round dark water.
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    gravestone(m, Math.floor(yard.x + Math.cos(a) * 11), Math.floor(yard.z + Math.sin(a) * 11));
+  }
+  const pumpkin = B.CROP_STAGES[B.CROPS.findIndex((c) => c.key === 'pumpkin')][B.RIPE];
+  for (let i = 0; i < 18; i++) {
+    const a = i * 2.4;
+    const d = 10 + (i % 3);
+    const x = Math.floor(patch.x + Math.cos(a) * d);
+    const z = Math.floor(patch.z + Math.sin(a) * d);
+    const g = m.ground(x, z);
+    if (m.keep[m.k(x, z)] === 1 || m.world.get(x, g + 1, z) !== B.AIR) continue;
+    m.world.set(x, g + 1, z, pumpkin);
+  }
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) m.world.set(Math.floor(well.x) + 4 + dx, well.level + 1, Math.floor(well.z) + 4 + dz, B.STONE);
+  m.world.set(Math.floor(well.x) + 4, well.level, Math.floor(well.z) + 4, B.WATER);
+  // The rusty gate, the graveyard's iron fence, a wall of pumpkins and the
+  // well's mist turned to stone.
+  rampGate(m, path, 3, 1, (x, y, z, i) => (i < 4 ? ((x + z) % 2 ? CHARCOAL : GRAY) : 0), { thick: 1 });
+  rampGate(m, path, 6, 2, (x, y, z, i) => (i === 3 ? B.LAMP : CHARCOAL), { thick: 1 });
+  rampGate(m, path, 9, 3, (x, y, z, i) => (i < 3 ? ORANGE : 0));
+  rampGate(m, path, 12, 4, (x, y, z, i) => (i === 3 ? LAVENDER : PURPLE), { thick: 1, high: 5 });
+  m.trees(3200, 5, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.08) ? lampPost() : rng.chance(0.5) ? deadTree(rng) : rng.chance(0.25) ? willowTree(rng) : null));
+  m.flowers(12, { extra: B.MUSHROOM, rare: 0.98 });
+  m.animals({ bunny: 2 }, (x, z) => x > 90 && z > 90);
+  return { fruit: B.FRUIT_ITEMS[5 % B.FRUIT_ITEMS.length] };
+}
+
+// ---------------------------------------------------------------- chapter 10
+
+// A brick building of Cogwheel City, w by d, high, with a flat roof, windows
+// that light up and a chimney; only on open ground well away from cliffs.
+function factoryBlock(m, rng, cx, cz) {
+  const { world } = m;
+  const w = rng.int(2, 3);
+  const d = rng.int(2, 3);
+  const high = rng.int(4, 7);
+  const g = m.ground(cx, cz);
+  for (let x = cx - w - 3; x <= cx + w + 3; x++) {
+    for (let z = cz - d - 3; z <= cz + d + 3; z++) {
+      if (!m.inside(x, z, 2) || m.keep[m.k(x, z)] || Math.abs(m.ground(x, z) - g) > 0) return false;
+    }
+  }
+  const wall = rng.pick([B.BRICK_WALL, GRAY, BROWN]);
+  for (let x = cx - w; x <= cx + w; x++) {
+    for (let z = cz - d; z <= cz + d; z++) {
+      const edge = Math.abs(x - cx) === w || Math.abs(z - cz) === d;
+      for (let y = 1; y <= high; y++) world.set(x, g + y, z, edge && y % 3 === 2 && (x + z) % 2 === 0 ? B.GLASS : y === high ? CHARCOAL : wall);
+    }
+  }
+  for (let y = high + 1; y <= high + 4; y++) world.set(cx + w - 1, g + y, cz - d + 1, y === high + 4 ? B.LAMP : CHARCOAL);
+  m.claim(cx, cz, Math.max(w, d) + 2, 3);
+  return true;
+}
+
+// A great cog lying on the ground, as a ring of dark bricks with teeth.
+function cog(m, cx, cz, r) {
+  for (let x = Math.floor(cx - r - 1); x <= Math.ceil(cx + r + 1); x++) {
+    for (let z = Math.floor(cz - r - 1); z <= Math.ceil(cz + r + 1); z++) {
+      const d = Math.hypot(x - cx, z - cz);
+      const tooth = (Math.round((Math.atan2(z - cz, x - cx) / (Math.PI * 2)) * 16) & 1) === 0;
+      if (d > r - 1 && (d < r + 0.2 || (tooth && d < r + 1.1)) && m.keep[m.k(x, z)] !== 1) m.world.set(x, m.ground(x, z), z, CHARCOAL);
+    }
+  }
+}
+
+// Chapter 10, Cogwheel City: a town of brass and brick on terraces stepping
+// up the hill behind Ember Mountain. From the docks in the south-west the way
+// goes through the Scrap Yard, along Conveyor Row (its moving belts running
+// against you), up to the Steam Works and the Clock Tower, and last up to
+// Mainspring Hall on the top terrace.
+function works(m) {
+  const { seed } = m;
+  m.pal.path = GRAY;
+  m.pal.cliff = B.BRICK_WALL;
+  m.pal.deep = B.STONE;
+  m.pal.rockAt = 99;
+  m.pal.deck = CHARCOAL;
+  m.pal.rail = B.FENCE;
+  const nodes = [
+    { x: 14, z: 116, t: 0 },
+    { x: 20, z: 106, t: 0 },
+    { x: 30, z: 96, t: 0, camp: true },
+    { x: 40, z: 84, t: 0 },
+    { x: 52, z: 78, t: 1 },
+    { x: 66, z: 78, t: 1 },
+    { x: 80, z: 78, t: 1 },
+    { x: 94, z: 84, t: 1, camp: true },
+    { x: 106, z: 72, t: 1 },
+    { x: 108, z: 58, t: 2 },
+    { x: 100, z: 44, t: 2, camp: true },
+    { x: 88, z: 33, t: 2 },
+    { x: 74, z: 29, t: 3 },
+    { x: 58, z: 24, t: 3, camp: true },
+    { x: 44, z: 29, t: 3 },
+    { x: 36, z: 42, t: 4 },
+    { x: 42, z: 54, t: 4 },
+    { x: 57, z: 57, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = (x, z) => {
+    const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.06;
+    const dx = Math.abs(x - 64) / 62;
+    const dz = Math.abs(z - 64) / 62;
+    const edge = 1 - (dx ** 6 + dz ** 6) ** (1 / 6) + n;
+    const land = smooth(edge / 0.12);
+    // Paved and level, each terrace: a town, not a hillside.
+    return SEA - 5 + land * 9 + (edge > 0 ? 5 * tierAt(x, z) : 0);
+  };
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0, width: 2 });
+  const brass = { post: BROWN, lamp: B.LAMP, floor: CHARCOAL, bed: B.CRATE };
+  m.camp(path, 2, { blend: 2, style: brass });
+  m.camp(path, 7, { blend: 2, style: brass });
+  const steam = m.camp(path, 10, { blend: 2, style: brass });
+  const clock = m.camp(path, 13, { blend: 2, style: brass });
+  m.camp(path, 17, { kind: 'castle', blend: 2, style: { wall: B.BRICK_WALL, tower: ORANGE, stripe: YELLOW, top: CHARCOAL, floor: B.CHECKER_FLOOR } });
+  m.finish();
+  // Conveyor Row: moving belts along the way, running back the way you come.
+  const { world } = m;
+  for (const p of path) {
+    if (p.node >= 0 && p.node !== 5) continue;
+    const i = path.indexOf(p);
+    if (!(p.s >= path.find((q) => q.node === 5).s && p.s <= path.find((q) => q.node === 6).s)) continue;
+    const back = facingTo(p.x, p.z, path[Math.max(0, i - 3)].x, path[Math.max(0, i - 3)].z);
+    for (const o of [-1, 0, 1]) {
+      const x = Math.floor(p.x);
+      const z = Math.floor(p.z) + o;
+      if (world.get(x, p.y + 1, z) === B.AIR && m.ground(x, z) === p.y) world.set(x, p.y + 1, z, B.turnedTo(B.WALKWAY, back));
+    }
+  }
+  // The Clock Tower by its camp, with a clock on each side; the steam works'
+  // chimneys; great cogs lying about, and brick buildings all over the town.
+  const tx = Math.floor(clock.x) - 11;
+  const tz = Math.floor(clock.z) - 3;
+  const tg = m.ground(tx, tz);
+  for (let y = 1; y <= 12; y++) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(tx + dx, tg + y, tz + dz, y === 12 ? CHARCOAL : B.BRICK_WALL);
+  for (const [dx, dz] of [[0, 2], [0, -2], [2, 0], [-2, 0]]) world.set(tx + dx, tg + 10, tz + dz, B.TOWER_CLOCK);
+  world.set(tx, tg + 13, tz, B.LAMP);
+  m.claim(tx, tz, 4, 3);
+  for (const [dx, dz] of [[9, -6], [10, 5]]) {
+    const x = Math.floor(steam.x) + dx;
+    const z = Math.floor(steam.z) + dz;
+    const g = m.ground(x, z);
+    for (let y = 1; y <= 9; y++) world.set(x, g + y, z, y > 7 ? GRAY : CHARCOAL);
+    m.claim(x, z, 2, 3);
+  }
+  cog(m, 70, 100, 4);
+  cog(m, 20, 60, 3);
+  const rng = new Rng(seed ^ 0x51a7);
+  for (let tries = 0, built = 0; tries < 400 && built < 22; tries++) if (factoryBlock(m, rng, rng.int(8, 120), rng.int(8, 120))) built++;
+  // The magnet's heap of junk, the steel shutter, the boiler-room doors, and
+  // the doors of Mainspring Hall.
+  rampGate(m, path, 3, 1, (x, y, z, i) => (i < 4 ? ((x * 3 + z + i) % 3 ? B.CRATE : GRAY) : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i % 2 ? GRAY : CHARCOAL), { thick: 1 });
+  rampGate(m, path, 11, 3, (x, y, z, i) => (i === 2 ? YELLOW : BROWN), { thick: 1 });
+  rampGate(m, path, 14, 4, (x, y, z, i) => (i === 3 ? ORANGE : B.BRICK_WALL), { thick: 1, high: 5 });
+  m.trees(900, 7, (x, z, y, rng2) => (m.world.get(x, y, z) === B.PEBBLES && rng2.chance(0.3) ? oakTree(rng2) : null));
+  m.flowers(6);
+  m.animals({ dog: 2 }, (x, z) => z > 90);
+  return { fruit: B.FRUIT_ITEMS[6 % B.FRUIT_ITEMS.length] };
+}
+
+// ---------------------------------------------------------------- chapter 11
+
+// A puff of cloud blocks floating at (cx, cy, cz).
+function cloudPuff(m, cx, cy, cz, r) {
+  for (let x = Math.floor(cx - r * 1.6); x <= Math.ceil(cx + r * 1.6); x++) {
+    for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++) {
+      for (let y = cy - 1; y <= cy + r; y++) {
+        if (!m.inside(x, z, 0) || ((x - cx) / 1.6) ** 2 + (z - cz) ** 2 + ((y - cy) * 1.3) ** 2 > r * r) continue;
+        if (m.world.get(x, y, z) === B.AIR) m.world.set(x, y, z, B.CLOUD);
+      }
+    }
+  }
+}
+
+// Chapter 11, the Stormcloud Spires: great pillars of rock standing up out of
+// the sea, each taller than the last, their tops green and the clouds drifting
+// round them, joined by rainbow bridges. From the landing on the low island in
+// the south-west the way crosses from spire to spire, by Rainbow Landing, the
+// Windy Arch, Hawk's Perch and the Thunder Steps, to the Thunderhead Temple on
+// the tallest of them all. Each bridge has a gate halfway over.
+function spires(m) {
+  const { seed } = m;
+  m.pal.path = WHITE;
+  m.pal.cliff = B.STONE;
+  m.pal.rockAt = 99;
+  m.pal.rail = B.FENCE;
+  // (The decks are laid dark, then painted the rainbow's colours.)
+  m.pal.deck = CHARCOAL;
+  // Each spire: where, how wide and how high its top. The first is the low
+  // island where everyone lands, with a beach to climb out of the sea onto.
+  const SPIRES = [
+    { x: 24, z: 104, r: 17, top: SEA + 4, beach: true },
+    { x: 21, z: 51, r: 13, top: SEA + 10 },
+    { x: 62, z: 22, r: 13, top: SEA + 16 },
+    { x: 104, z: 41, r: 13, top: SEA + 22 },
+    { x: 89, z: 92, r: 18, top: SEA + 28 },
+    // And some no way goes to, for the look of it.
+    { x: 60, z: 64, r: 6, top: SEA + 20 },
+    { x: 116, z: 112, r: 5, top: SEA + 12 },
+    { x: 8, z: 22, r: 5, top: SEA + 18 },
+    { x: 58, z: 112, r: 6, top: SEA + 9 },
+  ];
+  m.shape((x, z) => {
+    let h = SEA - 8;
+    for (const s of SPIRES) {
+      const d = Math.hypot(x - s.x, z - s.z) + fbm(seed + 71, x / 7, z / 7, 2) * 1.6;
+      if (s.beach) {
+        if (d < s.r + 6) h = Math.max(h, SEA - 3 + smooth((s.r + 6 - d) / 8) * (s.top - SEA + 3) + fbm(seed + 5, x / 6, z / 6, 2) * 0.5);
+      } else if (d < s.r) {
+        h = Math.max(h, s.top + fbm(seed + 23, x / 9, z / 9, 2) * 0.8);
+      }
+    }
+    return h;
+  });
+  const path = m.route([
+    { x: 15, z: 116 },
+    { x: 24, z: 106 },
+    { x: 30, z: 96, y: SEA + 4 },
+    { x: 27, z: 89, bridge: true },
+    { x: 23, z: 63 },
+    { x: 21, z: 51, y: SEA + 10 },
+    { x: 29, z: 43, bridge: true },
+    { x: 51, z: 27 },
+    { x: 62, z: 22, y: SEA + 16 },
+    { x: 74, z: 26, bridge: true },
+    { x: 93, z: 37 },
+    { x: 104, z: 41, y: SEA + 22 },
+    { x: 102, z: 53, bridge: true },
+    { x: 95, z: 76 },
+    { x: 89, z: 92, y: SEA + 28 },
+  ], { slope: 0.6, blend: 0 });
+  const cloud = { post: WHITE, lamp: B.LAMP, floor: SKY, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: cloud });
+  m.camp(path, 5, { blend: 1, style: cloud });
+  m.camp(path, 8, { blend: 1, style: cloud });
+  m.camp(path, 11, { blend: 1, style: cloud });
+  m.camp(path, 14, { kind: 'castle', blend: 1, style: { wall: WHITE, tower: SKY, stripe: YELLOW, top: WHITE, floor: B.STAR_BLOCK } });
+  m.finish();
+  // The bridges in all the colours of the rainbow.
+  const RAINBOW = [RED, ORANGE, YELLOW, LIME, SKY, BLUE, PURPLE];
+  const { world } = m;
+  for (let x = 0; x < m.S; x++) {
+    for (let z = 0; z < m.S; z++) {
+      for (let y = SEA + 3; y < SEA + 32; y++) {
+        if (world.get(x, y, z) !== CHARCOAL) continue;
+        const near = m.bridges.reduce((best, p) => (Math.hypot(p.x - x - 0.5, p.z - z - 0.5) < best.d ? { d: Math.hypot(p.x - x - 0.5, p.z - z - 0.5), p } : best), { d: Infinity, p: null });
+        if (near.p && near.d < 3.5) world.set(x, y, z, RAINBOW[Math.floor(near.p.s / 2.5) % RAINBOW.length]);
+      }
+    }
+  }
+  // Clouds drifting round the spires, high over the bridges.
+  for (const [x, y, z, r] of [[44, SEA + 36, 70, 3], [80, SEA + 38, 60, 4], [20, SEA + 33, 78, 3], [110, SEA + 40, 76, 3], [42, SEA + 37, 10, 3], [70, SEA + 41, 110, 4], [100, SEA + 35, 14, 3]]) cloudPuff(m, x, y, z, r);
+  // A rainbow wall across each bridge, halfway over.
+  m.gate(path, 3, 1, (x, y, z, i) => RAINBOW[(i + 7) % 7], { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 6, 2, (x, y, z, i) => (i % 2 ? WHITE : SKY), { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 9, 3, (x, y, z, i) => (i === 2 ? B.LAMP : WHITE_CLOTH), { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 12, 4, (x, y, z, i) => (i === 3 ? YELLOW : WHITE), { high: 5, span: 3, thick: 1, mid: true });
+  m.trees(2400, 5, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.4) ? oakTree(rng) : rng.chance(0.3) ? pineTree(rng) : null));
+  m.flowers(24);
+  m.animals({ sheep: 3, bunny: 2 }, (x, z) => Math.hypot(x - 24, z - 104) < 16);
+  return { fruit: B.FRUIT_ITEMS[1] };
+}
+
+const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle };
 
 // ---------------------------------------------------------------- the isle
 
@@ -1815,7 +2442,7 @@ const CHAPTER_MAPS = { shore, woods, frost, candy, marsh, ember, castle };
 // does — { world, critters, fruit, mines, camps, defense } — and gates:
 // each { camp, x, y, z, cells } (cells as an edit, what they become once
 // that camp is freed).
-export function buildIsle({ stage = 1, seed = 1 } = {}) {
+export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
   const ch = chapterOf(stage);
   const make = CHAPTER_MAPS[ch.key] ?? shore;
   const m = new Maker(ch, seed >>> 0 || 1);
@@ -1834,10 +2461,10 @@ export function buildIsle({ stage = 1, seed = 1 } = {}) {
     .sort((a, b) => (a.s.kind === 'castle') - (b.s.kind === 'castle') || a.i - b.i)
     .map(({ s }, i) => ({ id: i + 1, kind: s.kind, x: s.x, y: s.level + 1, z: s.z, r: s.r }));
   const out = { world, critters, fruit: made.fruit ?? B.FRUIT_ITEMS[0], mines: [], camps, defense: null, gates: m.gates, chestSpots: m.chestSpots(), debug: { routes: m.routes, spots: m.spots } };
-  // Told again on a later round, a chapter is its own map turned over:
-  // mirrored left to right on round 2, top to bottom on round 3, both on
-  // round 4, and so on round again — the way going the other way round.
-  const turn = (ch.round - 1) % 4;
+  // Told again on a later journey, a chapter is its own map turned over:
+  // mirrored left to right on journey 2, top to bottom on journey 3, both on
+  // journey 4, and so on round again — the way going the other way round.
+  const turn = ((Number.isInteger(journey) && journey >= 1 ? journey : 1) - 1) % 4;
   if (turn) mirror(out, turn !== 2, turn !== 1);
   return out;
 }

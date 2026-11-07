@@ -11,7 +11,7 @@
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
-import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HELP_REACH, helpHp } from './adventure.js';
+import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HAZARD, HELP_REACH, helpHp } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
@@ -175,18 +175,24 @@ function nearestSeats(c, s) {
 // Who a logged-in player is, as their pages tell an island (see main.js).
 export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 
+// Who throws the isle's hazards on the way (adventure.js stepHazards): nobody,
+// as far as a bump of one is told (id 0).
+const HAZARD_THROWER = { id: 0, kind: 'blob', plan: null, body: { x: 0, y: 0, z: 0 } };
+
 export class Room {
   // Either { theme, size, name, seed, adventure, defense, stage } for a
   // brand-new island, or { save }. stage: the public adventure island's
   // (see shared/adventure.js); shared: an island everybody owns, so nobody
   // becomes its owner — the public adventure island is one, and its toy box
   // stays shut: nobody builds on it or brings anything to it.
-  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
+  constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, journey = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
     this.log = log;
     this.random = random;
     this.stage = cleanStage(stage);
+    // How many times round the isle's story this is (server/adventure.js).
+    this.journey = Number.isInteger(journey) && journey >= 1 ? Math.min(journey, 9999) : 1;
     this.shared = shared === true;
     this.clients = new Map();
     this.tokens = new Map();
@@ -273,7 +279,7 @@ export class Room {
       // The shared isle, Adventure Isle, is the map of its stage's chapter
       // of the story (isle-maps.js), not a random island.
       const story = this.shared && adventure;
-      const made = story ? buildIsle({ stage: this.stage, seed: s }) : generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
+      const made = story ? buildIsle({ stage: this.stage, seed: s, journey: this.journey }) : generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
       if (story) made.world.name = islandName;
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
@@ -282,7 +288,7 @@ export class Room {
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
-      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, story, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
+      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, story, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
       if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
@@ -1404,7 +1410,9 @@ export class Room {
     env.left -= dt;
     if (env.twister) env.twister.age += dt;
     if (env.left <= 0) {
-      const next = nextWeather(env.weather, this.world.theme, () => this.rng.next());
+      // (A chapter of the isle's story may have only some weathers: isle-story.js.)
+      const only = this.adventure?.story?.weather;
+      const next = only ? { weather: only[Math.floor(this.rng.next() * only.length)], seconds: 150 + this.rng.next() * 150 } : nextWeather(env.weather, this.world.theme, () => this.rng.next());
       env.weather = next.weather;
       env.left = next.seconds;
       // Each tornado a path of its own (no draw of the rng of its own, so
@@ -1564,7 +1572,23 @@ export class Room {
       people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now });
     }
     const adv = this.adventure;
-    if (adv?.active) for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) this.campFreed(news);
+    if (adv?.active) {
+      for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) {
+        if (news.t === 'ambush') this.broadcast({ t: 'ambush', id: news.camp.id, n: news.count });
+        else this.campFreed(news);
+      }
+      // The isle's hazards on the way (adventure.js stepHazards): shown
+      // falling out of the sky, and a moment later, whoever is still under
+      // one is hit (stepBossMoves, as for what a boss throws).
+      if (this.shared) {
+        for (const h of adv.stepHazards(this.world, now, people)) {
+          const at = (q) => [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2)];
+          const [first] = h.to;
+          this.broadcast({ t: 'mfx', kind: 'hurl', id: 0, sky: true, what: h.what, from: at({ ...first, y: first.y + HAZARD.high }), to: h.to.map(at), ms: h.ms, r: h.reach });
+          this.thrown.push({ monster: HAZARD_THROWER, what: h.what, to: h.to, reach: h.reach, bumps: h.bumps, at: now + h.ms });
+        }
+      }
+    }
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
     // The Queen Mosquito getting a heart back (monsters.js step): everyone
@@ -2558,6 +2582,12 @@ export class Room {
     }
     const msg = { t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max };
     if (hit.dazed) msg.dazed = true;
+    // King Grumble puffing himself up, at the end of the story: his helpers
+    // come running as he does.
+    if (hit.second) {
+      msg.second = true;
+      m.dazed = 0;
+    }
     this.broadcast(msg);
     if (hit.beaten) this.winAdventure(p, m);
   }

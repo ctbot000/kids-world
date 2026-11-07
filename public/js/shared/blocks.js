@@ -92,6 +92,10 @@ export const BASALT = def(28, 'basalt', { name: 'Basalt', category: 'nature', ti
 // crater are made of it, and it glows in the dark.
 export const LAVA = def(29, 'lava', { name: 'Lava', kind: 'lava', category: 'nature', tiles: 'lava', light: 12, sound: 'water' });
 export const CLOUD = def(18, 'cloud', { name: 'Cloud', category: 'nature', tiles: 'cloud', sound: 'soft' });
+// The glowing crystals of Adventure Isle's Crystal Caverns (isle-maps.js),
+// purple and blue, lighting up the dark. The isle's own: not in the toy box.
+export const CRYSTAL = def(422, 'crystal', { name: 'Glow Crystal', tiles: 'crystal', light: 11, sound: 'glass' });
+export const CRYSTAL_BLUE = def(423, 'crystal-blue', { name: 'Blue Glow Crystal', tiles: 'crystal-blue', light: 11, sound: 'glass' });
 export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', category: 'nature', tiles: { top: 'snow', side: 'snowy-leaves', bottom: 'pine-leaves' }, sound: 'snow' });
 // The grumpy monsters' ground, round their camps on an adventure island
 // (shared/adventure.js): dark and gloomy until the camp is freed, when it

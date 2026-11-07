@@ -157,7 +157,7 @@ export const STICKERS = [
 // every kind of monster, the easiest first (the bosses last, in the order
 // of the chapters they hold: bosses.js), each counted twice, as seen
 // (seen<kind>, 1 once you have) and as popped (pop<kind>, how many).
-export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'rattle', 'wolf', 'hawk', 'golem', 'stinger', 'mimic', 'queen', 'wizard', 'oak', 'cyclops', 'hydra', 'rex', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'king'];
+export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'rattle', 'wolf', 'hawk', 'golem', 'stinger', 'mimic', 'queen', 'wizard', 'oak', 'cyclops', 'hydra', 'rex', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king'];
 export const seenKey = (kind) => `seen${kind}`;
 export const popKey = (kind) => `pop${kind}`;
 

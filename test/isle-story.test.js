@@ -10,7 +10,7 @@ import { AdventureSim, CAMP_RADIUS, kingHearts } from '../public/js/shared/adven
 import { BOSSES, isBoss } from '../public/js/shared/bosses.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
-import { campName, CHAPTERS, chapterOf, introOf, SHARDS } from '../public/js/shared/isle-story.js';
+import { campName, CHAPTERS, chapterOf, introOf, SHARDS, STAGES } from '../public/js/shared/isle-story.js';
 import { kindOf, MONSTER_KINDS, MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
@@ -19,11 +19,12 @@ import { PublicAdventure } from '../server/adventure.js';
 
 test('the story has a chapter for every Star Shard, each told in full', () => {
   assert.equal(CHAPTERS.length, SHARDS);
+  assert.equal(STAGES, SHARDS, 'a stage for each chapter, and no more');
   assert.equal(new Set(CHAPTERS.map((c) => c.key)).size, SHARDS, 'each chapter its own map');
   for (const ch of CHAPTERS) {
-    assert.ok(['sunny', 'snowy', 'candy', 'volcano'].includes(ch.theme), ch.key);
-    assert.ok(ch.icon && ch.name && ch.lair && ch.intro && ch.won, ch.key);
-    assert.equal(ch.camps.length, 3, `${ch.key}: three camps along the way`);
+    assert.ok(['sunny', 'snowy', 'candy', 'volcano', 'dunes', 'crystal', 'hollow', 'works', 'spires'].includes(ch.theme), ch.key);
+    assert.ok(ch.icon && ch.name && ch.lair && ch.intro && ch.won && ch.hazard, ch.key);
+    assert.ok(ch.camps.length >= 3 && ch.camps.length <= 4, `${ch.key}: three or four camps along the way`);
     assert.equal(ch.freed.length, ch.camps.length, `${ch.key}: a line for each camp freed`);
     ch.freed.forEach((line, i) => assert.ok(line.includes(ch.camps[i].replace(/^The /, '')), `${ch.key}: freeing ${ch.camps[i]} says so`));
     for (const kind of ch.guards) assert.ok(MONSTER_KINDS.includes(kind), `${ch.key}: ${kind} is a monster`);
@@ -38,13 +39,14 @@ test('the story has a chapter for every Star Shard, each told in full', () => {
   assert.match(CHAPTERS.at(-1).won, /once and for all/);
 });
 
-test('each stage is a chapter, the story going round again after the last', () => {
-  assert.deepEqual([1, 2, 7].map((s) => chapterOf(s).key), ['shore', 'woods', 'castle']);
-  assert.deepEqual([chapterOf(1).n, chapterOf(1).round, chapterOf(1).shards], [1, 1, 1]);
-  const again = chapterOf(8);
-  assert.equal(again.key, 'shore');
-  assert.equal(again.round, 2);
-  assert.match(introOf(8), /^Round 2!/);
+test('each stage is a chapter, the last the end of the story, told again on a new journey', () => {
+  assert.deepEqual([1, 2, 5, 12].map((s) => chapterOf(s).key), ['shore', 'woods', 'dunes', 'castle']);
+  assert.deepEqual([chapterOf(1).n, chapterOf(1).shards, chapterOf(1).final], [1, 1, false]);
+  assert.deepEqual([chapterOf(STAGES).shards, chapterOf(STAGES).final], [SHARDS, true]);
+  assert.equal(chapterOf(STAGES + 5).key, 'castle', 'past the last, the last');
+  // The later chapters are longer: four camps along the way.
+  assert.ok(CHAPTERS.slice(4).some((c) => c.camps.length === 4));
+  assert.match(introOf(3, 2), /^Journey 2!/);
   assert.equal(introOf(1), CHAPTERS[0].intro);
   assert.equal(chapterOf(undefined).key, 'shore', 'no stage is stage 1');
   assert.equal(campName(2, 1), 'Mushroom Ring');
@@ -102,8 +104,8 @@ for (const [i, ch] of CHAPTERS.entries()) {
       const { world } = made;
       assert.equal(world.W, ISLE_SIDE);
       assert.equal(world.theme, ch.theme);
-      // Three camps along the way, then King Grumble's lair.
-      assert.deepEqual(made.camps.map((c) => [c.id, c.kind]), [[1, 'camp'], [2, 'camp'], [3, 'camp'], [4, 'castle']]);
+      // Its camps along the way, then the lair.
+      assert.deepEqual(made.camps.map((c) => [c.id, c.kind]), [...ch.camps.map((_, k) => [k + 1, 'camp']), [ch.camps.length + 1, 'castle']]);
       for (const c of made.camps) {
         assert.ok(B.SOLID[world.get(Math.floor(c.x), c.y - 1, Math.floor(c.z))], `${ch.key} camp ${c.id}: its flag stands on the ground`);
         assert.equal(world.get(Math.floor(c.x), c.y + 1, Math.floor(c.z)), B.AIR, `${ch.key} camp ${c.id}: with room over it`);
@@ -115,7 +117,7 @@ for (const [i, ch] of CHAPTERS.entries()) {
         assert.ok(!['helicopter', 'balloon'].includes(c.type), `${ch.key}: no ${c.type}`);
       }
       // A gate after each camp, opened by freeing it.
-      assert.deepEqual(made.gates.map((g) => g.camp), [1, 2, 3]);
+      assert.deepEqual(made.gates.map((g) => g.camp), ch.camps.map((_, k) => k + 1));
       for (const g of made.gates) assert.ok(g.cells.length >= 8 && g.cells.length % 4 === 0, `${ch.key}: gate ${g.camp} has cells`);
       // From the start, on foot: the first camp, and no further until its
       // gate opens; then the next, and so on to the lair.
@@ -124,7 +126,7 @@ for (const [i, ch] of CHAPTERS.entries()) {
         const seen = walk();
         return made.camps.map((c) => reaches(seen, c));
       };
-      assert.deepEqual(got(), [true, false, false, false], `${ch.key} (seed ${seed}): only the first camp to begin with`);
+      assert.deepEqual(got(), made.camps.map((c) => c.id === 1), `${ch.key} (seed ${seed}): only the first camp to begin with`);
       for (const g of made.gates) {
         for (let k = 0; k < g.cells.length; k += 4) world.set(g.cells[k], g.cells[k + 1], g.cells[k + 2], g.cells[k + 3]);
         assert.deepEqual(got(), made.camps.map((c) => c.id <= g.camp + 1), `${ch.key} (seed ${seed}): gate ${g.camp} open`);
@@ -133,14 +135,13 @@ for (const [i, ch] of CHAPTERS.entries()) {
   });
 }
 
-test('told again on a later round, a chapter is its own map turned over, the way going the other way round', () => {
+test('told again on a later journey, a chapter is its own map turned over, the way going the other way round', () => {
   const first = buildIsle({ stage: 1, seed: 5 });
-  for (const [stage, alongX, alongZ] of [[8, true, false], [15, false, true], [22, true, true], [29, false, false]]) {
-    const made = buildIsle({ stage, seed: 5 });
-    assert.equal(chapterOf(stage).key, 'shore');
+  for (const [journey, alongX, alongZ] of [[2, true, false], [3, false, true], [4, true, true], [5, false, false]]) {
+    const made = buildIsle({ stage: 1, seed: 5, journey });
     const fx = (x) => (alongX ? ISLE_SIDE - x : x);
     const fz = (z) => (alongZ ? ISLE_SIDE - z : z);
-    assert.deepEqual(made.camps.map((c) => [c.x, c.z]), first.camps.map((c) => [fx(c.x), fz(c.z)]), `round ${chapterOf(stage).round}`);
+    assert.deepEqual(made.camps.map((c) => [c.x, c.z]), first.camps.map((c) => [fx(c.x), fz(c.z)]), `journey ${journey}`);
     assert.deepEqual([made.world.spawn.x, made.world.spawn.z], [fx(first.world.spawn.x), fz(first.world.spawn.z)]);
     const [x, z] = [10, 20];
     assert.equal(made.world.get(alongX ? ISLE_SIDE - 1 - x : x, 22, alongZ ? ISLE_SIDE - 1 - z : z), first.world.get(x, 22, z));

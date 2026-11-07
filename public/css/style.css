@@ -7097,3 +7097,62 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
     margin-left: 0;
   }
 }
+
+/* Adventure Isle's films (ui.js filmDialog): the whole screen, black round
+   the picture, with Skip and, when the browser kept the sound off, a button
+   for it. */
+.modal.film {
+  padding: 0;
+  background: #000;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.modal.film .panel {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  padding: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+  overflow: hidden;
+  animation: none;
+}
+.modal.film #modal-body,
+.film-frame {
+  width: 100%;
+  height: 100%;
+}
+.film-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.film-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.film-skip,
+.film-sound {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 2;
+  opacity: 0.85;
+}
+.film-skip {
+  right: max(18px, env(safe-area-inset-right));
+}
+.film-sound {
+  left: max(18px, env(safe-area-inset-left));
+}
+.modal.film .panel > .close {
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.85);
+}
+.story-films {
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+}

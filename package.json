@@ -12,7 +12,8 @@
     "test-user": "node scripts/test-user.mjs",
     "test": "node scripts/test.mjs",
     "check": "node scripts/check.mjs",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "films": "node scripts/films/make-films.mjs"
   },
   "engines": {
     "node": ">=22"

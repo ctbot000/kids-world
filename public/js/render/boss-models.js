@@ -17,6 +17,9 @@
 //   grown huge, its top glowing lava, horns of black glass and lava glowing
 //   through the cracks.
 //
+// - Sir Scarabold, Old Glimmershell, Baron Boo, Big Sprocket and Old Nimbus:
+//   creatures of their own, built at their full size (captain-models.js).
+//
 // King Grumble is adventure-models.js KingModel, with the same parts as
 // these (addBossParts): the bubble round it while any camp is not free, a
 // ring on the ground as far as its stomp reaches while it crouches for
@@ -27,6 +30,7 @@ import { BOSSES, stompMove } from '../shared/bosses.js';
 import { thrownMesh } from './boss-fx.js';
 import { MonsterModel } from './monster-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
+import { BaronModel, CloudModel, ScarabModel, SprocketModel, TortoiseModel } from './captain-models.js';
 import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const DARK = '#2b2530';
@@ -366,6 +370,11 @@ const MAKE = {
       }
     },
   },
+  scarabold: { make: () => new ScarabModel(), side: 1, up: 1, dress() {} },
+  glimmershell: { make: () => new TortoiseModel(), side: 1, up: 1, dress() {} },
+  baronboo: { make: () => new BaronModel(), side: 1, up: 1, dress() {} },
+  sprocket: { make: () => new SprocketModel(), side: 1, up: 1, dress() {} },
+  nimbus: { make: () => new CloudModel(), side: 1, up: 1, dress() {} },
 };
 
 // The model of a boss (shared/bosses.js) by its kind; theme, the island's.

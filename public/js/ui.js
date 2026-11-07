@@ -46,7 +46,7 @@ import { BY_HEART, workbookByKey, workbookProgress, WORKBOOKS } from './shared/s
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
 import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
-import { CHAPTERS, chapterOf, introOf, SHARDS, STORY_TITLE } from './shared/isle-story.js';
+import { CHAPTERS, chapterOf, introOf, SHARDS, STAGES, STORY_TITLE } from './shared/isle-story.js';
 import { popKey, seenKey } from './shared/stickers.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
@@ -61,6 +61,15 @@ import { load, save } from './storage.js';
 import { STICKERS } from './profile.js';
 import { QUALITY_CHOICES } from './quality.js';
 import { pictureFrom, recentErrors, screenshot } from './report.js';
+
+// Adventure Isle's films seen on this device (filmDialog): the intro plays by
+// itself the first time you come to the isle, and the ending, once seen, can
+// be watched again from the story.
+const filmsSeen = () => {
+  const seen = load('isleFilms', []);
+  return Array.isArray(seen) ? seen : [];
+};
+const seeFilm = (name) => filmsSeen().includes(name) || save('isleFilms', [...filmsSeen(), name].slice(-4));
 
 // The ideas whose answers this device has shown already (see wishAnswered).
 const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
@@ -473,7 +482,7 @@ export class UI {
   // fills: what the dialog shows comes in after it opens (from the island
   // keeper), so it opens from the top and grows downward: the tabs and
   // buttons above stay where a finger is about to tap them.
-  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false, fills = false } = {}) {
+  openModal(build, { narrow = false, onClose = null, seeThrough = false, pose = false, fills = false, film = false } = {}) {
     // Opening a dialog over another closes that one first, so what it changed
     // goes back: the camera that turned to you, the big map being drawn. Before
     // building, as the new dialog may set the same things up again.
@@ -487,6 +496,7 @@ export class UI {
     panel.classList.toggle('narrow', narrow);
     panel.classList.toggle('fills', fills);
     $('modal').classList.toggle('see-through', seeThrough);
+    $('modal').classList.toggle('film', film);
     document.body.classList.toggle('posing', pose);
     $('modal').hidden = false;
     this.modalClose = onClose;
@@ -1640,20 +1650,110 @@ export class UI {
     this.openModal(
       (root) => {
         root.append(
-          h('p', { class: 'story-kicker' }, `📖 ${STORY_TITLE}${story.round > 1 ? ` · round ${story.round}` : ''}`),
+          h('p', { class: 'story-kicker' }, `📖 ${STORY_TITLE}${adv.journey > 1 ? ` · journey ${adv.journey}` : ''}`),
           h('h2', { class: 'story-title' }, h('span', { class: 'emoji' }, story.icon), ` Chapter ${story.n}: ${story.name}`),
           h('div', { class: 'story-shards', role: 'img', 'aria-label': `${shards} of ${SHARDS} Star Shards back` }, ...Array.from({ length: SHARDS }, (_, i) => h('span', { class: i < shards ? 'got' : '' }, i < shards ? '⭐' : '☆'))),
-          h('p', { class: 'story-text' }, introOf(adv.stage)),
+          h('p', { class: 'story-text' }, introOf(adv.stage, adv.journey)),
           h(
             'ol',
             { class: 'story-way' },
             ...camps.map((c) => h('li', { class: c.freed ? 'free' : '' }, c.kind === 'castle' ? `${this.game.bossInfo().icon} ` : c.freed ? '🚩 ' : '🏴 ', c.kind === 'castle' ? `${this.game.bossInfo().name} in the ${story.lair}` : this.game.campLabel(c), c.freed ? ' ✓' : '')),
+          ),
+          h(
+            'div',
+            { class: 'row story-films' },
+            h('button', { class: 'chip', type: 'button', onclick: () => this.filmDialog('intro') }, '🎬 Watch the intro'),
+            filmsSeen().includes('ending') ? h('button', { class: 'chip', type: 'button', onclick: () => this.filmDialog('ending') }, '🏁 Watch the ending') : '',
           ),
           h('button', { class: `big ${adv.won ? 'green' : 'blue'}`, type: 'button', onclick: () => this.closeModal() }, adv.won ? '👍 OK' : '⚔️ Let’s go!'),
         );
       },
       { narrow: true },
     );
+  }
+
+  // Arriving on the isle: the first time on this device, its intro film,
+  // and after it (or straight away, every time after) the chapter's page.
+  isleArrival() {
+    const g = this.game;
+    if (!g?.adventure?.story) return;
+    if (!filmsSeen().includes('intro') && !this.modalOpen && !g.watching && !document.hidden) {
+      seeFilm('intro');
+      this.filmDialog('intro', () => setTimeout(() => this.storyDialog(true), 250));
+      return;
+    }
+    this.storyDialog(true);
+  }
+
+  // The isle's last stage won: its ending film, as soon as no other window is
+  // open (a quiz, say), for everyone who was there when it was won.
+  endingFilm(tries = 0) {
+    const g = this.game;
+    if (!g?.adventure?.story?.final || g.watching) return;
+    if (this.modalOpen && !this.filming) {
+      if (tries < 90) setTimeout(() => this.endingFilm(tries + 1), 1000);
+      return;
+    }
+    if (this.filming) return;
+    seeFilm('ending');
+    this.filmDialog('ending');
+  }
+
+  // One of Adventure Isle's films (made by scripts/films, a video in
+  // public/video) over everything: the intro or the ending. It plays with
+  // sound if the browser lets it (muted, with 🔊 to tap, if not), the
+  // island's music hushed meanwhile, as loud as your sound and music are set;
+  // ✖, Skip or Esc ends it, and so does anything going wrong, so it never
+  // stands in the way of the game. done: once it is over, however it ended.
+  filmDialog(name, done = null) {
+    const video = h('video', { class: 'film-video', preload: 'auto', poster: `video/isle-${name}.jpg` });
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    const level = Math.max(Number(this.profile.settings.sound) || 0, Number(this.profile.settings.music) || 0);
+    video.volume = Math.min(1, level || 0);
+    video.muted = level <= 0;
+    const loud = h('button', { class: 'chip film-sound', type: 'button', hidden: true }, '🔊 Tap for sound');
+    const skip = h('button', { class: 'chip film-skip', type: 'button' }, 'Skip ⏭');
+    let stall = 0;
+    const end = () => {
+      if (this.filming === video) this.closeModal();
+    };
+    this.openModal(
+      (root) => {
+        root.append(h('div', { class: 'film-frame' }, video, loud, skip));
+      },
+      {
+        film: true,
+        onClose: () => {
+          clearTimeout(stall);
+          this.filming = null;
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+          this.sound.hushMusic(false);
+          done?.();
+        },
+      },
+    );
+    this.filming = video;
+    this.sound.hushMusic(true);
+    skip.onclick = end;
+    loud.onclick = () => {
+      video.muted = false;
+      video.volume = Math.max(0.6, video.volume);
+      loud.hidden = true;
+    };
+    video.addEventListener('ended', end);
+    video.addEventListener('error', end);
+    // Never stuck on a film that will not come (no network, say).
+    stall = setTimeout(() => video.readyState < 2 && end(), 9000);
+    video.src = `video/isle-${name}.mp4`;
+    video.play().catch(() => {
+      if (this.filming !== video) return;
+      video.muted = true;
+      loud.hidden = level <= 0;
+      video.play().catch(end);
+    });
   }
 
   // Your monster collection from Adventure Isle, the isle's own like its
@@ -2450,7 +2550,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle: King Grumble broke the lighthouse’s Star into seven Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Misty Marsh, Ember Mountain and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s six captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, a little harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). Every day it begins again at chapter 1. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle, with a film at its start and its end: King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Only beating King Grumble on the last stage starts it over, on a new journey. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -3446,7 +3546,9 @@ export class UI {
     });
     // Arriving on a stage of the isle: its chapter of the story, a moment
     // after, once the island is drawn.
-    on('story', () => setTimeout(() => this.storyDialog(true), 600));
+    on('story', () => setTimeout(() => this.isleArrival(), 600));
+    // The last stage won: the ending, once the fireworks have had a moment.
+    on('ending', () => this.endingFilm());
     on('defense', () => this.renderDefense());
     on('dizzy', () => this.renderHp());
     // On and off a dragon's back: its own hearts by yours (renderHp).
@@ -3510,8 +3612,8 @@ export class UI {
     // Come back to a conquered stage (a reconnect, say): on you go from it.
     this.nextStageNews();
     this.input.enabled = true;
-    // Arrived on a stage of the isle: its chapter of the story.
-    setTimeout(() => this.game === game && this.storyDialog(true), 600);
+    // Arrived on a stage of the isle: its intro the first time, and its chapter of the story.
+    setTimeout(() => this.game === game && this.isleArrival(), 600);
   }
 
   detach() {
@@ -4179,7 +4281,7 @@ export class UI {
             h(
               'div',
               { class: 'adventure-list' },
-              ...(staged ? [h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, String(adv.stage)))] : []),
+              ...(staged ? [h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, story ? `${adv.stage} of ${STAGES}` : String(adv.stage)))] : []),
               ...(story ? [h('div', { class: 'camp' }, '⭐', ' Star Shards', h('span', { class: 'muted' }, `${shards} of ${SHARDS}`))] : []),
               ...camps
                 .filter((c) => c.kind === 'camp')
@@ -6870,7 +6972,7 @@ export class UI {
     const el = $('next-stage');
     el.hidden = !go;
     if (!go) return;
-    el.replaceChildren(h('span', { class: 'emoji' }, chapterOf(go.stage).icon), `Stage ${go.stage}, ${chapterOf(go.stage).name}, in ${go.left}…`, h('span', { class: 'go' }, 'Go now ▶'));
+    el.replaceChildren(h('span', { class: 'emoji' }, chapterOf(go.stage).icon), `${go.stage === 1 ? 'A new journey! ' : ''}Stage ${go.stage}, ${chapterOf(go.stage).name}, in ${go.left}…`, h('span', { class: 'go' }, 'Go now ▶'));
   }
 
   goNextStage() {

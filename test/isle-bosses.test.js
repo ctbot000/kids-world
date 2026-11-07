@@ -16,7 +16,9 @@ import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
 
 const KINDS = ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok'];
-const MOVES = ['stomp', 'leap', 'charge', 'hurl', 'puff', 'breath'];
+// The captains of the later chapters, on the end of the kinds after the beasts.
+const LATER = ['scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus'];
+const MOVES = ['stomp', 'leap', 'charge', 'hurl', 'puff', 'breath', 'blink', 'call'];
 
 function conn() {
   const c = { inbox: [] };
@@ -77,10 +79,11 @@ function run(sim, w, people, done, ms = 20000) {
 
 test('every chapter has a boss of its own, on the end of the kinds, in the collection, with its own moves, none of them quicker than you run', () => {
   assert.deepEqual(MONSTER_KINDS.slice(16, 16 + KINDS.length), KINDS, 'new kinds go on the end: the wire sends the index');
+  assert.deepEqual(MONSTER_KINDS.slice(-LATER.length), LATER, 'and the later captains after the beasts');
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
-  assert.deepEqual(CHAPTERS.map((c) => c.boss), [...KINDS, 'king']);
-  for (const kind of [...KINDS, 'king']) {
+  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king']);
+  for (const kind of [...KINDS, ...LATER, 'king']) {
     const plan = BOSSES[kind];
     assert.ok(isBoss(kind) && isHeavy(kind), kind);
     assert.deepEqual(bodyOf(kind), plan.body);
@@ -90,7 +93,7 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
     assert.ok(at(0) >= 1 && at(2) > at(0), `${kind}: more moves the crosser it gets`);
     for (const v of plan.moves) {
       assert.ok(MOVES.includes(v.move), `${kind}: ${v.move}`);
-      assert.ok(v.windup >= 800 && v.bumps > 0, `${kind}: its ${v.move} shows coming`);
+      assert.ok(v.windup >= 800 && (v.bumps > 0 || v.move === 'blink' || v.move === 'call'), `${kind}: its ${v.move} shows coming`);
     }
     assert.ok(MONSTER_KINDS.includes(plan.minion) && !isBoss(plan.minion), `${kind}: its minions`);
     assert.ok(MONSTER_BOOK.some((m) => m.kind === kind && m.name === (kind === 'king' ? 'King Grumble' : plan.name)), `${kind}: in the collection`);

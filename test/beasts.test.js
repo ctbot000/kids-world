@@ -77,7 +77,7 @@ const due = (m, i = 0) => {
 };
 
 test('the beasts go on the end of the kinds and states, each tougher than most, never as quick as you run, and in the collection', () => {
-  assert.deepEqual(MONSTER_KINDS.slice(22), KINDS_NEW, 'new kinds go on the end: the wire sends the index');
+  assert.deepEqual(MONSTER_KINDS.slice(22, 22 + KINDS_NEW.length), KINDS_NEW, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('moltok'), 21, 'the old ones where they were');
   assert.deepEqual(MONSTER_STATES.slice(13), ['heap', 'howl', 'blink']);
   assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW].sort());
@@ -482,7 +482,7 @@ test('Rumble Rex bumps harder than anything, and when it is cross it roars: a ri
 test('every chapter of the story has champions of its own in its later camps, extra guards that do not come back and must go before the flag can rise', () => {
   const champs = new Set();
   for (const ch of CHAPTERS) {
-    assert.equal(ch.champions.length, 2, ch.key);
+    assert.equal(ch.champions.length, ch.camps.length - 1, `${ch.key}: one for each camp from the second`);
     for (const k of ch.champions) {
       assert.ok(isBeast(k), `${ch.key}: ${k}`);
       champs.add(k);
@@ -517,16 +517,17 @@ test('every chapter of the story has champions of its own in its later camps, ex
   assert.equal(c2.back.length, before + 1);
   sim.guardGone({ camp: 2, kind: 'wolf', helper: true }, 1000);
   assert.equal(c2.back.length, before + 1, 'nor do helpers');
-  // Further on, both, full grown from the sixth stage and tougher with friends;
-  // the second time round the story, the first camp has one too.
+  // Further on, all of them, full grown from the sixth stage and tougher with
+  // friends; a chapter of four camps has three.
   const later = (stage) => new AdventureSim({ camps: made.camps, stage, story: true }, 1);
   const championAt = (stage, id) => {
     const at = later(stage);
     return at.championOf(made.world, at.campById(id));
   };
   assert.equal(championAt(2, 3), 'oak');
-  const round2 = later(8);
-  assert.equal(round2.championOf(made.world, round2.campById(1)), 'rattle');
+  const hollow = buildIsle({ stage: 8, seed: 7 });
+  const eighth = new AdventureSim({ camps: hollow.camps, stage: 8, story: true }, 1);
+  assert.deepEqual([1, 2, 3, 4].map((id) => eighth.championOf(hollow.world, eighth.campById(id))), [null, 'wolf', 'wizard', 'rattle']);
   const grownUp = (stage, players) => {
     const sim2 = later(stage);
     const list = new MonsterSim(2);
@@ -550,9 +551,10 @@ test('every chapter of the story has champions of its own in its later camps, ex
 });
 
 test('the beasts join the higher stages’ guards, and the old ones keep their places before them', () => {
-  assert.ok(!toughGuards(11).some(isBeast));
-  assert.ok(toughGuards(13).includes('wolf'));
-  const high = toughGuards(40);
+  assert.ok(!toughGuards(7).some(isBeast));
+  assert.ok(toughGuards(8).includes('wolf'));
+  const high = toughGuards(12);
+  assert.deepEqual(toughGuards(40), high, 'none tougher past the last stage');
   for (const k of ['wolf', 'stinger', 'rattle', 'hawk', 'mimic']) assert.ok(high.includes(k), k);
   assert.ok(!high.some((k) => BEASTS[k]?.tier === 2), 'the mightiest are champions only: they would never be cleared before they came back');
   assert.ok(high.indexOf('wolf') < high.indexOf('knight'), 'tougher than a Knight, so sooner');

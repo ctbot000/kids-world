@@ -258,14 +258,25 @@ const TOUGH_TOLD = {
   gumbo: { icon: '🧸', text: 'Gumbo the Gummy Giant! When a red ring shows round you, he is about to come down on it: run out of it, or jump!' },
   bogmaw: { icon: '🐸', text: 'Bogmaw the Bog Toad! Run out of the red rings where he leaps and his mud comes down — and step back when he puffs himself up!' },
   moltok: { icon: '🌋', text: 'Moltok the Lava Golem! Get out of the way he faces when he rears back, jump when he crouches, and run out of the red rings!' },
+  scarabold: { icon: '🪲', text: 'Sir Scarabold! Step out of the strip when he lowers his horn, run out of the red rings where his sand comes down — and when his wings open, he is about to land on you!' },
+  glimmershell: { icon: '🐢', text: 'Old Glimmershell! Jump when he stomps, run out of the red rings where his crystals fall, and step aside when he spins along in his shell!' },
+  baronboo: { icon: '🎩', text: 'Baron Boo! He vanishes and pops up somewhere else, so keep looking about. Run out of the red rings where his pumpkins land, and step back out of his cold mist!' },
+  sprocket: { icon: '🤖', text: 'Big Sprocket! Jump when he stomps, run out of the red rings where his gears rain down, and keep out of the way of the steam from his mouth!' },
+  nimbus: { icon: '🌩️', text: 'Old Nimbus! Run out of the red rings, where his lightning strikes, and step back when he puffs himself up to blow a gale!' },
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
-const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak' };
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack' };
 // What a Swamp Hydra breathes (and anything else that is no fire).
 const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
+// Big Sprocket's steam.
+const STEAM_COLORS = ['#ffffff', '#eef2f6', '#d8e0e8', '#f6f9fc', '#c8d2dc'];
 // What each beast says as it comes at you.
 const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
+// How long after the isle's last stage is won its ending film starts (ui.js).
+const ENDING_AFTER_MS = 3500;
+// About how long the ending film is: its extra-credit quizzes are offered after it.
+const ENDING_FILM_MS = 72000;
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
@@ -683,6 +694,9 @@ export class Game extends EventTarget {
       case 'kinghit':
         this.kingHit(msg);
         break;
+      case 'ambush':
+        this.ambushed(msg);
+        break;
       case 'mhit':
         this.monsterHit(msg);
         break;
@@ -786,7 +800,7 @@ export class Game extends EventTarget {
           this.stomped(msg);
           this.sound.play('roar');
         } else if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
-          this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, msg.what === 'gas');
+          this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, ['gas', 'mist', 'gust'].includes(msg.what) ? msg.what : 'spores');
           this.sound.play('blow');
         }
         // A boss's moves (shared/bosses.js): what shows before they come.
@@ -1768,9 +1782,9 @@ export class Game extends EventTarget {
     // (A boss's breath reaches as far and as wide as its own: msg.r, msg.a.)
     entry.fireReach = Number.isFinite(msg.r) ? msg.r : GHOST_FIRE.reach;
     entry.fireAngle = Number.isFinite(msg.a) ? msg.a : GHOST_FIRE.angle;
-    entry.fireColors = msg.what === 'venom' ? VENOM_COLORS : undefined;
+    entry.fireColors = msg.what === 'venom' ? VENOM_COLORS : msg.what === 'steam' ? STEAM_COLORS : undefined;
     const p = entry.model.group.position;
-    if (this.near(p.x, p.y, p.z, 30)) this.sound.play(msg.what === 'venom' ? 'hiss' : 'fire');
+    if (this.near(p.x, p.y, p.z, 30)) this.sound.play(msg.what === 'venom' || msg.what === 'steam' ? 'hiss' : 'fire');
   }
 
   monsterHit(msg) {
@@ -2735,6 +2749,12 @@ export class Game extends EventTarget {
       }
       const ground = this.renderer.groundUnder(s.x, s.y, s.z);
       m.update(stopped ? 0 : dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
+      // King Grumble puffed up, at the end of the story: half as big again.
+      if (entry.kind === 'king') {
+        const big = this.adventure?.king?.second ? 1.45 : 1;
+        entry.grown = (entry.grown ?? 1) + (big - (entry.grown ?? 1)) * Math.min(1, dt * 3);
+        m.group.scale.setScalar(entry.grown);
+      }
       const flash = flashOn((entry.flashUntil ?? 0) - now);
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
@@ -2794,7 +2814,9 @@ export class Game extends EventTarget {
       // The public adventure island's stage, 1 on any other adventure island;
       // there, the chapter of its story the stage is (shared/isle-story.js).
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
-      this.adventure = { camps, won: a.won === true, stage, king: null, shield: true, story: this.shared ? chapterOf(stage) : null };
+      // (And which journey round the story this is: server/adventure.js.)
+      const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
+      this.adventure = { camps, won: a.won === true, stage, journey, king: null, shield: true, story: this.shared ? chapterOf(stage) : null };
       this.adventureNews(a);
     }
     this.emit('adventure');
@@ -2838,7 +2860,7 @@ export class Game extends EventTarget {
       c.friends = 0;
       c.guarded = false;
     }
-    adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1] } : null;
+    adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1], second: msg.k[2] === 1 } : null;
     adv.shield = msg.shield !== false && !adv.won;
     this.emit('adventure');
   }
@@ -2904,7 +2926,16 @@ export class Game extends EventTarget {
       }
       return;
     }
-    if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max };
+    if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max, second: msg.second === true || this.adventure.king?.second === true };
+    // King Grumble puffing himself up, at the very end of the story.
+    if (msg.second) {
+      if (p) {
+        this.renderer.effects.sparkles(p.x, p.y + 1.5, p.z, 60, ['#b18cff', '#ffd84d', '#ff8fc4', '#ffffff']);
+        this.renderer.shake(0.35);
+      }
+      this.sound.play('roar');
+      this.emit('toast', { icon: '😤', text: 'King Grumble puffs himself up, bigger and grumpier than ever — and gets half his hearts back! Keep at him, together!' });
+    }
     if (entry) entry.model.squash = msg.dazed ? 0.6 : 0.45;
     if (entry) entry.flashUntil = performance.now() + FLASH_MS;
     if (p && this.near(p.x, p.y, p.z, 40)) {
@@ -2913,6 +2944,19 @@ export class Game extends EventTarget {
       this.sound.play('ouch');
     }
     this.emit('adventure');
+  }
+
+  // A camp's monsters ambushing whoever is raising its flag, half way up (on
+  // the isle's higher stages): more of them come running.
+  ambushed(msg) {
+    const c = this.adventure?.camps.get(msg.id);
+    if (!c) return;
+    const near = this.near(c.x, c.y, c.z, c.r + 20);
+    if (near) {
+      this.sound.play('grumble', { big: true });
+      this.renderer.shake(0.15);
+    }
+    this.emit('toast', { icon: '⚔️', text: `An ambush at ${this.campLabel(c)}! ${msg.n > 1 ? `${msg.n} more monsters come` : 'Another monster comes'} running to pull the flag down — pop them, then keep raising it!` });
   }
 
   // King Grumble landing from a stomp: a ring rushing out over the ground,
@@ -2973,10 +3017,11 @@ export class Game extends EventTarget {
       if (!this.near(msg.from[0], msg.from[1], msg.from[2], 80)) return;
       this.monsters.get(msg.id)?.model.thrown?.();
       const what = THROWN_SOUND[msg.what] ? msg.what : 'bomb';
+      // (Adventure Isle's hazards fall out of the sky, thrown by nobody.)
       this.renderer.hurl(msg.from, to, ms, r, what, ([x, y, z]) => {
         if (this.near(x, y, z, 40)) this.sound.play(THROWN_SOUND[what], { near: 0.8 });
-      });
-      this.sound.play('swish');
+      }, msg.sky === true);
+      if (!msg.sky) this.sound.play('swish');
       return;
     }
     if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.near(msg.x, msg.y, msg.z, 80)) return;
@@ -3022,7 +3067,9 @@ export class Game extends EventTarget {
       // (shared/quiz.js): the offer comes up by itself once the fireworks
       // have had their moment (updateAdventure), and after that waits with
       // the 🎓 by the flag (ui.js) for as long as you stay.
-      this.quizOffer = { at: performance.now() + WIN_OFFER_MS, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
+      // (At the end of the story, the ending film first: ui.js endingFilm.)
+      const after = adv?.story?.final ? ENDING_AFTER_MS + ENDING_FILM_MS : WIN_OFFER_MS;
+      this.quizOffer = { at: performance.now() + after, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
     }
     if (this.dizzy) {
       this.dizzy = false;
@@ -3034,6 +3081,8 @@ export class Game extends EventTarget {
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards won back so far.
     if (story) this.emit('toast', { icon: '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${story.shards < SHARDS ? `${story.shards} of ${SHARDS} Star Shards back!` : `All ${SHARDS} Star Shards!`}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    // The end of the story: its ending, once the fireworks have had a moment (ui.js).
+    if (story?.final) setTimeout(() => this.adventure === adv && this.emit('ending'), ENDING_AFTER_MS);
     else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
   }

@@ -782,6 +782,14 @@ const PAINT = {
     ctx.lineTo(60, 32);
     ctx.stroke();
   },
+  // The Crystal Caverns' glowing crystals: facets of light and shade, with a
+  // bright core.
+  crystal(ctx) {
+    crystalTile(ctx, '#9b6bff', '#d9c4ff', '#5a2fb8');
+  },
+  'crystal-blue'(ctx) {
+    crystalTile(ctx, '#4fc8ff', '#c9f3ff', '#1f6fa8');
+  },
   'star-block'(ctx) {
     fill(ctx, '#ffcf3f');
     const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 40);
@@ -1885,6 +1893,34 @@ const PAINT = {
 };
 
 // A cut jewel, pointing down: a flat top, a row of facets, and a point.
+function crystalTile(ctx, base, light, dark) {
+  fill(ctx, base);
+  const facets = [
+    [[0, 0], [32, 0], [20, 26], [0, 18], light],
+    [[32, 0], [64, 0], [64, 22], [40, 30], dark],
+    [[0, 18], [20, 26], [26, 64], [0, 64], dark],
+    [[40, 30], [64, 22], [64, 64], [38, 64], light],
+  ];
+  for (const [a, b, c, d, color] of facets) {
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(...a);
+    ctx.lineTo(...b);
+    ctx.lineTo(...c);
+    ctx.lineTo(...d);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const g = ctx.createRadialGradient(30, 32, 2, 30, 32, 26);
+  g.addColorStop(0, 'rgba(255,255,255,0.75)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, TILE, TILE);
+  bevel(ctx, 0.5);
+}
+
 function jewel(ctx, cx, cy, r, color) {
   const top = cy - r * 0.55;
   const girdle = cy - r * 0.1;

@@ -689,13 +689,13 @@ export class Renderer {
     this.bossFx.push(new WarnStrip(this.scene, x, y, z, yaw, d, w, ms));
   }
 
-  hurl(from, to, ms, r, what, land) {
+  hurl(from, to, ms, r, what, land, sky = false) {
     // A bolt comes down out of the sky as it lands, on the ring it was aimed at.
     const strike = what === 'bolt' ? (at) => this.zapBolt([{ x: at[0], y: at[1] + 26, z: at[2] }, { x: at[0], y: at[1], z: at[2] }]) : null;
     this.bossFx.push(new Thrown(this.scene, this.effects, from, to, ms, r, what, (at) => {
       strike?.(at);
       land?.(at);
-    }));
+    }, sky));
   }
 
   // The shows of the mightiest toy weapons (weapon-fx.js): a bolt of lightning

@@ -5,17 +5,20 @@
 // nothing is brought to it or sent away) and nobody flies on their own on
 // it — it is everyone's adventure, on foot. Freed, the island is retired
 // and the next stage's takes its place at once, a little harder (see
-// shared/adventure.js), on and on without end — and at the beginning of
-// each day it starts over again at stage 1.
+// shared/adventure.js), up to the last chapter of its story (shared/isle-
+// story.js). Win that one and the story is over: the ending plays for
+// everyone there (ui.js), and a new journey starts at stage 1. Nothing else
+// starts it over, so a stage stays where it got to for as long as it takes.
 //
 // A retired island stays open a while for whoever is on it to enjoy their
-// win, and once everyone has left it, it goes. The stage is kept over a
-// restart (in `file`, when given), and the island of a stage is the same one
-// all that day, so a restart that day puts back just the island it had.
+// win, and once everyone has left it, it goes. The journey, the stage and the
+// camps freed so far are kept over a restart (in `file`, when given), and the
+// island of a stage of a journey is always the same one, so a restart puts
+// back just the island it had.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { generateCode } from '../public/js/shared/codes.js';
-import { chapterOf } from '../public/js/shared/isle-story.js';
+import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
 import { Room } from '../public/js/shared/room.js';
 import { PeerHost } from './host.js';
 
@@ -23,17 +26,11 @@ export const PUBLIC_ISLAND_NAME = 'Adventure Isle';
 // How long a retired island is kept after everyone leaves it.
 export const RETIRED_KEEP_MS = 10 * 60 * 1000;
 
-// The day a moment is in, as the server sees days.
-const dayOf = (now) => {
-  const d = new Date(now);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-};
-
-// The island of one stage of one day: always the same one, so a restart
-// mid-day brings back the very island that stage had.
-function seedFor(day, stage) {
+// The island of one stage of one journey: always the same one, so a restart
+// brings back the very island that stage had.
+function seedFor(journey, stage) {
   let h = 2166136261;
-  for (const c of `${day}:${stage}`) {
+  for (const c of `${journey}:${stage}`) {
     h ^= c.charCodeAt(0);
     h = Math.imul(h, 16777619);
   }
@@ -42,9 +39,9 @@ function seedFor(day, stage) {
 
 export class PublicAdventure {
   // rooms: the server's islands (see server.js), which the island of each
-  // stage is one of. retiredKeepMs: how long a conquered (or a day's ended)
-  // island is kept after everyone leaves it. file: where the day and stage
-  // are kept over a restart, or none.
+  // stage is one of. retiredKeepMs: how long a conquered island is kept after
+  // everyone leaves it. file: where the journey and stage are kept over a
+  // restart, or none.
   constructor({ rooms, log = () => {}, now = () => Date.now(), retiredKeepMs = RETIRED_KEEP_MS, file = null } = {}) {
     if (!rooms) throw new Error('The public adventure island needs the server\'s islands.');
     this.rooms = rooms;
@@ -59,7 +56,9 @@ export class PublicAdventure {
     this.onRetire = null;
     this.onGone = null;
     this.stage = 0;
-    this.day = '';
+    // How many times round the story this is, 1 the first time.
+    this.journey = 1;
+    this.freed = 0;
     this.entry = null;
     this.retired = [];
     this.stopped = false;
@@ -69,64 +68,80 @@ export class PublicAdventure {
     return this.entry && !this.entry.room.closed ? this.entry.room : null;
   }
 
-  // Makes the island of today's stage: the one kept from before a restart
-  // today, or stage 1. Call tick() now and then (the server does, about ten
-  // times a second) for the stages to follow.
+  // Makes the island of the stage it had got to: the one kept from before a
+  // restart, with the camps freed by then, or stage 1 of the first journey.
+  // Call tick() now and then (the server does, about ten times a second) for
+  // the stages to follow.
   start() {
     if (this.entry) return this;
-    const day = dayOf(this.now());
     const kept = this.readKept();
-    const stage = kept?.day === day ? kept.stage : 1;
-    this.open(stage, day);
-    this.say(`Adventure Isle is up: stage ${stage} (code ${this.entry.code}).`);
+    this.open(kept?.stage ?? 1, kept?.journey ?? 1, kept?.freed ?? []);
+    this.say(`Adventure Isle is up: stage ${this.stage} of ${STAGES}, journey ${this.journey} (code ${this.entry.code}).`);
     return this;
   }
 
+  // What was kept, checked; null if nothing that makes sense is. (A file from
+  // the days when the stages started over each day, or went past the last
+  // chapter, has no journey: on from there, the first one.)
   readKept() {
     if (!this.file) return null;
     try {
       const kept = JSON.parse(readFileSync(this.file, 'utf8'));
-      return typeof kept?.day === 'string' && Number.isInteger(kept.stage) && kept.stage >= 1 ? kept : null;
+      if (!Number.isInteger(kept?.stage) || kept.stage < 1) return null;
+      const journey = Number.isInteger(kept.journey) && kept.journey >= 1 ? kept.journey : 1;
+      if (kept.stage > STAGES) return { stage: 1, journey: journey + 1, freed: [] };
+      return { stage: kept.stage, journey, freed: Array.isArray(kept.freed) ? kept.freed.filter(Number.isInteger) : [] };
     } catch (error) {
       if (error.code !== 'ENOENT') this.say(`its stage in ${this.file} could not be read (${error.message}).`);
       return null;
     }
   }
 
-  // The day and stage, written as each stage opens: a tiny file, rarely.
+  // The journey, the stage and the camps freed, written as each of them
+  // changes: a tiny file, rarely.
   keep() {
     if (!this.file) return;
+    const freed = this.entry ? this.entry.room.adventure.camps.filter((c) => c.freed).map((c) => c.id) : [];
     try {
       mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(`${this.file}.tmp`, `${JSON.stringify({ day: this.day, stage: this.stage })}\n`);
+      writeFileSync(`${this.file}.tmp`, `${JSON.stringify({ journey: this.journey, stage: this.stage, freed })}\n`);
       renameSync(`${this.file}.tmp`, this.file);
     } catch (error) {
       this.say(`its stage could not be kept (${error.message}).`);
     }
   }
 
-  // A new stage (or a new day's stage 1) in place of the current island:
-  // that one is retired — left open a while for whoever is on it — and this
-  // island of the new stage is the public one from here on.
-  open(stage, day) {
+  // A new stage in place of the current island: that one is retired — left
+  // open a while for whoever is on it — and this island of the new stage is
+  // the public one from here on. freed: the camps freed on it already (those
+  // kept over a restart), freed again now, with nobody there to see.
+  open(stage, journey, freed = []) {
     this.stage = stage;
-    this.day = day;
-    this.keep();
+    this.journey = journey;
     const code = this.freeCode();
     // Each stage is a chapter of the isle's story, with its own map (the
     // room makes it: shared/isle-maps.js).
+    const chapter = chapterOf(stage);
     const room = new Room({
       code,
-      theme: chapterOf(stage).theme,
+      theme: chapter.theme,
       name: PUBLIC_ISLAND_NAME,
       adventure: true,
       stage,
+      journey,
       shared: true,
-      seed: seedFor(day, stage),
+      seed: seedFor(journey, stage),
+      settings: chapter.day ? { day: chapter.day } : null,
       log: (error) => this.log(`Adventure Isle: a mistake on stage ${stage}: ${error?.message ?? error}`),
     });
     room.public = true;
+    for (const id of freed) {
+      const camp = room.adventure.campById(id);
+      if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
+    }
     this.entry = { code, room, emptySince: 0, public: true };
+    this.freed = room.adventure.camps.filter((c) => c.freed).length;
+    this.keep();
     this.rooms.set(code, this.entry);
     this.onOpen?.(room);
     return this.entry;
@@ -139,41 +154,39 @@ export class PublicAdventure {
     }
   }
 
-  // Moves the public island on: won, to the next stage; the day turned, back
-  // to stage 1 however the last one was going.
+  // Moves the public island on: won, to the next stage — and the last stage
+  // won, the story told, back to stage 1 on a new journey.
   tick(now = this.now()) {
     if (this.stopped || !this.entry) return;
     this.sweep(now);
-    const day = dayOf(now);
-    if (day !== this.day) {
-      // Stage 1's island first, so the old one can say where it is: anyone
-      // who comes to the old one later (the stage won just before midnight,
-      // its players flying on to it) goes on to stage 1, and if the old one
-      // was won (just at midnight), those on it go on now, as after any win.
-      const done = this.entry;
-      const won = !!done.room.adventure?.won;
-      this.open(1, day);
-      const next = { code: this.entry.code, stage: 1 };
-      this.retire(now, won
-        ? `A new day! 🌟 ${PUBLIC_ISLAND_NAME} starts again from stage 1 — off you all go there in a moment!`
-        : `A new day! 🌟 ${PUBLIC_ISLAND_NAME} starts again from stage 1 — it is first on the list of islands.`, done, next, won);
-      this.say(`a new day; stage 1 is up (code ${next.code}).`);
-      return;
-    }
     if (this.entry.room.closed) {
       // Gone by itself (the server shutting down): never while ticking.
       this.retire(now, '');
-      this.open(this.stage, day);
+      this.open(this.stage, this.journey);
       return;
     }
-    if (this.entry.room.adventure?.won) {
+    const adv = this.entry.room.adventure;
+    if (adv?.won) {
       // The next stage's island first, so everyone on this one can be told
       // where it is: their pages fly them on there by themselves (ui.js).
       const done = this.entry;
-      this.open(this.stage + 1, day);
+      const last = this.stage >= STAGES;
+      this.open(last ? 1 : this.stage + 1, last ? this.journey + 1 : this.journey);
       const next = { code: this.entry.code, stage: this.stage };
-      this.retire(now, `On to stage ${next.stage}! 🌟 Off you all go there in a moment — come and conquer it together!`, done, next);
-      this.say(`stage ${next.stage - 1} conquered; stage ${next.stage} is up (code ${next.code}).`);
+      if (last) {
+        this.retire(now, `The Star of ${PUBLIC_ISLAND_NAME} shines again! 🌟 A new journey starts from stage 1 — come along when you are ready!`, done, next);
+        this.say(`the last stage conquered; journey ${this.journey} starts at stage 1 (code ${next.code}).`);
+      } else {
+        this.retire(now, `On to stage ${next.stage}! 🌟 Off you all go there in a moment — come and conquer it together!`, done, next);
+        this.say(`stage ${next.stage - 1} conquered; stage ${next.stage} is up (code ${next.code}).`);
+      }
+      return;
+    }
+    // A camp freed since last time: kept, so a restart does not take it back.
+    const freed = adv ? adv.camps.filter((c) => c.freed).length : 0;
+    if (freed !== this.freed) {
+      this.freed = freed;
+      this.keep();
     }
   }
 
@@ -181,9 +194,7 @@ export class PublicAdventure {
   // longer listed as public, told where the next one is (next: the next
   // stage's { code, stage }, when it was won), and kept until everyone has
   // left it (and a while).
-  // tell: whether those on it now are sent on to next too (a day turning
-  // in the middle of a stage only tells them of the new day).
-  retire(now, text, entry = this.entry, next = null, tell = !!next) {
+  retire(now, text, entry = this.entry, next = null) {
     const { code, room } = entry;
     room.public = false;
     entry.public = false;
@@ -192,7 +203,7 @@ export class PublicAdventure {
     this.retired.push({ code, room, emptySince: room.online > 0 ? 0 : now });
     if (room.online > 0) {
       if (text) room.broadcast({ t: 'notice', level: 'info', text });
-      if (next && tell) room.broadcast({ t: 'next', ...next });
+      if (next) room.broadcast({ t: 'next', ...next });
     }
     this.onRetire?.(room);
   }
@@ -258,9 +269,9 @@ export function shareTheIsle(keeper, isle, { log = () => {}, iceServers } = {}) 
     keeper.listIsland(room.code, () => (host.state === 'online' && !room.closed ? room.listing() : null));
     hosts.set(room, host);
   };
-  // A stage won or a day over: off the list at once, but whoever is on it
-  // stays on it, peer to peer too, until it goes — to see the fireworks and
-  // to be told where the next stage is.
+  // A stage won: off the list at once, but whoever is on it stays on it, peer
+  // to peer too, until it goes — to see the fireworks and to be told where the
+  // next stage is.
   const unlist = (room) => keeper.unlistIsland(room.code);
   const unshare = (room) => {
     const host = hosts.get(room);

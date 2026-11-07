@@ -52,6 +52,17 @@ export function palette(theme) {
       return { top: B.SNOW, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
     case 'candy':
       return { top: B.FROSTING, under: B.COOKIE, deep: B.CHOCOLATE, beach: B.SAND, flowers: [B.GUMDROP, B.LOLLIPOP, B.COSMOS], grass: 0 };
+    // Adventure Isle's own corners (isle-maps.js), each its own ground.
+    case 'dunes':
+      return { top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, cliff: B.TOY_BRICKS[15], flowers: [B.SUNFLOWER, B.TULIP], grass: 0 };
+    case 'crystal':
+      return { top: B.STONE, under: B.STONE, deep: B.STONE, beach: B.PEBBLES, flowers: [B.MUSHROOM, B.BLUEBELL], grass: 0 };
+    case 'hollow':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.DIRT, flowers: [B.MUSHROOM, B.BLUEBELL, B.COSMOS], grass: B.TALL_GRASS };
+    case 'works':
+      return { top: B.PEBBLES, under: B.STONE, deep: B.STONE, beach: B.SAND, flowers: [B.TULIP, B.SUNFLOWER], grass: 0 };
+    case 'spires':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.DAISY, B.BLUEBELL, B.TULIP], grass: B.TALL_GRASS };
     case 'volcano':
       return { top: B.BASALT, under: B.STONE, deep: B.STONE, beach: B.BASALT, flowers: [B.TULIP, B.COSMOS], grass: 0 };
     default:
