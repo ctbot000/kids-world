@@ -267,9 +267,10 @@ test('a toy weapon is in the look the island sees while you have it on, and only
     assert.ok(boppers[i].power > boppers[i - 1].power || boppers[i].reach > boppers[i - 1].reach, `${boppers[i].name} does more`);
   }
   // Each reaches further than an arm, and none far: no bopping from across the meadow.
-  for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 5, `${w.name} reaches ${w.reach}`);
-  assert.equal(WEAPONS.at(-1).key, 'bow', 'the Toy Bow last, so saved weapons stay what they were');
-  for (const w of WEAPONS.slice(0, -1)) assert.ok(weaponOf('bow').reach > w.reach, `the bow shoots further than the ${w.name}`);
+  for (const w of WEAPONS) assert.ok(w.reach > 0 && ARM_REACH + w.reach <= 8, `${w.name} reaches ${w.reach}`);
+  // The mightiest come after them (weapons.test.js).
+  assert.equal(WEAPONS[5].key, 'bow', 'the Toy Bow after them, so saved weapons stay what they were');
+  for (const w of WEAPONS.slice(0, 5)) assert.ok(weaponOf('bow').reach > w.reach, `the bow shoots further than the ${w.name}`);
 });
 
 test('any of the weapons you own can be the one in your hand: the one you pick, or the best', () => {
@@ -374,6 +375,10 @@ test('a toy weapon pops a blob in fewer bops, and only from as far as it reaches
   assert.equal(bow.taps(edge('bow') - 0.1), 1, 'one arrow pops a blob from far off');
   assert.ok(edge('bow') > edge('blaster') + 0.2, 'further than a bubble flies');
   assert.equal(bow.taps(edge('bow') + 0.1), Infinity, 'but not across the meadow');
+  const ray = meadowRoom('rainbowray');
+  assert.equal(ray.taps(edge('rainbowray') - 0.1), 1, 'one beam pops a blob from further off still');
+  assert.ok(edge('rainbowray') > edge('bow') + 0.2, 'further than an arrow flies');
+  assert.equal(ray.taps(edge('rainbowray') + 0.1), Infinity);
   assert.equal(meadowRoom('cannon').taps(2), BLOB_HEARTS, 'no made-up weapons');
 });
 
@@ -387,6 +392,8 @@ test('King Grumble feels a Star Hammer\'s bop twice, and three times over when d
   assert.equal(AdventureSim.prototype.hitKing.call(c, 1, 0, false, weaponOf('lavablade').king).hearts, 27, 'a Lava Blade thrice over');
   const d = king();
   assert.equal(AdventureSim.prototype.hitKing.call(d, 1, 0, true, 2).hearts, 24);
+  const e = king();
+  assert.equal(AdventureSim.prototype.hitKing.call(e, 1, 0, false, weaponOf('meteorstaff').king).hearts, 23, 'a meteor seven times over');
 });
 
 test('every toy weapon is drawn in the hand, and a swing moves the arm', () => {

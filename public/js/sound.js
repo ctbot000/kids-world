@@ -479,6 +479,24 @@ export class Sound {
         } else if (kind === 'bow') {
           this.tone(170 * r(), { decay: 0.1, gain: 0.34 * near, slide: 420, slideTime: 0.06 });
           this.noise(0.05, { type: 'lowpass', freq: 1400, gain: 0.25 * near });
+        } else if (kind === 'thunderspear') {
+          // A crack of thunder close to, with a fizz of sparks after it.
+          this.noise(0.05, { type: 'highpass', freq: 3000, gain: 0.5 * near, attack: 0.001 });
+          this.tone(160 * r(), { decay: 0.2, gain: 0.6 * near, type: 'triangle', slide: 48, slideTime: 0.18, attack: 0.002 });
+          this.noise(0.28, { at: 0.03, type: 'bandpass', freq: 5200, sweep: 2600, q: 2, gain: 0.16 * near });
+        } else if (kind === 'galaxyblade') {
+          // A heavy thwack, with stars ringing out over it.
+          this.noise(0.09, { type: 'bandpass', freq: 2600, sweep: 900, q: 1.2, gain: 0.5 * near });
+          this.tone(150 * r(), { decay: 0.18, gain: 0.72 * near, slide: 52, slideTime: 0.16, attack: 0.002 });
+          for (const [i, n] of [84, 88, 91].entries()) this.tone(NOTE(n) * r(), { at: 0.02 + i * 0.03, decay: 0.24, gain: 0.05 * near, type: 'triangle' });
+        } else if (kind === 'rainbowray') {
+          // A bright zing, and a thump under it.
+          this.tone(1500 * r(), { decay: 0.12, gain: 0.14 * near, type: 'triangle', slide: 500, slideTime: 0.1 });
+          this.tone(150 * r(), { decay: 0.15, gain: 0.62 * near, slide: 58, slideTime: 0.13, attack: 0.002 });
+          this.noise(0.06, { type: 'bandpass', freq: 2400, q: 1, gain: 0.32 * near });
+        } else if (kind === 'meteorstaff') {
+          this.tone(120 * r(), { decay: 0.3, gain: 0.65 * near, slide: 40, slideTime: 0.26, attack: 0.002 });
+          this.noise(0.18, { type: 'lowpass', freq: 1300, sweep: 240, gain: 0.48 * near });
         } else {
           this.tone(140 * r(), { decay: 0.15, gain: 0.55 * near, slide: 52, slideTime: 0.12, attack: 0.002 });
           this.noise(0.08, { type: 'lowpass', freq: 1700, sweep: 320, gain: 0.42 * near });
@@ -512,6 +530,64 @@ export class Sound {
         this.tone(170 * r(), { decay: 0.12, gain: 0.3, slide: 420, slideTime: 0.07 });
         this.noise(0.05, { type: 'lowpass', freq: 1200, gain: 0.15 });
         break;
+      // The Thunder Spear's bolt: the snap of it, a buzz falling away, and the
+      // crackle after.
+      case 'zap': {
+        const near = opts.near ?? 1;
+        this.noise(0.04, { type: 'highpass', freq: 4200, gain: 0.3 * near, attack: 0.001 });
+        this.tone(1700 * r(), { decay: 0.14, gain: 0.05 * near, type: 'sawtooth', slide: 180, slideTime: 0.12 });
+        this.tone(95 * r(), { decay: 0.3, gain: 0.09 * near, type: 'sawtooth', slide: 60, slideTime: 0.26 });
+        for (let i = 0; i < 4; i++) this.noise(0.03, { at: 0.05 + i * 0.05 + Math.random() * 0.02, type: 'bandpass', freq: 3000 + Math.random() * 3000, q: 3, gain: 0.16 * near, attack: 0.001 });
+        break;
+      }
+      // The Galaxy Blade going round: stars ringing up the scale into the moment
+      // it lands (opts.lands, seconds on).
+      case 'starspin': {
+        const lands = opts.lands ?? 0.3;
+        for (const [i, n] of [72, 76, 79, 84, 88].entries()) this.tone(NOTE(n) * r(), { at: Math.max(0, lands - 0.3) + i * 0.055, decay: 0.2, gain: 0.05, type: 'triangle' });
+        this.noise(lands, { type: 'bandpass', freq: 500, sweep: 1900, q: 1, gain: 0.12, attack: lands * 0.7 });
+        break;
+      }
+      // The Rainbow Ray charging up, to the moment it fires (opts.lands, seconds on).
+      case 'raycharge': {
+        const lands = opts.lands ?? 0.2;
+        this.tone(320 * r(), { attack: lands * 0.8, decay: lands * 0.25, gain: 0.05, type: 'triangle', slide: 1500, slideTime: lands });
+        break;
+      }
+      // The Rainbow Ray firing: a rising chord of a zing, and the rush of it.
+      case 'ray': {
+        const near = opts.near ?? 1;
+        for (const [i, n] of [76, 83, 88, 95].entries()) this.tone(NOTE(n) * r(), { at: i * 0.012, decay: 0.3, gain: 0.07 * near, type: 'triangle', slide: NOTE(n) * 0.5, slideTime: 0.3 });
+        this.tone(1400 * r(), { decay: 0.2, gain: 0.05 * near, type: 'sawtooth', slide: 420, slideTime: 0.18 });
+        this.noise(0.24, { type: 'bandpass', freq: 2800, sweep: 1100, q: 0.9, gain: 0.14 * near });
+        break;
+      }
+      // The Meteor Staff raised: a shimmer rising as the sky answers.
+      case 'summon': {
+        const lands = opts.lands ?? 0.3;
+        this.tone(180 * r(), { attack: lands * 0.8, decay: 0.35, gain: 0.05, type: 'triangle', slide: 700, slideTime: lands + 0.1, vibrato: 12 });
+        this.noise(lands + 0.15, { type: 'highpass', freq: 1800, sweep: 6000, gain: 0.03, attack: lands * 0.8 });
+        break;
+      }
+      // A meteor coming down: a whistle falling all the way (opts.secs) and the
+      // roar of the air round it.
+      case 'whistle': {
+        const secs = opts.secs ?? 0.65;
+        this.tone(1500 * r(), { attack: 0.03, decay: secs, gain: 0.07, slide: 170, slideTime: secs });
+        this.noise(secs, { type: 'bandpass', freq: 2400, sweep: 320, q: 0.9, gain: 0.16, attack: secs * 0.8 });
+        break;
+      }
+      // A meteor landing: the deepest boom there is, with rocks raining down
+      // after it. opts.near: how close, 1 right there.
+      case 'kaboom': {
+        const near = opts.near ?? 1;
+        this.noise(0.03, { type: 'highpass', freq: 2200, gain: 0.5 * near, attack: 0.001 });
+        this.tone(105 * r(), { decay: 0.9, gain: 0.5 * near, slide: 28, slideTime: 0.8, attack: 0.003 });
+        this.tone(58 * r(), { decay: 1.1, gain: 0.32 * near, slide: 30, slideTime: 0.9 });
+        this.noise(0.8, { type: 'lowpass', freq: 1400, sweep: 120, gain: 0.34 * near });
+        for (let i = 0; i < 6; i++) this.noise(0.05, { at: 0.2 + i * 0.09 + Math.random() * 0.05, type: 'bandpass', freq: 700 + Math.random() * 900, q: 1.5, gain: 0.12 * near });
+        break;
+      }
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });

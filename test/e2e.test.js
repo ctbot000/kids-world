@@ -2284,6 +2284,235 @@ test('a friend’s blow lands on your screen too: the monster stops dead, goes w
   await host.browserContext().close();
 });
 
+test('the mightiest toy weapons: a bolt leaping through a chain of monsters, a spin all round, a beam through a line and a meteor out of the sky', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Mighty Moose' });
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await clickButton(page, 'Make an island');
+  await clickButton(page, 'Flat Land', '#modal');
+  await clickButton(page, 'New name', '#modal');
+  await clickSwitch(page, '#modal .switch'); // Friends can visit: off
+  await clickSwitch(page, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(page, 'Make it', '#modal');
+  await inGame(page);
+  // A clearing with you in it, and what the weapons show and say written down as it goes.
+  await page.evaluate(() => {
+    const kw = window.kidsWorld;
+    const g = kw.game;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 14;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 10; cx <= x + 10; cx++) {
+      for (let cz = z - 18; cz <= z + 6; cz++) {
+        for (let cy = y; cy < y + 14; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+      }
+    }
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.sendMove(true);
+    window.seen = { shows: [], sounds: [], said: [] };
+    for (const name of ['zapBolt', 'rainbowBeam', 'meteor']) {
+      const show = kw.renderer[name].bind(kw.renderer);
+      kw.renderer[name] = (...args) => {
+        window.seen.shows.push({ name, args: JSON.parse(JSON.stringify(args)) });
+        return show(...args);
+      };
+    }
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.seen.sounds.push(name);
+      return play(name, opts);
+    };
+    const emit = g.emit.bind(g);
+    g.emit = (name, detail) => {
+      if (name === 'hit-word') window.seen.said.push(detail.text);
+      return emit(name, detail);
+    };
+    g.profile.data.gear.weapon = 10;
+  });
+  await until(page, () => window.kidsWorld.game.critters.size === 0);
+  // That weapon in your hand, facing -z, and monsters of 30 hearts held still at each spot.
+  const face = async (level, key, spots) => {
+    await page.evaluate(() => {
+      const room = window.kidsWorld.session.link.room;
+      for (const m of [...room.monsters.list]) room.monsters.remove(m.id);
+    });
+    await until(page, () => window.kidsWorld.game.monsters.size === 0 && window.kidsWorld.game.flung.length === 0);
+    await page.evaluate((level) => window.kidsWorld.game.profile.pickWeapon(level), level);
+    await until(page, (key) => window.kidsWorld.session.link.room.players.get(window.kidsWorld.game.pid).look?.weapon === key, key);
+    const ids = await page.evaluate((spots) => {
+      const kw = window.kidsWorld;
+      const b = kw.game.me.body;
+      const room = kw.session.link.room;
+      kw.game.me.yaw = Math.PI;
+      Object.assign(window.seen, { shows: [], sounds: [], said: [] });
+      return spots.map(([dx, dz]) => {
+        const m = room.monsters.add(room.world, b.x + dx, b.y, b.z + dz);
+        m.giggle = Infinity;
+        m.hearts = 30;
+        m.max = 30;
+        return m.id;
+      });
+    }, spots);
+    await until(page, (ids) => {
+      const g = window.kidsWorld.game;
+      return g.attackReady() && ids.every((id) => g.monsters.get(id)?.drawn);
+    }, ids);
+    return ids;
+  };
+  const hearts = (ids) => page.evaluate((ids) => ids.map((id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts ?? 0), ids);
+  const heartsAre = (ids, want) => until(page, ({ ids, want }) => ids.every((id, i) => (window.kidsWorld.session.link.room.monsters.get(id)?.hearts ?? 0) === want[i]), { ids, want });
+  const seen = () => page.evaluate(() => window.seen);
+
+  // ⚡ Stabbing the nearest: the bolt leaps through it to the nearest three, and no more.
+  const chain = await face(7, 'thunderspear', [[0, -3], [3, -3], [3, -6], [0, -7], [-3, -8]]);
+  await page.keyboard.press('KeyX');
+  await heartsAre(chain, [25, 25, 25, 25, 30]);
+  const bolt = await seen();
+  const bolts = bolt.shows.filter((s) => s.name === 'zapBolt').map((s) => s.args[0].length);
+  assert.deepEqual(bolts, [2, 4], `from the spear to the one stabbed, then through all four: ${bolts}`);
+  assert.ok(bolt.sounds.includes('zap') && bolt.sounds.includes('whack'), bolt.sounds.join());
+
+  // 🌌 All round you, without turning you: in front, behind and to each side, but no further.
+  const round = await face(8, 'galaxyblade', [[0, -2.4], [2.4, 0], [0, 2.4], [-2.4, 0], [0, -7.5]]);
+  await page.keyboard.press('KeyX');
+  await heartsAre(round, [23, 23, 23, 23, 30]);
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.me.yaw), Math.PI, 'still facing the way you were');
+  assert.ok((await seen()).sounds.includes('starspin'));
+  assert.ok(await page.evaluate(() => window.kidsWorld.renderer.effects.slashes.some((s) => s.secs > 0.3)), 'a slash as long as the spin');
+
+  // 🌈 Through all in a line, however far along it, and not the one to one side.
+  const line = await face(9, 'rainbowray', [[0, -2.5], [0.2, -4.6], [-0.2, -6.8], [3, -4]]);
+  await page.keyboard.press('KeyX');
+  await heartsAre(line, [22, 22, 22, 30]);
+  const [beam] = (await seen()).shows.filter((s) => s.name === 'rainbowBeam');
+  const [from, to] = beam.args;
+  const long = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+  assert.ok(long > 7, `out past the furthest of them, not into the ground just past the first: ${long}`);
+  // With nothing in front, it fires all the same, straight on.
+  await face(9, 'rainbowray', []);
+  await page.keyboard.press('KeyX');
+  await until(page, () => window.seen.shows.some((s) => s.name === 'rainbowBeam'));
+
+  // ☄️ A ring and a meteor a moment before the blast, and all in it at once.
+  const crowd = await face(10, 'meteorstaff', [[0, -4.5], [-2.2, -5], [2.2, -5.5], [0, -15]]);
+  await page.keyboard.press('KeyX');
+  await until(page, () => window.seen.shows.some((s) => s.name === 'meteor'));
+  assert.deepEqual(await hearts(crowd), [30, 30, 30, 30], 'nothing while it falls');
+  assert.ok(await page.evaluate(() => window.kidsWorld.renderer.bossFx.some((f) => f.rock?.parent)), 'a meteor in the sky');
+  await heartsAre(crowd, [18, 18, 18, 30]);
+  await until(page, () => window.seen.said.includes('KABOOM!') && window.seen.sounds.includes('kaboom'));
+  assert.ok((await seen()).sounds.includes('whistle'));
+  assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.gear.wear.meteorstaff >= 1), 'it wears as a Bomb Rod does');
+  // Every show over, and nothing left behind in the scene.
+  await until(page, () => window.kidsWorld.renderer.bossFx.length === 0);
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a friend’s mighty weapons show on your screen too: their bolt, their beam and their meteor', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Keen Owl' });
+  const errors = [];
+  host.on('pageerror', (e) => errors.push(e.message));
+  await clickButton(host, 'Make an island');
+  await clickButton(host, 'Flat Land', '#modal');
+  await clickButton(host, 'New name', '#modal');
+  await clickSwitch(host, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(host, 'Make it', '#modal');
+  await inGame(host);
+  await until(host, () => window.kidsWorld.session.link.state === 'online');
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Bold Wolf' });
+  guest.on('pageerror', (e) => errors.push(e.message));
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  const guestPid = await guest.evaluate(() => window.kidsWorld.game.pid);
+  // A clearing with the friend in it and you a few steps off, and on your page what
+  // shows written down as it goes.
+  const spot = await host.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 14;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 8; cx <= x + 8; cx++) {
+      for (let cz = z - 12; cz <= z + 6; cz++) {
+        for (let cy = y; cy < y + 14; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+      }
+    }
+    Object.assign(kw.game.me.body, { x: x + 5.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+    window.shows = [];
+    for (const name of ['zapBolt', 'rainbowBeam', 'meteor']) {
+      const show = kw.renderer[name].bind(kw.renderer);
+      kw.renderer[name] = (...args) => {
+        window.shows.push({ name, args: JSON.parse(JSON.stringify(args)) });
+        return show(...args);
+      };
+    }
+    return { x, y, z };
+  });
+  await guest.evaluate(({ x, y, z }) => {
+    const g = window.kidsWorld.game;
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.me.yaw = Math.PI;
+    g.sendMove(true);
+    g.profile.data.gear.weapon = 10;
+  }, spot);
+  await until(host, ({ pid, x, z }) => {
+    const at = window.kidsWorld.game.players.get(pid)?.avatar?.root.position;
+    return at && Math.hypot(at.x - x - 0.5, at.z - z - 0.5) < 0.2;
+  }, { pid: guestPid, x: spot.x, z: spot.z });
+  // Their weapon in hand on your screen too, monsters in front of them, and a swing.
+  const swing = async (level, key, spots) => {
+    await guest.evaluate((level) => window.kidsWorld.game.profile.pickWeapon(level), level);
+    await until(host, ({ pid, key }) => window.kidsWorld.game.players.get(pid)?.avatar?.weaponKind === key, { pid: guestPid, key });
+    const ids = await host.evaluate(({ x, y, z, spots }) => {
+      const room = window.kidsWorld.session.link.room;
+      for (const m of [...room.monsters.list]) room.monsters.remove(m.id);
+      window.shows = [];
+      return spots.map(([dx, dz]) => {
+        const m = room.monsters.add(room.world, x + 0.5 + dx, y, z + 0.5 + dz);
+        m.giggle = Infinity;
+        m.hearts = 30;
+        m.max = 30;
+        return m.id;
+      });
+    }, { ...spot, spots });
+    await until(guest, (ids) => {
+      const g = window.kidsWorld.game;
+      return g.attackReady() && ids.every((id) => g.monsters.get(id)?.drawn);
+    }, ids);
+    await until(host, (ids) => ids.every((id) => window.kidsWorld.game.monsters.get(id)?.drawn), ids);
+    await guest.evaluate(() => {
+      window.kidsWorld.game.me.yaw = Math.PI;
+      window.kidsWorld.game.attack();
+    });
+    return ids;
+  };
+  await swing(7, 'thunderspear', [[0, -3], [3, -3]]);
+  await until(host, () => window.shows.some((s) => s.name === 'zapBolt'));
+  const [bolt] = await host.evaluate(() => window.shows.filter((s) => s.name === 'zapBolt'));
+  assert.equal(bolt.args[0].length, 3, 'from the point of their spear, through the one stabbed, to the next');
+  await swing(9, 'rainbowray', [[0, -3]]);
+  await until(host, () => window.shows.some((s) => s.name === 'rainbowBeam'));
+  const crowd = await swing(10, 'meteorstaff', [[0, -4]]);
+  await until(host, () => window.shows.some((s) => s.name === 'meteor'));
+  await until(host, (id) => window.kidsWorld.session.link.room.monsters.get(id)?.hearts === 18, crowd[0]);
+  assert.deepEqual(errors, []);
+  await guest.browserContext().close();
+  await host.browserContext().close();
+});
+
 test('the shop sells, the 🎒 backpack is where you put things on and take them off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Badger' });
   // On the title, the backpack turns you round to see how you look, and

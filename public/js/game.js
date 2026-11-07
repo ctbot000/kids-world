@@ -46,7 +46,7 @@ import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, POTION, ROD_LOB_MS, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
+import { gearMove, METEOR_FALL_MS, POTION, ROD_LOB_MS, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './shared/race.js';
 import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
@@ -137,6 +137,19 @@ const ROD_ARC_G = 9;
 const ROD_LEAVES_HAND = 0.1;
 // How fast the blaster's bubble flies (blocks a second).
 const BUBBLE_SPEED = 13;
+// The Rainbow Ray's beam bops whatever it passes this close to, side to side
+// (a monster's own width over and above it).
+const BEAM_SIDE = 0.6;
+// How high a meteor comes down from over where it lands, with nothing in its
+// way, and how far off to one side and back along the way its caller faces, for
+// each block of that: so that from behind them it comes slanting across the
+// picture, in sight for most of the way.
+const METEOR_HIGH = 12;
+const METEOR_SIDE = 0.9;
+const METEOR_BACK = 0.3;
+// Seconds its fall is drawn longer than the island takes, as the island's word
+// that it landed takes a moment to come.
+const METEOR_LATE = 0.06;
 
 // A monster bopped flashes white: solid while the blow holds it (and for this
 // long at least), and then, in FLASH_TAIL, a blink off, on and off. On and off
@@ -156,6 +169,9 @@ const SLASHES = {
   lavablade: { color: '#ff6a1f', y: 0.95 },
   // The King Punch: a wider, golden shockwave all round in front.
   king: { color: '#ffd84d', y: 0.9, wide: true },
+  // The Galaxy Blade's: all the way round, for as long as you spin, ending in
+  // front as it lands, with stars thrown off it.
+  galaxyblade: { color: '#9a7bff', y: 0.95, from: -6.15, to: 0.13, secs: 0.46, tilt: -0.07, stars: true },
 };
 // How each swing lands on a monster: your swing and the monsters it hit stop
 // dead for stop ms (a little longer for each more one), the picture jolts
@@ -173,6 +189,11 @@ const IMPACTS = {
   // What flies lands lighter, from further off.
   blaster: { color: '#9fe8ff', stop: 50, kick: 0.008, roll: 0.003, zoom: 0.01, burst: 0.7, buzz: 10, words: ['BLOOP!', 'SPLOSH!'] },
   bow: { color: '#ff8fc4', stop: 65, kick: 0.01, roll: 0.004, zoom: 0.014, burst: 0.8, buzz: 12, words: ['THWOP!', 'THUNK!'] },
+  // The mightiest, each landing harder than what it comes after.
+  thunderspear: { color: '#7fd4ff', stop: 120, kick: 0.024, roll: 0.014, zoom: 0.034, burst: 1.35, buzz: 32, words: ['ZAP!', 'KZZT!', 'CRACK!'], lines: true },
+  galaxyblade: { color: SLASHES.galaxyblade.color, stop: 130, kick: 0.026, down: 0.008, roll: 0.016, zoom: 0.038, burst: 1.45, buzz: 36, words: ['SWOOSH!', 'WHIRRR!', 'TWINKLE!'], lines: true },
+  rainbowray: { color: '#ff7ad9', stop: 110, kick: 0.024, roll: 0.01, zoom: 0.036, burst: 1.4, buzz: 34, words: ['ZZZAP!', 'PEW PEW!', 'SHINE!'], lines: true },
+  meteorstaff: { color: '#ff8a2a', stop: 150, kick: 0.03, down: 0.02, roll: 0.018, zoom: 0.04, burst: 1.6, buzz: 44, words: ['KABOOM!'], lines: true },
 };
 const STOP_MORE = 15;
 const STOP_MAX = 230;
@@ -571,10 +592,16 @@ export class Game extends EventTarget {
         const lands = avatar?.swing() ?? 0;
         const king = msg.king === true;
         this.slashSoon(avatar, lands, king);
+        const world = this.world;
         if (king) {
-          const world = this.world;
           setTimeout(() => {
             if (this.world === world) this.shockwaveFrom(avatar);
+          }, lands * 1000);
+        }
+        // A friend's Rainbow Ray fires as their swing lands, the way they face.
+        if (avatar?.weaponKind === 'rainbowray') {
+          setTimeout(() => {
+            if (this.world === world) this.rayFrom(avatar);
           }, lands * 1000);
         }
         break;
@@ -727,6 +754,8 @@ export class Game extends EventTarget {
         else if (msg.kind === 'blast') this.blast(msg);
         else if (msg.kind === 'fuse') this.fuse(msg);
         else if (msg.kind === 'lob' && msg.pid !== this.pid) this.lobBomb(msg.x, msg.y, msg.z, msg.tx, msg.tz);
+        else if (msg.kind === 'bolt') this.boltNews(msg);
+        else if (msg.kind === 'meteor' && msg.pid !== this.pid) this.callMeteor(msg.tx, msg.y - 1, msg.tz, Math.atan2(msg.tx - msg.x, msg.tz - msg.z));
         break;
       case 'mfx':
         // Mr. Mole popping up: his burst of dirt (see room.js).
@@ -1911,7 +1940,9 @@ export class Game extends EventTarget {
     const { position: at, rotation, scale } = avatar.root;
     if (!this.near(at.x, at.y, at.z, 40)) return;
     const reach = king ? KING_REACH + 0.6 : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
-    this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, from: look.wide ? -2.4 : undefined, to: look.wide ? 2.4 : undefined });
+    const y = at.y + look.y * scale.y;
+    this.renderer.effects.slash(at.x, y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, tilt: look.tilt, secs: look.secs, from: look.wide ? -2.4 : look.from, to: look.wide ? 2.4 : look.to });
+    if (look.stars) this.renderer.effects.starWhirl(at.x, y, at.z, rotation.y, reach, look.from, look.to, look.secs);
   }
 
   // The slash of a swing landing in lands seconds: it sets off that much sooner
@@ -1920,7 +1951,7 @@ export class Game extends EventTarget {
     const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
     if (!look) return;
     const world = this.world;
-    const lead = slashLead({ upright: look.upright, ...(look.wide ? { from: -2.4, to: 2.4 } : {}) });
+    const lead = slashLead({ upright: look.upright, ...(look.wide ? { from: -2.4, to: 2.4 } : {}), ...(look.from ? { from: look.from, to: look.to, secs: look.secs } : {}) });
     setTimeout(() => {
       if (this.world === world) this.slashFrom(avatar, king);
     }, Math.max(0, lands - lead) * 1000);
@@ -2187,6 +2218,15 @@ export class Game extends EventTarget {
     // The bubble blaster and the bow shoot at the one nearest in front.
     const blaster = weapon?.key === 'blaster' || bow;
     const rod = weapon?.key === 'bombrod';
+    const meteor = weapon?.key === 'meteorstaff';
+    // The Thunder Spear stabs the one nearest in front (the island's bolt leaps
+    // on from it), and the Rainbow Ray fires at it, through all in the line.
+    const spear = Boolean(weapon?.chain);
+    const ray = Boolean(weapon?.beam);
+    // The Galaxy Blade goes right round.
+    const spin = Boolean(weapon?.spin);
+    const aimed = blaster || rod || meteor || spear || ray;
+    const arc = spin ? -1 : aimed ? FRONT : SWEEP;
     const hits = [];
     let best = null;
     for (const [id, entry] of this.monsters) {
@@ -2200,7 +2240,7 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster || rod ? FRONT : SWEEP)) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < arc) continue;
       const ey = b.y + BODY.eye;
       const dy = m.y + size.height / 2 - ey;
       const len = Math.hypot(dx, dy, dz) || 1;
@@ -2221,7 +2261,7 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < (blaster || rod ? FRONT : SWEEP)) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < arc) continue;
       const hit = { id: c.id, gap, dx, dz, m, size, dragon: true };
       dragons.push(hit);
       if (!best || gap < best.gap) best = hit;
@@ -2229,14 +2269,26 @@ export class Game extends EventTarget {
     // The blaster turns to aim at its one; a sweep goes the way you face,
     // turning only for one right up against you behind.
     const behind = (hit) => (hit.dx * fx + hit.dz * fz) / (Math.hypot(hit.dx, hit.dz) || 1) < SWEEP;
-    if (best && (blaster || rod || behind(best))) this.me.yaw = Math.atan2(best.dx, best.dz);
+    if (best && (aimed || (!spin && behind(best)))) this.me.yaw = Math.atan2(best.dx, best.dz);
+    // What it lands on, of what is in reach: the spear's one, those in the ray's
+    // line now it has turned to aim, and for all the others all of them.
+    const aimX = Math.sin(this.me.yaw);
+    const aimZ = Math.cos(this.me.yaw);
+    const inLine = (hit) => hit.dx * aimX + hit.dz * aimZ > 0 && Math.abs(hit.dx * aimZ - hit.dz * aimX) <= hit.size.radius + BEAM_SIDE;
+    const takes = (hit) => (spear ? hit === best : !ray || hit === best || inLine(hit));
+    const struck = hits.filter(takes);
+    const struckDragons = dragons.filter(takes);
     // The bop (and a blaster's bubble) goes when the swing lands, a moment on;
     // the whoosh of a swing as it starts.
-    const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
+    const avatar = this.players.get(this.pid)?.avatar;
+    const lands = avatar?.swing() ?? 0;
     this.send({ t: 'swing' });
-    if (!blaster) this.sound.play('swish', { lands });
+    if (ray) this.sound.play('raycharge', { lands });
+    else if (meteor) this.sound.play('summon', { lands });
+    else if (!blaster) this.sound.play('swish', { lands });
     if (bow) this.sound.play('creak');
-    if (!blaster && !rod) this.slashSoon(this.players.get(this.pid)?.avatar, lands);
+    if (spin) this.sound.play('starspin', { lands });
+    if (!blaster && !rod) this.slashSoon(avatar, lands);
     const world = this.world;
     setTimeout(() => {
       if (this.world !== world) return;
@@ -2264,14 +2316,26 @@ export class Game extends EventTarget {
         this.send({ t: 'bomb', d: +d.toFixed(2) });
         this.wearOut();
         return;
-      } else if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
+      } else if (meteor) {
+        // Called down out of the sky at the one aimed at, or a few steps ahead.
+        const d = best ? Math.hypot(best.dx, best.dz) : reach;
+        this.callMeteor(b.x + Math.sin(yaw) * d, b.y, b.z + Math.cos(yaw) * d, yaw);
+        this.send({ t: 'bomb', d: +d.toFixed(2) });
+        this.wearOut();
+        return;
+      } else {
+        const aim = at && { x: at.x, y: at.y + best.size.height / 2, z: at.z };
+        if (spear) this.zapFrom(avatar, aim, reach);
+        else if (ray) this.rayFrom(avatar, aim);
+        if (struck.length || struckDragons.length) this.strike(struck, weapon?.key ?? 'punch', struckDragons);
+      }
       if (best) {
         const bop = () => {
           if (this.world !== world) return;
           // What flies lands as it gets there, on the one it was shot at.
           if (shot) this.strike(best.dragon ? [] : [best], weapon.key, best.dragon ? [best] : []);
           this.bopSentAt = performance.now();
-          for (const hit of blaster ? [best] : [...hits, ...dragons]) {
+          for (const hit of blaster ? [best] : [...struck, ...struckDragons]) {
             if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
             else this.bop(hit.id);
           }
@@ -2291,9 +2355,107 @@ export class Game extends EventTarget {
     const near = [...this.monsters.values()].some(({ model: { group: { position: m } } }) => Math.hypot(m.x - b.x, m.y - b.y, m.z - b.z) < 8);
     if (near && now > (this.toldReach ?? 0)) {
       this.toldReach = now + 20000;
-      this.emit('toast', { icon: weapon?.icon ?? '👊', text: blaster ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
+      this.emit('toast', { icon: weapon?.icon ?? '👊', text: aimed ? 'Turn to face a monster a few steps away, then bop!' : 'Walk right up to a monster, then swing!' });
     }
     return null;
+  }
+
+  // Your Thunder Spear's stab: a bolt from its point to aim ({ x, y, z }, what it
+  // stabs), or with nothing there as far as it reaches, ending in sparks.
+  zapFrom(avatar, aim, reach) {
+    const tip = avatar?.muzzle();
+    if (!tip) return;
+    const yaw = this.me.yaw;
+    const to = aim ?? { x: tip.x + Math.sin(yaw) * reach, y: tip.y, z: tip.z + Math.cos(yaw) * reach };
+    this.renderer.zapBolt([tip, to]);
+    if (!aim) this.renderer.effects.zapSparks(to.x, to.y, to.z);
+    this.sound.play('zap');
+  }
+
+  // A Thunder Spear's bolt as the island tells it: through the monsters ids,
+  // leaping from each to the next. The first leap for friends is from the
+  // point of the spear; your own you lit as you stabbed (zapFrom).
+  boltNews(msg) {
+    if (!Array.isArray(msg.ids)) return;
+    const points = [];
+    for (const id of msg.ids) {
+      const entry = this.monsters.get(id);
+      const at = entry?.model.group.position;
+      if (at) points.push({ x: at.x, y: at.y + bodyOf(entry.kind).height / 2, z: at.z });
+    }
+    if (!points.length || !this.near(points[0].x, points[0].y, points[0].z, 40)) return;
+    if (msg.pid !== this.pid) {
+      const tip = this.players.get(msg.pid)?.avatar?.muzzle();
+      if (tip) points.unshift(tip);
+      this.sound.play('zap', { near: 0.6 });
+    }
+    if (points.length > 1) this.renderer.zapBolt(points);
+  }
+
+  // A Rainbow Ray firing from avatar's hand: its beam, at aim ({ x, y, z }, what
+  // it is aimed at) and on past it, or straight on the way they face, as far as
+  // the ray reaches or to the first wall.
+  rayFrom(avatar, aim = null) {
+    const from = avatar?.muzzle();
+    if (!from || !this.near(from.x, from.y, from.z, 50)) return;
+    const yaw = avatar === this.players.get(this.pid)?.avatar ? this.me.yaw : avatar.root.rotation.y;
+    let dx = Math.sin(yaw);
+    let dy = 0;
+    let dz = Math.cos(yaw);
+    const long = ARM_REACH + weaponOf('rainbowray').reach + 0.6;
+    if (aim) {
+      const side = Math.hypot(aim.x - from.x, aim.z - from.z) || 1;
+      dx = (aim.x - from.x) / side;
+      dz = (aim.z - from.z) / side;
+      // Up at one over your head, straight at it; down at one on the ground,
+      // only down to its height by the far end, or it would go into the ground
+      // just past it.
+      dy = (aim.y - from.y) / (aim.y > from.y ? side : long);
+    }
+    const wall = raycast(this.world, from.x, from.y, from.z, dx, dy, dz, long, (id) => B.SOLID[id] === 1);
+    const d = wall ? wall.dist : long;
+    const to = { x: from.x + dx * d, y: from.y + dy * d, z: from.z + dz * d };
+    this.renderer.rainbowBeam(from, to);
+    this.renderer.effects.beamSparks(from.x, from.y, from.z, to.x, to.y, to.z);
+    this.sound.play('ray', { near: avatar === this.players.get(this.pid)?.avatar ? 1 : 0.6 });
+  }
+
+  // The ground (or the water) at (x, z) nearest the height y: up out of a hill
+  // there, or down to what is under it.
+  groundNear(x, y, z) {
+    const stops = (at) => {
+      const id = this.world.get(Math.floor(x), at, Math.floor(z));
+      return B.SOLID[id] === 1 || id === B.WATER || id === B.LAVA;
+    };
+    const from = Math.floor(y + 0.1);
+    let at = from;
+    if (stops(at)) {
+      while (stops(at) && at < from + 8) at++;
+      return at;
+    }
+    while (!stops(at - 1) && at > Math.max(1, from - 10)) at--;
+    return at;
+  }
+
+  // A meteor called down at (x, z) by someone at height y facing yaw (yours, or
+  // a friend's as the island tells it): slanting down out of the sky, from one
+  // side or the other, from no higher than what is over the spot lets it. It
+  // lands as the island says (blast).
+  callMeteor(x, y, z, yaw) {
+    if (!this.near(x, y, z, 60)) return;
+    const ground = this.groundNear(x, y, z);
+    let high = METEOR_HIGH;
+    for (let h = 2; h < METEOR_HIGH; h++) {
+      if (B.SOLID[this.world.get(Math.floor(x), ground + h, Math.floor(z))] === 1) {
+        high = h - 0.5;
+        break;
+      }
+    }
+    const side = high * METEOR_SIDE * (Math.random() < 0.5 ? -1 : 1);
+    const back = high * METEOR_BACK;
+    const from = [x + Math.cos(yaw) * side - Math.sin(yaw) * back, ground + high, z - Math.sin(yaw) * side - Math.cos(yaw) * back];
+    this.renderer.meteor(from, [x, ground + 0.3, z], METEOR_FALL_MS + METEOR_LATE * 1000, weaponOf('meteorstaff').blast);
+    this.sound.play('whistle', { secs: METEOR_FALL_MS / 1000 });
   }
 
   // A door the swing of the fist (👊 or X) passes through: the one the ray of
@@ -6433,21 +6595,43 @@ export class Game extends EventTarget {
   // blast shook out of gem rocks into the basket of whoever laid it.
   blast(msg) {
     const fx = this.renderer.effects;
-    fx.pop(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), '#d9d3c7', 24);
-    fx.sparkles(msg.x, msg.y + 0.5, msg.z, 30, ['#ffd84d', '#ff8fc4', '#ffffff']);
     const d = this.me ? Math.hypot(this.me.body.x - msg.x, this.me.body.y - msg.y, this.me.body.z - msg.z) : 0;
-    this.sound.play('boom', { near: Math.max(0.35, 1 - d / 120) });
-    if (d < 16) {
-      this.renderer.shake(0.35 * (1 - d / 16));
-      fx.impact(msg.x, msg.y + 0.5, msg.z, 0, 0, '#ffb13d', 1.5, false);
-      this.emit('hit-lines', { x: msg.x, y: msg.y + 0.5, z: msg.z });
-      this.emit('hit-word', { x: msg.x, y: msg.y, z: msg.z, top: 1.2, text: 'BOOM!', color: '#ffb13d', big: true });
-      this.buzz(30);
+    if (msg.meteor) {
+      this.meteorLands(msg, d);
+    } else {
+      fx.pop(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), '#d9d3c7', 24);
+      fx.sparkles(msg.x, msg.y + 0.5, msg.z, 30, ['#ffd84d', '#ff8fc4', '#ffffff']);
+      this.sound.play('boom', { near: Math.max(0.35, 1 - d / 120) });
+      if (d < 16) {
+        this.renderer.shake(0.35 * (1 - d / 16));
+        fx.impact(msg.x, msg.y + 0.5, msg.z, 0, 0, '#ffb13d', 1.5, false);
+        this.emit('hit-lines', { x: msg.x, y: msg.y + 0.5, z: msg.z });
+        this.emit('hit-word', { x: msg.x, y: msg.y, z: msg.z, top: 1.2, text: 'BOOM!', color: '#ffb13d', big: true });
+        this.buzz(30);
+      }
     }
     if (msg.by !== this.pid || !msg.gems?.length) return;
     const cells = [];
     for (let i = 0; i < msg.gems.length; i++) cells.push(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), B.AIR);
     this.collect(msg.gems, cells);
+  }
+
+  // A Meteor Staff's meteor landing, d blocks from you: fire rolling out as far
+  // as it reached, a ring rushing over the ground, the sky lit up and the
+  // picture shaken, the closer the harder.
+  meteorLands(msg, d) {
+    const r = weaponOf('meteorstaff').blast;
+    const y = this.groundNear(msg.x, msg.y, msg.z);
+    this.renderer.effects.fireball(msg.x, y, msg.z, r);
+    this.renderer.shockwave(msg.x, y, msg.z, r + 1.4);
+    this.sound.play('kaboom', { near: Math.max(0.35, 1 - d / 120) });
+    if (d >= 30) return;
+    const k = 1 - d / 30;
+    this.renderer.shake(0.9 * k);
+    this.renderer.sky.flash = Math.max(this.renderer.sky.flash, 0.5 * k);
+    this.emit('hit-lines', { x: msg.x, y: y + 1, z: msg.z });
+    this.emit('hit-word', { x: msg.x, y, z: msg.z, top: 2, text: 'KABOOM!', color: '#ffb13d', big: true });
+    this.buzz(70);
   }
 
   // ------------------------------------------------ tools

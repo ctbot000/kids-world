@@ -96,14 +96,24 @@ export const GEAR = [
     // swings that land it lasts before it breaks (see wear, below).
     // Saves keep the weapons as how many levels you have (gear.weapon), so
     // a new one goes on the end: put in between, it would turn everyone's
-    // saved weapons into others. The Bomb Rod and the Toy Bow are last for that.
+    // saved weapons into others. The Bomb Rod and the Toy Bow come after the
+    // Lava Blade for that. The mightiest are the last four, each harder than
+    // anything before it and with a way of its own: chain, how many more
+    // monsters its bolt leaps on to (room.js boltOn); spin, it bops all the
+    // way round you (game.js attack); beam, it goes through all in a line
+    // (game.js attack); blast, how far round where it lands it bops (room.js
+    // rodBlast).
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, push: 8, reach: 1, king: 1, uses: 60, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, uses: 80, does: 'Two bubbles pop a monster, a few steps in front of you.' },
       { key: 'hammer', name: 'Star Hammer', icon: '🔨', price: 250, power: 3, push: 11, reach: 0.6, king: 2, uses: 100, does: 'One bop pops a monster right in front of you, and a boss feels every bop twice.' },
       { key: 'lavablade', name: 'Lava Blade', icon: '🔥', price: 400, power: 4, push: 10, reach: 1.2, king: 3, uses: 120, does: 'One bop pops any monster from a step away, and a boss feels every bop three times over.' },
       { key: 'bombrod', name: 'Bomb Rod', icon: '💣', price: 450, power: 2, push: 9, reach: 3.7, king: 1, uses: 70, does: 'Lobs a small bomb a few steps ahead: its pop bops every monster in the blast and shakes jewels out of gem rocks, without digging the ground.' },
-      { key: 'bow', name: 'Toy Bow', icon: '🏹', price: 500, power: 3, reach: 3.8, king: 2, uses: 90, does: 'Shoots a suction-cup arrow at the monster in front of you: one pops it from further off than anything else, and a boss feels it twice.' },
+      { key: 'bow', name: 'Toy Bow', icon: '🏹', price: 500, power: 3, reach: 3.8, king: 2, uses: 90, does: 'Shoots a suction-cup arrow at the monster in front of you: one pops it from a long way off, and a boss feels it twice.' },
+      { key: 'thunderspear', name: 'Thunder Spear', icon: '⚡', price: 800, power: 5, push: 12, reach: 2.6, king: 4, uses: 130, chain: 3, does: 'Stabs a bolt of lightning into the monster in front of you, and it leaps on to three more nearby: five hearts off each, and a boss feels it four times over.' },
+      { key: 'galaxyblade', name: 'Galaxy Blade', icon: '🌌', price: 1200, power: 7, push: 13, reach: 2.2, king: 5, uses: 150, spin: true, does: 'Spin right round in a whirl of stars and bop every monster all round you: seven hearts off each, and a boss feels it five times over.' },
+      { key: 'rainbowray', name: 'Rainbow Ray', icon: '🌈', price: 1800, power: 8, reach: 6.3, king: 6, uses: 110, beam: true, does: 'Fires a rainbow beam further than anything else, straight through every monster in a line: eight hearts off each, and a boss feels it six times over.' },
+      { key: 'meteorstaff', name: 'Meteor Staff', icon: '☄️', price: 2500, power: 12, push: 14, reach: 4.4, king: 7, uses: 90, blast: 3.6, does: 'Calls a meteor down out of the sky a few steps ahead: twelve hearts off everything in its huge blast, jewels shaken out of gem rocks, and the ground never dug. A boss feels it seven times over.' },
     ],
   },
 ];
@@ -171,6 +181,9 @@ export const WEAPONS = GEAR.find((g) => g.key === 'weapon').levels;
 // How long the Bomb Rod's little bomb takes from the throw to where it lands
 // and pops, from the moment it leaves the hand (ms).
 export const ROD_LOB_MS = 550;
+// How long the Meteor Staff's meteor takes to fall, from the moment it is
+// called (ms).
+export const METEOR_FALL_MS = 750;
 export const weaponOf = (key) => WEAPONS.find((w) => w.key === key) ?? null;
 
 // Your look as the island sees it: with the weapon, clothes, shoes (or

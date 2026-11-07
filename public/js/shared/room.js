@@ -20,6 +20,7 @@ import { buildHouse, escapeHouse, houseCells, houseUsed, inHouse, puzzleAt, RESE
 import { GoSim, isGoBoard, REACH as GO_REACH } from './go.js';
 import { BLOCK_CM, cleanKit, IslandEnv, isKit, MAX_BOTS, MAX_KITS, problems, RobotSim, startFrom } from './robokit.js';
 import * as B from './blocks.js';
+import { raycast } from './raycast.js';
 import { trainAt } from './coaster.js';
 import { CRITTER_INFO, CritterSim, FLOWERS, heldToy, isFixed, MAX_FIREFLIES, spinAt, maxCritters, mountUnder, nearestWater, NEEDS_WATER, needsRoom, busesClearOf, placeAircraft, placeBig, placeBuses, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, riderAt, seatsFor, roomFor, standHeight } from './critters.js';
 import { advanceTime, DAY_MODES, isNight, isRaining, nextWeather, WEATHERS } from './env.js';
@@ -45,7 +46,7 @@ import { canFloat } from './fishing.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { canWatch } from './watch.js';
-import { hasPower, ROD_LOB_MS, weaponOf } from './shop.js';
+import { hasPower, METEOR_FALL_MS, ROD_LOB_MS, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 // The most HP someone has, from the level on their look.
@@ -108,6 +109,15 @@ const BOMB_SPARK_MS = 400;
 // its pop reaches this far round where it lands (rodBlast).
 const ROD_RANGE = 5;
 const ROD_BLAST = 2;
+// What is thrown or called down with each of them: how far off it can land,
+// how far round its pop reaches, how long it takes, and how friends are told.
+const BLASTS = {
+  bombrod: { range: ROD_RANGE, blast: ROD_BLAST, ms: ROD_LOB_MS, fx: 'lob' },
+  meteorstaff: { range: 7, blast: weaponOf('meteorstaff').blast, ms: METEOR_FALL_MS, fx: 'meteor' },
+};
+// A Thunder Spear's bolt leaps from one monster to another no further off
+// than this (middle to middle).
+const BOLT_LEAP = 5;
 // Talking: a few at once, then about one a second.
 const TALK_BURST = 5;
 const TALK_PER_SEC = 1;
@@ -1783,6 +1793,11 @@ export class Room {
     const r = CRITTER_INFO.dragon.ride;
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     if (bopGap(at, { x: c.x, y: c.y, z: c.z, radius: r.radius, height: r.height }, ARM_REACH + (weapon?.reach ?? 0) + BOP_SLACK) === null) return;
+    this.dragonBlow(p, c, now, weapon);
+  }
+
+  // A wild dragon taking a blow of theirs, with weapon in hand (or none).
+  dragonBlow(p, c, now, weapon) {
     const hit = hitDragon(c, p.id, now, weapon?.power ?? 1);
     if (!hit || hit.wait) return;
     this.broadcast({ t: 'dhit', id: c.id, by: p.id, hearts: hit.hearts, max: hit.max });
@@ -2019,6 +2034,7 @@ export class Room {
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
     const weapon = weaponOf(p.look?.weapon);
     if (!landed && !this.monsters.canBop(m.id, at, king ? KING_REACH : weapon?.reach ?? 0)) return;
+    if (!landed && weapon?.chain) this.boltOn(p, m, now, weapon);
     if (m.march) {
       this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
       return;
@@ -2055,31 +2071,85 @@ export class Room {
     this.sendDefense();
   }
 
-  // A Bomb Rod thrown (shop.js bombrod): the small bomb pops where it lands,
-  // a few steps off, bopping every monster caught in its blast — the thrower's
-  // bops, as any swing of theirs is — and shaking the jewels out of any gem
-  // rocks there into their basket (tools.js gemBlastEdit). The ground is never
-  // dug, and nothing anyone built, planted or furnished is ever broken.
+  // A blow of a weapon's that lands by itself, not with a swing's bop: a bolt
+  // leaping on to it, or a blast round it. It is its owner's bop all the same.
+  // from: where it comes from, to be knocked back away from.
+  weaponBlow(p, m, now, weapon, from) {
+    if (m.march) {
+      this.bopMarcher(p, m, now, weapon.power);
+      return;
+    }
+    if (isBoss(m.kind)) {
+      this.bopKing(p, m, now, weapon.king);
+      return;
+    }
+    const hit = this.monsters.hit(m, p.id, from, now, weapon.power, weapon.push);
+    if (hit.wait) return;
+    if (hit.hearts) {
+      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+      return;
+    }
+    this.popMonster(p, m, now);
+  }
+
+  // A Thunder Spear's stab, landing on m (shop.js thunderspear): the bolt
+  // leaps on to the nearest monster from there, and from that one to the next,
+  // as many times as the spear's chain, each one taking the spear's blow. It
+  // goes through no wall, and leaps no further than BOLT_LEAP. Everyone sees
+  // it by the monsters it went through, in order (m first, which bop goes on
+  // to hit).
+  boltOn(p, m, now, weapon) {
+    const middle = ({ body: b }) => ({ x: b.x, y: b.y + b.height / 2, z: b.z });
+    const path = [m];
+    while (path.length <= weapon.chain) {
+      const a = middle(path.at(-1));
+      let next = null;
+      let best = BOLT_LEAP;
+      for (const q of this.monsters.list) {
+        if (q.under || path.includes(q)) continue;
+        const c = middle(q);
+        const d = Math.hypot(c.x - a.x, c.y - a.y, c.z - a.z);
+        if (d >= best) continue;
+        if (raycast(this.world, a.x, a.y, a.z, c.x - a.x, c.y - a.y, c.z - a.z, d, (id) => B.SOLID[id] === 1)) continue;
+        next = q;
+        best = d;
+      }
+      if (!next) break;
+      path.push(next);
+    }
+    this.broadcast({ t: 'fx', kind: 'bolt', pid: p.id, ids: path.map((q) => q.id) });
+    for (let i = 1; i < path.length; i++) this.weaponBlow(p, path[i], now, weapon, middle(path[i - 1]));
+  }
+
+  // A Bomb Rod thrown (shop.js bombrod), or a meteor called down with a Meteor
+  // Staff: it pops where it lands, a few steps off, bopping every monster
+  // caught in its blast — the thrower's bops, as any swing of theirs is — and
+  // shaking the jewels out of any gem rocks there into their basket (tools.js
+  // gemBlastEdit). The ground is never dug, and nothing anyone built, planted
+  // or furnished is ever broken.
   rodBlast(p, msg) {
     const now = this.now();
-    if ((p.dizzyUntil ?? 0) > now || weaponOf(p.look?.weapon)?.key !== 'bombrod') return;
-    // Where it pops: a few steps the way they face, no further than the rod
-    // throws, on the ground there (or in it, so a blast against a wall still
+    const key = weaponOf(p.look?.weapon)?.key;
+    const how = BLASTS[key];
+    if ((p.dizzyUntil ?? 0) > now || !how) return;
+    // Where it pops: a few steps the way they face, no further than it can
+    // land, on the ground there (or in it, so a blast against a wall still
     // catches the gem rocks in the wall).
     const fx = Math.sin(p.s[3] ?? 0);
     const fz = Math.cos(p.s[3] ?? 0);
-    const dist = Math.min(ROD_RANGE, Math.max(0, +msg.d || 0));
+    const dist = Math.min(how.range, Math.max(0, +msg.d || 0));
     const x = Math.floor(p.s[0] + fx * dist);
     const z = Math.floor(p.s[2] + fz * dist);
     const y = Math.floor(p.s[1] + 0.5);
     if (!this.world.inBounds(x, y, z)) return;
-    // Friends see the bomb lobbed from the thrower's hand, arcing down to it,
-    // and it pops as it lands (stepRodBombs), from where they threw it.
-    this.broadcast({ t: 'fx', kind: 'lob', pid: p.id, x: +p.s[0].toFixed(2), y: +(p.s[1] + 1).toFixed(2), z: +p.s[2].toFixed(2), tx: x + 0.5, tz: z + 0.5 });
-    this.rodBombs.push({ pid: p.id, x, y, z, from: { x: p.s[0], y: p.s[1], z: p.s[2] }, at: now + ROD_LOB_MS });
+    // Friends see it fly from the thrower's hand, arcing down to it (or fall
+    // out of the sky at it), and it pops as it lands (stepRodBombs), from where
+    // they threw it.
+    this.broadcast({ t: 'fx', kind: how.fx, pid: p.id, x: +p.s[0].toFixed(2), y: +(p.s[1] + 1).toFixed(2), z: +p.s[2].toFixed(2), tx: x + 0.5, tz: z + 0.5 });
+    this.rodBombs.push({ pid: p.id, key, x, y, z, from: { x: p.s[0], y: p.s[1], z: p.s[2] }, at: now + how.ms });
   }
 
-  // The Bomb Rod's little bombs, landing.
+  // The Bomb Rod's little bombs, and meteors, landing.
   stepRodBombs(now) {
     if (!this.rodBombs.length) return;
     const landed = this.rodBombs.filter((bomb) => bomb.at <= now);
@@ -2090,37 +2160,30 @@ export class Room {
     }
   }
 
-  rodBurst(p, { x, y, z, from }, now) {
+  rodBurst(p, { key, x, y, z, from }, now) {
+    const weapon = weaponOf(key);
+    const { blast } = BLASTS[key];
+    const meteor = key === 'meteorstaff';
+    const caught = (b) => Math.hypot(b.x - x - 0.5, b.z - z - 0.5) <= blast + b.radius && b.y <= y + blast + 1 && b.y + b.height >= y - blast;
     // The monsters in the blast: each takes a bop of the thrower's.
     for (const m of [...this.monsters.list]) {
-      if (m.under) continue;
-      const b = m.body;
-      if (Math.hypot(b.x - x - 0.5, b.z - z - 0.5) > ROD_BLAST + b.radius) continue;
-      if (b.y > y + ROD_BLAST + 1 || b.y + b.height < y - ROD_BLAST) continue;
-      if (m.march) {
-        this.bopMarcher(p, m, now, weaponOf('bombrod').power);
-        continue;
+      if (!m.under && caught(m.body)) this.weaponBlow(p, m, now, weapon, from);
+    }
+    // A meteor catches a wild dragon too (a bomb is too little to trouble one).
+    if (meteor) {
+      const { radius, height } = CRITTER_INFO.dragon.ride;
+      for (const c of [...this.critters.list]) {
+        if (isWild(c) && caught({ x: c.x, y: c.y, z: c.z, radius, height })) this.dragonBlow(p, c, now, weapon);
       }
-      if (isBoss(m.kind)) {
-        this.bopKing(p, m, now, weaponOf('bombrod').king);
-        continue;
-      }
-      const hit = this.monsters.hit(m, p.id, from, now, weaponOf('bombrod').power, weaponOf('bombrod').push);
-      if (hit.wait) continue;
-      if (hit.hearts) {
-        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
-        continue;
-      }
-      this.popMonster(p, m, now);
     }
     // The gem rocks caught in it: their jewels, and the boom everyone hears.
-    const plan = gemBlastEdit(this.world, x, y, z);
+    const plan = gemBlastEdit(this.world, x, y, z, meteor ? blast : undefined);
     if (plan.cells.length) {
       for (let i = 0; i < plan.cells.length; i += 4) this.world.set(plan.cells[i], plan.cells[i + 1], plan.cells[i + 2], plan.cells[i + 3]);
       this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'pick', cells: plan.cells });
       this.changed();
     }
-    this.broadcast({ t: 'fx', kind: 'blast', x: x + 0.5, y: y + 0.5, z: z + 0.5, by: p.id, gems: plan.collected });
+    this.broadcast({ t: 'fx', kind: 'blast', x: x + 0.5, y: y + 0.5, z: z + 0.5, by: p.id, gems: plan.collected, ...(meteor ? { meteor: true } : {}) });
   }
 
   // ------------------------------------------------ tower defense

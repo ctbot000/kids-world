@@ -13,12 +13,12 @@ const ROCK = new THREE.DodecahedronGeometry(1, 0);
 // A ring flat on the ground at (x, y, z), as wide as r, pulsing, with a
 // disc inside it growing out to its edge as the moment it shows comes.
 export class WarnRing {
-  constructor(scene, x, y, z, r, ms) {
+  constructor(scene, x, y, z, r, ms, color = WARN) {
     this.life = ms / 1000;
     this.age = 0;
     this.group = new THREE.Group();
     this.group.position.set(x, y + 0.07, z);
-    const mat = (opacity) => new THREE.MeshBasicMaterial({ color: WARN, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+    const mat = (opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
     this.ring = new THREE.Mesh(new THREE.RingGeometry(r - Math.min(0.3, r * 0.15), r, 48), mat(0.7));
     this.fill = new THREE.Mesh(new THREE.CircleGeometry(r, 48), mat(0.22));
     for (const m of [this.ring, this.fill]) {

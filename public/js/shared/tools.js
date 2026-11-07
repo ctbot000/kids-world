@@ -275,13 +275,14 @@ export function drillEdit(world, cells) {
 // shakes the jewels out of any gem rocks, without digging the ground. Only
 // natural gem rocks ever go, so nothing anyone built, planted or furnished
 // is ever broken, and the ground is left standing. Returns { cells, collected }.
-export function gemBlastEdit(world, x, y, z) {
+export function gemBlastEdit(world, x, y, z, reach = 2.4) {
   const o = new Overlay(world);
   const collected = [];
-  for (let dx = -2; dx <= 2; dx++) {
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.hypot(dx, dy, dz) > 2.4) continue;
+  const n = Math.floor(reach);
+  for (let dx = -n; dx <= n; dx++) {
+    for (let dy = -n; dy <= n; dy++) {
+      for (let dz = -n; dz <= n; dz++) {
+        if (Math.hypot(dx, dy, dz) > reach) continue;
         const cx = x + dx;
         const cy = y + dy;
         const cz = z + dz;

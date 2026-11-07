@@ -192,7 +192,7 @@ const SLASH_TO = 1.75;
 const SLASH_TO_UPRIGHT = 0.6;
 // How long a slash takes to come round to straight ahead: it starts that long
 // before the swing lands, so the blade is on the monster as the blow is.
-export const slashLead = ({ upright = false, from = SLASH_FROM, to = upright ? SLASH_TO_UPRIGHT : SLASH_TO } = {}) => (((0 - from) / (to - from)) * SLASH_SECS) / (1 + SLASH_TRAIL);
+export const slashLead = ({ upright = false, from = SLASH_FROM, to = upright ? SLASH_TO_UPRIGHT : SLASH_TO, secs = SLASH_SECS } = {}) => (((0 - from) / (to - from)) * secs) / (1 + SLASH_TRAIL);
 
 const FRAG = /* glsl */ `
   uniform sampler2D map;
@@ -315,7 +315,8 @@ export class Effects {
     const key = `${from}|${to}|${inner}|${outer}`;
     let g = this.slashGeos.get(key);
     if (g) return g;
-    const n = 24;
+    // (A whole circle needs more stretches than a sweep in front.)
+    const n = Math.max(24, Math.ceil(Math.abs(to - from) * 6));
     const pos = [];
     const ts = [];
     const index = [];
@@ -337,8 +338,8 @@ export class Effects {
 
   // A swing's slash at (x, y, z), facing yaw: a sweep from the swinger's
   // right round to their left (or, upright, from over their head down in
-  // front of them), as far out as reach, in color.
-  slash(x, y, z, yaw, { reach = 1.5, color = '#ffffff', upright = false, tilt = -0.2, from, to } = {}) {
+  // front of them), as far out as reach, in color, over secs.
+  slash(x, y, z, yaw, { reach = 1.5, color = '#ffffff', upright = false, tilt = -0.2, from, to, secs = SLASH_SECS } = {}) {
     let s = this.slashes.find((one) => !one.group.visible);
     if (!s) {
       if (this.slashes.length >= SLASH_POOL) s = this.slashes.reduce((a, b) => (a.age > b.age ? a : b));
@@ -372,6 +373,7 @@ export class Effects {
     s.mat.uniforms.uColor.value.set(color);
     s.mat.uniforms.uHead.value = 0;
     s.age = 0;
+    s.secs = secs;
     s.group.visible = true;
   }
 
@@ -606,6 +608,72 @@ export class Effects {
     for (let i = 0; i < 3; i++) this.add('puff', x, y, z, { vy: 1.4, vx: (Math.random() - 0.5) * 1.2, vz: (Math.random() - 0.5) * 1.2, size: 0.4, grow: 1.5, life: 0.26, color: '#ff6a1f', delay: i * 0.03, over: true });
   }
 
+  // The Galaxy Blade's whirl: stars thrown off the slash all the way round as
+  // it comes (from to to, round from straight ahead at yaw, in secs), flying
+  // outward. Round (x, y, z), as far out as reach.
+  starWhirl(x, y, z, yaw, reach, from, to, secs) {
+    const colors = ['#ffffff', '#ffe27a', '#b18cff', '#7fd4ff'];
+    for (let i = 0; i < 36; i++) {
+      const k = i / 36;
+      const a = yaw + from + (to - from) * k;
+      const r = reach * (0.55 + Math.random() * 0.45);
+      const out = 1.5 + Math.random() * 3.5;
+      this.add(i % 3 ? 'sparkle' : 'star', x + Math.sin(a) * r, y + (Math.random() - 0.5) * 0.7, z + Math.cos(a) * r, { vx: Math.sin(a) * out, vy: 0.3 + Math.random() * 1.8, vz: Math.cos(a) * out, size: 0.24 + Math.random() * 0.26, life: 0.45 + Math.random() * 0.35, drag: 2, spin: 6, color: colors[i % 4], delay: k * secs });
+    }
+  }
+
+  // Sparks flying off wherever a Thunder Spear's bolt ended with nothing to strike.
+  zapSparks(x, y, z) {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 2 + Math.random() * 3;
+      this.add(i % 2 ? 'streak' : 'sparkle', x, y, z, { vx: Math.cos(a) * s, vy: (Math.random() - 0.3) * s, vz: Math.sin(a) * s, size: 0.2 + Math.random() * 0.2, life: 0.2 + Math.random() * 0.2, drag: 4, turn: a, color: i % 3 ? '#9fe8ff' : '#ffffff' });
+    }
+  }
+
+  // Colours of the rainbow glittering all along a Rainbow Ray's beam, from
+  // (x, y, z) to (tx, ty, tz), and a burst at its mouth.
+  beamSparks(x, y, z, tx, ty, tz) {
+    const colors = ['#ff5a5a', '#ff9d3d', '#ffe14d', '#5fd36a', '#4fa8ff', '#a77bff', '#ffffff'];
+    const long = Math.hypot(tx - x, ty - y, tz - z);
+    for (let i = 0; i < Math.ceil(long * 5); i++) {
+      const k = Math.random();
+      this.add('sparkle', x + (tx - x) * k, y + (ty - y) * k, z + (tz - z) * k, { vx: (Math.random() - 0.5) * 2.4, vy: (Math.random() - 0.3) * 2.4, vz: (Math.random() - 0.5) * 2.4, size: 0.14 + Math.random() * 0.18, life: 0.3 + Math.random() * 0.3, drag: 2, color: colors[i % colors.length] });
+    }
+    this.add('burst', x, y, z, { size: 1.1, grow: -6, life: 0.12, color: '#ffffff' });
+  }
+
+  // A meteor landing at (x, y, z), on the ground: a white-hot flash, fire
+  // rolling out along the ground as far as r and a column of it going up, rocks
+  // and embers flying every way.
+  fireball(x, y, z, r) {
+    const fire = ['#fff3a0', '#ffd84d', '#ff9a3d', '#ff5a1f', '#e8401c'];
+    this.add('burst', x, y + 1, z, { size: r * 2.2, grow: -r * 8, life: 0.16, color: '#ffb13d', over: true });
+    this.add('puff', x, y + 1, z, { size: r * 1.1, grow: r * 7, life: 0.2, over: true });
+    for (let i = 0; i < 44; i++) {
+      const a = (i / 44) * Math.PI * 2 + Math.random() * 0.2;
+      const s = r * (1.8 + Math.random() * 2.2);
+      this.add('puff', x + Math.cos(a) * 0.5, y + 0.3 + Math.random() * 0.5, z + Math.sin(a) * 0.5, { vx: Math.cos(a) * s, vy: 0.4 + Math.random() * 1.4, vz: Math.sin(a) * s, size: 0.7 + Math.random() * 0.7, grow: 2.2, life: 0.4 + Math.random() * 0.35, drag: 3.4, color: fire[i % fire.length] });
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = Math.random() * 1.6;
+      this.add('puff', x + Math.cos(a) * s * 0.4, y + 0.5, z + Math.sin(a) * s * 0.4, { vx: Math.cos(a) * s, vy: 5 + Math.random() * 7, vz: Math.sin(a) * s, size: 0.7 + Math.random() * 0.6, grow: 1.6, life: 0.45 + Math.random() * 0.4, drag: 2.4, delay: Math.random() * 0.06, color: i % 4 === 3 ? '#6a5a52' : fire[i % fire.length] });
+    }
+    const rock = ['#3f3638', '#57473f', '#ff7a1a', '#ffd84d'];
+    for (let i = 0; i < 28; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 3 + Math.random() * 6;
+      this.add('square', x, y + 0.5, z, { vx: Math.cos(a) * s, vy: 4 + Math.random() * 8, vz: Math.sin(a) * s, size: 0.12 + Math.random() * 0.16, life: 0.7 + Math.random() * 0.5, gravity: 20, drag: 0.6, color: rock[i % 4] });
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 2 + Math.random() * 3;
+      this.add('sparkle', x, y + 0.8, z, { vx: Math.cos(a) * s, vy: 1 + Math.random() * 4, vz: Math.sin(a) * s, size: 0.2 + Math.random() * 0.25, life: 0.6 + Math.random() * 0.5, drag: 1.2, color: i % 2 ? '#ffd84d' : '#ffffff' });
+    }
+    for (const [from, to] of [[0.5, r * 0.8], [0.3, r * 1.5]]) this.ripple(x, y + 0.1, z, from, to);
+  }
+
   // A monster going pop at (x, y, z): a white puff, drops of it in its own
   // color flying every way and falling, and a flat ring round it on the ground
   // (size: how big it was).
@@ -804,8 +872,8 @@ export class Effects {
     for (const s of this.slashes) {
       if (!s.group.visible) continue;
       if (!held) s.age += dt;
-      s.mat.uniforms.uHead.value = (s.age / SLASH_SECS) * (1 + SLASH_TRAIL);
-      if (s.age >= SLASH_SECS) s.group.visible = false;
+      s.mat.uniforms.uHead.value = (s.age / s.secs) * (1 + SLASH_TRAIL);
+      if (s.age >= s.secs) s.group.visible = false;
     }
     for (const r of this.ripples ?? []) r.update(dt);
     for (const a of this.arrows ?? []) a.update(dt);

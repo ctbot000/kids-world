@@ -40,7 +40,8 @@ const PR = PERSON.r;
 // hand forward and down (0 holds it square to the upper arm, as at rest),
 // fwdL, raiseL and elbowL the left arm (with wL how much), twist the
 // shoulders round (+ takes the right one back), lean forward, dip the body,
-// nod the head, and step the left foot forward.
+// nod the head, and step the left foot forward. turn: over which fractions of
+// the way through the whole of you spins round once.
 export const SWINGS = {
   // The fist drawn back by the shoulder, then the arm straight out.
   punch: {
@@ -136,6 +137,64 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // The Thunder Spear: drawn back high by the ear in the one hand, the other
+  // out along it, then driven straight out with all the body behind it, the
+  // spear level all the way.
+  thunderspear: {
+    secs: 0.46,
+    strike: 0.42,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.26, w: 1, wL: 0.8, fwd: -2.25, raise: 0.42, elbow: 1.75, wrist: 2.25, fwdL: -1.15, raiseL: -0.28, elbowL: 0.85, twist: 0.5, lean: -0.1, nod: -0.06 },
+      { at: 0.42, w: 1, wL: 0.8, fwd: -1.52, raise: 0.02, elbow: 0.04, wrist: 1.52, fwdL: -1.05, raiseL: -0.42, elbowL: 0.35, twist: -0.55, lean: 0.24, step: 0.45, dip: -0.05, nod: 0.1 },
+      { at: 0.6, w: 1, wL: 0.8, fwd: -1.5, raise: 0.02, elbow: 0.08, wrist: 1.5, fwdL: -1.02, raiseL: -0.42, elbowL: 0.4, twist: -0.5, lean: 0.2, step: 0.45, dip: -0.05, nod: 0.08 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // The Galaxy Blade: held out level, the other arm out behind for balance,
+  // and the whole of you spins right round (turn), the blade coming back to
+  // the front as it lands on everything round you.
+  galaxyblade: {
+    secs: 0.62,
+    strike: 0.62,
+    turn: { from: 0.12, to: 0.66 },
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.16, w: 1, wL: 1, fwd: -1.5, raise: 0.55, elbow: 0.25, wrist: 1.5, fwdL: -0.6, raiseL: 0.9, elbowL: 0.5, twist: 0.35, lean: -0.05, nod: -0.05 },
+      { at: 0.62, w: 1, wL: 1, fwd: -1.35, raise: 0.25, elbow: 0.08, wrist: 1.35, fwdL: -0.4, raiseL: 0.8, elbowL: 0.4, twist: -0.35, lean: 0.16, step: 0.4, dip: -0.06, nod: 0.06 },
+      { at: 0.76, w: 1, wL: 1, fwd: -1.3, raise: 0.25, elbow: 0.12, wrist: 1.3, fwdL: -0.4, raiseL: 0.75, elbowL: 0.4, twist: -0.32, lean: 0.14, step: 0.4, dip: -0.05, nod: 0.05 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // The Rainbow Ray: up to aim in both hands, level; it fires, the kick of it
+  // throws the arms up and the body back, and it settles.
+  rainbowray: {
+    secs: 0.5,
+    strike: 0.4,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.28, w: 1, wL: 1, fwd: -1.5, raise: 0.03, elbow: 0.16, wrist: 1.5, fwdL: -1.15, raiseL: -0.42, elbowL: 0.55, twist: -0.14, lean: 0.05 },
+      { at: 0.4, w: 1, wL: 1, fwd: -1.5, raise: 0.03, elbow: 0.16, wrist: 1.5, fwdL: -1.15, raiseL: -0.42, elbowL: 0.55, twist: -0.14, lean: 0.07 },
+      { at: 0.5, w: 1, wL: 1, fwd: -1.9, raise: 0.03, elbow: 0.4, wrist: 1.5, fwdL: -1.4, raiseL: -0.42, elbowL: 0.75, twist: -0.1, lean: -0.1, nod: -0.05 },
+      { at: 0.72, w: 1, wL: 1, fwd: -1.5, raise: 0.03, elbow: 0.16, wrist: 1.5, fwdL: -1.15, raiseL: -0.42, elbowL: 0.55, twist: -0.14, lean: 0.03 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
+  // The Meteor Staff: up over the head in both hands, pointing at the sky, the
+  // head back to look; the meteor comes as it reaches the top, and it is
+  // brought down to point at where the meteor will land.
+  meteorstaff: {
+    secs: 0.72,
+    strike: 0.44,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.3, w: 1, wL: 1, fwd: -2.95, raise: 0.12, elbow: 0.3, wrist: 1.38, fwdL: -2.75, raiseL: -0.05, elbowL: 0.55, lean: -0.15, nod: -0.3 },
+      { at: 0.44, w: 1, wL: 1, fwd: -3, raise: 0.12, elbow: 0.25, wrist: 1.43, fwdL: -2.8, raiseL: -0.05, elbowL: 0.5, lean: -0.17, nod: -0.32 },
+      { at: 0.62, w: 1, wL: 1, fwd: -1.35, raise: 0.03, elbow: 0.1, wrist: 1.45, fwdL: -1.05, raiseL: -0.42, elbowL: 0.4, lean: 0.18, step: 0.4, dip: -0.05, nod: 0.08 },
+      { at: 0.82, w: 1, wL: 1, fwd: -1.3, raise: 0.03, elbow: 0.12, wrist: 1.4, fwdL: -1, raiseL: -0.42, elbowL: 0.42, lean: 0.15, step: 0.4, dip: -0.04, nod: 0.05 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
 };
 const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL', 'twist', 'lean', 'nod', 'dip', 'step'];
 // What a key says of one of them: an arm angle a key leaves out is the next
@@ -161,6 +220,8 @@ export function swingPose(swing, k) {
     const va = poseValue(key, a, b);
     pose[key] = va + (poseValue(key, b, a) - va) * e;
   }
+  const turn = swing.turn;
+  pose.spin = turn ? easeInOut(Math.min(1, Math.max(0, (k - turn.from) / (turn.to - turn.from)))) * Math.PI * 2 : 0;
   return pose;
 }
 const BLACK = '#2b2530';
@@ -1681,6 +1742,65 @@ const bowLimbs = () =>
     return g;
   });
 
+// A shape cut flat from points [x, y], as thick as depth, its soft edges
+// standing out by bevel all round, its faces towards +z and -z.
+const flatShape = (key, points, depth, bevel) =>
+  geo(`flat|${key}`, () => {
+    const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+    const g = new THREE.ExtrudeGeometry(shape, { depth, steps: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2 });
+    g.translate(0, 0, -depth / 2);
+    return g;
+  });
+
+// A star's points, at radius r from the middle, with n points.
+const starPoints = (n, r, inner = r * 0.38) => Array.from({ length: n * 2 }, (_, i) => {
+  const a = (i / n) * Math.PI + Math.PI / 2;
+  const d = i % 2 ? inner : r;
+  return [Math.cos(a) * d, Math.sin(a) * d];
+});
+
+// The Thunder Spear's head: a fat bolt of lightning cut flat, pointing +y from
+// its foot at 0.
+const BOLT_HEAD = [[-0.055, 0], [0.05, 0], [0.018, 0.14], [0.092, 0.14], [-0.022, 0.44], [0.004, 0.2], [-0.078, 0.2]];
+// The Galaxy Blade: wider as it leaves the guard, then to a long point.
+const GALAXY_BLADE = [[-0.07, 0], [0.07, 0], [0.092, 0.34], [0.074, 0.62], [0, 0.88], [-0.074, 0.62], [-0.092, 0.34]];
+
+// A lump of space rock about 1 round, with lava glowing out of the cracks
+// between its dark chunks: the Meteor Staff's little one, and the meteor it
+// calls (render/weapon-fx.js).
+export function meteorRock() {
+  const g = new THREE.Group();
+  const rock = geo('meteor-chunk', () => new THREE.DodecahedronGeometry(1, 0));
+  g.add(mesh(sphere(1, 16, 12), toon('#ff7a1a', { emissive: 1.1 }), 0, 0, 0, 0.84));
+  const dark = toon('#3f3638');
+  const brown = toon('#57473f');
+  for (const [i, [x, y, z, r]] of [[0.5, 0.55, 0.35, 0.62], [-0.55, 0.45, 0.3, 0.58], [0.1, -0.6, 0.5, 0.6], [0.55, -0.3, -0.4, 0.6], [-0.45, -0.4, -0.45, 0.58], [-0.15, 0.55, -0.55, 0.6], [-0.7, -0.15, 0.1, 0.42], [0.75, 0.1, 0, 0.4]].entries()) {
+    const chunk = mesh(rock, i % 3 ? dark : brown, x, y, z, r);
+    chunk.rotation.set(i * 1.3, i * 2.1, i * 0.7);
+    g.add(chunk);
+  }
+  return g;
+}
+
+// Something in a weapon's model marking where it shoots from (Avatar muzzle).
+const tipAt = (y) => {
+  const tip = new THREE.Object3D();
+  tip.name = 'tip';
+  tip.position.y = y;
+  return tip;
+};
+// A ring round a weapon's shaft, at y along it (and z off the middle).
+const shaftRing = (r, tube, color, y, opts, z = 0) => mesh(torus(r, tube), toon(color, opts), 0, y, z).rotateX(Math.PI / 2);
+// How far round its shaft a flat blade is turned, level in the hand: flat on, it
+// would be a thin line from the side; turned on edge, from behind.
+const BLADE_TURN = -0.6;
+const turnedBlade = (...parts) => {
+  const blade = new THREE.Group();
+  blade.rotation.y = BLADE_TURN;
+  blade.add(...parts);
+  return blade;
+};
+
 // A toy weapon from the shop (shared/shop.js), held in the hand: its grip
 // at the hand, pointing forward with the arm down. Soft foam and bubbles,
 // in bright toy colours.
@@ -1765,6 +1885,110 @@ export function weapon(kind) {
         mesh(capsule(0.052, 0.46), toon('#ff8c2e', { emissive: 0.45 }), 0, 0.4, 0, 1, 1, 0.42),
         mesh(capsule(0.03, 0.3), toon('#ffd23f', { emissive: 0.6 }), 0, 0.5, 0.018, 1, 1, 0.2),
         mesh(sphere(), toon('#ffd97a', { emissive: 0.7 }), 0, 0.65, 0, 0.026),
+      );
+      break;
+    }
+    case 'thunderspear': {
+      // A long blue spear with a gold grip, rings of stored-up lightning round
+      // its shaft, and for a head a fat yellow bolt of lightning.
+      const head = turnedBlade(
+        mesh(flatShape('bolt', BOLT_HEAD, 0.04, 0.012), toon('#ffdf3d', { emissive: 0.55 }), 0, 0.72, 0),
+        mesh(flatShape('bolt', BOLT_HEAD, 0.04, 0.012), toon('#fffbe0', { emissive: 0.9 }), 0, 0.775, 0, 0.5, 0.62, 1.32),
+      );
+      g.add(
+        mesh(cylinder(0.024, 0.024, 1, 10), toon('#3d6fe6'), 0, 0.24, 0),
+        mesh(cylinder(0.031, 0.031, 0.19, 10), toon('#ffcf3f'), 0, 0.01, 0),
+        mesh(cone(0.032, 0.09, 10), toon('#ffcf3f'), 0, -0.3, 0).rotateX(Math.PI),
+        mesh(cylinder(0.05, 0.028, 0.05, 12), toon('#ffcf3f'), 0, 0.72, 0),
+        shaftRing(0.034, 0.011, '#9fe8ff', 0.3, { emissive: 0.9 }),
+        shaftRing(0.034, 0.011, '#9fe8ff', 0.42, { emissive: 0.9 }),
+        shaftRing(0.034, 0.011, '#9fe8ff', 0.54, { emissive: 0.9 }),
+        head,
+        tipAt(1.14),
+      );
+      break;
+    }
+    case 'galaxyblade': {
+      // A great blade of the night sky: deep violet, lit from within, an edge
+      // of pale starlight, clouds of pink and blue in it and gold stars all
+      // over it, over a gold guard with a star in the middle.
+      const clouds = [
+        [0.02, 0.3, 0.05, 0.13, '#ff7fd8'],
+        [-0.025, 0.56, 0.055, 0.15, '#4fc3ff'],
+        [0.015, 0.78, 0.04, 0.1, '#ff7fd8'],
+      ];
+      const stars = [
+        [0.03, 0.24, 0.03],
+        [-0.04, 0.38, 0.022],
+        [0.038, 0.5, 0.034],
+        [-0.03, 0.66, 0.026],
+        [0.022, 0.8, 0.022],
+        [-0.012, 0.93, 0.017],
+      ];
+      const star = geo('star4', () => new THREE.ShapeGeometry(new THREE.Shape(starPoints(4, 1).map(([x, y]) => new THREE.Vector2(x, y)))));
+      const back = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+      const parts = [];
+      for (const [x, y, r] of stars) {
+        for (const side of [-1, 1]) parts.push({ g: star, m: new THREE.Matrix4().compose(new THREE.Vector3(side * x, y, side * 0.037), side < 0 ? back : new THREE.Quaternion(), new THREE.Vector3(r, r, 1)) });
+      }
+      g.add(
+        mesh(cylinder(0.03, 0.03, 0.16, 10), toon('#2d2a6e'), 0, 0.01, 0),
+        mesh(flatShape('star5', starPoints(5, 1, 0.5), 0.5, 0.05), toon('#ffcf3f', { emissive: 0.25 }), 0, -0.095, 0, 0.042, 0.042, 0.05),
+        mesh(capsule(0.028, 0.2), toon('#ffcf3f'), 0, 0.105, 0).rotateZ(Math.PI / 2),
+        mesh(flatShape('star5', starPoints(5, 1, 0.5), 0.5, 0.05), toon('#fff3a0', { emissive: 0.55 }), 0, 0.105, 0, 0.062, 0.062, 0.1),
+        turnedBlade(
+          mesh(flatShape('galaxy', GALAXY_BLADE, 0.012, 0.006), toon('#a9d8ff', { emissive: 0.85 }), 0, 0.125, 0, 1.13, 1.05, 1),
+          mesh(flatShape('galaxy', GALAXY_BLADE, 0.012, 0.006), toon('#32239a', { emissive: 0.45 }), 0, 0.14, 0, 1, 1, 2.4),
+          ...clouds.map(([x, y, w, l, color]) => mesh(sphere(1, 12, 8), toon(color, { emissive: 0.8, transparent: true, opacity: 0.6 }), x, y, 0, w, l, 0.035)),
+          mesh(bakeCached('galaxy-stars', parts), toon('#fff6c8', { emissive: 1 })),
+        ),
+      );
+      break;
+    }
+    case 'rainbowray': {
+      // A chunky ray gun on a pistol grip: a pale body in rings of every colour
+      // of the rainbow, a glass tank of sparkling light along the top, and a
+      // glowing lens at its mouth. (Level in the hand, -z is up.)
+      const top = -0.085;
+      const grip = mesh(capsule(0.03, 0.1), toon('#9b7bea'), 0, -0.012, 0.012);
+      grip.rotation.x = Math.PI / 2 - 0.25;
+      g.add(
+        grip,
+        mesh(capsule(0.072, 0.2), toon('#dfe6ff'), 0, 0.085, top),
+        ...['#ff5a5a', '#ff9d3d', '#ffe14d', '#5fd36a', '#4fa8ff', '#a77bff'].map((color, i) => shaftRing(0.077 - i * 0.002, 0.016, color, 0 + i * 0.044, { emissive: 0.3 }, top)),
+        mesh(cylinder(0.048, 0.06, 0.12, 16), toon('#8a95e8'), 0, 0.29, top),
+        mesh(cylinder(0.086, 0.048, 0.07, 18), toon('#dfe6ff'), 0, 0.375, top),
+        mesh(sphere(1, 16, 10), toon('#fffbe0', { emissive: 1.2 }), 0, 0.41, top, 0.066, 0.026, 0.066),
+        mesh(sphere(), toon('#bff3ff', { transparent: true, opacity: 0.75 }), 0, 0.05, top - 0.085, 0.054),
+        mesh(sphere(), toon('#ffffff', { emissive: 0.9 }), 0, 0.05, top - 0.085, 0.022),
+        mesh(roundedBox(0.014, 0.1, 0.05, 0.006), toon('#ff7fb2'), 0, 0.2, top - 0.09),
+        tipAt(0.43),
+      );
+      g.getObjectByName('tip').position.z = top;
+      break;
+    }
+    case 'meteorstaff': {
+      // A wizard's long wooden staff, bound in gold, with a gold claw at the
+      // top holding a little meteor, lava glowing out of its cracks, and
+      // sparks floating round it.
+      const rock = meteorRock();
+      rock.position.y = 0.98;
+      rock.scale.setScalar(0.12);
+      const claw = mesh(torus(0.155, 0.021, Math.PI * 1.45), toon('#ffcf3f', { emissive: 0.2 }), 0, 0.98, 0);
+      claw.rotation.z = Math.PI * 0.775;
+      g.add(
+        mesh(cylinder(0.027, 0.032, 1.13, 10), toon('#8a5a32'), 0, 0.26, 0),
+        mesh(cylinder(0.035, 0.035, 0.17, 10), toon('#5a3a20'), 0, 0.01, 0),
+        mesh(sphere(), toon('#ffcf3f'), 0, -0.31, 0, 0.04),
+        shaftRing(0.033, 0.011, '#ffcf3f', -0.09),
+        shaftRing(0.033, 0.011, '#ffcf3f', 0.11),
+        mesh(cylinder(0.04, 0.03, 0.09, 12), toon('#ffcf3f'), 0, 0.81, 0),
+        claw,
+        rock,
+        mesh(sphere(), toon('#ffd84d', { emissive: 1.2 }), 0.17, 1.1, 0.03, 0.017),
+        mesh(sphere(), toon('#ff9a3d', { emissive: 1.2 }), -0.14, 1.14, -0.03, 0.014),
+        mesh(sphere(), toon('#ffd84d', { emissive: 1.2 }), 0.03, 1.2, 0.02, 0.012),
+        tipAt(1),
       );
       break;
     }
@@ -2471,6 +2695,8 @@ export class Avatar {
     this.weaponKind = this.weapon ? look.weapon : null;
     // The Toy Bow's nocked arrow, gone from the string once it is shot.
     this.nock = this.weapon?.getObjectByName('arrow') ?? null;
+    // Where a mighty weapon shoots from (see muzzle).
+    this.tip = this.weapon?.getObjectByName('tip') ?? null;
     if (this.weapon) {
       this.weapon.position.set(0, -0.045 * B.hand, 0.006 * B.hand);
       this.hands[1].add(this.weapon);
@@ -2534,6 +2760,12 @@ export class Avatar {
     this.swingAt = this.time;
     const swing = SWINGS[this.weaponKind] ?? SWINGS.punch;
     return swing.secs * swing.strike;
+  }
+
+  // Where what is in hand shoots from, in the world, or null if it does not:
+  // a Thunder Spear's point, a Rainbow Ray's lens, a Meteor Staff's rock.
+  muzzle() {
+    return this.tip?.getWorldPosition(new THREE.Vector3()) ?? null;
   }
 
   // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
@@ -3007,6 +3239,7 @@ export class Avatar {
       dip = p.dip;
       headNod += p.nod;
       step = p.step;
+      spin += p.spin;
     }
 
     const curled = anim === ANIM.curl;

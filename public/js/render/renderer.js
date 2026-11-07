@@ -25,6 +25,7 @@ import { World } from '../shared/world.js';
 import { FlagModel, KingModel, Shockwave } from './adventure-models.js';
 import { makeBoss } from './boss-models.js';
 import { Thrown, WarnRing, WarnStrip } from './boss-fx.js';
+import { Meteor, RainbowBeam, ZapBolt } from './weapon-fx.js';
 import { isBoss } from '../shared/bosses.js';
 import { ANIM, Avatar, shirtHex, weapon } from './avatar.js';
 import { CritterModel } from './critter-models.js';
@@ -688,6 +689,21 @@ export class Renderer {
 
   hurl(from, to, ms, r, what, land) {
     this.bossFx.push(new Thrown(this.scene, this.effects, from, to, ms, r, what, land));
+  }
+
+  // The shows of the mightiest toy weapons (weapon-fx.js): a bolt of lightning
+  // through points, a rainbow beam, and a meteor falling from `from` to `to` in
+  // ms, with a ring as wide as r where it will land.
+  zapBolt(points, delay = 0) {
+    this.bossFx.push(new ZapBolt(this.scene, points, delay));
+  }
+
+  rainbowBeam(from, to) {
+    this.bossFx.push(new RainbowBeam(this.scene, from, to));
+  }
+
+  meteor(from, to, ms, r) {
+    this.bossFx.push(new Meteor(this.scene, this.effects, from, to, ms, r));
   }
 
   // Where the ground is under something, for its round shadow.
