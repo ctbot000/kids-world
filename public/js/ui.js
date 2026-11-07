@@ -1499,7 +1499,7 @@ export class UI {
           apply();
           draw();
           // Up to its colours and its name, over the long list of kinds.
-          if (pet) details.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          if (pet) details.scrollIntoView({ block: 'nearest' });
         };
         const draw = () => {
           // Each kind as it is: yours in its own colour, the rest in their first.

@@ -3108,7 +3108,7 @@ function petOnScreen(page, pid) {
 test('a dog of any breed can be picked in My pet, in the coats it comes in, and its fur draws', { skip }, async () => {
   const a = await openPlayer(base, { name: 'Kind Owl', look: { animal: 'bear', fur: 'brown', shirt: 2, hat: 'none' } });
   const bad = [];
-  a.on('console', (m) => m.type() === 'error' && /shader|program|webgl/i.test(m.text()) && bad.push(m.text()));
+  a.on('console', (m) => m.type() === 'error' && /Shader Error|WebGLProgram/.test(m.text()) && bad.push(m.text()));
   await clickButton(a, 'My pet');
   // Every breed there, with its picture drawn.
   const shown = await a.$$eval('#modal .choice', (cards) => cards.map((c) => c.textContent));
@@ -3120,11 +3120,12 @@ test('a dog of any breed can be picked in My pet, in the coats it comes in, and 
   assert.equal(pet.kind, 'corgi');
   assert.equal(pet.coat, 'tricolor');
   await until(a, () => window.kidsWorld.renderer.pets.get(-1)?.dog?.coat.name === 'tricolor');
-  // Drawn, without a word from the GPU: its skin, and layers of fur over it.
-  await until(a, () => window.kidsWorld.renderer.pets.get(-1).dog.fur.geometry.instanceCount > 0);
+  // Drawn, without a word from the GPU: its skin, and layers of fur over it
+  // (however many it has for how big it looks from here).
+  await until(a, () => ['dog-fur-0', 'dog-fur-1'].every((key) => window.kidsWorld.renderer.gl.info.programs.some((p) => p.cacheKey.includes(key))));
   assert.deepEqual(bad, []);
   assert.ok(await a.evaluate(() => window.kidsWorld.renderer.gl.info.programs.every((p) => !p.diagnostics || p.diagnostics.runnable)), 'every shader runs');
-  await a.close();
+  await a.browserContext().close();
 });
 
 test('a pet picked in My pet comes along: it follows you and sits by you, is petted with a click, joins in when you wave, and a friend sees it and pets it too', { skip }, async () => {

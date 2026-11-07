@@ -149,7 +149,7 @@ float coatPattern(vec3 p) {
     // Brindle: dark stripes down its sides, wandering.
     vec3 q = p * vec3(1.0, 0.16, 1.0) * uPatScale.x;
     float n = patNoise(q + vec3(0.0, 0.0, 0.0)) + 0.5 * patNoise(q * 3.0);
-    return smoothstep(-0.25, -0.55, sin(n * 9.0 + p.z * uPatScale.x * 1.5));
+    return smoothstep(0.2, -0.75, sin(n * 9.0 + p.z * uPatScale.x * 1.5)) * 0.8;
   }
   return 1.0;
 }

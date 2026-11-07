@@ -295,7 +295,7 @@ const BREEDS = {
     coats: {
       fawn: { palette: ['#d6b281', '#28211e', '#ecd6b0'], paint: (v, set) => (set(2, under(v) * 0.6 + chestPatch(v) * 0.6), set(1, snout(v, -0.2, 0.05) * 0.8 + ss(0.08, 0.05, v.eyeD) * v.head * 0.5)) },
       'cream-dog': plain(['#eadcbe', '#f7eedb', '#ddcba4'], { nose: '#34261f' }),
-      brindle: { palette: ['#a9773f', '#faf5ea', '#a9773f', '#1f1a18'], pattern: 3, patScale: 18, paint: (v, set) => { set(3, 1); set(1, chestPatch(v) * 0.7); } },
+      brindle: { palette: ['#a9773f', '#faf5ea', '#a9773f', '#1f1a18'], pattern: 3, patScale: 28, dither: 0.7, paint: (v, set) => { set(3, 1); set(1, chestPatch(v) * 0.7); } },
       pied: { palette: ['#f6f1e6', '#1f1b1a', '#efe8d9', '#1f1b1a'], pattern: 2, patScale: 3.2, patAt: 0.56, paint: (v, set) => { set(3, 0.95); set(1, ss(0.13, 0.09, Math.abs(Math.abs(v.fx) - 0.2)) * v.tag.skull * ss(0.1, 0.2, Math.abs(v.fx)) + earsOf(v)); set(0, blaze(v, 0.04)); } },
     },
   },
@@ -421,7 +421,7 @@ const BREEDS = {
     coats: {
       'white-dog': { palette: ['#f6f1e4', '#e8dfca', '#fffcf4'], nose: '#2e211c', paint: (v, set) => (set(1, saddle(v, 0.3) * 0.45 + earsOf(v) * 0.5), set(2, under(v) * 0.5)) },
       fawn: { palette: ['#cf9a56', '#f2e3c6', '#ad7a3c'], paint: (v, set) => (set(2, saddle(v, 0.5) * 0.4), set(1, v.tag.chin + v.tag.lip * 0.9 + chestPatch(v) * 0.8 + under(v) * 0.9 + legsBelow(v, 0.25, 0.1) * 0.6 + hindInside(v) + v.tag.tail * ss(0.3, -0.4, v.ny) * 0.8)) },
-      brindle: { palette: ['#b48443', '#efdfc2', '#b48443', '#1f1a18'], pattern: 3, patScale: 15, paint: (v, set) => { set(3, 1 - under(v) * 0.6); set(1, v.tag.chin + v.tag.lip * 0.9); } },
+      brindle: { palette: ['#b48443', '#efdfc2', '#b48443', '#1f1a18'], pattern: 3, patScale: 26, dither: 0.7, paint: (v, set) => { set(3, 1 - under(v) * 0.6); set(1, v.tag.chin + v.tag.lip * 0.9); } },
       'black-tan': { palette: ['#1f1b1a', '#b4702f', '#f0e2c8'], paint: (v, set) => (tanPoints(v, set, 1, { legs: 0.34 }), set(2, chestPatch(v) * 0.6)) },
     },
   },
@@ -512,7 +512,7 @@ const BREEDS = {
     fur: { ...SLEEK },
     coats: {
       fawn: { palette: ['#bf8a4e', '#f7f2e6', '#1f1a18'], paint: (v, set) => (set(2, snout(v, -0.12, 0.08) * 0.92 + v.tag.lip + ss(0.075, 0.05, v.eyeD) * v.head * 0.7 + earsOf(v) * 0.35), set(1, chestPatch(v) * 0.95 + legsBelow(v, 0.16) + under(v, -0.6, -0.95) * 0.7 + blaze(v, 0.018) * ss(0.72, 0.6, v.fz / v.muzzleZ))) },
-      brindle: { palette: ['#a9743c', '#f7f2e6', '#1f1a18', '#201b18'], pattern: 3, patScale: 18, paint: (v, set) => { set(3, 1); set(2, snout(v, -0.12, 0.08) * 0.92 + v.tag.lip); set(1, chestPatch(v) * 0.95 + legsBelow(v, 0.16)); } },
+      brindle: { palette: ['#a9743c', '#f7f2e6', '#1f1a18', '#201b18'], pattern: 3, patScale: 28, dither: 0.7, paint: (v, set) => { set(3, 1); set(2, snout(v, -0.12, 0.08) * 0.92 + v.tag.lip); set(1, chestPatch(v) * 0.95 + legsBelow(v, 0.16)); } },
     },
   },
   labrador: {
@@ -631,7 +631,7 @@ const BREEDS = {
       fawn: { palette: ['#c9a06c', '#e7d3b2', '#a97f4e'], paint: (v, set) => (set(1, under(v) * 0.7 + v.tag.chest * 0.5), set(2, snout(v, 0.2, 0.5) * 0.5)) },
       slate: plain(['#6b7079', '#7f848c', '#5a5e66'], { eye: '#5b4426' }),
       'black-white': { palette: ['#1d1a1a', '#f8f5ee'], paint: (v, set) => whiteMarks(v, set, 1, { face: 0.018, socks: 0.3 }) },
-      brindle: { palette: ['#a9743c', '#f4efe2', '#a9743c', '#1f1a18'], pattern: 3, patScale: 16, paint: (v, set) => { set(3, 1); set(1, under(v, -0.6, -0.95) * 0.5); } },
+      brindle: { palette: ['#a9743c', '#f4efe2', '#a9743c', '#1f1a18'], pattern: 3, patScale: 26, dither: 0.7, paint: (v, set) => { set(3, 1); set(1, under(v, -0.6, -0.95) * 0.5); } },
     },
   },
   bernese: {
