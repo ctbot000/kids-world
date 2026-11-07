@@ -2152,6 +2152,138 @@ test('a blow lands hard: the picture jolts, the monster stops dead and goes whit
   await page.browserContext().close();
 });
 
+test('a friend’s blow lands on your screen too: the monster stops dead, goes white and is knocked back, to their weapon’s whack, and their last blow flings it off', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Brave Fox' });
+  const errors = [];
+  host.on('pageerror', (e) => errors.push(e.message));
+  await clickButton(host, 'Make an island');
+  await clickButton(host, 'Flat Land', '#modal');
+  await clickButton(host, 'New name', '#modal');
+  await clickSwitch(host, '#modal .switch[aria-label="Monsters"]');
+  await clickButton(host, 'Make it', '#modal');
+  await inGame(host);
+  await until(host, () => window.kidsWorld.session.link.state === 'online');
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Happy Panda' });
+  guest.on('pageerror', (e) => errors.push(e.message));
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  const guestPid = await guest.evaluate(() => window.kidsWorld.game.pid);
+  // A clearing with the friend in it and you a few steps off, the friend with a sword in
+  // hand, and on your page what a blow does written down as it goes.
+  const spot = await host.evaluate(() => {
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const w = room.world;
+    room.monsters.clear();
+    room.monsters.spawnAt = Infinity;
+    for (const c of [...room.critters.list]) room.critters.remove(c.id);
+    const x = Math.floor(w.spawn.x) + 14;
+    const y = Math.floor(w.spawn.y);
+    const z = Math.floor(w.spawn.z);
+    for (let cx = x - 6; cx <= x + 6; cx++) {
+      for (let cz = z - 8; cz <= z + 6; cz++) {
+        for (let cy = y; cy < y + 12; cy++) if (w.get(cx, cy, cz) !== 0) room.natureCell([cx, cy, cz], 0);
+      }
+    }
+    Object.assign(kw.game.me.body, { x: x + 4.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    kw.game.sendMove(true);
+    window.blows = { said: [], jolts: 0, sounds: [], flung: 0 };
+    const g = kw.game;
+    const emit = g.emit.bind(g);
+    g.emit = (name, detail) => {
+      if (name.startsWith('hit-')) window.blows.said.push(name);
+      return emit(name, detail);
+    };
+    const jolt = kw.renderer.jolt.bind(kw.renderer);
+    kw.renderer.jolt = (...args) => {
+      window.blows.jolts++;
+      return jolt(...args);
+    };
+    const play = g.sound.play.bind(g.sound);
+    g.sound.play = (name, opts) => {
+      window.blows.sounds.push({ name, ...opts });
+      return play(name, opts);
+    };
+    const fling = g.fling.bind(g);
+    g.fling = (...args) => {
+      window.blows.flung++;
+      return fling(...args);
+    };
+    const monsterHit = g.monsterHit.bind(g);
+    g.monsterHit = (msg) => {
+      monsterHit(msg);
+      const e = g.monsters.get(msg.id);
+      window.blows.hit = { stop: e.stopUntil > 0, flash: e.flashUntil > 0, recoil: Boolean(e.recoil), kick: e.kick?.dist ?? null };
+    };
+    return { x, y, z };
+  });
+  await guest.evaluate(({ x, y, z }) => {
+    const g = window.kidsWorld.game;
+    Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
+    g.me.yaw = Math.PI;
+    g.sendMove(true);
+    g.profile.data.gear.weapon = 6;
+    g.profile.pickWeapon(1);
+  }, spot);
+  await until(host, (pid) => window.kidsWorld.session.link.room.players.get(pid).look?.weapon === 'sword', guestPid);
+  await until(host, ({ pid, x, z }) => {
+    const at = window.kidsWorld.game.players.get(pid)?.avatar?.root.position;
+    return at && Math.hypot(at.x - x - 0.5, at.z - z - 0.5) < 0.2 && window.kidsWorld.game.players.get(pid).avatar.weaponKind === 'sword';
+  }, { pid: guestPid, x: spot.x, z: spot.z });
+  // One held still in front of them, to their sword.
+  const id = await host.evaluate(({ x, y, z }) => {
+    const room = window.kidsWorld.session.link.room;
+    const m = room.monsters.add(room.world, x + 0.5, y, z - 1.2);
+    m.giggle = Infinity;
+    m.hearts = 5;
+    m.max = 6;
+    return m.id;
+  }, spot);
+  const seen = (page) => until(page, (id) => window.kidsWorld.game.monsters.get(id)?.drawn && window.kidsWorld.game.attackReady(), id);
+  await seen(host);
+  await seen(guest);
+  await guest.evaluate(() => {
+    window.kidsWorld.game.me.yaw = Math.PI;
+    window.kidsWorld.game.attack();
+  });
+  await until(host, (id) => window.kidsWorld.game.monsters.get(id)?.hearts === 3, id);
+  const blow = await host.evaluate(() => window.blows);
+  assert.ok(blow.hit.stop && blow.hit.flash && blow.hit.recoil, `it stops dead and goes white: ${JSON.stringify(blow)}`);
+  assert.ok(blow.hit.kick > 1.4, `knocked back as far as a sword does: ${blow.hit.kick}`);
+  assert.deepEqual(blow.sounds.filter((s) => s.name === 'whack').map((s) => s.kind), ['sword'], 'to their weapon’s whack');
+  assert.equal(blow.jolts, 0, 'your picture stays still: the blow is theirs');
+  assert.deepEqual(blow.said, [], 'and the word over it is for them');
+  // Their last blow: flung off, and gone pop a moment on, on your screen as on theirs.
+  await host.evaluate((id) => {
+    const room = window.kidsWorld.session.link.room;
+    const m = room.monsters.get(id);
+    m.hearts = 1;
+    const p = room.players.get(room.clients.size && [...room.players.keys()].find((k) => k !== window.kidsWorld.game.pid));
+    Object.assign(m.body, { x: p.s[0], y: p.s[1], z: p.s[2] - 1.2, vx: 0, vz: 0 });
+    window.blows.sounds = [];
+  }, id);
+  await until(guest, (id) => {
+    const g = window.kidsWorld.game;
+    const e = g.monsters.get(id);
+    const p = e?.model.group.position;
+    return e?.hearts === 1 && !e.kick && !e.recoil && g.attackReady() && Math.hypot(p.x - g.me.body.x, p.z - g.me.body.z) < 1.8;
+  }, id);
+  await guest.evaluate(() => {
+    window.kidsWorld.game.me.yaw = Math.PI;
+    window.kidsWorld.game.attack();
+  });
+  await until(host, (id) => !window.kidsWorld.game.monsters.has(id), id);
+  assert.equal(await host.evaluate(() => window.blows.flung), 1, 'flung off');
+  await until(host, (id) => !window.kidsWorld.renderer.monsters.has(id) && window.blows.sounds.some((s) => s.name === 'splat'), id);
+  assert.ok(await host.evaluate(() => window.blows.sounds.some((s) => s.name === 'whack' && s.final && s.kind === 'sword')), 'to their whack, and the boom under it');
+  await until(guest, (id) => !window.kidsWorld.renderer.monsters.has(id), id);
+  assert.deepEqual(errors, []);
+  await guest.browserContext().close();
+  await host.browserContext().close();
+});
+
 test('the shop sells, the 🎒 backpack is where you put things on and take them off', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Tidy Badger' });
   // On the title, the backpack turns you round to see how you look, and
