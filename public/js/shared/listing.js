@@ -11,9 +11,10 @@
 // passcode: whether the island has one (never the passcode itself);
 // public: the one public adventure island the server keeps for everyone to
 // conquer together (server/adventure.js), which heads the list;
-// adventure, only on an adventure island: { camps, freed, won, stage }, how
-// many monster camps it has and how many are free, whether all of it is,
-// and the public one's stage;
+// adventure, only on a stage of Adventure Isle (the public one, or one just
+// won that someone is still on): { camps, freed, won, stage }, how many
+// monster camps it has and how many are free, whether all of it is, and
+// which stage it is;
 // defense, only on a tower defense island: { wave, waves, won }, the wave
 // it is on, of how many, and whether every one is seen off.
 

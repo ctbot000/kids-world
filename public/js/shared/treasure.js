@@ -130,19 +130,4 @@ export class Chests {
     world.set(...cells);
     return cells;
   }
-
-  // Where they are, kept only so that a load can take them away: a chest
-  // left from before is gone, and new ones come.
-  save() {
-    return this.list.map((c) => [c.x, c.y, c.z]);
-  }
-
-  static clear(world, raw) {
-    if (!Array.isArray(raw)) return;
-    for (const at of raw.slice(0, 16)) {
-      if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger)) continue;
-      const [x, y, z] = at;
-      if (world.inBounds(x, y, z) && (isChest(world.get(x, y, z)) || isOpenChest(world.get(x, y, z)))) world.set(x, y, z, B.AIR);
-    }
-  }
 }

@@ -797,8 +797,9 @@ function byShore(world, rng, type, off, others = []) {
 }
 
 // What the bus and the ferry keep clear of, as { x, z, r }: the other
-// vehicles, and an adventure island's camps or a tower defense island's
-// road, pads, Star Stone and gate.
+// vehicles, and the camps an island made with ⚔️ Adventure on had
+// (adventure.js retireCamps) or a tower defense island's road, pads, Star
+// Stone and gate.
 export function busesClearOf(vehicles = [], camps = [], defense = null) {
   const out = vehicles.map((v) => ({ x: v.x, z: v.z, r: 0 }));
   for (const c of camps) out.push({ x: c.x, z: c.z, r: c.r + 3 });

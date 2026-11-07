@@ -1,8 +1,8 @@
 // HP potions (shop.js): for sale at the shop, one and five at a time, and
 // kept with your coins and gear — here, at the keeper, and added up when a
 // guest's progress joins a login. Drinking one brings all your HP back at
-// once (the island's half of it: room.js), even sitting dizzy on an adventure
-// island, where that gets you up on your own instead of waiting for a friend.
+// once (the island's half of it: room.js), even sitting dizzy on Adventure
+// Isle, where that gets you up on your own instead of waiting for a friend.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';

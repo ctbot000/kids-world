@@ -1,14 +1,14 @@
-// The Monster Gashapon and the tougher monsters of the adventure islands'
-// higher stages: the figures (the real monsters, rarer ones likelier the
-// higher the stage), the machine (out of the toy box, nobody's to put down,
-// pick up or build over), the island putting it down now and then near
-// someone and taking it away again (and never keeping it), a turn of it
-// through your profile with its stickers; and the Grumble Knight and the
-// Stone Golem, tougher than a Big Bruiser, among a camp's guards more and
-// more from stage 2 on.
+// The Monster Gashapon and the tougher monsters of Adventure Isle's higher
+// stages: the figures (the real monsters, rarer ones likelier the higher the
+// stage), the machine (out of the toy box, nobody's to put down, pick up or
+// build over), the isle putting it down now and then near someone and taking
+// it away again, a turn of it through your profile with its stickers; and the
+// Grumble Knight and the Stone Golem, tougher than a Big Bruiser, among a
+// camp's guards more and more from stage 2 on.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AdventureSim, toughGuards } from '../public/js/shared/adventure.js';
+import { chapterOf } from '../public/js/shared/isle-story.js';
 import * as B from '../public/js/shared/blocks.js';
 import { ALL_TOYS, cleanToys, drawToy, gashaponNear, isGashapon, isMonsterGashapon, MONSTER_FIGURES, MONSTER_GASHA, MONSTER_PRICE, rarityOdds, TOYS, toysFound } from '../public/js/shared/gashapon.js';
 import { bodyOf, isHeavy, kindOf, MONSTER_KINDS, MonsterSim } from '../public/js/shared/monsters.js';
@@ -93,7 +93,7 @@ test('a player picking up the Monster Gashapon, or building over it, gets it put
   assert.deepEqual(ack.fix, [x, y, z, B.MONSTER_GASHAPON], 'and put back on the picker’s screen');
 });
 
-test('on an adventure island the Monster Gashapon turns up near someone a while after they come, and goes after a while', () => {
+test('on Adventure Isle the Monster Gashapon turns up near someone a while after they come, and goes after a while', () => {
   const w = flat();
   const adv = new AdventureSim({ camps: [{ id: 1, kind: 'camp', x: 50.5, y: 6, z: 50.5, r: 7 }] }, 9);
   const me = [{ id: 1, x: 20.5, y: 6, z: 20.5 }];
@@ -125,8 +125,8 @@ test('on an adventure island the Monster Gashapon turns up near someone a while 
   assert.equal(again?.t, 'gasha', 'and back again later');
 });
 
-test('the room puts the Monster Gashapon down and takes it away, telling everyone; an island put away keeps none', () => {
-  const room = new Room({ code: '123456', theme: 'flat', size: 'small', seed: 5, adventure: true });
+test('the room puts the Monster Gashapon down and takes it away, telling everyone', () => {
+  const room = new Room({ code: '123456', seed: 5, adventure: true, shared: true });
   const c = { inbox: [], send: (t) => c.inbox.push(JSON.parse(t)), close: () => {} };
   room.attach(c);
   room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'cat' } });
@@ -136,9 +136,6 @@ test('the room puts the Monster Gashapon down and takes it away, telling everyon
   room.adventure.gasha = { ...at, until: Infinity };
   assert.ok(isMonsterGashapon(room.world.get(at.x, at.y, at.z)));
   assert.deepEqual(c.inbox.findLast((m) => m.t === 'gasha'), { t: 'gasha', ...at });
-  // Saved with it there, it is gone when the island is opened again.
-  const again = new Room({ save: JSON.parse(JSON.stringify(room.exportSave())) });
-  assert.equal(again.world.get(at.x, at.y, at.z), B.AIR, 'not kept');
   room.gashaNews({ t: 'gasha-gone', ...at });
   assert.equal(room.world.get(at.x, at.y, at.z), B.AIR);
   assert.deepEqual(c.inbox.findLast((m) => m.t === 'gasha'), { t: 'gasha', ...at, gone: true });
@@ -212,25 +209,22 @@ test('the Grumble Knight and the Stone Golem are tougher than a Big Bruiser, and
     assert.equal(kinds[0], 'mosquito');
     for (const k of want) assert.ok(kinds.includes(k), `stage ${stage} has a ${k}`);
     assert.ok(kinds.includes('queen'), `stage ${stage}: the queen guards the deepest camp`);
-    if (!want.length) assert.ok(kinds.slice(1).every((k) => k === 'blob' || k === 'queen'), 'stage 1: blobs otherwise');
+    if (!want.length) assert.ok(kinds.slice(1).every((k) => k === 'blob' || k === 'queen' || chapterOf(1).guards.includes(k)), 'stage 1: the chapter’s own, and blobs otherwise');
   }
 });
 
-test('only the shared isle, Adventure Isle, gets the Monster Gashapon: no other adventure island does', () => {
-  for (const shared of [false, true]) {
-    let t = 1_000_000;
-    const room = new Room({ code: '123456', theme: 'flat', size: 'small', seed: 5, adventure: true, shared, now: () => t });
-    const c = { inbox: [], send: (m) => c.inbox.push(JSON.parse(m)), close: () => {} };
-    room.attach(c);
-    room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'cat' } });
-    const s = room.world.spawn;
-    for (let ms = 0; ms < MONSTER_GASHA.first[1] + 15000; ms += 500) {
-      t += 500;
-      room.receive(c, { t: 'm', s: [s.x, s.y, s.z, 0, 0, 0] });
-      room.tick();
-    }
-    const up = c.inbox.find((m) => m.t === 'gasha');
-    if (shared) assert.ok(up && isMonsterGashapon(room.world.get(up.x, up.y, up.z)), 'it turns up on Adventure Isle');
-    else assert.equal(up, undefined, 'never on an island made with Adventure on');
+test('the isle puts the Monster Gashapon down by itself a while after someone comes', () => {
+  let t = 1_000_000;
+  const room = new Room({ code: '123456', seed: 5, adventure: true, shared: true, now: () => t });
+  const c = { inbox: [], send: (m) => c.inbox.push(JSON.parse(m)), close: () => {} };
+  room.attach(c);
+  room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'cat' } });
+  const s = room.world.spawn;
+  for (let ms = 0; ms < MONSTER_GASHA.first[1] + 15000; ms += 500) {
+    t += 500;
+    room.receive(c, { t: 'm', s: [s.x, s.y, s.z, 0, 0, 0] });
+    room.tick();
   }
+  const up = c.inbox.find((m) => m.t === 'gasha');
+  assert.ok(up && isMonsterGashapon(room.world.get(up.x, up.y, up.z)), 'it turns up on Adventure Isle');
 });

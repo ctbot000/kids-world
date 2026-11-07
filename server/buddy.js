@@ -5,8 +5,8 @@
 // file with the game's own engine, the way a page would: it joins an island
 // as one more player (dialing a host's page peer to peer, or straight into a
 // room of this dedicated server: dialer.js), walks and flies after a friend
-// with the game's physics, helps dizzy friends up, bops monsters that come at
-// them, puts down a stamp when asked, pets their pets, waves and dances,
+// with the game's physics, bops monsters that come at them, puts down a
+// stamp when asked, pets their pets, waves and dances,
 // and plays Go or Gomoku with a child who asks it to at a Go board, teaching
 // the rules as they play (shared/go.js picks its moves; the model says the
 // lessons).
@@ -47,7 +47,6 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as B from '../public/js/shared/blocks.js';
 import { generateCode } from '../public/js/shared/codes.js';
-import { HELP_REACH } from '../public/js/shared/adventure.js';
 import { BLACK, gameOf, lessonsOf, NO_MOVE, pickFor, placeName, REACH as GO_REACH, WHITE } from '../public/js/shared/go.js';
 import { critterBox, CRITTER_INFO, CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { isNight } from '../public/js/shared/env.js';
@@ -75,7 +74,7 @@ export const DEFAULT_LOOK = { animal: 'kid', skin: 'golden', hair: 'spiky', hair
 export const ADMIN_NAME = 'Admin';
 
 // As the renderer's poses (render/avatar.js), which a page sends as s[4].
-const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7 };
+const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6 };
 // A player's yaw (s[3]) as a page sends it: the way it faces, atan2(dx, dz).
 // (A camera's yaw, as stamps' facingFromYaw takes, looks the other way.)
 export const yawTowards = (dx, dz) => Math.atan2(dx, dz);
@@ -98,7 +97,6 @@ const FLY_FAR = 30;
 // Monsters closer than this to a friend get bopped.
 const GUARD = 7;
 const BOP_MS = 450;
-const HELP_MS = 1000;
 // Talking: a moment's wait for more before answering, never two lines in a
 // row too fast, and something to say now and then when it is quiet. After
 // its goodbye, a moment for it to be seen before it goes.
@@ -198,9 +196,9 @@ Rules, always:
 - You know the real date and time outside the game (given in the situation); the game's day and night is its own, much quicker. When a child asks what time or day it is, tell them the real one, their way.
 
 You can do one thing with each answer ("action"): follow (go with the friend), stay (wait here), wave, dance, cheer, hearts, clap, laugh, surprise, sleepy, build (put down a stamp next to you, named in "stamp": ${STAMP_KEYS.join(', ')}), pet (pet the friend's pet), leave (go home: when they say bye or goodbye, or want you to go). Otherwise "none". "stamp" is "none" unless you build.
-By yourself you also pop monsters that come at your friends and help dizzy friends up.
+By yourself you also pop monsters that come at your friends.
 
-Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent, a birthday party, a stock exchange. The stock market (📈 Stocks in the shop, or Q at a Stock Terminal) has real companies at their real prices in Seoul, Tokyo and New York, a coin being worth a dollar; the shares are pretend and bought with game coins. You never say which share to buy. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A fun park island has a real roller coaster (hop in its train at the station with Q; it goes up the lift hill, down the drop and round a loop by itself, and you get off back at the station), a Ferris wheel and a merry-go-round (walk up and press Q to hop on; they go round by themselves). A racing island has a race track with go-karts: drive over the checkered finish line to start your lap clock, go all the way round and cross it again for your lap time. An escape island has an escape house of three locked rooms, solved together: in room 1 press the coloured buttons (Q) in the order the stars over 1, 2, 3, 4 show; in room 2 open the crate the treasure map marks with an X to find the key; in room 3 count the stars of each colour and turn each dial to its number to open the way out. Nobody can dig through its walls, and once everyone has left it locks up again with new puzzles. A zoo island has a big zoo: a ZOO gate with a café and a gift shop, a loop of path round exhibits of giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (steps down to a window under the water), kangaroos, monkey island and a flamingo lagoon, and a petting farm to walk into through its gate. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and every zoo animal is in the toy box. Tap 🏁 Race! in a go-kart to race: everyone in a kart lines up, robot drivers take the other karts, three laps, first over the line wins. A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, vegetables, shells and jewels from your basket for coins, for running shoes, wings, roller skates (Roller Skates and Light-up Skates: on in place of shoes, faster on the ground, gliding on when you let go), toy weapons, clothes (a Cozy Scarf and a Royal Robe just for looks; a Hero Cape jumps higher, Knight Armor halves monster bumps, a Fire Suit swims in lava without burning), HP potions (Y drinks one, filling HP up at once) and vegetables to plant. In a thunderstorm lightning can set trees and grass on fire, and the fire spreads to what grows next to it (never to what anybody built); stay out of the flames and put a fire out by tapping it with the watering can. Farming: plant a carrot, strawberry, tomato, corn, pumpkin or watermelon from your basket on grass or farmland, water it with the watering can from the toy box's Farm tab (rain waters it too) to grow it twice as fast, and tap it when it is ripe to pick two. Fishing: stand at the edge of a pond or the sea facing the water and press Q (or tap Fish) to cast; the fish that will bite swims in under the water and circles the bobber, so you can see what kind it is; a twitch is only a nibble (striking then scares it off); when the bobber goes right under, press Q (or tap Strike!) quick to hook it; then hold Q (or hold the button) to reel it in, letting go when the line meter goes red or the line snaps, and not letting go too long or it swims off. Big fish (trout, pufferfish, the rare golden fish) run and leap and fight hard. A minnow, a perch, a clownfish, a trout, a pufferfish or a golden fish goes in your basket (or now and then a seashell, a pearl or an old boot). Fish sell for 2 coins. Jump on a monster, or swing at it with X up close: a swing sweeps round in front of you and bops every monster it passes. A gashapon machine (Q beside it) takes 5 coins for a capsule toy; there are 18 to collect: 8 common, 7 rare and 3 super rare (the Golden Dragon, the Rainbow Phoenix and the Starlight Jellyfish). They are kept in My collection. A piano or a grand piano (Home tab, Q beside it) plays: tap the keys, or pick a song and play the glowing key each time. A TV, a Retro TV or a Wall TV (Home tab, Q beside it) has five channels to watch: fish, a bunny, a rocket, the island's weather and a dance party. A Broadcast Station (Home tab, Q beside it, then Go live) puts your own camera and microphone on every TV on every island, on the On Air channel. The School stamp is a schoolhouse with a classroom of desks; at a chalkboard (Home tab too, Q beside it, then Class) you pick a class, Year 2 of elementary school, Year 3 of middle school or Thinking Math (puzzles), and answer three questions for coins. At a stove (Home tab, or the Cooking School stamp, Q beside it, then Cook) there is a cooking class: pick a recipe (pancakes, pizza, salad, cookies, veggie soup, a sandwich) and cook it by hand: take what comes next off the shelf, then drag it into the bowl, pour, stir round, tap to chop, rub to spread or roll, and take it off the heat when it is golden; a coin for each step done just right. Sit down at a Study Desk (Home tab) and your workbooks open: adding, taking away, times tables, sharing and spelling. New facts are shown first, then you type the answers; a miss shows the answer and a way to work it out, and each fact got right in four studies is known by heart. A Go Board (Home tab, Q beside it, then Play Go) plays Go or Gomoku. Gomoku (five in a row) is on a 9×9, 13×13 or 15×15 board: take turns, and the first to get five stones in a row across, down or slanting wins; block three with both ends open. Go is on a small board, 5×5, 7×7 or 9×9: black and white take turns putting stones on the crossings, a stone or group with no breathing spaces (liberties) left is captured, and at the end you count your stones and the places you surround; with a friend, or with you: tap 🤖 Play with ${name} and you come over, play white and teach the rules as you go. A Robot Kit (Home tab, Q beside it, then Build) is a robotics kit: in Build snap a hub, motors with wheels on their axles, a ball wheel, beams, a distance sensor, a colour sensor, a bumper, a lamp or a propeller onto the plate (everything joined to the hub; each motor and sensor gets a port A to F), or start from a ready-made robot (Driving Base, Line Follower, Brick Dodger, Disco Fan); in Code put blocks under when program starts (move, turn, start moving, motor run, show a picture, set lamp, beep, wait, repeat, forever, if a sensor sees something); then Run drives it on the play mat, a white mat with a black line and toy bricks, and Drive on the island lets it out to run its program on the island itself (Call it back brings it home). A Drawing Board (Home tab, Q beside it, then Draw) is a whiteboard to draw a picture on, with friends too, and everyone sees it on the board; To my gallery keeps the picture in your own gallery (My gallery, at a board or in Stickers), to put up on a board again. On a volcano island a big wild green dragon sleeps by the crater: go near and it wakes and breathes fire (run out of the way it faces when it rears back); bop it with X until it is tired out to tame it, then ride it and hold jump to fly; tame a dragon 10 times and your own dragon is in the toy box's Animals tab. On an adventure island, pop a camp's monsters and stand by its flag to free it. On Adventure Isle (only there), now and then a Monster Gashapon turns up with a beam of light: 10 coins for a figure of a real monster (10 of them; King Grumble and the Stone Golem are the rarest, likelier on higher stages of Adventure Isle). Locked treasure chests lie about Adventure Isle: Q by one with no key offers a quiz, one answered right is a key, and the key opens the chest for coins (and sometimes an HP potion). Higher stages bring tougher monsters: a Grumble Knight (helmet and shield, eight bops) and a Stone Golem (huge and strong, twelve bops). The CTB island is an office where Grace, CTB's guide, meets visitors at the gate and walks them in, and CTB's helpers (Ada, Ben, Cleo and Dev) sit at their desks making Kids World better, fixing things and adding new ones; anyone can visit it and ask them what they are working on, and a child logged in and at level 5 on Adventure Isle can send them an idea for the game with 💡 An idea for the game? in Help or Settings: one of them reads it and writes back. Now and then a cloudy sky spins up a tornado that wanders over the island for a minute or two: anyone out in the open who goes too close is swept up, spun round the funnel and tossed out somewhere else, never hurt; a roof over your head keeps you safe. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
+Things you know about the game, to help: Build, Pick up, Paint and Hills tools, and Undo. The toy box (E) has bricks, furniture and stamps like a house, a castle tower, a fountain, a circus tent, a birthday party, a stock exchange. The stock market (📈 Stocks in the shop, or Q at a Stock Terminal) has real companies at their real prices in Seoul, Tokyo and New York, a coin being worth a dollar; the shares are pretend and bought with game coins. You never say which share to buy. F flies (Space up, Shift down). Q rides a pony or a dolphin standing beside it. A fun park island has a real roller coaster (hop in its train at the station with Q; it goes up the lift hill, down the drop and round a loop by itself, and you get off back at the station), a Ferris wheel and a merry-go-round (walk up and press Q to hop on; they go round by themselves). A racing island has a race track with go-karts: drive over the checkered finish line to start your lap clock, go all the way round and cross it again for your lap time. An escape island has an escape house of three locked rooms, solved together: in room 1 press the coloured buttons (Q) in the order the stars over 1, 2, 3, 4 show; in room 2 open the crate the treasure map marks with an X to find the key; in room 3 count the stars of each colour and turn each dial to its number to open the way out. Nobody can dig through its walls, and once everyone has left it locks up again with new puzzles. A zoo island has a big zoo: a ZOO gate with a café and a gift shop, a loop of path round exhibits of giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (steps down to a window under the water), kangaroos, monkey island and a flamingo lagoon, and a petting farm to walk into through its gate. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and every zoo animal is in the toy box. Tap 🏁 Race! in a go-kart to race: everyone in a kart lines up, robot drivers take the other karts, three laps, first over the line wins. A pet comes from 🐾 My pet. The 🛒 Shop sells fruit, vegetables, shells and jewels from your basket for coins, for running shoes, wings, roller skates (Roller Skates and Light-up Skates: on in place of shoes, faster on the ground, gliding on when you let go), toy weapons, clothes (a Cozy Scarf and a Royal Robe just for looks; a Hero Cape jumps higher, Knight Armor halves monster bumps, a Fire Suit swims in lava without burning), HP potions (Y drinks one, filling HP up at once) and vegetables to plant. In a thunderstorm lightning can set trees and grass on fire, and the fire spreads to what grows next to it (never to what anybody built); stay out of the flames and put a fire out by tapping it with the watering can. Farming: plant a carrot, strawberry, tomato, corn, pumpkin or watermelon from your basket on grass or farmland, water it with the watering can from the toy box's Farm tab (rain waters it too) to grow it twice as fast, and tap it when it is ripe to pick two. Fishing: stand at the edge of a pond or the sea facing the water and press Q (or tap Fish) to cast; the fish that will bite swims in under the water and circles the bobber, so you can see what kind it is; a twitch is only a nibble (striking then scares it off); when the bobber goes right under, press Q (or tap Strike!) quick to hook it; then hold Q (or hold the button) to reel it in, letting go when the line meter goes red or the line snaps, and not letting go too long or it swims off. Big fish (trout, pufferfish, the rare golden fish) run and leap and fight hard. A minnow, a perch, a clownfish, a trout, a pufferfish or a golden fish goes in your basket (or now and then a seashell, a pearl or an old boot). Fish sell for 2 coins. Jump on a monster, or swing at it with X up close: a swing sweeps round in front of you and bops every monster it passes. A gashapon machine (Q beside it) takes 5 coins for a capsule toy; there are 18 to collect: 8 common, 7 rare and 3 super rare (the Golden Dragon, the Rainbow Phoenix and the Starlight Jellyfish). They are kept in My collection. A piano or a grand piano (Home tab, Q beside it) plays: tap the keys, or pick a song and play the glowing key each time. A TV, a Retro TV or a Wall TV (Home tab, Q beside it) has five channels to watch: fish, a bunny, a rocket, the island's weather and a dance party. A Broadcast Station (Home tab, Q beside it, then Go live) puts your own camera and microphone on every TV on every island, on the On Air channel. The School stamp is a schoolhouse with a classroom of desks; at a chalkboard (Home tab too, Q beside it, then Class) you pick a class, Year 2 of elementary school, Year 3 of middle school or Thinking Math (puzzles), and answer three questions for coins. At a stove (Home tab, or the Cooking School stamp, Q beside it, then Cook) there is a cooking class: pick a recipe (pancakes, pizza, salad, cookies, veggie soup, a sandwich) and cook it by hand: take what comes next off the shelf, then drag it into the bowl, pour, stir round, tap to chop, rub to spread or roll, and take it off the heat when it is golden; a coin for each step done just right. Sit down at a Study Desk (Home tab) and your workbooks open: adding, taking away, times tables, sharing and spelling. New facts are shown first, then you type the answers; a miss shows the answer and a way to work it out, and each fact got right in four studies is known by heart. A Go Board (Home tab, Q beside it, then Play Go) plays Go or Gomoku. Gomoku (five in a row) is on a 9×9, 13×13 or 15×15 board: take turns, and the first to get five stones in a row across, down or slanting wins; block three with both ends open. Go is on a small board, 5×5, 7×7 or 9×9: black and white take turns putting stones on the crossings, a stone or group with no breathing spaces (liberties) left is captured, and at the end you count your stones and the places you surround; with a friend, or with you: tap 🤖 Play with ${name} and you come over, play white and teach the rules as you go. A Robot Kit (Home tab, Q beside it, then Build) is a robotics kit: in Build snap a hub, motors with wheels on their axles, a ball wheel, beams, a distance sensor, a colour sensor, a bumper, a lamp or a propeller onto the plate (everything joined to the hub; each motor and sensor gets a port A to F), or start from a ready-made robot (Driving Base, Line Follower, Brick Dodger, Disco Fan); in Code put blocks under when program starts (move, turn, start moving, motor run, show a picture, set lamp, beep, wait, repeat, forever, if a sensor sees something); then Run drives it on the play mat, a white mat with a black line and toy bricks, and Drive on the island lets it out to run its program on the island itself (Call it back brings it home). A Drawing Board (Home tab, Q beside it, then Draw) is a whiteboard to draw a picture on, with friends too, and everyone sees it on the board; To my gallery keeps the picture in your own gallery (My gallery, at a board or in Stickers), to put up on a board again. On a volcano island a big wild green dragon sleeps by the crater: go near and it wakes and breathes fire (run out of the way it faces when it rears back); bop it with X until it is tired out to tame it, then ride it and hold jump to fly; tame a dragon 10 times and your own dragon is in the toy box's Animals tab. On Adventure Isle, pop a camp's monsters and stand by its flag to free it; and there (only there), now and then a Monster Gashapon turns up with a beam of light: 10 coins for a figure of a real monster (10 of them; King Grumble and the Stone Golem are the rarest, likelier on higher stages of Adventure Isle). Locked treasure chests lie about Adventure Isle: Q by one with no key offers a quiz, one answered right is a key, and the key opens the chest for coins (and sometimes an HP potion). Higher stages bring tougher monsters: a Grumble Knight (helmet and shield, eight bops) and a Stone Golem (huge and strong, twelve bops). The CTB island is an office where Grace, CTB's guide, meets visitors at the gate and walks them in, and CTB's helpers (Ada, Ben, Cleo and Dev) sit at their desks making Kids World better, fixing things and adding new ones; anyone can visit it and ask them what they are working on, and a child logged in and at level 5 on Adventure Isle can send them an idea for the game with 💡 An idea for the game? in Help or Settings: one of them reads it and writes back. Now and then a cloudy sky spins up a tornado that wanders over the island for a minute or two: anyone out in the open who goes too close is swept up, spun round the funnel and tossed out somewhere else, never hurt; a roof over your head keeps you safe. Tap a dizzy friend to help them up. Stickers and levels come from playing. T talks, G does emotes.
 
 Answer with JSON only: {"say": "...", "action": "...", "stamp": "..."}.`;
 }
@@ -628,7 +626,6 @@ export class Visit extends EventEmitter {
     this.settings = {};
     this.host = 0;
     this.env = { time: 0.4, weather: 'clear' };
-    this.adventure = null;
     this.defense = null;
     this.chat = [];
     // The personality question asked of each friend and not answered yet:
@@ -644,14 +641,12 @@ export class Visit extends EventEmitter {
     this.body = null;
     this.yaw = 0;
     this.anim = ANIM.idle;
-    this.dizzy = false;
     this.mode = 'follow';
     this.friend = 0;
     this.seq = 0;
     this.lastSent = '';
     this.sentAt = 0;
     this.bopAt = 0;
-    this.helpAt = 0;
     this.saidAt = 0;
     this.heardAt = 0;
     this.builtAt = -BUILD_GAP_MS;
@@ -689,7 +684,7 @@ export class Visit extends EventEmitter {
       owner: this.host !== this.me ? name(this.host) : '',
       players: this.others().map((p) => p.name),
       friend: name(this.friend),
-      mode: this.dizzy ? 'dizzy' : this.mode,
+      mode: this.mode,
       thinking: this.thinking,
       doing: this.welcomed ? this.doing : 'Getting there…',
       ...(this.home
@@ -820,30 +815,8 @@ export class Visit extends EventEmitter {
       case 'bump':
         this.bumped(msg);
         break;
-      case 'helped':
-        this.setDizzy(msg.pid, false);
-        if (msg.pid === this.me) {
-          const who = this.players.get(msg.by)?.name;
-          if (who) this.event(`${who} helped you up when you were dizzy. Say thank you!`, msg.by);
-        }
-        break;
-      // Somebody drank an HP potion (the shop sells them): up and about,
-      // nobody needs helping up.
-      case 'healed':
-        this.setDizzy(msg.pid, false);
-        break;
       case 'home':
-        this.setDizzy(msg.pid, false);
         if (msg.pid === this.me && Array.isArray(msg.at) && this.body) Object.assign(this.body, { x: msg.at[0], y: msg.at[1], z: msg.at[2], vx: 0, vy: 0, vz: 0 });
-        break;
-      case 'freed': {
-        const camp = this.adventure?.camps?.find((c) => c.id === msg.id);
-        if (camp) camp.freed = true;
-        this.event('Your friends just freed a monster camp! Cheer for them!', 0, 'cheer');
-        break;
-      }
-      case 'won':
-        this.event('The whole island is safe: you and your friends won! Celebrate!', 0, 'dance');
         break;
       // Hide and seek (shared/hideseek.js): it hides by keeping still where
       // it is, for following a friend would give them away; once the round
@@ -874,7 +847,6 @@ export class Visit extends EventEmitter {
     for (const row of msg.pack ?? []) this.critters.set(row[0], { id: row[0], type: CRITTER_TYPES[row[1]], name: names.get(row[0])?.name ?? '', x: row[2] / 100, y: row[3] / 100, z: row[4] / 100 });
     this.handle({ t: 'mon', m: msg.monsters });
     if (msg.env) this.env = msg.env;
-    this.adventure = msg.adventure ?? null;
     this.defense = msg.defense ?? null;
     this.goState(msg.go);
     // What was said before it came, so it knows what is going on.
@@ -954,10 +926,7 @@ export class Visit extends EventEmitter {
   }
 
   bumped(msg) {
-    if (msg.pid !== this.me) {
-      if (msg.dizzy) this.setDizzy(msg.pid, true);
-      return;
-    }
+    if (msg.pid !== this.me) return;
     if (msg.home && Array.isArray(msg.at)) {
       Object.assign(this.body, { x: msg.at[0], y: msg.at[1], z: msg.at[2], vx: 0, vy: 0, vz: 0 });
       return;
@@ -967,16 +936,6 @@ export class Visit extends EventEmitter {
     const dz = this.body.z - msg.z;
     const d = Math.hypot(dx, dz) || 1;
     Object.assign(this.body, { vx: (dx / d) * 8, vz: (dz / d) * 8, vy: 5, onGround: false });
-    if (msg.dizzy) {
-      this.dizzy = true;
-      this.event('A monster bumped you and you are dizzy, sitting with stars round your head. Ask a friend to tap you to help you up!', 0);
-    }
-  }
-
-  setDizzy(pid, on) {
-    if (pid === this.me) this.dizzy = on;
-    const p = this.players.get(pid);
-    if (p) p.dizzy = on;
   }
 
   // ------------------------------------------------ every tick
@@ -1009,26 +968,12 @@ export class Visit extends EventEmitter {
     this.sendMove(now);
   }
 
-  // Where to go, and what to do there: a dizzy friend first, then a monster
-  // coming at a friend, then the friend it is with.
+  // Where to go, and what to do there: a monster coming at a friend first,
+  // then the friend it is with.
   plan(now) {
-    if (this.dizzy) {
-      this.doing = 'Sitting dizzy, waiting for a friend to tap it up';
-      return null;
-    }
     const b = this.body;
-    const dist = (p) => Math.hypot(p.x - b.x, p.y - b.y, p.z - b.z);
     const others = this.others().map((p) => ({ p, x: p.s[0], y: p.s[1], z: p.s[2] }));
-    const dizzy = others.filter((o) => o.p.dizzy).sort((a, b2) => dist(a) - dist(b2))[0];
-    if (dizzy && dist(dizzy) < 48) {
-      this.doing = `Helping ${dizzy.p.name} up: they are dizzy`;
-      if (dist(dizzy) <= HELP_REACH && now - this.helpAt > HELP_MS) {
-        this.helpAt = now;
-        this.link.send({ t: 'help', pid: dizzy.p.id });
-      }
-      return { x: dizzy.x, y: dizzy.y, z: dizzy.z, reach: 1.6 };
-    }
-    if (this.monsters.length && (this.settings.monsters || this.adventure || this.defense)) {
+    if (this.monsters.length && (this.settings.monsters || this.defense)) {
       const guarded = [...others, { x: b.x, y: b.y, z: b.z, me: true }];
       let threat = null;
       let best = Infinity;
@@ -1044,8 +989,8 @@ export class Visit extends EventEmitter {
         }
       }
       if (threat) {
-        // A boss (King Grumble, or one of the isle's: bosses.js) is big, so
-        // near enough to bop from further off.
+        // A boss (King Grumble, marching with a tower defense island's
+        // waves: bosses.js) is big, so near enough to bop from further off.
         const size = isBoss(threat.kind) ? bodyOf(threat.kind).radius : 0;
         this.doing = `Bopping a${size ? ' boss' : ''} monster coming at ${target.me ? 'it' : target.p.name}`;
         const gap = Math.hypot(threat.x - b.x, threat.z - b.z);
@@ -1153,7 +1098,7 @@ export class Visit extends EventEmitter {
     // Walked into someone or an animal: back out of them, as a player does.
     keepApart(this.world, b, this.standing(), `p${this.me}`);
     const speed = Math.hypot(b.vx, b.vz);
-    this.anim = this.dizzy ? ANIM.dizzy : b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
+    this.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : speed > 5.8 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
   }
 
   // ------------------------------------------------ building on its own island
@@ -1471,8 +1416,7 @@ export class Visit extends EventEmitter {
     const friends = this.others().map((p) => {
       const bits = [`${steps(p.s)} steps away`];
       if (p.id === this.host) bits.unshift('the island owner');
-      if (p.dizzy) bits.push('dizzy');
-      else if (p.s[5] & 1) bits.push('flying');
+      if (p.s[5] & 1) bits.push('flying');
       if (p.look?.pet) bits.push(`with a pet ${petKind(p.look.pet.kind)?.name.toLowerCase() ?? p.look.pet.kind} called ${p.look.pet.name}`);
       const person = this.personOf(p.id);
       const type = person.people.typeOf(person.id);
@@ -1487,13 +1431,12 @@ export class Visit extends EventEmitter {
       lines.push(`Around you: ${[...counts].map(([n, k]) => (k > 1 ? `${k} ${n.toLowerCase()}s` : `${/^[aeiou]/i.test(n) ? 'an' : 'a'} ${n.toLowerCase()}`)).join(', ')}.`);
     }
     if (this.monsters.length) lines.push(`There are ${this.monsters.length} grumpy monsters on the island.`);
-    if (this.adventure?.camps?.length) lines.push(`It is an adventure island: ${this.adventure.camps.filter((c) => c.freed).length} of ${this.adventure.camps.length} monster camps are free.`);
     if (this.defense) lines.push('It is a tower defense island: monsters march to the Star Stone, and towers on the pads stop them.');
     const canBuild = this.settings.build !== 'host' || this.host === this.me;
     if (!canBuild) lines.push('Only the island owner builds here, so you cannot build.');
     else if (this.now() - this.builtAt < BUILD_GAP_MS) lines.push('You just built something, so you cannot build again for a few seconds: say you will in a moment.');
     else lines.push('You may build here.');
-    lines.push(`You are ${this.dizzy ? 'sitting dizzy' : this.mode === 'stay' ? 'waiting where you are' : `with ${this.players.get(this.friend)?.name ?? 'your friends'}`}.`);
+    lines.push(`You are ${this.mode === 'stay' ? 'waiting where you are' : `with ${this.players.get(this.friend)?.name ?? 'your friends'}`}.`);
     if (this.chat.length) {
       lines.push('', 'What was said (newest last):');
       for (const c of this.chat.slice(-10)) lines.push(`${c.mine ? `${this.name} (you)` : c.name}: ${c.text}`);
@@ -1590,7 +1533,7 @@ export class Visit extends EventEmitter {
   // turn.
   goGoal(now) {
     const g = this.goGame();
-    if (!g || this.dizzy) return null;
+    if (!g) return null;
     const b = this.body;
     const cx = g.x + 0.5;
     const cz = g.z + 0.5;

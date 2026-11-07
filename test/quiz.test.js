@@ -1,4 +1,4 @@
-// Extra-credit quizzes: an adventure island conquered offers everyone who
+// Extra-credit quizzes: a stage of Adventure Isle conquered offers everyone who
 // freed it three quizzes for extra credit — one at elementary school
 // second-year level, one at middle school third-year level and a
 // thinking-math one of puzzles to work out — each a few

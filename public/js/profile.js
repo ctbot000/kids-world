@@ -235,7 +235,7 @@ export class Profile extends EventTarget {
   // stickers handed out) only once the capsule is opened, openCapsule, so
   // no sticker gives away what is inside. monster: the Monster Gashapon's
   // turn, for one of its figures (MONSTER_FIGURES, at its own price), the
-  // rare ones likelier the higher the adventure island's stage.
+  // rare ones likelier the higher Adventure Isle's stage.
   turnGashapon(rand = Math.random, { later = false, monster = false, stage = 1 } = {}) {
     const price = monster ? MONSTER_PRICE : GASHA_PRICE;
     if (this.data.coins < price) return null;

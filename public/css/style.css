@@ -499,7 +499,7 @@ body.fullscreen .full-icon .leave {
   max-width: 40vw;
 }
 
-/* The code's line, with an adventure island's stage first on it: a bright
+/* The code's line, with Adventure Isle's stage first on it: a bright
    pill that stands out, but no taller than the line, as the layouts below
    the top bar count on its height. */
 .island-line {
@@ -1128,7 +1128,7 @@ body.fullscreen .full-icon .leave {
   opacity: 0.8;
 }
 
-/* On an adventure island, how many camps are free. */
+/* On Adventure Isle, how many camps are free. */
 .hearts .camps {
   margin-left: 6px;
   font-size: 0.95rem;
@@ -1579,8 +1579,8 @@ body.touch.playing #joystick {
   background: rgba(255, 243, 176, 0.92);
 }
 
-/* Over an adventure island's camps, how their flags are going, and over King
-   Grumble, his hearts: a little card with a bar, following them about as the
+/* Over Adventure Isle's camps, how their flags are going, and over its
+   boss, its hearts: a little card with a bar, following them about as the
    name tags do. */
 .adv-tag {
   position: absolute;
@@ -2348,8 +2348,8 @@ body.touch.playing #joystick {
   color: var(--sky-dark);
 }
 
-/* An adventure island's camps, in its card: one row each, the free ones in
-   the island's colours. */
+/* Adventure Isle's camps (and a tower defense island's waves), in its card:
+   one row each, the free ones in the island's colours. */
 .adventure-list {
   display: flex;
   flex-direction: column;

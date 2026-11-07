@@ -625,7 +625,7 @@ function islandList(device) {
 
 // ---------------------------------------------------------------- the AI friend
 
-const MODE = { follow: 'following', stay: 'waiting where it is', dizzy: 'dizzy' };
+const MODE = { follow: 'following', stay: 'waiting where it is' };
 
 // Its settings form, made once: a refresh fills it in only while nothing in
 // it has been changed and not saved.

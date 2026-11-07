@@ -1,9 +1,8 @@
-// The bosses: whoever holds an adventure island's castle (adventure.js).
-// On any adventure island that is King Grumble, who stomps. On Adventure
-// Isle (isle-story.js) each chapter's lair is held by a boss of its own —
-// one of King Grumble's eleven captains, each keeping a Star Shard for him —
-// and King Grumble himself waits on Gloom Rock at the end of the story,
-// knowing every one of his captains' tricks.
+// The bosses: whoever holds the lair at the end of a stage of Adventure Isle
+// (adventure.js). Each chapter's lair (isle-story.js) is held by a boss of
+// its own — one of King Grumble's eleven captains, each keeping a Star Shard
+// for him — and King Grumble himself waits on Gloom Rock at the end of the
+// story, knowing every one of his captains' tricks.
 //
 // A boss is big, has lots of hearts (adventure.js kingHearts, times its
 // hearts here), sits safe in a bubble while any camp is still to free, and
@@ -42,27 +41,14 @@
 // bigger again, each its own shape).
 export const KING_BODY = { radius: 0.95, height: 1.8 };
 
-// His stomp on any adventure island: now and then, near whoever he is after,
-// he crouches (long enough to see it coming, with a ring on the ground as
-// far as it reaches), jumps straight up and lands with a thump that knocks
-// over anyone on the ground that near; anyone in the air then is missed.
-// Down from one, he sits dazed a moment: he bumps nobody, and a bop then
-// takes DAZED_HIT hearts (monsters.js). every: how long from landing to the
-// next, when he is not cross at all (gap, by rage, below).
+// His stomp: now and then, near whoever he is after, he crouches (long
+// enough to see it coming, with a ring on the ground as far as it reaches),
+// jumps straight up and lands with a thump that knocks over anyone on the
+// ground that near; anyone in the air then is missed. Down from one, he
+// sits dazed a moment: he bumps nobody, and a bop then takes DAZED_HIT
+// hearts (monsters.js). every: how long from landing to the next, for one
+// that stomps with no moves of its own to say (monsters.js stompOf).
 export const STOMP = { every: 6500, windup: 900, reach: 6, jump: 10.5 };
-
-// King Grumble on any adventure island: stomps, and only stomps, sooner
-// the crosser he gets; at the last as quick as you walk, never as you run.
-export const KING = {
-  icon: '👑',
-  name: 'King Grumble',
-  hearts: 1,
-  bump: 1,
-  run: [3, 3.8, 4.6],
-  gap: [6500, 4500, 3200],
-  minion: 'blob',
-  moves: [{ move: 'stomp', from: 0, windup: STOMP.windup, reach: STOMP.reach, jump: STOMP.jump, bumps: 1 }],
-};
 
 // The bosses of Adventure Isle, by kind (monsters.js MONSTER_KINDS), in the
 // order of the chapters they hold (isle-story.js).
@@ -312,10 +298,9 @@ export const BOSSES = {
 // Whether a monster kind is a boss.
 export const isBoss = (kind) => Object.hasOwn(BOSSES, kind);
 
-// How a boss of this kind fights: on Adventure Isle (isle) as its chapter
-// has it, King Grumble anywhere else with his stomp alone. Null for a kind
+// How a boss of this kind fights, as its chapter has it. Null for a kind
 // that is no boss.
-export const planOf = (kind, isle = false) => (kind === 'king' && !isle ? KING : (BOSSES[kind] ?? null));
+export const planOf = (kind) => BOSSES[kind] ?? null;
 
 // A boss's stomp (the first of its moves that is one), or null.
 export const stompMove = (plan) => plan?.moves.find((m) => m.move === 'stomp') ?? null;

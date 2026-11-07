@@ -569,7 +569,7 @@ class Maker {
     const map = groundMap(this.world);
     const rng = new Rng(this.seed ^ 0x6a09e667);
     for (const s of this.spots) {
-      flatten(this.world, map, this.pal, s, true);
+      flatten(this.world, map, this.pal, s);
       if (s.kind === 'castle') {
         const dx = s.from.x - s.x;
         const dz = s.from.z - s.z;
@@ -2439,9 +2439,9 @@ const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow
 // The island of a stage of Adventure Isle: the map of its chapter, from the
 // stage's seed (which only settles the trees, flowers and the like: the
 // lie of the land is the chapter's own). Returns what worldgen.generate
-// does — { world, critters, fruit, mines, camps, defense } — and gates:
-// each { camp, x, y, z, cells } (cells as an edit, what they become once
-// that camp is freed).
+// does — { world, critters, fruit, mines, defense } — and its camps (as
+// adventure.js AdventureSim takes them) and gates: each { camp, x, y, z,
+// cells } (cells as an edit, what they become once that camp is freed).
 export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
   const ch = chapterOf(stage);
   const make = CHAPTER_MAPS[ch.key] ?? shore;

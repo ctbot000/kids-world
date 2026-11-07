@@ -53,13 +53,6 @@ test('every island has a helicopter and a balloon near where everyone comes in, 
       }
     }
   }
-  // Clear of an adventure island's camps too.
-  for (const seed of [5, 11, 4242]) {
-    const adv = generate({ seed, theme: 'sunny', size: 'small', adventure: true });
-    for (const v of adv.critters.filter((c) => AIR.includes(c.type))) {
-      for (const c of adv.camps) assert.ok(Math.hypot(v.x - c.x, v.z - c.z) >= c.r + 3, `${seed}: the ${v.type} clear of camp ${c.id}`);
-    }
-  }
 });
 
 test('a helicopter seats two friends behind its pilot and a balloon four, each in their own seat', () => {

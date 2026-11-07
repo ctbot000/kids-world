@@ -207,20 +207,15 @@ test('on the isle, freeing a camp opens its gate for everyone', () => {
 test('a chapter’s own monsters come out among its camps’ guards, and its boss holds the lair and calls its helpers', () => {
   const world = buildIsle({ stage: 1, seed: 7 }).world;
   const camps = buildIsle({ stage: 1, seed: 7 }).camps;
-  const sim = new AdventureSim({ camps, stage: 1, story: true }, 1);
+  const sim = new AdventureSim({ camps, stage: 1 }, 1);
   const monsters = new MonsterSim(1);
   sim.wake(world, sim.campById(1), [], monsters, 2);
   const kinds = monsters.list.filter((m) => m.camp === 1).map((m) => m.kind);
   assert.deepEqual(kinds.slice(0, 2), ['mosquito', 'snapper'], 'on Shipwreck Shore: its mosquito, then a Snappy Crab');
-  // Not on an island of your own: blobs as ever.
-  const plain = new AdventureSim({ camps, stage: 1 }, 1);
-  const theirs = new MonsterSim(1);
-  plain.wake(world, plain.campById(1), [], theirs, 2);
-  assert.ok(!theirs.list.some((m) => m.kind === 'snapper'));
   // The Whispering Woods' camps keep Puffshrooms; Old Puffcap holds its
   // lair, and calls more of them.
   const woods = buildIsle({ stage: 2, seed: 7 });
-  const w2 = new AdventureSim({ camps: woods.camps, stage: 2, story: true }, 1);
+  const w2 = new AdventureSim({ camps: woods.camps, stage: 2 }, 1);
   const m2 = new MonsterSim(1);
   w2.wake(woods.world, w2.campById(1), [], m2, 1);
   assert.ok(m2.list.some((m) => m.kind === 'shroom'));
@@ -234,11 +229,4 @@ test('a chapter’s own monsters come out among its camps’ guards, and its bos
   w2.stepCastle(woods.world, w2.castle, 1000, m2);
   assert.deepEqual(m2.list.filter((m) => m.camp === w2.castle.id && m !== boss).map((m) => m.kind), ['shroom', 'shroom', 'shroom', 'shroom']);
   assert.ok(kindOf('shroom').hearts > 0);
-  // Anywhere else, King Grumble holds the castle, stomping and only that.
-  const own = new AdventureSim({ camps: woods.camps, stage: 2 }, 1);
-  const m3 = new MonsterSim(1);
-  for (const c of own.camps) if (c.kind === 'camp') c.freed = true;
-  own.wake(woods.world, own.castle, [], m3, 1);
-  assert.equal(m3.list[0].kind, 'king');
-  assert.deepEqual(m3.list[0].plan.moves.map((v) => v.move), ['stomp']);
 });

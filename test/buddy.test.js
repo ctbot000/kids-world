@@ -1,8 +1,8 @@
 // The AI friend: invited to an island of this server, it comes in under its
 // own name and look, says hello and answers what friends say (with what the
 // model was told about it), builds when asked, walks after its friend and
-// flies to one far away, helps a dizzy friend up and bops a monster coming at
-// one, asked for their MBTI, asks a friend a few questions first and
+// flies to one far away and bops a monster coming at one, asked for their
+// MBTI, asks a friend a few questions first and
 // remembers the answers by their username; it goes home when asked, when left alone, and stays away from an island
 // whose owner sent it home. The admin page changes its settings, shows the
 // islands it is on with what is said there, has it say something there as
@@ -196,8 +196,8 @@ test('at hide and seek it hides where it is instead of following its friend, and
   await eventually(() => away(pip, me) < 4.5);
 });
 
-test('it helps a dizzy friend up, and bops a monster coming at one', async () => {
-  const { room, rooms, island } = server({ adventure: true, theme: 'sunny', seed: 5 });
+test('it bops a monster coming at a friend', async () => {
+  const { room, rooms, island } = server({ theme: 'sunny', seed: 5 });
   const minji = child(room);
   const buddy = friend({ llm: model(), rooms });
   await buddy.start();
@@ -205,13 +205,9 @@ test('it helps a dizzy friend up, and bops a monster coming at one', async () =>
   const pip = await eventually(() => buddyIn(room));
   const me = room.players.get(minji.me);
   minji.say({ t: 'm', s: [pip.s[0] + 6, pip.s[1], pip.s[2], 0, 0, 0] });
-  me.hp = 1;
-  room.hurt(me.id, { id: 999, kind: 'blob', body: { x: me.s[0] + 1, z: me.s[2] } }, Date.now());
-  assert.ok(me.dizzyUntil > Date.now(), 'dizzy');
-  const helped = await eventually(() => minji.of('helped').find((m) => m.pid === me.id));
-  assert.equal(helped.by, pip.id);
-
-  room.settings.monsters = true;
+  // Monsters let in by Minji, the island's owner: everyone hears, Pip too.
+  minji.say({ t: 'host', cmd: 'settings', settings: { monsters: true } });
+  assert.equal(room.settings.monsters, true);
   const w = room.world;
   // Between them: Minji stands in the start's safe place, which a monster
   // keeps out of, so one put down further off goes round its edge, away up

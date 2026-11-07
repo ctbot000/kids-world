@@ -6,14 +6,14 @@
 // to bump a heart off them. Nobody can jump on it: two bops see it off.
 // Being a flyer it crosses the water where the others cannot, keeps out of
 // the safe places as they do, flits along a tower defense road quicker
-// than the marching blobs, hangs over a camp on an adventure island and
-// comes back when popped — and its wings beat together, its eyes glowing
+// than the marching blobs, hangs over a camp on Adventure Isle and comes
+// back when popped — and its wings beat together, its eyes glowing
 // red at night.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from '../public/vendor/three.module.js';
 import * as B from '../public/js/shared/blocks.js';
-import { GUARD_BACK_MS } from '../public/js/shared/adventure.js';
+import { AdventureSim, GUARD_BACK_MS } from '../public/js/shared/adventure.js';
 import { CRITTER_TYPES } from '../public/js/shared/critters.js';
 import { LEAK, waveOf } from '../public/js/shared/defense.js';
 import { HIT_MS, BUMP_HP, isHeavy, KINDS, maxHp, MONSTER_KINDS, MONSTER_STATES, MonsterSim, MOSQUITO_HOVER, QUEEN_HEAL_MS, QUEEN_LONELY_MS, QUEEN_NEAR, SAFE_RADIUS, unpackMonster } from '../public/js/shared/monsters.js';
@@ -257,10 +257,13 @@ test('mosquitos fly among the waves from the second one, spread through them and
 });
 
 test('a mosquito guards a camp on the wing, and popped it comes back', () => {
-  const time = clock();
-  const room = new Room({ code: '123456', theme: 'sunny', seed: 3, adventure: true, now: time.now });
+  const { room, time } = meadowRoom({ monsters: false });
   const a = join(room);
-  const camp = room.adventure.camps.find((c) => c.kind === 'camp');
+  // Two of Adventure Isle's camps on the meadow (adventure.js): this one, and
+  // a deeper one far off, for the Queen Mosquito, asleep.
+  const s = room.world.spawn;
+  room.adventure = new AdventureSim({ camps: [{ id: 1, kind: 'camp', x: s.x + 25, y: 11, z: s.z, r: 7 }, { id: 2, kind: 'camp', x: 12.5, y: 11, z: 12.5, r: 7 }] }, 1);
+  const camp = room.adventure.campById(1);
   const bug = () => room.monsters.list.filter((m) => m.camp === camp.id && m.kind === 'mosquito');
   const stand = (x) => room.receive(a, { t: 'm', s: [x, camp.y, camp.z, 0, 0, 0] });
   // Into the camp: out come its monsters, the mosquito among them, and it

@@ -36,11 +36,11 @@ const onFoot = (id, x, y, z) => ({ id, x, y, z, flying: false, riding: false, di
 test('on the isle’s higher stages a camp’s monsters come back only so many times, so a camp is never hopeless', () => {
   const stage = 6;
   const made = buildIsle({ stage, seed: 3 });
-  const sim = new AdventureSim({ camps: made.camps, stage, story: true }, 1);
+  const sim = new AdventureSim({ camps: made.camps, stage }, 1);
   const monsters = new MonsterSim(1);
   const c = sim.campById(1);
   sim.wake(made.world, c, [], monsters, 1);
-  assert.equal(c.reserve, reserveFor(1, stage, true));
+  assert.equal(c.reserve, reserveFor(1, stage));
   // Each one popped comes back out of the reserve, until it is gone.
   const start = c.reserve;
   for (let i = 0; i < start; i++) sim.guardGone(monsters.list.find((m) => m.camp === c.id && m.kind !== 'queen' && !m.champion), 1000 + i);
@@ -52,19 +52,16 @@ test('on the isle’s higher stages a camp’s monsters come back only so many t
   sim.sleep(c, monsters);
   sim.wake(made.world, c, [], monsters, 1);
   assert.equal(c.reserve, 0);
-  // On the first stages, and on an island of your own, they always come back.
-  const early = new AdventureSim({ camps: buildIsle({ stage: 2, seed: 3 }).camps, stage: 2, story: true }, 1);
+  // On the first stages they always come back.
+  const early = new AdventureSim({ camps: buildIsle({ stage: 2, seed: 3 }).camps, stage: 2 }, 1);
   early.wake(made.world, early.campById(1), [], new MonsterSim(2), 1);
   assert.equal(early.campById(1).reserve, Infinity);
-  const own = new AdventureSim({ camps: made.camps, stage: 1 }, 1);
-  own.wake(made.world, own.campById(1), [], new MonsterSim(3), 1);
-  assert.equal(own.campById(1).reserve, Infinity);
 });
 
 test('a flag slides back down while the camp’s monsters hold it, and half way up they ambush whoever is raising it, once', () => {
   const stage = 5;
   const made = buildIsle({ stage, seed: 3 });
-  const sim = new AdventureSim({ camps: made.camps, stage, story: true }, 1);
+  const sim = new AdventureSim({ camps: made.camps, stage }, 1);
   const monsters = new MonsterSim(1);
   const c = sim.campById(1);
   const me = onFoot(1, c.x + 1, c.y, c.z);
@@ -89,7 +86,7 @@ test('a flag slides back down while the camp’s monsters hold it, and half way 
   for (let t = 0; t < 200 && !more.some((n) => n.t === 'freed'); t++) sim.stepCamp(made.world, c, 0.25, 30000 + t * 250, [me], monsters, 9, more);
   assert.deepEqual(more.map((n) => n.t), ['freed']);
   // On stage 1 nothing slides back, and there is no ambush.
-  const first = new AdventureSim({ camps: buildIsle({ stage: 1, seed: 3 }).camps, stage: 1, story: true }, 1);
+  const first = new AdventureSim({ camps: buildIsle({ stage: 1, seed: 3 }).camps, stage: 1 }, 1);
   const c1 = first.campById(1);
   const m1 = new MonsterSim(4);
   first.wake(made.world, c1, [me], m1, 1);

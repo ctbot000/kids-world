@@ -383,7 +383,7 @@ test('a toy weapon pops a blob in fewer bops, and only from as far as it reaches
 });
 
 test('King Grumble feels a Star Hammer\'s bop twice, and three times over when dazed', () => {
-  const king = () => ({ shielded: false, king: { id: 9, hearts: 30, max: 30, hits: new Map() } });
+  const king = () => ({ shielded: false, story: { final: false }, king: { id: 9, hearts: 30, max: 30, hits: new Map() } });
   const a = king();
   assert.equal(AdventureSim.prototype.hitKing.call(a, 1, 0, false, weaponOf('hammer').king).hearts, 28);
   const b = king();

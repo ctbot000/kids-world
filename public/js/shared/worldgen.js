@@ -1,12 +1,11 @@
 // Makes a new island from a seed: hills and a mountain, beaches, a pond,
 // trees (some of them fruit trees of the island's own fruit), flowers,
 // seashells, jewels in the rock and a mine into each mountain, animal
-// friends, and a spot for everyone to arrive at; on an adventure island, the
-// grumpy monsters' camps and King Grumble's castle too; on a fun park
-// island, the park in the middle (park.js); on a racing island, the race
-// track there instead (race.js); on an escape island, the escape house
-// (escape.js).
-import { buildCamps } from './adventure.js';
+// friends, and a spot for everyone to arrive at; on a tower defense island,
+// the monsters' road too (defense.js); on a fun park island, the park in the
+// middle (park.js); on a racing island, the race track there instead
+// (race.js); on an escape island, the escape house (escape.js). (Adventure
+// Isle's maps are made by isle-maps.js.)
 import { buildDefense } from './defense.js';
 import { buildPark, inPark, PARK_BLEND, PARK_HALF } from './park.js';
 import { buildRace } from './race.js';
@@ -70,11 +69,9 @@ export function palette(theme) {
   }
 }
 
-// adventure: with monster camps all over it, to free (see adventure.js);
 // defense: with a road for monsters to march along, and towers to build
-// beside it (see defense.js); stage: the public adventure island's stage,
-// for how many camps it gets.
-export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, adventure = false, defense = false, stage = 1 } = {}) {
+// beside it (see defense.js).
+export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, defense = false } = {}) {
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);
@@ -509,20 +506,11 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   const vehicles = placeVehicles(world, new Rng(seed ^ 0x4cf5ad43), mines, parkClear);
   critters.push(...vehicles);
 
-  // ---------------------------------------------------------------- adventure
-  // Last of all, from randomness of its own, on top of the island as it
-  // would be without: the monsters' camps, and King Grumble's castle.
-  let camps = [];
-  if (adventure) {
-    const made = buildCamps(world, new Rng(seed ^ 0x6a09e667), { pal, trees, critters, mines, stage });
-    camps = made.camps;
-    critters.splice(0, critters.length, ...made.critters);
-  }
-
   // ---------------------------------------------------------------- tower defense
-  // Or, the same way, the monsters' road from their gate to the Star Stone.
+  // Last of all, from randomness of its own, on top of the island as it
+  // would be without: the monsters' road from their gate to the Star Stone.
   let road = null;
-  if (defense && !adventure) {
+  if (defense) {
     const made = buildDefense(world, new Rng(seed ^ 0x3c6ef372 ^ 0x9e3779b9), { pal, trees, critters, mines });
     if (made) {
       road = made.defense;
@@ -533,17 +521,17 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // ---------------------------------------------------------------- riding together
   // After all that, so it all comes out just as before them: a bus and a
   // ferry, clear of everything else, with dice of their own.
-  const buses = placeBuses(world, new Rng(seed ^ 0x3243f6a8), [...busesClearOf(vehicles, camps, road), ...parkClear]);
+  const buses = placeBuses(world, new Rng(seed ^ 0x3243f6a8), [...busesClearOf(vehicles, [], road), ...parkClear]);
   critters.push(...buses);
 
   // ---------------------------------------------------------------- flying
   // And after those, the same way: a helicopter and a hot-air balloon.
-  const aircraft = placeAircraft(world, new Rng(seed ^ 0x13198a2e), [...busesClearOf([...vehicles, ...buses], camps, road), ...parkClear]);
+  const aircraft = placeAircraft(world, new Rng(seed ^ 0x13198a2e), [...busesClearOf([...vehicles, ...buses], [], road), ...parkClear]);
   critters.push(...aircraft);
 
   // ---------------------------------------------------------------- kicking along
   // And after those, the same way: a kick scooter by where everyone comes in.
-  critters.push(...placeScooters(world, new Rng(seed ^ 0x85ebca6b), [...busesClearOf([...vehicles, ...buses, ...aircraft], camps, road), ...parkClear]));
+  critters.push(...placeScooters(world, new Rng(seed ^ 0x85ebca6b), [...busesClearOf([...vehicles, ...buses, ...aircraft], [], road), ...parkClear]));
 
   // On a zoo island, as many of the island's own animals as it takes are
   // left out to make room for the zoo's, so it has them all and every
@@ -553,7 +541,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       if (!CRITTER_INFO[critters[i].type].vehicle) critters.splice(i, 1);
     }
   }
-  return { world, critters, fruit, mines, camps, defense: road };
+  return { world, critters, fruit, mines, defense: road };
 }
 
 // ---------------------------------------------------------------- jewels

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { ambushFor, campCount, cleanStage, guardBackMs, guardsFor, hazardEvery, kingHearts, raiseSeconds, reserveFor, slideFor, stageGap } from '../public/js/shared/adventure.js';
+import { ambushFor, cleanStage, guardBackMs, guardsFor, hazardEvery, kingHearts, raiseSeconds, reserveFor, slideFor, stageGap } from '../public/js/shared/adventure.js';
 import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
@@ -64,12 +64,6 @@ test('each stage is harder than the last, up to the last, and none is ever hopel
   assert.equal(cleanStage(2.5), 1);
   assert.equal(cleanStage(99999), 9999);
 
-  // Camps: three on a cozy island at stage 1, one more every second stage,
-  // four more at the most.
-  const cozy = { W: 128, D: 128 };
-  assert.deepEqual([1, 3, 5, 9, 50].map((s) => campCount(cozy, s)), [3, 4, 5, 7, 7]);
-  assert.equal(campCount(cozy), campCount(cozy, 1), 'an island on its own is stage 1');
-
   // Guards in a camp: one more than there are friends (up to five), one more
   // again every second stage, nine at the most.
   assert.deepEqual([1, 2, 3, 4, 8].map((n) => guardsFor(n)), [2, 3, 4, 5, 5]);
@@ -85,12 +79,12 @@ test('each stage is harder than the last, up to the last, and none is ever hopel
   assert.equal(kingHearts(4, 400), 144, 'no harder than four times');
   assert.deepEqual([1, 12, 400].map(stageGap), [1, 0.725, 2 / 3]);
 
-  // On the isle: popped monsters back sooner, but only so many times from the
-  // third stage (so a camp is never hopeless); a flag sliding back while they
-  // hold it from the second, and an ambush half way up it from the third.
-  assert.deepEqual([[1, true], [12, true], [12, false]].map(([s, isle]) => guardBackMs(s, isle)), [20000, 13400, 20000]);
-  assert.deepEqual([[1, 2, true], [1, 3, true], [1, 12, true], [1, 12, false]].map(([n, s, isle]) => reserveFor(n, s, isle)), [Infinity, 3, 14, Infinity]);
-  assert.deepEqual([[1, true], [2, true], [12, true], [12, false]].map(([s, isle]) => slideFor(s, isle)), [0, 0.01, 0.04, 0]);
+  // Popped monsters back sooner, but only so many times from the third stage
+  // (so a camp is never hopeless); a flag sliding back while they hold it
+  // from the second, and an ambush half way up it from the third.
+  assert.deepEqual([1, 12].map((s) => guardBackMs(s)), [20000, 13400]);
+  assert.deepEqual([[1, 2], [1, 3], [1, 12]].map(([n, s]) => reserveFor(n, s)), [Infinity, 3, 14]);
+  assert.deepEqual([1, 2, 12].map((s) => slideFor(s)), [0, 0.01, 0.04]);
   assert.deepEqual([[1, 2], [1, 3], [3, 12], [8, 400]].map(([n, s]) => ambushFor(n, s)), [0, 1, 6, 6]);
   assert.deepEqual([2, 12].map(hazardEvery), [12000, 5000]);
 

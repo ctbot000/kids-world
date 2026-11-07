@@ -57,12 +57,8 @@ test('every island has a bus near where everyone comes in and a ferry on the sea
   }
 });
 
-test('on an adventure or tower defense island, the bus and the ferry keep clear of the camps and the road', () => {
+test('on a tower defense island, the bus and the ferry keep clear of the road', () => {
   for (const seed of [5, 11, 4242]) {
-    const adv = generate({ seed, theme: 'sunny', size: 'small', adventure: true });
-    for (const v of adv.critters.filter((c) => c.type === 'bus' || c.type === 'ferry')) {
-      for (const c of adv.camps) assert.ok(Math.hypot(v.x - c.x, v.z - c.z) >= c.r + 3, `${seed}: the ${v.type} clear of camp ${c.id}`);
-    }
     const def = generate({ seed, theme: 'sunny', size: 'small', defense: true });
     if (!def.defense) continue;
     for (const v of def.critters.filter((c) => c.type === 'bus' || c.type === 'ferry')) {

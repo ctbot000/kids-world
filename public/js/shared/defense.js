@@ -218,8 +218,10 @@ function findWay(world, map, from, to, { blocked, used, avoid, seed }) {
 // the monsters' gate as far from the start as there is room for, the Star
 // Stone a few steps from the start, a winding road of pebbles three wide
 // between them (with a bridge where it crosses water), and wooden pads for
-// towers beside it, every few steps on one side or the other. pal, trees,
-// critters, mines: as for buildCamps (adventure.js). Returns
+// towers beside it, every few steps on one side or the other. pal: the
+// island's ground (worldgen.js palette); trees: as worldgen.js grew them,
+// to take down those in the way; critters: the animals and vehicles (the
+// animals in the way move out); mines: their ways in, to keep clear. Returns
 // { defense, critters }, defense as { path, pads, stone, gate }: path, the
 // cells down the middle of the road from the gate to the Star Stone, as
 // [x, y, z] with y where feet stand on it; each pad as { id, x, y, z } (its

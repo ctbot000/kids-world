@@ -12,8 +12,9 @@ const $ = (id) => document.getElementById(id);
 
 function islandRow(h, island, watch) {
   const theme = THEMES.find((t) => t.key === island.theme);
-  const kind = island.public ? '🌟 Adventure Isle' : island.watch ? '🏢 CTB' : island.adventure ? '⚔️ Adventure' : island.defense ? '🛡️ Tower defense' : '';
-  const stage = island.adventure ? `${island.public ? `stage ${island.adventure.stage}, ` : ''}${island.adventure.freed} of ${island.adventure.camps} camps free` : island.defense ? `wave ${island.defense.wave} of ${island.defense.waves}` : '';
+  // (A stage of Adventure Isle already won is no longer the public one.)
+  const kind = island.public || island.adventure ? '🌟 Adventure Isle' : island.watch ? '🏢 CTB' : island.defense ? '🛡️ Tower defense' : '';
+  const stage = island.adventure ? `stage ${island.adventure.stage}, ${island.adventure.won ? 'won' : `${island.adventure.freed} of ${island.adventure.camps} camps free`}` : island.defense ? `wave ${island.defense.wave} of ${island.defense.waves}` : '';
   return h(
     'li',
     { class: 'island-open' },

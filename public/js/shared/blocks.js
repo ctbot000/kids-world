@@ -97,7 +97,7 @@ export const CLOUD = def(18, 'cloud', { name: 'Cloud', category: 'nature', tiles
 export const CRYSTAL = def(422, 'crystal', { name: 'Glow Crystal', tiles: 'crystal', light: 11, sound: 'glass' });
 export const CRYSTAL_BLUE = def(423, 'crystal-blue', { name: 'Blue Glow Crystal', tiles: 'crystal-blue', light: 11, sound: 'glass' });
 export const SNOWY_LEAVES = def(24, 'snowy-leaves', { name: 'Snowy Leaves', category: 'nature', tiles: { top: 'snow', side: 'snowy-leaves', bottom: 'pine-leaves' }, sound: 'snow' });
-// The grumpy monsters' ground, round their camps on an adventure island
+// The grumpy monsters' ground, round their camps on Adventure Isle
 // (shared/adventure.js): dark and gloomy until the camp is freed, when it
 // turns back into the island's own grass, snow or frosting. Natural ground,
 // not something to build with.
@@ -302,7 +302,7 @@ export const ARCADE_PAIRS = furniture(162, 'arcade-pairs', { name: 'Picture Pair
 // which only make its picture in the toy box.
 export const GASHAPON = furniture(204, 'gashapon', { name: 'Gashapon Machine', color: '#e8453c', after: 162, sound: 'stone', real: 'gashapon' });
 // The Monster Gashapon: a gashapon of monster figures that turns up on its
-// own now and then on adventure islands and goes again (adventure.js). Only
+// own now and then on Adventure Isle and goes again (adventure.js). Only
 // the island puts it down or takes it away (`islandOnly`: nobody picks it
 // up or builds over it), and it is not in the toy box.
 export const MONSTER_GASHAPON = furniture(240, 'monster-gashapon', { name: 'Monster Gashapon', color: '#5b2a86', category: false, light: 8, sound: 'stone', real: 'monster-gashapon', islandOnly: true });

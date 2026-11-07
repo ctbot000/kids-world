@@ -1,6 +1,6 @@
 // One visit to an island, from this player's side: the copy of the world,
 // you walking about, your friends, the animals and any monsters moving
-// smoothly, your HP, an adventure island's camps and flags, a tower
+// smoothly, your HP, Adventure Isle's camps and flags, a tower
 // defense island's waves and towers, the tools,
 // and everything said and done. Talks to the island through a link (see
 // net.js) and draws through the renderer.
@@ -353,10 +353,10 @@ export class Game extends EventTarget {
     this.wasInWater = false;
     this.seenNight = false;
     this.seenRainbow = false;
-    // An adventure island's camps and King Grumble (shared/adventure.js), as
+    // Adventure Isle's camps and its stage's boss (shared/adventure.js), as
     // the island tells of them (null on any other island); whether you sit
     // dizzy there, out of HP, until a friend helps you up; the fireworks
-    // when it is all free; and the extra-credit quizzes a conquered one
+    // when it is all free; and the extra-credit quizzes a conquered stage
     // offers you (shared/quiz.js) — the offer, and the quiz you are taking.
     this.adventure = null;
     this.dizzy = false;
@@ -1476,9 +1476,9 @@ export class Game extends EventTarget {
     this.emit('hp', this.hp);
   }
 
-  // A monster bumped into someone: you are knocked back (further by King
-  // Grumble), or out of HP sent home, or on an adventure island left
-  // sitting dizzy for a friend to help up; a friend gets a little burst of stars.
+  // A monster bumped into someone: you are knocked back (further by a
+  // boss), or out of HP sent home, or on Adventure Isle left sitting dizzy
+  // for a friend to help up; a friend gets a little burst of stars.
   bumped(msg) {
     const entry = this.monsters.get(msg.id);
     if (entry) entry.model.squash = 0.3;
@@ -2058,7 +2058,7 @@ export class Game extends EventTarget {
   // the picture jolts, each one goes white and squashes, a burst flies off it
   // from where the blow met it, and it hops back leaning away from the blow; the
   // whack is as heavy as the weapon (kind) is. The blow that takes a monster's
-  // last heart lands harder still. Not King Grumble safe in his bubble: that
+  // last heart lands harder still. Not a boss safe in its bubble: that
   // bounces.
   strike(hits, kind, dragons = []) {
     const look = IMPACTS[kind] ?? IMPACTS.punch;
@@ -2794,9 +2794,11 @@ export class Game extends EventTarget {
     }
   }
 
-  // ------------------------------------------------ an adventure island
+  // ------------------------------------------------ Adventure Isle
 
-  // The camps as the island tells of them as you arrive, each with its flag pole.
+  // The camps as the island tells of them as you arrive, each with its flag
+  // pole: only ever on Adventure Isle (an island hosted by a page from
+  // before it was the only adventure may still tell of some: not here).
   setAdventure(a) {
     this.renderer.clearFlags();
     this.adventure = null;
@@ -2804,45 +2806,43 @@ export class Game extends EventTarget {
     // a conquered one, none are yours to take.
     this.quizOffer = null;
     this.quiz = null;
-    if (a && Array.isArray(a.camps) && a.camps.length) {
+    if (this.shared && a && Array.isArray(a.camps) && a.camps.length) {
       const camps = new Map();
       for (const c of a.camps) {
         if (!Number.isInteger(c?.id) || ![c.x, c.y, c.z, c.r].every(Number.isFinite)) continue;
         const kind = c.kind === 'castle' ? 'castle' : 'camp';
         camps.set(c.id, { id: c.id, kind, x: c.x, y: c.y, z: c.z, r: c.r, freed: c.freed === true, progress: Number(c.progress) || 0, friends: 0, guarded: false, flag: this.renderer.addFlag(c.id, kind) });
       }
-      // The public adventure island's stage, 1 on any other adventure island;
-      // there, the chapter of its story the stage is (shared/isle-story.js).
+      // The isle's stage, and the chapter of its story it is
+      // (shared/isle-story.js).
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
       // (And which journey round the story this is: server/adventure.js.)
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
-      this.adventure = { camps, won: a.won === true, stage, journey, king: null, shield: true, story: this.shared ? chapterOf(stage) : null };
+      this.adventure = { camps, won: a.won === true, stage, journey, king: null, shield: true, story: chapterOf(stage) };
       this.adventureNews(a);
     }
     this.emit('adventure');
-    // On the isle, the chapter's story is told as you arrive (ui.js).
-    if (this.adventure?.story) this.emit('story');
+    // The chapter's story is told as you arrive (ui.js).
+    if (this.adventure) this.emit('story');
   }
 
-  // What a camp of the adventure is called: on the isle, its name in the
-  // story ('Seaside Village', the lair's for King Grumble's castle); on any
-  // other island, 'Camp 2' or 'King Grumble's castle'.
+  // What a camp of the isle is called: its name in the story ('Seaside
+  // Village'), and the lair's for the boss's castle.
   campLabel(c) {
-    const story = this.adventure?.story;
-    if (story) return c.kind === 'castle' ? story.lair : (story.camps[c.id - 1] ?? `Camp ${c.id}`);
-    return c.kind === 'castle' ? 'King Grumble’s castle' : `Camp ${c.id}`;
+    const { story } = this.adventure;
+    return c.kind === 'castle' ? story.lair : (story.camps[c.id - 1] ?? `Camp ${c.id}`);
   }
 
-  // Who holds the castle (shared/bosses.js): on the isle the chapter's boss,
-  // anywhere else King Grumble; { kind, icon, name, moves, ... }.
+  // Who holds the lair (shared/bosses.js): the chapter's boss — or, away
+  // from the isle, King Grumble, who marches with a tower defense island's
+  // waves; { kind, icon, name, moves, ... }.
   bossInfo() {
-    const story = this.adventure?.story;
-    const kind = story?.boss ?? 'king';
-    return { kind, ...planOf(kind, Boolean(story)) };
+    const kind = this.adventure?.story.boss ?? 'king';
+    return { kind, ...planOf(kind) };
   }
 
   // How far up each flag is, how many friends are by it and whether its
-  // monsters guard it, and King Grumble's hearts, a few times a second.
+  // monsters guard it, and the boss's hearts, a few times a second.
   adventureNews(msg) {
     const adv = this.adventure;
     if (!adv) return;
@@ -2886,8 +2886,7 @@ export class Game extends EventTarget {
         this.sound.play('creak');
       }
     }
-    const story = adv.story;
-    const line = story?.freed[c.id - 1];
+    const line = adv.story.freed[c.id - 1];
     if (line) {
       this.emit('toast', { icon: '🚩', text: `${line}${mine ? ' It is a safe place now.' : ''}` });
     } else {
@@ -2897,7 +2896,7 @@ export class Game extends EventTarget {
     this.emit('adventure');
   }
 
-  // Every camp free: King Grumble's bubble popped.
+  // Every camp free: the boss's bubble popped.
   shieldDown() {
     const adv = this.adventure;
     if (!adv?.shield) return;
@@ -2908,12 +2907,11 @@ export class Game extends EventTarget {
     }
     this.sound.play('shield');
     const boss = this.bossInfo();
-    const lair = adv.story ? `the ${adv.story.lair}` : 'his castle';
-    this.emit('toast', { icon: '🫧', text: `Every camp is free! ${boss.name}’s bubble popped. Off to ${lair}, and pop ${boss.kind === 'moltok' ? 'it' : 'him'}!` });
+    this.emit('toast', { icon: '🫧', text: `Every camp is free! ${boss.name}’s bubble popped. Off to the ${adv.story.lair}, and pop ${boss.kind === 'moltok' ? 'it' : 'him'}!` });
     this.emit('adventure');
   }
 
-  // King Grumble bopped: a heart off him, or a boing off his bubble.
+  // The lair's boss bopped: a heart off it, or a boing off its bubble.
   kingHit(msg) {
     const entry = this.monsters.get(msg.id);
     const p = entry?.model.group.position;
@@ -2959,8 +2957,8 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: '⚔️', text: `An ambush at ${this.campLabel(c)}! ${msg.n > 1 ? `${msg.n} more monsters come` : 'Another monster comes'} running to pull the flag down — pop them, then keep raising it!` });
   }
 
-  // King Grumble landing from a stomp: a ring rushing out over the ground,
-  // dust, a thump, and the ground shaking under anyone near.
+  // A boss (or a Little Yeti) landing from a stomp: a ring rushing out over
+  // the ground, dust, a thump, and the ground shaking under anyone near.
   stomped(msg) {
     if (![msg.x, msg.y, msg.z].every(Number.isFinite) || !this.me) return;
     const d = Math.hypot(this.me.body.x - msg.x, this.me.body.z - msg.z);
@@ -3496,8 +3494,8 @@ export class Game extends EventTarget {
     this.profile.openCapsule(monster);
   }
 
-  // The adventure island's stage, for the Monster Gashapon's odds (1 on any
-  // island but the public one's higher stages).
+  // Adventure Isle's stage, for the Monster Gashapon's odds (1 anywhere
+  // else).
   gashaStage() {
     return this.adventure?.stage ?? 1;
   }

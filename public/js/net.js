@@ -86,7 +86,7 @@ class Link extends EventTarget {
 // ---------------------------------------------------------------- host
 
 export class HostLink extends Link {
-  // island: { theme, size, name, adventure, defense } for a new island, or { save } to open a saved one.
+  // island: { theme, size, name, defense } for a new island, or { save } to open a saved one.
   // watch: this page only looks round it, as nobody (Room.watchHere).
   constructor({ island, online = false, peerOptions = {}, watch = false } = {}) {
     super();
@@ -99,7 +99,6 @@ export class HostLink extends Link {
       theme: island.theme,
       size: island.size,
       name: island.name,
-      adventure: island.adventure === true,
       defense: island.defense === true,
       save: island.save ?? null,
       settings: island.settings ?? null,

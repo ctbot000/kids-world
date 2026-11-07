@@ -120,8 +120,6 @@ test('everything but the road comes out just as it would on the island without i
       }
     }
     assert.ok(same > w.W * w.D * 0.3, `${theme.key}: most of it (${same} columns) as it was`);
-    // Adventure islands have no road.
-    assert.equal(generate({ seed: 77, theme: theme.key, size: 'small', adventure: true, defense: true }).defense, null);
   }
 });
 

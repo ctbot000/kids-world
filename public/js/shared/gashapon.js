@@ -80,7 +80,7 @@ export const ALL_TOYS = [...TOYS, ...MONSTER_FIGURES];
 // A turn of the Monster Gashapon costs more.
 export const MONSTER_PRICE = 10;
 
-// The higher the stage of an adventure island, the likelier a rare monster
+// The higher the stage of Adventure Isle, the likelier a rare monster
 // figure: a rare one's weight grows by a quarter each stage (up to three
 // times), a super rare one's by a half (up to eight times). The capsule
 // toys, and stage 1, keep RARITIES' weights.
@@ -128,7 +128,7 @@ export const gashaponNear = (world, body, reach = 2.2) => cellNear(world, body, 
 // One turn of the handle: the toy in the capsule, and the colour of its
 // shell. rand: a function giving 0 to 1, Math.random by default; list: the
 // machine's toys (the Monster Gashapon's are MONSTER_FIGURES); stage: the
-// adventure island's, for how likely the rare ones are.
+// isle's, for how likely the rare ones are.
 export function drawToy(rand = Math.random, { list = TOYS, stage = 1 } = {}) {
   const total = list.reduce((n, t) => n + rarityWeight(t.rare, stage), 0);
   let r = rand() * total;

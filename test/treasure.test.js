@@ -2,11 +2,9 @@
 // the toy box), the island putting them down about the isle (out of the
 // camps, away from the start and each other), opening one for whoever has a
 // key and stands by it (the first of two at once), the open one going a
-// while after and another turning up later, none kept when the island is
-// put away, and what is inside.
+// while after and another turning up later, and what is inside.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AdventureSim } from '../public/js/shared/adventure.js';
 import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
 import { addProgress, keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
@@ -139,17 +137,6 @@ test('on the shared isle the room opens a chest for whoever stands by it, the fi
   // Nobody picks one up.
   room.receive(a, { t: 'edit', seq: 3, kind: 'pick', cells: [found[1].x, found[1].y, found[1].z, B.AIR] });
   assert.ok(isChest(room.world.get(found[1].x, found[1].y, found[1].z)));
-  // Put away and opened again, its chests are new ones.
-  const again = new Room({ save: JSON.parse(JSON.stringify(room.exportSave())), shared: true });
-  assert.equal(chestsIn(again.world).length, 0, 'none kept');
-});
-
-test('no chests on any adventure island but the shared isle', () => {
-  const room = new Room({ code: '123456', theme: 'sunny', size: 'small', seed: 11, adventure: true });
-  room.tick?.(0.05);
-  assert.equal(chestsIn(room.world).length, 0);
-  const adv = new AdventureSim({ camps: [] }, 1);
-  assert.equal(adv.chests.list.length, 0);
 });
 
 test('a chest holds coins, more on higher stages, and now and then an HP potion; opening them earns a sticker', () => {

@@ -2,8 +2,8 @@
 // reconnect tokens, the animals, the clock and the weather, sprouts growing
 // into trees, fruit growing back, crops growing on farmland (and the rain
 // and water close by watering it), what the island's owner allows, the
-// monsters when the owner lets them in (with everyone's HP), and on an
-// adventure island its camps to free (see adventure.js), and on a tower
+// monsters when the owner lets them in (with everyone's HP), and on a stage
+// of Adventure Isle its camps to free (see adventure.js), and on a tower
 // defense island the waves of monsters and the towers (see defense.js).
 //
 // Transport-agnostic. The host environment (the Node server, a host's
@@ -11,7 +11,7 @@
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
-import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HAZARD, HELP_REACH, helpHp } from './adventure.js';
+import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HAZARD, HELP_REACH, helpHp, retireCamps } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
@@ -180,11 +180,12 @@ export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const HAZARD_THROWER = { id: 0, kind: 'blob', plan: null, body: { x: 0, y: 0, z: 0 } };
 
 export class Room {
-  // Either { theme, size, name, seed, adventure, defense, stage } for a
-  // brand-new island, or { save }. stage: the public adventure island's
-  // (see shared/adventure.js); shared: an island everybody owns, so nobody
-  // becomes its owner — the public adventure island is one, and its toy box
-  // stays shut: nobody builds on it or brings anything to it.
+  // Either { theme, size, name, seed, defense } for a brand-new island, or
+  // { save }. shared: an island everybody owns, so nobody becomes its owner,
+  // and its toy box stays shut: nobody builds on it or brings anything to
+  // it. Adventure Isle is one, made with adventure on too (shared and
+  // adventure: a stage of the isle, server/adventure.js): stage, which one,
+  // and journey, how many times round its story this is.
   constructor({ code = '', theme = 'sunny', size = 'small', name = '', seed = 0, adventure = false, defense = false, save = null, settings = null, stage = 1, journey = 1, shared = false, now = () => Date.now(), log = () => {}, random = Math.random } = {}) {
     this.code = code;
     this.now = now;
@@ -242,8 +243,8 @@ export class Room {
     this.starAt = t + STAR_MS;
     this.farmAt = t + FARM_MS;
     this.farmedAt = t;
-    // The camps to free, on an adventure island (adventure.js), and King
-    // Grumble's landings still to work out (see stepMonsters).
+    // The camps to free, on Adventure Isle (adventure.js), and the stomps
+    // and leaps still to work out (see stepMonsters).
     this.adventure = null;
     this.advSent = '';
     this.stomps = [];
@@ -278,9 +279,9 @@ export class Room {
       const islandName = cleanIslandName(name) || randomIslandName(theme, random);
       // The shared isle, Adventure Isle, is the map of its stage's chapter
       // of the story (isle-maps.js), not a random island.
-      const story = this.shared && adventure;
-      const made = story ? buildIsle({ stage: this.stage, seed: s, journey: this.journey }) : generate({ seed: s, theme, size, name: islandName, adventure, defense: defense && !adventure, stage: this.stage });
-      if (story) made.world.name = islandName;
+      const isle = this.shared && adventure;
+      const made = isle ? buildIsle({ stage: this.stage, seed: s, journey: this.journey }) : generate({ seed: s, theme, size, name: islandName, defense });
+      if (isle) made.world.name = islandName;
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
@@ -288,7 +289,7 @@ export class Room {
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
-      if (made.camps.length) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, story, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
+      if (isle) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
       if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
@@ -920,7 +921,7 @@ export class Room {
     const z = Math.min(w.D, Math.max(0, s[2]));
     const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(16, s[4] | 0)), s[5] & 0xff];
     p.s = state;
-    // Up in the air (or flying, or swimming), for King Grumble's stomp to miss.
+    // Up in the air (or flying, or swimming), for a boss's stomp to miss.
     if (this.adventure) {
       const ground = w.groundBelow(Math.floor(x), Math.floor(y + 0.05), Math.floor(z)) + 1;
       if (state[5] & 1 || y - ground > 0.3) p.airAt = this.now();
@@ -1385,7 +1386,7 @@ export class Room {
       // An island anyone may come to straight from a link without logging
       // in (whoever keeps it sets this): the CTB island (server/ctb-office.js).
       ...(this.watchable === true ? { watch: true } : {}),
-      // An adventure island: how many camps it has, how many are free, and whether all of it is.
+      // A stage of Adventure Isle: how many camps it has, how many are free, whether all of it is, and which stage.
       ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
       // A tower defense island: the wave it is on, of how many, and whether every one is done.
       ...(this.defense ? { defense: this.defense.tally() } : {}),
@@ -1706,11 +1707,11 @@ export class Room {
     this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? bumps / 2 : bumps), msg);
   }
 
-  // HP off someone, by whatever took it — a monster's bump, King Grumble's
-  // stomp, the lava — with the safe moment after, and with none left, they
-  // sit dizzy where they are on an adventure island while a friend there
-  // could come and help them up; otherwise back they go to the nearest safe
-  // place, with all their HP again. The message says what happened.
+  // HP off someone, by whatever took it — a monster's bump, a boss's stomp,
+  // the lava — with the safe moment after, and with none left, they sit
+  // dizzy where they are on Adventure Isle while a friend there could come
+  // and help them up; otherwise back they go to the nearest safe place,
+  // with all their HP again. The message says what happened.
   knock(p, now, hp, msg) {
     p.hp = hp;
     p.bumpAt = now;
@@ -2569,10 +2570,9 @@ export class Room {
     this.broadcast({ t: 'arc', s: pack });
   }
 
-  // A bop for the castle's boss (King Grumble, or on the isle the chapter's:
-  // bosses.js): nothing in its bubble, otherwise a heart (three while it
-  // sits dazed; it is too big to knock back); with none left it goes pop,
-  // and the whole island is free.
+  // A bop for the lair's boss (the chapter's: bosses.js): nothing in its
+  // bubble, otherwise a heart (three while it sits dazed; it is too big to
+  // knock back); with none left it goes pop, and the whole stage is won.
   bopKing(p, m, now, times = 1) {
     const hit = this.adventure?.hitKing(p.id, now, now < (m.dazed ?? 0), times);
     if (!hit || hit.wait) return;
@@ -2592,9 +2592,9 @@ export class Room {
     if (hit.beaten) this.winAdventure(p, m);
   }
 
-  // A camp of an adventure island freed: its monsters go pop, its gloomy
-  // ground turns back into the island's own, and everyone hears (and, with
-  // the last camp, that King Grumble's bubble popped).
+  // A camp of Adventure Isle freed: its monsters go pop, its gloomy ground
+  // turns back into the island's own, and everyone hears (and, with the
+  // last camp, that the boss's bubble popped).
   campFreed(news) {
     const c = news.camp;
     for (const m of news.gone) {
@@ -2660,9 +2660,8 @@ export class Room {
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
   }
 
-  // The castle's boss popped (King Grumble, or on the isle the chapter's):
-  // every camp's monster goes, its castle is free, and
-  // so is the island, for everyone on it.
+  // The lair's boss popped (the chapter's): every camp's monster goes, its
+  // lair is free, and so is the island, for everyone on it.
   winAdventure(p, king) {
     const adv = this.adventure;
     for (const m of adv.win(this.monsters)) {
@@ -2696,9 +2695,8 @@ export class Room {
     }
   }
 
-  // Monsters turned off: every one roaming about goes (those of an adventure
-  // island's camps stay), and, unless those are about, everyone has all their
-  // HP.
+  // Monsters turned off: every one roaming about goes (those of camps to
+  // free stay), and, unless those are about, everyone has all their HP.
   noMonsters() {
     this.monsters.clearRoaming();
     if (this.adventure?.active) return;
@@ -3104,7 +3102,6 @@ export class Room {
       nextPid: this.nextPid,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, look: p.look, ...(p.who ? { who: p.who } : {}) })),
       tokens: [...this.tokens],
-      ...(this.adventure ? { adventure: this.adventure.save() } : {}),
       ...(this.defense ? { defense: this.defense.save() } : {}),
       ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
       ...(this.kits.size ? { kits: this.packKits() } : {}),
@@ -3153,22 +3150,24 @@ export class Room {
     }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';
-    this.adventure = AdventureSim.load(save.adventure, this.world, (seed ^ 0x510e527f ^ (Number(save.savedAt) | 0)) >>> 0);
-    if (this.adventure) this.stage = this.adventure.stage;
-    this.defense = this.adventure ? null : DefenseSim.load(save.defense, this.world, (seed ^ 0x2b992ddf ^ (Number(save.savedAt) | 0)) >>> 0);
+    // An island made with ⚔️ Adventure on, from when any island could be
+    // one: an island like any other now, its camps' gloomy ground grass
+    // again (adventure.js retireCamps).
+    const camps = retireCamps(save.adventure, this.world, palette(this.world.theme), new Rng(seed ^ 0x510e527f));
+    this.defense = DefenseSim.load(save.defense, this.world, (seed ^ 0x2b992ddf ^ (Number(save.savedAt) | 0)) >>> 0);
     // And a bus and a ferry, to ride in together, clear of the camps or the road.
     if (v < 8) {
-      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), camps, this.defense);
       for (const f of placeBuses(this.world, new Rng(seed ^ 0x3243f6a8), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     // And a helicopter and a hot-air balloon, the same way.
     if (v < 9) {
-      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), camps, this.defense);
       for (const f of placeAircraft(this.world, new Rng(seed ^ 0x13198a2e), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     // And a kick scooter, the same way.
     if (v < 11) {
-      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), this.adventure?.camps ?? [], this.defense);
+      const clear = busesClearOf(this.critters.list.filter((c) => CRITTER_INFO[c.type].vehicle), camps, this.defense);
       for (const f of placeScooters(this.world, new Rng(seed ^ 0x85ebca6b), clear)) this.critters.add(f.type, f.x, f.y, f.z, null, f.yaw);
     }
     const time = finite(save.env?.time) ? ((save.env.time % 1) + 1) % 1 : 0.3;

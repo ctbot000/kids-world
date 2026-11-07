@@ -1,6 +1,6 @@
 // Puts the island on screen: the terrain, the sky, players and their pets, animals and monsters,
 // the pictures on drawing boards,
-// an adventure island's flags (and the stomps of King Grumble), the preview
+// Adventure Isle's flags (and the stomps of its bosses), the preview
 // of what a tool is about to do, and a camera that follows you around (and
 // never ends up inside a hill). Everything that moves is a glossy toy under a
 // studio's light (render/toon.js); at the better picture qualities it casts
@@ -216,7 +216,7 @@ export class Renderer {
     // Everyone's pets, by their owner.
     this.pets = new Map();
     this.monsters = new Map();
-    // An adventure island's flags, by camp, and stomps rushing out over the ground.
+    // Adventure Isle's flags, by camp, and stomps rushing out over the ground.
     this.flags = new Map();
     this.shockwaves = [];
     // What shows of the bosses' moves before they come (boss-fx.js).

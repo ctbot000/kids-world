@@ -146,7 +146,7 @@ export const hasPower = (look, power) => outfitOf(look?.outfit)?.power === power
 
 // An HP potion: the one thing the shop sells that is used up. Bought with
 // coins, carried with them (profile.js) and drunk to fill your HP right up,
-// at once, even mid-fight — or sitting dizzy on an adventure island, to get
+// at once, even mid-fight — or sitting dizzy on Adventure Isle, to get
 // up on your own (the island's half of it is room.js, 'potion').
 export const POTION = {
   key: 'potion',

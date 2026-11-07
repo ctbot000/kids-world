@@ -1,27 +1,24 @@
-// Adventure islands: monster camps all over the island, more on a bigger
-// one, with King Grumble's castle furthest from the start; built on top of
-// the island as it would be without them, each with a way in to its flag;
+// Adventure Isle's camps and its boss, as the room plays them (adventure.js):
 // a camp's monsters coming out as friends come near and keeping to their
 // camp; a flag going up only with no monster in the camp, faster with more
 // friends; a camp freed turning back into grass and flowers, a safe place;
-// sitting dizzy out of hearts until a friend helps you up; King Grumble in
-// his bubble until every camp is free, then popped sooner by more friends,
-// with helpers, a stomp that misses anyone jumping, and the island free;
-// and all of it kept when saved, and on the list of open islands.
+// sitting dizzy out of hearts until a friend helps you up; the boss in its
+// bubble until every camp is free, then popped sooner by more friends, with
+// helpers, a stomp that misses anyone jumping, and the stage won. An island
+// made with ⚔️ Adventure on, back when any island could be one, opens as an
+// island like any other. And the monster collection's book.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bossHearts, CAMP_RADIUS, CASTLE_RADIUS, campCount, DIZZY_MS, FLAG_REACH, GUARD_BACK_MS, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
+import { AdventureSim, bossHearts, CAMP_RADIUS, campFence, CASTLE_RADIUS, castleWalls, DIZZY_MS, flatten, GUARD_BACK_MS, groundMap, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
 import { keptProfile } from '../public/js/shared/keeper.js';
-import { BOSSES } from '../public/js/shared/bosses.js';
-import { MONSTER_KINDS } from '../public/js/shared/monsters.js';
+import { BOSSES, stompMove } from '../public/js/shared/bosses.js';
+import { chapterOf } from '../public/js/shared/isle-story.js';
+import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, maxHp, MONSTER_KINDS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { popKey, seenKey, STAT_KEYS } from '../public/js/shared/stickers.js';
 import * as B from '../public/js/shared/blocks.js';
-import { CRITTER_INFO } from '../public/js/shared/critters.js';
-import { cleanListing } from '../public/js/shared/listing.js';
-import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, maxHp, MonsterSim, SAFE_RADIUS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { Rng } from '../public/js/shared/rng.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { World } from '../public/js/shared/world.js';
-import { generate, SIZES, THEMES } from '../public/js/shared/worldgen.js';
+import { palette } from '../public/js/shared/worldgen.js';
 
 function clock(start = 1_000_000) {
   const c = { t: start };
@@ -46,11 +43,42 @@ function join(room, name = 'Happy Panda') {
   return c;
 }
 
-// An adventure island of flat land: level ground, so the monsters' ways about
-// it are easy to follow.
-function adventureRoom(seed = 5, size = 'small') {
+// Two camps and a lair round the start of a big island of flat land, each
+// well out of reach of it, built as the isle's maps build theirs (adventure.js
+// flatten, campFence and castleWalls: isle-maps.js lays them along its way):
+// levelled, gloomy, fenced or walled. Returns them as the adventure takes
+// them, the lair last.
+function layCamps(w) {
+  const s = w.spawn;
+  const level = Math.floor(s.y) - 1;
+  const map = groundMap(w);
+  const pal = palette(w.theme);
+  const rng = new Rng(7);
+  return [
+    [s.x, s.z - 50, 'camp'],
+    [s.x + 50, s.z, 'camp'],
+    [s.x - 50, s.z, 'castle'],
+  ].map(([x, z, kind], i) => {
+    const r = kind === 'castle' ? CASTLE_RADIUS : CAMP_RADIUS;
+    const spot = { cx: Math.floor(x), cz: Math.floor(z), x, z, level, r, square: kind === 'castle' };
+    flatten(w, map, pal, spot);
+    // Its ways in: one from the start, one behind.
+    const toStart = Math.atan2(s.z - z, s.x - x);
+    if (kind === 'castle') castleWalls(w, spot, [1, 0]);
+    else campFence(w, rng, spot, [toStart, toStart + Math.PI]);
+    return { id: i + 1, kind, x, y: level + 1, z, r };
+  });
+}
+
+// A stage of Adventure Isle on flat land, so the monsters' ways about it are
+// easy to follow: its camps (layCamps), and the stage's adventure — stage 1
+// unless told, Shipwreck Shore, its Snappy Crabs among the guards and Captain
+// Clawbeard in the lair.
+function isleRoom(stage = 1) {
   const time = clock();
-  const room = new Room({ code: '123456', theme: 'flat', size, seed, adventure: true, now: time.now });
+  const room = new Room({ code: '123456', theme: 'flat', size: 'big', seed: 5, now: time.now });
+  room.adventure = new AdventureSim({ camps: layCamps(room.world), stage }, 5);
+  room.stage = stage;
   return { room, time };
 }
 
@@ -88,163 +116,9 @@ function popAll(room, c, who, time) {
 // Where to stand by a camp's flag: just off its stone floor.
 const byFlag = (c, dx = 2.5) => [c.x + dx, c.z, c.y];
 
-// Columns a kid can walk to from the start, and the height of their feet in
-// each: up a block at a time, down any way, swimming where there is water,
-// never through anything solid.
-function walkable(world) {
-  const { W, D, H } = world;
-  const feet = new Int16Array(W * D).fill(-1);
-  const open = (x, y, z) => !B.SOLID[world.get(x, y, z)] && !B.SOLID[world.get(x, y + 1, z)];
-  const stand = (x, z, from) => {
-    for (let y = Math.min(H - 2, from + 1); y >= Math.max(1, from - 12); y--) if (B.SOLID[world.get(x, y - 1, z)] && open(x, y, z)) return y;
-    return -1;
-  };
-  const sx = Math.floor(world.spawn.x);
-  const sz = Math.floor(world.spawn.z);
-  const queue = [[sx, sz, stand(sx, sz, Math.floor(world.spawn.y))]];
-  feet[sx * D + sz] = queue[0][2];
-  while (queue.length) {
-    const [x, z, y] = queue.shift();
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx;
-      const nz = z + dz;
-      if (nx < 0 || nz < 0 || nx >= W || nz >= D || feet[nx * D + nz] >= 0) continue;
-      const ny = stand(nx, nz, y);
-      // Standing up there takes room to go up into first.
-      if (ny < 0 || (ny > y && !open(x, y + 1, z))) continue;
-      feet[nx * D + nz] = ny;
-      queue.push([nx, nz, ny]);
-    }
-  }
-  return feet;
-}
-
-test('an adventure island has monster camps all over it, more on a bigger one, and King Grumble’s castle', () => {
-  const counts = SIZES.map((s) => campCount(generate({ seed: 3, theme: 'flat', size: s.key }).world));
-  assert.deepEqual(counts, [3, 5, 7], 'three on a cozy island, more on a bigger one');
-  for (const size of SIZES) {
-    for (const theme of THEMES) {
-      for (const seed of [11, 4242]) {
-        const label = `${theme.key} ${size.key} island ${seed}`;
-        const { world, camps } = generate({ seed, theme: theme.key, size: size.key, adventure: true });
-        const spawn = world.spawn;
-        assert.equal(camps.filter((c) => c.kind === 'camp').length, campCount(world), label);
-        assert.equal(camps.at(-1).kind, 'castle', `${label}: the castle last`);
-        assert.equal(camps.filter((c) => c.kind === 'castle').length, 1);
-        assert.deepEqual(
-          camps.map((c) => c.id),
-          camps.map((_, i) => i + 1),
-        );
-        const away = (c) => Math.hypot(c.x - spawn.x, c.z - spawn.z);
-        const plain = camps.filter((c) => c.kind === 'camp');
-        assert.deepEqual(
-          plain.map(away),
-          plain.map(away).sort((a, b) => a - b),
-          `${label}: numbered from the nearest`,
-        );
-        for (const c of camps) {
-          const reach = c.kind === 'castle' ? c.r * Math.SQRT2 : c.r;
-          assert.equal(c.r, c.kind === 'castle' ? CASTLE_RADIUS : CAMP_RADIUS);
-          assert.ok(away(c) > reach + SAFE_RADIUS + 4, `${label}: camp ${c.id} is well away from the start`);
-          for (const o of camps) if (o !== c) assert.ok(Math.hypot(o.x - c.x, o.z - c.z) > reach + (o.kind === 'castle' ? o.r * Math.SQRT2 : o.r) + 4, `${label}: camps ${c.id} and ${o.id} keep apart`);
-          // Its flag stands on a little stone floor, with room over it, in the
-          // middle of gloomy ground as far as its fence and a little beyond.
-          const cx = Math.floor(c.x);
-          const cz = Math.floor(c.z);
-          assert.equal(world.get(cx, c.y, cz), B.PEBBLES, `${label}: camp ${c.id}'s flag floor`);
-          for (let y = c.y + 1; y < c.y + 6; y++) assert.equal(world.get(cx, y, cz), B.AIR);
-          for (let dx = -c.r + 1; dx < c.r; dx++) {
-            for (let dz = -c.r + 1; dz < c.r; dz++) {
-              if (campDistance(c, c.x + dx, c.z + dz) > c.r - 1) continue;
-              assert.equal(world.get(cx + dx, c.y - 1, cz + dz), B.GLOOM, `${label}: camp ${c.id} at ${dx}, ${dz}`);
-            }
-          }
-        }
-      }
-    }
-  }
-});
-
-test('every camp has a fence of logs and the castle stone walls, each with a way in from the start to its flag', () => {
-  for (const [theme, size, seed] of [
-    ['sunny', 'small', 11],
-    ['snowy', 'small', 4242],
-    ['candy', 'big', 11],
-    ['flat', 'small', 4242],
-  ]) {
-    const { world, camps } = generate({ seed, theme, size, adventure: true });
-    const feet = walkable(world);
-    for (const c of camps) {
-      const cx = Math.floor(c.x);
-      const cz = Math.floor(c.z);
-      const label = `${theme} island ${seed}, ${c.kind} ${c.id}`;
-      // Round it, logs (or stone): most of the way round, at the fence.
-      let wall = 0;
-      let all = 0;
-      for (let a = 0; a < 64; a++) {
-        const x = cx + Math.round(Math.cos((a / 64) * Math.PI * 2) * c.r);
-        const z = cz + Math.round(Math.sin((a / 64) * Math.PI * 2) * c.r);
-        if (c.kind === 'castle') continue;
-        all++;
-        if (world.get(x, c.y, z) === B.WOOD) wall++;
-      }
-      if (c.kind === 'camp') assert.ok(wall / all >= 0.7, `${label}: ${wall} of ${all} round it are logs`);
-      else {
-        let stone = 0;
-        for (let d = -c.r; d <= c.r; d++) for (const [x, z] of [[cx + d, cz - c.r], [cx + d, cz + c.r], [cx - c.r, cz + d], [cx + c.r, cz + d]]) if (world.get(x, c.y + 4, z) === B.BRICK_WALL || world.get(x, c.y + 4, z) === B.LAMP) stone++;
-        assert.ok(stone >= 4 * (2 * c.r + 1) - 4, `${label}: walls all round (${stone})`);
-      }
-      // ...and a way in from the start, to stand by the flag.
-      let reached = false;
-      for (let dx = -3; dx <= 3 && !reached; dx++) {
-        for (let dz = -3; dz <= 3 && !reached; dz++) {
-          const f = feet[(cx + dx) * world.D + cz + dz];
-          reached = Math.hypot(dx, dz) <= FLAG_REACH && f >= c.y - 1 && f <= c.y + 2;
-        }
-      }
-      assert.ok(reached, `${label}: a way in to the flag`);
-    }
-  }
-});
-
-test('everything but the camps comes out just as it would on the island without them', () => {
-  for (const theme of THEMES) {
-    const plain = generate({ seed: 77, theme: theme.key, size: 'small' });
-    const made = generate({ seed: 77, theme: theme.key, size: 'small', adventure: true });
-    assert.deepEqual(plain.camps, []);
-    const w = made.world;
-    // Far enough from every camp for its trees and slopes, the same.
-    const clear = (x, z) => made.camps.every((c) => Math.hypot(x - c.x, z - c.z) > (c.kind === 'castle' ? (c.r + 3) * Math.SQRT2 : c.r + 3) + 9);
-    let same = 0;
-    for (let x = 0; x < w.W; x++) {
-      for (let z = 0; z < w.D; z++) {
-        if (!clear(x + 0.5, z + 0.5)) continue;
-        for (let y = 0; y < w.H; y++) assert.equal(w.get(x, y, z), plain.world.get(x, y, z), `${theme.key}: ${x}, ${y}, ${z}`);
-        same++;
-      }
-    }
-    assert.ok(same > w.W * w.D * 0.3, `${theme.key}: most of the island (${same} columns)`);
-    assert.deepEqual(w.spawn, plain.world.spawn);
-    // Every vehicle, and every animal away from the camps; none in them.
-    // (Not the ones that come after the camps, kept clear of them, which
-    // can find room where a camp levelled the ground: see placeBuses.)
-    const after = new Set(['bus', 'ferry', 'helicopter', 'balloon', 'scooter']);
-    const key = (c) => `${c.type}@${c.x},${c.y},${c.z}`;
-    const kept = new Set(made.critters.map(key));
-    for (const c of plain.critters) {
-      if (after.has(c.type)) continue;
-      if (CRITTER_INFO[c.type].vehicle || clear(c.x, c.z)) assert.ok(kept.has(key(c)), `${theme.key}: ${key(c)} kept`);
-    }
-    for (const c of made.critters) {
-      if (CRITTER_INFO[c.type].vehicle) continue;
-      for (const camp of made.camps) assert.ok(campDistance(camp, c.x, c.z) > camp.r + 1, `${theme.key}: no ${c.type} in camp ${camp.id}`);
-    }
-  }
-});
-
 test('a camp’s monsters come out as someone comes near, one more than there are friends (up to five), and keep to their camp', () => {
   assert.deepEqual([1, 2, 3, 4, 8].map((n) => guardsFor(n)), [2, 3, 4, 5, 5]);
-  const { room, time } = adventureRoom();
+  const { room, time } = isleRoom();
   const a = join(room);
   const spawn = room.world.spawn;
   const [c] = camps(room);
@@ -257,7 +131,7 @@ test('a camp’s monsters come out as someone comes near, one more than there ar
   assert.equal(guards(room, c).length, guardsFor(1));
   const kinds = a.last('mon').m.map(unpackMonster).map((m) => m.kind);
   assert.equal(kinds.filter((k) => k === 'mosquito').length, 1, 'one mosquito hanging over the camp');
-  assert.ok(kinds.every((k) => k === 'blob' || k === 'mosquito'), 'the rest blobs');
+  assert.ok(kinds.every((k) => k === 'blob' || k === 'mosquito' || chapterOf(1).guards.includes(k)), 'the rest the chapter’s own, and blobs');
   play(room, time, 20000, [a, ...edge]);
   for (const m of guards(room, c)) {
     assert.ok(campDistance(c, m.body.x, m.body.z) <= c.r, 'in their camp');
@@ -273,7 +147,7 @@ test('a camp’s monsters come out as someone comes near, one more than there ar
 });
 
 test('one comes after whoever goes into its camp, gives up once they are well out of it, and goes back', () => {
-  const { room, time } = adventureRoom();
+  const { room, time } = isleRoom();
   const a = join(room);
   const [c] = camps(room);
   play(room, time, 300, [a, c.x + c.r + 10, c.z]);
@@ -291,7 +165,7 @@ test('one comes after whoever goes into its camp, gives up once they are well ou
 
 test('a flag goes up only with nobody of its camp in it, faster with more friends; a monster popped comes back a while after', () => {
   assert.deepEqual([1, 2, 3, 4, 6].map((n) => raiseSeconds(n)), [10, 6, 4.5, 4, 4]);
-  const { room, time } = adventureRoom();
+  const { room, time } = isleRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
   const [c] = camps(room);
@@ -324,7 +198,7 @@ test('a flag goes up only with nobody of its camp in it, faster with more friend
 });
 
 test('a camp freed: its monsters go, its gloomy ground turns into grass and flowers, and it is a safe place to come back to', () => {
-  const { room, time } = adventureRoom();
+  const { room, time } = isleRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
   const [c, d] = camps(room);
@@ -354,7 +228,8 @@ test('a camp freed: its monsters go, its gloomy ground turns into grass and flow
   // A safe place: monsters of the next camp chasing you stop at its edge.
   const havens = room.adventure.havens(w);
   assert.ok(havens.some((h) => h.x === c.x && h.z === c.z && h.r > c.r));
-  // Out of hearts near it, with nobody to help: back you come, by its flag.
+  // Out of hearts near the next one, with nobody to help: back you come, to
+  // the nearest safe place.
   room.receive(b, { t: 'leave' });
   room.players.get(a.pid).hp = 1;
   play(room, time, 300, [a, d.x + d.r + 10, d.z]);
@@ -367,7 +242,7 @@ test('a camp freed: its monsters go, its gloomy ground turns into grass and flow
 });
 
 test('out of HP with a friend on the island you sit dizzy, nothing bumps you, and a friend beside you helps you up', () => {
-  const { room, time } = adventureRoom();
+  const { room, time } = isleRoom();
   const a = join(room);
   const b = join(room, 'Brave Otter');
   const [c] = camps(room);
@@ -403,48 +278,51 @@ test('out of HP with a friend on the island you sit dizzy, nothing bumps you, an
   assert.equal(room.players.get(a.pid).hp, maxHp(1));
 });
 
-// An adventure island with every camp but the castle free, someone at the
-// castle's gate and King Grumble awake.
-function atTheCastle({ free = true, friends = 1 } = {}) {
-  const { room, time } = adventureRoom();
+// A stage with every camp but the lair free, someone at the lair's gate and
+// its boss awake. stomping: the boss only stomps, the one of its moves to
+// watch.
+function atTheLair({ free = true, friends = 1, stage = 1, stomping = false } = {}) {
+  const { room, time } = isleRoom(stage);
   const who = Array.from({ length: friends }, (_, i) => join(room, `Friend ${i + 1}`));
   if (free) for (const c of camps(room)) room.campFreed(room.adventure.free(c, [], room.monsters));
   const castle = room.adventure.castle;
   play(room, time, 300, ...who.map((p) => [p, castle.x + castle.r + 12, castle.z]));
-  const king = room.monsters.list.find((m) => m.kind === 'king');
-  return { room, time, who, castle, king };
+  const boss = room.monsters.list.find((m) => m.camp === castle.id);
+  if (stomping) boss.plan = { ...boss.plan, moves: [stompMove(boss.plan)] };
+  return { room, time, who, castle, boss };
 }
 
-test('King Grumble stays in his bubble while any camp is not free: no trouble, and no bop gets through', () => {
-  const { room, time, who, castle, king } = atTheCastle({ free: false });
+test('the boss stays in its bubble while any camp is not free: no trouble, and no bop gets through', () => {
+  const { room, time, who, castle, boss } = atTheLair({ free: false });
   const [a] = who;
-  assert.ok(king, 'he is there');
-  assert.equal(king.camp, castle.id);
-  assert.equal(a.last('adv').k[0], kingHearts(1));
+  assert.ok(boss, 'it is there');
+  assert.equal(boss.kind, 'clawbeard', 'Shipwreck Shore’s own');
+  assert.equal(a.last('adv').k[0], bossHearts(BOSSES.clawbeard, 1));
   assert.equal(a.last('adv').shield, true);
   for (let i = 0; i < 5; i++) {
-    play(room, time, 1000, [a, king.body.x + 1.6, king.body.z]);
-    room.receive(a, { t: 'bop', id: king.id });
+    play(room, time, 1000, [a, boss.body.x + boss.body.radius + 1, boss.body.z]);
+    room.receive(a, { t: 'bop', id: boss.id });
   }
   assert.equal(a.last('kinghit').shielded, true);
-  assert.equal(room.adventure.king.hearts, kingHearts(1), 'not a heart');
+  assert.equal(room.adventure.king.hearts, bossHearts(BOSSES.clawbeard, 1), 'not a heart');
   assert.deepEqual(a.all('bump'), [], 'nor a bump');
-  // The last camp freed pops his bubble, and everyone hears.
+  // The last camp freed pops its bubble, and everyone hears.
   for (const c of camps(room)) room.campFreed(room.adventure.free(c, [], room.monsters));
   assert.equal(a.last('shield').up, false);
   play(room, time, 300, [a, castle.x + castle.r + 12, castle.z]);
   assert.equal(a.last('adv').shield, false);
 });
 
-test('out of his bubble, each friend can bop King Grumble once a moment: more friends pop him sooner, and the island is free', () => {
-  const { room, time, who, castle, king } = atTheCastle({ friends: 2 });
+test('out of its bubble, each friend can bop the boss once a moment: more friends pop it sooner, and the stage is won', () => {
+  const { room, time, who, castle, boss } = atTheLair({ friends: 2 });
   const [a, b] = who;
   const k = room.adventure.king;
-  assert.equal(k.max, kingHearts(2));
-  king.giggle = Infinity;
+  assert.equal(k.max, bossHearts(BOSSES.clawbeard, 2));
+  assert.ok(k.max > bossHearts(BOSSES.clawbeard, 1));
+  boss.giggle = Infinity;
   const bop = (p) => {
-    room.receive(p, { t: 'm', s: [king.body.x + 2, king.body.y, king.body.z, 0, 0, 0] });
-    room.receive(p, { t: 'bop', id: king.id });
+    room.receive(p, { t: 'm', s: [boss.body.x + boss.body.radius + 1, boss.body.y, boss.body.z, 0, 0, 0] });
+    room.receive(p, { t: 'bop', id: boss.id });
   };
   bop(a);
   bop(a);
@@ -452,8 +330,8 @@ test('out of his bubble, each friend can bop King Grumble once a moment: more fr
   bop(b);
   assert.equal(k.hearts, k.max - 2, 'and a friend too');
   assert.equal(a.last('kinghit').hearts, k.max - 2);
-  // Down to two thirds of his hearts, he calls two helpers; at a third, two more.
-  const helpers = () => room.monsters.list.filter((m) => m.camp === castle.id && m.kind === 'blob').length;
+  // Down to two thirds of its hearts, it calls two helpers; at a third, two more.
+  const helpers = () => room.monsters.list.filter((m) => m.camp === castle.id && m.kind === BOSSES.clawbeard.minion).length;
   const hits = [];
   while (k.hearts > 0) {
     time.t += KING_HIT_MS;
@@ -464,31 +342,28 @@ test('out of his bubble, each friend can bop King Grumble once a moment: more fr
     hits.push([k.hearts, helpers()]);
   }
   for (const [hearts, n] of hits) if (hearts > 0) assert.equal(n, hearts <= k.max / 3 ? 4 : hearts <= (k.max * 2) / 3 ? 2 : 0, `${hearts} hearts`);
-  // Popped: the whole island is free, every camp's monster gone.
+  // Popped: the whole stage is won, every camp's monster gone.
   assert.equal(room.adventure.won, true);
   assert.equal(room.monsters.list.length, 0);
   const won = b.last('won');
   assert.deepEqual(won.by.sort(), [a.pid, b.pid].sort());
   assert.equal(castle.freed, true);
-  assert.equal(room.world.get(Math.floor(castle.x) + 3, castle.y - 1, Math.floor(castle.z)), B.GRASS, 'his yard all grass');
+  assert.equal(room.world.get(Math.floor(castle.x) + 3, castle.y - 1, Math.floor(castle.z)), B.GRASS, 'its yard all grass');
   assert.equal(room.adventure.active, false);
-  // Kept when saved.
-  const again = new Room({ save: room.exportSave(), now: time.now });
-  assert.equal(again.adventure.won, true);
-  assert.ok(again.adventure.camps.every((c) => c.freed));
-  assert.deepEqual(again.listing().adventure, { camps: camps(room).length, freed: camps(room).length, won: true, stage: 1 });
 });
 
 test('King Grumble’s stomp knocks over whoever is on the ground near him as he lands, and misses anyone jumping', () => {
-  const { room, time, who, castle, king } = atTheCastle({ friends: 2 });
+  const { room, time, who, castle, boss } = atTheLair({ friends: 2, stage: 12, stomping: true });
+  assert.equal(boss.kind, 'king', 'on Gloom Rock, at the end of the story');
   const [a, b] = who;
   let stomped = null;
   for (let t = 0; t < 20000 && !stomped; t += 100) {
     time.t += 100;
     const ground = castle.y;
-    // Both four blocks from him, out of his reach; one always in the air.
-    room.receive(a, { t: 'm', s: [king.body.x + 4, ground, king.body.z, 0, 0, 0] });
-    room.receive(b, { t: 'm', s: [king.body.x - 4, ground + 1.2, king.body.z, 0, 3, 0] });
+    // Both four blocks from him (either side, off the stone floor of his
+    // flag in the middle of the yard); one always in the air.
+    room.receive(a, { t: 'm', s: [boss.body.x, ground, boss.body.z - 4, 0, 0, 0] });
+    room.receive(b, { t: 'm', s: [boss.body.x, ground + 1.2, boss.body.z + 4, 0, 3, 0] });
     room.tick();
     stomped = a.last('stomp') && a.all('bump').find((m) => m.stomp);
   }
@@ -497,109 +372,109 @@ test('King Grumble’s stomp knocks over whoever is on the ground near him as he
   assert.equal(stomped.pid, a.pid);
   assert.equal(stomped.big, true);
   assert.equal(a.all('bump').filter((m) => m.pid === b.pid).length, 0, 'the one in the air missed');
-  assert.ok(Math.hypot(a.last('stomp').x - king.body.x, a.last('stomp').z - king.body.z) < 1, 'where he came down');
+  assert.ok(Math.hypot(a.last('stomp').x - boss.body.x, a.last('stomp').z - boss.body.z) < 1, 'where he came down');
   assert.ok(STOMP.reach > 4);
 });
 
 test('King Grumble sits dazed after a stomp, bumping nobody, and a bop then takes three hearts; he is never knocked back', () => {
-  const { room, time, who, king } = atTheCastle({ friends: 1 });
+  const { room, time, who, boss } = atTheLair({ stage: 12, stomping: true });
   const [a] = who;
   const k = room.adventure.king;
-  const x0 = king.body.x;
-  room.receive(a, { t: 'm', s: [king.body.x + 2, king.body.y, king.body.z, 0, 0, 0] });
-  room.receive(a, { t: 'bop', id: king.id });
+  const x0 = boss.body.x;
+  room.receive(a, { t: 'm', s: [boss.body.x + boss.body.radius + 1, boss.body.y, boss.body.z, 0, 0, 0] });
+  room.receive(a, { t: 'bop', id: boss.id });
   assert.equal(k.hearts, k.max - 1, 'one heart when he is not dazed');
-  assert.ok(Math.abs(king.body.vx) < 0.5 && Math.abs(king.body.x - x0) < 0.5, 'not knocked back');
+  assert.ok(Math.abs(boss.body.vx) < 0.5 && Math.abs(boss.body.x - x0) < 0.5, 'not knocked back');
   // Wait for his stomp, jumping each time it comes, out of his reach.
-  let t = 0;
-  for (; t < 30000 && king.state !== 'dazed'; t += 100) {
+  for (let t = 0; t < 30000 && boss.state !== 'dazed'; t += 100) {
     time.t += 100;
-    room.receive(a, { t: 'm', s: [king.body.x + 7, king.body.y + 1.2, king.body.z, 0, 3, 0] });
+    room.receive(a, { t: 'm', s: [boss.body.x + 7, boss.body.y + 1.2, boss.body.z, 0, 3, 0] });
     room.tick();
   }
-  assert.equal(king.state, 'dazed', 'dazed after his stomp');
+  assert.equal(boss.state, 'dazed', 'dazed after his stomp');
   const before = k.hearts;
   // Right up against him while he is dazed: no bump.
-  room.receive(a, { t: 'm', s: [king.body.x + 1, king.body.y, king.body.z, 0, 0, 0] });
+  room.receive(a, { t: 'm', s: [boss.body.x + boss.body.radius + 0.1, boss.body.y, boss.body.z, 0, 0, 0] });
   const bumps = a.all('bump').length;
   time.t += 100;
   room.tick();
   assert.equal(a.all('bump').length, bumps, 'no bump while dazed');
   time.t += KING_HIT_MS;
-  room.receive(a, { t: 'bop', id: king.id });
+  room.receive(a, { t: 'bop', id: boss.id });
   assert.equal(k.hearts, before - DAZED_HIT);
   assert.equal(a.last('kinghit').dazed, true);
   // After a while, he is up again.
   for (let i = 0; i < DAZE_MS / 100 + 2; i++) {
     time.t += 100;
-    room.receive(a, { t: 'm', s: [king.body.x + 12, king.body.y, king.body.z, 0, 0, 0] });
+    room.receive(a, { t: 'm', s: [boss.body.x + 12, boss.body.y, boss.body.z, 0, 0, 0] });
     room.tick();
   }
-  assert.notEqual(king.state, 'dazed');
+  assert.notEqual(boss.state, 'dazed');
 });
 
-test('King Grumble left alone gets his hearts back, and the fewer he has, the more often he stomps', () => {
-  const { room, time, who, king } = atTheCastle({ friends: 1 });
+test('the boss left alone gets its hearts back, and the fewer it has, the crosser it is', () => {
+  const { room, time, who, boss } = atTheLair();
   const [a] = who;
   const k = room.adventure.king;
   k.hearts = Math.floor(k.max / 3);
   k.hitAt = time.t;
   room.tick();
-  assert.equal(king.rage, 2, 'very cross at a third');
-  // Left alone, far from him: nothing for a while, then a heart every two seconds.
+  assert.equal(boss.rage, 2, 'very cross at a third');
+  // Left alone, far from it: nothing for a while, then a heart every two seconds.
   const low = k.hearts;
-  play(room, time, KING_HEAL_MS - 200, [a, king.body.x + 40, king.body.z]);
+  play(room, time, KING_HEAL_MS - 200, [a, boss.body.x + 40, boss.body.z]);
   assert.equal(k.hearts, low);
-  play(room, time, 4500, [a, king.body.x + 40, king.body.z]);
+  play(room, time, 4500, [a, boss.body.x + 40, boss.body.z]);
   assert.equal(k.hearts, low + 3);
-  // How cross: chasing someone on flat ground for 40 seconds.
-  const chase = (rage) => {
-    const sim = new MonsterSim(4);
-    const w = new World({ W: 96, H: 32, D: 96, sea: 4, theme: 'flat', spawn: { x: 48.5, y: 11, z: 48.5 } });
-    for (let x = 0; x < 96; x++) for (let z = 0; z < 96; z++) for (let y = 0; y <= 10; y++) w.set(x, y, z, y === 10 ? B.GRASS : B.DIRT);
-    const m = sim.add(w, 20.5, 11, 48.5, { kind: 'king' });
-    m.rage = rage;
-    let now = 1000;
-    let stomps = 0;
-    // Someone just ahead of him all the time, never bumped.
-    const p = { id: 1, x: 23.5, y: 11, z: 48.5 };
-    m.target = 1;
-    for (let t = 0; t < 40000; t += 50) {
-      now += 50;
-      p.x = m.body.x + 3;
-      sim.step(w, 0.05, now, [{ ...p, safeUntil: Infinity }], false, { roam: false, havens: [] });
-      stomps += sim.takeStomps().length;
-    }
-    return stomps;
-  };
-  const [calm, cross, crossest] = [0, 1, 2].map(chase);
-  assert.ok(calm < cross && cross < crossest, `stomps in 40 seconds: ${calm}, ${cross}, ${crossest}`);
+  // The crosser it is, the sooner its moves come (bosses.js).
+  const { gap } = BOSSES.clawbeard;
+  assert.ok(gap[0] > gap[1] && gap[1] > gap[2]);
 });
 
-test('turning monsters off leaves the camps’ monsters be; an adventure is kept when saved, and shows on the list of open islands', () => {
-  const { room, time } = adventureRoom(9, 'big');
+test('an island made with ⚔️ Adventure on, back when any island could be one, opens as an island like any other', () => {
+  const time = clock();
+  // As one was saved then: its camps and its castle (the first camp freed),
+  // and a Monster Gashapon that had turned up.
+  const old = new Room({ code: '123456', theme: 'flat', size: 'big', seed: 5, now: time.now });
+  const laid = layCamps(old.world);
+  const s = old.world.spawn;
+  const gasha = [Math.floor(s.x) + 3, Math.floor(s.y), Math.floor(s.z)];
+  old.world.set(...gasha, B.MONSTER_GASHAPON);
+  const save = JSON.parse(JSON.stringify(old.exportSave()));
+  save.adventure = { camps: laid.map((c, i) => ({ ...c, freed: i === 0 })), won: false, stage: 1, gasha };
+  const room = new Room({ save, now: time.now });
+  assert.equal(room.adventure, null, 'no adventure');
+  const w = room.world;
+  for (const c of laid) {
+    let gloom = 0;
+    for (let dx = -c.r - 4; dx <= c.r + 4; dx++) for (let dz = -c.r - 4; dz <= c.r + 4; dz++) if (w.get(Math.floor(c.x) + dx, c.y - 1, Math.floor(c.z) + dz) === B.GLOOM) gloom++;
+    assert.equal(gloom, 0, `${c.kind} ${c.id}: its ground green again`);
+  }
+  // Its fences and its castle stand where they were; its Monster Gashapon is gone.
+  const [c, d, castle] = laid;
+  let logs = 0;
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    if (w.get(Math.floor(c.x) + Math.round(Math.cos(a) * c.r), c.y, Math.floor(c.z) + Math.round(Math.sin(a) * c.r)) === B.WOOD) logs++;
+  }
+  assert.ok(logs > 32, `${logs} of 64 round the fence are logs`);
+  assert.equal(w.get(Math.floor(castle.x) - castle.r, castle.y + 1, Math.floor(castle.z) + 3), B.BRICK_WALL, 'the castle’s wall');
+  assert.equal(w.get(...gasha), B.AIR);
+  // Nothing comes out of the camps, it is listed as any other, and saved
+  // again, nothing of the adventure is kept.
   const a = join(room);
-  room.receive(a, { t: 'host', cmd: 'settings', settings: { monsters: true } });
-  const [c, d] = camps(room);
-  play(room, time, 300, [a, c.x + c.r + 10, c.z]);
-  assert.ok(guards(room, c).length > 0);
-  room.receive(a, { t: 'host', cmd: 'settings', settings: { monsters: false } });
-  assert.ok(guards(room, c).length > 0, 'the camp keeps its monsters');
-  room.campFreed(room.adventure.free(d, [], room.monsters));
-  const listing = room.listing();
-  assert.deepEqual(listing.adventure, { camps: camps(room).length, freed: 1, won: false, stage: 1 });
-  assert.deepEqual(cleanListing(listing).adventure, listing.adventure);
-  assert.equal(cleanListing({ ...listing, adventure: undefined }).adventure, undefined, 'none on other islands');
-  const again = new Room({ save: room.exportSave(), now: time.now });
-  assert.deepEqual(
-    again.adventure.camps.map((o) => [o.id, o.kind, o.x, o.y, o.z, o.r, o.freed]),
-    room.adventure.camps.map((o) => [o.id, o.kind, o.x, o.y, o.z, o.r, o.freed]),
-  );
-  assert.equal(again.adventure.won, false);
-  assert.equal(new Room({ code: '654321', theme: 'flat', seed: 9, now: time.now }).adventure, null, 'an island made without one has none');
-  const welcome = join(again).last('welcome');
-  assert.equal(welcome.adventure.camps.find((o) => o.id === d.id).freed, true);
-  assert.equal(welcome.adventure.shield, true);
+  assert.equal(a.last('welcome').adventure, null);
+  play(room, time, 3000, [a, ...byFlag(d)]);
+  assert.equal(room.monsters.list.length, 0);
+  assert.equal(room.listing().adventure, undefined);
+  assert.equal(room.exportSave().adventure, undefined);
+  // Nor is one made any more, whatever a page asks for: Adventure Isle is
+  // the only adventure.
+  const made = new Room({ code: '654321', theme: 'flat', seed: 9, adventure: true, now: time.now });
+  assert.equal(made.adventure, null);
+  assert.equal(made.world.blocks.indexOf(B.GLOOM), -1, 'no gloomy ground anywhere');
+  // And a stage of the isle going on is never saved with its island.
+  assert.equal(isleRoom().room.exportSave().adventure, undefined);
 });
 
 test('the monster book has every kind of monster, each with a name and stats, counted as seen and popped in stats the keeper keeps', () => {

@@ -550,9 +550,8 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) saveIsland();
 });
 
-// adventure: monster camps all over it, to free with friends (shared/adventure.js);
 // defense: a road for monsters to march along, and towers to build beside it (shared/defense.js).
-function makeIsland({ theme, size, name, online, settings = null, adventure = false, defense = false }) {
+function makeIsland({ theme, size, name, online, settings = null, defense = false }) {
   if (serverMode && online) {
     const link = new WsLink({ url: wsUrl() });
     // The first message makes the island; reconnecting later is an ordinary visit.
@@ -561,12 +560,12 @@ function makeIsland({ theme, size, name, online, settings = null, adventure = fa
       mode: 'server',
       key: tokenKey('server', 'new'),
       loadingText: 'Making your island…',
-      first: (game) => (game.code ? { ...game.joinMessage(), code: game.code } : { ...game.joinMessage(), t: 'create', theme, size, name, adventure, defense, ...(settings ? { settings } : {}) }),
+      first: (game) => (game.code ? { ...game.joinMessage(), code: game.code } : { ...game.joinMessage(), t: 'create', theme, size, name, defense, ...(settings ? { settings } : {}) }),
     });
     return;
   }
   const islandId = storage.newIslandId();
-  const link = new HostLink({ island: { theme, size, name, settings, adventure, defense }, online: online && !signalError, peerOptions });
+  const link = new HostLink({ island: { theme, size, name, settings, defense }, online: online && !signalError, peerOptions });
   startSession({ link, mode: 'host', islandId, key: tokenKey('island', islandId), loadingText: 'Making your island…' });
   if (online && signalError) ui.toast('🙈', signalError, 'warn');
 }

@@ -363,7 +363,7 @@ const SWIM_HEAD = 1.23;
 // head to toe and side to side (shared/seats.js puts the root at its middle).
 const CURL_ROOM = { long: 0.84, wide: 0.84 };
 
-// dizzy: sitting on the ground, out of hearts on an adventure island, until a friend helps you up.
+// dizzy: sitting on the ground, out of hearts on Adventure Isle, until a friend helps you up.
 // sit: on a chair or a sofa, the root at the seat; lie: in bed, on your
 // back, the root at your feet and your head behind you; curl: in a bed one
 // block long, curled up on your side with your knees up, made just small

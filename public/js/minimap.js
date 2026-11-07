@@ -293,8 +293,8 @@ export class MiniMap {
       ctx.stroke();
     }
 
-    // An adventure island's camps: the monsters' purple flag on each, the
-    // island's sky-blue one once it is free, and a crown on King Grumble's castle.
+    // Adventure Isle's camps: the monsters' purple flag on each, the
+    // island's sky-blue one once it is free, and a crown on the boss's lair.
     for (const c of g.adventure?.camps.values() ?? []) campMark(ctx, X(c.x), Y(c.z), c, (big ? 1.5 : 1) * u);
 
     // A tower defense island's road, the monsters' gate at one end of it and

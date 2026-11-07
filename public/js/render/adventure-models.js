@@ -1,9 +1,10 @@
-// What an adventure island (shared/adventure.js) adds to the picture: each
-// camp's flag pole, with the monsters' grumpy purple flag coming down it as
-// the island's own sky-blue star flag goes up; King Grumble, a big jelly
-// blob with a crown, in his bubble until every camp is free, with a ring on
-// the ground round him as he crouches to stomp; and the ring of a stomp
-// rushing out over the ground.
+// What Adventure Isle (shared/adventure.js) adds to the picture: each camp's
+// flag pole, with the monsters' grumpy purple flag coming down it as the
+// island's own sky-blue star flag goes up; King Grumble, a big jelly blob
+// with a crown (in his bubble on Gloom Rock until every camp is free, and
+// marching with a tower defense island's waves), with a ring on the ground
+// round him as he crouches to stomp; and the ring of a stomp rushing out
+// over the ground.
 import * as THREE from '../../vendor/three.module.js';
 import { cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 import { addBossParts, bossPose, disposeBossParts, underState } from './boss-models.js';

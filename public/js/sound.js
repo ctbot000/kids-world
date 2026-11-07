@@ -421,9 +421,9 @@ export class Sound {
         // King Grumble's is a deeper one.
         this.tone((opts.big ? 62 : 110) * r(), { decay: opts.big ? 0.6 : 0.35, gain: opts.big ? 0.16 : 0.12, type: 'sawtooth', slide: opts.big ? 48 : 85, vibrato: 12 });
         break;
-      // An adventure island: a camp freed (a fanfare), the whole island
-      // freed (a longer one), King Grumble's bubble popping, his stomp
-      // landing, a bop on him, sitting dizzy, and a friend helping you up.
+      // Adventure Isle: a camp freed (a fanfare), a whole stage won (a
+      // longer one), the boss's bubble popping, a stomp landing, a bop on
+      // the boss, sitting dizzy, and a friend helping you up.
       case 'fanfare':
         [67, 72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.12, decay: i === 3 ? 0.9 : 0.16, gain: 0.14, type: 'triangle' }));
         this.tone(NOTE(84), { at: 0.48, decay: 0.9, gain: 0.06 });

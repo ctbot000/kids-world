@@ -1,4 +1,4 @@
-// Extra-credit quizzes: an adventure island conquered, the fireworks still
+// Extra-credit quizzes: a stage of Adventure Isle conquered, the fireworks still
 // going, offers everyone who freed it a little school work for extra credit —
 // three quizzes to pick from, one at elementary school second-year level,
 // one at middle school third-year level, and a thinking-math one of puzzles

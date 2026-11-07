@@ -186,8 +186,6 @@ const THEME_ICON = Object.fromEntries(THEMES.map((t) => [t.key, t.icon]));
 // The bop button shows while a monster is this near.
 const ATTACK_SHOW = 14;
 const MONSTERS_ABOUT = 'Grumpy jelly blobs hop after you and take some of your HP (each level up gives you more of it). Jump on one to pop it, or walk right up to it and bop it three times with 👊 (X)! Watch out for big Bruisers and prickly Spikies, more of them at night. HP comes back by itself — or drink a 🧪 potion from the shop to fill it up at once.';
-// What an adventure island is (shared/adventure.js).
-const ADVENTURE_ABOUT = 'Grumpy monster camps all over the island. Free them with friends, then pop King Grumble!';
 // What a tower defense island is (shared/defense.js).
 const DEFENSE_ABOUT = 'Monsters march along a road to the Star Stone. Build towers beside it with friends, and see off every wave!';
 
@@ -304,7 +302,7 @@ export class UI {
     this.icons = new Map();
     this.game = null;
     this.tags = new Map();
-    // Over an adventure island's camps and King Grumble (see adventureTags).
+    // Over Adventure Isle's camps and its boss (see adventureTags).
     this.advTags = new Map();
     // What you got for popping a monster, over where you did it (see reward).
     this.floats = new Map();
@@ -689,7 +687,6 @@ export class UI {
     let rolled = '';
     let online = true;
     let monsters = false;
-    let adventure = false;
     let defense = false;
     const p = this.home;
     const price = p.islandPrice(this.handlers.islands().length);
@@ -770,25 +767,11 @@ export class UI {
         monsterSw.setAttribute('aria-checked', String(monsters));
         this.sound.play('ui');
       };
-      const adventureSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Adventure', role: 'switch', 'aria-checked': 'false' });
       const defenseSw = h('button', { class: 'switch', type: 'button', 'aria-label': 'Tower defense', role: 'switch', 'aria-checked': 'false' });
-      // One or the other: an island is an adventure or a tower defense, never both.
-      const showKinds = () => {
-        adventureSw.classList.toggle('on', adventure);
-        adventureSw.setAttribute('aria-checked', String(adventure));
-        defenseSw.classList.toggle('on', defense);
-        defenseSw.setAttribute('aria-checked', String(defense));
-      };
-      adventureSw.onclick = () => {
-        adventure = !adventure;
-        if (adventure) defense = false;
-        showKinds();
-        this.sound.play('ui');
-      };
       defenseSw.onclick = () => {
         defense = !defense;
-        if (defense) adventure = false;
-        showKinds();
+        defenseSw.classList.toggle('on', defense);
+        defenseSw.setAttribute('aria-checked', String(defense));
         this.sound.play('ui');
       };
       root.append(
@@ -816,7 +799,6 @@ export class UI {
           ),
         ),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, 'Friends can visit'), h('div', { class: 'muted' }, 'Friends join with your island code. Turn off to play alone.')), sw),
-        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '⚔️ Adventure'), h('div', { class: 'muted' }, ADVENTURE_ABOUT)), adventureSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🗼 Tower defense'), h('div', { class: 'muted' }, DEFENSE_ABOUT)), defenseSw),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
         price ? h('p', { class: 'muted island-price' }, `A new island costs 🪙 ${price}. You have 🪙 ${p.data.coins.toLocaleString()}.`) : h('p', { class: 'muted island-price' }, '🎁 Your first island is free!'),
@@ -849,7 +831,7 @@ export class UI {
               }
               if (!note.isConnected || !p.payForIsland(this.handlers.islands().length)) return;
               this.closeModal();
-              this.handlers.make({ theme, size, name, online, adventure, defense, settings: monsters ? { monsters: true } : null });
+              this.handlers.make({ theme, size, name, online, defense, settings: monsters ? { monsters: true } : null });
             },
           },
           '✨ Make it!',
@@ -961,14 +943,12 @@ export class UI {
           const full = it.players >= it.max;
           const size = SIZES.find((s) => s.key === it.size)?.name ?? '';
           const who = it.players === 0 ? 'Nobody there right now' : `${it.players} of ${it.max} playing`;
-          // The public adventure island's stage, and which chapter of its
-          // story that is (any other adventure island is stage 1, where it
-          // goes without saying).
-          const stage = it.adventure && (it.public || it.adventure.stage > 1) ? `Stage ${it.adventure.stage} · ${it.public ? `${chapterOf(it.adventure.stage).name} · ` : ''}` : '';
+          // A stage of Adventure Isle: which, and which chapter of its story
+          // that is.
           const adv = it.adventure
             ? it.adventure.won
               ? '🏆 Freed'
-              : `⚔️ ${stage}${it.adventure.freed} of ${it.adventure.camps} camps free`
+              : `⚔️ Stage ${it.adventure.stage} · ${chapterOf(it.adventure.stage).name} · ${it.adventure.freed} of ${it.adventure.camps} camps free`
             : it.defense
               ? it.defense.won
                 ? '🏆 Safe'
@@ -1760,7 +1740,7 @@ export class UI {
   // stickers (adventure.js MONSTER_BOOK): 👀 Seen, every kind of monster you
   // have come across there (the rest a ???), and 🏆 Defeated, the ones you
   // popped there, each with its name, how many you popped and its stats
-  // (monsterStats). Any other adventure island adds nothing to it.
+  // (monsterStats). No other island adds anything to it.
   monsterBook(tab = 'seen') {
     const stats = this.profile.data.stats;
     const seen = MONSTER_BOOK.filter((m) => stats[seenKey(m.kind)] > 0);
@@ -2541,7 +2521,7 @@ export class UI {
           card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. With nothing in your hand, hold it down for a second and let go for a 👑 King Punch that bops everything in front of you! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
-          card('⚔️', 'Adventure islands', ['Make one with ⚔️ Adventure on. Pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. When every camp is free, pop King Grumble in his castle, and jump when he stomps. Out of HP? Sit tight until a friend taps you to help you up. On 🌟 Adventure Isle a 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: press 🔒 by one and solve a quiz for a 🔑 key, then open it for coins.']),
+          card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: press 🔒 by one and solve a quiz for a 🔑 key, then open it for coins.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
           card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school, Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
@@ -2549,7 +2529,7 @@ export class UI {
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
-          card('🎓', 'Extra-credit quizzes', ['Conquer an adventure island and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
+          card('🎓', 'Extra-credit quizzes', ['Conquer a stage of 🌟 Adventure Isle and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle, with a film at its start and its end: King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Only beating King Grumble on the last stage starts it over, on a new journey. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
@@ -4269,33 +4249,28 @@ export class UI {
         if (adv) {
           const camps = [...adv.camps.values()];
           const castle = camps.find((c) => c.kind === 'castle');
-          // The shared isle says which of its stages this is, and which
-          // chapter of its story (with the Star Shards won back so far); any
-          // other adventure island is stage 1, where it goes without saying.
-          const staged = g.shared || adv.stage > 1;
+          // Which stage of the isle this is, and which chapter of its story
+          // (with the Star Shards won back so far).
           const story = adv.story;
-          const title = story ? `${story.icon} Chapter ${story.n}: ${story.name}` : `⚔️ Adventure${staged ? ` — stage ${adv.stage}` : ''}`;
-          const shards = story ? story.shards - (adv.won ? 0 : 1) : 0;
+          const shards = story.shards - (adv.won ? 0 : 1);
           root.append(
-            h('h3', {}, adv.won ? `🏆 ${story ? story.name : 'This island'} is free!` : title),
+            h('h3', {}, adv.won ? `🏆 ${story.name} is free!` : `${story.icon} Chapter ${story.n}: ${story.name}`),
             h(
               'div',
               { class: 'adventure-list' },
-              ...(staged ? [h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, story ? `${adv.stage} of ${STAGES}` : String(adv.stage)))] : []),
-              ...(story ? [h('div', { class: 'camp' }, '⭐', ' Star Shards', h('span', { class: 'muted' }, `${shards} of ${SHARDS}`))] : []),
+              h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, `${adv.stage} of ${STAGES}`)),
+              h('div', { class: 'camp' }, '⭐', ' Star Shards', h('span', { class: 'muted' }, `${shards} of ${SHARDS}`)),
               ...camps
                 .filter((c) => c.kind === 'camp')
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` ${g.campLabel(c)}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
-              castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, g.bossInfo().icon, story ? ` ${g.bossInfo().name}, ${story.lair}` : ` ${g.bossInfo().name}`, h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in a bubble 🫧' : 'ready to pop!')) : '',
+              castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, g.bossInfo().icon, ` ${g.bossInfo().name}, ${story.lair}`, h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in a bubble 🫧' : 'ready to pop!')) : '',
             ),
             adv.won && g.quizOffer && (!g.quizOffer.taken.junior || !g.quizOffer.taken.senior)
               ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag: one at elementary school Year 2 level, one at middle school Year 3. Every answer right pays!')
               : adv.won
                 ? ''
-                : h('p', { class: 'muted' }, story ? 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!' : 'Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
-            g.shared
-              ? h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, story ? h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story') : '', h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'))
-              : '',
+                : h('p', { class: 'muted' }, 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
+            h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection')),
           );
         }
         const def = g.defense;
@@ -4701,17 +4676,16 @@ export class UI {
     const code = $('island-code');
     code.hidden = g.shared;
     code.replaceChildren(...(g.shared ? [] : this.gameHandlers?.canInvite() || g.watching ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
-    // The adventure island's stage, bright where its code goes (as in 👫
-    // Players: the shared isle always, any other island only past stage 1).
+    // Adventure Isle's stage, bright where its code goes (as in 👫 Players).
     const adv = g.adventure;
     const stage = $('island-stage');
-    stage.hidden = !(adv && (g.shared || adv.stage > 1));
+    stage.hidden = !adv;
     stage.replaceChildren(...(stage.hidden ? [] : ['🌟 ', h('span', { class: 'word' }, 'Stage '), String(adv.stage)]));
   }
 
   // Your HP, shown while the island has monsters (or camps to free): the
   // number and a bar, going amber and then red as it runs low, and a shake
-  // when a bump takes some. On an adventure island, how many camps are free too.
+  // when a bump takes some. On Adventure Isle, how many camps are free too.
   renderHp() {
     const el = $('hearts');
     const row = $('hp-row');
@@ -4754,7 +4728,7 @@ export class UI {
 
   // The 🧪 button by your HP (shop.js): a potion to drink, there whenever
   // you have one and there is something to drink it for — some HP missing,
-  // or sitting dizzy on an adventure island.
+  // or sitting dizzy on Adventure Isle.
   renderPotion() {
     const el = $('btn-potion');
     const g = this.game;
@@ -6902,7 +6876,7 @@ export class UI {
     else this.renderQuiz();
   }
 
-  // The quizzes a conquered adventure island offers (game.js quizOffer): one
+  // The quizzes a conquered stage of Adventure Isle offers (game.js quizOffer): one
   // at elementary school second-year level, one at middle school third-year
   // level and a thinking-math one, each for extra credit. auto: come up by
   // itself once the island was won, so never over a window already open —
@@ -7890,10 +7864,9 @@ export class UI {
     el.hidden = false;
   }
 
-  // On an adventure island: over each camp near you, how its flag is going
-  // (or what to do there), and over the castle's boss (King Grumble, or on
-  // the isle the chapter's), its hearts (or its bubble); over any other
-  // monster, its hearts.
+  // On Adventure Isle: over each camp near you, how its flag is going (or
+  // what to do there), and over the lair's boss (the chapter's), its hearts
+  // (or its bubble); over any other monster, its hearts.
   adventureTags(g, r) {
     const seen = new Set();
     const adv = g.adventure;

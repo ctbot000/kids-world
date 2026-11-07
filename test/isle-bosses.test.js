@@ -3,12 +3,12 @@
 // with moves of its own that show before they come — a charge (step aside),
 // things thrown (out of the red ring), a leap (out of the ring, or jump), a
 // puff and a breath of fire — getting more of them, sooner, the crosser it
-// gets. King Grumble anywhere else only stomps, as ever (adventure.test.js).
+// gets.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { bossHearts, KING_HIT_MS, MONSTER_BOOK, monsterStats } from '../public/js/shared/adventure.js';
-import { BOSSES, isBoss, KING, planOf } from '../public/js/shared/bosses.js';
+import { BOSSES, isBoss, planOf } from '../public/js/shared/bosses.js';
 import { CHAPTERS } from '../public/js/shared/isle-story.js';
 import { BUMP_HP, bodyOf, isHeavy, MONSTER_KINDS, MONSTER_STATES, MonsterSim } from '../public/js/shared/monsters.js';
 import { MOVE } from '../public/js/shared/physics.js';
@@ -102,9 +102,8 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
     assert.ok(s.speed < 100 && s.atk >= BUMP_HP, kind);
   }
   assert.ok(!isBoss('blob') && !isBoss('queen'));
-  assert.equal(planOf('king'), KING, 'King Grumble anywhere else: his stomp alone');
-  assert.equal(planOf('king', true), BOSSES.king, 'on Gloom Rock, all his captains’ tricks');
-  assert.deepEqual(KING.moves.map((v) => v.move), ['stomp']);
+  assert.equal(planOf('king'), BOSSES.king, 'King Grumble on Gloom Rock, with all his captains’ tricks');
+  assert.ok(BOSSES.king.moves.length > 1);
   assert.equal(planOf('blob'), null);
 });
 

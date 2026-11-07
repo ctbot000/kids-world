@@ -28,7 +28,7 @@
 // each landing, so two jumps see it off — or four bops. It keeps to the
 // ground, out of the water and the safe places like the others.
 //
-// And on the higher stages of the public adventure island, two tougher
+// And on the higher stages of Adventure Isle, two tougher
 // still keep the camps (adventure.js): a Grumble Knight, a blob in a steel
 // helmet with a shield, that bumps twice as much HP off you, takes eight
 // bops and only gives up two hearts to a landing on its helmet, and when
@@ -45,7 +45,7 @@
 // and it goes pop.
 //
 // And the Queen Mosquito, the giant one's mother and much bigger, with a
-// little crown: she guards the deepest camp of an adventure island. Like her
+// little crown: she guards the deepest camp of a stage of Adventure Isle. Like her
 // little cousins she darts down out of the air to bump HP off you — twice as
 // much — and nobody can jump on her, and she takes a lot of bops to pop. Her
 // own trick: with nobody within a few steps of her for a few seconds, she gets
@@ -72,10 +72,10 @@
 // On a tower defense island (defense.js) they march along the road from
 // their gate to the Star Stone instead, bumping nobody on the way.
 //
-// On an adventure island (adventure.js) monsters also keep to their camps,
+// On Adventure Isle (adventure.js) monsters also keep to their camps,
 // whether the rule is on or not: guards that chase whoever comes into their
-// camp and go back to it after, and in his castle King Grumble, big and
-// slow, who stomps the ground now and then.
+// camp and go back to it after, and in its lair each chapter's boss, big and
+// slow, with moves of its own (bosses.js).
 //
 // Nobody gets hurt: HP comes back by itself, the start of the island
 // (and every camp freed) and every tent are safe places no monster goes
@@ -457,7 +457,7 @@ export class MonsterSim {
   // camp: the id of the camp it keeps to (0: none); kind: 'blob' or 'king';
   // march: the way it marches along, as [{ x, y, z }] (a tower defense
   // island's road, see defense.js), or null; plan: how a boss fights
-  // (bosses.js planOf: King Grumble with his stomp alone, unless told).
+  // (bosses.js planOf).
   add(world, x, y, z, { camp = 0, kind = 'blob', march = null, plan = planOf(kind) } = {}) {
     if (!camp && !march && this.roaming >= MAX_MONSTERS) return null;
     const size = bodyOf(kind);
@@ -623,8 +623,8 @@ export class MonsterSim {
   }
 
   // A spot for a new one: out of sight round one of the players, away from
-  // all of them and from the safe places (the island's start, and on an
-  // adventure island every camp freed).
+  // all of them and from the safe places (the island's start, and on
+  // Adventure Isle every camp freed).
   findSpot(world, people, havens = startOnly(world)) {
     if (!people.length) return null;
     for (let tries = 0; tries < 40; tries++) {
@@ -1456,7 +1456,7 @@ export class MonsterSim {
       MONSTER_STATES.indexOf(m.state),
       MONSTER_KINDS.indexOf(m.kind),
       // Its hearts, and how many it had to start with, for the bar over it
-      // (King Grumble's on an adventure island are adventure.js's instead).
+      // (a boss's in its lair are adventure.js's instead).
       m.hearts,
       m.max ?? BLOB_HEARTS,
     ]);

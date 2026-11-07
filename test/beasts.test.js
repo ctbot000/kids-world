@@ -490,7 +490,7 @@ test('every chapter of the story has champions of its own in its later camps, ex
   }
   assert.equal(champs.size, KINDS_NEW.length, 'every beast is somewhere in the story');
   const made = buildIsle({ stage: 1, seed: 7 });
-  const sim = new AdventureSim({ camps: made.camps, stage: 1, story: true }, 1);
+  const sim = new AdventureSim({ camps: made.camps, stage: 1 }, 1);
   const monsters = new MonsterSim(1);
   const count = (id) => monsters.list.filter((m) => m.camp === id);
   // The first camp has none.
@@ -519,15 +519,16 @@ test('every chapter of the story has champions of its own in its later camps, ex
   assert.equal(c2.back.length, before + 1, 'nor do helpers');
   // Further on, all of them, full grown from the sixth stage and tougher with
   // friends; a chapter of four camps has three.
-  const later = (stage) => new AdventureSim({ camps: made.camps, stage, story: true }, 1);
+  const later = (stage) => new AdventureSim({ camps: made.camps, stage }, 1);
   const championAt = (stage, id) => {
     const at = later(stage);
-    return at.championOf(made.world, at.campById(id));
+    return at.championOf(at.campById(id));
   };
   assert.equal(championAt(2, 3), 'oak');
   const hollow = buildIsle({ stage: 8, seed: 7 });
-  const eighth = new AdventureSim({ camps: hollow.camps, stage: 8, story: true }, 1);
-  assert.deepEqual([1, 2, 3, 4].map((id) => eighth.championOf(hollow.world, eighth.campById(id))), [null, 'wolf', 'wizard', 'rattle']);
+  const eighth = new AdventureSim({ camps: hollow.camps, stage: 8 }, 1);
+  assert.deepEqual([1, 2, 3, 4].map((id) => eighth.championOf(eighth.campById(id))), [null, 'wolf', 'wizard', 'rattle']);
+  assert.equal(eighth.championOf(eighth.castle), null, 'none in the lair');
   const grownUp = (stage, players) => {
     const sim2 = later(stage);
     const list = new MonsterSim(2);
@@ -536,18 +537,6 @@ test('every chapter of the story has champions of its own in its later camps, ex
   assert.equal(grownUp(6, 1), BEASTS[championAt(6, 2)].hearts);
   assert.ok(grownUp(6, 4) > grownUp(6, 1) * 1.5);
   assert.ok(grownUp(2, 1) < BEASTS[championAt(2, 2)].hearts);
-  // On an island of your own: from the second camp on, by the island's luck, the
-  // same each time, of the first tier, and none in the deepest or the castle.
-  const small = new AdventureSim({ camps: made.camps, stage: 1 }, 1);
-  assert.equal(small.championOf(made.world, small.campById(1)), null);
-  const first = small.championOf(made.world, small.campById(2));
-  assert.equal(BEASTS[first].tier, 1);
-  assert.equal(small.championOf(made.world, small.campById(2)), first);
-  const camps = [1, 2, 3, 4, 5, 6].map((id) => ({ id, kind: id === 6 ? 'castle' : 'camp', x: id * 20, y: 11, z: 20, r: 7 }));
-  const big = new AdventureSim({ camps }, 1);
-  for (const id of [2, 3, 4]) assert.equal(BEASTS[big.championOf(made.world, big.campById(id))].tier, 1);
-  assert.equal(big.championOf(made.world, big.campById(5)), null, 'the Queen Mosquito holds the deepest');
-  assert.equal(big.championOf(made.world, big.campById(6)), null, 'none in the castle');
 });
 
 test('the beasts join the higher stages’ guards, and the old ones keep their places before them', () => {
