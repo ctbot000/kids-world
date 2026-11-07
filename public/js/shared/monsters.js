@@ -221,7 +221,7 @@ export const QUEEN_NEAR = 12;
 export const QUEEN_LONELY_MS = 3000;
 // A bop knocks it back this fast, and up a little; then for a while it comes
 // after whoever tapped it this fast: quicker than you walk, slower than you run.
-const HIT_PUSH = 7;
+export const HIT_PUSH = 7;
 const CROSS_MS = 5000;
 const CROSS_RUN = 6.5;
 const CROSS_MOVE = { ...MOVE, run: CROSS_RUN };

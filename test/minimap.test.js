@@ -7,6 +7,7 @@ import * as THREE from '../public/vendor/three.module.js';
 import * as B from '../public/js/shared/blocks.js';
 import { World } from '../public/js/shared/world.js';
 import { facing, looking, mapFrame, MapImage } from '../public/js/minimap.js';
+import { Jolt } from '../public/js/render/jolt.js';
 import { Renderer } from '../public/js/render/renderer.js';
 
 // Stand-in for the painted atlas: a plain colour for each block used here.
@@ -108,7 +109,7 @@ test('the map is the 3D view seen from above, not its mirror', () => {
     body.rotation.y = yaw;
     close(flat(new THREE.Vector3(0, 0, 1).applyQuaternion(body.quaternion)), facing(yaw), `facing at ${yaw}`);
     // The real camera code, without WebGL.
-    const fake = { view: { yaw, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false }, camera: new THREE.PerspectiveCamera(58, 1.6, 0.1, 100), world: null };
+    const fake = { jolted: new Jolt(), view: { yaw, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false }, camera: new THREE.PerspectiveCamera(58, 1.6, 0.1, 100), world: null };
     Renderer.prototype.updateCamera.call(fake, 1 / 60, { x: 40, y: 20, z: 40 }, false);
     fake.camera.updateMatrixWorld();
     const look = looking(yaw);

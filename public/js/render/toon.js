@@ -78,6 +78,7 @@ export function setStudio(texture) {
   }
 }
 
+const tmpScale = new THREE.Vector3();
 // Something bopped flashes white for a moment, as in a Zelda game.
 const FLASH = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.92 });
 // Every part of a model drawn in FLASH (on), or as it was (off): each part's
@@ -94,6 +95,23 @@ export function flashModel(group, on) {
       delete o.userData.unflash;
     }
   });
+}
+
+// The colour most of a model is, as it is drawn when not flashing: the drops
+// that fly out of a monster as it goes pop.
+export function jellyColor(group) {
+  let best = '#ffffff';
+  let most = -1;
+  group.traverse((o) => {
+    const color = o.isMesh && (o.userData.unflash ?? o.material)?.color;
+    if (!color) return;
+    const size = (o.geometry.attributes.position?.count ?? 0) * Math.max(...o.getWorldScale(tmpScale).toArray());
+    if (size > most) {
+      most = size;
+      best = `#${color.getHexString()}`;
+    }
+  });
+  return best;
 }
 
 // Shared shapes, made once.

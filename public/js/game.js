@@ -35,7 +35,7 @@ import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { popKey, seenKey } from './shared/stickers.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, SPORES, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, maxHp, moleUnder, SPORES, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -46,7 +46,7 @@ import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
-import { gearMove, POTION, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
+import { gearMove, POTION, ROD_LOB_MS, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
 import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './shared/race.js';
 import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
@@ -60,7 +60,8 @@ import { World } from './shared/world.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
-import { flashModel } from './render/toon.js';
+import { slashLead } from './render/effects.js';
+import { flashModel, jellyColor } from './render/toon.js';
 
 export const TOOLS = [
   { key: 'build', name: 'Build', icon: '🧱', key1: 'B' },
@@ -95,10 +96,11 @@ const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
 const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
-// monsters.js), most of it in the first KICK_SECS: drawn so at once, not
-// only once the host's next update says so.
+// monsters.js), most of it in the first KICK_SECS: drawn so at once, for
+// KICK_HOLD_SECS at most, not only once the host's updates say so.
 const KICK_DIST = 1.4;
 const KICK_SECS = 0.15;
+const KICK_HOLD_SECS = 0.45;
 // And as it flies back, it hops up off the ground (KICK_HOP high at the
 // top, a small one less) and leans back from the blow (KICK_LEAN radians at
 // the most), springing upright again, all in RECOIL_SECS.
@@ -123,17 +125,27 @@ const BUBBLE_SECS = 4.5;
 // monster it passes, as far round as this either side (the cosine of 100°).
 const FRONT = 0.34;
 const SWEEP = -0.17;
+// The 👊 button pressed this long (ms) before the next swing can go still
+// swings, as soon as it can: rather than a press lost, a beat kept.
+const ATTACK_SOON_MS = 180;
 // A weapon this many swings from breaking says so.
 const WEAR_WARN = 10;
 // How hard the Bomb Rod's little bomb is pulled down as it flies (game.js
 // lobBomb): a short steep arc, over a fence and down in a few steps.
 const ROD_ARC_G = 9;
+// How long after the throw starts the bomb leaves the hand (seconds).
+const ROD_LEAVES_HAND = 0.1;
+// How fast the blaster's bubble flies (blocks a second).
+const BUBBLE_SPEED = 13;
 
-// A monster bopped flashes white, on and off, this long.
-const FLASH_MS = 300;
+// A monster bopped flashes white: solid while the blow holds it (and for this
+// long at least), and then, in FLASH_TAIL, a blink off, on and off. On and off
+// for longer it would only look like something else, not a blow landing.
+const FLASH_MS = 230;
+const FLASH_TAIL = 150;
+const flashOn = (left) => left > 0 && (left > FLASH_TAIL || Math.floor(left / (FLASH_TAIL / 3)) === 1);
 // A volcano island's own dragon, still wild (dragon.js): not to ride yet, but to bop.
 const wildDragon = (c) => c.type === 'dragon' && Boolean(c.fight) && c.fight.mood !== 'tame';
-const FLASH_BLINK = 75;
 // How each swing's slash looks (render/effects.js slash): its colour, how
 // high over the swinger's feet, and the hammer's coming down from overhead.
 // The blaster has none: it blows a bubble.
@@ -145,20 +157,44 @@ const SLASHES = {
   // The King Punch: a wider, golden shockwave all round in front.
   king: { color: '#ffd84d', y: 0.9, wide: true },
 };
-// How each swing lands on a monster: your swing and the monsters it hit
-// stop dead for stop ms (a little longer for each more one), the camera
-// jolts by shake, and the hit bursts in the slash's colour. The heavier the
-// weapon, the harder it lands.
+// How each swing lands on a monster: your swing and the monsters it hit stop
+// dead for stop ms (a little longer for each more one), the picture jolts
+// (kick and down as shares of the screen's height, roll in radians, zoom how
+// far it is pushed in: renderer.jolt), the hit bursts in color, as big as
+// burst, your device buzzes for buzz ms if it can, and one of words pops up.
+// The heavier the weapon, the harder it lands.
 const IMPACTS = {
-  punch: { stop: 55, shake: 0.06 },
-  sword: { stop: 70, shake: 0.08 },
-  hammer: { stop: 120, shake: 0.2 },
-  lavablade: { stop: 100, shake: 0.14 },
+  punch: { color: SLASHES.punch.color, stop: 70, kick: 0.012, roll: 0.005, zoom: 0.018, burst: 0.85, buzz: 14, words: ['POW!', 'BAM!', 'BOP!'] },
+  sword: { color: SLASHES.sword.color, stop: 85, kick: 0.015, roll: 0.008, zoom: 0.022, burst: 1, buzz: 16, words: ['THWACK!', 'SMACK!'] },
+  hammer: { color: SLASHES.hammer.color, stop: 140, kick: 0.012, down: 0.024, roll: 0.012, zoom: 0.035, burst: 1.35, buzz: 40, words: ['BONK!', 'WHAM!'], thud: true, lines: true },
+  lavablade: { color: SLASHES.lavablade.color, stop: 110, kick: 0.022, down: 0.006, roll: 0.012, zoom: 0.03, burst: 1.25, buzz: 28, words: ['SIZZLE!', 'FWOOM!'], embers: true },
   // A King Punch lands harder than any toy weapon.
-  king: { stop: 150, shake: 0.24 },
+  king: { color: SLASHES.king.color, stop: 170, kick: 0.03, down: 0.012, roll: 0.016, zoom: 0.05, burst: 1.6, buzz: 50, words: ['KAPOW!'], lines: true },
+  // What flies lands lighter, from further off.
+  blaster: { color: '#9fe8ff', stop: 50, kick: 0.008, roll: 0.003, zoom: 0.01, burst: 0.7, buzz: 10, words: ['BLOOP!', 'SPLOSH!'] },
+  bow: { color: '#ff8fc4', stop: 65, kick: 0.01, roll: 0.004, zoom: 0.014, burst: 0.8, buzz: 12, words: ['THWOP!', 'THUNK!'] },
 };
 const STOP_MORE = 15;
-const STOP_MAX = 160;
+const STOP_MAX = 230;
+// The blow that takes a monster's last heart lands harder still: this much
+// longer a stop, a bigger jolt and burst, and it flies off and goes pop.
+const FINISH = { stop: 60, jolt: 1.35, burst: 1.2, buzz: 20, words: ['KA-POW!', 'WHAMMO!', 'SPLAT!'] };
+// How far a monster being stopped by a blow shudders along it, at the start.
+const SHUDDER = 0.14;
+// If the island has not said it popped once the stop is over, it waits as it
+// is for this much longer (ms): it was only a guess, but a good one.
+const POP_WAIT = 220;
+// A monster flung off by its last blow: how long it flies before it pops, how
+// far back, how high and how far it tumbles over (radians).
+const FLING_SECS = 0.22;
+const FLING_DIST = 1.5;
+const FLING_HOP = 0.9;
+const FLING_SPIN = 2.6;
+// Blows landing no further apart than this (ms) are a chain: each sounds a note
+// higher than the last, and from the third on says how many.
+const CHAIN_MS = 1500;
+// What a blow sounds on, for those not made of jelly (sound.js whack).
+const HIT_ON = { knight: 'metal', golem: 'stone', moltok: 'stone' };
 // How much more than HIT_MS apart bops are sent.
 const BOP_SPACING = 120;
 // How high round a kid's middle a hula hoop goes, above their feet (a
@@ -244,6 +280,8 @@ export class Game extends EventTarget {
     this.pets = new Map();
     // Monsters (shared/monsters.js), while the island has them, and your HP.
     this.monsters = new Map();
+    // Monsters popped by a blow, still flying off (fling).
+    this.flung = [];
     this.hp = this.maxHp = maxHp(1);
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
     this.chat = [];
@@ -532,12 +570,13 @@ export class Game extends EventTarget {
         const avatar = this.players.get(msg.pid)?.avatar;
         const lands = avatar?.swing() ?? 0;
         const king = msg.king === true;
-        const world = this.world;
-        setTimeout(() => {
-          if (this.world !== world) return;
-          this.slashFrom(avatar, king);
-          if (king) this.shockwaveFrom(avatar);
-        }, lands * 1000);
+        this.slashSoon(avatar, lands, king);
+        if (king) {
+          const world = this.world;
+          setTimeout(() => {
+            if (this.world === world) this.shockwaveFrom(avatar);
+          }, lands * 1000);
+        }
         break;
       }
       case 'c':
@@ -1416,6 +1455,8 @@ export class Game extends EventTarget {
     this.sound.play('bump');
     const b = this.me?.body;
     if (!b) return;
+    this.renderer.jolt(b.x - (Number(msg.x) || b.x), b.z - (Number(msg.z) || b.z), { kick: msg.big ? 0.02 : 0.013, roll: msg.big ? 0.012 : 0.007, zoom: 0.012 });
+    this.buzz(msg.big ? 40 : 25);
     // Knocked out of your seat, or off the piano bench.
     if (this.seat) this.standUp();
     if (this.pianoAt) {
@@ -1481,24 +1522,37 @@ export class Game extends EventTarget {
     const here = [p.x, p.y, p.z].every(Number.isFinite);
     const boss = isBoss(entry?.kind);
     const near = here && this.near(p.x, p.y, p.z, boss || entry?.kind === 'queen' ? 120 : 40);
-    if (near) {
-      fx.sparkles(p.x, p.y + 0.4, p.z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
-      fx.dust(p.x, p.y, p.z);
-      // King Grumble goes with a much bigger pop.
-      if (entry?.kind === 'big' || entry?.kind === 'knight' || entry?.kind === 'golem') fx.sparkles(p.x, p.y + 0.9, p.z, 30, entry.kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : entry.kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
-      // The Queen Mosquito goes with a big pop of her own, crown and all.
-      if (entry?.kind === 'queen') {
-        fx.sparkles(p.x, p.y + 1.1, p.z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
-        fx.firework(p.x, p.y + 2, p.z);
+    const mine = msg.by === this.pid;
+    // The last of its hearts it lost: only you hear how many.
+    if (mine && near && entry?.hearts > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: entry.hearts });
+    // Off the end of a swing it flies off, and goes pop as it lands (fling).
+    const away = near && entry && !boss ? this.blownAway(entry, msg.by) : null;
+    const queen = entry?.kind === 'queen';
+    const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
+    const pop = (x, y, z) => {
+      if (near) this.popBurst(entry, x, y, z);
+      // The reward for it, where it happened: stars out of the monster, and
+      // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
+      // gave (levels.js), so what it says is what you got.
+      if (!mine) return;
+      if (near) fx.stars(x, y + (boss ? 1.4 : 0.7), z, isHeavy(entry?.kind) ? 7 : 4);
+      if (here) this.emit('reward', { x, y, z, xp });
+    };
+    if (away) {
+      // (A friend's last blow, as yours burst already as it landed.)
+      if (!mine) {
+        const size = bodyOf(entry.kind);
+        const kind = this.players.get(msg.by)?.avatar?.weaponKind;
+        const look = IMPACTS[kind] ?? IMPACTS.punch;
+        fx.impact(p.x - away.x * size.radius * 0.8, p.y + size.height * 0.55, p.z - away.z * size.radius * 0.8, away.x, away.z, look.color, look.burst, false);
+        this.sound.play('whack', { kind, on: HIT_ON[entry.kind], final: true, near: 0.6 });
       }
-      if (boss) {
-        fx.sparkles(p.x, p.y + 1.2, p.z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
-        fx.firework(p.x, p.y + 2, p.z);
-      }
-      this.sound.play('splat');
+      this.fling(msg.id, entry, away, pop);
+    } else {
+      pop(p.x, p.y, p.z);
+      this.dropMonster(msg.id);
     }
-    this.dropMonster(msg.id);
-    if (msg.by === this.pid) {
+    if (mine) {
       const first = !this.profile.data.stats.popped;
       this.profile.count('popped');
       // And as defeated in the collection, on Adventure Isle.
@@ -1508,19 +1562,118 @@ export class Game extends EventTarget {
       }
       // Popping the Queen Mosquito is a feat of its own: a count of her, a
       // few coins and the XP that comes with it, over and above a monster's.
-      const queen = entry?.kind === 'queen';
       if (queen) {
         this.profile.count('queens');
         this.profile.earn(QUEEN_POP.coins);
       }
-      // The reward for it, where it happened: stars out of the monster, and
-      // a "+N ⭐" float over the spot (ui.js reward), with the XP it really
-      // gave (levels.js), so what it says is what you got.
-      const xp = XP_FOR.popped.xp + (queen ? XP_FOR.queens.xp : 0);
-      if (near) fx.stars(p.x, p.y + (boss ? 1.4 : 0.7), p.z, isHeavy(entry?.kind) ? 7 : 4);
-      if (here) this.emit('reward', { x: p.x, y: p.y, z: p.z, xp });
       if (first && !boss) this.emit('toast', { icon: '👾', text: 'Pop! Jump on a monster to pop it at once, or walk up to it and bop it until it pops.' });
     }
+  }
+
+  // The way a monster's last blow sends it, if a swing is what it was: yours,
+  // or a friend's just now. Not one landed on, nor one caught in a blast.
+  blownAway(entry, by) {
+    const swung = by === this.pid ? performance.now() - (entry.swungAt ?? -Infinity) < 1500 : this.justSwung(by);
+    if (!swung) return null;
+    const from = by === this.pid ? this.me?.body : this.players.get(by)?.avatar?.root.position;
+    const m = entry.model.group.position;
+    const dx = from ? m.x - from.x : 0;
+    const dz = from ? m.z - from.z : 0;
+    const d = Math.hypot(dx, dz);
+    return d > 0.01 ? { x: dx / d, z: dz / d } : null;
+  }
+
+  justSwung(pid) {
+    const avatar = this.players.get(pid)?.avatar;
+    return avatar && avatar.time - (avatar.swingAt ?? -Infinity) < 0.9;
+  }
+
+  // A monster going pop at (x, y, z): out of it, drops of its own colour, and
+  // the sparkles and sound of it.
+  popBurst(entry, x, y, z) {
+    const fx = this.renderer.effects;
+    const kind = entry?.kind;
+    if (entry) {
+      const { height } = bodyOf(kind);
+      fx.jellyPop(x, y + height * 0.5, z, jellyColor(entry.model.group), Math.min(1.8, 0.6 + height * 0.45));
+    }
+    fx.sparkles(x, y + 0.4, z, 18, ['#ffd84d', '#ffffff', '#b18cff', '#7fe08c']);
+    fx.dust(x, y, z);
+    // King Grumble goes with a much bigger pop.
+    if (kind === 'big' || kind === 'knight' || kind === 'golem') fx.sparkles(x, y + 0.9, z, 30, kind === 'golem' ? ['#b9bec7', '#ffffff', '#7fe08c'] : kind === 'knight' ? ['#c9ced6', '#ffffff', '#62c4f5'] : ['#ff8fa3', '#ffffff', '#ffd84d']);
+    // The Queen Mosquito goes with a big pop of her own, crown and all.
+    if (kind === 'queen') {
+      fx.sparkles(x, y + 1.1, z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
+      fx.firework(x, y + 2, z);
+    }
+    if (isBoss(kind)) {
+      fx.sparkles(x, y + 1.2, z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
+      fx.firework(x, y + 2, z);
+    }
+    this.sound.play('splat');
+  }
+
+  // A monster's last blow: gone as far as the game goes, but what you see of
+  // it stays a moment: still stopped dead, then thrown back tumbling, swelling
+  // up, and pop! at the end of it (pop(x, y, z)).
+  fling(id, entry, away, pop) {
+    const now = performance.now();
+    const group = entry.model.group;
+    this.flung.push({
+      id,
+      model: entry.model,
+      at: Math.max(now, entry.finishAt || entry.stopUntil || now),
+      x: group.position.x,
+      y: group.position.y,
+      z: group.position.z,
+      yaw: group.rotation.y,
+      scale: group.scale.x,
+      away,
+      pop,
+    });
+    this.monsters.delete(id);
+  }
+
+  updateFlung(now) {
+    this.flung = this.flung.filter((f) => {
+      const { model, away } = f;
+      const group = model.group;
+      const k = (now - f.at) / 1000 / FLING_SECS;
+      let { x, y, z } = f;
+      if (k >= 1) {
+        flashModel(group, false);
+        this.renderer.removeMonster(f.id);
+        f.pop(x + away.x * FLING_DIST, y, z + away.z * FLING_DIST);
+        return false;
+      }
+      if (k < 0) {
+        const shudder = SHUDDER * this.stopFlip;
+        x += away.x * shudder;
+        z += away.z * shudder;
+        flashModel(group, true);
+      } else {
+        const out = 1 - (1 - k) ** 2;
+        x += away.x * FLING_DIST * out;
+        z += away.z * FLING_DIST * out;
+        y += FLING_HOP * 4 * k * (1 - k);
+        const spin = FLING_SPIN * out;
+        const c = Math.cos(f.yaw);
+        const sn = Math.sin(f.yaw);
+        group.rotation.x = spin * (away.x * sn + away.z * c);
+        group.rotation.z = -spin * (away.x * c - away.z * sn);
+        group.scale.setScalar(f.scale * (1 + 0.55 * k * k * k));
+        // White, its colour back, and white again just as it goes.
+        flashModel(group, k < 0.25 || k > 0.8);
+      }
+      group.position.set(x, y, z);
+      this.renderer.placeShadow(model.shadow, x, y, z, model.shadowScale ?? 1);
+      return true;
+    });
+  }
+
+  clearFlung() {
+    for (const f of this.flung) this.renderer.removeMonster(f.id);
+    this.flung = [];
   }
 
   // A monster bopped, with hearts left: it squashes and hops back, and
@@ -1544,9 +1697,18 @@ export class Game extends EventTarget {
     const entry = this.monsters.get(msg.id);
     // Your own bop landed already (strike): it flashed, stopped and burst then.
     const struck = entry && msg.by === this.pid && now - (entry.struckAt ?? -Infinity) < 1500;
+    const mine = msg.by === this.pid;
     if (entry) entry.model.squash = Math.max(entry.model.squash ?? 0, 0.4);
     if (entry && !struck) entry.flashUntil = now + FLASH_MS;
+    // How many hearts that took off it, as the island says: only you hear.
+    const lost = entry && Number.isInteger(msg.hearts) ? (entry.hearts ?? msg.hearts) - msg.hearts : 0;
     if (entry && Number.isInteger(msg.hearts)) entry.hearts = msg.hearts;
+    // Its last blow, we thought, and it was not (a friend's heart came back,
+    // say): it need not wait to go pop.
+    if (entry?.finishAt) {
+      entry.stopUntil = Math.min(entry.stopUntil, entry.finishAt);
+      entry.finishAt = 0;
+    }
     // Knocked back away from whoever bopped it (one marching keeps to its
     // road), once it has stopped dead from the blow.
     const from = msg.by === this.pid ? this.me?.body : this.players.get(msg.by)?.avatar?.root.position;
@@ -1557,21 +1719,38 @@ export class Game extends EventTarget {
       const d = Math.hypot(dx, dz);
       if (d > 0.01) away = { x: dx / d, z: dz / d };
     }
+    // Whatever the one who bopped it has in their hand, as a friend's swing lands.
+    const kind = this.players.get(msg.by)?.avatar?.weaponKind;
+    const look = IMPACTS[kind] ?? IMPACTS.punch;
     if (entry && !struck && away) {
-      entry.stopUntil = now + IMPACTS.punch.stop;
+      entry.stopAt = now;
+      entry.stopUntil = now + look.stop;
+      entry.flashUntil = entry.stopUntil + FLASH_TAIL;
       if (!msg.march) entry.recoil = { ...away, at: entry.stopUntil };
     }
-    if (away && !msg.march) entry.kick = { ...away, at: Math.max(now, entry.stopUntil ?? 0), snap: entry.seenSnap };
+    if (away && !msg.march) {
+      entry.kick = {
+        ...away,
+        at: Math.max(now, entry.stopUntil ?? 0),
+        fromX: entry.drawn.x - (entry.err?.x ?? 0),
+        fromZ: entry.drawn.z - (entry.err?.z ?? 0),
+        dist: KICK_DIST * ((weaponOf(kind)?.push ?? HIT_PUSH) / HIT_PUSH),
+      };
+    }
     const p = entry?.model.group.position;
     if (p && this.near(p.x, p.y, p.z, 30)) {
       if (!struck && away) {
         const size = bodyOf(entry.kind);
         const r = size.radius * 0.8;
-        this.renderer.effects.impact(p.x - away.x * r, p.y + size.height * 0.55, p.z - away.z * r, away.x, away.z, '#ffffff');
+        this.renderer.effects.impact(p.x - away.x * r, p.y + size.height * 0.55, p.z - away.z * r, away.x, away.z, look.color, look.burst * 0.8, mine);
       }
-      this.renderer.effects.sparkles(p.x, p.y + 0.6, p.z, 6, ['#ffffff', '#d9c8ff']);
-      this.renderer.effects.bang(p.x, p.y + 1, p.z);
-      this.sound.play('bump');
+      if (mine && lost > 0) this.emit('hit-number', { x: p.x, y: p.y, z: p.z, n: lost });
+      // Your own swing sounded and burst as it landed (strike). A friend's, or
+      // your bomb's, as the island says.
+      if (!struck) {
+        this.renderer.effects.bang(p.x, p.y + 1, p.z);
+        this.sound.play('whack', { kind, on: HIT_ON[entry.kind], near: 0.6 });
+      }
     }
     if (msg.by === this.pid && performance.now() > (this.toldHit ?? 0)) {
       this.toldHit = performance.now() + 20000;
@@ -1658,7 +1837,7 @@ export class Game extends EventTarget {
   // bopped, and a word about a wild one the first time you come near it.
   dragonFrame(c, s, now) {
     const m = c.model;
-    const flash = now < (c.flashUntil ?? 0) && Math.floor((c.flashUntil - now) / FLASH_BLINK) % 2 === 0;
+    const flash = flashOn((c.flashUntil ?? 0) - now);
     if (flash || c.flashed) flashModel(m.group, flash);
     c.flashed = flash;
     if (now < (c.fireUntil ?? 0) && m.group.visible && m.mouth) {
@@ -1713,9 +1892,14 @@ export class Game extends EventTarget {
   // moment from each friend, and a bop that goes late, or comes quicker over
   // the network, must not come too soon after it).
   attackReady() {
+    return this.attackWait() <= 0;
+  }
+
+  // How long until it can (ms).
+  attackWait() {
     const now = performance.now();
     const swing = SWINGS[wornWeapon(this.profile.data.gear)?.key] ?? SWINGS.punch;
-    return now >= (this.attackAt ?? 0) && now + swing.secs * swing.strike * 1000 >= (this.bopSentAt ?? -Infinity) + HIT_MS + BOP_SPACING;
+    return Math.max((this.attackAt ?? 0) - now, (this.bopSentAt ?? -Infinity) + HIT_MS + BOP_SPACING - swing.secs * swing.strike * 1000 - now);
   }
 
   // The slash a swing leaves in the air as it lands, round in front of
@@ -1728,6 +1912,18 @@ export class Game extends EventTarget {
     if (!this.near(at.x, at.y, at.z, 40)) return;
     const reach = king ? KING_REACH + 0.6 : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
     this.renderer.effects.slash(at.x, at.y + look.y * scale.y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, from: look.wide ? -2.4 : undefined, to: look.wide ? 2.4 : undefined });
+  }
+
+  // The slash of a swing landing in lands seconds: it sets off that much sooner
+  // than the blow, so the blade comes round to the monster just as it lands.
+  slashSoon(avatar, lands, king = false) {
+    const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
+    if (!look) return;
+    const world = this.world;
+    const lead = slashLead({ upright: look.upright, ...(look.wide ? { from: -2.4, to: 2.4 } : {}) });
+    setTimeout(() => {
+      if (this.world === world) this.slashFrom(avatar, king);
+    }, Math.max(0, lands - lead) * 1000);
   }
 
   // The golden shockwave of a King Punch, whoever threw it: a ring bursting
@@ -1760,33 +1956,50 @@ export class Game extends EventTarget {
 
   // Your swing landing on monsters (hits, as attack found them), at once,
   // not only once the island says so: the swing and every monster in it
-  // stop dead a moment, as in a Zelda game, the camera jolts, each one
-  // flashes and squashes, a burst flies off it from where the blow met it,
-  // and it hops back leaning away from the blow; the whack is as heavy as
-  // the weapon (kind) is. Not King Grumble safe in his bubble: that bounces.
+  // stop dead a moment, as in a Zelda game, shuddering, and the slash with them;
+  // the picture jolts, each one goes white and squashes, a burst flies off it
+  // from where the blow met it, and it hops back leaning away from the blow; the
+  // whack is as heavy as the weapon (kind) is. The blow that takes a monster's
+  // last heart lands harder still. Not King Grumble safe in his bubble: that
+  // bounces.
   strike(hits, kind, dragons = []) {
     const look = IMPACTS[kind] ?? IMPACTS.punch;
-    const color = SLASHES[kind]?.color ?? SLASHES.punch.color;
     const now = performance.now();
-    const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1));
     const b = this.me.body;
-    let landed = 0;
-    for (const hit of hits) {
+    const weapon = weaponOf(kind);
+    const landing = hits.filter((hit) => {
       const entry = this.monsters.get(hit.id);
-      if (!entry || (isBoss(entry.kind) && this.adventure?.shield)) continue;
+      return entry && !(isBoss(entry.kind) && this.adventure?.shield);
+    });
+    // A monster's last blow, as far as anyone can tell from here. A boss has
+    // its hearts kept apart, and a boss feels a weapon its own way.
+    const lastBlow = (entry) => (isBoss(entry.kind) ? (this.adventure?.king?.hearts ?? Infinity) <= (weapon?.king ?? 1) : entry.hearts <= (weapon?.power ?? 1));
+    const finish = landing.some((hit) => lastBlow(this.monsters.get(hit.id)));
+    const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1) + (finish ? FINISH.stop : 0));
+    // (Bursts side by side are smaller, or they hide all there is to see.)
+    const burst = look.burst * (finish ? FINISH.burst : 1) * (hits.length + dragons.length > 1 ? 0.72 : 1);
+    let first = null;
+    for (const hit of landing) {
+      const entry = this.monsters.get(hit.id);
       const m = entry.model.group.position;
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      entry.stopUntil = until;
+      const last = lastBlow(entry) && !isBoss(entry.kind);
+      entry.stopAt = now;
+      entry.stopUntil = last ? until + POP_WAIT : until;
+      entry.finishAt = last ? until : 0;
       entry.struckAt = now;
-      entry.flashUntil = until + FLASH_MS;
-      entry.model.squash = Math.max(entry.model.squash ?? 0, 0.45);
+      entry.swungAt = now;
+      entry.flashUntil = until + FLASH_TAIL;
+      entry.model.squash = Math.max(entry.model.squash ?? 0, last ? 0.6 : 0.45);
       entry.recoil = { x: dx / d, z: dz / d, at: until };
       // Where the blow met it: its near side, a little over half way up.
       const r = hit.size.radius * 0.8;
-      this.renderer.effects.impact(m.x - (dx / d) * r, m.y + hit.size.height * 0.55, m.z - (dz / d) * r, dx / d, dz / d, color);
-      landed++;
+      const at = { x: m.x - (dx / d) * r, y: m.y + hit.size.height * 0.55, z: m.z - (dz / d) * r };
+      this.renderer.effects.impact(at.x, at.y, at.z, dx / d, dz / d, look.color, burst);
+      if (look.embers) this.renderer.effects.embers(at.x, at.y, at.z);
+      first ??= { m: { x: m.x, y: m.y, z: m.z }, top: hit.size.height, at, dx: dx / d, dz: dz / d, on: HIT_ON[entry.kind] };
     }
     for (const hit of dragons) {
       const c = this.critters.get(hit.id);
@@ -1795,15 +2008,49 @@ export class Game extends EventTarget {
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      c.flashUntil = until + FLASH_MS;
+      c.flashUntil = until + FLASH_TAIL;
       const r = hit.size.radius * 0.8;
-      this.renderer.effects.impact(m.x - (dx / d) * r, m.y + hit.size.height * 0.35, m.z - (dz / d) * r, dx / d, dz / d, color);
-      landed++;
+      const at = { x: m.x - (dx / d) * r, y: m.y + hit.size.height * 0.35, z: m.z - (dz / d) * r };
+      this.renderer.effects.impact(at.x, at.y, at.z, dx / d, dz / d, look.color, burst);
+      first ??= { m: { x: m.x, y: m.y, z: m.z }, top: hit.size.height, at, dx: dx / d, dz: dz / d };
     }
-    if (!landed) return;
+    if (!first) return;
     this.hitStopUntil = until;
-    this.renderer.shake(look.shake);
-    this.sound.play('whack', { kind });
+    this.renderer.effects.holdSlashes(until);
+    const more = finish ? FINISH.jolt : 1;
+    this.renderer.jolt(first.dx, first.dz, { kick: look.kick * more, down: (look.down ?? 0) * more, roll: look.roll * more, zoom: look.zoom * more });
+    if (look.thud) {
+      const y = this.renderer.groundUnder(first.m.x, first.m.y, first.m.z) ?? first.m.y;
+      this.renderer.shockwave(first.m.x, y, first.m.z, 3.2);
+      this.renderer.effects.thud(first.m.x, y, first.m.z);
+    }
+    // A chain of blows, each a note higher than the last.
+    this.chain = now - (this.chainAt ?? -Infinity) < CHAIN_MS ? (this.chain ?? 0) + 1 : 1;
+    this.chainAt = now;
+    this.sound.play('whack', { kind, on: first.on, final: finish, chain: this.chain });
+    const words = finish ? FINISH.words : look.words;
+    this.emit('hit-word', { ...first.m, top: first.top, text: words[this.chain % words.length], color: finish ? '#ffd84d' : look.color, big: finish, chain: this.chain });
+    if (finish || look.lines) this.emit('hit-lines', first.at);
+    this.buzz(look.buzz + (finish ? FINISH.buzz : 0));
+  }
+
+  // Landing on a monster: a thump down through the picture as you hit it.
+  stompLands(entry, m, size) {
+    const now = performance.now();
+    entry.struckAt = now;
+    entry.stopAt = now;
+    entry.stopUntil = now + IMPACTS.punch.stop;
+    entry.flashUntil = entry.stopUntil + FLASH_TAIL;
+    this.renderer.jolt(0, 0, { down: 0.016, zoom: 0.014 });
+    this.renderer.effects.impact(m.x, m.y + size.height, m.z, 0, 0, '#ffffff', 0.8);
+    this.sound.play('whack', { on: HIT_ON[entry.kind] });
+    this.buzz(14);
+  }
+
+  // A buzz of the device in your hands, on one that has it and once you have
+  // touched the page (browsers refuse it before then).
+  buzz(ms) {
+    if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(ms);
   }
 
   // The bop button held down (👊 or X) with an empty hand: after a moment the
@@ -1891,12 +2138,12 @@ export class Game extends EventTarget {
     // The wind-up as any swing: the pose, the whoosh and the word to friends.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
     this.send({ t: 'swing', king: true });
-    this.sound.play('swish');
+    this.sound.play('swish', { lands });
+    this.slashSoon(this.players.get(this.pid)?.avatar, lands, true);
     const world = this.world;
     setTimeout(() => {
       if (this.world !== world) return;
       const yaw = this.me.yaw;
-      this.slashFrom(this.players.get(this.pid)?.avatar, true);
       this.shockwave(b.x, b.y + 0.95, b.z, yaw);
       this.strike(hits, 'king', dragons);
       this.bopSentAt = performance.now();
@@ -1918,7 +2165,13 @@ export class Game extends EventTarget {
     if (!this.world || !this.me || this.aboard) return null;
     // On a dragon's back, a swing is a breath of fire instead (see breath).
     if (this.riding) return this.breath();
-    if (this.dizzy || !this.attackReady()) return null;
+    if (this.dizzy) return null;
+    // Pressed just too soon: it is not lost, and goes the moment it can (update).
+    const wait = this.attackWait();
+    if (wait > 0) {
+      this.attackSoon = wait <= ATTACK_SOON_MS;
+      return null;
+    }
     const now = performance.now();
     const weapon = wornWeapon(this.profile.data.gear);
     // Not again before this swing is over.
@@ -1981,8 +2234,9 @@ export class Game extends EventTarget {
     // the whoosh of a swing as it starts.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
     this.send({ t: 'swing' });
-    if (!blaster) this.sound.play('swish');
+    if (!blaster) this.sound.play('swish', { lands });
     if (bow) this.sound.play('creak');
+    if (!blaster && !rod) this.slashSoon(this.players.get(this.pid)?.avatar, lands);
     const world = this.world;
     setTimeout(() => {
       if (this.world !== world) return;
@@ -1996,27 +2250,26 @@ export class Game extends EventTarget {
           ? this.renderer.effects.arrowShot(hand.x, hand.y + 0.25, hand.z, at.x, at.y + best.size.height / 2, at.z, true)
           : this.renderer.effects.arrowShot(hand.x, hand.y + 0.25, hand.z, hand.x + Math.sin(yaw) * reach * 1.6, hand.y + 0.3, hand.z + Math.cos(yaw) * reach * 1.6);
         this.sound.play('twang');
-        if (at) setTimeout(() => this.sound.play('thwop'), shot * 1000);
         if (!at) shot = 0;
       } else if (blaster) {
-        if (at) this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z);
+        // The nearer the monster, the sooner the bubble is there.
+        if (at) shot = this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, at.x, at.y + best.size.height / 2, at.z, Math.max(0.1, Math.min(0.28, Math.hypot(at.x - hand.x, at.z - hand.z) / BUBBLE_SPEED)));
         else this.renderer.effects.bubbleShot(hand.x, hand.y, hand.z, hand.x + Math.sin(yaw) * reach, hand.y, hand.z + Math.cos(yaw) * reach);
         this.sound.play('blow');
       } else if (rod) {
-        // The little bomb lobbed in an arc to where you face, popping there.
+        // The little bomb lobbed in an arc to where you face, popping as it lands there.
         const d = best ? Math.hypot(best.dx, best.dz) : reach;
         this.lobBomb(hand.x, hand.y, hand.z, b.x + Math.sin(yaw) * d, b.z + Math.cos(yaw) * d);
         this.sound.play('swish');
         this.send({ t: 'bomb', d: +d.toFixed(2) });
         this.wearOut();
         return;
-      } else {
-        this.slashFrom(this.players.get(this.pid)?.avatar);
-        if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
-      }
+      } else if (hits.length || dragons.length) this.strike(hits, weapon?.key ?? 'punch', dragons);
       if (best) {
         const bop = () => {
           if (this.world !== world) return;
+          // What flies lands as it gets there, on the one it was shot at.
+          if (shot) this.strike(best.dragon ? [] : [best], weapon.key, best.dragon ? [best] : []);
           this.bopSentAt = performance.now();
           for (const hit of blaster ? [best] : [...hits, ...dragons]) {
             if (hit.dragon) this.send({ t: 'critter', op: 'hit', id: hit.id });
@@ -2139,6 +2392,7 @@ export class Game extends EventTarget {
       const up = b.y - m.y;
       if (up < size.height * 0.5 || up > size.height + 0.5) continue;
       entry.stomped = isHeavy(entry.kind) || entry.kind === 'knight' || this.defense ? now + 500 : Infinity;
+      this.stompLands(entry, m, size);
       this.bop(entry.id, true);
       b.vy = 9;
       this.sound.play('jump');
@@ -2168,18 +2422,30 @@ export class Game extends EventTarget {
       x += (last.x - prev.x) * k;
       z += (last.z - prev.z) * k;
     }
-    // A new update moving the guess: from where it was drawn, smoothly.
-    if (entry.seenSnap !== last && entry.drawn) {
+    // Bopped a moment ago: flying back already, as far at least as the blow
+    // would have sent it by now, however little the updates have it moved yet.
+    const kick = entry.kick;
+    let kicked = entry.seenSnap !== last;
+    if (kick) {
+      const t = Math.max(0, performance.now() - kick.at) / 1000;
+      if (t >= KICK_HOLD_SECS) {
+        entry.kick = null;
+        kicked = true;
+      } else {
+        const want = kick.dist * (1 - Math.exp(-t / KICK_SECS));
+        const got = (x - kick.fromX) * kick.x + (z - kick.fromZ) * kick.z;
+        if (want > got) {
+          x += kick.x * (want - got);
+          z += kick.z * (want - got);
+        }
+      }
+    }
+    // A new update moving the guess (or the end of a kick): from where it was
+    // drawn, smoothly.
+    if (kicked && entry.drawn) {
       entry.err = { x: entry.drawn.x - x, z: entry.drawn.z - z };
     }
     entry.seenSnap = last;
-    // Bopped a moment ago, before any update since: flying back already.
-    const kick = entry.kick;
-    if (kick && kick.snap === last) {
-      const d = KICK_DIST * (1 - Math.exp(-Math.max(0, performance.now() - kick.at) / 1000 / KICK_SECS));
-      x += kick.x * d;
-      z += kick.z * d;
-    } else entry.kick = null;
     if (entry.err) {
       const fade = Math.exp(-dt * PREDICT_FADE);
       entry.err.x *= fade;
@@ -2223,15 +2489,19 @@ export class Game extends EventTarget {
     const now = performance.now();
     const night = isNight(this.env.time);
     const cam = this.renderer.camera.position;
+    this.stopFlip = -(this.stopFlip ?? 1);
+    this.updateFlung(now);
     for (const entry of this.monsters.values()) {
-      // Stopped dead by a blow: held where it was, shivering.
+      // Stopped dead by a blow: held where it was, shuddering to and fro along
+      // the blow, less and less. (Waiting for the island to say it popped, still.)
       const stopped = now < (entry.stopUntil ?? 0) && entry.held;
       const s = stopped ? entry.held : this.monsterNow(entry, dt);
       if (!s) continue;
       if (!stopped) entry.held = s;
       const m = entry.model;
-      const shiver = stopped ? 0.04 : 0;
-      m.group.position.set(s.x + (Math.random() - 0.5) * shiver, s.y, s.z + (Math.random() - 0.5) * shiver);
+      const left = entry.recoil ? entry.recoil.at - now : 0;
+      const shudder = stopped && left > 0 ? SHUDDER * this.stopFlip * Math.min(1, left / Math.max(1, entry.recoil.at - (entry.stopAt ?? now))) : 0;
+      m.group.position.set(s.x + (entry.recoil?.x ?? 0) * shudder, s.y, s.z + (entry.recoil?.z ?? 0) * shudder);
       m.group.rotation.order = 'YXZ';
       m.group.rotation.y = s.yaw;
       // Leaning back from the blow, top first, and springing upright.
@@ -2249,7 +2519,7 @@ export class Game extends EventTarget {
       }
       const ground = this.renderer.groundUnder(s.x, s.y, s.z);
       m.update(stopped ? 0 : dt, s.state ?? 'idle', ground === null ? 9 : s.y - ground, night, Boolean(this.adventure?.shield));
-      const flash = now < (entry.flashUntil ?? 0) && Math.floor((entry.flashUntil - now) / FLASH_BLINK) % 2 === 0;
+      const flash = flashOn((entry.flashUntil ?? 0) - now);
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
       this.renderer.placeShadow(m.shadow, s.x, s.y, s.z, m.shadowScale ?? 1);
@@ -6147,15 +6417,15 @@ export class Game extends EventTarget {
   // in an arc over the way. It pops where it lands (the host's word comes back
   // as a blast fx, blast), so here is only the flight of it.
   lobBomb(x, y, z, tx, tz) {
-    const t = 0.45;
+    const t = ROD_LOB_MS / 1000 - ROD_LEAVES_HAND;
     const ty = Math.max(this.me.body.y, this.world.top(Math.floor(tx), Math.floor(tz)) + 1) + 0.3;
     const vx = (tx - x) / t;
     const vz = (tz - z) / t;
     // Enough of a push up to rise over the arc and come down there (gravity
     // pulls the particle down all the while, as much as half of it again).
     const vy = (ty - y) / t + 0.5 * ROD_ARC_G * t;
-    this.renderer.effects.add('puff', x, y, z, { vx, vy, vz, size: 0.24, life: t, grow: 0.3, gravity: ROD_ARC_G, color: '#3b3644', delay: 0.1 });
-    this.renderer.effects.add('sparkle', x, y, z, { vx, vy, vz, size: 0.12, life: t, gravity: ROD_ARC_G, color: '#ffd23f', delay: 0.1 });
+    this.renderer.effects.add('puff', x, y, z, { vx, vy, vz, size: 0.24, life: t, grow: 0.3, gravity: ROD_ARC_G, color: '#3b3644', delay: ROD_LEAVES_HAND });
+    this.renderer.effects.add('sparkle', x, y, z, { vx, vy, vz, size: 0.12, life: t, gravity: ROD_ARC_G, color: '#ffd23f', delay: ROD_LEAVES_HAND });
   }
 
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and
@@ -6167,6 +6437,13 @@ export class Game extends EventTarget {
     fx.sparkles(msg.x, msg.y + 0.5, msg.z, 30, ['#ffd84d', '#ff8fc4', '#ffffff']);
     const d = this.me ? Math.hypot(this.me.body.x - msg.x, this.me.body.y - msg.y, this.me.body.z - msg.z) : 0;
     this.sound.play('boom', { near: Math.max(0.35, 1 - d / 120) });
+    if (d < 16) {
+      this.renderer.shake(0.35 * (1 - d / 16));
+      fx.impact(msg.x, msg.y + 0.5, msg.z, 0, 0, '#ffb13d', 1.5, false);
+      this.emit('hit-lines', { x: msg.x, y: msg.y + 0.5, z: msg.z });
+      this.emit('hit-word', { x: msg.x, y: msg.y, z: msg.z, top: 1.2, text: 'BOOM!', color: '#ffb13d', big: true });
+      this.buzz(30);
+    }
     if (msg.by !== this.pid || !msg.gems?.length) return;
     const cells = [];
     for (let i = 0; i < msg.gems.length; i++) cells.push(Math.floor(msg.x), Math.floor(msg.y), Math.floor(msg.z), B.AIR);
@@ -6674,6 +6951,11 @@ export class Game extends EventTarget {
     // The bop button held down (input.bop): a bare fist charges up a King
     // Punch while it is held, and swings when it is let go.
     this.chargeBop(input);
+    // A press of it that came just too soon, for the swing it asked for.
+    if (this.attackSoon && this.attackReady()) {
+      this.attackSoon = false;
+      this.attack();
+    }
     // Holding the button down (after a moment) keeps building or picking as you sweep.
     const hold = this.holding;
     if (hold && performance.now() >= hold.at && this.tool !== 'stamp' && this.tool !== 'friends') {
@@ -7225,6 +7507,7 @@ export class Game extends EventTarget {
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
     for (const id of [...this.monsters.keys()]) this.renderer.removeMonster(id);
+    this.clearFlung();
     this.renderer.clearFlags();
     this.players.clear();
     this.critters.clear();

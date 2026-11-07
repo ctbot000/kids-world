@@ -34,6 +34,7 @@ import { GoBoards } from './go-boards.js';
 import { Screens } from './screens.js';
 import { Tornado } from './tornado-model.js';
 import { Effects } from './effects.js';
+import { Jolt } from './jolt.js';
 import { FireView } from './fire.js';
 import { shownBox } from './monster-figures.js';
 import { MonsterModel } from './monster-model.js';
@@ -169,7 +170,10 @@ export class Renderer {
     this.camera.position.set(0, 40, 40);
     this.terrain = new Terrain(this.scene, atlas);
     this.sky = new Sky(this.scene);
-    this.effects = new Effects(this.scene);
+    this.effects = new Effects(this.scene, this.camera);
+    this.jolted = new Jolt();
+    // Anyone who asks their device for less motion gets a nudge, not a jolt.
+    this.joltScale = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1;
     // Blocks lightning has set alight (shared/fire.js).
     this.fires = new FireView(this.scene, this.effects);
     this.tornado = new Tornado(this.scene);
@@ -639,9 +643,26 @@ export class Renderer {
     for (const id of [...this.flags.keys()]) this.removeFlag(id);
   }
 
-  // Shakes the camera for a moment, by about this much.
+  // Shakes the picture for a moment, by about this much (render/jolt.js).
   shake(amount) {
-    this.shaking = Math.max(this.shaking ?? 0, amount);
+    this.jolted.shake(amount * this.joltScale);
+  }
+
+  // A blow landing, going the way (dx, dz) along the ground: the picture
+  // kicked that way across the screen by kick (a share of its height) and down
+  // by down, tipped by roll either way and pushed in by zoom.
+  jolt(dx, dz, { kick = 0, down = 0, roll = 0, zoom = 0 } = {}) {
+    const e = this.camera.matrixWorld.elements;
+    const across = dx * e[0] + dz * e[2];
+    const up = dx * e[4] + dz * e[6];
+    const d = Math.hypot(across, up) || 1;
+    const k = this.joltScale;
+    this.jolted.hit({
+      x: (across / d) * kick * k,
+      y: (-(up / d) * kick + down) * k,
+      roll: (Math.random() < 0.5 ? -roll : roll) * k,
+      zoom: zoom * k,
+    });
   }
 
   // King Grumble landing: a ring rushing out over the ground, as far as his stomp reaches.
@@ -780,15 +801,10 @@ export class Renderer {
     // Snap in at once (never show the inside of a wall), ease back out.
     this.camDist = dist < (this.camDist ?? dist) ? dist : this.camDist + (dist - this.camDist) * Math.min(1, dt * 3);
     this.camera.position.copy(v.smooth).addScaledVector(dir, this.camDist);
-    // The ground shaking (King Grumble landing near you), dying away.
-    if (this.shaking > 0) {
-      const k = this.shaking;
-      this.camera.position.x += (Math.random() - 0.5) * k;
-      this.camera.position.y += (Math.random() - 0.5) * k;
-      this.camera.position.z += (Math.random() - 0.5) * k;
-      this.shaking = Math.max(0, k - dt * 1.2);
-    }
     this.camera.lookAt(v.smooth);
+    // A blow landing, or the ground shaking under you (render/jolt.js).
+    const jolt = this.jolted.update(dt);
+    if (jolt.roll) this.camera.rotateZ(jolt.roll);
     if (Math.abs(v.shiftNow) > 1e-3) {
       v.smooth.x += Math.cos(v.yaw) * v.shiftNow;
       v.smooth.z -= Math.sin(v.yaw) * v.shiftNow;
@@ -798,8 +814,11 @@ export class Renderer {
     // and the ground never comes between them.
     v.liftNow = (v.liftNow ?? 0) + ((v.lift ?? 0) - (v.liftNow ?? 0)) * Math.min(1, dt * 5);
     const cam = this.camera;
-    if (Math.abs(v.liftNow) > 1e-3) cam.setViewOffset(cam.aspect, 1, 0, v.liftNow, cam.aspect, 1);
-    else if (cam.view?.enabled) cam.clearViewOffset();
+    if (Math.abs(v.liftNow) > 1e-3 || jolt.moved) {
+      const wide = cam.aspect;
+      const seen = 1 / (1 + jolt.zoom);
+      cam.setViewOffset(wide, 1, (wide * (1 - seen)) / 2 - jolt.shiftX, (1 - seen) / 2 - jolt.shiftY + v.liftNow, wide * seen, seen);
+    } else if (cam.view?.enabled) cam.clearViewOffset();
     return this.camDist;
   }
 

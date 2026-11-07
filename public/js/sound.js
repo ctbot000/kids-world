@@ -11,6 +11,8 @@ const SFX_GAIN = 2.5;
 const MUSIC_GAIN = 0.6;
 // C major pentatonic, the notes that always sound nice together.
 const PENTA = [0, 2, 4, 7, 9];
+// Up a major scale, for blows in a row.
+const MAJOR = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19];
 
 // Happy Birthday, in C: [its MIDI note, how many beats], and each bar's low
 // note and chord, in three time from the two notes before the first bar.
@@ -388,9 +390,11 @@ export class Sound {
         this.noise(0.08, { type: 'lowpass', freq: 600, gain: 0.15 });
         break;
       case 'splat':
-        this.noise(0.12, { type: 'bandpass', freq: 700, sweep: 2400, q: 1.5, gain: 0.25 });
-        this.tone(420 * r(), { decay: 0.1, gain: 0.2, slide: 1100, slideTime: 0.08 });
-        this.tone(NOTE(91), { at: 0.1, decay: 0.3, gain: 0.08, type: 'triangle' });
+        this.noise(0.012, { type: 'highpass', freq: 2400, gain: 0.3, attack: 0.001 });
+        this.noise(0.12, { type: 'bandpass', freq: 700, sweep: 2400, q: 1.5, gain: 0.34 });
+        this.tone(170 * r(), { decay: 0.1, gain: 0.3, slide: 70, slideTime: 0.09, attack: 0.002 });
+        this.tone(420 * r(), { decay: 0.1, gain: 0.26, slide: 1100, slideTime: 0.08 });
+        this.tone(NOTE(91), { at: 0.1, decay: 0.3, gain: 0.09, type: 'triangle' });
         break;
       case 'grumble':
         // King Grumble's is a deeper one.
@@ -418,26 +422,57 @@ export class Sound {
         this.tone(240 * r(), { decay: 0.22, gain: 0.14, slide: 620, slideTime: 0.14 });
         this.noise(0.12, { type: 'lowpass', freq: 900, gain: 0.05 });
         break;
-      // A swing of the arm (the 👊 button): a soft whoosh.
-      case 'swish':
-        this.noise(0.14, { type: 'bandpass', freq: 700, sweep: 2200, q: 1.2, gain: 0.12 });
+      // A swing of the arm (the 👊 button): a whoosh rising into the moment it
+      // lands (opts.lands, seconds on), longer and lower the slower the swing.
+      case 'swish': {
+        const lands = opts.lands ?? 0.14;
+        const secs = Math.min(0.22, Math.max(0.12, lands * 0.7));
+        this.noise(secs, { at: Math.max(0, lands - secs), type: 'bandpass', freq: lands > 0.25 ? 380 : 700, sweep: lands > 0.25 ? 1500 : 2400, q: 1.2, gain: lands > 0.25 ? 0.16 : 0.13, attack: secs * 0.75 });
         break;
-      // A swing landing on a monster (opts.kind, what swung): a fist's
-      // thump, a toy sword's crisp thwack, the Star Hammer's heavy bonk with
-      // a boom under it, and the Lava Blade's thwack with a hiss after.
+      }
+      // A swing landing (opts.kind, what swung): first a crack too short to have
+      // a pitch, the edge of the blow; under it a fist's thump, a toy sword's
+      // crisp thwack, the Star Hammer's great boom and the Lava Blade's thwack
+      // with a hiss after; then what it landed on (opts.on): a clang off armor,
+      // a crunch off stone, or a squelch out of jelly. opts.near: how close, 1
+      // right there. opts.chain: how many blows in a row, each a note higher
+      // than the last. opts.final: the blow that pops it, with a boom under it.
       case 'whack': {
         const kind = opts.kind;
-        if (kind === 'hammer') {
-          this.tone(150 * r(), { decay: 0.32, gain: 0.4, slide: 55, slideTime: 0.28 });
-          this.noise(0.18, { type: 'lowpass', freq: 900, sweep: 200, gain: 0.4 });
-          this.tone(NOTE(84) * r(), { decay: 0.35, gain: 0.05, type: 'triangle' });
+        const near = opts.near ?? 1;
+        const chain = Math.max(0, (opts.chain ?? 1) - 1);
+        const up = 2 ** (MAJOR[Math.min(chain, MAJOR.length - 1)] / 12);
+        this.noise(0.014, { type: 'highpass', freq: 2800, gain: 0.5 * near, attack: 0.001 });
+        if (kind === 'hammer' || kind === 'king') {
+          this.tone(170 * r(), { decay: 0.34, gain: 0.7 * near, slide: 44, slideTime: 0.26, attack: 0.002 });
+          this.noise(0.17, { type: 'lowpass', freq: 1500, sweep: 220, gain: 0.5 * near });
+          this.tone(NOTE(84) * r(), { at: 0.01, decay: 0.32, gain: 0.05 * near, type: 'triangle' });
         } else if (kind === 'sword' || kind === 'lavablade') {
-          this.noise(0.07, { type: 'bandpass', freq: 2600, sweep: 900, q: 1.4, gain: 0.32 });
-          this.tone(260 * r(), { decay: 0.12, gain: 0.3, type: 'triangle', slide: 120, slideTime: 0.1 });
-          if (kind === 'lavablade') this.noise(0.45, { at: 0.04, type: 'highpass', freq: 3500, sweep: 7000, gain: 0.08 });
+          this.noise(0.08, { type: 'bandpass', freq: 3000, sweep: 1000, q: 1.2, gain: 0.42 * near });
+          this.tone(300 * r(), { decay: 0.12, gain: 0.36 * near, type: 'triangle', slide: 110, slideTime: 0.1 });
+          this.tone(130 * r(), { decay: 0.1, gain: 0.42 * near, slide: 60, slideTime: 0.09, attack: 0.002 });
+          if (kind === 'lavablade') this.noise(0.5, { at: 0.04, type: 'highpass', freq: 3500, sweep: 7500, gain: 0.1 * near });
+        } else if (kind === 'blaster') {
+          this.tone(300 * r(), { decay: 0.1, gain: 0.3 * near, slide: 900, slideTime: 0.08 });
+          this.noise(0.05, { type: 'lowpass', freq: 1600, gain: 0.25 * near });
+        } else if (kind === 'bow') {
+          this.tone(170 * r(), { decay: 0.1, gain: 0.34 * near, slide: 420, slideTime: 0.06 });
+          this.noise(0.05, { type: 'lowpass', freq: 1400, gain: 0.25 * near });
         } else {
-          this.tone(120 * r(), { decay: 0.14, gain: 0.38, slide: 60, slideTime: 0.12 });
-          this.noise(0.08, { type: 'lowpass', freq: 1400, sweep: 300, gain: 0.32 });
+          this.tone(140 * r(), { decay: 0.15, gain: 0.55 * near, slide: 52, slideTime: 0.12, attack: 0.002 });
+          this.noise(0.08, { type: 'lowpass', freq: 1700, sweep: 320, gain: 0.42 * near });
+        }
+        if (opts.on === 'metal') {
+          for (const f of [2300, 3410, 4870]) this.tone(f * r(), { decay: 0.2, gain: 0.05 * near, type: 'triangle' });
+        } else if (opts.on === 'stone') {
+          this.noise(0.09, { type: 'bandpass', freq: 520, sweep: 240, q: 1.5, gain: 0.4 * near });
+        } else {
+          this.tone(300 * up * r(), { at: 0.012, decay: 0.09, gain: 0.17 * near, slide: 720 * up, slideTime: 0.07 });
+        }
+        if (chain) this.tone(NOTE(72) * up, { at: 0.012, decay: 0.16, gain: 0.07 * near, type: 'triangle' });
+        if (opts.final) {
+          this.tone(110 * r(), { decay: 0.42, gain: 0.55 * near, slide: 34, slideTime: 0.34, attack: 0.003 });
+          this.noise(0.26, { type: 'lowpass', freq: 900, sweep: 150, gain: 0.34 * near });
         }
         break;
       }

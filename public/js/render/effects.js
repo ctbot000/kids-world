@@ -4,27 +4,35 @@
 import * as THREE from '../../vendor/three.module.js';
 import { arrow } from './avatar.js';
 
-const KINDS = ['puff', 'heart', 'sparkle', 'note', 'zzz', 'square', 'drop', 'star', 'bang'];
-const CELL = 64;
+const KINDS = ['puff', 'heart', 'sparkle', 'note', 'zzz', 'square', 'drop', 'star', 'bang', 'burst', 'streak'];
+// Each picture is drawn on UNIT by UNIT, on a CELL by CELL part of the sheet:
+// a blow's burst shows large for a moment, and should have a clean edge.
+const UNIT = 64;
+const CELL = 128;
 const MAX = 900;
+// The ones drawn over everything, a blow's own: your avatar stands between the
+// camera and what you hit, and would hide them.
+const MAX_OVER = 240;
+// How far out the points and dips of a blow's burst go, all the way round.
+const BURST = [31, 13, 26, 12, 30, 14, 23, 11, 31, 13, 27, 12, 30, 12, 24, 13, 29, 11, 26, 14];
 
 function sheet() {
   const c = document.createElement('canvas');
   c.width = CELL * KINDS.length;
   c.height = CELL;
   const ctx = c.getContext('2d');
-  const at = (i) => ({ x: i * CELL, c: CELL / 2 });
+  const m = UNIT / 2;
   KINDS.forEach((kind, i) => {
-    const { x, c: m } = at(i);
     ctx.save();
-    ctx.translate(x, 0);
+    ctx.translate(i * CELL, 0);
+    ctx.scale(CELL / UNIT, CELL / UNIT);
     switch (kind) {
       case 'puff': {
         const g = ctx.createRadialGradient(m, m, 2, m, m, 28);
         g.addColorStop(0, 'rgba(255,255,255,1)');
         g.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, CELL, CELL);
+        ctx.fillRect(0, 0, UNIT, UNIT);
         break;
       }
       case 'heart':
@@ -97,6 +105,26 @@ function sheet() {
         ctx.textBaseline = 'middle';
         ctx.fillText('!', m, m + 2);
         break;
+      // The spiky star a comic draws round a blow.
+      case 'burst':
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        BURST.forEach((r, k) => {
+          const a = (k / BURST.length) * Math.PI * 2 - Math.PI / 2;
+          ctx.lineTo(m + Math.cos(a) * r, m + Math.sin(a) * r);
+        });
+        ctx.fill();
+        break;
+      // A thin splinter, long from side to side (see turn, in add).
+      case 'streak':
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(1, m);
+        ctx.lineTo(m + 12, m - 5);
+        ctx.lineTo(63, m);
+        ctx.lineTo(m + 12, m + 5);
+        ctx.fill();
+        break;
       default:
         break;
     }
@@ -110,23 +138,25 @@ function sheet() {
 const VERT = /* glsl */ `
   attribute vec3 center;
   attribute vec4 color;
-  attribute vec2 info; // size, kind
+  attribute vec3 info; // size, kind, how far it is turned
   varying vec2 vUv;
   varying vec4 vColor;
   uniform float uKinds;
   void main() {
     vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
     vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-    vec3 p = center + (right * position.x + up * position.y) * info.x;
+    float c = cos(info.z);
+    float s = sin(info.z);
+    vec3 p = center + (right * (position.x * c - position.y * s) + up * (position.x * s + position.y * c)) * info.x;
     gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
     vUv = vec2((uv.x + info.y) / uKinds, uv.y);
     vColor = color;
   }
 `;
 
-// A slash: a sweep of light along an arc, its head running from one end to
-// the other with a trail fading out behind it, brightest at the outer edge
-// where the blade's tip goes.
+// A slash: a crescent of light along an arc, its head running from one end to
+// the other: pointed and white-hot there, widest a little behind it and
+// narrowing away to nothing along the outer edge, where the blade's tip goes.
 const SLASH_VERT = /* glsl */ `
   attribute vec2 ts; // how far along the arc, and how far out (0 to 1)
   varying vec2 vTs;
@@ -143,14 +173,26 @@ const SLASH_FRAG = /* glsl */ `
   void main() {
     float d = uHead - vTs.x;
     if (d < 0.0 || d > uTrail) discard;
-    float a = pow(1.0 - d / uTrail, 0.6) * smoothstep(0.0, 0.25, vTs.y) * (0.55 + 0.45 * vTs.y);
-    gl_FragColor = vec4(mix(uColor, vec3(1.0), pow(vTs.y, 8.0) * 0.7), a * 0.95);
+    float t = d / uTrail;
+    float wide = smoothstep(0.0, 0.12, t) * pow(1.0 - t, 1.3);
+    float inner = 1.0 - wide;
+    if (vTs.y < inner) discard;
+    float across = (vTs.y - inner) / max(wide, 0.001);
+    float hot = max(1.0 - smoothstep(0.0, 0.3, t), smoothstep(0.62, 0.95, across));
+    gl_FragColor = vec4(mix(uColor, vec3(1.0), hot), smoothstep(0.0, 0.3, across) * (1.0 - t * t));
     #include <colorspace_fragment>
   }
 `;
 const SLASH_SECS = 0.26;
 const SLASH_TRAIL = 0.55;
 const SLASH_POOL = 8;
+// Where a slash's arc goes (round from straight ahead, the way the swing goes).
+const SLASH_FROM = -1.75;
+const SLASH_TO = 1.75;
+const SLASH_TO_UPRIGHT = 0.6;
+// How long a slash takes to come round to straight ahead: it starts that long
+// before the swing lands, so the blade is on the monster as the blow is.
+export const slashLead = ({ upright = false, from = SLASH_FROM, to = upright ? SLASH_TO_UPRIGHT : SLASH_TO } = {}) => (((0 - from) / (to - from)) * SLASH_SECS) / (1 + SLASH_TRAIL);
 
 const FRAG = /* glsl */ `
   uniform sampler2D map;
@@ -164,17 +206,20 @@ const FRAG = /* glsl */ `
   }
 `;
 
-export class Effects {
-  constructor(scene) {
+// A batch of particles, drawn together: in the world (hidden by what stands in
+// front of them), or over everything.
+class Layer {
+  constructor(scene, map, max, over) {
     this.list = [];
+    this.max = max;
     const quad = new THREE.PlaneGeometry(1, 1);
     const g = new THREE.InstancedBufferGeometry();
     g.index = quad.index;
     g.setAttribute('position', quad.getAttribute('position'));
     g.setAttribute('uv', quad.getAttribute('uv'));
-    this.center = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
-    this.color = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4);
-    this.info = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 2), 2);
+    this.center = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    this.color = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4);
+    this.info = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
     for (const a of [this.center, this.color, this.info]) a.setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('center', this.center);
     g.setAttribute('color', this.color);
@@ -182,16 +227,81 @@ export class Effects {
     g.instanceCount = 0;
     this.geometry = g;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: sheet() }, uKinds: { value: KINDS.length } },
+      uniforms: { map: { value: map }, uKinds: { value: KINDS.length } },
       vertexShader: VERT,
       fragmentShader: FRAG,
       transparent: true,
       depthWrite: false,
+      depthTest: !over,
     });
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 5;
+    this.mesh.renderOrder = over ? 6 : 5;
     scene.add(this.mesh);
+  }
+
+  update(dt) {
+    let n = 0;
+    const c = this.center.array;
+    const col = this.color.array;
+    const info = this.info.array;
+    for (let i = 0; i < this.list.length; i++) {
+      const p = this.list[i];
+      p.age += dt;
+      if (p.age >= p.life) continue;
+      if (p.age < 0) {
+        // Not showing yet: kept, and drawn nowhere.
+        this.list[n] = p;
+        c[n * 3] = p.x;
+        c[n * 3 + 1] = p.y;
+        c[n * 3 + 2] = p.z;
+        col[n * 4 + 3] = 0;
+        info[n * 3] = 0;
+        info[n * 3 + 1] = p.k;
+        info[n * 3 + 2] = 0;
+        n++;
+        continue;
+      }
+      p.vy -= p.gravity * dt;
+      if (p.drag) {
+        const k = Math.max(0, 1 - p.drag * dt);
+        p.vx *= k;
+        p.vy *= k;
+        p.vz *= k;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.size += p.grow * dt;
+      p.turn += p.spin * dt;
+      const fade = Math.min(1, (p.life - p.age) / Math.min(0.35, p.life * 0.5));
+      c[n * 3] = p.x;
+      c[n * 3 + 1] = p.y;
+      c[n * 3 + 2] = p.z;
+      col[n * 4] = p.r;
+      col[n * 4 + 1] = p.g;
+      col[n * 4 + 2] = p.b;
+      col[n * 4 + 3] = fade;
+      info[n * 3] = Math.max(0, p.size);
+      info[n * 3 + 1] = p.k;
+      info[n * 3 + 2] = p.turn;
+      this.list[n] = p;
+      n++;
+    }
+    this.list.length = n;
+    this.geometry.instanceCount = n;
+    this.center.needsUpdate = true;
+    this.color.needsUpdate = true;
+    this.info.needsUpdate = true;
+  }
+}
+
+export class Effects {
+  constructor(scene, camera) {
+    this.camera = camera;
+    const map = sheet();
+    this.world = new Layer(scene, map, MAX, false);
+    this.over = new Layer(scene, map, MAX_OVER, true);
     this.tmp = new THREE.Color();
     this.scene = scene;
     this.slashes = [];
@@ -251,8 +361,8 @@ export class Effects {
         this.slashes.push(s);
       }
     }
-    const lo = from ?? -1.75;
-    const hi = to ?? (upright ? 0.6 : 1.75);
+    const lo = from ?? SLASH_FROM;
+    const hi = to ?? (upright ? SLASH_TO_UPRIGHT : SLASH_TO);
     s.mesh.geometry = this.slashGeo(lo, hi, Math.max(0.3, reach * 0.45), reach);
     s.group.position.set(x, y, z);
     s.group.rotation.set(0, yaw, 0);
@@ -265,11 +375,19 @@ export class Effects {
     s.group.visible = true;
   }
 
-  // delay: seconds before it shows (and starts to move).
-  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0, delay = 0 } = {}) {
-    if (this.list.length >= MAX) this.list.shift();
+  // What is showing in the world (not what is drawn over everything).
+  get list() {
+    return this.world.list;
+  }
+
+  // delay: seconds before it shows (and starts to move). turn: how far it is
+  // turned in the picture's plane, and spin how fast that goes round. over:
+  // drawn over everything, whatever stands in front of it.
+  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0, delay = 0, turn = 0, over = false } = {}) {
+    const layer = over ? this.over : this.world;
+    if (layer.list.length >= layer.max) layer.list.shift();
     const c = this.tmp.set(color);
-    this.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: -delay, gravity, grow, drag, spin });
+    layer.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: -delay, gravity, grow, drag, spin, turn });
   }
 
   // ------------------------------------------------ recipes
@@ -401,38 +519,111 @@ export class Effects {
     });
   }
 
-  // A blow landing at (x, y, z), going the way (dx, dz) along the ground: a
-  // white flash there that is gone almost at once, a ring of sparkles in
-  // color bursting out round it, and quick streaks flying on the way the
-  // blow went, falling as they go.
-  impact(x, y, z, dx, dz, color = '#ffffff') {
-    this.add('sparkle', x, y, z, { size: 1.1, life: 0.12, grow: -4, color: '#ffffff' });
-    this.add('puff', x, y, z, { size: 0.4, life: 0.15, grow: 4, color });
+  // A blow landing at (x, y, z), going the way (dx, dz) along the ground, sized
+  // by power: a spiky star there in color with a white-hot one inside it, gone
+  // in a few frames; splinters of light shooting straight out from it across
+  // the picture; a ring of sparkles bursting out; and quick bits flying on the
+  // way the blow went, falling as they go. Your own (over) is drawn over
+  // everything, as you stand between the camera and what you hit.
+  impact(x, y, z, dx, dz, color = '#ffffff', power = 1, over = true) {
+    const turn = Math.random() * Math.PI * 2;
+    this.add('burst', x, y, z, { size: 1.9 * power, grow: -7 * power, life: 0.11, color, turn, over });
+    this.add('burst', x, y, z, { size: 1.2 * power, grow: -6 * power, life: 0.09, turn: turn + 0.5, over });
+    const e = this.camera.matrixWorld.elements;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+      const s = (11 + Math.random() * 5) * power;
+      const sx = Math.cos(a) * s;
+      const sy = Math.sin(a) * s;
+      this.add('streak', x, y, z, {
+        vx: e[0] * sx + e[4] * sy,
+        vy: e[1] * sx + e[5] * sy,
+        vz: e[2] * sx + e[6] * sy,
+        size: (1 + Math.random() * 0.5) * power,
+        grow: -4 * power,
+        life: 0.17,
+        drag: 7,
+        turn: a,
+        color: i % 2 ? color : '#ffffff',
+        over,
+      });
+    }
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
       const up = Math.random() * 1.6 - 0.5;
       this.add('sparkle', x, y, z, {
-        vx: Math.cos(a) * 3.2,
-        vy: up * 3.2,
-        vz: Math.sin(a) * 3.2,
-        size: 0.22 + Math.random() * 0.1,
-        life: 0.22 + Math.random() * 0.1,
+        vx: Math.cos(a) * 3.8 * power,
+        vy: up * 3.8 * power,
+        vz: Math.sin(a) * 3.8 * power,
+        size: (0.3 + Math.random() * 0.14) * power,
+        life: 0.26 + Math.random() * 0.1,
         drag: 6,
         color: i % 2 ? color : '#ffffff',
+        over,
       });
     }
     for (let i = 0; i < 6; i++) {
-      const s = 5 + Math.random() * 3;
+      const s = (5 + Math.random() * 3) * power;
       const side = (Math.random() - 0.5) * 1.4;
       this.add('square', x, y, z, {
         vx: (dx - dz * side) * s,
         vy: 1.5 + Math.random() * 2.5,
         vz: (dz + dx * side) * s,
-        size: 0.08 + Math.random() * 0.06,
+        size: (0.1 + Math.random() * 0.07) * power,
         life: 0.35 + Math.random() * 0.2,
         gravity: 16,
         drag: 3,
         color: i % 3 ? color : '#ffffff',
+        over,
+      });
+    }
+  }
+
+  // The Star Hammer coming down: dust thrown out low along the ground all round.
+  thud(x, y, z) {
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+      const s = 3.5 + Math.random() * 2;
+      this.add('puff', x, y + 0.12, z, { vx: Math.cos(a) * s, vy: 0.5 + Math.random() * 0.5, vz: Math.sin(a) * s, size: 0.35, grow: 1.6, life: 0.42, drag: 5, color: '#fff6e0' });
+    }
+  }
+
+  // The Lava Blade's cut: embers floating up out of it, and a lick of flame.
+  embers(x, y, z) {
+    for (let i = 0; i < 12; i++) {
+      this.add('square', x + (Math.random() - 0.5) * 0.5, y + (Math.random() - 0.5) * 0.5, z + (Math.random() - 0.5) * 0.5, {
+        vx: (Math.random() - 0.5) * 2.4,
+        vy: 1 + Math.random() * 2.2,
+        vz: (Math.random() - 0.5) * 2.4,
+        size: 0.06 + Math.random() * 0.07,
+        life: 0.5 + Math.random() * 0.4,
+        drag: 1.2,
+        gravity: -1,
+        color: i % 3 ? '#ff8a2a' : '#ffd84d',
+        over: true,
+      });
+    }
+    for (let i = 0; i < 3; i++) this.add('puff', x, y, z, { vy: 1.4, vx: (Math.random() - 0.5) * 1.2, vz: (Math.random() - 0.5) * 1.2, size: 0.4, grow: 1.5, life: 0.26, color: '#ff6a1f', delay: i * 0.03, over: true });
+  }
+
+  // A monster going pop at (x, y, z): a white puff, drops of it in its own
+  // color flying every way and falling, and a flat ring round it on the ground
+  // (size: how big it was).
+  jellyPop(x, y, z, color, size = 1) {
+    this.add('puff', x, y, z, { size: 1.5 * size, grow: 7 * size, life: 0.16, over: true });
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const out = (2.5 + Math.random() * 4) * size;
+      this.add('drop', x, y, z, {
+        vx: Math.cos(a) * out,
+        vy: 2.5 + Math.random() * 5,
+        vz: Math.sin(a) * out,
+        size: (0.2 + Math.random() * 0.24) * size,
+        life: 0.45 + Math.random() * 0.25,
+        gravity: 17,
+        drag: 0.8,
+        color: i % 4 ? color : '#ffffff',
+        over: true,
       });
     }
   }
@@ -485,9 +676,9 @@ export class Effects {
     }
   }
 
-  // A tower's bubble, flying from (x, y, z) to (tx, ty, tz), and bursting there.
-  bubbleShot(x, y, z, tx, ty, tz) {
-    const t = 0.28;
+  // A tower's bubble, flying from (x, y, z) to (tx, ty, tz) in t seconds, and
+  // bursting there. Returns t.
+  bubbleShot(x, y, z, tx, ty, tz, t = 0.28) {
     const vx = (tx - x) / t;
     const vy = (ty - y) / t;
     const vz = (tz - z) / t;
@@ -497,6 +688,7 @@ export class Effects {
       const a = Math.random() * Math.PI * 2;
       this.add('drop', tx, ty, tz, { vx: Math.cos(a) * 1.6 + vx * 0.05, vy: 1.5 + Math.random(), vz: Math.sin(a) * 1.6 + vz * 0.05, size: 0.12, life: 0.4, gravity: 10, color: '#9fe8ff', delay: t });
     }
+    return t;
   }
 
   // A Toy Bow's arrow (shared/shop.js bow) shot from (x, y, z) at (tx, ty,
@@ -602,64 +794,23 @@ export class Effects {
     }
   }
 
+  // Slashes in the air stop dead with the swing, until (performance.now()).
+  holdSlashes(until) {
+    this.slashHold = until;
+  }
+
   update(dt) {
+    const held = performance.now() < (this.slashHold ?? 0);
     for (const s of this.slashes) {
       if (!s.group.visible) continue;
-      s.age += dt;
+      if (!held) s.age += dt;
       s.mat.uniforms.uHead.value = (s.age / SLASH_SECS) * (1 + SLASH_TRAIL);
       if (s.age >= SLASH_SECS) s.group.visible = false;
     }
     for (const r of this.ripples ?? []) r.update(dt);
     for (const a of this.arrows ?? []) a.update(dt);
-    let n = 0;
-    const c = this.center.array;
-    const col = this.color.array;
-    const info = this.info.array;
-    for (let i = 0; i < this.list.length; i++) {
-      const p = this.list[i];
-      p.age += dt;
-      if (p.age >= p.life) continue;
-      if (p.age < 0) {
-        // Not showing yet: kept, and drawn nowhere.
-        this.list[n] = p;
-        c[n * 3] = p.x;
-        c[n * 3 + 1] = p.y;
-        c[n * 3 + 2] = p.z;
-        col[n * 4 + 3] = 0;
-        info[n * 2] = 0;
-        info[n * 2 + 1] = p.k;
-        n++;
-        continue;
-      }
-      p.vy -= p.gravity * dt;
-      if (p.drag) {
-        const k = Math.max(0, 1 - p.drag * dt);
-        p.vx *= k;
-        p.vy *= k;
-        p.vz *= k;
-      }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.z += p.vz * dt;
-      p.size += p.grow * dt;
-      const fade = Math.min(1, (p.life - p.age) / Math.min(0.35, p.life * 0.5));
-      c[n * 3] = p.x;
-      c[n * 3 + 1] = p.y;
-      c[n * 3 + 2] = p.z;
-      col[n * 4] = p.r;
-      col[n * 4 + 1] = p.g;
-      col[n * 4 + 2] = p.b;
-      col[n * 4 + 3] = fade;
-      info[n * 2] = p.size;
-      info[n * 2 + 1] = p.k;
-      this.list[n] = p;
-      n++;
-    }
-    this.list.length = n;
-    this.geometry.instanceCount = n;
-    this.center.needsUpdate = true;
-    this.color.needsUpdate = true;
-    this.info.needsUpdate = true;
+    this.world.update(dt);
+    this.over.update(dt);
   }
 }
 

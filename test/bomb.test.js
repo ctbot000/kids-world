@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { WEAPONS, weaponOf } from '../public/js/shared/shop.js';
+import { ROD_LOB_MS, WEAPONS, weaponOf } from '../public/js/shared/shop.js';
 import { applyCells, blastEdit, gemBlastEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
 
@@ -206,15 +206,30 @@ test('a Bomb Rod thrown bops the monsters in its blast, as the thrower\'s bops',
   Object.assign(m.body, { x: spawn.x, y: 11, z: spawn.z + 3, vx: 0, vy: 0, vz: 0 });
   a.inbox.length = 0;
   room.receive(a, { t: 'bomb', d: 3 });
+  // In the air it does nothing yet: friends only see it lobbed.
+  assert.ok(a.inbox.some((msg) => msg.t === 'fx' && msg.kind === 'lob'), 'friends see the bomb lobbed');
+  assert.equal(a.inbox.some((msg) => msg.t === 'mhit' || msg.kind === 'blast'), false, 'nothing pops while it flies');
+  time.t += ROD_LOB_MS - 50;
+  room.tick();
+  assert.equal(a.inbox.some((msg) => msg.t === 'mhit' || msg.kind === 'blast'), false, 'not until it lands');
+  // It lands where it was thrown, whatever the thrower does while it flies.
+  room.receive(a, { t: 'm', s: [spawn.x - 20, 11, spawn.z, Math.PI / 2, 0, 0] });
+  time.t += 50;
+  room.tick();
   const blast = a.last('fx');
   assert.ok(blast && blast.kind === 'blast', 'the pop is told');
   assert.equal(blast.by, 1, 'it was the thrower\'s');
-  assert.ok(a.inbox.some((msg) => msg.t === 'fx' && msg.kind === 'lob'), 'friends see the bomb lobbed');
+  assert.equal(blast.z, Math.floor(spawn.z + 3) + 0.5, 'where it was thrown');
+  assert.equal(blast.x, Math.floor(spawn.x) + 0.5, 'where it was thrown');
   assert.ok(a.inbox.some((msg) => msg.t === 'mhit' && msg.by === 1), 'the monster is bopped as theirs');
+  assert.ok(m.body.vz > 0, 'knocked away from where it was thrown from');
   // A monster well out of the blast is left alone.
   const far = room.monsters.add(w, spawn.x, 11, spawn.z - 6);
   Object.assign(far.body, { x: spawn.x, y: 11, z: spawn.z - 6, vx: 0, vy: 0, vz: 0 });
   a.inbox.length = 0;
+  room.receive(a, { t: 'm', s: [spawn.x, 11, spawn.z, 0, 0, 0] });
   room.receive(a, { t: 'bomb', d: 3 });
-  assert.equal(a.inbox.some((msg) => msg.t === 'mhit'), false, 'too far for the blast');
+  time.t += ROD_LOB_MS;
+  room.tick();
+  assert.equal(a.inbox.some((msg) => msg.t === 'mhit' && msg.id === far.id), false, 'too far for the blast');
 });

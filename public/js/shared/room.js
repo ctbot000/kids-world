@@ -45,7 +45,7 @@ import { canFloat } from './fishing.js';
 import { applyStroke, blankPicture, cleanStroke, decodePicture, encodePicture, isBlank, isPictureAt, MAX_PICTURES } from './drawing.js';
 import { cleanPiece } from './song.js';
 import { canWatch } from './watch.js';
-import { hasPower, weaponOf } from './shop.js';
+import { hasPower, ROD_LOB_MS, weaponOf } from './shop.js';
 import { cleanChat, cleanIslandName, cleanLook, cleanName, EMOTE_KEYS, isValidName, lookHair, lookTall, NAME_MAX, PHRASES, randomIslandName, randomName, STICKERS } from './words.js';
 
 // The most HP someone has, from the level on their look.
@@ -298,6 +298,8 @@ export class Room {
     // Mining bombs placed, by the cell they sit in: the cell, who placed one
     // there, and when it pops (stepBombs).
     this.bombs = new Map();
+    // The Bomb Rod's little bombs in the air: where each will land, and when.
+    this.rodBombs = [];
     // Fires lightning has started (stepStorm), never saved; and when the
     // next strike comes, in a storm. Their own draws, so the weather goes
     // on as before.
@@ -1476,6 +1478,7 @@ export class Room {
     this.farm(now);
     this.nature(now);
     this.stepBombs(now);
+    this.stepRodBombs(now);
   }
 
   // The fireflies: the host lets a few out over the flowers at dusk and
@@ -2027,7 +2030,7 @@ export class Room {
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : undefined);
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -2070,8 +2073,24 @@ export class Room {
     const z = Math.floor(p.s[2] + fz * dist);
     const y = Math.floor(p.s[1] + 0.5);
     if (!this.world.inBounds(x, y, z)) return;
-    // Friends see the bomb lobbed from the thrower's hand, arcing down to it.
+    // Friends see the bomb lobbed from the thrower's hand, arcing down to it,
+    // and it pops as it lands (stepRodBombs), from where they threw it.
     this.broadcast({ t: 'fx', kind: 'lob', pid: p.id, x: +p.s[0].toFixed(2), y: +(p.s[1] + 1).toFixed(2), z: +p.s[2].toFixed(2), tx: x + 0.5, tz: z + 0.5 });
+    this.rodBombs.push({ pid: p.id, x, y, z, from: { x: p.s[0], y: p.s[1], z: p.s[2] }, at: now + ROD_LOB_MS });
+  }
+
+  // The Bomb Rod's little bombs, landing.
+  stepRodBombs(now) {
+    if (!this.rodBombs.length) return;
+    const landed = this.rodBombs.filter((bomb) => bomb.at <= now);
+    this.rodBombs = this.rodBombs.filter((bomb) => bomb.at > now);
+    for (const bomb of landed) {
+      const p = this.players.get(bomb.pid);
+      if (p) this.rodBurst(p, bomb, now);
+    }
+  }
+
+  rodBurst(p, { x, y, z, from }, now) {
     // The monsters in the blast: each takes a bop of the thrower's.
     for (const m of [...this.monsters.list]) {
       if (m.under) continue;
@@ -2086,7 +2105,7 @@ export class Room {
         this.bopKing(p, m, now, weaponOf('bombrod').king);
         continue;
       }
-      const hit = this.monsters.hit(m, p.id, { x: p.s[0], y: p.s[1], z: p.s[2] }, now, weaponOf('bombrod').power);
+      const hit = this.monsters.hit(m, p.id, from, now, weaponOf('bombrod').power, weaponOf('bombrod').push);
       if (hit.wait) continue;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });

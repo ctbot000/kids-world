@@ -399,16 +399,51 @@ export class UI {
   // the spot and fades (frame keeps it over the place as you look about),
   // and the ⭐ ring on the Stickers button pings, the XP going in: what the
   // ring says and what the pill says are the same thing.
-  reward({ x, y, z, xp }) {
-    if (![x, y, z, xp].every(Number.isFinite) || xp <= 0) return;
-    const el = h('div', { class: 'float-reward', title: `${xp} XP toward your next level` }, h('span', {}, `⭐ +${xp}`));
+  // What a blow says as it lands (game.js strike): the word popping out over
+  // what it hit, from the third in a row how many in a row, and gone in a blink.
+  hitWord({ x, y, z, top, text, color, big, chain }) {
+    if (![x, y, z].every(Number.isFinite)) return;
+    const tilt = (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 9);
+    const el = h('div', { class: `float-hit${big ? ' finish' : ''}`, style: `--c:${color};--tilt:${tilt.toFixed(1)}deg` }, h('span', {}, text, chain >= 3 ? h('small', {}, `×${chain}`) : ''));
+    this.addFloat(el, { x, y, z, secs: 0.62, lift: top + 0.72, rise: 0.8 });
+  }
+
+  // How many hearts it took off (off the island's own word), beside the word.
+  hitNumber({ x, y, z, n }) {
+    if (![x, y, z, n].every(Number.isFinite)) return;
+    const el = h('div', { class: 'float-hit num', style: `--tilt:${(Math.random() * 10 - 5).toFixed(1)}deg` }, h('span', {}, `−${n}`));
+    this.addFloat(el, { x, y, z, secs: 0.7, lift: 0.35, rise: 0.8, side: 46 + Math.random() * 14 });
+  }
+
+  // Lines rushing in towards a big blow from all round the screen, a moment.
+  hitLines({ x, y, z }) {
+    const scr = this.game.renderer.project(x, y, z);
+    if (!scr.visible) return;
+    if (!this.linesEl?.isConnected) this.linesEl = $('overlays').appendChild(h('div', { class: 'hit-lines' }));
+    const el = this.linesEl;
+    el.style.setProperty('--x', `${Math.round(scr.x)}px`);
+    el.style.setProperty('--y', `${Math.round(scr.y)}px`);
+    el.style.setProperty('--turn', `${Math.round(Math.random() * 360)}deg`);
+    el.classList.remove('on');
+    // So one still going starts over.
+    void el.offsetWidth;
+    el.classList.add('on');
+  }
+
+  addFloat(el, f) {
     $('overlays').append(el);
-    this.floats.set(`reward-${this.floatId++}`, { x, y, z, at: performance.now(), el });
-    while (this.floats.size > 8) {
+    this.floats.set(`float-${this.floatId++}`, { ...f, at: performance.now(), el });
+    while (this.floats.size > 12) {
       const oldest = this.floats.keys().next().value;
       this.floats.get(oldest).el.remove();
       this.floats.delete(oldest);
     }
+  }
+
+  reward({ x, y, z, xp }) {
+    if (![x, y, z, xp].every(Number.isFinite) || xp <= 0) return;
+    const el = h('div', { class: 'float-reward', title: `${xp} XP toward your next level` }, h('span', {}, `⭐ +${xp}`));
+    this.addFloat(el, { x, y, z });
     const button = $('btn-stickers-hud');
     button.classList.remove('gain');
     // So a pulse still going round again starts over.
@@ -3459,6 +3494,9 @@ export class UI {
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
     on('reward', (e) => this.reward(e.detail));
+    on('hit-word', (e) => this.hitWord(e.detail));
+    on('hit-number', (e) => this.hitNumber(e.detail));
+    on('hit-lines', (e) => this.hitLines(e.detail));
     on('notice', (e) => this.toast(e.detail.level === 'info' ? '💡' : '🙈', e.detail.text, e.detail.level === 'info' ? '' : 'warn'));
     on('chat', (e) => this.chatLine(e.detail));
     on('fly', (e) => $('btn-fly').classList.toggle('on', e.detail));
@@ -7842,7 +7880,14 @@ export class UI {
         const max = Math.max(1, e.max ?? 1);
         const hearts = Math.max(0, Math.min(max, e.hearts ?? max));
         const top = isBoss(e.kind) ? (e.model.height ?? 1.8) + 1.1 : bodyOf(e.kind).height + 0.3;
-        tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => [bar(hearts / max, 'monster')], 'mon');
+        // Hearts just lost stay on the bar in white a moment, and drain away.
+        tag(`mon-${e.id}`, p.x, p.y + top, p.z, `${hearts}|${max}`, () => {
+          const was = Math.min(max, e.barWas ?? hearts);
+          e.barWas = hearts;
+          const left = Math.round((hearts / max) * 100);
+          if (was <= hearts) return [bar(hearts / max, 'monster')];
+          return [h('div', { class: 'bar monster hit' }, h('i', { style: `left:${left}%;width:${Math.round(((was - hearts) / max) * 100)}%` }), h('span', { style: `width:${left}%` }))];
+        }, 'mon');
       }
     }
     for (const [key, el] of this.advTags) {
@@ -7958,21 +8003,21 @@ export class UI {
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);
-    // The reward floats: each up out of the world where it happened and
-    // gone, a second and a bit on.
+    // The floats (a reward, a blow's word): each up out of the world where it
+    // happened and gone, a second or so on.
     for (const [key, f] of this.floats) {
-      const t = (performance.now() - f.at) / 1200;
+      const t = (performance.now() - f.at) / 1000 / (f.secs ?? 1.2);
       if (t >= 1) {
         f.el.remove();
         this.floats.delete(key);
         continue;
       }
-      const scr = r.project(f.x, f.y + 0.9 + t * 1.2, f.z);
+      const scr = r.project(f.x, f.y + (f.lift ?? 0.9) + t * (f.rise ?? 1.2), f.z);
       if (!scr.visible) {
         f.el.style.opacity = '0';
         continue;
       }
-      f.el.style.transform = `translate(${scr.x}px, ${scr.y}px) translate(-50%, -50%)`;
+      f.el.style.transform = `translate(${scr.x + (f.side ?? 0)}px, ${scr.y}px) translate(-50%, -50%)`;
       f.el.style.opacity = t < 0.7 ? 1 : String(1 - (t - 0.7) / 0.3);
     }
     // The clock: sun, moon and weather.
