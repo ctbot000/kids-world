@@ -1,0 +1,75 @@
+// The dogs you can have for a pet, smallest to biggest: how tall each stands
+// at the shoulders (a kid is about 1.4 tall, so they stand as they would by a
+// real child), the coats it comes in and what it may be called. A coat's
+// colour here is only its swatch (see render/dog-breeds.js for the real one).
+const two = (a, b) => `linear-gradient(135deg, ${a} 50%, ${b} 50%)`;
+const three = (a, b, c) => `linear-gradient(135deg, ${a} 34%, ${b} 34% 67%, ${c} 67%)`;
+
+export const DOG_COATS = {
+  fawn: '#d8b079',
+  'cream-dog': '#f0e0bf',
+  'white-dog': '#f8f5ee',
+  'black-dog': '#25211f',
+  chocolate: '#5c3b28',
+  rust: '#b4602c',
+  golden: '#d3a356',
+  'golden-pale': '#ecd6a3',
+  'golden-dark': '#ad6d2c',
+  'yellow-lab': '#e2c88f',
+  apricot: '#e3ad78',
+  'gray-dog': '#8f9299',
+  slate: '#6a7079',
+  silver: '#b9bcc2',
+  sable: two('#b57a3c', '#3a2a20'),
+  sesame: two('#c0763a', '#2a2320'),
+  'black-tan': two('#25211f', '#b0682e'),
+  'choc-tan': two('#5c3b28', '#c08a4e'),
+  'black-white': two('#25211f', '#f8f5ee'),
+  'gray-white': two('#7d8088', '#f8f5ee'),
+  'red-white': two('#b4602c', '#f8f5ee'),
+  'gold-white': two('#d3a356', '#f8f5ee'),
+  'liver-white': two('#6a3f2a', '#f8f5ee'),
+  'lemon-white': two('#e0bb6c', '#f8f5ee'),
+  merle: three('#7d8590', '#25211f', '#f8f5ee'),
+  tricolor: three('#25211f', '#b0682e', '#f8f5ee'),
+  'steel-tan': two('#5f6a78', '#c08a4e'),
+  brindle: two('#a9743c', '#2e2520'),
+  spotted: `radial-gradient(circle at 35% 35%, #25211f 18%, transparent 19%), radial-gradient(circle at 70% 65%, #25211f 14%, transparent 15%), #f8f5ee`,
+  'liver-spotted': `radial-gradient(circle at 35% 35%, #6a3f2a 18%, transparent 19%), radial-gradient(circle at 70% 65%, #6a3f2a 14%, transparent 15%), #f8f5ee`,
+  harlequin: `radial-gradient(circle at 30% 40%, #25211f 26%, transparent 27%), radial-gradient(circle at 72% 62%, #25211f 18%, transparent 19%), #f8f5ee`,
+  pied: `radial-gradient(circle at 34% 34%, #25211f 30%, transparent 31%), #f8f5ee`,
+  'salt-pepper': two('#8d9096', '#3c3d41'),
+};
+
+export const DOGS = [
+  { key: 'chihuahua', name: 'Chihuahua', size: 0.24, coats: ['fawn', 'cream-dog', 'black-tan', 'chocolate'], names: ['Pico', 'Taco', 'Chico', 'Tiny', 'Peanut', 'Bean', 'Mimi', 'Pixie', 'Nacho', 'Coco'] },
+  { key: 'yorkie', name: 'Yorkshire Terrier', size: 0.24, coats: ['steel-tan'], names: ['Bella', 'Bows', 'Duchess', 'Toby', 'Yoyo', 'Sugar', 'Tinker', 'Daisy', 'Prince', 'Silky'] },
+  { key: 'maltese', name: 'Maltese', size: 0.26, coats: ['white-dog'], names: ['Snowy', 'Cotton', 'Angel', 'Dubu', 'Pearl', 'Fluffy', 'Sugar', 'Bori', 'Lily', 'Cloud'] },
+  { key: 'pomeranian', name: 'Pomeranian', size: 0.26, coats: ['golden-dark', 'cream-dog', 'white-dog', 'black-dog', 'sable'], names: ['Pom Pom', 'Fluff', 'Tangerine', 'Foxy', 'Bear', 'Puff', 'Sunny', 'Kumo', 'Mochi', 'Button'] },
+  { key: 'dachshund', name: 'Dachshund', size: 0.26, coats: ['rust', 'black-tan', 'choc-tan', 'cream-dog'], names: ['Frank', 'Oscar', 'Schnitzel', 'Slinky', 'Pretzel', 'Otto', 'Weenie', 'Noodle', 'Heidi', 'Fritz'] },
+  { key: 'shihtzu', name: 'Shih Tzu', size: 0.29, coats: ['gold-white', 'black-white'], names: ['Bao', 'Lulu', 'Mei', 'Ming', 'Choco', 'Dumpling', 'Peony', 'Ruby', 'Teddy', 'Lotus'] },
+  { key: 'poodle', name: 'Toy Poodle', size: 0.3, coats: ['apricot', 'white-dog', 'chocolate', 'black-dog', 'silver'], names: ['Coco', 'Choco', 'Fifi', 'Latte', 'Curly', 'Marcel', 'Bori', 'Toto', 'Pierre', 'Candy'] },
+  { key: 'pug', name: 'Pug', size: 0.33, coats: ['fawn', 'black-dog'], names: ['Pugsley', 'Otis', 'Waffle', 'Frank', 'Winston', 'Doug', 'Snort', 'Mabel', 'Boba', 'Gizmo'] },
+  { key: 'corgi', name: 'Corgi', size: 0.33, coats: ['red-white', 'tricolor', 'sable'], names: ['Stumpy', 'Waffles', 'Biscuit', 'Maple', 'Loaf', 'Toast', 'Queenie', 'Nugget', 'Pip', 'Ginger'] },
+  { key: 'frenchie', name: 'French Bulldog', size: 0.35, coats: ['fawn', 'cream-dog', 'brindle', 'pied'], names: ['Gaston', 'Bruno', 'Remy', 'Pierre', 'Coco', 'Louie', 'Margot', 'Sumo', 'Tank', 'Bijou'] },
+  { key: 'schnauzer', name: 'Schnauzer', size: 0.4, coats: ['salt-pepper', 'black-dog', 'white-dog'], names: ['Fritz', 'Wally', 'Max', 'Bruno', 'Pepper', 'Whiskers', 'Oskar', 'Greta', 'Salty', 'Bart'] },
+  { key: 'beagle', name: 'Beagle', size: 0.42, coats: ['tricolor', 'lemon-white', 'red-white'], names: ['Snoop', 'Copper', 'Bagel', 'Scout', 'Barley', 'Sniffles', 'Bailey', 'Rusty', 'Molly', 'Tracker'] },
+  { key: 'cocker', name: 'Cocker Spaniel', size: 0.42, coats: ['golden', 'black-dog', 'liver-white'], names: ['Lady', 'Honey', 'Rosie', 'Sandy', 'Dusty', 'Bonnie', 'Cooper', 'Amber', 'Duke', 'Flossie'] },
+  { key: 'shiba', name: 'Shiba Inu', size: 0.44, coats: ['rust', 'sesame', 'black-tan', 'cream-dog'], names: ['Doge', 'Kabosu', 'Hachi', 'Kuma', 'Maru', 'Mochi', 'Yuzu', 'Sora', 'Kinako', 'Tofu'] },
+  { key: 'jindo', name: 'Korean Jindo', size: 0.56, coats: ['white-dog', 'fawn', 'brindle', 'black-tan'], names: ['Baekgu', 'Hwanggu', 'Bori', 'Dori', 'Nuri', 'Haru', 'Sarang', 'Tori', 'Mirae', 'Dol'] },
+  { key: 'bordercollie', name: 'Border Collie', size: 0.56, coats: ['black-white', 'red-white', 'merle'], names: ['Shep', 'Fly', 'Moss', 'Meg', 'Jess', 'Nell', 'Tess', 'Sweep', 'Cap', 'Roy'] },
+  { key: 'husky', name: 'Siberian Husky', size: 0.6, coats: ['black-white', 'gray-white', 'red-white'], names: ['Balto', 'Togo', 'Luna', 'Koda', 'Blizzard', 'Yuki', 'Nanook', 'Storm', 'Sasha', 'Aurora'] },
+  { key: 'samoyed', name: 'Samoyed', size: 0.6, coats: ['white-dog', 'golden-pale'], names: ['Snowball', 'Yuki', 'Nikita', 'Blanc', 'Frosty', 'Misha', 'Polar', 'Sky', 'Olaf', 'Dasha'] },
+  { key: 'dalmatian', name: 'Dalmatian', size: 0.62, coats: ['spotted', 'liver-spotted'], names: ['Dotty', 'Pongo', 'Perdy', 'Domino', 'Freckles', 'Patch', 'Spot', 'Sparky', 'Oreo', 'Lucky'] },
+  { key: 'boxer', name: 'Boxer', size: 0.62, coats: ['fawn', 'brindle'], names: ['Rocky', 'Duke', 'Champ', 'Tyson', 'Bella', 'Ali', 'Roxy', 'Bruno', 'Jab', 'Zeus'] },
+  { key: 'labrador', name: 'Labrador Retriever', size: 0.64, coats: ['yellow-lab', 'black-dog', 'chocolate'], names: ['Buddy', 'Marley', 'Sunny', 'Lucky', 'Bear', 'Honey', 'Max', 'Sam', 'Coal', 'Cocoa'] },
+  { key: 'golden', name: 'Golden Retriever', size: 0.64, coats: ['golden', 'golden-pale', 'golden-dark'], names: ['Goldie', 'Sunny', 'Bailey', 'Honey', 'Charlie', 'Maple', 'Buddy', 'Daisy', 'Tucker', 'Amber'] },
+  { key: 'gsd', name: 'German Shepherd', size: 0.68, coats: ['black-tan', 'sable', 'black-dog'], names: ['Rex', 'Max', 'Kaiser', 'Duke', 'Blitz', 'Heidi', 'Ace', 'Shadow', 'Ranger', 'Bruno'] },
+  { key: 'rottweiler', name: 'Rottweiler', size: 0.7, coats: ['black-tan'], names: ['Bruno', 'Tank', 'Rocky', 'Titan', 'Otto', 'Gus', 'Hulk', 'Bear', 'Zeus', 'Greta'] },
+  { key: 'greyhound', name: 'Greyhound', size: 0.72, coats: ['fawn', 'slate', 'black-white', 'brindle'], names: ['Flash', 'Dash', 'Comet', 'Arrow', 'Bolt', 'Zip', 'Swift', 'Rocket', 'Whisper', 'Jet'] },
+  { key: 'bernese', name: 'Bernese Mountain Dog', size: 0.72, coats: ['tricolor'], names: ['Bernie', 'Heidi', 'Alpine', 'Bear', 'Moose', 'Sage', 'Gus', 'Tilly', 'Bruno', 'Wilma'] },
+  { key: 'stbernard', name: 'Saint Bernard', size: 0.82, coats: ['red-white'], names: ['Beethoven', 'Barry', 'Bernie', 'Moose', 'Brandy', 'Tiny', 'Tank', 'Goliath', 'Rescue', 'Nana'] },
+  { key: 'greatdane', name: 'Great Dane', size: 0.92, coats: ['fawn', 'harlequin', 'black-dog', 'slate'], names: ['Duke', 'Scooby', 'Zeus', 'Titan', 'Hamlet', 'Odin', 'Marmaduke', 'Gigi', 'Atlas', 'Freya'] },
+];
+
+export const dogSize = (key) => DOGS.find((d) => d.key === key)?.size ?? null;

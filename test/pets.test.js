@@ -384,7 +384,7 @@ test("every pet's model can be drawn in every coat and every pose, in its owner'
           if (o.isMesh) assert.ok(o.matrixWorld.elements.every(Number.isFinite), `${p.key} (${coat}), ${pose}: every part is somewhere`);
         });
       }
-      assert.ok(m.height > 0.25 && m.height < 0.6 && m.pick > 0.2, `${p.key}: about as big as a pet`);
+      assert.ok(m.height > 0.25 && m.height < (p.dog ? 1.4 : 0.6) && m.pick > 0.2, `${p.key}: about as big as a pet (a dog as big as one of its breed)`);
       m.dispose();
     }
   }

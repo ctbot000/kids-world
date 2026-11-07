@@ -2,6 +2,7 @@
 // an animal), and talking: typed, or ready-made phrases and stickers. The
 // host tidies and checks everything it receives.
 import { TOY_BRICKS } from './blocks.js';
+import { DOG_COATS, DOGS } from './dog-kinds.js';
 import { cleanLevel } from './levels.js';
 import { outfitOf, shoesOf, skatesOf, weaponOf, wingsOf } from './shop.js';
 
@@ -341,9 +342,10 @@ export function cleanLook(look, random = Math.random) {
 // one), so friends see it and a login brings it along. The first coat and
 // the first name are a kind's own, for one that came without them. A
 // parrot, a long-tailed tit and a baby dragon fly; the others walk, hop
-// and swim.
+// and swim. Every dog (dog-kinds.js, and the puppy) is a kind of its own.
 export const PETS = [
-  { key: 'puppy', name: 'Puppy', icon: '🐶', coats: ['tan', 'brown', 'cream', 'white', 'gray', 'charcoal'], names: ['Biscuit', 'Buddy', 'Waffles', 'Peanut', 'Coco', 'Bingo', 'Rolo', 'Noodle', 'Scout', 'Teddy'] },
+  { key: 'puppy', name: 'Puppy', icon: '🐶', dog: true, coats: ['tan', 'brown', 'cream', 'white', 'gray', 'charcoal'], names: ['Biscuit', 'Buddy', 'Waffles', 'Peanut', 'Coco', 'Bingo', 'Rolo', 'Noodle', 'Scout', 'Teddy'] },
+  ...DOGS.map(({ key, name, coats, names }) => ({ key, name, icon: key === 'poodle' ? '🐩' : '🐕', dog: true, coats, names })),
   { key: 'kitten', name: 'Kitten', icon: '🐱', coats: ['orange', 'gray', 'white', 'charcoal', 'cream', 'brown'], names: ['Whiskers', 'Mittens', 'Luna', 'Tiger', 'Pumpkin', 'Socks', 'Muffin', 'Pebbles', 'Ginger', 'Mochi'] },
   { key: 'bunny', name: 'Bunny', icon: '🐰', coats: ['white', 'cream', 'brown', 'gray', 'charcoal', 'pink'], names: ['Thumper', 'Clover', 'Snowball', 'Cocoa', 'Nibbles', 'Honey', 'Pip', 'Marshmallow', 'Hopscotch', 'Daisy'] },
   { key: 'hamster', name: 'Hamster', icon: '🐹', coats: ['tan', 'orange', 'cream', 'white', 'gray', 'brown'], names: ['Nugget', 'Squeaky', 'Cheeks', 'Fuzzy', 'Acorn', 'Toffee', 'Crumbs', 'Popcorn', 'Sesame', 'Hazel'] },
@@ -353,7 +355,7 @@ export const PETS = [
   { key: 'tit', name: 'Long-tailed Tit', icon: '🐦', flies: true, coats: ['white', 'pink', 'cream'], names: ['Mochi', 'Snowy', 'Cotton', 'Puffin', 'Dango', 'Fluff', 'Pebble', 'Button', 'Tinsel', 'Daisy'] },
   { key: 'dragon', name: 'Baby Dragon', icon: '🐲', flies: true, coats: ['green', 'lavender', 'sky', 'pink', 'orange', 'red'], names: ['Sparky', 'Ember', 'Puff', 'Blaze', 'Smudge', 'Toasty', 'Cinder', 'Twinkle', 'Ziggy', 'Scales'] },
 ];
-export const PET_COATS = { ...FUR_COLORS, green: '#5cc96b', blue: '#4f9ff0', red: '#ef5b5b' };
+export const PET_COATS = { ...FUR_COLORS, green: '#5cc96b', blue: '#4f9ff0', red: '#ef5b5b', ...DOG_COATS };
 
 export const petKind = (key) => PETS.find((p) => p.key === key) ?? null;
 

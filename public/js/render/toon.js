@@ -64,7 +64,13 @@ export function toon(color, { emissive = 0, transparent = false, opacity = 1, si
 // by the studio like the rest.
 const made = new Set();
 export function toyMaterial(params) {
-  const m = new ToyMaterial({ metalness: 0, ...params, envMap: studio });
+  return litByStudio(new ToyMaterial({ metalness: 0, ...params }));
+}
+
+// Any material of a kind of its own, lit by the studio all the same, now and
+// when the studio's light comes.
+export function litByStudio(m) {
+  m.envMap = studio;
   made.add(m);
   return m;
 }

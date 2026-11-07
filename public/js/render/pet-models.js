@@ -1,12 +1,15 @@
 // The pets (see shared/pets.js) as little models, in the coat each was given
-// and a collar the colour of their owner's T-shirt: a puppy, a kitten, a
-// bunny, a hamster, a piglet and a baby dragon on four legs, and a
-// duckling, a parrot and a long-tailed tit on two. Each walks (or hops, scurries, waddles), runs, swims,
+// and a collar the colour of their owner's T-shirt: a kitten, a bunny, a
+// hamster, a piglet and a baby dragon on four legs, and a duckling, a parrot
+// and a long-tailed tit on two. Each walks (or hops, scurries, waddles), runs, swims,
 // sits, lies down, sleeps, flies if it can, and does its tricks: begging,
-// spinning round, a jump, rolling over, a happy wiggle and a snack.
+// spinning round, a jump, rolling over, a happy wiggle and a snack. The dogs
+// are real dogs, of every breed there is here (dog-model.js).
 import * as THREE from '../../vendor/three.module.js';
 import { PET_COATS } from '../shared/words.js';
 import { CritterModel, eyesOn, wingPair } from './critter-models.js';
+import { breedOf, isBreed } from './dog-breeds.js';
+import { DogRig } from './dog-model.js';
 import { bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, sphere, toon, torus } from './toon.js';
 
 const BLACK = '#2b2530';
@@ -128,37 +131,12 @@ function quadruped(coat, m) {
 }
 
 const QUAD = {
-  puppy: { y: 0.24, half: 0.14, torso: [0.12, 0.11, 0.18], inset: 0.05, legX: 0.065, legR: 0.038, neck: [0.12, 0.17], head: [0.135, 0.125, 0.125], eyes: [0.055, 0.035, 0.024] },
   kitten: { y: 0.22, half: 0.12, torso: [0.1, 0.095, 0.16], inset: 0.045, legX: 0.055, legR: 0.032, neck: [0.11, 0.15], head: [0.128, 0.118, 0.118], eyes: [0.052, 0.03, 0.026] },
   bunny: { y: 0.19, half: 0.1, torso: [0.13, 0.12, 0.15], inset: 0.04, legX: 0.06, legR: 0.03, neck: [0.12, 0.13], head: [0.118, 0.108, 0.108], eyes: [0.05, 0.03, 0.022] },
   hamster: { y: 0.125, half: 0.09, torso: [0.12, 0.105, 0.135], inset: 0.04, legX: 0.065, legR: 0.022, neck: [0.065, 0.12], head: [0.1, 0.092, 0.092], eyes: [0.045, 0.02, 0.019] },
   piglet: { y: 0.21, half: 0.13, torso: [0.13, 0.12, 0.18], inset: 0.045, legX: 0.07, legR: 0.035, neck: [0.09, 0.17], head: [0.13, 0.12, 0.118], eyes: [0.055, 0.035, 0.022] },
   dragon: { y: 0.24, half: 0.13, torso: [0.115, 0.11, 0.18], inset: 0.045, legX: 0.07, legR: 0.035, neck: [0.13, 0.17], head: [0.125, 0.112, 0.12], eyes: [0.052, 0.035, 0.024] },
 };
-
-function puppy(coat) {
-  const m = QUAD.puppy;
-  const p = quadruped(coat, m);
-  const { head, H } = p;
-  // A muzzle, a nose, floppy ears.
-  head.add(mesh(sphere(), toon(p.light), 0, -0.035, H[2] * 0.8, 0.068, 0.052, 0.06));
-  head.add(mesh(sphere(), toon(BLACK), 0, -0.012, H[2] * 0.8 + 0.058, 0.026, 0.02, 0.018));
-  head.add(mesh(torus(0.018, 0.005, Math.PI), toon('#7a3b3b'), 0, -0.058, H[2] * 0.8 + 0.045).rotateZ(Math.PI));
-  blush(head, H[2], 0.085, -0.035);
-  const ears = [-1, 1].map((side) => {
-    const e = new THREE.Group();
-    e.position.set(side * 0.1, 0.07, -0.01);
-    e.rotation.z = side * 0.3;
-    e.userData.side = side;
-    e.add(mesh(sphere(), toon(p.dark), side * 0.012, -0.06, 0, 0.045, 0.085, 0.024));
-    e.add(mesh(sphere(1, 8, 6), toon(p.light), side * 0.014, -0.062, 0.012, 0.028, 0.062, 0.014));
-    head.add(e);
-    return e;
-  });
-  p.tail.add(mesh(capsule(0.022, 0.09), toon(p.fur), 0, 0.06, -0.012).rotateX(-0.25));
-  p.tail.add(mesh(sphere(1, 10, 8), toon(p.light), 0, 0.115, -0.03, 0.026));
-  return { ...p, ears, earRest: 0.3, earFlap: 'floppy', height: 0.52, pick: 0.3 };
-}
 
 function kitten(coat) {
   const m = QUAD.kitten;
@@ -475,7 +453,7 @@ function tit(coat) {
   return { group: g, body, roll, pivot, head, eyes, wings, folded, feet, band, tail, legs: [], ears: [], height: 0.27, pick: 0.21, bird: 'tit', wingRate: 32 };
 }
 
-const BUILDERS = { puppy, kitten, bunny, hamster, piglet, dragon, duckling, parrot, tit };
+const BUILDERS = { kitten, bunny, hamster, piglet, dragon, duckling, parrot, tit };
 
 // ------------------------------------------------ riding along
 
@@ -529,12 +507,18 @@ export function petSeat(mount) {
 // How far its middle is out of each pose, for easing from one to the next.
 const POSE_KEYS = ['drop', 'pitch', 'front', 'back', 'headX', 'headY', 'headZ', 'tail', 'ear', 'fold', 'open'];
 
+// A dog of a real breed, in the rig they all share.
+function realDog(kind, coat, collarColor) {
+  const dog = new DogRig(kind, coat, breedOf(kind).size, collarColor);
+  return { group: dog.group, body: dog.body, roll: dog.roll, head: dog.bones[5], eyes: dog.eyes, legs: [], ears: [], tail: null, band: dog.band, height: dog.height, pick: Math.max(0.24, dog.height * 0.45), dog };
+}
+
 export class PetModel {
   // pet: { kind, coat }; collarColor: the colour of its owner's T-shirt.
   constructor(pet, collarColor = '#ff6f6f') {
-    const parts = (BUILDERS[pet.kind] ?? puppy)(pet.coat);
+    const parts = BUILDERS[pet.kind] ? BUILDERS[pet.kind](pet.coat) : realDog(isBreed(pet.kind) ? pet.kind : 'puppy', pet.coat, collarColor);
     Object.assign(this, parts);
-    this.kind = BUILDERS[pet.kind] ? pet.kind : 'puppy';
+    this.kind = BUILDERS[pet.kind] || isBreed(pet.kind) ? pet.kind : 'puppy';
     this.coat = pet.coat;
     this.time = Math.random() * 10;
     this.phase = 0;
@@ -549,7 +533,7 @@ export class PetModel {
     this.vy = 0;
     this.last = null;
     this.setCollar(collarColor);
-    const shadow = blobShadow((this.kind === 'hamster' || this.bird ? 0.16 : 0.22) * 1.25, 0.2);
+    const shadow = blobShadow((this.dog?.shadowR ?? (this.kind === 'hamster' || this.bird ? 0.16 : 0.22)) * 1.25, 0.2);
     this.shadow = shadow;
   }
 
@@ -578,6 +562,10 @@ export class PetModel {
     }
     this.since += dt;
     this.track(Math.max(dt, 1e-3));
+    if (this.dog) {
+      this.dog.play(dt, pose, this.hs);
+      return;
+    }
     const want = this.bird ? this.birdPose(pose) : this.quadPose(pose);
     // Easing from pose to pose: sitting down, lying down, getting up.
     const k = 1 - Math.exp(-dt * 9);
@@ -926,5 +914,6 @@ export class PetModel {
     this.shadow.geometry.dispose();
     this.shadow.material.dispose();
     this.band.dispose();
+    this.dog?.dispose();
   }
 }

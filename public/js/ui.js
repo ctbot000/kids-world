@@ -1498,18 +1498,23 @@ export class UI {
           }
           apply();
           draw();
+          // Up to its colours and its name, over the long list of kinds.
+          if (pet) details.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         };
         const draw = () => {
+          // Each kind as it is: yours in its own colour, the rest in their first.
+          const card = (k) =>
+            h(
+              'button',
+              { class: `choice${k.key === pet?.kind ? ' on' : ''}`, type: 'button', onclick: () => choose(k.key) },
+              this.lookPic({ shirt: p.look.shirt, pet: { kind: k.key, coat: k.key === pet?.kind ? pet.coat : k.coats[0] } }, { pet: true, turn: 0.6, size: 128 }, h('span', { class: 'emoji' }, k.icon)),
+              k.name,
+            );
           kinds.replaceChildren(
-            // Each kind as it is: yours in its own colour, the rest in their first.
-            ...PETS.map((k) =>
-              h(
-                'button',
-                { class: `choice${k.key === pet?.kind ? ' on' : ''}`, type: 'button', onclick: () => choose(k.key) },
-                this.lookPic({ shirt: p.look.shirt, pet: { kind: k.key, coat: k.key === pet?.kind ? pet.coat : k.coats[0] } }, { pet: true, turn: 0.6, size: 128 }, h('span', { class: 'emoji' }, k.icon)),
-                k.name,
-              ),
-            ),
+            h('h3', { class: 'pet-group' }, '🐕 Dogs'),
+            ...PETS.filter((k) => k.dog).map(card),
+            h('h3', { class: 'pet-group' }, '🐾 Other pets'),
+            ...PETS.filter((k) => !k.dog).map(card),
             h('button', { class: `choice${pet ? '' : ' on'}`, type: 'button', onclick: () => choose(null) }, h('span', { class: 'emoji' }, '🚫'), 'No pet'),
           );
           details.hidden = !pet;
@@ -1537,8 +1542,8 @@ export class UI {
         root.append(
           h('h2', {}, '🐾 My pet'),
           h('p', { class: 'muted' }, 'Your pet comes along to every island, and friends see it too.'),
-          kinds,
           details,
+          kinds,
           h('button', { class: 'big green', type: 'button', style: 'margin-top:16px', onclick: () => this.closeModal() }, '👍 Done'),
         );
       },

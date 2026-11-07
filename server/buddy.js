@@ -58,7 +58,7 @@ import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { FACING, facingFromYaw, STAMPS } from '../public/js/shared/stamps.js';
 import { applyCells, stampEdit } from '../public/js/shared/tools.js';
 import { World } from '../public/js/shared/world.js';
-import { CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTE_KEYS, langOf, PHRASES, STICKERS } from '../public/js/shared/words.js';
+import { CHAT_MAX, cleanChat, cleanLook, cleanName, EMOTE_KEYS, langOf, petKind, PHRASES, STICKERS } from '../public/js/shared/words.js';
 import { PUBLIC_ISLAND_NAME } from './adventure.js';
 import { ISLAND_NAME as CTB_ISLAND_NAME } from './ctb-office.js';
 import { clears, COLORS, findSite, layersAt, PROJECT_KEYS, PROJECTS, projectByKey, projectCells, reachOf } from './builds.js';
@@ -1473,7 +1473,7 @@ export class Visit extends EventEmitter {
       if (p.id === this.host) bits.unshift('the island owner');
       if (p.dizzy) bits.push('dizzy');
       else if (p.s[5] & 1) bits.push('flying');
-      if (p.look?.pet) bits.push(`with a pet ${p.look.pet.kind} called ${p.look.pet.name}`);
+      if (p.look?.pet) bits.push(`with a pet ${petKind(p.look.pet.kind)?.name.toLowerCase() ?? p.look.pet.kind} called ${p.look.pet.name}`);
       const person = this.personOf(p.id);
       const type = person.people.typeOf(person.id);
       if (type) bits.push(`MBTI ${type}`);

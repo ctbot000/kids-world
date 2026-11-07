@@ -16,8 +16,11 @@
 // Everything is timed by the steps it is given, never by the clock, so a
 // test stepping time along sees what a player would.
 import * as B from './blocks.js';
+import { DOGS } from './dog-kinds.js';
 import { bodyOverlapsSolid, makeBody, stepBody, unstick } from './physics.js';
 import { Rng } from './rng.js';
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // A pet bed (PET_BED in blocks.js) to sleep in: the nearest one within
 // BED_RANGE of (x, z), at (x, y, z) just inside its cell, or null. Called
@@ -56,6 +59,8 @@ export const PET_INFO = {
   tit: { radius: 0.12, height: 0.3, float: 0.15, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.6, perch: 'head' },
   dragon: { radius: 0.2, height: 0.55, float: 0.3, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.45, perch: 'ground' },
 };
+// Each dog, by how tall it stands at the shoulders.
+for (const { key, size } of DOGS) PET_INFO[key] = { radius: clamp(size * 0.42, 0.14, 0.3), height: Math.min(1.3, size * 1.35), float: size * 0.72, walk: 4.6, run: 9.5 };
 
 // How far behind you it keeps on the move; how close by is close enough
 // when you stop (where it then sits, beside you); further off than POP (or
@@ -106,7 +111,6 @@ export function hearsay(pet, owner, text) {
 }
 
 const FL = Math.floor;
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrap = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
 const turn = (from, to, rate) => wrap(from + clamp(wrap(to - from), -rate, rate));
 

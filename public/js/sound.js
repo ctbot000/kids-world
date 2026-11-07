@@ -4,6 +4,8 @@
 // talk" babble when someone says something, and gentle music that changes
 // with the time of day, unless the island's owner picked a song of their own
 // (an MP3, see shared/song.js), which plays round and round instead.
+import { dogSize } from './shared/dog-kinds.js';
+
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 // Mixer levels at full volume: effects peak around -10 dB, music sits below them.
@@ -160,9 +162,28 @@ export class Sound {
 
   // ------------------------------------------------ effects
 
+  // A dog's bark, as deep as the dog is big: a little one yaps, and a big one
+  // goes woof.
+  woof(size) {
+    const r = () => 0.94 + Math.random() * 0.12;
+    const pitch = 150 / Math.max(0.2, size) ** 0.95;
+    const small = size < 0.4;
+    const barks = small ? 3 : 2;
+    const gap = small ? 0.15 : 0.26;
+    for (let i = 0; i < barks; i++) {
+      this.tone(pitch * r(), { at: i * gap, type: 'sawtooth', attack: 0.008, decay: small ? 0.07 : 0.13, gain: small ? 0.045 : 0.075, slide: pitch * 0.62, slideTime: small ? 0.07 : 0.11 });
+      this.noise(small ? 0.05 : 0.09, { at: i * gap, type: small ? 'bandpass' : 'lowpass', freq: small ? 1500 : 900, q: 1.5, gain: 0.07 });
+    }
+  }
+
   play(name, opts = {}) {
     if (!this.ready) return;
     const r = () => 0.94 + Math.random() * 0.12;
+    const dogSized = dogSize(name);
+    if (dogSized) {
+      this.woof(dogSized);
+      return;
+    }
     switch (name) {
       case 'place': {
         const base = { brick: 760, wood: 430, stone: 320, glass: 1250, soft: 380, cloth: 330, grass: 300, dirt: 260, sand: 340, snow: 420, leaves: 520, candy: 880, water: 300, plant: 900 }[opts.kind] ?? 600;

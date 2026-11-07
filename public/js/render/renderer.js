@@ -37,6 +37,7 @@ import { Effects } from './effects.js';
 import { Jolt } from './jolt.js';
 import { FireView } from './fire.js';
 import { shownBox } from './monster-figures.js';
+import { setFurLayers } from './dog-fur.js';
 import { MonsterModel } from './monster-model.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { PetModel, petSeat } from './pet-models.js';
@@ -72,13 +73,14 @@ const FLASH = new THREE.Color('#e8ecff');
 // sharp screen), multisampled this many times for smooth edges (or smoothed
 // afterwards, FXAA); shaded where things meet (ambient occlusion, worked out
 // on at most this many pixels and spread over the picture, with this many
-// samples); soft out of focus (dof); and with the shadows of what moves on a
-// map this many texels across. The lowest draws straight to the screen with
-// none of it: still glossy toys.
+// samples); soft out of focus (dof); with the shadows of what moves on a map
+// this many texels across; and with a dog's fur in at most this many layers
+// (dog-fur.js). The lowest draws straight to the screen with none of the
+// rest: still glossy toys.
 export const QUALITY = {
-  high: { post: true, pixels: 4.2e6, samples: 4, ao: 1.2e6, aoSamples: 12, dof: true, shadows: 2048 },
-  medium: { post: true, pixels: 2.6e6, samples: 0, ao: 0.4e6, aoSamples: 8, dof: false, shadows: 1024 },
-  low: { post: false, pixels: Infinity, samples: 0, ao: 0, aoSamples: 0, dof: false, shadows: 0 },
+  high: { post: true, pixels: 4.2e6, samples: 4, ao: 1.2e6, aoSamples: 12, dof: true, shadows: 2048, fur: 18 },
+  medium: { post: true, pixels: 2.6e6, samples: 0, ao: 0.4e6, aoSamples: 8, dof: false, shadows: 1024, fur: 10 },
+  low: { post: false, pixels: Infinity, samples: 0, ao: 0, aoSamples: 0, dof: false, shadows: 0, fur: 5 },
 };
 // Watching an island unseen (free), the camera backs off this far at most,
 // and sees at least this far, so a whole island is in sight.
@@ -296,6 +298,7 @@ export class Renderer {
     const q = this.finish;
     const gl = this.gl;
     this.disposePost();
+    setFurLayers(q.fur);
     // The sun's shadows, cast by what moves (castShadows) onto the ground
     // (render/terrain.js) and onto each other.
     gl.shadowMap.enabled = q.shadows > 0;
@@ -392,7 +395,7 @@ export class Renderer {
     this.entities.traverse((o) => {
       if (!o.isMesh) return;
       const m = o.userData.unflash ?? o.material;
-      const solid = !m.isMeshBasicMaterial && !(m.transparent && m.opacity < 0.6);
+      const solid = !m.isMeshBasicMaterial && !(m.transparent && m.opacity < 0.6) && !o.userData.noShadow;
       o.castShadow = on && solid;
       o.receiveShadow = on && !m.isMeshBasicMaterial;
     });
@@ -479,7 +482,7 @@ export class Renderer {
       // A critter's hidden parts (what it carries, a splash) left out.
       const box = critter || stamp ? shownBox(thing) : new THREE.Box3().setFromObject(thing);
       const mid = box.getCenter(new THREE.Vector3());
-      const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * (stamp ? 0.78 : 0.82);
+      const far = (box.getSize(new THREE.Vector3()).length() / 2 / Math.sin(THREE.MathUtils.degToRad(15))) * (stamp ? 0.78 : animal?.dog ? 0.68 : 0.82);
       camera.position.set(mid.x, mid.y + far * (stamp ? 0.55 : 0.15), mid.z + far);
       camera.lookAt(mid);
       camera.far = Math.max(20, far * 3);

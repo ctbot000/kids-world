@@ -2194,6 +2194,11 @@ body.touch.playing #joystick {
   gap: 10px;
 }
 
+.grid .pet-group {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  text-align: left;
+}
 .grid.wide {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }

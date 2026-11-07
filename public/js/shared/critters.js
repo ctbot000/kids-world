@@ -90,7 +90,7 @@ export const CRITTER_INFO = {
   unicorn: { name: 'Unicorn', icon: '🦄', speed: 1.6, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.21, radius: 0.44, height: 2.4, float: 0.85, spread: 0.85, walk: 6, run: 10.5, swim: 3.5, jump: 11.5 }, names: ['Stardust', 'Moonbeam', 'Candyfloss', 'Celeste', 'Dreamy', 'Sugarplum', 'Pixie', 'Starlight', 'Wish', 'Lullaby'] },
   // A big fluffy dog, gentle and glad to be ridden; faster than you run,
   // and it jumps higher too.
-  dog: { name: 'Dog', icon: '🐶', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.13, radius: 0.42, height: 2.3, float: 0.8, spread: 0.85, walk: 5.5, run: 10, swim: 3.5, jump: 11 }, names: ['Buddy', 'Rex', 'Biscuit', 'Waggles', 'Rosie', 'Bruno', 'Barnaby', 'Gus', 'Poppy', 'Muddy'] },
+  dog: { name: 'Dog', icon: '🐶', speed: 1.5, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.2, radius: 0.42, height: 2.36, float: 0.8, spread: 0.85, walk: 5.5, run: 10, swim: 3.5, jump: 11 }, names: ['Buddy', 'Rex', 'Biscuit', 'Waggles', 'Rosie', 'Bruno', 'Barnaby', 'Gus', 'Poppy', 'Muddy'] },
   // The zoo's animals (zoo.js keeps them in their pens on a zoo island; the
   // toy box brings them anywhere). The big ones ride like the rest.
   lion: { name: 'Lion', icon: '🦁', speed: 1.1, swims: true, flies: false, big: true, gallops: true, ride: { seat: 1.05, radius: 0.44, height: 2.25, float: 0.8, spread: 0.9, walk: 5.5, run: 10, swim: 3, jump: 10.5 }, names: ['Leo', 'Simba', 'Sunny', 'Goldie', 'Mufasa', 'Nala', 'Rory', 'Marmalade', 'Honey', 'Kiara'] },

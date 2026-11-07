@@ -9,6 +9,7 @@
 // one big animal that flies, is a monster now: mosquito-model.js.)
 import * as THREE from '../../vendor/three.module.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, lathe, mesh, onSurface, sphere, toon, torus } from './toon.js';
+import { DogRig } from './dog-model.js';
 import { dragon as realDragon } from './dragon-model.js';
 import { drive, VEHICLE_BUILDERS } from './vehicle-models.js';
 import { RIDE_BUILDERS } from './ride-models.js';
@@ -1115,95 +1116,53 @@ function unicorn(id) {
 
 const reindeer = (id) => pony(id, 'reindeer');
 
-// The big friendly dog: huge and fluffy, with a wagging tail, floppy ears
-// and a collar with a tag. It stands taller than you, and is glad about it.
-const DOGS = [
-  { fur: '#c98d4f', belly: '#f4e3cb', ear: '#8a5a30' }, // golden
-  { fur: '#e8e2d6', belly: '#fbf8f0', ear: '#c9bda6' }, // cream
-  { fur: '#8a6a4a', belly: '#d9c6a8', ear: '#5c4430' }, // brown
-  { fur: '#d9d9df', belly: '#f2f2f6', ear: '#9a9aa4' }, // grey
-  { fur: '#4a4245', belly: '#7a7076', ear: '#2b2528' }, // black
+// The big friendly dog: a real dog of one of the breeds that look kindest,
+// the size of a pony, and glad about it (dog-model.js).
+const DOG_SEAT = 1.2;
+const BIG_DOGS = [
+  ['bernese', 'tricolor'],
+  ['golden', 'golden'],
+  ['husky', 'gray-white'],
+  ['stbernard', 'red-white'],
+  ['samoyed', 'white-dog'],
+  ['labrador', 'chocolate'],
+  ['gsd', 'black-tan'],
+  ['golden', 'golden-pale'],
+  ['labrador', 'black-dog'],
+  ['greatdane', 'fawn'],
 ];
 
 function dog(id) {
-  const k = DOGS[id % DOGS.length];
-  const { g, body, pivot } = bigRig(0.72);
-  const fur = toon(k.fur);
-  const R = [0.36, 0.3, 0.56];
-  // A big fluffy body: deep at the chest, with a paler belly, and ruffs of
-  // fur round the shoulders and the rump.
-  pivot.add(mesh(sphere(), fur, 0, 0, 0, ...R));
-  pivot.add(mesh(sphere(), toon(k.belly), 0, -0.08, 0.18, 0.24, 0.18, 0.3));
-  pivot.add(mesh(sphere(), fur, 0, 0.04, 0.3, 0.3, 0.28, 0.28));
-  pivot.add(mesh(sphere(), fur, 0, 0.02, -0.3, 0.31, 0.27, 0.28));
-  const legs = fourLegs(pivot, { x: 0.19, front: 0.34, back: -0.34, hip: -0.2, len: 0.56, r: 0.085, color: k.fur, paw: k.belly });
-  // Toes showing in each paw.
-  for (const leg of legs) for (const x of [-0.04, 0.04]) leg.add(mesh(sphere(1, 8, 6), toon(k.belly), x, -0.53, 0.1, 0.03, 0.02, 0.045));
-
-  const neck = new THREE.Group();
-  neck.position.set(0, 0.16, 0.44);
-  pivot.add(neck);
-  const n = new THREE.Group();
-  n.rotation.x = 0.5;
-  neck.add(n);
-  n.add(mesh(lathe([[0, -0.08], [0.14, -0.06], [0.15, 0.06], [0.13, 0.22], [0.11, 0.32]], 16), fur, 0, 0, 0, 1, 1, 1.1));
-  // The fluffy ruff of fur round its neck.
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    n.add(mesh(sphere(1, 10, 8), toon(k.belly), Math.sin(a) * 0.1, 0.1 + Math.cos(a) * 0.03, 0.06 + Math.cos(a) * 0.06, 0.09, 0.08, 0.07));
-  }
-  const head = new THREE.Group();
-  head.position.set(0, 0.32, 0.02);
-  n.add(head);
-  head.add(mesh(sphere(), fur, 0, 0, 0, 0.17, 0.16, 0.18));
-  // A broad muzzle with a big black nose and a mouth that smiles round it.
-  head.add(mesh(sphere(), toon(k.belly), 0, -0.06, 0.16, 0.1, 0.085, 0.12));
-  head.add(mesh(sphere(), toon(BLACK), 0, -0.02, 0.27, 0.045, 0.035, 0.035));
-  head.add(mesh(sphere(1, 8, 6), toon(BLACK), 0, -0.09, 0.25, 0.05, 0.012, 0.02));
-  // A pink tongue, out when it is glad (the happy gait tips the head up).
-  const tongue = mesh(sphere(1, 8, 6), toon('#f2909e'), 0, -0.1, 0.26, 0.028, 0.045, 0.02);
-  tongue.visible = false;
-  head.add(tongue);
-  const eyes = sideEyes(head, 0.11, 0.06, 0.1, 0.03);
-  // Floppy ears, hung from the top of the head, that flap as it goes.
-  const ears = [-1, 1].map((side) => {
-    const e = new THREE.Group();
-    e.position.set(side * 0.13, 0.12, -0.02);
-    e.rotation.z = -side * 0.5;
-    e.add(mesh(sphere(), toon(k.ear), side * 0.02, -0.09, 0, 0.07, 0.13, 0.045));
-    e.userData.side = side;
-    head.add(e);
-    return e;
-  });
-  // A collar with a golden tag, under the ruff.
-  neck.add(mesh(torus(0.14, 0.02), toon('#e8413c'), 0, 0.02, 0.04).rotateX(Math.PI / 2 - 0.4));
-  neck.add(mesh(sphere(), toon('#ffcf3f', { emissive: 0.2 }), 0, -0.06, 0.13, 0.035));
-
-  const tail = new THREE.Group();
-  tail.position.set(0, 0.16, -0.56);
-  pivot.add(tail);
-  // A fluffy tail of puffs, wagging in trot (and wide when it is happy).
-  tail.add(mesh(sphere(1, 10, 8), fur, 0, 0.02, -0.04, 0.06, 0.06, 0.07));
-  tail.add(mesh(sphere(1, 10, 8), toon(k.belly), 0, 0.1, -0.1, 0.075, 0.075, 0.08));
-  const s = saddle(pivot, R[1] + 0.06, 0.28, 0.26);
+  const [breed, coat] = BIG_DOGS[id % BIG_DOGS.length];
+  const rig = new DogRig(breed, coat, 1.1, '#e8413c');
+  const { a } = rig.b;
+  const size = rig.size;
+  // A saddle on its back, moving with it, for whoever rides it, its top
+  // where they sit (the height of its cushion over its middle, 0.065).
+  const s = saddle(rig.bones[1], DOG_SEAT / size - rig.b.place[1][1] - 0.065, 0.2, 0.24, -rig.b.place[1][2], true);
+  // What a pet riding along behind them sits on, never drawn.
+  const seat = mesh(capsule(0.2 * size, (a.zF - a.zB) * size * 0.7), new THREE.MeshBasicMaterial(), 0, (rig.backAt(a.zR) - 0.2) * size, 0);
+  seat.rotation.x = Math.PI / 2;
+  seat.visible = false;
+  rig.body.add(seat);
   return {
-    group: g,
-    body,
-    pivot,
-    neck,
-    head,
-    eyes,
-    ears,
-    tongue,
-    tail,
-    legs,
+    group: rig.group,
+    body: rig.body,
+    head: rig.bones[5],
+    neck: rig.bones[4],
+    eyes: rig.eyes,
+    ears: [rig.bones[7], rig.bones[9]],
+    tongue: rig.tongue,
+    tail: rig.bones[11],
+    legs: [],
     ...s,
-    height: 1.5,
-    shadow: 0.6,
+    height: rig.height,
+    shadow: rig.shadowR,
     pick: 0.75,
-    center: 0.9,
+    center: 0.75,
     seen: 110,
-    gait: { len: 0.5, run: 4, happy: 'hop', graze: 0.7 },
+    dogRig: rig,
+    owned: [rig],
   };
 }
 
@@ -1872,6 +1831,12 @@ export class CritterModel {
     this.track(dt);
     if (this.vehicle) {
       drive(this, dt, state, moving, air);
+      return;
+    }
+    if (this.dogRig) {
+      const pose = state === 'fly' ? 'jump' : state === 'hop' ? 'walk' : state;
+      const go = this.hs > 4 || pose === 'run' ? 'run' : moving || pose === 'walk' ? 'walk' : pose;
+      this.dogRig.play(dt, pose === 'idle' || pose === 'walk' || pose === 'run' ? go : pose, this.hs);
       return;
     }
     if (this.gait) {
