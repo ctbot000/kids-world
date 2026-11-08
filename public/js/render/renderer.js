@@ -1081,7 +1081,11 @@ export class Renderer {
     this.goBoards.update();
     this.robotKits.update(dt);
     this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
-    this.bossFx = this.bossFx.filter((f) => f.update(dt));
+    // One may start another as it ends (a hawk's bolt strikes where it lands):
+    // that goes on a fresh list, not on this one, which is thrown away.
+    const going = this.bossFx;
+    this.bossFx = [];
+    this.bossFx = going.filter((f) => f.update(dt)).concat(this.bossFx);
     const pulse = 0.55 + 0.35 * Math.sin(this.time * 6);
     this.outline.material.opacity = pulse;
     if (this.drawing) {

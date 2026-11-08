@@ -2555,7 +2555,7 @@ test('the beasts in a real page: each one drawn and told of, a Mimic a chest unt
     Object.assign(g.me.body, { x: x + 0.5, y, z: z + 0.5, vx: 0, vy: 0, vz: 0 });
     g.sendMove(true);
     window.spot = { x: x + 0.5, y, z: z + 0.5 };
-    window.seen = { toasts: [], sounds: [], hurls: [], zaps: 0 };
+    window.seen = { toasts: [], sounds: [], hurls: [], zaps: 0, bolts: [] };
     const hurl = kw.renderer.hurl.bind(kw.renderer);
     kw.renderer.hurl = (from, to, ms, r, what, land) => {
       window.seen.hurls.push({ what, to: to.length, ms, r });
@@ -2564,7 +2564,11 @@ test('the beasts in a real page: each one drawn and told of, a Mimic a chest unt
     const zap = kw.renderer.zapBolt.bind(kw.renderer);
     kw.renderer.zapBolt = (...args) => {
       window.seen.zaps++;
-      return zap(...args);
+      // (The list it goes on, whichever that is just now.)
+      const list = kw.renderer.bossFx;
+      const made = zap(...args);
+      window.seen.bolts.push(list.at(-1).mesh);
+      return made;
     };
     const play = g.sound.play.bind(g.sound);
     g.sound.play = (name, opts) => {
@@ -2689,6 +2693,9 @@ test('the beasts in a real page: each one drawn and told of, a Mimic a chest unt
   await until(page, () => window.seen.hurls.some((h) => h.what === 'bolt' && h.to === 3));
   const zaps = await page.evaluate(() => window.seen.zaps);
   await until(page, (n) => window.seen.zaps >= n + 3, zaps);
+  // Each strikes and goes out again: none is left hanging in the sky.
+  await page.evaluate(() => { window.fighter.moveAt = Date.now() + 1e7; });
+  await until(page, () => window.seen.bolts.length > 0 && window.seen.bolts.every((b) => !b.parent));
   await force('cyclops', 0, { dist: 12 });
   await until(page, () => window.seen.hurls.some((h) => h.what === 'boulder'));
   await until(page, () => window.seen.sounds.includes('boom'));
