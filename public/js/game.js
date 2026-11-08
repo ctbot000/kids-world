@@ -53,7 +53,7 @@ import { cleanRace, COUNT_MS, lapStep, lapTime, ordinal, raceTrack } from './sha
 import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
-import { makeQuiz, quizCoins, QUIZ_LEVELS, WIN_OFFER_MS } from './shared/quiz.js';
+import { cleanQuizBook, fileQuizAnswer, makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
 import { chestNear, chestTreasure } from './shared/treasure.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { terminalNear } from './shared/stocks.js';
@@ -468,7 +468,7 @@ export class Game extends EventTarget {
     this.frameTarget = null;
     this.frameAt = null;
     this.drawings = new Map();
-    this.classEnded = { junior: 0, senior: 0 };
+    this.classEnded = {};
     // The stove beside you (shared/cooking.js), when you last cooked each
     // recipe, for the break before the next time, and the cooking class
     // going (shared/cooking.js makeLesson, and its coins and xp when done).
@@ -3103,12 +3103,37 @@ export class Game extends EventTarget {
 
   // ------------------------------------------------ extra-credit quizzes
 
+  // Your quiz book (shared/quiz.js): the questions of each quiz you have
+  // been getting right, and the ones learnt, never asked of you again.
+  // Kept on this device for whoever is playing (storage.js), like the
+  // notebook, and in memory here too, as the 🎓 over a conquered island's
+  // flag asks after it every frame (ui.js adventureTags).
+  get quizBook() {
+    this.quizBookKept ??= cleanQuizBook(load('quizbook', {}));
+    return this.quizBookKept;
+  }
+
+  // How many of a quiz's questions are still to learn: none, and it has
+  // nothing left to ask you.
+  quizLeft(level) {
+    return quizProgress(this.quizBook, level).left;
+  }
+
+  // Whether a conquered island's offer has a quiz of a level for you: not
+  // taken yet, and with questions left to ask.
+  offersQuiz(level) {
+    return !!this.quizOffer && !!QUIZ_LEVELS[level] && !this.quizOffer.taken[level] && this.quizLeft(level) > 0;
+  }
+
   // One of the quizzes a conquered island offered (shared/quiz.js), its
   // questions picked and shuffled by chance: { level, questions, picks (the
   // answers you have given), right (how many of them were right), done }.
   // Says 'quiz', for the window taking it (ui.js). Returns true when the
   // answer was right, false when it was not, and undefined when it was no
   // answer to take (no quiz going, the quiz done, or a nonsense answer).
+  // Each answer is filed in your quiz book straight away, wherever the quiz
+  // is (here, at school or at a chest): a question learnt by it says so
+  // (learnt), for the window to tell you.
   quizAnswer(i) {
     const q = this.quiz;
     if (!q || q.done) return;
@@ -3117,6 +3142,9 @@ export class Game extends EventTarget {
     const right = i === ask.answer;
     q.picks.push(i);
     if (right) q.right++;
+    const book = this.quizBook;
+    if (fileQuizAnswer(book, q.level, ask.q, right)) ask.learnt = true;
+    save('quizbook', book);
     if (q.picks.length < q.questions.length) {
       this.emit('quiz');
       return right;
@@ -3150,11 +3178,12 @@ export class Game extends EventTarget {
     return right;
   }
 
-  // A quiz begun: one of the island's offer, not already taken. Says 'quiz',
-  // which opens the window on it (ui.js).
+  // A quiz begun: one of the island's offer, not already taken, out of the
+  // questions you have not learnt. Says 'quiz', which opens the window on
+  // it (ui.js).
   startQuiz(level) {
-    if (!this.quizOffer || this.quizOffer.taken[level] || !QUIZ_LEVELS[level]) return;
-    this.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0), picks: [], right: 0, done: false };
+    if (!this.offersQuiz(level)) return;
+    this.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook), picks: [], right: 0, done: false };
     this.emit('quiz');
   }
 
@@ -3184,13 +3213,14 @@ export class Game extends EventTarget {
     this.send({ t: 'chest', at: [t.x, t.y, t.z] });
   }
 
-  // A key quiz at a chest: one question of the level picked, which earns a
-  // key if it is answered right. Says 'quiz', which opens the window on it.
+  // A key quiz at a chest: one question of the level picked (one you have
+  // not learnt), which earns a key if it is answered right. Says 'quiz',
+  // which opens the window on it.
   startKeyQuiz(level) {
     const t = this.chestAt ?? this.chestTarget;
-    if (!t || !QUIZ_LEVELS[level]) return;
+    if (!t || !QUIZ_LEVELS[level] || !this.quizLeft(level)) return;
     this.chestAt = t;
-    this.quiz = { level, chest: { x: t.x, y: t.y, z: t.z }, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0), picks: [], right: 0, done: false };
+    this.quiz = { level, chest: { x: t.x, y: t.y, z: t.z }, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook), picks: [], right: 0, done: false };
     this.emit('quiz');
   }
 
@@ -3684,11 +3714,12 @@ export class Game extends EventTarget {
   }
 
   // A class begun at the chalkboard: a quiz of CLASS_SIZE questions, out of
-  // the quizzes' banks, unless that level's break is still on. Says 'quiz',
-  // which opens the window on it (ui.js).
+  // the quizzes' banks (fewer when there are not that many you have not
+  // learnt), unless that level's break is still on. Says 'quiz', which
+  // opens the window on it (ui.js).
   startClass(level) {
-    if (!QUIZ_LEVELS[level] || this.classBreak(level) > 0) return;
-    this.quiz = { level, school: true, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, CLASS_SIZE), picks: [], right: 0, done: false };
+    if (!QUIZ_LEVELS[level] || this.classBreak(level) > 0 || !this.quizLeft(level)) return;
+    this.quiz = { level, school: true, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, CLASS_SIZE, this.quizBook), picks: [], right: 0, done: false };
     this.emit('quiz');
   }
 

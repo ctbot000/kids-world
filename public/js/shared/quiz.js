@@ -1,12 +1,13 @@
 // Extra-credit quizzes: a stage of Adventure Isle conquered, the fireworks still
 // going, offers everyone who freed it a little school work for extra credit —
-// three quizzes to pick from, one at elementary school second-year level,
-// one at middle school third-year level, and a thinking-math one of puzzles
-// to work out (patterns, logic, counting, shapes) in the style of Korea's
-// thinking-math workbooks for young children, each a single question with
-// answers to pick from. An answer got right is extra credit: coins, XP and the
-// counts that earn stickers (stickers.js), on top of what freeing the island
-// already gave.
+// quizzes to pick from, at elementary school second-year and third-year
+// level, middle school third-year level and high school first-year level,
+// a thinking-math one of puzzles to work out (patterns, logic, counting,
+// shapes) in the style of Korea's thinking-math workbooks for young
+// children, and English Words, each a single question with answers to pick
+// from. An answer got right is extra credit: coins, XP and the counts that
+// earn stickers (stickers.js), on top of what freeing the island already
+// gave.
 //
 // The quizzes are each player's own, on their own page (the island has no
 // hand in them, unlike the arcade's games): the island says it is won
@@ -14,7 +15,12 @@
 // long as they stay on the island — the 🎓 by the castle flag opens them —
 // until they have done them all. Each quiz taken once, its question picked and its
 // answers shuffled out of a bank by chance (makeQuiz), so two quizzes are
-// seldom the same. A class at school (school.js) asks from the same banks.
+// seldom the same. A class at school (school.js) and a treasure chest's
+// key quiz (treasure.js) ask from the same banks.
+//
+// Every answer is filed in your quiz book (cleanQuizBook): a question
+// answered right LEARNT_AFTER times in a row, wherever it was asked, is
+// learnt, and never asked of you again.
 //
 // The English Words quiz asks what words mean, out of the Kids Dictionary
 // (english-words.js, brought in by scripts/dictionary.mjs): each question
@@ -23,8 +29,8 @@
 import { ENGLISH_WORDS } from './english-words.js';
 import { Rng } from './rng.js';
 
-// The quizzes, by their keys: what each is called, its button's colour and
-// how many coins each answer right pays.
+// The quizzes, by their keys, in the order they are offered: what each is
+// called, its button's colour and how many coins each answer right pays.
 export const QUIZ_LEVELS = {
   junior: {
     key: 'junior',
@@ -34,6 +40,14 @@ export const QUIZ_LEVELS = {
     color: 'blue',
     coins: 1,
   },
+  elementary3: {
+    key: 'elementary3',
+    icon: '🎒',
+    name: 'Elementary School Year 3',
+    how: 'One question, like in Year 3 of elementary school. Get it right for a coin!',
+    color: 'orange',
+    coins: 1,
+  },
   senior: {
     key: 'senior',
     icon: '🧑‍🎓',
@@ -41,6 +55,14 @@ export const QUIZ_LEVELS = {
     how: 'One harder question, like in Year 3 of middle school. Get it right for two coins!',
     color: 'pink',
     coins: 2,
+  },
+  high1: {
+    key: 'high1',
+    icon: '📚',
+    name: 'High School Year 1',
+    how: 'One hard question, like in Year 1 of high school. Get it right for three coins!',
+    color: 'teal',
+    coins: 3,
   },
   thinker: {
     key: 'thinker',
@@ -65,8 +87,9 @@ export const QUIZ_LEVELS = {
 export const QUIZ_SIZE = 1;
 export const WIN_OFFER_MS = 2600;
 
-// A coin for each answer right on the elementary quiz, two on the middle
-// school and thinking-math ones, that much harder.
+// A coin for each answer right on the elementary school quizzes and English
+// Words, two on the middle school and thinking-math ones, that much harder,
+// and three on the high school one.
 export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 ? Math.floor(right) * (QUIZ_LEVELS[level]?.coins ?? 1) : 0);
 
 // The banks the questions come from. Each: { q: the question, a: its answers,
@@ -104,6 +127,58 @@ export const QUESTION_BANKS = {
     { q: 'Which word starts with the letter B?', a: ['Ball', 'Apple', 'Cat', 'Duck'] },
     { q: 'Count by fives: 5, 10, 15, … what comes next?', a: ['20', '16', '25', '18'] },
   ],
+  // Year 3 of elementary school: sums and take-aways into the hundreds,
+  // times and sharing, remainders, fractions and tenths, lengths, time,
+  // litres and grams; magnets, life cycles, solids, liquids and gases,
+  // sound, the Earth and the Moon; a map's directions; and first English.
+  elementary3: [
+    { q: 'What is 356 + 278?', a: ['634', '624', '534', '644'] },
+    { q: 'What is 503 − 248?', a: ['255', '355', '265', '345'] },
+    { q: 'What is 24 × 3?', a: ['72', '62', '27', '612'] },
+    { q: 'What is 56 ÷ 7?', a: ['8', '7', '9', '6'] },
+    { q: 'What is 72 ÷ 3?', a: ['24', '23', '21', '26'] },
+    { q: 'What is 125 × 4?', a: ['500', '400', '480', '520'] },
+    { q: 'What is 23 × 12?', a: ['276', '266', '69', '286'] },
+    { q: 'What is the remainder when 17 is divided by 5?', a: ['2', '3', '1', '12'] },
+    { q: 'Which number has a 7 in the hundreds place?', a: ['4,723', '7,423', '4,273', '4,237'] },
+    { q: '48 candies are shared equally among 6 children. How many does each child get?', a: ['8', '6', '42', '54'] },
+    { q: 'A box holds 6 eggs. How many eggs are in 15 boxes?', a: ['90', '21', '80', '96'] },
+    { q: 'What is 1/4 of 20?', a: ['5', '4', '16', '80'] },
+    { q: 'Which fraction is the biggest?', a: ['1/3', '1/4', '1/5', '1/6'] },
+    { q: 'A pizza is cut into 8 equal slices, and you eat 3 of them. What fraction of the pizza did you eat?', a: ['3/8', '5/8', '3/5', '1/8'] },
+    { q: 'Which decimal is the same as 3/10?', a: ['0.3', '3.0', '0.03', '3.1'] },
+    { q: 'Which decimal means 2 and 5 tenths?', a: ['2.5', '25', '0.25', '5.2'] },
+    { q: 'How many millimetres are in 1 centimetre?', a: ['10', '100', '1000', '12'] },
+    { q: 'How many metres are in 1 kilometre?', a: ['1000', '100', '10', '10000'] },
+    { q: 'A ribbon is 1 m long, and you cut off 35 cm. How much is left?', a: ['65 cm', '75 cm', '35 cm', '1 m 35 cm'] },
+    { q: 'A square’s sides are 7 cm each. How long are all four sides together?', a: ['28 cm', '21 cm', '49 cm', '14 cm'] },
+    { q: 'A circle’s radius is 4 cm. How long is its diameter?', a: ['8 cm', '2 cm', '4 cm', '16 cm'] },
+    { q: 'How many right angles does a rectangle have?', a: ['4', '2', '0', '1'] },
+    { q: 'How many seconds is 1 minute 20 seconds?', a: ['80', '120', '70', '100'] },
+    { q: 'What time is it 40 minutes after 2:30?', a: ['3:10', '2:70', '3:40', '2:10'] },
+    { q: 'Ji-ho read from 1:50 to 3:15. How long did Ji-ho read?', a: ['1 hour 25 minutes', '1 hour 35 minutes', '2 hours 25 minutes', '1 hour 15 minutes'] },
+    { q: 'How many millilitres are in 1 litre?', a: ['1000', '100', '10', '500'] },
+    { q: 'How many grams are in 1 kilogram?', a: ['1000', '100', '10', '60'] },
+    { q: 'Which tool tells you how heavy something is?', a: ['A scale', 'A ruler', 'A clock', 'A thermometer'] },
+    { q: 'Which of these does a magnet pull?', a: ['An iron nail', 'A wooden pencil', 'A plastic cup', 'A rubber eraser'] },
+    { q: 'What happens when you bring the N poles of two magnets close together?', a: ['They push each other away', 'They pull each other close', 'They melt', 'They change colour'] },
+    { q: 'What does a caterpillar turn into?', a: ['A butterfly', 'A bee', 'A spider', 'A ladybug'] },
+    { q: 'What is a baby frog called?', a: ['A tadpole', 'A cub', 'A chick', 'A calf'] },
+    { q: 'Which of these animals hatches from an egg?', a: ['A turtle', 'A whale', 'A rabbit', 'A bat'] },
+    { q: 'How many legs does an insect have?', a: ['6', '8', '4', '10'] },
+    { q: 'Which of these keeps its own shape, whatever it is put in?', a: ['A stone', 'Water', 'Milk', 'Air'] },
+    { q: 'Which of these is a gas?', a: ['The air in a balloon', 'An ice cube', 'Orange juice', 'A pebble'] },
+    { q: 'Sound is made when something…', a: ['Shakes back and forth very fast', 'Gets very hot', 'Gets wet', 'Stays very still'] },
+    { q: 'Which covers more of the Earth’s surface?', a: ['The sea', 'The land', 'Both the same', 'Ice'] },
+    { q: 'Why can’t plants and animals live on the Moon?', a: ['It has no air or water', 'It is too small', 'It is made of cheese', 'It is too close to the Sun'] },
+    { q: 'Rock worn into tiny bits by wind and running water becomes…', a: ['Sand and soil', 'Clouds', 'Ice', 'Air'] },
+    { q: 'On most maps, which direction is at the top?', a: ['North', 'South', 'East', 'West'] },
+    { q: 'You face north. Which direction is on your right?', a: ['East', 'West', 'South', 'North'] },
+    { q: 'Which direction does the Sun rise in?', a: ['East', 'West', 'North', 'South'] },
+    { q: 'What is the plural of “child”?', a: ['Children', 'Childs', 'Childes', 'Childrens'] },
+    { q: 'Which word is a verb, a doing word?', a: ['Run', 'Table', 'Happy', 'Blue'] },
+    { q: 'What is the past tense of “go”?', a: ['Went', 'Goed', 'Gone', 'Going'] },
+  ],
   senior: [
     { q: 'Solve for x: 3x = 27', a: ['9', '3', '6', '81'] },
     { q: 'What is the square root of 144?', a: ['12', '14', '24', '72'] },
@@ -130,6 +205,64 @@ export const QUESTION_BANKS = {
     { q: 'Which planet is known as the Red Planet?', a: ['Mars', 'Jupiter', 'Venus', 'Saturn'] },
     { q: 'What is the mean of 4, 6 and 8?', a: ['6', '18', '4', '8'] },
     { q: 'Light travels fastest through…', a: ['A vacuum', 'Water', 'Glass', 'Air'] },
+  ],
+  // Year 1 of high school: complex numbers, quadratics and their roots,
+  // the remainder theorem and factoring, inequalities, counting, sets and
+  // propositions, points, lines and circles, functions and their
+  // inverses; forces and momentum, atoms and bonds, cells and DNA,
+  // oxidation, acids and bases, ecosystems, energy and the universe;
+  // Korean history; and English grammar.
+  high1: [
+    { q: 'What is i², where i is the imaginary unit?', a: ['−1', '1', 'i', '0'] },
+    { q: 'What is (2 + i)(2 − i)?', a: ['5', '3', '4', '2i'] },
+    { q: 'What is 1 ÷ i?', a: ['−i', 'i', '1', '−1'] },
+    { q: 'Which equation has no real roots?', a: ['x² + x + 1 = 0', 'x² − 1 = 0', 'x² − 2x + 1 = 0', 'x² − 5x + 6 = 0'] },
+    { q: 'The two roots of x² − 7x + 10 = 0 multiply to…', a: ['10', '7', '−7', '−10'] },
+    { q: 'For which k does x² + 4x + k = 0 have just one root, a double root?', a: ['4', '2', '16', '−4'] },
+    { q: 'Where is the vertex of y = (x − 3)² + 2?', a: ['(3, 2)', '(−3, 2)', '(3, −2)', '(2, 3)'] },
+    { q: 'What is the largest value of y = −(x − 1)² + 5?', a: ['5', '1', '−5', '6'] },
+    { q: 'What is the remainder when x³ − 2x + 5 is divided by x − 1?', a: ['4', '6', '5', '2'] },
+    { q: 'Which is x³ − 8, factored?', a: ['(x − 2)(x² + 2x + 4)', '(x − 2)(x² − 2x + 4)', '(x − 2)³', '(x + 2)(x² − 2x + 4)'] },
+    { q: 'What is (a + b)³, multiplied out?', a: ['a³ + 3a²b + 3ab² + b³', 'a³ + b³', 'a³ + 3ab + b³', 'a³ + a²b + ab² + b³'] },
+    { q: 'Solve |x − 2| < 3', a: ['−1 < x < 5', 'x < 5', '−5 < x < 1', 'x < −1 or x > 5'] },
+    { q: 'In how many ways can 4 runners come first, second and third?', a: ['24', '12', '4', '64'] },
+    { q: 'In how many ways can you choose 2 of 5 students, if the order does not matter?', a: ['10', '20', '25', '7'] },
+    { q: 'What is 5! (5 factorial)?', a: ['120', '25', '60', '15'] },
+    { q: 'A = {1, 2, 3} and B = {2, 3, 4}. What is A ∩ B?', a: ['{2, 3}', '{1, 2, 3, 4}', '{1, 4}', '{1}'] },
+    { q: 'How many subsets does the set {a, b, c} have?', a: ['8', '6', '3', '7'] },
+    { q: 'What is the converse of “If it rains, the ground is wet”?', a: ['If the ground is wet, it rains', 'If it does not rain, the ground is not wet', 'If the ground is not wet, it does not rain', 'It rains and the ground is wet'] },
+    { q: 'How far apart are the points (1, 2) and (4, 6)?', a: ['5', '7', '25', '√7'] },
+    { q: 'What is the midpoint of (2, 3) and (6, 7)?', a: ['(4, 5)', '(8, 10)', '(2, 2)', '(3, 4)'] },
+    { q: 'What is the radius of the circle x² + y² = 25?', a: ['5', '25', '12.5', '√5'] },
+    { q: 'Where is the centre of the circle (x − 1)² + (y + 2)² = 9?', a: ['(1, −2)', '(−1, 2)', '(1, 2)', '(3, 3)'] },
+    { q: 'Which line is perpendicular to y = 2x + 1?', a: ['y = −½x + 3', 'y = 2x − 3', 'y = −2x + 1', 'y = ½x + 1'] },
+    { q: 'f(x) = 2x + 1 and g(x) = x². What is f(g(3))?', a: ['19', '49', '16', '7'] },
+    { q: 'f(x) = 3x − 6. What is its inverse, f⁻¹(x)?', a: ['x/3 + 2', '3x + 6', 'x/3 − 2', '1/(3x − 6)'] },
+    { q: 'A 2 kg cart is pushed with a force of 10 N. What is its acceleration?', a: ['5 m/s²', '20 m/s²', '12 m/s²', '0.2 m/s²'] },
+    { q: 'Which of these is Newton’s third law?', a: ['Every action has an equal and opposite reaction', 'Force equals mass times acceleration', 'A body at rest stays at rest unless a force acts on it', 'Energy is never made or destroyed'] },
+    { q: 'What is the momentum of a 3 kg ball moving at 4 m/s?', a: ['12 kg·m/s', '7 kg·m/s', '0.75 kg·m/s', '48 kg·m/s'] },
+    { q: 'Why does an airbag make a crash less harmful?', a: ['It makes the stop take longer, so the force is smaller', 'It makes the car lighter', 'It makes the stop quicker', 'It speeds the car up'] },
+    { q: 'What kind of bond holds sodium and chlorine together in table salt?', a: ['An ionic bond', 'A covalent bond', 'A metallic bond', 'A hydrogen bond'] },
+    { q: 'How many electrons can an atom’s first shell hold?', a: ['2', '8', '1', '18'] },
+    { q: 'Which element has the atomic number 6?', a: ['Carbon', 'Oxygen', 'Nitrogen', 'Helium'] },
+    { q: 'In which group of the periodic table are the noble gases, like helium and neon?', a: ['Group 18', 'Group 1', 'Group 2', 'Group 17'] },
+    { q: 'Which gas makes up most of the Earth’s air?', a: ['Nitrogen', 'Oxygen', 'Carbon dioxide', 'Argon'] },
+    { q: 'In DNA, A pairs with T, and G pairs with…', a: ['C', 'A', 'T', 'U'] },
+    { q: 'Where in a plant cell does photosynthesis happen?', a: ['In the chloroplasts', 'In the mitochondria', 'In the nucleus', 'In the cell wall'] },
+    { q: 'Which part of a cell releases the energy in food?', a: ['The mitochondria', 'The chloroplasts', 'The ribosomes', 'The nucleus'] },
+    { q: 'A substance that is oxidised…', a: ['Loses electrons', 'Gains electrons', 'Gains protons', 'Loses neutrons'] },
+    { q: 'What is the pH of pure water at 25 °C?', a: ['7', '0', '1', '14'] },
+    { q: 'An acid and a base react to make a salt and…', a: ['Water', 'Oxygen', 'Carbon dioxide', 'Hydrogen'] },
+    { q: 'In the food chain grass → rabbit → fox, which is the producer?', a: ['The grass', 'The rabbit', 'The fox', 'The Sun'] },
+    { q: 'Which of these makes electricity from a renewable source?', a: ['A wind turbine', 'A coal power station', 'An oil power station', 'A gas power station'] },
+    { q: 'About how fast does light travel?', a: ['300,000 km a second', '300 km a second', '3,000 km a second', '30,000,000 km a second'] },
+    { q: 'Which two elements did the Big Bang make most of?', a: ['Hydrogen and helium', 'Carbon and oxygen', 'Iron and nickel', 'Nitrogen and oxygen'] },
+    { q: 'What forms where two continental plates push into each other?', a: ['High mountains, like the Himalayas', 'A mid-ocean ridge', 'A deep ocean trench', 'A rift valley'] },
+    { q: 'In which year was Korea freed from Japanese rule?', a: ['1945', '1910', '1950', '1919'] },
+    { q: 'Which kingdom first united most of the Korean Peninsula, in the 7th century?', a: ['Silla', 'Goguryeo', 'Baekje', 'Gaya'] },
+    { q: 'Fill the gap: “If I ___ a bird, I would fly to you.”', a: ['were', 'am', 'will be', 'have been'] },
+    { q: 'Which sentence is in the passive voice?', a: ['The cake was eaten by the dog.', 'The dog ate the cake.', 'The dog is eating the cake.', 'The dog has eaten the cake.'] },
+    { q: 'Fill the gap: “This is the house ___ Jack built.”', a: ['that', 'who', 'what', 'where'] },
   ],
   // Puzzles to think through rather than facts to remember: each takes a
   // step or two of reasoning, and the wrong answers are the slips a child
@@ -191,17 +324,68 @@ export const QUESTION_BANKS = {
   english: ENGLISH_WORDS.flatMap(({ word, emoji, ko, quiz }) => quiz.map(({ q, a }) => ({ q, a, word: { word, emoji, ko } }))).filter((b, i, all) => all.findIndex((o) => o.q === b.q) === i),
 };
 
+// How many times in a row a question must be answered right to be learnt:
+// after that it is never asked of you again.
+export const LEARNT_AFTER = 3;
+
+// Each bank's questions, to know a question of it when one is filed.
+const ASKED = Object.fromEntries(Object.entries(QUESTION_BANKS).map(([level, bank]) => [level, new Set(bank.map((b) => b.q))]));
+
+// Your quiz book: each quiz's questions you have been getting right, with
+// how many times in a row, and the ones learnt (LEARNT_AFTER times):
+// { [level]: { [question]: times right in a row } }. Kept on this device
+// for whoever is playing (game.js, storage.js), like the Study Desk's
+// notebook; a question no longer in its bank is let go.
+export function cleanQuizBook(raw) {
+  const out = {};
+  for (const level of Object.keys(QUIZ_LEVELS)) {
+    const page = raw?.[level];
+    out[level] = {};
+    if (!page || typeof page !== 'object') continue;
+    for (const [q, n] of Object.entries(page)) if (ASKED[level].has(q) && Number.isInteger(n) && n >= 1) out[level][q] = Math.min(n, LEARNT_AFTER);
+  }
+  return out;
+}
+
+// An answer filed in the quiz book: one more time right in a row, or, got
+// wrong, back to none. Returns true when it was the answer that learnt
+// the question.
+export function fileQuizAnswer(book, level, q, right) {
+  if (!ASKED[level]?.has(q)) return false;
+  const page = (book[level] ??= {});
+  const before = page[q] ?? 0;
+  if (before >= LEARNT_AFTER) return false;
+  if (!right) {
+    delete page[q];
+    return false;
+  }
+  page[q] = before + 1;
+  return page[q] >= LEARNT_AFTER;
+}
+
+// Whether a question is learnt, never to be asked again.
+export const isLearnt = (book, level, q) => (book?.[level]?.[q] ?? 0) >= LEARNT_AFTER;
+
+// How far along a quiz is: { learnt, left, total } of its questions.
+export function quizProgress(book, level) {
+  const bank = QUESTION_BANKS[QUIZ_LEVELS[level]?.key] ?? [];
+  const learnt = bank.reduce((n, b) => n + (isLearnt(book, level, b.q) ? 1 : 0), 0);
+  return { learnt, left: bank.length - learnt, total: bank.length };
+}
+
 // A quiz of a level, `size` questions picked out of the bank and shuffled, and
 // each one's answers shuffled with them: { level, questions: [{ q, choices,
-// answer }] }, answer the place in choices the right one landed. The same
-// seed makes the same quiz, so a page put right can say what was asked.
-export function makeQuiz(level, seed = 1, size = QUIZ_SIZE) {
+// answer }] }, answer the place in choices the right one landed. Never a
+// question learnt in `book` (your quiz book), so a quiz of a level all
+// learnt asks nothing, and one nearly so fewer than `size`. The same seed
+// and book make the same quiz, so a page put right can say what was asked.
+export function makeQuiz(level, seed = 1, size = QUIZ_SIZE, book = null) {
   const bank = QUESTION_BANKS[QUIZ_LEVELS[level]?.key];
   if (!bank) return { level, questions: [] };
   const rng = new Rng(seed);
   const picks = [];
-  const left = [...bank.keys()];
-  for (let i = 0; i < Math.min(size, bank.length); i++) {
+  const left = [...bank.keys()].filter((i) => !isLearnt(book, level, bank[i].q));
+  for (let i = 0, n = Math.min(size, left.length); i < n; i++) {
     const at = Math.floor(rng.next() * left.length);
     picks.push(bank[left.splice(at, 1)[0]]);
   }

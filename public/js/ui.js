@@ -34,7 +34,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
 import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
-import { QUIZ_LEVELS, QUIZ_SIZE, quizCoins } from './shared/quiz.js';
+import { LEARNT_AFTER, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
@@ -2621,13 +2621,13 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: press 🔒 by one and solve a quiz for a 🔑 key, then open it for coins.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
-          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 of elementary school, one like Year 3 of middle school, Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or two! After a class, the next one of that kind is after a little break.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 or Year 3 of elementary school, Year 3 of middle school or Year 1 of high school, Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
-          card('🎓', 'Extra-credit quizzes', ['Conquer a stage of 🌟 Adventure Isle and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
+          card('🎓', 'Extra-credit quizzes', ['Conquer a stage of 🌟 Adventure Isle and pick a quiz for extra credit: from elementary school to high school, Thinking Math or English Words. Every answer you get right is a coin or more! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done them all.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle, with a film at its start and its end: King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Only beating King Grumble on the last stage starts it over, on a new journey — but you can start a new game from stage 1 any time (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
@@ -4363,8 +4363,8 @@ export class UI {
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` ${g.campLabel(c)}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
               castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, g.bossInfo().icon, ` ${g.bossInfo().name}, ${story.lair}`, h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in a bubble 🫧' : 'ready to pop!')) : '',
             ),
-            adv.won && g.quizOffer && (!g.quizOffer.taken.junior || !g.quizOffer.taken.senior)
-              ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag: one at elementary school Year 2 level, one at middle school Year 3. Every answer right pays!')
+            adv.won && Object.keys(QUIZ_LEVELS).some((k) => g.offersQuiz(k))
+              ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag, from elementary school to high school. Every answer right pays!')
               : adv.won
                 ? ''
                 : h('p', { class: 'muted' }, 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
@@ -6974,31 +6974,44 @@ export class UI {
     else this.renderQuiz();
   }
 
-  // The quizzes a conquered stage of Adventure Isle offers (game.js quizOffer): one
-  // at elementary school second-year level, one at middle school third-year
-  // level and a thinking-math one, each for extra credit. auto: come up by
-  // itself once the island was won, so never over a window already open —
-  // after that, the 🎓 by the flag opens this again (adventureTags).
+  // The line under a quiz's name on its button: what it asks and pays, and
+  // how many of its questions you have learnt (game.js quizBook) — or, all
+  // learnt, that it has nothing left to ask you.
+  quizSub(book, level, says) {
+    const { learnt, left } = quizProgress(book, level);
+    if (!left) return '🏅 All learnt!';
+    return learnt ? `${says} · 🏅 ${learnt} learnt` : says;
+  }
+
+  // The quizzes a conquered stage of Adventure Isle offers (game.js quizOffer),
+  // from elementary school to high school, Thinking Math and English Words,
+  // each for extra credit. auto: come up by itself once the island was won,
+  // so never over a window already open — after that, the 🎓 by the flag
+  // opens this again (adventureTags).
   quizOfferDialog(auto = false) {
     const g = this.game;
     if (!g?.quizOffer || (auto && this.modalOpen)) return;
     const levels = Object.values(QUIZ_LEVELS);
-    const left = levels.filter((l) => !g.quizOffer.taken[l.key]).length;
+    const left = levels.filter((l) => g.offersQuiz(l.key)).length;
+    const book = g.quizBook;
     this.openModal(
       (root) => {
         root.append(
           h('h2', {}, '🎓 Extra credit!'),
           h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — one question, and the right answer pays.` : 'You have done all of this island’s quizzes. Well done!'),
         );
+        const list = h('div', { class: 'class-list' });
+        root.append(list);
         for (const l of levels) {
           const done = g.quizOffer.taken[l.key];
-          root.append(
+          const all = !quizProgress(book, l.key).left;
+          list.append(
             h(
               'button',
               {
                 class: `big ${l.color}`,
                 type: 'button',
-                disabled: done,
+                disabled: done || all,
                 onclick: () => {
                   this.sound.unlock();
                   this.sound.play('ui');
@@ -7006,7 +7019,7 @@ export class UI {
                 },
               },
               h('span', { class: 'emoji' }, l.icon),
-              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, done ? '✓ done' : `🪙 ${quizCoins(1, l.key)} a right answer`)),
+              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, done ? '✓ done' : this.quizSub(book, l.key, `🪙 ${quizCoins(1, l.key)} a right answer`))),
             ),
           );
         }
@@ -7062,10 +7075,10 @@ export class UI {
 
   // ------------------------------------------------ school
 
-  // The classes at a chalkboard (game.js openClass, shared/school.js): one
-  // at elementary school Year 2 level and one at middle school Year 3, each
+  // The classes at a chalkboard (game.js openClass, shared/school.js), from
+  // elementary school to high school, Thinking Math and English Words, each
   // a few questions, with the break before the next one counting down on a
-  // class just had.
+  // class just had, and a class whose questions you have all learnt shut.
   classDialog() {
     const g = this.game;
     if (!g) return;
@@ -7075,16 +7088,18 @@ export class UI {
       (root) => {
         const list = h('div', { class: 'class-list' });
         const render = () => {
+          const book = g.quizBook;
           list.replaceChildren(
             ...levels.map((l) => {
-              const wait = g.classBreak(l.key);
+              const all = !quizProgress(book, l.key).left;
+              const wait = all ? 0 : g.classBreak(l.key);
               const s = Math.ceil(wait / 1000);
               return h(
                 'button',
                 {
                   class: `big ${l.color}`,
                   type: 'button',
-                  disabled: wait > 0,
+                  disabled: all || wait > 0,
                   onclick: () => {
                     this.sound.unlock();
                     this.sound.play('ui');
@@ -7092,7 +7107,7 @@ export class UI {
                   },
                 },
                 h('span', { class: 'emoji' }, l.icon),
-                h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🔔 Break: next class in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${CLASS_SIZE} questions · 🪙 ${quizCoins(1, l.key)} a right answer`)),
+                h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🔔 Break: next class in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : this.quizSub(book, l.key, `${CLASS_SIZE} questions · 🪙 ${quizCoins(1, l.key)} a right answer`))),
               );
             }),
           );
@@ -7795,7 +7810,8 @@ export class UI {
     if (q.done && this.quizAt >= total) {
       const perfect = q.right === total;
       const coins = q.coins ?? quizCoins(q.right, q.level);
-      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && (q.school ? !g.classBreak(l.key) : g.quizOffer && !g.quizOffer.taken[l.key]));
+      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && (q.school ? !g.classBreak(l.key) && g.quizLeft(l.key) > 0 : g.offersQuiz(l.key)));
+      const allLearnt = !g.quizLeft(q.level);
       els.box.replaceChildren(
         h('div', { class: `quiz-result${perfect ? ' perfect' : ''}` }, `${perfect ? '💯' : '🎓'} ${q.right} of ${total} right`),
         h(
@@ -7804,7 +7820,11 @@ export class UI {
           perfect ? (total === 1 ? 'Right! ' : 'Perfect, every one right! ') : q.right ? 'Well done! ' : '',
           `${q.school ? 'You earned' : 'Extra credit'}: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
         ),
-        q.school ? h('p', { class: 'muted' }, `🔔 The next ${QUIZ_LEVELS[q.level].name} class is after a ${Math.round(CLASS_BREAK_MS / 60_000)}-minute break.`) : '',
+        allLearnt
+          ? h('p', { class: 'quiz-learnt' }, `🏅 You have learnt every ${QUIZ_LEVELS[q.level].name} question!`)
+          : q.school
+            ? h('p', { class: 'muted' }, `🔔 The next ${QUIZ_LEVELS[q.level].name} class is after a ${Math.round(CLASS_BREAK_MS / 60_000)}-minute break.`)
+            : '',
         other ? h('button', { class: `big ${other.color}`, type: 'button', onclick: () => { this.sound.play('ui'); if (q.school) g.startClass(other.key); else g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), q.school ? ` The ${other.name} class` : ` The ${other.name} quiz`) : '',
         h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
       );
@@ -7841,6 +7861,7 @@ export class UI {
       ask.pic ? this.quizPic(ask.pic) : '',
       answers,
       answered ? h('p', { class: 'quiz-verdict' }, q.picks[this.quizAt] === ask.answer ? '✅ Yes, that’s the one!' : '❌ Not this one — the right answer is the one outlined green.') : '',
+      answered && ask.learnt ? h('p', { class: 'quiz-learnt' }, `🏅 Learnt! Right ${LEARNT_AFTER} times in a row, so this question won’t come again.`) : '',
       answered
         ? h('button', { class: 'big green', type: 'button', onclick: () => { this.sound.play('ui'); this.quizAt++; this.renderQuiz(); } }, this.quizAt === total - 1 ? 'How you did ▶' : 'Next ▶')
         : '',
@@ -7856,6 +7877,7 @@ export class UI {
     const g = this.game;
     if (!g?.chestAt) return;
     const keys = g.profile.data.keys;
+    const book = g.quizBook;
     this.openModal(
       (root) => {
         const list = h(
@@ -7867,6 +7889,7 @@ export class UI {
               {
                 class: `big ${l.color}`,
                 type: 'button',
+                disabled: !quizProgress(book, l.key).left,
                 onclick: () => {
                   this.sound.unlock();
                   this.sound.play('ui');
@@ -7874,7 +7897,7 @@ export class UI {
                 },
               },
               h('span', { class: 'emoji' }, l.icon),
-              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, 'One question · 🔑 a key if you get it right')),
+              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, this.quizSub(book, l.key, 'One question · 🔑 a key if you get it right'))),
             ),
           ),
         );
@@ -8031,8 +8054,9 @@ export class UI {
     }
     // A conquered island's extra-credit quizzes wait by its flag — the
     // castle's, or the last camp's on an island that had no castle — until
-    // both are done: 🎓 over it, and a tap takes them (ui.js quizOfferDialog).
-    if (adv && me && adv.won && g.quizOffer && Object.values(QUIZ_LEVELS).some((l) => !g.quizOffer.taken[l.key])) {
+    // they are all done: 🎓 over it, and a tap takes them (ui.js
+    // quizOfferDialog).
+    if (adv && me && adv.won && g.quizOffer && Object.keys(QUIZ_LEVELS).some((k) => g.offersQuiz(k))) {
       const camps = [...adv.camps.values()];
       const spot = camps.find((c) => c.kind === 'castle') ?? camps[camps.length - 1];
       if (spot && Math.hypot(spot.x - me.x, spot.z - me.z) < 50) {

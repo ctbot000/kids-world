@@ -27,6 +27,10 @@
   --pink-dark: #e0588f;
   --grape: #a57be8;
   --grape-dark: #7d55c4;
+  --orange: #ff9b3d;
+  --orange-dark: #dd7414;
+  --teal: #2bb7a9;
+  --teal-dark: #1b8c80;
   --select: #fff3b0;
   --shadow: 0 6px 18px rgba(61, 46, 79, 0.22);
   --radius: 20px;
@@ -179,6 +183,16 @@ button:focus-visible {
 .purple {
   background: var(--grape);
   --shade: var(--grape-dark);
+}
+
+.orange {
+  background: var(--orange);
+  --shade: var(--orange-dark);
+}
+
+.teal {
+  background: var(--teal);
+  --shade: var(--teal-dark);
 }
 
 .chip {
@@ -4907,13 +4921,19 @@ button.go-pt {
   }
 }
 
-/* The two quizzes to pick from, a name and what each pays in one big button. */
+/* The quizzes to pick from, a name and what each pays in one big button. */
 .quiz-level {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
   line-height: 1.2;
+}
+
+/* One not to take now (done, on a break, or every question learnt): faded. */
+.big:disabled:has(> .quiz-level) {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* A stove's recipes, two to a row where there is room. */
@@ -5149,7 +5169,7 @@ button.go-pt {
   text-align: center;
 }
 
-/* A chalkboard's classes, one big button each, a little apart. */
+/* The classes or quizzes to pick from, one big button each, a little apart. */
 .class-list {
   display: flex;
   flex-direction: column;
@@ -5302,6 +5322,16 @@ button.go-pt {
 
 .quiz-verdict {
   margin: 12px 0;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* A question learnt, right three times in a row: it will not come again. */
+.quiz-learnt {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--select);
   font-weight: 700;
   text-align: center;
 }

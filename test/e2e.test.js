@@ -22,6 +22,7 @@ import { latestNews, NEWS } from '../public/js/news.js';
 import { CHAPTERS, STAGES } from '../public/js/shared/isle-story.js';
 import { MONSTER_LOG } from '../public/js/shared/stickers.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
+import { LEARNT_AFTER, QUESTION_BANKS } from '../public/js/shared/quiz.js';
 import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
 import { VESSEL } from '../public/js/render/kitchen.js';
 import { STUDY_SIZE } from '../public/js/shared/study.js';
@@ -6727,8 +6728,16 @@ test('a TV: Q by it opens its picture, ◀ ▶, a tap and the number keys flip t
   await page.browserContext().close();
 });
 
-test('a school: Q by a chalkboard opens the classes, a class of questions answered pays a coin for each right, and the next one of that kind is after a break', { skip }, async () => {
-  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+test('a school: Q by a chalkboard opens the classes, a class of questions answered pays a coin for each right, a question right three times in a row is learnt, and the next one of that kind is after a break', { skip }, async () => {
+  // A quiz book from playing before: every Year 2 question learnt but three,
+  // two of them right twice in a row already, and every Elementary School
+  // Year 3 question learnt.
+  const left = QUESTION_BANKS.junior.slice(0, CLASS_SIZE).map((b) => b.q);
+  const book = {
+    junior: Object.fromEntries(QUESTION_BANKS.junior.map((b, i) => [b.q, i < CLASS_SIZE ? (i < 2 ? LEARNT_AFTER - 1 : 0) : LEARNT_AFTER]).filter(([, n]) => n)),
+    elementary3: Object.fromEntries(QUESTION_BANKS.elementary3.map((b) => [b.q, LEARNT_AFTER])),
+  };
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } }, `localStorage.setItem('kidsworld.quizbook', ${JSON.stringify(JSON.stringify(book))})`);
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // A chalkboard on a wall beside the start, on level ground, and nothing
   // rideable near it to take the button.
@@ -6762,32 +6771,43 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('School'));
   await page.click('.class-list button:first-child');
   await until(page, () => document.querySelector('#modal h2').textContent.includes('Year 2') && document.querySelector('.quiz-answer'));
-  // Every answer right, then on to how it went.
+  // Only the three questions not learnt are asked.
+  assert.deepEqual((await page.evaluate(() => window.kidsWorld.game.quiz.questions.map((ask) => ask.q))).sort(), [...left].sort());
+  // Every answer right, then on to how it went: the two that were right
+  // twice in a row before are learnt now, and say so.
+  const learnt = [];
   for (let i = 0; i < CLASS_SIZE; i++) {
     const right = await page.evaluate((i) => window.kidsWorld.game.quiz.questions[i].answer, i);
     await page.click(`.quiz-answer:nth-child(${right + 1})`);
     await until(page, () => document.querySelector('.quiz-verdict'));
+    if (await page.evaluate(() => document.querySelector('.quiz-learnt')?.textContent.includes('Learnt'))) learnt.push(await page.evaluate((i) => window.kidsWorld.game.quiz.questions[i].q, i));
     await page.click('.quiz-box button.green');
   }
+  assert.deepEqual(learnt.sort(), left.slice(0, 2).sort());
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.quizbook')).junior);
+  assert.deepEqual([kept[left[0]], kept[left[1]], kept[left[2]]], [LEARNT_AFTER, LEARNT_AFTER, 1], 'filed in the quiz book on this device');
   await until(page, (n) => document.querySelector('.quiz-result')?.textContent.includes(`${n} of ${n} right`), CLASS_SIZE);
   const after = await page.evaluate(() => ({ coins: window.kidsWorld.profile.data.coins, stats: window.kidsWorld.profile.data.stats, stickers: window.kidsWorld.profile.data.stickers }));
   assert.equal(after.coins, at.coins + CLASS_SIZE, 'a coin for each right answer');
   assert.equal(after.stats.quizzes, 1);
   assert.equal(after.stats.quizperfect, 1);
   assert.ok(after.stickers['quiz-whiz'] && after.stickers['quiz-perfect']);
-  // The other classes are there to take straight on; Year 2 has its break.
+  // The other classes are there to take straight on (but Elementary School
+  // Year 3, all learnt); Year 2 has its break.
   assert.ok(await page.evaluate(() => [...document.querySelectorAll('.quiz-box button')].some((b) => b.textContent.includes('Middle School Year 3 class'))));
   await page.click('.quiz-box button.green');
   await until(page, () => document.getElementById('modal').hidden);
   await page.keyboard.press('KeyQ');
   await until(page, () => document.querySelector('.class-list button'));
   assert.deepEqual(
-    await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break')])),
+    await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break'), b.textContent.includes('All learnt')])),
     [
-      [true, true],
-      [false, false],
-      [false, false],
-      [false, false],
+      [true, true, false],
+      [true, false, true],
+      [false, false, false],
+      [false, false, false],
+      [false, false, false],
+      [false, false, false],
     ],
   );
   await page.keyboard.press('Escape');

@@ -2,9 +2,11 @@
 // hangs on the wall (pieces of furniture, blocks.js), and the 🏫 School
 // stamp (stamps.js), a schoolhouse with a bell tower and a classroom of
 // desks facing a long chalkboard. Walk up to a chalkboard and press Class:
-// pick a class, Year 2 of elementary school or Year 3 of middle school, and
-// answer its questions, asked out of the extra-credit quizzes' banks
-// (quiz.js), for a coin or two for each one right.
+// pick a class, from Year 2 of elementary school to Year 1 of high school,
+// Thinking Math or English Words, and answer its questions, asked out of the
+// extra-credit quizzes' banks (quiz.js), for a coin or more for each one
+// right. A question answered right three times in a row is learnt, and
+// never asked of you again (quiz.js LEARNT_AFTER).
 //
 // It all happens on your own page, like the quizzes: each player's class is
 // their own. After a class, the next one of that level is after a break
