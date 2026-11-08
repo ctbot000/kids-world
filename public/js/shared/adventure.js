@@ -899,6 +899,8 @@ export class AdventureSim {
       won: this.won,
       stage: this.stage,
       journey: this.journey,
+      // Which of the isle's games it is (server/adventure.js), when it is one.
+      ...(this.run ? { run: this.run } : {}),
       final: this.story.final,
       ...this.pack(),
     };

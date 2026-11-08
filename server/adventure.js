@@ -228,6 +228,8 @@ export class PublicAdventure {
     // Which run it is, for the list of open islands (room.listing), and a new
     // run started from it (room.js, an `isle` message or a join asking for one).
     room.isleRun = { id: run.id, by: run.by };
+    // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
+    room.adventure.run = run.id;
     room.onIsleNew = (name) => this.newRun(name);
     for (const id of freed) {
       const camp = room.adventure.campById(id);

@@ -144,7 +144,8 @@ async function openPlayer(url, profile = {}, init = null) {
   // the newest one they saw (null: none); and every chapter of Adventure
   // Isle's story, unless profile.seenStory is false (it opens by itself
   // as you arrive on a stage, once a chapter); and the isle's films, unless
-  // profile.seenFilms is false (its intro plays the first time you come).
+  // profile.seenFilms is false (its intro plays the first time you come, and
+  // at each game's start), or the list of them seen.
   const { seenNews = latestNews(), seenStory = true, seenFilms = true, ...rest } = profile;
   await page.evaluateOnNewDocument(
     (p, seen, story, films) => {
@@ -159,13 +160,15 @@ async function openPlayer(url, profile = {}, init = null) {
         const key = `kidsworld.${space}isleStory`;
         if (story && localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(story));
         const filmKey = `kidsworld.${space}isleFilms`;
-        if (films && localStorage.getItem(filmKey) === null) localStorage.setItem(filmKey, JSON.stringify(['intro', 'ending']));
+        if (films && localStorage.getItem(filmKey) === null) localStorage.setItem(filmKey, JSON.stringify(films));
       }
     },
     rest,
     seenNews,
     seenStory ? CHAPTERS.map((c) => c.key) : null,
-    seenFilms,
+    // (Both films, and the start of the first few games: the intro plays at
+    // each game's start, ui.js isleArrival.)
+    seenFilms === true ? ['intro', 'ending', ...Array.from({ length: 9 }, (_, i) => `intro@${i + 1}.1`)] : seenFilms || null,
   );
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(url);
@@ -7277,6 +7280,36 @@ test('the isle’s intro plays the first time you come, before its story, and th
     await page.click('#modal .film-skip');
     await until(page, () => document.getElementById('modal').hidden);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending']);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// The isle's intro plays at the start of each game you begin, as well as the
+// first time you come: arriving on stage 1 of a game not begun on this device.
+test('the isle’s intro plays at the start of a game you have not begun, once', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenFilms: ['intro', 'ending'] });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await until(page, () => document.querySelector('#modal.film video')?.getAttribute('src') === 'video/isle-intro.mp4');
+    await until(page, () => document.querySelector('#modal video')?.currentTime > 0.3);
+    await page.click('#modal .film-skip');
+    await until(page, () => document.getElementById('modal').hidden);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending', 'intro@1.1']);
+    // Back again: this game is begun, so no film.
+    await page.click('#btn-settings');
+    await clickButton(page, 'Leave island', '#modal');
+    await until(page, () => !document.getElementById('title').hidden);
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await delay(1500);
+    assert.equal(await page.$eval('#modal', (el) => el.hidden), true, 'no film the second time');
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();

@@ -62,14 +62,21 @@ import { STICKERS } from './profile.js';
 import { QUALITY_CHOICES } from './quality.js';
 import { pictureFrom, recentErrors, screenshot } from './report.js';
 
-// Adventure Isle's films seen on this device (filmDialog): the intro plays by
-// itself the first time you come to the isle, and the ending, once seen, can
-// be watched again from the story.
+// Adventure Isle's films seen on this device (filmDialog): 'intro' and
+// 'ending', and the start of each game begun ('intro@<game>.<journey>'). The
+// intro plays by itself the first time you come to the isle and at the start
+// of each game you begin; the ending, once seen, can be watched again from the
+// story. (The last few games' starts are kept, the films' own marks always.)
 const filmsSeen = () => {
   const seen = load('isleFilms', []);
-  return Array.isArray(seen) ? seen : [];
+  return Array.isArray(seen) ? seen.filter((k) => typeof k === 'string') : [];
 };
-const seeFilm = (name) => filmsSeen().includes(name) || save('isleFilms', [...filmsSeen(), name].slice(-4));
+const seeFilm = (name) => {
+  const seen = filmsSeen();
+  if (seen.includes(name)) return;
+  const all = [...seen, name];
+  save('isleFilms', [...all.filter((k) => !k.includes('@')), ...all.filter((k) => k.includes('@')).slice(-24)]);
+};
 
 // The ideas whose answers this device has shown already (see wishAnswered).
 const WISHES_SEEN_KEY = 'kidsworld.wishes-seen';
@@ -1712,14 +1719,24 @@ export class UI {
     );
   }
 
-  // Arriving on the isle: the first time on this device, its intro film,
-  // and after it (or straight away, every time after) the chapter's page.
+  // Arriving on the isle: its intro film the first time on this device, and
+  // again at the start of each game you begin (stage 1 of one of the isle's
+  // games, or of its next journey, not begun on this device before); after
+  // it (or straight away) the chapter's page of the story. It counts as seen
+  // once it has started playing, so one the browser kept from playing comes
+  // again next time.
   isleArrival() {
     const g = this.game;
-    if (!g?.adventure?.story) return;
-    if (!filmsSeen().includes('intro') && !this.modalOpen && !g.watching && !document.hidden) {
-      seeFilm('intro');
-      this.filmDialog('intro', () => setTimeout(() => this.storyDialog(true), 250));
+    const adv = g?.adventure;
+    if (!adv?.story) return;
+    const seen = filmsSeen();
+    const start = adv.stage === 1 && adv.run ? `intro@${adv.run}.${adv.journey}` : '';
+    if ((!seen.includes('intro') || (start && !seen.includes(start))) && !this.modalOpen && !g.watching && !document.hidden) {
+      const watched = () => {
+        seeFilm('intro');
+        if (start) seeFilm(start);
+      };
+      this.filmDialog('intro', () => setTimeout(() => this.storyDialog(true), 250), watched);
       return;
     }
     this.storyDialog(true);
@@ -1735,8 +1752,7 @@ export class UI {
       return;
     }
     if (this.filming) return;
-    seeFilm('ending');
-    this.filmDialog('ending');
+    this.filmDialog('ending', null, () => seeFilm('ending'));
   }
 
   // One of Adventure Isle's films (made by scripts/films, a video in
@@ -1744,8 +1760,10 @@ export class UI {
   // sound if the browser lets it (muted, with 🔊 to tap, if not), the
   // island's music hushed meanwhile, as loud as your sound and music are set;
   // ✖, Skip or Esc ends it, and so does anything going wrong, so it never
-  // stands in the way of the game. done: once it is over, however it ended.
-  filmDialog(name, done = null) {
+  // stands in the way of the game. done: once it is over, however it ended;
+  // started: once it has begun playing. A browser that will not play it by
+  // itself even without sound (an iPad saving its battery) gets a big ▶ to tap.
+  filmDialog(name, done = null, started = null) {
     const video = h('video', { class: 'film-video', preload: 'auto', poster: `video/isle-${name}.jpg` });
     video.playsInline = true;
     video.setAttribute('playsinline', '');
@@ -1754,13 +1772,15 @@ export class UI {
     video.muted = level <= 0;
     const loud = h('button', { class: 'chip film-sound', type: 'button', hidden: true }, '🔊 Tap for sound');
     const skip = h('button', { class: 'chip film-skip', type: 'button' }, 'Skip ⏭');
+    const tap = h('button', { class: 'film-play', type: 'button', hidden: true, 'aria-label': 'Play the film' }, '▶');
     let stall = 0;
+    let waiting = false;
     const end = () => {
       if (this.filming === video) this.closeModal();
     };
     this.openModal(
       (root) => {
-        root.append(h('div', { class: 'film-frame' }, video, loud, skip));
+        root.append(h('div', { class: 'film-frame' }, video, tap, loud, skip));
       },
       {
         film: true,
@@ -1785,14 +1805,32 @@ export class UI {
     };
     video.addEventListener('ended', end);
     video.addEventListener('error', end);
-    // Never stuck on a film that will not come (no network, say).
-    stall = setTimeout(() => video.readyState < 2 && end(), 9000);
+    video.addEventListener('playing', () => {
+      tap.hidden = true;
+      waiting = false;
+      started?.();
+      started = null;
+    });
+    tap.onclick = () => {
+      waiting = false;
+      tap.hidden = true;
+      video.play().catch(end);
+    };
+    // Never stuck on a film that will not come (no network, say) — unless it
+    // waits for a tap.
+    stall = setTimeout(() => !waiting && video.readyState < 2 && end(), 9000);
     video.src = `video/isle-${name}.mp4`;
     video.play().catch(() => {
       if (this.filming !== video) return;
       video.muted = true;
       loud.hidden = level <= 0;
-      video.play().catch(end);
+      video.play().catch(() => {
+        if (this.filming !== video) return;
+        waiting = true;
+        video.muted = level <= 0;
+        loud.hidden = true;
+        tap.hidden = false;
+      });
     });
   }
 

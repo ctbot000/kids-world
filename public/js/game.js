@@ -2823,7 +2823,9 @@ export class Game extends EventTarget {
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
       // (And which journey round the story this is: server/adventure.js.)
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
-      this.adventure = { camps, won: a.won === true, stage, journey, king: null, shield: true, story: chapterOf(stage) };
+      // (And which of its games, server/adventure.js: 0 for none said.)
+      const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
+      this.adventure = { camps, won: a.won === true, stage, journey, run, king: null, shield: true, story: chapterOf(stage) };
       this.adventureNews(a);
     }
     this.emit('adventure');

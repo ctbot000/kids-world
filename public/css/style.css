@@ -7195,3 +7195,23 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
 .isle-game.new {
   background: #fff8e6;
 }
+
+/* A film the browser would not start by itself: a big button to tap. */
+.film-play {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #5b3fb0;
+  font-size: 52px;
+  line-height: 1;
+  padding-left: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  z-index: 2;
+}
+.film-play[hidden] {
+  display: none;
+}
