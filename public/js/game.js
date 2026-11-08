@@ -712,6 +712,11 @@ export class Game extends EventTarget {
       case 'next':
         this.setNextStage(msg);
         break;
+      // A new game of the isle started, kept apart from this one (server/
+      // adventure.js newRun): where it is, to go there (main.js), or why not.
+      case 'isle-run':
+        this.emit('isle-run', { code: typeof msg.code === 'string' && isValidCode(msg.code) ? msg.code : '', error: typeof msg.error === 'string' ? msg.error.slice(0, 200) : '' });
+        break;
       case 'helped':
         this.helped(msg);
         break;

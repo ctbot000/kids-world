@@ -20,7 +20,7 @@
 
 import { isValidCode } from './codes.js';
 import { SIZES, THEMES } from './worldgen.js';
-import { cleanIslandName } from './words.js';
+import { cleanIslandName, cleanName, NAME_MAX } from './words.js';
 
 export const PASSCODE_LENGTH = 4;
 // The most islands a list shows, the busiest first.
@@ -62,7 +62,7 @@ export function cleanListing(raw) {
     passcode: raw.passcode === true,
     public: raw.public === true,
     ...(raw.watch === true ? { watch: true } : {}),
-    ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true, stage: count(adventure.stage, 1, 9999) } } : {}),
+    ...(adventure ? { adventure: { camps, freed: count(adventure.freed, 0, camps), won: adventure.won === true, stage: count(adventure.stage, 1, 9999), ...(Number.isInteger(adventure.run) && adventure.run >= 1 ? { run: Math.min(adventure.run, 1e6), journey: count(adventure.journey, 1, 9999) } : {}), ...(typeof adventure.by === 'string' && cleanName(adventure.by) ? { by: [...cleanName(adventure.by)].slice(0, NAME_MAX).join('') } : {}) } } : {}),
     ...(defense ? { defense: { wave: count(defense.wave, 1, waves), waves, won: defense.won === true } } : {}),
   };
 }

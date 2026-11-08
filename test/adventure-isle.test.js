@@ -6,7 +6,7 @@
 // nobody can be turned away; and the conquered island waiting for its players
 // before it goes.
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -16,7 +16,8 @@ import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
-import { PUBLIC_ISLAND_NAME, PublicAdventure } from '../server/adventure.js';
+import { MAX_RUNS, NEW_RUN_MS, PUBLIC_ISLAND_NAME, PublicAdventure, RUN_IDLE_MS } from '../server/adventure.js';
+import { isValidCode } from '../public/js/shared/codes.js';
 import { createGameServer } from '../server/server.js';
 
 // A fake clock that starts at a set noon, not the real time: a test that
@@ -112,7 +113,7 @@ test('one public adventure island, on the list even with nobody on it, owned by 
   const listing = room.listing();
   assert.equal(listing.players, 0);
   assert.equal(listing.public, true);
-  assert.deepEqual(listing.adventure, { camps: room.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 1 });
+  assert.deepEqual(listing.adventure, { camps: room.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 1, run: 1, journey: 1 });
   const cleaned = cleanListing(listing);
   assert.equal(cleaned.public, true);
   assert.equal(cleaned.adventure.stage, 1);
@@ -161,7 +162,7 @@ test('conquered: the next stage is up at once, the conquered one waits for its p
   assert.notDeepEqual(next.adventure.camps.map((c) => [c.x, c.z]), room.adventure.camps.map((c) => [c.x, c.z]), 'not the same island again');
   assert.equal(next.adventure.stage, 2);
   assert.equal(next.world.name, PUBLIC_ISLAND_NAME);
-  assert.deepEqual(next.listing().adventure, { camps: next.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 2 });
+  assert.deepEqual(next.listing().adventure, { camps: next.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 2, run: 1, journey: 1 });
   assert.equal(room.closed, false, 'the conquered island stays open a while');
   assert.ok(a.last('notice').text.includes('stage 2'), 'those there hear where the next one is');
   assert.deepEqual(a.last('next'), { t: 'next', code: next.code, stage: 2 }, 'and their pages where to take them on to');
@@ -232,12 +233,20 @@ test('the journey, the stage and the camps freed are kept over a restart, whatev
   assert.equal(again.room.adventure.gates[0].open, true);
   again.stop();
 
-  // From before journeys, a file that has only a day and a stage: on from
-  // that stage; one past the last chapter, a new journey.
+  // From before there could be more than one game, a file of one: that game
+  // is kept, at its stage, and a new one from stage 1 starts first beside it,
+  // so the story can be begun again from the start. One past the last
+  // chapter is that game's next journey.
   writeFileSync(file, JSON.stringify({ day: '2026-10-11', stage: 4 }));
-  assert.deepEqual((({ stage, journey }) => [stage, journey])(make()), [4, 1]);
-  writeFileSync(file, JSON.stringify({ day: '2026-10-11', stage: STAGES + 3 }));
-  assert.deepEqual((({ stage, journey }) => [stage, journey])(make()), [1, 2]);
+  const legacy = make();
+  assert.deepEqual(legacy.runs.map((r) => [r.stage, r.journey]), [[1, 1], [4, 1]]);
+  assert.deepEqual([legacy.stage, legacy.room.stage], [1, 1], 'the new one first');
+  legacy.stop();
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).runs.map((r) => r.stage), [1, 4], 'and kept that way');
+  writeFileSync(file, JSON.stringify({ journey: 1, stage: STAGES + 3 }));
+  const past = make();
+  assert.deepEqual(past.runs.map((r) => [r.stage, r.journey]), [[1, 1], [1, 2]]);
+  past.stop();
 
   // Nonsense in the file is stage 1, not a crash.
   writeFileSync(file, 'not json');
@@ -270,6 +279,62 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   one.room.adventure.win(one.room.monsters);
   one.tick(time.now());
   assert.deepEqual([one.stage, one.journey], [2, 2], 'and on the stages go');
+});
+
+test('anyone can start a new game from stage 1, kept apart from the others, each kept over a restart', (t) => {
+  const dir = mkdtempSync(joinPath(tmpdir(), 'kw-isle-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = joinPath(dir, 'adventure-isle.json');
+  const time = clock();
+  const rooms = new Map();
+  const make = () => new PublicAdventure({ rooms, now: time.now, log: () => {}, file }).start();
+  const one = make();
+  winAll(one, time, 3);
+  const a = join(one.room, 'Brave Fox');
+  // From the isle: a new game, and the one who asked is told where it is.
+  one.room.receive(a, { t: 'isle', op: 'new' });
+  const started = a.last('isle-run');
+  assert.ok(isValidCode(started.code));
+  assert.equal(started.stage, 1);
+  assert.equal(one.runs.length, 2);
+  const fresh = rooms.get(started.code).room;
+  assert.deepEqual([fresh.stage, fresh.public, fresh.journey], [1, true, 1]);
+  assert.deepEqual(fresh.listing().adventure, { camps: fresh.adventure.camps.filter((c) => c.kind === 'camp').length, freed: 0, won: false, stage: 1, run: 2, journey: 1, by: 'Brave Fox' });
+  assert.equal(one.room.stage, 3, 'the first game where it was');
+  assert.equal(publicEntries(rooms).length, 2, 'both on the list');
+  // Not again at once by the same player.
+  one.room.receive(a, { t: 'isle', op: 'new' });
+  assert.equal(a.inbox.filter((m) => m.t === 'isle-run').length, 1);
+  // From the title, a moment later: a join asking for a new game is told
+  // where one is — the one just started, to start it together — and no more.
+  const c = conn();
+  one.room.attach(c);
+  one.room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Happy Panda', look: { animal: 'cat' }, isle: 'new' });
+  assert.deepEqual(c.last('isle-run'), { t: 'isle-run', code: started.code, stage: 1 });
+  assert.equal(c.last('welcome'), undefined, 'nobody came to this one');
+  assert.equal(one.runs.length, 2);
+  // Each goes on by itself.
+  fresh.adventure.win(fresh.monsters);
+  one.tick(time.now());
+  assert.deepEqual(one.runs.map((r) => r.stage), [3, 2]);
+  // And each is kept over a restart.
+  one.stop();
+  const again = make();
+  assert.deepEqual(again.runs.map((r) => [r.id, r.stage, r.by]), [[1, 3, ''], [2, 2, 'Brave Fox']]);
+  // As many games as there may be: no more, until one nobody has played for
+  // days makes room for a new one.
+  while (again.runs.length < MAX_RUNS) {
+    time.advance(NEW_RUN_MS + 1);
+    assert.ok(again.newRun('Quick Owl').code);
+  }
+  time.advance(NEW_RUN_MS + 1);
+  assert.match(again.newRun('Late Llama').error, /games on Adventure Isle already/);
+  time.advance(RUN_IDLE_MS);
+  const late = again.newRun('Late Llama');
+  assert.ok(late.code);
+  assert.equal(again.runs.length, MAX_RUNS);
+  assert.ok(!again.runs.some((r) => r.id === 1), 'the one played longest ago made room');
+  again.stop();
 });
 
 test('each island as it comes and goes, told to whoever wants it (the server, to host it peer to peer)', () => {

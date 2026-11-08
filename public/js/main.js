@@ -482,6 +482,15 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
     }
     ui.toast(wait ? '⏳' : '🙈', text, 'warn');
   });
+  // A new game of the isle started (from the title, or from the isle): off
+  // to its island, or back to the title, told why not.
+  game.addEventListener('isle-run', (e) => {
+    if (session?.game !== game) return;
+    const { code, error } = e.detail;
+    backToTitle();
+    if (code) visitIsland(code);
+    else ui.toast('🙈', error || 'A new game could not be started just now.', 'warn');
+  });
   if (mode === 'host') link.room.onUpdate = () => session && (session.dirty = true);
   link.start(() => first(game));
   updateListing();
@@ -588,15 +597,18 @@ function openIsland(id, save = null) {
 
 // passcode: the one you typed for an island that has one. pass: from an
 // invitation, which lets you in without it.
-function visitIsland(raw, passcode = '', pass = '') {
+function visitIsland(raw, passcode = '', pass = '', { isleNew = false } = {}) {
   const code = normalizeCode(raw);
   if (!isValidCode(code)) {
     ui.toast('🙈', 'An island code has 6 numbers.', 'warn');
     return;
   }
+  // (Asking one of the isle's games for a new one: game.js 'isle-run'.)
+  const extra = isleNew ? { isle: 'new' } : {};
+  const loadingText = isleNew ? '🌟 Starting a new game of Adventure Isle…' : 'Flying to your friend’s island…';
   if (serverMode) {
     const link = new WsLink({ url: wsUrl() });
-    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText: 'Flying to your friend’s island…', first: (game) => ({ ...game.joinMessage(), code }), visit: code, passcode, pass });
+    startSession({ link, mode: 'server', key: tokenKey('server', code), loadingText, first: (game) => ({ ...game.joinMessage(), code, ...extra }), visit: code, passcode, pass });
     return;
   }
   if (signalError) {
@@ -604,7 +616,7 @@ function visitIsland(raw, passcode = '', pass = '') {
     return;
   }
   const link = new GuestLink({ code, peerOptions });
-  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText: 'Flying to your friend’s island…', visit: code, passcode, pass });
+  startSession({ link, mode: 'guest', key: tokenKey('visit', code), loadingText, first: (game) => ({ ...game.joinMessage(), ...extra }), visit: code, passcode, pass });
 }
 
 // The keeper's admin page watching an island unseen (shared/watch.js): its
@@ -926,22 +938,30 @@ const titleHandlers = {
   // The list of open islands is there with the dedicated server, or a keeper.
   listAvailable: () => serverMode || Boolean(keeper.config),
   openIslands,
-  // 🌟 The shared isle, straight from the title screen: the one public
-  // adventure island (server/adventure.js) off whichever list there is.
+  // 🌟 The shared isle, from the title screen: its games going on (server/
+  // adventure.js), off whichever list there is. Just one, at stage 1: straight
+  // there; more, or one further on: the games to pick from, or a new one.
   sharedIsle: async () => {
-    let isle = null;
+    let games = [];
     try {
-      isle = (await openIslands()).find((i) => i.public) ?? null;
+      games = (await openIslands()).filter((i) => i.public);
     } catch {
       // no list to ask
     }
-    if (isle) {
-      visitIsland(isle.code);
+    if (games.length === 1 && (games[0].adventure?.stage ?? 1) === 1) {
+      visitIsland(games[0].code);
+      return;
+    }
+    if (games.length) {
+      ui.isleGamesDialog(games);
       return;
     }
     ui.visitDialog();
     ui.toast('😴', 'The shared isle is not on the list right now. Try again in a moment!', 'warn');
   },
+  // A new game of the isle, from stage 1, kept apart from the others: asked of
+  // one of its games (viaCode), which says where the new one is.
+  newIsleGame: (viaCode) => visitIsland(viaCode, '', '', { isleNew: true }),
   // 🏢 The CTB island, straight from the title screen.
   ctb: () => watchCtb(keeperStarted),
   visitedBefore,

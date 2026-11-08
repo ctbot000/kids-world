@@ -7244,6 +7244,9 @@ test('the isle’s intro plays the first time you come, before its story, and th
   try {
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
+    // Further on than stage 1: its games to pick from (here, the one).
+    await until(page, (code) => document.querySelector(`#modal .isle-game[data-code="${code}"]`), isle.room.code);
+    await page.click(`#modal .isle-game[data-code="${isle.room.code}"]`);
     await inGame(page);
     await until(page, () => document.querySelector('#modal.film video.film-video'));
     assert.equal(await page.$eval('#modal video', (v) => v.getAttribute('src')), 'video/isle-intro.mp4');
@@ -7274,6 +7277,59 @@ test('the isle’s intro plays the first time you come, before its story, and th
     await page.click('#modal .film-skip');
     await until(page, () => document.getElementById('modal').hidden);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending']);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// Adventure Isle's games (server/adventure.js): with one further on than
+// stage 1, the title offers it and a new game from stage 1; a new game is kept
+// apart, the other staying at its stage; and from the isle, 🆕 New game starts
+// another one, asked first.
+test('a new game of the isle starts from stage 1, from the title or the isle, while the other games keep their stages', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  for (let s = 1; s < 3; s++) {
+    isle.room.adventure.win(isle.room.monsters);
+    isle.tick();
+  }
+  const first = isle.room;
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 2);
+    const rows = await page.$$eval('#modal .isle-game', (els) => els.map((el) => el.textContent));
+    assert.match(rows[0], /Stage 3 of 12: Frostpeak Pass/);
+    assert.match(rows[1], /Start a new game/);
+    await clickButton(page, 'Start a new game', '#modal');
+    await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code !== code && window.kidsWorld.game?.adventure?.stage === 1, first.code);
+    await inGame(page);
+    const second = await page.evaluate(() => window.kidsWorld.game.code);
+    assert.notEqual(second, first.code, 'a game of its own');
+    assert.deepEqual(isle.runs.map((r) => r.stage), [3, 1], 'the other where it was');
+    assert.equal(isle.runs[1].by, 'Brave Fox');
+
+    // From the isle: 🆕 New game, asked first, starts another.
+    isle.runs[1].startedAt -= 60 * 1000;
+    await page.click('#island-badge');
+    await clickButton(page, '🆕 New game', '#modal');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('A new game?'));
+    await clickButton(page, 'Start a new game', '#modal');
+    await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code !== code && window.kidsWorld.game?.adventure?.stage === 1, second);
+    await inGame(page);
+    assert.equal(isle.runs.length, 3);
+    assert.deepEqual(isle.runs.map((r) => r.stage), [3, 1, 1]);
+
+    // Back at the title, all three to pick from.
+    await page.click('#btn-settings');
+    await clickButton(page, 'Leave island', '#modal');
+    await until(page, () => !document.getElementById('title').hidden);
+    await clickButton(page, 'Adventure Isle');
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 4);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -7963,6 +8019,8 @@ test('the isle’s lair holds its chapter’s boss, named over its head, and wha
   try {
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
+    await until(page, (code) => document.querySelector(`#modal .isle-game[data-code="${code}"]`), isle.room.code);
+    await page.click(`#modal .isle-game[data-code="${isle.room.code}"]`);
     await inGame(page);
     const room = isle.room;
     const adv = room.adventure;

@@ -178,6 +178,8 @@ export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 // Who throws the isle's hazards on the way (adventure.js stepHazards): nobody,
 // as far as a bump of one is told (id 0).
 const HAZARD_THROWER = { id: 0, kind: 'blob', plan: null, body: { x: 0, y: 0, z: 0 } };
+// One player may start a new game of the isle at most this often (isleOp).
+const ISLE_NEW_MS = 10000;
 
 export class Room {
   // Either { theme, size, name, seed, defense } for a brand-new island, or
@@ -670,6 +672,9 @@ export class Room {
       case 'chest':
         this.chestOp(conn, p, msg);
         break;
+      case 'isle':
+        this.isleOp(conn, p, msg);
+        break;
       case 'go':
         this.goOp(conn, p, msg);
         break;
@@ -689,6 +694,12 @@ export class Room {
   join(conn, c, msg) {
     if (msg.protocol !== PROTOCOL) {
       this.sendTo(conn, { t: 'error', code: 'protocol', text: 'This island needs a newer (or older) Kids World. Reload the page and try again.' });
+      return;
+    }
+    // On the shared isle, a page come only to start a new game of it (from
+    // the title): told where that one is, and nothing more — it goes there.
+    if (msg.isle === 'new' && this.shared) {
+      this.sendTo(conn, { t: 'isle-run', ...(this.onIsleNew?.(cleanName(msg.name)) ?? { error: 'A new game cannot be started here.' }) });
       return;
     }
     let token = typeof msg.token === 'string' ? msg.token : '';
@@ -1386,8 +1397,9 @@ export class Room {
       // An island anyone may come to straight from a link without logging
       // in (whoever keeps it sets this): the CTB island (server/ctb-office.js).
       ...(this.watchable === true ? { watch: true } : {}),
-      // A stage of Adventure Isle: how many camps it has, how many are free, whether all of it is, and which stage.
-      ...(this.adventure ? { adventure: this.adventure.tally() } : {}),
+      // A stage of Adventure Isle: how many camps it has, how many are free, whether all of it is, and which stage;
+      // and which of its journeys it is, how many times round the story, and who started it (server/adventure.js).
+      ...(this.adventure ? { adventure: { ...this.adventure.tally(), ...(this.isleRun ? { run: this.isleRun.id, journey: this.adventure.journey, ...(this.isleRun.by ? { by: this.isleRun.by } : {}) } : {}) } } : {}),
       // A tower defense island: the wave it is on, of how many, and whether every one is done.
       ...(this.defense ? { defense: this.defense.tally() } : {}),
     };
@@ -2638,6 +2650,17 @@ export class Room {
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
     this.broadcast({ t: 'chest', x, y, z, by: p.id });
     this.changed();
+  }
+
+  // Someone on the shared isle starting a new game of it, from stage 1,
+  // kept apart from this one (server/adventure.js newRun): they are told where
+  // it is ({ t: 'isle-run', code } or { error }), and go there. Not too often.
+  isleOp(conn, p, msg) {
+    if (msg.op !== 'new' || !this.shared || !this.onIsleNew) return;
+    const now = this.now();
+    if (now - (p.isleNewAt ?? -Infinity) < ISLE_NEW_MS) return;
+    p.isleNewAt = now;
+    this.sendTo(conn, { t: 'isle-run', ...this.onIsleNew(p.name) });
   }
 
   // Gates the adventure opened (Adventure Isle's, shut across its way until

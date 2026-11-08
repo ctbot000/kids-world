@@ -1652,6 +1652,66 @@ export class UI {
     );
   }
 
+  // The games of Adventure Isle going on now (server/adventure.js), each kept
+  // apart at its own stage, from the title: join one, or start a new one from
+  // stage 1 while the others keep going. games: their listings.
+  isleGamesDialog(games) {
+    const list = [...games].sort((a, b) => b.players - a.players || (a.adventure?.stage ?? 1) - (b.adventure?.stage ?? 1) || (a.adventure?.run ?? 0) - (b.adventure?.run ?? 0));
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '🌟 Adventure Isle'),
+          h('p', { class: 'muted' }, 'Each game of the isle is kept apart, at its own stage. Join one — or start a new game from the beginning, and the others keep going.'),
+          h(
+            'div',
+            { class: 'isle-games' },
+            ...list.map((it) => {
+              const stage = it.adventure?.stage ?? 1;
+              const ch = chapterOf(stage);
+              const journey = it.adventure?.journey ?? 1;
+              return h(
+                'button',
+                { class: 'isle-game', type: 'button', 'data-code': it.code, onclick: () => (this.closeModal(), this.handlers?.visit(it.code)) },
+                h('span', { class: 'emoji' }, ch.icon),
+                h('span', { class: 'what' }, h('b', {}, `Stage ${stage} of ${STAGES}: ${ch.name}`), h('span', { class: 'muted' }, [journey > 1 ? `Journey ${journey}` : '', it.adventure?.by ? `started by ${it.adventure.by}` : ''].filter(Boolean).join(' · ') || (stage === 1 ? 'The story from the start' : 'The story so far'))),
+                h('span', { class: 'who' }, it.players ? `👫 ${it.players}` : '▶'),
+              );
+            }),
+            h(
+              'button',
+              { class: 'isle-game new', type: 'button', onclick: () => (this.closeModal(), this.handlers?.newIsleGame?.(list[0].code)) },
+              h('span', { class: 'emoji' }, '🆕'),
+              h('span', { class: 'what' }, h('b', {}, 'Start a new game'), h('span', { class: 'muted' }, `From stage 1, ${chapterOf(1).name}`)),
+            ),
+          ),
+        );
+      },
+      { narrow: true },
+    );
+  }
+
+  // From the isle: a new game of it, from stage 1, kept apart from this one,
+  // which goes on for whoever is on it. Asked first, as it takes you away.
+  newIsleGameDialog() {
+    const g = this.game;
+    if (!g?.shared) return;
+    this.openModal(
+      (root) => {
+        root.append(
+          h('h2', {}, '🆕 A new game?'),
+          h('p', {}, `Start Adventure Isle again from stage 1, ${chapterOf(1).name}, in a game of its own. This game stays just as it is, at stage ${g.adventure?.stage ?? 1}, for whoever is playing it — and you can come back to it from the 🌟 Adventure Isle button.`),
+          h(
+            'div',
+            { class: 'row', style: 'justify-content:center;gap:8px' },
+            h('button', { class: 'big green', type: 'button', onclick: () => (this.closeModal(), g.send({ t: 'isle', op: 'new' })) }, '🆕 Start a new game'),
+            h('button', { class: 'big', type: 'button', onclick: () => this.closeModal() }, 'Stay here'),
+          ),
+        );
+      },
+      { narrow: true },
+    );
+  }
+
   // Arriving on the isle: the first time on this device, its intro film,
   // and after it (or straight away, every time after) the chapter's page.
   isleArrival() {
@@ -2530,7 +2590,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🎓', 'Extra-credit quizzes', ['Conquer a stage of 🌟 Adventure Isle and pick a quiz for extra credit: one like Year 2 of elementary school, one like Year 3 of middle school. Every answer you get right is a coin or two! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done both.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle, with a film at its start and its end: King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Only beating King Grumble on the last stage starts it over, on a new journey. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. It has a story, 📖 The Star of Adventure Isle, with a film at its start and its end: King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next, and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Only beating King Grumble on the last stage starts it over, on a new journey — but you can start a new game from stage 1 any time (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -4270,7 +4330,7 @@ export class UI {
               : adv.won
                 ? ''
                 : h('p', { class: 'muted' }, 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
-            h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection')),
+            h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.newIsleGameDialog() }, '🆕 New game')),
           );
         }
         const def = g.defense;
