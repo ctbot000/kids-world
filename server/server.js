@@ -376,7 +376,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // The stock market's real prices, fetched when pages ask for them.
   const market = new MarketFeed({ file: join(store.dir, 'market.json') });
   if (keeper) keeper.market = market;
-  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb }), market });
+  const server = createGameServer({ keeperConfig: config ?? null, isleFile: join(store.dir, 'adventure-isle.json'), admin: adminHandler({ store, keeper, friend, ctb, isle: () => server.publicAdventure }), market });
   ctb.rooms = server.rooms;
   // The shared isle hosted peer to peer too, so pages anywhere can conquer
   // it together (see shareTheIsle).

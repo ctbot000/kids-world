@@ -18,6 +18,7 @@ import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
 import { MAX_RUNS, NEW_RUN_MS, PUBLIC_ISLAND_NAME, PublicAdventure, RUN_IDLE_MS } from '../server/adventure.js';
 import { isValidCode } from '../public/js/shared/codes.js';
+import { adminHandler } from '../server/admin.js';
 import { createGameServer } from '../server/server.js';
 
 // A fake clock that starts at a set noon, not the real time: a test that
@@ -335,6 +336,85 @@ test('anyone can start a new game from stage 1, kept apart from the others, each
   assert.equal(again.runs.length, MAX_RUNS);
   assert.ok(!again.runs.some((r) => r.id === 1), 'the one played longest ago made room');
   again.stop();
+});
+
+test('the admin can start a game over from stage 1 or remove it, whoever is on it sent on', (t) => {
+  const dir = mkdtempSync(joinPath(tmpdir(), 'kw-isle-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = joinPath(dir, 'adventure-isle.json');
+  const time = clock();
+  const rooms = new Map();
+  const one = new PublicAdventure({ rooms, now: time.now, log: () => {}, file }).start();
+  winAll(one, time, 4);
+  time.advance(NEW_RUN_MS + 1);
+  const second = one.newRun('Brave Fox');
+  const a = join(one.room, 'Sunny Otter');
+  one.tick(time.now());
+  assert.deepEqual(one.adminList().map((g) => [g.id, g.first, g.stage, g.journey, g.by, g.players]), [[1, true, 4, 1, '', 1], [2, false, 1, 1, 'Brave Fox', 0]]);
+
+  // Started over: back to stage 1, whoever was on it sent on there.
+  const old = one.room;
+  const to = one.resetRun(1);
+  assert.deepEqual(to, { code: one.room.code, stage: 1 });
+  assert.deepEqual(one.runs.map((r) => [r.id, r.stage, r.journey]), [[1, 1, 1], [2, 1, 1]]);
+  assert.equal(old.public, false, 'its old island retired');
+  assert.deepEqual(a.last('next'), { t: 'next', code: to.code, stage: 1 });
+  assert.match(a.last('notice').text, /starts over from stage 1/);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).runs.map((r) => r.stage), [1, 1], 'and kept');
+
+  // Removed: gone for good, whoever is on it sent on to another game.
+  const b = join(rooms.get(second.code).room, 'Happy Panda');
+  const gone = one.removeRun(2);
+  assert.deepEqual(gone, { code: one.room.code, stage: 1 });
+  assert.deepEqual(one.runs.map((r) => r.id), [1]);
+  assert.deepEqual(b.last('next'), { t: 'next', code: one.room.code, stage: 1 });
+  assert.equal(rooms.has(second.code), true, 'its island waits for its player');
+  rooms.get(second.code).room.receive(b, { t: 'leave' });
+  one.tick(time.now());
+  time.advance(11 * 60 * 1000);
+  one.tick(time.now());
+  assert.equal(rooms.has(second.code), false, 'and goes once they have');
+  // The only game removed: a new one from stage 1 takes its place.
+  const last = one.room.code;
+  assert.ok(one.removeRun(1));
+  assert.equal(one.runs.length, 1);
+  assert.notEqual(one.room.code, last);
+  assert.equal(one.stage, 1);
+  assert.equal(one.removeRun(99), null, 'no such game');
+  assert.equal(one.resetRun(99), null);
+  one.stop();
+});
+
+test('the admin page lists the isle’s games and starts one over, removes one or starts a new one', async () => {
+  const web = createGameServer({ log: () => {}, admin: adminHandler({ store: { dir: tmpdir() }, isle: () => web.publicAdventure }) });
+  await new Promise((done) => web.listen(0, '127.0.0.1', done));
+  try {
+    const api = async (path, method = 'GET', headers = { 'X-Kids-World-Admin': '1' }) => {
+      const res = await fetch(`http://127.0.0.1:${web.address().port}/admin/api/isle${path}`, { method, headers });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    };
+    const listed = await api('');
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.games.map((g) => [g.id, g.stage]), [[1, 1]]);
+    assert.equal(listed.body.max, MAX_RUNS);
+    // Changes need the admin header.
+    assert.equal((await api('/games', 'POST', {})).status, 403);
+    const made = await api('/games', 'POST');
+    assert.equal(made.status, 200);
+    assert.deepEqual(made.body.games.map((g) => g.id), [1, 2]);
+    web.publicAdventure.room.adventure.win(web.publicAdventure.room.monsters);
+    web.publicAdventure.tick();
+    assert.equal(web.publicAdventure.stage, 2);
+    const reset = await api('/games/1/reset', 'POST');
+    assert.equal(reset.status, 200);
+    assert.deepEqual(reset.body.games.map((g) => [g.id, g.stage]), [[1, 1], [2, 1]]);
+    const removed = await api('/games/2', 'DELETE');
+    assert.deepEqual(removed.body.games.map((g) => g.id), [1]);
+    assert.equal((await api('/games/2', 'DELETE')).status, 404);
+    assert.equal((await api('/games/1', 'PUT')).status, 405);
+  } finally {
+    await web.shutdown();
+  }
 });
 
 test('each island as it comes and goes, told to whoever wants it (the server, to host it peer to peer)', () => {

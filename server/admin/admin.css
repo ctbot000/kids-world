@@ -1567,3 +1567,20 @@ button.link:hover {
 .island-open .badge {
   flex: none;
 }
+
+/* ------------------------------------------------------------ Adventure Isle's games */
+
+.isle-game-row .island-about b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.isle-game-row button {
+  flex: none;
+}
+
+.open-now .error {
+  color: var(--danger);
+  font-weight: 600;
+}

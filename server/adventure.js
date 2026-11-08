@@ -18,6 +18,10 @@
 // (in `file`, when given). The island of a stage of a game is always the same
 // one, so a restart puts back just the island it had.
 //
+// The keeper's admin page lists the games, and can start one over from stage 1
+// (resetRun) or remove it (removeRun): whoever is on it is sent on, to stage 1
+// or to another game.
+//
 // A retired island stays open a while for whoever is on it to enjoy their win,
 // and once everyone has left it, it goes.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -77,6 +81,9 @@ export class PublicAdventure {
     // first), startedAt, playedAt, entry (its island now), retired, freed }.
     this.runs = [];
     this.nextId = 1;
+    // The islands of games removed (removeRun), kept until whoever is on them
+    // has gone on, as a game's retired ones are.
+    this.leftover = { retired: [] };
     this.stopped = false;
   }
 
@@ -276,10 +283,86 @@ export class PublicAdventure {
     this.say(`game ${run.id} (stage ${run.stage}, unplayed since ${new Date(run.playedAt).toISOString()}) made room for a new one.`);
   }
 
+  // The games as the admin page shows them: each one's number, stage and
+  // journey, who started it and when, when it was last played, its island's
+  // code, how many are on its islands now, and how many of its camps are free.
+  adminList() {
+    return this.runs.map((r, i) => {
+      const room = r.entry?.room;
+      const camps = room ? room.adventure.camps.filter((c) => c.kind === 'camp') : [];
+      return {
+        id: r.id,
+        first: i === 0,
+        stage: r.stage,
+        journey: r.journey,
+        by: r.by,
+        startedAt: r.startedAt,
+        playedAt: r.playedAt,
+        code: r.entry?.code ?? '',
+        players: (room?.online ?? 0) + r.retired.reduce((n, o) => n + o.room.online, 0),
+        camps: camps.length,
+        freed: camps.filter((c) => c.freed).length,
+      };
+    });
+  }
+
+  // A game started over from stage 1 (the admin page's ↺ Start over): its
+  // island now retired, and whoever is on it sent on to its new stage 1, as
+  // after a win. Returns { code, stage } of its new island, or null for no
+  // such game.
+  resetRun(id, now = this.now()) {
+    const run = this.runById(id);
+    if (!run || this.stopped) return null;
+    const done = run.entry;
+    this.open(run, 1, 1);
+    run.startedAt = now;
+    run.playedAt = now;
+    run.keptPlayed = now;
+    const next = { code: run.entry.code, stage: 1 };
+    this.retire(run, now, `This game of ${PUBLIC_ISLAND_NAME} starts over from stage 1! 🌟 Off you all go there in a moment.`, done, next);
+    this.keep();
+    this.say(`game ${run.id} started over at stage 1 (code ${next.code}).`);
+    return next;
+  }
+
+  // A game removed for good (the admin page's 🗑 Remove): whoever is on its
+  // islands is sent on to another game — the first left, or a new one from
+  // stage 1 if it was the only one, as there is always one. Returns { code,
+  // stage } of where they go, or null for no such game.
+  removeRun(id, now = this.now()) {
+    const run = this.runById(id);
+    if (!run || this.stopped) return null;
+    this.runs.splice(this.runs.indexOf(run), 1);
+    if (!this.runs.length) {
+      const fresh = { id: this.nextId++, journey: 1, stage: 1, by: '', startedAt: now, playedAt: now, entry: null, retired: [], freed: 0, keptPlayed: now };
+      this.runs.push(fresh);
+      this.open(fresh, 1, 1);
+    }
+    const to = this.runs[0];
+    const next = { code: to.entry.code, stage: to.stage };
+    const text = `This game of ${PUBLIC_ISLAND_NAME} is over — off you all go to another one in a moment!`;
+    this.retire(run, now, text, run.entry, next);
+    // Its islands of stages won before, and anyone still on them, go the same way.
+    for (const r of run.retired) {
+      r.room.next = next;
+      if (r.room.online > 0) {
+        r.room.broadcast({ t: 'notice', level: 'info', text });
+        r.room.broadcast({ t: 'next', ...next });
+      }
+    }
+    this.leftover.retired.push(...run.retired);
+    run.retired = [];
+    run.entry = null;
+    this.keep();
+    this.say(`game ${run.id} (stage ${run.stage}) removed; its players go on to game ${to.id} (code ${next.code}).`);
+    return next;
+  }
+
   // Moves each run on: won, to its next stage — and its last stage won, the
   // story told, back to stage 1 on its next journey round.
   tick(now = this.now()) {
     if (this.stopped || !this.runs.length) return;
+    this.sweep(this.leftover, now);
     let changed = false;
     for (const run of this.runs) {
       this.sweep(run, now);
@@ -373,6 +456,12 @@ export class PublicAdventure {
 
   stop() {
     this.stopped = true;
+    for (const entry of this.leftover.retired) {
+      if (!entry.room.closed) entry.room.close();
+      this.rooms.delete(entry.code);
+      this.onGone?.(entry.room);
+    }
+    this.leftover.retired = [];
     for (const run of this.runs) {
       if (run.entry) this.onRetire?.(run.entry.room);
       for (const entry of [run.entry, ...run.retired].filter(Boolean)) {

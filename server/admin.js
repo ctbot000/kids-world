@@ -22,12 +22,15 @@
 // shared/watch.js); and CTB, the company whose workers do real work on
 // this project (ctb.js): its settings, its workers and what they are doing,
 // its task board (GitHub issues) with a form for a new task, the workers'
-// proposals to approve or turn down, and their pull requests. Only for this computer: requests from other
+// proposals to approve or turn down, and their pull requests; and Adventure
+// Isle's games (server/adventure.js), each to start over from stage 1 or remove,
+// and a new one to start. Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import send from 'send';
+import { MAX_RUNS } from './adventure.js';
 import { isLoopbackIp, isPublicIp, KeepError } from './keeper.js';
 
 const ADMIN_DIR = fileURLToPath(new URL('./admin/', import.meta.url));
@@ -39,6 +42,7 @@ const PAGES = {
   '/admin/ctb.js': 'ctb.js',
   '/admin/tabs.js': 'tabs.js',
   '/admin/islands.js': 'islands.js',
+  '/admin/isle.js': 'isle.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -174,8 +178,39 @@ async function ctbApiFor(ctb, req, res, rest) {
   }
 }
 
-// Returns a handler: (req, res, pathname) => true when it answered.
-export function adminHandler({ store, keeper = null, friend = null, ctb = null, dataDir = store.dir }) {
+// Adventure Isle's games (server/adventure.js), under /admin/api/isle: GET
+// them; POST /games starts a new one from stage 1; POST /games/<id>/reset
+// starts one over from stage 1, and DELETE /games/<id> removes it, whoever is
+// on it sent on (to its stage 1, or to another game). Each answers with the
+// games as they are now.
+async function isleApiFor(isle, req, res, rest) {
+  if (!isle) return json(res, 404, { error: 'Adventure Isle is not kept here.' });
+  const games = () => ({ games: isle.adminList(), max: MAX_RUNS });
+  if (rest === '') {
+    if (req.method !== 'GET') return res.writeHead(405, { Allow: 'GET' }).end();
+    return json(res, 200, games());
+  }
+  if (rest === '/games') {
+    if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+    const started = isle.newRun('');
+    return json(res, started.error ? 409 : 200, { ...games(), ...started });
+  }
+  const one = /^\/games\/(\d+)(\/reset)?$/.exec(rest);
+  if (!one) return json(res, 404, { error: 'Not found' });
+  const id = Number(one[1]);
+  if (one[2]) {
+    if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+    const to = isle.resetRun(id);
+    return json(res, to ? 200 : 404, to ? { ...games(), to } : { error: 'No such game.' });
+  }
+  if (req.method !== 'DELETE') return res.writeHead(405, { Allow: 'DELETE' }).end();
+  const to = isle.removeRun(id);
+  return json(res, to ? 200 : 404, to ? { ...games(), to } : { error: 'No such game.' });
+}
+
+// Returns a handler: (req, res, pathname) => true when it answered. isle: the
+// server's Adventure Isle (server/adventure.js PublicAdventure), when asked.
+export function adminHandler({ store, keeper = null, friend = null, ctb = null, isle = () => null, dataDir = store.dir }) {
   const friendApi = (req, res, rest) => friendApiFor(friend, req, res, rest);
   return async function admin(req, res, pathname) {
     if (pathname !== '/admin' && !pathname.startsWith('/admin/')) return false;
@@ -265,6 +300,10 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
       if (!keeper) json(res, 404, { error: 'The keeper does not run here.' });
       else if (req.method === 'PUT' || req.method === 'DELETE') json(res, 200, { lock: await keeper.setLock(req.method === 'PUT') });
       else res.writeHead(405, { Allow: 'PUT, DELETE' }).end();
+      return true;
+    }
+    if (pathname === '/admin/api/isle' || pathname.startsWith('/admin/api/isle/')) {
+      await isleApiFor(isle(), req, res, pathname.slice('/admin/api/isle'.length));
       return true;
     }
     if (pathname === '/admin/api/ctb' || pathname.startsWith('/admin/api/ctb/')) {

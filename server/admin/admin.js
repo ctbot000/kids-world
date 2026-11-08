@@ -30,6 +30,7 @@ import { CHAT_MAX } from '/js/shared/words.js';
 import { THEMES } from '/js/shared/worldgen.js';
 import { setUpCtb } from '/admin/ctb.js';
 import { setUpIslands } from '/admin/islands.js';
+import { setUpIsle } from '/admin/isle.js';
 import { setUpTabs } from '/admin/tabs.js';
 import { refreshTv, setUpTv } from '/admin/tv.js';
 
@@ -1219,6 +1220,7 @@ async function refresh(now = false) {
   if (now) shown = reportsShown = visitorsShown = lockShown = '';
   render(state);
   await refreshFriend();
+  await isleGames.refresh();
   await ctb.refresh();
   timer = setTimeout(refresh, REFRESH_MS);
 }
@@ -1229,5 +1231,6 @@ setUpTabs();
 setUpTv();
 const islandWatch = setUpIslands({ h });
 const refreshIslands = islandWatch.refresh;
+const isleGames = setUpIsle({ h, ago });
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
 refresh();
