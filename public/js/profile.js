@@ -7,6 +7,7 @@
 // a world of its own, so what you earn and carry there stays apart from all
 // this, and never goes to the keeper.
 import { COLLECTABLES, TOY_BRICKS, GRASS, DIRT, STONE, PLANKS, GLASS, TULIP, LAMP } from './shared/blocks.js';
+import { FISH_KINDS } from './shared/fishing.js';
 import { addToGallery, cleanGallery, removeFromGallery } from './shared/drawing.js';
 import { drawToy, GASHA_PRICE, MONSTER_FIGURES, MONSTER_PRICE, TOY_MAX, TOYS, toysFound } from './shared/gashapon.js';
 import { mergeProfiles } from './shared/keeper.js';
@@ -22,6 +23,19 @@ export { STICKERS };
 export const DEFAULT_HOTBAR = [GRASS, DIRT, STONE, PLANKS, GLASS, TOY_BRICKS[0], TOY_BRICKS[2], TOY_BRICKS[7], TULIP, LAMP];
 
 export const DEFAULT_SETTINGS = { music: 0.5, sound: 0.8, studs: true, autoJump: true, map: true, readAloud: false, quality: 'auto', keeper: true };
+
+// Which kinds of fish a profile's `fish` holds, of the kinds there are
+// (shared/fishing.js FISH_KINDS): { [key]: the day caught }, none for kinds
+// never caught.
+function cleanFish(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const c of FISH_KINDS) {
+    const at = raw[c.key];
+    out[c.key] = Number.isFinite(at) && at > 0 ? at : 0;
+  }
+  return out;
+}
 
 function clean(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
@@ -46,6 +60,10 @@ function clean(raw) {
     gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
+    // Which kinds of fish you have caught (shared/fishing.js FISH_KINDS),
+    // for the 🐟 Fish Dictionary: each kind's key, and the day you caught
+    // your first of it.
+    fish: cleanFish(p.fish),
     gallery: cleanGallery(p.gallery),
     tokens: p.tokens && typeof p.tokens === 'object' ? p.tokens : {},
     hotbar,
@@ -136,6 +154,17 @@ export class Profile extends EventTarget {
     this.data.settings[key] = value;
     this.store();
     this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  // A kind of fish landed (shared/fishing.js FISH_KINDS key): the first of
+  // it fills its page in the 🐟 Fish Dictionary. Says whether it was the
+  // first of that kind, for the cheer.
+  caughtFish(key) {
+    if (!(key in this.data.fish)) return false;
+    if (this.data.fish[key]) return false;
+    this.data.fish[key] = Date.now();
+    this.shopped();
+    return true;
   }
 
   addToBasket(key, n = 1) {

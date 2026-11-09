@@ -11,6 +11,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { RoomEnvironment } from '../../vendor/three-addons/environments/RoomEnvironment.js';
 import { toyFigure } from './capsule-toys.js';
+import { fishModel } from './fishing-rod.js';
 import { shownBox } from './monster-figures.js';
 import { CHUTE, capsuleModel, gashaponMaterials, gashaponModel } from './gashapon-model.js';
 
@@ -470,4 +471,60 @@ export function toyPortraits(keys, size = 160) {
     gl.forceContextLoss();
   }
   return Object.fromEntries(portraits);
+}
+
+// Pictures of the fish for the 🐟 Fish Dictionary (shared/fishing.js), each
+// rendered once in 3D in the window's light, nose to the right as the fish in
+// the atlas faces, and kept for as long as the page is open: { [fish key]:
+// data URL }. Without WebGL, an empty list.
+const fishPictures = new Map();
+export function fishPortraits(keys, size = 160) {
+  const want = keys.filter((k) => !fishPictures.has(k));
+  if (want.length) {
+    let gl;
+    try {
+      const canvas = document.createElement('canvas');
+      gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    } catch {
+      return Object.fromEntries(fishPictures);
+    }
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    gl.setPixelRatio(ratio);
+    gl.setSize(size, size, false);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.05;
+    const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const room = new THREE.RoomEnvironment();
+    const env = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    scene.environment = env;
+    scene.add(new THREE.HemisphereLight(0xfff6ea, 0xd8c8b0, 1.1));
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(-1.2, 2.2, -1.6);
+    scene.add(key);
+    const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 50);
+    for (const k of want) {
+      const model = fishModel(k, 0.8);
+      model.rotation.y = -Math.PI / 2;
+      scene.add(model);
+      // Framed to fit, whatever its shape, seen a little from above.
+      const box = new THREE.Box3().setFromObject(model);
+      const mid = box.getCenter(new THREE.Vector3());
+      const r = box.getSize(new THREE.Vector3()).length() / 2;
+      const d = (r / Math.sin(THREE.MathUtils.degToRad(13))) * 0.92;
+      camera.position.set(mid.x, mid.y + d * 0.28, mid.z - d * 0.96);
+      camera.lookAt(mid);
+      camera.updateProjectionMatrix();
+      gl.render(scene, camera);
+      fishPictures.set(k, gl.domElement.toDataURL('image/png'));
+      scene.remove(model);
+    }
+    env.dispose();
+    gl.dispose();
+    gl.forceContextLoss();
+  }
+  return Object.fromEntries(fishPictures);
 }

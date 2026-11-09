@@ -5262,6 +5262,12 @@ export class Game extends EventTarget {
     if (c.basket) {
       const best = this.profile.data.stats.fishcm ?? 0;
       this.profile.addToBasket(c.basket, 1);
+      // A first of its kind: its page fills in in the 🐟 Fish Dictionary.
+      const first = c.basket === 'fish' && this.profile.caughtFish(c.key);
+      if (first) {
+        this.sound.play('newfish');
+        this.emit('newfish', { key: c.key, name: c.name, icon: c.icon, rare: c.rare });
+      }
       this.profile.count(c.basket === 'fish' ? 'fished' : c.basket === 'shell' ? 'shells' : 'pearls');
       if (c.basket === 'fish') this.profile.count('fishcm', c.length, { max: true });
       this.sound.play('collect');

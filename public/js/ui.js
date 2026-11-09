@@ -16,7 +16,7 @@ import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
-import { FIGHT } from './shared/fishing.js';
+import { FIGHT, FISH_KINDS } from './shared/fishing.js';
 import { ropeDue } from './shared/jump-rope.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
@@ -2216,7 +2216,7 @@ export class UI {
         draw();
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.fishDialog() }, '🐟 Fish'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             stats,
@@ -3599,6 +3599,15 @@ export class UI {
       this.sound.unlock();
       game.defend();
     };
+    // 📖 beside the 🎣 Fish button at the water's edge: the 🐟 Fish
+    // Dictionary of the kinds you have caught.
+    $('fishbook').onmousedown = (e) => e.preventDefault();
+    $('fishbook').onclick = () => {
+      $('fishbook').blur();
+      this.sound.unlock();
+      this.sound.play('ui');
+      this.fishDialog();
+    };
     const on = (type, fn) => game.addEventListener(type, fn);
     on('players', () => {
       this.renderFriends();
@@ -3680,6 +3689,9 @@ export class UI {
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
     on('reward', (e) => this.reward(e.detail));
+    // A first of a kind of fish: the dictionary's page filled in, said out
+    // loud over the catch itself.
+    on('newfish', (e) => this.toast('📖', `New in your 🐟 Fish Dictionary: ${e.detail.name}!`));
     on('hit-word', (e) => this.hitWord(e.detail));
     on('hit-number', (e) => this.hitNumber(e.detail));
     on('hit-lines', (e) => this.hitLines(e.detail));
@@ -5311,8 +5323,17 @@ export class UI {
     const width = el.offsetWidth || 150;
     const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
     const y = scr.visible ? scr.y + 24 : 220;
-    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    const left = Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x));
+    const top = Math.min(hgt - 150, Math.max(200, y));
+    el.style.transform = `translate(${left}px, ${top}px) translate(-50%, -100%)`;
     el.hidden = false;
+    // At the water's edge, the 🐟 Fish Dictionary opens from a 📖 beside the
+    // 🎣 Fish button, on its left — while your line is out too.
+    const book = $('fishbook');
+    if (t === g.fishTarget && !g.watching) {
+      book.style.transform = `translate(${Math.max(16 + 26, left - width / 2 - 30)}px, ${top}px) translate(-50%, -100%)`;
+      book.hidden = false;
+    } else book.hidden = true;
   }
 
   // The game at the arcade machine you pressed Play at, in a window: how it
@@ -5809,6 +5830,46 @@ export class UI {
       h('span', { class: 'name' }, n ? t.name : '???'),
       h('span', { class: `rarity ${r.key}`, 'aria-label': r.name }, h('span', { class: 'stars' }, r.stars), ` ${r.name}`),
       n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
+    );
+  }
+
+  // The 🐟 Fish Dictionary: a page for every kind of fish there is to catch
+  // (shared/fishing.js FISH_KINDS), filled in with its picture and its name
+  // the first time you catch one — until then a silhouette, with the rare
+  // golden fish saying so. Opened from a 📖 beside the 🎣 Fish button at the
+  // water's edge and from the 🎒 backpack. Which kinds you have caught is
+  // kept with your other saved things (profile.js fish).
+  fishDialog() {
+    const p = this.profile;
+    let onChange = null;
+    this.openModal((root) => {
+      const heading = h('h3', { class: 'collection-head' });
+      const grid = h('div', { class: 'fish-grid', role: 'group', 'aria-label': 'Fish Dictionary' });
+      // The fish drawn in 3D as on the island (render/gasha-stage.js), once
+      // the pictures are made; its emoji till then, or without WebGL. The
+      // ones still to catch are the same pictures, darkened to a silhouette.
+      const card = (c, caught, fresh) =>
+        h('div', { class: `fish-page${caught ? '' : ' missing'}${fresh ? ' fresh' : ''}`, title: caught ? c.name : `A ${c.rare ? 'rare ' : ''}fish still to catch` }, this.fishPictures?.[c.key] ? h('img', { src: this.fishPictures[c.key], alt: caught ? c.name : 'A fish still to catch', draggable: false }) : h('span', { class: 'icon' }, caught ? c.icon : h('span', {}, '🐟')), h('span', { class: 'kind' }, caught ? h('b', {}, c.name) : h('b', { class: 'muted' }, '???'), c.rare ? h('span', { class: 'rare' }, '✨ Rare') : null, caught ? null : h('span', { class: 'muted' }, `${c.cm[0]}–${c.cm[1]} cm`)), fresh ? h('span', { class: 'rare' }, 'New!') : null);
+      const draw = () => {
+        const caught = p.data.fish ?? {};
+        heading.textContent = `🐟 Fish Dictionary (${FISH_KINDS.filter((c) => caught[c.key]).length} of ${FISH_KINDS.length}) — ${this.game?.fishing ? 'your line is still out!' : 'cast a line at the water’s edge'}`;
+        grid.replaceChildren(...FISH_KINDS.map((c) => card(c, caught[c.key] > 0, this.freshFish === c.key && caught[c.key] > 0 && Date.now() - caught[c.key] < 4000)),
+        );
+      };
+      root.append(h('div', { class: 'dialog-head' }, h('h2', {}, '🐟 Fish Dictionary'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')), heading, h('p', { class: 'muted' }, 'Every kind of fish fills in its page the first time you catch one. Cast a line from the shore — the rare golden fish is the hardest to land!'), grid,
+      );
+      draw();
+      if (!this.fishPictures) {
+        import('./render/gasha-stage.js')
+          .then(({ fishPortraits }) => {
+            this.fishPictures = fishPortraits(FISH_KINDS.map((c) => c.key));
+            if (this.modalOpen && grid.isConnected) draw();
+          })
+          .catch(() => {});
+      }
+      onChange = draw;
+      p.addEventListener('basket', onChange);
+    }, { onClose: () => p.removeEventListener('basket', onChange) },
     );
   }
 
@@ -8204,6 +8265,9 @@ export class UI {
     this.renderRace(g);
     this.renderHoop(g);
     this.renderFishFight(g);
+    // The 📖 Fish Dictionary button at the water's edge: hidden unless this
+    // frame's rideButton finds the fishing spot again (arcadeButton).
+    $('fishbook').hidden = true;
     this.raceButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);

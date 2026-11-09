@@ -65,6 +65,7 @@
 // in the hello, before that check; the keeper still answers them.
 import { COLLECTABLES } from './blocks.js';
 import { CHUNK } from './framing.js';
+import { FISH_KINDS } from './fishing.js';
 import { addToys } from './gashapon.js';
 import { cleanGallery, joinGalleries } from './drawing.js';
 import { cleanCoins, cleanGear, cleanKeys, cleanPotions, cleanTames, COINS_MAX } from './shop.js';
@@ -186,7 +187,8 @@ export const KEPT_MAX = 512;
 
 // What is kept of a profile: your name and look, your basket, coins,
 // potions and gear from the shop, chest keys (the isle's own world of you), what you have done and the stickers it
-// earned, when your name, look, basket, coins, potions or gear last
+// earned, which kinds of fish you have caught (fishing.js, the 🐟 Fish
+// Dictionary), when your name, look, basket, coins, potions or gear last
 // changed, and your gallery of drawings (drawing.js). Never your tokens,
 // which let you back into islands as yourself, nor your settings. The page
 // sends exactly this.
@@ -205,6 +207,13 @@ export function keptProfile(raw) {
     const n = p.basket?.[c.key];
     basket[c.key] = Number.isInteger(n) && n > 0 ? Math.min(999, n) : 0;
   }
+  // Which kinds of fish have been caught (the 🐟 Fish Dictionary): the day
+  // of the first of each kind, 0 for a kind never caught.
+  const fish = {};
+  for (const c of FISH_KINDS) {
+    const at = p.fish?.[c.key];
+    fish[c.key] = Number.isFinite(at) && at > 0 ? at : 0;
+  }
   return {
     name: isValidName(p.name) ? p.name : '',
     look: cleanLook(p.look),
@@ -215,6 +224,7 @@ export function keptProfile(raw) {
     gear: cleanGear(p.gear),
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, KEPT_MAX),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, KEPT_MAX),
+    fish,
     gallery: cleanGallery(p.gallery),
     changedAt: Number.isFinite(p.changedAt) && p.changedAt > 0 ? p.changedAt : 0,
   };
@@ -269,8 +279,8 @@ export function usernameProblem(v) {
 
 // One player's profile from two devices, put together: the name, look,
 // basket, coins, potions, keys and gear from whichever changed them last, every
-// sticker either has earned (dated the earlier day), and the most either has
-// done of everything.
+// sticker either has earned (dated the earlier day), the kinds of fish either
+// has caught (the earlier day too), and the most either has done of everything.
 export function mergeProfiles(mine, theirs) {
   const a = keptProfile(mine);
   const b = keptProfile(theirs);
@@ -279,10 +289,14 @@ export function mergeProfiles(mine, theirs) {
   for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
   const stats = { ...a.stats };
   for (const [key, n] of Object.entries(b.stats)) stats[key] = Math.max(stats[key] ?? 0, n);
+  // The fish dictionary as one page out of either: a kind caught on one
+  // device is caught, dated the earlier day.
+  const fish = { ...a.fish };
+  for (const [key, at] of Object.entries(b.fish)) fish[key] = fish[key] ? Math.min(fish[key], at) : at;
   // The gallery as it was last changed, on whichever device: a picture taken
   // down on one stays down.
   const gallery = b.gallery.changedAt > a.gallery.changedAt ? b.gallery : a.gallery;
-  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, keys: newer.keys, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
+  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, keys: newer.keys, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, fish, gallery };
 }
 
 // Stats that are the best there has ever been, not a count to add up.
@@ -293,8 +307,8 @@ const BEST_STATS = new Set(['highest', 'byheart', 'typewpm', 'rainbest', 'fishcm
 // (dated the earlier day), the two baskets, their coins and what each has
 // done added up (the highest you flew, the facts known by heart and the
 // best typing, the higher of the two), and the better gear of each kind, and the clothes
-// and capsule toys of both, the dragons both tamed, the shares both own, and
-// the pictures in both galleries.
+// and capsule toys of both, the dragons both tamed, the shares both own, the
+// kinds of fish both have caught, and the pictures in both galleries.
 export function addProgress(player, guest) {
   const a = keptProfile(player);
   const b = keptProfile(guest);
@@ -302,6 +316,8 @@ export function addProgress(player, guest) {
   for (const [key, at] of Object.entries(b.stickers)) stickers[key] = key in stickers ? Math.min(stickers[key], at) : at;
   const stats = { ...a.stats };
   for (const [key, n] of Object.entries(b.stats)) stats[key] = BEST_STATS.has(key) ? Math.max(stats[key] ?? 0, n) : (stats[key] ?? 0) + n;
+  const fish = { ...a.fish };
+  for (const [key, at] of Object.entries(b.fish)) fish[key] = fish[key] ? Math.min(fish[key], at) : at;
   const basket = {};
   for (const [key, n] of Object.entries(a.basket)) basket[key] = Math.min(999, n + (b.basket[key] ?? 0));
   const gear = cleanGear(a.gear);
@@ -310,7 +326,7 @@ export function addProgress(player, guest) {
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
   gear.stocks = addStocks(gear.stocks, b.gear.stocks);
-  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
+  return { stickers, stats, fish, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:
