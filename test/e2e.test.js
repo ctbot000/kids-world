@@ -4941,6 +4941,19 @@ test('the admin page’s Tests tab: how long the tests took before each push, th
       ],
     );
     assert.equal(await page.$eval('.tests-files tbody tr:nth-child(2) .badge', (b) => b.classList.contains('warn')), true);
+
+    // A server started before the tab, its folder pulled but not restarted,
+    // serves this page without its script: the rest of the page works on.
+    const handler = adminHandler({ store });
+    const old = createGameServer({ log: () => {}, admin: (req, res, pathname) => (pathname === '/admin/tests.js' ? (res.writeHead(404).end(), true) : handler(req, res, pathname)) });
+    await new Promise((done) => old.listen(0, '127.0.0.1', done));
+    try {
+      await page.goto(`http://127.0.0.1:${old.address().port}/admin/`);
+      await until(page, () => document.querySelector('#summary .stat'));
+      assert.equal(await page.$eval('#tab-tests', (t) => t.hidden), true);
+    } finally {
+      await old.shutdown();
+    }
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();

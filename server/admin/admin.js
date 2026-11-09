@@ -33,7 +33,6 @@ import { setUpCtb } from '/admin/ctb.js';
 import { setUpIslands } from '/admin/islands.js';
 import { setUpIsle } from '/admin/isle.js';
 import { setUpTabs } from '/admin/tabs.js';
-import { setUpTests } from '/admin/tests.js';
 import { refreshTv, setUpTv } from '/admin/tv.js';
 
 const REFRESH_MS = 5000;
@@ -1236,5 +1235,10 @@ const islandWatch = setUpIslands({ h });
 const refreshIslands = islandWatch.refresh;
 const isleGames = setUpIsle({ h, ago });
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
-const tests = setUpTests({ h, ago, plural, num });
+// The Tests tab comes on its own: a server started before it came, whose
+// folder was updated (git pull) but not restarted, has no /admin/tests.js to
+// serve, and a page that cannot load one of its imports runs none of itself.
+let tests = { refresh: async () => {} };
+const testsTab = await import('/admin/tests.js').catch(() => null);
+if (testsTab) tests = testsTab.setUpTests({ h, ago, plural, num });
 refresh();
