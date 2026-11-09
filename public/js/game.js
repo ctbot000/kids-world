@@ -7735,6 +7735,7 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
+      if (c.type === 'firefly' && state === 'hand') this.onYourHand(c, s);
       this.seaSights(c, s, state, now, moving);
     }
   }
@@ -7821,6 +7822,29 @@ export class Game extends EventTarget {
     this.perchedOn = c.id;
     this.profile.count('perched');
     this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
+  }
+
+  // A firefly that has landed sits right on the hand, however it sways as
+  // they stand, rather than where the island's last word of it was (which
+  // would lag and judder behind): whose hand the one nearest to it is.
+  onYourHand(c, s) {
+    const at = c.model.group.position;
+    let best = Infinity;
+    let yaw = 0;
+    for (const p of this.players.values()) {
+      const hand = p.avatar?.hands?.[1];
+      if (!hand) continue;
+      hand.getWorldPosition(at);
+      const d = Math.hypot(at.x - s.x, at.y - s.y, at.z - s.z);
+      if (d < best) {
+        best = d;
+        yaw = p.avatar.root.rotation.y;
+      }
+    }
+    if (best === Infinity) return;
+    // Just a touch above the back of the hand.
+    at.y += 0.03;
+    c.model.group.rotation.y = yaw;
   }
 
   // Things worth a sticker that just happen: night skies, rainbows, and a

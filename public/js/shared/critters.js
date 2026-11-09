@@ -223,7 +223,7 @@ export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].v
 // with whoever has it (their hooper) until it drops.
 export const heldToy = (type) => Boolean(CRITTER_INFO[type]?.hoop || CRITTER_INFO[type]?.rope);
 // New states go on the end too.
-export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race', 'hoop'];
+export const STATES = ['idle', 'walk', 'hop', 'eat', 'happy', 'swim', 'fly', 'sleep', 'jump', 'spout', 'slide', 'dive', 'run', 'fire', 'open', 'race', 'hoop', 'hand'];
 export const MAX_CRITTERS = 64;
 // The most fireflies an island lets out at once: enough for a little wonder,
 // never a swarm — and they never take a seat an animal could have.
@@ -539,6 +539,64 @@ function roofed(world, c) {
     if (B.SOLID[id] && !B.TREE_PART[id]) return true;
   }
   return false;
+}
+
+// How long somebody has to stand still out in the dark before a firefly
+// comes down to sit on their hand (see handSpot).
+export const FIREFLY_HAND_S = 4;
+// How far a firefly will come from to sit on a still hand.
+const FIREFLY_HAND_REACH = 6;
+
+// Whose hand it lands on: the right, which holds what you carry.
+const HAND_SIDE = 1;
+
+// Where a firefly sits on somebody's hand: by their side a little in front,
+// about the height a hand hangs at. It is only ever still people, so the hand
+// stays put while it is there (their idle sway moves it a touch, which the
+// page that draws it follows). tall: how much taller than a kid they stand.
+export function handSpot(p, out = { x: 0, y: 0, z: 0 }) {
+  const sin = Math.sin(p.yaw);
+  const cos = Math.cos(p.yaw);
+  out.x = p.x + sin * 0.22 + cos * (HAND_SIDE * 0.18);
+  out.y = p.y + 0.5 + (p.tall ?? 0) * 0.42;
+  out.z = p.z + cos * 0.22 - sin * (HAND_SIDE * 0.18);
+  return out;
+}
+
+// The anims that mean somebody is up in the air, in the water, in a seat or
+// on an animal: not standing on their own two feet. (Their numbers are in
+// render/avatar.js, which the shared code cannot see; these match it.)
+const ANIM_AIR = 3;
+const ANIM_SWIM = 4;
+const ANIM_RIDE = 6;
+const ANIM_SIT = 8;
+
+// Something solid over a spot (leaves don't count): under a roof, no firefly
+// comes down to sit on a hand.
+function roofedAt(world, x, y, z) {
+  const cx = FL(x);
+  const cz = FL(z);
+  for (let yy = FL(y) + 1; yy <= FL(y) + 8; yy++) {
+    const id = world.get(cx, yy, cz);
+    if (B.SOLID[id] && !B.TREE_PART[id]) return true;
+  }
+  return false;
+}
+
+// Whoever has stood still the longest out in the open within reach, or null.
+// Only somebody on their own feet, not sitting in a seat (a hand in the lap
+// or on a wheel is not out to be sat on) — a swing of the arm is what sends
+// the firefly away again, not what keeps it off.
+function stillPlayer(world, players, c, still) {
+  let best = null;
+  for (const [id, p] of players) {
+    if (p.flying || p.anim === ANIM_AIR || p.anim === ANIM_SWIM || p.anim === ANIM_SIT || p.anim === ANIM_RIDE) continue;
+    if (Math.hypot(p.x - c.x, p.z - c.z) > FIREFLY_HAND_REACH) continue;
+    if (roofedAt(world, p.x, p.y + 1, p.z)) continue;
+    const stillFor = still.get(id) ?? 0;
+    if (!best || stillFor > best.stillFor) best = { id, ...p, stillFor };
+  }
+  return best;
 }
 
 // How many of each newer flying friend an island starts with.
@@ -901,6 +959,12 @@ export class CritterSim {
     this.nextId = 1;
     // A bigger island has room for more (see maxCritters).
     this.max = MAX_CRITTERS;
+    // How long each person has stood still (id -> seconds), and where they
+    // stood; and the one firefly, if any, that has come down to sit on a
+    // hand. Never more than one lands at a time.
+    this.still = new Map();
+    this.stood = new Map();
+    this.handFlyer = 0;
   }
 
   add(type, x, y, z, name = null, yaw = null) {
@@ -991,6 +1055,17 @@ export class CritterSim {
 
   // players: Map of pid -> { x, y, z, yaw, anim, flying, hat, hair } for who is here.
   step(world, dt, now, players, night = false) {
+    // How long each person here has stood just where they are: a firefly
+    // comes to sit on the hand of one who has been still a while (see
+    // onHand). Any step, hop or change of pose starts it over.
+    for (const id of [...this.still.keys()]) if (!players.has(id)) this.still.delete(id);
+    for (const [id, p] of players) {
+      const was = this.stood.get(id);
+      const same = was && Math.hypot(p.x - was.x, p.z - was.z) < 0.05 && Math.abs(p.y - was.y) < 0.05 && p.anim === was.anim;
+      const stillFor = same ? Math.min(was.stillFor + dt, 600) : 0;
+      this.stood.set(id, { x: p.x, y: p.y, z: p.z, anim: p.anim, stillFor });
+      this.still.set(id, stillFor);
+    }
     for (const c of this.list) this.stepOne(world, c, dt, now, players, night);
   }
 
@@ -1043,7 +1118,7 @@ export class CritterSim {
     }
 
     if (info.flies) {
-      this.stepFlyer(world, c, dt, leader, night);
+      this.stepFlyer(world, c, dt, leader, night, players);
       return;
     }
     if (info.sea === 'water') {
@@ -1686,10 +1761,24 @@ export class CritterSim {
 
   // ------------------------------------------------ flying friends
 
-  stepFlyer(world, c, dt, leader, night) {
+  stepFlyer(world, c, dt, leader, night, players) {
     if (leader) {
       this.follow(world, c, dt, leader);
       return;
+    }
+    // A firefly out at night comes down onto the hand of whoever stands
+    // still long enough out in the open, and sits there blinking until they
+    // move again (see onHand). Only ever one of them at a time.
+    if (c.type === 'firefly' && this.handFlyer !== c.id && c.perch !== 'hand') {
+      if (night && !roofed(world, c)) {
+        const still = stillPlayer(world, players, c, this.still);
+        if (still && still.stillFor > FIREFLY_HAND_S) {
+          this.flyTo(c, handSpot(still), 'hand');
+          this.handFlyer = c.id;
+          c.onHand = still.id;
+          return;
+        }
+      }
     }
     if (c.followed) {
       // On its own again: it thinks again from wherever it is.
@@ -1701,6 +1790,10 @@ export class CritterSim {
     }
     if (c.state === 'happy') c.state = c.mode === 'perch' ? 'idle' : c.mode === 'hover' && c.goal === 'flower' ? 'eat' : 'fly';
     const awake = CRITTER_INFO[c.type].nocturnal ? night : !night;
+    if (c.perch === 'hand') {
+      this.onHand(c, dt, players, night);
+      return;
+    }
     if (c.mode === 'fly') {
       if (this.flight(world, c, dt)) this.arrive(c, awake);
     } else if (c.mode === 'soar') {
@@ -1795,6 +1888,26 @@ export class CritterSim {
         }
         this.takeOff(world, c, true);
     }
+  }
+
+  // Sitting on somebody's hand (see handSpot): it stays while they stay
+  // still, then flits back to the others. A step, a jump, a swing of the
+  // arm, the day coming, or a roof going up over them all send it off.
+  onHand(c, dt, players, night) {
+    const p = c.onHand ? players.get(c.onHand) : null;
+    const still = p ? (this.still.get(c.onHand) ?? 0) : 0;
+    if (!p || still < 0.35 || !night || p.flying || p.anim === ANIM_AIR || p.anim === ANIM_SWIM || p.anim === ANIM_SIT || p.anim === ANIM_RIDE) {
+      if (this.handFlyer === c.id) this.handFlyer = 0;
+      c.onHand = 0;
+      c.perch = '';
+      c.mode = 'perch';
+      c.timer = 0;
+      return;
+    }
+    handSpot(p, c);
+    c.yaw = p.yaw;
+    c.state = 'hand';
+    c.timer = 3;
   }
 
   // Off somewhere new, each in its own way.
@@ -2070,6 +2183,14 @@ export class CritterSim {
   arrive(c, awake) {
     c.mode = 'perch';
     c.state = awake ? 'idle' : 'sleep';
+    if (c.goal === 'hand') {
+      // It landed on somebody's hand: it sits there, not on the world.
+      c.perch = 'hand';
+      c.state = 'hand';
+      c.onHead = 0;
+      c.timer = this.rng.range(4, 9);
+      return;
+    }
     if (Math.hypot(c.tx - c.x, c.ty - c.y, c.tz - c.z) > 0.5) {
       // Took far too long: it thinks again from where it got to.
       c.timer = 0;
