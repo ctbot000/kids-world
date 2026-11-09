@@ -261,6 +261,39 @@ test('a pet waits under you while you fly, and pops over to you when you go a lo
   assert.ok(!bodyOverlapsSolid(world, pet.body));
 });
 
+test('run ahead and a baby penguin flops onto its tummy and slides to catch up, standing up beside you', () => {
+  const world = meadow();
+  const me = makeBody(24.5, 6, 24.5);
+  // Left well behind (as it is when you have ridden off, or it was petting a
+  // butterfly): too far for a waddle, so onto its tummy it goes.
+  const pet = makePet('penguin', 17.5, 6, 24.5);
+  const poses = new Set();
+  together(world, me, pet, { mx: 0, mz: 0 }, 4, { look: (p) => poses.add(petPose(p)) });
+  assert.ok(poses.has('slide'), `it slides to catch up: ${[...poses]}`);
+  assert.ok(poses.has('sit') || poses.has('walk'), `up on its feet again beside you: ${[...poses]}`);
+  assert.equal(pet.state, 'sit');
+  assert.ok(Math.hypot(pet.x - me.x, pet.z - me.z) < 1.6, `beside you, ${Math.hypot(pet.x - me.x, pet.z - me.z).toFixed(2)} away`);
+  assert.ok(!pet.sliding, 'up off its tummy');
+  // A walk it keeps up with on its feet, waddling along behind you.
+  const seen = new Set();
+  together(world, me, pet, { mx: 1, mz: 0 }, 3, { look: (p) => seen.add(petPose(p)) });
+  assert.ok(!seen.has('slide'), `a walk is no slide: ${[...seen]}`);
+});
+
+test('in the water a baby penguin paddles after you, and it swims quicker than it walks', () => {
+  const world = meadow();
+  // A long pond, a block below the grass, from one side to the other.
+  for (let x = 10; x < 38; x++) for (let z = 20; z < 29; z++) for (let y = 3; y <= 5; y++) world.set(x, y, z, y === 3 ? B.SAND : B.WATER);
+  const me = makeBody(10.5, 6, 24.5);
+  const pet = makePet('penguin', 9.5, 6, 24.5);
+  let paddled = false;
+  together(world, me, pet, { mx: 1, mz: 0 }, 10, { look: (p) => (paddled ||= petPose(p) === 'swim') });
+  assert.ok(paddled, 'it paddles after you');
+  assert.ok(me.x > 36, 'you are across');
+  assert.ok(pet.x > 33, `it is across too, at ${pet.x.toFixed(1)}`);
+  assert.ok(PET_INFO.penguin.swim > PET_INFO.penguin.walk, 'quicker in the water than on its feet');
+});
+
 test('a pet swims after you, and climbs out after you onto the bank', () => {
   // A pond, a block below the grass, in the middle of the meadow.
   const world = meadow();
@@ -367,7 +400,7 @@ for (const bird of ['parrot', 'tit']) test(`a ${bird} sits on your head while yo
 });
 
 test("every pet's model can be drawn in every coat and every pose, in its owner's colour", () => {
-  const poses = ['idle', 'walk', 'run', 'jump', 'swim', 'sit', 'lie', 'sleep', 'fly', 'hover', 'perch', ...Object.keys(TRICKS)];
+  const poses = ['idle', 'walk', 'run', 'jump', 'swim', 'sit', 'lie', 'sleep', 'fly', 'hover', 'perch', 'slide', ...Object.keys(TRICKS)];
   for (const p of PETS) {
     for (const coat of p.coats) {
       const m = new PetModel({ kind: p.key, coat }, '#3a7bd5');
