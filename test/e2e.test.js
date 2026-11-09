@@ -39,6 +39,7 @@ import { Office } from '../server/ctb-office.js';
 import { Company, defaultSettings } from '../server/ctb.js';
 import { friendWho } from '../server/personality.js';
 import { createGameServer } from '../server/server.js';
+import { TestRuns } from '../server/test-runs.js';
 import { COINS, fakeFeed } from './fixtures/market.js';
 
 const CHROME = [
@@ -4829,6 +4830,117 @@ test('the admin page shows each player, their login and their islands, folded aw
     await clickButton(page, 'Clear log');
     await until(page, () => document.querySelector('#visitors .empty'));
     assert.deepEqual(await store.visitors(), []);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+    await games.shutdown();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('the admin page’s Tests tab: how long the tests took before each push, the one going on now, each run opened to its test files, and the files that took longest beside their usual', { skip }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kids-world-e2e-'));
+  const store = await new KeeperStore(dir).open();
+  // Runs ten minutes apart, hours ago, as check.mjs writes them.
+  let now = Date.now() - 6 * 3_600_000;
+  const runs = new TestRuns({ dir, now: () => now });
+  const add = async (k, ms, { ok = true, full = false, hook = true, jobs = [], failed = [], pid = 2 ** 30 } = {}) => {
+    now += 600_000;
+    const run = await runs.start({ commit: `${String(k).padStart(7, '0')}${'f'.repeat(33)}`, subject: `Change ${k}`, hook, full, load: 2.5, node: 'v26.0.0', pid });
+    now += ms;
+    const counts = { tests: 200, pass: failed.length ? 199 : 200, fail: failed.length, cancelled: 0, skipped: 0 };
+    if (ok !== null) await runs.end(run, { ok, copyMs: 1000, testsMs: ms - 1500, summary: { counts, jobs, flaky: [], failed, heldMs: 0, atOnce: { jobs: 4, e2e: 2, shards: 4, cores: 8 } } });
+  };
+  const times = (e2e, sea, engine, again = 0) => [
+    { name: 'test/e2e.test.js 1/4', ms: e2e },
+    { name: 'test/sea.test.js', ms: sea },
+    { name: 'test/engine.test.js', ms: engine, ...(again ? { again } : {}) },
+  ];
+  await add(1, 100_000, { jobs: times(80_000, 4000, 2000) });
+  await add(2, 120_000, { jobs: times(95_000, 4200, 2100) });
+  await add(3, 60_000, { ok: false, failed: ['test/sea.test.js'], jobs: [...times(50_000, 3000, 2000).filter((j) => j.name !== 'test/sea.test.js'), { name: 'test/sea.test.js', ms: 3000, again: 900, ok: false }] });
+  // Cut off: its process is gone.
+  await add(4, 30_000, { ok: null });
+  await add(5, 300_000, { full: true, hook: false, jobs: times(200_000, 9000, 5000) });
+  await add(6, 110_000, { jobs: [...times(90_000, 12_000, 2000, 500), { name: 'test/new.test.js', ms: 1000 }] });
+  // Going on now, in this process, half a minute in.
+  now = Date.now() - 30_000;
+  await runs.start({ commit: `0000007${'f'.repeat(33)}`, subject: 'Change 7', hook: true, full: false });
+  const games = createGameServer({ log: () => {}, admin: adminHandler({ store }) });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  page.on('pageerror', (error) => pageErrors.push(`admin: ${error.message}`));
+  try {
+    await page.goto(`http://127.0.0.1:${games.address().port}/admin/#tests`);
+    await until(page, () => document.getElementById('tab-tests').ariaSelected === 'true' && document.getElementById('tests-section').checkVisibility());
+    assert.equal(await page.$eval('#tests-badge', (b) => b.textContent), 'running');
+    const going = await page.$eval('.tests-running', (el) => el.textContent);
+    for (const bit of ['Testing', '0000007', 'Change 7', 'so far', 'usually 1 min 50 s', 'to go', 'pre-push']) assert.ok(going.includes(bit), `${bit} in ${going}`);
+
+    // The latest run, the usual, fastest and slowest of the light runs that passed, and how many of the latest passed.
+    const tiles = await page.$$eval('#tests .stat', (els) => els.map((el) => [el.querySelector('.label').textContent, el.querySelector('b').textContent, el.classList.contains('warn')]));
+    assert.deepEqual(tiles, [
+      ['Last run', '1 min 50 s', false],
+      ['Usually', '1 min 50 s', false],
+      ['Fastest', '1 min 40 s', false],
+      ['Slowest', '2 min', false],
+      ['Passed', '4 of 6', true],
+    ]);
+
+    // A bar a run that ended (not the one cut off, nor the one going on), oldest first, coloured as it went.
+    await until(page, () => Chart.getChart(document.querySelector('#tests canvas'))?.data.datasets[0].data.length === 5);
+    assert.deepEqual(await page.$eval('#tests canvas', (c) => Chart.getChart(c).data.datasets[0].data.map((minutes) => Math.round(minutes * 60))), [100, 120, 60, 300, 110]);
+    const legend = await page.$eval('.tests-legend', (el) => el.textContent);
+    for (const bit of ['Passed', 'Passed, full (CHECK_FULL)', 'Failed', 'Usually, 1 min 50 s']) assert.ok(legend.includes(bit), bit);
+
+    // The runs, newest first.
+    const rows = await page.$$eval('.tests-runs tbody tr[data-run]', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
+    assert.deepEqual(
+      rows.map((r) => [r[1].slice(0, 7), r[2], r[4]]),
+      [
+        ['0000007', '—', 'Running'],
+        ['0000006', '1 min 50 s', 'Passed'],
+        ['0000005', '5 minfull', 'Passed'],
+        ['0000004', '—', 'Stopped'],
+        ['0000003', '1 min', 'Failed'],
+        ['0000002', '2 min', 'Passed'],
+        ['0000001', '1 min 40 s', 'Passed'],
+      ],
+    );
+    assert.match(rows[2][0], /by hand$/);
+    assert.match(rows[1][0], /pre-push$/);
+    assert.match(rows[4][3], /199 of 200failed: test\/sea\.test\.js/);
+
+    // A run opened: how its time went, and each test file's, longest first.
+    await page.click('.tests-runs tbody tr:nth-child(2) button');
+    await until(page, () => document.querySelector('.tests-detail .tests-run-files'));
+    const run = await page.$eval('.tests-detail', (el) => el.textContent);
+    for (const bit of ['copying the commit out 1 s', 'the tests 1 min 49 s', 'added up 1 min 46 s, about 1.0 at once', 'up to 4 at once (2 end-to-end)', 'load 2.5', 'Node v26.0.0']) assert.ok(run.includes(bit), `${bit} in ${run}`);
+    assert.deepEqual(
+      await page.$$eval('.tests-run-files tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent).slice(0, 2))),
+      [
+        ['test/e2e.test.js 1/4', '1 min 30 s'],
+        ['test/sea.test.js', '12 s'],
+        ['test/engine.test.jsrun again', '2 s + 1 s again'],
+        ['test/new.test.js', '1 s'],
+      ],
+    );
+    await clickButton(page, 'Hide', '.tests-runs');
+    await until(page, () => !document.querySelector('.tests-detail'));
+
+    // The latest run that passed, each file beside the middle of its light runs that passed: one much slower than usual stands out, and a new one has none.
+    const files = await page.$$eval('.tests-files tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent)));
+    assert.deepEqual(
+      files.map((f) => [f[0], f[1], f[3], f[4]]),
+      [
+        ['test/e2e.test.js 1/4', '1 min 30 s', '1 min 30 s', 'as usual'],
+        ['test/sea.test.js', '12 s', '4 s', '+8 s'],
+        ['test/engine.test.js', '2 s + 1 s again', '2 s', 'as usual'],
+        ['test/new.test.js', '1 s', '—', '—'],
+      ],
+    );
+    assert.equal(await page.$eval('.tests-files tbody tr:nth-child(2) .badge', (b) => b.classList.contains('warn')), true);
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();

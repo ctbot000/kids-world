@@ -12,6 +12,8 @@
 // and touch), TEST_JOBS (how many run at once) and E2E_JOBS (how many of
 // those can be end-to-end ones) change how it shares them out. While the
 // computer is short of memory, no more start until it eases (memoryShort).
+// TEST_SUMMARY names a file to write how it went to, as JSON: the counts, and
+// how long each test file and share took (check.mjs times each run with it).
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, freemem, tmpdir } from 'node:os';
@@ -44,7 +46,7 @@ async function runAll() {
   const jobs = [...e2e('', {}), ...(touch ? e2e(' with no mouse', { E2E_NO_MOUSE: '1' }) : []), ...files];
   // Where each job's run keeps which of its tests passed, for running only the failed ones again.
   const states = mkdtempSync(join(tmpdir(), 'kids-world-test-'));
-  jobs.forEach((job, k) => Object.assign(job, { state: join(states, `${k}.json`), attempt: 0, flaky: [] }));
+  jobs.forEach((job, k) => Object.assign(job, { state: join(states, `${k}.json`), attempt: 0, flaky: [], ms: 0, again: 0 }));
   const retries = Number(env.TEST_RETRIES ?? 1);
 
   // How long each took last time, longest first; the end-to-end ones first the very first time.
@@ -54,7 +56,7 @@ async function runAll() {
     times = JSON.parse(readFileSync(timesFile, 'utf8'));
   } catch {}
   const guess = (job) => times[job.name] ?? (job.e2e ? 1e9 : 1e8);
-  const waiting = jobs.sort((a, b) => guess(b) - guess(a));
+  const waiting = [...jobs].sort((a, b) => guess(b) - guess(a));
 
   const cores = availableParallelism();
   const most = Number(env.TEST_JOBS) || Math.max(1, cores - 1);
@@ -98,7 +100,8 @@ async function runAll() {
         running.delete(job);
         const took = Date.now() - begun;
         // How long a whole run took, not a rerun of a few of its tests.
-        if (!job.attempt) times[job.name] = took;
+        if (!job.attempt) times[job.name] = job.ms = took;
+        else job.again += took;
         const plain = output.replace(/\x1b\[[0-9;]*m/g, '');
         const count = (what) => Number(plain.match(new RegExp(`^ℹ ${what} (\\d+)$`, 'm'))?.[1] ?? 0);
         const names = plain.split('✖ failing tests:')[1]?.match(/^✖ .+(?= \([\d.]+ms\)$)/gm) ?? [];
@@ -131,6 +134,20 @@ async function runAll() {
     renameSync(`${timesFile}.${process.pid}`, timesFile);
   } catch {}
   rmSync(states, { recursive: true, force: true });
+  if (env.TEST_SUMMARY) {
+    try {
+      const summary = {
+        ms: Date.now() - started,
+        counts,
+        jobs: jobs.map((job) => ({ name: job.name, ms: job.ms, ...(job.again ? { again: job.again } : {}), ...(failed.includes(job.name) ? { ok: false } : {}) })),
+        flaky,
+        failed,
+        heldMs: held * 2000,
+        atOnce: { jobs: most, e2e: mostE2e, shards, cores },
+      };
+      writeFileSync(env.TEST_SUMMARY, JSON.stringify(summary));
+    } catch {}
+  }
   const took = seconds(Date.now() - started);
   if (flaky.length) console.log(`Passed only when run again (flaky):\n${flaky.map((name) => `  ${name}`).join('\n')}`);
   if (held) console.log(`Short of memory, new tests were held back for about ${held * 2} s`);

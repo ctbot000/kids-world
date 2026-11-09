@@ -2,9 +2,10 @@
 # Runs the tests (scripts/check.mjs) on what is about to go to main, and stops
 # the push if they fail. CI runs no tests; this is where they run.
 # Turned on by npm install (package.json "prepare"); skip once with --no-verify.
+# CHECK_HOOK marks the run, timed for the admin page's Tests tab, as this hook's.
 zero=0000000000000000000000000000000000000000
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$remote_ref" = refs/heads/main ] || continue
   [ "$local_sha" = "$zero" ] && continue
-  node "$(git rev-parse --show-toplevel)/scripts/check.mjs" "$local_sha" "$remote_sha" < /dev/null || exit 1
+  CHECK_HOOK=1 node "$(git rev-parse --show-toplevel)/scripts/check.mjs" "$local_sha" "$remote_sha" < /dev/null || exit 1
 done

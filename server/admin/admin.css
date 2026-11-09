@@ -1584,3 +1584,168 @@ button.link:hover {
   color: var(--danger);
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------ tests before a push */
+
+.tests {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tests > p {
+  margin: 0;
+}
+
+.tests .usage-chart {
+  margin-bottom: 0;
+}
+
+.tests-now {
+  display: grid;
+  gap: 12px;
+}
+
+.tests-now:empty {
+  display: none;
+}
+
+.tests-running {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.tests-running .meter {
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+.tests-running .meter span {
+  display: block;
+  height: 100%;
+  background: var(--warn);
+}
+
+.tests-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.tests-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.tests-legend i.dash {
+  height: 0;
+  border-top: 2px dashed var(--text-3);
+  border-radius: 0;
+  vertical-align: 3px;
+}
+
+/* A grid or flex item: without this a wide table would widen the page, not scroll in its box. */
+.tests-part {
+  min-width: 0;
+}
+
+.tests-part h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tests-part > p {
+  margin: 0 0 8px;
+}
+
+.tests-part > p:last-child {
+  margin: 8px 0 0;
+}
+
+.usage td.tests-commit,
+.tests-runs thead th:nth-child(2) {
+  text-align: left;
+}
+
+.tests-commit span {
+  display: inline-block;
+  max-width: 32em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.usage .tests-detail > td {
+  padding: 10px 12px 12px;
+  background: var(--surface-2);
+  text-align: left;
+  white-space: normal;
+}
+
+/* A run's hundred or so test files scroll in their own box, not down the list of runs. */
+.tests-run {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.tests-run > p {
+  margin: 0 0 8px;
+}
+
+.tests-run-files {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tests-run-files th,
+.tests-run-files td {
+  padding: 2px 16px 2px 0;
+  border: 0;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tests-run-files td:nth-child(2) {
+  text-align: right;
+}
+
+.tests-run-files .badge,
+.tests-files th .badge {
+  margin-left: 6px;
+}
+
+.tests-bar {
+  display: block;
+  width: 160px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.tests-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--series-1);
+}
+
+.usage td.tests-bar-cell {
+  vertical-align: middle;
+}

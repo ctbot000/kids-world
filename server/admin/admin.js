@@ -14,7 +14,8 @@
 // screen, to mark done or delete; the visitors' log, of the pages that came
 // by with no login, to clear; and what is on every TV in the game
 // (tv.js); the islands open now, to watch any of them unseen (islands.js);
-// and CTB, whose workers do real work on the project (ctb.js). It reads /admin/api/state and /admin/api/friend every few
+// and CTB, whose workers do real work on the project (ctb.js); and how long
+// the tests took before each push to main (tests.js). It reads /admin/api/state and /admin/api/friend every few
 // seconds — every moment, for a while, after something is said to it, so its
 // answer shows as it comes — and /admin/api/friend/llm too while
 // the model log is open.
@@ -32,6 +33,7 @@ import { setUpCtb } from '/admin/ctb.js';
 import { setUpIslands } from '/admin/islands.js';
 import { setUpIsle } from '/admin/isle.js';
 import { setUpTabs } from '/admin/tabs.js';
+import { setUpTests } from '/admin/tests.js';
 import { refreshTv, setUpTv } from '/admin/tv.js';
 
 const REFRESH_MS = 5000;
@@ -1222,6 +1224,7 @@ async function refresh(now = false) {
   await refreshFriend();
   await isleGames.refresh();
   await ctb.refresh();
+  await tests.refresh();
   timer = setTimeout(refresh, REFRESH_MS);
 }
 
@@ -1233,4 +1236,5 @@ const islandWatch = setUpIslands({ h });
 const refreshIslands = islandWatch.refresh;
 const isleGames = setUpIsle({ h, ago });
 const ctb = setUpCtb({ h, ago, plural, time, usageTable, opened, reports: $('reports-section'), shown: showCtbTab });
+const tests = setUpTests({ h, ago, plural, num });
 refresh();

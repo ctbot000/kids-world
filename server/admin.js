@@ -24,7 +24,8 @@
 // its task board (GitHub issues) with a form for a new task, the workers'
 // proposals to approve or turn down, and their pull requests; and Adventure
 // Isle's games (server/adventure.js), each to start over from stage 1 or remove,
-// and a new one to start. Only for this computer: requests from other
+// and a new one to start; and how long the tests took before each push to
+// main, and each test file in them (test-runs.js). Only for this computer: requests from other
 // machines, or under any other host name (a DNS rebinding page), are
 // refused, and changes need a header no other site's page can send.
 import { basename, dirname, join } from 'node:path';
@@ -32,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import send from 'send';
 import { MAX_RUNS } from './adventure.js';
 import { isLoopbackIp, isPublicIp, KeepError } from './keeper.js';
+import { TestRuns } from './test-runs.js';
 
 const ADMIN_DIR = fileURLToPath(new URL('./admin/', import.meta.url));
 const PAGES = {
@@ -43,6 +45,7 @@ const PAGES = {
   '/admin/tabs.js': 'tabs.js',
   '/admin/islands.js': 'islands.js',
   '/admin/isle.js': 'isle.js',
+  '/admin/tests.js': 'tests.js',
 };
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const LOCAL_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -208,9 +211,22 @@ async function isleApiFor(isle, req, res, rest) {
   return json(res, to ? 200 : 404, to ? { ...games(), to } : { error: 'No such game.' });
 }
 
+// The tests' runs before each push to main (test-runs.js), under
+// /admin/api/tests: GET them in brief, with how long one usually takes and
+// each test file's time in the latest that passed; GET /<id> one run whole,
+// with the time of each of its test files.
+async function testsApiFor(tests, req, res, rest) {
+  if (req.method !== 'GET') return res.writeHead(405, { Allow: 'GET' }).end();
+  if (rest === '') return json(res, 200, await tests.summary());
+  const one = /^\/([\w-]+)$/.exec(rest);
+  const run = one && (await tests.run(one[1]));
+  return run ? json(res, 200, run) : json(res, 404, { error: 'No such run.' });
+}
+
 // Returns a handler: (req, res, pathname) => true when it answered. isle: the
 // server's Adventure Isle (server/adventure.js PublicAdventure), when asked.
-export function adminHandler({ store, keeper = null, friend = null, ctb = null, isle = () => null, dataDir = store.dir }) {
+// tests: the tests' runs before each push, from the data folder's test-runs/.
+export function adminHandler({ store, keeper = null, friend = null, ctb = null, isle = () => null, dataDir = store.dir, tests = new TestRuns({ dir: dataDir }) }) {
   const friendApi = (req, res, rest) => friendApiFor(friend, req, res, rest);
   return async function admin(req, res, pathname) {
     if (pathname !== '/admin' && !pathname.startsWith('/admin/')) return false;
@@ -312,6 +328,10 @@ export function adminHandler({ store, keeper = null, friend = null, ctb = null, 
     }
     if (pathname === '/admin/api/friend' || pathname.startsWith('/admin/api/friend/')) {
       await friendApi(req, res, pathname.slice('/admin/api/friend'.length));
+      return true;
+    }
+    if (pathname === '/admin/api/tests' || pathname.startsWith('/admin/api/tests/')) {
+      await testsApiFor(tests, req, res, pathname.slice('/admin/api/tests'.length));
       return true;
     }
     const report = /^\/admin\/api\/reports\/([^/]+)(?:\/(picture|seen))?$/.exec(pathname);

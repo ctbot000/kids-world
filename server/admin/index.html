@@ -23,6 +23,7 @@
         <button type="button" role="tab" id="tab-tv" aria-controls="tv-section" hidden>TV broadcast</button>
         <button type="button" role="tab" id="tab-friend" aria-controls="friend-section" hidden>AI friend</button>
         <button type="button" role="tab" id="tab-ctb" aria-controls="ctb-section" hidden>CTB <span id="ctb-reports-count" class="badge bad" hidden></span></button>
+        <button type="button" role="tab" id="tab-tests" aria-controls="tests-section" hidden>Tests <span id="tests-badge" class="badge warn"></span></button>
       </nav>
     </header>
     <main>
@@ -71,6 +72,9 @@
         </div>
         <div id="ctb-models" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-runs" hidden></div>
         <div id="ctb-tokens" class="ctb" role="tabpanel" aria-labelledby="tab-ctb-tokens" hidden></div>
+      </section>
+      <section id="tests-section" role="tabpanel" aria-labelledby="tab-tests" hidden>
+        <div id="tests" class="tests"></div>
       </section>
     </main>
   </body>
