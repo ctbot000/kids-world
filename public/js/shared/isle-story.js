@@ -14,17 +14,72 @@
 // himself, who knows all his captains' tricks, is popped once and for all and
 // the Star shines again.
 //
-// That is the end of the story: the last stage, won, plays the ending (ui.js)
-// and starts a new journey from stage 1 (server/adventure.js). The first
-// arrival on the isle plays the opening. A chapter told on a later journey is
-// its own map turned over (isle-maps.js mirror).
+// That is the end of the first episode: its last stage, won, plays its
+// ending (ui.js), and the story goes on with the next (server/adventure.js).
+//
+// Episode 2, "The Rainbow of Adventure Isle": with the Star shining again, a
+// rainbow stood over the isle every morning — until Queen Grizzle, King
+// Grumble's big sister, who cannot bear bright colours, caught it in her great
+// grey umbrella, shook its seven colours into seven jars and gave six of them
+// to her helpers to hide in the Rainbow Lands on the far side of the isle; the
+// last, violet, she kept herself. Without them the isle is fading to grey.
+// Seven chapters, one for each colour: the Tulip Fields, Maple Ridge, the
+// Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet
+// Vale, where Castle Drab stands. Each won brings its colour back.
+//
+// The last episode's last stage, won, starts a new journey from stage 1. The
+// first arrival on an episode plays its opening. A chapter told on a later
+// journey is its own map turned over (isle-maps.js mirror).
 
-// How many chapters the story has, the stages there are to conquer and the
-// Star Shards to win back.
+// How many Star Shards there are to win back in the first episode, one for
+// each of its chapters.
 export const SHARDS = 12;
-export const STAGES = SHARDS;
 
 export const STORY_TITLE = 'The Star of Adventure Isle';
+
+// The colours of the rainbow, in their order: the second episode's chapters
+// win them back one by one.
+export const RAINBOW = [
+  { name: 'red', color: '#e8453c' },
+  { name: 'orange', color: '#f59331' },
+  { name: 'yellow', color: '#fcd535' },
+  { name: 'green', color: '#35a852' },
+  { name: 'blue', color: '#3a73d8' },
+  { name: 'indigo', color: '#4b3fb5' },
+  { name: 'violet', color: '#9b4fd6' },
+];
+
+// The episodes of the isle's story, in their order: each its own tale with
+// its own villain, its chapters one after another among the isle's stages
+// (CHAPTERS, by their episode), an opening and an ending film (public/video
+// isle-<name>.mp4, made by scripts/films; endingMs: about how long the ending
+// is). token: what each chapter wins back (colours: drawn as dots of these,
+// not as stars); again: what is told before a chapter on a journey after the
+// first.
+export const EPISODES = [
+  {
+    n: 1,
+    key: 'star',
+    icon: '🌟',
+    title: STORY_TITLE,
+    villain: 'King Grumble',
+    token: { one: 'Star Shard', many: 'Star Shards' },
+    films: { intro: 'intro', ending: 'ending', endingMs: 72000 },
+    again: (journey) =>
+      `Journey ${journey}! King Grumble puffed himself up again, grumpier than ever, broke the Star all over again and gave the shards back to his captains — and the isle has turned itself about, so the way goes round the other side.`,
+  },
+  {
+    n: 2,
+    key: 'rainbow',
+    icon: '🌈',
+    title: 'The Rainbow of Adventure Isle',
+    villain: 'Queen Grizzle',
+    token: { one: 'colour', many: 'colours of the rainbow', colours: RAINBOW },
+    films: { intro: 'intro2', ending: 'ending2', endingMs: 44000 },
+    again: (journey) =>
+      `Journey ${journey}! Queen Grizzle is back with a bigger umbrella, caught the rainbow all over again and gave its colours back to her helpers — and the Rainbow Lands have turned themselves about, so the way goes round the other side.`,
+  },
+];
 
 // Each chapter: its key (which map, isle-maps.js), icon and name, the kind
 // of island it is (for the sky, the sea and the ground), its camps' names
@@ -38,6 +93,9 @@ export const STORY_TITLE = 'The Star of Adventure Isle';
 // only the first of them). day: how its days go, if not as anywhere (env.js
 // DAY_MODES); weather: the only weathers it ever has, if not as anywhere.
 // hazard: what comes down on the way between its camps (adventure.js stepHazards).
+// episode: which episode it is a chapter of, if not the first; level: how hard
+// it is, as a stage of the first episode is (adventure.js: its guards, its
+// boss's hearts and all the rest), if not as hard as its place in its episode.
 export const CHAPTERS = [
   {
     key: 'shore',
@@ -291,15 +349,214 @@ export const CHAPTERS = [
     ],
     won: 'King Grumble is popped once and for all! All twelve Star Shards fly home to the lighthouse, and the Star of Adventure Isle shines again. The whole isle cheers for you!',
   },
+  // ------------------------------------------------ Episode 2: the rainbow
+  {
+    key: 'tulip',
+    episode: 2,
+    level: 7,
+    icon: '🌷',
+    name: 'Tulip Fields',
+    theme: 'tulip',
+    camps: ['Scarecrow Corner', 'Strawberry Patch', 'Old Windmill'],
+    lair: 'Rose Bower',
+    boss: 'dotty',
+    guards: ['spiky', 'shroom'],
+    champions: ['stinger', 'wolf'],
+    hazard: 'berry',
+    intro:
+      'The Star shines again — and every morning its light painted a rainbow right over Adventure Isle. Not any more! Queen Grizzle, King Grumble’s big sister, cannot bear bright colours. She caught the rainbow in her great grey umbrella, shook its seven colours into seven jars and gave six of them to her helpers to hide in the Rainbow Lands, on the far side of the isle. Without them, everything is fading to grey! Red is nearest: Lady Dotty, a ladybird as big as a cart, keeps it in her Rose Bower at the top of the Tulip Fields. Free the fields — and step aside when she comes rolling!',
+    freed: [
+      'Scarecrow Corner is free! The scarecrows wave their arms, and the hay bales roll off the lane.',
+      'The Strawberry Patch is free! The farmers push their cart out of the gateway.',
+      'The Old Windmill is free! Its sails turn again, and the bramble hedge before the Rose Bower opens.',
+    ],
+    won: 'Pop! Lady Dotty flew off over the hedge, counting her spots to see that none had fallen off — and over went the red jar. Red is back: the tulips glow again!',
+  },
+  {
+    key: 'maple',
+    episode: 2,
+    level: 8,
+    icon: '🍁',
+    name: 'Maple Ridge',
+    theme: 'maple',
+    camps: ['Leafy Lane', 'Acorn Store', 'Log Bridge', 'Bonfire Clearing'],
+    lair: 'Nut Hoard',
+    boss: 'bushytail',
+    guards: ['mole', 'spider'],
+    champions: ['wolf', 'oak', 'mimic'],
+    hazard: 'acorn',
+    intro:
+      'Red is back, and it points the way: up Maple Ridge, where the leaves are orange all the year round — or were. Duke Bushytail, a squirrel as tall as a shed, has stuffed the orange jar into his Nut Hoard at the top, along with every acorn on the ridge. Climb from lane to bridge to clearing — and mind your head: he never misses with an acorn!',
+    freed: [
+      'Leafy Lane is free! The great heap of leaves across the path blows away.',
+      'The Acorn Store is free! The squirrels roll their barrels off the steps.',
+      'The Log Bridge is free! The fallen trunk across the way is rolled aside.',
+      'Bonfire Clearing is free! The gate of the Nut Hoard swings open.',
+    ],
+    won: 'Pop! Duke Bushytail shot up the tallest maple with his tail in a twist — and out of his cheeks fell the orange jar. Orange is back: the maples blaze again!',
+  },
+  {
+    key: 'honey',
+    episode: 2,
+    level: 9,
+    icon: '🍯',
+    name: 'Honeycomb Hills',
+    theme: 'honey',
+    weather: ['clear', 'clear', 'cloudy'],
+    camps: ['Sunflower Gate', 'Clover Bank', 'Beekeeper’s Yard', 'Honey Falls'],
+    lair: 'Golden Hive',
+    boss: 'bumble',
+    guards: ['gummy', 'spiky'],
+    champions: ['stinger', 'hawk', 'mimic'],
+    hazard: 'honey',
+    intro:
+      'Two colours shine again! Yellow is in the Honeycomb Hills, where the sunflowers grow as tall as houses and the cliffs are made of honeycomb. Baroness Bumble, the biggest, bossiest bee there ever was, keeps the yellow jar in her Golden Hive, and all the honey for herself. Go up through the sunflowers — and keep out of the red rings when her honey comes down!',
+    freed: [
+      'Sunflower Gate is free! The sunflowers turn their heads and lift their leaves off the path.',
+      'Clover Bank is free! The wall of wax across the steps melts in the sun.',
+      'The Beekeeper’s Yard is free! The beekeeper smokes the bees off the gate.',
+      'Honey Falls is free! The honey stops pouring over the door of the Golden Hive.',
+    ],
+    won: 'Pop! Baroness Bumble buzzed off in a huff, round and round and out of sight — and left the yellow jar in the honey. Yellow is back: the sunflowers shine again!',
+  },
+  {
+    key: 'jungle',
+    episode: 2,
+    level: 10,
+    icon: '🌴',
+    name: 'Tangle Jungle',
+    theme: 'jungle',
+    weather: ['clear', 'cloudy', 'rain'],
+    camps: ['Parrot Landing', 'Vine Village', 'Monkey Bridge', 'Mossy Steps'],
+    lair: 'Lost Temple',
+    boss: 'blendalot',
+    guards: ['spider', 'snapper'],
+    champions: ['stinger', 'hydra', 'rex'],
+    hazard: 'banana',
+    intro:
+      'Yellow is home! Green lives deep in Tangle Jungle, where the trees shut out the sky and the vines hang down like ropes. Sir Blendalot, a chameleon who can turn any colour he likes, has the green jar in the Lost Temple — if you can find him: he vanishes, and pops up somewhere else! Follow the old stone road up through the jungle, and keep your eyes peeled — he could be anywhere!',
+    freed: [
+      'Parrot Landing is free! The parrots pull the creepers off the jungle road.',
+      'Vine Village is free! The villagers haul their log gate up out of the way.',
+      'Monkey Bridge is free! The monkeys untie the knot of vines across the road.',
+      'The Mossy Steps are free! The stone door of the Lost Temple rolls aside.',
+    ],
+    won: 'Pop! Sir Blendalot went red, then white, then spotty all over, and ran off up a tree — and there on the temple steps stood the green jar. Green is back: the jungle is green again!',
+  },
+  {
+    key: 'lagoon',
+    episode: 2,
+    level: 11,
+    icon: '🫧',
+    name: 'Bubble Lagoon',
+    theme: 'lagoon',
+    weather: ['clear', 'clear', 'cloudy'],
+    camps: ['Shell Beach', 'Coral Garden', 'Pearl Divers’ Rock', 'Whale Rock'],
+    lair: 'Sunken Galleon',
+    boss: 'inkwell',
+    guards: ['snapper', 'spiky'],
+    champions: ['rattle', 'hydra', 'mimic'],
+    hazard: 'ink',
+    intro:
+      'Four colours shine! Blue is out in Bubble Lagoon, where the sea is so clear you can count the fish — but Admiral Inkwell, an octopus with an arm for every job, is squirting it grey from the wreck of the Sunken Galleon. Cross the piers from rock to rock, keep out of the ink, and get the blue jar back!',
+    freed: [
+      'Shell Beach is free! The crabs carry the driftwood off the pier.',
+      'The Coral Garden is free! The giant clam across the pier yawns open.',
+      'The Pearl Divers’ Rock is free! The divers haul their old net out of the way.',
+      'Whale Rock is free! The tide goes out, and the way to the Sunken Galleon is open.',
+    ],
+    won: 'Pop! Admiral Inkwell squirted himself backwards right out of the lagoon, all eight arms waving — and up floated the blue jar. Blue is back: the sea and the sky are blue again!',
+  },
+  {
+    key: 'moor',
+    episode: 2,
+    level: 12,
+    icon: '🌙',
+    name: 'Moonbeam Moor',
+    theme: 'moor',
+    day: 'night',
+    weather: ['clear'],
+    camps: ['Lantern Gate', 'Firefly Pond', 'Standing Stones', 'Stargazers’ Camp'],
+    lair: 'Moon Mill',
+    boss: 'mochi',
+    guards: ['ghost', 'mole'],
+    champions: ['wolf', 'wizard', 'hawk'],
+    hazard: 'ricecake',
+    intro:
+      'Only two colours to go! Indigo, the colour of the night sky, is up on Moonbeam Moor, where it is always night and the moon hangs so low you could almost touch it. Mochi the Moon Rabbit came down from it with his great mallet to pound rice cakes at the Moon Mill — and Queen Grizzle gave him the indigo jar to mind. Follow the lanterns over the moor — and jump when his mallet comes down!',
+    freed: [
+      'Lantern Gate is free! Its lanterns light up, and the gate swings open.',
+      'Firefly Pond is free! The fireflies show the way round the water.',
+      'The Standing Stones are free! The great stone across the path rolls back.',
+      'The Stargazers’ Camp is free! The stargazers swing their telescope aside, and the door of the Moon Mill opens.',
+    ],
+    won: 'Pop! Mochi hopped all the way back up to the moon in three great bounds, his mallet over his shoulder — and left the indigo jar beside his mortar. Indigo is back: the night sky is deep and starry again!',
+  },
+  {
+    key: 'vale',
+    episode: 2,
+    level: 13,
+    icon: '☂️',
+    name: 'Violet Vale',
+    theme: 'vale',
+    weather: ['cloudy'],
+    camps: ['Grey Garden', 'Drab Bridge', 'Umbrella Court'],
+    lair: 'Castle Drab',
+    boss: 'grizzle',
+    guards: ['knight', 'golem'],
+    champions: ['wizard', 'cyclops'],
+    hazard: 'smudge',
+    intro:
+      'Six colours shine over the isle! The last, violet, is with Queen Grizzle herself, in Castle Drab at the head of Violet Vale — where the lavender once grew as far as you could see, and now everything is as grey as a rainy Monday. She knows all her helpers’ tricks, and she has her great grey umbrella. Cross the Grey Garden, storm the castle and pop her — and bring the rainbow home!',
+    freed: [
+      'The Grey Garden is free! A few violets peep out, and the garden gate creaks open.',
+      'Drab Bridge is free! The drawbridge comes rattling down.',
+      'Umbrella Court is free! The great grey umbrellas fold up — Queen Grizzle is in the yard behind!',
+    ],
+    won: 'Queen Grizzle is popped, umbrella and all! All seven colours fly up into the sky, and the rainbow stands over Adventure Isle again, brighter than ever. Even Queen Grizzle has to say it looks rather nice.',
+  },
 ];
 
-// The chapter of a stage of the isle, and how many Star Shards are back once
-// it is won. final: it is the last, the end of the story. A stage past the last
-// (never on the isle) is the last.
+// The stages there are to conquer: a stage for each chapter, the episodes one
+// after another.
+export const STAGES = CHAPTERS.length;
+
+// An episode by its number (the first, for none or nonsense), the stage its
+// chapters start at, and how many it has.
+export const episodeOf = (n) => EPISODES.find((e) => e.n === n) ?? EPISODES[0];
+const numberOf = (ch) => ch.episode ?? 1;
+export const firstStage = (episode) => CHAPTERS.findIndex((c) => numberOf(c) === episodeOf(episode).n) + 1;
+export const stagesOf = (episode) => CHAPTERS.filter((c) => numberOf(c) === episodeOf(episode).n).length;
+
+// The chapter of a stage of the isle. stage: the stage it is; episode: the
+// episode it is a chapter of; n: which of its chapters, and of: of how many;
+// shards: how many of the episode's Star Shards (or colours) are back once it
+// is won; level: how hard it is (as a stage of the first episode); final: it
+// is the last of its episode, the end of that tale; last: it is the last of
+// them all, a new journey after it. A stage past the last (never on the isle)
+// is the last.
 export function chapterOf(stage) {
   const s = Number.isInteger(stage) && stage >= 1 ? stage : 1;
   const i = Math.min(s, CHAPTERS.length) - 1;
-  return { ...CHAPTERS[i], n: i + 1, shards: i + 1, final: i === CHAPTERS.length - 1 };
+  const ch = CHAPTERS[i];
+  const episode = episodeOf(numberOf(ch));
+  const n = i + 2 - firstStage(episode.n);
+  const of = stagesOf(episode.n);
+  return { ...ch, stage: i + 1, episode, n, of, shards: n, level: ch.level ?? n, final: n === of, last: i === CHAPTERS.length - 1 };
+}
+
+// What a stage is called: "Stage 3 of 12", with its episode before it once
+// it is not the first's ("Episode 2 · Stage 3 of 7"); short: without how many.
+export function stageName(stage, short = false) {
+  const ch = chapterOf(stage);
+  return `${ch.episode.n > 1 ? `Episode ${ch.episode.n} · ` : ''}Stage ${ch.n}${short ? '' : ` of ${ch.of}`}`;
+}
+
+// What a chapter won has brought back so far, as a win says it: "3 of 12 Star
+// Shards back!", or all of them.
+export function tokensBack(story) {
+  const { many } = story.episode.token;
+  return story.shards >= story.of ? `All ${story.of} ${many}!` : `${story.shards} of ${story.of} ${many} back!`;
 }
 
 // A camp's name on a stage (its id is its place along the way, the lair
@@ -311,9 +568,9 @@ export function campName(stage, id, kind = 'camp') {
 }
 
 // What is told on arriving: the chapter's own story, and on a journey after
-// the first, that King Grumble is back.
+// the first, that its episode's villain is back.
 export function introOf(stage, journey = 1) {
   const ch = chapterOf(stage);
   if (!(journey > 1)) return ch.intro;
-  return `Journey ${journey}! King Grumble puffed himself up again, grumpier than ever, broke the Star all over again and gave the shards back to his captains — and the isle has turned itself about, so the way goes round the other side. ${ch.intro}`;
+  return `${ch.episode.again(journey)} ${ch.intro}`;
 }

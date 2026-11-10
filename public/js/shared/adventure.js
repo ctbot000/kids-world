@@ -410,6 +410,9 @@ export class AdventureSim {
     this.stage = cleanStage(stage);
     this.journey = Number.isInteger(journey) && journey >= 1 ? journey : 1;
     this.story = chapterOf(this.stage);
+    // How hard it is: its chapter says (isle-story.js), as a stage of the
+    // first episode.
+    this.level = this.story.level;
     // Who holds the lair: the chapter's boss (bosses.js).
     this.boss = this.story.boss;
     this.plan = planOf(this.boss);
@@ -441,7 +444,7 @@ export class AdventureSim {
   // The treasure chests, now and then: the cells that changed, [x, y, z,
   // id] each.
   stepChests(world, now) {
-    return this.chests.step(world, now, { stage: this.stage, camps: this.camps });
+    return this.chests.step(world, now, { stage: this.level, camps: this.camps });
   }
 
   // Whether there is anything left to free.
@@ -500,7 +503,7 @@ export class AdventureSim {
   step(world, dt, now, people, monsters, players) {
     const news = [];
     if (!this.active) return news;
-    const want = guardsFor(players, this.stage);
+    const want = guardsFor(players, this.level);
     for (const c of this.camps) {
       if (c.freed) continue;
       if (people.some((p) => campDistance(c, p.x, p.z) <= c.r + WAKE)) {
@@ -529,15 +532,15 @@ export class AdventureSim {
       const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: this.boss, plan: this.plan });
       m.passive = this.shielded;
       // Quicker with its moves the higher the stage.
-      m.gapScale = stageGap(this.stage);
-      const hearts = bossHearts(this.plan, players, this.stage);
+      m.gapScale = stageGap(this.level);
+      const hearts = bossHearts(this.plan, players, this.level);
       this.king = { ...noKing(), id: m.id, hearts, max: hearts };
       return;
     }
-    for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
+    for (let i = 0; i < guardsFor(players, this.level); i++) this.addGuard(world, c, people, monsters);
     // (Their reserve is set once, the first time they come out: it does
     // not fill up again as they go back to sleep and wake.)
-    if (c.reserve === Infinity) c.reserve = reserveFor(players, this.stage);
+    if (c.reserve === Infinity) c.reserve = reserveFor(players, this.level);
     if (c.queen) this.addQueen(world, c, people, monsters);
     this.addChampion(world, c, people, monsters, players);
   }
@@ -597,7 +600,7 @@ export class AdventureSim {
   // camp of the very first stage, where the Queen Mosquito is enough for anyone.
   championOf(c) {
     const i = this.camps.filter((o) => o.kind === 'camp').indexOf(c);
-    if (i < 0 || (this.stage === 1 && c.queen)) return null;
+    if (i < 0 || (this.level === 1 && c.queen)) return null;
     return this.story.champions?.[i - 1] ?? null;
   }
 
@@ -628,7 +631,7 @@ export class AdventureSim {
     const m = monsters.add(world, spot.x, spot.y, spot.z, { camp: c.id, kind });
     if (m) {
       m.champion = true;
-      const grown = Math.min(1, 0.4 + 0.1 * this.stage);
+      const grown = Math.min(1, 0.4 + 0.1 * this.level);
       m.hearts = Math.max(3, Math.round(kindOf(kind).hearts * grown * (1 + 0.3 * (Math.min(8, Math.max(1, players)) - 1))));
       m.max = m.hearts;
     }
@@ -645,7 +648,7 @@ export class AdventureSim {
     const have = new Map();
     for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
     have.set('mosquito', have.get('mosquito') - 1);
-    for (const k of [...(this.story.guards ?? []), ...toughGuards(this.stage)]) {
+    for (const k of [...(this.story.guards ?? []), ...toughGuards(this.level)]) {
       if ((have.get(k) ?? 0) > 0) have.set(k, have.get(k) - 1);
       else return k;
     }
@@ -664,7 +667,7 @@ export class AdventureSim {
     // A friend came to the island: one more on its way (out of the reserve,
     // on the higher stages, while there is one).
     if (count + c.back.length < want && c.reserve > 0) {
-      c.back.push(now + guardBackMs(this.stage));
+      c.back.push(now + guardBackMs(this.level));
       c.reserve--;
     }
     c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
@@ -672,12 +675,12 @@ export class AdventureSim {
     // flag down. Still, whoever comes to raise it is near enough to wake it.)
     c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5 && !(kindOf(m.kind).shut && m.state === 'idle'));
     // From the second stage the monsters pull a flag they hold back down.
-    if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.stage));
+    if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.level));
     if (!c.holders || c.guarded) return;
-    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.stage));
+    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.level));
     // Half way up, on the higher stages: an ambush, once a camp.
     if (!c.ambushed && c.progress >= AMBUSH_AT) {
-      const n = ambushFor(people.length, this.stage);
+      const n = ambushFor(people.length, this.level);
       if (n) {
         c.ambushed = true;
         for (let i = 0; i < n; i++) {
@@ -698,7 +701,7 @@ export class AdventureSim {
   // comes down, a moment ahead, for the room to show and work out. Returns
   // [{ pid, what, to: [{ x, y, z }], ms, reach, bumps }].
   stepHazards(world, now, people) {
-    if (!this.story.hazard || this.stage < HAZARD.from || this.won) return [];
+    if (!this.story.hazard || this.level < HAZARD.from || this.won) return [];
     const out = [];
     const havens = this.havens(world);
     for (const p of people) {
@@ -707,13 +710,13 @@ export class AdventureSim {
       const due = this.hazardAt.get(p.id);
       if (near || due === undefined) {
         // Not out on the way (or just come out on it): the wait starts again.
-        this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.6 + 0.6 * this.hazardRng.next()));
+        this.hazardAt.set(p.id, now + hazardEvery(this.level) * (0.6 + 0.6 * this.hazardRng.next()));
         continue;
       }
       if (now < due) continue;
-      this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.8 + 0.4 * this.hazardRng.next()));
+      this.hazardAt.set(p.id, now + hazardEvery(this.level) * (0.8 + 0.4 * this.hazardRng.next()));
       const to = [];
-      for (let i = 0; i < hazardCount(this.stage) * 3 && to.length < hazardCount(this.stage); i++) {
+      for (let i = 0; i < hazardCount(this.level) * 3 && to.length < hazardCount(this.level); i++) {
         // On them the first time, and round them after.
         const a = this.hazardRng.range(-Math.PI, Math.PI);
         const d = to.length ? this.hazardRng.range(2.5, 4.5) : 0;
@@ -723,7 +726,7 @@ export class AdventureSim {
         if (y === null || Math.abs(y - p.y) > 3 || havens.some((h) => campDistance(h, x, z) < h.r)) continue;
         to.push({ x, y, z });
       }
-      if (to.length) out.push({ pid: p.id, what: this.story.hazard, to, ms: HAZARD.ms, reach: HAZARD.reach, bumps: hazardBumps(this.stage) });
+      if (to.length) out.push({ pid: p.id, what: this.story.hazard, to, ms: HAZARD.ms, reach: HAZARD.reach, bumps: hazardBumps(this.level) });
     }
     for (const id of [...this.hazardAt.keys()]) if (!people.some((p) => p.id === id)) this.hazardAt.delete(id);
     return out;
@@ -854,7 +857,7 @@ export class AdventureSim {
     // (On the higher stages, only while its reserve lasts.)
     if (c.reserve <= 0) return;
     c.reserve--;
-    c.back.push(now + guardBackMs(this.stage));
+    c.back.push(now + guardBackMs(this.level));
   }
 
   // A friend bopping the lair's boss (the chapter's: bosses.js): nothing

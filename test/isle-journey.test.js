@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { AdventureSim, ambushFor, HAZARD, reserveFor, SECOND_WIND } from '../public/js/shared/adventure.js';
 import { BOSSES } from '../public/js/shared/bosses.js';
 import { buildIsle } from '../public/js/shared/isle-maps.js';
-import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
+import { chapterOf, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
 import { MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 
@@ -144,9 +144,9 @@ test('hazards come down on the way between the camps, on rings shown first, and 
   assert.deepEqual(quiet.adventure.stepHazards(quiet.world, time.t, [onFoot(1, ...at)]), []);
 });
 
-test('at the very end of the story King Grumble gets his second wind before he goes pop for good', () => {
+test('at the very end of an episode its last boss gets a second wind before going pop for good', () => {
   const time = { t: 1_000_000 };
-  const room = isleRoom(STAGES, time);
+  const room = isleRoom(stagesOf(1), time);
   const adv = room.adventure;
   assert.equal(adv.story.final, true);
   const a = join(room);
@@ -174,15 +174,25 @@ test('at the very end of the story King Grumble gets his second wind before he g
   bop();
   assert.equal(adv.won, true, 'popped for good');
   assert.equal(a.last('won').hero, a.pid);
-  // Anywhere before the end of the story, popped is popped.
-  const earlier = isleRoom(STAGES - 1, time);
-  const sim = earlier.adventure;
-  sim.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
-  for (const c of sim.camps) if (c.kind === 'camp') c.freed = true;
-  assert.equal(sim.hitKing(1, 5000).beaten, true);
+  // Anywhere before the end of an episode, popped is popped.
+  for (const stage of [stagesOf(1) - 1, stagesOf(1) + 1, STAGES - 1]) {
+    const sim = isleRoom(stage, time).adventure;
+    sim.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
+    for (const c of sim.camps) if (c.kind === 'camp') c.freed = true;
+    assert.equal(sim.hitKing(1, 5000).beaten, true, `stage ${stage}`);
+  }
+  // And at the end of the second episode, Queen Grizzle puffs herself up the same way.
+  const vale = isleRoom(STAGES, time).adventure;
+  assert.deepEqual([vale.boss, vale.story.final, vale.story.last], ['grizzle', true, true]);
+  vale.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
+  for (const c of vale.camps) if (c.kind === 'camp') c.freed = true;
+  const puffed = vale.hitKing(1, 5000);
+  assert.deepEqual([puffed.second, puffed.beaten, vale.king.hearts], [true, false, Math.round(10 * SECOND_WIND)]);
+  vale.king.hearts = 1;
+  assert.equal(vale.hitKing(1, 9000).beaten, true);
 });
 
-for (const stage of [5, 7, 8, 10, 11]) {
+for (const stage of [5, 7, 8, 10, 11, 13, 14, 15, 16, 17, 18, 19]) {
   const boss = chapterOf(stage).boss;
   test(`stage ${stage}: ${BOSSES[boss].name} holds the lair and fights with all its moves`, () => {
     const time = { t: 1_000_000 };

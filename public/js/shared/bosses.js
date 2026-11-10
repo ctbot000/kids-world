@@ -2,7 +2,9 @@
 // (adventure.js). Each chapter's lair (isle-story.js) is held by a boss of
 // its own — one of King Grumble's eleven captains, each keeping a Star Shard
 // for him — and King Grumble himself waits on Gloom Rock at the end of the
-// story, knowing every one of his captains' tricks.
+// first episode, knowing every one of his captains' tricks. In the second,
+// six helpers of his big sister each keep a colour of the rainbow for her in
+// the Rainbow Lands, and Queen Grizzle herself waits in Castle Drab.
 //
 // A boss is big, has lots of hearts (adventure.js kingHearts, times its
 // hearts here), sits safe in a bubble while any camp is still to free, and
@@ -289,6 +291,159 @@ export const BOSSES = {
       { move: 'stomp', from: 0, windup: STOMP.windup, reach: STOMP.reach, jump: 11, bumps: 1.5 },
       { move: 'hurl', from: 0, windup: 800, what: 'bomb', count: 3, scatter: 1, reach: 2.2, ms: 1300, far: 20, bumps: 1.5 },
       { move: 'leap', from: 1, windup: 800, reach: 5, jump: 13, far: 15, bumps: 1.5 },
+      { move: 'charge', from: 2, windup: 1000, speed: 13, far: 16, near: 3, bumps: 2 },
+      { move: 'call', from: 2, windup: 900, kind: 'knight', count: 2, most: 1, far: 24 },
+    ],
+  },
+  // ------------------------------------------------ Episode 2: the rainbow
+  // Lady Dotty, of the Rose Bower at the top of the Tulip Fields: a ladybird
+  // as big as a cart, shiny red with black spots. She comes rolling at you,
+  // flies up and comes down on you, throws strawberries when she is cross,
+  // and stomps when she is crosser. Her minions: Spikies.
+  dotty: {
+    icon: '🐞',
+    name: 'Lady Dotty',
+    she: true,
+    body: { radius: 1.2, height: 1.5 },
+    hearts: 1.2,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3500, 2800, 2200],
+    minion: 'spiky',
+    moves: [
+      { move: 'charge', from: 0, windup: 1000, speed: 13, far: 16, near: 3, bumps: 1.5 },
+      { move: 'leap', from: 0, windup: 850, reach: 4.5, jump: 12, far: 15, bumps: 1.5 },
+      { move: 'hurl', from: 1, windup: 850, what: 'berry', count: 3, scatter: 1, reach: 1.8, ms: 1300, far: 18, bumps: 1 },
+      { move: 'stomp', from: 2, windup: 850, reach: 5, jump: 9.5, bumps: 1 },
+    ],
+  },
+  // Duke Bushytail, of the Nut Hoard at the top of Maple Ridge: a squirrel as
+  // tall as a shed, russet, with a tail bigger than he is and his cheeks full.
+  // He never misses with an acorn, bounds onto you, scampers at you when he is
+  // cross, and whistles up giant spiders when he is crosser. His minions: Mr.
+  // Moles.
+  bushytail: {
+    icon: '🐿️',
+    name: 'Duke Bushytail',
+    body: { radius: 1.0, height: 2.5 },
+    hearts: 1.25,
+    bump: 1.5,
+    run: [3.8, 4.6, 5.4],
+    gap: [3400, 2700, 2100],
+    minion: 'mole',
+    moves: [
+      { move: 'hurl', from: 0, windup: 800, what: 'acorn', count: 3, scatter: 1, reach: 1.9, ms: 1200, far: 20, bumps: 1 },
+      { move: 'leap', from: 0, windup: 800, reach: 4.5, jump: 13, far: 16, bumps: 1.5 },
+      { move: 'charge', from: 1, windup: 1000, speed: 14, far: 16, near: 3, bumps: 1.5 },
+      { move: 'call', from: 2, windup: 900, kind: 'spider', count: 2, most: 1, far: 22 },
+    ],
+  },
+  // Baroness Bumble, of the Golden Hive in the Honeycomb Hills: the biggest,
+  // bossiest bee there ever was, in a little crown, never touching the
+  // ground. She drops blobs of honey round you, comes at you sting first,
+  // shakes off a cloud of pollen when she is cross, and calls her cousins the
+  // giant mosquitoes when she is crosser. Her minions: giant mosquitoes.
+  bumble: {
+    icon: '🐝',
+    name: 'Baroness Bumble',
+    she: true,
+    body: { radius: 1.15, height: 2.3 },
+    hearts: 1.3,
+    bump: 1.5,
+    run: [3.6, 4.4, 5.2],
+    gap: [3300, 2600, 2000],
+    minion: 'mosquito',
+    moves: [
+      { move: 'hurl', from: 0, windup: 850, what: 'honey', count: 3, scatter: 2, reach: 2, ms: 1300, far: 20, bumps: 1 },
+      { move: 'charge', from: 0, windup: 950, speed: 14, far: 16, near: 3, bumps: 2 },
+      { move: 'puff', from: 1, windup: 1000, what: 'pollen', reach: 5.5, bumps: 1.5 },
+      { move: 'call', from: 2, windup: 900, kind: 'mosquito', count: 3, most: 2, far: 24 },
+    ],
+  },
+  // Sir Blendalot, of the Lost Temple in Tangle Jungle: a great chameleon
+  // with a crest like a helmet, eyes that look two ways at once and a curly
+  // tail, changing colour as he goes. He vanishes and pops up somewhere else,
+  // throws bunches of bananas, scuttles at you when he is cross, and drops on
+  // you out of the trees when he is crosser. His minions: giant spiders.
+  blendalot: {
+    icon: '🦎',
+    name: 'Sir Blendalot',
+    body: { radius: 1.15, height: 1.8 },
+    hearts: 1.35,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3200, 2500, 1900],
+    minion: 'spider',
+    moves: [
+      { move: 'blink', from: 0, windup: 800, to: [5, 9], far: 40 },
+      { move: 'hurl', from: 0, windup: 850, what: 'banana', count: 3, scatter: 1, reach: 1.9, ms: 1300, far: 18, bumps: 1 },
+      { move: 'charge', from: 1, windup: 950, speed: 14, far: 16, near: 3, bumps: 2 },
+      { move: 'leap', from: 2, windup: 800, reach: 5, jump: 12, far: 15, bumps: 1.5 },
+    ],
+  },
+  // Admiral Inkwell, of the Sunken Galleon in Bubble Lagoon: a great blue
+  // octopus in an admiral's hat, an arm for every job. He squirts blobs of ink
+  // that come down round you, slams his arms down all round him, lets go a
+  // cloud of ink when he is cross, and jets at you when he is crosser. His
+  // minions: Snappy Crabs.
+  inkwell: {
+    icon: '🐙',
+    name: 'Admiral Inkwell',
+    body: { radius: 1.25, height: 2.2 },
+    hearts: 1.4,
+    bump: 1.5,
+    run: [3, 3.8, 4.6],
+    gap: [3100, 2400, 1900],
+    minion: 'snapper',
+    moves: [
+      { move: 'hurl', from: 0, windup: 850, what: 'ink', count: 3, scatter: 2, reach: 2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'stomp', from: 0, windup: 900, reach: 6.5, jump: 9.5, bumps: 1.5 },
+      { move: 'puff', from: 1, windup: 1000, what: 'ink', reach: 6, bumps: 1.5 },
+      { move: 'charge', from: 2, windup: 1000, speed: 14, far: 18, near: 3, bumps: 2 },
+    ],
+  },
+  // Mochi the Moon Rabbit, of the Moon Mill on Moonbeam Moor: a great white
+  // rabbit down from the moon, with a mallet as big as a barrel for pounding
+  // rice cakes. He brings it down so the whole moor shakes, bounds a long way
+  // onto you, throws rice cakes when he is cross, and calls the moor's ghosts
+  // when he is crosser. His minions: Mr. Moles.
+  mochi: {
+    icon: '🐇',
+    name: 'Mochi the Moon Rabbit',
+    body: { radius: 1.05, height: 2.6 },
+    hearts: 1.45,
+    bump: 1.5,
+    run: [3.8, 4.6, 5.4],
+    gap: [3000, 2300, 1800],
+    minion: 'mole',
+    moves: [
+      { move: 'stomp', from: 0, windup: 850, reach: 6.5, jump: 10.5, bumps: 1.5 },
+      { move: 'leap', from: 0, windup: 800, reach: 5, jump: 14, far: 18, bumps: 2 },
+      { move: 'hurl', from: 1, windup: 850, what: 'ricecake', count: 3, scatter: 2, reach: 2, ms: 1250, far: 20, bumps: 1.5 },
+      { move: 'call', from: 2, windup: 900, kind: 'ghost', count: 2, most: 1, far: 24 },
+    ],
+  },
+  // Queen Grizzle in Castle Drab, at the end of the second episode: King
+  // Grumble's big sister, as grey as a rainy Monday, with all her helpers'
+  // tricks and her great grey umbrella. She throws smudges of grey and stomps,
+  // floats off under her umbrella and comes down somewhere else, shakes a
+  // drizzle all round her when she is cross, and charges and calls her
+  // brother's knights when she is very cross. Her minions: Grumble Knights.
+  grizzle: {
+    icon: '👸',
+    name: 'Queen Grizzle',
+    she: true,
+    body: { radius: 1.0, height: 2.1 },
+    hearts: 1.65,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3000, 2300, 1800],
+    minion: 'knight',
+    moves: [
+      { move: 'hurl', from: 0, windup: 800, what: 'smudge', count: 3, scatter: 2, reach: 2.2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'stomp', from: 0, windup: 900, reach: 6, jump: 11, bumps: 1.5 },
+      { move: 'blink', from: 1, windup: 800, to: [6, 10], far: 40 },
+      { move: 'puff', from: 1, windup: 1000, what: 'drizzle', reach: 6, bumps: 1.5 },
       { move: 'charge', from: 2, windup: 1000, speed: 13, far: 16, near: 3, bumps: 2 },
       { move: 'call', from: 2, windup: 900, kind: 'knight', count: 2, most: 1, far: 24 },
     ],
