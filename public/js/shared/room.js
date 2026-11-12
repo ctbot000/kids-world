@@ -1604,6 +1604,9 @@ export class Room {
           this.broadcast({ t: 'mfx', kind: 'hurl', id: 0, sky: true, what: h.what, from: at({ ...first, y: first.y + HAZARD.high }), to: h.to.map(at), ms: h.ms, r: h.reach });
           this.thrown.push({ monster: HAZARD_THROWER, what: h.what, to: h.to, reach: h.reach, bumps: h.bumps, at: now + h.ms });
         }
+        // Nobody gets round a gate that is still shut (adventure.js
+        // stepSneaks): whoever has, by sea or over a wall, goes back.
+        for (const pid of adv.stepSneaks(this.world, now, people)) this.sendBack(this.players.get(pid), now);
       }
     }
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
@@ -2042,6 +2045,17 @@ export class Room {
   sendHome(p, now) {
     const at = this.goHome(p, now);
     this.broadcast({ t: 'home', pid: p.id, at, ...this.hpOf(p) });
+  }
+
+  // Someone who got past a gate of the isle that is still shut, back to the
+  // nearest safe place (the start, or a camp freed) as they are: no HP given
+  // or taken, and safe from bumps for a moment as they land.
+  sendBack(p, now) {
+    if (!p || !this.adventure) return;
+    const at = this.adventure.homeFor(this.world, p.s[0], p.s[2]);
+    p.safeUntil = now + SAFE_MS;
+    p.s = [at.x, at.y, at.z, p.s[3], 0, 0];
+    this.broadcast({ t: 'home', pid: p.id, at: [at.x, at.y, at.z], why: 'gate', ...this.hpOf(p) });
   }
 
   // A friend tapping someone sitting dizzy, from beside them: up they get,

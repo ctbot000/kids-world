@@ -1,17 +1,19 @@
 // Adventure Isle's harder later stages (shared/adventure.js): a camp's
 // monsters coming back only so many times, its flag sliding back down while
 // they hold it, an ambush half way up it, hazards coming down on the way
-// between the camps, King Grumble getting his second wind at the end of the
-// story, and the captains of the later chapters (shared/bosses.js) fighting
-// in their lairs.
+// between the camps, nobody getting round a gate that is still shut, King
+// Grumble getting his second wind at the end of the story, and the captains of
+// the later chapters (shared/bosses.js) fighting in their lairs.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AdventureSim, ambushFor, HAZARD, reserveFor, SECOND_WIND } from '../public/js/shared/adventure.js';
+import * as B from '../public/js/shared/blocks.js';
+import { AdventureSim, ambushFor, HAZARD, reserveFor, SECOND_WIND, SNEAK_MS, walkBack, walkReach } from '../public/js/shared/adventure.js';
 import { BOSSES } from '../public/js/shared/bosses.js';
 import { buildIsle } from '../public/js/shared/isle-maps.js';
 import { chapterOf, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
 import { MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
+import { World } from '../public/js/shared/world.js';
 
 function conn() {
   const c = { inbox: [] };
@@ -142,6 +144,147 @@ test('hazards come down on the way between the camps, on rings shown first, and 
   // None on the first stage.
   const quiet = isleRoom(1, time);
   assert.deepEqual(quiet.adventure.stepHazards(quiet.world, time.t, [onFoot(1, ...at)]), []);
+});
+
+test('walking: a step up at a time, down any drop, never through water nor through anything solid', () => {
+  // A floor at y 3 (so one stands at 4), sixteen across.
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1, theme: 'sunny', spawn: { x: 8.5, y: 4, z: 8.5 } });
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) for (let y = 0; y <= 3; y++) w.set(x, y, z, B.STONE);
+  // A step one high, a pillar two high, a pool, a dry pit, a hollow under
+  // the floor with no way in, and a wall right across with a hole to crawl
+  // through that is only one high.
+  w.set(4, 4, 4, B.STONE);
+  for (const y of [4, 5]) w.set(12, y, 4, B.STONE);
+  w.set(4, 3, 12, B.WATER);
+  for (const y of [1, 2, 3]) w.set(12, y, 12, B.AIR);
+  for (const y of [1, 2]) w.set(2, y, 8, B.AIR);
+  for (let x = 0; x < 16; x++) for (const y of [4, 5, 6]) w.set(x, y, 1, B.STONE);
+  w.set(8, 4, 1, B.AIR);
+  const reach = walkReach(w, [[8.5, 4, 8.5]]);
+  const at = (x, y, z) => reach[(x * w.D + z) * w.H + y];
+  assert.equal(at(8, 4, 8), 1, 'where it starts');
+  assert.equal(at(0, 4, 15), 1, 'all over the floor');
+  assert.equal(at(4, 5, 4), 1, 'up a step');
+  assert.equal(at(12, 6, 4), 0, 'not up two at once');
+  assert.equal(at(4, 4, 12) + at(4, 3, 12), 0, 'not into the water');
+  assert.equal(at(12, 1, 12), 1, 'down a drop, however deep');
+  assert.equal(at(2, 1, 8) + at(2, 2, 8), 0, 'not through the floor into a hollow under it');
+  assert.equal(at(8, 4, 0), 0, 'nor through a hole too low to stand in');
+  // From nowhere one can stand, nowhere.
+  assert.equal(walkReach(w, [[4.5, 4, 12.5], [99, 4, 99]]).some(Boolean), false);
+  // And the other way round, from where a spot is walked to: down into the
+  // pit from all over, and never out of it.
+  const cell = (x, y, z) => (x * w.D + z) * w.H + y;
+  const down = walkBack(w, [[12.5, 1, 12.5]]);
+  assert.deepEqual([down[cell(12, 1, 12)], down[cell(8, 4, 8)], down[cell(4, 5, 4)], down[cell(8, 4, 0)]], [1, 1, 1, 0]);
+  const up = walkBack(w, [[8.5, 4, 8.5]]);
+  assert.deepEqual([up[cell(8, 4, 8)], up[cell(0, 4, 15)], up[cell(4, 5, 4)], up[cell(12, 1, 12)]], [1, 1, 1, 0]);
+  assert.equal(walkBack(w, [[99, 4, 99]]).some(Boolean), false);
+});
+
+test('past a gate is where a camp still barred can be walked to from: a beach under its cliff is nobody’s business', () => {
+  // A floor (one stands at 4), with a terrace three higher across the north
+  // west of it and the second camp up there; the way up is a flight of
+  // steps, which the first camp's gate builds. East of the terrace, behind a
+  // wall, a beach at the foot of its cliff: down to it from the terrace, and
+  // no way back up.
+  const w = new World({ W: 20, H: 16, D: 20, sea: 1, theme: 'sunny', spawn: { x: 4.5, y: 4, z: 1.5 } });
+  for (let x = 0; x < 20; x++) for (let z = 0; z < 20; z++) for (let y = 0; y <= (z >= 10 && x < 12 ? 6 : 3); y++) w.set(x, y, z, B.STONE);
+  for (let x = 12; x < 20; x++) for (const y of [4, 5, 6]) w.set(x, y, 10, B.STONE);
+  const steps = [4, 4, 8, B.STONE, 4, 4, 9, B.STONE, 4, 5, 9, B.STONE];
+  const camps = [
+    { id: 1, kind: 'camp', x: 12.5, y: 4, z: 4.5, r: 3 },
+    { id: 2, kind: 'camp', x: 5.5, y: 7, z: 15.5, r: 3 },
+  ];
+  const sim = new AdventureSim({ camps, stage: 1, gates: [{ camp: 1, cells: steps }] }, 1);
+  const cell = (x, y, z) => (x * w.D + z) * w.H + y;
+  const way = sim.ways(w);
+  assert.deepEqual(way.barred.map((c) => c.id), [2]);
+  const [start, terrace, edge, beach] = [cell(4, 4, 1), cell(5, 7, 13), cell(11, 7, 18), cell(15, 4, 15)];
+  assert.deepEqual([start, terrace, edge, beach].map((i) => way.on[i]), [1, 0, 0, 0], 'the way on: the floor before the steps');
+  assert.deepEqual([start, terrace, edge, beach].map((i) => way.past[i]), [0, 1, 1, 0], 'past the gate: the terrace, not the beach under it');
+  // Whoever is there a moment is told on: standing, jumping all the while, or
+  // up on an animal's back; never on the way, on the beach, or flying.
+  let now = 1000;
+  const there = (x, y, z, more = {}) => {
+    const told = [];
+    for (let t = 0; t <= SNEAK_MS + 200; t += 100) told.push(...sim.stepSneaks(w, (now += 100), [{ ...onFoot(7, x, typeof y === 'function' ? y(t) : y, z), ...more }]));
+    return told;
+  };
+  assert.deepEqual(there(4.5, 4, 1.5), []);
+  assert.deepEqual(there(5.5, 7, 13.5), [7]);
+  assert.deepEqual(there(5.5, (t) => (t % 200 ? 8.4 : 7.6), 13.5), [7], 'jumping');
+  assert.deepEqual(there(5.5, 9.4, 13.5, { riding: true }), [7], 'riding');
+  assert.deepEqual(there(15.5, 4, 15.5), [], 'the beach');
+  assert.deepEqual(there(5.5, 7, 13.5, { flying: true }), []);
+  assert.deepEqual(there(5.5, 7, 13.5, { dizzy: true }), []);
+  assert.deepEqual(there(5.5, 15, 13.5), [], 'high over it');
+  // A moment only: off it again in time, nothing.
+  for (let t = 0; t < 3000; t += 100) assert.deepEqual(sim.stepSneaks(w, (now += 100), [onFoot(7, 5.5, t % 800 < 600 ? 7 : 15, 13.5)]), []);
+  // The first camp freed, its gate builds the steps: the terrace is on the way.
+  for (const g of sim.free(sim.campById(1), [], { list: [] }).gates) for (let k = 0; k < g.cells.length; k += 4) w.set(g.cells[k], g.cells[k + 1], g.cells[k + 2], g.cells[k + 3]);
+  assert.deepEqual(there(5.5, 7, 13.5), []);
+  const after = sim.ways(w);
+  assert.deepEqual([after.barred.length, after.on[terrace], after.on[beach], after.past.length], [0, 1, 1, 0], 'the beach too, down off the terrace');
+});
+
+test('there is no way round a gate still shut: whoever stands past one is sent back to the nearest safe place', () => {
+  const time = { t: 1_000_000 };
+  // Sunscorch Dunes: the shore of its second terrace can be swum to.
+  const room = isleRoom(5, time);
+  const adv = room.adventure;
+  const a = join(room);
+  const p = room.players.get(a.pid);
+  const [first, second, third] = adv.camps;
+  const beside = (c) => [c.x, c.y, c.z + 2];
+  // (Standing somewhere a while — until the room sends them home, when it does.)
+  const stay = (at, ms = SNEAK_MS + 400) => {
+    const homes = a.all('home').length;
+    for (let t = 0; t < ms && a.all('home').length === homes; t += 100) {
+      time.t += 100;
+      room.receive(a, { t: 'm', s: [...at, 0, 0, 0] });
+      p.dizzyUntil = 0;
+      p.hp = 60;
+      room.tick();
+    }
+  };
+  const spawn = [room.world.spawn.x, room.world.spawn.y, room.world.spawn.z];
+  // On the way, at the first camp: nothing.
+  stay(beside(first));
+  assert.equal(a.last('home'), undefined);
+  // Past the first gate, at the second camp: a moment there, and back to the start.
+  stay(beside(second), SNEAK_MS - 200);
+  assert.equal(a.last('home'), undefined, 'not at once');
+  stay(beside(second), 400);
+  const home = a.last('home');
+  assert.deepEqual([home.pid, home.why, home.at], [a.pid, 'gate', spawn]);
+  assert.equal(home.hp, 60, 'as they are: no HP given');
+  assert.deepEqual(p.s.slice(0, 3), spawn, 'and the room has them there');
+  // Jumping all the while, or up on an animal's back, is no way round
+  // either: it is the ground under them that counts.
+  for (const lift of [(t) => (t % 200 ? 1.4 : 0.6), () => 2.6]) {
+    a.inbox.length = 0;
+    const [x, y, z] = beside(second);
+    for (let t = 0; t < SNEAK_MS + 400 && !a.last('home'); t += 100) stay([x, y + lift(t), z], 100);
+    assert.equal(a.last('home')?.why, 'gate');
+  }
+  // In the sea, or up where nobody walks: nobody's business.
+  a.inbox.length = 0;
+  stay([2.5, room.world.sea + 1, 2.5]);
+  stay([second.x, second.y + 9, second.z]);
+  assert.equal(a.last('home'), undefined);
+  // The first camp freed, its gate opens: the second camp is on the way now.
+  room.campFreed(adv.free(first, [], room.monsters));
+  stay(beside(second));
+  assert.equal(a.last('home'), undefined);
+  // The third is not, yet: back to the nearest safe place, the camp just freed.
+  stay(beside(third));
+  assert.deepEqual([a.last('home').why, a.last('home').at], ['gate', [first.x, first.y, first.z + 2]]);
+  // With every camp free and the boss popped, the whole island is.
+  a.inbox.length = 0;
+  for (const c of adv.camps) if (c.kind === 'camp' && !c.freed) room.campFreed(adv.free(c, [], room.monsters));
+  stay(beside(adv.castle));
+  assert.equal(a.last('home'), undefined);
 });
 
 test('at the very end of an episode its last boss gets a second wind before going pop for good', () => {

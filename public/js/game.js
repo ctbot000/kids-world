@@ -1585,8 +1585,8 @@ export class Game extends EventTarget {
   }
 
   // Back to a safe place (at, as [x, y, z]; or the start of the island), and
-  // on your feet with all your HP.
-  goHome(at, text) {
+  // on your feet (with all your HP, unless the text says why else you go).
+  goHome(at, text, icon = '💖') {
     if (this.pianoAt) {
       this.pianoAt = null;
       this.emit('piano-gone');
@@ -1603,7 +1603,7 @@ export class Game extends EventTarget {
     this.renderer.view.ready = false;
     this.renderer.effects.sparkles(b.x, b.y + 1, b.z, 20);
     this.sendMove(true);
-    this.emit('toast', { icon: '💖', text });
+    this.emit('toast', { icon, text });
   }
 
   // A monster popped: bopped or jumped on.
@@ -3306,7 +3306,9 @@ export class Game extends EventTarget {
     if (p) p.dizzy = false;
     if (msg.pid !== this.pid || !this.me) return;
     this.setHp(msg);
-    this.goHome(msg.at, 'Back you go to the nearest safe place, with all your HP.');
+    // (Sent back from past a gate of the isle that is still shut: room.js sendBack.)
+    if (msg.why === 'gate') this.goHome(msg.at, 'There is no way round a gate! Free the camp before it, and it opens. Back you go.', '🚧');
+    else this.goHome(msg.at, 'Back you go to the nearest safe place, with all your HP.');
   }
 
   // Each frame: the flags where their camps are, fireworks going off, stars

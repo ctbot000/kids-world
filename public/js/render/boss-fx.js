@@ -17,6 +17,9 @@ const FROM_SKY = { star: true };
 const FROM_GROUND = { root: true };
 // A bolt is only the ring until it strikes (renderer.js hurl draws it).
 const UNSEEN = { bolt: true };
+// Whether whoever throws this holds it up first: not what comes out of the
+// sky or the ground by itself (a bolt of lightning, a star, a root).
+export const heldUp = (what) => Boolean(what) && !UNSEEN[what] && !FROM_SKY[what] && !FROM_GROUND[what];
 
 // A ring flat on the ground at (x, y, z), as wide as r, pulsing, with a
 // disc inside it growing out to its edge as the moment it shows comes.

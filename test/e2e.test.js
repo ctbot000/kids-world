@@ -7590,6 +7590,54 @@ test('the isle’s second episode starts from the title in a game of its own, wi
   }
 });
 
+// On the isle there is no way round a gate that is still shut (shared/
+// adventure.js stepSneaks): whoever stands past one — having swum round, say —
+// is sent back to the nearest safe place a moment later, told why.
+test('on the isle, standing past a gate that is still shut sends you back to the start, told why', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    const room = isle.room;
+    const [first, second] = room.adventure.camps;
+    const put = (c) =>
+      page.evaluate(
+        (at) => {
+          const kw = window.kidsWorld;
+          Object.assign(kw.game.me.body, { x: at[0], y: at[1], z: at[2], vx: 0, vy: 0, vz: 0 });
+          kw.game.sendMove(true);
+        },
+        [c.x, c.y, c.z + 2],
+      );
+    const told = () => page.evaluate(() => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('There is no way round a gate')));
+    // (Nothing bumps them meanwhile.)
+    const safe = setInterval(() => {
+      for (const p of room.players.values()) p.safeUntil = Date.now() + 60000;
+    }, 100);
+    try {
+      // By the first camp, on the way: nothing.
+      await put(first);
+      await delay(1600);
+      assert.equal(await told(), false);
+      // By the second, past the first gate: back to the start.
+      await put(second);
+      await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('There is no way round a gate')));
+      const far = await page.evaluate((s) => Math.hypot(window.kidsWorld.game.me.body.x - s.x, window.kidsWorld.game.me.body.z - s.z), room.world.spawn);
+      assert.ok(far < 2, `back at the start: ${far}`);
+    } finally {
+      clearInterval(safe);
+    }
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
 // The same login on two devices is one player on the isle: the device that
 // comes in last plays, and the other is sent back to the title, told why.
 test('the same login on two devices is on the shared isle once, the one in last', { skip }, async () => {

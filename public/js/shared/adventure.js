@@ -22,6 +22,9 @@
 // - Out of HP with a friend on the island, you sit dizzy for a while,
 //   until a friend comes and taps you to help you up (or you go back to the
 //   nearest safe place).
+// - There is no way round a gate that is still shut: whoever gets past one
+//   all the same — swimming round by the sea, in a boat, over a wall with a
+//   Hero Cape — is sent back to the nearest safe place (stepSneaks).
 //
 // Each stage is a chapter of the isle's story (isle-story.js) with a map of
 // its own, made with its camps and its lair (isle-maps.js, with the
@@ -161,6 +164,11 @@ export const HAZARD = { from: 2, ms: 1500, reach: 1.8, high: 22 };
 export const hazardEvery = (stage) => Math.max(5000, 12000 - 700 * (cleanStage(stage) - 2));
 export const hazardCount = (stage) => 1 + Math.floor((cleanStage(stage) - 1) / 5);
 export const hazardBumps = (stage) => (cleanStage(stage) >= 8 ? 1 : 0.5);
+// How long someone has been past a gate still shut before they are sent
+// back: long enough to be no slip of a moment. And how far over the ground
+// still counts as there: someone jumping, or up on an animal's back.
+export const SNEAK_MS = 800;
+const SNEAK_OVER = 6;
 export const stageRaise = (base, stage) => {
   const by = Math.min(STAGE_RAISE, 1 + (cleanStage(stage) - 1) / 10);
   return by === 1 ? base : Math.round(base * by);
@@ -389,6 +397,117 @@ export function freeCells(world, camp, pal, rng) {
   return cells;
 }
 
+// ---------------------------------------------------------------- the way on foot
+
+const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+// Walking over an island's blocks: a step up at a time, down any drop, never
+// through water or lava, nor through anything solid — as the gates of the
+// isle's maps are meant to hold (isle-maps.js). Cells go by their number
+// among the world's.
+//   stand(x, y, z)         whether someone can stand in this cell: ground
+//                          under them, room for them, and dry;
+//   step(x, y, z, dx, dz)  how high they stand after a step that way from
+//                          where they stand, or -1 where there is no going;
+//   spot([x, y, z])        the cell someone stands in at a spot — on the
+//                          ground at their feet, or just under them — or -1.
+function walker(world) {
+  const { W, D, H, blocks } = world;
+  const at = (x, y, z) => blocks[(x * D + z) * H + y];
+  const free = (x, y, z) => y >= H || !B.SOLID[at(x, y, z)];
+  const wet = (x, y, z) => at(x, y, z) === B.WATER || at(x, y, z) === B.LAVA;
+  const stand = (x, y, z) => Boolean(B.SOLID[at(x, y - 1, z)]) && free(x, y, z) && free(x, y + 1, z) && !wet(x, y, z);
+  const step = (x, y, z, dx, dz) => {
+    const nx = x + dx;
+    const nz = z + dz;
+    if (nx < 0 || nz < 0 || nx >= W || nz >= D) return -1;
+    if (free(nx, y, nz) && free(nx, y + 1, nz)) {
+      // Across on the level, or off an edge and down to whatever is below
+      // (into water or lava, there is no walking on).
+      let ny = y;
+      while (!wet(nx, ny, nz) && ny > 1 && !B.SOLID[at(nx, ny - 1, nz)]) ny--;
+      return !wet(nx, ny, nz) && B.SOLID[at(nx, ny - 1, nz)] ? ny : -1;
+    }
+    // Up a step, with room overhead to take it.
+    return y + 2 < H && B.SOLID[at(nx, y, nz)] && free(nx, y + 1, nz) && free(nx, y + 2, nz) && free(x, y + 2, z) && !wet(nx, y + 1, nz) ? y + 1 : -1;
+  };
+  const spot = ([fx, fy, fz]) => {
+    const x = FL(fx);
+    const z = FL(fz);
+    if (x < 0 || z < 0 || x >= W || z >= D) return -1;
+    const top = Math.min(H - 2, Math.round(fy) + 1);
+    for (let y = top; y >= 1 && y >= top - 4; y--) if (stand(x, y, z)) return (x * D + z) * H + y;
+    return -1;
+  };
+  return { stand, step, spot };
+}
+
+// Everywhere on an island that can be walked to from the spots given ([x, y,
+// z] each, where someone stands). Returns marks, a byte for every cell of
+// the world: 1 where someone has walked to and stands.
+export function walkReach(world, from) {
+  const { W, D, H } = world;
+  const { step, spot } = walker(world);
+  const seen = new Uint8Array(W * D * H);
+  const todo = [];
+  const mark = (i) => {
+    if (i < 0 || seen[i]) return;
+    seen[i] = 1;
+    todo.push(i);
+  };
+  for (const s of from) mark(spot(s));
+  while (todo.length) {
+    const i = todo.pop();
+    const y = i % H;
+    const z = ((i - y) / H) % D;
+    const x = (i - y - z * H) / (H * D);
+    for (const [dx, dz] of STEPS) {
+      const ny = step(x, y, z, dx, dz);
+      if (ny >= 0) mark(((x + dx) * D + z + dz) * H + ny);
+    }
+  }
+  return seen;
+}
+
+// And the other way round: everywhere the spots given can be walked to from
+// (not the same: a drop goes down only). Marks as walkReach's: 1 where
+// someone stands who can walk there.
+export function walkBack(world, to) {
+  const { W, D, H } = world;
+  const { stand, step, spot } = walker(world);
+  // Every step there is to take on the island, by where it ends: the last
+  // one found ending in each cell, and for each step the one found before it
+  // that ends there too, and where it starts.
+  const last = new Int32Array(W * D * H).fill(-1);
+  const before = [];
+  const start = [];
+  for (let x = 0; x < W; x++) {
+    for (let z = 0; z < D; z++) {
+      for (let y = 1; y < H; y++) {
+        if (!stand(x, y, z)) continue;
+        for (const [dx, dz] of STEPS) {
+          const ny = step(x, y, z, dx, dz);
+          if (ny < 0) continue;
+          const j = ((x + dx) * D + z + dz) * H + ny;
+          before.push(last[j]);
+          start.push((x * D + z) * H + y);
+          last[j] = start.length - 1;
+        }
+      }
+    }
+  }
+  const seen = new Uint8Array(W * D * H);
+  const todo = [];
+  const mark = (i) => {
+    if (i < 0 || seen[i]) return;
+    seen[i] = 1;
+    todo.push(i);
+  };
+  for (const s of to) mark(spot(s));
+  while (todo.length) for (let e = last[todo.pop()]; e >= 0; e = before[e]) mark(start[e]);
+  return seen;
+}
+
 // ---------------------------------------------------------------- playing them
 
 const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 });
@@ -439,6 +558,11 @@ export class AdventureSim {
     // one, by id, with randomness of their own as well.
     this.hazardAt = new Map();
     this.hazardRng = new Rng((seed ^ 0xc2b2ae35) >>> 0);
+    // No way round a gate (stepSneaks): the way through the island as it is
+    // now (ways), worked out when it is first wanted and again as a camp is
+    // freed; and since when each person has been past a gate still shut.
+    this.way = null;
+    this.sneakAt = new Map();
   }
 
   // The treasure chests, now and then: the cells that changed, [x, y, z,
@@ -732,12 +856,67 @@ export class AdventureSim {
     return out;
   }
 
+  // The way through the island as it is now, its gates as they are. on:
+  // everywhere that can be walked to from its start and its freed camps
+  // (walkReach). barred: the camps still held that cannot — each behind a
+  // gate still shut. past: everywhere one of those can be walked to from
+  // (walkBack).
+  ways(world) {
+    const beside = (c) => STEPS.map(([dx, dz]) => [c.x + dx * 2, c.y, c.z + dz * 2]);
+    const { spot } = walker(world);
+    const on = walkReach(world, [[world.spawn.x, world.spawn.y, world.spawn.z], ...this.camps.filter((c) => c.freed).flatMap(beside)]);
+    const barred = this.camps.filter((c) => !c.freed && !beside(c).some((s) => on[spot(s)] === 1));
+    return { on, barred, past: barred.length ? walkBack(world, barred.flatMap(beside)) : new Uint8Array(0) };
+  }
+
+  // Whoever has got past a gate that is still shut — by sea, in a boat, over
+  // a wall — and been there a moment (SNEAK_MS): from the ground they stand
+  // on, or are over (in the middle of a jump, up on what they ride:
+  // SNEAK_OVER cells down at most), a camp that is not to be walked to yet
+  // can be. Anywhere else — the sea, a roof, a tree, a beach under a cliff
+  // with no way up — is nobody's business. Returns their ids, for the room
+  // to send back to the nearest safe place.
+  stepSneaks(world, now, people) {
+    if (this.won || !this.gates.some((g) => !g.open)) {
+      if (this.sneakAt.size) this.sneakAt.clear();
+      return [];
+    }
+    this.way ??= this.ways(world);
+    const { past } = this.way;
+    const out = [];
+    const { W, D, H, blocks } = world;
+    for (const p of people) {
+      const x = FL(p.x);
+      const z = FL(p.z);
+      let there = false;
+      if (!p.flying && !p.dizzy && x >= 0 && z >= 0 && x < W && z < D) {
+        const column = (x * D + z) * H;
+        let y = Math.max(1, Math.min(H - 1, Math.round(p.y)));
+        for (let down = 0; down < SNEAK_OVER && y > 1 && !B.SOLID[blocks[column + y - 1]]; down++) y--;
+        there = past[column + y] === 1;
+      }
+      const since = this.sneakAt.get(p.id);
+      if (!there) {
+        if (since !== undefined) this.sneakAt.delete(p.id);
+      } else if (since === undefined) {
+        this.sneakAt.set(p.id, now);
+      } else if (now - since >= SNEAK_MS) {
+        this.sneakAt.delete(p.id);
+        out.push(p.id);
+      }
+    }
+    for (const id of [...this.sneakAt.keys()]) if (!people.some((p) => p.id === id)) this.sneakAt.delete(id);
+    return out;
+  }
+
   // The camp is free: its monsters go, and whoever was there helped. With
   // that the last camp, the boss's bubble pops (and on a map without a
   // lair, that is the stage won).
   free(c, people, monsters) {
     const shielded = this.shielded;
     Object.assign(c, { freed: true, progress: 1, awake: false, quiet: 0, back: [], holders: 0, guarded: false });
+    // (A safe place more, from where the way on is walked: stepSneaks.)
+    this.way = null;
     const gone = [];
     for (const m of [...monsters.list]) if (m.camp === c.id) gone.push(monsters.remove(m.id));
     const by = people.filter((p) => campDistance(c, p.x, p.z) <= c.r + 12).map((p) => p.id);
@@ -786,6 +965,8 @@ export class AdventureSim {
   openGates(id = 0) {
     const out = this.gates.filter((g) => !g.open && (!id || g.camp === id));
     for (const g of out) g.open = true;
+    // (The way on is longer now: worked out again when next wanted.)
+    if (out.length) this.way = null;
     return out;
   }
 
