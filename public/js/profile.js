@@ -443,6 +443,37 @@ export class Profile extends EventTarget {
     this.dispatchEvent(new CustomEvent('basket'));
   }
 
+  // How many stickers you have earned, for the one sticker that asks for a
+  // number of them (stickers.js Sticker Collector).
+  stickerCount() {
+    return STICKERS.filter((s) => this.data.stickers[s.key]).length;
+  }
+
+  // Hands out any sticker earned by the stickers themselves, however many you
+  // have: called when one is earned and when you come to play, so a player who
+  // was already at 99 or more gets it the next time they play. Says which it
+  // gave, and 'level' if its XP took you up one — unless a count says the level
+  // itself (count), so it is not said twice.
+  checkStickers({ level = true } = {}) {
+    const got = [];
+    const s = this.data.stats;
+    const before = this.progress.level;
+    for (const sticker of STICKERS) {
+      if (!sticker.readsStickers || this.data.stickers[sticker.key] || !sticker.test(s, this.stickerCount())) continue;
+      this.data.stickers[sticker.key] = Date.now();
+      got.push(sticker);
+      this.dispatchEvent(new CustomEvent('sticker', { detail: sticker }));
+    }
+    if (!got.length) return got;
+    this.storeSoon();
+    this.dispatchEvent(new CustomEvent('count'));
+    if (level) {
+      const now = this.progress.level;
+      if (now > before) this.dispatchEvent(new CustomEvent('level', { detail: { level: now } }));
+    }
+    return got;
+  }
+
   // Counts something you did, and hands out any sticker it earned. Says
   // 'count', for the ranking, and 'level' when it took you up a level.
   count(stat, n = 1, { max = false } = {}) {
@@ -450,11 +481,15 @@ export class Profile extends EventTarget {
     if (!(stat in s)) return;
     const before = this.progress.level;
     s[stat] = max ? Math.max(s[stat], n) : s[stat] + n;
+    const mine = this.data.stickers;
     for (const sticker of STICKERS) {
-      if (this.data.stickers[sticker.key] || !sticker.test(s)) continue;
-      this.data.stickers[sticker.key] = Date.now();
+      if (mine[sticker.key] || sticker.readsStickers || !sticker.test(s)) continue;
+      mine[sticker.key] = Date.now();
       this.dispatchEvent(new CustomEvent('sticker', { detail: sticker }));
     }
+    // The one that counts your stickers may have been earned by the stickers
+    // this very count handed out; the count says the level itself.
+    this.checkStickers({ level: false });
     this.storeSoon();
     this.dispatchEvent(new CustomEvent('count'));
     const level = this.progress.level;

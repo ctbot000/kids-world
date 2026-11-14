@@ -152,6 +152,11 @@ export const STICKERS = [
   { key: 'rope-champ', icon: '🏅', name: 'Rope Champ', text: 'Jump over a jump rope 100 times in a row', test: (s) => s.ropebest >= 100, goal: 100, of: 'ropebest' },
   // A legend of its own: every coin you have ever earned, from anywhere.
   { key: 'millionaire', icon: '💰', name: 'Millionaire', text: 'Earn 1,000,000 coins in all', test: (s) => s.earned >= 1000000, goal: 1000000, of: 'earned' },
+  // The only sticker that asks how many you have, rather than what you have
+  // done: how far there is to go is your stickers, not a count (stickers of
+  // yours). Awarded by the profile itself, so it is there whatever else you
+  // did — and one who was already at 99 gets it the next time they play.
+  { key: 'sticker-collector', icon: '🌟', name: 'Sticker Collector', text: 'Earn 99 stickers', test: (s, stickers) => stickers >= 99, goal: 99, of: 'stickers', readsStickers: true },
 ];
 
 // The monster collection of Adventure Isle (adventure.js MONSTER_BOOK):
