@@ -22,6 +22,9 @@
 // - Out of HP with a friend on the island, you sit dizzy for a while,
 //   until a friend comes and taps you to help you up (or you go back to the
 //   nearest safe place).
+// - There is no way round a gate that is still shut: whoever gets past one
+//   all the same — swimming round by the sea, in a boat, over a wall with a
+//   Hero Cape — is sent back to the nearest safe place (stepSneaks).
 //
 // Each stage is a chapter of the isle's story (isle-story.js) with a map of
 // its own, made with its camps and its lair (isle-maps.js, with the
@@ -161,6 +164,11 @@ export const HAZARD = { from: 2, ms: 1500, reach: 1.8, high: 22 };
 export const hazardEvery = (stage) => Math.max(5000, 12000 - 700 * (cleanStage(stage) - 2));
 export const hazardCount = (stage) => 1 + Math.floor((cleanStage(stage) - 1) / 5);
 export const hazardBumps = (stage) => (cleanStage(stage) >= 8 ? 1 : 0.5);
+// How long someone has been past a gate still shut before they are sent
+// back: long enough to be no slip of a moment. And how far over the ground
+// still counts as there: someone jumping, or up on an animal's back.
+export const SNEAK_MS = 800;
+const SNEAK_OVER = 6;
 export const stageRaise = (base, stage) => {
   const by = Math.min(STAGE_RAISE, 1 + (cleanStage(stage) - 1) / 10);
   return by === 1 ? base : Math.round(base * by);
@@ -389,6 +397,117 @@ export function freeCells(world, camp, pal, rng) {
   return cells;
 }
 
+// ---------------------------------------------------------------- the way on foot
+
+const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+// Walking over an island's blocks: a step up at a time, down any drop, never
+// through water or lava, nor through anything solid — as the gates of the
+// isle's maps are meant to hold (isle-maps.js). Cells go by their number
+// among the world's.
+//   stand(x, y, z)         whether someone can stand in this cell: ground
+//                          under them, room for them, and dry;
+//   step(x, y, z, dx, dz)  how high they stand after a step that way from
+//                          where they stand, or -1 where there is no going;
+//   spot([x, y, z])        the cell someone stands in at a spot — on the
+//                          ground at their feet, or just under them — or -1.
+function walker(world) {
+  const { W, D, H, blocks } = world;
+  const at = (x, y, z) => blocks[(x * D + z) * H + y];
+  const free = (x, y, z) => y >= H || !B.SOLID[at(x, y, z)];
+  const wet = (x, y, z) => at(x, y, z) === B.WATER || at(x, y, z) === B.LAVA;
+  const stand = (x, y, z) => Boolean(B.SOLID[at(x, y - 1, z)]) && free(x, y, z) && free(x, y + 1, z) && !wet(x, y, z);
+  const step = (x, y, z, dx, dz) => {
+    const nx = x + dx;
+    const nz = z + dz;
+    if (nx < 0 || nz < 0 || nx >= W || nz >= D) return -1;
+    if (free(nx, y, nz) && free(nx, y + 1, nz)) {
+      // Across on the level, or off an edge and down to whatever is below
+      // (into water or lava, there is no walking on).
+      let ny = y;
+      while (!wet(nx, ny, nz) && ny > 1 && !B.SOLID[at(nx, ny - 1, nz)]) ny--;
+      return !wet(nx, ny, nz) && B.SOLID[at(nx, ny - 1, nz)] ? ny : -1;
+    }
+    // Up a step, with room overhead to take it.
+    return y + 2 < H && B.SOLID[at(nx, y, nz)] && free(nx, y + 1, nz) && free(nx, y + 2, nz) && free(x, y + 2, z) && !wet(nx, y + 1, nz) ? y + 1 : -1;
+  };
+  const spot = ([fx, fy, fz]) => {
+    const x = FL(fx);
+    const z = FL(fz);
+    if (x < 0 || z < 0 || x >= W || z >= D) return -1;
+    const top = Math.min(H - 2, Math.round(fy) + 1);
+    for (let y = top; y >= 1 && y >= top - 4; y--) if (stand(x, y, z)) return (x * D + z) * H + y;
+    return -1;
+  };
+  return { stand, step, spot };
+}
+
+// Everywhere on an island that can be walked to from the spots given ([x, y,
+// z] each, where someone stands). Returns marks, a byte for every cell of
+// the world: 1 where someone has walked to and stands.
+export function walkReach(world, from) {
+  const { W, D, H } = world;
+  const { step, spot } = walker(world);
+  const seen = new Uint8Array(W * D * H);
+  const todo = [];
+  const mark = (i) => {
+    if (i < 0 || seen[i]) return;
+    seen[i] = 1;
+    todo.push(i);
+  };
+  for (const s of from) mark(spot(s));
+  while (todo.length) {
+    const i = todo.pop();
+    const y = i % H;
+    const z = ((i - y) / H) % D;
+    const x = (i - y - z * H) / (H * D);
+    for (const [dx, dz] of STEPS) {
+      const ny = step(x, y, z, dx, dz);
+      if (ny >= 0) mark(((x + dx) * D + z + dz) * H + ny);
+    }
+  }
+  return seen;
+}
+
+// And the other way round: everywhere the spots given can be walked to from
+// (not the same: a drop goes down only). Marks as walkReach's: 1 where
+// someone stands who can walk there.
+export function walkBack(world, to) {
+  const { W, D, H } = world;
+  const { stand, step, spot } = walker(world);
+  // Every step there is to take on the island, by where it ends: the last
+  // one found ending in each cell, and for each step the one found before it
+  // that ends there too, and where it starts.
+  const last = new Int32Array(W * D * H).fill(-1);
+  const before = [];
+  const start = [];
+  for (let x = 0; x < W; x++) {
+    for (let z = 0; z < D; z++) {
+      for (let y = 1; y < H; y++) {
+        if (!stand(x, y, z)) continue;
+        for (const [dx, dz] of STEPS) {
+          const ny = step(x, y, z, dx, dz);
+          if (ny < 0) continue;
+          const j = ((x + dx) * D + z + dz) * H + ny;
+          before.push(last[j]);
+          start.push((x * D + z) * H + y);
+          last[j] = start.length - 1;
+        }
+      }
+    }
+  }
+  const seen = new Uint8Array(W * D * H);
+  const todo = [];
+  const mark = (i) => {
+    if (i < 0 || seen[i]) return;
+    seen[i] = 1;
+    todo.push(i);
+  };
+  for (const s of to) mark(spot(s));
+  while (todo.length) for (let e = last[todo.pop()]; e >= 0; e = before[e]) mark(start[e]);
+  return seen;
+}
+
 // ---------------------------------------------------------------- playing them
 
 const noKing = () => ({ id: 0, hearts: 0, max: 0, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 });
@@ -410,6 +529,9 @@ export class AdventureSim {
     this.stage = cleanStage(stage);
     this.journey = Number.isInteger(journey) && journey >= 1 ? journey : 1;
     this.story = chapterOf(this.stage);
+    // How hard it is: its chapter says (isle-story.js), as a stage of the
+    // first episode.
+    this.level = this.story.level;
     // Who holds the lair: the chapter's boss (bosses.js).
     this.boss = this.story.boss;
     this.plan = planOf(this.boss);
@@ -436,12 +558,17 @@ export class AdventureSim {
     // one, by id, with randomness of their own as well.
     this.hazardAt = new Map();
     this.hazardRng = new Rng((seed ^ 0xc2b2ae35) >>> 0);
+    // No way round a gate (stepSneaks): the way through the island as it is
+    // now (ways), worked out when it is first wanted and again as a camp is
+    // freed; and since when each person has been past a gate still shut.
+    this.way = null;
+    this.sneakAt = new Map();
   }
 
   // The treasure chests, now and then: the cells that changed, [x, y, z,
   // id] each.
   stepChests(world, now) {
-    return this.chests.step(world, now, { stage: this.stage, camps: this.camps });
+    return this.chests.step(world, now, { stage: this.level, camps: this.camps });
   }
 
   // Whether there is anything left to free.
@@ -500,7 +627,7 @@ export class AdventureSim {
   step(world, dt, now, people, monsters, players) {
     const news = [];
     if (!this.active) return news;
-    const want = guardsFor(players, this.stage);
+    const want = guardsFor(players, this.level);
     for (const c of this.camps) {
       if (c.freed) continue;
       if (people.some((p) => campDistance(c, p.x, p.z) <= c.r + WAKE)) {
@@ -529,15 +656,15 @@ export class AdventureSim {
       const m = monsters.add(world, at.x, at.y, at.z, { camp: c.id, kind: this.boss, plan: this.plan });
       m.passive = this.shielded;
       // Quicker with its moves the higher the stage.
-      m.gapScale = stageGap(this.stage);
-      const hearts = bossHearts(this.plan, players, this.stage);
+      m.gapScale = stageGap(this.level);
+      const hearts = bossHearts(this.plan, players, this.level);
       this.king = { ...noKing(), id: m.id, hearts, max: hearts };
       return;
     }
-    for (let i = 0; i < guardsFor(players, this.stage); i++) this.addGuard(world, c, people, monsters);
+    for (let i = 0; i < guardsFor(players, this.level); i++) this.addGuard(world, c, people, monsters);
     // (Their reserve is set once, the first time they come out: it does
     // not fill up again as they go back to sleep and wake.)
-    if (c.reserve === Infinity) c.reserve = reserveFor(players, this.stage);
+    if (c.reserve === Infinity) c.reserve = reserveFor(players, this.level);
     if (c.queen) this.addQueen(world, c, people, monsters);
     this.addChampion(world, c, people, monsters, players);
   }
@@ -597,7 +724,7 @@ export class AdventureSim {
   // camp of the very first stage, where the Queen Mosquito is enough for anyone.
   championOf(c) {
     const i = this.camps.filter((o) => o.kind === 'camp').indexOf(c);
-    if (i < 0 || (this.stage === 1 && c.queen)) return null;
+    if (i < 0 || (this.level === 1 && c.queen)) return null;
     return this.story.champions?.[i - 1] ?? null;
   }
 
@@ -628,7 +755,7 @@ export class AdventureSim {
     const m = monsters.add(world, spot.x, spot.y, spot.z, { camp: c.id, kind });
     if (m) {
       m.champion = true;
-      const grown = Math.min(1, 0.4 + 0.1 * this.stage);
+      const grown = Math.min(1, 0.4 + 0.1 * this.level);
       m.hearts = Math.max(3, Math.round(kindOf(kind).hearts * grown * (1 + 0.3 * (Math.min(8, Math.max(1, players)) - 1))));
       m.max = m.hearts;
     }
@@ -645,7 +772,7 @@ export class AdventureSim {
     const have = new Map();
     for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
     have.set('mosquito', have.get('mosquito') - 1);
-    for (const k of [...(this.story.guards ?? []), ...toughGuards(this.stage)]) {
+    for (const k of [...(this.story.guards ?? []), ...toughGuards(this.level)]) {
       if ((have.get(k) ?? 0) > 0) have.set(k, have.get(k) - 1);
       else return k;
     }
@@ -664,7 +791,7 @@ export class AdventureSim {
     // A friend came to the island: one more on its way (out of the reserve,
     // on the higher stages, while there is one).
     if (count + c.back.length < want && c.reserve > 0) {
-      c.back.push(now + guardBackMs(this.stage));
+      c.back.push(now + guardBackMs(this.level));
       c.reserve--;
     }
     c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
@@ -672,12 +799,12 @@ export class AdventureSim {
     // flag down. Still, whoever comes to raise it is near enough to wake it.)
     c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5 && !(kindOf(m.kind).shut && m.state === 'idle'));
     // From the second stage the monsters pull a flag they hold back down.
-    if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.stage));
+    if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.level));
     if (!c.holders || c.guarded) return;
-    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.stage));
+    c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.level));
     // Half way up, on the higher stages: an ambush, once a camp.
     if (!c.ambushed && c.progress >= AMBUSH_AT) {
-      const n = ambushFor(people.length, this.stage);
+      const n = ambushFor(people.length, this.level);
       if (n) {
         c.ambushed = true;
         for (let i = 0; i < n; i++) {
@@ -698,7 +825,7 @@ export class AdventureSim {
   // comes down, a moment ahead, for the room to show and work out. Returns
   // [{ pid, what, to: [{ x, y, z }], ms, reach, bumps }].
   stepHazards(world, now, people) {
-    if (!this.story.hazard || this.stage < HAZARD.from || this.won) return [];
+    if (!this.story.hazard || this.level < HAZARD.from || this.won) return [];
     const out = [];
     const havens = this.havens(world);
     for (const p of people) {
@@ -707,13 +834,13 @@ export class AdventureSim {
       const due = this.hazardAt.get(p.id);
       if (near || due === undefined) {
         // Not out on the way (or just come out on it): the wait starts again.
-        this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.6 + 0.6 * this.hazardRng.next()));
+        this.hazardAt.set(p.id, now + hazardEvery(this.level) * (0.6 + 0.6 * this.hazardRng.next()));
         continue;
       }
       if (now < due) continue;
-      this.hazardAt.set(p.id, now + hazardEvery(this.stage) * (0.8 + 0.4 * this.hazardRng.next()));
+      this.hazardAt.set(p.id, now + hazardEvery(this.level) * (0.8 + 0.4 * this.hazardRng.next()));
       const to = [];
-      for (let i = 0; i < hazardCount(this.stage) * 3 && to.length < hazardCount(this.stage); i++) {
+      for (let i = 0; i < hazardCount(this.level) * 3 && to.length < hazardCount(this.level); i++) {
         // On them the first time, and round them after.
         const a = this.hazardRng.range(-Math.PI, Math.PI);
         const d = to.length ? this.hazardRng.range(2.5, 4.5) : 0;
@@ -723,9 +850,62 @@ export class AdventureSim {
         if (y === null || Math.abs(y - p.y) > 3 || havens.some((h) => campDistance(h, x, z) < h.r)) continue;
         to.push({ x, y, z });
       }
-      if (to.length) out.push({ pid: p.id, what: this.story.hazard, to, ms: HAZARD.ms, reach: HAZARD.reach, bumps: hazardBumps(this.stage) });
+      if (to.length) out.push({ pid: p.id, what: this.story.hazard, to, ms: HAZARD.ms, reach: HAZARD.reach, bumps: hazardBumps(this.level) });
     }
     for (const id of [...this.hazardAt.keys()]) if (!people.some((p) => p.id === id)) this.hazardAt.delete(id);
+    return out;
+  }
+
+  // The way through the island as it is now, its gates as they are. on:
+  // everywhere that can be walked to from its start and its freed camps
+  // (walkReach). barred: the camps still held that cannot — each behind a
+  // gate still shut. past: everywhere one of those can be walked to from
+  // (walkBack).
+  ways(world) {
+    const beside = (c) => STEPS.map(([dx, dz]) => [c.x + dx * 2, c.y, c.z + dz * 2]);
+    const { spot } = walker(world);
+    const on = walkReach(world, [[world.spawn.x, world.spawn.y, world.spawn.z], ...this.camps.filter((c) => c.freed).flatMap(beside)]);
+    const barred = this.camps.filter((c) => !c.freed && !beside(c).some((s) => on[spot(s)] === 1));
+    return { on, barred, past: barred.length ? walkBack(world, barred.flatMap(beside)) : new Uint8Array(0) };
+  }
+
+  // Whoever has got past a gate that is still shut — by sea, in a boat, over
+  // a wall — and been there a moment (SNEAK_MS): from the ground they stand
+  // on, or are over (in the middle of a jump, up on what they ride:
+  // SNEAK_OVER cells down at most), a camp that is not to be walked to yet
+  // can be. Anywhere else — the sea, a roof, a tree, a beach under a cliff
+  // with no way up — is nobody's business. Returns their ids, for the room
+  // to send back to the nearest safe place.
+  stepSneaks(world, now, people) {
+    if (this.won || !this.gates.some((g) => !g.open)) {
+      if (this.sneakAt.size) this.sneakAt.clear();
+      return [];
+    }
+    this.way ??= this.ways(world);
+    const { past } = this.way;
+    const out = [];
+    const { W, D, H, blocks } = world;
+    for (const p of people) {
+      const x = FL(p.x);
+      const z = FL(p.z);
+      let there = false;
+      if (!p.flying && !p.dizzy && x >= 0 && z >= 0 && x < W && z < D) {
+        const column = (x * D + z) * H;
+        let y = Math.max(1, Math.min(H - 1, Math.round(p.y)));
+        for (let down = 0; down < SNEAK_OVER && y > 1 && !B.SOLID[blocks[column + y - 1]]; down++) y--;
+        there = past[column + y] === 1;
+      }
+      const since = this.sneakAt.get(p.id);
+      if (!there) {
+        if (since !== undefined) this.sneakAt.delete(p.id);
+      } else if (since === undefined) {
+        this.sneakAt.set(p.id, now);
+      } else if (now - since >= SNEAK_MS) {
+        this.sneakAt.delete(p.id);
+        out.push(p.id);
+      }
+    }
+    for (const id of [...this.sneakAt.keys()]) if (!people.some((p) => p.id === id)) this.sneakAt.delete(id);
     return out;
   }
 
@@ -735,6 +915,8 @@ export class AdventureSim {
   free(c, people, monsters) {
     const shielded = this.shielded;
     Object.assign(c, { freed: true, progress: 1, awake: false, quiet: 0, back: [], holders: 0, guarded: false });
+    // (A safe place more, from where the way on is walked: stepSneaks.)
+    this.way = null;
     const gone = [];
     for (const m of [...monsters.list]) if (m.camp === c.id) gone.push(monsters.remove(m.id));
     const by = people.filter((p) => campDistance(c, p.x, p.z) <= c.r + 12).map((p) => p.id);
@@ -783,6 +965,8 @@ export class AdventureSim {
   openGates(id = 0) {
     const out = this.gates.filter((g) => !g.open && (!id || g.camp === id));
     for (const g of out) g.open = true;
+    // (The way on is longer now: worked out again when next wanted.)
+    if (out.length) this.way = null;
     return out;
   }
 
@@ -854,7 +1038,7 @@ export class AdventureSim {
     // (On the higher stages, only while its reserve lasts.)
     if (c.reserve <= 0) return;
     c.reserve--;
-    c.back.push(now + guardBackMs(this.stage));
+    c.back.push(now + guardBackMs(this.level));
   }
 
   // A friend bopping the lair's boss (the chapter's: bosses.js): nothing

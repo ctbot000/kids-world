@@ -22,7 +22,7 @@ import { CRITTER_INFO, placeFlyers, placePolar, placeSea } from './critters.js';
 import { chapterOf } from './isle-story.js';
 import { fbm } from './noise.js';
 import { hash2, Rng } from './rng.js';
-import { candyTree, fruitTree, oakTree, pineTree, placeTemplate, stampByKey } from './stamps.js';
+import { candyTree, fruitTree, katsuraTree, oakTree, pineTree, placeTemplate, stampByKey } from './stamps.js';
 import { World } from './world.js';
 import { palette } from './worldgen.js';
 
@@ -695,8 +695,11 @@ class Maker {
   // ------------------------------------------------ trees and flowers
 
   // Trees where fn(x, z) says (a tree's cells, or null), on open ground no
-  // nearer each other than `apart`, tried `tries` times.
-  trees(tries, apart, fn) {
+  // nearer each other than `apart`, tried `tries` times; none within
+  // `clear` of the foot of a cliff (further for trees with wide crowns, tall
+  // enough to reach the top of it: a crown touching the land above, or the
+  // crown of a tree that does, is a way up).
+  trees(tries, apart, fn, clear = 3) {
     const { world, rng } = this;
     const placed = [];
     for (let t = 0; t < tries; t++) {
@@ -708,7 +711,7 @@ class Maker {
       if (y <= SEA || !B.TERRAIN[world.get(x, y, z)] || world.get(x, y + 1, z) !== B.AIR) continue;
       // Not at the foot of a cliff either, its crown a ladder up it.
       let under = false;
-      for (let dx = -3; dx <= 3 && !under; dx++) for (let dz = -3; dz <= 3 && !under; dz++) if (this.inside(x + dx, z + dz, 0) && this.g[this.k(x + dx, z + dz)] > y + 2) under = true;
+      for (let dx = -clear; dx <= clear && !under; dx++) for (let dz = -clear; dz <= clear && !under; dz++) if (this.inside(x + dx, z + dz, 0) && this.g[this.k(x + dx, z + dz)] > y + 2) under = true;
       if (under) continue;
       if (placed.some(([px, pz, a]) => Math.hypot(px - x, pz - z) < Math.max(a, apart))) continue;
       const cells = fn(x, z, y, rng);
@@ -719,7 +722,7 @@ class Maker {
         // river would be a way across it.
         if (this.inside(cx, cz, 0) && (this.bare[this.k(cx, cz)] || this.g[this.k(cx, cz)] < SEA || this.water[this.k(cx, cz)])) continue;
         if (world.inBounds(cx, cy, cz) && SOFT[world.get(cx, cy, cz)] && !this.keep[this.k(cx, cz)]) world.set(cx, cy, cz, id);
-        else if (world.inBounds(cx, cy, cz) && SOFT[world.get(cx, cy, cz)] && (id === B.LEAVES || id === B.PINE_LEAVES || id === B.SNOWY_LEAVES || id === B.COTTON_CANDY) && cy > y + 3) world.set(cx, cy, cz, id);
+        else if (world.inBounds(cx, cy, cz) && SOFT[world.get(cx, cy, cz)] && (id === B.LEAVES || id === B.PINE_LEAVES || id === B.SNOWY_LEAVES || id === B.COTTON_CANDY || id === B.KATSURA_LEAVES) && cy > y + 3) world.set(cx, cy, cz, id);
       }
     }
     return placed;
@@ -1110,8 +1113,9 @@ function giantMushroom(m, x, z, h, r) {
 
 // A tree of the old wood whose trunk is hollow, four wide and as tall as a
 // house, with roots spreading round its foot, a doorway into the hollow
-// (the way (fx, fz) faces) and a great crown of leaves.
-function hollowTree(m, x, z, fx, fz) {
+// (the way (fx, fz) faces) and a great crown of leaves (of these, if not an
+// oak's).
+function hollowTree(m, x, z, fx, fz, leaves = B.LEAVES) {
   const { world } = m;
   const y0 = m.ground(x, z);
   const tall = 15;
@@ -1133,8 +1137,8 @@ function hollowTree(m, x, z, fx, fz) {
   world.set(x, y0 + 5, z, B.LAMP);
   // Branches and the crown.
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let l = 2; l <= 5; l++) world.set(x + dx * l, y0 + tall - 3 + (l >> 1), z + dz * l, B.WOOD);
-  ball(m, x, y0 + tall + 3, z, 8, 4.5, 8, B.LEAVES);
-  for (const [dx, dz] of [[5, 3], [-5, -2], [2, -6], [-3, 5]]) ball(m, x + dx, y0 + tall + 1, z + dz, 4, 3, 4, B.LEAVES);
+  ball(m, x, y0 + tall + 3, z, 8, 4.5, 8, leaves);
+  for (const [dx, dz] of [[5, 3], [-5, -2], [2, -6], [-3, 5]]) ball(m, x + dx, y0 + tall + 1, z + dz, 4, 3, 4, leaves);
 }
 
 // A water mill on a river bank: a log cabin, and its wheel turning in the
@@ -2432,7 +2436,987 @@ function spires(m) {
   return { fruit: B.FRUIT_ITEMS[1] };
 }
 
-const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle };
+// ---------------------------------------------------------------- Episode 2
+
+// The land of a chapter of the Rainbow Lands (the story's second episode) on
+// terraces (tierAt, from terraces): an island with its coast a little in from
+// the map's edge, rolling as hills(x, z) says, each terrace after the first
+// lift higher than the one before. Only the first, where everyone lands,
+// comes down to the sea in a beach: the others stand coast over it all round
+// in a cliff, so there is no swimming round a gate to the next of them.
+function rainbowLand(m, tierAt, { rim = 61, power = 4, base = 6, hills = () => 2, lift = 5, coast = 3 } = {}) {
+  const { seed } = m;
+  return (x, z) => {
+    const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.08;
+    const dx = Math.abs(x - 64) / rim;
+    const dz = Math.abs(z - 64) / rim;
+    const edge = 1 - (dx ** power + dz ** power) ** (1 / power) + n;
+    const land = smooth(edge / 0.16);
+    const t = tierAt(x, z);
+    return SEA - 5 + land * (base + hills(x, z)) + (edge > 0 && t ? coast + lift * t : 0);
+  };
+}
+
+// How far the land eases back round a pad cut for a landmark (level): not at
+// all, so it is square-sided wherever it meets a cliff.
+const PAD = 0.5;
+
+// The faces of the cliffs painted: every block of the land that shows at the
+// side of a column standing min or more over its lowest neighbour, from over
+// that neighbour's top (or the sea) up to under its own, as paint(x, y, z)
+// says (0 leaves it). Only what they are made of: where they stand stays.
+function paintCliffs(m, paint, min = 3) {
+  const { world, S } = m;
+  for (let x = 0; x < S; x++) {
+    for (let z = 0; z < S; z++) {
+      const g = m.g[m.k(x, z)];
+      if (g <= SEA) continue;
+      let low = g;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (m.inside(x + dx, z + dz, 0)) low = Math.min(low, m.g[m.k(x + dx, z + dz)]);
+      if (g - low < min) continue;
+      for (let y = Math.max(SEA - 1, low + 1); y < g; y++) {
+        const id = paint(x, y, z);
+        if (id && B.SOLID[world.get(x, y, z)] && B.KIND[world.get(x, y, z)] !== B.K_FURNITURE) world.set(x, y, z, id);
+      }
+    }
+  }
+}
+
+// Whether a column is open ground of the island's own kind, with nothing on
+// it and nothing kept clear there: where a field's flowers may grow.
+function openGround(m, x, z) {
+  if (!m.inside(x, z, 2) || m.keep[m.k(x, z)]) return -1;
+  const y = m.ground(x, z);
+  return y > SEA && m.world.get(x, y, z) === m.pal.top && m.world.get(x, y + 1, z) === B.AIR ? y : -1;
+}
+
+// A windmill: a round white tower narrowing as it goes up, a red band round
+// its middle, a brown cap, a door, and four sails of wood and cloth turning
+// (well, standing) on the side the way (fx, fz) faces.
+function windmill(m, cx, cz, fx, fz) {
+  const { world } = m;
+  const y0 = m.ground(cx, cz);
+  const tall = 10;
+  for (let dx = -4; dx <= 4; dx++) {
+    for (let dz = -4; dz <= 4; dz++) {
+      const d = Math.hypot(dx, dz);
+      const x = cx + dx;
+      const z = cz + dz;
+      if (d <= 3.6) for (let y = m.ground(x, z) + 1; y <= y0; y++) world.set(x, y, z, B.STONE);
+      for (let y = 1; y <= tall; y++) {
+        const r = 3.4 - y * 0.11;
+        if (d <= r && d > r - 1.2) world.set(x, y0 + y, z, y === 5 ? RED : WHITE);
+        else if (d <= r - 1.2) world.set(x, y0 + y, z, B.AIR);
+      }
+      if (d <= 2.9) world.set(x, y0 + tall + 1, z, BROWN);
+      if (d <= 1.9) world.set(x, y0 + tall + 2, z, BROWN);
+    }
+  }
+  world.set(cx, y0 + tall + 3, cz, BROWN);
+  // The door, on the side away from the sails, and a lamp inside.
+  for (let y = 1; y <= 2; y++) for (let l = 2; l <= 3; l++) world.set(cx - fx * l, y0 + y, cz - fz * l, B.AIR);
+  world.set(cx, y0 + 4, cz, B.LAMP);
+  // The sails: an axle out of the tower, and four arms in a cross.
+  const hx = cx + fx * 4;
+  const hz = cz + fz * 4;
+  const hy = y0 + 8;
+  for (let l = 2; l <= 4; l++) world.set(cx + fx * l, hy, cz + fz * l, B.WOOD);
+  for (const [u, v] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    for (let l = 1; l <= 5; l++) {
+      // (u along the tower's face, v up.)
+      const x = hx + (fz ? u * l : 0);
+      const z = hz + (fx ? u * l : 0);
+      world.set(x, hy + v * l, z, B.WOOD);
+      // (Its cloth, on the inside of each arm.)
+      if (l >= 2) world.set(x, hy + v * l - v, z, WHITE_CLOTH);
+      if (l >= 2) world.set(x - (fz ? u : 0), hy + v * l, z - (fx ? u : 0), WHITE_CLOTH);
+    }
+  }
+  m.claim(cx, cz, 7, 3);
+}
+
+// A giant rose: a green stem as tall as you, two leaves, and a red bloom
+// (or one of color, its heart tip).
+function giantRose(m, x, z, color = RED, tip = PINK) {
+  const { world } = m;
+  const y0 = m.ground(x, z);
+  if (y0 <= SEA || m.keep[m.k(x, z)] === 1) return;
+  for (let y = 1; y <= 4; y++) world.set(x, y0 + y, z, GREEN);
+  world.set(x + 1, y0 + 2, z, LIME);
+  world.set(x - 1, y0 + 3, z, LIME);
+  ball(m, x + 0.5, y0 + 6, z + 0.5, 1.7, 1.5, 1.7, (cx, cy) => (cy >= y0 + 7 ? tip : color));
+  m.claim(x, z, 2.5, 3);
+}
+
+// Chapter 1 of the second episode, the Tulip Fields: red tulips in rows as
+// far as you can see, on wide terraces of farmland. From the landing in the
+// south-east the lane goes west by Scarecrow Corner, up to the Strawberry
+// Patch in the west, on up to the Old Windmill in the north, and round to the
+// Rose Bower in the east, where Lady Dotty keeps the red of the rainbow.
+function tulip(m) {
+  const { seed } = m;
+  m.pal.path = TAN;
+  m.pal.cliff = BROWN;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 110, z: 114, t: 0 },
+    { x: 98, z: 106, t: 0 },
+    { x: 84, z: 100, t: 0, camp: true },
+    { x: 68, z: 104, t: 0 },
+    { x: 52, z: 106, t: 0 },
+    { x: 37, z: 100, t: 1 },
+    { x: 26, z: 88, t: 1, camp: true },
+    { x: 22, z: 72, t: 1 },
+    { x: 26, z: 58, t: 1 },
+    { x: 36, z: 46, t: 2 },
+    { x: 50, z: 38, t: 2, camp: true },
+    { x: 64, z: 32, t: 2 },
+    { x: 78, z: 28, t: 2 },
+    { x: 92, z: 30, t: 3 },
+    { x: 102, z: 42, t: 3 },
+    { x: 100, z: 58, t: 3, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 1.6 + fbm(seed + 23, x / 26, z / 26, 3) * 0.9 });
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const farm = { post: B.WOOD, lamp: B.LAMP, floor: B.PLANKS, bed: B.HAY };
+  const corner = m.camp(path, 2, { blend: 2, style: farm });
+  const patch = m.camp(path, 6, { blend: 2, style: farm });
+  const mill = m.camp(path, 10, { blend: 2, style: farm });
+  const bower = m.camp(path, 15, { kind: 'castle', blend: 2, style: { wall: GREEN, tower: LIME, stripe: RED, floor: PINK } });
+  // Room for the windmill beside its camp, and for the strawberry patch
+  // (each cut square into the land, as every pad of these chapters is: a
+  // slope round one, where it meets the next terrace, would be a way up it).
+  m.level(mill.x + 2, mill.z - 15, 5, 5, mill.level, PAD, 3);
+  m.level(patch.x - 2, patch.z + 14, 4, 3, patch.level, PAD, 3);
+  m.finish();
+  const { world } = m;
+  paintCliffs(m, (x, y, z) => (hash2(seed + 91, x + y * 57, z) < 0.12 ? TAN : y % 4 === 0 ? TAN : BROWN));
+  windmill(m, Math.floor(mill.x) + 2, Math.floor(mill.z) - 15, 0, 1);
+  // The strawberry patch: rows of ripe strawberries in ploughed soil.
+  const strawberry = B.CROP_STAGES[B.CROPS.findIndex((c) => c.key === 'strawberry')][B.RIPE];
+  for (let dx = -4; dx <= 4; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      const x = Math.floor(patch.x) - 2 + dx;
+      const z = Math.floor(patch.z) + 14 + dz;
+      const g = m.ground(x, z);
+      if (g !== patch.level || world.get(x, g + 1, z) !== B.AIR) continue;
+      world.set(x, g, z, B.FARMLAND);
+      if (dz % 2 === 0) world.set(x, g + 1, z, strawberry);
+    }
+  }
+  // Scarecrows out in the fields round their corner, and hay bales by the lane.
+  for (let i = 0; i < 7; i++) {
+    const a = 0.4 + i * 0.9;
+    const x = Math.floor(corner.x + Math.cos(a) * (13 + (i % 3) * 3));
+    const z = Math.floor(corner.z + Math.sin(a) * (13 + (i % 3) * 3));
+    const g = openGround(m, x, z);
+    if (g < 0 || Math.abs(g - corner.level) > 1) continue;
+    world.set(x, g + 1, z, i % 3 === 2 ? B.HAY : B.SCARECROW);
+    m.claim(x + 0.5, z + 0.5, 1.5, 3);
+  }
+  // Giant roses round the Rose Bower.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.3;
+    giantRose(m, Math.floor(bower.x + Math.cos(a) * 16.5), Math.floor(bower.z + Math.sin(a) * 16.5), i % 3 === 1 ? PINK : RED);
+  }
+  // The hay bales across the lane, the farmers' cart in the gateway, and the
+  // bramble hedge before the Rose Bower.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 3 + ((x + z) & 1) ? B.HAY : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i === 3 ? B.PLANKS : (x + z + i) % 2 ? B.CRATE : BROWN), { thick: 1 });
+  rampGate(m, path, 12, 3, (x, y, z, i) => (hash2(seed + 5, x * 31 + i, z) < 0.2 ? RED : (x + z + i) % 3 ? GREEN : LIME), { high: 5 });
+  const fruit = B.FRUIT_ITEMS[0];
+  m.trees(700, 9, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.4) ? fruitTree(rng, fruit, rng.int(2, 4)) : rng.chance(0.5) ? oakTree(rng) : null), 5);
+  // The fields: tulips in rows, a band of pink or white now and then.
+  flowerRows(m, (row) => [B.TULIP, B.TULIP, B.COSMOS, B.TULIP, B.DAISY][Math.floor(row / 9) % 5], { where: (x, z) => fbm(seed + 41, x / 18, z / 18, 2) > -0.2 });
+  m.flowers(10);
+  m.animals({ cow: 3, sheep: 3, chick: 3, pony: 1 }, (x, z) => z > 86 && x > 44);
+  return { fruit };
+}
+
+// Flowers in rows over the open ground, as a field has them: pick(row, x, z)
+// says which flower a row grows (0 for none), where(x, z) whether there is a
+// field there at all; one row in every is left bare, and a gap here and there.
+function flowerRows(m, pick, { every = 3, where = () => true, thin = 0.1 } = {}) {
+  const { seed, world } = m;
+  for (let x = 3; x < m.S - 3; x++) {
+    for (let z = 3; z < m.S - 3; z++) {
+      const row = Math.floor(x * 0.8 + z * 0.6);
+      if (row % every === every - 1 || hash2(seed + 43, x, z) < thin || !where(x, z)) continue;
+      const id = pick(row, x, z);
+      if (!id) continue;
+      const y = openGround(m, x, z);
+      if (y >= 0) world.set(x, y + 1, z, id);
+    }
+  }
+}
+
+// A maple in its autumn leaves (a katsura's, gold and apricot and red): a
+// trunk and a round crown; big, a tall one with a wide crown.
+function mapleTree(rng, big = false) {
+  const cells = [];
+  const h = big ? rng.int(6, 7) : rng.int(3, 5);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, B.KATSURA_WOOD]);
+  const r = big ? 3.6 : 2.4;
+  const ry = r * 0.8;
+  const top = h + (big ? 1 : 0);
+  for (let x = -4; x <= 4; x++) {
+    for (let y = -3; y <= 3; y++) {
+      for (let z = -4; z <= 4; z++) {
+        const d = (x / r) ** 2 + (y / ry) ** 2 + (z / r) ** 2;
+        if (d > 1 || (d > 0.55 && rng.chance(0.22)) || (x === 0 && z === 0 && y < 0)) continue;
+        cells.push([x, top + y, z, B.KATSURA_LEAVES]);
+      }
+    }
+  }
+  return cells;
+}
+
+// A great acorn standing on end: a tan nut under a brown cap with a stalk.
+function acorn(m, x, z, r = 1.6) {
+  const y0 = m.ground(x, z);
+  if (y0 <= SEA || m.keep[m.k(x, z)] === 1) return;
+  ball(m, x + 0.5, y0 + 1 + r, z + 0.5, r, r * 1.15, r, (cx, cy) => (cy > y0 + 1 + r * 1.25 ? BROWN : TAN));
+  m.world.set(x, Math.floor(y0 + 2 + r * 2.2), z, BROWN);
+  m.claim(x, z, r + 1.5, 3);
+}
+
+// Chapter 2 of the second episode, Maple Ridge: a hill of maples all orange
+// and gold, the way winding round and round it to the top. From the landing
+// in the west it goes by Leafy Lane and the Acorn Store in the north, the
+// Log Bridge in the east and Bonfire Clearing in the south, and up to the Nut
+// Hoard under the great hollow maple at the very top.
+function maple(m) {
+  const { seed } = m;
+  m.pal.cliff = BROWN;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 13, z: 66, t: 0 },
+    { x: 21, z: 53, t: 0 },
+    { x: 32, z: 41, t: 0, camp: true },
+    { x: 44, z: 30, t: 0 },
+    { x: 57, z: 23, t: 0 },
+    { x: 73, z: 21, t: 1 },
+    { x: 87, z: 26, t: 1, camp: true },
+    { x: 98, z: 36, t: 1 },
+    { x: 106, z: 50, t: 1 },
+    { x: 108, z: 65, t: 2 },
+    { x: 104, z: 79, t: 2, camp: true },
+    { x: 96, z: 91, t: 2 },
+    { x: 84, z: 100, t: 2 },
+    { x: 70, z: 104, t: 3 },
+    { x: 55, z: 102, t: 3, camp: true },
+    { x: 43, z: 94, t: 3 },
+    { x: 36, z: 82, t: 3 },
+    { x: 39, z: 69, t: 4 },
+    { x: 51, z: 62, t: 4 },
+    { x: 66, z: 62, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 2 + fbm(seed + 23, x / 20, z / 20, 3) * 1.2 });
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const logs = { post: B.KATSURA_WOOD, lamp: B.LAMP, floor: B.PLANKS, bed: B.HAY };
+  const lane = m.camp(path, 2, { blend: 2, style: logs });
+  const store = m.camp(path, 6, { blend: 2, style: logs });
+  const bridge = m.camp(path, 10, { blend: 2, style: logs });
+  const fire = m.camp(path, 14, { blend: 2, style: logs });
+  const hoard = m.camp(path, 19, { kind: 'castle', blend: 2, style: { wall: B.WOOD, tower: B.KATSURA_WOOD, stripe: ORANGE, floor: B.PLANKS } });
+  // Room for the great hollow maple behind the Nut Hoard.
+  m.level(hoard.x + 18, hoard.z - 1, 5, 5, hoard.level, PAD, 3);
+  m.finish();
+  const { world } = m;
+  paintCliffs(m, (x, y, z) => (y % 3 === 0 ? ORANGE : hash2(seed + 91, x + y * 57, z) < 0.3 ? TAN : BROWN));
+  hollowTree(m, Math.floor(hoard.x) + 18, Math.floor(hoard.z) - 1, -1, 0, B.KATSURA_LEAVES);
+  // Great acorns round the hoard and by the store, heaps of leaves along
+  // Leafy Lane, logs lying by their bridge, and the bonfires in their clearing.
+  for (const [dx, dz, r] of [[-15, -8, 1.6], [-14, 9, 1.3], [3, 16, 1.6], [4, -16, 1.4]]) acorn(m, Math.floor(hoard.x) + dx, Math.floor(hoard.z) + dz, r);
+  for (const [dx, dz] of [[11, -6], [12, 5], [-4, 12]]) acorn(m, Math.floor(store.x) + dx, Math.floor(store.z) + dz, 1.3);
+  for (let i = 0; i < 9; i++) {
+    const a = i * 0.7 + 0.2;
+    const x = Math.floor(lane.x + Math.cos(a) * (11 + (i % 3) * 2));
+    const z = Math.floor(lane.z + Math.sin(a) * (11 + (i % 3) * 2));
+    const g = openGround(m, x, z);
+    if (g < 0 || Math.abs(g - lane.level) > 1) continue;
+    for (const [ox, oz, high] of [[0, 0, 2], [1, 0, 1], [0, 1, 1], [-1, 0, 1]]) if (openGround(m, x + ox, z + oz) === g) for (let y = 1; y <= high; y++) world.set(x + ox, g + y, z + oz, B.KATSURA_LEAVES);
+    m.claim(x + 0.5, z + 0.5, 2.5, 3);
+  }
+  for (const [dx, dz, ax] of [[10, -5, 1], [-11, 4, 0], [9, 8, 0]]) {
+    for (let l = 0; l < 6; l++) {
+      const x = Math.floor(bridge.x) + dx + (ax ? l : 0);
+      const z = Math.floor(bridge.z) + dz + (ax ? 0 : l);
+      const g = openGround(m, x, z);
+      if (g >= 0 && Math.abs(g - bridge.level) <= 1) world.set(x, g + 1, z, B.KATSURA_WOOD);
+    }
+  }
+  for (const [dx, dz] of [[10, 0], [-9, 5], [0, -10]]) {
+    const x = Math.floor(fire.x) + dx;
+    const z = Math.floor(fire.z) + dz;
+    const g = openGround(m, x, z);
+    if (g < 0) continue;
+    world.set(x, g + 1, z, B.CAMPFIRE);
+    m.claim(x + 0.5, z + 0.5, 2, 3);
+  }
+  // The heap of leaves across the lane, the squirrels' barrels, the fallen
+  // trunk, and the gate of the Nut Hoard.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 3 + ((x * 3 + z) & 1) ? B.KATSURA_LEAVES : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i < 4 ? ((x + z + i) % 3 ? B.CRATE : BROWN) : 0));
+  rampGate(m, path, 12, 3, (x, y, z, i) => (i < 3 ? B.KATSURA_WOOD : i === 3 && (x + z) % 2 ? B.KATSURA_LEAVES : 0));
+  rampGate(m, path, 16, 4, (x, y, z, i) => (i === 3 ? ORANGE : B.PLANKS), { thick: 1, high: 5 });
+  m.trees(3400, 5, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.07) ? katsuraTree(rng.chance(0.3)) : rng.chance(0.75) ? mapleTree(rng, rng.chance(0.25)) : rng.chance(0.3) ? pineTree(rng) : null), 6);
+  m.flowers(18, { extra: B.MUSHROOM, rare: 0.985 });
+  m.animals({ bunny: 3, sheep: 2 }, (x, z) => x < 40 && z < 70);
+  return { fruit: B.FRUIT_ITEMS[1] };
+}
+
+// A giant sunflower, as tall as a house: a green stalk with a leaf or two,
+// and its great head, a brown middle in a ring of yellow petals, standing up
+// to face the way the sun goes.
+function giantSunflower(rng) {
+  const cells = [];
+  const h = rng.int(5, 8);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, GREEN]);
+  cells.push([1, Math.floor(h / 2), 0, LIME], [-1, Math.floor(h / 2) + 1, 0, LIME]);
+  for (let a = -2; a <= 2; a++) {
+    for (let b = -2; b <= 2; b++) {
+      const d = Math.hypot(a, b);
+      if (d > 2.3) continue;
+      cells.push([a, h + 2 + b, 1, d < 1.2 ? BROWN : YELLOW]);
+    }
+  }
+  cells.push([0, h, 0, GREEN], [0, h + 1, 0, GREEN], [0, h + 2, 0, GREEN]);
+  return cells;
+}
+
+// A beehive as big as a hut: rings of yellow and orange one on another,
+// narrowing to the top, a dark doorway the way (fx, fz) faces.
+function beehive(m, cx, cz, fx, fz, size = 1) {
+  const { world } = m;
+  const y0 = m.ground(cx, cz);
+  const rings = [2.2, 2.9, 3.2, 3.2, 2.9, 2.3, 1.5].map((r) => r * size);
+  for (const [i, r] of rings.entries()) {
+    for (let dx = -Math.ceil(r); dx <= Math.ceil(r); dx++) {
+      for (let dz = -Math.ceil(r); dz <= Math.ceil(r); dz++) {
+        if (Math.hypot(dx, dz) > r) continue;
+        if (i === 0) for (let y = m.ground(cx + dx, cz + dz) + 1; y <= y0; y++) world.set(cx + dx, y, cz + dz, YELLOW);
+        world.set(cx + dx, y0 + 1 + i, cz + dz, i % 2 ? ORANGE : YELLOW);
+      }
+    }
+  }
+  const out = Math.round(rings[1]);
+  for (let y = 1; y <= 2; y++) for (let l = out - 1; l <= out; l++) world.set(cx + fx * l, y0 + y, cz + fz * l, CHARCOAL);
+  m.claim(cx, cz, rings[2] + 1.5, 3);
+}
+
+// Chapter 3 of the second episode, the Honeycomb Hills: hills that step up
+// in cliffs of honeycomb, a road of yellow bricks winding up through fields
+// of sunflowers taller than you. From the landing in the south it goes west
+// by Sunflower Gate, back east along Clover Bank and the Beekeeper's Yard,
+// round by Honey Falls in the east, and west again along the top to the
+// Golden Hive.
+function honey(m) {
+  const { seed } = m;
+  m.pal.path = YELLOW;
+  m.pal.cliff = ORANGE;
+  m.pal.rockAt = 99;
+  m.pal.deck = YELLOW;
+  const nodes = [
+    { x: 66, z: 117, t: 0 },
+    { x: 53, z: 110, t: 0 },
+    { x: 39, z: 104, t: 0, camp: true },
+    { x: 26, z: 97, t: 0 },
+    { x: 17, z: 86, t: 0 },
+    { x: 16, z: 70, t: 1 },
+    { x: 26, z: 60, t: 1, camp: true },
+    { x: 40, z: 58, t: 1 },
+    { x: 53, z: 62, t: 1 },
+    { x: 68, z: 67, t: 2 },
+    { x: 82, z: 71, t: 2, camp: true },
+    { x: 96, z: 72, t: 2 },
+    { x: 108, z: 64, t: 2 },
+    { x: 110, z: 49, t: 3 },
+    { x: 102, z: 37, t: 3, camp: true },
+    { x: 90, z: 29, t: 3 },
+    { x: 77, z: 25, t: 3 },
+    { x: 62, z: 24, t: 4 },
+    { x: 49, z: 25, t: 4 },
+    { x: 36, z: 29, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 1.8 + fbm(seed + 23, x / 16, z / 16, 3) * 1.3 });
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const wax = { post: YELLOW, lamp: B.LAMP, floor: ORANGE, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: { ...wax, post: B.WOOD } });
+  m.camp(path, 6, { blend: 2, style: wax });
+  const yard = m.camp(path, 10, { blend: 2, style: wax });
+  const falls = m.camp(path, 14, { blend: 2, style: wax });
+  const hive = m.camp(path, 19, { kind: 'castle', blend: 2, style: { wall: YELLOW, tower: ORANGE, stripe: CHARCOAL, floor: ORANGE } });
+  // Room for the beekeeper's hives, and for the great hive behind the lair.
+  const hives = [[12, -7], [13, 4], [-3, 13]].map(([dx, dz]) => [Math.floor(yard.x) + dx, Math.floor(yard.z) + dz]);
+  for (const [x, z] of hives) m.level(x + 0.5, z + 0.5, 3, 3, yard.level, PAD, 3);
+  m.level(hive.x - 1, hive.z - 19, 5, 5, hive.level, PAD, 3);
+  m.finish();
+  // Honeycomb in the cliffs, and honey running down them by Honey Falls.
+  paintCliffs(m, (x, y, z) => {
+    if (Math.hypot(x - falls.x - 11, z - falls.z) < 3) return (x + y + z) % 5 === 0 ? B.STAR_BLOCK : ORANGE;
+    return (x + z + y) % 4 === 0 || (x + z - y + 400) % 4 === 0 ? ORANGE : YELLOW;
+  });
+  for (const [i, [x, z]] of hives.entries()) beehive(m, x, z, i === 2 ? 0 : -1, i === 2 ? -1 : 0);
+  beehive(m, Math.floor(hive.x) - 1, Math.floor(hive.z) - 19, 0, 1, 1.5);
+  // The sunflowers' leaves over the road, a wall of wax, the bees' own gate
+  // in stripes, and honey over the door of the Golden Hive.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 4 ? ((x + z + i) % 2 ? GREEN : LIME) : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i < 4 ? ((x + i) % 3 ? YELLOW : WHITE) : 0), { thick: 1 });
+  rampGate(m, path, 12, 3, (x, y, z, i) => (i % 2 ? CHARCOAL : YELLOW), { thick: 1 });
+  rampGate(m, path, 16, 4, (x, y, z, i) => (i === 3 ? B.STAR_BLOCK : ORANGE), { thick: 1, high: 5 });
+  m.trees(2600, 5, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.5) ? giantSunflower(rng) : rng.chance(0.25) ? fruitTree(rng, B.FRUIT_ITEMS[3], rng.int(2, 4)) : null), 6);
+  flowerRows(m, (row) => [B.SUNFLOWER, B.SUNFLOWER, B.DAISY][Math.floor(row / 9) % 3], { where: (x, z) => fbm(seed + 41, x / 16, z / 16, 2) > -0.05, thin: 0.2 });
+  m.flowers(14);
+  m.animals({ chick: 3, duck: 2, cow: 2 }, (x, z) => z > 92);
+  return { fruit: B.FRUIT_ITEMS[3] };
+}
+
+// A tree of the jungle: a tall bare trunk, a wide flat crown at the top, and
+// vines hanging down from its edge.
+function jungleTree(rng) {
+  const cells = [];
+  const h = rng.int(7, 10);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, B.WOOD]);
+  const r = rng.int(3, 4);
+  for (let x = -r; x <= r; x++) {
+    for (let z = -r; z <= r; z++) {
+      const d = Math.hypot(x, z);
+      if (d > r + 0.3) continue;
+      cells.push([x, h, z, B.LEAVES]);
+      if (d < r - 1) cells.push([x, h + 1, z, B.LEAVES]);
+      if (d > r - 0.8 && rng.chance(0.3)) for (let y = h - 1; y >= h - rng.int(2, 4); y--) cells.push([x, y, z, B.LEAVES]);
+    }
+  }
+  return cells;
+}
+
+// Bamboo: a clump of thin green canes, each with a tuft at its top.
+function bamboo(rng) {
+  const cells = [];
+  for (const [x, z] of [[0, 0], [1, 1], [-1, 0], [0, -1]]) {
+    if ((x || z) && rng.chance(0.4)) continue;
+    const h = rng.int(4, 7);
+    for (let y = 0; y < h; y++) cells.push([x, y, z, y % 3 === 2 ? GREEN : LIME]);
+    cells.push([x, h, z, B.LEAVES]);
+  }
+  return cells;
+}
+
+// A totem pole: faces one on another in bright colours, wings near the top.
+function totem(m, x, z) {
+  const y0 = m.ground(x, z);
+  if (y0 <= SEA || m.keep[m.k(x, z)]) return;
+  const colors = [BROWN, RED, YELLOW, TEAL, BROWN, ORANGE];
+  for (const [i, c] of colors.entries()) m.world.set(x, y0 + 1 + i, z, c);
+  for (const side of [-1, 1]) m.world.set(x + side, y0 + 5, z, YELLOW);
+  m.claim(x + 0.5, z + 0.5, 2, 3);
+}
+
+// Chapter 4 of the second episode, Tangle Jungle: trees so tall they shut
+// out the sky, vines hanging from them, and an old road of stone going up
+// through it all. From the landing in the north-east it goes west by Parrot
+// Landing to Vine Village, south to Monkey Bridge, east by the Mossy Steps,
+// and round to the Lost Temple in the south.
+function jungle(m) {
+  const { seed } = m;
+  m.pal.path = B.STONE;
+  m.pal.cliff = B.STONE;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 113, z: 15, t: 0 },
+    { x: 100, z: 23, t: 0 },
+    { x: 86, z: 30, t: 0, camp: true },
+    { x: 72, z: 25, t: 0 },
+    { x: 59, z: 19, t: 0 },
+    { x: 43, z: 18, t: 1 },
+    { x: 30, z: 25, t: 1, camp: true },
+    { x: 20, z: 37, t: 1 },
+    { x: 16, z: 51, t: 1 },
+    { x: 20, z: 65, t: 2 },
+    { x: 32, z: 73, t: 2, camp: true },
+    { x: 46, z: 77, t: 2 },
+    { x: 59, z: 75, t: 2 },
+    { x: 74, z: 70, t: 3 },
+    { x: 89, z: 65, t: 3, camp: true },
+    { x: 103, z: 74, t: 3 },
+    { x: 108, z: 88, t: 3 },
+    { x: 101, z: 101, t: 4 },
+    { x: 86, z: 106, t: 4 },
+    { x: 69, z: 103, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 2.2 + fbm(seed + 23, x / 15, z / 15, 3) * 1.4 });
+  m.shape(height);
+  m.pond(36, 60, 4, Math.round(height(36, 60)) + 1, 2);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const vines = { post: B.WOOD, lamp: B.LAMP, floor: B.STONE, bed: B.HAY };
+  const landing = m.camp(path, 2, { blend: 2, style: vines });
+  const village = m.camp(path, 6, { blend: 2, style: vines });
+  m.camp(path, 10, { blend: 2, style: vines });
+  const steps = m.camp(path, 14, { blend: 2, style: { ...vines, post: B.STONE } });
+  const temple = m.camp(path, 19, { kind: 'castle', blend: 2, style: { wall: B.STONE, tower: GREEN, stripe: LIME, floor: B.STONE } });
+  // The village's log cabins round its square (each on a pad cut square
+  // into the land: no slope up to another terrace), and room for the temple
+  // behind the lair.
+  for (const a of [0.4, 2.2, -1.4]) {
+    const at = (d) => [village.x + Math.cos(a) * d, village.z + Math.sin(a) * d];
+    m.level(...at(16.5), 5, 5, village.level, PAD, 3);
+    m.later(() => m.stamp('log-cabin', ...at(13), village.x, village.z));
+  }
+  m.level(temple.x - 19, temple.z + 1, 8, 8, temple.level, PAD, 3);
+  m.finish();
+  // Moss and creepers on the cliffs, the Lost Temple's pyramid behind its
+  // yard, mossy pillars by its steps, and totem poles here and there.
+  paintCliffs(m, (x, y, z) => {
+    const r = hash2(seed + 91, x + y * 57, z);
+    return r < 0.22 ? GREEN : r < 0.34 ? LIME : r < 0.4 ? B.LEAVES : 0;
+  });
+  pyramid(m, temple.cx - 19, temple.cz + 1, 7, m.ground(temple.cx - 19, temple.cz + 1) + 1, B.STONE, GREEN);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.5;
+    const x = Math.floor(steps.x + Math.cos(a) * 11.5);
+    const z = Math.floor(steps.z + Math.sin(a) * 11.5);
+    const g = openGround(m, x, z);
+    if (g < 0 || Math.abs(g - steps.level) > 1) continue;
+    for (let y = 1; y <= 3 + (i % 3); y++) m.world.set(x, g + y, z, y % 2 ? B.STONE : GREEN);
+    m.claim(x + 0.5, z + 0.5, 2, 3);
+  }
+  for (const [dx, dz] of [[10, 5], [-9, -7], [3, -11]]) totem(m, Math.floor(landing.x) + dx, Math.floor(landing.z) + dz);
+  totem(m, 50, 92);
+  totem(m, 96, 44);
+  // Creepers over the road, the villagers' log gate, a knot of vines, and
+  // the stone door of the Lost Temple.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 4 ? ((x + z + i) % 3 ? B.LEAVES : GREEN) : 0));
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i === 3 ? LIME : B.WOOD), { thick: 1 });
+  rampGate(m, path, 12, 3, (x, y, z, i) => ((x * 3 + z + i) % 2 ? LIME : GREEN), { thick: 1 });
+  rampGate(m, path, 16, 4, (x, y, z, i) => (i === 2 ? B.STAR_BLOCK : (x + z + i) % 4 === 0 ? GREEN : B.STONE), { thick: 1, high: 5 });
+  m.trees(5200, 4, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.45) ? jungleTree(rng) : rng.chance(0.4) ? bamboo(rng) : rng.chance(0.4) ? palmTree(rng) : rng.chance(0.3) ? fruitTree(rng, B.FRUIT_ITEMS[2], 3) : null), 7);
+  m.flowers(30, { extra: B.MUSHROOM, rare: 0.985 });
+  m.animals({ monkey: 4, tiger: 1, flamingo: 2 }, (x, z) => z < 48 && x > 50);
+  m.animals({ elephant: 1, monkey: 2 }, (x, z) => x < 60 && z > 56 && z < 96);
+  return { fruit: B.FRUIT_ITEMS[2] };
+}
+
+// A coral growing up off the lagoon's floor to stand a little out of the
+// water: a stem and a branch or two, all of one bright colour.
+function coral(m, x, z, color, rng) {
+  const { world } = m;
+  const bed = m.ground(x, z);
+  if (bed >= SEA - 1 || m.keep[m.k(x, z)]) return;
+  const top = SEA + rng.int(0, 2);
+  for (let y = bed + 1; y <= top; y++) world.set(x, y, z, color);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    if (!rng.chance(0.55) || !m.inside(x + dx, z + dz, 2) || m.keep[m.k(x + dx, z + dz)]) continue;
+    const from = rng.int(bed + 2, Math.max(bed + 2, top - 1));
+    world.set(x + dx, from, z + dz, color);
+    for (let y = from + 1; y <= top + rng.int(-1, 1); y++) world.set(x + dx * 2, y, z + dz * 2, color);
+    world.set(x + dx * 2, from, z + dz * 2, color);
+  }
+}
+
+// A galleon gone down in the shallows: its hull keeled over (shipwreck), and
+// two masts still standing out of the water, rags of sail on their yards.
+function galleon(m, cx, cz, along) {
+  shipwreck(m, cx, cz, along);
+  const { world } = m;
+  for (const l of [-3, 3]) {
+    const x = Math.floor(cx + Math.cos(along) * l);
+    const z = Math.floor(cz + Math.sin(along) * l);
+    const y0 = m.ground(x, z);
+    const tall = l < 0 ? 11 : 9;
+    for (let y = 1; y <= tall; y++) world.set(x, y0 + y, z, B.WOOD);
+    for (const yard of [tall - 1, tall - 5]) {
+      for (let w = -2; w <= 2; w++) {
+        const yx = Math.floor(x - Math.sin(along) * w + 0.5);
+        const yz = Math.floor(z + Math.cos(along) * w + 0.5);
+        if (w) world.set(yx, y0 + yard, yz, B.WOOD);
+        if ((w + l + yard) % 3) world.set(yx, y0 + yard - 1, yz, WHITE_CLOTH);
+      }
+    }
+  }
+}
+
+// Chapter 5 of the second episode, Bubble Lagoon: tables of coral rock
+// standing out of a shallow blue lagoon, each a little higher than the last,
+// with piers from one to the next. From Shell Beach on the low island in the
+// south-east the way crosses to the Coral Garden, the Pearl Divers' Rock and
+// Whale Rock, and last to the rock where the Sunken Galleon lies. Each pier
+// has a gate halfway over, and there is no climbing a rock out of the water.
+function lagoon(m) {
+  const { seed } = m;
+  m.pal.path = B.PLANKS;
+  m.pal.cliff = PINK;
+  m.pal.rockAt = 99;
+  m.pal.rail = B.FENCE;
+  // Each rock: where, how wide and how high its top. The first is the low
+  // island where everyone lands, with a beach to come up out of the sea by.
+  const ROCKS = [
+    { x: 104, z: 104, r: 17, top: SEA + 4, beach: true },
+    { x: 104, z: 53, r: 13, top: SEA + 7 },
+    { x: 66, z: 22, r: 13, top: SEA + 10 },
+    { x: 26, z: 42, r: 13, top: SEA + 13 },
+    { x: 38, z: 92, r: 18, top: SEA + 16 },
+    // And some no pier goes to, for the look of it.
+    { x: 70, z: 66, r: 6, top: SEA + 6 },
+    { x: 13, z: 113, r: 5, top: SEA + 5 },
+    { x: 116, z: 15, r: 5, top: SEA + 7 },
+    { x: 76, z: 112, r: 4, top: SEA + 4 },
+  ];
+  m.shape((x, z) => {
+    // The lagoon's floor: shallow sand, falling away to the deep at the edge.
+    const out = Math.max(Math.abs(x - 64), Math.abs(z - 64));
+    let h = SEA - 2.6 - smooth((out - 50) / 10) * 5 + fbm(seed + 5, x / 9, z / 9, 2) * 0.5;
+    for (const s of ROCKS) {
+      const d = Math.hypot(x - s.x, z - s.z) + fbm(seed + 71, x / 7, z / 7, 2) * 1.6;
+      if (s.beach) {
+        if (d < s.r + 6) h = Math.max(h, SEA - 3 + smooth((s.r + 6 - d) / 8) * (s.top - SEA + 3) + fbm(seed + 5, x / 6, z / 6, 2) * 0.5);
+      } else if (d < s.r) {
+        h = Math.max(h, s.top + fbm(seed + 23, x / 9, z / 9, 2) * 0.7);
+      }
+    }
+    return h;
+  });
+  const path = m.route([
+    { x: 114, z: 117 },
+    { x: 106, z: 109 },
+    { x: 99, z: 99, y: SEA + 4 },
+    { x: 100, z: 91, bridge: true },
+    { x: 103, z: 64 },
+    { x: 104, z: 53, y: SEA + 7 },
+    { x: 96, z: 45, bridge: true },
+    { x: 76, z: 28 },
+    { x: 66, z: 22, y: SEA + 10 },
+    { x: 54, z: 25, bridge: true },
+    { x: 37, z: 36 },
+    { x: 26, z: 42, y: SEA + 13 },
+    { x: 27, z: 54, bridge: true },
+    { x: 34, z: 76 },
+    { x: 38, z: 92, y: SEA + 16 },
+  ], { slope: 0.6, blend: 0 });
+  const drift = { post: B.WOOD, lamp: B.LAMP, floor: B.PLANKS, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: drift });
+  const garden = m.camp(path, 5, { blend: 1, style: { ...drift, post: PINK } });
+  const divers = m.camp(path, 8, { blend: 1, style: drift });
+  m.camp(path, 11, { blend: 1, style: { ...drift, post: BLUE } });
+  m.camp(path, 14, { kind: 'castle', blend: 1, style: { wall: B.PLANKS, tower: BLUE, stripe: SKY, floor: TEAL } });
+  m.finish();
+  const { world } = m;
+  // The rocks' sides, coral in bands of pink, orange and white.
+  paintCliffs(m, (x, y, z) => {
+    const r = hash2(seed + 91, x + y * 57, z);
+    return r < 0.08 ? RED : r < 0.14 ? PURPLE : [PINK, PINK, ORANGE, WHITE][(y + Math.floor(r * 3)) % 4];
+  });
+  // Corals standing up out of the shallows, bubbles drifting over them, the
+  // whale off Whale Rock, and the galleon gone down by the last rock.
+  const rng = new Rng(seed ^ 0x51a7);
+  for (let i = 0; i < 70; i++) coral(m, rng.int(6, 121), rng.int(6, 121), rng.pick([PINK, ORANGE, RED, PURPLE, WHITE, YELLOW]), rng);
+  for (let i = 0; i < 26; i++) {
+    const x = rng.int(8, 119);
+    const z = rng.int(8, 119);
+    const y = SEA + rng.int(3, 12);
+    if (m.g[m.k(x, z)] >= SEA || m.keep[m.k(x, z)] || world.get(x, y, z) !== B.AIR) continue;
+    world.set(x, y, z, B.GLASS);
+    if (i % 5 === 0) for (const [dx, dy, dz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0]]) if (world.get(x + dx, y + dy, z + dz) === B.AIR) world.set(x + dx, y + dy, z + dz, B.GLASS);
+  }
+  ball(m, 9, SEA, 66, 3.2, 3, 7.5, (x, y) => (y <= SEA ? WHITE : BLUE));
+  for (const [dx, dy] of [[-2, 1], [-1, 2], [0, 2], [1, 2], [2, 1]]) world.set(9 + dx, SEA + 2 + dy, 75, BLUE);
+  world.set(9, SEA + 3, 75, BLUE);
+  for (let y = 4; y <= 6; y++) world.set(9, SEA + y, 61, B.GLASS);
+  for (const side of [-1, 1]) world.set(9 + side * 2, SEA + 2, 60, CHARCOAL);
+  galleon(m, 66, 101, 0.35);
+  // A giant clam in the Coral Garden, a pearl in it, and pearls on the divers' rock.
+  const cx = Math.floor(garden.x) + 10;
+  const cz = Math.floor(garden.z) + 1;
+  const cg = m.ground(cx, cz);
+  if (cg === garden.level) {
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) world.set(cx + dx, cg + 1, cz + dz, dx || dz ? WHITE : PINK);
+    for (let dz = -1; dz <= 1; dz++) for (let y = 2; y <= 3; y++) world.set(cx + 1, cg + y, cz + dz, y === 3 && dz ? PINK : WHITE);
+    world.set(cx, cg + 2, cz, B.PEARL);
+    m.claim(cx, cz, 3, 3);
+  }
+  for (const [dx, dz] of [[9, 3], [-9, -2]]) {
+    const x = Math.floor(divers.x) + dx;
+    const z = Math.floor(divers.z) + dz;
+    const g = m.ground(x, z);
+    if (g === divers.level && world.get(x, g + 1, z) === B.AIR) world.set(x, g + 1, z, B.PEARL);
+  }
+  // Driftwood on the first pier, the giant clam's shell across the second,
+  // the divers' net over the third, and the tide across the last.
+  m.gate(path, 3, 1, (x, y, z, i) => ((x + z + i) % 2 ? B.WOOD : B.PLANKS), { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 6, 2, (x, y, z, i) => (i === 2 ? PINK : WHITE), { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 9, 3, (x, y, z, i) => ((x + z + i) % 2 ? WHITE_CLOTH : SKY), { high: 5, span: 3, thick: 1, mid: true });
+  m.gate(path, 12, 4, (x, y, z, i) => (i % 2 ? BLUE : TEAL), { high: 5, span: 3, thick: 1, mid: true });
+  m.trees(1600, 5, (x, z, y, rng2) => (m.world.get(x, y, z) !== B.SAND || y <= SEA + 1 ? null : rng2.chance(0.55) ? palmTree(rng2) : null));
+  m.flowers(16, { extra: 0 });
+  m.shells(24);
+  m.animals({ flamingo: 3, chick: 2 }, (x, z) => Math.hypot(x - 104, z - 104) < 16);
+  return { fruit: B.FRUIT_ITEMS[1] };
+}
+
+// A stone of a ring of standing stones: a slab two wide and as tall as two
+// of you, turned to face the middle.
+function standingStone(m, x, z, alongX, high) {
+  const g = m.ground(x, z);
+  if (g <= SEA || m.keep[m.k(x, z)] === 1) return 0;
+  for (const o of [0, 1]) {
+    const sx = x + (alongX ? o : 0);
+    const sz = z + (alongX ? 0 : o);
+    if (m.keep[m.k(sx, sz)] === 1) continue;
+    for (let y = m.ground(sx, sz) + 1; y <= g + high; y++) m.world.set(sx, y, sz, y === g + high ? GRAY : B.STONE);
+    m.keep[m.k(sx, sz)] = 3;
+  }
+  m.clear(x + 0.5, z + 0.5, 2.5);
+  return g + high;
+}
+
+// Chapter 6 of the second episode, Moonbeam Moor: a rolling moor where it is
+// always night, heather in bloom, a low moon hanging over the Moon Mill.
+// From the landing in the south-east the lantern path goes west by Lantern
+// Gate and Firefly Pond, north through the Standing Stones, east by the
+// Stargazers' Camp, and up to the Moon Mill under the moon.
+function moor(m) {
+  const { seed } = m;
+  m.pal.path = PURPLE;
+  m.pal.cliff = BLUE;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 113, z: 109, t: 0 },
+    { x: 102, z: 99, t: 0 },
+    { x: 90, z: 90, t: 0, camp: true },
+    { x: 76, z: 96, t: 0 },
+    { x: 63, z: 103, t: 0 },
+    { x: 48, z: 106, t: 1 },
+    { x: 34, z: 100, t: 1, camp: true },
+    { x: 22, z: 90, t: 1 },
+    { x: 16, z: 77, t: 1 },
+    { x: 16, z: 62, t: 2 },
+    { x: 24, z: 48, t: 2, camp: true },
+    { x: 36, z: 38, t: 2 },
+    { x: 47, z: 33, t: 2 },
+    { x: 60, z: 40, t: 3 },
+    { x: 70, z: 56, t: 3, camp: true },
+    { x: 84, z: 64, t: 3 },
+    { x: 98, z: 62, t: 4 },
+    { x: 107, z: 50, t: 4 },
+    { x: 102, z: 36, t: 4, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 2 + fbm(seed + 23, x / 17, z / 17, 3) * 1.5 });
+  m.shape(height);
+  m.pond(38, 85, 5, Math.round(height(38, 85)) + 1, 2);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0 });
+  const night = { post: CHARCOAL, lamp: B.LAMP, floor: LAVENDER, bed: B.HAY };
+  m.camp(path, 2, { blend: 2, style: night });
+  m.camp(path, 6, { blend: 2, style: night });
+  const stones = m.camp(path, 10, { blend: 2, style: { ...night, post: B.STONE } });
+  const gazers = m.camp(path, 14, { blend: 2, style: night });
+  const mill = m.camp(path, 18, { kind: 'castle', blend: 2, style: { wall: BLUE, tower: PURPLE, stripe: WHITE, floor: LAVENDER } });
+  // Room for the great mortar beside the Moon Mill.
+  m.level(mill.x - 18, mill.z + 2, 4, 4, mill.level, PAD, 3);
+  m.finish();
+  const { world } = m;
+  // The cliffs deep blue, stars glinting in them.
+  paintCliffs(m, (x, y, z) => {
+    const r = hash2(seed + 91, x + y * 57, z);
+    return r < 0.025 ? B.STAR_BLOCK : (y + Math.floor(r * 2)) % 3 === 0 ? PURPLE : BLUE;
+  });
+  // The lantern gate over the path before its camp: two posts and a beam,
+  // lanterns hanging from it.
+  const g1 = m.along(path, 1);
+  for (const side of [-1, 1]) {
+    const x = Math.floor(g1.x - g1.dz * side * 3.2);
+    const z = Math.floor(g1.z + g1.dx * side * 3.2);
+    const g = m.ground(x, z);
+    for (let y = 1; y <= 5; y++) world.set(x, g + y, z, CHARCOAL);
+    world.set(x, g + 6, z, B.LAMP);
+    m.claim(x + 0.5, z + 0.5, 1.5, 3);
+  }
+  for (let o = -3; o <= 3; o++) {
+    const x = Math.floor(g1.x - g1.dz * o);
+    const z = Math.floor(g1.z + g1.dx * o);
+    world.set(x, g1.y + 6, z, RED);
+    if (Math.abs(o) === 1) world.set(x, g1.y + 5, z, B.LAMP);
+  }
+  // The ring of standing stones round their camp, a beam across each pair.
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.2;
+    const x = Math.floor(stones.x + Math.cos(a) * 12);
+    const z = Math.floor(stones.z + Math.sin(a) * 12);
+    standingStone(m, x, z, Math.abs(Math.sin(a)) > 0.7, 4 + (i % 2));
+  }
+  // The stargazers' telescope on its stand, looking up at the moon.
+  const tx = Math.floor(gazers.x) + 11;
+  const tz = Math.floor(gazers.z) - 3;
+  const tg = m.ground(tx, tz);
+  if (Math.abs(tg - gazers.level) <= 1) {
+    for (let y = 1; y <= 2; y++) world.set(tx, tg + y, tz, GRAY);
+    for (let l = -1; l <= 3; l++) world.set(tx + l, tg + 3 + Math.max(0, l), tz - Math.max(0, l), l === 3 ? B.GLASS : CHARCOAL);
+    m.claim(tx, tz, 3, 3);
+  }
+  // The great mortar where the rice cakes are pounded, a white heap in it;
+  // and the moon, hanging low beyond the mill.
+  const mx = Math.floor(mill.x) - 18;
+  const mz = Math.floor(mill.z) + 2;
+  const mg = m.ground(mx, mz);
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      const d = Math.hypot(dx, dz);
+      if (d > 3.3) continue;
+      for (let y = 1; y <= 3; y++) world.set(mx + dx, mg + y, mz + dz, d > 2.2 || y === 1 ? BROWN : y === 2 ? WHITE : B.AIR);
+    }
+  }
+  world.set(mx, mg + 3, mz, WHITE);
+  m.claim(mx, mz, 5, 3);
+  const moonY = Math.min(H - 8, mill.level + 15);
+  ball(m, mill.x + 17, moonY, mill.z - 13, 5.2, 5.2, 5.2, (x, y, z) => {
+    const r = hash2(seed + 7, x * 31 + y, z);
+    return r < 0.1 ? GRAY : (x + y + z) % 2 ? B.LAMP : WHITE;
+  });
+  // The lantern gate's bars, a wall of starry dark across the way round the
+  // pond, the great stone across the path, and the door of the Moon Mill.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i === 3 ? B.LAMP : (x + z) % 2 ? CHARCOAL : PURPLE), { thick: 1 });
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i < 4 ? ((x + z + i) % 3 ? BLUE : B.STAR_BLOCK) : 0), { thick: 1 });
+  rampGate(m, path, 12, 3, (x, y, z, i) => (i < 4 ? ((x * 3 + z + i) % 4 ? B.STONE : GRAY) : 0));
+  rampGate(m, path, 15, 4, (x, y, z, i) => (i === 3 ? WHITE : LAVENDER), { thick: 1, high: 5 });
+  m.trees(1500, 6, (x, z, y, rng) => (m.world.get(x, y, z) !== B.GRASS ? null : rng.chance(0.3) ? lampPost() : rng.chance(0.3) ? pineTree(rng) : rng.chance(0.2) ? willowTree(rng) : null), 6);
+  // Heather in bloom over the moor.
+  flowerRows(m, () => B.BLUEBELL, { every: 2, where: (x, z) => fbm(seed + 41, x / 14, z / 14, 2) > 0, thin: 0.3 });
+  m.flowers(10, { extra: B.MUSHROOM, rare: 0.985 });
+  m.animals({ bunny: 5, sheep: 2 }, (x, z) => z > 80);
+  for (let i = 0; i < 6; i++) m.critters.push({ type: 'firefly', x: 38.5 + Math.cos(i * 1.1) * (6 + (i % 3)), y: Math.round(height(38, 85)) + 3 + (i % 2), z: 85.5 + Math.sin(i * 1.1) * (6 + (i % 3)) });
+  return { fruit: B.FRUIT_ITEMS[4] };
+}
+
+// A tree all gone grey: a dark trunk and a crown of grey.
+function greyTree(rng) {
+  const cells = [];
+  const h = rng.int(3, 5);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, CHARCOAL]);
+  const r = 2.3;
+  for (let x = -3; x <= 3; x++) {
+    for (let y = -2; y <= 2; y++) {
+      for (let z = -3; z <= 3; z++) {
+        const d = (x / r) ** 2 + (y / (r * 0.85)) ** 2 + (z / r) ** 2;
+        if (d > 1 || (d > 0.5 && rng.chance(0.25)) || (x === 0 && z === 0 && y < 0)) continue;
+        cells.push([x, h + y, z, (x + y + z) % 5 === 0 ? WHITE : GRAY]);
+      }
+    }
+  }
+  return cells;
+}
+
+// One of Queen Grizzle's great grey umbrellas, stuck in the ground: a pole
+// and a wide canopy coming to a point.
+function umbrella(rng) {
+  const cells = [];
+  const h = rng.int(5, 7);
+  for (let y = 0; y < h; y++) cells.push([0, y, 0, CHARCOAL]);
+  for (const [r, dy] of [[3.3, 0], [2.3, 1], [1.2, 2]]) {
+    for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (Math.hypot(x, z) <= r && (dy || Math.hypot(x, z) > 0.5)) cells.push([x, h + dy, z, dy === 1 ? CHARCOAL : GRAY]);
+  }
+  cells.push([0, h + 3, 0, CHARCOAL]);
+  return cells;
+}
+
+// Chapter 7 of the second episode, Violet Vale: where the lavender grew as
+// far as you could see, all gone grey round Castle Drab. From the landing in
+// the south-west the road goes east through the Grey Garden, north over Drab
+// Bridge, west through Umbrella Court, and round to Castle Drab on its
+// height, where Queen Grizzle keeps the last colour of the rainbow.
+function vale(m) {
+  const { seed } = m;
+  m.pal.path = CHARCOAL;
+  m.pal.cliff = GRAY;
+  m.pal.rockAt = 99;
+  const nodes = [
+    { x: 18, z: 115, t: 0 },
+    { x: 29, z: 105, t: 0 },
+    { x: 42, z: 97, t: 0, camp: true },
+    { x: 56, z: 93, t: 0 },
+    { x: 69, z: 97, t: 0 },
+    { x: 84, z: 97, t: 1 },
+    { x: 98, z: 88, t: 1, camp: true },
+    { x: 106, z: 74, t: 1 },
+    { x: 104, z: 60, t: 1 },
+    { x: 96, z: 47, t: 2 },
+    { x: 84, z: 40, t: 2, camp: true },
+    { x: 70, z: 36, t: 2 },
+    { x: 57, z: 36, t: 2 },
+    { x: 44, z: 40, t: 3 },
+    { x: 34, z: 50, t: 3 },
+    { x: 40, z: 63, t: 3, camp: true },
+  ];
+  const tierAt = terraces(m, nodes);
+  const height = rainbowLand(m, tierAt, { hills: (x, z) => 1.6 + fbm(seed + 23, x / 22, z / 22, 3) * 1.1 });
+  m.shape(height);
+  const path = m.route(onTerraces(nodes, height), { slope: 0.6, blend: 0, width: 2 });
+  const drab = { post: GRAY, lamp: B.LAMP, floor: CHARCOAL, bed: WHITE };
+  const garden = m.camp(path, 2, { blend: 2, style: drab });
+  m.camp(path, 6, { blend: 2, style: drab });
+  const court = m.camp(path, 10, { blend: 2, style: drab });
+  const castle2 = m.camp(path, 15, { kind: 'castle', blend: 2, style: { wall: GRAY, tower: CHARCOAL, stripe: LAVENDER, floor: B.CHECKER_FLOOR } });
+  // Room for the keep of Castle Drab behind its yard.
+  m.level(castle2.x - 18, castle2.z, 4, 4, castle2.level, PAD, 3);
+  m.finish();
+  const { world } = m;
+  paintCliffs(m, (x, y, z) => {
+    const r = hash2(seed + 91, x + y * 57, z);
+    return r < 0.1 ? WHITE : y % 3 === 0 ? CHARCOAL : GRAY;
+  });
+  // The keep: a tall square tower, a violet light in each of its windows —
+  // the last colour of the rainbow, shut up inside.
+  const kx = Math.floor(castle2.x) - 18;
+  const kz = Math.floor(castle2.z);
+  const kg = m.ground(kx, kz);
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      const edge = Math.max(Math.abs(dx), Math.abs(dz)) === 3;
+      for (let y = m.ground(kx + dx, kz + dz) + 1; y <= kg + 15; y++) {
+        const window = edge && (y - kg) % 4 === 3 && (dx === 0 || dz === 0);
+        world.set(kx + dx, y, kz + dz, window ? LAVENDER : edge || y === kg + 15 ? GRAY : y % 5 === 0 ? B.LAMP : B.AIR);
+      }
+      if (edge && (dx + dz) % 2 === 0) world.set(kx + dx, kg + 16, kz + dz, CHARCOAL);
+    }
+  }
+  for (let y = 16; y <= 20; y++) world.set(kx, kg + y, kz, y === 20 ? PURPLE : CHARCOAL);
+  m.claim(kx, kz, 5, 3);
+  // Grey roses in the Grey Garden (and one still violet), and the great
+  // umbrellas of Umbrella Court.
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.4;
+    giantRose(m, Math.floor(garden.x + Math.cos(a) * 12), Math.floor(garden.z + Math.sin(a) * 12), i === 4 ? PURPLE : GRAY, i === 4 ? LAVENDER : WHITE);
+  }
+  const urng = new Rng(seed ^ 0x77a1);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + 0.7;
+    const x = Math.floor(court.x + Math.cos(a) * 12.5);
+    const z = Math.floor(court.z + Math.sin(a) * 12.5);
+    const g = openGround(m, x, z);
+    if (g < 0 || Math.abs(g - court.level) > 1 || m.bare[m.k(x, z)]) continue;
+    for (const [cx, cy, cz, id] of placeTemplate(umbrella(urng), x, g + 1, z, 0)) if (m.inside(cx, cz, 0) && !m.bare[m.k(cx, cz)] && SOFT[world.get(cx, cy, cz)]) world.set(cx, cy, cz, id);
+    m.claim(x + 0.5, z + 0.5, 3.5, 3);
+  }
+  // The garden gate's bars, the drawbridge up, the umbrellas shut across the
+  // way, and the door of Castle Drab.
+  rampGate(m, path, 4, 1, (x, y, z, i) => (i < 4 ? ((x + z) % 2 ? CHARCOAL : GRAY) : 0), { thick: 1 });
+  rampGate(m, path, 8, 2, (x, y, z, i) => (i === 4 ? CHARCOAL : (x + z + i) % 4 === 0 ? BROWN : B.PLANKS), { thick: 1, high: 5 });
+  rampGate(m, path, 12, 3, (x, y, z, i) => ((x + z + i) % 2 ? GRAY : CHARCOAL), { thick: 1, high: 5 });
+  m.trees(2600, 6, (x, z, y, rng) => (m.world.get(x, y, z) !== B.PEBBLES ? null : rng.chance(0.5) ? greyTree(rng) : rng.chance(0.25) ? umbrella(rng) : null), 6);
+  // The last violets, round Castle Drab where their colour is shut up.
+  flowerRows(m, () => B.BLUEBELL, { every: 2, where: (x, z) => Math.hypot(x - castle2.x, z - castle2.z) < 26, thin: 0.35 });
+  m.flowers(6, { extra: 0 });
+  m.animals({ sheep: 2 }, (x, z) => z > 96);
+  return { fruit: B.FRUIT_ITEMS[4] };
+}
+
+const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale };
 
 // ---------------------------------------------------------------- the isle
 

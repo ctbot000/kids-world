@@ -3,9 +3,10 @@
 // who started it and when, when it was last played, how many are on it now
 // and its camps freed. Each can be started over from stage 1 (↺ Start over)
 // or removed (🗑 Remove), asked first: whoever is on it is sent on, to its new
-// stage 1 or to another game. 🆕 New game starts one from stage 1.
+// stage 1 or to another game. 🆕 New game starts one from stage 1, of the
+// story's first episode or of a later one.
 import { prettyCode } from '/js/shared/codes.js';
-import { chapterOf, STAGES } from '/js/shared/isle-story.js';
+import { chapterOf, EPISODES, stageName } from '/js/shared/isle-story.js';
 
 const $ = (id) => document.getElementById(id);
 const HEADERS = { 'X-Kids-World-Admin': '1' };
@@ -32,7 +33,7 @@ export function setUpIsle({ h, ago }) {
   function row(game, count) {
     const ch = chapterOf(game.stage);
     const who = game.by ? `started by ${game.by}` : 'the first game';
-    const about = [`Stage ${game.stage} of ${STAGES}: ${ch.name}`, game.journey > 1 ? `journey ${game.journey}` : '', `${game.freed} of ${game.camps} camps free`].filter(Boolean).join(' · ');
+    const about = [`${stageName(game.stage)}: ${ch.name}`, game.journey > 1 ? `journey ${game.journey}` : '', `${game.freed} of ${game.camps} camps free`].filter(Boolean).join(' · ');
     const when = [`${who}, ${ago(game.startedAt)}`, `last played ${ago(game.playedAt)}`, game.code ? `code ${prettyCode(game.code)}` : ''].filter(Boolean).join(' · ');
     return h(
       'li',
@@ -55,7 +56,7 @@ export function setUpIsle({ h, ago }) {
           type: 'button',
           class: 'danger',
           title: count === 1 ? 'The only game: a new one from stage 1 takes its place' : 'Gone for good; whoever is on it goes on to another game',
-          onclick: () => confirm(`Remove game ${game.id} (stage ${game.stage}) for good?${game.players ? ` The ${game.players} playing it go on to another game.` : ''}${count === 1 ? ' A new game from stage 1 takes its place.' : ''}`) && call(`/games/${game.id}`, 'DELETE'),
+          onclick: () => confirm(`Remove game ${game.id} (${stageName(game.stage, true)}) for good?${game.players ? ` The ${game.players} playing it go on to another game.` : ''}${count === 1 ? ' A new game from stage 1 takes its place.' : ''}`) && call(`/games/${game.id}`, 'DELETE'),
         },
         '🗑 Remove',
       ),
@@ -82,7 +83,11 @@ export function setUpIsle({ h, ago }) {
       h('p', { class: 'muted' }, `Adventure Isle’s games, each kept apart at its own stage. ↺ Start over sends a game back to stage 1; 🗑 Remove ends it for good. Whoever is playing goes on by themselves: to the new stage 1, or to another game. At most ${max} games go on at once.`),
       note ? h('p', { class: 'error', role: 'alert' }, note) : '',
       h('ol', { class: 'recent island-list card' }, ...games.map((g) => row(g, games.length))),
-      h('p', {}, h('button', { type: 'button', class: 'primary', onclick: () => call('/games', 'POST') }, '🆕 New game')),
+      h(
+        'p',
+        { class: 'isle-new' },
+        ...EPISODES.map((ep) => h('button', { type: 'button', class: ep.n === 1 ? 'primary' : '', title: ep.title, onclick: () => call(ep.n === 1 ? '/games' : `/episodes/${ep.n}/games`, 'POST') }, ep.n === 1 ? '🆕 New game' : `${ep.icon} New game: Episode ${ep.n}`)),
+      ),
     );
   }
 

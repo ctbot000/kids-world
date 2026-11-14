@@ -93,6 +93,15 @@ const HOLLOW_TINT = new THREE.Color('#5a3f8a');
 const CRYSTAL_TINT = new THREE.Color('#5f4fd6');
 const WORKS_TINT = new THREE.Color('#c9a06a');
 const SPIRES_TINT = new THREE.Color('#2f6fff');
+// And the Rainbow Lands of its second episode: amber over the maples, golden
+// over the honeycomb, a green haze over the jungle, turquoise over the lagoon,
+// indigo over the moor, and grey over the vale that has lost its colours.
+const MAPLE_TINT = new THREE.Color('#ffae5e');
+const HONEY_TINT = new THREE.Color('#ffe08a');
+const JUNGLE_TINT = new THREE.Color('#a8e6b0');
+const LAGOON_TINT = new THREE.Color('#46d6e0');
+const MOOR_TINT = new THREE.Color('#4b3fb5');
+const VALE_TINT = new THREE.Color('#a3a7ad');
 
 // Everything the scene's lighting needs for a moment of the day.
 export function environment(time, weather, theme, out = {}) {
@@ -126,6 +135,21 @@ export function environment(time, weather, theme, out = {}) {
     top.lerp(WORKS_TINT, 0.12);
   } else if (theme === 'spires') {
     top.lerp(SPIRES_TINT, 0.25 * day);
+  } else if (theme === 'maple') {
+    horizon.lerp(MAPLE_TINT, 0.3 * day);
+  } else if (theme === 'honey') {
+    horizon.lerp(HONEY_TINT, 0.35 * day);
+  } else if (theme === 'jungle') {
+    horizon.lerp(JUNGLE_TINT, 0.3 * day);
+  } else if (theme === 'lagoon') {
+    horizon.lerp(LAGOON_TINT, 0.3 * day);
+    top.lerp(LAGOON_TINT, 0.12 * day);
+  } else if (theme === 'moor') {
+    horizon.lerp(MOOR_TINT, 0.45);
+    top.lerp(MOOR_TINT, 0.3);
+  } else if (theme === 'vale') {
+    horizon.lerp(VALE_TINT, 0.6);
+    top.lerp(VALE_TINT, 0.45);
   }
   const sunAngle = (time - 0.25) * Math.PI * 2;
   out.sunDir = (out.sunDir ?? new THREE.Vector3()).set(Math.cos(sunAngle), Math.sin(sunAngle), 0.32).normalize();

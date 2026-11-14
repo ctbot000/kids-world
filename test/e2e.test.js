@@ -19,7 +19,7 @@ import { BUMP_HP } from '../public/js/shared/monsters.js';
 import { KEYS as PIANO_KEYS, songOf } from '../public/js/shared/piano.js';
 import { CHANNELS } from '../public/js/shared/tv.js';
 import { latestNews, NEWS } from '../public/js/news.js';
-import { CHAPTERS, STAGES } from '../public/js/shared/isle-story.js';
+import { CHAPTERS, firstStage, stagesOf } from '../public/js/shared/isle-story.js';
 import { MONSTER_LOG } from '../public/js/shared/stickers.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
 import { LEARNT_AFTER, QUESTION_BANKS } from '../public/js/shared/quiz.js';
@@ -168,9 +168,9 @@ async function openPlayer(url, profile = {}, init = null) {
     rest,
     seenNews,
     seenStory ? CHAPTERS.map((c) => c.key) : null,
-    // (Both films, and the start of the first few games: the intro plays at
-    // each game's start, ui.js isleArrival.)
-    seenFilms === true ? ['intro', 'ending', ...Array.from({ length: 9 }, (_, i) => `intro@${i + 1}.1`)] : seenFilms || null,
+    // (Each episode's films, and the start of the first few games: an
+    // episode's intro plays at each game's start, ui.js isleArrival.)
+    seenFilms === true ? ['intro', 'ending', 'intro2', 'ending2', ...Array.from({ length: 9 }, (_, i) => `intro@${i + 1}.1`), ...Array.from({ length: 9 }, (_, i) => `intro2@${i + 1}.1`)] : seenFilms || null,
   );
   page.setDefaultNavigationTimeout(60000 * SLOW);
   await page.goto(url);
@@ -7385,13 +7385,14 @@ test('arriving on the shared isle tells its chapter of the story, once, and its 
 
 // Adventure Isle's films (scripts/films, public/video): the intro the first
 // time you come to the isle, before its story, skipped with Skip; and once the
-// last stage is won, the ending, and after it a new journey from stage 1.
-test('the isle’s intro plays the first time you come, before its story, and the ending once its last stage is won', { skip }, async () => {
+// first episode's last stage is won, its ending, and after it the second
+// episode's first stage.
+test('the isle’s intro plays the first time you come, before its story, and the ending once its episode’s last stage is won', { skip }, async () => {
   const games = createGameServer({ log: () => {}, publicAdventure: true });
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
   const isle = games.publicAdventure;
-  // On to the last stage, King Grumble's own Gloom Rock.
-  while (isle.stage < STAGES) {
+  // On to the first episode's last stage, King Grumble's own Gloom Rock.
+  while (isle.stage < stagesOf(1)) {
     isle.room.adventure.win(isle.room.monsters);
     isle.tick();
   }
@@ -7421,11 +7422,11 @@ test('the isle’s intro plays the first time you come, before its story, and th
     room.adventure.win(room.monsters);
     room.broadcast({ t: 'won', by: [p.id], hero: p.id, x: room.adventure.castle.x, y: room.adventure.castle.y, z: room.adventure.castle.z });
     await until(page, () => document.querySelector('#modal.film video')?.getAttribute('src') === 'video/isle-ending.mp4');
-    // Meanwhile a new journey is up: on to stage 1, held while the film plays.
+    // Meanwhile the second episode is up: on to its stage 1, held while the film plays.
     isle.tick();
-    assert.deepEqual([isle.stage, isle.journey], [1, 2]);
+    assert.deepEqual([isle.stage, isle.journey], [firstStage(2), 1]);
     await until(page, () => !document.getElementById('next-stage').hidden);
-    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /A new journey! Stage 1, Shipwreck Shore/);
+    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /Episode 2! Stage 1, Tulip Fields/);
     await page.evaluate(() => (window.kidsWorld.ui.nextGo.left = 1));
     await delay(2500);
     assert.equal(await page.evaluate((code) => window.kidsWorld.game.code === code, room.code), true, 'held while the ending plays');
@@ -7486,10 +7487,11 @@ test('a new game of the isle starts from stage 1, from the title or the isle, wh
   try {
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 2);
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 3);
     const rows = await page.$$eval('#modal .isle-game', (els) => els.map((el) => el.textContent));
     assert.match(rows[0], /Stage 3 of 12: Frostpeak Pass/);
     assert.match(rows[1], /Start a new game/);
+    assert.match(rows[2], /Start Episode 2.*The Rainbow of Adventure Isle, from Tulip Fields/);
     await clickButton(page, 'Start a new game', '#modal');
     await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code !== code && window.kidsWorld.game?.adventure?.stage === 1, first.code);
     await inGame(page);
@@ -7514,7 +7516,121 @@ test('a new game of the isle starts from stage 1, from the title or the isle, wh
     await clickButton(page, 'Leave island', '#modal');
     await until(page, () => !document.getElementById('title').hidden);
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 4);
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 5);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// The second episode of the isle's story (shared/isle-story.js): started from
+// the title in a game of its own, with its own intro film, its story — the
+// rainbow's seven colours to win back — and its stages counted from 1 again;
+// its first boss popped, red is back.
+test('the isle’s second episode starts from the title in a game of its own, with its own intro, story and colours to win back', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  isle.room.adventure.win(isle.room.monsters);
+  isle.tick();
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenStory: false, seenFilms: ['intro', 'ending', 'intro@1.1'] });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await until(page, () => document.querySelector('#modal .isle-game.new[data-episode="2"]'));
+    await page.click('#modal .isle-game.new[data-episode="2"]');
+    await until(page, (first) => window.kidsWorld.session?.started && window.kidsWorld.game?.adventure?.stage === first, firstStage(2));
+    await inGame(page);
+    assert.deepEqual(isle.runs.map((r) => r.stage), [2, firstStage(2)], 'a game of its own, the other where it was');
+    // Its own intro, then its story: the first chapter of the second episode.
+    await until(page, () => document.querySelector('#modal.film video')?.getAttribute('src') === 'video/isle-intro2.mp4');
+    await until(page, () => document.querySelector('#modal video')?.currentTime > 0.3);
+    await page.click('#modal .film-skip');
+    await until(page, () => document.querySelector('#modal .story-title'));
+    const story = await page.evaluate(() => ({
+      kicker: document.querySelector('#modal .story-kicker').textContent,
+      title: document.querySelector('#modal .story-title').textContent,
+      dots: document.querySelectorAll('#modal .story-shards.colours .hue').length,
+      got: document.querySelectorAll('#modal .story-shards .hue.got').length,
+      text: document.querySelector('#modal .story-text').textContent,
+      films: [...document.querySelectorAll('#modal .story-films button')].map((b) => b.textContent),
+    }));
+    assert.equal(story.kicker, '📖 Episode 2 · The Rainbow of Adventure Isle');
+    assert.match(story.title, /Chapter 1: Tulip Fields/);
+    assert.deepEqual([story.dots, story.got], [7, 0], 'seven colours, none back yet');
+    assert.match(story.text, /Queen Grizzle.*Lady Dotty/);
+    assert.deepEqual(story.films, ['🎬 Watch the intro'], 'its ending not seen yet');
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending', 'intro2', 'intro@1.1', 'intro2@2.1']);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    assert.equal(await page.$eval('#island-stage', (el) => (el.hidden ? '' : el.textContent)), '🌈 Stage 1');
+    // The island's card: which episode, its stage of how many, its colours.
+    await page.click('#island-badge');
+    await until(page, () => document.querySelector('#modal .adventure-list'));
+    const card = await page.$eval('#modal .adventure-list', (el) => el.textContent);
+    assert.match(card, /Episode 2The Rainbow of Adventure Isle/);
+    assert.match(card, /Stage1 of 7/);
+    assert.match(card, /Colours0 of 7/);
+    assert.match(card, /Lady Dotty, Rose Bower/);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+
+    // Lady Dotty popped: red is back, and on to stage 2 of the episode.
+    const room = isle.runs[1].entry.room;
+    const [p] = [...room.players.values()];
+    room.adventure.win(room.monsters);
+    room.broadcast({ t: 'won', by: [p.id], hero: p.id, x: room.adventure.castle.x, y: room.adventure.castle.y, z: room.adventure.castle.z });
+    await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('Red is back') && t.textContent.includes('1 of 7 colours of the rainbow back!')));
+    isle.tick();
+    await until(page, () => !document.getElementById('next-stage').hidden);
+    assert.match(await page.$eval('#next-stage', (el) => el.textContent), /^🍁Stage 2, Maple Ridge, in/);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// On the isle there is no way round a gate that is still shut (shared/
+// adventure.js stepSneaks): whoever stands past one — having swum round, say —
+// is sent back to the nearest safe place a moment later, told why.
+test('on the isle, standing past a gate that is still shut sends you back to the start, told why', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    const room = isle.room;
+    const [first, second] = room.adventure.camps;
+    const put = (c) =>
+      page.evaluate(
+        (at) => {
+          const kw = window.kidsWorld;
+          Object.assign(kw.game.me.body, { x: at[0], y: at[1], z: at[2], vx: 0, vy: 0, vz: 0 });
+          kw.game.sendMove(true);
+        },
+        [c.x, c.y, c.z + 2],
+      );
+    const told = () => page.evaluate(() => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('There is no way round a gate')));
+    // (Nothing bumps them meanwhile.)
+    const safe = setInterval(() => {
+      for (const p of room.players.values()) p.safeUntil = Date.now() + 60000;
+    }, 100);
+    try {
+      // By the first camp, on the way: nothing.
+      await put(first);
+      await delay(1600);
+      assert.equal(await told(), false);
+      // By the second, past the first gate: back to the start.
+      await put(second);
+      await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('There is no way round a gate')));
+      const far = await page.evaluate((s) => Math.hypot(window.kidsWorld.game.me.body.x - s.x, window.kidsWorld.game.me.body.z - s.z), room.world.spawn);
+      assert.ok(far < 2, `back at the start: ${far}`);
+    } finally {
+      clearInterval(safe);
+    }
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -8706,7 +8822,7 @@ test('the admin page watches any island it kept: live while it is played, and it
   }
 });
 
-test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
+test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, the first of a kind filling its page in the 🐟 Fish Dictionary (📖 beside 🎣 Fish, and the backpack), too soon scares it off, and walking off reels in', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // Level ground beside the start, cleared, with a pond dug in front, to the east.
@@ -8770,6 +8886,42 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.profile.basket.fish, window.kidsWorld.profile.data.stats.fished, Boolean(window.kidsWorld.profile.data.stickers['gone-fishing'])]), [1, 1, true]);
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => /You caught a Minnow, \d+ cm long!/.test(t.textContent)));
   await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
+  // The first minnow fills its page in the 🐟 Fish Dictionary, with a cheer,
+  // counted with the rest of what you do (so it goes with a login).
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('New in your 🐟 Fish Dictionary: Minnow!')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.caughtminnow), 1);
+  // It opens from a 📖 beside the 🎣 Fish button, not over it.
+  await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish') && !document.getElementById('fishbook').hidden);
+  const apart = await page.evaluate(() => {
+    const a = document.getElementById('fishbook').getBoundingClientRect();
+    const b = document.getElementById('ride').getBoundingClientRect();
+    return a.width > 0 && (a.right <= b.left || a.left >= b.right);
+  });
+  assert.ok(apart, 'the 📖 beside the 🎣 Fish button');
+  await page.click('#fishbook');
+  const book = () =>
+    page.evaluate(() => ({
+      heading: document.querySelector('#modal-body .collection-head')?.textContent,
+      pages: [...document.querySelectorAll('#modal-body .fish-page')].map((el) => `${el.dataset.fish}${el.classList.contains('missing') ? '' : ' caught'}${el.classList.contains('fresh') ? ' new' : ''}`),
+      minnow: document.querySelector('#modal-body .fish-page[data-fish="minnow"]')?.textContent,
+      golden: document.querySelector('#modal-body .fish-page[data-fish="goldfish"]')?.textContent,
+    }));
+  // Every kind drawn in 3D (render/gasha-stage.js), the ones still to catch
+  // as dark shapes of themselves.
+  await until(page, () => [...document.querySelectorAll('#modal-body .fish-page img')].filter((img) => img.src.startsWith('data:image/png')).length === 6);
+  const opened = await book();
+  assert.match(opened.heading, /^1 of 6 kinds caught/);
+  assert.deepEqual(opened.pages, ['minnow caught new', 'perch', 'clownfish', 'trout', 'puffer', 'goldfish']);
+  assert.match(opened.minnow, /Minnow.*Caught 1/);
+  assert.match(opened.golden, /\?\?\?✨ Rare15–30 cm/, 'the golden fish unnamed till caught, and rare');
+  // And from the 🎒 backpack: its 🐟 Fish chip.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await page.evaluate(() => [...document.querySelectorAll('#modal-body .dialog-head .chip')].find((b) => b.textContent === '🐟 Fish').click());
+  await until(page, () => document.querySelector('#modal-body .fish-grid'));
+  assert.equal((await book()).pages.filter((p) => p.includes('caught')).length, 1);
+  await page.keyboard.press('Escape');
+  await until(page, () => !window.kidsWorld.ui.modalOpen);
   // Too soon: it is scared off, and the line comes in empty.
   await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish'));
   await page.keyboard.press('KeyQ');

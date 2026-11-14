@@ -1,6 +1,7 @@
 // The stickers you earn for what you do, and the things the game counts
 // that earn them. Shared, so the keeper can tell real stickers from made-up
 // ones when it ranks players (see ranking.js).
+import { FISH_KINDS } from './fishing.js';
 import { MONSTER_FIGURES, TOYS } from './gashapon.js';
 import { CHANNELS } from './tv.js';
 
@@ -157,8 +158,12 @@ export const STICKERS = [
 // every kind of monster, the easiest first (the bosses last, in the order
 // of the chapters they hold: bosses.js), each counted twice, as seen
 // (seen<kind>, 1 once you have) and as popped (pop<kind>, how many).
-export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'rattle', 'wolf', 'hawk', 'golem', 'stinger', 'mimic', 'queen', 'wizard', 'oak', 'cyclops', 'hydra', 'rex', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king'];
+export const MONSTER_LOG = ['blob', 'snapper', 'cub', 'mosquito', 'spiky', 'mole', 'shroom', 'gummy', 'spider', 'big', 'yeti', 'knight', 'ghost', 'rattle', 'wolf', 'hawk', 'golem', 'stinger', 'mimic', 'queen', 'wizard', 'oak', 'cyclops', 'hydra', 'rex', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle'];
 export const seenKey = (kind) => `seen${kind}`;
 export const popKey = (kind) => `pop${kind}`;
+// The 🐟 Fish Dictionary (ui.js fishDialog): every kind of fish there is
+// to catch (fishing.js FISH_KINDS), counted as caught<kind>. Kept with
+// the other counts, so a kind caught on one device is caught on them all.
+export const caughtKey = (kind) => `caught${kind}`;
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'escalators', 'walkways', 'stockbuys', 'stockwins', 'stockgain', 'stocksheld', 'stockworld', 'wishes', 'slices', 'presents', 'balloons', 'bounces', 'ropejumps', 'ropebest', 'campouts', 'freed', 'helped', 'kings', 'queens', 'beasts', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'volcanohouses', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'chests', 'keys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'gomokugames', 'gomokuwins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered', 'pearls', 'islands', 'laps', 'races', 'racewins', 'escapes', 'tornadoes', 'coasters', 'typed', 'typewpm', 'rainbest', 'robotruns', 'fished', 'fishcm', 'earned', ...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)])];
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'escalators', 'walkways', 'stockbuys', 'stockwins', 'stockgain', 'stocksheld', 'stockworld', 'wishes', 'slices', 'presents', 'balloons', 'bounces', 'ropejumps', 'ropebest', 'campouts', 'freed', 'helped', 'kings', 'queens', 'beasts', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'volcanohouses', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'chests', 'keys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'gomokugames', 'gomokuwins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered', 'pearls', 'islands', 'laps', 'races', 'racewins', 'escapes', 'tornadoes', 'coasters', 'typed', 'typewpm', 'rainbest', 'robotruns', 'fished', 'fishcm', 'earned', ...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key))];

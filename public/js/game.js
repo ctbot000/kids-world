@@ -30,12 +30,12 @@ import { newRope, packTurn, ROPE, stepRope, unpackTurn } from './shared/jump-rop
 import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
-import { chapterOf, SHARDS } from './shared/isle-story.js';
+import { chapterOf, tokensBack } from './shared/isle-story.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { popKey, seenKey } from './shared/stickers.js';
+import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, maxHp, moleUnder, SPORES, staggerOf, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
@@ -263,10 +263,18 @@ const TOUGH_TOLD = {
   baronboo: { icon: '🎩', text: 'Baron Boo! He vanishes and pops up somewhere else, so keep looking about. Run out of the red rings where his pumpkins land, and step back out of his cold mist!' },
   sprocket: { icon: '🤖', text: 'Big Sprocket! Jump when he stomps, run out of the red rings where his gears rain down, and keep out of the way of the steam from his mouth!' },
   nimbus: { icon: '🌩️', text: 'Old Nimbus! Run out of the red rings, where his lightning strikes, and step back when he puffs himself up to blow a gale!' },
+  // And of its second episode.
+  dotty: { icon: '🐞', text: 'Lady Dotty! Step out of the strip when she tucks in her legs to come rolling, and run out of the red ring when her wings open — she is about to land on it!' },
+  bushytail: { icon: '🐿️', text: 'Duke Bushytail! Run out of the red rings where his acorns come down, and out of the big one when he crouches to bound at you!' },
+  bumble: { icon: '🐝', text: 'Baroness Bumble! Run out of the red rings where her honey comes down, step out of the strip when her sting curls under her, and step back from her cloud of pollen!' },
+  blendalot: { icon: '🦎', text: 'Sir Blendalot! He fades away and pops up somewhere else, so keep looking about — and run out of the red rings where his bananas land!' },
+  inkwell: { icon: '🐙', text: 'Admiral Inkwell! Jump when all his arms go up — they come down all round him — and run out of the red rings where his ink lands!' },
+  mochi: { icon: '🐇', text: 'Mochi the Moon Rabbit! Jump when his mallet goes up — it shakes the whole moor — and run out of the red ring when he crouches to bound at you!' },
+  grizzle: { icon: '👸', text: 'Queen Grizzle! Run out of the red rings where her smudges land, jump when she stomps — and when her umbrella opens she floats off, so look about for where she comes down!' },
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
-const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack' };
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack', berry: 'splat', acorn: 'whack', honey: 'splat', banana: 'boing', ink: 'splat', ricecake: 'boing', smudge: 'splat' };
 // What a Swamp Hydra breathes (and anything else that is no fire).
 const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
 // Big Sprocket's steam.
@@ -275,8 +283,6 @@ const STEAM_COLORS = ['#ffffff', '#eef2f6', '#d8e0e8', '#f6f9fc', '#c8d2dc'];
 const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // How long after the isle's last stage is won its ending film starts (ui.js).
 const ENDING_AFTER_MS = 3500;
-// About how long the ending film is: its extra-credit quizzes are offered after it.
-const ENDING_FILM_MS = 72000;
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
@@ -805,7 +811,7 @@ export class Game extends EventTarget {
           this.stomped(msg);
           this.sound.play('roar');
         } else if (msg.kind === 'spores' && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 40)) {
-          this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, ['gas', 'mist', 'gust'].includes(msg.what) ? msg.what : 'spores');
+          this.renderer.effects.spores(msg.x, msg.y, msg.z, Number.isFinite(msg.r) ? msg.r : SPORES.reach, ['gas', 'mist', 'gust', 'pollen', 'ink', 'drizzle'].includes(msg.what) ? msg.what : 'spores');
           this.sound.play('blow');
         }
         // A boss's moves (shared/bosses.js): what shows before they come.
@@ -1579,8 +1585,8 @@ export class Game extends EventTarget {
   }
 
   // Back to a safe place (at, as [x, y, z]; or the start of the island), and
-  // on your feet with all your HP.
-  goHome(at, text) {
+  // on your feet (with all your HP, unless the text says why else you go).
+  goHome(at, text, icon = '💖') {
     if (this.pianoAt) {
       this.pianoAt = null;
       this.emit('piano-gone');
@@ -1597,7 +1603,7 @@ export class Game extends EventTarget {
     this.renderer.view.ready = false;
     this.renderer.effects.sparkles(b.x, b.y + 1, b.z, 20);
     this.sendMove(true);
-    this.emit('toast', { icon: '💖', text });
+    this.emit('toast', { icon, text });
   }
 
   // A monster popped: bopped or jumped on.
@@ -2932,14 +2938,16 @@ export class Game extends EventTarget {
       return;
     }
     if (this.adventure && Number.isInteger(msg.hearts)) this.adventure.king = { hearts: msg.hearts, max: msg.max, second: msg.second === true || this.adventure.king?.second === true };
-    // King Grumble puffing himself up, at the very end of the story.
+    // The last boss of an episode (King Grumble, Queen Grizzle) puffing up,
+    // at the very end of its tale.
     if (msg.second) {
       if (p) {
         this.renderer.effects.sparkles(p.x, p.y + 1.5, p.z, 60, ['#b18cff', '#ffd84d', '#ff8fc4', '#ffffff']);
         this.renderer.shake(0.35);
       }
       this.sound.play('roar');
-      this.emit('toast', { icon: '😤', text: 'King Grumble puffs himself up, bigger and grumpier than ever — and gets half his hearts back! Keep at him, together!' });
+      const boss = this.bossInfo();
+      this.emit('toast', { icon: '😤', text: `${boss.name} puffs ${boss.she ? 'herself' : 'himself'} up, bigger and grumpier than ever — and gets half ${boss.she ? 'her' : 'his'} hearts back! Keep at ${boss.she ? 'her' : 'him'}, together!` });
     }
     if (entry) entry.model.squash = msg.dazed ? 0.6 : 0.45;
     if (entry) entry.flashUntil = performance.now() + FLASH_MS;
@@ -3072,8 +3080,9 @@ export class Game extends EventTarget {
       // (shared/quiz.js): the offer comes up by itself once the fireworks
       // have had their moment (updateAdventure), and after that waits with
       // the 🎓 by the flag (ui.js) for as long as you stay.
-      // (At the end of the story, the ending film first: ui.js endingFilm.)
-      const after = adv?.story?.final ? ENDING_AFTER_MS + ENDING_FILM_MS : WIN_OFFER_MS;
+      // (At the end of an episode, its ending film first, however long that
+      // is: ui.js endingFilm.)
+      const after = adv?.story?.final ? ENDING_AFTER_MS + adv.story.episode.films.endingMs : WIN_OFFER_MS;
       this.quizOffer = { at: performance.now() + after, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
     }
     if (this.dizzy) {
@@ -3084,9 +3093,10 @@ export class Game extends EventTarget {
     const boss = this.bossInfo();
     const what = hero ? `${hero} popped ${boss.name}!` : 'Every camp is free!';
     const story = adv?.story;
-    // On the isle, the chapter's ending, and the Star Shards won back so far.
-    if (story) this.emit('toast', { icon: '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${story.shards < SHARDS ? `${story.shards} of ${SHARDS} Star Shards back!` : `All ${SHARDS} Star Shards!`}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
-    // The end of the story: its ending, once the fireworks have had a moment (ui.js).
+    // On the isle, the chapter's ending, and the Star Shards (or the colours
+    // of the rainbow) won back so far.
+    if (story) this.emit('toast', { icon: story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    // The end of an episode: its ending, once the fireworks have had a moment (ui.js).
     if (story?.final) setTimeout(() => this.adventure === adv && this.emit('ending'), ENDING_AFTER_MS);
     else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
     this.emit('adventure');
@@ -3235,7 +3245,7 @@ export class Game extends EventTarget {
       return;
     }
     this.profile.useKey();
-    const got = chestTreasure(Math.random, this.adventure?.stage ?? 1);
+    const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1);
     this.profile.earn(got.coins);
     if (got.potion) got.potion = this.profile.findPotion();
     this.profile.count('chests');
@@ -3296,7 +3306,9 @@ export class Game extends EventTarget {
     if (p) p.dizzy = false;
     if (msg.pid !== this.pid || !this.me) return;
     this.setHp(msg);
-    this.goHome(msg.at, 'Back you go to the nearest safe place, with all your HP.');
+    // (Sent back from past a gate of the isle that is still shut: room.js sendBack.)
+    if (msg.why === 'gate') this.goHome(msg.at, 'There is no way round a gate! Free the camp before it, and it opens. Back you go.', '🚧');
+    else this.goHome(msg.at, 'Back you go to the nearest safe place, with all your HP.');
   }
 
   // Each frame: the flags where their camps are, fireworks going off, stars
@@ -3531,10 +3543,10 @@ export class Game extends EventTarget {
     this.profile.openCapsule(monster);
   }
 
-  // Adventure Isle's stage, for the Monster Gashapon's odds (1 anywhere
-  // else).
+  // How hard Adventure Isle's stage is (as a stage of its first episode),
+  // for the Monster Gashapon's odds (1 anywhere else).
   gashaStage() {
-    return this.adventure?.stage ?? 1;
+    return this.adventure?.story.level ?? 1;
   }
 
   // Whether the machine whose window is open is still there (the Monster
@@ -5262,6 +5274,16 @@ export class Game extends EventTarget {
     if (c.basket) {
       const best = this.profile.data.stats.fishcm ?? 0;
       this.profile.addToBasket(c.basket, 1);
+      // Each kind of fish counted on its own (stickers.js caughtKey): the
+      // first of a kind fills its page in the 🐟 Fish Dictionary.
+      if (c.basket === 'fish') {
+        const first = !(this.profile.data.stats[caughtKey(c.key)] > 0);
+        this.profile.count(caughtKey(c.key));
+        if (first) {
+          this.sound.play('newfish');
+          this.emit('newfish', { key: c.key, name: c.name, icon: c.icon, rare: c.rare });
+        }
+      }
       this.profile.count(c.basket === 'fish' ? 'fished' : c.basket === 'shell' ? 'shells' : 'pearls');
       if (c.basket === 'fish') this.profile.count('fishcm', c.length, { max: true });
       this.sound.play('collect');
