@@ -202,6 +202,7 @@ test('harder stickers, and legendary ones after them, come only long after the e
     ['memory-master', 'perfect-recall', 'pairsfound', 5000],
     ['brainiac', 'genius', 'quizperfect', 100],
     ['harvest-champion', 'farm-tycoon', 'harvested', 10000],
+    ['chest-hunter', 'great-thief', 'chests', 1000],
   ];
   const byKey = new Map(STICKERS.map((s, i) => [s.key, { ...s, i }]));
   assert.equal(byKey.size, STICKERS.length, 'every key is its own');
