@@ -250,6 +250,9 @@ export const STOCK_TERMINAL = furniture(406, 'stock-terminal', { name: 'Stock Te
 export const STOCK_TICKER = furniture(410, 'stock-ticker', { name: 'Stock Ticker', color: '#1c2230', after: 406, solid: false, wall: true, light: 6, sound: 'glass', real: 'stock-ticker' });
 export const BULL_STATUE = furniture(414, 'bull-statue', { name: 'Golden Bull', color: '#e0b04c', after: 410, sound: 'stone', real: 'bull-statue' });
 export const BEAR_STATUE = furniture(418, 'bear-statue', { name: 'Bronze Bear', color: '#8f5a34', after: 414, sound: 'stone', real: 'bear-statue' });
+// A dish (shared/dish.js): a plate to set food from your basket on, up to
+// three pieces, for everyone to see and take from. After the bear statue.
+export const DISH = furniture(424, 'dish', { name: 'Dish', color: '#f7f5ef', after: 418, sound: 'glass' });
 export const FIREPLACE = furniture(133, 'fireplace', { name: 'Fireplace', color: '#b55d45', light: 12, sound: 'stone' });
 // Hangs on a wall: put it against one and it faces out from it.
 export const PICTURE = furniture(137, 'picture', { name: 'Picture', color: '#f5c542', solid: false, wall: true, sound: 'wood' });
@@ -652,6 +655,10 @@ export const cropByKey = (key) => CROPS.find((c) => c.key === key) ?? null;
 // What animals and pets will eat from your basket: fruit and vegetables.
 export const FOODS = [...FRUITS.map(([key]) => key), ...CROPS.map((c) => c.key)];
 export const isFood = (key) => FOODS.includes(key);
+// What a dish holds (shared/dish.js): fruit, vegetables, cookies or fish, the
+// kinds you carry in your basket.
+export const DISH_FOODS = [...FOODS, 'cookie', 'fish'];
+export const isDishFood = (key) => DISH_FOODS.includes(key);
 // Gem rocks, which a tap digs a jewel out of.
 export const GEM_ROCK = new Uint8Array(BLOCK_IDS);
 for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;

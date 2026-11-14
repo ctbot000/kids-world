@@ -736,6 +736,13 @@ const MODELS = {
     return out;
   },
 
+  // A dish: a shallow plate with a rim, standing on the floor or on a table.
+  // The food set on it (shared/dish.js) is drawn over the plate by the mesher
+  // (render/mesher.js dishFood), so the dish itself is only the plate.
+  dish() {
+    return [box(0.22, 0, 0.22, 0.78, 0.05, 0.78, '#f2f0e8', 'plain'), box(0.28, 0.05, 0.28, 0.72, 0.08, 0.72, '#fbfaf5', 'plain')];
+  },
+
   // A pet's bed (shared/pets.js): a round basket of woven bands with a soft
   // pink cushion in it and a little pillow at the back, for a pet to curl up
   // in at night.
