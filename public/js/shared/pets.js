@@ -304,14 +304,16 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   }
   let target = null;
   let fast = false;
-  // A baby penguin's own way of catching up: left behind, it flops onto its
-  // tummy and slides after you, standing up again once it is close by.
+  // A baby penguin's own way of catching up: when you run off, or it is left
+  // behind, it flops onto its tummy and slides after you (over a little hop
+  // too), standing up again once you slow down and it is close by.
   if (pet.info.slides) {
-    const flat = !b.inWater && b.onGround && !tricking && !posing && pet.mode !== 'bed';
+    const can = !b.inWater && !tricking && !posing && pet.mode !== 'bed';
+    const dashing = owner.moving && owner.speed > pet.info.walk + 1;
     if (pet.sliding) {
-      if (!flat || !going || d <= FOLLOW * 0.8) pet.sliding = false;
+      if (!can || (!dashing && (!going || d <= FOLLOW * 0.8))) pet.sliding = false;
       else fast = true;
-    } else if (flat && going && d > RUN_AT) {
+    } else if (can && b.onGround && going && (d > RUN_AT || dashing)) {
       pet.sliding = true;
       fast = true;
     }

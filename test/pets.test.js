@@ -280,6 +280,22 @@ test('run ahead and a baby penguin flops onto its tummy and slides to catch up, 
   assert.ok(!seen.has('slide'), `a walk is no slide: ${[...seen]}`);
 });
 
+test('run off and a baby penguin slides after you on its tummy all the way, and stands up when you stop', () => {
+  const world = meadow();
+  const me = makeBody(4.5, 6, 24.5);
+  const pet = makePet('penguin', 3.5, 6, 24.5);
+  together(world, me, pet, { mx: 0, mz: 0 }, 2);
+  // Running keeps it close behind you, so it is never far behind: it slides
+  // because you run, and keeps sliding while you do.
+  const poses = [];
+  together(world, me, pet, { mx: 1, mz: 0, run: true }, 3.5, { look: (p) => poses.push(petPose(p)) });
+  const late = poses.slice(60);
+  assert.ok(late.every((p) => p === 'slide'), `sliding along behind you: ${[...new Set(late)]}`);
+  assert.ok(Math.hypot(pet.x - me.x, pet.z - me.z) < 3.6, 'close behind you');
+  together(world, me, pet, { mx: 0, mz: 0 }, 3);
+  assert.ok(!pet.sliding && pet.state === 'sit', `up on its feet beside you: ${pet.state}`);
+});
+
 test('in the water a baby penguin paddles after you, and it swims quicker than it walks', () => {
   const world = meadow();
   // A long pond, a block below the grass, from one side to the other.
@@ -485,3 +501,4 @@ test('a parrot repeats what you say, about a second later; asleep or far behind,
   together(world, me, sleepy, { mx: 0, mz: 0 }, 2, { night: true, look: (p, ev) => (kept = ev.echoed ?? kept) });
   assert.ok(!kept, 'asleep: it stays quiet');
 });
+
