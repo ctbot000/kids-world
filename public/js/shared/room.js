@@ -36,6 +36,7 @@ import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
 import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
+import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
 import { CHEST_REACH } from './treasure.js';
 import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
@@ -225,6 +226,9 @@ export class Room {
     // The robots and programs at the island's robot kits (robokit.js), by
     // cell: { x, y, z, kit }. Saved with the island.
     this.kits = new Map();
+    // The food set on the island's dishes (dish.js), by cell: { x, y, z,
+    // food: [key, ...] }. Saved with the island.
+    this.dishes = new Map();
     // The robots let out of their kits, driving on the island, by their
     // kit's cell: { k, at, sim, env, since, stopped }. Never saved.
     this.bots = new Map();
@@ -371,6 +375,8 @@ export class Room {
       // A robot kit picked up takes its robot and program with it.
       if (isKit(before) && !isKit(after) && this.kits.delete(k)) this.broadcast({ t: 'kit', at: [x, y, z], kit: null });
       if (isKit(before) && !isKit(after)) this.botHome(k);
+      // A dish picked up (or painted over): what is on it goes with it.
+      if (isDish(before) && !isDish(after) && this.dishes.delete(k)) this.sendDishes();
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
@@ -615,6 +621,9 @@ export class Room {
       }
       case 'draw':
         this.draw(conn, p, msg);
+        break;
+      case 'dish':
+        this.dish(conn, p, msg);
         break;
       case 'kit':
         this.kit(conn, p, msg);
@@ -928,6 +937,7 @@ export class Room {
       race: this.raceSim()?.pack(this.now()) ?? null,
       go: this.go.pack(),
       drawings: this.packDrawings(),
+      dishes: this.packDishes(),
       kits: this.packKits(),
       bots: this.packBots(),
       ...(this.screens ? { screens: this.screens } : {}),
@@ -3037,6 +3047,41 @@ export class Room {
     this.changed();
   }
 
+  // ------------------------------------------------ dishes
+
+  // Food set on a dish, or taken off it (dish.js), by someone standing at
+  // it: kept, and passed on to everyone else. `food` is the pieces on it
+  // after the change, [] when the last is taken off.
+  dish(conn, p, msg) {
+    const at = msg.at;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isDish(this.world.get(...at))) return;
+    if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
+    if (this.ownerWho) {
+      this.notice(conn, `${this.world.name} stays just as it is — no laying the table here!`);
+      return;
+    }
+    // Only pieces of food, never more than a dish holds.
+    if (!Array.isArray(msg.food) || msg.food.length > DISH_MAX) return;
+    const food = cleanDishFood(msg.food);
+    if (food.length !== msg.food.length) return;
+    const k = this.world.index(...at);
+    const was = this.dishes.get(k)?.food ?? [];
+    // One piece at a time comes or goes, so nothing is conjured or spirited
+    // away: every kind but one is as it was, and that one has one more or one
+    // fewer piece on it.
+    const counts = new Map();
+    for (const f of was) counts.set(f, (counts.get(f) ?? 0) + 1);
+    for (const f of food) counts.set(f, (counts.get(f) ?? 0) - 1);
+    const changes = [...counts.values()].filter((n) => n !== 0);
+    if (changes.length !== 1 || Math.abs(changes[0]) !== 1) return;
+    if (food.length) this.dishes.set(k, { x: at[0], y: at[1], z: at[2], food });
+    else this.dishes.delete(k);
+    // To everyone, whoever did it too: it is when the island says so that
+    // their basket gives the piece up, or gets it back (game.js dishHeard).
+    this.broadcast({ t: 'dish', pid: p.id, at, food });
+    this.changed();
+  }
+
   // ▶ On the island at a robot kit: its robot drives out in front of it and
   // runs its program on the island itself, for everyone (robokit.js
   // IslandEnv); or, op 'home', it is called back.
@@ -3141,6 +3186,17 @@ export class Room {
     return [...this.drawings.values()].map((d) => [d.x, d.y, d.z, encodePicture(d.px)]);
   }
 
+  // The dishes' food, as [x, y, z, [key, ...]] each.
+  packDishes() {
+    return [...this.dishes.values()].map((d) => [d.x, d.y, d.z, d.food]);
+  }
+
+  // The dishes' food now, told to everyone there (a dish changed, or the
+  // island opened with food on them).
+  sendDishes() {
+    this.broadcast({ t: 'dishes', d: this.packDishes() });
+  }
+
   // ------------------------------------------------ saving
 
   exportSave() {
@@ -3169,6 +3225,7 @@ export class Room {
       ...(this.defense ? { defense: this.defense.save() } : {}),
       ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
       ...(this.kits.size ? { kits: this.packKits() } : {}),
+      ...(this.dishes.size ? { dishes: this.packDishes() } : {}),
     };
   }
 
@@ -3211,6 +3268,13 @@ export class Room {
       const [x, y, z, raw] = row;
       const kit = cleanKit(raw);
       if (kit && isKit(this.world.get(x, y, z))) this.kits.set(this.world.index(x, y, z), { x, y, z, kit });
+    }
+    // The food, on the dishes still there.
+    for (const row of Array.isArray(save.dishes) ? save.dishes : []) {
+      if (!Array.isArray(row) || !row.slice(0, 3).every(Number.isInteger)) continue;
+      const [x, y, z, raw] = row;
+      const food = cleanDishFood(raw);
+      if (food.length && isDish(this.world.get(x, y, z))) this.dishes.set(this.world.index(x, y, z), { x, y, z, food });
     }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';

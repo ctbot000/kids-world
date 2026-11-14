@@ -644,6 +644,63 @@ const PAINT = {
     PAINT['pine-leaves'](ctx);
     wavyBand(ctx, '#f6f9ff', 14, 9);
   },
+  // A cactus's flesh: green ribs running up it, with pale spines along them.
+  cactus(ctx) {
+    fill(ctx, '#3f9e4f');
+    const rib = (x, dark) => {
+      ctx.fillStyle = dark ? 'rgba(24,80,36,0.5)' : 'rgba(120,200,120,0.4)';
+      ctx.fillRect(x, 0, 4, TILE);
+    };
+    for (let i = 0; i < 4; i++) rib(4 + i * 14, i % 2 === 0);
+    const r = speckleRandom(87);
+    ctx.fillStyle = '#f4ecc8';
+    for (let i = 0; i < 22; i++) {
+      const x = 6 + Math.floor(r() * 4) * 14 + r() * 4;
+      const y = r() * TILE;
+      ctx.fillRect(x, y, 1.6, 3.5);
+    }
+    bevel(ctx, 0.7);
+  },
+  'cactus-top'(ctx) {
+    fill(ctx, '#4bb35c');
+    const r = speckleRandom(88);
+    ctx.fillStyle = 'rgba(24,80,36,0.45)';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(TILE / 2, TILE / 2);
+      ctx.arc(TILE / 2, TILE / 2, TILE / 2 - 2, (i / 4) * Math.PI * 2, ((i + 0.5) / 4) * Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#f4ecc8';
+    for (let i = 0; i < 10; i++) {
+      const a = r() * Math.PI * 2;
+      const d = 6 + r() * 18;
+      ctx.fillRect(TILE / 2 + Math.cos(a) * d, TILE / 2 + Math.sin(a) * d, 1.6, 1.6);
+    }
+    bevel(ctx, 0.6);
+  },
+  // A palm's fronds: long blades crossing over each other from the middle.
+  palm(ctx) {
+    fill(ctx, '#3e9e52');
+    ctx.lineCap = 'round';
+    const r = speckleRandom(89);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + r() * 0.3;
+      const dark = i % 3 === 0;
+      ctx.strokeStyle = dark ? '#2e7f42' : '#57bd68';
+      ctx.lineWidth = 4.5;
+      wrapped(TILE / 2, TILE / 2, 30, (wx, wy) => {
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.lineTo(wx + Math.cos(a) * 28, wy + Math.sin(a) * 28);
+        ctx.stroke();
+      });
+    }
+    bevel(ctx, 0.4);
+  },
+  'palm-top'(ctx) {
+    PAINT.palm(ctx);
+  },
   water(ctx) {
     fill(ctx, '#58bdf0');
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
