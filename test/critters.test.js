@@ -7,7 +7,7 @@ import * as THREE from '../public/vendor/three.module.js';
 import { CritterModel } from '../public/js/render/critter-models.js';
 import { Ripple } from '../public/js/render/effects.js';
 import * as B from '../public/js/shared/blocks.js';
-import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, flyerCounts, FLOWERS, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline, STATES, unpackCritter } from '../public/js/shared/critters.js';
+import { ANIMAL_TYPES, CRITTER_INFO, CritterSim, FIREFLY_HAND_S, flyerCounts, FLOWERS, handSpot, headTop, MAX_CRITTERS, MAX_FIREFLIES, perchAt, scaleCounts, skyline, STATES, unpackCritter } from '../public/js/shared/critters.js';
 import { sellPrice } from '../public/js/shared/shop.js';
 import { World } from '../public/js/shared/world.js';
 import { generate } from '../public/js/shared/worldgen.js';
@@ -474,4 +474,85 @@ test('a clam model gapes open to show its pearl, and shuts again', () => {
   assert.ok(Math.abs(m.shells[0].rotation.x) > 0.5, 'the shells have parted');
   for (let i = 0; i < 60; i++) m.update(0.05, 'idle', false, 2);
   assert.ok(!m.pearl.visible && !m.eyes.visible, 'shut again');
+});
+
+
+// Someone standing on the meadow (critters.js players), and the night's
+// fireflies stepped with them for so many seconds; what each step saw.
+function standing(world, sim, me, seconds, { night = true, look = () => {} } = {}) {
+  const players = new Map([[1, me]]);
+  for (let i = 0; i < seconds * 10; i++) {
+    sim.step(world, 0.1, i * 100, players, night);
+    look(i / 10);
+  }
+}
+
+test('stand still out at night and a firefly comes down onto your hand, and flits off when you move', () => {
+  const world = meadow();
+  const sim = new CritterSim(5);
+  const flies = [sim.add('firefly', 20.5, 7, 24.5), sim.add('firefly', 27.5, 7, 22.5)];
+  const me = { x: 24.5, y: 6, z: 24.5, yaw: 0.6, anim: 0, flying: false, tall: 0 };
+  let landedAt = null;
+  standing(world, sim, me, 12, { look: (t) => (landedAt ??= flies.some((f) => f.state === 'hand') ? t : null) });
+  assert.ok(landedAt !== null && landedAt > FIREFLY_HAND_S && landedAt < 10, `on your hand after ${landedAt} s`);
+  const on = flies.filter((f) => f.state === 'hand');
+  assert.equal(on.length, 1, 'one at a time');
+  const at = handSpot(me);
+  assert.ok(Math.hypot(on[0].x - at.x, on[0].y - at.y, on[0].z - at.z) < 0.05, 'right on the hand');
+  // A step, and it is off again.
+  me.x += 0.5;
+  standing(world, sim, me, 0.3);
+  assert.ok(flies.every((f) => f.state !== 'hand' && f.perch !== 'hand'), 'flown off');
+});
+
+test('no firefly lands on a hand by day, under a roof, or once you have moved off before it gets there', () => {
+  const me = () => ({ x: 24.5, y: 6, z: 24.5, yaw: 0, anim: 0, flying: false, tall: 0 });
+  const none = (world, sim, who, opts) => {
+    const f = sim.add('firefly', 21.5, 7, 24.5);
+    let landed = false;
+    standing(world, sim, who, 15, { ...opts, look: () => (landed ||= f.state === 'hand') });
+    return !landed;
+  };
+  assert.ok(none(meadow(), new CritterSim(5), me(), { night: false }), 'by day');
+  const roofed = meadow();
+  for (let x = 22; x < 28; x++) for (let z = 22; z < 28; z++) roofed.set(x, 9, z, B.PLANKS);
+  assert.ok(none(roofed, new CritterSim(5), me()), 'under a roof');
+  // Off before it gets there: it turns back and never lands.
+  const world = meadow();
+  const sim = new CritterSim(5);
+  const f = sim.add('firefly', 19.5, 7, 21.5);
+  const who = me();
+  const players = new Map([[1, who]]);
+  let t = 0;
+  while (f.goal !== 'hand' && t < 200) sim.step(world, 0.1, t++ * 100, players, true);
+  assert.ok(f.goal === 'hand' && f.state !== 'hand', 'on its way');
+  who.z += 3;
+  standing(world, sim, who, 0.5);
+  assert.ok(f.goal !== 'hand' && f.state !== 'hand' && sim.handFlyer === 0, 'turned back');
+});
+
+test('a firefly on a hand sits still and glows softly', () => {
+  const firefly = new CritterModel('firefly', 3);
+  for (let i = 0; i < 40; i++) firefly.update(0.05, 'hand', false, 0);
+  assert.equal(firefly.body.position.y, 0, 'no bobbing on a hand');
+  assert.ok(firefly.lantern.scale.x > 0, 'its lantern lit');
+  assert.equal(STATES.at(-1), 'hand', 'a new state, on the end');
+});
+
+test('with many fireflies about, only one comes down to the hand, and it gets there', () => {
+  const world = meadow();
+  const sim = new CritterSim(9);
+  const flies = [];
+  for (let i = 0; i < 8; i++) flies.push(sim.add('firefly', 21.5 + (i % 4) * 2, 7, 22.5 + Math.floor(i / 4) * 4));
+  const me = { x: 24.5, y: 6, z: 24.5, yaw: 0, anim: 0, flying: false, tall: 0 };
+  let most = 0;
+  let landedAt = null;
+  standing(world, sim, me, 15, {
+    look: (t) => {
+      most = Math.max(most, flies.filter((f) => f.goal === 'hand' || f.state === 'hand').length);
+      landedAt ??= flies.some((f) => f.state === 'hand') ? t : null;
+    },
+  });
+  assert.equal(most, 1, 'one at a time, on its way and on the hand');
+  assert.ok(landedAt !== null && landedAt < 10, `landed after ${landedAt} s`);
 });

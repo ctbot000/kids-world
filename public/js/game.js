@@ -7757,6 +7757,7 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
+      if (c.type === 'firefly' && state === 'hand') this.onYourHand(c, s);
       this.seaSights(c, s, state, now, moving);
     }
   }
@@ -7843,6 +7844,34 @@ export class Game extends EventTarget {
     this.perchedOn = c.id;
     this.profile.count('perched');
     this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
+  }
+
+  // A firefly that has landed sits right on the hand, however it sways as
+  // they stand, rather than where the island's last word of it was (which
+  // would lag and judder behind): whose hand the one nearest to it is.
+  onYourHand(c, s) {
+    const at = (this.handAt ??= c.model.group.position.clone());
+    let best = Infinity;
+    let who = null;
+    for (const p of this.players.values()) {
+      const hand = p.avatar?.hands?.[1];
+      if (!hand) continue;
+      hand.getWorldPosition(at);
+      const d = Math.hypot(at.x - s.x, at.y - s.y, at.z - s.z);
+      if (d < best) {
+        best = d;
+        who = p;
+      }
+    }
+    // Nobody's hand near where the island has it: left where it is.
+    if (!who || best > 1) return;
+    // On the back of that hand: the outside of the hand itself (the group's
+    // own point is the wrist, inside the arm), however the arm sways.
+    const rest = who.avatar.hands[1].userData.rest;
+    if (!rest.geometry.boundingSphere) rest.geometry.computeBoundingSphere();
+    const { center, radius } = rest.geometry.boundingSphere;
+    rest.localToWorld(c.model.group.position.set(center.x + radius * 0.8, center.y, center.z));
+    c.model.group.rotation.y = who.avatar.root.rotation.y;
   }
 
   // Things worth a sticker that just happen: night skies, rainbows, and a
