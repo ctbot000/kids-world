@@ -65,7 +65,7 @@ test('a toy weapon in hand: the other hand waves and goes to your heart, and arm
   };
   const bare = pose(null, 'wave');
   assert.ok(bare.right > bare.left + 0.5, 'without one, the right hand waves');
-  for (const weapon of ['sword', 'blaster', 'hammer', 'lavablade', 'bow', 'thunderspear', 'galaxyblade', 'rainbowray', 'meteorstaff']) {
+  for (const weapon of ['sword', 'blaster', 'hammer', 'lavablade', 'bow', 'thunderspear', 'galaxyblade', 'rainbowray', 'meteorstaff', 'punchglove']) {
     const wave = pose(weapon, 'wave');
     assert.ok(wave.left > wave.right + 0.5, `${weapon}: the left hand waves`);
     const hearts = pose(weapon, 'hearts');

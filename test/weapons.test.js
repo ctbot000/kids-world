@@ -1,12 +1,14 @@
 // The mightiest toy weapons (shared/shop.js), at the host and in the hand: each
 // harder than everything before it, and each with a way of its own. A Thunder
 // Spear's bolt leaping on from what it stabs, a Galaxy Blade's spin, a Rainbow
-// Ray reaching furthest, and a Meteor Staff's meteor on everything in its blast.
+// Ray reaching furthest, a Meteor Staff's meteor on everything in its blast,
+// and a King's Punch Glove whose charged punch is a shockwave round everything
+// in front of you.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { DRAGON_HEARTS } from '../public/js/shared/dragon.js';
-import { ARM_REACH } from '../public/js/shared/monsters.js';
+import { ARM_REACH, BOP_SLACK, KING_REACH, MONSTER_BODY } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { cleanGear, lookWithGear, METEOR_FALL_MS, nextLevel, WEAPONS, weaponOf, wornWeapon } from '../public/js/shared/shop.js';
 import { cleanLook } from '../public/js/shared/words.js';
@@ -168,6 +170,29 @@ test('a Meteor Staff\'s meteor comes down a moment on, on everything in a blast 
   time.t += METEOR_FALL_MS;
   room.tick();
   assert.equal(c.all('fx', 'blast')[0].z, Math.floor(z + 7) + 0.5);
+});
+
+test('a King\'s Punch Glove charges a golden shockwave: far harder than its bop, and further round than any plain swing', () => {
+  const { room, c, monster } = meadow('punchglove');
+  const { power, shock, wave } = weaponOf('punchglove');
+  const near = monster(0, 2.5);
+  const wide = monster(4.5, 2.5);
+  room.receive(c, { t: 'bop', id: near.id, king: true });
+  room.receive(c, { t: 'bop', id: wide.id, king: true });
+  assert.equal(near.hearts, 30 - shock, 'the charged punch bops harder than a plain one');
+  assert.equal(wide.hearts, 30 - shock, 'and far round to the side');
+  // A tap of the glove bops its plain power, not the shock.
+  const tap = monster(0, 2.5);
+  room.receive(c, { t: 'bop', id: tap.id });
+  assert.equal(tap.hearts, 30 - power, 'a tap bops as the glove says');
+  // The wave reaches further than the glove's own arm: a monster past a plain
+  // bop's reach is still caught by the charged punch, but not one beyond it.
+  const pastArm = monster(0, ARM_REACH + weaponOf('punchglove').reach + BOP_SLACK + MONSTER_BODY.radius + 0.4);
+  const beyond = monster(0, ARM_REACH + KING_REACH + wave + BOP_SLACK + MONSTER_BODY.radius + 0.4);
+  room.receive(c, { t: 'bop', id: pastArm.id, king: true });
+  room.receive(c, { t: 'bop', id: beyond.id, king: true });
+  assert.equal(pastArm.hearts, 30 - shock, 'past an arm and the glove both');
+  assert.equal(beyond.hearts, 30, 'but not across the meadow');
 });
 
 test('a meteor needs the staff in hand; a bomb is still a bomb', () => {

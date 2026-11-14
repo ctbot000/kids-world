@@ -195,17 +195,18 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
-  // The King's Punch Glove: a boxer's wind-up, both fists up by the chin, then
-  // a great straight punch out from the shoulder with the whole body behind it,
-  // and back on guard. Held longer than a bare-fist punch, as a mighty glove
-  // would be — and the charge of a King Punch (game.js chargeBop) draws it back
-  // the same way for as long as it is held.
+  // The King's Punch Glove: a boxer's wind-up, the fist drawn back by the ear
+  // with the elbow well up, the other up on guard, then a great straight punch
+  // out from the shoulder with the whole body behind it, and back on guard.
+  // Held longer than a bare-fist punch, as a mighty glove would be — and the
+  // charge of a King Punch (game.js chargeBop) draws it back the same way for
+  // as long as it is held.
   punchglove: {
     secs: 0.42,
     strike: 0.42,
     keys: [
       { at: 0, w: 0, wL: 0 },
-      { at: 0.2, w: 1, wL: 1, fwd: 0.35, raise: 0.2, elbow: 2.1, twist: 0.4, fwdL: 0.3, raiseL: 0.35, elbowL: 2, lean: -0.05 },
+      { at: 0.18, w: 1, wL: 1, fwd: -2.3, raise: 0.45, elbow: 1.9, twist: 0.4, fwdL: 0.3, raiseL: 0.35, elbowL: 2, lean: -0.06 },
       { at: 0.42, w: 1, wL: 1, fwd: -1.65, raise: 0.05, elbow: 0.05, twist: -0.45, fwdL: 0.3, raiseL: 0.3, elbowL: 1.9, lean: 0.2, step: 0.45, dip: -0.04 },
       { at: 0.6, w: 1, wL: 1, fwd: -1.6, raise: 0.05, elbow: 0.1, twist: -0.42, fwdL: 0.3, raiseL: 0.3, elbowL: 1.9, lean: 0.18, step: 0.45, dip: -0.03 },
       { at: 1, w: 0, wL: 0 },
