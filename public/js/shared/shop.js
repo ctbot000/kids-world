@@ -97,12 +97,12 @@ export const GEAR = [
     // Saves keep the weapons as how many levels you have (gear.weapon), so
     // a new one goes on the end: put in between, it would turn everyone's
     // saved weapons into others. The Bomb Rod and the Toy Bow come after the
-    // Lava Blade for that. The mightiest are the last four, each harder than
+    // Lava Blade for that. The mightiest are the last five, each harder than
     // anything before it and with a way of its own: chain, how many more
     // monsters its bolt leaps on to (room.js boltOn); spin, it bops all the
     // way round you (game.js attack); beam, it goes through all in a line
     // (game.js attack); blast, how far round where it lands it bops (room.js
-    // rodBlast).
+    // rodBlast); shock, the charged King Punch its glove throws (room.js bop).
     levels: [
       { key: 'sword', name: 'Foam Sword', icon: '🗡️', price: 40, power: 2, push: 8, reach: 1, king: 1, uses: 60, does: 'Two bops pop a monster, and it reaches a step further than your arm.' },
       { key: 'blaster', name: 'Bubble Blaster', icon: '🫧', price: 100, power: 2, reach: 3.5, king: 1, uses: 80, does: 'Two bubbles pop a monster, a few steps in front of you.' },
@@ -114,6 +114,10 @@ export const GEAR = [
       { key: 'galaxyblade', name: 'Galaxy Blade', icon: '🌌', price: 1200, power: 7, push: 13, reach: 2.2, king: 5, uses: 150, spin: true, does: 'Spin right round in a whirl of stars and bop every monster all round you: seven hearts off each, and a boss feels it five times over.' },
       { key: 'rainbowray', name: 'Rainbow Ray', icon: '🌈', price: 1800, power: 8, reach: 6.3, king: 6, uses: 110, beam: true, does: 'Fires a rainbow beam further than anything else, straight through every monster in a line: eight hearts off each, and a boss feels it six times over.' },
       { key: 'meteorstaff', name: 'Meteor Staff', icon: '☄️', price: 2500, power: 12, push: 14, reach: 4.4, king: 7, uses: 90, blast: 3.6, does: 'Calls a meteor down out of the sky a few steps ahead: twelve hearts off everything in its huge blast, jewels shaken out of gem rocks, and the ground never dug. A boss feels it seven times over.' },
+      // shock: how many hearts the charged King Punch bops with this in hand
+      // (room.js bop), and wave: how much further round than a bare fist it
+      // reaches (monsters.js KING_REACH).
+      { key: 'punchglove', name: "King's Punch Glove", icon: '🥊', price: 3200, power: 7, push: 12, reach: 1.4, king: 8, uses: 120, shock: 18, wave: 1.6, does: 'Seven hearts off every monster it bops — and hold bop to charge a King Punch whose golden shockwave lands more than twice as hard on everything it reaches, further round than any arm could. A boss feels it eight times over.' },
     ],
   },
 ];
