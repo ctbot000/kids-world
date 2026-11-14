@@ -14,7 +14,7 @@ import { keptProfile } from '../public/js/shared/keeper.js';
 import { BOSSES, stompMove } from '../public/js/shared/bosses.js';
 import { chapterOf } from '../public/js/shared/isle-story.js';
 import { FIG_HEARTS, figuresOwned } from '../public/js/shared/gashapon.js';
-import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, maxHp, MONSTER_KINDS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, kindOf, maxHp, MONSTER_KINDS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { popKey, seenKey, STAT_KEYS } from '../public/js/shared/stickers.js';
 import * as B from '../public/js/shared/blocks.js';
 import { Rng } from '../public/js/shared/rng.js';
@@ -497,13 +497,14 @@ test('a monster figure you own takes a heart more off that monster with every bo
     room.tick();
   };
   // A punch takes two of the blob's three hearts for a, one of them for b.
+  // (kindOf tells each monster kind's hearts, as below.)
   const blobA = room.monsters.add(room.world, c.x - 2, c.y, c.z, { camp: c.id, kind: 'blob' });
   const blobB = room.monsters.add(room.world, c.x + 2, c.y, c.z, { camp: c.id, kind: 'blob' });
   bop(a, blobA);
   bop(b, blobB);
-  assert.deepEqual([blobA.hearts, blobB.hearts], [BLOB_HEARTS - 1 - FIG_HEARTS, BLOB_HEARTS - 1], 'a heart more with the figure');
-  assert.equal(a.last('mhit').hearts, blobA.hearts, 'and the word says so');
-  assert.equal(b.last('mhit').hearts, blobB.hearts);
+  assert.deepEqual([blobA.hearts, blobB.hearts], [kindOf('blob').hearts - 1 - FIG_HEARTS, kindOf('blob').hearts - 1], 'a heart more with the figure');
+  assert.equal(a.all('mhit').find((h) => h.id === blobA.id).hearts, blobA.hearts, 'and the word says so');
+  assert.equal(b.all('mhit').find((h) => h.id === blobB.id).hearts, blobB.hearts);
   // A landing on a monster that takes a few of them: a heart more too.
   const land = (who, m) => {
     time.t += HIT_MS;
@@ -519,7 +520,7 @@ test('a monster figure you own takes a heart more off that monster with every bo
   // A figure of a beast, a boss or King Grumble helps with none of them (the
   // only figure of a boss there is, is King Grumble's own).
   const p = room.players.get(a.pid);
-  assert.deepEqual(figuresOwned({ 'm-king': 1, 'm-rattle': 1 }), ['m-king', 'm-rattle']);
+  assert.deepEqual(figuresOwned({ 'm-king': 1, 'm-rattle': 1 }), ['m-rattle', 'm-king']);
   room.receive(a, { t: 'figures', keys: ['m-rattle', 'm-king'] });
   const beast = room.monsters.add(room.world, c.x + 2, c.y, c.z, { camp: c.id, kind: 'rattle' });
   bop(a, beast);
