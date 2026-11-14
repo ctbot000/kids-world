@@ -496,6 +496,10 @@ export class Game extends EventTarget {
       this.sendFigures();
     };
     profile.addEventListener('change', this.onProfile);
+    // A figure won from a Monster Gashapon changes only the gear (a 'basket'
+    // event, profile.js shopped): the island hears of it then too.
+    this.onGear = () => this.sendFigures();
+    profile.addEventListener('basket', this.onGear);
   }
 
   // ------------------------------------------------ talking to the island
@@ -509,8 +513,13 @@ export class Game extends EventTarget {
   // their keys, for the island to keep on you: owning one takes a heart more
   // off that kind of monster with every bop on Adventure Isle (room.js
   // figBonus). Said again whenever they change, as your look is.
+  // Said only when the list changes, and again on each arrival (welcome).
   sendFigures() {
-    this.send({ t: 'figures', keys: figuresOwned(this.profile.data.gear.toys) });
+    if (!this.pid || this.watching) return;
+    const keys = figuresOwned(this.profile.data.gear.toys);
+    if (keys.join() === this.figuresSent) return;
+    this.figuresSent = keys.join();
+    this.send({ t: 'figures', keys });
   }
 
   // The world's own profile to earn and carry with here (the shared isle has
@@ -520,9 +529,14 @@ export class Game extends EventTarget {
   useProfile(profile) {
     if (this.profile === profile) return;
     this.profile.removeEventListener('change', this.onProfile);
+    this.profile.removeEventListener('basket', this.onGear);
     this.profile = profile;
     this.profile.addEventListener('change', this.onProfile);
+    this.profile.addEventListener('basket', this.onGear);
     if (this.pid) this.syncPet(this.pid);
+    // The isle's own figures, which welcome (still on your own profile, which
+    // has none) could not have told the island.
+    this.sendFigures();
   }
 
   // As the owner of an island with a passcode: a pass for a friend you
@@ -939,7 +953,8 @@ export class Game extends EventTarget {
     }
     // The island hears which monster figures you have, for the bop bonus of
     // owning the one you are bopping (room.js figures).
-    if (!this.watching) this.sendFigures();
+    this.figuresSent = null;
+    this.sendFigures();
     this.emit('welcome', { again });
     this.emit('players');
     this.emit('settings');
@@ -7997,6 +8012,7 @@ export class Game extends EventTarget {
     this.renderer.free = false;
     this.link.removeEventListener('message', this.onMessage);
     this.profile.removeEventListener('change', this.onProfile);
+    this.profile.removeEventListener('basket', this.onGear);
     for (const pid of [...this.pets.keys()]) this.dropPet(pid);
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);

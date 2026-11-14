@@ -5935,7 +5935,7 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await page.browserContext().close();
 });
 
-test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobody can pick it up, and its window knows when it has gone', { skip }, async () => {
+test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure (the island hearing of it, for the bop bonus), nobody can pick it up, and its window knows when it has gone', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // The island puts one down beside the start (as Adventure Isle does now
@@ -5985,6 +5985,12 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   assert.equal(after.toys.length, 1);
   assert.ok(after.toys[0].startsWith('m-'), 'a monster figure');
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['monster-figure']), 'the sticker');
+  // The island hears of the new figure at once, for its bop bonus on the isle.
+  const figKind = await page.evaluate(async () => {
+    const { toyOf } = await import('/js/shared/gashapon.js');
+    return toyOf(Object.keys(window.kidsWorld.profile.data.gear.toys)[0]).monster;
+  });
+  await until(page, (kind) => { const kw = window.kidsWorld; return kw.session.link.room.players.get(kw.game.pid).figs?.includes(kind); }, figKind);
   // The island takes it away: the window says so, and turns no more.
   await page.evaluate((at) => window.kidsWorld.session.link.room.gashaNews({ t: 'gasha-gone', ...at }), at);
   await until(page, () => document.querySelector('.gasha-said').textContent.includes('has gone') && document.querySelector('.gasha-turn').disabled);
@@ -6005,6 +6011,10 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   });
   await until(page, () => document.querySelector('.collection-toys')?.dataset.tab === 'monster' && document.querySelectorAll('.collection-toys .gasha-toy-card:not(.missing)').length === 1);
   assert.ok(await page.evaluate(() => document.querySelector('.collection-head').textContent.includes('Monster figures')));
+  // The isle's own profile swapped in (as main.js does on arriving there):
+  // the island hears of its figures, which arrival on your own could not.
+  await page.evaluate(() => window.kidsWorld.game.useProfile(window.kidsWorld.ui.isle));
+  await until(page, () => { const kw = window.kidsWorld; return kw.session.link.room.players.get(kw.game.pid).figs?.join() === 'golem'; });
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

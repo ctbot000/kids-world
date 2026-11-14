@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'figure-power', date: '2026-11-15', icon: '👾', title: 'Monster figures make you stronger', text: 'On 🌟 Adventure Isle, every monster figure you own from the Monster Gashapon makes your bops take one more heart off that kind of monster. Collect a Grumpy Blob and Grumpy Blobs pop quicker! Beasts, chapter bosses and King Grumble are as tough as ever.' },
   { id: 'desert-islands', date: '2026-11-15', icon: '🏜️', title: 'Desert islands', text: 'Make a 🏜️ Desert Island: rolling golden dunes dotted with cacti, and an oasis pool ringed with palm trees. Crabs and turtles keep its shore, and the sky glows gold over the sand. A 🌵 Cactus and a 🌴 Palm Tree are in the toy box too, to plant on any island.' },
   { id: 'dish', date: '2026-11-15', icon: '🍽️', title: 'Dishes', text: 'A 🍽️ Dish in the toy box\'s 🛋️ Home tab: put one on the floor or a table, walk up and tap 🍽️ Dish to set fruit, vegetables or a fish from your basket on it, up to three pieces, for everyone to see. Tap a piece to take it back.' },
   { id: 'firefly-hand', date: '2026-11-15', icon: '✨', title: 'A firefly on your hand', text: 'Out at night among the fireflies, stand very still for a few seconds: one drifts down and sits on the back of your hand, glowing softly. Take a step and it flits away again.' },
