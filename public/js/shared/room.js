@@ -3038,7 +3038,10 @@ export class Room {
       this.notice(conn, `${this.world.name} stays just as it is — no laying the table here!`);
       return;
     }
+    // Only pieces of food, never more than a dish holds.
+    if (!Array.isArray(msg.food) || msg.food.length > DISH_MAX) return;
     const food = cleanDishFood(msg.food);
+    if (food.length !== msg.food.length) return;
     const k = this.world.index(...at);
     const was = this.dishes.get(k)?.food ?? [];
     // One piece at a time comes or goes, so nothing is conjured or spirited
@@ -3051,7 +3054,9 @@ export class Room {
     if (changes.length !== 1 || Math.abs(changes[0]) !== 1) return;
     if (food.length) this.dishes.set(k, { x: at[0], y: at[1], z: at[2], food });
     else this.dishes.delete(k);
-    this.broadcast({ t: 'dish', pid: p.id, at, food }, conn);
+    // To everyone, whoever did it too: it is when the island says so that
+    // their basket gives the piece up, or gets it back (game.js dishHeard).
+    this.broadcast({ t: 'dish', pid: p.id, at, food });
     this.changed();
   }
 

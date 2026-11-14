@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'dish', date: '2026-11-15', icon: '🍽️', title: 'Dishes', text: 'A 🍽️ Dish in the toy box\'s 🛋️ Home tab: put one on the floor or a table, walk up and tap 🍽️ Dish to set fruit, vegetables or a fish from your basket on it, up to three pieces, for everyone to see. Tap a piece to take it back.' },
   { id: 'firefly-hand', date: '2026-11-15', icon: '✨', title: 'A firefly on your hand', text: 'Out at night among the fireflies, stand very still for a few seconds: one drifts down and sits on the back of your hand, glowing softly. Take a step and it flits away again.' },
   { id: 'baby-penguin', date: '2026-11-14', icon: '🐧', title: 'A baby penguin pet', text: 'A new pet in 🐾 My pet: a chubby 🐧 baby penguin, in the colour you like with its tummy white. Run off and it flops onto its tummy and slides after you, and in the water it paddles along quicker than it walks.' },
   { id: 'fish-dictionary', date: '2026-11-14', icon: '🐟', title: 'The Fish Dictionary', text: 'The first time you catch each kind of fish, its page fills in in your 🐟 Fish Dictionary, with a little cheer. Open it from the 📖 beside 🎣 Fish at the water’s edge, or from the 🎒 backpack: every kind you have caught, in 3D with how many, and the rest as dark shapes still to find. Can you land the rare golden fish?' },

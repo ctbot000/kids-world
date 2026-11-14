@@ -24,7 +24,7 @@ const BOOKS = ['#e8453c', '#3a73d8', '#fcd535', '#35a852', '#8c5bd6', '#f59331',
 // How high a table's top is: what stands on tables (a computer) in the cell
 // above one is drawn down on it (furnitureDrop).
 const TABLE_TOP = 0.82;
-const ON_TABLES = new Set(['computer', 'robot-kit', 'birthday-cake', 'present', 'balloons']);
+const ON_TABLES = new Set(['computer', 'robot-kit', 'birthday-cake', 'present', 'balloons', 'dish']);
 const TABLES = new Set(['table', 'party-table']);
 
 const box = (x0, y0, z0, x1, y1, z1, color, tile = 'plain') => [x0, y0, z0, x1, y1, z1, color, tile];
@@ -736,9 +736,9 @@ const MODELS = {
     return out;
   },
 
-  // A dish: a shallow plate with a rim, standing on the floor or on a table.
-  // The food set on it (shared/dish.js) is drawn over the plate by the mesher
-  // (render/mesher.js dishFood), so the dish itself is only the plate.
+  // A dish: a shallow plate with a rim, standing on the floor or down on a
+  // table's top (ON_TABLES). The food set on it (shared/dish.js) is drawn on
+  // the plate by the mesher (render/mesher.js dishFood).
   dish() {
     return [box(0.22, 0, 0.22, 0.78, 0.05, 0.78, '#f2f0e8', 'plain'), box(0.28, 0.05, 0.28, 0.72, 0.08, 0.72, '#fbfaf5', 'plain')];
   },

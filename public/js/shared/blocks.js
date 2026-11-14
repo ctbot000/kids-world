@@ -655,9 +655,9 @@ export const cropByKey = (key) => CROPS.find((c) => c.key === key) ?? null;
 // What animals and pets will eat from your basket: fruit and vegetables.
 export const FOODS = [...FRUITS.map(([key]) => key), ...CROPS.map((c) => c.key)];
 export const isFood = (key) => FOODS.includes(key);
-// What a dish holds (shared/dish.js): fruit, vegetables, cookies or fish, the
-// kinds you carry in your basket.
-export const DISH_FOODS = [...FOODS, 'cookie', 'fish'];
+// What a dish holds (shared/dish.js): fruit, vegetables or fish from your
+// basket.
+export const DISH_FOODS = [...FOODS, 'fish'];
 export const isDishFood = (key) => DISH_FOODS.includes(key);
 // Gem rocks, which a tap digs a jewel out of.
 export const GEM_ROCK = new Uint8Array(BLOCK_IDS);
