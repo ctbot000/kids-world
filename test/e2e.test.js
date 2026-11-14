@@ -5935,7 +5935,7 @@ test('a gashapon: Q by the machine opens it, a turn of the handle takes coins an
   await page.browserContext().close();
 });
 
-test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobody can pick it up, and its window knows when it has gone', { skip }, async () => {
+test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure (the island hearing of it, for the bop bonus), nobody can pick it up, and its window knows when it has gone', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // The island puts one down beside the start (as Adventure Isle does now
@@ -5985,6 +5985,12 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   assert.equal(after.toys.length, 1);
   assert.ok(after.toys[0].startsWith('m-'), 'a monster figure');
   assert.ok(await page.evaluate(() => window.kidsWorld.profile.data.stickers['monster-figure']), 'the sticker');
+  // The island hears of the new figure at once, for its bop bonus on the isle.
+  const figKind = await page.evaluate(async () => {
+    const { toyOf } = await import('/js/shared/gashapon.js');
+    return toyOf(Object.keys(window.kidsWorld.profile.data.gear.toys)[0]).monster;
+  });
+  await until(page, (kind) => { const kw = window.kidsWorld; return kw.session.link.room.players.get(kw.game.pid).figs?.includes(kind); }, figKind);
   // The island takes it away: the window says so, and turns no more.
   await page.evaluate((at) => window.kidsWorld.session.link.room.gashaNews({ t: 'gasha-gone', ...at }), at);
   await until(page, () => document.querySelector('.gasha-said').textContent.includes('has gone') && document.querySelector('.gasha-turn').disabled);
@@ -6005,6 +6011,10 @@ test('a Monster Gashapon: Q by it opens it, a turn gives a monster figure, nobod
   });
   await until(page, () => document.querySelector('.collection-toys')?.dataset.tab === 'monster' && document.querySelectorAll('.collection-toys .gasha-toy-card:not(.missing)').length === 1);
   assert.ok(await page.evaluate(() => document.querySelector('.collection-head').textContent.includes('Monster figures')));
+  // The isle's own profile swapped in (as main.js does on arriving there):
+  // the island hears of its figures, which arrival on your own could not.
+  await page.evaluate(() => window.kidsWorld.game.useProfile(window.kidsWorld.ui.isle));
+  await until(page, () => { const kw = window.kidsWorld; return kw.session.link.room.players.get(kw.game.pid).figs?.join() === 'golem'; });
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
@@ -8957,6 +8967,74 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.game.fishing?.phase, window.kidsWorld.game.reelHeld]), ['fight', true], 'hooked and reeling');
   await press('pointerup');
   assert.equal(await page.evaluate(() => window.kidsWorld.game.reelHeld), false, 'let go');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a dish: 🍽️ Dish (Q) beside it opens its window, food tapped from the basket goes on the plate and comes back tapped again, and picking the dish up gives back what was on it', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A dish beside the start, on level ground, nothing about to take the button.
+  const at = await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], B.DISH);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id: B.DISH };
+  });
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.profile.addToBasket('apple', 2);
+    kw.profile.addToBasket('fish', 1);
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🍽️ Dish'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Dish'));
+  const chip = (row, key) => `#modal-body .dish-row:nth-of-type(${row}) .dish-food[data-food="${key}"]`;
+  // Two apples and the fish on: the basket gives each up once the island says so.
+  await page.click(chip(2, 'apple'));
+  await until(page, () => window.kidsWorld.profile.basket.apple === 1);
+  await page.click(chip(2, 'apple'));
+  await until(page, () => window.kidsWorld.profile.basket.apple === 0);
+  await page.click(chip(2, 'fish'));
+  await until(page, () => window.kidsWorld.profile.basket.fish === 0);
+  const state = () =>
+    page.evaluate((at) => {
+      const kw = window.kidsWorld;
+      return { dish: kw.game.dishFood(at.x, at.y, at.z), room: kw.session.link.room.packDishes(), plate: [...document.querySelectorAll('#modal-body .dish-row:nth-of-type(1) .dish-food')].map((b) => b.dataset.food), note: document.querySelector('#modal-body p.muted:last-child')?.textContent };
+    }, at);
+  let s = await state();
+  assert.deepEqual(s.dish, ['apple', 'apple', 'fish']);
+  assert.deepEqual(s.room, [[at.x, at.y, at.z, ['apple', 'apple', 'fish']]]);
+  assert.deepEqual(s.plate, ['apple', 'apple', 'fish']);
+  assert.match(s.note, /full/);
+  // Drawn on the plate: its chunk has the pictures of the three.
+  await until(page, (at) => window.kidsWorld.game.renderer.terrain.dishFood.get(`${at.x},${at.y},${at.z}`)?.length === 3, at);
+  // One tapped on the plate comes back.
+  await page.click(chip(1, 'fish'));
+  await until(page, () => window.kidsWorld.profile.basket.fish === 1);
+  s = await state();
+  assert.deepEqual(s.dish, ['apple', 'apple']);
+  await page.keyboard.press('Escape');
+  // Picked up, the dish gives back the two apples on it.
+  await page.evaluate((at) => window.kidsWorld.game.edit('pick', [at.x, at.y, at.z, 0]), at);
+  await until(page, () => window.kidsWorld.profile.basket.apple === 2);
+  await until(page, () => window.kidsWorld.session.link.room.packDishes().length === 0);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

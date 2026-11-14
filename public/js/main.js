@@ -161,6 +161,9 @@ keeper.addEventListener('live-refused', (e) => ui.liveRefused?.(e.detail.code));
 for (const p of [profile, isle]) {
   for (const type of ['change', 'basket', 'sticker']) p.addEventListener(type, () => keeper.nudge());
   p.addEventListener('count', () => keeper.counted());
+  // Whatever stickers you came back with may already have earned one more
+  // (stickers.js Sticker Collector), so it is yours before you do anything.
+  p.checkStickers();
 }
 // A toy weapon (or clothes) bought in the shop, put on or taken off in the
 // backpack: friends on the island see it in your hand, and the island lets

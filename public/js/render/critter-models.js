@@ -2198,12 +2198,14 @@ export class CritterModel {
     const t = this.time;
     const asleep = state === 'sleep';
     const sip = state === 'eat';
-    const beat = asleep ? 0 : sip ? 0.72 + Math.sin(t * 5) * 0.28 : 0.5 + Math.sin(t * 2.2) * Math.sin(t * 0.9) * 0.5;
-    this.lantern.scale.setScalar(this.lantern.userData.size * (asleep ? 0.3 : Math.max(0.001, 0.5 + beat)));
-    const a = asleep ? 0.1 : 0.3 + Math.sin(t * this.flapRate) * 0.2;
+    // On a hand it just sits, wings folded, glowing slower and softer.
+    const onHand = state === 'hand';
+    const beat = asleep || onHand ? 0 : sip ? 0.72 + Math.sin(t * 5) * 0.28 : 0.5 + Math.sin(t * 2.2) * Math.sin(t * 0.9) * 0.5;
+    this.lantern.scale.setScalar(this.lantern.userData.size * (asleep ? 0.3 : onHand ? 0.8 + Math.sin(t * 1.6) * Math.sin(t * 0.37) * 0.3 : Math.max(0.001, 0.5 + beat)));
+    const a = asleep ? 0.1 : onHand ? 0.05 : 0.3 + Math.sin(t * this.flapRate) * 0.2;
     for (const w of this.wings) w.rotation.z = w.userData.wing * a;
-    this.pivot.rotation.z = asleep ? 0 : Math.sin(t * 2.1) * 0.12;
-    this.body.position.y = asleep ? 0 : Math.sin(t * 3.4) * 0.02;
+    this.pivot.rotation.z = asleep || onHand ? 0 : Math.sin(t * 2.1) * 0.12;
+    this.body.position.y = asleep || onHand ? 0 : Math.sin(t * 3.4) * 0.02;
   }
 
   // Three fish, tails going, keeping together; one of them leaps out of the
