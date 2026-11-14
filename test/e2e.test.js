@@ -8906,7 +8906,9 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
       minnow: document.querySelector('#modal-body .fish-page[data-fish="minnow"]')?.textContent,
       golden: document.querySelector('#modal-body .fish-page[data-fish="goldfish"]')?.textContent,
     }));
-  await until(page, () => document.querySelector('#modal-body .fish-grid'));
+  // Every kind drawn in 3D (render/gasha-stage.js), the ones still to catch
+  // as dark shapes of themselves.
+  await until(page, () => [...document.querySelectorAll('#modal-body .fish-page img')].filter((img) => img.src.startsWith('data:image/png')).length === 6);
   const opened = await book();
   assert.match(opened.heading, /^1 of 6 kinds caught/);
   assert.deepEqual(opened.pages, ['minnow caught new', 'perch', 'clownfish', 'trout', 'puffer', 'goldfish']);
