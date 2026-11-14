@@ -8706,7 +8706,7 @@ test('the admin page watches any island it kept: live while it is played, and it
   }
 });
 
-test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
+test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, the first of a kind filling its page in the 🐟 Fish Dictionary (📖 beside 🎣 Fish, and the backpack), too soon scares it off, and walking off reels in', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // Level ground beside the start, cleared, with a pond dug in front, to the east.
@@ -8770,6 +8770,40 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.profile.basket.fish, window.kidsWorld.profile.data.stats.fished, Boolean(window.kidsWorld.profile.data.stickers['gone-fishing'])]), [1, 1, true]);
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => /You caught a Minnow, \d+ cm long!/.test(t.textContent)));
   await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
+  // The first minnow fills its page in the 🐟 Fish Dictionary, with a cheer,
+  // counted with the rest of what you do (so it goes with a login).
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('New in your 🐟 Fish Dictionary: Minnow!')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.caughtminnow), 1);
+  // It opens from a 📖 beside the 🎣 Fish button, not over it.
+  await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish') && !document.getElementById('fishbook').hidden);
+  const apart = await page.evaluate(() => {
+    const a = document.getElementById('fishbook').getBoundingClientRect();
+    const b = document.getElementById('ride').getBoundingClientRect();
+    return a.width > 0 && (a.right <= b.left || a.left >= b.right);
+  });
+  assert.ok(apart, 'the 📖 beside the 🎣 Fish button');
+  await page.click('#fishbook');
+  const book = () =>
+    page.evaluate(() => ({
+      heading: document.querySelector('#modal-body .collection-head')?.textContent,
+      pages: [...document.querySelectorAll('#modal-body .fish-page')].map((el) => `${el.dataset.fish}${el.classList.contains('missing') ? '' : ' caught'}${el.classList.contains('fresh') ? ' new' : ''}`),
+      minnow: document.querySelector('#modal-body .fish-page[data-fish="minnow"]')?.textContent,
+      golden: document.querySelector('#modal-body .fish-page[data-fish="goldfish"]')?.textContent,
+    }));
+  await until(page, () => document.querySelector('#modal-body .fish-grid'));
+  const opened = await book();
+  assert.match(opened.heading, /^1 of 6 kinds caught/);
+  assert.deepEqual(opened.pages, ['minnow caught new', 'perch', 'clownfish', 'trout', 'puffer', 'goldfish']);
+  assert.match(opened.minnow, /Minnow.*Caught 1/);
+  assert.match(opened.golden, /\?\?\?✨ Rare15–30 cm/, 'the golden fish unnamed till caught, and rare');
+  // And from the 🎒 backpack: its 🐟 Fish chip.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await page.evaluate(() => [...document.querySelectorAll('#modal-body .dialog-head .chip')].find((b) => b.textContent === '🐟 Fish').click());
+  await until(page, () => document.querySelector('#modal-body .fish-grid'));
+  assert.equal((await book()).pages.filter((p) => p.includes('caught')).length, 1);
+  await page.keyboard.press('Escape');
+  await until(page, () => !window.kidsWorld.ui.modalOpen);
   // Too soon: it is scared off, and the line comes in empty.
   await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish'));
   await page.keyboard.press('KeyQ');

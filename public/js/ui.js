@@ -47,7 +47,7 @@ import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, is
 import { paint } from './render/drawings.js';
 import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { CHAPTERS, chapterOf, introOf, SHARDS, STAGES, STORY_TITLE } from './shared/isle-story.js';
-import { popKey, seenKey } from './shared/stickers.js';
+import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -3690,8 +3690,11 @@ export class UI {
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
     on('reward', (e) => this.reward(e.detail));
     // A first of a kind of fish: the dictionary's page filled in, said out
-    // loud over the catch itself.
-    on('newfish', (e) => this.toast('📖', `New in your 🐟 Fish Dictionary: ${e.detail.name}!`));
+    // loud over the catch itself, and marked new there for a little while.
+    on('newfish', (e) => {
+      this.freshFish = { key: e.detail.key, at: Date.now() };
+      this.toast('📖', `New in your 🐟 Fish Dictionary: ${e.detail.name}!`);
+    });
     on('hit-word', (e) => this.hitWord(e.detail));
     on('hit-number', (e) => this.hitNumber(e.detail));
     on('hit-lines', (e) => this.hitLines(e.detail));
@@ -5328,10 +5331,13 @@ export class UI {
     el.style.transform = `translate(${left}px, ${top}px) translate(-50%, -100%)`;
     el.hidden = false;
     // At the water's edge, the 🐟 Fish Dictionary opens from a 📖 beside the
-    // 🎣 Fish button, on its left — while your line is out too.
+    // 🎣 Fish button, on its left (its right, with no room there) — while
+    // your line is out too.
     const book = $('fishbook');
     if (t === g.fishTarget && !g.watching) {
-      book.style.transform = `translate(${Math.max(16 + 26, left - width / 2 - 30)}px, ${top}px) translate(-50%, -100%)`;
+      const half = (book.offsetWidth || 54) / 2;
+      const before = left - width / 2 - 8 - half;
+      book.style.transform = `translate(${before - half >= 16 ? before : left + width / 2 + 8 + half}px, ${top}px) translate(-50%, -100%)`;
       book.hidden = false;
     } else book.hidden = true;
   }
@@ -5837,39 +5843,61 @@ export class UI {
   // (shared/fishing.js FISH_KINDS), filled in with its picture and its name
   // the first time you catch one — until then a silhouette, with the rare
   // golden fish saying so. Opened from a 📖 beside the 🎣 Fish button at the
-  // water's edge and from the 🎒 backpack. Which kinds you have caught is
-  // kept with your other saved things (profile.js fish).
+  // water's edge and from the 🎒 backpack. How many of each kind you have
+  // caught is counted with the rest of what you do (stickers.js caughtKey),
+  // so it goes with a login to your other devices.
   fishDialog() {
     const p = this.profile;
-    let onChange = null;
-    this.openModal((root) => {
-      const heading = h('h3', { class: 'collection-head' });
-      const grid = h('div', { class: 'fish-grid', role: 'group', 'aria-label': 'Fish Dictionary' });
-      // The fish drawn in 3D as on the island (render/gasha-stage.js), once
-      // the pictures are made; its emoji till then, or without WebGL. The
-      // ones still to catch are the same pictures, darkened to a silhouette.
-      const card = (c, caught, fresh) =>
-        h('div', { class: `fish-page${caught ? '' : ' missing'}${fresh ? ' fresh' : ''}`, title: caught ? c.name : `A ${c.rare ? 'rare ' : ''}fish still to catch` }, this.fishPictures?.[c.key] ? h('img', { src: this.fishPictures[c.key], alt: caught ? c.name : 'A fish still to catch', draggable: false }) : h('span', { class: 'icon' }, caught ? c.icon : h('span', {}, '🐟')), h('span', { class: 'kind' }, caught ? h('b', {}, c.name) : h('b', { class: 'muted' }, '???'), c.rare ? h('span', { class: 'rare' }, '✨ Rare') : null, caught ? null : h('span', { class: 'muted' }, `${c.cm[0]}–${c.cm[1]} cm`)), fresh ? h('span', { class: 'rare' }, 'New!') : null);
-      const draw = () => {
-        const caught = p.data.fish ?? {};
-        heading.textContent = `🐟 Fish Dictionary (${FISH_KINDS.filter((c) => caught[c.key]).length} of ${FISH_KINDS.length}) — ${this.game?.fishing ? 'your line is still out!' : 'cast a line at the water’s edge'}`;
-        grid.replaceChildren(...FISH_KINDS.map((c) => card(c, caught[c.key] > 0, this.freshFish === c.key && caught[c.key] > 0 && Date.now() - caught[c.key] < 4000)),
+    let onCount = null;
+    this.openModal(
+      (root) => {
+        const heading = h('h3', { class: 'collection-head' });
+        const grid = h('div', { class: 'fish-grid', role: 'group', 'aria-label': 'Fish Dictionary' });
+        // The fish drawn in 3D as on the island (render/gasha-stage.js), once
+        // the pictures are made; its emoji till then, or without WebGL. The
+        // ones still to catch are the same pictures, darkened to a silhouette.
+        // A kind just caught for the first time says it is new.
+        const card = (c, n) => {
+          const fresh = n > 0 && this.freshFish?.key === c.key && Date.now() - this.freshFish.at < 10_000;
+          const pic = this.fishPictures?.[c.key];
+          return h(
+            'div',
+            { class: `fish-page${n ? '' : ' missing'}${fresh ? ' fresh' : ''}`, 'data-fish': c.key, title: n ? c.name : `A ${c.rare ? 'rare ' : ''}fish still to catch` },
+            pic ? h('img', { src: pic, alt: n ? c.name : 'A fish still to catch', draggable: false }) : h('span', { class: 'icon' }, n ? c.icon : '🐟'),
+            h('span', { class: 'kind' }, n ? h('b', {}, c.name) : h('b', { class: 'muted' }, '???'), c.rare ? h('span', { class: 'rare' }, '✨ Rare') : null, h('span', { class: 'muted' }, n ? `Caught ${n}` : `${c.cm[0]}–${c.cm[1]} cm`)),
+            fresh ? h('span', { class: 'rare' }, 'New!') : null,
+          );
+        };
+        // Drawn again when a count changes, but only once a fish is caught:
+        // every step you take is counted too.
+        let shown = '';
+        const draw = (always = true) => {
+          const counts = FISH_KINDS.map((c) => p.data.stats[caughtKey(c.key)] ?? 0);
+          const key = counts.join();
+          if (!always && key === shown) return;
+          shown = key;
+          heading.textContent = `${counts.filter((n) => n > 0).length} of ${FISH_KINDS.length} kinds caught — ${this.game?.fishing ? 'your line is still out!' : 'cast a line at the water’s edge'}`;
+          grid.replaceChildren(...FISH_KINDS.map((c, i) => card(c, counts[i])));
+        };
+        root.append(
+          h('div', { class: 'dialog-head' }, h('h2', {}, '🐟 Fish Dictionary'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')),
+          heading,
+          h('p', { class: 'muted' }, 'Every kind of fish fills in its page the first time you catch one. Cast a line from the shore — the rare golden fish is the hardest to land!'),
+          grid,
         );
-      };
-      root.append(h('div', { class: 'dialog-head' }, h('h2', {}, '🐟 Fish Dictionary'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')), heading, h('p', { class: 'muted' }, 'Every kind of fish fills in its page the first time you catch one. Cast a line from the shore — the rare golden fish is the hardest to land!'), grid,
-      );
-      draw();
-      if (!this.fishPictures) {
-        import('./render/gasha-stage.js')
-          .then(({ fishPortraits }) => {
-            this.fishPictures = fishPortraits(FISH_KINDS.map((c) => c.key));
-            if (this.modalOpen && grid.isConnected) draw();
-          })
-          .catch(() => {});
-      }
-      onChange = draw;
-      p.addEventListener('basket', onChange);
-    }, { onClose: () => p.removeEventListener('basket', onChange) },
+        draw();
+        if (!this.fishPictures) {
+          import('./render/gasha-stage.js')
+            .then(({ fishPortraits }) => {
+              this.fishPictures = fishPortraits(FISH_KINDS.map((c) => c.key));
+              if (this.modalOpen && grid.isConnected) draw();
+            })
+            .catch(() => {});
+        }
+        onCount = () => draw(false);
+        p.addEventListener('count', onCount);
+      },
+      { onClose: () => p.removeEventListener('count', onCount) },
     );
   }
 

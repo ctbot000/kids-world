@@ -1107,6 +1107,20 @@ body.fullscreen .full-icon .leave {
   filter: brightness(0.18) saturate(0.4) contrast(1.4);
 }
 
+/* Just caught for the first time: a gold edge round its page. */
+.fish-page.fresh {
+  border-color: #ffd84d;
+}
+
+/* Its name (??? till caught), ✨ Rare, and how many caught or how long
+   it grows, one under another. */
+.fish-page .kind {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .fish-page .rare {
   color: #a86400;
   font-size: 0.85rem;

@@ -496,7 +496,7 @@ export function fishPortraits(keys, size = 160) {
     gl.toneMappingExposure = 1.05;
     const scene = new THREE.Scene();
     const pmrem = new THREE.PMREMGenerator(gl);
-    const room = new THREE.RoomEnvironment();
+    const room = new RoomEnvironment();
     const env = pmrem.fromScene(room, 0.04).texture;
     room.dispose();
     pmrem.dispose();

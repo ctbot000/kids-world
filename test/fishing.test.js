@@ -5,10 +5,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
-import { BITE_MS, canFloat, CAST_FAR, castSpot, CATCHES, catchFor, FIGHT, fightStep, lineState, newFight, NIBBLE_MS, NIBBLES, planBites, STRIKE_MS } from '../public/js/shared/fishing.js';
+import { BITE_MS, canFloat, CAST_FAR, castSpot, CATCHES, catchFor, FIGHT, fightStep, FISH_KINDS, lineState, newFight, NIBBLE_MS, NIBBLES, planBites, STRIKE_MS } from '../public/js/shared/fishing.js';
+import { addProgress, mergeProfiles } from '../public/js/shared/keeper.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { sellPrice } from '../public/js/shared/shop.js';
-import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { caughtKey, STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { World } from '../public/js/shared/world.js';
 
 const THREE = await import('../public/vendor/three.module.js');
@@ -159,6 +160,26 @@ test('a fish is a basket treasure that sells, with stickers for catching them', 
   const got = STICKERS.filter((s) => s.test({ fished: 250, fishcm: 40 }) && !s.test({ fished: 0, fishcm: 0 }));
   assert.deepEqual(got.map((s) => s.key), ['gone-fishing', 'angler', 'big-one', 'master-angler']);
   assert.ok(STAT_KEYS.includes('fishcm'));
+});
+
+test('every kind of fish is counted on its own for the 🐟 Fish Dictionary, and a kind caught on one device is caught on them all', () => {
+  // Its pages: the six that go in the basket as fish, the golden one rare.
+  assert.deepEqual(FISH_KINDS.map((c) => c.key), ['minnow', 'perch', 'clownfish', 'trout', 'puffer', 'goldfish']);
+  assert.deepEqual(FISH_KINDS.filter((c) => c.rare).map((c) => c.key), ['goldfish']);
+  for (const c of FISH_KINDS) assert.ok(STAT_KEYS.includes(caughtKey(c.key)), `${c.key} is counted`);
+  // Put together with a login like any count: a minnow caught on one device
+  // and a trout on another are both caught, whichever way round they meet,
+  // and one that caught none takes nothing away.
+  const here = { stats: { [caughtKey('minnow')]: 3 } };
+  const there = { stats: { [caughtKey('trout')]: 1 } };
+  for (const both of [mergeProfiles(here, there), mergeProfiles(there, here)]) {
+    assert.equal(both.stats[caughtKey('minnow')], 3);
+    assert.equal(both.stats[caughtKey('trout')], 1);
+  }
+  assert.equal(mergeProfiles(here, {}).stats[caughtKey('minnow')], 3);
+  // A guest's catches go to the player they log in as.
+  assert.equal(addProgress(here, { stats: { [caughtKey('minnow')]: 2 } }).stats[caughtKey('minnow')], 5);
+  assert.equal(addProgress(here, {}).stats[caughtKey('minnow')], 3);
 });
 
 test('a cast and a reel are passed on to everyone else, a cast only onto open water in reach', () => {
