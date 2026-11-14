@@ -1,10 +1,11 @@
-// Makes Adventure Isle's intro and ending films (films.js) as videos in
+// Makes Adventure Isle's intro and ending films (films.js: each episode's,
+// intro and ending the first's, intro2 and ending2 the second's) as videos in
 // public/video/: each frame drawn in a real browser by the game's own renderer
 // (stage.js), on a clock of the film's own, its music and sound made there too
 // (score.js), and ffmpeg putting them together as an MP4 (H.264 and AAC, which
 // every browser plays) and a still for its poster.
 //
-// npm run films [-- intro|ending] (FROM=s TO=s for a part, PREVIEW=1 for a
+// npm run films [-- intro|ending|intro2|ending2] (FROM=s TO=s for a part, PREVIEW=1 for a
 // quick small one in the scratch folder of your choice, OUT=dir)
 // Needs Google Chrome and ffmpeg (Homebrew's: /opt/homebrew/bin).
 import { spawn } from 'node:child_process';
@@ -21,7 +22,7 @@ const OUT = process.env.OUT ?? join(root, 'public', 'video');
 const FFMPEG = process.env.FFMPEG ?? '/opt/homebrew/bin/ffmpeg';
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const names = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-const which = names.length ? names : ['intro', 'ending'];
+const which = names.length ? names : ['intro', 'ending', 'intro2', 'ending2'];
 const preview = Boolean(process.env.PREVIEW);
 mkdirSync(OUT, { recursive: true });
 

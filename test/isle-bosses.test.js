@@ -18,6 +18,8 @@ import { World } from '../public/js/shared/world.js';
 const KINDS = ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok'];
 // The captains of the later chapters, on the end of the kinds after the beasts.
 const LATER = ['scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus'];
+// The second episode's bosses, on the end of the kinds after them.
+const RAINBOW = ['dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle'];
 const MOVES = ['stomp', 'leap', 'charge', 'hurl', 'puff', 'breath', 'blink', 'call'];
 
 function conn() {
@@ -79,11 +81,13 @@ function run(sim, w, people, done, ms = 20000) {
 
 test('every chapter has a boss of its own, on the end of the kinds, in the collection, with its own moves, none of them quicker than you run', () => {
   assert.deepEqual(MONSTER_KINDS.slice(16, 16 + KINDS.length), KINDS, 'new kinds go on the end: the wire sends the index');
-  assert.deepEqual(MONSTER_KINDS.slice(-LATER.length), LATER, 'and the later captains after the beasts');
+  const later = MONSTER_KINDS.indexOf(LATER[0]);
+  assert.deepEqual(MONSTER_KINDS.slice(later, later + LATER.length), LATER, 'and the later captains after the beasts');
+  assert.deepEqual(MONSTER_KINDS.slice(-RAINBOW.length), RAINBOW, 'and the second episode’s after them, on the end');
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
-  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king']);
-  for (const kind of [...KINDS, ...LATER, 'king']) {
+  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW]);
+  for (const kind of [...KINDS, ...LATER, 'king', ...RAINBOW]) {
     const plan = BOSSES[kind];
     assert.ok(isBoss(kind) && isHeavy(kind), kind);
     assert.deepEqual(bodyOf(kind), plan.body);

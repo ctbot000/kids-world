@@ -18,7 +18,14 @@
 //   through the cracks.
 //
 // - Sir Scarabold, Old Glimmershell, Baron Boo, Big Sprocket and Old Nimbus:
-//   creatures of their own, built at their full size (captain-models.js).
+//   creatures of their own, built at their full size (captain-models.js),
+//   which take their moves' states as they are (raw): the scarab's wing cases
+//   opening as he flies up, the tortoise spinning along in his shell, arms up
+//   to throw.
+//
+// - Lady Dotty, Duke Bushytail, Baroness Bumble, Sir Blendalot, Admiral
+//   Inkwell, Mochi the Moon Rabbit and Queen Grizzle, of the story's second
+//   episode: creatures of their own too (rainbow-models.js), raw as well.
 //
 // King Grumble is adventure-models.js KingModel, with the same parts as
 // these (addBossParts): the bubble round it while any camp is not free, a
@@ -27,10 +34,11 @@
 // each move (bossPose).
 import * as THREE from '../../vendor/three.module.js';
 import { BOSSES, stompMove } from '../shared/bosses.js';
-import { thrownMesh } from './boss-fx.js';
+import { heldUp, thrownMesh } from './boss-fx.js';
 import { MonsterModel } from './monster-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
 import { BaronModel, CloudModel, ScarabModel, SprocketModel, TortoiseModel } from './captain-models.js';
+import { BeeModel, ChameleonModel, GrizzleModel, LadybirdModel, OctopusModel, RabbitModel, SquirrelModel } from './rainbow-models.js';
 import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
 const DARK = '#2b2530';
@@ -63,7 +71,8 @@ export function addBossParts(m, { bubble, y, reach = 0, hurl = null, top = 2 }) 
     m.ring.renderOrder = 2;
     m.group.add(m.ring);
   }
-  if (hurl) {
+  // (Old Nimbus calls his lightning down: nothing to hold up.)
+  if (heldUp(hurl)) {
     m.held = thrownMesh(hurl);
     m.held.scale.setScalar(1.4);
     m.held.position.y = top + 0.5;
@@ -370,11 +379,18 @@ const MAKE = {
       }
     },
   },
-  scarabold: { make: () => new ScarabModel(), side: 1, up: 1, dress() {} },
-  glimmershell: { make: () => new TortoiseModel(), side: 1, up: 1, dress() {} },
-  baronboo: { make: () => new BaronModel(), side: 1, up: 1, dress() {} },
-  sprocket: { make: () => new SprocketModel(), side: 1, up: 1, dress() {} },
-  nimbus: { make: () => new CloudModel(), side: 1, up: 1, dress() {} },
+  scarabold: { make: () => new ScarabModel(), side: 1, up: 1, raw: true, dress() {} },
+  glimmershell: { make: () => new TortoiseModel(), side: 1, up: 1, raw: true, dress() {} },
+  baronboo: { make: () => new BaronModel(), side: 1, up: 1, raw: true, dress() {} },
+  sprocket: { make: () => new SprocketModel(), side: 1, up: 1, raw: true, dress() {} },
+  nimbus: { make: () => new CloudModel(), side: 1, up: 1, raw: true, dress() {} },
+  dotty: { make: () => new LadybirdModel(), side: 1, up: 1, raw: true, dress() {} },
+  bushytail: { make: () => new SquirrelModel(), side: 1, up: 1, raw: true, dress() {} },
+  bumble: { make: () => new BeeModel(), side: 1, up: 1, raw: true, dress() {} },
+  blendalot: { make: () => new ChameleonModel(), side: 1, up: 1, raw: true, dress() {} },
+  inkwell: { make: () => new OctopusModel(), side: 1, up: 1, raw: true, dress() {} },
+  mochi: { make: () => new RabbitModel(), side: 1, up: 1, raw: true, dress() {} },
+  grizzle: { make: () => new GrizzleModel(), side: 1, up: 1, raw: true, dress() {} },
 };
 
 // The model of a boss (shared/bosses.js) by its kind; theme, the island's.
@@ -388,7 +404,7 @@ export function makeBoss(kind, theme = 'sunny') {
   addBossParts(m, { bubble: Math.max(height, plan.body.radius * 2) * 0.78, y: height * 0.5, reach: stompMove(plan)?.reach ?? 0, hurl: plan.moves.find((v) => v.move === 'hurl')?.what ?? null, top: height });
   const update = m.update.bind(m);
   m.update = (dt, state, air = 0, night = false, shielded = false) => {
-    update(dt, underState(state), air, night);
+    update(dt, look.raw ? state : underState(state), air, night);
     bossPose(m, dt, state, air, shielded);
   };
   const dispose = m.dispose.bind(m);

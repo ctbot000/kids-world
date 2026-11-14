@@ -62,6 +62,23 @@ export function palette(theme) {
       return { top: B.PEBBLES, under: B.STONE, deep: B.STONE, beach: B.SAND, flowers: [B.TULIP, B.SUNFLOWER], grass: 0 };
     case 'spires':
       return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.DAISY, B.BLUEBELL, B.TULIP], grass: B.TALL_GRASS };
+    // The Rainbow Lands of its second episode: tulip fields, a ridge of
+    // maples, hills of honeycomb, a jungle, a lagoon, a moor under the moon
+    // and a vale gone grey.
+    case 'tulip':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.TULIP, B.TULIP, B.TULIP, B.COSMOS, B.DAISY], grass: B.TALL_GRASS };
+    case 'maple':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.MUSHROOM, B.SUNFLOWER, B.TULIP], grass: B.TALL_GRASS };
+    case 'honey':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.SUNFLOWER, B.SUNFLOWER, B.DAISY], grass: B.TALL_GRASS };
+    case 'jungle':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, flowers: [B.COSMOS, B.TULIP, B.BLUEBELL, B.MUSHROOM], grass: B.TALL_GRASS };
+    case 'lagoon':
+      return { top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, flowers: [B.COSMOS, B.DAISY], grass: 0 };
+    case 'moor':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.BLUEBELL, B.MUSHROOM, B.DAISY], grass: B.TALL_GRASS };
+    case 'vale':
+      return { top: B.PEBBLES, under: B.STONE, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
     case 'volcano':
       return { top: B.BASALT, under: B.STONE, deep: B.STONE, beach: B.BASALT, flowers: [B.TULIP, B.COSMOS], grass: 0 };
     default:
