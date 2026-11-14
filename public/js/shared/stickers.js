@@ -101,6 +101,7 @@ export const STICKERS = [
   { key: 'full-set', icon: '🐉', name: 'Full Set', text: 'Collect every capsule toy, the super rare ones too', test: (s) => s.capsuletoys >= TOYS.length },
   { key: 'monster-figure', icon: '👾', name: 'Monster Catcher', text: 'Get a monster figure out of a Monster Gashapon on Adventure Isle', test: (s) => s.monsterfigs >= 1 },
   { key: 'chest-hunter', icon: '🗝️', name: 'Chest Hunter', text: 'Open 10 treasure chests on Adventure Isle', test: (s) => s.chests >= 10, goal: 10, of: 'chests' },
+  { key: 'great-thief', icon: '👑', name: 'Great Thief', text: 'Open 1,000 treasure chests on Adventure Isle', test: (s) => s.chests >= 1000, goal: 1000, of: 'chests' },
   { key: 'monster-collector', icon: '👑', name: 'Monster Collector', text: 'Collect every monster figure, King Grumble too', test: (s) => s.monstertoys >= MONSTER_FIGURES.length },
   { key: 'channel-surfer', icon: '📺', name: 'Channel Surfer', text: `Flip through ${CHANNELS.length} channels on a TV`, test: (s) => s.channels >= CHANNELS.length },
   { key: 'little-artist', icon: '🎨', name: 'Little Artist', text: 'Draw 25 strokes on a drawing board', test: (s) => s.strokes >= 25 },

@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'great-thief', date: '2026-11-16', icon: '👑', title: 'The Great Thief sticker', text: 'Ten treasure chests opened on 🌟 Adventure Isle earned the 🗝️ Chest Hunter sticker — now a thousand earns the legendary 👑 Great Thief! Your chests already opened count towards it, so keep unlocking them for coins, and sometimes an HP potion.' },
   { id: 'firefly-hand', date: '2026-11-15', icon: '✨', title: 'A firefly on your hand', text: 'Out at night among the fireflies, stand very still for a few seconds: one drifts down and sits on the back of your hand, glowing softly. Take a step and it flits away again.' },
   { id: 'baby-penguin', date: '2026-11-14', icon: '🐧', title: 'A baby penguin pet', text: 'A new pet in 🐾 My pet: a chubby 🐧 baby penguin, in the colour you like with its tummy white. Run off and it flops onto its tummy and slides after you, and in the water it paddles along quicker than it walks.' },
   { id: 'fish-dictionary', date: '2026-11-14', icon: '🐟', title: 'The Fish Dictionary', text: 'The first time you catch each kind of fish, its page fills in in your 🐟 Fish Dictionary, with a little cheer. Open it from the 📖 beside 🎣 Fish at the water’s edge, or from the 🎒 backpack: every kind you have caught, in 3D with how many, and the rest as dark shapes still to find. Can you land the rare golden fish?' },
