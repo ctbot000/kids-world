@@ -504,6 +504,10 @@ export class Sound {
         } else if (kind === 'meteorstaff') {
           this.tone(120 * r(), { decay: 0.3, gain: 0.65 * near, slide: 40, slideTime: 0.26, attack: 0.002 });
           this.noise(0.18, { type: 'lowpass', freq: 1300, sweep: 240, gain: 0.48 * near });
+        } else if (kind === 'punchglove') {
+          // A great padded thud, with a boom under it.
+          this.tone(110 * r(), { decay: 0.26, gain: 0.68 * near, slide: 36, slideTime: 0.22, attack: 0.002 });
+          this.noise(0.12, { type: 'lowpass', freq: 900, sweep: 200, gain: 0.5 * near });
         } else {
           this.tone(140 * r(), { decay: 0.15, gain: 0.55 * near, slide: 52, slideTime: 0.12, attack: 0.002 });
           this.noise(0.08, { type: 'lowpass', freq: 1700, sweep: 320, gain: 0.42 * near });

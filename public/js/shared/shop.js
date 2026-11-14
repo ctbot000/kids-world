@@ -114,6 +114,10 @@ export const GEAR = [
       { key: 'galaxyblade', name: 'Galaxy Blade', icon: '🌌', price: 1200, power: 7, push: 13, reach: 2.2, king: 5, uses: 150, spin: true, does: 'Spin right round in a whirl of stars and bop every monster all round you: seven hearts off each, and a boss feels it five times over.' },
       { key: 'rainbowray', name: 'Rainbow Ray', icon: '🌈', price: 1800, power: 8, reach: 6.3, king: 6, uses: 110, beam: true, does: 'Fires a rainbow beam further than anything else, straight through every monster in a line: eight hearts off each, and a boss feels it six times over.' },
       { key: 'meteorstaff', name: 'Meteor Staff', icon: '☄️', price: 2500, power: 12, push: 14, reach: 4.4, king: 7, uses: 90, blast: 3.6, does: 'Calls a meteor down out of the sky a few steps ahead: twelve hearts off everything in its huge blast, jewels shaken out of gem rocks, and the ground never dug. A boss feels it seven times over.' },
+      // shock: how much harder the charged King Punch bops when it is thrown
+      // with this in hand (monsters.js KING_POWER), and wave: how much further
+      // round it reaches (KING_REACH).
+      { key: 'punchglove', name: "King's Punch Glove", icon: '🥊', price: 3200, power: 7, push: 12, reach: 1.4, king: 8, uses: 120, shock: 18, wave: 1.6, does: 'Seven hearts off every monster it bops — and hold bop to charge a King Punch that lands nearly twice as hard on everything its golden shockwave reaches. A boss feels it eight times over.' },
     ],
   },
 ];

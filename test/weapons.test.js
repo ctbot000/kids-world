@@ -48,13 +48,16 @@ function meadow(weapon) {
 test('the mightiest go last, each dearer and harder than everything before it, so saved weapons stay what they were', () => {
   assert.deepEqual(
     WEAPONS.map((w) => w.key),
-    ['sword', 'blaster', 'hammer', 'lavablade', 'bombrod', 'bow', 'thunderspear', 'galaxyblade', 'rainbowray', 'meteorstaff'],
+    ['sword', 'blaster', 'hammer', 'lavablade', 'bombrod', 'bow', 'thunderspear', 'galaxyblade', 'rainbowray', 'meteorstaff', 'punchglove'],
   );
   for (const [i, w] of WEAPONS.entries()) {
     if (i < 6) continue;
+    // The King's Punch Glove's bop is seven hearts, like a Galaxy Blade's; its
+    // charge is what makes it the mightiest.
+    const hit = w.shock ?? w.power;
     for (const before of WEAPONS.slice(0, i)) {
       assert.ok(w.price > before.price, `${w.name} dearer than the ${before.name}`);
-      assert.ok(w.power > before.power, `${w.name} takes more hearts than the ${before.name}`);
+      assert.ok(hit > before.power, `${w.name} hits harder than the ${before.name}`);
       assert.ok(w.king > before.king, `a boss feels the ${w.name} more than the ${before.name}`);
     }
     assert.ok(w.does.length > 20 && w.icon && w.uses > 0, w.name);
@@ -66,7 +69,7 @@ test('the mightiest go last, each dearer and harder than everything before it, s
     assert.equal(wornWeapon(cleanGear({ weapon: i + 1 })).key, w.key);
     assert.equal(cleanLook(lookWithGear(look, cleanGear({ weapon: i + 1 }))).weapon, w.key);
   }
-  assert.equal(nextLevel(cleanGear({ weapon: WEAPONS.length }), 'weapon'), null, 'the Meteor Staff is the best there is');
+  assert.equal(nextLevel(cleanGear({ weapon: WEAPONS.length }), 'weapon'), null, 'the King\'s Punch Glove is the best there is');
   // A Lava Blade picked before they came is still what is in your hand.
   assert.equal(wornWeapon(cleanGear({ weapon: 10, pick: { weapon: 4 } })).key, 'lavablade');
 });

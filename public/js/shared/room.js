@@ -2092,26 +2092,29 @@ export class Room {
     const now = this.now();
     const m = this.monsters.get(msg.id);
     if (!m || (!m.camp && !m.march && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
-    // A King Punch (a bare fist held to charge, game.js): only with an empty
-    // hand, and it reaches further round a wider arc. HP and XP are as a punch.
-    const king = msg.king === true && !weaponOf(p.look?.weapon);
+    // A King Punch (a bare fist held to charge, game.js): with an empty hand
+    // it is a punch that reaches further round a wider arc (KING_REACH); with
+    // the King's Punch Glove on, far further still (its wave) and harder (its
+    // shock) than its plain bop. HP and XP are as a punch.
+    const weapon = weaponOf(p.look?.weapon);
+    const glove = msg.king === true && weapon?.key === 'punchglove' ? weapon : null;
+    const king = Boolean(glove) || (msg.king === true && !weapon);
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
-    const weapon = weaponOf(p.look?.weapon);
-    if (!landed && !this.monsters.canBop(m.id, at, king ? KING_REACH : weapon?.reach ?? 0)) return;
+    if (!landed && !this.monsters.canBop(m.id, at, king ? (glove ? KING_REACH + glove.wave : KING_REACH) : weapon?.reach ?? 0)) return;
     if (!landed && weapon?.chain) this.boltOn(p, m, now, weapon);
     if (m.march) {
-      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
+      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (glove ? glove.king : king ? 1 : weapon?.king ?? 1) : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1));
       return;
     }
     if (isBoss(m.kind)) {
-      this.bopKing(p, m, now, weapon?.king ?? 1);
+      this.bopKing(p, m, now, glove ? glove.king : king ? 1 : weapon?.king ?? 1);
       return;
     }
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push, landed ? null : weapon?.key);
+      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1), king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
