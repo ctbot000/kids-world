@@ -8,7 +8,7 @@ import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
 import { goBoardNear, isGoBoard } from './shared/go.js';
 import { cleanRound } from './shared/hideseek.js';
-import { gashaponNear, isGashapon } from './shared/gashapon.js';
+import { figuresOwned, gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
@@ -487,8 +487,12 @@ export class Game extends EventTarget {
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
-    // A new pet (or none) chosen while here: at your side at once.
-    this.onProfile = () => this.syncPet(this.pid);
+    // A new pet (or none) chosen while here: at your side at once. Your
+    // monster figures too, when they change: the island keeps them on you.
+    this.onProfile = () => {
+      this.syncPet(this.pid);
+      this.sendFigures();
+    };
     profile.addEventListener('change', this.onProfile);
   }
 
@@ -497,6 +501,14 @@ export class Game extends EventTarget {
   joinMessage() {
     const p = this.profile;
     return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.who ? { who: this.who } : {}), ...(this.friendWho ? { friendWho: this.friendWho } : {}), ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
+  }
+
+  // The monster figures you have in My collection (shared/gashapon.js), as
+  // their keys, for the island to keep on you: owning one takes a heart more
+  // off that kind of monster with every bop on Adventure Isle (room.js
+  // figBonus). Said again whenever they change, as your look is.
+  sendFigures() {
+    this.send({ t: 'figures', keys: figuresOwned(this.profile.data.gear.toys) });
   }
 
   // The world's own profile to earn and carry with here (the shared isle has
@@ -916,6 +928,9 @@ export class Game extends EventTarget {
       this.renderer.view.pitch = ARRIVE_PITCH;
       this.me.yaw = spawn.yaw + Math.PI;
     }
+    // The island hears which monster figures you have, for the bop bonus of
+    // owning the one you are bopping (room.js figures).
+    if (!this.watching) this.sendFigures();
     this.emit('welcome', { again });
     this.emit('players');
     this.emit('settings');
