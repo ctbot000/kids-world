@@ -841,7 +841,7 @@ export class Sound {
         this.tone(650 * r(), { decay: 0.16, gain: 0.08, slide: 220, slideTime: 0.14 });
         break;
       case 'penguin':
-        // Aah, aah!
+        // Aah, aah! (a baby penguin pet says it too, as the island's penguins do)
         for (let i = 0; i < 2; i++) this.tone(620 * r(), { at: i * 0.2, type: 'sawtooth', decay: 0.13, gain: 0.05, slide: 480, vibrato: 25 });
         break;
       case 'seal':
