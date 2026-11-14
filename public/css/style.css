@@ -1061,6 +1061,78 @@ body.fullscreen .full-icon .leave {
     0 3px 10px rgba(61, 46, 79, 0.25);
 }
 
+/* 📖 beside the 🎣 Fish button at the water's edge, opening the 🐟 Fish
+   Dictionary: a small round one. */
+.ride-button.fishbook-button {
+  justify-content: center;
+  min-width: 54px;
+  padding: 4px 12px;
+  font-size: 1.35rem;
+  background: #bde3ff;
+  box-shadow:
+    0 4px 0 #3a7fb5,
+    0 3px 10px rgba(61, 46, 79, 0.25);
+}
+
+/* A fish's page in the dictionary: its picture (a silhouette until caught)
+   and its name, side by side in the grid of pages. */
+.fish-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 3px solid white;
+  border-radius: 18px;
+  background: #eaf6ff;
+  text-align: center;
+}
+
+.fish-page img,
+.fish-page .icon {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
+.fish-page .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+}
+
+/* Still to catch: the fish drawn as a dark shape, unnamed. */
+.fish-page.missing img {
+  filter: brightness(0.18) saturate(0.4) contrast(1.4);
+}
+
+/* Just caught for the first time: a gold edge round its page. */
+.fish-page.fresh {
+  border-color: #ffd84d;
+}
+
+/* Its name (??? till caught), ✨ Rare, and how many caught or how long
+   it grows, one under another. */
+.fish-page .kind {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.fish-page .rare {
+  color: #a86400;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.fish-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 10px;
+}
+
 /* 3, 2, 1, GO! in big letters over the track. */
 .race-count {
   position: fixed;
