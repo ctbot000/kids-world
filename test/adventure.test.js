@@ -13,7 +13,8 @@ import { AdventureSim, bossHearts, CAMP_RADIUS, campFence, CASTLE_RADIUS, castle
 import { keptProfile } from '../public/js/shared/keeper.js';
 import { BOSSES, stompMove } from '../public/js/shared/bosses.js';
 import { chapterOf } from '../public/js/shared/isle-story.js';
-import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, maxHp, MONSTER_KINDS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
+import { FIG_HEARTS, figuresOwned } from '../public/js/shared/gashapon.js';
+import { campDistance, DAZE_MS, DAZED_HIT, HIT_MS, kindOf, maxHp, MONSTER_KINDS, STOMP, unpackMonster } from '../public/js/shared/monsters.js';
 import { popKey, seenKey, STAT_KEYS } from '../public/js/shared/stickers.js';
 import * as B from '../public/js/shared/blocks.js';
 import { Rng } from '../public/js/shared/rng.js';
@@ -475,6 +476,62 @@ test('an island made with ⚔️ Adventure on, back when any island could be one
   assert.equal(made.world.blocks.indexOf(B.GLOOM), -1, 'no gloomy ground anywhere');
   // And a stage of the isle going on is never saved with its island.
   assert.equal(isleRoom().room.exportSave().adventure, undefined);
+});
+
+test('a monster figure you own takes a heart more off that monster with every bop, and only that monster', () => {
+  const { room, time } = isleRoom();
+  const a = join(room);
+  const b = join(room, 'Brave Otter');
+  // The Grumpy Blob figure is a's; b owns none.
+  assert.deepEqual(figuresOwned({ 'm-blob': 1, dino: 2 }), ['m-blob']);
+  room.receive(a, { t: 'figures', keys: ['m-blob', 'm-big', 'made-up'] });
+  room.receive(b, { t: 'figures', keys: [] });
+  assert.deepEqual(room.players.get(a.pid).figs, ['blob', 'big'], 'the island keeps the monsters they are figures of');
+  assert.deepEqual(room.players.get(b.pid).figs, []);
+  const [c] = camps(room);
+  play(room, time, 300, [a, c.x + c.r + 10, c.z]);
+  const bop = (who, m) => {
+    time.t += HIT_MS;
+    room.receive(who, { t: 'm', s: [m.body.x + m.body.radius + 1, m.body.y, m.body.z, 0, 0, 0] });
+    room.receive(who, { t: 'bop', id: m.id });
+    room.tick();
+  };
+  // A punch takes two of the blob's three hearts for a, one of them for b.
+  // (kindOf tells each monster kind's hearts, as below.)
+  const blobA = room.monsters.add(room.world, c.x - 2, c.y, c.z, { camp: c.id, kind: 'blob' });
+  const blobB = room.monsters.add(room.world, c.x + 2, c.y, c.z, { camp: c.id, kind: 'blob' });
+  bop(a, blobA);
+  bop(b, blobB);
+  assert.deepEqual([blobA.hearts, blobB.hearts], [kindOf('blob').hearts - 1 - FIG_HEARTS, kindOf('blob').hearts - 1], 'a heart more with the figure');
+  assert.equal(a.all('mhit').find((h) => h.id === blobA.id).hearts, blobA.hearts, 'and the word says so');
+  assert.equal(b.all('mhit').find((h) => h.id === blobB.id).hearts, blobB.hearts);
+  // A landing on a monster that takes a few of them: a heart more too.
+  const land = (who, m) => {
+    time.t += HIT_MS;
+    room.receive(who, { t: 'm', s: [m.body.x, m.body.y + m.body.height, m.body.z, 0, 0, 0] });
+    room.receive(who, { t: 'bop', id: m.id, on: true });
+    room.tick();
+  };
+  const bigA = room.monsters.add(room.world, c.x, c.y, c.z + 2, { camp: c.id, kind: 'big' });
+  const bigB = room.monsters.add(room.world, c.x, c.y, c.z - 2, { camp: c.id, kind: 'big' });
+  land(a, bigA);
+  land(b, bigB);
+  assert.deepEqual([bigA.hearts, bigB.hearts], [kindOf('big').hearts - kindOf('big').land - FIG_HEARTS, kindOf('big').hearts - kindOf('big').land]);
+  // A figure of a beast, a boss or King Grumble helps with none of them (the
+  // only figure of a boss there is, is King Grumble's own).
+  const p = room.players.get(a.pid);
+  assert.deepEqual(figuresOwned({ 'm-king': 1, 'm-rattle': 1 }), ['m-rattle', 'm-king']);
+  room.receive(a, { t: 'figures', keys: ['m-rattle', 'm-king'] });
+  const beast = room.monsters.add(room.world, c.x + 2, c.y, c.z, { camp: c.id, kind: 'rattle' });
+  bop(a, beast);
+  assert.equal(beast.hearts, kindOf('rattle').hearts - 1, 'a beast takes a bop as before');
+  assert.equal(room.figBonus(p, { kind: 'king', march: null }), 0, 'King Grumble as before');
+  assert.equal(room.figBonus(p, { kind: 'clawbeard', march: null }), 0, 'a chapter boss as before');
+  assert.equal(room.figBonus(p, { kind: 'blob', march: {} }), 0, 'a marcher as before');
+  assert.equal(room.figBonus(room.players.get(b.pid), { kind: 'blob', march: null }), 0, 'and none owned: none');
+  // No camps, no bonus: an island with monsters on is as it always was.
+  const plain = new Room({ code: '654321', theme: 'flat', seed: 7, now: time.now, settings: { monsters: true } });
+  assert.equal(plain.figBonus({ figs: ['blob'] }, { kind: 'blob', march: null }), 0);
 });
 
 test('the monster book has every kind of monster, each with a name and stats, counted as seen and popped in stats the keeper keeps', () => {

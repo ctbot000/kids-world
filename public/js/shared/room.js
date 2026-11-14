@@ -35,9 +35,10 @@ import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
-import { isMonsterGashapon } from './gashapon.js';
+import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
 import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
 import { CHEST_REACH } from './treasure.js';
+import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
@@ -638,6 +639,16 @@ export class Room {
         if (name) p.name = this.uniqueName(name, p.id);
         this.broadcast({ t: 'look', pid, look: p.look, name: p.name });
         this.changed();
+        break;
+      }
+      // The monster figures someone has in My collection (shared/gashapon.js):
+      // kept by the island on them, for the bop bonus of owning the one they
+      // are bopping (bop). Their page says which each time it changes, as it
+      // does their look — nobody else needs to know.
+      case 'figures': {
+        const kinds = kindsOfFigures(msg.keys);
+        if (p.figs && kinds.join() === p.figs.join()) break;
+        p.figs = kinds;
         break;
       }
       case 'critter':
@@ -2093,6 +2104,17 @@ export class Room {
     this.broadcast({ t: 'healed', pid: p.id, ...this.hpOf(p) });
   }
 
+  // A hit from someone who owns that kind of monster's figure (the Monster
+  // Gashapon's, in My collection) takes FIG_HEARTS more off it, so collecting
+  // figures makes you stronger. Only where the camps are, the shared isle
+  // Adventure Isle, and only the island's ordinary monsters and the camps'
+  // guards: beasts, the chapters' bosses and King Grumble feel a blow from a
+  // figure's owner as any other (see bop).
+  figBonus(p, m) {
+    if (!this.adventure || m.march || isBoss(m.kind) || isBeast(m.kind)) return 0;
+    return p.figs?.includes(m.kind) ? FIG_HEARTS : 0;
+  }
+
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
   // and from further, with a toy weapon in hand), and pop with the last.
   // (King Grumble takes a lot of either, a Big Bruiser a few landings, and
@@ -2121,7 +2143,7 @@ export class Room {
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push, landed ? null : weapon?.key);
+      const hit = this.monsters.hit(m, p.id, at, now, (landed ? land : (weapon?.power ?? 1)) + this.figBonus(p, m), king ? KING_PUSH : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -2158,7 +2180,7 @@ export class Room {
       this.bopKing(p, m, now, weapon.king);
       return;
     }
-    const hit = this.monsters.hit(m, p.id, from, now, weapon.power, weapon.push, weapon.key);
+    const hit = this.monsters.hit(m, p.id, from, now, weapon.power + this.figBonus(p, m), weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
