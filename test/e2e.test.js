@@ -8822,7 +8822,7 @@ test('the admin page watches any island it kept: live while it is played, and it
   }
 });
 
-test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, too soon scares it off, and walking off reels in', { skip }, async () => {
+test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bite swims in under the water to circle it, 🎣 Strike! (Q) when it bites hooks it, holding Q reels it in over the line meter into the basket, the first of a kind filling its page in the 🐟 Fish Dictionary (📖 beside 🎣 Fish, and the backpack), too soon scares it off, and walking off reels in', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
   await makeIsland(page, { online: false, theme: 'Flat Land' });
   // Level ground beside the start, cleared, with a pond dug in front, to the east.
@@ -8886,6 +8886,42 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.profile.basket.fish, window.kidsWorld.profile.data.stats.fished, Boolean(window.kidsWorld.profile.data.stickers['gone-fishing'])]), [1, 1, true]);
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => /You caught a Minnow, \d+ cm long!/.test(t.textContent)));
   await until(page, () => !window.kidsWorld.game.fishing && window.kidsWorld.game.lines.size === 0);
+  // The first minnow fills its page in the 🐟 Fish Dictionary, with a cheer,
+  // counted with the rest of what you do (so it goes with a login).
+  await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('New in your 🐟 Fish Dictionary: Minnow!')));
+  assert.equal(await page.evaluate(() => window.kidsWorld.profile.data.stats.caughtminnow), 1);
+  // It opens from a 📖 beside the 🎣 Fish button, not over it.
+  await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish') && !document.getElementById('fishbook').hidden);
+  const apart = await page.evaluate(() => {
+    const a = document.getElementById('fishbook').getBoundingClientRect();
+    const b = document.getElementById('ride').getBoundingClientRect();
+    return a.width > 0 && (a.right <= b.left || a.left >= b.right);
+  });
+  assert.ok(apart, 'the 📖 beside the 🎣 Fish button');
+  await page.click('#fishbook');
+  const book = () =>
+    page.evaluate(() => ({
+      heading: document.querySelector('#modal-body .collection-head')?.textContent,
+      pages: [...document.querySelectorAll('#modal-body .fish-page')].map((el) => `${el.dataset.fish}${el.classList.contains('missing') ? '' : ' caught'}${el.classList.contains('fresh') ? ' new' : ''}`),
+      minnow: document.querySelector('#modal-body .fish-page[data-fish="minnow"]')?.textContent,
+      golden: document.querySelector('#modal-body .fish-page[data-fish="goldfish"]')?.textContent,
+    }));
+  // Every kind drawn in 3D (render/gasha-stage.js), the ones still to catch
+  // as dark shapes of themselves.
+  await until(page, () => [...document.querySelectorAll('#modal-body .fish-page img')].filter((img) => img.src.startsWith('data:image/png')).length === 6);
+  const opened = await book();
+  assert.match(opened.heading, /^1 of 6 kinds caught/);
+  assert.deepEqual(opened.pages, ['minnow caught new', 'perch', 'clownfish', 'trout', 'puffer', 'goldfish']);
+  assert.match(opened.minnow, /Minnow.*Caught 1/);
+  assert.match(opened.golden, /\?\?\?✨ Rare15–30 cm/, 'the golden fish unnamed till caught, and rare');
+  // And from the 🎒 backpack: its 🐟 Fish chip.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+  await page.evaluate(() => [...document.querySelectorAll('#modal-body .dialog-head .chip')].find((b) => b.textContent === '🐟 Fish').click());
+  await until(page, () => document.querySelector('#modal-body .fish-grid'));
+  assert.equal((await book()).pages.filter((p) => p.includes('caught')).length, 1);
+  await page.keyboard.press('Escape');
+  await until(page, () => !window.kidsWorld.ui.modalOpen);
   // Too soon: it is scared off, and the line comes in empty.
   await until(page, () => document.getElementById('ride').textContent.includes('🎣 Fish'));
   await page.keyboard.press('KeyQ');
@@ -8921,6 +8957,74 @@ test('fishing: 🎣 Fish (Q) at the shore casts a line and the fish that will bi
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.game.fishing?.phase, window.kidsWorld.game.reelHeld]), ['fight', true], 'hooked and reeling');
   await press('pointerup');
   assert.equal(await page.evaluate(() => window.kidsWorld.game.reelHeld), false, 'let go');
+  assert.deepEqual(pageErrors, []);
+  await page.browserContext().close();
+});
+
+test('a dish: 🍽️ Dish (Q) beside it opens its window, food tapped from the basket goes on the plate and comes back tapped again, and picking the dish up gives back what was on it', { skip }, async () => {
+  const page = await openPlayer(base + '?p2p=1', { name: 'Happy Panda', look: { animal: 'panda' } });
+  await makeIsland(page, { online: false, theme: 'Flat Land' });
+  // A dish beside the start, on level ground, nothing about to take the button.
+  const at = await page.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const kw = window.kidsWorld;
+    const room = kw.session.link.room;
+    const b = kw.game.me.body;
+    const z = Math.floor(b.z);
+    const ground = room.world.top(Math.floor(b.x), z);
+    let x = Math.floor(b.x) + 3;
+    while (x < Math.floor(b.x) + 40 && (room.world.top(x, z) !== ground || room.world.top(x - 1, z) !== ground)) x++;
+    room.natureCell([x, ground + 1, z], B.DISH);
+    for (const c of [...room.critters.list]) {
+      if (Math.hypot(c.x - x, c.z - z) < 16) {
+        room.critters.remove(c.id);
+        room.broadcast({ t: 'cdel', id: c.id, by: 0 });
+      }
+    }
+    return { x, y: ground + 1, z, id: B.DISH };
+  });
+  await until(page, (at) => window.kidsWorld.game.world.get(at.x, at.y, at.z) === at.id, at);
+  await page.evaluate((at) => {
+    const kw = window.kidsWorld;
+    kw.profile.addToBasket('apple', 2);
+    kw.profile.addToBasket('fish', 1);
+    Object.assign(kw.game.me.body, { x: at.x - 0.5, y: at.y, z: at.z + 0.5, vx: 0, vy: 0, vz: 0, flying: false });
+    kw.game.sendMove(true);
+    for (let i = 0; i < 90; i++) kw.step(1 / 60, 1);
+  }, at);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🍽️ Dish'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('Dish'));
+  const chip = (row, key) => `#modal-body .dish-row:nth-of-type(${row}) .dish-food[data-food="${key}"]`;
+  // Two apples and the fish on: the basket gives each up once the island says so.
+  await page.click(chip(2, 'apple'));
+  await until(page, () => window.kidsWorld.profile.basket.apple === 1);
+  await page.click(chip(2, 'apple'));
+  await until(page, () => window.kidsWorld.profile.basket.apple === 0);
+  await page.click(chip(2, 'fish'));
+  await until(page, () => window.kidsWorld.profile.basket.fish === 0);
+  const state = () =>
+    page.evaluate((at) => {
+      const kw = window.kidsWorld;
+      return { dish: kw.game.dishFood(at.x, at.y, at.z), room: kw.session.link.room.packDishes(), plate: [...document.querySelectorAll('#modal-body .dish-row:nth-of-type(1) .dish-food')].map((b) => b.dataset.food), note: document.querySelector('#modal-body p.muted:last-child')?.textContent };
+    }, at);
+  let s = await state();
+  assert.deepEqual(s.dish, ['apple', 'apple', 'fish']);
+  assert.deepEqual(s.room, [[at.x, at.y, at.z, ['apple', 'apple', 'fish']]]);
+  assert.deepEqual(s.plate, ['apple', 'apple', 'fish']);
+  assert.match(s.note, /full/);
+  // Drawn on the plate: its chunk has the pictures of the three.
+  await until(page, (at) => window.kidsWorld.game.renderer.terrain.dishFood.get(`${at.x},${at.y},${at.z}`)?.length === 3, at);
+  // One tapped on the plate comes back.
+  await page.click(chip(1, 'fish'));
+  await until(page, () => window.kidsWorld.profile.basket.fish === 1);
+  s = await state();
+  assert.deepEqual(s.dish, ['apple', 'apple']);
+  await page.keyboard.press('Escape');
+  // Picked up, the dish gives back the two apples on it.
+  await page.evaluate((at) => window.kidsWorld.game.edit('pick', [at.x, at.y, at.z, 0]), at);
+  await until(page, () => window.kidsWorld.profile.basket.apple === 2);
+  await until(page, () => window.kidsWorld.session.link.room.packDishes().length === 0);
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });

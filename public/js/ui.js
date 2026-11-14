@@ -16,7 +16,7 @@ import { isBroadcastStation, onAirShow } from './shared/station.js';
 import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
-import { FIGHT } from './shared/fishing.js';
+import { FIGHT, FISH_KINDS } from './shared/fishing.js';
 import { ropeDue } from './shared/jump-rope.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
@@ -47,7 +47,8 @@ import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, is
 import { paint } from './render/drawings.js';
 import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { CHAPTERS, chapterOf, EPISODES, firstStage, introOf, stageName } from './shared/isle-story.js';
-import { popKey, seenKey } from './shared/stickers.js';
+import { caughtKey, popKey, seenKey } from './shared/stickers.js';
+import { DISH_MAX, isDish } from './shared/dish.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -2242,7 +2243,7 @@ export class UI {
         draw();
         root.append(
           ...[
-            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
+            h('div', { class: 'dialog-head' }, h('h2', {}, '🎒 Backpack'), h('button', { class: 'chip', type: 'button', onclick: () => this.shopDialog() }, '🛒 Shop'), h('button', { class: 'chip', type: 'button', onclick: () => this.collectionDialog() }, '🧸 Collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.fishDialog() }, '🐟 Fish'), p !== this.isle ? h('button', { class: 'chip', type: 'button', onclick: () => this.stockDialog() }, '📈 Stocks') : null),
             p === this.isle ? h('p', { class: 'muted' }, 'This is Adventure Isle’s backpack: what you bought on the isle, apart from your things everywhere else.') : null,
             h('p', { class: 'muted' }, 'Put on what you like and see how you look: friends see it on you too. One set of clothes at a time, and one toy weapon in your hand.'),
             stats,
@@ -3625,6 +3626,15 @@ export class UI {
       this.sound.unlock();
       game.defend();
     };
+    // 📖 beside the 🎣 Fish button at the water's edge: the 🐟 Fish
+    // Dictionary of the kinds you have caught.
+    $('fishbook').onmousedown = (e) => e.preventDefault();
+    $('fishbook').onclick = () => {
+      $('fishbook').blur();
+      this.sound.unlock();
+      this.sound.play('ui');
+      this.fishDialog();
+    };
     const on = (type, fn) => game.addEventListener(type, fn);
     on('players', () => {
       this.renderFriends();
@@ -3673,6 +3683,7 @@ export class UI {
     on('screens', () => this.screenChanged?.());
     on('computer-open', () => this.computerDialog());
     on('stocks-open', () => this.stockDialog());
+    on('dish-open', (e) => this.dishDialog(e.detail));
     on('kit-open', () => this.robotKitDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
@@ -3706,6 +3717,12 @@ export class UI {
     on('undo', () => this.buildToolbar());
     on('toast', (e) => this.toast(e.detail.icon, e.detail.text));
     on('reward', (e) => this.reward(e.detail));
+    // A first of a kind of fish: the dictionary's page filled in, said out
+    // loud over the catch itself, and marked new there for a little while.
+    on('newfish', (e) => {
+      this.freshFish = { key: e.detail.key, at: Date.now() };
+      this.toast('📖', `New in your 🐟 Fish Dictionary: ${e.detail.name}!`);
+    });
     on('hit-word', (e) => this.hitWord(e.detail));
     on('hit-number', (e) => this.hitNumber(e.detail));
     on('hit-lines', (e) => this.hitLines(e.detail));
@@ -5155,7 +5172,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.fishTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fishTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -5298,7 +5315,7 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.fishTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.dishTarget ?? g.fishTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
@@ -5324,12 +5341,12 @@ export class UI {
                     ? ['🎣 Strike!', 'A fish is biting: strike now!']
                     : ['🎣 Wait…', 'Wait for the bobber to go right under']
             : null;
-    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t === g.dishTarget ? '🍽️ Dish' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t === g.stockTarget ? 'Buy and sell shares at the stock terminal' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t === g.stockTarget ? 'Buy and sell shares at the stock terminal' : t === g.dishTarget ? 'Put food on the dish, or take some back' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     el.classList.toggle('biting', label === '🎣 Strike!' || label === '🌬️ Blow!');
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
@@ -5338,8 +5355,20 @@ export class UI {
     const width = el.offsetWidth || 150;
     const x = scr.visible ? scr.x + 60 + width / 2 : w / 2;
     const y = scr.visible ? scr.y + 24 : 220;
-    el.style.transform = `translate(${Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x))}px, ${Math.min(hgt - 150, Math.max(200, y))}px) translate(-50%, -100%)`;
+    const left = Math.min(w - 90 - width / 2, Math.max(16 + width / 2, x));
+    const top = Math.min(hgt - 150, Math.max(200, y));
+    el.style.transform = `translate(${left}px, ${top}px) translate(-50%, -100%)`;
     el.hidden = false;
+    // At the water's edge, the 🐟 Fish Dictionary opens from a 📖 beside the
+    // 🎣 Fish button, on its left (its right, with no room there) — while
+    // your line is out too.
+    const book = $('fishbook');
+    if (t === g.fishTarget && !g.watching) {
+      const half = (book.offsetWidth || 54) / 2;
+      const before = left - width / 2 - 8 - half;
+      book.style.transform = `translate(${before - half >= 16 ? before : left + width / 2 + 8 + half}px, ${top}px) translate(-50%, -100%)`;
+      book.hidden = false;
+    } else book.hidden = true;
   }
 
   // The game at the arcade machine you pressed Play at, in a window: how it
@@ -5836,6 +5865,68 @@ export class UI {
       h('span', { class: 'name' }, n ? t.name : '???'),
       h('span', { class: `rarity ${r.key}`, 'aria-label': r.name }, h('span', { class: 'stars' }, r.stars), ` ${r.name}`),
       n > 1 ? h('span', { class: 'count' }, `×${n}`) : null,
+    );
+  }
+
+  // The 🐟 Fish Dictionary: a page for every kind of fish there is to catch
+  // (shared/fishing.js FISH_KINDS), filled in with its picture and its name
+  // the first time you catch one — until then a silhouette, with the rare
+  // golden fish saying so. Opened from a 📖 beside the 🎣 Fish button at the
+  // water's edge and from the 🎒 backpack. How many of each kind you have
+  // caught is counted with the rest of what you do (stickers.js caughtKey),
+  // so it goes with a login to your other devices.
+  fishDialog() {
+    const p = this.profile;
+    let onCount = null;
+    this.openModal(
+      (root) => {
+        const heading = h('h3', { class: 'collection-head' });
+        const grid = h('div', { class: 'fish-grid', role: 'group', 'aria-label': 'Fish Dictionary' });
+        // The fish drawn in 3D as on the island (render/gasha-stage.js), once
+        // the pictures are made; its emoji till then, or without WebGL. The
+        // ones still to catch are the same pictures, darkened to a silhouette.
+        // A kind just caught for the first time says it is new.
+        const card = (c, n) => {
+          const fresh = n > 0 && this.freshFish?.key === c.key && Date.now() - this.freshFish.at < 10_000;
+          const pic = this.fishPictures?.[c.key];
+          return h(
+            'div',
+            { class: `fish-page${n ? '' : ' missing'}${fresh ? ' fresh' : ''}`, 'data-fish': c.key, title: n ? c.name : `A ${c.rare ? 'rare ' : ''}fish still to catch` },
+            pic ? h('img', { src: pic, alt: n ? c.name : 'A fish still to catch', draggable: false }) : h('span', { class: 'icon' }, n ? c.icon : '🐟'),
+            h('span', { class: 'kind' }, n ? h('b', {}, c.name) : h('b', { class: 'muted' }, '???'), c.rare ? h('span', { class: 'rare' }, '✨ Rare') : null, h('span', { class: 'muted' }, n ? `Caught ${n}` : `${c.cm[0]}–${c.cm[1]} cm`)),
+            fresh ? h('span', { class: 'rare' }, 'New!') : null,
+          );
+        };
+        // Drawn again when a count changes, but only once a fish is caught:
+        // every step you take is counted too.
+        let shown = '';
+        const draw = (always = true) => {
+          const counts = FISH_KINDS.map((c) => p.data.stats[caughtKey(c.key)] ?? 0);
+          const key = counts.join();
+          if (!always && key === shown) return;
+          shown = key;
+          heading.textContent = `${counts.filter((n) => n > 0).length} of ${FISH_KINDS.length} kinds caught — ${this.game?.fishing ? 'your line is still out!' : 'cast a line at the water’s edge'}`;
+          grid.replaceChildren(...FISH_KINDS.map((c, i) => card(c, counts[i])));
+        };
+        root.append(
+          h('div', { class: 'dialog-head' }, h('h2', {}, '🐟 Fish Dictionary'), h('button', { class: 'chip', type: 'button', onclick: () => this.backpackDialog() }, '🎒 Backpack')),
+          heading,
+          h('p', { class: 'muted' }, 'Every kind of fish fills in its page the first time you catch one. Cast a line from the shore — the rare golden fish is the hardest to land!'),
+          grid,
+        );
+        draw();
+        if (!this.fishPictures) {
+          import('./render/gasha-stage.js')
+            .then(({ fishPortraits }) => {
+              this.fishPictures = fishPortraits(FISH_KINDS.map((c) => c.key));
+              if (this.modalOpen && grid.isConnected) draw();
+            })
+            .catch(() => {});
+        }
+        onCount = () => draw(false);
+        p.addEventListener('count', onCount);
+      },
+      { onClose: () => p.removeEventListener('count', onCount) },
     );
   }
 
@@ -6448,6 +6539,48 @@ export class UI {
   }
 
   // The stock market's window: buy and sell shares (ui-stocks.js).
+  // 🍽️ A dish (shared/dish.js): what is on it, a piece tapped to take it
+  // back to your basket, and the food in your basket, one tapped to set a
+  // piece on the plate (up to DISH_MAX), for everyone on the island to see.
+  dishDialog(t) {
+    const g = this.game;
+    const p = this.profile;
+    let redraw = null;
+    this.openModal(
+      (root) => {
+        const plate = h('div', { class: 'dish-row', role: 'group', 'aria-label': 'On the dish' });
+        const basket = h('div', { class: 'dish-row', role: 'group', 'aria-label': 'Food in your basket' });
+        const note = h('p', { class: 'muted' });
+        const info = (key) => B.COLLECTABLES.find((c) => c.key === key);
+        const piece = (key, label, attrs) => h('button', { class: 'chip dish-food', type: 'button', 'data-food': key, ...attrs }, this.img(info(key).item, info(key).name), label);
+        redraw = () => {
+          // The dish picked up meanwhile: nothing here to show.
+          if (!isDish(g.world.get(t.x, t.y, t.z))) {
+            this.closeModal();
+            return;
+          }
+          const food = g.dishFood(t.x, t.y, t.z);
+          const full = food.length >= DISH_MAX;
+          plate.replaceChildren(...(food.length ? food.map((key, i) => piece(key, info(key).name, { 'aria-label': `Take the ${info(key).name.toLowerCase()} back`, onclick: () => g.changeDish(t, { take: i }) })) : [h('span', { class: 'muted' }, 'Nothing on it yet.')]));
+          const have = B.DISH_FOODS.filter((key) => p.basket[key] > 0);
+          basket.replaceChildren(...(have.length ? have.map((key) => piece(key, `${info(key).name} ×${p.basket[key]}`, { disabled: full, 'aria-label': `Put ${/^[aeiou]/i.test(info(key).name) ? 'an' : 'a'} ${info(key).name.toLowerCase()} on the dish`, onclick: () => g.changeDish(t, { put: key }) })) : [h('span', { class: 'muted' }, 'No fruit, vegetables or fish in your basket: pick some, grow some or catch some!')]));
+          note.textContent = full ? `The dish is full: ${DISH_MAX} pieces. Tap one to take it back.` : `Tap food to set it on the dish (up to ${DISH_MAX}), or a piece on the dish to take it back. Everyone here sees it.`;
+        };
+        root.append(h('h2', {}, '🍽️ Dish'), h('h3', {}, 'On the dish'), plate, h('h3', {}, 'From your basket'), basket, note);
+        redraw();
+        g.addEventListener('dish', redraw);
+        p.addEventListener('basket', redraw);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          g.removeEventListener('dish', redraw);
+          p.removeEventListener('basket', redraw);
+        },
+      },
+    );
+  }
+
   stockDialog(key = null) {
     stockDialog(this, key);
   }
@@ -8232,6 +8365,9 @@ export class UI {
     this.renderRace(g);
     this.renderHoop(g);
     this.renderFishFight(g);
+    // The 📖 Fish Dictionary button at the water's edge: hidden unless this
+    // frame's rideButton finds the fishing spot again (arcadeButton).
+    $('fishbook').hidden = true;
     this.raceButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);

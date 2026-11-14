@@ -6,6 +6,7 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
+import { dishNear, dishWith, isDish } from './shared/dish.js';
 import { goBoardNear, isGoBoard } from './shared/go.js';
 import { cleanRound } from './shared/hideseek.js';
 import { gashaponNear, isGashapon } from './shared/gashapon.js';
@@ -35,7 +36,7 @@ import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { popKey, seenKey } from './shared/stickers.js';
+import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, maxHp, moleUnder, SPORES, staggerOf, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
@@ -440,6 +441,7 @@ export class Game extends EventTarget {
     this.tankTarget = null;
     // The stock terminal beside you, to trade at (shared/stocks.js).
     this.stockTarget = null;
+    this.dishTarget = null;
     // The birthday cake, present or balloons beside you (shared/party.js), and
     // the song you can hear going: { key, x, y, z, stop, until, notes }.
     this.partyTarget = null;
@@ -595,6 +597,12 @@ export class Game extends EventTarget {
         break;
       case 'draw':
         this.drawHeard(msg);
+        break;
+      case 'dish':
+        this.dishHeard(msg);
+        break;
+      case 'dishes':
+        this.setDishes(msg.d ?? []);
         break;
       case 'kit':
         this.kitHeard(msg);
@@ -903,6 +911,7 @@ export class Game extends EventTarget {
     this.setHideSeek(msg.hideseek ?? null);
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
+    this.setDishes(msg.dishes ?? []);
     this.setKits(msg.kits ?? []);
     this.setBots(msg.bots ?? []);
     this.setEnv(msg.env);
@@ -3931,6 +3940,60 @@ export class Game extends EventTarget {
     this.computerAt = null;
   }
 
+  // ------------------------------------------------ dishes
+
+  // The food on the dish in cell (x, y, z), as the island last said.
+  dishFood(x, y, z) {
+    return this.renderer.terrain.dishFood.get(`${x},${y},${z}`) ?? [];
+  }
+
+  // A piece of food from your basket onto the dish `t` (ui.js dishDialog),
+  // or the piece at `take` off it: the island says whether it can be, and
+  // only then does your basket give it up or get it back (dishHeard).
+  changeDish(t, change) {
+    if (this.staysAsMade) {
+      this.emit('notice', { text: `${this.world.name} stays just as it is — no laying the table here!`, level: 'info' });
+      return false;
+    }
+    if (change.put && !(this.profile.basket[change.put] > 0)) return false;
+    const food = dishWith(this.dishFood(t.x, t.y, t.z), change);
+    if (!food) return false;
+    this.send({ t: 'dish', at: [t.x, t.y, t.z], food });
+    return true;
+  }
+
+  // Every dish's food, as the island tells of it on arrival or when a dish
+  // goes.
+  setDishes(rows) {
+    this.renderer.terrain.setDishes((Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r) && isDish(this.world.get(r[0], r[1], r[2]))));
+    this.emit('dish');
+  }
+
+  // A dish changed, by whoever: drawn so. If it was you, the piece put on
+  // leaves your basket, or the one taken off goes in it.
+  dishHeard(msg) {
+    const [x, y, z] = msg.at;
+    const was = this.dishFood(x, y, z);
+    const food = Array.isArray(msg.food) ? msg.food : [];
+    this.renderer.terrain.setDish(x, y, z, food);
+    if (msg.pid === this.pid) {
+      const left = [...was];
+      for (const key of food) {
+        const i = left.indexOf(key);
+        if (i >= 0) left.splice(i, 1);
+        else {
+          this.profile.addToBasket(key, -1);
+          this.sound.play('collect');
+        }
+      }
+      for (const key of left) {
+        this.profile.addToBasket(key, 1);
+        this.sound.play('pop');
+      }
+    }
+    this.emit('dish');
+  }
+
   // ------------------------------------------------ the stock market
 
   // Q (or the Trade button) by a stock terminal: the market's window opens.
@@ -4901,6 +4964,11 @@ export class Game extends EventTarget {
       this.openStocks();
       return;
     }
+    if (!id && this.dishTarget) {
+      this.sound.play('ui');
+      this.emit('dish-open', this.dishTarget);
+      return;
+    }
     if (!id && this.fishTarget) {
       this.castLine();
       return;
@@ -5274,6 +5342,16 @@ export class Game extends EventTarget {
     if (c.basket) {
       const best = this.profile.data.stats.fishcm ?? 0;
       this.profile.addToBasket(c.basket, 1);
+      // Each kind of fish counted on its own (stickers.js caughtKey): the
+      // first of a kind fills its page in the 🐟 Fish Dictionary.
+      if (c.basket === 'fish') {
+        const first = !(this.profile.data.stats[caughtKey(c.key)] > 0);
+        this.profile.count(caughtKey(c.key));
+        if (first) {
+          this.sound.play('newfish');
+          this.emit('newfish', { key: c.key, name: c.name, icon: c.icon, rare: c.rare });
+        }
+      }
       this.profile.count(c.basket === 'fish' ? 'fished' : c.basket === 'shell' ? 'shells' : 'pearls');
       if (c.basket === 'fish') this.profile.count('fishcm', c.length, { max: true });
       this.sound.play('collect');
@@ -6422,6 +6500,9 @@ export class Game extends EventTarget {
     const undo = [];
     for (let i = 0; i < cells.length; i += 4) {
       const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
+      // A dish picked up (or undone) with food on it: the food comes back
+      // to your basket, not lost with the plate.
+      if (isDish(w.get(x, y, z)) && !isDish(id)) for (const key of this.dishFood(x, y, z)) this.profile.addToBasket(key, 1);
       undo.push(x, y, z, w.get(x, y, z), id);
       this.pending.set(w.index(x, y, z), seq);
     }
@@ -7287,6 +7368,8 @@ export class Game extends EventTarget {
     this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
     this.kitTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.dizzy && !on.flying && on.onGround ? kitNear(this.world, on) : null;
     this.stockTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.dizzy && !on.flying && on.onGround ? terminalNear(this.world, on) : null;
+    // A dish to set food on, or take it off (dishDialog in ui.js).
+    this.dishTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dizzy && !on.flying && on.onGround ? dishNear(this.world, on) : null;
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
@@ -7300,7 +7383,7 @@ export class Game extends EventTarget {
     // else beside you to use; while your line is out, where its bobber is.
     this.fishTarget = this.fishing
       ? this.fishing.spot
-      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
+      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dishTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
         ? castSpot(this.world, on, this.me.yaw)
         : null;
     this.sendMove();
@@ -7747,6 +7830,7 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
+      if (c.type === 'firefly' && state === 'hand') this.onYourHand(c, s);
       this.seaSights(c, s, state, now, moving);
     }
   }
@@ -7835,6 +7919,34 @@ export class Game extends EventTarget {
     this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
   }
 
+  // A firefly that has landed sits right on the hand, however it sways as
+  // they stand, rather than where the island's last word of it was (which
+  // would lag and judder behind): whose hand the one nearest to it is.
+  onYourHand(c, s) {
+    const at = (this.handAt ??= c.model.group.position.clone());
+    let best = Infinity;
+    let who = null;
+    for (const p of this.players.values()) {
+      const hand = p.avatar?.hands?.[1];
+      if (!hand) continue;
+      hand.getWorldPosition(at);
+      const d = Math.hypot(at.x - s.x, at.y - s.y, at.z - s.z);
+      if (d < best) {
+        best = d;
+        who = p;
+      }
+    }
+    // Nobody's hand near where the island has it: left where it is.
+    if (!who || best > 1) return;
+    // On the back of that hand: the outside of the hand itself (the group's
+    // own point is the wrist, inside the arm), however the arm sways.
+    const rest = who.avatar.hands[1].userData.rest;
+    if (!rest.geometry.boundingSphere) rest.geometry.computeBoundingSphere();
+    const { center, radius } = rest.geometry.boundingSphere;
+    rest.localToWorld(c.model.group.position.set(center.x + radius * 0.8, center.y, center.z));
+    c.model.group.rotation.y = who.avatar.root.rotation.y;
+  }
+
   // Things worth a sticker that just happen: night skies, rainbows, and a
   // night in a tent.
   observe() {
@@ -7913,6 +8025,7 @@ export class Game extends EventTarget {
     this.computerTarget = null;
     this.tankTarget = null;
     this.stockTarget = null;
+    this.dishTarget = null;
     this.partyTarget = null;
     this.endPartySong();
     this.kitTarget = null;

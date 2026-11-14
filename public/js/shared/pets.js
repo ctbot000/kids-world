@@ -55,6 +55,7 @@ export const PET_INFO = {
   hamster: { radius: 0.15, height: 0.3, float: 0.2, walk: 4.6, run: 9.5 },
   piglet: { radius: 0.2, height: 0.5, float: 0.3, walk: 4.6, run: 9.5 },
   duckling: { radius: 0.15, height: 0.4, float: 0.15, walk: 4.6, run: 9.5 },
+  penguin: { radius: 0.15, height: 0.42, float: 0.12, walk: 4.6, run: 9.5, swim: 7.5, slide: 11, slides: true },
   parrot: { radius: 0.15, height: 0.4, float: 0.2, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.75, perch: 'head' },
   tit: { radius: 0.12, height: 0.3, float: 0.15, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.6, perch: 'head' },
   dragon: { radius: 0.2, height: 0.55, float: 0.3, walk: 4.6, run: 9.5, flies: true, fly: 18, hover: 1.45, perch: 'ground' },
@@ -146,6 +147,8 @@ export function makePet(kind, x, y, z, { yaw = 0, seed = 1 } = {}) {
     // A trick it is doing, and for how much longer.
     trick: '',
     trickLeft: 0,
+    // Belly-sliding along the ground (a baby penguin catching up).
+    sliding: false,
     // What its owner last said, for a parrot to repeat, and when (hearsay).
     echo: null,
     // Which way it looks while it sits (a glance about now and then).
@@ -231,6 +234,7 @@ function stepWalker(world, pet, owner, dt, night, ev) {
       pet.trail = [];
       pet.trick = '';
       pet.trickLeft = 0;
+      pet.sliding = false;
       ev.boarded = true;
     }
     Object.assign(pet, { x: owner.x, y: owner.y, z: owner.z, yaw: owner.yaw, stuck: 0, lost: 0 });
@@ -300,6 +304,20 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   }
   let target = null;
   let fast = false;
+  // A baby penguin's own way of catching up: when you run off, or it is left
+  // behind, it flops onto its tummy and slides after you (over a little hop
+  // too), standing up again once you slow down and it is close by.
+  if (pet.info.slides) {
+    const can = !b.inWater && !tricking && !posing && pet.mode !== 'bed';
+    const dashing = owner.moving && owner.speed > pet.info.walk + 1;
+    if (pet.sliding) {
+      if (!can || (!dashing && (!going || d <= FOLLOW * 0.8))) pet.sliding = false;
+      else fast = true;
+    } else if (can && b.onGround && going && (d > RUN_AT || dashing)) {
+      pet.sliding = true;
+      fast = true;
+    }
+  }
   // Bedtime: at night, with a pet bed (PET_BED in blocks.js) about and you
   // settled, it walks to the nearest one and curls up in it instead of
   // sleeping at your feet — up again when you walk off, or morning comes.
@@ -358,7 +376,7 @@ function stepWalker(world, pet, owner, dt, night, ev) {
   const speed = Math.hypot(b.vx, b.vz);
   if (target || speed > 0.4 || (!b.onGround && !b.inWater)) {
     pet.rest = 0;
-    pet.state = b.inWater ? 'swim' : !b.onGround && b.vy > 1 ? 'jump' : speed > 6 ? 'run' : speed > 0.3 ? 'walk' : 'idle';
+    pet.state = b.inWater ? 'swim' : !b.onGround && b.vy > 1 ? 'jump' : pet.sliding ? 'slide' : speed > 6 ? 'run' : speed > 0.3 ? 'walk' : 'idle';
     if (speed > 0.3) pet.yaw = turn(pet.yaw, Math.atan2(b.vx, b.vz), dt * 10);
   } else {
     rest(pet, owner, dt, night);
@@ -447,7 +465,7 @@ function move(world, pet, owner, target, fast, dt, ev) {
     }
   }
   const keepUp = Math.min(16, owner.speed * 1.12);
-  const moveOpts = { walk: info.walk, run: Math.max(info.run, keepUp), swim: Math.max(3.4, Math.min(10, keepUp)), jump: 8.7 };
+  const moveOpts = { walk: info.walk, run: Math.max(info.run, keepUp, pet.sliding ? info.slide ?? 0 : 0), swim: Math.max(info.swim ?? 3.4, Math.min(10, keepUp)), jump: 8.7 };
   const x0 = b.x;
   const z0 = b.z;
   const wasInWater = b.inWater;
@@ -468,7 +486,7 @@ function popTo(world, pet, owner, ev, why, spot = null) {
   const b = pet.body;
   Object.assign(b, { x: at.x, y: at.y, z: at.z, vx: 0, vy: 0, vz: 0, onGround: false });
   unstick(world, b);
-  Object.assign(pet, { x: b.x, y: b.y, z: b.z, trail: [], stuck: 0, lost: 0, best: Infinity, rest: 0, trick: '', trickLeft: 0 });
+  Object.assign(pet, { x: b.x, y: b.y, z: b.z, trail: [], stuck: 0, lost: 0, best: Infinity, rest: 0, trick: '', trickLeft: 0, sliding: false });
   pet.yaw = Math.atan2(owner.x - b.x, owner.z - b.z);
   pet.mode = owner.flying && pet.info.flies ? 'fly' : 'rest';
   pet.settle = 9;
