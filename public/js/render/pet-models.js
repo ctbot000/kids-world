@@ -1,10 +1,11 @@
 // The pets (see shared/pets.js) as little models, in the coat each was given
 // and a collar the colour of their owner's T-shirt: a kitten, a bunny, a
-// hamster, a piglet and a baby dragon on four legs, and a duckling, a parrot
-// and a long-tailed tit on two. Each walks (or hops, scurries, waddles), runs, swims,
-// sits, lies down, sleeps, flies if it can, and does its tricks: begging,
-// spinning round, a jump, rolling over, a happy wiggle and a snack. The dogs
-// are real dogs, of every breed there is here (dog-model.js).
+// hamster, a piglet and a baby dragon on four legs, and a duckling, a baby
+// penguin, a parrot and a long-tailed tit on two. Each walks (or hops,
+// scurries, waddles), runs, swims, sits, lies down, sleeps, flies if it can,
+// and does its tricks: begging, spinning round, a jump, rolling over, a happy
+// wiggle and a snack. The dogs are real dogs, of every breed there is here
+// (dog-model.js).
 import * as THREE from '../../vendor/three.module.js';
 import { PET_COATS } from '../shared/words.js';
 import { CritterModel, eyesOn, wingPair } from './critter-models.js';
@@ -336,6 +337,57 @@ function duckling(coat) {
   return { group: g, body, roll, pivot, head, eyes, wings, feet, band, tail: null, legs: [], ears: [], height: 0.38, pick: 0.24, bird: 'duck' };
 }
 
+// A baby penguin: rounder and fluffier than the island's own penguins, its
+// back the colour it was given (its tummy stays white), flippers instead of
+// wings, and a collar the colour of its owner's T-shirt. On its tummy it
+// slides to catch up with you (see pets.js).
+function penguin(coat) {
+  const fur = PET_COATS[coat] ?? PET_COATS.charcoal;
+  const back = shade(fur, -0.05);
+  const white = '#fbfbf8';
+  const { g, body, roll, pivot } = birdRig(0.14);
+  // A round, chubby little body, its white tummy round the front.
+  pivot.add(mesh(sphere(), toon(back), 0, 0, -0.005, 0.105, 0.105, 0.1));
+  pivot.add(mesh(sphere(), toon(white), 0, -0.012, 0.045, 0.085, 0.088, 0.078));
+  const head = new THREE.Group();
+  head.position.set(0, 0.115, 0.035);
+  pivot.add(head);
+  head.add(mesh(sphere(1, 18, 14), toon(back), 0, 0, 0, 0.082, 0.08, 0.078));
+  head.add(mesh(sphere(1, 14, 12), toon(white), 0, -0.016, 0.03, 0.062, 0.058, 0.052));
+  const eyes = eyesOn(head, 0.082, 0.08, 0.078, 0.036, 0.016, 0.016);
+  // A little beak, and a fluffy crest of a chick.
+  head.add(mesh(cone(0.022, 0.045, 8), toon(ORANGE), 0, -0.016, 0.078).rotateX(Math.PI / 2));
+  head.add(mesh(sphere(), toon(shade(fur, 0.18)), 0, 0.072, -0.02, 0.045, 0.028, 0.032));
+  blush(head, 0.08, 0.052, -0.014);
+  const band = collar(pivot, { y: 0.055, z: 0.04, r: 0.052, lean: 0.3, tag: false });
+  // Flippers, flat and pointed, out at its sides; in the water and on its
+  // tummy they swim along with it.
+  const wings = [-1, 1].map((side) => {
+    const w = new THREE.Group();
+    w.position.set(side * 0.09, 0.02, -0.005);
+    w.userData.wing = side;
+    w.add(mesh(sphere(), toon(back), side * 0.012, -0.008, 0, 0.024, 0.062, 0.07));
+    pivot.add(w);
+    return w;
+  });
+  // Big orange feet, three toes each, out at the front to steer with on its
+  // tummy and to paddle with in the water.
+  const feet = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.04, 0.05, 0.015);
+    f.add(mesh(cylinder(0.01, 0.01, 0.05, 6), toon(ORANGE), 0, -0.025, 0));
+    f.add(mesh(sphere(), toon(ORANGE), 0, -0.05, 0.022, 0.038, 0.011, 0.05));
+    body.add(f);
+    return f;
+  });
+  // A stubby little tail, out behind it to steer with on the ice.
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.01, -0.1);
+  tail.add(mesh(sphere(), toon(back), 0, 0, -0.022, 0.05, 0.018, 0.04));
+  pivot.add(tail);
+  return { group: g, body, roll, pivot, head, eyes, wings, feet, band, tail, legs: [], ears: [], height: 0.36, pick: 0.24, bird: 'penguin' };
+}
+
 function parrot(coat) {
   const fur = PET_COATS[coat] ?? PET_COATS.green;
   const k = PARROTS[coat] ?? PARROTS.green;
@@ -453,7 +505,7 @@ function tit(coat) {
   return { group: g, body, roll, pivot, head, eyes, wings, folded, feet, band, tail, legs: [], ears: [], height: 0.27, pick: 0.21, bird: 'tit', wingRate: 32 };
 }
 
-const BUILDERS = { kitten, bunny, hamster, piglet, dragon, duckling, parrot, tit };
+const BUILDERS = { kitten, bunny, hamster, piglet, dragon, duckling, penguin, parrot, tit };
 
 // ------------------------------------------------ riding along
 
@@ -791,7 +843,7 @@ export class PetModel {
     this.rollOver = 0;
     this.bob = 0;
     this.flap = 0;
-    const parrot = this.bird !== 'duck';
+    const parrot = this.bird === 'parrot' || this.bird === 'tit';
     switch (pose) {
       case 'walk':
       case 'run':
@@ -799,7 +851,13 @@ export class PetModel {
         break;
       case 'swim':
         this.gait = 'swim';
+        w.drop = parrot ? 0 : -0.04;
+        break;
+      case 'slide':
+        // Flopped onto its tummy, gliding along to catch up.
+        this.gait = 'slide';
         w.drop = -0.04;
+        w.pitch = 1.45;
         break;
       case 'jump':
         this.flap = 1;
@@ -866,7 +924,7 @@ export class PetModel {
   applyBird(w) {
     const t = this.time;
     const c = this.cur;
-    const parrot = this.bird !== 'duck';
+    const parrot = this.bird === 'parrot' || this.bird === 'tit';
     let bob = this.bob;
     let rock = 0;
     if (this.gait === 'walk') {
@@ -876,6 +934,9 @@ export class PetModel {
     } else if (this.gait === 'swim') {
       bob += Math.sin(t * 2.4) * 0.012;
       rock = Math.sin(t * 1.7) * 0.05;
+    } else if (this.gait === 'slide') {
+      // Gliding on its tummy: a little weave, as it steers by its feet.
+      rock = Math.sin(t * 3) * 0.06;
     }
     this.body.position.y = c.drop + bob;
     this.body.rotation.y = this.spin;
@@ -898,6 +959,17 @@ export class PetModel {
       // (A long-tailed tit's tail streams out behind it, and flicks.)
       if (this.bird === 'tit') this.tail.rotation.x = flying ? -0.35 : Math.max(0, Math.sin(t * 1.3)) ** 8 * 0.35;
       else this.tail.rotation.x = flying ? 1.1 : 0.15 + Math.sin(t * 2) * 0.04;
+    } else if (this.bird === 'penguin') {
+      // Flippers: paddling in the water, out to steer on its tummy, and
+      // flapping for joy (or in a trick) on its feet.
+      const out = this.gait === 'slide' || this.gait === 'swim';
+      const paddle = this.gait === 'swim' ? Math.sin(t * 9) * 0.5 : 0;
+      for (const wg of this.wings) {
+        wg.visible = true;
+        wg.rotation.z = wg.userData.wing * (out ? 0.85 + paddle * 0.2 : 0.1 + this.flap * Math.max(0, Math.sin(t * 18)) * 0.9);
+        wg.rotation.x = out ? 0 : -paddle * 0.1;
+      }
+      this.tail.rotation.x = 0.1;
     } else {
       for (const wg of this.wings) wg.rotation.z = wg.userData.wing * (0.1 + this.flap * Math.max(0, Math.sin(t * 18)) * 0.9);
     }
