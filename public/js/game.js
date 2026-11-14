@@ -35,7 +35,7 @@ import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
-import { popKey, seenKey } from './shared/stickers.js';
+import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, maxHp, moleUnder, SPORES, staggerOf, STOMP, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
@@ -5274,6 +5274,16 @@ export class Game extends EventTarget {
     if (c.basket) {
       const best = this.profile.data.stats.fishcm ?? 0;
       this.profile.addToBasket(c.basket, 1);
+      // Each kind of fish counted on its own (stickers.js caughtKey): the
+      // first of a kind fills its page in the 🐟 Fish Dictionary.
+      if (c.basket === 'fish') {
+        const first = !(this.profile.data.stats[caughtKey(c.key)] > 0);
+        this.profile.count(caughtKey(c.key));
+        if (first) {
+          this.sound.play('newfish');
+          this.emit('newfish', { key: c.key, name: c.name, icon: c.icon, rare: c.rare });
+        }
+      }
       this.profile.count(c.basket === 'fish' ? 'fished' : c.basket === 'shell' ? 'shells' : 'pearls');
       if (c.basket === 'fish') this.profile.count('fishcm', c.length, { max: true });
       this.sound.play('collect');
@@ -7747,6 +7757,7 @@ export class Game extends EventTarget {
         if (c.type !== 'butterfly' && c.type !== 'firefly') this.sound.play(c.type === 'dragon' ? 'roar' : c.type);
       }
       this.onYourHead(c, s, state);
+      if (c.type === 'firefly' && state === 'hand') this.onYourHand(c, s);
       this.seaSights(c, s, state, now, moving);
     }
   }
@@ -7833,6 +7844,34 @@ export class Game extends EventTarget {
     this.perchedOn = c.id;
     this.profile.count('perched');
     this.emit('toast', { icon: CRITTER_INFO[c.type].icon, text: `${c.name || 'A friend'} is sitting on your head!` });
+  }
+
+  // A firefly that has landed sits right on the hand, however it sways as
+  // they stand, rather than where the island's last word of it was (which
+  // would lag and judder behind): whose hand the one nearest to it is.
+  onYourHand(c, s) {
+    const at = (this.handAt ??= c.model.group.position.clone());
+    let best = Infinity;
+    let who = null;
+    for (const p of this.players.values()) {
+      const hand = p.avatar?.hands?.[1];
+      if (!hand) continue;
+      hand.getWorldPosition(at);
+      const d = Math.hypot(at.x - s.x, at.y - s.y, at.z - s.z);
+      if (d < best) {
+        best = d;
+        who = p;
+      }
+    }
+    // Nobody's hand near where the island has it: left where it is.
+    if (!who || best > 1) return;
+    // On the back of that hand: the outside of the hand itself (the group's
+    // own point is the wrist, inside the arm), however the arm sways.
+    const rest = who.avatar.hands[1].userData.rest;
+    if (!rest.geometry.boundingSphere) rest.geometry.computeBoundingSphere();
+    const { center, radius } = rest.geometry.boundingSphere;
+    rest.localToWorld(c.model.group.position.set(center.x + radius * 0.8, center.y, center.z));
+    c.model.group.rotation.y = who.avatar.root.rotation.y;
   }
 
   // Things worth a sticker that just happen: night skies, rainbows, and a
