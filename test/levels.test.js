@@ -123,6 +123,43 @@ test('photos are counted, and five of them are the Photographer’s sticker', as
   }
 });
 
+test('the 99th sticker is the Sticker Collector sticker, and one already at 99 earns it the next time they play', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };
+  try {
+    const { Profile } = await import('../public/js/profile.js');
+    const sticker = STICKERS.find((s) => s.key === 'sticker-collector');
+    assert.ok(sticker, 'the sticker is there');
+    assert.equal(sticker.goal, 99, 'it asks for 99 stickers');
+    assert.equal(sticker.of, 'stickers', 'of your stickers, not a count');
+    assert.equal(sticker.test({}, 98), false);
+    assert.equal(sticker.test({}, 99), true);
+    // Ninety-eight stickers of yours, with the First Brick still to come.
+    const p = new Profile();
+    p.data.stickers = Object.fromEntries(STICKERS.filter((s) => s.key !== 'sticker-collector' && s.key !== 'first-block').slice(0, 98).map((s) => [s.key, 1]));
+    assert.equal(p.stickerCount(), 98);
+    assert.ok(!p.data.stickers[sticker.key], 'not yet');
+    const got = [];
+    p.addEventListener('sticker', (e) => got.push(e.detail.key));
+    p.count('placed');
+    assert.deepEqual(got, ['first-block', 'sticker-collector'], 'the 99th sticker brings it');
+    assert.ok(p.data.stickers[sticker.key] > 0);
+    // Its 25 XP is part of the level, with the rest of the stickers'.
+    assert.equal(p.progress.xp, 1 + p.stickerCount() * STICKER_XP);
+    // Someone who already had 99 or more, from before the sticker was: it
+    // comes the next time they play.
+    const again = new Profile();
+    again.data.stickers = Object.fromEntries(STICKERS.filter((s) => s.key !== 'sticker-collector').map((s) => [s.key, 1]));
+    const late = [];
+    again.addEventListener('sticker', (e) => late.push(e.detail.key));
+    again.checkStickers();
+    assert.deepEqual(late, ['sticker-collector'], 'caught up at the start of a game');
+    assert.ok(again.data.stickers[sticker.key] > 0);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
 test('the 777th monster popped is the King Bop sticker, and one already past 777 earns it on their next pop', async () => {
   const store = new Map();
   globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k), key: (i) => [...store.keys()][i] ?? null, get length() { return store.size; } };

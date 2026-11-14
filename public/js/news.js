@@ -5,6 +5,7 @@
 // it. Add a new update at the top; never reuse or reorder an id.
 
 export const NEWS = [
+  { id: 'sticker-collector', date: '2026-11-15', icon: '🌟', title: 'The Sticker Collector sticker', text: 'A new sticker for the biggest collectors: earn 99 stickers and 🌟 Sticker Collector is yours, with the usual fanfare and 25 XP. Until then, ⭐ Stickers shows how close you are — and if you already have 99, it is waiting for you the next time you play!' },
   { id: 'figure-power', date: '2026-11-15', icon: '👾', title: 'Monster figures make you stronger', text: 'On 🌟 Adventure Isle, every monster figure you own from the Monster Gashapon makes your bops take one more heart off that kind of monster. Collect a Grumpy Blob and Grumpy Blobs pop quicker! Beasts, chapter bosses and King Grumble are as tough as ever.' },
   { id: 'desert-islands', date: '2026-11-15', icon: '🏜️', title: 'Desert islands', text: 'Make a 🏜️ Desert Island: rolling golden dunes dotted with cacti, and an oasis pool ringed with palm trees. Crabs and turtles keep its shore, and the sky glows gold over the sand. A 🌵 Cactus and a 🌴 Palm Tree are in the toy box too, to plant on any island.' },
   { id: 'dish', date: '2026-11-15', icon: '🍽️', title: 'Dishes', text: 'A 🍽️ Dish in the toy box\'s 🛋️ Home tab: put one on the floor or a table, walk up and tap 🍽️ Dish to set fruit, vegetables or a fish from your basket on it, up to three pieces, for everyone to see. Tap a piece to take it back.' },
