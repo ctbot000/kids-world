@@ -121,6 +121,12 @@ export function environment(time, weather, theme, out = {}) {
     horizon.lerp(VOLCANO_TINT, 0.22 + 0.18 * day);
     top.lerp(VOLCANO_TINT, 0.1 * day);
   }
+  // A desert island's sky: warm gold at the horizon over the dunes, a touch
+  // of it high up.
+  if (theme === 'desert') {
+    horizon.lerp(DUNES_TINT, 0.22 * day);
+    top.lerp(DUNES_TINT, 0.05 * day);
+  }
   if (theme === 'dunes') {
     horizon.lerp(DUNES_TINT, 0.4 * day);
     top.lerp(DUNES_TINT, 0.08 * day);

@@ -107,6 +107,11 @@ export const GLOOM = def(27, 'gloom', { name: 'Gloomy Ground', tiles: { top: 'gl
 // grass it was — it is what the mower leaves, not something to build with —
 // and mowing it again mows nothing.
 export const MOWED = def(303, 'mowed-grass', { name: 'Mowed Grass', tiles: { top: 'mowed-top', side: 'mowed-side', bottom: 'dirt' }, studs: true, sound: 'grass', under: 3 });
+// A desert's plants (worldgen.js): a cactus's ribbed green flesh, and the
+// fronds of a palm tree's crown. A cactus is built of cactus blocks, a palm
+// of a trunk of them with a crown of palm leaves (shared/stamps.js).
+export const CACTUS = def(428, 'cactus', { name: 'Cactus', category: 'nature', tiles: { top: 'cactus-top', side: 'cactus' }, sound: 'plant' });
+export const PALM_LEAVES = def(429, 'palm-leaves', { name: 'Palm Leaves', category: 'nature', after: 428, tiles: { top: 'palm-top', side: 'palm' }, sound: 'leaves' });
 
 // ---------------------------------------------------------------- building
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });
