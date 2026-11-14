@@ -80,6 +80,11 @@ export const ALL_TOYS = [...TOYS, ...MONSTER_FIGURES];
 // A turn of the Monster Gashapon costs more.
 export const MONSTER_PRICE = 10;
 
+// A bop from someone who owns that kind of monster's figure takes this many
+// hearts more off it (room.js figBonus): one extra heart, so collecting
+// figures makes you stronger on Adventure Isle.
+export const FIG_HEARTS = 1;
+
 // The higher the stage of Adventure Isle, the likelier a rare monster
 // figure: a rare one's weight grows by a quarter each stage (up to three
 // times), a super rare one's by a half (up to eight times). The capsule
@@ -115,6 +120,24 @@ export const MONSTER_GASHA = {
 
 export const toyOf = (key) => ALL_TOYS.find((t) => t.key === key) ?? null;
 export const rarityOf = (toy) => RARITIES[toy?.rare ?? 0];
+
+// The monster figure keys a player's toys are: one for each they have at
+// least one of, so their page can tell the island which monsters they have
+// figures of (for the bop bonus, room.js).
+export const figuresOwned = (toys) => MONSTER_FIGURES.filter((f) => (toys?.[f.key] ?? 0) > 0).map((f) => f.key);
+
+// A list of monster figure keys as the island may keep it: only real ones,
+// each once, no more than there are figures. (What a page says it has is
+// tidied to this, for the bop bonus.)
+export function cleanFigureList(list) {
+  if (!Array.isArray(list)) return [];
+  const keys = list.filter((k) => typeof k === 'string' && MONSTER_FIGURES.some((f) => f.key === k));
+  return [...new Set(keys)].slice(0, MONSTER_FIGURES.length);
+}
+
+// The monster kinds a list of figure keys is figures of: the monster of each
+// figure, each once, as the island keeps the bonus by.
+export const kindsOfFigures = (keys) => [...new Set(cleanFigureList(keys).map((k) => toyOf(k)?.monster).filter(Boolean))];
 
 // Whether a block is a gashapon machine (any way it faces), and whether
 // it is the Monster Gashapon.

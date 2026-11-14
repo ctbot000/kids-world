@@ -15,13 +15,14 @@ import * as B from './blocks.js';
 import { busesClearOf, CRITTER_INFO, maxCritters, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
 import { Rng, hash2 } from './rng.js';
-import { fruitTree, oakTree, pineTree, candyTree, katsuraTree, placeTemplate } from './stamps.js';
+import { fruitTree, oakTree, pineTree, candyTree, cactus, palmTree, katsuraTree, placeTemplate } from './stamps.js';
 import { World } from './world.js';
 
 export const THEMES = [
   { key: 'sunny', name: 'Sunny Island', icon: '🏝️', blurb: 'Beaches, fruit trees and flowers' },
   { key: 'snowy', name: 'Snowy Island', icon: '❄️', blurb: 'Snow, pine trees and frozen ponds' },
   { key: 'candy', name: 'Candy Island', icon: '🍭', blurb: 'Frosting hills and lollipop trees' },
+  { key: 'desert', name: 'Desert Island', icon: '🏜️', blurb: 'Golden dunes, cacti and a palm oasis' },
   { key: 'volcano', name: 'Volcano Island', icon: '🌋', blurb: 'A smoking crater, lakes of lava and one dragon' },
   { key: 'park', name: 'Fun Park Island', icon: '🎡', blurb: 'A roller coaster, a Ferris wheel and more' },
   { key: 'race', name: 'Racing Island', icon: '🏁', blurb: 'A race track with go-karts and lap times' },
@@ -79,6 +80,8 @@ export function palette(theme) {
       return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.BLUEBELL, B.MUSHROOM, B.DAISY], grass: B.TALL_GRASS };
     case 'vale':
       return { top: B.PEBBLES, under: B.STONE, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
+    case 'desert':
+      return { top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, flowers: [], grass: 0 };
     case 'volcano':
       return { top: B.BASALT, under: B.STONE, deep: B.STONE, beach: B.BASALT, flowers: [B.TULIP, B.COSMOS], grass: 0 };
     default:
@@ -163,7 +166,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
   // A volcano island has none: its water would only boil away (see the lava
   // pools below, and shared/room.js for water brought to it).
   if (theme !== 'flat' && theme !== 'volcano') {
-    const want = rng.int(1, 2) + more(1) - 1;
+    const want = theme === 'desert' ? Math.max(1, rng.int(1, 2) + more(1) - 1) : rng.int(1, 2) + more(1) - 1;
     for (let tries = 0; tries < more(200) && ponds.length < want; tries++) {
       const px = rng.int(24, W - 25);
       const pz = rng.int(24, D - 25);
@@ -173,6 +176,20 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       if (nearMountain(px, pz, 22) || Math.hypot(px - cx, pz - cz) < 8 || inPark(park, px, pz, Math.ceil(r) + 6)) continue;
       if (ponds.some((p) => Math.hypot(p.x - px, p.z - pz) < p.r + r + 8)) continue;
       ponds.push({ x: px, z: pz, r, level: h0 - 1 });
+    }
+    // A desert island keeps looking until it has its oasis: the one pool
+    // its palms gather round, wherever the dunes will have it.
+    if (theme === 'desert' && !ponds.length) {
+      let best = null;
+      for (let x = 24; x < W - 25; x += 3) {
+        for (let z = 24; z < D - 25; z += 3) {
+          const h0 = hi(x, z);
+          if (h0 < sea + 1 || h0 > sea + 8 || nearMountain(x, z, 20)) continue;
+          const score = -Math.abs(h0 - (sea + 3)) - Math.abs(Math.hypot(x - cx, z - cz) - W * 0.25);
+          if (!best || score > best.score) best = { x, z, score, h0 };
+        }
+      }
+      if (best) ponds.push({ x: best.x, z: best.z, r: 3.6, level: best.h0 - 1 });
     }
   }
 
@@ -192,10 +209,10 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       let under = beach ? pal.beach : pal.under;
       if (!beach && theme !== 'flat') {
         if (h > sea + 13 + hash2(seed, x, z) * 3) {
-          top = theme === 'candy' ? B.CANDY_CANE : B.STONE;
-          under = theme === 'candy' ? B.CHOCOLATE : B.STONE;
+          top = theme === 'candy' ? B.CANDY_CANE : theme === 'desert' ? B.SAND : B.STONE;
+          under = theme === 'candy' ? B.CHOCOLATE : theme === 'desert' ? B.SAND : B.STONE;
         }
-        if (h > sea + 18 + hash2(seed + 1, x, z) * 2 && theme !== 'volcano') top = theme === 'candy' ? B.COTTON_CANDY : B.SNOW;
+        if (h > sea + 18 + hash2(seed + 1, x, z) * 2 && theme !== 'volcano' && theme !== 'desert') top = theme === 'candy' ? B.COTTON_CANDY : B.SNOW;
       }
       for (let y = 1; y <= h; y++) {
         let id = pal.deep;
@@ -376,6 +393,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     if (theme === 'volcano') cells = deadTree(rng);
     else if (theme === 'snowy') cells = pineTree(rng, true);
     else if (theme === 'candy') cells = rng.chance(0.3) ? fruitTree(rng, fruit, rng.int(2, 4)) : candyTree(rng);
+    else if (theme === 'desert') cells = rng.chance(0.8) ? cactus(rng) : palmTree(rng);
     else if (high || (theme === 'sunny' && forest > 0.35 && rng.chance(0.5))) cells = pineTree(rng, false);
     else if (rng.chance(0.3)) cells = fruitTree(rng, fruit, rng.int(2, 4));
     else {
@@ -411,8 +429,26 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
     t.oak = false;
   }
 
+  // A desert island's palms ring its oasis: one every few steps round each
+  // pond, standing on the sand at its rim. They join the island's trees, so
+  // nothing else grows into them (and they keep the oasis for themselves:
+  // dunes are for cacti).
+  if (theme === 'desert') {
+    for (const p of ponds) {
+      const rr = Math.ceil(p.r) + 2;
+      for (let a = 0; a < 10; a++) {
+        const ang = (a / 10) * Math.PI * 2 + rng.range(-0.2, 0.2);
+        const x = Math.round(p.x + Math.cos(ang) * rr);
+        const z = Math.round(p.z + Math.sin(ang) * rr);
+        if (!isLand(x, z) || trees.some((t) => Math.hypot(t.x - x, t.z - z) < 3)) continue;
+        trees.push({ x, z, cells: placeTemplate(palmTree(rng), x, hi(x, z) + 1, z, 0) });
+        place(trees.at(-1).cells);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- flowers and grass
-  const clusters = more(theme === 'flat' ? 14 : 34);
+  const clusters = pal.flowers.length ? more(theme === 'flat' ? 14 : 34) : 0;
   for (let i = 0; i < clusters; i++) {
     const x0 = rng.int(4, W - 5);
     const z0 = rng.int(4, D - 5);
@@ -430,7 +466,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       if (!isLand(x, z) || nearSpawn(x, z, 2)) continue;
       const r = hash2(seed + 61, x, z);
       if (pal.grass && r < 0.06) world.set(x, hi(x, z) + 1, z, pal.grass);
-      else if (r > 0.997) world.set(x, hi(x, z) + 1, z, theme === 'candy' ? B.GUMDROP : B.MUSHROOM);
+      else if (r > 0.997 && theme !== 'desert') world.set(x, hi(x, z) + 1, z, theme === 'candy' ? B.GUMDROP : B.MUSHROOM);
     }
   }
 

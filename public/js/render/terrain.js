@@ -443,6 +443,9 @@ export class Terrain {
     // How the birthday cakes, presents and balloons are going, as the island
     // tells it (game.js partyNews), for their models to show.
     this.party = new Party();
+    // The food on the island's dishes (shared/dish.js), by "x,y,z": drawn
+    // on their plates by the mesher (setDish).
+    this.dishFood = new Map();
     // The birthday banners drawn, by their cells: what spells on along a row
     // reaches past its chunk (cellsChanged).
     this.banners = new Set();
@@ -518,6 +521,7 @@ export class Terrain {
   setWorld(world) {
     this.clear();
     this.party = new Party();
+    this.dishFood = new Map();
     this.world = world;
     this.light = new LightMap(world);
     this.light.computeAll();
@@ -595,6 +599,27 @@ export class Terrain {
   }
 
   // Blocks changed: relight around them and queue the chunks that need redrawing.
+  // The food on the dish in cell (x, y, z) now ([] for none): its chunk is
+  // drawn again with it on the plate.
+  setDish(x, y, z, food) {
+    const key = `${x},${y},${z}`;
+    if (food.length) this.dishFood.set(key, food);
+    else if (!this.dishFood.delete(key)) return;
+    this.dirty.add(`${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`);
+  }
+
+  // Every dish's food at once (the island's own list, `rows` of [x, y, z,
+  // food]), the chunks of those that changed drawn again.
+  setDishes(rows) {
+    const old = this.dishFood;
+    this.dishFood = new Map(rows.map(([x, y, z, food]) => [`${x},${y},${z}`, food]));
+    for (const key of new Set([...old.keys(), ...this.dishFood.keys()])) {
+      if (String(old.get(key)) === String(this.dishFood.get(key))) continue;
+      const [x, , z] = key.split(',').map(Number);
+      this.dirty.add(`${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`);
+    }
+  }
+
   cellsChanged(cells) {
     if (!this.world || cells.length === 0) return;
     let x0 = Infinity;
@@ -660,7 +685,7 @@ export class Terrain {
     const key = `${cx},${cz}`;
     const old = this.chunks.get(key);
     if (old) this.disposeChunk(old);
-    const data = meshChunk(this.world, this.light, this.atlas, cx, cz);
+    const data = meshChunk(this.world, this.light, this.atlas, cx, cz, this.dishFood);
     const group = new THREE.Group();
     group.name = `chunk ${key}`;
     const chunk = { key, cx, cz, group, studs: null, movers: [], feet: data.trees.map((c) => c.join()) };
