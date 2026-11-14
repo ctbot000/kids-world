@@ -120,3 +120,18 @@ test('a cactus and a palm are the shapes worldgen stamps them from', () => {
   assert.ok(p.some(([, dy]) => dy >= 5), 'a palm climbs above you');
   assert.ok(p.filter(([, , , id]) => id === B.PALM_LEAVES).length >= 9, 'a broad crown of fronds');
 });
+
+test('a desert is clear nearly always, and its rare wet spells are rain, never snow', async () => {
+  const { nextWeather } = await import('../public/js/shared/env.js');
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const seen = new Map();
+  let weather = 'clear';
+  for (let i = 0; i < 4000; i++) {
+    weather = nextWeather(weather, 'desert', random).weather;
+    seen.set(weather, (seen.get(weather) ?? 0) + 1);
+  }
+  assert.ok(!seen.has('snow'), `no snow: ${[...seen.keys()]}`);
+  assert.ok(seen.has('rain') || seen.has('storm'), 'a little rain now and then');
+  assert.ok(seen.get('clear') > 4000 * 0.6, `clear mostly: ${seen.get('clear')}`);
+});

@@ -110,8 +110,8 @@ export const MOWED = def(303, 'mowed-grass', { name: 'Mowed Grass', tiles: { top
 // A desert's plants (worldgen.js): a cactus's ribbed green flesh, and the
 // fronds of a palm tree's crown. A cactus is built of cactus blocks, a palm
 // of a trunk of them with a crown of palm leaves (shared/stamps.js).
-export const CACTUS = def(424, 'cactus', { name: 'Cactus', category: 'nature', tiles: { top: 'cactus-top', side: 'cactus' }, sound: 'plant' });
-export const PALM_LEAVES = def(425, 'palm-leaves', { name: 'Palm Leaves', category: 'nature', after: 424, tiles: { top: 'palm-top', side: 'palm' }, sound: 'leaves' });
+export const CACTUS = def(428, 'cactus', { name: 'Cactus', category: 'nature', tiles: { top: 'cactus-top', side: 'cactus' }, sound: 'plant' });
+export const PALM_LEAVES = def(429, 'palm-leaves', { name: 'Palm Leaves', category: 'nature', after: 428, tiles: { top: 'palm-top', side: 'palm' }, sound: 'leaves' });
 
 // ---------------------------------------------------------------- building
 export const PLANKS = def(12, 'planks', { name: 'Planks', category: 'building', tiles: 'planks', studs: true, sound: 'wood' });

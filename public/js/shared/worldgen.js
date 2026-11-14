@@ -466,7 +466,7 @@ export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size =
       if (!isLand(x, z) || nearSpawn(x, z, 2)) continue;
       const r = hash2(seed + 61, x, z);
       if (pal.grass && r < 0.06) world.set(x, hi(x, z) + 1, z, pal.grass);
-      else if (r > 0.997) world.set(x, hi(x, z) + 1, z, theme === 'candy' ? B.GUMDROP : B.MUSHROOM);
+      else if (r > 0.997 && theme !== 'desert') world.set(x, hi(x, z) + 1, z, theme === 'candy' ? B.GUMDROP : B.MUSHROOM);
     }
   }
 

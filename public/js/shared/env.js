@@ -73,11 +73,12 @@ export function nextWeather(current, theme, random = Math.random) {
   if (current === 'tornado') return { weather: 'cloudy', seconds: 60 + random() * 60 };
   const r = random();
   if (current === 'cloudy' && r >= 0.9) return { weather: 'tornado', seconds: TORNADO_SECONDS[0] + random() * (TORNADO_SECONDS[1] - TORNADO_SECONDS[0]) };
-  if (r < 0.55 || (theme === 'volcano' && r < 0.95)) return { weather: 'clear', seconds: 180 + random() * 180 };
+  // A volcano or a desert is clear nearly always.
+  if (r < 0.55 || ((theme === 'volcano' || theme === 'desert') && r < 0.95)) return { weather: 'clear', seconds: 180 + random() * 180 };
   if (r < 0.8) return { weather: 'cloudy', seconds: 120 + random() * 120 };
-  // Anywhere else (but by a volcano), a wet spell is now and then snow
-  // instead of rain.
-  const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : theme !== 'volcano' && random() < 0.35 ? 'snow' : 'rain';
+  // Anywhere else (but by a volcano or in a desert), a wet spell is now and
+  // then snow instead of rain.
+  const wet = theme === 'snowy' ? 'snow' : theme === 'candy' ? 'sprinkles' : theme !== 'volcano' && theme !== 'desert' && random() < 0.35 ? 'snow' : 'rain';
   return { weather: wet === 'rain' && r >= 0.93 ? 'storm' : wet, seconds: 90 + random() * 90 };
 }
 
