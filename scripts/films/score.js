@@ -472,8 +472,101 @@ function ending(b) {
   b.horn(67.8, 1.8, 'A4', 0.07);
 }
 
+// Queen Grizzle's tune: her little brother's, prim and an octave up, with a
+// sniff at the end of it.
+const GRIZZLE = [
+  ['D4', 0.5], [null, 0.25], ['D4', 0.25], ['F4', 0.5], ['A4', 0.5], ['G#4', 0.5], ['A4', 0.5], [null, 1],
+  ['Bb4', 0.5], ['A4', 0.5], ['G4', 0.5], ['F4', 0.5], ['E4', 0.5], ['C#4', 0.5], ['D4', 0.5], ['A4', 0.25], ['D5', 0.25],
+];
+
+function intro2(b) {
+  // 0–6.5: a rainbow over the happy isle: a music box, strings, the theme on a flute.
+  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  b.arps(0, BPM, ['D', 'G', 'A'], 0.045);
+  b.tune(1.2, BPM, THEME.slice(0, 8), 'flute', 0.07);
+  b.sea(0, 7, 0.03);
+  b.sparkle(0.6, 8, 0.04);
+  // 6.5–13.5: Queen Grizzle comes down: the sky goes grey, her tune.
+  b.strings(6.5, 7, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 1, release: 1, tremolo: true });
+  b.tune(7.2, BPM, GRIZZLE, 'bassoon', 0.08);
+  b.whoosh(9.2, 0.08, 1.1);
+  b.drum(9.9, { f: 100, to: 50, decay: 0.5, gain: 0.35 });
+  // 13.5–21: the rainbow caught: a long whoosh down, a crash, the jars flying off.
+  b.strings(13.5, 4.6, ['Bb1', 'F2', 'Bb2', 'D3'], 0.04, { attack: 0.4, release: 0.6, tremolo: true });
+  for (let k = 0; k < 6; k++) b.whoosh(14.7 + k * 0.5, 0.07, 1, (k % 2) - 0.5);
+  b.timpaniRoll(16.4, 1.6, 'D2', 0.2);
+  b.crash(18, 0.16, 3.5);
+  b.drum(18, { f: 90, to: 40, decay: 1.2, gain: 0.55 });
+  b.sparkle(18, 16, 0.06);
+  for (let k = 0; k < 7; k++) b.whoosh(18.2 + k * 0.16, 0.06, 0.8, (k % 2) - 0.5);
+  b.tune(18.8, BPM, GRIZZLE.slice(8), 'bassoon', 0.07);
+  // 21–36: her helpers, a bar each: drums, a low ostinato, a horn hit at each cut.
+  const m0 = 21;
+  b.beat(m0, BPM, 6, 0.3);
+  const helpers = ['Dm', 'Bb', 'Gm', 'A', 'Dm', 'A'];
+  b.chords(m0, BPM, helpers, 0.03, { attack: 0.08, release: 0.3 });
+  helpers.forEach((c, i) => {
+    const t = m0 + i * BAR;
+    b.horn(t, 0.35, CHORDS[c][2], 0.08);
+    b.horn(t, 0.35, CHORDS[c][3], 0.06);
+    for (let k = 0; k < 8; k++) b.pluck(t + k * (BAR / 8), hz(CHORDS[c][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+  });
+  // 36–41.5: Queen Grizzle in Castle Drab: her tune, low.
+  b.tune(36.1, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.09);
+  b.chords(36, BPM, ['Dm', 'A'], 0.025, { attack: 0.1, release: 0.5 });
+  for (let k = 0; k < 8; k++) b.pluck(36 + k * 0.625, hz(k % 2 ? 'A2' : 'D2'), { gain: 0.1, decay: 0.4, type: 'triangle', verb: 0.2 });
+  // 41.5–50.5: the heroes and the title: the theme in full.
+  b.swell(41.5, 2.5, 0.08);
+  b.timpaniRoll(43.2, 0.8, 'D2', 0.2);
+  b.chords(44, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(44, BPM, THEME.slice(0, 14), 'horn', 0.1);
+  b.crash(45.3, 0.12, 3);
+  b.sparkle(45.3, 10, 0.04);
+  b.strings(50.5 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending2(b) {
+  // 0–6: the last bop, a pop, a fanfare.
+  b.timpaniRoll(0, 1.6, 'A2', 0.2);
+  b.pop(1.6, 0.35);
+  b.crash(1.6, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(1.7, 14, 0.05);
+  b.cheer(1.9, 3.6, 0.03);
+  b.choir(2.6, 3.4, ['D4', 'A4', 'D5'], 0.025);
+  // 6–13.5: the colours flying up: a harp rising, a swell, and the rainbow whole.
+  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  for (let k = 0; k < 14; k++) b.pluck(6.2 + k * 0.25, hz(['D4', 'E4', 'F#4', 'G4', 'A4', 'B4', 'C#5'][k % 7]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
+  for (let k = 0; k < 7; k++) b.whoosh(6.3 + k * 0.25, 0.05, 1.2, (k % 2) - 0.5);
+  b.swell(7.6, 2, 0.1);
+  b.crash(9.6, 0.16, 4);
+  b.drum(9.6, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
+  b.sparkle(9.6, 20, 0.06);
+  b.strings(9.6, 3.9, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
+  b.horn(9.6, 3.4, 'D5', 0.08);
+  b.horn(9.6, 3.4, 'A4', 0.06);
+  // 13.5–22: the party on the beach: the theme, bright, with drums and fireworks.
+  b.beat(13.5, BPM, 3, 0.26);
+  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  b.arps(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035);
+  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
+  b.cheer(13.7, 6.5, 0.035);
+  // 22–36: the credits, gently: a music box and strings.
+  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(22, 14, 0.025);
+  // 36–43.5: Queen Grizzle floating home: her tune, and — for once — a happy end to it.
+  b.sea(36, 7.5, 0.05);
+  b.tune(36.6, BPM, GRIZZLE.slice(0, 8), 'bassoon', 0.075);
+  b.strings(39.6, 3.6, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.3 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+  b.sparkle(40.9, 8, 0.04);
+}
+
 export async function score(name, secs) {
   const b = new Band(secs);
-  (name === 'intro' ? intro : ending)(b);
+  ({ intro, ending, intro2, ending2 }[name] ?? ending)(b);
   return b.render();
 }

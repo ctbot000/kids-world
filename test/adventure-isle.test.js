@@ -1,8 +1,9 @@
 // The public adventure island: the one adventure island the dedicated server
 // keeps for everyone to conquer together, on the list of open islands even
 // while nobody is on it; its stages one after another, each harder than the
-// last, up to the last chapter of its story, and that one won, a new journey
-// from stage 1 (and nothing else starting it over); nobody owning it, so
+// last, up to the last chapter of its story (an episode's last leading on to
+// the next episode), and that one won, a new journey from stage 1 (and
+// nothing else starting it over); nobody owning it, so
 // nobody can be turned away; and the conquered island waiting for its players
 // before it goes.
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { ambushFor, cleanStage, guardBackMs, guardsFor, hazardEvery, kingHearts, raiseSeconds, reserveFor, slideFor, stageGap } from '../public/js/shared/adventure.js';
-import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
+import { chapterOf, firstStage, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
@@ -77,7 +78,7 @@ test('each stage is harder than the last, up to the last, and none is ever hopel
   assert.equal(kingHearts(1, 1), 18);
   assert.equal(kingHearts(1, 5), 36);
   assert.equal(kingHearts(4, 1), 36);
-  assert.equal(kingHearts(4, STAGES), 135);
+  assert.equal(kingHearts(4, stagesOf(1)), 135, 'King Grumble, at the end of the first episode');
   assert.equal(kingHearts(4, 400), 144, 'no harder than four times');
   assert.deepEqual([1, 12, 400].map(stageGap), [1, 0.725, 2 / 3]);
 
@@ -265,6 +266,7 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   winAll(one, time);
   assert.equal(one.stage, STAGES);
   assert.equal(one.room.adventure.story.final, true, 'the last chapter');
+  assert.equal(one.room.adventure.story.last, true, 'of the last episode');
   assert.equal(one.room.adventure.describe().final, true, 'and the pages are told so');
   const last = one.room;
   const b = join(last, 'Brave Fox');
@@ -274,12 +276,62 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   assert.equal(one.room.adventure.describe().journey, 2);
   assert.equal(publicEntries(rooms).length, 1);
   assert.deepEqual(b.last('next'), { t: 'next', code: one.room.code, stage: 1 }, 'those there sent on to it, after the ending');
-  assert.match(b.last('notice').text, /shines again/);
+  assert.match(b.last('notice').text, /is told! .* A new journey starts from stage 1/);
   // The new journey's islands are their own, its maps turned over.
   assert.notDeepEqual(one.room.adventure.camps.map((c) => [c.x, c.z]), last.adventure.camps.map((c) => [c.x, c.z]));
   one.room.adventure.win(one.room.monsters);
   one.tick(time.now());
   assert.deepEqual([one.stage, one.journey], [2, 2], 'and on the stages go');
+});
+
+test('an episode’s last stage won leads on to the next episode, and a new game can begin at either', () => {
+  const { time, isle: one } = isle();
+  const end = stagesOf(1);
+  assert.equal(firstStage(2), end + 1);
+  winAll(one, time, end);
+  const story = one.room.adventure.story;
+  assert.deepEqual([story.final, story.last, story.episode.n], [true, false, 1], 'the end of the first tale, not of them all');
+  assert.equal(one.room.adventure.describe().final, true, 'its ending plays');
+  const last = one.room;
+  const b = join(last, 'Brave Fox');
+  last.adventure.win(last.monsters);
+  one.tick(time.now());
+  assert.deepEqual([one.stage, one.journey], [end + 1, 1], 'on to the second episode, on the same journey');
+  assert.deepEqual(b.last('next'), { t: 'next', code: one.room.code, stage: end + 1 });
+  assert.match(b.last('notice').text, /The story goes on with Episode 2, The Rainbow of Adventure Isle/);
+  const next = one.room.adventure;
+  assert.deepEqual([next.story.episode.n, next.story.n, next.story.of, next.story.key, next.boss], [2, 1, STAGES - end, 'tulip', 'dotty']);
+  assert.equal(one.room.world.theme, 'tulip');
+  // As hard as its chapter says, not as its place among the stages.
+  assert.equal(next.level, chapterOf(end + 1).level);
+  assert.ok(next.level < end + 1);
+  assert.equal(one.room.listing().adventure.stage, end + 1, 'listed at its stage');
+
+  // A new game of the second episode, from the isle: kept apart.
+  time.advance(60 * 1000);
+  const a = join(one.room, 'Happy Panda');
+  one.room.receive(a, { t: 'isle', op: 'new', episode: 2 });
+  assert.equal(a.last('isle-run').stage, end + 1);
+  assert.deepEqual(one.runs.map((r) => [r.stage, r.journey]), [[end + 1, 1], [end + 1, 1]]);
+  // And from the title, by a page come only to start one.
+  time.advance(60 * 1000);
+  const c = conn();
+  one.room.attach(c);
+  one.room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Sunny Otter', isle: 'new', episode: 2 });
+  assert.equal(c.last('isle-run').stage, end + 1);
+  assert.equal(one.runs.length, 3);
+  // No episode said, or nonsense for one, is the first.
+  time.advance(60 * 1000);
+  assert.equal(one.newRun('Ann', time.now(), 99).stage, 1);
+  time.advance(60 * 1000);
+  assert.equal(one.newRun('Ben', time.now()).stage, 1);
+  // Started over, a game goes back to the start of its own episode.
+  const second = one.runs[1];
+  second.entry.room.adventure.win(second.entry.room.monsters);
+  one.tick(time.now());
+  assert.equal(second.stage, end + 2);
+  assert.deepEqual(one.resetRun(second.id), { code: second.entry.code, stage: end + 1 });
+  one.stop();
 });
 
 test('anyone can start a new game from stage 1, kept apart from the others, each kept over a restart', (t) => {
@@ -412,6 +464,12 @@ test('the admin page lists the isle’s games and starts one over, removes one o
     assert.deepEqual(removed.body.games.map((g) => g.id), [1]);
     assert.equal((await api('/games/2', 'DELETE')).status, 404);
     assert.equal((await api('/games/1', 'PUT')).status, 405);
+    // A new game of a later episode of the story, from its first stage.
+    const rainbow = await api('/episodes/2/games', 'POST');
+    assert.equal(rainbow.status, 200);
+    assert.equal(rainbow.body.stage, firstStage(2));
+    assert.deepEqual(rainbow.body.games.map((g) => g.stage), [1, firstStage(2)]);
+    assert.equal((await api('/episodes/2/games')).status, 405);
   } finally {
     await web.shutdown();
   }

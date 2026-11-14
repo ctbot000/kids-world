@@ -182,10 +182,11 @@ async function ctbApiFor(ctb, req, res, rest) {
 }
 
 // Adventure Isle's games (server/adventure.js), under /admin/api/isle: GET
-// them; POST /games starts a new one from stage 1; POST /games/<id>/reset
-// starts one over from stage 1, and DELETE /games/<id> removes it, whoever is
-// on it sent on (to its stage 1, or to another game). Each answers with the
-// games as they are now.
+// them; POST /games starts a new one from stage 1 (POST /episodes/<n>/games
+// from the first stage of that episode); POST /games/<id>/reset starts one
+// over from stage 1 of its episode, and DELETE /games/<id> removes it, whoever
+// is on it sent on (to its stage 1, or to another game). Each answers with
+// the games as they are now.
 async function isleApiFor(isle, req, res, rest) {
   if (!isle) return json(res, 404, { error: 'Adventure Isle is not kept here.' });
   const games = () => ({ games: isle.adminList(), max: MAX_RUNS });
@@ -196,6 +197,12 @@ async function isleApiFor(isle, req, res, rest) {
   if (rest === '/games') {
     if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
     const started = isle.newRun('');
+    return json(res, started.error ? 409 : 200, { ...games(), ...started });
+  }
+  const fresh = /^\/episodes\/(\d+)\/games$/.exec(rest);
+  if (fresh) {
+    if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+    const started = isle.newRun('', undefined, Number(fresh[1]));
     return json(res, started.error ? 409 : 200, { ...games(), ...started });
   }
   const one = /^\/games\/(\d+)(\/reset)?$/.exec(rest);

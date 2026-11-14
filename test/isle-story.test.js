@@ -1,5 +1,6 @@
-// Adventure Isle's story and its maps: every stage a chapter of "The Star
-// of Adventure Isle", with a map drawn for it, its camps one after another
+// Adventure Isle's story and its maps: every stage a chapter of an episode
+// of it ("The Star of Adventure Isle", then "The Rainbow of Adventure Isle"),
+// with a map drawn for it, its camps one after another
 // along a way that a gate shuts between each camp and the next — freeing a
 // camp opens the gate on to the next, so the isle is crossed like a real
 // journey — and King Grumble's lair at the end.
@@ -10,19 +11,21 @@ import { AdventureSim, CAMP_RADIUS, kingHearts } from '../public/js/shared/adven
 import { BOSSES, isBoss } from '../public/js/shared/bosses.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
-import { campName, CHAPTERS, chapterOf, introOf, SHARDS, STAGES } from '../public/js/shared/isle-story.js';
+import { campName, CHAPTERS, chapterOf, EPISODES, episodeOf, firstStage, introOf, RAINBOW, SHARDS, stageName, STAGES, stagesOf, tokensBack } from '../public/js/shared/isle-story.js';
 import { kindOf, MONSTER_KINDS, MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
 
 // ------------------------------------------------ the story
 
-test('the story has a chapter for every Star Shard, each told in full', () => {
-  assert.equal(CHAPTERS.length, SHARDS);
-  assert.equal(STAGES, SHARDS, 'a stage for each chapter, and no more');
-  assert.equal(new Set(CHAPTERS.map((c) => c.key)).size, SHARDS, 'each chapter its own map');
+test('the story has a chapter for every Star Shard and every colour of the rainbow, each told in full', () => {
+  assert.equal(stagesOf(1), SHARDS, 'the first episode: a chapter for each Star Shard');
+  assert.equal(stagesOf(2), RAINBOW.length, 'the second: one for each colour of the rainbow');
+  assert.equal(STAGES, CHAPTERS.length, 'a stage for each chapter, and no more');
+  assert.equal(STAGES, EPISODES.reduce((n, ep) => n + stagesOf(ep.n), 0), 'every chapter in an episode');
+  assert.equal(new Set(CHAPTERS.map((c) => c.key)).size, STAGES, 'each chapter its own map');
   for (const ch of CHAPTERS) {
-    assert.ok(['sunny', 'snowy', 'candy', 'volcano', 'dunes', 'crystal', 'hollow', 'works', 'spires'].includes(ch.theme), ch.key);
+    assert.ok(['sunny', 'snowy', 'candy', 'volcano', 'dunes', 'crystal', 'hollow', 'works', 'spires', 'tulip', 'maple', 'honey', 'jungle', 'lagoon', 'moor', 'vale'].includes(ch.theme), ch.key);
     assert.ok(ch.icon && ch.name && ch.lair && ch.intro && ch.won && ch.hazard, ch.key);
     assert.ok(ch.camps.length >= 3 && ch.camps.length <= 4, `${ch.key}: three or four camps along the way`);
     assert.equal(ch.freed.length, ch.camps.length, `${ch.key}: a line for each camp freed`);
@@ -33,17 +36,48 @@ test('the story has a chapter for every Star Shard, each told in full', () => {
     assert.ok(MONSTER_KINDS.includes(BOSSES[ch.boss].minion) && !isBoss(BOSSES[ch.boss].minion), `${ch.key}: its minions`);
     assert.ok(ch.intro.includes(BOSSES[ch.boss].name.split(' the ')[0]), `${ch.key}: the story tells of ${BOSSES[ch.boss].name}`);
   }
-  assert.equal(new Set(CHAPTERS.map((c) => c.boss)).size, SHARDS, 'a boss of its own for every chapter');
-  assert.equal(CHAPTERS.at(-1).boss, 'king', 'King Grumble himself at the last');
-  // The last chapter ends the story: King Grumble popped for good, the Star whole.
-  assert.match(CHAPTERS.at(-1).won, /once and for all/);
+  assert.equal(new Set(CHAPTERS.map((c) => c.boss)).size, STAGES, 'a boss of its own for every chapter');
+  assert.equal(CHAPTERS[SHARDS - 1].boss, 'king', 'King Grumble himself at the last of the first episode');
+  // Its last chapter ends that tale: King Grumble popped for good, the Star whole.
+  assert.match(CHAPTERS[SHARDS - 1].won, /once and for all/);
+  // And Queen Grizzle at the last of the second, the rainbow back.
+  assert.equal(CHAPTERS.at(-1).boss, 'grizzle');
+  assert.match(CHAPTERS.at(-1).won, /the rainbow stands over Adventure Isle again/);
+  // Each episode: a tale of its own, with its films and what its chapters win back.
+  assert.deepEqual(EPISODES.map((ep) => ep.n), [1, 2]);
+  assert.equal(new Set(EPISODES.flatMap((ep) => [ep.key, ep.title, ep.films.intro, ep.films.ending])).size, 8);
+  for (const ep of EPISODES) {
+    assert.ok(ep.icon && ep.villain && ep.token.one && ep.token.many && ep.films.endingMs > 10000, ep.key);
+    assert.match(ep.again(3), /^Journey 3! /);
+    assert.ok(ep.again(2).includes(ep.villain));
+  }
+  assert.deepEqual(RAINBOW.map((c) => c.name), ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet']);
+  assert.equal(EPISODES[1].token.colours, RAINBOW);
+  // The second episode's chapters each win back their colour, and say so.
+  CHAPTERS.slice(SHARDS).forEach((ch, i) => assert.match(ch.won, new RegExp(i === 6 ? 'seven colours' : `${RAINBOW[i].name[0].toUpperCase()}${RAINBOW[i].name.slice(1)} is back`), ch.key));
 });
 
-test('each stage is a chapter, the last the end of the story, told again on a new journey', () => {
-  assert.deepEqual([1, 2, 5, 12].map((s) => chapterOf(s).key), ['shore', 'woods', 'dunes', 'castle']);
+test('each stage is a chapter of an episode, its last the end of that tale, told again on a new journey', () => {
+  assert.deepEqual([1, 2, 5, 12, 13, 19].map((s) => chapterOf(s).key), ['shore', 'woods', 'dunes', 'castle', 'tulip', 'vale']);
   assert.deepEqual([chapterOf(1).n, chapterOf(1).shards, chapterOf(1).final], [1, 1, false]);
-  assert.deepEqual([chapterOf(STAGES).shards, chapterOf(STAGES).final], [SHARDS, true]);
-  assert.equal(chapterOf(STAGES + 5).key, 'castle', 'past the last, the last');
+  assert.deepEqual([chapterOf(SHARDS).shards, chapterOf(SHARDS).final, chapterOf(SHARDS).last], [SHARDS, true, false], 'the end of the first episode, not of the story');
+  assert.deepEqual([chapterOf(STAGES).shards, chapterOf(STAGES).final, chapterOf(STAGES).last], [RAINBOW.length, true, true]);
+  assert.equal(chapterOf(STAGES + 5).key, 'vale', 'past the last, the last');
+  // The second episode's stages come after the first's, counted from 1 again.
+  assert.deepEqual([firstStage(1), firstStage(2), firstStage(99)], [1, SHARDS + 1, 1]);
+  assert.equal(episodeOf(2), EPISODES[1]);
+  assert.equal(episodeOf(0), EPISODES[0], 'no such episode is the first');
+  const tulip = chapterOf(SHARDS + 1);
+  assert.deepEqual([tulip.stage, tulip.episode.n, tulip.n, tulip.of, tulip.shards, tulip.final], [SHARDS + 1, 2, 1, RAINBOW.length, 1, false]);
+  // How hard: a stage of the first episode as its number, the second's as each says.
+  assert.deepEqual([1, 6, 12].map((s) => chapterOf(s).level), [1, 6, 12]);
+  const levels = CHAPTERS.slice(SHARDS).map((_, i) => chapterOf(SHARDS + 1 + i).level);
+  assert.ok(levels.every((l, i) => l >= 6 && (i === 0 || l > levels[i - 1])), 'each harder than the last');
+  assert.ok(levels.at(-1) > SHARDS, 'Queen Grizzle harder than King Grumble');
+  assert.deepEqual([stageName(3), stageName(3, true), stageName(SHARDS + 3), stageName(SHARDS + 3, true)], ['Stage 3 of 12', 'Stage 3', 'Episode 2 · Stage 3 of 7', 'Episode 2 · Stage 3']);
+  assert.deepEqual([tokensBack(chapterOf(3)), tokensBack(chapterOf(SHARDS)), tokensBack(tulip), tokensBack(chapterOf(STAGES))], ['3 of 12 Star Shards back!', 'All 12 Star Shards!', '1 of 7 colours of the rainbow back!', 'All 7 colours of the rainbow!']);
+  assert.match(introOf(SHARDS + 2, 2), /^Journey 2! Queen Grizzle is back/);
+  assert.equal(introOf(SHARDS + 1), CHAPTERS[SHARDS].intro);
   // The later chapters are longer: four camps along the way.
   assert.ok(CHAPTERS.slice(4).some((c) => c.camps.length === 4));
   assert.match(introOf(3, 2), /^Journey 2!/);

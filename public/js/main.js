@@ -597,14 +597,14 @@ function openIsland(id, save = null) {
 
 // passcode: the one you typed for an island that has one. pass: from an
 // invitation, which lets you in without it.
-function visitIsland(raw, passcode = '', pass = '', { isleNew = false } = {}) {
+function visitIsland(raw, passcode = '', pass = '', { isleNew = false, episode = 1 } = {}) {
   const code = normalizeCode(raw);
   if (!isValidCode(code)) {
     ui.toast('🙈', 'An island code has 6 numbers.', 'warn');
     return;
   }
   // (Asking one of the isle's games for a new one: game.js 'isle-run'.)
-  const extra = isleNew ? { isle: 'new' } : {};
+  const extra = isleNew ? { isle: 'new', ...(episode > 1 ? { episode } : {}) } : {};
   const loadingText = isleNew ? '🌟 Starting a new game of Adventure Isle…' : 'Flying to your friend’s island…';
   if (serverMode) {
     const link = new WsLink({ url: wsUrl() });
@@ -959,9 +959,10 @@ const titleHandlers = {
     ui.visitDialog();
     ui.toast('😴', 'The shared isle is not on the list right now. Try again in a moment!', 'warn');
   },
-  // A new game of the isle, from stage 1, kept apart from the others: asked of
-  // one of its games (viaCode), which says where the new one is.
-  newIsleGame: (viaCode) => visitIsland(viaCode, '', '', { isleNew: true }),
+  // A new game of the isle, from stage 1 (of the episode of its story asked
+  // for, the first unless said), kept apart from the others: asked of one of
+  // its games (viaCode), which says where the new one is.
+  newIsleGame: (viaCode, episode = 1) => visitIsland(viaCode, '', '', { isleNew: true, episode }),
   // 🏢 The CTB island, straight from the title screen.
   ctb: () => watchCtb(keeperStarted),
   visitedBefore,

@@ -180,6 +180,9 @@ export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const HAZARD_THROWER = { id: 0, kind: 'blob', plan: null, body: { x: 0, y: 0, z: 0 } };
 // One player may start a new game of the isle at most this often (isleOp).
 const ISLE_NEW_MS = 10000;
+// Which episode of the isle's story a new game is asked for (isle-story.js):
+// a small whole number, or the first.
+const episodeAsked = (n) => (Number.isInteger(n) && n >= 1 && n <= 99 ? n : 1);
 
 export class Room {
   // Either { theme, size, name, seed, defense } for a brand-new island, or
@@ -697,9 +700,10 @@ export class Room {
       return;
     }
     // On the shared isle, a page come only to start a new game of it (from
-    // the title): told where that one is, and nothing more — it goes there.
+    // the title; episode: of which episode of its story, the first unless
+    // said): told where that one is, and nothing more — it goes there.
     if (msg.isle === 'new' && this.shared) {
-      this.sendTo(conn, { t: 'isle-run', ...(this.onIsleNew?.(cleanName(msg.name)) ?? { error: 'A new game cannot be started here.' }) });
+      this.sendTo(conn, { t: 'isle-run', ...(this.onIsleNew?.(cleanName(msg.name), episodeAsked(msg.episode)) ?? { error: 'A new game cannot be started here.' }) });
       return;
     }
     let token = typeof msg.token === 'string' ? msg.token : '';
@@ -1600,6 +1604,9 @@ export class Room {
           this.broadcast({ t: 'mfx', kind: 'hurl', id: 0, sky: true, what: h.what, from: at({ ...first, y: first.y + HAZARD.high }), to: h.to.map(at), ms: h.ms, r: h.reach });
           this.thrown.push({ monster: HAZARD_THROWER, what: h.what, to: h.to, reach: h.reach, bumps: h.bumps, at: now + h.ms });
         }
+        // Nobody gets round a gate that is still shut (adventure.js
+        // stepSneaks): whoever has, by sea or over a wall, goes back.
+        for (const pid of adv.stepSneaks(this.world, now, people)) this.sendBack(this.players.get(pid), now);
       }
     }
     const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
@@ -2038,6 +2045,17 @@ export class Room {
   sendHome(p, now) {
     const at = this.goHome(p, now);
     this.broadcast({ t: 'home', pid: p.id, at, ...this.hpOf(p) });
+  }
+
+  // Someone who got past a gate of the isle that is still shut, back to the
+  // nearest safe place (the start, or a camp freed) as they are: no HP given
+  // or taken, and safe from bumps for a moment as they land.
+  sendBack(p, now) {
+    if (!p || !this.adventure) return;
+    const at = this.adventure.homeFor(this.world, p.s[0], p.s[2]);
+    p.safeUntil = now + SAFE_MS;
+    p.s = [at.x, at.y, at.z, p.s[3], 0, 0];
+    this.broadcast({ t: 'home', pid: p.id, at: [at.x, at.y, at.z], why: 'gate', ...this.hpOf(p) });
   }
 
   // A friend tapping someone sitting dizzy, from beside them: up they get,
@@ -2652,15 +2670,16 @@ export class Room {
     this.changed();
   }
 
-  // Someone on the shared isle starting a new game of it, from stage 1,
-  // kept apart from this one (server/adventure.js newRun): they are told where
-  // it is ({ t: 'isle-run', code } or { error }), and go there. Not too often.
+  // Someone on the shared isle starting a new game of it, from stage 1 (of
+  // the episode of its story they ask for, the first unless said), kept apart
+  // from this one (server/adventure.js newRun): they are told where it is
+  // ({ t: 'isle-run', code } or { error }), and go there. Not too often.
   isleOp(conn, p, msg) {
     if (msg.op !== 'new' || !this.shared || !this.onIsleNew) return;
     const now = this.now();
     if (now - (p.isleNewAt ?? -Infinity) < ISLE_NEW_MS) return;
     p.isleNewAt = now;
-    this.sendTo(conn, { t: 'isle-run', ...this.onIsleNew(p.name) });
+    this.sendTo(conn, { t: 'isle-run', ...this.onIsleNew(p.name, episodeAsked(msg.episode)) });
   }
 
   // Gates the adventure opened (Adventure Isle's, shut across its way until

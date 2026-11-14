@@ -5,14 +5,16 @@
 // to it or sent away) and nobody flies on their own on it — it is everyone's
 // adventure, on foot. Freed, the island is retired and the next stage's takes
 // its place at once, a little harder (see shared/adventure.js), up to the last
-// chapter of its story (shared/isle-story.js). Win that one and the story is
-// over: the ending plays for everyone there (ui.js), and a new journey starts
-// at stage 1. Nothing else starts it over, so a stage stays where it got to
-// for as long as it takes.
+// chapter of its story (shared/isle-story.js). The story has episodes, one
+// after another among the stages: win the last chapter of one and its ending
+// plays for everyone there (ui.js), and the next episode's first stage is up;
+// win the last of them all, and a new journey starts at stage 1. Nothing else
+// starts it over, so a stage stays where it got to for as long as it takes.
 //
 // More than one game can go on at once (a run, here), each kept apart at its
-// own stage: anyone can start a new one from stage 1 (newRun) — from the
-// title, or from the isle — while the others keep going for whoever is on
+// own stage: anyone can start a new one from the first stage of an episode
+// (newRun) — from the title, or from the isle — while the others keep going
+// for whoever is on
 // them. Each game is listed as an island of its own, and keeps its stage, its
 // journey (times round the story) and its camps freed so far over a restart
 // (in `file`, when given). The island of a stage of a game is always the same
@@ -27,7 +29,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { generateCode } from '../public/js/shared/codes.js';
-import { chapterOf, STAGES } from '../public/js/shared/isle-story.js';
+import { chapterOf, episodeOf, firstStage, stageName, STAGES } from '../public/js/shared/isle-story.js';
 import { Room } from '../public/js/shared/room.js';
 import { cleanName, NAME_MAX } from '../public/js/shared/words.js';
 import { PeerHost } from './host.js';
@@ -139,7 +141,7 @@ export class PublicAdventure {
       this.open(run, r.stage, r.journey, r.freed);
     }
     this.keep();
-    for (const run of this.runs) this.say(`game ${run.id} is up: stage ${run.stage} of ${STAGES}, journey ${run.journey} (code ${run.entry.code}).`);
+    for (const run of this.runs) this.say(`game ${run.id} is up: ${stageName(run.stage)} (stage ${run.stage} of ${STAGES} in all), journey ${run.journey} (code ${run.entry.code}).`);
     return this;
   }
 
@@ -230,7 +232,7 @@ export class PublicAdventure {
     room.isleRun = { id: run.id, by: run.by };
     // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
     room.adventure.run = run.id;
-    room.onIsleNew = (name) => this.newRun(name);
+    room.onIsleNew = (name, episode = 1) => this.newRun(name, this.now(), episode);
     for (const id of freed) {
       const camp = room.adventure.campById(id);
       if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
@@ -249,26 +251,27 @@ export class PublicAdventure {
     }
   }
 
-  // A new game from stage 1, kept apart from the others, as `by` asked:
-  // { code, stage } of its island; or, a moment after another was started,
-  // that one's (they start it together); or { error } when there are as many
-  // games as there may be and none of them can make room (nobody has played
-  // it for RUN_IDLE_MS).
-  newRun(by = '', now = this.now()) {
+  // A new game from the first stage of an episode (the first, unless said),
+  // kept apart from the others, as `by` asked: { code, stage } of its island;
+  // or, a moment after another of that episode was started, that one's (they
+  // start it together); or { error } when there are as many games as there may
+  // be and none of them can make room (nobody has played it for RUN_IDLE_MS).
+  newRun(by = '', now = this.now(), episode = 1) {
     if (this.stopped) return { error: 'Adventure Isle is closing. Try again in a moment!' };
+    const start = firstStage(episodeOf(episode).n);
     const last = this.runs.at(-1);
-    if (last && this.runs.length > 1 && now - last.startedAt < NEW_RUN_MS && last.stage === 1 && last.journey === 1) return { code: last.entry.code, stage: 1 };
+    if (last && this.runs.length > 1 && now - last.startedAt < NEW_RUN_MS && last.stage === start && last.journey === 1) return { code: last.entry.code, stage: start };
     if (this.runs.length >= MAX_RUNS) {
       const idle = this.runs.filter((r) => r.entry.room.online === 0 && r.retired.every((o) => o.room.online === 0) && now - r.playedAt >= RUN_IDLE_MS).sort((a, b) => a.playedAt - b.playedAt)[0];
       if (!idle) return { error: `There are ${MAX_RUNS} games on Adventure Isle already — come and join one of them!` };
       this.drop(idle, now);
     }
-    const run = { id: this.nextId++, journey: 1, stage: 1, by: whoStarted(by), startedAt: now, playedAt: now, entry: null, retired: [], freed: 0, keptPlayed: now };
+    const run = { id: this.nextId++, journey: 1, stage: start, by: whoStarted(by), startedAt: now, playedAt: now, entry: null, retired: [], freed: 0, keptPlayed: now };
     this.runs.push(run);
-    this.open(run, 1, 1);
+    this.open(run, start, 1);
     this.keep();
-    this.say(`${run.by || 'someone'} started game ${run.id} at stage 1 (code ${run.entry.code}).`);
-    return { code: run.entry.code, stage: 1 };
+    this.say(`${run.by || 'someone'} started game ${run.id} at ${stageName(start, true)} (code ${run.entry.code}).`);
+    return { code: run.entry.code, stage: start };
   }
 
   // A run gone for good, to make room (nobody had played it for a long time):
@@ -308,22 +311,23 @@ export class PublicAdventure {
     });
   }
 
-  // A game started over from stage 1 (the admin page's ↺ Start over): its
-  // island now retired, and whoever is on it sent on to its new stage 1, as
-  // after a win. Returns { code, stage } of its new island, or null for no
-  // such game.
+  // A game started over from stage 1 of the episode it is in (the admin
+  // page's ↺ Start over): its island now retired, and whoever is on it sent on
+  // to its new stage 1, as after a win. Returns { code, stage } of its new
+  // island, or null for no such game.
   resetRun(id, now = this.now()) {
     const run = this.runById(id);
     if (!run || this.stopped) return null;
     const done = run.entry;
-    this.open(run, 1, 1);
+    const start = firstStage(chapterOf(run.stage).episode.n);
+    this.open(run, start, 1);
     run.startedAt = now;
     run.playedAt = now;
     run.keptPlayed = now;
-    const next = { code: run.entry.code, stage: 1 };
+    const next = { code: run.entry.code, stage: start };
     this.retire(run, now, `This game of ${PUBLIC_ISLAND_NAME} starts over from stage 1! 🌟 Off you all go there in a moment.`, done, next);
     this.keep();
-    this.say(`game ${run.id} started over at stage 1 (code ${next.code}).`);
+    this.say(`game ${run.id} started over at ${stageName(start, true)} (code ${next.code}).`);
     return next;
   }
 
@@ -360,8 +364,9 @@ export class PublicAdventure {
     return next;
   }
 
-  // Moves each run on: won, to its next stage — and its last stage won, the
-  // story told, back to stage 1 on its next journey round.
+  // Moves each run on: won, to its next stage (the next episode's first,
+  // after an episode's last) — and the last stage of all won, the story told,
+  // back to stage 1 on its next journey round.
   tick(now = this.now()) {
     if (this.stopped || !this.runs.length) return;
     this.sweep(this.leftover, now);
@@ -388,14 +393,19 @@ export class PublicAdventure {
         // The next stage's island first, so everyone on this one can be told
         // where it is: their pages fly them on there by themselves (ui.js).
         const done = run.entry;
+        const won = chapterOf(run.stage);
         const last = run.stage >= STAGES;
         this.open(run, last ? 1 : run.stage + 1, last ? run.journey + 1 : run.journey);
         const next = { code: run.entry.code, stage: run.stage };
+        const to = chapterOf(next.stage);
         if (last) {
-          this.retire(run, now, `The Star of ${PUBLIC_ISLAND_NAME} shines again! 🌟 A new journey starts from stage 1 — come along when you are ready!`, done, next);
+          this.retire(run, now, `${won.episode.title} is told! ${won.episode.icon} A new journey starts from stage 1 — come along when you are ready!`, done, next);
           this.say(`game ${run.id}: the last stage conquered; journey ${run.journey} starts at stage 1 (code ${next.code}).`);
+        } else if (won.final) {
+          this.retire(run, now, `${won.episode.title} is told! ${to.episode.icon} The story goes on with Episode ${to.episode.n}, ${to.episode.title} — come along when you are ready!`, done, next);
+          this.say(`game ${run.id}: episode ${won.episode.n} conquered; ${stageName(next.stage, true)} is up (code ${next.code}).`);
         } else {
-          this.retire(run, now, `On to stage ${next.stage}! 🌟 Off you all go there in a moment — come and conquer it together!`, done, next);
+          this.retire(run, now, `On to stage ${to.n}! ${to.episode.icon} Off you all go there in a moment — come and conquer it together!`, done, next);
           this.say(`game ${run.id}: stage ${next.stage - 1} conquered; stage ${next.stage} is up (code ${next.code}).`);
         }
         changed = true;

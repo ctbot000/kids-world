@@ -4,7 +4,7 @@
 // a strip the way it is about to charge; and the things it throws, flying
 // there in an arc and bursting as they land.
 import * as THREE from '../../vendor/three.module.js';
-import { cone, cylinder, mesh, sphere, toon } from './toon.js';
+import { cone, cylinder, mesh, sphere, toon, torus } from './toon.js';
 
 const WARN = '#ff4a3d';
 // A lava rock's shape.
@@ -17,6 +17,9 @@ const FROM_SKY = { star: true };
 const FROM_GROUND = { root: true };
 // A bolt is only the ring until it strikes (renderer.js hurl draws it).
 const UNSEEN = { bolt: true };
+// Whether whoever throws this holds it up first: not what comes out of the
+// sky or the ground by itself (a bolt of lightning, a star, a root).
+export const heldUp = (what) => Boolean(what) && !UNSEEN[what] && !FROM_SKY[what] && !FROM_GROUND[what];
 
 // A ring flat on the ground at (x, y, z), as wide as r, pulsing, with a
 // disc inside it growing out to its edge as the moment it shows comes.
@@ -118,7 +121,9 @@ export class WarnStrip {
 // What a boss throws (bosses.js hurl what), as a little group about a unit
 // across at most: a coconut, a spore pod, a snowball, a gumdrop, a ball of
 // mud, a lava rock or a grumble bomb; or a beast's (beasts.js): a boulder, a bone,
-// a glob of venom, a falling star or a root.
+// a glob of venom, a falling star or a root; or, in the story's second episode,
+// a strawberry, an acorn, a blob of honey, a bunch of bananas, a blob of ink, a
+// rice cake or a smudge of grey.
 export function thrownMesh(what) {
   const g = new THREE.Group();
   if (what === 'boulder') {
@@ -160,6 +165,65 @@ export function thrownMesh(what) {
       root.rotation.set(tilt * (z < 0 ? -1 : 0.4), 0, tilt);
       g.add(root);
     }
+    return g;
+  }
+  if (what === 'berry') {
+    // A strawberry: red, pointed, seeds all over, green leaves on top.
+    g.add(mesh(cone(0.3, 0.52, 14), toon('#e3342b'), 0, -0.04, 0).rotateX(Math.PI));
+    g.add(mesh(sphere(1, 14, 10), toon('#e3342b'), 0, 0.2, 0, 0.3, 0.16, 0.3));
+    for (let i = 0; i < 8; i++) {
+      const a = i * 2.4;
+      const y = 0.16 - (i % 4) * 0.1;
+      const r = 0.29 * (1 - (0.22 - y) / 0.6);
+      g.add(mesh(sphere(1, 6, 4), toon('#ffe14d'), Math.sin(a) * r, y, Math.cos(a) * r, 0.03));
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      g.add(mesh(sphere(1, 8, 6), toon('#35a852'), Math.sin(a) * 0.14, 0.33, Math.cos(a) * 0.14, 0.12, 0.03, 0.07).rotateY(a));
+    }
+    return g;
+  }
+  if (what === 'acorn') {
+    g.add(mesh(sphere(1, 14, 10), toon('#d9a35c'), 0, -0.06, 0, 0.24, 0.32, 0.24));
+    g.add(mesh(sphere(1, 14, 10), toon('#7a4a26'), 0, 0.14, 0, 0.27, 0.16, 0.27));
+    g.add(mesh(cylinder(0.03, 0.03, 0.14, 6), toon('#7a4a26'), 0, 0.33, 0));
+    return g;
+  }
+  if (what === 'honey') {
+    const honey = toon('#ffb21f', { transparent: true, opacity: 0.88 });
+    g.add(mesh(sphere(1, 14, 10), honey, 0, 0, 0, 0.3, 0.26, 0.3));
+    g.add(mesh(sphere(1, 10, 8), honey, 0.05, -0.26, 0.02, 0.12, 0.2, 0.12));
+    g.add(mesh(sphere(1, 8, 6), honey, -0.2, 0.1, 0.1, 0.11));
+    g.add(mesh(sphere(1, 8, 6), toon('#ffffff', { emissive: 0.5, transparent: true, opacity: 0.6 }), -0.08, 0.1, 0.22, 0.05));
+    return g;
+  }
+  if (what === 'banana') {
+    // A bunch of three, curved, yellow with dark tips.
+    for (const [i, a] of [-0.5, 0, 0.5].entries()) {
+      const one = mesh(torus(0.26, 0.075, Math.PI * 0.8), toon('#ffd93d'), 0, 0, 0);
+      one.rotation.set(0, a, Math.PI * 0.6);
+      one.position.set(Math.sin(a) * 0.08, 0, Math.cos(a) * 0.08 - 0.05);
+      g.add(one);
+      g.add(mesh(sphere(1, 6, 4), toon('#5a3a1c'), Math.sin(a) * 0.3, -0.24 + i * 0.01, Math.cos(a) * 0.3 - 0.05, 0.04));
+    }
+    g.add(mesh(cylinder(0.05, 0.05, 0.12, 6), toon('#5a3a1c'), 0, 0.27, -0.05));
+    return g;
+  }
+  if (what === 'ink' || what === 'smudge') {
+    // A blob of ink, blue-black; or a smudge of Queen Grizzle's grey.
+    const dark = toon(what === 'ink' ? '#1c2440' : '#8b9099', { transparent: true, opacity: 0.92 });
+    g.add(mesh(sphere(1, 14, 10), dark, 0, 0, 0, 0.3, 0.27, 0.3));
+    g.add(mesh(sphere(1, 8, 6), dark, 0.22, 0.12, -0.08, 0.12));
+    g.add(mesh(sphere(1, 8, 6), dark, -0.2, -0.1, 0.12, 0.1));
+    g.add(mesh(sphere(1, 8, 6), dark, 0.02, -0.26, 0.04, 0.09, 0.14, 0.09));
+    g.add(mesh(sphere(1, 8, 6), toon('#ffffff', { emissive: 0.4, transparent: true, opacity: 0.5 }), -0.1, 0.12, 0.2, 0.045));
+    return g;
+  }
+  if (what === 'ricecake') {
+    // A rice cake fresh from the mortar: round, white and soft, a leaf under it.
+    g.add(mesh(sphere(1, 16, 12), toon('#fbf7ee'), 0, 0.02, 0, 0.33, 0.22, 0.33));
+    g.add(mesh(sphere(1, 10, 8), toon('#ffffff'), 0.08, 0.14, 0.1, 0.12, 0.06, 0.12));
+    g.add(mesh(sphere(1, 10, 8), toon('#5fa84a'), 0, -0.18, 0, 0.3, 0.03, 0.2));
     return g;
   }
   if (what === 'coconut') {
@@ -301,7 +365,7 @@ export class Thrown {
   // spores, a puff of smoke and sparks.
   burst([x, y, z]) {
     const fx = this.effects;
-    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'], boulder: ['#8d929c', '#a2a7b0', '#6d727c'], bone: ['#f3ead2', '#d9ccab', '#ffffff'], venom: ['#a6e04a', '#d6ff5a', '#6f9440'], bolt: ['#ffffff', '#ffe14d', '#59c7ff'], star: ['#ffe14d', '#ffffff', '#ffb13b'], root: ['#6b4a2f', '#8a6a48', '#4f3620'], sandball: ['#e8c77a', '#cfa95a', '#fff1c4'], crystal: ['#b98cff', '#7fe8ff', '#ffffff'], pumpkin: ['#ff8a1f', '#ffe14d', '#4f7a2a'], gear: ['#9aa3ad', '#4a5260', '#ffd75a'] }[this.what] ?? ['#ffffff'];
+    const colors = { coconut: ['#7a4a26', '#e9dcc0', '#ffffff'], pod: ['#e6f28a', '#c9e46a', '#f4f7c0'], snowball: ['#ffffff', '#dfeefc', '#bfe8ff'], gumdrop: ['#ff5aa5', '#ffd23f', '#5fd36a'], mud: ['#6b4a2b', '#4f3620', '#8a6a48'], lava: ['#ff7a1a', '#ffd84d', '#3b3438'], bomb: ['#ffd84d', '#ff8fc4', '#b18cff'], boulder: ['#8d929c', '#a2a7b0', '#6d727c'], bone: ['#f3ead2', '#d9ccab', '#ffffff'], venom: ['#a6e04a', '#d6ff5a', '#6f9440'], bolt: ['#ffffff', '#ffe14d', '#59c7ff'], star: ['#ffe14d', '#ffffff', '#ffb13b'], root: ['#6b4a2f', '#8a6a48', '#4f3620'], sandball: ['#e8c77a', '#cfa95a', '#fff1c4'], crystal: ['#b98cff', '#7fe8ff', '#ffffff'], pumpkin: ['#ff8a1f', '#ffe14d', '#4f7a2a'], gear: ['#9aa3ad', '#4a5260', '#ffd75a'], berry: ['#e3342b', '#ff8fa8', '#35a852'], acorn: ['#d9a35c', '#7a4a26', '#f6e3c0'], honey: ['#ffb21f', '#ffd93d', '#fff1b8'], banana: ['#ffd93d', '#fff1b8', '#5a3a1c'], ink: ['#1c2440', '#3a4a7a', '#0e1224'], ricecake: ['#fbf7ee', '#ffffff', '#5fa84a'], smudge: ['#8b9099', '#c9ced6', '#5d626c'] }[this.what] ?? ['#ffffff'];
     if (this.what === 'pod') fx.spores(x, y, z, 1.6);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2;

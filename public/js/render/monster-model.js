@@ -15,7 +15,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { blobShadow, cone, cylinder, mesh, onSurface, sphere, toon, torus } from './toon.js';
 
-const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'] };
+const JELLY = { sunny: ['#9b6bff', '#6c3fd6'], snowy: ['#5fc7e6', '#2f8fb8'], candy: ['#8ee05a', '#4fa82e'], flat: ['#9b6bff', '#6c3fd6'], moor: ['#5b4fd0', '#3a2f96'], vale: ['#a3a7ad', '#6d727c'] };
 // The tougher kinds: their colours, and how much bigger than a blob.
 const KIND_JELLY = { big: ['#e2536a', '#9c2440'], spiky: ['#ffa53d', '#d4621a'], knight: ['#5fb36f', '#2f7a45'], golem: ['#8d929c', '#5d626c'], ghost: ['#ff7a2f', '#a3300c'], yeti: ['#f4f7fb', '#cfd8e6'] };
 // Gummy Bears and their cubs come in the colours of the sweets.

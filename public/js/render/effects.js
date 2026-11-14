@@ -841,9 +841,10 @@ export class Effects {
   // round it as far as reach, rising a little and fading, with a few motes;
   // what, if not spores: 'gas', Bogmaw's burp of swamp gas, murky green;
   // 'mist', Baron Boo's cold mist, pale and blue; 'gust', Old Nimbus's gale,
-  // white (true, from before: gas).
+  // white; 'pollen', Baroness Bumble's, golden; 'ink', Admiral Inkwell's cloud
+  // of it, blue-black; 'drizzle', Queen Grizzle's, grey (true, from before: gas).
   spores(x, y, z, reach = 2.8, what = 'spores') {
-    const colors = { true: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], gas: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], mist: ['#dfe9ff', '#b8c8f0', '#f4f7ff', '#9fb4e8'], gust: ['#ffffff', '#eef4fb', '#dfe9f5', '#ffffff'] }[what] ?? ['#e6f28a', '#c9e46a', '#f4f7c0', '#b8d870'];
+    const colors = { true: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], gas: ['#8fb35a', '#6f9440', '#b5c97a', '#5d7d36'], mist: ['#dfe9ff', '#b8c8f0', '#f4f7ff', '#9fb4e8'], gust: ['#ffffff', '#eef4fb', '#dfe9f5', '#ffffff'], pollen: ['#ffd93d', '#ffb21f', '#fff1b8', '#ffc928'], ink: ['#1c2440', '#2c3766', '#0e1224', '#3a4a7a'], drizzle: ['#8b9099', '#a9aeb6', '#c9ced6', '#6f747d'] }[what] ?? ['#e6f28a', '#c9e46a', '#f4f7c0', '#b8d870'];
     for (let i = 0; i < 22; i++) {
       const a = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
       const s = reach * (1.2 + Math.random() * 0.8);

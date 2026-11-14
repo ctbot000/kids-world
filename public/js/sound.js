@@ -386,6 +386,13 @@ export class Sound {
         [72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.1, decay: i === 3 ? 0.7 : 0.18, gain: 0.15, type: 'triangle' }));
         this.noise(0.6, { at: 0.35, type: 'highpass', freq: 6000, gain: 0.06 });
         break;
+      // A first of a kind of fish: its page fills in in the 🐟 Fish
+      // Dictionary — a little splash of a cheer.
+      case 'newfish':
+        [72, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.08, decay: 0.2, gain: 0.12, type: 'triangle' }));
+        this.tone(NOTE(88), { at: 0.28, decay: 0.5, gain: 0.1, type: 'triangle', slide: NOTE(93), slideTime: 0.4 });
+        this.noise(0.25, { at: 0.05, type: 'bandpass', freq: 3000, q: 1, gain: 0.12 });
+        break;
       // Up a level: a rising fanfare and a shimmer.
       case 'levelup':
         [67, 72, 76, 79].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.09, decay: 0.16, gain: 0.14, type: 'triangle' }));
@@ -834,7 +841,7 @@ export class Sound {
         this.tone(650 * r(), { decay: 0.16, gain: 0.08, slide: 220, slideTime: 0.14 });
         break;
       case 'penguin':
-        // Aah, aah!
+        // Aah, aah! (a baby penguin pet says it too, as the island's penguins do)
         for (let i = 0; i < 2; i++) this.tone(620 * r(), { at: i * 0.2, type: 'sawtooth', decay: 0.13, gain: 0.05, slide: 480, vibrato: 25 });
         break;
       case 'seal':

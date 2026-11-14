@@ -351,6 +351,7 @@ export const PETS = [
   { key: 'hamster', name: 'Hamster', icon: '🐹', coats: ['tan', 'orange', 'cream', 'white', 'gray', 'brown'], names: ['Nugget', 'Squeaky', 'Cheeks', 'Fuzzy', 'Acorn', 'Toffee', 'Crumbs', 'Popcorn', 'Sesame', 'Hazel'] },
   { key: 'piglet', name: 'Piglet', icon: '🐷', coats: ['pink', 'cream', 'brown', 'charcoal'], names: ['Truffle', 'Rosie', 'Snuffles', 'Bubblegum', 'Poppy', 'Dumpling', 'Petunia', 'Button', 'Oinky', 'Sprout'] },
   { key: 'duckling', name: 'Duckling', icon: '🐥', coats: ['yellow', 'cream', 'white', 'brown'], names: ['Puddles', 'Waddles', 'Quackers', 'Sunny', 'Dandelion', 'Pipsqueak', 'Ducky', 'Splash', 'Lemon', 'Bubbles'] },
+  { key: 'penguin', name: 'Baby Penguin', icon: '🐧', coats: ['charcoal', 'blue', 'gray', 'brown', 'lavender', 'mint'], names: ['Pebble', 'Waddles', 'Pip', 'Tux', 'Fluffy', 'Igloo', 'Chilly', 'Snowflake', 'Slider', 'Blizzard'] },
   { key: 'parrot', name: 'Parrot', icon: '🦜', flies: true, coats: ['green', 'blue', 'red', 'yellow'], names: ['Polly', 'Kiwi', 'Mango', 'Rio', 'Captain', 'Pepper', 'Echo', 'Tango', 'Skye', 'Chatter'] },
   { key: 'tit', name: 'Long-tailed Tit', icon: '🐦', flies: true, coats: ['white', 'pink', 'cream'], names: ['Mochi', 'Snowy', 'Cotton', 'Puffin', 'Dango', 'Fluff', 'Pebble', 'Button', 'Tinsel', 'Daisy'] },
   { key: 'dragon', name: 'Baby Dragon', icon: '🐲', flies: true, coats: ['green', 'lavender', 'sky', 'pink', 'orange', 'red'], names: ['Sparky', 'Ember', 'Puff', 'Blaze', 'Smudge', 'Toasty', 'Cinder', 'Twinkle', 'Ziggy', 'Scales'] },

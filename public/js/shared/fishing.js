@@ -51,12 +51,17 @@ export const CATCHES = [
   { key: 'clownfish', name: 'Clownfish', icon: '🐠', weight: 12, cm: [7, 11], fight: 0.4, basket: 'fish' },
   { key: 'trout', name: 'Rainbow Trout', icon: '🐟', weight: 14, cm: [25, 50], fight: 0.75, basket: 'fish' },
   { key: 'puffer', name: 'Pufferfish', icon: '🐡', weight: 7, cm: [10, 30], fight: 0.65, basket: 'fish' },
-  { key: 'goldfish', name: 'Golden Fish', icon: '✨', weight: 3, cm: [15, 30], fight: 0.95, basket: 'fish' },
+  { key: 'goldfish', name: 'Golden Fish', icon: '✨', weight: 3, cm: [15, 30], fight: 0.95, basket: 'fish', rare: true },
   { key: 'shell', name: 'Seashell', icon: '🐚', weight: 6, fight: 0.05, basket: 'shell' },
   { key: 'pearl', name: 'Pearl', icon: '🦪', weight: 1, fight: 0.05, basket: 'pearl' },
   { key: 'boot', name: 'Old Boot', icon: '👢', weight: 5, fight: 0.35, still: true, basket: null },
 ];
 export const catchByKey = (key) => CATCHES.find((c) => c.key === key) ?? null;
+// The kinds of fish there are to catch, for the 🐟 Fish Dictionary: the six
+// of them that go in the basket as fish, in the dictionary's order. The
+// golden fish is the rare one (rare: true above), the page it fills in says
+// so.
+export const FISH_KINDS = CATCHES.filter((c) => c.basket === 'fish');
 const TOTAL = CATCHES.reduce((n, c) => n + c.weight, 0);
 
 // Whether cell (x, y, z) is water with open air over it: a bobber floats there.
