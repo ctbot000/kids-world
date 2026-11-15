@@ -716,7 +716,14 @@ export class UI {
         say('');
       };
       const grid = h('div', { class: 'grid wide' });
+      // A Grow Island starts as open sea whatever its size, and has no
+      // monsters' road to build (shared/grow.js): no size or tower defense for it.
+      const sizeHead = h('h3', {}, 'How big?');
+      const defenseRow = h('div', { class: 'setting' });
       const draw = () => {
+        sizeHead.hidden = theme === 'grow';
+        sizes.hidden = theme === 'grow';
+        defenseRow.hidden = theme === 'grow';
         grid.replaceChildren(
           ...THEMES.map((t) =>
             h(
@@ -738,8 +745,8 @@ export class UI {
           ),
         );
       };
-      draw();
       const sizes = h('div', { class: 'grid sizes' });
+      draw();
       const drawSizes = () => {
         sizes.replaceChildren(
           ...SIZES.map((s) =>
@@ -788,7 +795,7 @@ export class UI {
         h('h2', {}, '🏝️ Make an island'),
         h('h3', {}, 'What kind of island?'),
         grid,
-        h('h3', {}, 'How big?'),
+        sizeHead,
         sizes,
         h('h3', {}, 'Its name'),
         h(
@@ -809,7 +816,7 @@ export class UI {
           ),
         ),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, 'Friends can visit'), h('div', { class: 'muted' }, 'Friends join with your island code. Turn off to play alone.')), sw),
-        h('div', { class: 'setting' }, h('div', {}, h('b', {}, '🗼 Tower defense'), h('div', { class: 'muted' }, DEFENSE_ABOUT)), defenseSw),
+        (defenseRow.append(h('div', {}, h('b', {}, '🗼 Tower defense'), h('div', { class: 'muted' }, DEFENSE_ABOUT)), defenseSw), defenseRow),
         h('div', { class: 'setting' }, h('div', {}, h('b', {}, '👾 Monsters'), h('div', { class: 'muted' }, MONSTERS_ABOUT)), monsterSw),
         price ? h('p', { class: 'muted island-price' }, `A new island costs 🪙 ${price}. You have 🪙 ${p.data.coins.toLocaleString()}.`) : h('p', { class: 'muted island-price' }, '🎁 Your first island is free!'),
         note,
@@ -2632,6 +2639,7 @@ export class UI {
           card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. To race, tap 🏁 Race! in your kart: everyone in a go-kart lines up behind the line, the computer drives the karts left over, and after 3, 2, 1, GO! it is three laps — first over the line wins!']),
           card('🔐', 'Escape house', ['A 🔐 Escape Island has an escape house of three locked rooms. Walk up to a puzzle and press ', h('kbd', {}, 'Q'), ' (or tap 👆 Press, 📦 Open or 🔢 Turn): in room 1, press the buttons in the order the stars over 1, 2, 3, 4 show; in room 2, open the crate the treasure map marks with an X to find the key; in room 3, count the stars of each colour and turn each dial to its number. Solve them together with friends! When everyone has left, it locks up again with new puzzles.']),
           card('🦒', 'Zoo', ['A 🦒 Zoo Island has a big zoo: come in under the ZOO gate, past the café and the gift shop, and walk the loop of path round the exhibits — giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (take the steps down to look in under the water), kangaroos, monkey island and the flamingo lagoon. Open the petting farm’s gate to go in and pet the animals. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and they are all in the toy box too!']),
+          card('🌱', 'Grow Island', ['A 🌱 Grow Island starts as open sea, without one block of land. Swim to where you want land and tap 🌱 Buy land: the green box shows the plot it buys, 16 blocks a side. Each plot must touch the land you have, and costs a little more than the last. Every block you put down costs 🪙 1 (Undo gives it back), and an animal or vehicle from the toy box 🪙 20. Keep buying and the sea grows round your land, as far as you like!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('↗️', 'Escalators', ['Put down an Up Escalator or a Down Escalator from the toy box\'s 🏠 Building tab, then tap it to add the next step up and along from its top (tap its side for another beside it). Walk on at its foot and the steps carry you up — or down a down one, from its top. Walk along it to go quicker! Or stamp a 🏬 Shopping Mall with one each way.']),
           card('➡️', 'Moving walkways', ['Put down a Moving Walkway from the toy box\'s 🏠 Building tab: it carries you along the floor, away from where you put it down. Tap it to make it longer, and put one beside it the other way round to come back. Or stamp an 🛫 Airport Walkway with one each way.']),
@@ -3621,6 +3629,12 @@ export class UI {
       this.sound.play('ui');
       this.goNextStage();
     };
+    $('land-btn').onmousedown = (e) => e.preventDefault();
+    $('land-btn').onclick = () => {
+      $('land-btn').blur();
+      this.sound.unlock();
+      game.buyLand();
+    };
     $('race-btn').onmousedown = (e) => e.preventDefault();
     $('race-btn').onclick = () => {
       $('race-btn').blur();
@@ -3763,6 +3777,7 @@ export class UI {
     $('hideseek').hidden = true;
     $('race').hidden = true;
     $('race-btn').hidden = true;
+    $('land-btn').hidden = true;
     $('race-count').hidden = true;
     $('blindfold').hidden = true;
     this.stopNextStage();
@@ -4990,6 +5005,31 @@ export class UI {
     const hgt = r.canvas.clientHeight;
     const width = el.offsetWidth || 150;
     el.style.transform = `translate(${Math.max(16 + width / 2, w / 2 - 70 - width / 2)}px, ${Math.max(140, hgt - 230)}px) translate(-50%, -100%)`;
+    el.hidden = false;
+  }
+
+  // 🌱 Buy land, on a Grow Island (shared/grow.js), with the plot it buys
+  // marked out on the sea in front of you, and what it costs: greyed when
+  // your coins are short. Down over the hotbar, right of the middle.
+  landButton(g, r) {
+    const el = $('land-btn');
+    const t = g.landTarget;
+    if (!t || this.modalOpen) {
+      el.hidden = true;
+      return;
+    }
+    const short = g.profile.data.coins < t.price;
+    const key = `${t.price}|${short}`;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.replaceChildren('🌱 Buy land ', h('span', { class: 'land-price' }, `🪙 ${t.price}`));
+      el.setAttribute('aria-label', `Buy the land marked out in green for ${t.price} coins`);
+      el.classList.toggle('short', short);
+    }
+    const w = r.canvas.clientWidth;
+    const hgt = r.canvas.clientHeight;
+    const width = el.offsetWidth || 170;
+    el.style.transform = `translate(${Math.min(w - 16 - width / 2, w / 2 + 70 + width / 2)}px, ${Math.max(140, hgt - 230)}px) translate(-50%, -100%)`;
     el.hidden = false;
   }
 
@@ -8404,6 +8444,7 @@ export class UI {
     // frame's rideButton finds the fishing spot again (arcadeButton).
     $('fishbook').hidden = true;
     this.raceButton(g, r);
+    this.landButton(g, r);
     this.rideButton(g, r);
     this.defendButton(g, r);
     this.adventureTags(g, r);

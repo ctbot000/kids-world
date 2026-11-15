@@ -14,6 +14,7 @@ import { buildZoo, ZOO_BLEND, ZOO_HALF } from './zoo.js';
 import * as B from './blocks.js';
 import { busesClearOf, CRITTER_INFO, maxCritters, placeAircraft, placeBig, placeBuses, placeDragon, placeFlyers, placePolar, placeScooters, placeSea, placeVehicles, scaleCounts } from './critters.js';
 import { fbm } from './noise.js';
+import { makeGrowWorld } from './grow.js';
 import { Rng, hash2 } from './rng.js';
 import { fruitTree, oakTree, pineTree, candyTree, cactus, palmTree, katsuraTree, placeTemplate } from './stamps.js';
 import { World } from './world.js';
@@ -29,6 +30,7 @@ export const THEMES = [
   { key: 'zoo', name: 'Zoo Island', icon: '🦒', blurb: 'Lions, elephants, giraffes, pandas, penguins and more' },
   { key: 'escape', name: 'Escape Island', icon: '🔐', blurb: 'An escape house of puzzles to solve, to get out' },
   { key: 'flat', name: 'Flat Land', icon: '🟩', blurb: 'A big flat meadow for building' },
+  { key: 'grow', name: 'Grow Island', icon: '🌱', blurb: 'Starts as open sea: buy land and blocks with coins, and grow it forever' },
 ];
 
 // How big an island is, side to side in blocks. A bigger one has more of
@@ -92,6 +94,8 @@ export function palette(theme) {
 // defense: with a road for monsters to march along, and towers to build
 // beside it (see defense.js).
 export function generate({ seed = 1, theme = 'sunny', name = 'My Island', size = 'small', W = sizeSide(size), H = 64, D = W, sea = 20, defense = false } = {}) {
+  // A Grow Island is open sea and nothing else, whatever its size (grow.js).
+  if (theme === 'grow') return { world: makeGrowWorld({ seed, name, sea, H }), critters: [], fruit: null, mines: [], defense: null };
   const world = new World({ W, H, D, sea, theme, seed, name });
   // How much more there is of everything than on a cozy island: by area, and side to side.
   const area = (W * D) / (128 * 128);

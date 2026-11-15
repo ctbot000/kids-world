@@ -60,6 +60,7 @@ import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from '.
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
+import { BLOCK_PRICE, FRIEND_PRICE, isGrow, landPrice, landProblem, onLand, PAID_KINDS, PLOT, plotKey, plotOf, raisePlot } from './shared/grow.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
@@ -467,6 +468,9 @@ export class Game extends EventTarget {
     this.fishing = null;
     this.reelHeld = false;
     this.fishTarget = null;
+    // On a Grow Island (shared/grow.js), the plot you could buy next, where
+    // you are or in front of you: { px, pz, price }, or null.
+    this.landTarget = null;
     this.lines = new Map();
     // The robot kit beside you, the one whose window is open, and the robots
     // and programs at the island's kits, by cell key (shared/robokit.js).
@@ -619,6 +623,9 @@ export class Game extends EventTarget {
         break;
       case 'edit':
         this.remoteEdit(msg);
+        break;
+      case 'land':
+        this.landNews(msg);
         break;
       case 'ack':
         this.ack(msg);
@@ -906,6 +913,12 @@ export class Game extends EventTarget {
     this.passcode = typeof msg.passcode === 'string' ? msg.passcode : '';
     this.chat = msg.chat ?? [];
     const keep = again && this.me ? { x: this.me.body.x, y: this.me.body.y, z: this.me.body.z } : null;
+    // A Grow Island that grew west or north moved everything east or south
+    // under you (room.js resizeWorld): you move with it.
+    if (keep && Array.isArray(msg.shift) && msg.shift.every(Number.isFinite)) {
+      keep.x += msg.shift[0];
+      keep.z += msg.shift[1];
+    }
     this.world = World.decode(msg.meta, msg.blocks);
     this.renderer.setWorld(this.world);
     this.renderer.terrain.buildAll();
@@ -1152,6 +1165,8 @@ export class Game extends EventTarget {
     this.renderer.effects.sparkles(c.x, c.y + 0.4, c.z, 14);
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
+      // A friend from the toy box costs coins on a Grow Island.
+      if (isGrow(this.world)) this.profile.pay(FRIEND_PRICE, { force: true });
       this.sound.play(entry.type);
       this.emit('toast', { icon: info.icon, text: `${msg.critter.name} the ${info.name.toLowerCase()} ${info.hoop ? 'is here! Walk up to it and spin it.' : info.rope ? 'is here! Walk up to it and jump.' : info.vehicle ? 'is here! Walk up to it to drive it.' : 'moved in!'}` });
       // A hoop or a rope you put down, Undo takes away again (while nobody has it).
@@ -6588,8 +6603,28 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return false;
     }
-    const seq = ++this.seq;
     const w = this.world;
+    // On a Grow Island every block put down costs coins, and only goes on
+    // land bought (shared/grow.js).
+    let paid = 0;
+    if (isGrow(w) && PAID_KINDS.includes(kind)) {
+      for (let i = 0; i < cells.length; i += 4) {
+        const id = cells[i + 3];
+        if (id === B.AIR) continue;
+        if (!onLand(w, cells[i], cells[i + 2])) {
+          this.emit('notice', { text: 'That is open sea! Buy the land there first: 🌱 Buy land.', level: 'info' });
+          this.sound.play('no');
+          return false;
+        }
+        if (w.get(cells[i], cells[i + 1], cells[i + 2]) !== id) paid += BLOCK_PRICE;
+      }
+      if (paid > this.profile.data.coins) {
+        this.emit('notice', { text: `That takes 🪙 ${paid} here, and you have 🪙 ${this.profile.data.coins}. Every block costs a coin on ${w.name}!`, level: 'info' });
+        this.sound.play('no');
+        return false;
+      }
+    }
+    const seq = ++this.seq;
     const undo = [];
     for (let i = 0; i < cells.length; i += 4) {
       const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
@@ -6605,8 +6640,9 @@ export class Game extends EventTarget {
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
     this.send(msg);
+    this.profile.pay(paid, { force: true });
     if (undoable) {
-      this.undoStack.push({ kind, cells: undo });
+      this.undoStack.push({ kind, cells: undo, ...(paid ? { paid } : {}) });
       if (this.undoStack.length > UNDO_KEEP) this.undoStack.shift();
       this.emit('undo', this.undoStack.length);
     }
@@ -6688,6 +6724,8 @@ export class Game extends EventTarget {
     const cells = [];
     const expect = [];
     const w = this.world;
+    // The coins paid for blocks taken back come back (a Grow Island's).
+    let back = 0;
     for (let i = last.cells.length - 5; i >= 0; i -= 5) {
       const [x, y, z, before, after] = last.cells.slice(i, i + 5);
       // A door put down and bopped open since is still the one put down.
@@ -6695,8 +6733,10 @@ export class Game extends EventTarget {
       if (here !== after && !(B.DOOR[after] && B.turnedDoor(after) === here)) continue;
       cells.push(x, y, z, before);
       expect.push(here);
+      if (after !== B.AIR && after !== before) back += BLOCK_PRICE;
     }
     if (this.edit('undo', cells, { expect, undoable: false })) {
+      if (last.paid) this.profile.refund(Math.min(last.paid, back));
       this.sound.play('pop');
       for (let i = 0; i < Math.min(cells.length, 40); i += 4) this.renderer.effects.sparkles(cells[i] + 0.5, cells[i + 1] + 0.5, cells[i + 2] + 0.5, 2);
     }
@@ -7403,11 +7443,73 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
+    if (isGrow(this.world) && this.profile.data.coins < FRIEND_PRICE) {
+      this.emit('notice', { text: `A friend from the toy box costs 🪙 ${FRIEND_PRICE} here. You have 🪙 ${this.profile.data.coins}.`, level: 'info' });
+      this.sound.play('no');
+      return;
+    }
     const x = hit.x + hit.nx + 0.5;
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz + 0.5;
     this.send({ t: 'critter', op: 'invite', type: this.critterType, x, y, z });
     this.profile.count('invited');
+  }
+
+  // ------------------------------------------------ Grow Island (shared/grow.js)
+
+  // The plot you could buy next: the one you are in, if it is open sea, or
+  // else the one in front of you (whichever way you face most). Null where
+  // there is none to buy, or this is no Grow Island.
+  landAhead() {
+    const w = this.world;
+    if (!isGrow(w) || this.watching || !this.me || !this.mayBuild) return null;
+    const b = this.riding?.body ?? this.me.body;
+    let { px, pz } = plotOf(b.x, b.z);
+    if (w.land.has(plotKey(px, pz))) {
+      const fx = Math.sin(this.me.yaw);
+      const fz = Math.cos(this.me.yaw);
+      if (Math.abs(fx) > Math.abs(fz)) px += Math.sign(fx);
+      else pz += Math.sign(fz);
+    }
+    return landProblem(w, px, pz) ? null : { px, pz, price: landPrice(w.land.size) };
+  }
+
+  // 🌱 Buy land: the island raises it for everyone (room.js landOp), and
+  // the coins go once it says the land is yours (landNews).
+  buyLand() {
+    const t = this.landTarget;
+    if (!t) return;
+    const coins = this.profile.data.coins;
+    if (coins < t.price) {
+      this.emit('notice', { text: `This land costs 🪙 ${t.price}, and you have 🪙 ${coins}. Earn more coins in quizzes, classes, games and the 🛒 shop!`, level: 'info' });
+      this.sound.play('no');
+      return;
+    }
+    this.send({ t: 'land', px: t.px, pz: t.pz, price: t.price });
+  }
+
+  // A plot bought on this Grow Island, by anyone: { px, pz, land, by, price }
+  // (just { land } when the island only puts us right about what is bought).
+  landNews(msg) {
+    const w = this.world;
+    if (!isGrow(w) || !Array.isArray(msg.land)) return;
+    w.land = new Set(msg.land.filter((k) => typeof k === 'string'));
+    if (!Number.isInteger(msg.px) || !Number.isInteger(msg.pz) || landProblem(w, msg.px, msg.pz) === 'outside') return;
+    const cells = raisePlot(w, msg.px, msg.pz);
+    this.changed(cells);
+    if (this.me && !this.seat && !this.aboard) unstick(w, this.riding?.body ?? this.me.body);
+    const mid = { x: (msg.px + 0.5) * PLOT, y: w.sea + 2.5, z: (msg.pz + 0.5) * PLOT };
+    for (let i = 0; i < 6; i++) this.renderer.effects.sparkles(mid.x + (i % 3 - 1) * 5, mid.y, mid.z + (Math.floor(i / 3) * 2 - 1) * 4, 14, ['#7ed957', '#ffd84d', '#ffffff']);
+    this.sound.play('stamp');
+    if (msg.by === this.pid) {
+      this.profile.pay(msg.price, { force: true });
+      const n = w.land.size;
+      this.emit('toast', { icon: '🌱', text: n === 1 ? `Land ho! ${w.name} has its very first plot. Build on it — every block costs 🪙 ${BLOCK_PRICE}.` : `New land! ${w.name} is ${n} plots big now.` });
+    } else {
+      const who = this.players.get(msg.by)?.name;
+      if (who) this.emit('toast', { icon: '🌱', text: `${who} bought new land for ${w.name}!` });
+    }
+    this.emit('land');
   }
 
   setTool(tool) {
@@ -7479,6 +7581,9 @@ export class Game extends EventTarget {
       : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dishTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
         ? castSpot(this.world, on, this.me.yaw)
         : null;
+    this.landTarget = this.landAhead();
+    const lt = this.landTarget;
+    this.renderer.showPlot(lt ? { x: lt.px * PLOT, z: lt.pz * PLOT, size: PLOT, y: this.world.sea + 2, ok: this.profile.data.coins >= lt.price } : null);
     this.sendMove();
     this.updatePlayers(dt);
     this.danceLoop();

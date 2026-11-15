@@ -13,7 +13,11 @@ import { BUILD_REACH, LEAK, MAX_LEVEL, START_BRICKS, START_MS, STONE_BACK, STONE
 import { cleanListing } from '../public/js/shared/listing.js';
 import { unpackMonster } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
-import { generate, SIZES, THEMES } from '../public/js/shared/worldgen.js';
+import { generate, SIZES, THEMES as ALL_THEMES } from '../public/js/shared/worldgen.js';
+
+// Every kind of island but a Grow Island, open sea with no land for a road
+// (grow.js): Make an island offers it no tower defense.
+const THEMES = ALL_THEMES.filter((t) => t.key !== 'grow');
 
 function clock(start = 1_000_000) {
   const c = { t: start };

@@ -29,6 +29,7 @@ import { FIRE as BLAZE, Fires, strikeSpot } from './fire.js';
 import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
+import { grownWorld, isGrow, landPrice, landProblem, onLand, PAID_KINDS, PLOT, raisePlot, seaWanted } from './grow.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { buildIsle } from './isle-maps.js';
 import { cleanLevel } from './levels.js';
@@ -532,6 +533,9 @@ export class Room {
       case 'douse':
         this.douse(p, msg);
         break;
+      case 'land':
+        this.landOp(conn, p, msg);
+        break;
       case 'say':
         this.say(conn, c, p, msg);
         break;
@@ -908,9 +912,12 @@ export class Room {
     return { id: p.id, name: p.name, look: p.look, s: p.s, ...((p.dizzyUntil ?? 0) > this.now() ? { dizzy: true } : {}), ...(p.ai ? { ai: true } : {}) };
   }
 
-  sendWelcome(conn, c) {
+  // shift: how far the world moved under everyone ([dx, dz]), welcoming
+  // them to it again after it grew (resizeWorld).
+  sendWelcome(conn, c, { shift = null } = {}) {
     this.sendTo(conn, {
       t: 'welcome',
+      ...(shift ? { shift } : {}),
       protocol: PROTOCOL,
       code: this.code,
       // A watcher is nobody here: -1, never anyone's id, nor the owner's.
@@ -1026,6 +1033,16 @@ export class Room {
         return;
       }
     }
+    // On a Grow Island, blocks go down only on land bought (grow.js).
+    if (isGrow(this.world) && PAID_KINDS.includes(kind)) {
+      let sea = false;
+      for (let i = 0; i < cells.length && !sea; i += 4) sea = cells[i + 3] !== B.AIR && !onLand(this.world, cells[i], cells[i + 2]);
+      if (sea) {
+        this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
+        this.notice(conn, 'That is open sea! Buy the land there first: 🟩 Buy land.');
+        return;
+      }
+    }
     // A desk chair rolling on (game.js scootInSeat) goes all at once or not
     // at all: from one cell and into the next, so a friend's build in the
     // way, or the chair already gone, never leaves it nowhere, or twice over.
@@ -1080,6 +1097,94 @@ export class Room {
     const out = [];
     for (let i = 0; i < cells.length; i += 4) out.push(cells[i], cells[i + 1], cells[i + 2], this.world.get(cells[i], cells[i + 1], cells[i + 2]));
     return out;
+  }
+
+  // ------------------------------------------------ Grow Island (grow.js)
+
+  // A plot of land bought: { px, pz, price }, the price the buyer's page
+  // will take from their coins once it hears the land is theirs. Everyone
+  // hears { t: 'land', px, pz, land, by, price } and raises the plot on
+  // their copy of the island. Where the land comes near the edge of the
+  // world, the sea grows round it first, and everyone is welcomed to the
+  // grown island again (resizeWorld) before hearing of the plot.
+  landOp(conn, p, msg) {
+    const w = this.world;
+    if (!isGrow(w)) return;
+    if (this.shared || this.ownerWho || (this.settings.build === 'host' && p.id !== this.host)) {
+      this.notice(conn, 'The island owner is the only builder right now.');
+      return;
+    }
+    const why = landProblem(w, msg.px, msg.pz);
+    if (why) {
+      this.notice(conn, why === 'owned' ? 'That land is bought already!' : why === 'far' ? 'New land has to touch the land there is: swim next to it.' : 'That is past the edge of the world.', 'info');
+      return;
+    }
+    const price = landPrice(w.land.size);
+    if (msg.price !== price) {
+      this.notice(conn, `That land costs 🪙 ${price} now.`, 'info');
+      this.sendTo(conn, { t: 'land', land: [...w.land], price: 0 });
+      return;
+    }
+    const first = !w.land.size;
+    raisePlot(w, msg.px, msg.pz);
+    // Everyone arrives on the first land bought from then on.
+    if (first) w.spawn = { x: (msg.px + 0.5) * PLOT, y: w.sea + 2, z: (msg.pz + 0.5) * PLOT };
+    let { px, pz } = msg;
+    const more = seaWanted(w, px, pz);
+    if (more) {
+      const grown = grownWorld(w, more);
+      this.resizeWorld(grown.world, grown.dx, grown.dz);
+      px += more.west;
+      pz += more.north;
+    }
+    this.broadcast({ t: 'land', px, pz, land: [...this.world.land], by: p.id, price });
+    this.changed();
+  }
+
+  // The world swapped for a grown one (grow.js grownWorld), everything in it
+  // moved dx east and dz south with it: the pictures, robots and food where
+  // they were, the animals and everyone on the island. What is going on in
+  // a game (the arcade, Go, hide and seek) starts again, the monsters go,
+  // and everybody's page is welcomed to the new world, told how far it moved.
+  resizeWorld(world, dx, dz) {
+    for (const pid of this.players.keys()) this.unride(pid);
+    for (const pid of this.players.keys()) this.unhoop(pid);
+    for (const k of [...this.bots.keys()]) this.botHome(k);
+    const move = (map) => new Map([...map.values()].map((v) => [world.index((v.x += dx), v.y, (v.z += dz)), v]));
+    const drawings = move(this.drawings);
+    const kits = move(this.kits);
+    const dishes = move(this.dishes);
+    const regrow = move(this.regrow);
+    this.world = world;
+    this.encoded = null;
+    this.hookWorld();
+    Object.assign(this, { drawings, kits, dishes, regrow });
+    for (const c of this.critters.list) {
+      c.x += dx;
+      c.z += dz;
+      c.tx += dx;
+      c.tz += dz;
+      if (c.home) c.home = { x: c.home.x + dx, z: c.home.z + dz };
+    }
+    for (const at of this.critters.stood.values()) {
+      at.x += dx;
+      at.z += dz;
+    }
+    this.critters.max = maxCritters(world);
+    for (const p of this.players.values()) {
+      p.s[0] += dx;
+      p.s[2] += dz;
+    }
+    const t = this.now();
+    this.monsters = new MonsterSim((world.seed ^ 0x7f4a7c15 ^ (t | 0)) >>> 0);
+    this.arcade = new ArcadeSim((world.seed ^ 0x5a7d3b1f ^ (t | 0)) >>> 0);
+    this.go = new GoSim();
+    this.hideseek = new HideSeekSim();
+    this.race = undefined;
+    this.escape = undefined;
+    this.stomps = [];
+    this.thrown = [];
+    for (const [conn, c] of this.clients) if (c.pid || c.watch) this.sendWelcome(conn, c, { shift: [dx, dz] });
   }
 
   // A phrase (p), a sticker (e), or something typed (text), tidied.

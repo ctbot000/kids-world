@@ -9098,3 +9098,85 @@ test('a dish: 🍽️ Dish (Q) beside it opens its window, food tapped from the 
   assert.deepEqual(pageErrors, []);
   await page.browserContext().close();
 });
+
+test('a Grow Island: land bought plot by plot for coins, a friend carried along as the world grows west, and blocks a coin each', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  await makeIsland(host, { online: true, theme: 'Grow Island' });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // Open sea, and nothing else.
+  assert.equal(await host.evaluate(() => window.kidsWorld.game.world.land.size), 0);
+  await host.evaluate(() => {
+    const { profile } = window.kidsWorld;
+    profile.pay(profile.data.coins);
+    profile.earn(200);
+  });
+  const guestCoins = await guest.evaluate(() => window.kidsWorld.profile.data.coins);
+  // Stands in the middle of a plot facing one way (yaw: 0 south, -π/2 west).
+  const put = (page, yaw, plot = null) =>
+    page.evaluate(
+      ([yaw, plot]) => {
+        const g = window.kidsWorld.game;
+        const b = g.me.body;
+        const [px, pz] = plot ?? [Math.floor(b.x / 16), Math.floor(b.z / 16)];
+        Object.assign(b, { x: px * 16 + 8, y: g.world.sea + 2.2, z: pz * 16 + 8, vx: 0, vy: 0, vz: 0 });
+        g.me.yaw = yaw;
+        g.sendMove?.(true);
+        window.kidsWorld.step(1 / 60, 3);
+        return g.landTarget;
+      },
+      [yaw, plot],
+    );
+  const buy = async () => {
+    const before = await host.evaluate(() => window.kidsWorld.game.world.land.size);
+    await until(host, () => {
+      window.kidsWorld.step(1 / 60, 1);
+      return !document.getElementById('land-btn').hidden;
+    });
+    await host.evaluate(() => document.getElementById('land-btn').click());
+    for (const page of [host, guest]) await until(page, (n) => window.kidsWorld.game.world.land.size === n + 1, before);
+  };
+  // The first plot, where the owner is swimming: 🪙 10.
+  const first = await put(host, 0);
+  assert.equal(first.price, 10);
+  await buy();
+  const plot = await host.evaluate(() => [...window.kidsWorld.game.world.land][0].split(',').map(Number));
+  await put(guest, 0, plot);
+  // West, and west again, until the world has to grow west to keep sea round it.
+  const w0 = await host.evaluate(() => window.kidsWorld.game.world.W);
+  const guestAt = await guest.evaluate(() => window.kidsWorld.game.me.body.x);
+  await put(host, -Math.PI / 2);
+  await buy();
+  await put(host, -Math.PI / 2, await host.evaluate(() => [Math.min(...[...window.kidsWorld.game.world.land].map((k) => +k.split(',')[0])), +[...window.kidsWorld.game.world.land][0].split(',')[1]]));
+  await buy();
+  for (const page of [host, guest]) await until(page, (w0) => window.kidsWorld.game.world.W > w0, w0);
+  const s = await guest.evaluate(() => {
+    const g = window.kidsWorld.game;
+    return { W: g.world.W, x: g.me.body.x, y: g.me.body.y, z: g.me.body.z, sea: g.world.sea, land: [...g.world.land], coins: g.profile.data.coins };
+  });
+  const dx = s.W - w0;
+  assert.ok(Math.abs(s.x - (guestAt + dx)) < 1.5, `the friend moved ${s.x - guestAt}, with the world's ${dx}`);
+  assert.ok(s.y > s.sea + 1, 'still standing on the land, not in the sea');
+  assert.equal(s.land.length, 3);
+  assert.equal(s.coins, guestCoins, 'only the buyer pays');
+  // 10 + 15 + 20 for the three plots.
+  assert.equal(await host.evaluate(() => window.kidsWorld.profile.data.coins), 200 - 45);
+  // A block costs a coin, and only on land.
+  const built = await host.evaluate(() => {
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const x = Math.floor(b.x) + 2;
+    const z = Math.floor(b.z);
+    const placed = g.edit('build', [x, g.world.sea + 2, z, 12]);
+    const sea = g.edit('build', [1, g.world.sea + 1, 1, 12]);
+    return { placed, sea, coins: g.profile.data.coins, at: [x, g.world.sea + 2, z] };
+  });
+  assert.deepEqual([built.placed, built.sea, built.coins], [true, false, 200 - 46]);
+  await until(guest, (at) => window.kidsWorld.game.world.get(...at) === 12, built.at);
+  assert.deepEqual(pageErrors, []);
+  await host.browserContext().close();
+  await guest.browserContext().close();
+});

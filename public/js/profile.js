@@ -161,6 +161,25 @@ export class Profile extends EventTarget {
     this.shopped();
   }
 
+  // Coins spent on a Grow Island (grow.js): its land, its blocks and the
+  // friends brought to it. Says whether there were enough; force: take what
+  // there is anyway (the island said yes to what had been checked before).
+  pay(n, { force = false } = {}) {
+    if (!(n > 0)) return true;
+    if (this.data.coins < n && !force) return false;
+    this.data.coins = Math.max(0, this.data.coins - n);
+    this.shopped();
+    return true;
+  }
+
+  // Coins back for what was taken back (Undo on a Grow Island): your own,
+  // so not counted as earned.
+  refund(n) {
+    if (!(n > 0)) return;
+    this.data.coins = Math.min(COINS_MAX, this.data.coins + n);
+    this.shopped();
+  }
+
   sell(key, n = 1) {
     const coins = sale(this.data.basket, key, n);
     if (!coins) return false;

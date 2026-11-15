@@ -238,6 +238,17 @@ export class Renderer {
     this.outline.visible = false;
     this.outline.renderOrder = 6;
     this.scene.add(this.outline);
+    // On a Grow Island, the plot 🌱 Buy land would buy (showPlot): a
+    // see-through slab of the land to come, and its edges.
+    const slab = new THREE.BoxGeometry(1, 1, 1);
+    slab.translate(0.5, 0.5, 0.5);
+    this.plotMark = new THREE.Group();
+    this.plotFill = new THREE.Mesh(slab, new THREE.MeshBasicMaterial({ color: 0x7ed957, transparent: true, opacity: 0.28, depthWrite: false }));
+    this.plotEdges = new THREE.LineSegments(new THREE.EdgesGeometry(slab), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+    this.plotMark.add(this.plotFill, this.plotEdges);
+    this.plotMark.renderOrder = 5;
+    this.plotMark.visible = false;
+    this.scene.add(this.plotMark);
 
     this.view = { yaw: Math.PI * 0.85, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false };
     // Watching an island unseen (game.js): no walls for the camera, and it
@@ -261,6 +272,7 @@ export class Renderer {
     this.terrain.setWorld(world);
     this.focus.cloudY = world.H + 22;
     this.view.ready = false;
+    this.plotMark.visible = false;
   }
 
   resize() {
@@ -781,13 +793,14 @@ export class Renderer {
 
   // A picture of the island as it is now, without the buttons on top.
   photo() {
-    const shown = [this.preview.visible, this.outline.visible];
+    const shown = [this.preview.visible, this.outline.visible, this.plotMark.visible];
     this.preview.visible = false;
     this.outline.visible = false;
+    this.plotMark.visible = false;
     this.draw();
     // Read it back in the same task, before the frame is handed to the screen and cleared.
     const url = this.canvas.toDataURL('image/png');
-    [this.preview.visible, this.outline.visible] = shown;
+    [this.preview.visible, this.outline.visible, this.plotMark.visible] = shown;
     return url;
   }
 
@@ -991,6 +1004,16 @@ export class Renderer {
     this.preview.instanceMatrix.needsUpdate = true;
     if (this.preview.instanceColor) this.preview.instanceColor.needsUpdate = true;
     this.previewMat.opacity = mode === 'remove' ? 0.3 : 0.5;
+  }
+
+  // plot: { x, z, size, y, ok } (its corner, the ground's top, and whether
+  // it can be paid for: green if so, else orange), or null to hide it.
+  showPlot(plot) {
+    this.plotMark.visible = Boolean(plot);
+    if (!plot) return;
+    this.plotMark.position.set(plot.x, plot.y - 1.5, plot.z);
+    this.plotMark.scale.set(plot.size, 2, plot.size);
+    this.plotFill.material.color.setHex(plot.ok ? 0x7ed957 : 0xffa94d);
   }
 
   showOutline(cell) {
