@@ -34,7 +34,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
 import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
-import { LEARNT_AFTER, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress } from './shared/quiz.js';
+import { LEARNT_AFTER, QUIZ_LEVELS, quizCoins, quizProgress } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
@@ -2655,7 +2655,7 @@ export class UI {
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
-          card('🎓', 'Extra-credit quizzes', ['Conquer a stage of 🌟 Adventure Isle and pick a quiz for extra credit: from elementary school to high school, Thinking Math or English Words. Every answer you get right is a coin or more! They come up as the fireworks end, and after that wait by the 🎓 by the flag until you have done them all.']),
+          card('🔑', 'Key quizzes', ['On 🌟 Adventure Isle, each camp you help free gives you one quiz, at the level you pick: one question, one try, and the right answer is a 🔑 key to a treasure chest. Win a whole stage for one quiz for a 👑 golden key, which opens the golden chest. A quiz comes up by itself; if you shut it, the 🔑 button over the hotbar brings it back.']),
           card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has two episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and the second episode begins, 🌈 The Rainbow of Adventure Isle: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Only popping Queen Grizzle on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or straight from Episode 2 (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
@@ -3715,11 +3715,6 @@ export class UI {
     on('race-go', () => {
       this.raceGoAt = performance.now();
     });
-    on('quiz-offer', () => {
-      // Not over a window already open: it comes up once that one is shut.
-      if (this.modalOpen && game.quizOffer) Object.assign(game.quizOffer, { told: false, at: performance.now() + 1200 });
-      else this.quizOfferDialog(true);
-    });
     on('key-offer', () => this.keyOfferNews());
     on('treasure', (e) => this.treasurePop(e.detail));
     on('quiz', () => this.quizNews());
@@ -4422,11 +4417,9 @@ export class UI {
                 .map((c) => h('div', { class: `camp${c.freed ? ' free' : ''}` }, c.freed ? '🚩' : '🏴', ` ${g.campLabel(c)}`, h('span', { class: 'muted' }, c.freed ? 'free' : c.progress > 0 ? `${Math.floor(c.progress * 100)}%` : 'monsters'))),
               castle ? h('div', { class: `camp castle${adv.won ? ' free' : ''}` }, g.bossInfo().icon, ` ${g.bossInfo().name}, ${story.lair}`, h('span', { class: 'muted' }, adv.won ? 'popped' : adv.shield ? 'in a bubble 🫧' : 'ready to pop!')) : '',
             ),
-            adv.won && Object.keys(QUIZ_LEVELS).some((k) => g.offersQuiz(k))
-              ? h('p', { class: 'muted' }, '🎓 Extra-credit quizzes by the flag, from elementary school to high school. Every answer right pays!')
-              : adv.won
-                ? ''
-                : h('p', { class: 'muted' }, 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
+            adv.won
+              ? ''
+              : h('p', { class: 'muted' }, 'Free the camps one after another along the way: each one freed opens the gate on to the next. Pop the monsters of a camp, then stand by its flag together to raise yours. More friends, faster!'),
             h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.monsterBook() }, '👾 Monster collection'), h('button', { class: 'chip', type: 'button', onclick: () => this.newIsleGameDialog() }, '🆕 New game')),
           );
         }
@@ -7139,10 +7132,10 @@ export class UI {
     }, 1000);
   }
 
-  // ------------------------------------------------ extra-credit quizzes
+  // ------------------------------------------------ quizzes
 
-  // A quiz begun or answered, as the game tells of it (game.js startQuiz and
-  // quizAnswer): the window on it opens, or the one already open shows where
+  // A quiz begun or answered, as the game tells of it (game.js startClass,
+  // startKeyQuiz and quizAnswer): the window on it opens, or the one already open shows where
   // it has got to.
   quizNews() {
     const g = this.game;
@@ -7158,52 +7151,6 @@ export class UI {
     const { learnt, left } = quizProgress(book, level);
     if (!left) return '🏅 All learnt!';
     return learnt ? `${says} · 🏅 ${learnt} learnt` : says;
-  }
-
-  // The quizzes a conquered stage of Adventure Isle offers (game.js quizOffer),
-  // from elementary school to high school, Thinking Math and English Words,
-  // each for extra credit. auto: come up by itself once the island was won,
-  // so never over a window already open — after that, the 🎓 by the flag
-  // opens this again (adventureTags).
-  quizOfferDialog(auto = false) {
-    const g = this.game;
-    if (!g?.quizOffer || (auto && this.modalOpen)) return;
-    const levels = Object.values(QUIZ_LEVELS);
-    const left = levels.filter((l) => g.offersQuiz(l.key)).length;
-    const book = g.quizBook;
-    this.openModal(
-      (root) => {
-        root.append(
-          h('h2', {}, '🎓 Extra credit!'),
-          h('p', {}, left ? `${g.world?.name ?? 'The island'} is free, and you helped! Take a quiz for extra credit — one question, and the right answer pays.` : 'You have done all of this island’s quizzes. Well done!'),
-        );
-        const list = h('div', { class: 'class-list' });
-        root.append(list);
-        for (const l of levels) {
-          const done = g.quizOffer.taken[l.key];
-          const all = !quizProgress(book, l.key).left;
-          list.append(
-            h(
-              'button',
-              {
-                class: `big ${l.color}`,
-                type: 'button',
-                disabled: done || all,
-                onclick: () => {
-                  this.sound.unlock();
-                  this.sound.play('ui');
-                  g.startQuiz(l.key);
-                },
-              },
-              h('span', { class: 'emoji' }, l.icon),
-              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, done ? '✓ done' : this.quizSub(book, l.key, `🪙 ${quizCoins(1, l.key)} a right answer`))),
-            ),
-          );
-        }
-        if (left) root.append(h('p', { class: 'muted' }, `${QUIZ_SIZE === 1 ? 'One question' : `${QUIZ_SIZE} questions`} each. Finish one and the others are still there, by the 🎓 by the flag, ${g.nextStage ? `until everyone goes on to stage ${chapterOf(g.nextStage.stage).n}` : 'as long as you stay on the island'}.`));
-      },
-      { narrow: true },
-    );
   }
 
   // ------------------------------------------------ on to the next stage
@@ -7946,13 +7893,19 @@ export class UI {
         const status = h('div', { class: 'quiz-status' });
         const box = h('div', { class: 'quiz-box' });
         this.quizEls = { quiz: q, status, box };
-        root.append(h('h2', {}, `${def.icon} ${def.name}`), status, box);
+        const key = q.keyQuiz;
+        root.append(
+          h('h2', {}, key ? (key.gold ? '👑 Golden key quiz' : '🔑 Key quiz') : `${def.icon} ${def.name}`),
+          key ? h('p', { class: 'muted' }, `${def.icon} ${def.name} · one question, one try: get it right for ${key.gold ? 'a golden key' : 'a key'}!`) : '',
+          status,
+          box,
+        );
       },
       {
         narrow: true,
         onClose: () => {
           this.quizEls = null;
-          // Another quiz taken over this window (startQuiz from its results)
+          // Another quiz taken over this window (startClass from its results)
           // must not be closed with the window it took over.
           if (g.quiz === q) g.closeQuiz();
         },
@@ -7988,7 +7941,7 @@ export class UI {
     if (q.done && this.quizAt >= total) {
       const perfect = q.right === total;
       const coins = q.coins ?? quizCoins(q.right, q.level);
-      const other = Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && (q.school ? !g.classBreak(l.key) && g.quizLeft(l.key) > 0 : g.offersQuiz(l.key)));
+      const other = q.school ? Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && !g.classBreak(l.key) && g.quizLeft(l.key) > 0) : null;
       const allLearnt = !g.quizLeft(q.level);
       els.box.replaceChildren(
         h('div', { class: `quiz-result${perfect ? ' perfect' : ''}` }, `${perfect ? '💯' : '🎓'} ${q.right} of ${total} right`),
@@ -7996,14 +7949,14 @@ export class UI {
           'p',
           { class: 'quiz-credit' },
           perfect ? (total === 1 ? 'Right! ' : 'Perfect, every one right! ') : q.right ? 'Well done! ' : '',
-          `${q.school ? 'You earned' : 'Extra credit'}: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
+          `You earned: 🪙 ${coins} ${coins === 1 ? 'coin' : 'coins'}`, q.xp ? ` and ⭐ ${q.xp} XP` : '',
         ),
         allLearnt
           ? h('p', { class: 'quiz-learnt' }, `🏅 You have learnt every ${QUIZ_LEVELS[q.level].name} question!`)
           : q.school
             ? h('p', { class: 'muted' }, `🔔 The next ${QUIZ_LEVELS[q.level].name} class is after a ${Math.round(CLASS_BREAK_MS / 60_000)}-minute break.`)
             : '',
-        other ? h('button', { class: `big ${other.color}`, type: 'button', onclick: () => { this.sound.play('ui'); if (q.school) g.startClass(other.key); else g.startQuiz(other.key); } }, h('span', { class: 'emoji' }, other.icon), q.school ? ` The ${other.name} class` : ` The ${other.name} quiz`) : '',
+        other ? h('button', { class: `big ${other.color}`, type: 'button', onclick: () => { this.sound.play('ui'); g.startClass(other.key); } }, h('span', { class: 'emoji' }, other.icon), ` The ${other.name} class`) : '',
         h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
       );
       return;
@@ -8093,15 +8046,17 @@ export class UI {
     }
   }
 
-  // The key quiz waiting first: pick one quiz and answer its one question
-  // right for a key (a golden key after a stage won). One try: the question
-  // stays the one picked, and answered, right or not, the try is used.
+  // The key quiz waiting first: pick its level, then answer its one
+  // question right for a key (a golden key after a stage won). One try: the
+  // question stays the one picked, and answered, right or not, the try is
+  // used; picked already, it goes straight back to that question.
   keyQuizDialog() {
     const g = this.game;
     const offer = g?.keyOffers[0];
     if (!offer) return;
     offer.shown = true;
     if (offer.quiz) {
+      if (this.modalOpen) this.closeModal();
       g.startKeyQuiz(offer.quiz.level);
       return;
     }
@@ -8132,8 +8087,8 @@ export class UI {
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, offer.gold ? '👑' : '🔑'),
           h('h2', {}, offer.gold ? '👑 A golden key quiz!' : '🔑 A key quiz!'),
-          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick a quiz: get its question right for a golden key, which opens the golden chest.' : 'You helped free a camp! Pick a quiz: get its question right for a key to a treasure chest.'),
-          h('p', { class: 'muted' }, 'Only one try, so think carefully!'),
+          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick the level of your quiz: get its one question right for a golden key, which opens the golden chest.' : 'You helped free a camp! Pick the level of your quiz: get its one question right for a key to a treasure chest.'),
+          h('p', { class: 'muted' }, 'One quiz, one try, so pick well and think carefully!'),
           list,
         );
       },
@@ -8302,17 +8257,6 @@ export class UI {
         const boss = g.bossInfo();
         const label = `${boss.icon} ${boss.name}${adv.shield ? ' 🫧' : ''}`;
         tag('king', p.x, p.y + (king.model.height ?? 1.8) + 1.1, p.z, `${hearts}|${max}|${label}`, () => [h('div', { class: 'label' }, label), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
-      }
-    }
-    // A conquered island's extra-credit quizzes wait by its flag — the
-    // castle's, or the last camp's on an island that had no castle — until
-    // they are all done: 🎓 over it, and a tap takes them (ui.js
-    // quizOfferDialog).
-    if (adv && me && adv.won && g.quizOffer && Object.keys(QUIZ_LEVELS).some((k) => g.offersQuiz(k))) {
-      const camps = [...adv.camps.values()];
-      const spot = camps.find((c) => c.kind === 'castle') ?? camps[camps.length - 1];
-      if (spot && Math.hypot(spot.x - me.x, spot.z - me.z) < 50) {
-        tag('quiz', spot.x, spot.y + 4.6, spot.z, 'quiz', () => [h('div', { class: 'label' }, '🎓 Extra credit quiz!')], 'quiz', () => this.quizOfferDialog());
       }
     }
     // Over a wild dragon near you (dragon.js), its name and the hearts it has left.

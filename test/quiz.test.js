@@ -1,11 +1,11 @@
-// Extra-credit quizzes: a stage of Adventure Isle conquered offers everyone who
-// freed it quizzes for extra credit — at elementary school second-year and
-// third-year level, middle school third-year level and high school
-// first-year level, a thinking-math one of puzzles to work out and English
-// Words — each a few questions picked and shuffled out of a bank of them,
-// with the right answer never where it was written; coins for the answers
-// got right, and the counts and stickers they earn. A question answered
-// right three times in a row is learnt, and never asked again.
+// Quizzes, asked in classes at school and as Adventure Isle's key quizzes
+// — at elementary school second-year and third-year level, middle school
+// third-year level and high school first-year level, a thinking-math one of
+// puzzles to work out and English Words — each a few questions picked and
+// shuffled out of a bank of them, with the right answer never where it was
+// written; coins for the answers got right, and the counts and stickers
+// they earn. A question answered right three times in a row is learnt, and
+// never asked again.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { XP_FOR } from '../public/js/shared/levels.js';

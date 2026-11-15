@@ -1,22 +1,17 @@
-// Extra-credit quizzes: a stage of Adventure Isle conquered, the fireworks still
-// going, offers everyone who freed it a little school work for extra credit —
-// quizzes to pick from, at elementary school second-year and third-year
-// level, middle school third-year level and high school first-year level,
-// a thinking-math one of puzzles to work out (patterns, logic, counting,
-// shapes) in the style of Korea's thinking-math workbooks for young
-// children, and English Words, each a single question with answers to pick
-// from. An answer got right is extra credit: coins, XP and the counts that
-// earn stickers (stickers.js), on top of what freeing the island already
-// gave.
+// Quizzes: a little school work, at elementary school second-year and
+// third-year level, middle school third-year level and high school
+// first-year level, a thinking-math one of puzzles to work out (patterns,
+// logic, counting, shapes) in the style of Korea's thinking-math workbooks
+// for young children, and English Words, each question with answers to
+// pick from. They are asked in classes at school (school.js), for coins,
+// and on Adventure Isle as key quizzes: one question, one try, for each
+// camp you help free (a key to a treasure chest, treasure.js) and for each
+// stage you help win (a golden key) — game.js offerKeyQuiz.
 //
 // The quizzes are each player's own, on their own page (the island has no
-// hand in them, unlike the arcade's games): the island says it is won
-// (game.js islandWon), and whoever was there is offered the quizzes for as
-// long as they stay on the island — the 🎓 by the castle flag opens them —
-// until they have done them all. Each quiz taken once, its question picked and its
-// answers shuffled out of a bank by chance (makeQuiz), so two quizzes are
-// seldom the same. A class at school (school.js) and a treasure chest's
-// key quiz (treasure.js) ask from the same banks.
+// hand in them, unlike the arcade's games), their questions picked and
+// their answers shuffled out of a bank by chance (makeQuiz), so two quizzes
+// are seldom the same.
 //
 // Every answer is filed in your quiz book (cleanQuizBook): a question
 // answered right LEARNT_AFTER times in a row, wherever it was asked, is
@@ -82,8 +77,9 @@ export const QUIZ_LEVELS = {
   },
 };
 
-// How many questions a quiz asks, out of its bank, and how long after the
-// island is won that it is offered (the fireworks get their moment first).
+// How many questions a key quiz asks, out of its bank, and how long after
+// the island is won the golden key's is offered (the fireworks get their
+// moment first).
 export const QUIZ_SIZE = 1;
 export const WIN_OFFER_MS = 2600;
 

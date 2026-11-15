@@ -8300,10 +8300,19 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // key, and no second try.
   const [one, two] = [...room.adventure.camps.filter((k) => k.kind === 'camp')].map((k) => k.id);
   await page.evaluate((id) => window.kidsWorld.game.campFreed({ id, by: [window.kidsWorld.game.pid] }), one);
+  // One quiz, at the level picked: one question.
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
   assert.equal(await page.evaluate(() => document.getElementById('key-quiz').hidden), false, 'the 🔑 button while it waits');
   await clickButton(page, 'Thinking Math', '#modal');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.quiz.questions.length), 1);
+  // Shut and opened again: the same question, no second try.
+  const asked = await page.evaluate(() => window.kidsWorld.game.quiz.questions[0].q);
+  await page.keyboard.press('Escape');
+  await until(page, () => document.getElementById('modal').hidden);
+  await page.evaluate(() => document.getElementById('key-quiz').click());
+  await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
+  assert.equal(await page.evaluate(() => window.kidsWorld.game.quiz.questions[0].q), asked);
   await answer(false);
   await clickButton(page, 'How you did', '#modal');
   await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('No key'));
@@ -8312,7 +8321,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // Another camp: right this time, a key.
   await page.evaluate((id) => window.kidsWorld.game.campFreed({ id, by: [window.kidsWorld.game.pid] }), two);
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
-  await clickButton(page, 'Thinking Math', '#modal');
+  await clickButton(page, 'Elementary School Year 2', '#modal');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
   await answer(true);
   await clickButton(page, 'How you did', '#modal');

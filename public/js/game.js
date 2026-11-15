@@ -375,12 +375,10 @@ export class Game extends EventTarget {
     // Adventure Isle's camps and its stage's boss (shared/adventure.js), as
     // the island tells of them (null on any other island); whether you sit
     // dizzy there, out of HP, until a friend helps you up; the fireworks
-    // when it is all free; and the extra-credit quizzes a conquered stage
-    // offers you (shared/quiz.js) — the offer, and the quiz you are taking.
+    // when it is all free; and the quiz you are taking (shared/quiz.js).
     this.adventure = null;
     this.dizzy = false;
     this.fireworks = [];
-    this.quizOffer = null;
     // Quizzes for a chest key (offerKeyQuiz): one for each camp you helped
     // free, and one for a golden key for each stage you helped win, waiting
     // in turn ({ gold, at, told, quiz }), until each is taken.
@@ -2879,9 +2877,6 @@ export class Game extends EventTarget {
   setAdventure(a) {
     this.renderer.clearFlags();
     this.adventure = null;
-    // Any quizzes were for the island as it was won: on one arrived at, even
-    // a conquered one, none are yours to take.
-    this.quizOffer = null;
     this.quiz = null;
     if (this.shared && a && Array.isArray(a.camps) && a.camps.length) {
       const camps = new Map();
@@ -3144,15 +3139,11 @@ export class Game extends EventTarget {
     if (mine) {
       this.profile.count('kings');
       this.profile.addToBasket('diamond', 1);
-      // Everyone who freed the island may take its extra-credit quizzes
-      // (shared/quiz.js): the offer comes up by itself once the fireworks
-      // have had their moment (updateAdventure), and after that waits with
-      // the 🎓 by the flag (ui.js) for as long as you stay.
-      // (At the end of an episode, its ending film first, however long that
-      // is: ui.js endingFilm.)
+      // Everyone who freed the island gets a quiz for a golden key: it comes
+      // up by itself once the fireworks have had their moment
+      // (updateAdventure). (At the end of an episode, its ending film first,
+      // however long that is: ui.js endingFilm.)
       const after = adv?.story?.final ? ENDING_AFTER_MS + adv.story.episode.films.endingMs : WIN_OFFER_MS;
-      this.quizOffer = { at: performance.now() + after, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
-      // And first, a quiz for a golden key (the extra-credit ones wait for it).
       this.offerKeyQuiz(true, after);
     }
     if (this.dizzy) {
@@ -3181,13 +3172,12 @@ export class Game extends EventTarget {
     this.emit('next-stage');
   }
 
-  // ------------------------------------------------ extra-credit quizzes
+  // ------------------------------------------------ quizzes
 
   // Your quiz book (shared/quiz.js): the questions of each quiz you have
   // been getting right, and the ones learnt, never asked of you again.
   // Kept on this device for whoever is playing (storage.js), like the
-  // notebook, and in memory here too, as the 🎓 over a conquered island's
-  // flag asks after it every frame (ui.js adventureTags).
+  // notebook, and in memory here too.
   get quizBook() {
     this.quizBookKept ??= cleanQuizBook(load('quizbook', {}));
     return this.quizBookKept;
@@ -3199,14 +3189,7 @@ export class Game extends EventTarget {
     return quizProgress(this.quizBook, level).left;
   }
 
-  // Whether a conquered island's offer has a quiz of a level for you: not
-  // taken yet, and with questions left to ask.
-  offersQuiz(level) {
-    return !!this.quizOffer && !!QUIZ_LEVELS[level] && !this.quizOffer.taken[level] && this.quizLeft(level) > 0;
-  }
-
-  // One of the quizzes a conquered island offered (shared/quiz.js), its
-  // questions picked and shuffled by chance: { level, questions, picks (the
+  // A quiz (a class at school, or a key quiz), its questions picked and shuffled by chance: { level, questions, picks (the
   // answers you have given), right (how many of them were right), done }.
   // Says 'quiz', for the window taking it (ui.js). Returns true when the
   // answer was right, false when it was not, and undefined when it was no
@@ -3229,7 +3212,7 @@ export class Game extends EventTarget {
       this.emit('quiz');
       return right;
     }
-    // The last one answered: the quiz is done, and the extra credit is yours.
+    // The last one answered: the quiz is done, and what it pays is yours.
     q.done = true;
     // A key quiz pays a key, and nothing else: not coins, XP or the
     // quizzes' counts (the chest pays when it is opened). Right or not, its
@@ -3250,7 +3233,6 @@ export class Game extends EventTarget {
     q.coins = quizCoins(q.right, q.level);
     q.xp = XP_FOR.quizzes.xp + q.right * XP_FOR.quizright.xp + (q.right === q.questions.length ? XP_FOR.quizperfect.xp : 0);
     if (q.school) this.classEnded[q.level] = performance.now();
-    else if (this.quizOffer) this.quizOffer.taken[q.level] = true;
     this.profile.count('quizzes');
     this.profile.count('quizright', q.right);
     if (q.right === q.questions.length) this.profile.count('quizperfect');
@@ -3259,15 +3241,6 @@ export class Game extends EventTarget {
     if (b) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: q.xp });
     this.emit('quiz');
     return right;
-  }
-
-  // A quiz begun: one of the island's offer, not already taken, out of the
-  // questions you have not learnt. Says 'quiz', which opens the window on
-  // it (ui.js).
-  startQuiz(level) {
-    if (!this.offersQuiz(level)) return;
-    this.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook), picks: [], right: 0, done: false };
-    this.emit('quiz');
   }
 
   // ------------------------------------------------ treasure chests
@@ -3302,7 +3275,7 @@ export class Game extends EventTarget {
     this.send({ t: 'chest', at: [t.x, t.y, t.z] });
   }
 
-  // A quiz for a chest key, offered (a while after, `after` ms): after a
+  // One quiz for a chest key, offered (a while after, `after` ms): after a
   // camp you helped free, or a golden key's after a stage you helped win.
   // Only when some quiz still has a question for you.
   offerKeyQuiz(gold, after = 0) {
@@ -3310,8 +3283,8 @@ export class Game extends EventTarget {
     this.keyOffers.push({ gold, at: performance.now() + after, told: false, quiz: null });
   }
 
-  // The key quiz waiting first: one question of the level picked (one you
-  // have not learnt), which earns its key if it is answered right. Its
+  // The key quiz waiting first, of the level you pick: one question (one
+  // you have not learnt), which earns its key if it is answered right. Its
   // question, once picked, stays the one asked, so closing the window and
   // picking again is no second try. Says 'quiz', which opens the window.
   startKeyQuiz(level) {
@@ -3450,11 +3423,6 @@ export class Game extends EventTarget {
     if (keyOffer && !keyOffer.told && now >= keyOffer.at) {
       keyOffer.told = true;
       this.emit('key-offer');
-    }
-    const offer = this.quizOffer;
-    if (offer && !offer.told && now >= offer.at && !this.keyOffers.length) {
-      offer.told = true;
-      this.emit('quiz-offer');
     }
     if (adv) {
       for (const c of adv.camps.values()) {

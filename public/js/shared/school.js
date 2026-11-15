@@ -4,7 +4,7 @@
 // desks facing a long chalkboard. Walk up to a chalkboard and press Class:
 // pick a class, from Year 2 of elementary school to Year 1 of high school,
 // Thinking Math or English Words, and answer its questions, asked out of the
-// extra-credit quizzes' banks (quiz.js), for a coin or more for each one
+// quizzes' banks (quiz.js), for a coin or more for each one
 // right. A question answered right three times in a row is learnt, and
 // never asked of you again (quiz.js LEARNT_AFTER).
 //
