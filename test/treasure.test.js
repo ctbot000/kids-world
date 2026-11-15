@@ -12,7 +12,7 @@ import { XP_FOR } from '../public/js/shared/levels.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 import { validCells } from '../public/js/shared/tools.js';
-import { CHEST_AGAIN_MS, CHEST_OPEN_MS, chestCount, chestNear, Chests, chestTreasure, isChest, isOpenChest } from '../public/js/shared/treasure.js';
+import { CHEST_AGAIN_MS, CHEST_OPEN_MS, chestCount, chestNear, Chests, chestTreasure, isChest, isGoldChest, isOpenChest } from '../public/js/shared/treasure.js';
 import { World } from '../public/js/shared/world.js';
 
 // Flat ground at y = 5 (standing at 6).
@@ -43,7 +43,7 @@ function standAt(room, c, x, y, z) {
 }
 
 test('treasure chests are island-only furniture, shut and open, facing every way, out of the toy box', () => {
-  for (const base of [B.CHEST, B.CHEST_OPEN]) {
+  for (const base of [B.CHEST, B.CHEST_OPEN, B.GOLD_CHEST, B.GOLD_CHEST_OPEN]) {
     for (let k = 0; k < 4; k++) {
       const d = B.BLOCKS[base + k];
       assert.equal(d.kind, 'furniture');
@@ -53,11 +53,12 @@ test('treasure chests are island-only furniture, shut and open, facing every way
     }
   }
   assert.ok(isChest(B.CHEST + 2) && !isChest(B.CHEST_OPEN) && isOpenChest(B.CHEST_OPEN + 3));
+  assert.ok(isChest(B.GOLD_CHEST + 1) && isOpenChest(B.GOLD_CHEST_OPEN + 2) && isGoldChest(B.GOLD_CHEST) && isGoldChest(B.GOLD_CHEST_OPEN) && !isGoldChest(B.CHEST));
   for (const tab of B.CATEGORIES) assert.ok(!B.blocksIn(tab.key).some((id) => isChest(id) || isOpenChest(id)));
   const w = flat();
   assert.equal(validCells(w, [10, 6, 10, B.CHEST]), null);
   w.set(20, 6, 20, B.CHEST + 1);
-  assert.deepEqual(chestNear(w, { x: 20.5, y: 6, z: 18.8 }), { x: 20, y: 6, z: 20, open: false, key: chestNear(w, { x: 20.5, y: 6, z: 18.8 }).key });
+  assert.deepEqual(chestNear(w, { x: 20.5, y: 6, z: 18.8 }), { x: 20, y: 6, z: 20, open: false, gold: false, key: chestNear(w, { x: 20.5, y: 6, z: 18.8 }).key });
   w.set(20, 6, 20, B.CHEST_OPEN + 1);
   assert.equal(chestNear(w, { x: 20.5, y: 6, z: 18.8 }).open, true);
   assert.equal(chestNear(w, { x: 30.5, y: 6, z: 30.5 }), null);
@@ -81,6 +82,7 @@ test('the island puts its chests about on open ground, out of the camps, away fr
     assert.ok(Math.hypot(c.x + 0.5 - w.spawn.x, c.z + 0.5 - w.spawn.z) >= 8, 'away from the start');
     for (const o of found) if (o !== c) assert.ok(Math.hypot(o.x - c.x, o.z - c.z) >= 8, 'away from each other');
   }
+  assert.equal(found.filter((c) => isGoldChest(c.id)).length, 1, 'one of them golden');
   assert.deepEqual(chests.step(w, 2000, { stage: 3 }), [], 'nothing more while all are there');
 });
 
@@ -132,6 +134,9 @@ test('on the shared isle the room opens a chest for whoever stands by it, the fi
       [{ t: 'chest', x: c.x, y: c.y, z: c.z, by: b.pid }],
       'one opening, by the first',
     );
+    const told = who.inbox.findIndex((m) => m.t === 'chest');
+    const opened = who.inbox.findIndex((m) => m.t === 'edit' && m.cells.join() === [c.x, c.y, c.z, room.world.get(c.x, c.y, c.z)].join());
+    assert.ok(told >= 0 && told < opened, 'who opened it told before it shows open');
     assert.ok(who.inbox.some((m) => m.t === 'edit' && m.cells.join() === [c.x, c.y, c.z, room.world.get(c.x, c.y, c.z)].join()));
   }
   // Nobody picks one up.
@@ -140,8 +145,9 @@ test('on the shared isle the room opens a chest for whoever stands by it, the fi
 });
 
 test('a chest holds coins, more on higher stages, and now and then an HP potion; opening them earns a sticker', () => {
-  assert.deepEqual(chestTreasure(() => 0, 1), { coins: 7, potion: true });
-  assert.deepEqual(chestTreasure(() => 0.99, 1), { coins: 12, potion: false });
+  assert.deepEqual(chestTreasure(() => 0, 1), { coins: 7, potion: true, diamond: false });
+  assert.deepEqual(chestTreasure(() => 0.99, 1), { coins: 12, potion: false, diamond: false });
+  assert.deepEqual(chestTreasure(() => 0.99, 1, true), { coins: 48, potion: true, diamond: true }, 'a golden chest: four times the coins, a potion and a diamond');
   assert.ok(chestTreasure(() => 0.5, 5).coins > chestTreasure(() => 0.5, 1).coins);
   assert.equal(chestTreasure(() => 0.5, 50).coins, chestTreasure(() => 0.5, 10).coins, 'up to a limit');
   assert.ok(STAT_KEYS.includes('chests') && STAT_KEYS.includes('keys'));
@@ -167,4 +173,9 @@ test('keys are kept at the keeper with the rest of what you carry, from whicheve
   assert.equal(mergeProfiles(older, newer).keys, 1);
   assert.equal(mergeProfiles(newer, older).keys, 1);
   assert.equal(addProgress({ keys: 2 }, { keys: 3 }).keys, 5);
+  // Golden keys too, apart from the others.
+  assert.equal(keptProfile({ gkeys: 2 }).gkeys, 2);
+  assert.equal(keptProfile({ keys: 2 }).gkeys, 0);
+  assert.equal(mergeProfiles({ name: 'Keen Owl', gkeys: 4, changedAt: 100 }, { name: 'Keen Owl', gkeys: 1, changedAt: 200 }).gkeys, 1);
+  assert.equal(addProgress({ gkeys: 1 }, { gkeys: 2 }).gkeys, 3);
 });

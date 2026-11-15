@@ -43,6 +43,9 @@ function clean(raw) {
     // Keys for Adventure Isle's treasure chests (treasure.js), earned by
     // solving quizzes there: only ever in the isle's own world of you.
     keys: cleanKeys(p.keys),
+    // Golden keys, for the isle's golden chests: earned only by the quiz
+    // after a whole stage is won.
+    gkeys: cleanKeys(p.gkeys),
     gear: cleanGear(p.gear),
     stats,
     stickers: p.stickers && typeof p.stickers === 'object' ? p.stickers : {},
@@ -316,10 +319,12 @@ export class Profile extends EventTarget {
   }
 
   // A key for a treasure chest (treasure.js): one more earned, or one used
-  // up opening a chest. Each says whether it happened.
-  addKey() {
-    if (this.data.keys >= KEYS_MAX) return false;
-    this.data.keys++;
+  // up opening a chest. Each says whether it happened. gold: a golden key,
+  // for a golden chest.
+  addKey(gold = false) {
+    const k = gold ? 'gkeys' : 'keys';
+    if (this.data[k] >= KEYS_MAX) return false;
+    this.data[k]++;
     this.shopped();
     return true;
   }
@@ -332,9 +337,10 @@ export class Profile extends EventTarget {
     return true;
   }
 
-  useKey() {
-    if (this.data.keys < 1) return false;
-    this.data.keys--;
+  useKey(gold = false) {
+    const k = gold ? 'gkeys' : 'keys';
+    if (this.data[k] < 1) return false;
+    this.data[k]--;
     this.shopped();
     return true;
   }

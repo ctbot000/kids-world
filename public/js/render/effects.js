@@ -4,7 +4,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { arrow } from './avatar.js';
 
-const KINDS = ['puff', 'heart', 'sparkle', 'note', 'zzz', 'square', 'drop', 'star', 'bang', 'burst', 'streak'];
+const KINDS = ['puff', 'heart', 'sparkle', 'note', 'zzz', 'square', 'drop', 'star', 'bang', 'burst', 'streak', 'coin'];
 // Each picture is drawn on UNIT by UNIT, on a CELL by CELL part of the sheet:
 // a blow's burst shows large for a moment, and should have a clean edge.
 const UNIT = 64;
@@ -115,6 +115,31 @@ function sheet() {
         });
         ctx.fill();
         break;
+      // A coin out of a treasure chest (tinted gold): a rim, a raised face
+      // with a star stamped on it, and a glint.
+      case 'coin': {
+        ctx.fillStyle = '#c9c9c9';
+        ctx.beginPath();
+        ctx.arc(m, m, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(m, m, 21, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#d8d8d8';
+        ctx.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const r = k % 2 === 0 ? 13 : 6;
+          const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+          ctx.lineTo(m + Math.cos(a) * r, m + 1 + Math.sin(a) * r);
+        }
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.beginPath();
+        ctx.ellipse(m - 9, m - 10, 6, 3, -0.7, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       // A thin splinter, long from side to side (see turn, in add).
       case 'streak':
         ctx.fillStyle = '#ffffff';

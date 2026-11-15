@@ -212,6 +212,7 @@ export function keptProfile(raw) {
     coins: cleanCoins(p.coins),
     potions: cleanPotions(p.potions),
     keys: cleanKeys(p.keys),
+    gkeys: cleanKeys(p.gkeys),
     gear: cleanGear(p.gear),
     stats: numbers(p.stats, /^[a-z]{1,24}$/i, KEPT_MAX),
     stickers: numbers(p.stickers, /^[a-z-]{1,32}$/, KEPT_MAX),
@@ -282,7 +283,7 @@ export function mergeProfiles(mine, theirs) {
   // The gallery as it was last changed, on whichever device: a picture taken
   // down on one stays down.
   const gallery = b.gallery.changedAt > a.gallery.changedAt ? b.gallery : a.gallery;
-  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, keys: newer.keys, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
+  return { name: newer.name, look: newer.look, basket: newer.basket, coins: newer.coins, potions: newer.potions, keys: newer.keys, gkeys: newer.gkeys, gear: newer.gear, changedAt: newer.changedAt, stats, stickers, gallery };
 }
 
 // Stats that are the best there has ever been, not a count to add up.
@@ -310,7 +311,7 @@ export function addProgress(player, guest) {
   gear.toys = addToys(gear.toys, b.gear.toys);
   gear.tames = cleanTames(gear.tames + b.gear.tames);
   gear.stocks = addStocks(gear.stocks, b.gear.stocks);
-  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
+  return { stickers, stats, basket, coins: Math.min(COINS_MAX, a.coins + b.coins), potions: Math.min(999, a.potions + b.potions), keys: cleanKeys(a.keys + b.keys), gkeys: cleanKeys(a.gkeys + b.gkeys), gear, gallery: joinGalleries(a.gallery, b.gallery) };
 }
 
 // What a logged-in page does with the keeper's list of the player's islands:

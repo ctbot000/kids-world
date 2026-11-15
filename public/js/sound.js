@@ -436,6 +436,31 @@ export class Sound {
         this.tone(NOTE(84), { at: 0.48, decay: 0.9, gain: 0.06 });
         this.noise(0.7, { at: 0.36, type: 'highpass', freq: 6500, gain: 0.05 });
         break;
+      // A treasure chest opening (game.js treasureBurst): three wooden
+      // rattles, the lid's creak as it swings up, then a shower of coins
+      // jingling and a bright rising chord (a golden chest: a longer, higher
+      // shower and a sparkle on top).
+      case 'treasure': {
+        const gold = !!opts.gold;
+        for (let i = 0; i < 3; i++) {
+          this.tone(150 * r(), { at: i * 0.13, decay: 0.07, gain: 0.22, type: 'triangle', slide: 110 });
+          this.noise(0.05, { at: i * 0.13, type: 'bandpass', freq: 700, q: 2, gain: 0.12 });
+        }
+        this.noise(0.32, { at: 0.42, type: 'bandpass', freq: 380, sweep: 1100, q: 7, gain: 0.07 });
+        const coins = gold ? 18 : 11;
+        for (let i = 0; i < coins; i++) {
+          const at = 0.58 + i * 0.045 + Math.random() * 0.03;
+          const f = (2400 + Math.random() * 1800) * (gold ? 1.15 : 1);
+          this.tone(f, { at, decay: 0.09, gain: 0.05, type: 'square' });
+          this.tone(f * 1.5, { at: at + 0.01, decay: 0.06, gain: 0.025 });
+        }
+        const root = gold ? 74 : 72;
+        [0, 4, 7, 12].forEach((n, i) => this.tone(NOTE(root + n), { at: 0.6 + i * 0.09, decay: i === 3 ? 1.1 : 0.25, gain: 0.12, type: 'triangle' }));
+        [0, 4, 7].forEach((n) => this.tone(NOTE(root + 12 + n), { at: 0.98, decay: 1.2, gain: 0.045 }));
+        this.noise(0.8, { at: 0.6, type: 'highpass', freq: 7000, gain: gold ? 0.07 : 0.045 });
+        if (gold) [88, 91, 96].forEach((n, i) => this.tone(NOTE(n), { at: 1.25 + i * 0.08, decay: 0.5, gain: 0.04 }));
+        break;
+      }
       case 'victory':
         [60, 64, 67, 72, 67, 72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), { at: i * 0.13 + (i > 4 ? 0.15 : 0), decay: i === 8 ? 1.4 : 0.2, gain: 0.13, type: 'triangle' }));
         [72, 76, 79].forEach((n) => this.tone(NOTE(n), { at: 1.35, decay: 1.6, gain: 0.05 }));

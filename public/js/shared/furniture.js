@@ -862,6 +862,17 @@ const MODELS = {
     ];
   },
 
+  // The golden chest, the isle's special one (shared/treasure.js): the
+  // same shape in gold, with a purple jewel on its lock. Drawn as a real
+  // model (render/chest-model.js); these boxes only shape it.
+  'gold-chest'() {
+    return [box(0.12, 0, 0.22, 0.88, 0.46, 0.82, GOLD, 'plain'), box(0.1, 0.46, 0.2, 0.9, 0.66, 0.84, GOLD, 'plain'), ...chestBands(0.66), box(0.42, 0.3, 0.17, 0.58, 0.5, 0.2, '#8c5bd6', 'plain')];
+  },
+
+  'gold-chest-open'() {
+    return [box(0.12, 0, 0.22, 0.88, 0.46, 0.82, GOLD, 'plain'), box(0.1, 0.46, 0.84, 0.9, 1.02, 0.94, GOLD, 'plain'), ...chestBands(0.46), box(0.14, 0.4, 0.24, 0.86, 0.5, 0.8, GOLD, 'glow'), box(0.3, 0.5, 0.36, 0.7, 0.62, 0.68, '#fff3b0', 'glow')];
+  },
+
   // A gashapon, a capsule toy machine (shared/gashapon.js): a red stand
   // with a coin slot, a big silver handle to turn and a chute the capsule
   // rolls out of, under a glass globe full of capsules — each half

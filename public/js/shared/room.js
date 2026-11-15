@@ -2700,8 +2700,11 @@ export class Room {
     if (Math.hypot(p.s[0] - x - 0.5, p.s[2] - z - 0.5) > CHEST_REACH || Math.abs(p.s[1] - y) > 3) return;
     const cells = this.adventure.chests.open(this.world, x, y, z, this.now());
     if (!cells) return;
-    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
+    // Who opened it first, while it is still shut where everyone is, so
+    // each page knows which kind it was and plays its opening from the
+    // start (render/chest-model.js); then the chest open.
     this.broadcast({ t: 'chest', x, y, z, by: p.id });
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
     this.changed();
   }
 

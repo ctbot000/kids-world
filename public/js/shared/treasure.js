@@ -1,10 +1,13 @@
 // Treasure chests on Adventure Isle, the shared isle (blocks.js CHEST):
-// a few lie about the island, each locked. A key opens one, and a key is
-// earned by solving a quiz (quiz.js) — at a chest, with no key in your
-// pocket, Q offers the quizzes to pick from, and one answered right is a
-// key. Opened, a chest shows its gold for everyone and pays its treasure to
-// whoever opened it (coins, and now and then an HP potion); a while after,
-// it goes, and another turns up somewhere else on the island later.
+// a few lie about the island, each locked. A key opens one, and keys come
+// only from quizzes (quiz.js) after a win: each camp you help free offers
+// one quiz for a key (game.js keyOffers), answered right a 🔑 key, and a
+// whole stage won offers one for a 👑 golden key. One of the chests is a
+// golden chest (blocks.js GOLD_CHEST), which only a golden key opens and
+// which holds far more. Opened, a chest shows its gold for everyone and
+// pays its treasure to whoever opened it (coins, and now and then an HP
+// potion); a while after, it goes, and another turns up somewhere else on
+// the island later.
 //
 // The island keeps the chests (Chests, run by the room on the shared isle
 // only, as it runs the Monster Gashapon): where they are and when each was
@@ -18,12 +21,15 @@ import { Rng } from './rng.js';
 
 export { KEYS_MAX } from './shop.js';
 
-export const isChest = (id) => B.BLOCKS[id]?.model === 'treasure-chest';
-export const isOpenChest = (id) => B.BLOCKS[id]?.model === 'treasure-chest-open';
+export const isChest = (id) => B.BLOCKS[id]?.model === 'treasure-chest' || B.BLOCKS[id]?.model === 'gold-chest';
+export const isOpenChest = (id) => B.BLOCKS[id]?.model === 'treasure-chest-open' || B.BLOCKS[id]?.model === 'gold-chest-open';
+// A golden chest, shut or open: the special one.
+export const isGoldChest = (id) => B.BLOCKS[id]?.model === 'gold-chest' || B.BLOCKS[id]?.model === 'gold-chest-open';
 
 // The chest nearest a body standing beside it (or a step below it, as one
-// on a ledge), shut or open: { x, y, z, open, key } of its cell, or null.
-export const chestNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => (isChest(id) ? { open: false } : isOpenChest(id) ? { open: true } : null), reach, 1);
+// on a ledge), shut or open: { x, y, z, open, gold, key } of its cell, or
+// null.
+export const chestNear = (world, body, reach = 2.2) => cellNear(world, body, (id) => (isChest(id) ? { open: false, gold: isGoldChest(id) } : isOpenChest(id) ? { open: true, gold: isGoldChest(id) } : null), reach, 1);
 
 // How many chests lie about the island: four on stage 1, one more every
 // second stage after, eight at the most.
@@ -38,10 +44,12 @@ export const CHEST_REACH = 3.2;
 const APART = 8;
 
 // What is in a chest, for whoever opened it: coins, more on the higher
-// stages, and one time in four an HP potion. rand: 0 to 1.
-export function chestTreasure(rand = Math.random, stage = 1) {
+// stages, and one time in four an HP potion. A golden chest holds four
+// times the coins, an HP potion always and a diamond. rand: 0 to 1.
+export function chestTreasure(rand = Math.random, stage = 1, gold = false) {
   const s = Math.min(10, Math.max(1, stage));
-  return { coins: 5 + 2 * s + Math.floor(rand() * 6), potion: rand() < 0.25 };
+  const coins = 5 + 2 * s + Math.floor(rand() * 6);
+  return gold ? { coins: coins * 4, potion: true, diamond: true } : { coins, potion: rand() < 0.25, diamond: false };
 }
 
 export class Chests {
@@ -88,12 +96,14 @@ export class Chests {
     return out;
   }
 
-  // A new chest somewhere on open ground, facing a way of its own.
+  // A new chest somewhere on open ground, facing a way of its own: a
+  // golden one whenever the island has none, a wooden one otherwise.
   put(world, camps, out) {
     const spot = this.spot(world, camps);
     if (!spot) return;
-    this.list.push({ ...spot, openedAt: 0 });
-    out.push([spot.x, spot.y, spot.z, B.turnedTo(B.CHEST, this.rng.int(0, 3))]);
+    const gold = !this.list.some((c) => c.gold);
+    this.list.push({ ...spot, gold, openedAt: 0 });
+    out.push([spot.x, spot.y, spot.z, B.turnedTo(gold ? B.GOLD_CHEST : B.CHEST, this.rng.int(0, 3))]);
   }
 
   // Somewhere for a chest: on top of the ground (not on a tree, a tent or
@@ -126,7 +136,7 @@ export class Chests {
     const id = world.get(x, y, z);
     if (!c || c.openedAt || !isChest(id)) return null;
     c.openedAt = now;
-    const cells = [x, y, z, B.turnedTo(B.CHEST_OPEN, B.BLOCKS[id].front)];
+    const cells = [x, y, z, B.turnedTo(isGoldChest(id) ? B.GOLD_CHEST_OPEN : B.CHEST_OPEN, B.BLOCKS[id].front)];
     world.set(...cells);
     return cells;
   }

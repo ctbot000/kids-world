@@ -592,8 +592,14 @@ export const DIALS = DIAL_COLORS.map((c) => {
 // Treasure chests on Adventure Isle (treasure.js): locked, until someone
 // with a key opens one, and then open with its gold showing, for a while,
 // before it goes. Only the island puts them down or takes them away.
-export const CHEST = furniture(371, 'treasure-chest', { name: 'Treasure Chest', color: '#a8692f', category: false, light: 4, sound: 'wood', islandOnly: true });
-export const CHEST_OPEN = furniture(375, 'treasure-chest-open', { name: 'Open Treasure Chest', color: '#a8692f', category: false, light: 9, sound: 'wood', islandOnly: true });
+export const CHEST = furniture(371, 'treasure-chest', { name: 'Treasure Chest', color: '#a8692f', category: false, light: 4, sound: 'wood', islandOnly: true, real: 'treasure-chest' });
+export const CHEST_OPEN = furniture(375, 'treasure-chest-open', { name: 'Open Treasure Chest', color: '#a8692f', category: false, light: 9, sound: 'wood', islandOnly: true, real: 'treasure-chest-open' });
+// A golden chest, the isle's special one: only a golden key (earned by the
+// quiz after a whole stage is won) opens it, and it holds far more. Both
+// kinds are drawn as real models (render/chest-model.js); their boxes only
+// shape them.
+export const GOLD_CHEST = furniture(430, 'gold-chest', { name: 'Golden Chest', color: '#e0b04c', category: false, light: 8, sound: 'stone', islandOnly: true, real: 'gold-chest' });
+export const GOLD_CHEST_OPEN = furniture(434, 'gold-chest-open', { name: 'Open Golden Chest', color: '#e0b04c', category: false, light: 12, sound: 'stone', islandOnly: true, real: 'gold-chest-open' });
 
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [

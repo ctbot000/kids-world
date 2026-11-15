@@ -55,7 +55,8 @@ import { doorOpen, escapeHouse, puzzleNear, roomAt } from './shared/escape.js';
 import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { cleanQuizBook, fileQuizAnswer, makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
-import { chestNear, chestTreasure } from './shared/treasure.js';
+import { chestNear, chestTreasure, isGoldChest } from './shared/treasure.js';
+import { CHEST_RATTLE_MS, openingChest } from './render/chest-model.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
@@ -287,6 +288,14 @@ const STEAM_COLORS = ['#ffffff', '#eef2f6', '#d8e0e8', '#f6f9fc', '#c8d2dc'];
 const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // How long after the isle's last stage is won its ending film starts (ui.js).
 const ENDING_AFTER_MS = 3500;
+// A key quiz comes up this long after the camp it is for is freed (once
+// its fanfare and its news have had their moment).
+const KEY_OFFER_MS = 4500;
+// An opening chest's treasure bursts out as its lid flies up, after it has
+// rattled (render/chest-model.js), and what was inside is shown once the
+// lid is up.
+const OPEN_BURST_MS = CHEST_RATTLE_MS + 120;
+const TREASURE_SHOW_MS = 1400;
 // What popping the Queen Mosquito pays over an ordinary monster's pop (see
 // popped): a few coins, on top of the XP her own count carries (levels.js).
 const QUEEN_POP = { coins: 5 };
@@ -372,6 +381,10 @@ export class Game extends EventTarget {
     this.dizzy = false;
     this.fireworks = [];
     this.quizOffer = null;
+    // Quizzes for a chest key (offerKeyQuiz): one for each camp you helped
+    // free, and one for a golden key for each stage you helped win, waiting
+    // in turn ({ gold, at, told, quiz }), until each is taken.
+    this.keyOffers = [];
     // The shared isle's next stage once this one is conquered (setNextStage).
     this.nextStage = null;
     this.quiz = null;
@@ -2943,6 +2956,8 @@ export class Game extends EventTarget {
     }
     const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
     if (mine) this.profile.count('freed');
+    // A camp you helped free: a quiz for a chest key, a little while after.
+    if (mine) this.offerKeyQuiz(false, KEY_OFFER_MS);
     // The gate it opened (Adventure Isle's), crumbling away in sparkles.
     if (Array.isArray(msg.gate) && msg.gate.length === 3 && msg.gate.every(Number.isFinite)) {
       const [x, y, z] = msg.gate;
@@ -3137,6 +3152,8 @@ export class Game extends EventTarget {
       // is: ui.js endingFilm.)
       const after = adv?.story?.final ? ENDING_AFTER_MS + adv.story.episode.films.endingMs : WIN_OFFER_MS;
       this.quizOffer = { at: performance.now() + after, told: false, taken: Object.fromEntries(Object.keys(QUIZ_LEVELS).map((k) => [k, false])) };
+      // And first, a quiz for a golden key (the extra-credit ones wait for it).
+      this.offerKeyQuiz(true, after);
     }
     if (this.dizzy) {
       this.dizzy = false;
@@ -3214,16 +3231,19 @@ export class Game extends EventTarget {
     }
     // The last one answered: the quiz is done, and the extra credit is yours.
     q.done = true;
-    // A quiz at a treasure chest pays a key, and nothing else: not coins,
-    // XP or the quizzes' counts, which a question after question at a chest
-    // would pile up (the chest pays when it is opened).
-    if (q.chest) {
+    // A key quiz pays a key, and nothing else: not coins, XP or the
+    // quizzes' counts (the chest pays when it is opened). Right or not, its
+    // offer is used up: one try for each.
+    if (q.keyQuiz) {
       q.coins = 0;
       q.xp = 0;
-      if (q.right === q.questions.length && this.profile.addKey()) {
+      const at = this.keyOffers.indexOf(q.keyQuiz);
+      if (at >= 0) this.keyOffers.splice(at, 1);
+      if (q.right === q.questions.length && this.profile.addKey(q.keyQuiz.gold)) {
         q.key = true;
         this.profile.count('keys');
       }
+      this.emit('key-offer');
       this.emit('quiz');
       return right;
     }
@@ -3253,14 +3273,15 @@ export class Game extends EventTarget {
   // ------------------------------------------------ treasure chests
 
   // Q (or the Open button) by a locked treasure chest on Adventure Isle
-  // (shared/treasure.js): with a key, the island is asked to open it (the
-  // key is spent once it says you did, chestNews); without, the quizzes
-  // that earn one are offered (ui.js chestDialog).
+  // (shared/treasure.js): with the key it takes (a golden key for a golden
+  // chest), the island is asked to open it (the key is spent once it says
+  // you did, chestNews); without, the window says how to earn one, and
+  // offers a key quiz waiting for you (ui.js chestDialog).
   useChest() {
     const t = this.chestTarget;
     if (!t) return;
     this.chestAt = t;
-    if (this.profile.data.keys > 0) {
+    if (this.hasKeyFor(t)) {
       this.openChest();
       return;
     }
@@ -3268,43 +3289,80 @@ export class Game extends EventTarget {
     this.emit('chest-open');
   }
 
+  // Whether you have the key a chest takes: a golden key for a golden one.
+  hasKeyFor(t) {
+    return (t?.gold ? this.profile.data.gkeys : this.profile.data.keys) > 0;
+  }
+
   // A key turned in the chest you are by (the one the window is for, or
   // the one beside you).
   openChest() {
     const t = this.chestAt ?? this.chestTarget;
-    if (!t || this.profile.data.keys < 1) return;
+    if (!t || !this.hasKeyFor(t)) return;
     this.send({ t: 'chest', at: [t.x, t.y, t.z] });
   }
 
-  // A key quiz at a chest: one question of the level picked (one you have
-  // not learnt), which earns a key if it is answered right. Says 'quiz',
-  // which opens the window on it.
+  // A quiz for a chest key, offered (a while after, `after` ms): after a
+  // camp you helped free, or a golden key's after a stage you helped win.
+  // Only when some quiz still has a question for you.
+  offerKeyQuiz(gold, after = 0) {
+    if (!Object.keys(QUIZ_LEVELS).some((k) => this.quizLeft(k) > 0)) return;
+    this.keyOffers.push({ gold, at: performance.now() + after, told: false, quiz: null });
+  }
+
+  // The key quiz waiting first: one question of the level picked (one you
+  // have not learnt), which earns its key if it is answered right. Its
+  // question, once picked, stays the one asked, so closing the window and
+  // picking again is no second try. Says 'quiz', which opens the window.
   startKeyQuiz(level) {
-    const t = this.chestAt ?? this.chestTarget;
-    if (!t || !QUIZ_LEVELS[level] || !this.quizLeft(level)) return;
-    this.chestAt = t;
-    this.quiz = { level, chest: { x: t.x, y: t.y, z: t.z }, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook), picks: [], right: 0, done: false };
+    const offer = this.keyOffers[0];
+    if (!offer) return;
+    if (!offer.quiz) {
+      if (!QUIZ_LEVELS[level] || !this.quizLeft(level)) return;
+      offer.quiz = { level, ...makeQuiz(level, (Math.random() * 2 ** 31) | 0, undefined, this.quizBook) };
+    }
+    this.quiz = { ...offer.quiz, keyQuiz: offer, picks: [], right: 0, done: false };
     this.emit('quiz');
   }
 
-  // A chest opened, as the island tells of it: by you, your key is spent
-  // and the treasure is yours; by anyone, heard and seen by whoever is near.
+  // A chest opened, as the island tells of it: everyone near sees its lid
+  // fly open (render/chest-model.js) and its treasure burst out; by you,
+  // your key is spent and the treasure is yours.
   chestNews(msg) {
     const { x, y, z } = msg;
     if (![x, y, z].every(Number.isInteger)) return;
-    if (this.near(x + 0.5, y, z + 0.5, 30)) this.renderer.effects.sparkles(x + 0.5, y + 0.8, z + 0.5, 24, ['#ffd84d', '#fff3b0', '#ffffff']);
-    if (msg.by !== this.pid) {
-      if (this.near(x + 0.5, y, z + 0.5, 20)) this.sound.play('open');
-      return;
-    }
-    this.profile.useKey();
-    const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1);
+    const gold = isGoldChest(this.world.get(x, y, z));
+    openingChest(x, y, z);
+    if (this.near(x + 0.5, y, z + 0.5, 40)) this.treasureBurst(x + 0.5, y, z + 0.5, gold);
+    if (msg.by !== this.pid) return;
+    this.profile.useKey(gold);
+    const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1, gold);
     this.profile.earn(got.coins);
     if (got.potion) got.potion = this.profile.findPotion();
+    if (got.diamond) this.profile.addToBasket('diamond', 1);
     this.profile.count('chests');
-    this.sound.play('fanfare');
     this.emit('reward', { x: x + 0.5, y: y + 1, z: z + 0.5, xp: XP_FOR.chests.xp });
-    this.emit('toast', { icon: '💰', text: `You opened the treasure chest: 🪙 ${got.coins} coins${got.potion ? ' and a 🧪 HP potion' : ''}!` });
+    // What was inside, shown once the lid is up (ui.js treasurePop).
+    setTimeout(() => this.emit('treasure', { ...got, gold }), TREASURE_SHOW_MS);
+  }
+
+  // A chest's lid flying open: a rattle, the creak and a burst of light,
+  // then coins and sparkles fountaining out of it and a bright chord, and
+  // for a golden chest, confetti too. Timed to the model's lid
+  // (render/chest-model.js CHEST_OPENING).
+  treasureBurst(x, y, z, gold) {
+    const fx = this.renderer.effects;
+    this.sound.play('treasure', { gold });
+    setTimeout(() => {
+      fx.sparkles(x, y + 0.7, z, gold ? 40 : 24, ['#ffd84d', '#fff3b0', '#ffffff', gold ? '#c78cff' : '#ffb84d']);
+      for (let i = 0; i < (gold ? 34 : 20); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 0.6 + Math.random() * 1.6;
+        fx.add('coin', x, y + 0.6, z, { vx: Math.cos(a) * s, vy: 4.5 + Math.random() * 3, vz: Math.sin(a) * s, color: i % 3 ? '#ffd84d' : '#ffe98a', size: 0.2 + Math.random() * 0.08, life: 1.1 + Math.random() * 0.5, gravity: 11, spin: 8, delay: i * 0.02 });
+      }
+      for (let i = 0; i < 10; i++) fx.add('star', x, y + 0.9, z, { vx: (Math.random() - 0.5) * 2, vy: 2 + Math.random() * 1.5, vz: (Math.random() - 0.5) * 2, size: 0.22 + Math.random() * 0.12, life: 1.3, drag: 0.8, color: ['#ffd84d', '#ffffff', '#fff3a0'][i % 3], delay: 0.1 + i * 0.04 });
+      if (gold) fx.confetti(x, y + 1, z, 90, 0.8);
+    }, OPEN_BURST_MS);
   }
 
   // The quiz window closed: a quiz half done simply goes, to be begun afresh
@@ -3370,8 +3428,13 @@ export class Game extends EventTarget {
   updateAdventure(dt) {
     const adv = this.adventure;
     const now = performance.now();
+    const keyOffer = this.keyOffers[0];
+    if (keyOffer && !keyOffer.told && now >= keyOffer.at) {
+      keyOffer.told = true;
+      this.emit('key-offer');
+    }
     const offer = this.quizOffer;
-    if (offer && !offer.told && now >= offer.at) {
+    if (offer && !offer.told && now >= offer.at && !this.keyOffers.length) {
       offer.told = true;
       this.emit('quiz-offer');
     }

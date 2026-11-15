@@ -20,6 +20,7 @@ import { STOCK_KINDS, stockMaterials, stockModel } from './stock-model.js';
 import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
 import { toyMaterial } from './toon.js';
+import { chestMaterials, chestModel } from './chest-model.js';
 import { TILE } from './atlas.js';
 
 const STUD_RADIUS = 0.25;
@@ -795,6 +796,10 @@ export class Terrain {
     if (kind === 'cuckoo-clock' || kind === 'tower-clock') {
       this.clockMaterials ??= clockMaterials(toyMaterial);
       return clockModel(this.clockMaterials, kind);
+    }
+    if (kind === 'treasure-chest' || kind === 'treasure-chest-open' || kind === 'gold-chest' || kind === 'gold-chest-open') {
+      this.chestMaterials ??= chestMaterials(toyMaterial);
+      return chestModel(this.chestMaterials, kind, cell);
     }
     if (kind === 'campfire') {
       this.campfireMaterials ??= campfireMaterials(toyMaterial);

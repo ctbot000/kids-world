@@ -8259,59 +8259,105 @@ test('the 👾 monster collection is Adventure Isle’s: a monster near you ther
   await page.browserContext().close();
 });
 
-test('a treasure chest on Adventure Isle: Q with no key offers a quiz, one answered right is a key, and the key opens the chest for its treasure', { skip }, async () => {
+test('treasure chest keys on Adventure Isle come only from a quiz after a camp is freed (one try each), a golden key after a stage won, and each opens its own chest', { skip }, async () => {
   const page = await openPlayer(base, { name: 'Keen Owl' });
   await clickButton(page, '⚔️ Adventure');
   await clickButton(page, 'Adventure Isle');
   await inGame(page);
   await until(page, () => window.kidsWorld.game?.profile === window.kidsWorld.isle);
   const room = server.publicAdventure.room;
-  const c = room.adventure.chests.list.find((o) => !o.openedAt);
-  assert.ok(c, 'chests about the isle');
-  // Nothing rideable near it to take the button.
+  const c = room.adventure.chests.list.find((o) => !o.openedAt && !o.gold);
+  const gc = room.adventure.chests.list.find((o) => !o.openedAt && o.gold);
+  assert.ok(c && gc, 'wooden chests and a golden one about the isle');
+  // Nothing rideable near them to take the button.
   for (const o of [...room.critters.list]) {
-    if (Math.hypot(o.x - c.x, o.z - c.z) < 16) {
+    if ([c, gc].some((k) => Math.hypot(o.x - k.x, o.z - k.z) < 16)) {
       room.critters.remove(o.id);
       room.broadcast({ t: 'cdel', id: o.id, by: 0 });
     }
   }
-  await page.evaluate((c) => {
-    const kw = window.kidsWorld;
-    Object.assign(kw.game.me.body, { x: c.x + 0.5, y: c.y + 0.2, z: c.z - 0.9, vx: 0, vy: 0, vz: 0, flying: false });
-    kw.game.sendMove(true);
-  }, { x: c.x, y: c.y, z: c.z });
+  const standBy = (k) =>
+    page.evaluate((k) => {
+      const kw = window.kidsWorld;
+      Object.assign(kw.game.me.body, { x: k.x + 0.5, y: k.y + 0.2, z: k.z - 0.9, vx: 0, vy: 0, vz: 0, flying: false });
+      kw.game.sendMove(true);
+    }, { x: k.x, y: k.y, z: k.z });
+  const answer = (right) =>
+    page.evaluate((right) => {
+      const ask = window.kidsWorld.game.quiz.questions[0];
+      document.querySelectorAll('#modal .quiz-answer')[right ? ask.answer : (ask.answer + 1) % ask.choices.length].click();
+    }, right);
+  // No key: the chest only says how to earn one, with no quiz to take there.
+  await standBy(c);
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
   const coins = await page.evaluate(() => window.kidsWorld.isle.data.coins);
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('treasure chest'));
-  // A wrong answer: no key, and another question to try.
+  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('free a camp') && !document.querySelector('#modal .class-list')), 'no quiz at the chest');
+  await clickButton(page, 'OK', '#modal');
+  await until(page, () => document.getElementById('modal').hidden);
+  // A camp freed with your help: a key quiz comes up by itself. Wrong: no
+  // key, and no second try.
+  const [one, two] = [...room.adventure.camps.filter((k) => k.kind === 'camp')].map((k) => k.id);
+  await page.evaluate((id) => window.kidsWorld.game.campFreed({ id, by: [window.kidsWorld.game.pid] }), one);
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
+  assert.equal(await page.evaluate(() => document.getElementById('key-quiz').hidden), false, 'the 🔑 button while it waits');
   await clickButton(page, 'Thinking Math', '#modal');
-  await until(page, () => window.kidsWorld.game.quiz?.chest && document.querySelector('#modal .quiz-answer'));
-  await page.evaluate(() => {
-    const ask = window.kidsWorld.game.quiz.questions[0];
-    document.querySelectorAll('#modal .quiz-answer')[(ask.answer + 1) % ask.choices.length].click();
-  });
+  await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
+  await answer(false);
   await clickButton(page, 'How you did', '#modal');
   await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('No key'));
-  assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.keys), 0);
-  // Right: a key, and the chest opened with it.
-  await clickButton(page, 'Another question', '#modal');
-  await until(page, () => window.kidsWorld.game.quiz?.picks.length === 0 && document.querySelector('#modal .quiz-answer'));
-  await page.evaluate(() => document.querySelectorAll('#modal .quiz-answer')[window.kidsWorld.game.quiz.questions[0].answer].click());
+  assert.deepEqual(await page.evaluate(() => [window.kidsWorld.isle.data.keys, window.kidsWorld.game.keyOffers.length, !!document.querySelector('#modal').textContent.includes('Another question'), document.getElementById('key-quiz').hidden]), [0, 0, false, true], 'one try, used up');
+  await clickButton(page, 'Done', '#modal');
+  // Another camp: right this time, a key.
+  await page.evaluate((id) => window.kidsWorld.game.campFreed({ id, by: [window.kidsWorld.game.pid] }), two);
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
+  await clickButton(page, 'Thinking Math', '#modal');
+  await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
+  await answer(true);
   await clickButton(page, 'How you did', '#modal');
   await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('You earned a key'));
   assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.keys), 1);
   assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.coins), coins, 'a key, not coins');
   assert.deepEqual(await page.evaluate(() => [window.kidsWorld.isle.data.stats.quizzes, window.kidsWorld.isle.data.stats.keys]), [0, 1], 'nor a quiz to count');
-  await clickButton(page, 'Open the chest', '#modal');
+  await clickButton(page, 'Done', '#modal');
+  // A wooden key does not open the golden chest.
+  await standBy(gc);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
+  // The key opens the wooden one: its treasure shown, the key spent.
+  await standBy(c);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🗝️ Open'));
+  await page.keyboard.press('KeyQ');
   await until(page, (c) => window.kidsWorld.game.world.get(c.x, c.y, c.z) >= 375 && window.kidsWorld.isle.data.stats.chests === 1, { x: c.x, y: c.y, z: c.z });
   const after = await page.evaluate(() => ({ keys: window.kidsWorld.isle.data.keys, coins: window.kidsWorld.isle.data.coins, home: window.kidsWorld.profile.data.stats.chests }));
   assert.equal(after.keys, 0, 'the key spent');
   assert.ok(after.coins >= coins + 7, 'the treasure');
   assert.equal(after.home, 0, 'in the isle’s own world of you');
+  await until(page, () => !document.getElementById('treasure-pop').hidden && document.getElementById('treasure-pop').textContent.includes('Treasure!'));
   await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('opened the treasure chest')));
   // Open, it has no button.
   await until(page, () => document.getElementById('ride').hidden || !document.getElementById('ride').textContent.includes('Locked'));
+  // A stage won: a golden key quiz, and the golden key opens the golden
+  // chest, for a diamond and far more coins.
+  await page.evaluate(() => window.kidsWorld.game.offerKeyQuiz(true, 0));
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('golden key quiz'), { timeout: 15000 });
+  await clickButton(page, 'Thinking Math', '#modal');
+  await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
+  await answer(true);
+  await clickButton(page, 'How you did', '#modal');
+  await until(page, () => document.querySelector('#modal .quiz-result')?.textContent.includes('golden key'));
+  assert.deepEqual(await page.evaluate(() => [window.kidsWorld.isle.data.keys, window.kidsWorld.isle.data.gkeys]), [0, 1]);
+  await clickButton(page, 'Done', '#modal');
+  const before = await page.evaluate(() => ({ coins: window.kidsWorld.isle.data.coins, diamonds: window.kidsWorld.isle.data.basket.diamond }));
+  await standBy(gc);
+  await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('👑 Open'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => window.kidsWorld.isle.data.stats.chests === 2);
+  const gold = await page.evaluate(() => ({ gkeys: window.kidsWorld.isle.data.gkeys, coins: window.kidsWorld.isle.data.coins, diamonds: window.kidsWorld.isle.data.basket.diamond }));
+  assert.equal(gold.gkeys, 0, 'the golden key spent');
+  assert.ok(gold.coins >= before.coins + 28, 'a golden treasure');
+  assert.equal(gold.diamonds, before.diamonds + 1, 'and a diamond');
+  await until(page, () => document.getElementById('treasure-pop').textContent.includes('Golden treasure'));
   await page.browserContext().close();
 });
 
