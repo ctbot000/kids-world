@@ -8293,7 +8293,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   const coins = await page.evaluate(() => window.kidsWorld.isle.data.coins);
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('treasure chest'));
-  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('free a camp') && !document.querySelector('#modal .class-list')), 'no quiz at the chest');
+  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('free a camp') && !document.querySelector('#modal .class-list') && !document.querySelector('#modal').textContent.includes('null')), 'no quiz at the chest');
   await clickButton(page, 'OK', '#modal');
   await until(page, () => document.getElementById('modal').hidden);
   // A camp freed with your help: a key quiz comes up by itself. Wrong: no
@@ -8324,6 +8324,11 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // A wooden key does not open the golden chest.
   await standBy(gc);
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
+  await page.keyboard.press('KeyQ');
+  await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('golden chest'));
+  assert.ok(await page.evaluate(() => /You have 🔑 1 key/.test(document.querySelector('#modal').textContent) && !document.querySelector('#modal').textContent.includes('null')), 'the keys you have, and nothing else');
+  await clickButton(page, 'OK', '#modal');
+  await until(page, () => document.getElementById('modal').hidden);
   // The key opens the wooden one: its treasure shown, the key spent.
   await standBy(c);
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🗝️ Open'));

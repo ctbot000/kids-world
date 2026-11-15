@@ -8064,8 +8064,8 @@ export class UI {
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, t.gold ? '👑🔒' : '🧰🔒'),
           h('h2', {}, t.gold ? '🔒 The golden chest!' : '🔒 A treasure chest!'),
           h('p', {}, t.gold ? 'It is locked, and only a 👑 golden key opens it. Win a whole stage with your friends, then answer its quiz right for a golden key.' : 'It is locked, and it takes a 🔑 key. Help free a camp, then answer its quiz right for a key.'),
-          have ? h('p', { class: 'muted' }, `You have ${have}${t.gold ? '' : gkeys && !keys ? ' — a golden key only opens the golden chest' : ''}.`) : null,
-          offer ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); this.keyQuizDialog(); } }, h('span', { class: 'emoji' }, offer.gold ? '👑' : '🔑'), offer.gold ? ' Take your golden key quiz' : ' Take your key quiz') : null,
+          have ? h('p', { class: 'muted' }, `You have ${have}${t.gold ? '' : gkeys && !keys ? ' — a golden key only opens the golden chest' : ''}.`) : '',
+          offer ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); this.keyQuizDialog(); } }, h('span', { class: 'emoji' }, offer.gold ? '👑' : '🔑'), offer.gold ? ' Take your golden key quiz' : ' Take your key quiz') : '',
           h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'OK'),
         );
       },
