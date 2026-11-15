@@ -2362,6 +2362,12 @@ body.touch.playing #joystick {
   color: var(--ink-soft);
 }
 
+/* What a toy box thing costs on a Grow Island. */
+.choice small.toy-price {
+  font-weight: 700;
+  color: #b7791f;
+}
+
 .choice.locked .emoji,
 .choice.locked .look-pic {
   filter: grayscale(1) opacity(0.45);

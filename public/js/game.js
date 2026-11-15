@@ -60,7 +60,7 @@ import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from '.
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
-import { BLOCK_PRICE, FRIEND_PRICE, isGrow, landPrice, landProblem, onLand, PAID_KINDS, PLOT, plotKey, plotOf, raisePlot } from './shared/grow.js';
+import { editPrice, friendPrice, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, PAID_KINDS, raiseColumn } from './shared/grow.js';
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
@@ -468,8 +468,8 @@ export class Game extends EventTarget {
     this.fishing = null;
     this.reelHeld = false;
     this.fishTarget = null;
-    // On a Grow Island (shared/grow.js), the plot you could buy next, where
-    // you are or in front of you: { px, pz, price }, or null.
+    // On a Grow Island (shared/grow.js), the block of land you could buy
+    // next, under you or just in front of you: { x, z, price }, or null.
     this.landTarget = null;
     this.lines = new Map();
     // The robot kit beside you, the one whose window is open, and the robots
@@ -1166,7 +1166,7 @@ export class Game extends EventTarget {
     if (msg.by === this.pid) {
       const info = CRITTER_INFO[entry.type];
       // A friend from the toy box costs coins on a Grow Island.
-      if (isGrow(this.world)) this.profile.pay(FRIEND_PRICE, { force: true });
+      if (isGrow(this.world)) this.profile.pay(friendPrice(entry.type), { force: true });
       this.sound.play(entry.type);
       this.emit('toast', { icon: info.icon, text: `${msg.critter.name} the ${info.name.toLowerCase()} ${info.hoop ? 'is here! Walk up to it and spin it.' : info.rope ? 'is here! Walk up to it and jump.' : info.vehicle ? 'is here! Walk up to it to drive it.' : 'moved in!'}` });
       // A hoop or a rope you put down, Undo takes away again (while nobody has it).
@@ -6604,22 +6604,21 @@ export class Game extends EventTarget {
       return false;
     }
     const w = this.world;
-    // On a Grow Island every block put down costs coins, and only goes on
-    // land bought (shared/grow.js).
+    // On a Grow Island everything put down costs coins (each thing its own
+    // price), goes down one at a time, and only on land bought (shared/grow.js).
     let paid = 0;
-    if (isGrow(w) && PAID_KINDS.includes(kind)) {
-      for (let i = 0; i < cells.length; i += 4) {
-        const id = cells[i + 3];
-        if (id === B.AIR) continue;
-        if (!onLand(w, cells[i], cells[i + 2])) {
-          this.emit('notice', { text: 'That is open sea! Buy the land there first: 🌱 Buy land.', level: 'info' });
-          this.sound.play('no');
-          return false;
-        }
-        if (w.get(cells[i], cells[i + 1], cells[i + 2]) !== id) paid += BLOCK_PRICE;
+    if (isGrow(w) && (PAID_KINDS.includes(kind) || MANY_AT_ONCE.includes(kind))) {
+      const many = MANY_AT_ONCE.includes(kind);
+      let sea = false;
+      for (let i = 0; i < cells.length && !sea; i += 4) sea = cells[i + 3] !== B.AIR && !isLand(w, cells[i], cells[i + 2]);
+      if (many || sea) {
+        this.emit('notice', { text: many ? `On ${w.name} everything goes down one block at a time!` : 'That is open sea! Buy the land there first: 🌱 Buy land.', level: 'info' });
+        this.sound.play('no');
+        return false;
       }
+      paid = editPrice(w, kind, cells);
       if (paid > this.profile.data.coins) {
-        this.emit('notice', { text: `That takes 🪙 ${paid} here, and you have 🪙 ${this.profile.data.coins}. Every block costs a coin on ${w.name}!`, level: 'info' });
+        this.emit('notice', { text: `That costs 🪙 ${paid} here, and you have 🪙 ${this.profile.data.coins}.`, level: 'info' });
         this.sound.play('no');
         return false;
       }
@@ -6724,8 +6723,10 @@ export class Game extends EventTarget {
     const cells = [];
     const expect = [];
     const w = this.world;
-    // The coins paid for blocks taken back come back (a Grow Island's).
+    // The coins paid for what is taken back come back (a Grow Island's):
+    // all of them, or for as much of it as is still there to take back.
     let back = 0;
+    let placed = 0;
     for (let i = last.cells.length - 5; i >= 0; i -= 5) {
       const [x, y, z, before, after] = last.cells.slice(i, i + 5);
       // A door put down and bopped open since is still the one put down.
@@ -6733,10 +6734,11 @@ export class Game extends EventTarget {
       if (here !== after && !(B.DOOR[after] && B.turnedDoor(after) === here)) continue;
       cells.push(x, y, z, before);
       expect.push(here);
-      if (after !== B.AIR && after !== before) back += BLOCK_PRICE;
+      if (after !== B.AIR && after !== before) back++;
     }
+    for (let i = 0; i < last.cells.length; i += 5) if (last.cells[i + 4] !== B.AIR && last.cells[i + 4] !== last.cells[i + 3]) placed++;
     if (this.edit('undo', cells, { expect, undoable: false })) {
-      if (last.paid) this.profile.refund(Math.min(last.paid, back));
+      if (last.paid && placed) this.profile.refund(Math.floor((last.paid * Math.min(back, placed)) / placed));
       this.sound.play('pop');
       for (let i = 0; i < Math.min(cells.length, 40); i += 4) this.renderer.effects.sparkles(cells[i] + 0.5, cells[i + 1] + 0.5, cells[i + 2] + 0.5, 2);
     }
@@ -7114,6 +7116,11 @@ export class Game extends EventTarget {
   plan(hit) {
     const w = this.world;
     const facing = facingFromYaw(this.renderer.view.yaw);
+    // On a Grow Island one block at a time (shared/grow.js): the smallest
+    // size, and nothing that puts down many at once.
+    const grow = isGrow(w);
+    const size = grow ? 1 : this.size;
+    if (grow && MANY_AT_ONCE.includes(this.tool)) return null;
     // Treasures, and gem rocks to dig a jewel out of, whatever the tool.
     if (B.KIND[hit.id] === B.K_ITEM || B.GEM_ROCK[hit.id]) return { kind: 'collect', ...pickEdit(w, hit, 1), mode: 'remove' };
     // A ripe crop to pick, whatever the tool.
@@ -7122,17 +7129,17 @@ export class Game extends EventTarget {
       case 'build': {
         const id = this.selectedBlock();
         // The watering can waters farmland; it is never put down itself.
-        if (id === B.WATERING_CAN) return { kind: 'water', ...waterEdit(w, hit, this.size), mode: 'paint' };
+        if (id === B.WATERING_CAN) return { kind: 'water', ...waterEdit(w, hit, size), mode: 'paint' };
         if (this.basketPick && (this.profile.basket[this.basketPick] ?? 0) <= 0) return { kind: 'build', cells: [], collected: [], mode: 'add', empty: true };
         const bodies = [{ ...this.me.body, radius: BODY.radius + 0.02, height: BODY.height }];
         if (this.riding) bodies.push({ ...this.riding.body, radius: this.riding.body.radius + 0.02 });
-        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : this.size, bodies, facing), mode: 'add' };
+        return { kind: 'build', ...buildEdit(w, hit, id, this.basketPick ? 1 : size, bodies, facing), mode: 'add' };
       }
       case 'pick':
-        return { kind: 'pick', ...pickEdit(w, hit, this.size), mode: 'remove' };
+        return { kind: 'pick', ...pickEdit(w, hit, size), mode: 'remove' };
       case 'paint': {
         const id = this.profile.data.hotbar[this.slot];
-        return { kind: 'paint', ...paintEdit(w, hit, id, this.size), mode: 'paint' };
+        return { kind: 'paint', ...paintEdit(w, hit, id, size), mode: 'paint' };
       }
       case 'hills':
         return { kind: 'hills', ...hillEdit(w, hit, this.hillMode, this.size), mode: 'mixed' };
@@ -7443,8 +7450,9 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
-    if (isGrow(this.world) && this.profile.data.coins < FRIEND_PRICE) {
-      this.emit('notice', { text: `A friend from the toy box costs 🪙 ${FRIEND_PRICE} here. You have 🪙 ${this.profile.data.coins}.`, level: 'info' });
+    const price = isGrow(this.world) ? friendPrice(this.critterType) : 0;
+    if (price > this.profile.data.coins) {
+      this.emit('notice', { text: `${CRITTER_INFO[this.critterType].name} costs 🪙 ${price} here. You have 🪙 ${this.profile.data.coins}.`, level: 'info' });
       this.sound.play('no');
       return;
     }
@@ -7457,21 +7465,22 @@ export class Game extends EventTarget {
 
   // ------------------------------------------------ Grow Island (shared/grow.js)
 
-  // The plot you could buy next: the one you are in, if it is open sea, or
-  // else the one in front of you (whichever way you face most). Null where
+  // The block of land you could buy next: the column you are in, if it is
+  // open sea, or else the first open sea just in front of you. Null where
   // there is none to buy, or this is no Grow Island.
   landAhead() {
     const w = this.world;
     if (!isGrow(w) || this.watching || !this.me || !this.mayBuild) return null;
     const b = this.riding?.body ?? this.me.body;
-    let { px, pz } = plotOf(b.x, b.z);
-    if (w.land.has(plotKey(px, pz))) {
-      const fx = Math.sin(this.me.yaw);
-      const fz = Math.cos(this.me.yaw);
-      if (Math.abs(fx) > Math.abs(fz)) px += Math.sign(fx);
-      else pz += Math.sign(fz);
+    const fx = Math.sin(this.me.yaw);
+    const fz = Math.cos(this.me.yaw);
+    for (let d = 0; d <= 2; d += 0.5) {
+      const x = Math.floor(b.x + fx * d);
+      const z = Math.floor(b.z + fz * d);
+      if (isLand(w, x, z)) continue;
+      return landProblem(w, x, z) ? null : { x, z, price: landPrice(landCount(w)) };
     }
-    return landProblem(w, px, pz) ? null : { px, pz, price: landPrice(w.land.size) };
+    return null;
   }
 
   // 🌱 Buy land: the island raises it for everyone (room.js landOp), and
@@ -7485,29 +7494,21 @@ export class Game extends EventTarget {
       this.sound.play('no');
       return;
     }
-    this.send({ t: 'land', px: t.px, pz: t.pz, price: t.price });
+    this.send({ t: 'land', x: t.x, z: t.z, price: t.price });
   }
 
-  // A plot bought on this Grow Island, by anyone: { px, pz, land, by, price }
-  // (just { land } when the island only puts us right about what is bought).
+  // A block of land bought on this Grow Island, by anyone: { x, z, by, price }.
   landNews(msg) {
     const w = this.world;
-    if (!isGrow(w) || !Array.isArray(msg.land)) return;
-    w.land = new Set(msg.land.filter((k) => typeof k === 'string'));
-    if (!Number.isInteger(msg.px) || !Number.isInteger(msg.pz) || landProblem(w, msg.px, msg.pz) === 'outside') return;
-    const cells = raisePlot(w, msg.px, msg.pz);
+    if (!isGrow(w) || !Number.isInteger(msg.x) || !Number.isInteger(msg.z) || !w.inBounds(msg.x, 0, msg.z)) return;
+    const cells = raiseColumn(w, msg.x, msg.z);
     this.changed(cells);
     if (this.me && !this.seat && !this.aboard) unstick(w, this.riding?.body ?? this.me.body);
-    const mid = { x: (msg.px + 0.5) * PLOT, y: w.sea + 2.5, z: (msg.pz + 0.5) * PLOT };
-    for (let i = 0; i < 6; i++) this.renderer.effects.sparkles(mid.x + (i % 3 - 1) * 5, mid.y, mid.z + (Math.floor(i / 3) * 2 - 1) * 4, 14, ['#7ed957', '#ffd84d', '#ffffff']);
-    this.sound.play('stamp');
+    this.renderer.effects.sparkles(msg.x + 0.5, w.sea + 2.3, msg.z + 0.5, 8, ['#7ed957', '#ffd84d', '#ffffff']);
+    this.sound.play('place', { kind: 'grass' });
     if (msg.by === this.pid) {
       this.profile.pay(msg.price, { force: true });
-      const n = w.land.size;
-      this.emit('toast', { icon: '🌱', text: n === 1 ? `Land ho! ${w.name} has its very first plot. Build on it — every block costs 🪙 ${BLOCK_PRICE}.` : `New land! ${w.name} is ${n} plots big now.` });
-    } else {
-      const who = this.players.get(msg.by)?.name;
-      if (who) this.emit('toast', { icon: '🌱', text: `${who} bought new land for ${w.name}!` });
+      if (landCount(w) === 1) this.emit('toast', { icon: '🌱', text: `Land ho! The very first block of ${w.name}. Keep tapping 🌱 Buy land to make it bigger!` });
     }
     this.emit('land');
   }
@@ -7583,7 +7584,7 @@ export class Game extends EventTarget {
         : null;
     this.landTarget = this.landAhead();
     const lt = this.landTarget;
-    this.renderer.showPlot(lt ? { x: lt.px * PLOT, z: lt.pz * PLOT, size: PLOT, y: this.world.sea + 2, ok: this.profile.data.coins >= lt.price } : null);
+    this.renderer.showPlot(lt ? { x: lt.x, z: lt.z, size: 1, y: this.world.sea + 2, ok: this.profile.data.coins >= lt.price } : null);
     this.sendMove();
     this.updatePlayers(dt);
     this.danceLoop();

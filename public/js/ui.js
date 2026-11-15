@@ -28,6 +28,7 @@ import { STAMPS } from './shared/stamps.js';
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem, REPORT_TEXT_MAX, TELL_US_LEVEL, USERNAME_MAX, USERNAME_MIN, usernameProblem, WISH_TEXT_MAX } from './shared/keeper.js';
 import { ACCESSORIES, ANIMALS, CHAT_MAX, cleanChat, cleanIslandName, cleanLook, cleanName, EMOTES, BODIES, buildOf, FACES, FUR_COLORS, GENDERS, GROWN_UP, HAIR_COLORS, HAIRS, HATS, headOf, HEADS, heightOf, HEIGHTS, ISLAND_NAME_MAX, isPerson, isValidName, langOf, lookHair, lookIcon, lookTall, NAME_MAX, PET_COATS, petKind, PETS, PHRASES, randomPetName, SHIRT_COLORS, SKIN_TONES, STICKERS as STICKER_EMOJI, randomIslandName, randomName } from './shared/words.js';
 import { SIZES, THEMES } from './shared/worldgen.js';
+import { blockPrice, friendPrice, isGrow, MANY_AT_ONCE } from './shared/grow.js';
 import { COUNT_MS, lapTime, ordinal, RACE_MS } from './shared/race.js';
 import { PASSCODE_LENGTH, randomPasscode } from './shared/listing.js';
 import { bodyOf, maxHp } from './shared/monsters.js';
@@ -2639,7 +2640,7 @@ export class UI {
           card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. To race, tap 🏁 Race! in your kart: everyone in a go-kart lines up behind the line, the computer drives the karts left over, and after 3, 2, 1, GO! it is three laps — first over the line wins!']),
           card('🔐', 'Escape house', ['A 🔐 Escape Island has an escape house of three locked rooms. Walk up to a puzzle and press ', h('kbd', {}, 'Q'), ' (or tap 👆 Press, 📦 Open or 🔢 Turn): in room 1, press the buttons in the order the stars over 1, 2, 3, 4 show; in room 2, open the crate the treasure map marks with an X to find the key; in room 3, count the stars of each colour and turn each dial to its number. Solve them together with friends! When everyone has left, it locks up again with new puzzles.']),
           card('🦒', 'Zoo', ['A 🦒 Zoo Island has a big zoo: come in under the ZOO gate, past the café and the gift shop, and walk the loop of path round the exhibits — giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (take the steps down to look in under the water), kangaroos, monkey island and the flamingo lagoon. Open the petting farm’s gate to go in and pet the animals. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and they are all in the toy box too!']),
-          card('🌱', 'Grow Island', ['A 🌱 Grow Island starts as open sea, without one block of land. Swim to where you want land and tap 🌱 Buy land: the green box shows the plot it buys, 16 blocks a side. Each plot must touch the land you have, and costs a little more than the last. Every block you put down costs 🪙 1 (Undo gives it back), and an animal or vehicle from the toy box 🪙 20. Keep buying and the sea grows round your land, as far as you like!']),
+          card('🌱', 'Grow Island', ['A 🌱 Grow Island starts as open sea, without one block of land. Swim to where you want land and tap 🌱 Buy land (or press ', h('kbd', {}, 'K'), '): one block of ground rises where the green box shows, beside the land you have. Everything from the toy box costs coins there, each thing its own price (shown on it), and goes down one block at a time: no stamps, no Hills. Undo gives the coins back. Keep buying and the sea grows round your land, as far as you like!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('↗️', 'Escalators', ['Put down an Up Escalator or a Down Escalator from the toy box\'s 🏠 Building tab, then tap it to add the next step up and along from its top (tap its side for another beside it). Walk on at its foot and the steps carry you up — or down a down one, from its top. Walk along it to go quicker! Or stamp a 🏬 Shopping Mall with one each way.']),
           card('➡️', 'Moving walkways', ['Put down a Moving Walkway from the toy box\'s 🏠 Building tab: it carries you along the floor, away from where you put it down. Tap it to make it longer, and put one beside it the other way round to come back. Or stamp an 🛫 Airport Walkway with one each way.']),
@@ -3691,6 +3692,8 @@ export class UI {
     // On and off a dragon's back: its own hearts by yours (renderHp).
     on('ride', () => this.renderHp());
     on('welcome', () => {
+      // The tools a Grow Island has are known once its world is (buildToolbar).
+      this.buildToolbar();
       this.renderDefense();
       this.renderShared();
     });
@@ -3808,8 +3811,11 @@ export class UI {
   buildToolbar() {
     const g = this.game;
     const bar = $('toolbar');
+    // A Grow Island has no tools that put down many blocks at once (shared/grow.js).
+    const grow = isGrow(g.world);
+    if (grow && MANY_AT_ONCE.includes(g.tool)) g.setTool('build');
     bar.replaceChildren(
-      ...TOOLS.map((t) =>
+      ...TOOLS.filter((t) => !grow || !MANY_AT_ONCE.includes(t.key)).map((t) =>
         h(
           'button',
           {
@@ -3851,7 +3857,7 @@ export class UI {
     const g = this.game;
     const opts = $('toolopts');
     const groups = [];
-    if (['build', 'pick', 'paint', 'hills'].includes(g.tool) && !(g.tool === 'build' && g.basketPick)) {
+    if (['build', 'pick', 'paint', 'hills'].includes(g.tool) && !(g.tool === 'build' && g.basketPick) && !isGrow(g.world)) {
       groups.push(
         h(
           'div',
@@ -4001,8 +4007,13 @@ export class UI {
       this.toast('🧸', `${g.world.name} stays just as it was made, so its toy box stays shut!`);
       return;
     }
+    // On a Grow Island (shared/grow.js) everything in it has a price, shown
+    // on it, and goes down one at a time: no stamps.
+    const grow = isGrow(g?.world);
+    const price = (n) => (grow ? h('small', { class: 'toy-price' }, `🪙 ${n}`) : '');
     let current = tab ?? this.lastTab ?? 'bricks';
-    const tabs = [...B.CATEGORIES, { key: 'stamps', name: 'Stamps', icon: '🏠' }, { key: 'animals', name: 'Animals', icon: '🐰' }, { key: 'vehicles', name: 'Vehicles', icon: '🚗' }];
+    const tabs = [...B.CATEGORIES, ...(grow ? [] : [{ key: 'stamps', name: 'Stamps', icon: '🏠' }]), { key: 'animals', name: 'Animals', icon: '🐰' }, { key: 'vehicles', name: 'Vehicles', icon: '🚗' }];
+    if (grow && current === 'stamps') current = 'bricks';
     this.openModal((root) => {
       const tabRow = h('div', { class: 'tabs' });
       const grid = h('div', { class: 'grid' });
@@ -4087,6 +4098,7 @@ export class UI {
                 },
                 this.lookPic(null, { critter: type, turn: -0.6, size: 128 }, h('span', { class: 'emoji' }, CRITTER_INFO[type].icon)),
                 CRITTER_INFO[type].name,
+                price(friendPrice(type)),
               ),
             ),
             ...(vehicles || open ? [] : [locked]),
@@ -4116,6 +4128,7 @@ export class UI {
                 },
                 this.img(id, B.block(id).name),
                 B.block(id).name,
+                price(blockPrice(id)),
               ),
             ),
           );

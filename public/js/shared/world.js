@@ -5,16 +5,15 @@ import { AIR, MAGIC_FLOOR, SOLID, isKnown } from './blocks.js';
 import { cleanIslandName } from './words.js';
 
 export const CHUNK = 16;
-// A Grow Island's land comes in plots this wide (grow.js), and its world
-// grows up to this wide, and this big all told (a long thin island may be
-// far longer than a square one), where every other island is at most 512 a
-// side.
-export const GROW_PLOT = 16;
+// A Grow Island's world (grow.js) grows by whole steps this wide, up to
+// this wide, and this big all told (a long thin island may be far longer
+// than a square one), where every other island is at most 512 a side.
+export const GROW_STEP = 16;
 export const GROW_MAX_SIDE = 4096;
 export const GROW_MAX_AREA = 1024 * 1024;
 
 export class World {
-  constructor({ W = 128, H = 64, D = 128, sea = 20, theme = 'sunny', seed = 1, name = 'My Island', spawn = null, blocks = null, land = [] } = {}) {
+  constructor({ W = 128, H = 64, D = 128, sea = 20, theme = 'sunny', seed = 1, name = 'My Island', spawn = null, blocks = null } = {}) {
     this.W = W;
     this.H = H;
     this.D = D;
@@ -24,8 +23,6 @@ export class World {
     this.name = name;
     this.spawn = spawn ?? { x: W / 2 + 0.5, y: sea + 4, z: D / 2 + 0.5 };
     this.blocks = blocks ?? new Uint16Array(W * H * D);
-    // A Grow Island's plots bought (grow.js), as 'px,pz': none on any other.
-    this.land = new Set(land);
     this.chunksX = Math.ceil(W / CHUNK);
     this.chunksZ = Math.ceil(D / CHUNK);
     // Called as onSet(x, y, z, before, after) for every change.
@@ -74,7 +71,7 @@ export class World {
   }
 
   meta() {
-    return { W: this.W, H: this.H, D: this.D, sea: this.sea, theme: this.theme, seed: this.seed, name: this.name, spawn: { ...this.spawn }, ...(this.theme === 'grow' ? { land: [...this.land] } : {}) };
+    return { W: this.W, H: this.H, D: this.D, sea: this.sea, theme: this.theme, seed: this.seed, name: this.name, spawn: { ...this.spawn } };
   }
 
   encode() {
@@ -96,15 +93,15 @@ export function normalizeMeta(meta) {
   const int = (v, lo, hi, fallback) => (Number.isInteger(v) && v >= lo && v <= hi ? v : fallback);
   const theme = ['sunny', 'snowy', 'candy', 'desert', 'volcano', 'park', 'race', 'zoo', 'escape', 'flat', 'grow', 'dunes', 'crystal', 'hollow', 'works', 'spires', 'tulip', 'maple', 'honey', 'jungle', 'lagoon', 'moor', 'vale'].includes(meta?.theme) ? meta.theme : 'sunny';
   const grow = theme === 'grow';
-  // A Grow Island's world is whole plots a side, and may be wider.
+  // A Grow Island's world is whole steps a side, and may be wider.
   const side = (v) => {
-    const n = int(v, 16, grow ? GROW_MAX_SIDE : 512, grow ? 5 * GROW_PLOT : 128);
-    return grow ? Math.max(GROW_PLOT, n - (n % GROW_PLOT)) : n;
+    const n = int(v, 16, grow ? GROW_MAX_SIDE : 512, grow ? 5 * GROW_STEP : 128);
+    return grow ? Math.max(GROW_STEP, n - (n % GROW_STEP)) : n;
   };
   let W = side(meta?.W);
   const H = int(meta?.H, 16, 128, 64);
   let D = side(meta?.D);
-  if (grow && W * D > GROW_MAX_AREA) W = D = 5 * GROW_PLOT;
+  if (grow && W * D > GROW_MAX_AREA) W = D = 5 * GROW_STEP;
   const sea = int(meta?.sea, 1, H - 2, Math.min(20, H - 2));
   const spawn = meta?.spawn;
   const finite = (v, lo, hi, fallback) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
@@ -124,18 +121,7 @@ export function normalizeMeta(meta) {
       // view to show (the CTB island's office): none on most islands.
       ...(Number.isFinite(spawn?.yaw) ? { yaw: spawn.yaw } : {}),
     },
-    // A Grow Island's plots bought, each 'px,pz' inside the world.
-    ...(grow ? { land: cleanLand(meta?.land, W / GROW_PLOT, D / GROW_PLOT) } : {}),
   };
-}
-
-function cleanLand(raw, across, down) {
-  const land = new Set();
-  for (const k of Array.isArray(raw) ? raw : []) {
-    const m = typeof k === 'string' ? /^(\d{1,4}),(\d{1,4})$/.exec(k) : null;
-    if (m && +m[1] < across && +m[2] < down) land.add(`${+m[1]},${+m[2]}`);
-  }
-  return [...land];
 }
 
 // ---------------------------------------------------------------- encoding

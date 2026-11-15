@@ -29,7 +29,7 @@ import { FIRE as BLAZE, Fires, strikeSpot } from './fire.js';
 import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
-import { grownWorld, isGrow, landPrice, landProblem, onLand, PAID_KINDS, PLOT, raisePlot, seaWanted } from './grow.js';
+import { grownWorld, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, raiseColumn, seaWanted, settleSea } from './grow.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { buildIsle } from './isle-maps.js';
 import { cleanLevel } from './levels.js';
@@ -1033,13 +1033,14 @@ export class Room {
         return;
       }
     }
-    // On a Grow Island, blocks go down only on land bought (grow.js).
-    if (isGrow(this.world) && PAID_KINDS.includes(kind)) {
-      let sea = false;
-      for (let i = 0; i < cells.length && !sea; i += 4) sea = cells[i + 3] !== B.AIR && !onLand(this.world, cells[i], cells[i + 2]);
+    // On a Grow Island (grow.js), everything goes down one at a time (no
+    // stamps or hills), and only on land bought.
+    if (isGrow(this.world) && kind !== 'undo' && kind !== 'door' && kind !== 'scoot') {
+      let sea = MANY_AT_ONCE.includes(kind);
+      for (let i = 0; i < cells.length && !sea; i += 4) sea = cells[i + 3] !== B.AIR && !isLand(this.world, cells[i], cells[i + 2]);
       if (sea) {
         this.sendTo(conn, { t: 'ack', seq, fix: this.current(cells) });
-        this.notice(conn, 'That is open sea! Buy the land there first: 🟩 Buy land.');
+        this.notice(conn, MANY_AT_ONCE.includes(kind) ? 'On a Grow Island everything goes down one block at a time!' : 'That is open sea! Buy the land there first: 🌱 Buy land.');
         return;
       }
     }
@@ -1101,12 +1102,12 @@ export class Room {
 
   // ------------------------------------------------ Grow Island (grow.js)
 
-  // A plot of land bought: { px, pz, price }, the price the buyer's page
-  // will take from their coins once it hears the land is theirs. Everyone
-  // hears { t: 'land', px, pz, land, by, price } and raises the plot on
-  // their copy of the island. Where the land comes near the edge of the
-  // world, the sea grows round it first, and everyone is welcomed to the
-  // grown island again (resizeWorld) before hearing of the plot.
+  // A block of land bought: { x, z, price }, the column there raised out
+  // of the sea, the price the buyer's page takes from their coins once it
+  // hears the land is theirs. Everyone hears { t: 'land', x, z, by, price }
+  // and raises it on their copy of the island. Where the land comes near the
+  // edge of the world, the sea grows round it first, and everyone is
+  // welcomed to the grown island again (resizeWorld) before hearing of it.
   landOp(conn, p, msg) {
     const w = this.world;
     if (!isGrow(w)) return;
@@ -1114,30 +1115,29 @@ export class Room {
       this.notice(conn, 'The island owner is the only builder right now.');
       return;
     }
-    const why = landProblem(w, msg.px, msg.pz);
+    const why = landProblem(w, msg.x, msg.z);
     if (why) {
       this.notice(conn, why === 'owned' ? 'That land is bought already!' : why === 'far' ? 'New land has to touch the land there is: swim next to it.' : 'That is past the edge of the world.', 'info');
       return;
     }
-    const price = landPrice(w.land.size);
+    const price = landPrice(landCount(w));
     if (msg.price !== price) {
       this.notice(conn, `That land costs 🪙 ${price} now.`, 'info');
-      this.sendTo(conn, { t: 'land', land: [...w.land], price: 0 });
       return;
     }
-    const first = !w.land.size;
-    raisePlot(w, msg.px, msg.pz);
+    const first = !landCount(w);
+    raiseColumn(w, msg.x, msg.z);
     // Everyone arrives on the first land bought from then on.
-    if (first) w.spawn = { x: (msg.px + 0.5) * PLOT, y: w.sea + 2, z: (msg.pz + 0.5) * PLOT };
-    let { px, pz } = msg;
-    const more = seaWanted(w, px, pz);
+    if (first) w.spawn = { x: msg.x + 0.5, y: w.sea + 2, z: msg.z + 0.5 };
+    let { x, z } = msg;
+    const more = seaWanted(w, x, z);
     if (more) {
       const grown = grownWorld(w, more);
       this.resizeWorld(grown.world, grown.dx, grown.dz);
-      px += more.west;
-      pz += more.north;
+      x += grown.dx;
+      z += grown.dz;
     }
-    this.broadcast({ t: 'land', px, pz, land: [...this.world.land], by: p.id, price });
+    this.broadcast({ t: 'land', x, z, by: p.id, price });
     this.changed();
   }
 
@@ -3343,6 +3343,8 @@ export class Room {
   loadSave(save) {
     if (!save || save.app !== 'kids-world' || save.kind !== 'island') throw new Error('That is not a Kids World island file.');
     this.world = World.decode(save.meta, save.blocks);
+    // A Grow Island from when its land came in plots: its sea made sea again.
+    if (isGrow(this.world)) settleSea(this.world);
     const seed = this.world.seed;
     this.rng = new Rng(seed ^ 0x27d4eb2d ^ (Number(save.savedAt) | 0));
     this.critters = new CritterSim(seed ^ 0x5bd1e995 ^ (Number(save.savedAt) | 0));

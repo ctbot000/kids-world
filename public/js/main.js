@@ -1106,6 +1106,11 @@ input
         if (!g.world) return false;
         g.drink();
         return true;
+      // 🌱 Buy land on a Grow Island: the block of land in front of you.
+      case 'KeyK':
+        if (!g.landTarget) return false;
+        g.buyLand();
+        return true;
       case 'KeyV':
         if (!g.defense) return false;
         g.defend();
