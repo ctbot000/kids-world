@@ -56,7 +56,7 @@ import { underTent } from './shared/tents.js';
 import { applyCells, buildEdit, doorEdit, drillEdit, harvestEdit, hillEdit, mowEdit, paintEdit, paintVanEdit, pickEdit, REACH, stampEdit, waterEdit } from './shared/tools.js';
 import { cleanQuizBook, fileQuizAnswer, makeQuiz, quizCoins, QUIZ_LEVELS, quizProgress, WIN_OFFER_MS } from './shared/quiz.js';
 import { chestNear, chestTreasure, isGoldChest } from './shared/treasure.js';
-import { CHEST_RATTLE_MS, openingChest } from './render/chest-model.js';
+import { CHEST_RATTLE_MS, CHEST_TAKE_MS, CHEST_TAKE_SECS, openingChest } from './render/chest-model.js';
 import { CANDLE_TOP, SLICES, SONG_MS, SURPRISES, balloonColors, balloonSpots, candleSpot, isBalloons, partyNear, presentCoins } from './shared/party.js';
 import { terminalNear } from './shared/stocks.js';
 import { World } from './shared/world.js';
@@ -3334,6 +3334,8 @@ export class Game extends EventTarget {
     const gold = isGoldChest(this.world.get(x, y, z));
     openingChest(x, y, z);
     if (this.near(x + 0.5, y, z + 0.5, 40)) this.treasureBurst(x + 0.5, y, z + 0.5, gold);
+    // The treasure taken out of it, flying to whoever opened it.
+    setTimeout(() => this.treasureTaken(x + 0.5, y, z + 0.5, msg.by, gold), CHEST_TAKE_MS);
     if (msg.by !== this.pid) return;
     this.profile.useKey(gold);
     const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1, gold);
@@ -3344,6 +3346,22 @@ export class Game extends EventTarget {
     this.emit('reward', { x: x + 0.5, y: y + 1, z: z + 0.5, xp: XP_FOR.chests.xp });
     // What was inside, shown once the lid is up (ui.js treasurePop).
     setTimeout(() => this.emit('treasure', { ...got, gold }), TREASURE_SHOW_MS);
+  }
+
+  // The treasure whirling up out of a chest and flying, coin after coin, to
+  // whoever opened it (by: their pid), if they are in sight.
+  treasureTaken(x, y, z, by, gold) {
+    if (!this.near(x, y, z, 40)) return;
+    const p = this.players.get(by)?.avatar?.root.position;
+    const fx = this.renderer.effects;
+    fx.sparkles(x, y + 0.8, z, 14, ['#ffd84d', '#fff3b0', '#ffffff']);
+    if (!p) return;
+    const n = gold ? 26 : 16;
+    for (let i = 0; i < n; i++) {
+      const life = 0.45 + Math.random() * 0.2;
+      const [sx, sy, sz] = [x + (Math.random() - 0.5) * 0.4, y + 0.7 + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.4];
+      fx.add(i % 5 ? 'coin' : 'sparkle', sx, sy, sz, { vx: (p.x - sx) / life, vy: (p.y + 1 - sy) / life, vz: (p.z - sz) / life, color: i % 3 ? '#ffd84d' : '#ffe98a', size: 0.17 + Math.random() * 0.06, life, spin: 10, delay: (i / n) * CHEST_TAKE_SECS });
+    }
   }
 
   // A chest's lid flying open: a rattle, the creak and a burst of light,

@@ -5,11 +5,12 @@
 // handles at the sides, a hasp on the lid and a padlock hanging from it.
 // The golden chest is the same chest in gold with purple bands and jewels.
 //
-// Open, the lid stands thrown back and a heap of gold coins and jewels
-// glows inside (a crown on a golden chest's). A chest just opened
-// (openingChest) plays its opening: it rattles, the padlock pops off, the
-// lid flies up and bounces, the treasure heaves up and a beam of light
-// shines out of it, fading. Its time goes by group.userData.tick, which
+// A chest just opened (openingChest) plays its opening: it rattles, the
+// padlock pops off, the lid flies up and bounces, a heap of gold coins and
+// jewels (a crown in a golden chest's) heaves up glowing and a beam of
+// light shines out of it; then the treasure whirls up out of the chest and
+// is gone, taken by whoever opened it, and the beam fades. Open after
+// that, the chest stands empty, its lid thrown back. Its time goes by group.userData.tick, which
 // render/terrain.js calls.
 //
 // Laid out in a cell's units, its foot in the middle of the floor at the
@@ -48,6 +49,11 @@ export const CHEST_FINISH = {
 // and its sound to these).
 export const CHEST_RATTLE_MS = 450;
 export const CHEST_LID_MS = 650;
+// When the treasure is taken out of a chest opening (from the start of its
+// opening), and how long it takes to whirl up and go: game.js sends coins
+// flying to whoever opened it then.
+export const CHEST_TAKE_MS = 1300;
+export const CHEST_TAKE_SECS = 0.5;
 // How far the lid swings back, open (radians, past upright).
 export const LID_OPEN = 1.95;
 
@@ -338,8 +344,6 @@ export function chestModel(materials, kind, cell = null) {
   beam.visible = false;
   whole.add(beam);
   const key = cell ? cellKey(cell[0], cell[1], cell[2]) : '';
-  // A golden chest's beam never quite goes out: it glimmers on.
-  const rest = gold ? 0.22 : 0;
   let settled = false;
   const set = () => {
     for (const o of [whole, lid, lock, heap, beam]) o.updateMatrix();
@@ -351,20 +355,17 @@ export function chestModel(materials, kind, cell = null) {
     const rattle = CHEST_RATTLE_MS / 1000;
     const up = CHEST_LID_MS / 1000;
     if (s > 6 || s < 0) {
-      // Long open (or never seen opening): just open, a golden one's beam
-      // glimmering.
+      // Long open (or never seen opening): open and empty, its treasure
+      // taken.
       if (!settled) {
         Object.assign(whole.rotation, { x: 0, z: 0 });
         whole.position.y = 0;
         whole.scale.setScalar(1);
         lid.rotation.x = LID_OPEN;
         lock.visible = false;
-        heap.position.y = 0;
-        heap.scale.setScalar(1);
+        heap.visible = glow.visible = beam.visible = false;
         settled = true;
       }
-      beam.visible = rest > 0;
-      beamMat.uniforms.uAlpha.value = rest * (0.8 + 0.2 * Math.sin(time * 2.4));
       set();
       return;
     }
@@ -377,7 +378,10 @@ export function chestModel(materials, kind, cell = null) {
       whole.position.y = Math.abs(Math.sin(s * 35)) * 0.03;
       lid.rotation.x = Math.abs(Math.sin(s * 40)) * 0.08;
       lock.visible = true;
+      heap.visible = glow.visible = true;
       heap.position.y = -0.1;
+      heap.scale.setScalar(1);
+      heap.rotation.y = 0;
       beam.visible = false;
     } else {
       // The lid flying up with a bounce, the chest squashing down and
@@ -390,12 +394,17 @@ export function chestModel(materials, kind, cell = null) {
       lid.rotation.x = LID_OPEN * easeOutBack(t);
       lock.visible = false;
       const h = Math.min(1, (s - rattle) / 0.5);
-      heap.position.y = -0.1 + 0.1 * easeOutBack(h);
-      heap.scale.setScalar(1 + Math.max(0, Math.sin(h * Math.PI)) * 0.08);
+      // Then taken: whirling up out of the chest, shrinking away to nothing.
+      const take = Math.min(1, Math.max(0, (s - CHEST_TAKE_MS / 1000) / CHEST_TAKE_SECS));
+      heap.visible = take < 1;
+      glow.visible = take < 0.5;
+      heap.position.y = -0.1 + 0.1 * easeOutBack(h) + take * take * 0.45;
+      heap.rotation.y = take * take * 5;
+      heap.scale.setScalar((1 + Math.max(0, Math.sin(h * Math.PI)) * 0.08) * (1 - take));
       const glowIn = Math.min(1, (s - rattle) / 0.3);
-      const fade = s < 2.4 ? 1 : Math.max(0, 1 - (s - 2.4) / 2);
-      beam.visible = true;
-      beamMat.uniforms.uAlpha.value = Math.max(rest, glowIn * fade * (gold ? 1.1 : 0.9));
+      const fade = s < 1.9 ? 1 : Math.max(0, 1 - (s - 1.9) / 1.6);
+      beam.visible = fade > 0;
+      beamMat.uniforms.uAlpha.value = glowIn * fade * (gold ? 1.1 : 0.9);
     }
     set();
   };
