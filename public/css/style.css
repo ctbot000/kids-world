@@ -7337,3 +7337,19 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
 .film-play[hidden] {
   display: none;
 }
+
+/* 🍽️ A dish's window: what is on the plate, and the food in your basket,
+   each a chip with its picture. */
+.dish-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.dish-food img {
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  vertical-align: middle;
+}

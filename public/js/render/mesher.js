@@ -4,6 +4,8 @@
 // and glass, and one stud per brick top. No three.js here, so it runs (and
 // is tested) anywhere.
 import { AIR, BLOCK_IDS, KIND, K_FURNITURE, K_GLASS, K_ITEM, K_LAVA, K_PLANT, K_SOLID, K_TREE, K_WATER, OPAQUE, EMIT, WATER, LAVA, BLOCKS, CROP_OF, CROPS, FRUIT_ITEMS, GEM_ITEMS, KATSURA_GIANT, RAIL, RIPE, SHELL, STAGE_OF, STAR_PIECE, STONE, SUNFLOWER, TREE_CORE } from '../shared/blocks.js';
+import { foodItem, isDish, plateSpots } from '../shared/dish.js';
+import { furnitureDrop } from '../shared/furniture.js';
 
 // The four ways along the ground, as shared/riding.js numbers them.
 const RAIL_DIRS = [
@@ -163,7 +165,9 @@ class ItemPart extends Part {
   }
 }
 
-export function meshChunk(world, light, visuals, cx, cz) {
+// dishes: the food on the island's dishes (shared/dish.js), by "x,y,z",
+// drawn on their plates as the pictures a piece put down is drawn as.
+export function meshChunk(world, light, visuals, cx, cz, dishes = null) {
   const { W, H, D, sea } = world;
   const blocks = world.blocks;
   const { faceLayer, tint, studTint, layers } = visuals;
@@ -373,6 +377,7 @@ export function meshChunk(world, light, visuals, cx, cz) {
         } else if (kind === K_FURNITURE) {
           if (BLOCKS[id].real) reals.push([x, y, z, id]);
           else furniture(opaque, x, y, z, id);
+          if (dishes && isDish(id)) dishFood(x, y, z, id);
         }
       }
     }
@@ -544,6 +549,31 @@ export function meshChunk(world, light, visuals, cx, cz) {
         part.verts += 4;
         part.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
       }
+    }
+  }
+
+  // The food on a dish, each piece a little picture standing on the plate
+  // (shared/dish.js plateSpots), lit as the plate is.
+  function dishFood(x, y, z, id) {
+    const food = dishes.get(`${x},${y},${z}`);
+    if (!food?.length) return;
+    const drop = furnitureDrop(id, world.get(x, y - 1, z));
+    const sky = Math.max(skyAt(x, y, z), 4) * 17;
+    const lamp = lampAt(x, y, z) * 17;
+    for (const [i, [dx, dz, size]] of plateSpots(food.length).entries()) {
+      const piece = foodItem(food[i]);
+      if (!piece) continue;
+      const layer = faceLayer[piece * 3];
+      const v0 = items.verts;
+      for (const [u, v] of CORNERS) {
+        items.pos.push(x + 0.5 + dx, y + drop + 0.08 + size * 0.45, z + 0.5 + dz);
+        items.corner.push((u - 0.5) * size, (v - 0.5) * size);
+        items.uvl.push(u, 1 - v, layer);
+        items.col.push(255, 255, 255);
+        items.lit.push(sky, lamp, 255, 0);
+      }
+      items.verts += 4;
+      items.idx.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
     }
   }
 

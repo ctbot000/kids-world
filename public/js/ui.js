@@ -48,6 +48,7 @@ import { paint } from './render/drawings.js';
 import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { CHAPTERS, chapterOf, EPISODES, firstStage, introOf, stageName } from './shared/isle-story.js';
 import { caughtKey, popKey, seenKey } from './shared/stickers.js';
+import { DISH_MAX, isDish } from './shared/dish.js';
 import { blockIcon } from './render/atlas.js';
 import { seatOf } from './shared/seats.js';
 import { shirtColor } from './render/avatar.js';
@@ -1576,9 +1577,7 @@ export class UI {
         h(
           'div',
           { class: 'grid', style: 'grid-template-columns:repeat(auto-fill,minmax(120px,1fr))' },
-          ...STICKERS.map((s) =>
-            h('div', { class: `sticker-card${got[s.key] ? '' : ' locked'}` }, h('span', { class: 'emoji' }, s.icon), h('b', {}, got[s.key] ? s.name : '???'), h('span', { class: 'muted' }, s.text), s.goal && !got[s.key] ? h('span', { class: 'muted' }, `${Math.min(p.data.stats[s.of] ?? 0, s.goal)}/${s.goal}`) : null),
-          ),
+          ...STICKERS.map((s) => h('div', { class: `sticker-card${got[s.key] ? '' : ' locked'}` }, h('span', { class: 'emoji' }, s.icon), h('b', {}, got[s.key] ? s.name : '???'), h('span', { class: 'muted' }, s.text), s.goal && !got[s.key] ? h('span', { class: 'muted' }, `${Math.min(s.of === 'stickers' ? count : p.data.stats[s.of] ?? 0, s.goal)}/${s.goal}`) : null)),
         ),
       );
     });
@@ -2642,7 +2641,7 @@ export class UI {
           card('🎹', 'Pianos', ['Put down a piano or a grand piano from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play). Tap the keys — or play on your keyboard, Z to M low and Q to I high — and friends nearby hear you! Pick a song and the next key to play glows, or make one of your own with ⏺ Record and hear it again with ▶ Play.']),
           card('📺', 'TVs', ['Put down a TV, a Retro TV or a Wall TV (on a wall) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Watch). Flip through the channels with ◀ ▶ (or the arrow keys, or 1 to ' + CHANNELS.length + '): fish, a bunny, a rocket, your island\'s weather and a dance party! On 🪩 Dance Party you dance along until you flip away. When the grown-ups put a show on, every TV gets 📡 Live after those.']),
           card('📹', 'Broadcast Station', ['Put down a Broadcast Station (a TV camera on a tripod) from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Go live). Say yes to your camera and microphone, tap 🔴 Go live, and you\'re on every TV on every island, on the 📹 On Air channel! One at a time; close the window to stop.']),
-          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. With nothing in your hand, hold it down for a second and let go for a 👑 King Punch that bops everything in front of you! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
+          card('👊', 'Monsters', ['Jump on a monster to pop it! Or walk right up to it and press ', h('kbd', {}, 'X'), ' or the 👊 button to swing: the swing sweeps round in front of you and bops every monster it passes, flashing it white. With nothing in your hand — or the 🥊 King’s Punch Glove on — hold it down for a second and let go for a 👑 King Punch that bops everything in front of you, golden and far wider with the glove! A toy weapon from the 🛒 shop bops harder, and a sword or a bubble blaster reaches further. Press ', h('kbd', {}, 'N'), ' (or the weapon button by the 👊 button) to carry the next of the weapons you own. Weapons wear out as they bop: fix them in the 🛒 shop before they break. A big red Bruiser takes a few jumps and bumps hard, never jump on a prickly orange Spiky or a darting giant mosquito: bop them! And a giant spider scuttles quicker than you walk, so run — two jumps or four bops see it off.']),
           card('🧪', 'HP potions', ['A bump from a monster takes some of your HP, and it comes back by itself. In a fix? Buy a 🧪 potion at the 🛒 shop and drink it with the 🧪 button by your HP (or press ', h('kbd', {}, 'Y'), '): all your HP back at once, and up you get on your own if you were sitting dizzy!']),
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: press 🔒 by one and solve a quiz for a 🔑 key, then open it for coins.']),
@@ -3682,6 +3681,7 @@ export class UI {
     on('screens', () => this.screenChanged?.());
     on('computer-open', () => this.computerDialog());
     on('stocks-open', () => this.stockDialog());
+    on('dish-open', (e) => this.dishDialog(e.detail));
     on('kit-open', () => this.robotKitDialog());
     on('station-open', () => this.stationDialog());
     on('class-open', () => this.classDialog());
@@ -5170,7 +5170,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.fishTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fishTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -5313,7 +5313,7 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.fishTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.dishTarget ?? g.fishTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
@@ -5339,12 +5339,12 @@ export class UI {
                     ? ['🎣 Strike!', 'A fish is biting: strike now!']
                     : ['🎣 Wait…', 'Wait for the bobber to go right under']
             : null;
-    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t === g.dishTarget ? '🍽️ Dish' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       el.replaceChildren(label, touch ? '' : h('kbd', {}, 'Q'));
-      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t === g.stockTarget ? 'Buy and sell shares at the stock terminal' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
+      el.setAttribute('aria-label', puzzle ? puzzle[1] : t.game ? `Play ${ARCADE_GAMES[t.game].name} at this machine` : t === g.pianoTarget ? `Play the ${t.grand ? 'grand piano' : 'piano'}` : t === g.tvTarget ? `Watch the ${t.name}` : t === g.stationTarget ? 'Go live at the broadcast station' : t === g.classTarget ? 'Have a class at the chalkboard' : t === g.drawTarget ? 'Draw on the drawing board' : t === g.frameTarget ? 'Hang one of your drawings in the picture frame' : t === g.stoveTarget ? 'Have a cooking class at the stove' : t === g.goTarget ? 'Play Go at this board' : t === g.screenTarget ? 'Look at the computer\'s screen' : t === g.computerTarget ? 'Type at the computer: typing practice and Word Rain' : t === g.tankTarget ? `Feed the fish in the ${t.kind === 'fish-bowl' ? 'goldfish bowl' : 'fish tank'}` : t === g.kitTarget ? 'Build and program a robot at the robot kit' : t === g.stockTarget ? 'Buy and sell shares at the stock terminal' : t === g.dishTarget ? 'Put food on the dish, or take some back' : t.monster ? 'Turn the Monster Gashapon for a monster figure' : 'Turn the gashapon machine for a capsule toy');
     }
     el.classList.toggle('biting', label === '🎣 Strike!' || label === '🌬️ Blow!');
     const scr = r.project(t.x + 0.5, t.y + 1.2, t.z + 0.5);
@@ -6537,6 +6537,48 @@ export class UI {
   }
 
   // The stock market's window: buy and sell shares (ui-stocks.js).
+  // 🍽️ A dish (shared/dish.js): what is on it, a piece tapped to take it
+  // back to your basket, and the food in your basket, one tapped to set a
+  // piece on the plate (up to DISH_MAX), for everyone on the island to see.
+  dishDialog(t) {
+    const g = this.game;
+    const p = this.profile;
+    let redraw = null;
+    this.openModal(
+      (root) => {
+        const plate = h('div', { class: 'dish-row', role: 'group', 'aria-label': 'On the dish' });
+        const basket = h('div', { class: 'dish-row', role: 'group', 'aria-label': 'Food in your basket' });
+        const note = h('p', { class: 'muted' });
+        const info = (key) => B.COLLECTABLES.find((c) => c.key === key);
+        const piece = (key, label, attrs) => h('button', { class: 'chip dish-food', type: 'button', 'data-food': key, ...attrs }, this.img(info(key).item, info(key).name), label);
+        redraw = () => {
+          // The dish picked up meanwhile: nothing here to show.
+          if (!isDish(g.world.get(t.x, t.y, t.z))) {
+            this.closeModal();
+            return;
+          }
+          const food = g.dishFood(t.x, t.y, t.z);
+          const full = food.length >= DISH_MAX;
+          plate.replaceChildren(...(food.length ? food.map((key, i) => piece(key, info(key).name, { 'aria-label': `Take the ${info(key).name.toLowerCase()} back`, onclick: () => g.changeDish(t, { take: i }) })) : [h('span', { class: 'muted' }, 'Nothing on it yet.')]));
+          const have = B.DISH_FOODS.filter((key) => p.basket[key] > 0);
+          basket.replaceChildren(...(have.length ? have.map((key) => piece(key, `${info(key).name} ×${p.basket[key]}`, { disabled: full, 'aria-label': `Put ${/^[aeiou]/i.test(info(key).name) ? 'an' : 'a'} ${info(key).name.toLowerCase()} on the dish`, onclick: () => g.changeDish(t, { put: key }) })) : [h('span', { class: 'muted' }, 'No fruit, vegetables or fish in your basket: pick some, grow some or catch some!')]));
+          note.textContent = full ? `The dish is full: ${DISH_MAX} pieces. Tap one to take it back.` : `Tap food to set it on the dish (up to ${DISH_MAX}), or a piece on the dish to take it back. Everyone here sees it.`;
+        };
+        root.append(h('h2', {}, '🍽️ Dish'), h('h3', {}, 'On the dish'), plate, h('h3', {}, 'From your basket'), basket, note);
+        redraw();
+        g.addEventListener('dish', redraw);
+        p.addEventListener('basket', redraw);
+      },
+      {
+        narrow: true,
+        onClose: () => {
+          g.removeEventListener('dish', redraw);
+          p.removeEventListener('basket', redraw);
+        },
+      },
+    );
+  }
+
   stockDialog(key = null) {
     stockDialog(this, key);
   }

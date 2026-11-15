@@ -6,9 +6,10 @@
 // net.js) and draws through the renderer.
 import * as B from './shared/blocks.js';
 import { ARCADE_GAMES, arcadeNear, keyOf } from './shared/arcade.js';
+import { dishNear, dishWith, isDish } from './shared/dish.js';
 import { goBoardNear, isGoBoard } from './shared/go.js';
 import { cleanRound } from './shared/hideseek.js';
-import { gashaponNear, isGashapon } from './shared/gashapon.js';
+import { figuresOwned, gashaponNear, isGashapon } from './shared/gashapon.js';
 import { BENCH_H, pianoNear, pianoSeat } from './shared/piano.js';
 import { tvNear } from './shared/tv.js';
 import { cleanScreens, isComputer, screenNear } from './shared/screens.js';
@@ -170,6 +171,8 @@ const SLASHES = {
   lavablade: { color: '#ff6a1f', y: 0.95 },
   // The King Punch: a wider, golden shockwave all round in front.
   king: { color: '#ffd84d', y: 0.9, wide: true },
+  // The King's Punch Glove's bop: golden, like the King Punch it charges into.
+  punchglove: { color: '#ffd84d', y: 0.95 },
   // The Galaxy Blade's: all the way round, for as long as you spin, ending in
   // front as it lands, with stars thrown off it.
   galaxyblade: { color: '#9a7bff', y: 0.95, from: -6.15, to: 0.13, secs: 0.46, tilt: -0.07, stars: true },
@@ -195,6 +198,7 @@ const IMPACTS = {
   galaxyblade: { color: SLASHES.galaxyblade.color, stop: 130, kick: 0.026, down: 0.008, roll: 0.016, zoom: 0.038, burst: 1.45, buzz: 36, words: ['SWOOSH!', 'WHIRRR!', 'TWINKLE!'], lines: true },
   rainbowray: { color: '#ff7ad9', stop: 110, kick: 0.024, roll: 0.01, zoom: 0.036, burst: 1.4, buzz: 34, words: ['ZZZAP!', 'PEW PEW!', 'SHINE!'], lines: true },
   meteorstaff: { color: '#ff8a2a', stop: 150, kick: 0.03, down: 0.02, roll: 0.018, zoom: 0.04, burst: 1.6, buzz: 44, words: ['KABOOM!'], lines: true },
+  punchglove: { color: '#ffd84d', stop: 145, kick: 0.028, down: 0.014, roll: 0.016, zoom: 0.042, burst: 1.55, buzz: 42, words: ['SOCK!', 'WHAM!', 'BAM!'], lines: true },
 };
 const STOP_MORE = 15;
 const STOP_MAX = 230;
@@ -440,6 +444,7 @@ export class Game extends EventTarget {
     this.tankTarget = null;
     // The stock terminal beside you, to trade at (shared/stocks.js).
     this.stockTarget = null;
+    this.dishTarget = null;
     // The birthday cake, present or balloons beside you (shared/party.js), and
     // the song you can hear going: { key, x, y, z, stop, until, notes }.
     this.partyTarget = null;
@@ -487,9 +492,17 @@ export class Game extends EventTarget {
     this.closed = false;
     this.onMessage = (e) => this.receive(e.detail);
     link.addEventListener('message', this.onMessage);
-    // A new pet (or none) chosen while here: at your side at once.
-    this.onProfile = () => this.syncPet(this.pid);
+    // A new pet (or none) chosen while here: at your side at once. Your
+    // monster figures too, when they change: the island keeps them on you.
+    this.onProfile = () => {
+      this.syncPet(this.pid);
+      this.sendFigures();
+    };
     profile.addEventListener('change', this.onProfile);
+    // A figure won from a Monster Gashapon changes only the gear (a 'basket'
+    // event, profile.js shopped): the island hears of it then too.
+    this.onGear = () => this.sendFigures();
+    profile.addEventListener('basket', this.onGear);
   }
 
   // ------------------------------------------------ talking to the island
@@ -499,6 +512,19 @@ export class Game extends EventTarget {
     return { t: 'join', protocol: PROTOCOL, name: p.name, look: p.shownLook, token: this.token, ...(this.who ? { who: this.who } : {}), ...(this.friendWho ? { friendWho: this.friendWho } : {}), ...(this.typedPasscode ? { passcode: this.typedPasscode } : {}), ...(this.invitePass ? { pass: this.invitePass } : {}) };
   }
 
+  // The monster figures you have in My collection (shared/gashapon.js), as
+  // their keys, for the island to keep on you: owning one takes a heart more
+  // off that kind of monster with every bop on Adventure Isle (room.js
+  // figBonus). Said again whenever they change, as your look is.
+  // Said only when the list changes, and again on each arrival (welcome).
+  sendFigures() {
+    if (!this.pid || this.watching) return;
+    const keys = figuresOwned(this.profile.data.gear.toys);
+    if (keys.join() === this.figuresSent) return;
+    this.figuresSent = keys.join();
+    this.send({ t: 'figures', keys });
+  }
+
   // The world's own profile to earn and carry with here (the shared isle has
   // one apart from yours — see main.js, which swaps it in once the island has
   // said it is that one). Everything after — counts, basket, gear, the level
@@ -506,9 +532,14 @@ export class Game extends EventTarget {
   useProfile(profile) {
     if (this.profile === profile) return;
     this.profile.removeEventListener('change', this.onProfile);
+    this.profile.removeEventListener('basket', this.onGear);
     this.profile = profile;
     this.profile.addEventListener('change', this.onProfile);
+    this.profile.addEventListener('basket', this.onGear);
     if (this.pid) this.syncPet(this.pid);
+    // The isle's own figures, which welcome (still on your own profile, which
+    // has none) could not have told the island.
+    this.sendFigures();
   }
 
   // As the owner of an island with a passcode: a pass for a friend you
@@ -595,6 +626,12 @@ export class Game extends EventTarget {
         break;
       case 'draw':
         this.drawHeard(msg);
+        break;
+      case 'dish':
+        this.dishHeard(msg);
+        break;
+      case 'dishes':
+        this.setDishes(msg.d ?? []);
         break;
       case 'kit':
         this.kitHeard(msg);
@@ -903,6 +940,7 @@ export class Game extends EventTarget {
     this.setHideSeek(msg.hideseek ?? null);
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
+    this.setDishes(msg.dishes ?? []);
     this.setKits(msg.kits ?? []);
     this.setBots(msg.bots ?? []);
     this.setEnv(msg.env);
@@ -916,6 +954,10 @@ export class Game extends EventTarget {
       this.renderer.view.pitch = ARRIVE_PITCH;
       this.me.yaw = spawn.yaw + Math.PI;
     }
+    // The island hears which monster figures you have, for the bop bonus of
+    // owning the one you are bopping (room.js figures).
+    this.figuresSent = null;
+    this.sendFigures();
     this.emit('welcome', { again });
     this.emit('players');
     this.emit('settings');
@@ -2011,13 +2053,14 @@ export class Game extends EventTarget {
 
   // The slash a swing leaves in the air as it lands, round in front of
   // whoever swung (avatar) as far as their weapon reaches. A King Punch's is
-  // the wide golden one, and it brings a shockwave with it (shockwaveFrom).
+  // the wide golden one, and it brings a shockwave with it (shockwaveFrom) —
+  // further still with the King's Punch Glove on.
   slashFrom(avatar, king = false) {
     const look = avatar && SLASHES[king ? 'king' : avatar.weaponKind ?? 'punch'];
     if (!look) return;
     const { position: at, rotation, scale } = avatar.root;
     if (!this.near(at.x, at.y, at.z, 40)) return;
-    const reach = king ? KING_REACH + 0.6 : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
+    const reach = king ? KING_REACH + 0.6 + (avatar.weaponKind === 'punchglove' ? weaponOf('punchglove').wave : 0) : 0.3 + ARM_REACH + (weaponOf(avatar.weaponKind)?.reach ?? 0);
     const y = at.y + look.y * scale.y;
     this.renderer.effects.slash(at.x, y, at.z, rotation.y, { reach, color: look.color, upright: look.upright, tilt: look.tilt, secs: look.secs, from: look.wide ? -2.4 : look.from, to: look.wide ? 2.4 : look.to });
     if (look.stars) this.renderer.effects.starWhirl(at.x, y, at.z, rotation.y, reach, look.from, look.to, look.secs);
@@ -2041,25 +2084,26 @@ export class Game extends EventTarget {
     if (!avatar) return;
     const { position: at, rotation } = avatar.root;
     if (!this.near(at.x, at.y, at.z, 40)) return;
-    this.shockwave(at.x, at.y + 0.9, at.z, rotation.y);
+    this.shockwave(at.x, at.y + 0.9, at.z, rotation.y, avatar.weaponKind === 'punchglove');
   }
 
-  shockwave(x, y, z, yaw) {
+  shockwave(x, y, z, yaw, big = false) {
     const e = this.renderer.effects;
-    for (let i = 0; i < 10; i++) {
-      const a = yaw + ((i / 10) * 2 - 1) * 1.25;
+    const round = big ? 14 : 10;
+    for (let i = 0; i < round; i++) {
+      const a = yaw + ((i / round) * 2 - 1) * (big ? 1.9 : 1.25);
       e.add('sparkle', x + Math.sin(a) * 0.8, y, z + Math.cos(a) * 0.8, {
-        vx: Math.sin(a) * 7,
-        vz: Math.cos(a) * 7,
+        vx: Math.sin(a) * (big ? 10 : 7),
+        vz: Math.cos(a) * (big ? 10 : 7),
         vy: 0.4,
-        size: 0.4,
+        size: big ? 0.55 : 0.4,
         life: 0.5,
         drag: 3,
         grow: 0.6,
         color: i % 2 ? '#ffd84d' : '#fff3a0',
       });
     }
-    e.ripple(x, y - 0.85, z, 0.5, KING_REACH + 1.2);
+    e.ripple(x, y - 0.85, z, 0.5, (big ? KING_REACH + weaponOf('punchglove').wave : KING_REACH) + 1.2);
     this.sound.play('boom', { near: 0.4 });
   }
 
@@ -2162,12 +2206,14 @@ export class Game extends EventTarget {
     if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(ms);
   }
 
-  // The bop button held down (👊 or X) with an empty hand: after a moment the
-  // fist glows and hums, and on release a King Punch goes out — a wide golden
-  // shockwave that bops every monster in front of you, harder than a punch.
-  // With a toy weapon in hand there is no charge: the button swings as ever.
+  // The bop button held down (👊 or X) with an empty hand or the King's Punch
+  // Glove on it: after a moment the fist glows and hums, and on release a King
+  // Punch goes out — a wide golden shockwave that bops every monster in front
+  // of you, harder than a punch. With any other toy weapon in hand there is no
+  // charge: the button swings as ever.
   chargeBop(input) {
-    const held = Boolean(input?.bop) && !this.aboard && !this.riding && !this.dizzy && this.world && this.me && !wornWeapon(this.profile.data.gear);
+    const glove = wornWeapon(this.profile.data.gear)?.key === 'punchglove';
+    const held = Boolean(input?.bop) && !this.aboard && !this.riding && !this.dizzy && this.world && this.me && (!wornWeapon(this.profile.data.gear) || glove);
     const now = performance.now();
     const avatar = this.players.get(this.pid)?.avatar;
     if (!this.charge) {
@@ -2202,11 +2248,16 @@ export class Game extends EventTarget {
   // round in front of you, further and wider than any swing, and bops every
   // monster it passes through at once, each one hit harder than a punch bops
   // it (HP and XP as ever: a heart off each, a Bruiser or King Grumble the
-  // same as a punch would). Returns how many it bopped.
+  // same as a punch would). With the King's Punch Glove on, the wave reaches
+  // further still (its wave) and the island knows to bop harder (room.js).
+  // Returns how many it bopped.
   kingPunch() {
     if (!this.world || !this.me || this.aboard || this.dizzy || !this.attackReady()) return 0;
     const now = performance.now();
-    this.attackAt = now + SWINGS.punch.secs * 1000;
+    const glove = weaponOf('punchglove') === wornWeapon(this.profile.data.gear);
+    this.attackAt = now + (SWINGS[glove ? 'punchglove' : 'punch'].secs) * 1000;
+    const reach = KING_REACH + (glove ? weaponOf('punchglove').wave : 0);
+    const sweep = KING_SWEEP - (glove ? 0.35 : 0);
     const b = this.me.body;
     if (this.renderer.camDist <= 1.3) this.me.yaw = this.renderer.view.yaw + Math.PI;
     const fx = Math.sin(this.me.yaw);
@@ -2216,13 +2267,13 @@ export class Game extends EventTarget {
       if (moleUnder(entry.kind, entry.snaps.at(-1)?.state)) continue;
       const m = entry.model.group.position;
       const size = bodyOf(entry.kind);
-      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, KING_REACH);
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, radius: size.radius, height: size.height }, reach);
       if (gap === null) continue;
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
       // Further round than a swing: nearly everything in front of you.
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < KING_SWEEP) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < sweep) continue;
       const ey = b.y + BODY.eye;
       const dy = m.y + size.height / 2 - ey;
       const len = Math.hypot(dx, dy, dz) || 1;
@@ -2236,15 +2287,17 @@ export class Game extends EventTarget {
       const m = c.model.group.position;
       const r = CRITTER_INFO.dragon.ride;
       const size = { radius: r.radius, height: r.height };
-      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, ...size }, KING_REACH);
+      const gap = bopGap(b, { x: m.x, y: m.y, z: m.z, ...size }, reach);
       if (gap === null) continue;
       const dx = m.x - b.x;
       const dz = m.z - b.z;
       const d = Math.hypot(dx, dz) || 1;
-      if (gap > 0.25 && (dx * fx + dz * fz) / d < KING_SWEEP) continue;
+      if (gap > 0.25 && (dx * fx + dz * fz) / d < sweep) continue;
       dragons.push({ id: c.id, gap, dx, dz, m, size, dragon: true });
     }
     // The wind-up as any swing: the pose, the whoosh and the word to friends.
+    // With the glove on it is the glove's own mightier swing, and a bigger
+    // golden wave goes out of it.
     const lands = this.players.get(this.pid)?.avatar?.swing() ?? 0;
     this.send({ t: 'swing', king: true });
     this.sound.play('swish', { lands });
@@ -2253,7 +2306,7 @@ export class Game extends EventTarget {
     setTimeout(() => {
       if (this.world !== world) return;
       const yaw = this.me.yaw;
-      this.shockwave(b.x, b.y + 0.95, b.z, yaw);
+      this.shockwave(b.x, b.y + 0.95, b.z, yaw, glove);
       this.strike(hits, 'king', dragons);
       this.bopSentAt = performance.now();
       for (const hit of [...hits, ...dragons]) {
@@ -3931,6 +3984,60 @@ export class Game extends EventTarget {
     this.computerAt = null;
   }
 
+  // ------------------------------------------------ dishes
+
+  // The food on the dish in cell (x, y, z), as the island last said.
+  dishFood(x, y, z) {
+    return this.renderer.terrain.dishFood.get(`${x},${y},${z}`) ?? [];
+  }
+
+  // A piece of food from your basket onto the dish `t` (ui.js dishDialog),
+  // or the piece at `take` off it: the island says whether it can be, and
+  // only then does your basket give it up or get it back (dishHeard).
+  changeDish(t, change) {
+    if (this.staysAsMade) {
+      this.emit('notice', { text: `${this.world.name} stays just as it is — no laying the table here!`, level: 'info' });
+      return false;
+    }
+    if (change.put && !(this.profile.basket[change.put] > 0)) return false;
+    const food = dishWith(this.dishFood(t.x, t.y, t.z), change);
+    if (!food) return false;
+    this.send({ t: 'dish', at: [t.x, t.y, t.z], food });
+    return true;
+  }
+
+  // Every dish's food, as the island tells of it on arrival or when a dish
+  // goes.
+  setDishes(rows) {
+    this.renderer.terrain.setDishes((Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r) && isDish(this.world.get(r[0], r[1], r[2]))));
+    this.emit('dish');
+  }
+
+  // A dish changed, by whoever: drawn so. If it was you, the piece put on
+  // leaves your basket, or the one taken off goes in it.
+  dishHeard(msg) {
+    const [x, y, z] = msg.at;
+    const was = this.dishFood(x, y, z);
+    const food = Array.isArray(msg.food) ? msg.food : [];
+    this.renderer.terrain.setDish(x, y, z, food);
+    if (msg.pid === this.pid) {
+      const left = [...was];
+      for (const key of food) {
+        const i = left.indexOf(key);
+        if (i >= 0) left.splice(i, 1);
+        else {
+          this.profile.addToBasket(key, -1);
+          this.sound.play('collect');
+        }
+      }
+      for (const key of left) {
+        this.profile.addToBasket(key, 1);
+        this.sound.play('pop');
+      }
+    }
+    this.emit('dish');
+  }
+
   // ------------------------------------------------ the stock market
 
   // Q (or the Trade button) by a stock terminal: the market's window opens.
@@ -4899,6 +5006,11 @@ export class Game extends EventTarget {
     }
     if (!id && this.stockTarget) {
       this.openStocks();
+      return;
+    }
+    if (!id && this.dishTarget) {
+      this.sound.play('ui');
+      this.emit('dish-open', this.dishTarget);
       return;
     }
     if (!id && this.fishTarget) {
@@ -6432,6 +6544,9 @@ export class Game extends EventTarget {
     const undo = [];
     for (let i = 0; i < cells.length; i += 4) {
       const [x, y, z, id] = [cells[i], cells[i + 1], cells[i + 2], cells[i + 3]];
+      // A dish picked up (or undone) with food on it: the food comes back
+      // to your basket, not lost with the plate.
+      if (isDish(w.get(x, y, z)) && !isDish(id)) for (const key of this.dishFood(x, y, z)) this.profile.addToBasket(key, 1);
       undo.push(x, y, z, w.get(x, y, z), id);
       this.pending.set(w.index(x, y, z), seq);
     }
@@ -7297,6 +7412,8 @@ export class Game extends EventTarget {
     this.tankTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.dizzy && !on.flying && on.onGround ? tankNear(this.world, on) : null;
     this.kitTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.dizzy && !on.flying && on.onGround ? kitNear(this.world, on) : null;
     this.stockTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.dizzy && !on.flying && on.onGround ? terminalNear(this.world, on) : null;
+    // A dish to set food on, or take it off (dishDialog in ui.js).
+    this.dishTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dizzy && !on.flying && on.onGround ? dishNear(this.world, on) : null;
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
@@ -7310,7 +7427,7 @@ export class Game extends EventTarget {
     // else beside you to use; while your line is out, where its bobber is.
     this.fishTarget = this.fishing
       ? this.fishing.spot
-      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
+      : !this.watching && !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.rideTarget && !this.hoopTarget && !this.hooping && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.frameTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dishTarget && !this.escapeTarget && !this.chestTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround
         ? castSpot(this.world, on, this.me.yaw)
         : null;
     this.sendMove();
@@ -7909,6 +8026,7 @@ export class Game extends EventTarget {
     this.renderer.free = false;
     this.link.removeEventListener('message', this.onMessage);
     this.profile.removeEventListener('change', this.onProfile);
+    this.profile.removeEventListener('basket', this.onGear);
     for (const pid of [...this.pets.keys()]) this.dropPet(pid);
     for (const pid of [...this.players.keys()]) this.renderer.removeAvatar(pid);
     for (const id of [...this.critters.keys()]) this.renderer.removeCritter(id);
@@ -7952,6 +8070,7 @@ export class Game extends EventTarget {
     this.computerTarget = null;
     this.tankTarget = null;
     this.stockTarget = null;
+    this.dishTarget = null;
     this.partyTarget = null;
     this.endPartySong();
     this.kitTarget = null;

@@ -195,6 +195,23 @@ export const SWINGS = {
       { at: 1, w: 0, wL: 0 },
     ],
   },
+  // The King's Punch Glove: a boxer's wind-up, the fist drawn back by the ear
+  // with the elbow well up, the other up on guard, then a great straight punch
+  // out from the shoulder with the whole body behind it, and back on guard.
+  // Held longer than a bare-fist punch, as a mighty glove would be — and the
+  // charge of a King Punch (game.js chargeBop) draws it back the same way for
+  // as long as it is held.
+  punchglove: {
+    secs: 0.42,
+    strike: 0.42,
+    keys: [
+      { at: 0, w: 0, wL: 0 },
+      { at: 0.18, w: 1, wL: 1, fwd: -2.3, raise: 0.45, elbow: 1.9, twist: 0.4, fwdL: 0.3, raiseL: 0.35, elbowL: 2, lean: -0.06 },
+      { at: 0.42, w: 1, wL: 1, fwd: -1.65, raise: 0.05, elbow: 0.05, twist: -0.45, fwdL: 0.3, raiseL: 0.3, elbowL: 1.9, lean: 0.2, step: 0.45, dip: -0.04 },
+      { at: 0.6, w: 1, wL: 1, fwd: -1.6, raise: 0.05, elbow: 0.1, twist: -0.42, fwdL: 0.3, raiseL: 0.3, elbowL: 1.9, lean: 0.18, step: 0.45, dip: -0.03 },
+      { at: 1, w: 0, wL: 0 },
+    ],
+  },
 };
 const POSE_KEYS = ['w', 'wL', 'fwd', 'raise', 'elbow', 'wrist', 'fwdL', 'raiseL', 'elbowL', 'twist', 'lean', 'nod', 'dip', 'step'];
 // What a key says of one of them: an arm angle a key leaves out is the next
@@ -1764,6 +1781,9 @@ const starPoints = (n, r, inner = r * 0.38) => Array.from({ length: n * 2 }, (_,
 const BOLT_HEAD = [[-0.055, 0], [0.05, 0], [0.018, 0.14], [0.092, 0.14], [-0.022, 0.44], [0.004, 0.2], [-0.078, 0.2]];
 // The Galaxy Blade: wider as it leaves the guard, then to a long point.
 const GALAXY_BLADE = [[-0.07, 0], [0.07, 0], [0.092, 0.34], [0.074, 0.62], [0, 0.88], [-0.074, 0.62], [-0.092, 0.34]];
+// A little crown for the back of the King's Punch Glove, cut flat, pointing +y
+// from its foot at 0: three points on its band and jewels between them.
+const CROWN = [[-0.07, 0], [0.07, 0], [0.07, 0.07], [0.035, 0.045], [0, 0.085], [-0.035, 0.045], [-0.07, 0.07]];
 
 // A lump of space rock about 1 round, with lava glowing out of the cracks
 // between its dark chunks: the Meteor Staff's little one, and the meteor it
@@ -1989,6 +2009,28 @@ export function weapon(kind) {
         mesh(sphere(), toon('#ff9a3d', { emissive: 1.2 }), -0.14, 1.14, -0.03, 0.014),
         mesh(sphere(), toon('#ffd84d', { emissive: 1.2 }), 0.03, 1.2, 0.02, 0.012),
         tipAt(1),
+      );
+      break;
+    }
+    case 'punchglove': {
+      // A great golden boxing glove over the fist: a padded cuff at the wrist,
+      // a fat round mitt with a seam ring round it and a shine on the knuckles,
+      // and a little crown stamped on the back of it — the King's own.
+      const mitt = new THREE.Group();
+      mitt.position.y = 0.17;
+      mitt.add(
+        mesh(sphere(1, 18, 14), toon('#ffd84d'), 0, 0, 0, 0.125, 0.145, 0.125),
+        mesh(sphere(1, 14, 10), toon('#fff3a0', { emissive: 0.35 }), 0, 0.075, 0.055, 0.055, 0.04, 0.04),
+        mesh(torus(0.118, 0.018), toon('#e0406f'), 0, -0.03, 0).rotateX(Math.PI / 2),
+      );
+      // The crown, cut flat, standing out from the back of the mitt.
+      const crown = mesh(flatShape('crown', CROWN, 0.026, 0.008), toon('#ff9a3d', { emissive: 0.5 }), 0, 0.02, -0.115);
+      crown.rotation.y = Math.PI;
+      mitt.add(crown);
+      g.add(
+        mesh(cylinder(0.052, 0.06, 0.1, 14), toon('#e0406f'), 0, 0.01, 0),
+        mesh(torus(0.056, 0.012), toon('#ffcf3f'), 0, 0.055, 0).rotateX(Math.PI / 2),
+        mitt,
       );
       break;
     }
@@ -2770,8 +2812,10 @@ export class Avatar {
 
   // A King Punch charging (game.js chargeBop): k is how far it has come, 0 to
   // 1. The fist is drawn back and glows brighter and bigger as it charges —
-  // everyone sees it — and at 0 the glow is gone.
+  // everyone sees it — and at 0 the glow is gone. With the King's Punch Glove
+  // on, the glow is round its mitt, and bigger.
   chargeUp(k) {
+    const glove = this.weaponKind === 'punchglove';
     if (!this.chargeLight) {
       // A golden glow in the right fist, lit from within, and the sparkles
       // that come off it are effects' business (game.js shockwave draws those).
@@ -2780,8 +2824,9 @@ export class Avatar {
       this.hands[1].add(light);
       this.chargeLight = light;
     }
+    this.chargeLight.position.set(0, glove ? 0.17 : 0, 0);
     this.chargeLight.visible = k > 0;
-    if (k > 0) this.chargeLight.scale.setScalar(0.4 + k * 1.1);
+    if (k > 0) this.chargeLight.scale.setScalar((glove ? 0.9 : 0.4) + k * (glove ? 1.7 : 1.1));
   }
 
   // A friend's King Punch charging, as the island tells it (on), or let go:

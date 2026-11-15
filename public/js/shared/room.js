@@ -35,8 +35,10 @@ import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
 import { underTent } from './tents.js';
-import { isMonsterGashapon } from './gashapon.js';
+import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
+import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
 import { CHEST_REACH } from './treasure.js';
+import { isBeast } from './beasts.js';
 import { isBoss } from './bosses.js';
 import { ARM_REACH, BOP_SLACK, bopGap, BUMP_HP, GHOST_FIRE, hpAfterBump, hpBack, isHeavy, KING_PUSH, KING_REACH, kindOf, LAVA_BUMPS, maxHp, MonsterSim, SAFE_MS, SPORES, STOMP } from './monsters.js';
 import { isNote, isPiano } from './piano.js';
@@ -224,6 +226,9 @@ export class Room {
     // The robots and programs at the island's robot kits (robokit.js), by
     // cell: { x, y, z, kit }. Saved with the island.
     this.kits = new Map();
+    // The food set on the island's dishes (dish.js), by cell: { x, y, z,
+    // food: [key, ...] }. Saved with the island.
+    this.dishes = new Map();
     // The robots let out of their kits, driving on the island, by their
     // kit's cell: { k, at, sim, env, since, stopped }. Never saved.
     this.bots = new Map();
@@ -370,6 +375,8 @@ export class Room {
       // A robot kit picked up takes its robot and program with it.
       if (isKit(before) && !isKit(after) && this.kits.delete(k)) this.broadcast({ t: 'kit', at: [x, y, z], kit: null });
       if (isKit(before) && !isKit(after)) this.botHome(k);
+      // A dish picked up (or painted over): what is on it goes with it.
+      if (isDish(before) && !isDish(after) && this.dishes.delete(k)) this.sendDishes();
       // An arcade machine picked up (or painted over): its game goes with it.
       if (gameOfBlock(before) && !gameOfBlock(after)) this.arcadeGone(x, y, z);
       // A Go board picked up: its game goes with it.
@@ -615,6 +622,9 @@ export class Room {
       case 'draw':
         this.draw(conn, p, msg);
         break;
+      case 'dish':
+        this.dish(conn, p, msg);
+        break;
       case 'kit':
         this.kit(conn, p, msg);
         break;
@@ -629,6 +639,16 @@ export class Room {
         if (name) p.name = this.uniqueName(name, p.id);
         this.broadcast({ t: 'look', pid, look: p.look, name: p.name });
         this.changed();
+        break;
+      }
+      // The monster figures someone has in My collection (shared/gashapon.js):
+      // kept by the island on them, for the bop bonus of owning the one they
+      // are bopping (bop). Their page says which each time it changes, as it
+      // does their look — nobody else needs to know.
+      case 'figures': {
+        const kinds = kindsOfFigures(msg.keys);
+        if (p.figs && kinds.join() === p.figs.join()) break;
+        p.figs = kinds;
         break;
       }
       case 'critter':
@@ -917,6 +937,7 @@ export class Room {
       race: this.raceSim()?.pack(this.now()) ?? null,
       go: this.go.pack(),
       drawings: this.packDrawings(),
+      dishes: this.packDishes(),
       kits: this.packKits(),
       bots: this.packBots(),
       ...(this.screens ? { screens: this.screens } : {}),
@@ -2083,6 +2104,17 @@ export class Room {
     this.broadcast({ t: 'healed', pid: p.id, ...this.hpOf(p) });
   }
 
+  // A hit from someone who owns that kind of monster's figure (the Monster
+  // Gashapon's, in My collection) takes FIG_HEARTS more off it, so collecting
+  // figures makes you stronger. Only where the camps are, the shared isle
+  // Adventure Isle, and only the island's ordinary monsters and the camps'
+  // guards: beasts, the chapters' bosses and King Grumble feel a blow from a
+  // figure's owner as any other (see bop).
+  figBonus(p, m) {
+    if (!this.adventure || m.march || isBoss(m.kind) || isBeast(m.kind)) return 0;
+    return p.figs?.includes(m.kind) ? FIG_HEARTS : 0;
+  }
+
   // Jumping on a monster (msg.on): pop! Tapping one: a heart off it (more,
   // and from further, with a toy weapon in hand), and pop with the last.
   // (King Grumble takes a lot of either, a Big Bruiser a few landings, and
@@ -2092,26 +2124,29 @@ export class Room {
     const now = this.now();
     const m = this.monsters.get(msg.id);
     if (!m || (!m.camp && !m.march && !this.settings.monsters) || (p.dizzyUntil ?? 0) > now) return;
-    // A King Punch (a bare fist held to charge, game.js): only with an empty
-    // hand, and it reaches further round a wider arc. HP and XP are as a punch.
-    const king = msg.king === true && !weaponOf(p.look?.weapon);
+    // A King Punch (a bare fist held to charge, game.js): with an empty hand
+    // it is a punch that reaches further round a wider arc (KING_REACH); with
+    // the King's Punch Glove on, far further still (its wave) and harder (its
+    // shock) than its plain bop. HP and XP are as a punch.
+    const weapon = weaponOf(p.look?.weapon);
+    const glove = msg.king === true && weapon?.key === 'punchglove' ? weapon : null;
+    const king = Boolean(glove) || (msg.king === true && !weapon);
     const at = { x: p.s[0], y: p.s[1], z: p.s[2] };
     const landed = msg.on === true && this.monsters.landsOn(m.id, at);
-    const weapon = weaponOf(p.look?.weapon);
-    if (!landed && !this.monsters.canBop(m.id, at, king ? KING_REACH : weapon?.reach ?? 0)) return;
+    if (!landed && !this.monsters.canBop(m.id, at, king ? (glove ? KING_REACH + glove.wave : KING_REACH) : weapon?.reach ?? 0)) return;
     if (!landed && weapon?.chain) this.boltOn(p, m, now, weapon);
     if (m.march) {
-      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (weapon?.king ?? 1) : (weapon?.power ?? 1));
+      this.bopMarcher(p, m, now, landed ? LAND_POWER : m.kind === 'king' ? (glove ? glove.king : king ? 1 : weapon?.king ?? 1) : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1));
       return;
     }
     if (isBoss(m.kind)) {
-      this.bopKing(p, m, now, weapon?.king ?? 1);
+      this.bopKing(p, m, now, glove ? glove.king : king ? 1 : weapon?.king ?? 1);
       return;
     }
     const land = kindOf(m.kind).land;
     if (landed && !land) return;
     if (!landed || land !== Infinity) {
-      const hit = this.monsters.hit(m, p.id, at, now, landed ? land : (weapon?.power ?? 1), king ? KING_PUSH : weapon?.push, landed ? null : weapon?.key);
+      const hit = this.monsters.hit(m, p.id, at, now, (landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m), king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
         this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -2148,7 +2183,7 @@ export class Room {
       this.bopKing(p, m, now, weapon.king);
       return;
     }
-    const hit = this.monsters.hit(m, p.id, from, now, weapon.power, weapon.push, weapon.key);
+    const hit = this.monsters.hit(m, p.id, from, now, weapon.power + this.figBonus(p, m), weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
       this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
@@ -3015,6 +3050,41 @@ export class Room {
     this.changed();
   }
 
+  // ------------------------------------------------ dishes
+
+  // Food set on a dish, or taken off it (dish.js), by someone standing at
+  // it: kept, and passed on to everyone else. `food` is the pieces on it
+  // after the change, [] when the last is taken off.
+  dish(conn, p, msg) {
+    const at = msg.at;
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isInteger) || !isDish(this.world.get(...at))) return;
+    if (Math.hypot(p.s[0] - at[0] - 0.5, p.s[2] - at[2] - 0.5) > REACH + 1 || Math.abs(p.s[1] - at[1]) > 4) return;
+    if (this.ownerWho) {
+      this.notice(conn, `${this.world.name} stays just as it is — no laying the table here!`);
+      return;
+    }
+    // Only pieces of food, never more than a dish holds.
+    if (!Array.isArray(msg.food) || msg.food.length > DISH_MAX) return;
+    const food = cleanDishFood(msg.food);
+    if (food.length !== msg.food.length) return;
+    const k = this.world.index(...at);
+    const was = this.dishes.get(k)?.food ?? [];
+    // One piece at a time comes or goes, so nothing is conjured or spirited
+    // away: every kind but one is as it was, and that one has one more or one
+    // fewer piece on it.
+    const counts = new Map();
+    for (const f of was) counts.set(f, (counts.get(f) ?? 0) + 1);
+    for (const f of food) counts.set(f, (counts.get(f) ?? 0) - 1);
+    const changes = [...counts.values()].filter((n) => n !== 0);
+    if (changes.length !== 1 || Math.abs(changes[0]) !== 1) return;
+    if (food.length) this.dishes.set(k, { x: at[0], y: at[1], z: at[2], food });
+    else this.dishes.delete(k);
+    // To everyone, whoever did it too: it is when the island says so that
+    // their basket gives the piece up, or gets it back (game.js dishHeard).
+    this.broadcast({ t: 'dish', pid: p.id, at, food });
+    this.changed();
+  }
+
   // ▶ On the island at a robot kit: its robot drives out in front of it and
   // runs its program on the island itself, for everyone (robokit.js
   // IslandEnv); or, op 'home', it is called back.
@@ -3119,6 +3189,17 @@ export class Room {
     return [...this.drawings.values()].map((d) => [d.x, d.y, d.z, encodePicture(d.px)]);
   }
 
+  // The dishes' food, as [x, y, z, [key, ...]] each.
+  packDishes() {
+    return [...this.dishes.values()].map((d) => [d.x, d.y, d.z, d.food]);
+  }
+
+  // The dishes' food now, told to everyone there (a dish changed, or the
+  // island opened with food on them).
+  sendDishes() {
+    this.broadcast({ t: 'dishes', d: this.packDishes() });
+  }
+
   // ------------------------------------------------ saving
 
   exportSave() {
@@ -3147,6 +3228,7 @@ export class Room {
       ...(this.defense ? { defense: this.defense.save() } : {}),
       ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
       ...(this.kits.size ? { kits: this.packKits() } : {}),
+      ...(this.dishes.size ? { dishes: this.packDishes() } : {}),
     };
   }
 
@@ -3189,6 +3271,13 @@ export class Room {
       const [x, y, z, raw] = row;
       const kit = cleanKit(raw);
       if (kit && isKit(this.world.get(x, y, z))) this.kits.set(this.world.index(x, y, z), { x, y, z, kit });
+    }
+    // The food, on the dishes still there.
+    for (const row of Array.isArray(save.dishes) ? save.dishes : []) {
+      if (!Array.isArray(row) || !row.slice(0, 3).every(Number.isInteger)) continue;
+      const [x, y, z, raw] = row;
+      const food = cleanDishFood(raw);
+      if (food.length && isDish(this.world.get(x, y, z))) this.dishes.set(this.world.index(x, y, z), { x, y, z, food });
     }
     this.settings = cleanSettings(save.settings);
     this.passcode = isPasscode(save.passcode) ? save.passcode : '';

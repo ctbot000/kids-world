@@ -136,6 +136,66 @@ export function candyTree(rng) {
   return c.list();
 }
 
+// A cactus (a desert island's): a ribbed green column out of the sand, with
+// an arm or two reaching up from its side.
+export function cactus(rng) {
+  const c = new Cells();
+  const h = rng.int(3, 5);
+  for (let y = 0; y < h; y++) c.put(0, y, 0, B.CACTUS);
+  if (rng.chance(0.7)) {
+    c.put(1, 1, 0, B.CACTUS);
+    c.put(2, 1, 0, B.CACTUS);
+    c.put(2, 2, 0, B.CACTUS);
+  }
+  if (rng.chance(0.5)) {
+    c.put(0, 2, -1, B.CACTUS);
+    c.put(0, 2, -2, B.CACTUS);
+    c.put(0, 3, -2, B.CACTUS);
+  }
+  return c.list();
+}
+
+// A palm tree (a desert island's, round its oasis): a trunk leaning a little
+// as it climbs, and a crown of fronds spread out on every side, the middle
+// one holding up its head.
+export function palmTree(rng) {
+  const c = new Cells();
+  const h = rng.int(5, 7);
+  const [lx, lz] = rng.pick([
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]);
+  let x = 0;
+  let z = 0;
+  for (let y = 0; y < h; y++) {
+    if (y === Math.floor(h / 2) + 1) {
+      x += lx;
+      z += lz;
+    }
+    c.put(x, y, z, B.WOOD);
+  }
+  c.put(x, h, z, B.PALM_LEAVES);
+  for (const [dx, dz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+  ]) {
+    c.put(x + dx, h, z + dz, B.PALM_LEAVES);
+    if (dx === 0 || dz === 0) {
+      c.put(x + dx * 2, h, z + dz * 2, B.PALM_LEAVES);
+      c.put(x + dx * 3, h - 1, z + dz * 3, B.PALM_LEAVES);
+    }
+  }
+  return c.list();
+}
+
 // What a sprout grows into.
 export function grownTree(kind, seed) {
   const rng = new Rng(seed);
@@ -1180,6 +1240,8 @@ export const STAMPS = [
   { key: 'tower', name: 'Castle Tower', icon: '🏰', cells: tower() },
   { key: 'big-tree', name: 'Big Tree', icon: '🌳', cells: bigTree() },
   { key: 'pine', name: 'Pine Tree', icon: '🌲', cells: pine() },
+  { key: 'cactus', name: 'Cactus', icon: '🌵', cells: cactus(new Rng(20250918)) },
+  { key: 'palm', name: 'Palm Tree', icon: '🌴', cells: palmTree(new Rng(20250919)) },
   { key: 'katsura', name: 'Katsura Tree', icon: '🍂', cells: katsura() },
   { key: 'fountain', name: 'Fountain', icon: '⛲', cells: fountain() },
   { key: 'elevator', name: 'Elevator Tower', icon: '🛗', cells: elevatorTower() },
