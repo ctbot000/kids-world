@@ -149,6 +149,12 @@ test('a chest holds coins, more on higher stages, and now and then an HP potion;
   const sticker = STICKERS.find((s) => s.key === 'chest-hunter');
   assert.equal(STICKERS.filter((s) => s.key === sticker.key).length, 1);
   assert.ok(!sticker.test({ chests: 9 }) && sticker.test({ chests: 10 }));
+  // The 👑 legendary tier above it, on the same count.
+  const great = STICKERS[STICKERS.indexOf(sticker) + 1];
+  assert.equal(great.key, 'great-thief');
+  assert.equal(great.of, 'chests');
+  assert.ok(!great.test({ chests: 999 }) && great.test({ chests: 1000 }));
+  assert.ok(sticker.test({ chests: 1000 }), 'the same count, not a fresh one');
 });
 
 test('keys are kept at the keeper with the rest of what you carry, from whichever device changed them last', () => {
