@@ -12,6 +12,7 @@ import { HIPS } from '../shared/critters.js';
 import { BENCH_H, HIGH, LOW } from '../shared/piano.js';
 import { buildOf, FUR_COLORS, GROWN_UP, HAIR_COLORS, headOf, isPerson, lookScale, lookTall, SKIN_TONES } from '../shared/words.js';
 import { fishingRod } from './fishing-rod.js';
+import { STICK_LEN } from './mallow-model.js';
 import { heldRope, placeRope } from './jump-rope.js';
 import { bake, bakeCached, blobShadow, capsule, cone, cylinder, geo, lathe, loft, mesh, onSurface, roundedBox, sphere, toon, torus } from './toon.js';
 
@@ -387,7 +388,7 @@ const CURL_ROOM = { long: 0.84, wide: 0.84 };
 // enough to fit in it, the root in the middle of the bed (shared/seats.js);
 // piano: on a piano bench (drawn under you) playing the piano in front of
 // you, the root at the top of the bench (shared/piano.js pianoSeat).
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14, fish: 15, rope: 16 };
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, swim: 4, fly: 5, ride: 6, dizzy: 7, sit: 8, lie: 9, curl: 10, piano: 11, type: 12, coffee: 13, hoop: 14, fish: 15, rope: 16, toast: 17 };
 // How long someone on a coffee break waits between sips, at least and at
 // most, each wait picked at random so no two people sip together; and how
 // long a sip takes (s).
@@ -3086,6 +3087,18 @@ export class Avatar {
       [armFwdL, armTwistL, armRaiseL, bendL] = this.reachTo([-0.05 * k, B.shoulder[0] * 0.3, 0.17 * k]);
       headNod = 0.16 + dip * 0.1;
       headTilt = dip ? 0 : Math.sin((t + this.quirk) * 0.5) * 0.05;
+    } else if (anim === ANIM.toast) {
+      // Toasting a marshmallow (shared/mallow.js): the stick in the right hand
+      // (holdStick), held out over the flames and a little down into them, the
+      // other hand behind the back; watching it brown, turning it now and then.
+      const k = B.arm[0] / 0.3;
+      const turn = Math.sin((t + this.quirk) * 0.45);
+      [armFwdR, armTwistR, armRaiseR, bendR] = this.reachTo([0.05 * k, B.shoulder[0] * 0.15, 0.19 * k + turn * 0.01 * k]);
+      armFwdL = -0.2;
+      armRaiseL = 0.08;
+      bendL = 0.35;
+      headNod = 0.3;
+      headTilt = 0;
     } else if (anim === ANIM.rope) {
       // Jumping rope: hands out by the hips, the wrists going round with the
       // rope (holdRope), feet together, the knees tucking up in the air and
@@ -3323,6 +3336,7 @@ export class Avatar {
     this.holdMug(anim === ANIM.coffee);
     this.holdBars(riding && Boolean(this.ride?.grips) && !this.emote && swung >= swing.secs, lean);
     this.holdRod(anim === ANIM.fish && !this.emote);
+    if (this.stick) this.keepStick();
     this.holdRope(anim === ANIM.rope && !this.emote);
     if (anim === ANIM.type) this.typeHands(lean, twist, t + this.quirk);
     this.body.position.y = bob + hop + dip;
@@ -3585,6 +3599,41 @@ export class Avatar {
     if (!tip) return null;
     tip.updateWorldMatrix(true, false);
     return tip.getWorldPosition(out);
+  }
+
+  // Toasting a marshmallow (ANIM.toast, shared/mallow.js): the stick in the
+  // right hand, `stick` as marshmallowStick() made it (render/mallow-model.js),
+  // or null to put it away again. It hangs on the body, its grip kept where
+  // the hand is, so it stays steady however the arm got there.
+  holdStick(stick) {
+    if (stick === (this.stick ?? null)) return;
+    this.stick?.removeFromParent();
+    this.stick = stick;
+    if (stick) {
+      this.body.add(stick);
+      this.weapon?.removeFromParent();
+    } else if (this.weapon && !this.handsPlaying && !this.barsHeld && !this.mug?.parent?.parent) this.hands[1].add(this.weapon);
+  }
+
+  // Where the marshmallow itself is in the world, while it is held out: into
+  // `out`, or null when there is none.
+  mallowTip(out = new THREE.Vector3()) {
+    if (!this.stick?.parent) return null;
+    this.stick.updateWorldMatrix(true, false);
+    out.set(0, STICK_LEN, 0).applyMatrix4(this.stick.matrixWorld);
+    return out;
+  }
+
+  // Each frame while the stick is held: its grip stays where the hand is,
+  // however the arm got there, and it tips forward and a little down, so the
+  // marshmallow on its tip hangs over the flames (game.js overFlames).
+  keepStick() {
+    const hand = this.hands[1];
+    hand.updateWorldMatrix(true, false);
+    const at = hand.getWorldPosition(scratch.v);
+    this.stick.position.copy(this.body.worldToLocal(at));
+    this.stick.position.y -= 0.02 * this.build.hand;
+    this.stick.rotation.set(0.62, 0, -0.1);
   }
 
   // Jumping rope (ANIM.rope), a grip in each hand and a weapon put away

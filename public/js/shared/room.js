@@ -627,6 +627,12 @@ export class Room {
         else if (msg.op === 'reel') this.broadcast({ t: 'rod', pid, op: 'reel', caught: word(msg.caught), lost: msg.lost === true }, conn);
         break;
       }
+      case 'mallow': {
+        const part = (v) => (Number.isFinite(v) ? Math.max(0, Math.min(9, +v.toFixed(2))) : 0);
+        const ops = ['hold', 'brown', 'eat', 'burn', 'drop'];
+        if (ops.includes(msg.op) && (msg.op !== 'hold' || (Array.isArray(msg.at) && msg.at.every(Number.isInteger)))) this.broadcast({ t: 'mallow', pid, op: msg.op, at: msg.at, p: part(msg.p) }, conn);
+        break;
+      }
       case 'draw':
         this.draw(conn, p, msg);
         break;
@@ -968,7 +974,7 @@ export class Room {
     const x = Math.min(w.W, Math.max(0, s[0]));
     const y = Math.min(w.H + 8, Math.max(0, s[1]));
     const z = Math.min(w.D, Math.max(0, s[2]));
-    const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(16, s[4] | 0)), s[5] & 0xff];
+    const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(17, s[4] | 0)), s[5] & 0xff];
     p.s = state;
     // Up in the air (or flying, or swimming), for a boss's stomp to miss.
     if (this.adventure) {
