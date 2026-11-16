@@ -47,7 +47,7 @@ import { stockDialog } from './ui-stocks.js';
 import { BY_HEART, workbookByKey, workbookProgress, WORKBOOKS } from './shared/study.js';
 import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, isFrame, MAX_POINTS, PICTURE_H, PICTURE_W } from './shared/drawing.js';
 import { paint } from './render/drawings.js';
-import { MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
+import { DEEDS, MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { CHAPTERS, chapterOf, EPISODES, firstStage, introOf, stageName } from './shared/isle-story.js';
 import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { DISH_MAX, isDish } from './shared/dish.js';
@@ -2666,7 +2666,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🔑', 'Key quizzes', ['On 🌟 Adventure Isle, each camp you help free gives you one quiz, at the level you pick: one question, one try, and the right answer is a 🔑 key to a treasure chest. Win a whole stage for one quiz for a 👑 golden key, which opens the golden chest. A quiz comes up by itself; if you shut it, the 🔑 button over the hotbar brings it back.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has two episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard, and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and the second episode begins, 🌈 The Rainbow of Adventure Isle: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Only popping Queen Grizzle on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or straight from Episode 2 (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has two episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and the second episode begins, 🌈 The Rainbow of Adventure Isle: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Only popping Queen Grizzle on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or straight from Episode 2 (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -3688,6 +3688,8 @@ export class UI {
     on('story', () => setTimeout(() => this.isleArrival(), 600));
     // The last stage won: the ending, once the fireworks have had a moment.
     on('ending', () => this.endingFilm());
+    // A stage won: who did what for it, and what each got for it.
+    on('stage-results', () => this.stageResultsDialog());
     on('defense', () => this.renderDefense());
     on('dizzy', () => this.renderHp());
     // On and off a dragon's back: its own hearts by yours (renderHp).
@@ -7213,6 +7215,53 @@ export class UI {
     const { learnt, left } = quizProgress(book, level);
     if (!left) return '🏅 All learnt!';
     return learnt ? `${says} · 🏅 ${learnt} learnt` : says;
+  }
+
+  // ------------------------------------------------ a stage's results
+
+  // A stage of the isle won: everyone who was there, most points first, with
+  // what each did for it (monsters popped, bops on the boss, seconds raising
+  // flags, friends helped up) and what it paid them (game.js islandWon,
+  // shared/adventure.js stageResults). Never over a film still playing: it
+  // waits for that to end. Closed, the golden key quiz waiting comes up.
+  stageResultsDialog() {
+    const g = this.game;
+    const res = g?.stageResults;
+    if (!res) return;
+    if (!$('modal').hidden && $('modal').classList.contains('film')) {
+      clearTimeout(this.resultsWait);
+      this.resultsWait = setTimeout(() => g === this.game && g.stageResults === res && this.stageResultsDialog(), 500);
+      return;
+    }
+    g.stageResults = null;
+    const deed = (icon, n, what) => (n ? h('span', { class: 'deed', title: what }, icon, ' ', String(n)) : null);
+    const row = (r) =>
+      h(
+        'li',
+        { class: `rank-row${r.id === g.pid ? ' you' : ''}${r.here ? '' : ' gone'}` },
+        h('span', { class: 'place', 'aria-label': `Number ${r.place}` }, MEDALS[r.place] ?? String(r.place)),
+        h(
+          'span',
+          { class: 'who' },
+          h('b', { lang: langOf(r.name) || undefined }, r.name, r.id === g.pid ? h('span', { class: 'muted' }, ' (you)') : r.here ? null : h('span', { class: 'muted' }, ' (left)')),
+          h('span', { class: 'deeds' }, deed('👾', r.pops, 'Monsters popped'), deed('👑', r.boss, 'Bops on the boss'), deed('🚩', r.flag ? `${r.flag}s` : 0, 'Seconds raising flags'), deed('🤝', r.helps, 'Friends helped up'), r.score ? null : h('span', { class: 'muted' }, 'Came to cheer!')),
+        ),
+        h('span', { class: 'score' }, `⭐ ${r.score.toLocaleString()}`),
+        h('span', { class: 'prize' }, r.here ? [`🪙 ${r.coins}`, r.gems ? ` 💎 ${r.gems}` : ''] : ''),
+      );
+    const you = res.mine;
+    this.openModal(
+      (root) => {
+        root.append(
+          h('div', { class: 'dialog-head' }, h('h2', {}, '🏆 ', res.name ? `${res.name} won!` : 'Stage won!')),
+          you ? h('p', { class: 'results-you' }, you.place === 1 && res.rows.length > 1 ? '🏅 You helped the most! ' : 'Thank you for helping! ', `You got 🪙 ${you.coins} coins${you.gems ? ` and 💎 ${you.gems} diamond${you.gems > 1 ? 's' : ''}` : ''}.`) : null,
+          h('ol', { class: 'ranking results' }, res.rows.map(row)),
+          h('p', { class: 'muted' }, `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on the boss ${DEEDS.boss}, 🚩 a second raising a flag ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.`),
+          h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
+        );
+      },
+      { onClose: () => setTimeout(() => this.keyOfferNews(), 0) },
+    );
   }
 
   // ------------------------------------------------ on to the next stage

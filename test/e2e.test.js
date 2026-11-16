@@ -7708,6 +7708,66 @@ test('the isle’s second episode starts from the title in a game of its own, wi
   }
 });
 
+// A stage of the isle won: everyone's results come up — what each did for
+// it, their points and place — and each page is paid its own share, by its
+// points; closed, the golden key quiz comes up.
+test('a stage of the isle won shows everyone’s results and pays each by what they did, then the golden key quiz', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox' });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await inGame(page);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    const room = isle.room;
+    // A friend there too, who did less.
+    const friend = { inbox: [], send() {}, close() {} };
+    room.attach(friend);
+    room.receive(friend, { t: 'join', protocol: PROTOCOL, name: 'Sunny Otter', look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' } });
+    const pids = [...room.players.values()].map((p) => p.id);
+    const me = await page.evaluate(() => window.kidsWorld.game.pid);
+    const other = pids.find((id) => id !== me);
+    room.adventure.credit(me, 'pops', 6);
+    room.adventure.credit(me, 'boss', 9);
+    room.adventure.credit(me, 'flag', 25.4);
+    room.adventure.credit(me, 'helps', 1);
+    room.adventure.credit(other, 'pops', 2);
+    const before = await page.evaluate(() => ({ coins: window.kidsWorld.isle.data.coins, diamonds: window.kidsWorld.isle.data.basket.diamond }));
+    room.adventure.win(room.monsters);
+    const board = room.stageBoard();
+    const c = room.adventure.castle;
+    room.broadcast({ t: 'won', by: pids, hero: me, x: c.x, y: c.y, z: c.z, board });
+    const mine = board.find((r) => r.id === me);
+    assert.deepEqual([mine.place, mine.score, mine.gems], [1, 6 * 2 + 9 * 3 + 25 + 5, 2]);
+    await until(page, () => document.querySelector('#modal .ranking.results'));
+    const shown = await page.evaluate(() => ({
+      title: document.querySelector('#modal h2').textContent,
+      you: document.querySelector('#modal .results-you').textContent,
+      rows: [...document.querySelectorAll('#modal .ranking.results .rank-row')].map((el) => el.textContent),
+      first: document.querySelector('#modal .rank-row').classList.contains('you'),
+    }));
+    assert.match(shown.title, /🏆 Shipwreck Shore won!/);
+    assert.match(shown.you, new RegExp(`You helped the most! You got 🪙 ${mine.coins} coins and 💎 2 diamonds`));
+    assert.equal(shown.rows.length, 2);
+    assert.match(shown.rows[0], /🥇Brave Fox \(you\)👾 6👑 9🚩 25s🤝 1⭐ 69🪙 \d+ 💎 2/);
+    assert.match(shown.rows[1], /🥈Sunny Otter👾 2⭐ 4🪙 6 💎 1/);
+    assert.ok(shown.first, 'you, picked out');
+    const after = await page.evaluate(() => ({ coins: window.kidsWorld.isle.data.coins, diamonds: window.kidsWorld.isle.data.basket.diamond }));
+    assert.deepEqual(after, { coins: before.coins + mine.coins, diamonds: before.diamonds + 2 }, 'paid your own share');
+    // The golden key quiz waits for it, and comes up once it is closed.
+    await delay(2000);
+    assert.ok(await page.evaluate(() => !!document.querySelector('#modal .ranking.results')), 'not over the results');
+    await clickButton(page, 'Done', '#modal');
+    await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2')?.textContent.includes('golden key quiz'));
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
 // On the isle there is no way round a gate that is still shut (shared/
 // adventure.js stepSneaks): whoever stands past one — having swum round, say —
 // is sent back to the nearest safe place a moment later, told why.

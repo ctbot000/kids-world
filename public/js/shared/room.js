@@ -11,7 +11,7 @@
 // optional close(), hands every decoded message to receive(), and calls
 // tick() about ten times a second.
 
-import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HAZARD, HELP_REACH, helpHp, retireCamps } from './adventure.js';
+import { AdventureSim, cleanStage, DIZZY_MS, freeCells, HAZARD, HELP_REACH, helpHp, retireCamps, stageResults } from './adventure.js';
 import { ArcadeSim, gameOfBlock, keyOf, REACH } from './arcade.js';
 import { BUILD_REACH, DefenseSim } from './defense.js';
 import { HideSeekSim } from './hideseek.js';
@@ -1981,6 +1981,7 @@ export class Room {
     this.monsters.remove(m.id);
     const b = m.body;
     this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    if (this.adventure?.active) this.adventure.credit(p.id, 'pops');
     if (m.camp) this.adventure?.guardGone(m, now);
     if (m.kind === 'gummy') {
       for (const side of [-1, 1]) {
@@ -2229,6 +2230,7 @@ export class Room {
     if (Math.hypot(q.s[0] - p.s[0], q.s[1] - p.s[1], q.s[2] - p.s[2]) > HELP_REACH + 1.5) return;
     Object.assign(q, { dizzyUntil: 0, hp: helpHp(q.maxHp), bumpAt: now, healAt: now, safeUntil: now + SAFE_MS * 2 });
     this.broadcast({ t: 'helped', pid: q.id, by: p.id, ...this.hpOf(q) });
+    if (this.adventure?.active) this.adventure.credit(p.id, 'helps');
   }
 
   // An HP potion drunk (shop.js, one out of the drinker's pocket at their
@@ -2819,6 +2821,7 @@ export class Room {
       this.broadcast({ t: 'kinghit', id: m.id, by: p.id, shielded: true });
       return;
     }
+    this.adventure.credit(p.id, 'boss', times);
     const msg = { t: 'kinghit', id: m.id, by: p.id, hearts: hit.hearts, max: hit.max };
     if (hit.dazed) msg.dazed = true;
     // King Grumble puffing himself up, at the end of the story: his helpers
@@ -2845,7 +2848,7 @@ export class Room {
     this.broadcast({ t: 'freed', id: c.id, by: news.by, x: c.x, y: c.y, z: c.z, ...(gate ? { gate } : {}) });
     if (news.shieldDown) this.broadcast({ t: 'shield', up: false });
     if (news.won) {
-      this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), x: c.x, y: c.y, z: c.z });
+      this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), x: c.x, y: c.y, z: c.z, board: this.stageBoard() });
       this.allWell();
     }
     this.changed();
@@ -2926,9 +2929,16 @@ export class Room {
     if (castle) this.ungloom(castle);
     this.openGates(adv.openGates());
     const b = king.body;
-    this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), hero: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
+    this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), hero: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), board: this.stageBoard() });
     this.allWell();
     this.changed();
+  }
+
+  // Who did what for the stage just won, and what it pays each of them
+  // (adventure.js stageResults): the rows of everyone's results window.
+  stageBoard() {
+    const all = [...this.players.values()];
+    return stageResults(this.adventure.deeds, all.filter((p) => p.online), all.filter((p) => !p.online));
   }
 
   // The island free: anyone dizzy gets up, and with no monsters roaming, nothing

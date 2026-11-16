@@ -301,6 +301,22 @@ const LAVA_COLORS = ['#ff7a26', '#ffb13d', '#ff5a1f', '#ffd23f', '#e8481c'];
 const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // How long after the isle's last stage is won its ending film starts (ui.js).
 const ENDING_AFTER_MS = 3500;
+// A stage won: everyone's results come up this long after (once the news
+// of it has had its moment and its toasts are gone; at the end of an
+// episode, as the ending film ends), and the golden key quiz this long
+// after that.
+const RESULTS_AFTER_MS = 4300;
+const RESULTS_BEFORE_KEY_MS = 400;
+
+// A stage's results as the island tells of them (shared/adventure.js
+// stageResults), checked: null when there are none, or they make no sense.
+function cleanBoard(board) {
+  if (!Array.isArray(board) || !board.length) return null;
+  const n = (v, max) => (Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
+  const rows = board.slice(0, 32).filter((r) => Number.isInteger(r?.id) && typeof r.name === 'string');
+  if (!rows.length) return null;
+  return rows.map((r) => ({ id: r.id, name: r.name.slice(0, 40), here: r.here === true, pops: n(r.pops, 99999), boss: n(r.boss, 99999), flag: n(r.flag, 99999), helps: n(r.helps, 99999), score: n(r.score, 9999999), place: Math.max(1, n(r.place, 99)), coins: n(r.coins, 500), gems: n(r.gems, 3) }));
+}
 // A key quiz comes up this long after the camp it is for is freed (once
 // its fanfare and its news have had their moment).
 const KEY_OFFER_MS = 4500;
@@ -401,6 +417,8 @@ export class Game extends EventTarget {
     // free, and one for a golden key for each stage you helped win, waiting
     // in turn ({ gold, at, told, quiz }), until each is taken.
     this.keyOffers = [];
+    // A stage won: everyone's results (islandWon), for the window (ui.js).
+    this.stageResults = null;
     // The shared isle's next stage once this one is conquered (setNextStage).
     this.nextStage = null;
     this.quiz = null;
@@ -3201,15 +3219,29 @@ export class Game extends EventTarget {
     for (let i = 0; i < 10; i++) this.fireworks.push({ at: now + 300 + i * 380, x: x + (Math.random() - 0.5) * 16, y: y + 11 + Math.random() * 6, z: z + (Math.random() - 0.5) * 16 });
     this.sound.play('victory');
     const mine = Array.isArray(msg.by) && msg.by.includes(this.pid);
+    // Who did what for the stage, and what it pays each (shared/adventure.js
+    // stageResults), when the island tells: yours paid to you, and everyone's
+    // shown in a window once the fireworks have had their moment (ui.js) —
+    // after the ending film, at the end of an episode.
+    const board = cleanBoard(msg.board);
+    const own = board?.find((r) => r.id === this.pid && r.here);
+    const after = adv?.story?.final ? ENDING_AFTER_MS + adv.story.episode.films.endingMs : WIN_OFFER_MS;
+    const resultsAt = adv?.story?.final ? after : RESULTS_AFTER_MS;
     if (mine) {
       this.profile.count('kings');
-      this.profile.addToBasket('diamond', 1);
+      if (!board) this.profile.addToBasket('diamond', 1);
+      else if (own?.gems) this.profile.addToBasket('diamond', own.gems);
+      if (own?.coins) this.profile.earn(own.coins);
       // Everyone who freed the island gets a quiz for a golden key: it comes
       // up by itself once the fireworks have had their moment
-      // (updateAdventure). (At the end of an episode, its ending film first,
-      // however long that is: ui.js endingFilm.)
-      const after = adv?.story?.final ? ENDING_AFTER_MS + adv.story.episode.films.endingMs : WIN_OFFER_MS;
-      this.offerKeyQuiz(true, after);
+      // (updateAdventure), after the results (ui.js stageResults). (At the
+      // end of an episode, its ending film first, however long that is: ui.js
+      // endingFilm.)
+      this.offerKeyQuiz(true, board ? resultsAt + RESULTS_BEFORE_KEY_MS : after);
+    }
+    if (board) {
+      this.stageResults = { rows: board, mine: own ?? null, stage: adv?.story?.n ?? 0, name: adv?.story?.name ?? '' };
+      setTimeout(() => this.stageResults?.rows === board && this.emit('stage-results'), resultsAt);
     }
     if (this.dizzy) {
       this.dizzy = false;
@@ -3221,10 +3253,11 @@ export class Game extends EventTarget {
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards (or the colours
     // of the rainbow) won back so far.
-    if (story) this.emit('toast', { icon: story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    const thanks = !mine ? '' : board ? ' Rewards for everyone, by how much each helped! 🏆' : ' A diamond for everyone who helped! 💎';
+    if (story) this.emit('toast', { icon: story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
     // The end of an episode: its ending, once the fireworks have had a moment (ui.js).
     if (story?.final) setTimeout(() => this.adventure === adv && this.emit('ending'), ENDING_AFTER_MS);
-    else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${mine ? ' A diamond for everyone who helped! 💎' : ''}` });
+    else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${story ? '' : thanks}` });
     this.emit('adventure');
   }
 

@@ -9,7 +9,7 @@
 // island like any other. And the monster collection's book.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AdventureSim, bossHearts, CAMP_RADIUS, campFence, CASTLE_RADIUS, castleWalls, DIZZY_MS, flatten, GUARD_BACK_MS, groundMap, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
+import { AdventureSim, bossHearts, DEEDS, RESULT_COINS_BASE, RESULT_COINS_MAX, RESULT_COINS_PER, stageResults, CAMP_RADIUS, campFence, CASTLE_RADIUS, castleWalls, DIZZY_MS, flatten, GUARD_BACK_MS, groundMap, guardsFor, helpHp, KING_HEAL_MS, KING_HIT_MS, kingHearts, MONSTER_BOOK, monsterStats, raiseSeconds, WAKE } from '../public/js/shared/adventure.js';
 import { keptProfile } from '../public/js/shared/keeper.js';
 import { BOSSES, stompMove } from '../public/js/shared/bosses.js';
 import { chapterOf } from '../public/js/shared/isle-story.js';
@@ -186,6 +186,12 @@ test('a flag goes up only with nobody of its camp in it, faster with more friend
   // ...a sixth a second for two; flying over it does not count.
   play(room, time, 1000, [a, ...byFlag(c)], [b, ...byFlag(c, -2.5)]);
   assert.ok(Math.abs(c.progress - (0.3 + 1 / 6)) < 0.02, `two friends: ${c.progress}`);
+  // Each counted for the stage's results: the monsters popped, and the
+  // seconds each stood raising the flag.
+  const da = room.adventure.deeds.get(a.pid);
+  assert.equal(da.pops, 3);
+  assert.ok(Math.abs(da.flag - 4) < 0.2, `a raised it for ${da.flag} s`);
+  assert.ok(Math.abs(room.adventure.deeds.get(b.pid).flag - 1) < 0.2);
   room.receive(b, { t: 'm', s: [c.x - 2.5, c.y + 3, c.z, 0, 0, 1] });
   room.receive(a, { t: 'm', s: [c.x + 10, c.y, c.z, 0, 0, 0] });
   const before = c.progress;
@@ -265,6 +271,7 @@ test('out of HP with a friend on the island you sit dizzy, nothing bumps you, an
   room.receive(b, { t: 'm', s: [x + 1.5, y, z, 0, 0, 0] });
   room.receive(b, { t: 'help', pid: a.pid });
   assert.deepEqual(b.last('helped'), { t: 'helped', pid: a.pid, by: b.pid, hp: helpHp(maxHp(1)), max: maxHp(1) });
+  assert.equal(room.adventure.deeds.get(b.pid).helps, 1, 'counted for the stage');
   assert.equal(room.players.get(a.pid).hp, helpHp(maxHp(1)));
   // Dizzy for too long, with nobody coming: back to the start.
   room.players.get(a.pid).hp = 1;
@@ -348,9 +355,34 @@ test('out of its bubble, each friend can bop the boss once a moment: more friend
   assert.equal(room.monsters.list.length, 0);
   const won = b.last('won');
   assert.deepEqual(won.by.sort(), [a.pid, b.pid].sort());
+  // With everyone's results: the bops each landed, their points, and what
+  // that pays them.
+  assert.equal(won.board.length, 2);
+  for (const r of won.board) {
+    assert.equal(r.here, true);
+    assert.ok(r.boss > 0, `${r.name} bopped it`);
+    assert.equal(r.score, r.pops * DEEDS.pops + r.boss * DEEDS.boss + r.flag * DEEDS.flag + r.helps * DEEDS.helps);
+    assert.equal(r.coins, RESULT_COINS_BASE + Math.floor(r.score / RESULT_COINS_PER));
+    assert.equal(r.gems, r.place === 1 ? 2 : 1);
+  }
+  assert.ok(won.board[0].score >= won.board[1].score, 'most points first');
   assert.equal(castle.freed, true);
   assert.equal(room.world.get(Math.floor(castle.x) + 3, castle.y - 1, Math.floor(castle.z)), B.GRASS, 'its yard all grass');
   assert.equal(room.adventure.active, false);
+});
+
+test('a stage’s results rank everyone by what they did for it, and pay each by their points', () => {
+  const deeds = new Map([
+    [1, { pops: 10, boss: 5, flag: 30.4, helps: 1 }],
+    [2, { pops: 3, boss: 0, flag: 2, helps: 0 }],
+    [3, { pops: 10, boss: 5, flag: 30.2, helps: 1 }],
+    [4, { pops: 900, boss: 0, flag: 0, helps: 0 }],
+    [7, { pops: 1, boss: 0, flag: 0, helps: 0 }],
+  ]);
+  const rows = stageResults(deeds, [{ id: 1, name: 'Happy Panda' }, { id: 2, name: 'Brave Otter' }, { id: 3, name: 'Sunny Fox' }, { id: 4, name: 'Busy Bee' }, { id: 5, name: 'Late Owl' }], [{ id: 6, name: 'Gone Cat' }, { id: 7, name: 'Gone Dog' }]);
+  assert.deepEqual(rows.map((r) => [r.id, r.place, r.score]), [[4, 1, 1800], [1, 2, 20 + 15 + 30 + 5], [3, 2, 70], [2, 4, 8], [7, 5, 2], [5, 6, 0]], 'ties share a place; nobody who left with nothing done');
+  assert.deepEqual(rows.map((r) => [r.coins, r.gems]), [[RESULT_COINS_MAX, 2], [RESULT_COINS_BASE + 17, 1], [RESULT_COINS_BASE + 17, 1], [RESULT_COINS_BASE + 2, 1], [0, 0], [RESULT_COINS_BASE, 0]], 'the most a diamond more; coins up to a cap; nothing for anyone gone; coins for coming to cheer');
+  assert.equal(rows.find((r) => r.id === 7).here, false);
 });
 
 test('King Grumble’s stomp knocks over whoever is on the ground near him as he lands, and misses anyone jumping', () => {

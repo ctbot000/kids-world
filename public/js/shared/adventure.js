@@ -564,6 +564,18 @@ export class AdventureSim {
     // freed; and since when each person has been past a gate still shut.
     this.way = null;
     this.sneakAt = new Map();
+    // What each person has done for the stage so far, by id (credit): for
+    // the results everyone sees once it is won (stageResults).
+    this.deeds = new Map();
+  }
+
+  // Something done for the stage by person id: what, one of DEEDS' keys, n
+  // times (or seconds, for raising a flag).
+  credit(id, what, n = 1) {
+    if (this.won || !(what in DEEDS) || !(n > 0)) return;
+    let d = this.deeds.get(id);
+    if (!d) this.deeds.set(id, (d = { pops: 0, boss: 0, flag: 0, helps: 0 }));
+    d[what] += n;
   }
 
   // The treasure chests, now and then: the cells that changed, [x, y, z,
@@ -795,7 +807,8 @@ export class AdventureSim {
       c.back.push(now + guardBackMs(this.level));
       c.reserve--;
     }
-    c.holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5).length;
+    const holders = people.filter((p) => !p.flying && !p.riding && !p.dizzy && Math.hypot(p.x - c.x, p.z - c.z) <= FLAG_REACH && p.y > c.y - 1.5 && p.y < c.y + 3.5);
+    c.holders = holders.length;
     // (A Mimic still shut guards nothing: nobody could tell what was holding the
     // flag down. Still, whoever comes to raise it is near enough to wake it.)
     c.guarded = monsters.list.some((m) => m.camp === c.id && campDistance(c, m.body.x, m.body.z) <= c.r + 0.5 && !(kindOf(m.kind).shut && m.state === 'idle'));
@@ -803,6 +816,7 @@ export class AdventureSim {
     if (c.guarded) c.progress = Math.max(0, c.progress - dt * slideFor(this.level));
     if (!c.holders || c.guarded) return;
     c.progress = Math.min(1, c.progress + dt / raiseSeconds(c.holders, this.level));
+    for (const p of holders) this.credit(p.id, 'flag', dt);
     // Half way up, on the higher stages: an ambush, once a camp.
     if (!c.ambushed && c.progress >= AMBUSH_AT) {
       const n = ambushFor(people.length, this.level);
@@ -1102,6 +1116,46 @@ export class AdventureSim {
     };
   }
 
+}
+
+// ------------------------------------------------ who did what for a stage
+
+// What counts towards a stage won, and how many points each is worth:
+// a monster popped, a bop on the boss, a second spent raising a flag,
+// a friend helped up.
+export const DEEDS = { pops: 2, boss: 3, flag: 1, helps: 5 };
+// What a stage won pays each person on it, by their points: a few coins for
+// being there, a coin for every RESULT_COINS_PER points more (up to
+// RESULT_COINS_MAX), a diamond for anyone who did something for it, and
+// another for whoever did the most.
+export const RESULT_COINS_BASE = 5;
+export const RESULT_COINS_PER = 4;
+export const RESULT_COINS_MAX = 150;
+// The most rows a stage's results list.
+export const RESULT_ROWS = 32;
+
+// A stage's results: everyone on the island (people: [{ id, name }]), and
+// whoever did something for it and has left since (gone: [{ id, name }]),
+// each with what they did (deeds, by id: Adventure.deeds), their points,
+// their place (1 the most; the same points, the same place) and what it
+// pays them; most points first. Only those on the island are paid.
+export function stageResults(deeds, people, gone = []) {
+  const row = (p, here) => {
+    const d = deeds.get(p.id) ?? { pops: 0, boss: 0, flag: 0, helps: 0 };
+    const flag = Math.round(d.flag);
+    const score = d.pops * DEEDS.pops + d.boss * DEEDS.boss + flag * DEEDS.flag + d.helps * DEEDS.helps;
+    return { id: p.id, name: String(p.name ?? '').slice(0, 40), here, pops: d.pops, boss: d.boss, flag, helps: d.helps, score, place: 0, coins: 0, gems: 0 };
+  };
+  const seen = new Set(people.map((p) => p.id));
+  const rows = [...people.map((p) => row(p, true)), ...gone.filter((p) => !seen.has(p.id) && deeds.has(p.id)).map((p) => row(p, false)).filter((r) => r.score > 0)];
+  rows.sort((a, b) => b.score - a.score || Number(b.here) - Number(a.here));
+  for (const [i, r] of rows.entries()) {
+    r.place = i && r.score === rows[i - 1].score ? rows[i - 1].place : i + 1;
+    if (!r.here) continue;
+    r.coins = RESULT_COINS_BASE + Math.min(RESULT_COINS_MAX - RESULT_COINS_BASE, Math.floor(r.score / RESULT_COINS_PER));
+    r.gems = r.score > 0 ? (r.place === 1 ? 2 : 1) : 0;
+  }
+  return rows.slice(0, RESULT_ROWS);
 }
 
 // An island made with ⚔️ Adventure on, back when any island could have

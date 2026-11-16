@@ -3020,6 +3020,52 @@ body.touch.playing #joystick {
   }
 }
 
+/* A stage's results (ui.js stageResultsDialog): what each did, and got. */
+.results-you {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.ranking.results {
+  margin-bottom: 12px;
+}
+
+.rank-row.gone {
+  opacity: 0.6;
+}
+
+.rank-row .who .deeds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ranking.results .who b {
+  display: block;
+}
+
+.rank-row .prize {
+  flex: none;
+  min-width: 4.5rem;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .ranking.results .rank-row {
+    flex-wrap: wrap;
+  }
+
+  .ranking.results .rank-row .prize {
+    min-width: 0;
+  }
+}
+
 .rank-about {
   display: flex;
   flex-wrap: wrap;
