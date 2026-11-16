@@ -35,6 +35,7 @@ import { buildIsle } from './isle-maps.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
+import { SPLASH_COOL_MS, VolcanoSim } from './volcano.js';
 import { underTent } from './tents.js';
 import { FIG_HEARTS, isMonsterGashapon, kindsOfFigures } from './gashapon.js';
 import { cleanDishFood, DISH_MAX, isDish } from './dish.js';
@@ -330,6 +331,12 @@ export class Room {
     // Mining bombs placed, by the cell they sit in: the cell, who placed one
     // there, and when it pops (stepBombs).
     this.bombs = new Map();
+    // The volcano island's eruptions (shared/volcano.js): never saved, so an
+    // island opened again starts quietly, and the bombs in the air now.
+    // Not on Adventure Isle, though its Ember Mountain is a volcano: its
+    // stages are laid out and balanced as they are (isle-story.js).
+    this.volcano = this.shared ? null : new VolcanoSim(w, () => this.rng.next());
+    this.lavaBombs = [];
     // The Bomb Rod's little bombs in the air: where each will land, and when.
     this.rodBombs = [];
     // Fires lightning has started (stepStorm), never saved; and when the
@@ -946,6 +953,8 @@ export class Room {
       ...this.hpOf(this.players.get(c.pid)),
       env: this.envMessage(),
       fires: this.fires.pack(),
+      // The eruption going as they came in, if one is (shared/volcano.js).
+      volcano: this.volcano?.pack(this.now()) ?? null,
       chat: this.chat,
       adventure: this.adventure?.describe() ?? null,
       defense: this.defense?.describe(this.monsters) ?? null,
@@ -1666,6 +1675,7 @@ export class Room {
     this.nature(now);
     this.stepBombs(now);
     this.stepRodBombs(now);
+    this.stepVolcano(now);
   }
 
   // The fireflies: the host lets a few out over the flowers at dusk and
@@ -2415,6 +2425,39 @@ export class Room {
       this.changed();
     }
     this.broadcast({ t: 'fx', kind: 'blast', x: x + 0.5, y: y + 0.5, z: z + 0.5, by: p.id, gems: plan.collected, ...(meteor ? { meteor: true } : {}) });
+  }
+
+  // The volcano island's crater erupting on its own (shared/volcano.js): a rumble, then a fountain of lava and lava bombs out of the crater, every few minutes. It is all a show told to everyone as 'vfx' — nothing is set in the world, so an island saved and opened again shows no trace of one. Each bomb bursts where it lands, and the splash it leaves burns anyone standing in it while it is still hot, as lava does; Knight Armor takes half of that, and a Fire Suit all of it (as with a monster's bump); riding anything, you are up out of it. Never on Adventure Isle (hookWorld).
+  stepVolcano(now) {
+    const v = this.volcano;
+    if (!v) return;
+    // What the eruption does as it goes, told to everyone at once.
+    for (const msg of v.step(now)) {
+      if (msg.kind === 'bomb') {
+        // The bomb comes down this long from now: remember it, so its burst
+        // lands on the host's word too.
+        msg.at = now + msg.ms;
+        this.lavaBombs.push(msg);
+      }
+      this.broadcast(msg);
+    }
+    // Each bomb as it lands: a pop like a Mining Bomb's and its splash.
+    for (const bomb of this.lavaBombs.filter((b) => b.at <= now)) {
+      const splash = v.splashAt(bomb.to[0], bomb.to[1], bomb.to[2], now);
+      this.broadcast({ t: 'vfx', kind: 'splash', id: bomb.id, at: bomb.to, keep: splash ? SPLASH_COOL_MS : 0 });
+    }
+    this.lavaBombs = this.lavaBombs.filter((b) => b.at > now);
+    // The splashes cooling away, and whoever is standing in one still hot.
+    for (const gone of v.stepSplashes(now)) this.broadcast({ t: 'vfx', kind: 'cool', at: [gone.x + 0.5, gone.y, gone.z + 0.5] });
+    if (!v.going && !this.lavaBombs.length && !v.splashes.size) return;
+    // Riding anything, you are up out of it, as out of lava (stepLava).
+    const riding = this.critters.aboard();
+    for (const p of this.players.values()) {
+      if (!p.online || riding.has(p.id) || (p.safeUntil ?? 0) > now || (p.dizzyUntil ?? 0) > now) continue;
+      if (hasPower(p.look, 'fireproof')) continue;
+      if (!v.burning(p.s[0], p.s[1], p.s[2], now)) continue;
+      this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? LAVA_BUMPS / 2 : LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });
+    }
   }
 
   // ------------------------------------------------ tower defense

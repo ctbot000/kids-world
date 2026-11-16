@@ -630,6 +630,29 @@ export class Sound {
         for (let i = 0; i < 6; i++) this.noise(0.05, { at: 0.2 + i * 0.09 + Math.random() * 0.05, type: 'bandpass', freq: 700 + Math.random() * 900, q: 1.5, gain: 0.12 * near });
         break;
       }
+      // A volcano's crater waking before it erupts: a long low rumble
+      // rising out of the island's rock (game.js volcanoNews), softer the
+      // further off it is (opts.near, 1 right there).
+      case 'rumble': {
+        const near = opts.near ?? 1;
+        this.tone(34 * r(), { attack: 1.6, decay: 2.6, gain: 0.3 * near, slide: 66, slideTime: 4, vibrato: 6 });
+        this.tone(52 * r(), { attack: 1.8, decay: 2.2, gain: 0.14 * near, slide: 90, slideTime: 3.6, type: 'triangle', vibrato: 9 });
+        this.noise(4, { type: 'lowpass', freq: 90, sweep: 300, gain: 0.24 * near, attack: 1.9 });
+        for (let i = 0; i < 5; i++) this.noise(0.08, { at: 0.7 + i * 0.6 + Math.random() * 0.15, type: 'bandpass', freq: 60 + Math.random() * 50, q: 4, gain: 0.16 * near });
+        break;
+      }
+      // The crater blowing: a deep boom with the roar of lava out of it and
+      // the rattle of the rocks it throws (game.js volcanoNews), softer the
+      // further off it is (opts.near, 1 right there).
+      case 'eruption': {
+        const near = opts.near ?? 1;
+        this.tone(88 * r(), { decay: 1.4, gain: 0.5 * near, slide: 26, slideTime: 1.1, attack: 0.004 });
+        this.tone(48 * r(), { decay: 1.8, gain: 0.34 * near, slide: 24, slideTime: 1.5 });
+        this.noise(0.05, { type: 'highpass', freq: 1800, gain: 0.3 * near, attack: 0.001 });
+        this.noise(1.6, { type: 'lowpass', freq: 1600, sweep: 90, gain: 0.36 * near });
+        this.noise(2.6, { type: 'bandpass', freq: 500, sweep: 180, q: 0.7, gain: 0.2 * near, attack: 0.7 });
+        break;
+      }
       // A tower blowing a bubble: a soft little bloop.
       case 'blow':
         this.tone(520 * r(), { decay: 0.1, gain: 0.05, slide: 1100, slideTime: 0.07 });
