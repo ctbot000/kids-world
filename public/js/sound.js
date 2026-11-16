@@ -948,6 +948,10 @@ export class Sound {
         // A soft cough of a chuff.
         for (let i = 0; i < 3; i++) this.noise(0.06, { at: i * 0.12, type: 'bandpass', freq: 700 * r(), q: 2, gain: 0.08 });
         break;
+      case 'camel':
+        // A grumble and a grumble: hmm-hmm, low and chewy.
+        for (let i = 0; i < 2; i++) this.tone(240 * r(), { at: i * 0.26, type: 'sawtooth', attack: 0.05, decay: 0.24, gain: 0.05, slide: 180, slideTime: 0.2, vibrato: 16 });
+        break;
       case 'polarbear':
         // A gentle rumble.
         this.tone(170 * r(), { type: 'sawtooth', attack: 0.08, decay: 0.55, gain: 0.04, slide: 120, vibrato: 18 });

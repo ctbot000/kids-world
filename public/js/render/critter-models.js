@@ -1392,6 +1392,68 @@ function polarbear(id) {
   return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.15, shadow: 0.65, pick: 0.7, center: 0.65, seen: 110, gait: { len: 0.44, run: 3.5, happy: 'hop', graze: 0.45 } };
 }
 
+// A camel: the desert's own big animal, tan and woolly, two humps on its back
+// with a dip between them for the saddle, a long neck that swings down to
+// graze, and wide pale feet for the sand.
+function camel(id) {
+  const { g, body, pivot } = bigRig(0.95);
+  const COAT = id % 2 ? '#d8a869' : '#ce9c5e';
+  const coat = toon(COAT);
+  const wool = toon(id % 2 ? '#e8c084' : '#dfb478');
+  const pale = toon('#f0e0bc');
+  const R = [0.29, 0.285, 0.58];
+  pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
+  // Its chest and its hindquarters stand a little higher than its back's dip.
+  pivot.add(mesh(sphere(), coat, 0, 0.05, 0.32, 0.26, 0.29, 0.28));
+  pivot.add(mesh(sphere(), coat, 0, 0.06, -0.32, 0.26, 0.3, 0.26));
+  // The two humps it is famous for, woolliest at the top, set wide apart so a
+  // rider sits in the dip between them.
+  for (const [z, w, h] of [[0.3, 0.16, 0.26], [-0.38, 0.15, 0.24]]) {
+    pivot.add(mesh(sphere(1, 12, 10), coat, 0, 0.17, z, w, h, 0.14));
+    pivot.add(mesh(sphere(1, 10, 8), wool, 0, 0.17 + h * 0.55, z, w * 0.7, h * 0.45, 0.1));
+  }
+  const legs = fourLegs(pivot, { x: 0.19, front: 0.36, back: -0.36, hip: -0.2, len: 0.75, r: 0.082, color: COAT });
+  // Two toes, wide and pale, on each foot.
+  for (const leg of legs) {
+    leg.add(mesh(sphere(), pale, 0, -0.72, 0.02, 0.085, 0.045, 0.115));
+    for (const x of [-0.035, 0.035]) leg.add(mesh(sphere(1, 8, 6), toon('#5a4a38'), x, -0.745, 0.12, 0.02, 0.014, 0.026));
+  }
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.14, 0.44);
+  pivot.add(neck);
+  const n = new THREE.Group();
+  n.rotation.x = 0.5;
+  neck.add(n);
+  n.add(mesh(capsule(0.085, 0.48, 6, 12), coat, 0, 0.24, 0));
+  // A woolly collar under its throat, and a short mane up the back of its neck.
+  n.add(mesh(sphere(1, 10, 8), wool, 0, 0.16, 0.05, 0.1, 0.16, 0.1));
+  for (let i = 0; i < 4; i++) n.add(mesh(sphere(1, 8, 6), wool, 0, 0.14 + i * 0.13, -0.075, 0.028, 0.06, 0.02));
+  const head = new THREE.Group();
+  head.position.set(0, 0.52, 0.04);
+  head.rotation.x = -0.5;
+  n.add(head);
+  head.add(mesh(sphere(), coat, 0, 0, 0.02, 0.1, 0.11, 0.15));
+  // A long muzzle, with a soft pale chin.
+  head.add(mesh(sphere(), coat, 0, -0.045, 0.17, 0.075, 0.075, 0.12));
+  head.add(mesh(sphere(), pale, 0, -0.075, 0.24, 0.05, 0.035, 0.06));
+  for (const side of [-1, 1]) {
+    head.add(mesh(sphere(1, 8, 6), toon('#5a4a38'), side * 0.03, -0.01, 0.27, 0.014, 0.018, 0.012));
+    // A little rounded ear, and long lashes over each eye.
+    head.add(mesh(sphere(), coat, side * 0.105, 0.075, -0.02, 0.032, 0.055, 0.022));
+    for (const dz of [0, 0.025, 0.05]) head.add(mesh(sphere(1, 6, 4), toon('#6a5238'), side * 0.085, 0.045, 0.075 + dz, 0.008, 0.022, 0.008));
+  }
+  const eyes = sideEyes(head, 0.088, 0.045, 0.075, 0.028);
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.1, -0.56);
+  pivot.add(tail);
+  tail.add(mesh(capsule(0.014, 0.3, 4, 8), coat, 0, -0.15, -0.01));
+  for (const dx of [-0.02, 0, 0.02]) tail.add(mesh(capsule(0.01, 0.07, 4, 6), wool, dx, -0.33, -0.01).rotateZ(dx * 8));
+  const s = saddle(pivot, 0.33, 0.3, 0.27, -0.05, true);
+  // Tassels on the blanket's edge, for riding in style.
+  for (const x of [-0.24, -0.12, 0.12, 0.24]) s.saddle.add(mesh(capsule(0.014, 0.07, 4, 6), toon('#ffcf3f'), x, -0.09, 0.13).rotateZ(x * 1.5));
+  return { group: g, body, pivot, neck, head, eyes, tail, legs, ...s, height: 1.9, shadow: 0.6, pick: 0.85, center: 1.0, seen: 120, gait: { len: 0.75, run: 4.5, happy: 'sway', graze: 0.55 } };
+}
+
 // ------------------------------------------------ the zoo's animals
 
 // How far out a body made of ellipsoids ([y, z, rx, ry, rz] each, round
@@ -1785,7 +1847,7 @@ function kangaroo(id) {
   return { group: g, body, head, eyes, legs, arms, tail, height: 0.95, pick: 0.42, center: 0.5 };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, lion, tiger, zebra, hippo, rhino, panda, flamingo, monkey, kangaroo, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, lion, tiger, zebra, hippo, rhino, panda, flamingo, monkey, kangaroo, camel, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {

@@ -39,11 +39,13 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo', 'rope'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo', 'rope', 'camel'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
 const ICY = new Set([B.SNOW, B.ICE, B.SAND, B.PEBBLES, B.STONE]);
+// The sand of a desert island's dunes, where the camels keep.
+const DUNY = new Set([B.SAND, B.PEBBLES]);
 // n seats evenly round a circle of radius r, the first straight ahead.
 function ring(n, r) {
   return Array.from({ length: n }, (_, i) => [Math.sin((i / n) * Math.PI * 2) * r, Math.cos((i / n) * Math.PI * 2) * r].map((v) => +v.toFixed(3)));
@@ -104,6 +106,10 @@ export const CRITTER_INFO = {
   flamingo: { name: 'Flamingo', icon: '🦩', speed: 0.8, swims: false, flies: false, wades: true, home: 8, range: [1, 3], names: ['Rosie', 'Flora', 'Pinky', 'Blush', 'Coral', 'Fifi', 'Peaches', 'Mingo', 'Bubblegum', 'Lolly'] },
   monkey: { name: 'Monkey', icon: '🐒', speed: 2, swims: false, flies: false, climb: 2.1, home: 8, range: [1.5, 5], names: ['Coco', 'Bobo', 'Banana', 'Mischief', 'Kiki', 'Jojo', 'Chimp', 'Momo', 'Peanut', 'Zippy'] },
   kangaroo: { name: 'Kangaroo', icon: '🦘', speed: 1.8, swims: false, flies: false, home: 12, range: [2, 6], names: ['Joey', 'Skippy', 'Roo', 'Boing', 'Matilda', 'Hopper', 'Bounce', 'Kanga', 'Sheila', 'Pogo'] },
+  // The desert's big animal, on the dunes and by the oasis of a desert
+  // island (and in the toy box, to bring anywhere): patient and plodding, but
+  // it gallops along faster than you run.
+  camel: { name: 'Camel', icon: '🐪', speed: 1.3, swims: true, flies: false, big: true, gallops: true, paddles: true, ground: DUNY, home: 12, ride: { seat: 1.35, z: -0.05, radius: 0.46, height: 2.55, float: 0.85, spread: 0.75, walk: 5, run: 9, swim: 3, jump: 9.5 }, names: ['Humphrey', 'Sahara', 'Sandy', 'Dune', 'Clementine', 'Cinnamon', 'Date', 'Oasis', 'Sunny', 'Caravan'] },
   // Vehicles (vehicle: 'land' or 'sea'), to drive. The car and the boat
   // honk instead of jumping; the digger digs through the ground it drives
   // into (ride.drill); the mine cart rolls along rails (ride.rails: its
@@ -733,6 +739,7 @@ export function bigCounts(theme) {
   if (theme === 'snowy') return { reindeer: 3, polarbear: 2 };
   if (theme === 'candy') return { unicorn: 3, pony: 1 };
   if (theme === 'flat') return { pony: 2, cow: 2, dog: 1 };
+  if (theme === 'desert') return { camel: 2 };
   if (theme === 'volcano') return {};
   return { pony: 2, cow: 2, elephant: 1, giraffe: 1, dog: 1 };
 }
@@ -753,7 +760,9 @@ export function placeBig(world, rng, counts = scaleCounts(bigCounts(world.theme)
     for (let i = 0; i < n; i++) {
       for (let tries = 0; tries < spots(world, 800); tries++) {
         const p = perchAt(world, rng.int(3, world.W - 4) + 0.5, rng.int(3, world.D - 4) + 0.5);
-        if (!p || (type === 'polarbear' ? !onShore(world, p) : p.kind !== 'ground' || p.ground === B.SAND || p.y <= world.sea + 1)) continue;
+        // A camel goes on the dunes of a desert island, where other big animals would not.
+        const fussy = type === 'polarbear' ? (p) => !onShore(world, p) : type === 'camel' ? (p) => p.kind !== 'ground' || !DUNY.has(p.ground) || p.y <= world.sea + 1 : (p) => p.kind !== 'ground' || p.ground === B.SAND || p.y <= world.sea + 1;
+        if (!p || fussy(p)) continue;
         if (Math.hypot(p.x - spawn.x, p.z - spawn.z) < 10 || out.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 3)) continue;
         if (!fits(world, type, p.x, p.y, p.z)) continue;
         out.push({ type, x: p.x, y: p.y, z: p.z });
