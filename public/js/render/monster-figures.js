@@ -20,6 +20,7 @@ import { MoleModel } from './mole-model.js';
 import { ShroomModel, SnapperModel } from './isle-monsters.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { SpiderModel } from './spider-model.js';
+import { MummyModel } from './mummy-model.js';
 
 const TALL = 0.95;
 
@@ -52,7 +53,7 @@ function modelOf(kind, theme = 'sunny') {
     b.figurePose();
     return b;
   }
-  const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel, snapper: SnapperModel, shroom: ShroomModel }[kind];
+  const make = { mosquito: MosquitoModel, queen: QueenMosquitoModel, spider: SpiderModel, mole: MoleModel, snapper: SnapperModel, shroom: ShroomModel, mummy: MummyModel }[kind];
   const m = make ? new make(theme, 1) : new MonsterModel(theme, kind);
   // (He comes up over a moment, so the moment is let go by.)
   m.update(kind === 'mole' ? 1 : 0, kind === 'mole' ? 'hop' : 'idle', 0, false);
