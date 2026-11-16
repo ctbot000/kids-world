@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { BLACK, BURNT_AT, campfireNear, GOLDEN_AT, isCampfire, mallowColor, mallowState, overFlames, TOAST_RATE, toastStep } from '../public/js/shared/mallow.js';
+import { STAT_KEYS } from '../public/js/shared/stickers.js';
+import { XP_FOR } from '../public/js/shared/levels.js';
 import { World } from '../public/js/shared/world.js';
 
 // A grassy field with a campfire in the middle of it.
@@ -61,4 +63,9 @@ test('the campfire beside you is found, and none further away', () => {
   // With the fire picked up, there is nothing to toast at.
   w.set(10, 5, 10, B.AIR);
   assert.equal(campfireNear(w, { x: 9.5, y: 6, z: 10.5 }), null, 'picked up mid-toast');
+});
+
+test('a golden one eaten is counted and earns XP, like any other thing done', () => {
+  assert.ok(STAT_KEYS.includes('toasted'), 'toasted is counted');
+  assert.ok(XP_FOR.toasted.xp > 0 && XP_FOR.toasted.cap > 0, 'it earns XP, up to a cap');
 });

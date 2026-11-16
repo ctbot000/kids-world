@@ -1100,6 +1100,7 @@ export class Game extends EventTarget {
     this.dropPet(pid);
     this.lines.get(pid)?.dispose();
     this.lines.delete(pid);
+    this.sticks.delete(pid);
     this.players.delete(pid);
     this.emit('players');
     if (!quiet && pid !== this.pid) {
@@ -5662,7 +5663,10 @@ export class Game extends EventTarget {
     const now = mallowState(m.brown);
     if (now !== was) {
       if (now === 'golden') this.emit('toast', { icon: '🍢', text: 'Golden! Tap to eat it, or hold on a moment more for a little darker.' });
-      else if (now === 'burnt') this.burnMallow();
+      else if (now === 'burnt') {
+        this.burnMallow();
+        return;
+      }
     }
     // What everyone else sees: how brown it is now, now and then on the way.
     const now2 = performance.now();
@@ -5691,11 +5695,12 @@ export class Game extends EventTarget {
     const state = mallowState(m.brown);
     const b = this.me.body;
     this.mallow = null;
+    this.hideStick(this.pid);
     this.send({ t: 'mallow', op: 'eat', p: +m.brown.toFixed(2) });
     this.eatFx(this.pid, state, m.brown, b.x, b.y + 1.1, b.z);
     if (state === 'golden') {
+      if (this.profile.data.stats.toasted < XP_FOR.toasted.cap) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: XP_FOR.toasted.xp });
       this.profile.count('toasted');
-      this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: XP_FOR.toasted?.xp ?? 2 });
     }
   }
 
@@ -5705,6 +5710,7 @@ export class Game extends EventTarget {
     const m = this.mallow;
     const b = this.me.body;
     this.mallow = null;
+    this.hideStick(this.pid);
     this.send({ t: 'mallow', op: 'burn' });
     this.eatFx(this.pid, 'burnt', m.brown, b.x, b.y + 1.1, b.z);
   }
@@ -5725,7 +5731,6 @@ export class Game extends EventTarget {
     else if (msg.op === 'brown') this.sticks.get(msg.pid)?.setBrown(msg.p);
     else if (msg.op === 'eat') {
       const at = this.stickAtOf(msg.pid);
-      this.showStick(msg.pid);
       this.sticks.get(msg.pid)?.setBrown(msg.p);
       this.eatFx(msg.pid, mallowState(msg.p), msg.p, at.x, at.y, at.z);
       this.hideStick(msg.pid);

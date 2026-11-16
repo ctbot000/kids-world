@@ -5410,10 +5410,10 @@ export class UI {
                     : ['🎣 Wait…', 'Wait for the bobber to go right under']
         : t === g.fireTarget
           ? g.mallow
-            ? { golden: ['🍢 Eat', 'Golden! Eat it now'], burnt: ['😖 Dropped!', 'Too late — it burnt'] }[mallowState(g.mallow.brown)] ?? ['🍢 Toast', 'Hold it over the flames until it turns golden']
+            ? { golden: ['🍢 Eat', 'Golden! Eat it now'], dark: ['🍢 Eat', 'A little dark — eat it now, before it burns'] }[mallowState(g.mallow.brown)] ?? ['🍢 Toast', 'Hold it over the flames until it turns golden']
             : ['🍢 Toast', 'Toast a marshmallow over the campfire']
             : null;
-    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t === g.dishTarget ? '🍽️ Dish' : t === g.fireTarget ? (g.mallow ? mallowState(g.mallow.brown) === 'golden' ? '🍢 Eat' : '🍢 Toast' : '🍢 Toast') : t.monster ? '👾 Turn' : '🎁 Turn';
+    const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t === g.dishTarget ? '🍽️ Dish' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
