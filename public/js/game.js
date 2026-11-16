@@ -64,6 +64,7 @@ import { editPrice, friendPrice, isGrow, isLand, landCount, landPrice, landProbl
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
+import { GENTLE, MOST, PUMP, SEAT, settle, swingAt, swingPhase, swungSitter } from './render/swing-model.js';
 import { slashLead } from './render/effects.js';
 import { flashModel, jellyColor } from './render/toon.js';
 
@@ -5111,6 +5112,8 @@ export class Game extends EventTarget {
     this.seat = { x: cell.x, y: cell.y, z: cell.z, spot };
     this.teaCounted = false;
     this.tubCounted = false;
+    // On a swing you start off swinging gently, and pump up from there.
+    this.swing = GENTLE;
     Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0 });
     this.sound.play('place', { kind: 'cloth' });
     this.profile.count('sat');
@@ -5123,11 +5126,12 @@ export class Game extends EventTarget {
       // A desk chair on wheels rolls as you walk, and only Q (or the button)
       // gets you off it.
       const rolls = scootsAt(this.world, cell.x, cell.y, cell.z);
+      const swings = B.block(id).model === 'swing-set';
       const off = this.touch ? 'Tap 👋 Get up to get off.' : 'Press Q to get off.';
       // At a study desk Q (and the button) open your workbooks instead.
-      const how = isStudyDesk(id) ? 'Walk' : rolls ? off : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
-      const hint = rolls ? pose.pose === 'sit' ? `You sit on the ${name} — walk to scoot it along! ${off}` : off : pose.pose === 'soak' ? `Ahh, into the ${name}! ${how} to get out.` : pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(id) ? 'at' : 'on'} the ${name}. ${how} to get up.`;
-      this.emit('toast', { icon: pose.pose === 'soak' ? '♨️' : rolls ? '🪑' : pose.pose === 'sit' ? '🛋️' : '🛏️', text: hint });
+      const how = isStudyDesk(id) ? 'Walk' : rolls || swings ? off : this.touch ? 'Walk, or tap 👋 Get up,' : 'Walk, or press Q,';
+      const hint = rolls ? pose.pose === 'sit' ? `You sit on the ${name} — walk to scoot it along! ${off}` : off : swings ? `You sit on the ${name} — tap ${this.touch ? 'jump' : 'Space'} in time to swing higher! ${off}` : pose.pose === 'soak' ? `Ahh, into the ${name}! ${how} to get out.` : pose.pose !== 'sit' ? `Snuggled up in bed! ${how} to get up.` : `You sit ${isStudyDesk(id) ? 'at' : 'on'} the ${name}. ${how} to get up.`;
+      this.emit('toast', { icon: pose.pose === 'soak' ? '♨️' : rolls ? '🪑' : swings ? '🎠' : pose.pose === 'sit' ? '🛋️' : '🛏️', text: hint });
     }
     this.emit('ride');
   }
@@ -5662,21 +5666,43 @@ export class Game extends EventTarget {
     a.root.position.z += r.dz;
   }
 
-  // The rocking chairs with someone in them (you or a friend sitting), as
-  // 'x,y,z' keys: what the renderer is told each frame so those rock and the
-  // rest stand still (render/terrain.js animate).
-  satInSeats() {
-    const out = new Set();
-    const add = (x, y, z) => {
-      if (B.block(this.world.get(x, y, z)).model === 'rocking-chair') out.add(`${x},${y},${z}`);
+  // The seats someone is in, for the renderer: the rocking chairs with someone
+  // in them (you or a friend sitting) as 'x,y,z' keys, so those rock and the
+  // rest stand still, and the swing sets likewise with the height each seat
+  // has been swung to (render/terrain.js animate). A friend's swing swings
+  // along with them at whatever height their hips say they are at.
+  seatMotion() {
+    const satIn = new Set();
+    const swinging = new Map();
+    const add = (x, y, z, spot, amp, hips) => {
+      const model = B.block(this.world.get(x, y, z)).model;
+      const key = `${x},${y},${z}`;
+      if (model === 'rocking-chair') satIn.add(key);
+      if (model !== 'swing-set') return;
+      satIn.add(key);
+      const amps = swinging.get(key) ?? [0, 0];
+      // How high this one is swinging: your own is what you have pumped it to,
+      // a friend's read off where their hips are, seat to bar.
+      amps[spot] = amp ?? Math.acos(Math.min(1, Math.max(-1, (SEAT.bar - (hips.y - y)) / SEAT.chains))) || GENTLE;
+      swinging.set(key, amps);
     };
-    if (this.seat) add(this.seat.x, this.seat.y, this.seat.z);
+    if (this.seat) add(this.seat.x, this.seat.y, this.seat.z, this.seat.spot, this.swing ?? GENTLE, null);
     for (const p of this.players.values()) {
       if (p.me || !p.inSeat || !p.avatar) continue;
       const a = p.avatar.root.position;
-      add(Math.floor(a.x), Math.floor(a.y), Math.floor(a.z));
+      const [x, y, z] = [Math.floor(a.x), Math.floor(a.y), Math.floor(a.z)];
+      // Which of the two seats they are on: the one their hips are sat in.
+      let spot = 0;
+      let near = Infinity;
+      for (let k = 0; k < 2; k++) {
+        const pose = seatPose(this.world, x, y, z, k);
+        if (!pose) continue;
+        const d = Math.hypot(a.x - pose.x, a.z - pose.z);
+        if (d < near) [spot, near] = [k, d];
+      }
+      add(x, y, z, spot, null, a);
     }
-    return out;
+    return { satIn, swinging };
   }
 
   // A tea party: you and a friend both sitting (shared/seats.js) with a Tea
@@ -5718,6 +5744,12 @@ export class Game extends EventTarget {
       this.scootInSeat(dt, input);
       return;
     }
+    // On a swing you swing back and forth, and tapping jump in time as you
+    // swing forward pumps you higher; moving, or Shift, gets you off.
+    if (B.block(this.world.get(c.x, c.y, c.z)).model === 'swing-set') {
+      this.swingInSeat(dt, input);
+      return;
+    }
     const pose = seatPose(this.world, c.x, c.y, c.z, c.spot);
     if (!pose || Math.hypot(b.x - pose.x, b.z - pose.z) > 0.8) {
       this.seat = null;
@@ -5746,6 +5778,65 @@ export class Game extends EventTarget {
       if (B.block(this.world.get(c.x, c.y, c.z)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(c.x, c.y, c.z)));
       a.update(dt, me.anim, 0);
       a.shadow.visible = false;
+    }
+  }
+
+  // On a swing, swinging: you swing gently back and forth on your own, and a
+  // tap of jump as you swing forward pumps you higher (a mistimed one less),
+  // up to almost level with the top bar. Walking off, or Shift, gets you off
+  // beside it. Friends see you swing: your seat swings with you (render/
+  // terrain.js), each at the height you have pumped it to.
+  swingInSeat(dt, input) {
+    const me = this.me;
+    const b = me.body;
+    const c = this.seat;
+    const pose = seatPose(this.world, c.x, c.y, c.z, c.spot);
+    if (!pose) {
+      this.seat = null;
+      unstick(this.world, b);
+      this.emit('ride');
+      return;
+    }
+    const move = input.readMove();
+    if (this.dizzy || input.down || Math.hypot(move.x, move.y) > 0.3) {
+      this.standUp();
+      this.liftLatch = true;
+      return;
+    }
+    const t = this.renderer.time + swingPhase(c.x, c.y, c.z);
+    // How high you have swung so far, settling back to a gentle swing when you
+    // stop pumping, as a swing left alone does.
+    this.swing = settle(this.swing ?? GENTLE, dt);
+    // A tap of jump as you swing forward (and only a tap: holding it does no
+    // more) puts your legs out and pumps you higher, the better timed the
+    // higher — the front of the swing is where it counts.
+    if (input.jump && !this.pumpLatch) {
+      this.pumpLatch = true;
+      // Well timed is at the bottom of the swing, going forward: putting your
+      // legs out there does the most, and the further from that the less.
+      const how = Math.max(0, Math.cos(t * Math.PI));
+      this.swing = Math.min(MOST, this.swing + PUMP * how);
+      this.sound.play('jump', { hop: true });
+    }
+    if (!input.jump) this.pumpLatch = false;
+    const a = swingAt(t, this.swing);
+    Object.assign(b, { x: pose.x, y: pose.y, z: pose.z, vx: 0, vy: 0, vz: 0, onGround: false, inWater: false, flying: false });
+    me.yaw = pose.yaw;
+    me.speed = 0;
+    me.anim = ANIM.sit;
+    const av = this.players.get(this.pid)?.avatar;
+    if (av) {
+      av.root.position.set(b.x, b.y, b.z);
+      av.root.rotation.y = me.yaw;
+      // On a swing you swing with the seat, leaned back as it goes up.
+      av.root.rotation.order = 'YXZ';
+      const s = swungSitter(a, me.yaw);
+      av.root.position.x += s.dx;
+      av.root.position.y += s.dy;
+      av.root.position.z += s.dz;
+      av.root.rotation.x = s.lean;
+      av.update(dt, me.anim, 0);
+      av.shadow.visible = false;
     }
   }
 
@@ -7635,7 +7726,7 @@ export class Game extends EventTarget {
     // Sitting or lying down, your eyes are lower than your hips are high.
     this.renderer.updateCamera(dt, this.seat ? { x: b.x, y: b.y - (this.me.anim === ANIM.sit ? 0.45 : 0.95), z: b.z } : this.pianoAt ? { x: b.x, y: b.y - BENCH_H, z: b.z } : b);
     this.selfVisible(this.renderer.camDist > 1.3);
-    this.renderer.frame(dt, { time: env.time, weather: env.weather, tornado: foot, focus: { x: b.x, y: b.y, z: b.z }, satIn: this.satInSeats() });
+    this.renderer.frame(dt, { time: env.time, weather: env.weather, tornado: foot, focus: { x: b.x, y: b.y, z: b.z }, ...this.seatMotion() });
     // The roar and crackle of a fire, louder the closer you are.
     // A campfire crackles softly, only close by.
     const fire = this.renderer.fires.nearest(b.x, b.y, b.z);
