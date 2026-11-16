@@ -36,6 +36,13 @@
 // great lump of mossy rock nearly twice your height, slow, that bumps three
 // times as much HP off you and takes twelve bops (a landing, two).
 //
+// And a Mummy, on a desert island only: a little monster wrapped head to
+// foot in bandages, shuffling after you slower than you walk (cross, though,
+// once bopped, like any of them). A jump landing on one and three bops each
+// see it off, and every bop knocks a bandage loose that unravels off it as
+// it hops back — then it winds itself up again. It keeps to the ground, out
+// of the water and the safe places like the others.
+//
 // And a Lava Ghost, on a volcano island only: a floating wisp of molten
 // rock that drifts slowly after you over the ground and the lava lakes alike
 // (never over water, nor into a tent or the safe place round the start, like
@@ -158,6 +165,8 @@ export const QUEEN_BODY = { radius: 0.8, height: 1.8 };
 export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 // A Stone Golem: taller than a player and wider than a Big Bruiser.
 export const GOLEM_BODY = { radius: 0.85, height: 1.75 };
+// A Mummy: about a blob's size, wrapped head to foot in bandages.
+export const MUMMY_BODY = { radius: 0.45, height: 1.0 };
 // A Lava Ghost: a blob's width but taller, hanging in the air a little way.
 export const GHOST_BODY = { radius: 0.45, height: 0.95 };
 // A Snappy Crab: wider than a blob and lower.
@@ -279,6 +288,9 @@ export const KINDS = {
   // A Puffshroom shuffles slowly, its spores doing most of the hurting
   // (SPORES); its cap is bouncy, two landings.
   shroom: { hearts: 4, bump: 1, land: 2, move: { walk: 1, run: 2.6, jump: 7 }, cross: { walk: 1, run: 3.6, jump: 7 } },
+  // A Mummy shambles after you, slower than you walk, and pops at one
+  // landing on it or three bops (a bandage unravels off it with each).
+  mummy: { hearts: 3, bump: 1, land: Infinity, move: { walk: 1.2, run: 3.2, jump: 8 }, cross: { walk: 1.2, run: 4.4, jump: 8 } },
   // A Little Yeti lumbers, and stomps (YETI_STOMP); three landings.
   yeti: { hearts: 6, bump: 2, land: 2, move: { walk: 1.5, run: 3.6, jump: 9 }, cross: { walk: 1.5, run: 5, jump: 9 } },
   // A Gummy Bear: two landings, and it splits in two (room.js).
@@ -297,6 +309,8 @@ const TOUGH = { day: { spiky: 0.2, mosquito: 0.12, spider: 0.08, mole: 0.1 }, ni
 const WILD = { day: { share: 0.04, mighty: 0 }, night: { share: 0.12, mighty: 0.25 } };
 // How often the one that comes out on a volcano island is a Lava Ghost.
 const GHOST_SHARE = 0.3;
+// How often the one that comes out on a desert island is a Mummy.
+export const MUMMY_SHARE = 0.3;
 // How high a mosquito keeps itself over the ground (or the water) beneath
 // it: well up out of reach of arm and jump until it darts at someone, when
 // it comes down to bump height; and how quickly it rises and sinks.
@@ -323,9 +337,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff', 'rear', 'charge', 'hurl', 'leap', 'heap', 'howl', 'blink'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy'];
 
-export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
 // it: up out of it he only ever hops or giggles (see step).
 export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
@@ -603,10 +617,11 @@ export class MonsterSim {
   }
 
   // Which kind comes out next, by day or at night (see TOUGH). A Lava Ghost
-  // comes out only on a volcano island, near the lava lakes and the sea of it.
-  // Now and then it is a beast (see WILD).
+  // comes out only on a volcano island, near the lava lakes and the sea of it,
+  // and a Mummy only on a desert island. Now and then it is a beast (see WILD).
   pickKind(night, theme = null) {
     if (theme === 'volcano' && this.kindRng.chance(GHOST_SHARE)) return 'ghost';
+    if (theme === 'desert' && this.kindRng.chance(MUMMY_SHARE)) return 'mummy';
     const wild = WILD[night ? 'night' : 'day'];
     if (this.kindRng.chance(wild.share)) return this.kindRng.pick(beastsOfTier(this.kindRng.chance(wild.mighty) ? 2 : 1));
     let r = this.kindRng.next();

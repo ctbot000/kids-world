@@ -83,7 +83,8 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
   assert.deepEqual(MONSTER_KINDS.slice(16, 16 + KINDS.length), KINDS, 'new kinds go on the end: the wire sends the index');
   const later = MONSTER_KINDS.indexOf(LATER[0]);
   assert.deepEqual(MONSTER_KINDS.slice(later, later + LATER.length), LATER, 'and the later captains after the beasts');
-  assert.deepEqual(MONSTER_KINDS.slice(-RAINBOW.length), RAINBOW, 'and the second episode’s after them, on the end');
+  const rainbow = MONSTER_KINDS.indexOf(RAINBOW[0]);
+  assert.deepEqual(MONSTER_KINDS.slice(rainbow, rainbow + RAINBOW.length), RAINBOW, 'and the second episode’s after them');
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
   assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW]);

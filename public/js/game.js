@@ -1798,6 +1798,8 @@ export class Game extends EventTarget {
       fx.sparkles(x, y + 1.1, z, 45, ['#ffd84d', '#ffffff', '#ff8fc4', '#b18cff']);
       fx.firework(x, y + 2, z);
     }
+    // A Mummy goes with a flurry of its bandages, all of them off at once.
+    if (kind === 'mummy') fx.sparkles(x, y + 0.7, z, 26, ['#f4ecd6', '#e7dabc', '#ffffff', '#d9c9a3']);
     if (isBoss(kind)) {
       fx.sparkles(x, y + 1.2, z, 60, ['#ffd84d', '#ffffff', '#b18cff', '#ff8fc4']);
       fx.firework(x, y + 2, z);
@@ -1892,6 +1894,9 @@ export class Game extends EventTarget {
     const struck = entry && msg.by === this.pid && now - (entry.struckAt ?? -Infinity) < 1500;
     const mine = msg.by === this.pid;
     if (entry) entry.model.squash = Math.max(entry.model.squash ?? 0, 0.4);
+    // A Mummy's bandages come loose with the blow and unravel off it
+    // (render/mummy-model.js), winding back on as it comes back at you.
+    entry?.model.bopped?.();
     if (entry && !struck) entry.flashUntil = now + FLASH_MS;
     // How many hearts that took off it, as the island says: only you hear.
     const lost = entry && Number.isInteger(msg.hearts) ? (entry.hearts ?? msg.hearts) - msg.hearts : 0;
