@@ -188,6 +188,7 @@ const BOOK = {
   big: { icon: '💪', name: 'Big Bruiser' },
   knight: { icon: '🛡️', name: 'Grumble Knight' },
   ghost: { icon: '👻', name: 'Lava Ghost' },
+  mummy: { icon: '🩹', name: 'Mummy' },
   golem: { icon: '🗿', name: 'Stone Golem' },
   queen: { icon: '👑', name: 'Queen Mosquito' },
   snapper: { icon: '🦀', name: 'Snappy Crab' },
