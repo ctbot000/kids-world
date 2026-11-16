@@ -23,6 +23,8 @@ import { isTank, tankNear } from './shared/fishtank.js';
 import { castSpot, catchFor, FIGHT, fightStep, lineState, newFight, NIBBLE_MS, planBites, STAY } from './shared/fishing.js';
 import { campfireNear, isCampfire, mallowState, overFlames, toastStep } from './shared/mallow.js';
 import { marshmallowStick } from './render/mallow-model.js';
+// How far from a campfire's middle you stand to toast over it (startToast).
+const TOAST_STAND = 0.95;
 import { FishingLine } from './render/fishing-rod.js';
 import { allByHeart, answerStudy, cleanNotebook, fileAnswer, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
@@ -43,7 +45,7 @@ import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, bodyOverlapsSolid, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { freeSpot, scootsAt, seatNear, seatOf, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -5633,6 +5635,13 @@ export class Game extends EventTarget {
     const fire = this.fireTarget;
     const b = this.me.body;
     if (!fire || this.mallow) return;
+    // Up close beside it, if there is room, so the marshmallow on the end of
+    // the stick is out over the flames (the button shows a step or two off).
+    const off = Math.hypot(b.x - fire.x - 0.5, b.z - fire.z - 0.5);
+    if (off > TOAST_STAND + 0.05) {
+      const at = { ...b, x: fire.x + 0.5 + ((b.x - fire.x - 0.5) / off) * TOAST_STAND, z: fire.z + 0.5 + ((b.z - fire.z - 0.5) / off) * TOAST_STAND };
+      if (!bodyOverlapsSolid(this.world, at)) Object.assign(b, { x: at.x, z: at.z, vx: 0, vz: 0 });
+    }
     this.me.yaw = Math.atan2(fire.x + 0.5 - b.x, fire.z + 0.5 - b.z);
     this.mallow = { fire: { x: fire.x, y: fire.y, z: fire.z }, brown: 0 };
     this.send({ t: 'mallow', op: 'hold', at: [fire.x, fire.y, fire.z] });
@@ -5674,7 +5683,7 @@ export class Game extends EventTarget {
       m.sentAt = now2;
       this.send({ t: 'mallow', op: 'brown', p: +m.brown.toFixed(2) });
     }
-    this.sticks.get(this.pid)?.setBrown(m.brown);
+    this.sticks.get(this.pid)?.userData.setBrown(m.brown);
   }
 
   // Where the marshmallow itself is in the world, while you hold it out: your
@@ -5728,10 +5737,10 @@ export class Game extends EventTarget {
   mallowNews(msg) {
     if (msg.pid === this.pid) return;
     if (msg.op === 'hold') this.showStick(msg.pid);
-    else if (msg.op === 'brown') this.sticks.get(msg.pid)?.setBrown(msg.p);
+    else if (msg.op === 'brown') this.sticks.get(msg.pid)?.userData.setBrown(msg.p);
     else if (msg.op === 'eat') {
       const at = this.stickAtOf(msg.pid);
-      this.sticks.get(msg.pid)?.setBrown(msg.p);
+      this.sticks.get(msg.pid)?.userData.setBrown(msg.p);
       this.eatFx(msg.pid, mallowState(msg.p), msg.p, at.x, at.y, at.z);
       this.hideStick(msg.pid);
     } else if (msg.op === 'burn') {

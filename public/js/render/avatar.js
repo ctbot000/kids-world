@@ -3625,15 +3625,16 @@ export class Avatar {
   }
 
   // Each frame while the stick is held: its grip stays where the hand is,
-  // however the arm got there, and it tips forward and a little down, so the
-  // marshmallow on its tip hangs over the flames (game.js overFlames).
+  // however the arm got there, and it reaches out nearly level, so the
+  // marshmallow on its tip is out over the flames, down among them (game.js
+  // overFlames), from where you stand beside the fire (startToast).
   keepStick() {
     const hand = this.hands[1];
     hand.updateWorldMatrix(true, false);
     const at = hand.getWorldPosition(scratch.v);
     this.stick.position.copy(this.body.worldToLocal(at));
     this.stick.position.y -= 0.02 * this.build.hand;
-    this.stick.rotation.set(0.62, 0, -0.1);
+    this.stick.rotation.set(1.45, 0, -0.1);
   }
 
   // Jumping rope (ANIM.rope), a grip in each hand and a weapon put away

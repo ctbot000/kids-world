@@ -5238,7 +5238,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fishTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fireTarget || g.fishTarget)) {
       this.arcadeButton(g, r);
       return;
     }
