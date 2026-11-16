@@ -425,6 +425,18 @@ const BANDS = {
 };
 // A penguin's leap out of the water on its way: [how far, how high, how long].
 const PENGUIN_LEAP = [2.6, 0.9, 0.75];
+// Dolphins racing a boat (CritterSim.race): how far off one comes to join a
+// boat, how far beside its bow they keep place, how many of them a boat takes
+// up with it, how often they leap as they go, when one has fallen so far
+// behind that it gives up and goes back to its own way, and how long a boat
+// goes without moving before it counts as stopped.
+const RACE_JOIN = 14;
+const RACE_BOW = 1.2;
+const RACE_SIDE = 1.7;
+const RACE_MAX = 2;
+const RACE_LEAP = 3.2;
+const RACE_DROP = 20;
+const RACE_STILL = 0.5;
 // What to say when a swimmer is invited where there is no water for it.
 export const NEEDS_WATER = {
   fish: 'Fish need water: tap a pond or the sea!',
@@ -1080,7 +1092,51 @@ export class CritterSim {
     }
     // The firefly on (or on its way to) a hand gone, as at dawn: another may come.
     if (this.handFlyer && !this.list.some((c) => c.id === this.handFlyer && c.onHand)) this.handFlyer = 0;
+    this.pickRacers(dt);
     for (const c of this.list) this.stepOne(world, c, dt, now, players, night);
+  }
+
+  // ------------------------------------------------ dolphins racing a boat
+
+  // Boats that are being driven somewhere gather their crew of dolphins, up to
+  // RACE_MAX of them, one on each side of the bow, from those close enough to
+  // come over. A boat stopped, or with nobody driving it, takes nobody on (and
+  // its crew falls away, one boat-length behind in race).
+  pickRacers(dt) {
+    for (const boat of this.list) {
+      if (boat.type !== 'boat') continue;
+      boat.crew ??= [];
+      // How fast it is going, with its driver at the helm, measured from one
+      // of their moves to the next: those come about every tenth of a second,
+      // out of step with the ticks, so a tick with none is not a stop (only
+      // RACE_STILL seconds of none are).
+      boat.still = (boat.still ?? 0) + dt;
+      const come = boat.crewAt ? Math.hypot(boat.x - boat.crewAt.x, boat.z - boat.crewAt.z) : 0;
+      if (!boat.crewAt || come > 0.02) {
+        boat.speed = boat.crewAt ? come / Math.max(boat.still, 1e-3) : 0;
+        boat.still = 0;
+        boat.crewAt = { x: boat.x, z: boat.z };
+      }
+      const going = Boolean(boat.rider) && boat.speed > 0.8 && boat.still < RACE_STILL;
+      // Stopped, or its driver gone: whoever it had falls away from it.
+      if (!going) {
+        for (const c of boat.crew) c.race = null;
+        boat.crew.length = 0;
+        continue;
+      }
+      boat.crew = boat.crew.filter((c) => c.race?.boat === boat.id);
+      // The nearest free dolphins about, taken on one at a time, each on the
+      // side of the bow the other side of the one before it.
+      const free = this.list
+        .filter((c) => c.type === 'dolphin' && !c.rider && !c.follow && !c.race && !boat.crew.includes(c) && Math.hypot(c.x - boat.x, c.z - boat.z) < RACE_JOIN)
+        .sort((a, b) => Math.hypot(a.x - boat.x, a.z - boat.z) - Math.hypot(b.x - boat.x, b.z - boat.z));
+      for (const c of free) {
+        if (boat.crew.length >= RACE_MAX) break;
+        const side = boat.crew.length ? -boat.crew[boat.crew.length - 1].race.side : this.rng.chance(0.5) ? 1 : -1;
+        c.race = { boat: boat.id, side };
+        boat.crew.push(c);
+      }
+    }
   }
 
   stepOne(world, c, dt, now, players, night) {
@@ -1443,7 +1499,7 @@ export class CritterSim {
   ride(id, pid) {
     const c = this.get(id);
     if (!c || !CRITTER_INFO[c.type].ride) return null;
-    Object.assign(c, { rider: pid, follow: 0, happyUntil: 0, leap: null, dive: null, body: null });
+    Object.assign(c, { rider: pid, follow: 0, happyUntil: 0, leap: null, dive: null, body: null, race: null });
     return c;
   }
 
@@ -2352,6 +2408,17 @@ export class CritterSim {
       this.backToWater(world, c);
       return;
     }
+    // Racing a boat (see pickRacers): beside its bow as long as it is under
+    // way with someone driving it and not too far ahead; fed a fruit, or its
+    // boat stopped, and it is back on its own way.
+    if (c.type === 'dolphin' && c.race) {
+      const boat = this.get(c.race.boat);
+      if (leader || !boat || !boat.rider || Math.hypot(boat.x - c.x, boat.z - c.z) > RACE_DROP) c.race = null;
+    }
+    if (c.race) {
+      this.race(world, c, dt, this.get(c.race.boat));
+      return;
+    }
     if (leader) {
       this.swimAfter(world, c, dt, leader);
       return;
@@ -2403,6 +2470,37 @@ export class CritterSim {
     }
     if (!night && c.timer <= 0) {
       c.timer = this.rng.range(4, 10);
+      this.tryLeap(world, c);
+    }
+  }
+
+  // Racing a boat (stepSwimmer sends it here): over to its bow and then keeping
+  // place beside it, RACE_SIDE out and RACE_BOW ahead, matching how fast it is
+  // going and leaping out of the water every few seconds. It only ever swims
+  // where a dolphin can (cruise sees to that), so it never leaves the sea nor
+  // runs into land, and it keeps to its own side of the bow.
+  race(world, c, dt, boat) {
+    c.timer -= dt;
+    c.state = 'swim';
+    const side = c.race.side;
+    // The place it is keeping: beside the bow, on its own side of it.
+    const sin = Math.sin(boat.yaw);
+    const cos = Math.cos(boat.yaw);
+    const place = { x: boat.x + sin * RACE_BOW + cos * RACE_SIDE * side, y: boat.y, z: boat.z + cos * RACE_BOW - sin * RACE_SIDE * side };
+    const w = waterFor(world, place.x, place.z, WATERS.dolphin);
+    const out = Math.hypot(place.x - c.x, place.z - c.z);
+    if (w) {
+      const [lo, hi] = BANDS.dolphin(w);
+      place.y = clamp(boat.y, lo, hi);
+      this.swimFor(c, place);
+    }
+    // As fast as the boat is going, and a little faster still to catch up when
+    // it has fallen behind (as it does over each leap), never so fast that it
+    // cannot still turn out of the way of land. Slower than that, if the boat is.
+    const speed = Math.min(11, Math.max(CRITTER_INFO.dolphin.speed, (boat.speed ?? 0) * (out > RACE_SIDE ? 1.45 : 1.05)));
+    this.cruise(world, c, dt, speed, 2.4, 'dolphin', 0.9, out < 1 ? 0.9 : 1.2);
+    if (c.timer <= 0 && out < 3) {
+      c.timer = this.rng.range(2, RACE_LEAP);
       this.tryLeap(world, c);
     }
   }
@@ -2577,11 +2675,13 @@ export class CritterSim {
   // Steadily round towards (tx, tz), turning no faster than turn and slowing
   // down to come round, and easing to the height ty. Never into water too
   // shallow or narrow for it, here or reach ahead: there it turns where it is,
-  // and gives up after a while. True once there, or given up.
-  cruise(world, c, dt, speed, turn, type, reach) {
+  // and gives up after a while. True once there, or given up. near: how close
+  // it counts as there (a racing dolphin settles into place beside its boat
+  // rather than cutting across its bow).
+  cruise(world, c, dt, speed, turn, type, reach, near = 1.2) {
     const dx = c.tx - c.x;
     const dz = c.tz - c.z;
-    if (Math.hypot(dx, dz) < 1.2) return true;
+    if (Math.hypot(dx, dz) < near) return true;
     const off = wrap(Math.atan2(dx, dz) - c.yaw);
     c.yaw = wrap(c.yaw + clamp(off, -turn * dt, turn * dt));
     const go = speed * Math.max(0.15, Math.cos(off)) * dt;

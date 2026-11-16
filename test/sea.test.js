@@ -154,6 +154,110 @@ test('fed a fruit, a sea creature comes along as far as the water goes, and wait
   assert.ok(fish.x > 16.5, `it waits at the near edge (${fish.x.toFixed(1)})`);
 });
 
+test('dolphins race alongside a boat that is under way, and go back to their own way when it stops', () => {
+  const w = new World({ W: 220, H: 32, D: 64, sea: 12 });
+  for (let x = 0; x < w.W; x++) {
+    for (let z = 0; z < w.D; z++) {
+      w.set(x, 0, z, B.MAGIC_FLOOR);
+      for (let y = 1; y <= 12; y++) w.set(x, y, z, x >= 200 ? B.SAND : B.WATER);
+    }
+  }
+  const sim = new CritterSim(5);
+  const boat = sim.add('boat', 30.5, 12 + SURFACE, 24.5, null, Math.PI / 2);
+  const dolphins = [sim.add('dolphin', 26.5, 12 + SURFACE - 0.6, 20.5), sim.add('dolphin', 34.5, 12 + SURFACE - 0.6, 28.5), sim.add('dolphin', 20.5, 12 + SURFACE - 0.6, 30.5), sim.add('dolphin', 100.5, 12 + SURFACE - 0.6, 40.5)];
+  // The driver, and where they have got to: the host carries the boat under
+  // its rider (carry), so driving it is moving them.
+  sim.ride(boat.id, 1);
+  const rider = { x: 30.5, y: 12 + SURFACE, z: 24.5, yaw: Math.PI / 2, anim: 0, flying: false, hat: 'none' };
+  const players = new Map([[1, rider]]);
+  let now = 0;
+  const drive = (seconds, push = () => {}) => {
+    for (let i = 0; i < seconds * 10; i++) {
+      now += 100;
+      push();
+      sim.step(w, 0.1, now, players, false);
+    }
+  };
+  // Under way east, and the dolphins about come over and take up their places.
+  drive(10, () => {
+    rider.x += 0.7;
+    rider.z += (24.5 - rider.z) * 0.02;
+  });
+  const racing = dolphins.filter((d) => d.race);
+  assert.ok(racing.length >= 1 && racing.length <= 2, `${racing.length} of them have joined in`);
+  assert.ok(!dolphins[3].race, 'one far off keeps to itself');
+  assert.equal(new Set(racing.map((d) => d.race.side)).size, racing.length, 'each on its own side of the bow');
+  for (const d of racing) assert.ok(Math.hypot(d.x - boat.x, d.z - boat.z) < 8, `beside the boat (${d.x.toFixed(1)},${d.z.toFixed(1)} for ${boat.x.toFixed(1)},${boat.z.toFixed(1)})`);
+  // On they go: keeping pace, and leaping now and then as they go.
+  let leaps = 0;
+  let alongside = 0;
+  let steps = 0;
+  drive(12, () => {
+    rider.x += 0.7;
+    rider.z += (24.5 - rider.z) * 0.02;
+    steps++;
+    for (const d of dolphins) {
+      const where = `a dolphin at ${d.x.toFixed(1)},${d.y.toFixed(1)},${d.z.toFixed(1)}`;
+      assert.ok(!B.SOLID[w.get(FL(d.x), FL(d.y + 0.15), FL(d.z))], `${where} inside a block`);
+      if (d.state !== 'jump') assert.equal(w.get(FL(d.x), FL(d.y), FL(d.z)), B.WATER, `${where} out of the water`);
+      if (d.state === 'jump' && d.was !== 'jump') leaps++;
+      d.was = d.state;
+      if (d.race && Math.hypot(d.x - boat.x, d.z - boat.z) < 5) alongside++;
+    }
+  });
+  assert.ok(alongside / (steps * dolphins.length) > 0.3, `with the boat ${(100 * alongside) / (steps * dolphins.length)}% of the way`);
+  assert.ok(leaps >= 3, `leaping as they go (${leaps})`);
+  assert.ok(boat.x > 60, `the boat went on, to ${boat.x.toFixed(1)}`);
+  // The boat stops: they peel off, and are back on their own way.
+  drive(6);
+  assert.equal(dolphins.filter((d) => d.race).length, 0, 'they have dropped out of the race');
+  drive(10);
+  for (const d of dolphins) assert.equal(w.get(FL(d.x), FL(d.y), FL(d.z)), B.WATER, 'still in the water, on their own');
+});
+
+test('dolphins keep racing a boat whose driver\'s moves come out of step with the ticks', () => {
+  const w = new World({ W: 220, H: 32, D: 64, sea: 12 });
+  for (let x = 0; x < w.W; x++) {
+    for (let z = 0; z < w.D; z++) {
+      w.set(x, 0, z, B.MAGIC_FLOOR);
+      for (let y = 1; y <= 12; y++) w.set(x, y, z, B.WATER);
+    }
+  }
+  const sim = new CritterSim(5);
+  const boat = sim.add('boat', 30.5, 12 + SURFACE, 24.5, null, Math.PI / 2);
+  const dolphins = [sim.add('dolphin', 26.5, 12 + SURFACE - 0.6, 20.5), sim.add('dolphin', 34.5, 12 + SURFACE - 0.6, 28.5)];
+  sim.ride(boat.id, 1);
+  const rider = { x: 30.5, y: 12 + SURFACE, z: 24.5, yaw: Math.PI / 2, anim: 0, flying: false, hat: 'none' };
+  const players = new Map([[1, rider]]);
+  // As on a real island: the room ticks every 100 ms, and the driver's page
+  // sends a move every six frames (100.2 ms), a little early or late over the
+  // network, so now and then a tick has none and the next has two.
+  let seed = 7;
+  const jitter = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5) * 30;
+  let sent = 0;
+  let next = 100.2 + jitter();
+  const gaps = [];
+  const races = new Map();
+  let swaps = 0;
+  for (let now = 100; now <= 20000; now += 100) {
+    let moves = 0;
+    while (next <= now) {
+      rider.x = 30.5 + (++sent * 100.2 * 6.5) / 1000;
+      next = (sent + 1) * 100.2 + jitter();
+      moves++;
+    }
+    gaps.push(moves);
+    sim.step(w, 0.1, now, players, false);
+    for (const d of dolphins) {
+      if (races.has(d.id) && races.get(d.id) !== d.race) swaps++;
+      if (d.race) races.set(d.id, d.race);
+    }
+  }
+  assert.ok(gaps.filter((n) => n === 0).length > 5, 'some ticks had no move from the driver');
+  assert.ok(dolphins.every((d) => d.race), 'both racing at the end');
+  assert.equal(swaps, 0, 'never dropped and taken on again, nor switching sides');
+});
+
 test('a crab walks sideways', () => {
   const w = new World({ W: 32, H: 16, D: 32, sea: 2 });
   for (let x = 0; x < w.W; x++) for (let z = 0; z < w.D; z++) for (let y = 0; y <= 4; y++) w.set(x, y, z, y === 0 ? B.MAGIC_FLOOR : y === 4 ? B.SAND : B.STONE);
