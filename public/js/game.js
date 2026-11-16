@@ -47,6 +47,7 @@ import { freeSpot, scootsAt, seatNear, seatOf, seatPose, standUpAt, teaTableNear
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
+import { RUMBLE_MS, SPLASH_R } from './shared/volcano.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { gearMove, METEOR_FALL_MS, POTION, ROD_LOB_MS, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
@@ -137,6 +138,9 @@ const WEAR_WARN = 10;
 // How hard the Bomb Rod's little bomb is pulled down as it flies (game.js
 // lobBomb): a short steep arc, over a fence and down in a few steps.
 const ROD_ARC_G = 9;
+// The gravity of a lava bomb's arc out of the crater (shared/volcano.js), a
+// little heavier than the Bomb Rod's little bomb so it comes down harder.
+const VOLCANO_G = 11;
 // How long after the throw starts the bomb leaves the hand (seconds).
 const ROD_LEAVES_HAND = 0.1;
 // How fast the blaster's bubble flies (blocks a second).
@@ -285,6 +289,9 @@ const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop
 const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
 // Big Sprocket's steam.
 const STEAM_COLORS = ['#ffffff', '#eef2f6', '#d8e0e8', '#f6f9fc', '#c8d2dc'];
+// The volcano's lava: what the crater's fountain and the bombs' bursts throw
+// about (see shared/volcano.js).
+const LAVA_COLORS = ['#ff7a26', '#ffb13d', '#ff5a1f', '#ffd23f', '#e8481c'];
 // What each beast says as it comes at you.
 const BEAST_SOUND = { rattle: 'rattle', stinger: 'hiss', wolf: 'growl', hawk: 'caw', mimic: 'chomp', oak: 'bellow', wizard: 'chant', hydra: 'hiss', cyclops: 'bellow', rex: 'roar' };
 // How long after the isle's last stage is won its ending film starts (ui.js).
@@ -350,6 +357,12 @@ export class Game extends EventTarget {
     this.monsters = new Map();
     // Monsters popped by a blow, still flying off (fling).
     this.flung = [];
+    // The volcano island's crater erupting (shared/volcano.js): the show as
+    // this page draws it — the eruption going, the lava bombs in the air and
+    // the glowing splashes cooling where they came down. Never in the world.
+    this.eruption = null;
+    this.bombsInAir = new Map();
+    this.volcanoSplashes = new Map();
     this.hp = this.maxHp = maxHp(1);
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
     this.chat = [];
@@ -859,6 +872,9 @@ export class Game extends EventTarget {
         else if (msg.kind === 'bolt') this.boltNews(msg);
         else if (msg.kind === 'meteor' && msg.pid !== this.pid) this.callMeteor(msg.tx, msg.y - 1, msg.tz, Math.atan2(msg.tx - msg.x, msg.tz - msg.z));
         break;
+      case 'vfx':
+        this.volcanoNews(msg);
+        break;
       case 'mfx':
         // Mr. Mole popping up: his burst of dirt (see room.js).
         if (msg.kind === 'dirt') {
@@ -977,6 +993,14 @@ export class Game extends EventTarget {
     this.setBots(msg.bots ?? []);
     this.setEnv(msg.env);
     this.renderer.fires.reset(this.world, msg.fires ?? []);
+    // An eruption already going as you came in (room.js volcano): the
+    // fountain plays on for whatever is left of it, and that is all you see.
+    this.eruption = null;
+    this.bombsInAir.clear();
+    this.volcanoSplashes.clear();
+    if (msg.volcano && Array.isArray(msg.volcano.at) && msg.volcano.phase === 'burst') {
+      this.eruption = { at: msg.volcano.at, blowing: true, spoutAt: 0, rumbleAt: 0, shakeAt: 0 };
+    }
     // The song goes on playing over a reconnect; its pieces come after this.
     if (msg.song?.id !== this.song?.id) this.setSong(msg.song ? { id: msg.song.id, name: songName(msg.song.name), ready: false } : null);
     // An island with a view to show turns you to it as you arrive.
@@ -7005,6 +7029,65 @@ export class Game extends EventTarget {
     this.renderer.effects.add('sparkle', x, y, z, { vx, vy, vz, size: 0.12, life: t, gravity: ROD_ARC_G, color: '#ffd23f', delay: ROD_LEAVES_HAND });
   }
 
+  // The volcano island's crater erupting (shared/volcano.js, room.js
+  // stepVolcano): the rumble rising, the boom as it blows, the fountain of
+  // lava out of the crater (the whale's blowhole spout scaled up, in lava
+  // colours), the lava bombs arcing out on the thrown-object physics, and
+  // the glowing splash each leaves where it lands, cooling and fading away.
+  // Nothing is set in the world, so an island opened again shows no trace.
+  volcanoNews(msg) {
+    const fx = this.renderer.effects;
+    const at = msg.at ?? msg.to ?? msg.from ?? [0, 0, 0];
+    const b = this.me?.body;
+    const d = b ? Math.hypot(at[0] - b.x, at[1] - b.y, at[2] - b.z) : 0;
+    if (msg.kind === 'start') {
+      this.eruption = { at: msg.at, until: performance.now() + RUMBLE_MS, spoutAt: 0, rumbleAt: performance.now() + RUMBLE_MS / 2, bombAt: 0, sent: 0 };
+      this.sound.play('rumble', { near: Math.max(0.4, 1 - d / 260) });
+      if (d < 90) this.renderer.shake(0.25 * (1 - d / 90));
+      return;
+    }
+    if (msg.kind === 'blow') {
+      this.sound.play('eruption', { near: Math.max(0.35, 1 - d / 200) });
+      this.renderer.shake(0.5 * (1 - Math.min(1, d / 110)));
+      fx.sparkles(at[0], at[1] + 1, at[2], 20, LAVA_COLORS);
+      if (this.eruption) this.eruption.blowing = true;
+      return;
+    }
+    if (msg.kind === 'bomb') {
+      this.volcanoBomb(msg);
+      return;
+    }
+    if (msg.kind === 'splash') {
+      // The burst where it landed, and the glowing pool it leaves, cooling.
+      fx.pop(Math.floor(at[0]), Math.floor(at[1]) - 1, Math.floor(at[2]), '#3b3644', 10);
+      fx.sparkles(at[0], at[1] + 0.4, at[2], 10, LAVA_COLORS);
+      this.sound.play('boom', { near: Math.max(0.3, 1 - d / 90) });
+      const born = performance.now();
+      if (msg.keep > 0) this.volcanoSplashes.set(msg.id, { at, born, until: born + msg.keep, next: 0 });
+      return;
+    }
+    if (msg.kind === 'cool') {
+      for (const [id, s] of [...this.volcanoSplashes]) if (Math.hypot(s.at[0] - at[0], s.at[2] - at[2]) < 0.9) this.volcanoSplashes.delete(id);
+      fx.smoke(at[0], at[1] + 0.2, at[2], 3, STEAM_COLORS);
+      return;
+    }
+    if (msg.kind === 'end') this.eruption = null;
+  }
+
+  // A lava bomb on its way out of the crater, flying the arc the host laid
+  // out for it (from, to, ms): a glowing ball with a tail of sparks.
+  volcanoBomb({ from, to, ms, id }) {
+    const t = ms / 1000;
+    const vx = (to[0] - from[0]) / t;
+    const vz = (to[2] - from[2]) / t;
+    // Enough of a push up to rise over the arc and come down there, as the
+    // Bomb Rod's little bomb does (lobBomb).
+    const vy = (to[1] - from[1]) / t + 0.5 * VOLCANO_G * t;
+    this.renderer.effects.add('puff', from[0], from[1], from[2], { vx, vy, vz, size: 0.5, life: t, grow: 0.4, gravity: VOLCANO_G, color: '#ff7a26' });
+    this.renderer.effects.add('sparkle', from[0], from[1], from[2], { vx, vy, vz, size: 0.2, life: t, gravity: VOLCANO_G, color: '#ffd23f', delay: 0 });
+    this.bombsInAir.set(id, { at: to, until: performance.now() + ms });
+  }
+
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and
   // heard wherever you stand — softer from far off — and any jewels the
   // blast shook out of gem rocks into the basket of whoever laid it.
@@ -8047,6 +8130,54 @@ export class Game extends EventTarget {
       this.onYourHead(c, s, state);
       if (c.type === 'firefly' && state === 'hand') this.onYourHand(c, s);
       this.seaSights(c, s, state, now, moving);
+    }
+    this.stepVolcanoFx(dt, now);
+  }
+
+  // The eruption's own show, each frame while it lasts: the fountain of lava
+  // out of the crater (the whale's blowhole spout scaled up, in lava colours),
+  // shaking the picture as it rumbles, and the glowing splashes cooling where
+  // the bombs came down. Nothing here is in the world at all.
+  stepVolcanoFx(dt, now) {
+    const e = this.eruption;
+    const fx = this.renderer.effects;
+    const b = this.me?.body;
+    if (e) {
+      // The rumble: one long low shake through the island's rock.
+      if (now < e.rumbleAt && now >= (e.shakeAt ?? 0)) {
+        e.shakeAt = now + 400;
+        const d = b ? Math.hypot(e.at[0] - b.x, e.at[2] - b.z) : 0;
+        if (d < 120) this.renderer.shake(0.12 * (1 - d / 120));
+      }
+      // The fountain, once it has blown: drops of lava hurled up out of the
+      // crater, falling back into it, as the whale's blowhole spout does only
+      // far bigger.
+      if (e.blowing && now >= e.spoutAt && b && Math.hypot(e.at[0] - b.x, e.at[2] - b.z) < 160) {
+        e.spoutAt = now + 40;
+        for (let i = 0; i < 5; i++) {
+          fx.add('drop', e.at[0], e.at[1] + 0.5, e.at[2], {
+            vx: (Math.random() - 0.5) * 3.4,
+            vy: 13 + Math.random() * 5,
+            vz: (Math.random() - 0.5) * 3.4,
+            size: 0.5,
+            life: 1.5,
+            gravity: 11,
+            color: LAVA_COLORS[Math.floor(Math.random() * LAVA_COLORS.length)],
+          });
+        }
+      }
+    }
+    // Each splash still glowing: a low pad of lava light, cooling and fading
+    // as its time runs out.
+    for (const [id, s] of [...this.volcanoSplashes]) {
+      if (now >= s.until) {
+        this.volcanoSplashes.delete(id);
+        continue;
+      }
+      if (now < s.next || !b || Math.hypot(s.at[0] - b.x, s.at[2] - b.z) > 120) continue;
+      s.next = now + 160;
+      const left = (s.until - now) / Math.max(1, s.until - s.born);
+      fx.add('puff', s.at[0], s.at[1] + 0.1, s.at[2], { size: 1.1 * SPLASH_R, life: 0.9, grow: 0.2, color: left > 0.5 ? '#ff7a26' : '#8a3b12', fade: 0.8 });
     }
   }
 
