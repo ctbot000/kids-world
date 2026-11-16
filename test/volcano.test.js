@@ -14,6 +14,7 @@ import { makeBody, stepBody } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { generate, THEMES } from '../public/js/shared/worldgen.js';
 import { naturalGround, RUMBLE_MS, SPLASH_COOL_MS, SPLASH_HOT_MS } from '../public/js/shared/volcano.js';
+import { CHAPTERS } from '../public/js/shared/isle-story.js';
 import { World } from '../public/js/shared/world.js';
 
 const SEEDS = [1, 7, 42, 777, 12345, 999999];
@@ -439,6 +440,36 @@ test('standing in a splash while it is hot burns like lava, halved by Knight Arm
     room.tick();
   }
   assert.equal(bare.all('bump').filter((m) => m.lava && m.pid === pid).length, before, 'a cooled splash burns nobody');
+});
+
+test('riding anything you are up out of a splash, and Adventure Isle\'s volcano never erupts', () => {
+  const { room, time } = volcanoRoom();
+  const rider = join(room, 'Rider');
+  const pid = [...room.players.values()].find((p) => p.name === 'Rider').id;
+  const where = [30.5, 11, 30.5];
+  assert.ok(room.volcano.splashAt(...where, time.t), 'a splash down on the basalt');
+  const pony = room.critters.add('pony', ...where);
+  room.critters.ride(pony.id, pid);
+  room.receive(rider, { t: 'm', s: [...where, 0, 6, 0] });
+  room.tick();
+  assert.equal(rider.all('bump').filter((m) => m.lava && m.pid === pid).length, 0, 'no burn up on a pony');
+  // The isle's Ember Mountain is a volcano too, but its stage is the story's.
+  const stage = CHAPTERS.findIndex((c) => c.theme === 'volcano') + 1;
+  assert.ok(stage > 0);
+  const isle = new Room({ code: '515151', adventure: true, shared: true, stage, seed: 9, now: time.now });
+  assert.equal(isle.world.theme, 'volcano');
+  assert.equal(isle.volcano, null, 'no eruptions on the isle');
+  // A splash burns only those on it, as far as its glow reaches (game.js
+  // stepVolcanoFx draws it about a block round), not anyone beside it.
+  const v = volcanoRoom().room.volcano;
+  const sp = v.splashAt(30.5, 11, 30.5, 0);
+  assert.ok(v.burning(sp.x + 0.5, 11, sp.z + 0.5, 1), 'on it');
+  assert.ok(v.burning(sp.x + 1.3, 11, sp.z + 0.5, 1), 'at its edge');
+  assert.ok(!v.burning(sp.x + 2, 11, sp.z + 0.5, 1), 'beside it, a step and a half off its middle');
+  for (let t = 0; t < 400; t++) {
+    time.t += 1000;
+    isle.tick();
+  }
 });
 
 test('ten cozy houses stamped on a volcano island earn the Pompeii sticker, and the count travels with a login', async () => {

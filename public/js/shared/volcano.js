@@ -19,7 +19,7 @@ export const BOMB_MS = [1600, 2600];
 // A splash a bomb leaves: this big round where it lands (blocks), this hot
 // for standing in, and gone this long after it landed (ms) — it cools and
 // fades on its own, so nothing is ever left behind.
-export const SPLASH_R = 1.7;
+export const SPLASH_R = 1;
 export const SPLASH_HOT_MS = 6000;
 export const SPLASH_COOL_MS = 45000;
 // No more than this many splashes lying about at once.

@@ -47,7 +47,7 @@ import { freeSpot, scootsAt, seatNear, seatOf, seatPose, standUpAt, teaTableNear
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
 import { isValidCode } from './shared/codes.js';
 import { PROTOCOL } from './shared/room.js';
-import { RUMBLE_MS, SPLASH_R } from './shared/volcano.js';
+import { RUMBLE_MS, SPLASH_HOT_MS, SPLASH_R } from './shared/volcano.js';
 import { cleanPiece, SONG_MAX_BYTES, songName, SongPieces, songPieces } from './shared/song.js';
 import { gearMove, METEOR_FALL_MS, POTION, ROD_LOB_MS, weaponOf, wornOutfit, wornWeapon } from './shared/shop.js';
 import { facingFromYaw, STAMPS } from './shared/stamps.js';
@@ -7092,8 +7092,8 @@ export class Game extends EventTarget {
     // Enough of a push up to rise over the arc and come down there, as the
     // Bomb Rod's little bomb does (lobBomb).
     const vy = (to[1] - from[1]) / t + 0.5 * VOLCANO_G * t;
-    this.renderer.effects.add('puff', from[0], from[1], from[2], { vx, vy, vz, size: 0.5, life: t, grow: 0.4, gravity: VOLCANO_G, color: '#ff7a26' });
-    this.renderer.effects.add('sparkle', from[0], from[1], from[2], { vx, vy, vz, size: 0.2, life: t, gravity: VOLCANO_G, color: '#ffd23f', delay: 0 });
+    this.renderer.effects.add('puff', from[0], from[1], from[2], { vx, vy, vz, size: 1.1, life: t, grow: 0.3, gravity: VOLCANO_G, color: '#ff7a26' });
+    this.renderer.effects.add('sparkle', from[0], from[1], from[2], { vx, vy, vz, size: 0.5, life: t, gravity: VOLCANO_G, color: '#ffd23f', delay: 0 });
   }
 
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and
@@ -8160,18 +8160,27 @@ export class Game extends EventTarget {
       // The fountain, once it has blown: drops of lava hurled up out of the
       // crater, falling back into it, as the whale's blowhole spout does only
       // far bigger.
+      // Big enough to see from the far side of the island: the volcano is
+      // the tallest thing there, and its crater is high over everyone.
       if (e.blowing && now >= e.spoutAt && b && Math.hypot(e.at[0] - b.x, e.at[2] - b.z) < 160) {
         e.spoutAt = now + 40;
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 6; i++) {
           fx.add('drop', e.at[0], e.at[1] + 0.5, e.at[2], {
-            vx: (Math.random() - 0.5) * 3.4,
-            vy: 13 + Math.random() * 5,
-            vz: (Math.random() - 0.5) * 3.4,
-            size: 0.5,
-            life: 1.5,
+            vx: (Math.random() - 0.5) * 4.5,
+            vy: 15 + Math.random() * 7,
+            vz: (Math.random() - 0.5) * 4.5,
+            size: 1,
+            life: 2.4,
             gravity: 11,
             color: LAVA_COLORS[Math.floor(Math.random() * LAVA_COLORS.length)],
           });
+        }
+        // The glow of the lava welling up in the crater's mouth, and a plume
+        // of dark ash climbing high over the summit.
+        if (now >= (e.plumeAt ?? 0)) {
+          e.plumeAt = now + 150;
+          fx.add('puff', e.at[0], e.at[1] + 1, e.at[2], { vy: 2, size: 3.2, life: 0.6, grow: 1, color: '#ff8a2a' });
+          fx.add('puff', e.at[0] + (Math.random() - 0.5) * 2, e.at[1] + 3, e.at[2] + (Math.random() - 0.5) * 2, { vx: (Math.random() - 0.5) * 0.8, vy: 4 + Math.random() * 2, vz: (Math.random() - 0.5) * 0.8, size: 2.4, life: 4.5, grow: 1.6, drag: 0.15, color: ['#4a4450', '#5c5560', '#3a3540'][Math.floor(Math.random() * 3)] });
         }
       }
     }
@@ -8184,9 +8193,9 @@ export class Game extends EventTarget {
       }
       if (now < s.next || !b || Math.hypot(s.at[0] - b.x, s.at[2] - b.z) > 120) continue;
       s.next = now + 160;
-      // Still hot it glows orange; as it cools it darkens to spent rock.
-      const left = (s.until - now) / Math.max(1, s.until - s.born);
-      fx.add('puff', s.at[0], s.at[1] + 0.1, s.at[2], { size: 1.1 * SPLASH_R, life: 0.9, grow: 0.2, color: left > 0.5 ? '#ff7a26' : '#8a3b12' });
+      // Orange while it is hot enough to burn (room.js stepVolcano), then
+      // darkened to spent rock as it cools, so you can see which to keep off.
+      fx.add('puff', s.at[0], s.at[1] + 0.3, s.at[2], { size: 2.6 * SPLASH_R, life: 0.9, grow: 0.2, color: now - s.born < SPLASH_HOT_MS ? '#ff7a26' : '#8a3b12' });
     }
   }
 

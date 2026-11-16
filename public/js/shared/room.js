@@ -333,7 +333,9 @@ export class Room {
     this.bombs = new Map();
     // The volcano island's eruptions (shared/volcano.js): never saved, so an
     // island opened again starts quietly, and the bombs in the air now.
-    this.volcano = new VolcanoSim(w, () => this.rng.next());
+    // Not on Adventure Isle, though its Ember Mountain is a volcano: its
+    // stages are laid out and balanced as they are (isle-story.js).
+    this.volcano = this.shared ? null : new VolcanoSim(w, () => this.rng.next());
     this.lavaBombs = [];
     // The Bomb Rod's little bombs in the air: where each will land, and when.
     this.rodBombs = [];
@@ -2419,7 +2421,7 @@ export class Room {
     this.broadcast({ t: 'fx', kind: 'blast', x: x + 0.5, y: y + 0.5, z: z + 0.5, by: p.id, gems: plan.collected, ...(meteor ? { meteor: true } : {}) });
   }
 
-  // The volcano island's crater erupting on its own (shared/volcano.js): a rumble, then a fountain of lava and lava bombs out of the crater, every few minutes. It is all a show told to everyone as 'vfx' — nothing is set in the world, so an island saved and opened again shows no trace of one. Each bomb bursts where it lands, and the splash it leaves burns anyone standing in it while it is still hot, as lava does; Knight Armor takes half of that, and a Fire Suit all of it (as with a monster's bump).
+  // The volcano island's crater erupting on its own (shared/volcano.js): a rumble, then a fountain of lava and lava bombs out of the crater, every few minutes. It is all a show told to everyone as 'vfx' — nothing is set in the world, so an island saved and opened again shows no trace of one. Each bomb bursts where it lands, and the splash it leaves burns anyone standing in it while it is still hot, as lava does; Knight Armor takes half of that, and a Fire Suit all of it (as with a monster's bump); riding anything, you are up out of it. Never on Adventure Isle (hookWorld).
   stepVolcano(now) {
     const v = this.volcano;
     if (!v) return;
@@ -2442,8 +2444,10 @@ export class Room {
     // The splashes cooling away, and whoever is standing in one still hot.
     for (const gone of v.stepSplashes(now)) this.broadcast({ t: 'vfx', kind: 'cool', at: [gone.x + 0.5, gone.y, gone.z + 0.5] });
     if (!v.going && !this.lavaBombs.length && !v.splashes.size) return;
+    // Riding anything, you are up out of it, as out of lava (stepLava).
+    const riding = this.critters.aboard();
     for (const p of this.players.values()) {
-      if (!p.online || (p.safeUntil ?? 0) > now || (p.dizzyUntil ?? 0) > now) continue;
+      if (!p.online || riding.has(p.id) || (p.safeUntil ?? 0) > now || (p.dizzyUntil ?? 0) > now) continue;
       if (hasPower(p.look, 'fireproof')) continue;
       if (!v.burning(p.s[0], p.s[1], p.s[2], now)) continue;
       this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? LAVA_BUMPS / 2 : LAVA_BUMPS), { t: 'bump', pid: p.id, lava: true });
