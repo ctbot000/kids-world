@@ -358,10 +358,9 @@ export class Game extends EventTarget {
     // Monsters popped by a blow, still flying off (fling).
     this.flung = [];
     // The volcano island's crater erupting (shared/volcano.js): the show as
-    // this page draws it — the eruption going, the lava bombs in the air and
-    // the glowing splashes cooling where they came down. Never in the world.
+    // this page draws it — the eruption going and the glowing splashes
+    // cooling where the bombs came down. Never in the world.
     this.eruption = null;
-    this.bombsInAir = new Map();
     this.volcanoSplashes = new Map();
     this.hp = this.maxHp = maxHp(1);
     this.env = { time: 0.3, weather: 'clear', mode: 'cycle' };
@@ -996,7 +995,6 @@ export class Game extends EventTarget {
     // An eruption already going as you came in (room.js volcano): the
     // fountain plays on for whatever is left of it, and that is all you see.
     this.eruption = null;
-    this.bombsInAir.clear();
     this.volcanoSplashes.clear();
     if (msg.volcano && Array.isArray(msg.volcano.at) && msg.volcano.phase === 'burst') {
       this.eruption = { at: msg.volcano.at, blowing: true, spoutAt: 0, rumbleAt: 0, shakeAt: 0 };
@@ -7041,7 +7039,7 @@ export class Game extends EventTarget {
     const b = this.me?.body;
     const d = b ? Math.hypot(at[0] - b.x, at[1] - b.y, at[2] - b.z) : 0;
     if (msg.kind === 'start') {
-      this.eruption = { at: msg.at, until: performance.now() + RUMBLE_MS, spoutAt: 0, rumbleAt: performance.now() + RUMBLE_MS / 2, bombAt: 0, sent: 0 };
+      this.eruption = { at: msg.at, rumbleAt: performance.now() + RUMBLE_MS, spoutAt: 0, shakeAt: 0 };
       this.sound.play('rumble', { near: Math.max(0.4, 1 - d / 260) });
       if (d < 90) this.renderer.shake(0.25 * (1 - d / 90));
       return;
@@ -7068,7 +7066,18 @@ export class Game extends EventTarget {
     }
     if (msg.kind === 'cool') {
       for (const [id, s] of [...this.volcanoSplashes]) if (Math.hypot(s.at[0] - at[0], s.at[2] - at[2]) < 0.9) this.volcanoSplashes.delete(id);
-      fx.smoke(at[0], at[1] + 0.2, at[2], 3, STEAM_COLORS);
+      // What is left goes off as a little steam.
+      for (let i = 0; i < 3; i++) {
+        fx.add('puff', at[0] + (Math.random() - 0.5) * 0.8, at[1] + 0.2, at[2] + (Math.random() - 0.5) * 0.8, {
+          vx: (Math.random() - 0.5) * 0.2,
+          vy: 0.5 + Math.random() * 0.3,
+          vz: (Math.random() - 0.5) * 0.2,
+          size: 0.35,
+          life: 1.4,
+          grow: 0.4,
+          color: STEAM_COLORS[i % STEAM_COLORS.length],
+        });
+      }
       return;
     }
     if (msg.kind === 'end') this.eruption = null;
@@ -7076,7 +7085,7 @@ export class Game extends EventTarget {
 
   // A lava bomb on its way out of the crater, flying the arc the host laid
   // out for it (from, to, ms): a glowing ball with a tail of sparks.
-  volcanoBomb({ from, to, ms, id }) {
+  volcanoBomb({ from, to, ms }) {
     const t = ms / 1000;
     const vx = (to[0] - from[0]) / t;
     const vz = (to[2] - from[2]) / t;
@@ -7085,7 +7094,6 @@ export class Game extends EventTarget {
     const vy = (to[1] - from[1]) / t + 0.5 * VOLCANO_G * t;
     this.renderer.effects.add('puff', from[0], from[1], from[2], { vx, vy, vz, size: 0.5, life: t, grow: 0.4, gravity: VOLCANO_G, color: '#ff7a26' });
     this.renderer.effects.add('sparkle', from[0], from[1], from[2], { vx, vy, vz, size: 0.2, life: t, gravity: VOLCANO_G, color: '#ffd23f', delay: 0 });
-    this.bombsInAir.set(id, { at: to, until: performance.now() + ms });
   }
 
   // A mining bomb going off (shared/room.js stepBombs): the boom seen and
@@ -8176,8 +8184,9 @@ export class Game extends EventTarget {
       }
       if (now < s.next || !b || Math.hypot(s.at[0] - b.x, s.at[2] - b.z) > 120) continue;
       s.next = now + 160;
+      // Still hot it glows orange; as it cools it darkens to spent rock.
       const left = (s.until - now) / Math.max(1, s.until - s.born);
-      fx.add('puff', s.at[0], s.at[1] + 0.1, s.at[2], { size: 1.1 * SPLASH_R, life: 0.9, grow: 0.2, color: left > 0.5 ? '#ff7a26' : '#8a3b12', fade: 0.8 });
+      fx.add('puff', s.at[0], s.at[1] + 0.1, s.at[2], { size: 1.1 * SPLASH_R, life: 0.9, grow: 0.2, color: left > 0.5 ? '#ff7a26' : '#8a3b12' });
     }
   }
 

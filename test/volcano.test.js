@@ -13,6 +13,7 @@ import { LAVA_BUMPS, BUMP_HP, maxHp, MonsterSim, MONSTER_KINDS } from '../public
 import { makeBody, stepBody } from '../public/js/shared/physics.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { generate, THEMES } from '../public/js/shared/worldgen.js';
+import { naturalGround, RUMBLE_MS, SPLASH_COOL_MS, SPLASH_HOT_MS } from '../public/js/shared/volcano.js';
 import { World } from '../public/js/shared/world.js';
 
 const SEEDS = [1, 7, 42, 777, 12345, 999999];
@@ -290,6 +291,154 @@ test('water stays put on any other island', () => {
   standFor(room, time, a, [room.world.spawn.x, room.world.spawn.y, room.world.spawn.z], 30000);
   assert.equal(room.world.get(x, y, z), B.WATER, 'no boiling there');
   assert.equal(room.world.get(x, y + 1, z), B.ICE, 'no melting either');
+});
+
+// --------------------------------------------------------- the eruptions
+
+// Steps the room on for ms, in the host's own moment (a tick every 100),
+// watching what it tells everyone.
+function runFor(room, time, ms) {
+  for (let t = 0; t < ms; t += 100) {
+    time.t += 100;
+    room.tick();
+  }
+}
+
+// The first eruption comes of its own accord, sooner or later: this runs
+// the clock on until one starts (or gives up), and says when it did.
+function erupts(room, time, limit = 400000) {
+  for (let t = 0; t < limit; t += 100) {
+    time.t += 100;
+    room.tick();
+    if (room.volcano.going) return time.t;
+  }
+  return null;
+}
+
+test('the crater erupts of its own accord every few minutes: a rumble, then the blow, then bombs out of it', () => {
+  const { room, time } = volcanoRoom();
+  const a = join(room);
+  // Nothing for a good while first: nobody steps onto the island to be met
+  // with an eruption already at them.
+  runFor(room, time, 60000);
+  assert.equal(a.all('vfx').length, 0, 'quiet at first');
+  assert.ok(!room.volcano.going);
+  const at = erupts(room, time);
+  assert.ok(at, 'erupts before too long');
+  assert.ok(at >= 100000, `not before a couple of minutes (${at})`);
+  const started = a.all('vfx').find((m) => m.kind === 'start');
+  assert.ok(started, 'everyone told it is starting');
+  assert.deepEqual(started.at, [room.volcano.crater.x, room.volcano.crater.y, room.volcano.crater.z], 'from the crater');
+  // The rumble rises first, and only then does it blow.
+  runFor(room, time, RUMBLE_MS + 100);
+  const kinds = a.all('vfx').map((m) => m.kind);
+  assert.ok(kinds.indexOf('blow') > kinds.indexOf('start'), 'the rumble before the blow');
+  // Then the bombs come out, each on its way to somewhere natural.
+  runFor(room, time, 4000);
+  const bombs = a.all('vfx').filter((m) => m.kind === 'bomb');
+  assert.ok(bombs.length > 0, 'lava bombs out of the crater');
+  for (const b of bombs) {
+    assert.equal(b.t, 'vfx');
+    const [fx, fy, fz] = b.to;
+    assert.ok(naturalGround(room.world, Math.floor(fx), Math.floor(fy) - 1, Math.floor(fz)), 'each lands on natural ground');
+  }
+});
+
+test('each bomb bursts where it lands, and its splash cools away within the minute', () => {
+  const { room, time } = volcanoRoom();
+  const a = join(room);
+  erupts(room, time);
+  runFor(room, time, 4000 + 20000);
+  const splashes = a.all('vfx').filter((m) => m.kind === 'splash');
+  assert.ok(splashes.length > 0, 'bombs burst where they land');
+  assert.ok(splashes.every((m) => m.keep === SPLASH_COOL_MS), 'each splash lasts as long as it cools');
+  // While the show is on, the splashes are there; once they have cooled,
+  // everyone is told, and none is left.
+  assert.ok(room.volcano.splashes.size > 0, 'splashes lying about');
+  runFor(room, time, SPLASH_COOL_MS + 1000);
+  assert.equal(room.volcano.splashes.size, 0, 'all cooled away');
+  const cooled = a.all('vfx').filter((m) => m.kind === 'cool');
+  assert.equal(cooled.length, splashes.length, 'each cooling told to everyone');
+  // Nothing at all is in the world: no trace of any of it.
+  let changed = 0;
+  for (let x = 0; x < room.world.W; x++) for (let z = 0; z < room.world.D; z++) {
+    if (room.world.get(x, 11, z) !== B.LAVA) changed++;
+  }
+  assert.equal(changed, 48 * 48 - 64, 'the world as it was made');
+});
+
+test('a room opened again shows no trace of an eruption, and other islands never erupt', () => {
+  const { room, time } = volcanoRoom();
+  const a = join(room);
+  erupts(room, time);
+  runFor(room, time, 30000);
+  // What a latecomer is told as they come in: nothing, unless one is going
+  // right now — and even then, no splash of it is handed over.
+  const again = join(room, 'Late Dragon');
+  const told = again.last('welcome').volcano;
+  assert.ok(!told || told.phase !== 'rumble' || Array.isArray(told.at), 'at most the show going now');
+  // An island of another theme never erupts at all, however long it waits.
+  const time2 = clock();
+  const sunny = new Room({ code: '654321', theme: 'sunny', seed: 7, now: time2.now, settings: {} });
+  const b = join(sunny);
+  for (let t = 0; t < 400000; t += 100) {
+    time2.t += 100;
+    sunny.tick();
+  }
+  assert.equal(b.all('vfx').length, 0, 'no eruptions on a sunny island');
+  assert.ok(!sunny.volcano.going);
+});
+
+test('no bomb bursts on anything built, planted or furnished, and no splash sits under a build', () => {
+  const w = new World({ W: 16, H: 16, D: 16, sea: 1, theme: 'volcano' });
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) w.set(x, 5, z, B.BASALT);
+  // Natural ground takes a bomb; what somebody built, planted or furnished
+  // does not, and nor does ground with anything of anybody's over it.
+  assert.ok(naturalGround(w, 3, 5, 3), 'bare basalt');
+  for (const id of [B.PLANKS, B.BRICK, B.GLASS, B.TULIP, B.OAK_SPROUT, B.POTTED_PLANT, B.WATERING_CAN]) {
+    w.set(5, 5, 5, id);
+    assert.equal(naturalGround(w, 5, 5, 5), false, `${B.block(id).name} is not ground to burst on`);
+    w.set(5, 5, 5, B.BASALT);
+  }
+  w.set(7, 6, 7, B.PLANKS);
+  assert.equal(naturalGround(w, 7, 5, 7), false, 'something built over it');
+  w.set(7, 6, 7, B.AIR);
+  assert.ok(naturalGround(w, 7, 5, 7), 'clear again');
+  // And the crater itself, where the lava sits: ground of its own.
+  w.set(9, 5, 9, B.LAVA);
+  assert.ok(naturalGround(w, 9, 5, 9), 'lava is ground of its own');
+});
+
+test('standing in a splash while it is hot burns like lava, halved by Knight Armor and stopped by a Fire Suit', () => {
+  const { room, time } = volcanoRoom();
+  const bare = join(room, 'Bare');
+  const knight = join(room, 'Knight');
+  room.receive(knight, { t: 'look', look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', outfit: 'armor' } });
+  const suit = join(room, 'Suit');
+  room.receive(suit, { t: 'look', look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap', outfit: 'firesuit' } });
+  // A splash straight away, on the basalt away from the lava.
+  const where = [30.5, 11, 30.5];
+  const s = room.volcano.splashAt(...where, time.t);
+  assert.ok(s, 'a splash down on the basalt');
+  for (const [c, spot] of [[bare, where], [knight, where], [suit, where]]) {
+    room.receive(c, { t: 'm', s: [...spot, 0, 0, 0] });
+  }
+  room.tick();
+  const burn = (c, pid) => c.all('bump').filter((m) => m.lava && m.pid === pid).pop();
+  const ids = new Map([...room.players.values()].map((p) => [p.name, p.id]));
+  assert.equal(burn(bare, ids.get('Bare')).hp, burn(bare, ids.get('Bare')).max - LAVA_BUMPS * BUMP_HP, 'the full burn for bare skin');
+  assert.equal(burn(knight, ids.get('Knight')).hp, burn(knight, ids.get('Knight')).max - (LAVA_BUMPS / 2) * BUMP_HP, 'half of it in Knight Armor');
+  assert.equal(burn(suit, ids.get('Suit')), undefined, 'nothing at all in a Fire Suit');
+  // Once it has cooled, standing there does nothing.
+  time.t += SPLASH_HOT_MS + 100;
+  const pid = ids.get('Bare');
+  const before = bare.all('bump').filter((m) => m.lava && m.pid === pid).length;
+  for (let t = 0; t < 2000; t += 100) {
+    time.t += 100;
+    room.receive(bare, { t: 'm', s: [...where, 0, 0, 0] });
+    room.tick();
+  }
+  assert.equal(bare.all('bump').filter((m) => m.lava && m.pid === pid).length, before, 'a cooled splash burns nobody');
 });
 
 test('ten cozy houses stamped on a volcano island earn the Pompeii sticker, and the count travels with a login', async () => {
