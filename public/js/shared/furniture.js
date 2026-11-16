@@ -136,6 +136,26 @@ const MODELS = {
     return out;
   },
 
+  // A swing set (render/swing-model.js): an A-frame of wood with a top bar,
+  // and two seats on chains under it. These straightened boxes are only its
+  // picture in the toy box; put down it is drawn as the real model, its seats
+  // swinging as whoever sits on one pumps.
+  'swing-set'() {
+    const out = [];
+    // The top bar the seats hang from, and the two A-frames holding it up.
+    out.push(box(0.06, 0.88, 0.44, 0.94, 0.96, 0.56, DARK_WOOD, 'planks'));
+    for (const x of [0.12, 0.82]) {
+      for (const z of [0.16, 0.84]) out.push(box(x, 0, z, x + 0.08, 0.9, z + 0.08, DARK_WOOD, 'planks'));
+      out.push(box(x, 0.42, 0.16, x + 0.08, 0.5, 0.84, DARK_WOOD, 'planks'));
+    }
+    // The two seats, each on its two chains drawn straight for the picture.
+    for (const sx of [0.24, 0.64]) {
+      for (const x of [sx, sx + 0.14]) out.push(box(x + 0.02, 0.5, 0.47, x + 0.04, 0.88, 0.53, STEEL, 'plain'));
+      out.push(box(sx, 0.44, 0.4, sx + 0.2, 0.5, 0.6, WOOD, 'planks'));
+    }
+    return out;
+  },
+
   // A wheeled desk chair (game.js scootInSeat): sit in it and walk, and it
   // rolls along the floor with you. A base of five spokes, each on a little
   // wheel, a gas lift up to the seat and a cushioned back — the seat turns
