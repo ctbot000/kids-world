@@ -131,19 +131,20 @@ test('a camel rides like the other big animals: quicker than you run, over steps
     top = Math.max(top, r.body.y);
   }
   assert.ok(top - 6 > 1.5 && top - 6 < 2.3, `up ${(top - 6).toFixed(2)}`);
+  // And you get off, standing beside it on the ground.
+  const off = getOffAt(w, r);
+  assert.equal(off.y, 6, 'on the ground');
+  assert.ok(!bodyOverlapsSolid(w, makeBody(off.x, off.y, off.z)), 'with room');
   // A step up onto a terrace, and a wall two high across it.
   for (let z = 0; z < 48; z++) {
     for (let x = 30; x < 48; x++) w.set(x, 6, z, B.GRASS);
     for (const y of [7, 8]) w.set(36, y, z, B.STONE);
   }
-  go(w, r, { mx: 1, mz: 0 }, 3);
-  assert.equal(r.body.y, 7, 'hopped up the step');
-  assert.ok(r.body.x <= 36 - r.body.radius + 1e-3, `stopped at the wall, at ${r.body.x}`);
-  assert.ok(!bodyOverlapsSolid(w, r.body));
-  // And you get off, standing beside it on the ground.
-  const off = getOffAt(w, r);
-  assert.equal(off.y, 6, 'on the ground');
-  assert.ok(!bodyOverlapsSolid(w, makeBody(off.x, off.y, off.z)), 'with room');
+  const again = ride(w, 'camel', 10.5, 6, 20.5);
+  go(w, again, { mx: 1, mz: 0, run: true }, 3);
+  assert.equal(again.body.y, 7, 'hopped up the step');
+  assert.ok(again.body.x <= 36 - again.body.radius + 1e-3, `stopped at the wall, at ${again.body.x}`);
+  assert.ok(!bodyOverlapsSolid(w, again.body));
 });
 
 test('a camel is drawn with two humps, and its saddle takes its rider\u2019s T-shirt colour', () => {
@@ -160,8 +161,10 @@ test('a camel is drawn with two humps, and its saddle takes its rider\u2019s T-s
   const ray = new THREE.Raycaster();
   const under = (z) => {
     ray.set(new THREE.Vector3(0, 6, z), new THREE.Vector3(0, -1, 0));
-    return ray.intersectObject(m.pivot, true).find((h) => h.object.visible)?.point.y ?? -Infinity;
+    return ray.intersectObject(m.pivot, true).find((h) => h.object.visible && !inSaddle(h.object))?.point.y ?? -Infinity;
   };
+  // The saddle blanket sits in the dip between the humps: leave it out.
+  const inSaddle = (o) => { let p = o; while (p) { if (p === m.saddle) return true; p = p.parent; } return false; };
   const hump = Math.max(under(0.3), under(-0.38));
   const dip = under(-0.05);
   assert.ok(hump - dip > 0.08, `its humps stand ${(hump - dip).toFixed(3)} over the dip between them`);

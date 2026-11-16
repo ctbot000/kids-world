@@ -1401,16 +1401,16 @@ function camel(id) {
   const coat = toon(COAT);
   const wool = toon(id % 2 ? '#e8c084' : '#dfb478');
   const pale = toon('#f0e0bc');
-  const R = [0.29, 0.31, 0.58];
+  const R = [0.29, 0.285, 0.58];
   pivot.add(mesh(sphere(), coat, 0, 0, 0, ...R));
   // Its chest and its hindquarters stand a little higher than its back's dip.
   pivot.add(mesh(sphere(), coat, 0, 0.05, 0.32, 0.26, 0.29, 0.28));
   pivot.add(mesh(sphere(), coat, 0, 0.06, -0.32, 0.26, 0.3, 0.26));
   // The two humps it is famous for, woolliest at the top, set wide apart so a
   // rider sits in the dip between them.
-  for (const [z, w, h] of [[0.3, 0.15, 0.21], [-0.38, 0.14, 0.19]]) {
-    pivot.add(mesh(sphere(1, 12, 10), coat, 0, 0.14, z, w, h, 0.13));
-    pivot.add(mesh(sphere(1, 10, 8), wool, 0, 0.14 + h * 0.6, z, w * 0.7, h * 0.5, 0.09));
+  for (const [z, w, h] of [[0.3, 0.16, 0.26], [-0.38, 0.15, 0.24]]) {
+    pivot.add(mesh(sphere(1, 12, 10), coat, 0, 0.17, z, w, h, 0.14));
+    pivot.add(mesh(sphere(1, 10, 8), wool, 0, 0.17 + h * 0.55, z, w * 0.7, h * 0.45, 0.1));
   }
   const legs = fourLegs(pivot, { x: 0.19, front: 0.36, back: -0.36, hip: -0.2, len: 0.75, r: 0.082, color: COAT });
   // Two toes, wide and pale, on each foot.
