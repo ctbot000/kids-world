@@ -18,6 +18,10 @@ export const SEATS = {
   // A desk chair on wheels (game.js scootInSeat): you sit a little high, and
   // walking rolls it along the floor instead of getting you up.
   'desk-chair': { pose: 'sit', h: 0.52, at: [0.5, 0.5], scoots: true },
+  // A swing set (game.js swingInSeat): two seats side by side, a friend in
+  // each, and while you sit you swing gently back and forth. The height is
+  // where a seat hangs at rest, halfway down its chains.
+  'swing-set': { pose: 'sit', h: 0.5, spots: [[0.3, 0.5], [0.7, 0.5]] },
   sofa: { pose: 'sit', h: 0.48, at: [0.5, 0.46] },
   bed: { pose: 'lie', h: 0.56 },
   'school-desk': { pose: 'sit', h: 0.48, at: [0.5, 0.7] },

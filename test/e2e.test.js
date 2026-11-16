@@ -1724,6 +1724,61 @@ test('beside a sofa the Sit button sits you on it, the island sees you sitting, 
   await page.browserContext().close();
 });
 
+test('a friend sees you swing: carried up and along with your seat, as high as you have pumped it', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  await makeIsland(host, { online: true, theme: 'Flat Land' });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // A swing set facing you a step in front, on cleared ground.
+  const at = await host.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const [x, y, z] = [Math.floor(b.x), Math.floor(b.y), Math.floor(b.z)];
+    const cells = [];
+    for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let dy = 0; dy < 3; dy++) if (g.world.get(x + dx, y + dy, z + dz) !== 0 && (dx || dz)) cells.push(x + dx, y + dy, z + dz, 0);
+    g.edit('pick', cells, { undoable: false });
+    g.edit('build', [x, y, z - 1, B.turnedTo(B.SWING_SET, 1)], { undoable: false });
+    Object.assign(b, { x: x + 0.5, z: z + 0.5, vx: 0, vz: 0 });
+    window.kidsWorld.step(1 / 60, 10);
+    return { x, y, z: z - 1 };
+  });
+  await until(host, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Sit'));
+  await host.click('#ride');
+  await until(host, () => window.kidsWorld.game.seat && window.kidsWorld.game.me.anim === 8);
+  const pid = await host.evaluate(() => window.kidsWorld.game.pid);
+  // Pumped high (settling back only slowly), and told to friends.
+  await host.evaluate(() => {
+    const g = window.kidsWorld.game;
+    g.swing = 1.2;
+    g.sendMove(true);
+  });
+  // On the friend's page the host goes up and down with their seat, well
+  // above where the seat hangs at rest, and the seat swings as high.
+  const seen = await (await until(
+    guest,
+    ({ pid, at }) => {
+      const g = window.kidsWorld.game;
+      const a = g.players.get(pid)?.avatar;
+      if (!a?.swingSeat) return false;
+      const ys = (window.swingYs ??= []);
+      ys.push(a.root.position.y - at.y);
+      const seat = [...g.renderer.terrain.chunks.values()].flatMap((c) => c.movers).find((m) => m.cell === `${at.x},${at.y},${at.z}`);
+      const angles = (window.seatAngles ??= []);
+      if (seat) angles.push(Math.abs(seat.model.userData.seats[a.swingSeat.spot].rotation.x));
+      return ys.length > 30 && Math.max(...ys) - Math.min(...ys) > 0.15 && Math.max(...angles) > 0.6 ? { amp: a.swingSeat.amp, rise: Math.max(...ys) - Math.min(...ys), angle: Math.max(...angles) } : false;
+    },
+    { pid, at },
+  )).jsonValue();
+  assert.ok(seen.amp > 0.6, `the friend hears how high: ${JSON.stringify(seen)}`);
+  assert.deepEqual(pageErrors, []);
+  await host.browserContext().close();
+  await guest.browserContext().close();
+});
+
 test('toasting a marshmallow: Q at a campfire puts one on a stick in your hand, a friend sees it, it browns over the flames, and Q eats it golden', { skip }, async () => {
   const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
   await makeIsland(host, { online: true, theme: 'Flat Land' });

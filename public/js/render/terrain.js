@@ -19,6 +19,7 @@ import { PARTY_KINDS, partyMaterials, partyModel } from './party-model.js';
 import { STOCK_KINDS, stockMaterials, stockModel } from './stock-model.js';
 import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
+import { GENTLE, swingMaterials, swingModel, swingAt, swingPhase } from './swing-model.js';
 import { toyMaterial } from './toon.js';
 import { chestMaterials, chestModel } from './chest-model.js';
 import { TILE } from './atlas.js';
@@ -751,7 +752,7 @@ export class Terrain {
       // A fan's blades go round, a tank's fish swim and a clock's pendulum
       // swings, each at a time of its own; an escalator's steps go along
       // together, from piece to piece.
-      if (model.userData.spin || model.userData.tick || model.userData.rock) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : model.userData.together ? 0 : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock ? `${x},${y},${z}` : null });
+      if (model.userData.spin || model.userData.tick || model.userData.rock || model.userData.seats) chunk.movers.push({ model, phase: model.userData.rock ? rockPhase(x, y, z) : model.userData.seats ? swingPhase(x, y, z) : model.userData.together ? 0 : (x * 7.3 + z * 3.1 + y) % 10, cell: model.userData.rock || model.userData.seats ? `${x},${y},${z}` : null });
       // A tank, to be fed by its cell (game.js feedFish).
       if (model.userData.feed) this.tanks.set(`${x},${y},${z}`, model);
       if (model.userData.campfire) {
@@ -809,6 +810,10 @@ export class Terrain {
       this.rockingMaterials ??= rockingMaterials(toyMaterial);
       return rockingModel(this.rockingMaterials);
     }
+    if (kind === 'swing-set') {
+      this.swingMaterials ??= swingMaterials(toyMaterial);
+      return swingModel(this.swingMaterials);
+    }
     if (PARTY_KINDS.has(kind)) {
       this.partyMaterials ??= partyMaterials(toyMaterial);
       return partyModel(this.partyMaterials, kind, cell, this.world, this.party);
@@ -836,9 +841,11 @@ export class Terrain {
 
   // The blades of the fans in sight go round, an electric fan's head sweeps
   // from side to side, fish swim round their tanks, clocks tell the island's
-  // time of day, `day` (env.js), and a rocking chair rocks while someone is
-  // in it (`satIn`, the cells someone is sitting in, from game.js).
-  animate(time, day = 0.5, satIn = null) {
+  // time of day, `day` (env.js), a rocking chair rocks while someone is in it
+  // (`satIn`, the cells someone is sitting in, from game.js), and a swing
+  // set's seats swing, each as high as whoever is on it has pumped it
+  // (`swinging`, the height of each seat in each cell someone is sitting in).
+  animate(time, day = 0.5, satIn = null, swinging = null) {
     for (const chunk of this.chunks.values()) {
       if (!chunk.group.visible) continue;
       for (const { model, phase, cell } of chunk.movers) {
@@ -859,6 +866,18 @@ export class Terrain {
         if (rock) {
           rock.rotation.x = satIn?.has(cell) ? rockingAt(t) : 0;
           rock.updateMatrix();
+        }
+        // A swing set's seats swing while someone is on one, as high as they
+        // have pumped it (an empty seat hangs straight down, and one sat on
+        // with nobody pumping swings gently).
+        const seats = model.userData.seats;
+        if (seats) {
+          const amps = swinging?.get(cell);
+          const gentle = satIn?.has(cell);
+          seats.forEach((seat, k) => {
+            seat.rotation.x = amps ? swingAt(t, amps[k]) : gentle ? swingAt(t, GENTLE) : 0;
+            seat.updateMatrix();
+          });
         }
       }
     }

@@ -207,6 +207,11 @@ export const ROCKING_CHAIR = furniture(271, 'rocking-chair', { name: 'Rocking Ch
 // floor with you, the way you steer (game.js scootInSeat). After the rocking
 // chair.
 export const DESK_CHAIR = furniture(309, 'desk-chair', { name: 'Desk Chair', color: '#2f6fe4', after: 271, sound: 'wood' });
+// A swing set (render/swing-model.js): two seats on chains under a wooden
+// A-frame. Sit on one and you swing gently back and forth; tap jump in time
+// as you swing forward and you pump higher, up to almost level with the top
+// bar (game.js swingInSeat). After the desk chair.
+export const SWING_SET = furniture(438, 'swing-set', { name: 'Swing Set', color: '#e8453c', after: 309, sound: 'wood', real: 'swing-set' });
 export const SOFA = furniture(105, 'sofa', { name: 'Sofa', color: '#5b8fd9', sound: 'cloth' });
 export const BED = furniture(109, 'bed', { name: 'Bed', color: '#f29bc4', sound: 'cloth' });
 export const BOOKSHELF = furniture(113, 'bookshelf', { name: 'Bookshelf', color: '#a8703f', sound: 'wood' });
