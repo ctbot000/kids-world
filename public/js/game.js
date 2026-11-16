@@ -64,7 +64,7 @@ import { editPrice, friendPrice, isGrow, isLand, landCount, landPrice, landProbl
 import { lookHair, lookTall, petKind, PHRASES, STICKERS as STICKER_EMOJI } from './shared/words.js';
 import { ANIM, CHARGE_SECS, CHARGE_TOLD, shirtColor, SWINGS } from './render/avatar.js';
 import { rockedSitter, rockingAt, rockPhase } from './render/rocking-model.js';
-import { GENTLE, MOST, PUMP, SEAT, settle, swingAt, swingPhase, swungSitter } from './render/swing-model.js';
+import { GENTLE, MOST, packSwing, PUMP, settle, swingAt, swingPhase, swungSitter, unpackSwing } from './render/swing-model.js';
 import { slashLead } from './render/effects.js';
 import { flashModel, jellyColor } from './render/toon.js';
 
@@ -5654,6 +5654,26 @@ export class Game extends EventTarget {
   }
 
 
+  // A friend on a swing: carried with their seat, as high as their moves say
+  // they have pumped it (sendMove), and the seat told so (seatMotion).
+  friendsSwing(a, s, cell) {
+    let spot = 0;
+    let near = Infinity;
+    for (let k = 0; k < 2; k++) {
+      const pose = seatPose(this.world, ...cell, k);
+      const d = pose ? Math.hypot(s.x - pose.x, s.z - pose.z) : Infinity;
+      if (d < near) [spot, near] = [k, d];
+    }
+    const amp = unpackSwing(s.flags ?? 0);
+    a.swing = { cell, spot, amp };
+    const r = swungSitter(swingAt(this.renderer.time + swingPhase(...cell), amp), a.root.rotation.y);
+    a.rocked = r;
+    a.root.rotation.x = r.lean;
+    a.root.position.x += r.dx;
+    a.root.position.y += r.dy;
+    a.root.position.z += r.dz;
+  }
+
   // An avatar sitting in a rocking chair rocked by `angle`, its root where
   // the chair's seat has them and turned to face its way: leaned with the
   // chair, and carried with the seat as it swings about the rockers.
@@ -5674,7 +5694,7 @@ export class Game extends EventTarget {
   seatMotion() {
     const satIn = new Set();
     const swinging = new Map();
-    const add = (x, y, z, spot, amp, hips) => {
+    const add = (x, y, z, spot, amp) => {
       const model = B.block(this.world.get(x, y, z)).model;
       const key = `${x},${y},${z}`;
       if (model === 'rocking-chair') satIn.add(key);
@@ -5682,25 +5702,19 @@ export class Game extends EventTarget {
       satIn.add(key);
       const amps = swinging.get(key) ?? [0, 0];
       // How high this one is swinging: your own is what you have pumped it to,
-      // a friend's read off where their hips are, seat to bar.
-      amps[spot] = amp ?? Math.acos(Math.min(1, Math.max(-1, (SEAT.bar - (hips.y - y)) / SEAT.chains))) || GENTLE;
+      // a friend's what their moves say (friendsSwing).
+      amps[spot] = amp ?? GENTLE;
       swinging.set(key, amps);
     };
-    if (this.seat) add(this.seat.x, this.seat.y, this.seat.z, this.seat.spot, this.swing ?? GENTLE, null);
+    if (this.seat) add(this.seat.x, this.seat.y, this.seat.z, this.seat.spot, this.swing ?? GENTLE);
     for (const p of this.players.values()) {
       if (p.me || !p.inSeat || !p.avatar) continue;
-      const a = p.avatar.root.position;
-      const [x, y, z] = [Math.floor(a.x), Math.floor(a.y), Math.floor(a.z)];
-      // Which of the two seats they are on: the one their hips are sat in.
-      let spot = 0;
-      let near = Infinity;
-      for (let k = 0; k < 2; k++) {
-        const pose = seatPose(this.world, x, y, z, k);
-        if (!pose) continue;
-        const d = Math.hypot(a.x - pose.x, a.z - pose.z);
-        if (d < near) [spot, near] = [k, d];
+      const sw = p.avatar.swing;
+      if (sw) add(...sw.cell, sw.spot, sw.amp);
+      else {
+        const a = p.avatar.root.position;
+        add(Math.floor(a.x), Math.floor(a.y), Math.floor(a.z), 0);
       }
-      add(x, y, z, spot, null, a);
     }
     return { satIn, swinging };
   }
@@ -8018,7 +8032,10 @@ export class Game extends EventTarget {
     if (!force && now - this.lastMoveSent < MOVE_SEND_MS) return;
     const b = this.me.body;
     const rope = this.hooping?.rope;
-    const s = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2), +this.me.yaw.toFixed(2), this.me.anim, (b.flying ? 1 : 0) | (rope ? packTurn(rope.turn) : 0)];
+    // On a swing, how high you are swinging goes where a rope's turn would.
+    const c = this.seat;
+    const swing = c && B.block(this.world.get(c.x, c.y, c.z)).model === 'swing-set' ? packSwing(this.swing ?? GENTLE) : 0;
+    const s = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2), +this.me.yaw.toFixed(2), this.me.anim, (b.flying ? 1 : 0) | (rope ? packTurn(rope.turn) : swing)];
     const key = s.join(',');
     if (!force && key === this.lastState && now - this.lastMoveSent < 1000) return;
     this.lastState = key;
@@ -8038,6 +8055,7 @@ export class Game extends EventTarget {
       const [rx, rz] = a.rocked ? [a.rocked.dx, a.rocked.dz] : [0, 0];
       const speed = Math.hypot(s.x - prev.x + rx, s.z - prev.z + rz) / Math.max(dt, 1e-3);
       a.rocked = null;
+      a.swing = null;
       a.root.position.set(s.x, s.y, s.z);
       a.root.rotation.y = s.yaw;
       // In a rocking chair, a friend rocks with it, leaned over like the
@@ -8046,6 +8064,7 @@ export class Game extends EventTarget {
       a.root.rotation.x = 0;
       const cell = [Math.floor(s.x), Math.floor(s.y), Math.floor(s.z)];
       if (s.anim === ANIM.sit && B.block(this.world.get(...cell)).model === 'rocking-chair') this.rockWith(a, rockingAt(this.renderer.time + rockPhase(...cell)));
+      if (s.anim === ANIM.sit && B.block(this.world.get(...cell)).model === 'swing-set') this.friendsSwing(a, s, cell);
       // On an animal: sitting astride it, with no shadow of their own.
       p.seated = s.anim === ANIM.ride;
       // Sitting on a chair or a sofa (not lying in bed): tea party company.

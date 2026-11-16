@@ -19,7 +19,7 @@ import { PARTY_KINDS, partyMaterials, partyModel } from './party-model.js';
 import { STOCK_KINDS, stockMaterials, stockModel } from './stock-model.js';
 import { escalatorMaterials, escalatorModel } from './escalator-model.js';
 import { rockingMaterials, rockingModel, rockingAt, rockPhase } from './rocking-model.js';
-import { swingMaterials, swingModel, swingAt, swingPhase } from './swing-model.js';
+import { GENTLE, swingMaterials, swingModel, swingAt, swingPhase } from './swing-model.js';
 import { toyMaterial } from './toon.js';
 import { chestMaterials, chestModel } from './chest-model.js';
 import { TILE } from './atlas.js';

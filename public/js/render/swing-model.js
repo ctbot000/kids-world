@@ -67,8 +67,15 @@ export function swungSitter(a, yaw) {
   const h = SEAT.chains;
   // The seat swings forward along the swing's own -z, the way you face.
   const forth = h * Math.sin(a);
-  return { lean: -a * 0.6, dx: Math.sin(yaw) * forth, dy: h * (Math.cos(a) - 1), dz: Math.cos(yaw) * forth };
+  // Hung from the bar, the seat rises as it swings out either way.
+  return { lean: -a * 0.6, dx: Math.sin(yaw) * forth, dy: h * (1 - Math.cos(a)), dz: Math.cos(yaw) * forth };
 }
+
+// How high someone is swinging, for their friends: packed into bits 1 to 7
+// of the flags a move sends (game.js sendMove), which only a jump rope
+// otherwise uses, and nobody turns a rope sitting on a swing.
+export const packSwing = (amp) => Math.round(Math.min(1, Math.max(0, amp / MOST)) * 127) << 1;
+export const unpackSwing = (flags) => (((flags >> 1) & 127) / 127) * MOST;
 
 const shapes = {};
 

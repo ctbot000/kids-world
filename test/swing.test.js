@@ -93,7 +93,7 @@ test('whoever sits on a swing is carried with the seat, leaned back as it swings
   // Facing +z (yaw 0), the swing carries them forward along +z as it swings.
   const forth = swungSitter(GENTLE, 0);
   assert.ok(forth.dz > 0, 'carried forward');
-  assert.ok(forth.dy < 0, 'a touch lower, as it swings out');
+  assert.ok(forth.dy > 0, 'a touch higher, as it swings out');
   assert.ok(Math.abs(forth.dx) < 1e-9, 'nowhere sideways');
   // The other way, and back the way they came from.
   const back = swungSitter(-GENTLE, 0);
@@ -131,4 +131,33 @@ test('the swing set itself fits its cell, and its two seats swing about the top 
   const box = new THREE.Box3().setFromObject(seat);
   assert.ok(box.min.z < 0, 'swung forward, the way you face');
   seat.rotation.x = 0;
+});
+
+test('a rider rises and goes forward with the seat they sit on, and friends hear how high', async () => {
+  const THREE = await import('../public/vendor/three.module.js');
+  const { swingMaterials, swingModel, swungSitter, packSwing, unpackSwing, MOST, GENTLE, PUMP } = await import('../public/js/render/swing-model.js');
+  const model = swingModel(swingMaterials());
+  const seat = model.userData.seats[0];
+  const board = () => {
+    model.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(seat.children.at(-1)).getCenter(new THREE.Vector3());
+  };
+  const rest = board();
+  for (const a of [0.3, -0.5, 1.2]) {
+    seat.rotation.x = a;
+    const at = board();
+    // The model faces -z; a rider facing yaw 0 looks along +z (the model
+    // turned half round), so the seat's -z is the rider's +z.
+    const r = swungSitter(a, 0);
+    assert.ok(Math.abs(at.y - rest.y - r.dy) < 0.01, `hips rise with the seat at ${a}`);
+    assert.ok(Math.abs(-(at.z - rest.z) - r.dz) < 0.01, `and go along with it at ${a}`);
+  }
+  // How high a friend swings goes in the move's flags, clear of the flying bit.
+  for (const amp of [0, GENTLE, GENTLE + PUMP, MOST]) {
+    const flags = 1 | packSwing(amp);
+    assert.equal(flags & 1, 1, 'flying bit untouched');
+    assert.ok(flags <= 0xff, 'fits the byte the island keeps');
+    assert.ok(Math.abs(unpackSwing(flags) - amp) < MOST / 127, `about ${amp}`);
+  }
+  assert.equal(unpackSwing(packSwing(MOST * 2)), MOST, 'never higher than MOST');
 });
