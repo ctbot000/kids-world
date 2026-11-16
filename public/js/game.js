@@ -5665,7 +5665,7 @@ export class Game extends EventTarget {
       if (d < near) [spot, near] = [k, d];
     }
     const amp = unpackSwing(s.flags ?? 0);
-    a.swing = { cell, spot, amp };
+    a.swingSeat = { cell, spot, amp };
     const r = swungSitter(swingAt(this.renderer.time + swingPhase(...cell), amp), a.root.rotation.y);
     a.rocked = r;
     a.root.rotation.x = r.lean;
@@ -5709,7 +5709,7 @@ export class Game extends EventTarget {
     if (this.seat) add(this.seat.x, this.seat.y, this.seat.z, this.seat.spot, this.swing ?? GENTLE);
     for (const p of this.players.values()) {
       if (p.me || !p.inSeat || !p.avatar) continue;
-      const sw = p.avatar.swing;
+      const sw = p.avatar.swingSeat;
       if (sw) add(...sw.cell, sw.spot, sw.amp);
       else {
         const a = p.avatar.root.position;
@@ -8055,7 +8055,7 @@ export class Game extends EventTarget {
       const [rx, rz] = a.rocked ? [a.rocked.dx, a.rocked.dz] : [0, 0];
       const speed = Math.hypot(s.x - prev.x + rx, s.z - prev.z + rz) / Math.max(dt, 1e-3);
       a.rocked = null;
-      a.swing = null;
+      a.swingSeat = null;
       a.root.position.set(s.x, s.y, s.z);
       a.root.rotation.y = s.yaw;
       // In a rocking chair, a friend rocks with it, leaned over like the
