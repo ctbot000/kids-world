@@ -48,6 +48,8 @@ export const XP_FOR = {
   ropejumps: { xp: 0.5, cap: 400 },
   ropebest: { xp: 1, cap: 100 },
   campouts: { xp: 10 },
+  // Marshmallows toasted golden on a campfire (shared/mallow.js).
+  toasted: { xp: 5, cap: 500 },
   freed: { xp: 50 },
   helped: { xp: 20 },
   kings: { xp: 200 },

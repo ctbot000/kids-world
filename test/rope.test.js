@@ -245,7 +245,7 @@ test('a friend is told you are jumping rope, and how far round it is, within wha
     room.receive(a, { t: 'm', s: [20.5, 11, 20.5, 0, anim, 0] });
     assert.equal(b.last('m').s[4], anim);
   }
-  assert.equal(ANIM.rope, Math.max(...Object.values(ANIM)), 'the newest of them');
+  assert.equal(ANIM.toast, Math.max(...Object.values(ANIM)), 'the newest of them');
   for (let turn = 0; turn < 40; turn += 0.37) {
     room.receive(a, { t: 'm', s: [20.5, 11, 20.5, 0, ANIM.rope, packTurn(turn)] });
     const told = b.last('m').s[5];

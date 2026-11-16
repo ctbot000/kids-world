@@ -1779,6 +1779,59 @@ test('a friend sees you swing: carried up and along with your seat, as high as y
   await guest.browserContext().close();
 });
 
+test('toasting a marshmallow: Q at a campfire puts one on a stick in your hand, a friend sees it, it browns over the flames, and Q eats it golden', { skip }, async () => {
+  const host = await openPlayer(p2p(), { name: 'Sunny Otter' });
+  await makeIsland(host, { online: true, theme: 'Flat Land' });
+  const code = await host.evaluate(() => window.kidsWorld.game.code);
+  const guest = await openPlayer(p2p(`&code=${code}`), { name: 'Brave Fox' });
+  await clickButton(guest, 'go!', '#modal');
+  await inGame(guest);
+  await until(host, () => window.kidsWorld.game.players.size === 2);
+  // A campfire two steps in front, on cleared ground, and you facing it.
+  await host.evaluate(async () => {
+    const B = await import('/js/shared/blocks.js');
+    const g = window.kidsWorld.game;
+    const b = g.me.body;
+    const [x, y, z] = [Math.floor(b.x), Math.floor(b.y), Math.floor(b.z)];
+    const cells = [];
+    for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let dy = 0; dy < 3; dy++) if (g.world.get(x + dx, y + dy, z + dz) !== 0 && (dx || dz)) cells.push(x + dx, y + dy, z + dz, 0);
+    g.edit('pick', cells, { undoable: false });
+    g.edit('build', [x, y, z - 2, B.CAMPFIRE], { undoable: false });
+    Object.assign(b, { x: x + 0.5, z: z + 0.5, vx: 0, vz: 0 });
+    g.me.yaw = Math.PI;
+    window.kidsWorld.step(1 / 60, 10);
+  });
+  await until(host, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Toast'));
+  // The button (as on a touch screen) steps you in beside it, close enough
+  // for the marshmallow to be out over the flames.
+  await host.click('#ride');
+  await until(host, () => window.kidsWorld.game.mallow);
+  const stood = await host.evaluate(() => {
+    const g = window.kidsWorld.game;
+    return Math.hypot(g.me.body.x - g.mallow.fire.x - 0.5, g.me.body.z - g.mallow.fire.z - 0.5);
+  });
+  assert.ok(stood < 1.05, `stepped in beside the fire: ${stood}`);
+  const pid = await host.evaluate(() => window.kidsWorld.game.pid);
+  await until(guest, (pid) => window.kidsWorld.game.players.get(pid)?.avatar?.stick?.parent, pid);
+  // Over the flames it browns, a few seconds to golden.
+  const golden = await host.evaluate(() => {
+    const kw = window.kidsWorld;
+    for (let i = 0; i < 60 * 8 && !(kw.game.mallow?.brown >= 0.9); i++) kw.step(1 / 60, 1);
+    return kw.game.mallow?.brown ?? null;
+  });
+  assert.ok(golden >= 0.9, `browned over the flames: ${golden}`);
+  await until(host, () => document.getElementById('ride').textContent.includes('Eat'));
+  const before = await host.evaluate(() => window.kidsWorld.game.profile.data.stats.toasted ?? 0);
+  await host.keyboard.press('KeyQ');
+  await until(host, () => !window.kidsWorld.game.mallow);
+  assert.equal(await host.evaluate(() => window.kidsWorld.game.profile.data.stats.toasted), before + 1, 'a golden one counted');
+  assert.ok(!(await host.evaluate((pid) => window.kidsWorld.game.players.get(pid).avatar.stick?.parent, pid)), 'out of your hand');
+  await until(guest, (pid) => !window.kidsWorld.game.players.get(pid).avatar.stick?.parent, pid);
+  assert.deepEqual(pageErrors, []);
+  await host.browserContext().close();
+  await guest.browserContext().close();
+});
+
 test('coming down from a height thumps and puffs up dust every time, however high it was', { skip }, async () => {
   const page = await openPlayer(base + '?p2p=1');
   await makeIsland(page, { online: false, theme: 'Flat Land' });

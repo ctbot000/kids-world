@@ -21,6 +21,10 @@ import { breakLeft, chalkboardNear, CLASS_SIZE } from './shared/school.js';
 import { cookBreakLeft, cookCoins, heatUp, makeLesson, pickItem, recipeByKey, stoveNear, takeOut, workOn } from './shared/cooking.js';
 import { isTank, tankNear } from './shared/fishtank.js';
 import { castSpot, catchFor, FIGHT, fightStep, lineState, newFight, NIBBLE_MS, planBites, STAY } from './shared/fishing.js';
+import { campfireNear, isCampfire, mallowState, overFlames, toastStep } from './shared/mallow.js';
+import { marshmallowStick } from './render/mallow-model.js';
+// How far from a campfire's middle you stand to toast over it (startToast).
+const TOAST_STAND = 0.95;
 import { FishingLine } from './render/fishing-rod.js';
 import { allByHeart, answerStudy, cleanNotebook, fileAnswer, isStudyDesk, makeStudy, workbookByKey } from './shared/study.js';
 import { load, save } from './storage.js';
@@ -41,7 +45,7 @@ import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
-import { BODY, BOUNCE, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
+import { BODY, BOUNCE, bodyOverlapsSolid, keepApart, makeBody, MOVE, onTrampoline, SCOOT, stepBody, unstick } from './shared/physics.js';
 import { raycast } from './shared/raycast.js';
 import { freeSpot, scootsAt, seatNear, seatOf, seatPose, standUpAt, teaTableNear, tubsShared } from './shared/seats.js';
 import { getOffAt, rideState, startRide, stepRide } from './shared/riding.js';
@@ -469,6 +473,12 @@ export class Game extends EventTarget {
     this.fishing = null;
     this.reelHeld = false;
     this.fishTarget = null;
+    // Toasting a marshmallow over a campfire (shared/mallow.js): the stick in
+    // your hand, { fire: { x, y, z }, brown }, or null; the campfire beside
+    // you to toast at, and everyone's stick out on the island, by player.
+    this.mallow = null;
+    this.fireTarget = null;
+    this.sticks = new Map();
     // On a Grow Island (shared/grow.js), the block of land you could buy
     // next, under you or just in front of you: { x, z, price }, or null.
     this.landTarget = null;
@@ -648,6 +658,9 @@ export class Game extends EventTarget {
         break;
       case 'rod':
         this.rodNews(msg);
+        break;
+      case 'mallow':
+        this.mallowNews(msg);
         break;
       case 'draw':
         this.drawHeard(msg);
@@ -1090,6 +1103,7 @@ export class Game extends EventTarget {
     this.dropPet(pid);
     this.lines.get(pid)?.dispose();
     this.lines.delete(pid);
+    this.sticks.delete(pid);
     this.players.delete(pid);
     this.emit('players');
     if (!quiet && pid !== this.pid) {
@@ -5021,6 +5035,16 @@ export class Game extends EventTarget {
       this.useParty();
       return;
     }
+    // Toasting a marshmallow: Q eats it once one is in your hand, and starts
+    // one at a campfire beside you.
+    if (this.mallow) {
+      this.eatMallow();
+      return;
+    }
+    if (this.fireTarget) {
+      this.startToast();
+      return;
+    }
     const id = this.rideTarget;
     if (!id && this.seatTarget) {
       this.sitDown(this.seatTarget);
@@ -5604,6 +5628,181 @@ export class Game extends EventTarget {
         }
       }
     }
+  }
+
+  // ------------------------------------------------ marshmallows
+
+  // Q (or the 🍢 Toast button) at a lit campfire: a marshmallow on a stick in
+  // your hand, and everyone else sees you hold it out over the flames. Brown
+  // enough already and the same tap eats it instead (updateToasting).
+  startToast() {
+    const fire = this.fireTarget;
+    const b = this.me.body;
+    if (!fire || this.mallow) return;
+    // Up close beside it, if there is room, so the marshmallow on the end of
+    // the stick is out over the flames (the button shows a step or two off).
+    const off = Math.hypot(b.x - fire.x - 0.5, b.z - fire.z - 0.5);
+    if (off > TOAST_STAND + 0.05) {
+      const at = { ...b, x: fire.x + 0.5 + ((b.x - fire.x - 0.5) / off) * TOAST_STAND, z: fire.z + 0.5 + ((b.z - fire.z - 0.5) / off) * TOAST_STAND };
+      if (!bodyOverlapsSolid(this.world, at)) Object.assign(b, { x: at.x, z: at.z, vx: 0, vz: 0 });
+    }
+    this.me.yaw = Math.atan2(fire.x + 0.5 - b.x, fire.z + 0.5 - b.z);
+    this.mallow = { fire: { x: fire.x, y: fire.y, z: fire.z }, brown: 0 };
+    this.send({ t: 'mallow', op: 'hold', at: [fire.x, fire.y, fire.z] });
+    this.showStick(this.pid);
+    this.sound.play('place', { kind: 'wood' });
+    if (!this.toldToast) {
+      this.toldToast = true;
+      this.emit('toast', { icon: '🍢', text: `Hold it over the flames till it turns golden, then ${this.touch ? 'tap 🍢 Eat' : 'press Q'} for a munch! Leave it too long and it burns.` });
+    }
+  }
+
+  // Each frame while your stick is out: it browns over the flames of the
+  // campfire you stand beside (stepping away stops it, as overFlames says no),
+  // and the fire gone from under you — picked up, or put out — drops the stick.
+  updateToasting(dt, input) {
+    const m = this.mallow;
+    if (!m) return;
+    const b = this.me.body;
+    const fire = m.fire;
+    if (!isCampfire(this.world.get(fire.x, fire.y, fire.z)) || this.dizzy || b.flying || b.inWater) {
+      this.dropMallow();
+      return;
+    }
+    const at = this.stickAt();
+    const over = overFlames(at, fire.x, fire.y, fire.z);
+    const was = mallowState(m.brown);
+    m.brown = toastStep(m.brown, over, dt);
+    const now = mallowState(m.brown);
+    if (now !== was) {
+      if (now === 'golden') this.emit('toast', { icon: '🍢', text: 'Golden! Tap to eat it, or hold on a moment more for a little darker.' });
+      else if (now === 'burnt') {
+        this.burnMallow();
+        return;
+      }
+    }
+    // What everyone else sees: how brown it is now, now and then on the way.
+    const now2 = performance.now();
+    if (now2 - (m.sentAt ?? 0) > 400) {
+      m.sentAt = now2;
+      this.send({ t: 'mallow', op: 'brown', p: +m.brown.toFixed(2) });
+    }
+    this.sticks.get(this.pid)?.userData.setBrown(m.brown);
+  }
+
+  // Where the marshmallow itself is in the world, while you hold it out: your
+  // hand's own place, tipped forward over the fire.
+  stickAt() {
+    const at = this.players.get(this.pid)?.avatar?.mallowTip();
+    if (at) return at;
+    const b = this.me.body;
+    return { x: b.x, y: b.y + 0.9, z: b.z };
+  }
+
+  // Q (or the button) with a marshmallow in hand: eat it. Golden, a happy
+  // munch and a heart; raw, a polite little nibble; burnt, an Oops! and a puff
+  // of smoke.
+  eatMallow() {
+    const m = this.mallow;
+    if (!m) return;
+    const state = mallowState(m.brown);
+    const b = this.me.body;
+    this.mallow = null;
+    this.hideStick(this.pid);
+    this.send({ t: 'mallow', op: 'eat', p: +m.brown.toFixed(2) });
+    this.eatFx(this.pid, state, m.brown, b.x, b.y + 1.1, b.z);
+    if (state === 'golden') {
+      if (this.profile.data.stats.toasted < XP_FOR.toasted.cap) this.emit('reward', { x: b.x, y: b.y, z: b.z, xp: XP_FOR.toasted.xp });
+      this.profile.count('toasted');
+    }
+  }
+
+  // The marshmallow left too long over the flames: burnt black, with a puff
+  // of smoke and an Oops!
+  burnMallow() {
+    const m = this.mallow;
+    const b = this.me.body;
+    this.mallow = null;
+    this.hideStick(this.pid);
+    this.send({ t: 'mallow', op: 'burn' });
+    this.eatFx(this.pid, 'burnt', m.brown, b.x, b.y + 1.1, b.z);
+  }
+
+  // The stick dropped: the campfire picked up mid-toast, or you walked off.
+  dropMallow() {
+    if (!this.mallow) return;
+    this.mallow = null;
+    this.send({ t: 'mallow', op: 'drop' });
+    this.hideStick(this.pid);
+  }
+
+  // Someone toasting: the stick in their hand, browning, eaten or burnt, or
+  // put away again.
+  mallowNews(msg) {
+    if (msg.pid === this.pid) return;
+    if (msg.op === 'hold') this.showStick(msg.pid);
+    else if (msg.op === 'brown') this.sticks.get(msg.pid)?.userData.setBrown(msg.p);
+    else if (msg.op === 'eat') {
+      const at = this.stickAtOf(msg.pid);
+      this.sticks.get(msg.pid)?.userData.setBrown(msg.p);
+      this.eatFx(msg.pid, mallowState(msg.p), msg.p, at.x, at.y, at.z);
+      this.hideStick(msg.pid);
+    } else if (msg.op === 'burn') {
+      const at = this.stickAtOf(msg.pid);
+      this.eatFx(msg.pid, 'burnt', 0, at.x, at.y, at.z);
+      this.hideStick(msg.pid);
+    } else if (msg.op === 'drop') this.hideStick(msg.pid);
+  }
+
+  // Where a friend's marshmallow is in the world, while they hold one out.
+  stickAtOf(pid) {
+    const p = this.players.get(pid);
+    const at = p?.avatar?.mallowTip();
+    if (at) return at;
+    const s = p?.avatar?.root.position;
+    return s ? { x: s.x, y: s.y + 1.1, z: s.z } : { x: 0, y: 0, z: 0 };
+  }
+
+  // The eating itself: the munch, the heart (or the smoke and the Oops!), for
+  // everyone to see and hear, whoever's marshmallow it was.
+  eatFx(pid, state, brown, x, y, z) {
+    const fxs = this.renderer.effects;
+    if (state === 'burnt') {
+      for (let i = 0; i < 4; i++) {
+        fxs.add('puff', x + (Math.random() - 0.5) * 0.2, y + 0.2, z + (Math.random() - 0.5) * 0.2, {
+          vy: 0.7 + Math.random() * 0.3,
+          size: 0.12 + Math.random() * 0.06,
+          grow: 0.3,
+          drag: 0.2,
+          life: 1.2,
+          color: ['#5a544e', '#6e6359'][i % 2],
+        });
+      }
+      if (this.near(x, y, z, 24)) this.sound.play('oops');
+      if (pid === this.pid) this.emit('toast', { icon: '😖', text: 'Oops! You left it too long — it burnt black! Another one?' });
+      return;
+    }
+    fxs.hearts(x, y + 0.4, z, state === 'golden' ? 3 : 1);
+    if (this.near(x, y, z, 20)) this.sound.play('yum');
+    if (pid === this.pid) this.emit('toast', { icon: '🍢', text: state === 'golden' ? 'Mmm, golden and gooey! Yum! 💛' : state === 'dark' ? 'A little dark, but still tasty!' : 'Still white inside… hold it over the flames a little longer!' });
+  }
+
+  // The stick in a player's hand, shown (and where it is kept, by player).
+  showStick(pid) {
+    this.hideStick(pid);
+    const stick = marshmallowStick();
+    this.sticks.set(pid, stick);
+    const p = this.players.get(pid);
+    if (p?.avatar) p.avatar.holdStick(stick);
+  }
+
+  // The stick out of a player's hand again.
+  hideStick(pid) {
+    const stick = this.sticks.get(pid);
+    if (!stick) return;
+    const p = this.players.get(pid);
+    p?.avatar?.holdStick(null);
+    this.sticks.delete(pid);
   }
 
   // Up out of your seat, in front of it (or beside it, or on top).
@@ -7663,6 +7862,7 @@ export class Game extends EventTarget {
       this.updateHoop(dt, input);
       this.moveMe(dt, input);
       this.updateFishing(dt, input);
+      this.updateToasting(dt, input);
     }
     // The wind roars louder the closer it is.
     this.sound.wind(foot ? Math.max(0, 1 - Math.hypot(this.me.body.x - foot.x, this.me.body.z - foot.z) / 50) : 0);
@@ -7687,6 +7887,9 @@ export class Game extends EventTarget {
     this.stockTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.dizzy && !on.flying && on.onGround ? terminalNear(this.world, on) : null;
     // A dish to set food on, or take it off (dishDialog in ui.js).
     this.dishTarget = !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dizzy && !on.flying && on.onGround ? dishNear(this.world, on) : null;
+    // A campfire beside you, to toast a marshmallow over (shared/mallow.js);
+    // while your stick is out, the one it is over.
+    this.fireTarget = this.mallow ? this.mallow.fire : !this.riding && !this.aboard && !this.seat && !this.seatTarget && !this.arcadeTarget && !this.gashaTarget && !this.pianoTarget && !this.tvTarget && !this.stationTarget && !this.classTarget && !this.drawTarget && !this.stoveTarget && !this.goTarget && !this.screenTarget && !this.computerTarget && !this.tankTarget && !this.kitTarget && !this.stockTarget && !this.dishTarget && !this.dizzy && !on.flying && !on.inWater && on.onGround ? campfireNear(this.world, on) : null;
     // In an escape house, the puzzle you face: a button, a crate or a dial.
     this.escapeTarget = this.escapeHouse && !this.riding && !this.aboard && !this.seat && !this.dizzy && !on.flying ? puzzleNear(this.world, this.escapeHouse, on, this.me.yaw) : null;
     if (this.escapeHouse) this.escapeHints();
@@ -7928,6 +8131,9 @@ export class Game extends EventTarget {
     else if (this.hooping && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.hoop;
     // Fishing, the rod held out over the water; walking off reels it in.
     else if (this.fishing && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.fish;
+    // Toasting a marshmallow, the stick held out over the campfire; walking
+    // off drops the stick (updateToasting).
+    else if (this.mallow && !still && b.onGround && speed <= 0.4 && !b.inWater) me.anim = ANIM.toast;
     else me.anim = b.flying ? ANIM.fly : b.inWater ? ANIM.swim : !b.onGround ? ANIM.air : still ? ANIM.dizzy : speed > ((gear ?? MOVE).walk + (gear ?? MOVE).run) / 2 ? ANIM.run : speed > 0.4 ? ANIM.walk : ANIM.idle;
     const fxs = this.renderer.effects;
     if (events.bounced) {

@@ -17,6 +17,7 @@ import { LiveTv } from './tv-live.js';
 import { drawShow, drawStatic } from './tv-shows.js';
 import { ANIMAL_TYPES, CRITTER_INFO, headTop, VEHICLES } from './shared/critters.js';
 import { FIGHT, FISH_KINDS } from './shared/fishing.js';
+import { mallowState } from './shared/mallow.js';
 import { ropeDue } from './shared/jump-rope.js';
 import { TAMES_TO_INVITE } from './shared/dragon.js';
 import { isNight } from './shared/env.js';
@@ -5237,7 +5238,7 @@ export class UI {
       this.arcadeButton(g, r);
       return;
     }
-    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fishTarget)) {
+    if (!g.riding && !g.aboard && !g.rideTarget && !g.seat && !g.seatTarget && (g.arcadeTarget || g.gashaTarget || g.pianoTarget || g.tvTarget || g.stationTarget || g.classTarget || g.drawTarget || g.frameTarget || g.stoveTarget || g.goTarget || g.screenTarget || g.computerTarget || g.tankTarget || g.kitTarget || g.stockTarget || g.dishTarget || g.fireTarget || g.fishTarget)) {
       this.arcadeButton(g, r);
       return;
     }
@@ -5380,7 +5381,7 @@ export class UI {
   // button again.
   arcadeButton(g, r) {
     const el = $('ride');
-    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.dishTarget ?? g.fishTarget;
+    const t = g.escapeTarget ?? g.chestTarget ?? g.partyTarget ?? g.arcadeTarget ?? g.gashaTarget ?? g.pianoTarget ?? g.tvTarget ?? g.stationTarget ?? g.classTarget ?? g.drawTarget ?? g.frameTarget ?? g.stoveTarget ?? g.goTarget ?? g.screenTarget ?? g.computerTarget ?? g.tankTarget ?? g.kitTarget ?? g.stockTarget ?? g.dishTarget ?? g.fireTarget ?? g.fishTarget;
     if (!t || this.modalOpen) {
       el.hidden = true;
       return;
@@ -5407,6 +5408,10 @@ export class UI {
                   : g.fishing.striking
                     ? ['🎣 Strike!', 'A fish is biting: strike now!']
                     : ['🎣 Wait…', 'Wait for the bobber to go right under']
+        : t === g.fireTarget
+          ? g.mallow
+            ? { golden: ['🍢 Eat', 'Golden! Eat it now'], dark: ['🍢 Eat', 'A little dark — eat it now, before it burns'] }[mallowState(g.mallow.brown)] ?? ['🍢 Toast', 'Hold it over the flames until it turns golden']
+            : ['🍢 Toast', 'Toast a marshmallow over the campfire']
             : null;
     const label = puzzle ? puzzle[0] : t.game ? '🕹️ Play' : t === g.pianoTarget ? '🎹 Play' : t === g.tvTarget ? '📺 Watch' : t === g.stationTarget ? '📹 Go live' : t === g.classTarget ? '✏️ Class' : t === g.drawTarget ? '🎨 Draw' : t === g.frameTarget ? '🖼️ Hang' : t === g.stoveTarget ? '🍳 Cook' : t === g.goTarget ? '⚫ Play Go' : t === g.screenTarget ? '💻 Look' : t === g.computerTarget ? '⌨️ Type' : t === g.tankTarget ? '🐟 Feed' : t === g.kitTarget ? '🤖 Build' : t === g.stockTarget ? '📈 Trade' : t === g.dishTarget ? '🍽️ Dish' : t.monster ? '👾 Turn' : '🎁 Turn';
     const key = `${label}|${touch}`;

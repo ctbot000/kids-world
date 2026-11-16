@@ -318,6 +318,12 @@ export class Sound {
         for (let i = 0; i < 3; i++) this.noise(0.05, { at: i * 0.1, type: 'bandpass', freq: 1800, q: 3, gain: 0.12 });
         this.tone(NOTE(84), { at: 0.35, decay: 0.3, gain: 0.1 });
         break;
+      // A marshmallow left too long over the flames: a sad little slide down
+      // and a hiss of smoke (game.js burnMallow).
+      case 'oops':
+        this.tone(400, { type: 'sawtooth', attack: 0.02, decay: 0.3, gain: 0.06, slide: 180, slideTime: 0.25 });
+        this.noise(0.4, { at: 0.05, type: 'highpass', freq: 1800, gain: 0.05, attack: 0.08 });
+        break;
       // Drinking an HP potion (shop.js): two little glugs and a sparkle.
       case 'sip':
         for (let i = 0; i < 2; i++) {
