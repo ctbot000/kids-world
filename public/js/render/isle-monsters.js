@@ -94,6 +94,9 @@ export class SnapperModel extends IsleMonster {
     b.add(this.shell);
     const s = this.shell;
     s.add(mesh(sphere(), shell, 0, 0.3, 0, 0.42, 0.2, 0.34));
+    s.add(mesh(sphere(), under, 0, 0.2, 0.02, 0.36, 0.1, 0.28));
+    // Bumps along the top of the shell.
+    for (const [x, z, r] of [[0, -0.05, 0.08], [-0.17, 0.02, 0.06], [0.17, 0.02, 0.06], [0, 0.15, 0.05]]) s.add(mesh(sphere(1, 8, 6), bump, x, 0.47, z, r, r * 0.55, r));
     // Eyes up on stalks, cross brows over them, and a frown under.
     for (const side of [-1, 1]) s.add(mesh(cylinder(0.025, 0.03, 0.18, 6), shell, side * 0.1, 0.52, 0.2));
     face(this, s, 0.64, 0.22, { spread: 0.1, size: 0.9, mouth: false });
