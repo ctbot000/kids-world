@@ -421,14 +421,16 @@ const BANDS = {
 const PENGUIN_LEAP = [2.6, 0.9, 0.75];
 // Dolphins racing a boat (CritterSim.race): how far off one comes to join a
 // boat, how far beside its bow they keep place, how many of them a boat takes
-// up with it, how often they leap as they go, and when one has fallen so far
-// behind that it gives up and goes back to its own way.
+// up with it, how often they leap as they go, when one has fallen so far
+// behind that it gives up and goes back to its own way, and how long a boat
+// goes without moving before it counts as stopped.
 const RACE_JOIN = 14;
 const RACE_BOW = 1.2;
 const RACE_SIDE = 1.7;
 const RACE_MAX = 2;
 const RACE_LEAP = 3.2;
 const RACE_DROP = 20;
+const RACE_STILL = 0.5;
 // What to say when a swimmer is invited where there is no water for it.
 export const NEEDS_WATER = {
   fish: 'Fish need water: tap a pond or the sea!',
@@ -1095,11 +1097,18 @@ export class CritterSim {
     for (const boat of this.list) {
       if (boat.type !== 'boat') continue;
       boat.crew ??= [];
-      // How fast it has come since the last tick, with its driver at the helm.
+      // How fast it is going, with its driver at the helm, measured from one
+      // of their moves to the next: those come about every tenth of a second,
+      // out of step with the ticks, so a tick with none is not a stop (only
+      // RACE_STILL seconds of none are).
+      boat.still = (boat.still ?? 0) + dt;
       const come = boat.crewAt ? Math.hypot(boat.x - boat.crewAt.x, boat.z - boat.crewAt.z) : 0;
-      boat.speed = come / Math.max(dt, 1e-3);
-      const going = Boolean(boat.rider) && boat.speed > 0.8;
-      boat.crewAt = { x: boat.x, z: boat.z };
+      if (!boat.crewAt || come > 0.02) {
+        boat.speed = boat.crewAt ? come / Math.max(boat.still, 1e-3) : 0;
+        boat.still = 0;
+        boat.crewAt = { x: boat.x, z: boat.z };
+      }
+      const going = Boolean(boat.rider) && boat.speed > 0.8 && boat.still < RACE_STILL;
       // Stopped, or its driver gone: whoever it had falls away from it.
       if (!going) {
         for (const c of boat.crew) c.race = null;
