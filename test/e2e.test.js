@@ -1763,13 +1763,13 @@ test('a friend sees you swing: carried up and along with your seat, as high as y
     ({ pid, at }) => {
       const g = window.kidsWorld.game;
       const a = g.players.get(pid)?.avatar;
-      if (!a?.swing) return false;
+      if (!a?.swingSeat) return false;
       const ys = (window.swingYs ??= []);
       ys.push(a.root.position.y - at.y);
       const seat = [...g.renderer.terrain.chunks.values()].flatMap((c) => c.movers).find((m) => m.cell === `${at.x},${at.y},${at.z}`);
       const angles = (window.seatAngles ??= []);
-      if (seat) angles.push(Math.abs(seat.model.userData.seats[a.swing.spot].rotation.x));
-      return ys.length > 30 && Math.max(...ys) - Math.min(...ys) > 0.15 && Math.max(...angles) > 0.6 ? { amp: a.swing.amp, rise: Math.max(...ys) - Math.min(...ys), angle: Math.max(...angles) } : false;
+      if (seat) angles.push(Math.abs(seat.model.userData.seats[a.swingSeat.spot].rotation.x));
+      return ys.length > 30 && Math.max(...ys) - Math.min(...ys) > 0.15 && Math.max(...angles) > 0.6 ? { amp: a.swingSeat.amp, rise: Math.max(...ys) - Math.min(...ys), angle: Math.max(...angles) } : false;
     },
     { pid, at },
   )).jsonValue();
