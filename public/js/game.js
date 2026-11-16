@@ -627,6 +627,12 @@ export class Game extends EventTarget {
       case 'land':
         this.landNews(msg);
         break;
+      case 'spent':
+        if (Number.isFinite(msg.n)) {
+          this.spent = msg.n;
+          this.emit('spent');
+        }
+        break;
       case 'ack':
         this.ack(msg);
         break;
@@ -965,6 +971,8 @@ export class Game extends EventTarget {
     this.setRace(msg.race ?? null);
     this.setDrawings(msg.drawings ?? []);
     this.setDishes(msg.dishes ?? []);
+    // What has been spent on a Grow Island all told (room.js spend).
+    this.spent = Number.isFinite(msg.spent) ? msg.spent : 0;
     this.setKits(msg.kits ?? []);
     this.setBots(msg.bots ?? []);
     this.setEnv(msg.env);
@@ -6592,7 +6600,7 @@ export class Game extends EventTarget {
   }
 
   // Makes a change here at once and asks the island to make it for everyone.
-  edit(kind, cells, { expect = null, undoable = true, anyone = false } = {}) {
+  edit(kind, cells, { expect = null, undoable = true, anyone = false, refund = 0 } = {}) {
     if (!cells.length || this.watching) return false;
     // Only the owner builds here right now (or it is the shared isle,
     // nobody's to build on): nothing changes, so nothing is picked up,
@@ -6638,6 +6646,8 @@ export class Game extends EventTarget {
     if (this.me && !this.seat && !this.aboard) unstick(w, this.riding?.body ?? this.me.body);
     const msg = { t: 'edit', seq, kind, cells };
     if (expect) msg.expect = expect;
+    // Coins Undo gives back on a Grow Island, off what it has had spent on it.
+    if (refund) msg.refund = refund;
     this.send(msg);
     this.profile.pay(paid, { force: true });
     if (undoable) {
@@ -6737,8 +6747,9 @@ export class Game extends EventTarget {
       if (after !== B.AIR && after !== before) back++;
     }
     for (let i = 0; i < last.cells.length; i += 5) if (last.cells[i + 4] !== B.AIR && last.cells[i + 4] !== last.cells[i + 3]) placed++;
-    if (this.edit('undo', cells, { expect, undoable: false })) {
-      if (last.paid && placed) this.profile.refund(Math.floor((last.paid * Math.min(back, placed)) / placed));
+    const refund = last.paid && placed ? Math.floor((last.paid * Math.min(back, placed)) / placed) : 0;
+    if (this.edit('undo', cells, { expect, undoable: false, refund })) {
+      this.profile.refund(refund);
       this.sound.play('pop');
       for (let i = 0; i < Math.min(cells.length, 40); i += 4) this.renderer.effects.sparkles(cells[i] + 0.5, cells[i + 1] + 0.5, cells[i + 2] + 0.5, 2);
     }

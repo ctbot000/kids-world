@@ -199,3 +199,30 @@ test('an island read back keeps its kind (a desert island stayed sunny)', () => 
   assert.equal(normalizeMeta({ theme: 'grow', W: MAX_SIDE, D: 40 }).D, 32, 'whole steps a side');
   assert.equal(normalizeMeta({ theme: 'sunny', W: MAX_SIDE }).W, 128);
 });
+
+test('everyone sees what has been spent on the island all told, and it is kept with it', () => {
+  const room = makeRoom();
+  const a = join(room);
+  const b = join(room, 'Brave Fox');
+  buy(room, a, MID, MID);
+  buy(room, b, MID + 1, MID);
+  assert.equal(room.spent, 2, 'a coin each for the first two blocks of land, whoever bought them');
+  const w = room.world;
+  const sofa = byKey('home', 'sofa');
+  // (Beside where everyone arrived, not on top of them.)
+  room.receive(a, { t: 'edit', seq: 1, kind: 'build', cells: [MID + 1, w.sea + 2, MID, sofa] });
+  assert.equal(room.spent, 2 + blockPrice(sofa));
+  room.receive(b, { t: 'critter', op: 'invite', type: 'bunny', x: MID + 0.5, y: w.sea + 2, z: MID + 0.5 });
+  assert.equal(room.spent, 2 + blockPrice(sofa) + friendPrice('bunny'));
+  // Undo gives the sofa's coins back, and they come off the total.
+  room.receive(a, { t: 'edit', seq: 2, kind: 'undo', cells: [MID + 1, w.sea + 2, MID, B.AIR], expect: [sofa], refund: blockPrice(sofa) });
+  const total = 2 + friendPrice('bunny');
+  assert.equal(room.spent, total);
+  // A refused edit costs nothing.
+  room.receive(a, { t: 'edit', seq: 3, kind: 'build', cells: [3, w.sea + 2, 3, sofa] });
+  assert.equal(room.spent, total);
+  for (const c of [a, b]) assert.equal(c.last('spent').n, total, 'everyone hears it');
+  assert.equal(join(room, 'Kind Owl').last('welcome').spent, total, 'and whoever comes in');
+  const again = new Room({ code: '123456', save: JSON.parse(JSON.stringify(room.exportSave())) });
+  assert.equal(again.spent, total);
+});

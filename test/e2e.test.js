@@ -9196,6 +9196,9 @@ test('a Grow Island: land bought a block at a time, a friend carried along as th
     return { placed, sea, stamp, paid: before - after, back: g.profile.data.coins - after };
   });
   assert.deepEqual(built, { placed: true, sea: false, stamp: false, paid: 3, back: 3 });
+  // Everyone sees what has been spent on the island all told: the land, the
+  // plank bought and given back.
+  for (const page of [host, guest]) await until(page, (n) => document.getElementById('island-stage').textContent === `🪙 ${n} spent`, n);
   assert.deepEqual(pageErrors, []);
   await host.browserContext().close();
   await guest.browserContext().close();

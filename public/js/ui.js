@@ -2640,7 +2640,7 @@ export class UI {
           card('🏁', 'Racing', ['A 🏁 Racing Island has a race track with 🏎️ go-karts waiting on the grid. Hop in one and drive over the checkered finish line to start your lap clock, go all the way round, and cross it again to see your lap time. To race, tap 🏁 Race! in your kart: everyone in a go-kart lines up behind the line, the computer drives the karts left over, and after 3, 2, 1, GO! it is three laps — first over the line wins!']),
           card('🔐', 'Escape house', ['A 🔐 Escape Island has an escape house of three locked rooms. Walk up to a puzzle and press ', h('kbd', {}, 'Q'), ' (or tap 👆 Press, 📦 Open or 🔢 Turn): in room 1, press the buttons in the order the stars over 1, 2, 3, 4 show; in room 2, open the crate the treasure map marks with an X to find the key; in room 3, count the stars of each colour and turn each dial to its number. Solve them together with friends! When everyone has left, it locks up again with new puzzles.']),
           card('🦒', 'Zoo', ['A 🦒 Zoo Island has a big zoo: come in under the ZOO gate, past the café and the gift shop, and walk the loop of path round the exhibits — giraffes, zebras and a rhino on the savanna, lions on their rock, elephants, tigers, pandas, a polar bear, penguins and hippos (take the steps down to look in under the water), kangaroos, monkey island and the flamingo lagoon. Open the petting farm’s gate to go in and pet the animals. Lions, tigers, zebras, hippos, rhinos and pandas can be ridden, and they are all in the toy box too!']),
-          card('🌱', 'Grow Island', ['A 🌱 Grow Island starts as open sea, without one block of land. Swim to where you want land and tap 🌱 Buy land (or press ', h('kbd', {}, 'K'), '): one block of ground rises where the green box shows, beside the land you have. Everything from the toy box costs coins there, each thing its own price (shown on it), and goes down one block at a time: no stamps, no Hills. Undo gives the coins back. Keep buying and the sea grows round your land, as far as you like!']),
+          card('🌱', 'Grow Island', ['A 🌱 Grow Island starts as open sea, without one block of land. Swim to where you want land and tap 🌱 Buy land (or press ', h('kbd', {}, 'K'), '): one block of ground rises where the green box shows, beside the land you have. Everything from the toy box costs coins there, each thing its own price (shown on it), and goes down one block at a time: no stamps, no Hills. Undo gives the coins back. The 🪙 by the island’s name is everything everyone has spent on it. Keep buying and the sea grows round your land, as far as you like!']),
           card('🛗', 'Elevators', ['Stand on an elevator pad and jump to ride up to the next pad above, or tap ⬇️ (', h('kbd', {}, 'Shift'), ') to ride down. Put pads in a column, one above the other.']),
           card('↗️', 'Escalators', ['Put down an Up Escalator or a Down Escalator from the toy box\'s 🏠 Building tab, then tap it to add the next step up and along from its top (tap its side for another beside it). Walk on at its foot and the steps carry you up — or down a down one, from its top. Walk along it to go quicker! Or stamp a 🏬 Shopping Mall with one each way.']),
           card('➡️', 'Moving walkways', ['Put down a Moving Walkway from the toy box\'s 🏠 Building tab: it carries you along the floor, away from where you put it down. Tap it to make it longer, and put one beside it the other way round to come back. Or stamp an 🛫 Airport Walkway with one each way.']),
@@ -3691,6 +3691,7 @@ export class UI {
     on('dizzy', () => this.renderHp());
     // On and off a dragon's back: its own hearts by yours (renderHp).
     on('ride', () => this.renderHp());
+    on('spent', () => this.renderIsland());
     on('welcome', () => {
       // The tools a Grow Island has are known once its world is (buildToolbar).
       this.buildToolbar();
@@ -4854,11 +4855,14 @@ export class UI {
     const code = $('island-code');
     code.hidden = g.shared;
     code.replaceChildren(...(g.shared ? [] : this.gameHandlers?.canInvite() || g.watching ? [h('span', { class: 'word' }, 'Code '), prettyCode(g.code)] : ['Playing alone']));
-    // Adventure Isle's stage, bright where its code goes (as in 👫 Players).
+    // Adventure Isle's stage, bright where its code goes (as in 👫 Players);
+    // on a Grow Island, every coin spent on it all told, for everyone to see.
     const adv = g.adventure;
+    const grow = isGrow(g.world);
     const stage = $('island-stage');
-    stage.hidden = !adv;
-    stage.replaceChildren(...(stage.hidden ? [] : [`${adv.story.episode.icon} `, h('span', { class: 'word' }, 'Stage '), String(adv.story.n)]));
+    stage.hidden = !adv && !grow;
+    stage.title = grow ? `Coins spent on ${g.world.name} by everyone, all told` : '';
+    stage.replaceChildren(...(adv ? [`${adv.story.episode.icon} `, h('span', { class: 'word' }, 'Stage '), String(adv.story.n)] : grow ? [`🪙 ${(g.spent ?? 0).toLocaleString()}`, h('span', { class: 'word' }, ' spent')] : []));
   }
 
   // Your HP, shown while the island has monsters (or camps to free): the

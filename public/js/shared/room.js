@@ -29,7 +29,7 @@ import { FIRE as BLAZE, Fires, strikeSpot } from './fire.js';
 import { blastEdit, gemBlastEdit, growEdit, validCells } from './tools.js';
 import { cellHitsBody, BODY } from './physics.js';
 import { World } from './world.js';
-import { grownWorld, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, raiseColumn, seaWanted, settleSea } from './grow.js';
+import { editPrice, friendPrice, grownWorld, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, PAID_KINDS, raiseColumn, seaWanted, settleSea } from './grow.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { buildIsle } from './isle-maps.js';
 import { cleanLevel } from './levels.js';
@@ -238,6 +238,10 @@ export class Room {
     // [{ x, y, z, name, issue, doing, steps, since }], or null for none.
     this.screens = null;
     this.counts = { shells: 0, stars: 0 };
+    // On a Grow Island (grow.js), every coin anyone has spent on it all told:
+    // its land, everything put down on it and every friend brought, less
+    // what Undo gave back. Saved with the island, and everyone sees it.
+    this.spent = 0;
     this.encoded = null;
     this.onUpdate = null;
     this.closed = false;
@@ -953,6 +957,8 @@ export class Room {
       shared: this.shared === true,
       // A conquered stage of it: where everyone goes on to (server/adventure.js).
       ...(this.next ? { next: this.next } : {}),
+      // What has been spent on a Grow Island all told.
+      ...(isGrow(this.world) ? { spent: this.spent } : {}),
     });
   }
 
@@ -1059,6 +1065,8 @@ export class Room {
       }
     }
     c.cells -= n;
+    // What this costs on a Grow Island, counted once it is done.
+    const cost = isGrow(this.world) && PAID_KINDS.includes(kind) ? editPrice(this.world, kind, cells) : 0;
     // Who is placing this, for a mining bomb's fuse: its blast's jewels go
     // in their basket (stepBombs).
     this.bombPlacer = p.id;
@@ -1090,6 +1098,8 @@ export class Room {
     }
     if (applied.length) this.broadcast({ t: 'edit', by: p.id, seq, kind, cells: applied });
     this.sendTo(conn, { t: 'ack', seq, fix });
+    // And what Undo gave back to the one who paid (their page says how much).
+    if (applied.length && isGrow(this.world)) this.spend(kind === 'undo' && Number.isInteger(msg.refund) && msg.refund > 0 ? -msg.refund : cost);
     if (applied.length) this.changed();
     this.bombPlacer = 0;
   }
@@ -1138,7 +1148,16 @@ export class Room {
       z += grown.dz;
     }
     this.broadcast({ t: 'land', x, z, by: p.id, price });
+    this.spend(price);
     this.changed();
+  }
+
+  // n coins more spent on this Grow Island (fewer, for a refund): everyone
+  // hears the new total.
+  spend(n) {
+    if (!n) return;
+    this.spent = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, this.spent + n));
+    this.broadcast({ t: 'spent', n: this.spent });
   }
 
   // The world swapped for a grown one (grow.js grownWorld), everything in it
@@ -1263,6 +1282,7 @@ export class Room {
         const c = this.critters.add(msg.type, at.x, at.y, at.z, null, info.vehicle || info.wild ? Math.atan2(p.s[0] - at.x, p.s[2] - at.z) : null);
         if (c && info.wild) c.tame = true;
         if (c) this.broadcast({ t: 'cadd', critter: { id: c.id, type: c.type, name: c.name }, s: this.critters.pack().find((r) => r[0] === c.id), by: p.id });
+        if (c && isGrow(w)) this.spend(friendPrice(c.type));
         this.changed();
         break;
       }
@@ -3337,6 +3357,7 @@ export class Room {
       ...(this.drawings.size ? { drawings: this.packDrawings() } : {}),
       ...(this.kits.size ? { kits: this.packKits() } : {}),
       ...(this.dishes.size ? { dishes: this.packDishes() } : {}),
+      ...(isGrow(this.world) ? { spent: this.spent } : {}),
     };
   }
 
@@ -3345,6 +3366,7 @@ export class Room {
     this.world = World.decode(save.meta, save.blocks);
     // A Grow Island from when its land came in plots: its sea made sea again.
     if (isGrow(this.world)) settleSea(this.world);
+    this.spent = Number.isSafeInteger(save.spent) && save.spent > 0 ? save.spent : 0;
     const seed = this.world.seed;
     this.rng = new Rng(seed ^ 0x27d4eb2d ^ (Number(save.savedAt) | 0));
     this.critters = new CritterSim(seed ^ 0x5bd1e995 ^ (Number(save.savedAt) | 0));
