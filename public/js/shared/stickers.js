@@ -3,6 +3,7 @@
 // ones when it ranks players (see ranking.js).
 import { FISH_KINDS } from './fishing.js';
 import { MONSTER_FIGURES, TOYS } from './gashapon.js';
+import { EPISODES, toldKey } from './isle-story.js';
 import { CHANNELS } from './tv.js';
 
 export const STICKERS = [
@@ -172,4 +173,9 @@ export const popKey = (kind) => `pop${kind}`;
 // the other counts, so a kind caught on one device is caught on them all.
 export const caughtKey = (kind) => `caught${kind}`;
 
-export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'escalators', 'walkways', 'stockbuys', 'stockwins', 'stockgain', 'stocksheld', 'stockworld', 'wishes', 'slices', 'presents', 'balloons', 'bounces', 'ropejumps', 'ropebest', 'campouts', 'toasted', 'freed', 'helped', 'kings', 'queens', 'beasts', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'volcanohouses', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'chests', 'keys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'gomokugames', 'gomokuwins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered', 'pearls', 'islands', 'laps', 'races', 'racewins', 'escapes', 'tornadoes', 'coasters', 'typed', 'typewpm', 'rainbest', 'robotruns', 'fished', 'fishcm', 'earned', ...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key))];
+// The episodes of the isle's story told to their end with you there
+// (isle-story.js toldKey: toldstar, toldrainbow) are counted too: the first
+// one told is the ticket to the second.
+export const TOLD_KEYS = EPISODES.map((e) => toldKey(e.n));
+
+export const STAT_KEYS = ['placed', 'picked', 'painted', 'hills', 'stamps', 'planted', 'sprouts', 'fruit', 'shells', 'stars', 'gems', 'diamonds', 'petted', 'fed', 'invited', 'perched', 'adopted', 'tricks', 'petpals', 'spouts', 'slides', 'rides', 'searides', 'drives', 'drilled', 'railed', 'lifts', 'escalators', 'walkways', 'stockbuys', 'stockwins', 'stockgain', 'stocksheld', 'stockworld', 'wishes', 'slices', 'presents', 'balloons', 'bounces', 'ropejumps', 'ropebest', 'campouts', 'toasted', 'freed', 'helped', 'kings', 'queens', 'beasts', 'towers', 'defended', 'said', 'danced', 'visits', 'guests', 'swims', 'highest', 'nights', 'rainbows', 'steps', 'popped', 'furnished', 'volcanohouses', 'sat', 'along', 'flights', 'teas', 'arcade', 'blobpops', 'pairsfound', 'hideseek', 'hidden', 'seekfound', 'capsules', 'capsuletoys', 'monsterfigs', 'monstertoys', 'chests', 'keys', 'notes', 'tunes', 'channels', 'strokes', 'gogames', 'gowins', 'gomokugames', 'gomokuwins', 'quizzes', 'quizright', 'quizperfect', 'dishes', 'cookright', 'studies', 'studyright', 'byheart', 'photos', 'sown', 'harvested', 'watered', 'pearls', 'islands', 'laps', 'races', 'racewins', 'escapes', 'tornadoes', 'coasters', 'typed', 'typewpm', 'rainbest', 'robotruns', 'fished', 'fishcm', 'earned', ...TOLD_KEYS, ...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key))];

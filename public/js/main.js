@@ -21,6 +21,7 @@ import { forgetSong as forgetSongOf, keepSong, loadSong } from './songs.js';
 import * as storage from './storage.js';
 import { UI, wishKey } from './ui.js';
 import { isValidCode, normalizeCode } from './shared/codes.js';
+import { EPISODES, ticketsHeld, toldKey } from './shared/isle-story.js';
 import { cleanListing } from './shared/listing.js';
 import { headTop } from './shared/critters.js';
 import { addProgress, mergeProfiles } from './shared/keeper.js';
@@ -87,6 +88,18 @@ const mirrorYou = () => {
 };
 profile.addEventListener('change', mirrorYou);
 mirrorYou();
+// The tickets to the isle's later episodes (shared/isle-story.js) are what
+// being there as the episode before is told to its end gives. From before
+// there were any: whoever has seen an episode's ending on this device was
+// there, so that is counted for them now — once, for each player here.
+if (!storage.load('isleTold', false)) {
+  const seen = storage.load('isleFilms', []);
+  for (const ep of EPISODES) if (Array.isArray(seen) && seen.includes(ep.films.ending)) isle.count(toldKey(ep.n), 1, { max: true });
+  storage.save('isleTold', true);
+}
+// The tickets you hold, as an island of the isle is told when you come (none
+// is said too: shared/room.js).
+const isleTickets = () => ({ tickets: ticketsHeld(isle.data.stats) });
 const sound = new Sound();
 sound.setLevels(profile.settings);
 const atlas = buildAtlas();
@@ -483,7 +496,7 @@ function startSession({ link, mode, islandId = null, key, loadingText, first = (
       ui.passcodeDialog({ wrong }, (typed) => visitIsland(visit, typed));
       return;
     }
-    ui.toast(wait ? '⏳' : '🙈', text, 'warn');
+    ui.toast(wait ? '⏳' : code === 'ticket' ? '🎫' : '🙈', text, 'warn');
   });
   // A new game of the isle started (from the title, or from the isle): off
   // to its island, or back to the title, told why not.
@@ -607,7 +620,8 @@ function visitIsland(raw, passcode = '', pass = '', { isleNew = false, episode =
     return;
   }
   // (Asking one of the isle's games for a new one: game.js 'isle-run'.)
-  const extra = isleNew ? { isle: 'new', ...(episode > 1 ? { episode } : {}) } : {};
+  // (And any island of the isle is told the tickets you hold: room.js join.)
+  const extra = { ...isleTickets(), ...(isleNew ? { isle: 'new', ...(episode > 1 ? { episode } : {}) } : {}) };
   const loadingText = isleNew ? '🌟 Starting a new game of Adventure Isle…' : 'Flying to your friend’s island…';
   if (serverMode) {
     const link = new WsLink({ url: wsUrl() });

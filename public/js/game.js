@@ -35,7 +35,7 @@ import { newRope, packTurn, ROPE, stepRope, unpackTurn } from './shared/jump-rop
 import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
-import { chapterOf, tokensBack } from './shared/isle-story.js';
+import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -421,6 +421,9 @@ export class Game extends EventTarget {
     this.stageResults = null;
     // The shared isle's next stage once this one is conquered (setNextStage).
     this.nextStage = null;
+    // The episode whose ticket you have just been given (islandWon), until
+    // the page has shown it to you (ui.js ticketDialog); 0 for none.
+    this.ticketWon = 0;
     this.quiz = null;
     // A tower defense island's road, pads, towers and waves
     // (shared/defense.js), as the island tells of them (null on any other).
@@ -3232,6 +3235,14 @@ export class Game extends EventTarget {
       if (!board) this.profile.addToBasket('diamond', 1);
       else if (own?.gems) this.profile.addToBasket('diamond', own.gems);
       if (own?.coins) this.profile.earn(own.coins);
+      // An episode of the isle's story told to its end with you there: counted
+      // — and the first time, that is your ticket to the next one (isle-
+      // story.js), told below and shown once the ending has played (ui.js).
+      if (this.shared && adv?.story?.final) {
+        const before = ticketsHeld(this.profile.data.stats);
+        this.profile.count(toldKey(adv.story.episode.n));
+        this.ticketWon = ticketsHeld(this.profile.data.stats).find((n) => !before.includes(n)) ?? 0;
+      }
       // Everyone who freed the island gets a quiz for a golden key: it comes
       // up by itself once the fireworks have had their moment
       // (updateAdventure), after the results (ui.js stageResults). (At the
@@ -3255,6 +3266,12 @@ export class Game extends EventTarget {
     // of the rainbow) won back so far.
     const thanks = !mine ? '' : board ? ' Rewards for everyone, by how much each helped! 🏆' : ' A diamond for everyone who helped! 💎';
     if (story) this.emit('toast', { icon: story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
+    // Your ticket to the next episode, the first time you see this one told
+    // to its end.
+    if (this.ticketWon) {
+      const ticket = ticketOf(this.ticketWon);
+      this.emit('toast', { icon: ticket.icon, text: `You got the ${ticket.name}! It lets you into Episode ${this.ticketWon} of Adventure Isle, and it is yours to keep.` });
+    }
     // The end of an episode: its ending, once the fireworks have had a moment (ui.js).
     if (story?.final) setTimeout(() => this.adventure === adv && this.emit('ending'), ENDING_AFTER_MS);
     else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${story ? '' : thanks}` });

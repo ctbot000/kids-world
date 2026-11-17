@@ -24,10 +24,12 @@ function conn() {
   return c;
 }
 
+// (Someone who holds the ticket to the story's second episode: its stages
+// are only for those who do, isle-story.js.)
 function join(room, name = 'Brave Fox') {
   const c = conn();
   room.attach(c);
-  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat' } });
+  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat' }, tickets: [2] });
   c.pid = c.last('welcome').you;
   return c;
 }

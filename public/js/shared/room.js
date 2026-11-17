@@ -32,6 +32,7 @@ import { World } from './world.js';
 import { editPrice, friendPrice, grownWorld, isGrow, isLand, landCount, landPrice, landProblem, MANY_AT_ONCE, PAID_KINDS, raiseColumn, seaWanted, settleSea } from './grow.js';
 import { generate, hideGems, palette, SIZES } from './worldgen.js';
 import { buildIsle } from './isle-maps.js';
+import { ticketFits, ticketNeeded } from './isle-story.js';
 import { cleanLevel } from './levels.js';
 import { isPasscode, normalizePasscode } from './listing.js';
 import { canRide, FIRE, hitDragon, inFlames, isWild, RIDE_BUMP_MS, RIDE_FIRE, RIDE_HEAL_MS, RIDE_HEAL_NEAR, RIDE_REST_MS, rideOf, stepDragons } from './dragon.js';
@@ -184,6 +185,12 @@ export const isWho = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 const HAZARD_THROWER = { id: 0, kind: 'blob', plan: null, body: { x: 0, y: 0, z: 0 } };
 // One player may start a new game of the isle at most this often (isleOp).
 const ISLE_NEW_MS = 10000;
+// The tickets a page says it holds, to the episodes of the isle's story after
+// the first (isle-story.js ticketsHeld): the episodes of them, a few at most.
+// Every page says, if only that it holds none; one that says nothing at all is
+// from before there were tickets, and may hold one once it is reloaded.
+const ticketsSaid = (list) => (Array.isArray(list) ? list.filter((n) => Number.isInteger(n) && n >= 2 && n <= 99).slice(0, 16) : []);
+const ticketsNotSaid = 'Kids World has been updated! Reload the page to come to this island.';
 // Which episode of the isle's story a new game is asked for (isle-story.js):
 // a small whole number, or the first.
 const episodeAsked = (n) => (Number.isInteger(n) && n >= 1 && n <= 99 ? n : 1);
@@ -744,7 +751,15 @@ export class Room {
     // the title; episode: of which episode of its story, the first unless
     // said): told where that one is, and nothing more — it goes there.
     if (msg.isle === 'new' && this.shared) {
-      this.sendTo(conn, { t: 'isle-run', ...(this.onIsleNew?.(cleanName(msg.name), episodeAsked(msg.episode)) ?? { error: 'A new game cannot be started here.' }) });
+      this.sendTo(conn, { t: 'isle-run', ...this.newIsleGame(cleanName(msg.name), msg) });
+      return;
+    }
+    // An episode of the isle's story after the first is only for those who
+    // hold its ticket — what the episode before it gives, told to its end
+    // (isle-story.js): anyone else is told how to get one.
+    const episode = this.shared ? this.adventure?.story.episode.n : 0;
+    if (episode && !ticketFits(episode, ticketsSaid(msg.tickets))) {
+      this.sendTo(conn, Array.isArray(msg.tickets) ? { t: 'error', code: 'ticket', text: ticketNeeded(episode) } : { t: 'error', code: 'reload', text: ticketsNotSaid });
       return;
     }
     let token = typeof msg.token === 'string' ? msg.token : '';
@@ -2894,7 +2909,16 @@ export class Room {
     const now = this.now();
     if (now - (p.isleNewAt ?? -Infinity) < ISLE_NEW_MS) return;
     p.isleNewAt = now;
-    this.sendTo(conn, { t: 'isle-run', ...this.onIsleNew(p.name, episodeAsked(msg.episode)) });
+    this.sendTo(conn, { t: 'isle-run', ...this.newIsleGame(p.name, msg) });
+  }
+
+  // A new game of the isle as someone asks for it ({ episode, tickets }): where
+  // it is ({ code, stage }), or { error } — an episode after the first only
+  // for someone holding its ticket (isle-story.js).
+  newIsleGame(name, msg) {
+    const episode = episodeAsked(msg.episode);
+    if (!ticketFits(episode, ticketsSaid(msg.tickets))) return { error: Array.isArray(msg.tickets) ? ticketNeeded(episode) : ticketsNotSaid };
+    return this.onIsleNew?.(name, episode) ?? { error: 'A new game cannot be started here.' };
   }
 
   // Gates the adventure opened (Adventure Isle's, shut across its way until

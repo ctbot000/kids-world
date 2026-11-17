@@ -11,7 +11,9 @@ import { AdventureSim, CAMP_RADIUS, kingHearts } from '../public/js/shared/adven
 import { BOSSES, isBoss } from '../public/js/shared/bosses.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
-import { campName, CHAPTERS, chapterOf, EPISODES, episodeOf, firstStage, introOf, RAINBOW, SHARDS, stageName, STAGES, stagesOf, tokensBack } from '../public/js/shared/isle-story.js';
+import { campName, CHAPTERS, chapterOf, EPISODES, episodeOf, firstStage, introOf, RAINBOW, SHARDS, stageName, STAGES, stagesOf, ticketFits, ticketNeeded, ticketOf, ticketsHeld, tokensBack, toldKey } from '../public/js/shared/isle-story.js';
+import { keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
+import { STAT_KEYS } from '../public/js/shared/stickers.js';
 import { kindOf, MONSTER_KINDS, MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
@@ -168,6 +170,38 @@ for (const [i, ch] of CHAPTERS.entries()) {
     }
   });
 }
+
+test('an episode after the first needs its ticket, which the episode before it gives, told to its end', () => {
+  // The first is open to everyone; every other has a ticket of its own.
+  assert.equal(ticketOf(1), null);
+  assert.deepEqual(ticketOf(2), { icon: '🎫', name: 'Rainbow Ticket' });
+  for (const ep of EPISODES.slice(1)) assert.ok(ep.ticket?.icon && ep.ticket.name, `episode ${ep.n}`);
+  // What is counted: the times you were there as each episode was told to
+  // its end, kept with everything else the isle's own world of you counts.
+  assert.deepEqual(EPISODES.map((ep) => toldKey(ep.n)), ['toldstar', 'toldrainbow']);
+  for (const ep of EPISODES) assert.ok(STAT_KEYS.includes(toldKey(ep.n)), toldKey(ep.n));
+  // The ticket to an episode: the one before it told to its end, once or often.
+  assert.deepEqual(ticketsHeld({}), []);
+  assert.deepEqual(ticketsHeld(null), []);
+  assert.deepEqual(ticketsHeld({ kings: 40, popking: 3, toldrainbow: 2 }), [], 'not for stages won, nor for another episode');
+  assert.deepEqual(ticketsHeld({ toldstar: 1 }), [2]);
+  assert.deepEqual(ticketsHeld({ toldstar: 7, toldrainbow: 1 }), [2]);
+  // Whether tickets let into an episode.
+  assert.equal(ticketFits(1, []), true);
+  assert.equal(ticketFits(1, undefined), true);
+  assert.equal(ticketFits(2, [2]), true);
+  for (const none of [[], [1], [3], undefined, null, 2, '2']) assert.equal(ticketFits(2, none), false, JSON.stringify(none));
+  assert.equal(ticketFits(99, []), true, 'nonsense is the first episode');
+  // And what someone without one is told.
+  assert.equal(ticketNeeded(1), '');
+  assert.equal(ticketNeeded(2), 'Episode 2 needs the 🎫 Rainbow Ticket. Pop King Grumble at the end of Episode 1 to get yours!');
+  // It is kept at the keeper, and is yours on every device: the most either has.
+  assert.equal(keptProfile({ stats: { toldstar: 1 } }).stats.toldstar, 1);
+  const here = { name: 'Brave Fox', stats: { toldstar: 0, kings: 3 } };
+  const there = { name: 'Brave Fox', stats: { toldstar: 1, kings: 1 } };
+  assert.deepEqual(ticketsHeld(mergeProfiles(here, there).stats), [2]);
+  assert.deepEqual(ticketsHeld(mergeProfiles(there, here).stats), [2]);
+});
 
 test('told again on a later journey, a chapter is its own map turned over, the way going the other way round', () => {
   const first = buildIsle({ stage: 1, seed: 5 });

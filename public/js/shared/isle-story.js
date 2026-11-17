@@ -30,6 +30,10 @@
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
+//
+// An episode after the first is open only to those who hold its ticket, and
+// the ticket is what the episode before it gives, told to its end: everyone
+// on the island as its last boss goes pop gets one, to keep (ticketsHeld).
 
 // How many Star Shards there are to win back in the first episode, one for
 // each of its chapters.
@@ -55,7 +59,7 @@ export const RAINBOW = [
 // isle-<name>.mp4, made by scripts/films; endingMs: about how long the ending
 // is). token: what each chapter wins back (colours: drawn as dots of these,
 // not as stars); again: what is told before a chapter on a journey after the
-// first.
+// first; ticket: what lets someone into it, for every episode but the first.
 export const EPISODES = [
   {
     n: 1,
@@ -75,6 +79,7 @@ export const EPISODES = [
     title: 'The Rainbow of Adventure Isle',
     villain: 'Queen Grizzle',
     token: { one: 'colour', many: 'colours of the rainbow', colours: RAINBOW },
+    ticket: { icon: '🎫', name: 'Rainbow Ticket' },
     films: { intro: 'intro2', ending: 'ending2', endingMs: 44000 },
     again: (journey) =>
       `Journey ${journey}! Queen Grizzle is back with a bigger umbrella, caught the rainbow all over again and gave its colours back to her helpers — and the Rainbow Lands have turned themselves about, so the way goes round the other side.`,
@@ -543,6 +548,34 @@ export function chapterOf(stage) {
   const n = i + 2 - firstStage(episode.n);
   const of = stagesOf(episode.n);
   return { ...ch, stage: i + 1, episode, n, of, shards: n, level: ch.level ?? n, final: n === of, last: i === CHAPTERS.length - 1 };
+}
+
+// ---------------------------------------------------------------- tickets
+
+// How many times someone has been there as an episode was told to its end —
+// on the island as its last boss went pop — is counted in the isle's own
+// world of them (stickers.js STAT_KEYS), under this: toldstar, toldrainbow.
+export const toldKey = (episode) => `told${episodeOf(episode).key}`;
+
+// The ticket an episode needs ({ icon, name }), or null for the first, which
+// is open to everyone.
+export const ticketOf = (episode) => episodeOf(episode).ticket ?? null;
+
+// The episodes whose tickets someone holds, from what they have done (their
+// counts): each one whose episode before it they have seen told to its end.
+// Kept for good. This is what a page tells an island of the isle as it comes.
+export const ticketsHeld = (stats) => EPISODES.filter((e) => e.ticket && stats?.[toldKey(e.n - 1)] >= 1).map((e) => e.n);
+
+// Whether tickets (the episodes of them, as ticketsHeld gives) let into an
+// episode: the first needs none.
+export const ticketFits = (episode, tickets) => !ticketOf(episode) || (Array.isArray(tickets) && tickets.includes(episodeOf(episode).n));
+
+// What someone without an episode's ticket is told.
+export function ticketNeeded(episode) {
+  const ep = episodeOf(episode);
+  if (!ep.ticket) return '';
+  const before = episodeOf(ep.n - 1);
+  return `Episode ${ep.n} needs the ${ep.ticket.icon} ${ep.ticket.name}. Pop ${before.villain} at the end of Episode ${before.n} to get yours!`;
 }
 
 // What a stage is called: "Stage 3 of 12", with its episode before it once

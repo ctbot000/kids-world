@@ -8,16 +8,18 @@ import { FISH_KINDS } from '../public/js/shared/fishing.js';
 import { cleanLevel, levelFor, MAX_LEVEL, progressOf, STICKER_XP, XP_FOR, xpForLevel, xpOf, xpToNext } from '../public/js/shared/levels.js';
 import { rankBoards } from '../public/js/shared/ranking.js';
 import { lookWithGear } from '../public/js/shared/shop.js';
-import { caughtKey, MONSTER_LOG, popKey, seenKey, STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
+import { caughtKey, MONSTER_LOG, popKey, seenKey, STAT_KEYS, STICKERS, TOLD_KEYS } from '../public/js/shared/stickers.js';
 import { cleanLook } from '../public/js/shared/words.js';
 
-test('everything counted earns XP, except the highest you flew, the monster collection, the fish dictionary and the coins earned in all, and only counted things do', () => {
+test('everything counted earns XP, except the highest you flew, the monster collection, the fish dictionary, the isle’s episodes told and the coins earned in all, and only counted things do', () => {
   // The monster collection's counts (seen and popped, kind by kind) go over
-  // what popped already earns XP for, and the fish dictionary's (caught,
-  // kind by kind) over what fished does. The coins earned in all (earned)
-  // are a lifetime total, not a thing done: what earned each coin already
-  // gave XP.
-  const book = new Set([...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key))]);
+  // what popped already earns XP for, the fish dictionary's (caught, kind by
+  // kind) over what fished does, and an episode of the isle's story told to
+  // its end (toldstar, toldrainbow: the ticket to the next) over the stage won
+  // that did it (kings). The coins earned in all (earned) are a lifetime
+  // total, not a thing done: what earned each coin already gave XP.
+  const book = new Set([...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key)), ...TOLD_KEYS]);
+  assert.deepEqual(TOLD_KEYS, ['toldstar', 'toldrainbow']);
   for (const key of Object.keys(XP_FOR)) assert.ok(STAT_KEYS.includes(key), `${key} is counted`);
   for (const key of STAT_KEYS) if (key !== 'highest' && key !== 'earned' && !book.has(key)) assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
   for (const key of book) assert.equal(XP_FOR[key], undefined, key);

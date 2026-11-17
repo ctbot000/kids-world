@@ -147,7 +147,8 @@ async function openPlayer(url, profile = {}, init = null) {
   // Isle's story, unless profile.seenStory is false (it opens by itself
   // as you arrive on a stage, once a chapter); and the isle's films, unless
   // profile.seenFilms is false (its intro plays the first time you come, and
-  // at each game's start), or the list of them seen.
+  // at each game's start), or the list of them seen. (Having seen the first
+  // episode's ending, they hold the ticket to the second: main.js.)
   const { seenNews = latestNews(), seenStory = true, seenFilms = true, ...rest } = profile;
   await page.evaluateOnNewDocument(
     (p, seen, story, films) => {
@@ -7512,8 +7513,10 @@ test('arriving on the shared isle tells its chapter of the story, once, and its 
 
 // Adventure Isle's films (scripts/films, public/video): the intro the first
 // time you come to the isle, before its story, skipped with Skip; and once the
-// first episode's last stage is won, its ending, and after it the second
-// episode's first stage.
+// first episode's last stage is won, its ending, straight after it the ticket
+// to the second episode — given to everyone there, to keep — then the stage's
+// results and its golden key quiz, and with that, on to the second episode's
+// first stage.
 test('the isle’s intro plays the first time you come, before its story, and the ending once its episode’s last stage is won', { skip }, async () => {
   const games = createGameServer({ log: () => {}, publicAdventure: true });
   await new Promise((done) => games.listen(0, '127.0.0.1', done));
@@ -7547,7 +7550,8 @@ test('the isle’s intro plays the first time you come, before its story, and th
     const room = isle.room;
     const [p] = [...room.players.values()];
     room.adventure.win(room.monsters);
-    room.broadcast({ t: 'won', by: [p.id], hero: p.id, x: room.adventure.castle.x, y: room.adventure.castle.y, z: room.adventure.castle.z });
+    room.adventure.credit(p.id, 'boss', 9);
+    room.broadcast({ t: 'won', by: [p.id], hero: p.id, x: room.adventure.castle.x, y: room.adventure.castle.y, z: room.adventure.castle.z, board: room.stageBoard() });
     await until(page, () => document.querySelector('#modal.film video')?.getAttribute('src') === 'video/isle-ending.mp4');
     // Meanwhile the second episode is up: on to its stage 1, held while the film plays.
     isle.tick();
@@ -7558,8 +7562,31 @@ test('the isle’s intro plays the first time you come, before its story, and th
     await delay(2500);
     assert.equal(await page.evaluate((code) => window.kidsWorld.game.code === code, room.code), true, 'held while the ending plays');
     await page.click('#modal .film-skip');
-    await until(page, () => document.getElementById('modal').hidden);
+    // Straight after it, the ticket to the second episode: everyone there as
+    // the first was told to its end is given one, to keep.
+    await until(page, () => document.querySelector('#modal .isle-ticket'));
+    assert.match(await page.$eval('#modal h2', (el) => el.textContent), /You got the Rainbow Ticket!/);
+    assert.equal(await page.$eval('#modal .isle-ticket', (el) => el.getAttribute('aria-label')), 'Rainbow Ticket: admit one to Episode 2, The Rainbow of Adventure Isle');
+    assert.deepEqual(await page.evaluate(() => [window.kidsWorld.isle.data.stats.toldstar, window.kidsWorld.profile.data.stats.toldstar]), [1, 0], 'counted in the isle’s own world of you');
+    assert.equal(await page.evaluate((code) => window.kidsWorld.game.code === code, room.code), true, 'held while it shows, too');
+    await page.evaluate(() => (window.kidsWorld.ui.nextGo.left = 60));
+    await clickButton(page, 'Hooray!', '#modal');
+    // Then the stage's results, and its golden key quiz, there and then: not
+    // a minute later, as they would have come had the film played to its end.
+    await until(page, () => document.querySelector('#modal .ranking.results'), null, 5000);
+    await clickButton(page, 'Done', '#modal');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('golden key quiz'), null, 5000);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('kidsworld.isleFilms'))), ['intro', 'ending']);
+    // It is in the isle's backpack from here on …
+    await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+    await until(page, () => document.querySelector('#modal .shop-card.gear'));
+    assert.match(await page.$eval('#modal .shop-card.gear', (el) => el.textContent), /^🎫Rainbow TicketYour ticket to Episode 2, The Rainbow of Adventure Isle: you got it for popping King Grumble at the end of Episode 1/);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    // … and with it, on to the second episode with everyone else.
+    await page.evaluate(() => (window.kidsWorld.ui.nextGo.left = 1));
+    await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code === code && window.kidsWorld.game.adventure?.stage === 13, isle.room.code);
+    assert.equal(isle.room.online, 1);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -7663,9 +7690,15 @@ test('the isle’s second episode starts from the title in a game of its own, wi
   isle.tick();
   const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenStory: false, seenFilms: ['intro', 'ending', 'intro@1.1'] });
   try {
+    // (Having seen the first episode's ending before there were tickets, they
+    // were there as it was told to its end: that was counted as the page
+    // opened, main.js, and is their ticket.)
+    assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.toldstar), 1);
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
     await until(page, () => document.querySelector('#modal .isle-game.new[data-episode="2"]'));
+    assert.equal(await page.$eval('#modal .ticket-note', (el) => el.textContent), '🎫 You hold the Rainbow Ticket: Episode 2 is open to you.');
+    assert.equal(await page.$('#modal .isle-game.locked'), null);
     await page.click('#modal .isle-game.new[data-episode="2"]');
     await until(page, (first) => window.kidsWorld.session?.started && window.kidsWorld.game?.adventure?.stage === first, firstStage(2));
     await inGame(page);
@@ -7710,6 +7743,90 @@ test('the isle’s second episode starts from the title in a game of its own, wi
     isle.tick();
     await until(page, () => !document.getElementById('next-stage').hidden);
     assert.match(await page.$eval('#next-stage', (el) => el.textContent), /^🍁Stage 2, Maple Ridge, in/);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
+// The second episode is only for those who hold its ticket (shared/isle-
+// story.js): without one, its games and a new game of it are there to see on
+// the title, shut, and say how to get one; its island says the same to a page
+// that asks it all the same; and from the isle, a new game of it is shut too.
+test('the isle’s second episode is shut to whoever holds no ticket to it, and says how to get one', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  // A game of the second episode going on beside the first one.
+  const second = isle.newRun('Happy Panda', Date.now(), 2);
+  // (Someone who has never seen the first episode's ending.)
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenFilms: ['intro', 'intro@1.1'] });
+  const needs = 'Episode 2 needs the 🎫 Rainbow Ticket. Pop King Grumble at the end of Episode 1 to get yours!';
+  const told = () => until(page, (text) => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes(text)), needs);
+  const noToasts = () => page.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove()));
+  try {
+    assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.toldstar), 0);
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 4);
+    const rows = await page.$$eval('#modal .isle-game', (els) => els.map((el) => [el.classList.contains('locked'), el.textContent]));
+    assert.deepEqual(rows.map((r) => r[0]), [false, true, false, true], 'the first episode open, the second shut');
+    assert.match(rows[1][1], /Episode 2 · Stage 1 of 7: Tulip FieldsNeeds the 🎫 Rainbow Ticket🔒/);
+    assert.match(rows[3][1], /Start Episode 2Needs the 🎫 Rainbow Ticket: pop King Grumble at the end of Episode 1🔒/);
+    assert.equal(await page.$('#modal .ticket-note'), null);
+    // Tapped, each says how to get one, and nobody goes anywhere.
+    await page.click(`#modal .isle-game[data-code="${second.code}"]`);
+    await told();
+    await noToasts();
+    await page.click('#modal .isle-game.new[data-episode="2"]');
+    await told();
+    assert.equal(await page.evaluate(() => Boolean(window.kidsWorld.session) || document.getElementById('modal').hidden), false);
+    assert.equal(isle.runs.length, 2, 'no game started');
+    // Its island says the same to a page that asks it all the same.
+    await noToasts();
+    await page.evaluate((code) => {
+      window.kidsWorld.ui.closeModal();
+      window.kidsWorld.ui.handlers.visit(code);
+    }, second.code);
+    await told();
+    await until(page, () => !document.getElementById('title').hidden && !window.kidsWorld.session);
+    assert.equal(isle.runs[1].entry.room.online, 0, 'nobody came');
+
+    // The first episode is open to everyone. From its island, a new game of
+    // the second is shut too, and there is no ticket in the isle's backpack.
+    await noToasts();
+    await clickButton(page, 'Adventure Isle');
+    await until(page, () => !document.getElementById('modal').hidden && document.querySelectorAll('#modal .isle-game').length === 4);
+    await page.click(`#modal .isle-game[data-code="${isle.room.code}"]`);
+    await inGame(page);
+    await page.evaluate(() => window.kidsWorld.ui.backpackDialog());
+    await until(page, () => document.querySelector('#modal .shop-empty'));
+    assert.equal(await page.$('#modal .shop-card.gear'), null);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    await page.click('#island-badge');
+    await clickButton(page, '🆕 New game', '#modal');
+    await until(page, () => document.querySelector('#modal h2')?.textContent.includes('A new game?'));
+    const ask = await page.evaluate(() => {
+      const button = document.querySelector('#modal button[data-episode="2"]');
+      return { text: document.getElementById('modal').textContent, shut: button.disabled, label: button.textContent };
+    });
+    assert.deepEqual([ask.shut, ask.label], [true, '🔒 Episode 2']);
+    assert.ok(ask.text.includes(`🔒 ${needs}`) && !ask.text.includes('or begin Episode 2'), ask.text);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    // A game going on to the second episode without you (you were not there
+    // as King Grumble was popped): no countdown flies you there only to be
+    // turned away — you are told how to get a ticket instead.
+    await noToasts();
+    isle.room.broadcast({ t: 'next', code: second.code, stage: firstStage(2) });
+    await told();
+    assert.equal(await page.$eval('#next-stage', (el) => el.hidden), true);
+    // (A new game of it asked of the island all the same: none is started,
+    // and back to the title, told why.)
+    await noToasts();
+    await page.evaluate(() => window.kidsWorld.game.send({ t: 'isle', op: 'new', episode: 2, tickets: [] }));
+    await told();
+    assert.equal(isle.runs.length, 2);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();

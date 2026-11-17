@@ -4,8 +4,9 @@
 // last, up to the last chapter of its story (an episode's last leading on to
 // the next episode), and that one won, a new journey from stage 1 (and
 // nothing else starting it over); nobody owning it, so
-// nobody can be turned away; and the conquered island waiting for its players
-// before it goes.
+// nobody can be turned away — but for an episode after the first, which is
+// only for those who hold its ticket; and the conquered island waiting for
+// its players before it goes.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +14,7 @@ import { join as joinPath } from 'node:path';
 import { after, before, test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { ambushFor, cleanStage, guardBackMs, guardsFor, hazardEvery, kingHearts, raiseSeconds, reserveFor, slideFor, stageGap } from '../public/js/shared/adventure.js';
-import { chapterOf, firstStage, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
+import { chapterOf, firstStage, STAGES, stagesOf, ticketNeeded } from '../public/js/shared/isle-story.js';
 import { CRITTER_INFO } from '../public/js/shared/critters.js';
 import { cleanListing, sortListings } from '../public/js/shared/listing.js';
 import { EDIT_KINDS, PROTOCOL } from '../public/js/shared/room.js';
@@ -42,10 +43,11 @@ function conn() {
   return c;
 }
 
-function join(room, name = 'Happy Panda') {
+// more: what else their page says as they come (the tickets they hold, say).
+function join(room, name = 'Happy Panda', more = {}) {
   const c = conn();
   room.attach(c);
-  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' } });
+  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat', fur: 'orange', shirt: 3, hat: 'cap' }, ...more });
   c.pid = c.last('welcome').you;
   return c;
 }
@@ -269,7 +271,7 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   assert.equal(one.room.adventure.story.last, true, 'of the last episode');
   assert.equal(one.room.adventure.describe().final, true, 'and the pages are told so');
   const last = one.room;
-  const b = join(last, 'Brave Fox');
+  const b = join(last, 'Brave Fox', { tickets: [2] });
   last.adventure.win(last.monsters);
   one.tick(time.now());
   assert.deepEqual([one.stage, one.journey], [1, 2], 'a new journey');
@@ -307,19 +309,60 @@ test('an episode’s last stage won leads on to the next episode, and a new game
   assert.ok(next.level < end + 1);
   assert.equal(one.room.listing().adventure.stage, end + 1, 'listed at its stage');
 
-  // A new game of the second episode, from the isle: kept apart.
+  // The second episode is only for those who hold its ticket — what being
+  // there as the first was told to its end gives, which their page says as
+  // they come: anyone else is told how to get one, and is not let in. A page
+  // that says nothing of tickets is from before there were any: it is told
+  // to reload, as it may hold one by now.
+  const needs = 'Episode 2 needs the 🎫 Rainbow Ticket. Pop King Grumble at the end of Episode 1 to get yours!';
+  const reload = 'Kids World has been updated! Reload the page to come to this island.';
+  assert.equal(ticketNeeded(2), needs);
+  for (const [tickets, code, text] of [
+    [[], 'ticket', needs],
+    [[3], 'ticket', needs],
+    [[2.5, 1, -2], 'ticket', needs],
+    [undefined, 'reload', reload],
+    ['all', 'reload', reload],
+    [{ 2: true }, 'reload', reload],
+  ]) {
+    const out = conn();
+    one.room.attach(out);
+    one.room.receive(out, { t: 'join', protocol: PROTOCOL, name: 'Quick Owl', look: { animal: 'cat' }, ...(tickets === undefined ? {} : { tickets }) });
+    assert.deepEqual([out.last('welcome'), out.last('error')], [undefined, { t: 'error', code, text }], JSON.stringify(tickets));
+  }
+  assert.equal(one.room.online, 0, 'nobody came');
+  // A new game of the second episode, from the isle: kept apart. With the
+  // ticket, that is (said again as it is asked for, as it may be new): without,
+  // none is started.
   time.advance(60 * 1000);
-  const a = join(one.room, 'Happy Panda');
-  one.room.receive(a, { t: 'isle', op: 'new', episode: 2 });
+  const shy = join(one.room, 'Quick Owl', { tickets: [2] });
+  one.room.receive(shy, { t: 'isle', op: 'new', episode: 2, tickets: [] });
+  assert.deepEqual(shy.last('isle-run'), { t: 'isle-run', error: needs });
+  assert.equal(one.runs.length, 1);
+  const a = join(one.room, 'Happy Panda', { tickets: [2] });
+  one.room.receive(a, { t: 'isle', op: 'new', episode: 2, tickets: [2] });
   assert.equal(a.last('isle-run').stage, end + 1);
   assert.deepEqual(one.runs.map((r) => [r.stage, r.journey]), [[end + 1, 1], [end + 1, 1]]);
-  // And from the title, by a page come only to start one.
+  // And from the title, by a page come only to start one — with its ticket.
   time.advance(60 * 1000);
   const c = conn();
   one.room.attach(c);
+  one.room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Sunny Otter', isle: 'new', episode: 2, tickets: [] });
+  assert.deepEqual(c.last('isle-run'), { t: 'isle-run', error: needs });
   one.room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Sunny Otter', isle: 'new', episode: 2 });
+  assert.deepEqual(c.last('isle-run'), { t: 'isle-run', error: reload }, 'a page from before there were tickets');
+  assert.equal(one.runs.length, 2);
+  one.room.receive(c, { t: 'join', protocol: PROTOCOL, name: 'Sunny Otter', isle: 'new', episode: 2, tickets: [2] });
   assert.equal(c.last('isle-run').stage, end + 1);
   assert.equal(one.runs.length, 3);
+  // The first episode is open to everyone, and so is a new game of it.
+  time.advance(60 * 1000);
+  const d = conn();
+  one.room.attach(d);
+  one.room.receive(d, { t: 'join', protocol: PROTOCOL, name: 'Shy Mole', isle: 'new' });
+  assert.equal(d.last('isle-run').stage, 1);
+  assert.equal(one.runs.length, 4);
+  assert.ok(join(one.runs.at(-1).entry.room, 'Shy Mole').pid, 'no ticket asked for');
   // No episode said, or nonsense for one, is the first.
   time.advance(60 * 1000);
   assert.equal(one.newRun('Ann', time.now(), 99).stage, 1);
