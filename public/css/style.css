@@ -5331,12 +5331,56 @@ button.go-pt {
   text-align: center;
 }
 
-/* The classes or quizzes to pick from, one big button each, a little apart. */
-.class-list {
+/* The classes or quizzes to pick from, a school at a time: its name (and
+   what an answer right pays there), then its years in small buttons, three
+   to a row; the quizzes of no school year after them, the same way. */
+.quiz-picker {
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin: 14px 0 6px;
+}
+
+.quiz-school h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.quiz-pays {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.quiz-years {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.big.quiz-year,
+.big.quiz-other {
+  flex-direction: column;
+  gap: 4px;
+  min-height: 64px;
+  padding: 10px 6px;
+  border-radius: 18px;
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
+.big.quiz-other .emoji {
+  font-size: 1.5rem;
+}
+
+.quiz-years .quiz-level {
+  align-items: center;
+  text-align: center;
 }
 
 .quiz-sub {

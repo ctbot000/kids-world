@@ -22,7 +22,7 @@ import { latestNews, NEWS } from '../public/js/news.js';
 import { CHAPTERS, firstStage, stagesOf } from '../public/js/shared/isle-story.js';
 import { MONSTER_LOG } from '../public/js/shared/stickers.js';
 import { CLASS_SIZE } from '../public/js/shared/school.js';
-import { LEARNT_AFTER, QUESTION_BANKS } from '../public/js/shared/quiz.js';
+import { LEARNT_AFTER, QUESTION_BANKS, QUIZ_LEVELS } from '../public/js/shared/quiz.js';
 import { GOLDEN, RECIPES } from '../public/js/shared/cooking.js';
 import { VESSEL } from '../public/js/render/kitchen.js';
 import { STUDY_SIZE } from '../public/js/shared/study.js';
@@ -307,6 +307,10 @@ async function clickSwitch(page, selector) {
   await landed(page, handle);
   await handle.click();
 }
+
+// A quiz in a dialog's quiz picker (ui.js quizPicker), by its key, once the
+// dialog has landed.
+const clickQuiz = (page, level) => clickSwitch(page, `#modal .quiz-picker [data-level="${level}"]:not(:disabled)`);
 
 // A real click in the middle of something beside a see-through dialog, which
 // must not be under the dialog: that would take the click instead.
@@ -7012,7 +7016,17 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Class'));
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('School'));
-  await page.click('.class-list button:first-child');
+  // The classes by school: every year of each, then the other quizzes.
+  assert.deepEqual(
+    await page.evaluate(() => [...document.querySelectorAll('#modal .quiz-school')].map((s) => [s.querySelector('h3').textContent.split('🪙')[0].trim(), s.querySelectorAll('button').length])),
+    [
+      ['🎒 Elementary School', 6],
+      ['🧑‍🎓 Middle School', 3],
+      ['📚 High School', 3],
+      ['🧩 More quizzes', 3],
+    ],
+  );
+  await page.click('#modal [data-level="junior"]');
   await until(page, () => document.querySelector('#modal h2').textContent.includes('Year 2') && document.querySelector('.quiz-answer'));
   // Only the three questions not learnt are asked.
   assert.deepEqual((await page.evaluate(() => window.kidsWorld.game.quiz.questions.map((ask) => ask.q))).sort(), [...left].sort());
@@ -7035,23 +7049,16 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   assert.equal(after.stats.quizzes, 1);
   assert.equal(after.stats.quizperfect, 1);
   assert.ok(after.stickers['quiz-whiz'] && after.stickers['quiz-perfect']);
-  // The other classes are there to take straight on (but Elementary School
-  // Year 3, all learnt); Year 2 has its break.
-  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.quiz-box button')].some((b) => b.textContent.includes('Middle School Year 3 class'))));
+  // The next class along is there to take straight on (Year 4, as Year 3
+  // is all learnt); Year 2 has its break.
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('.quiz-box button')].some((b) => b.textContent.includes('Elementary School Year 4 class'))));
   await page.click('.quiz-box button.green');
   await until(page, () => document.getElementById('modal').hidden);
   await page.keyboard.press('KeyQ');
-  await until(page, () => document.querySelector('.class-list button'));
+  await until(page, () => document.querySelector('#modal .quiz-picker button'));
   assert.deepEqual(
-    await page.evaluate(() => [...document.querySelectorAll('.class-list button')].map((b) => [b.disabled, b.textContent.includes('Break'), b.textContent.includes('All learnt')])),
-    [
-      [true, true, false],
-      [true, false, true],
-      [false, false, false],
-      [false, false, false],
-      [false, false, false],
-      [false, false, false],
-    ],
+    await page.evaluate(() => [...document.querySelectorAll('#modal .quiz-picker button')].map((b) => [b.dataset.level, b.disabled, b.textContent.includes('Break'), b.textContent.includes('All learnt')])),
+    Object.keys(QUIZ_LEVELS).map((k) => [k, k === 'junior' || k === 'elementary3', k === 'junior', k === 'elementary3']),
   );
   await page.keyboard.press('Escape');
   assert.deepEqual(pageErrors, []);
@@ -8461,7 +8468,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   const coins = await page.evaluate(() => window.kidsWorld.isle.data.coins);
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('treasure chest'));
-  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('free a camp') && !document.querySelector('#modal .class-list') && !document.querySelector('#modal').textContent.includes('null')), 'no quiz at the chest');
+  assert.ok(await page.evaluate(() => document.querySelector('#modal').textContent.includes('free a camp') && !document.querySelector('#modal .quiz-picker') && !document.querySelector('#modal').textContent.includes('null')), 'no quiz at the chest');
   await clickButton(page, 'OK', '#modal');
   await until(page, () => document.getElementById('modal').hidden);
   // A camp freed with your help: a key quiz comes up by itself. Wrong: no
@@ -8471,7 +8478,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // One quiz, at the level picked: one question.
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
   assert.equal(await page.evaluate(() => document.getElementById('key-quiz').hidden), false, 'the 🔑 button while it waits');
-  await clickButton(page, 'Thinking Math', '#modal');
+  await clickQuiz(page, 'thinker');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
   assert.equal(await page.evaluate(() => window.kidsWorld.game.quiz.questions.length), 1);
   // Shut and opened again: the same question, no second try.
@@ -8489,7 +8496,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // Another camp: right this time, a key.
   await page.evaluate((id) => window.kidsWorld.game.campFreed({ id, by: [window.kidsWorld.game.pid] }), two);
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('A key quiz'), { timeout: 15000 });
-  await clickButton(page, 'Elementary School Year 2', '#modal');
+  await clickQuiz(page, 'junior');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
   await answer(true);
   await clickButton(page, 'How you did', '#modal');
@@ -8523,7 +8530,7 @@ test('treasure chest keys on Adventure Isle come only from a quiz after a camp i
   // chest, for a diamond and far more coins.
   await page.evaluate(() => window.kidsWorld.game.offerKeyQuiz(true, 0));
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('golden key quiz'), { timeout: 15000 });
-  await clickButton(page, 'Thinking Math', '#modal');
+  await clickQuiz(page, 'thinker');
   await until(page, () => window.kidsWorld.game.quiz?.keyQuiz && document.querySelector('#modal .quiz-answer'));
   await answer(true);
   await clickButton(page, 'How you did', '#modal');

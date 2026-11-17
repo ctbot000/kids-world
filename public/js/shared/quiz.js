@@ -1,12 +1,13 @@
-// Quizzes: a little school work, at elementary school second-year and
-// third-year level, middle school third-year level and high school
-// first-year level, a thinking-math one of puzzles to work out (patterns,
-// logic, counting, shapes) in the style of Korea's thinking-math workbooks
-// for young children, and English Words, each question with answers to
-// pick from. They are asked in classes at school (school.js), for coins,
-// and on Adventure Isle as key quizzes: one question, one try, for each
-// camp you help free (a key to a treasure chest, treasure.js) and for each
-// stage you help win (a golden key) — game.js offerKeyQuiz.
+// Quizzes: a little school work, for every school year from Year 1 of
+// elementary school to Year 3 of high school, a thinking-math one of
+// puzzles to work out (patterns, logic, counting, shapes) in the style of
+// Korea's thinking-math workbooks for young children, the Math Olympiad's
+// hardest puzzles of all, like a maths contest's, and English Words, each
+// question with answers to pick from. They are asked in classes at school
+// (school.js), for coins, and on Adventure Isle as key quizzes: one
+// question, one try, for each camp you help free (a key to a treasure
+// chest, treasure.js) and for each stage you help win (a golden key) —
+// game.js offerKeyQuiz.
 //
 // The quizzes are each player's own, on their own page (the island has no
 // hand in them, unlike the arcade's games), their questions picked and
@@ -24,41 +25,41 @@
 import { ENGLISH_WORDS } from './english-words.js';
 import { Rng } from './rng.js';
 
-// The quizzes, by their keys, in the order they are offered: what each is
-// called, its button's colour and how many coins each answer right pays.
+// The schools, in order, and their years: a school year's quiz takes its
+// icon, its buttons' colour and what an answer right pays from its school
+// (a coin at elementary school, two at middle school, three at high
+// school).
+export const SCHOOLS = [
+  { key: 'elementary', icon: '🎒', name: 'Elementary School', color: 'blue', coins: 1, years: 6 },
+  { key: 'middle', icon: '🧑‍🎓', name: 'Middle School', color: 'pink', coins: 2, years: 3 },
+  { key: 'high', icon: '📚', name: 'High School', color: 'teal', coins: 3, years: 3 },
+];
+
+// A school year's quiz, by its key (Year 2 of elementary school and Year 3
+// of middle school keep the keys they had when they were the only two).
+function yearQuiz(key, school, year) {
+  const s = SCHOOLS.find((x) => x.key === school);
+  const pays = s.coins === 1 ? 'a coin' : `${s.coins} coins`;
+  return { key, school, year, icon: s.icon, name: `${s.name} Year ${year}`, how: `One question, like in Year ${year} of ${s.name.toLowerCase()}. Get it right for ${pays}!`, color: s.color, coins: s.coins };
+}
+
+// The quizzes, by their keys, in the order they are offered: the school
+// years (school, year), then the quizzes of no school year. Each says what
+// it is called, its button's colour and how many coins each answer right
+// pays.
 export const QUIZ_LEVELS = {
-  junior: {
-    key: 'junior',
-    icon: '🧒',
-    name: 'Elementary School Year 2',
-    how: 'One little question, like in Year 2 of elementary school. Get it right for a coin!',
-    color: 'blue',
-    coins: 1,
-  },
-  elementary3: {
-    key: 'elementary3',
-    icon: '🎒',
-    name: 'Elementary School Year 3',
-    how: 'One question, like in Year 3 of elementary school. Get it right for a coin!',
-    color: 'orange',
-    coins: 1,
-  },
-  senior: {
-    key: 'senior',
-    icon: '🧑‍🎓',
-    name: 'Middle School Year 3',
-    how: 'One harder question, like in Year 3 of middle school. Get it right for two coins!',
-    color: 'pink',
-    coins: 2,
-  },
-  high1: {
-    key: 'high1',
-    icon: '📚',
-    name: 'High School Year 1',
-    how: 'One hard question, like in Year 1 of high school. Get it right for three coins!',
-    color: 'teal',
-    coins: 3,
-  },
+  elementary1: yearQuiz('elementary1', 'elementary', 1),
+  junior: yearQuiz('junior', 'elementary', 2),
+  elementary3: yearQuiz('elementary3', 'elementary', 3),
+  elementary4: yearQuiz('elementary4', 'elementary', 4),
+  elementary5: yearQuiz('elementary5', 'elementary', 5),
+  elementary6: yearQuiz('elementary6', 'elementary', 6),
+  middle1: yearQuiz('middle1', 'middle', 1),
+  middle2: yearQuiz('middle2', 'middle', 2),
+  senior: yearQuiz('senior', 'middle', 3),
+  high1: yearQuiz('high1', 'high', 1),
+  high2: yearQuiz('high2', 'high', 2),
+  high3: yearQuiz('high3', 'high', 3),
   thinker: {
     key: 'thinker',
     icon: '🐂',
@@ -66,6 +67,14 @@ export const QUIZ_LEVELS = {
     how: 'One puzzle to think through: patterns, logic, counting and shapes. Work it out for two coins!',
     color: 'yellow',
     coins: 2,
+  },
+  olympiad: {
+    key: 'olympiad',
+    icon: '🏆',
+    name: 'Math Olympiad',
+    how: 'The hardest puzzles of all, like in a maths contest. Work one out for four coins!',
+    color: 'orange',
+    coins: 4,
   },
   english: {
     key: 'english',
@@ -85,7 +94,7 @@ export const WIN_OFFER_MS = 2600;
 
 // A coin for each answer right on the elementary school quizzes and English
 // Words, two on the middle school and thinking-math ones, that much harder,
-// and three on the high school one.
+// three on the high school ones and four on the Math Olympiad.
 export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 ? Math.floor(right) * (QUIZ_LEVELS[level]?.coins ?? 1) : 0);
 
 // The banks the questions come from. Each: { q: the question, a: its answers,
@@ -96,6 +105,50 @@ export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 
 // tile to work out. The English Words questions have three answers each,
 // and word: the word asked about ({ word, emoji, ko }).
 export const QUESTION_BANKS = {
+  // Year 1 of elementary school: adding and taking away up to 20, numbers
+  // to 100, tens and ones, counting on, shapes, longer and heavier, o'clock
+  // and half past, days and seasons, and the world around you.
+  elementary1: [
+    { q: 'What is 3 + 4?', a: ['7', '6', '8', '34'] },
+    { q: 'What is 9 − 5?', a: ['4', '5', '3', '14'] },
+    { q: 'What is 6 + 6?', a: ['12', '11', '13', '66'] },
+    { q: 'What is 10 − 3?', a: ['7', '6', '8', '13'] },
+    { q: 'What is 8 + 5?', a: ['13', '12', '14', '3'] },
+    { q: 'What is 15 − 4?', a: ['11', '19', '10', '12'] },
+    { q: 'What is 2 + 2 + 2?', a: ['6', '4', '8', '222'] },
+    { q: 'Which is the same as 10?', a: ['6 + 4', '6 + 3', '5 + 4', '7 + 4'] },
+    { q: 'You have 5 candies and eat 2. How many are left?', a: ['3', '7', '2', '4'] },
+    { q: 'There are 4 ducks on a pond, and 3 more swim over. How many ducks are there now?', a: ['7', '1', '6', '43'] },
+    { q: 'Which number comes right after 39?', a: ['40', '30', '38', '49'] },
+    { q: 'Which number comes just before 70?', a: ['69', '71', '60', '79'] },
+    { q: 'Which number is the smallest?', a: ['19', '91', '29', '23'] },
+    { q: 'How many tens are there in 50?', a: ['5', '50', '10', '0'] },
+    { q: 'Which number is 3 tens and 4 ones?', a: ['34', '43', '7', '304'] },
+    { q: 'Count by tens: 10, 20, 30, … what comes next?', a: ['40', '31', '50', '300'] },
+    { q: 'Count by twos: 12, 14, 16, … what comes next?', a: ['18', '17', '20', '26'] },
+    { q: 'How many apples are there?', pic: ['🍎 🍎 🍎', '🍎 🍎 🍎', '🍎 🍎 ·'], a: ['8', '9', '7', '6'] },
+    { q: 'What comes next?', pic: ['🔴 🔵 🔴 🔵 🔴 ❓'], a: ['🔵', '🔴', '🟢', '🟡'] },
+    { q: 'Which shape has no corners?', a: ['A circle', 'A triangle', 'A square', 'A rectangle'] },
+    { q: 'How many corners does a triangle have?', a: ['3', '4', '0', '6'] },
+    { q: 'Which of these rolls best?', a: ['A ball', 'A box', 'A book', 'A brick'] },
+    { q: 'Which is the longest?', a: ['A bus', 'A pencil', 'A spoon', 'A shoe'] },
+    { q: 'Which is the heaviest?', a: ['An elephant', 'A mouse', 'A cat', 'A rabbit'] },
+    { q: 'The short hand points to 3 and the long hand to 12. What time is it?', a: ['3 o’clock', '12 o’clock', 'Half past 3', '3:12'] },
+    { q: 'The short hand is between 7 and 8, and the long hand points to 6. What time is it?', a: ['Half past 7', 'Half past 8', '6 o’clock', '7 o’clock'] },
+    { q: 'Which day comes after Tuesday?', a: ['Wednesday', 'Monday', 'Thursday', 'Sunday'] },
+    { q: 'Which season is the hottest?', a: ['Summer', 'Winter', 'Spring', 'Autumn'] },
+    { q: 'In which season do leaves turn red and yellow and fall?', a: ['Autumn', 'Spring', 'Summer', 'Winter'] },
+    { q: 'What do we hear with?', a: ['Our ears', 'Our eyes', 'Our nose', 'Our hands'] },
+    { q: 'How many fingers are there on two hands?', a: ['10', '5', '8', '20'] },
+    { q: 'Which word is the opposite of “big”?', a: ['Small', 'Tall', 'Long', 'Round'] },
+    { q: 'What colour is a ripe banana?', a: ['Yellow', 'Blue', 'Purple', 'Black'] },
+    { q: 'Which animal lives in the sea?', a: ['A dolphin', 'A lion', 'A horse', 'A squirrel'] },
+    { q: 'Which one is a fruit?', a: ['A grape', 'A carrot', 'A potato', 'An onion'] },
+    { q: 'What do plants need to grow?', a: ['Water and sunlight', 'Candy and juice', 'Only darkness', 'Toys and games'] },
+    { q: 'Which letter comes after C?', a: ['D', 'B', 'E', 'F'] },
+    { q: 'How many wheels does a bicycle have?', a: ['2', '3', '4', '1'] },
+    { q: 'Which coin is worth the most?', a: ['500 won', '100 won', '50 won', '10 won'] },
+  ],
   junior: [
     { q: 'What is 7 + 8?', a: ['15', '13', '14', '16'] },
     { q: 'What is 12 − 5?', a: ['7', '6', '8', '5'] },
@@ -174,6 +227,236 @@ export const QUESTION_BANKS = {
     { q: 'What is the plural of “child”?', a: ['Children', 'Childs', 'Childes', 'Childrens'] },
     { q: 'Which word is a verb, a doing word?', a: ['Run', 'Table', 'Happy', 'Blue'] },
     { q: 'What is the past tense of “go”?', a: ['Went', 'Goed', 'Gone', 'Going'] },
+  ],
+  // Year 4 of elementary school: big numbers, times and sharing by two
+  // digits, fractions and decimals added and taken away, angles,
+  // triangles, parallel and perpendicular lines, four-sided shapes and
+  // number rules; springs, mixtures, volcanoes and fossils, water and its
+  // states, shadows and mirrors; scale and contour lines on a map.
+  elementary4: [
+    { q: 'What is 325 × 14?', a: ['4,550', '4,450', '1,625', '4,560'] },
+    { q: 'What is 864 ÷ 24?', a: ['36', '34', '38', '46'] },
+    { q: 'What is 520 ÷ 13?', a: ['40', '4', '400', '41'] },
+    { q: 'What is 15 × 40?', a: ['600', '60', '6,000', '550'] },
+    { q: 'How many zeros does one million have?', a: ['6', '5', '7', '8'] },
+    { q: 'Which number is ten thousand?', a: ['10,000', '1,000', '100,000', '1,000,000'] },
+    { q: 'In 4,725,000, what is the 7 worth?', a: ['700,000', '7,000', '70,000', '7,000,000'] },
+    { q: 'What is the largest number you can make with the cards 3, 8, 1 and 6, using each card once?', a: ['8,631', '8,613', '1,368', '8,361'] },
+    { q: 'What is 3,847 rounded to the nearest hundred?', a: ['3,800', '3,900', '3,850', '4,000'] },
+    { q: 'What is 2/7 + 3/7?', a: ['5/7', '5/14', '6/7', '1/7'] },
+    { q: 'What is 1 − 3/8?', a: ['5/8', '3/8', '2/8', '4/8'] },
+    { q: 'Which is the same as 1 and 2/5?', a: ['7/5', '12/5', '3/5', '5/7'] },
+    { q: 'What is 0.45 + 0.3?', a: ['0.75', '0.48', '0.78', '7.5'] },
+    { q: 'What is 3.2 − 1.45?', a: ['1.75', '2.25', '1.85', '2.75'] },
+    { q: 'How many degrees is a right angle?', a: ['90°', '45°', '180°', '360°'] },
+    { q: 'What kind of angle is 120°?', a: ['Obtuse', 'Acute', 'Right', 'Straight'] },
+    { q: 'Two angles of a triangle are 50° and 60°. What is the third?', a: ['70°', '110°', '80°', '90°'] },
+    { q: 'What is a triangle with all three sides the same length called?', a: ['Equilateral', 'Isosceles', 'Right-angled', 'Obtuse'] },
+    { q: 'Which shape has exactly one pair of parallel sides?', a: ['A trapezoid', 'A parallelogram', 'A rectangle', 'A rhombus'] },
+    { q: 'How many diagonals does a pentagon have?', a: ['5', '2', '10', '3'] },
+    { q: 'What are lines that never meet, however far they go, called?', a: ['Parallel lines', 'Perpendicular lines', 'Crossing lines', 'Curved lines'] },
+    { q: 'What are two lines that meet at a right angle called?', a: ['Perpendicular', 'Parallel', 'Curved', 'Equal'] },
+    { q: 'The numbers go 2, 5, 8, 11, … What is the 10th number?', a: ['29', '30', '32', '26'] },
+    { q: 'How many hours are 300 minutes?', a: ['5', '3', '30', '50'] },
+    { q: 'A spring stretches 2 cm for every 10 g hung on it. How far does it stretch with 50 g?', a: ['10 cm', '5 cm', '25 cm', '52 cm'] },
+    { q: 'Which of these can a magnet pull out of sand?', a: ['Iron filings', 'Salt', 'Sugar', 'Pebbles'] },
+    { q: 'How can you get salt back out of salty water?', a: ['Let the water evaporate', 'Use a magnet', 'Freeze the salt', 'Shake it hard'] },
+    { q: 'What comes out of an erupting volcano?', a: ['Lava, ash and gas', 'Only rain', 'Snow and ice', 'Sand and shells'] },
+    { q: 'What are the remains of ancient plants and animals kept in rock called?', a: ['Fossils', 'Crystals', 'Pebbles', 'Lava'] },
+    { q: 'Water slowly turning into water vapour from its surface is called…', a: ['Evaporation', 'Freezing', 'Melting', 'Condensation'] },
+    { q: 'Where do the drops on the outside of a cold cup come from?', a: ['Water vapour in the air', 'Inside the cup', 'The table', 'The cup melting'] },
+    { q: 'When water freezes into ice, its volume…', a: ['Gets bigger', 'Gets smaller', 'Stays the same', 'Disappears'] },
+    { q: 'Why does a shadow form?', a: ['Light goes in straight lines and is blocked', 'Light bends round things', 'Light is heavy', 'Light is cold'] },
+    { q: 'You raise your right hand in front of a mirror. Which hand does your reflection seem to raise?', a: ['Its left hand', 'Its right hand', 'Both hands', 'Neither hand'] },
+    { q: 'Which part of a plant takes in water from the soil?', a: ['The roots', 'The leaves', 'The flowers', 'The seeds'] },
+    { q: 'On a map where 1 cm stands for 1 km, two towns are 5 cm apart. How far apart are they really?', a: ['5 km', '1 km', '50 km', '500 m'] },
+    { q: 'What do contour lines close together on a map show?', a: ['Steep ground', 'Flat ground', 'A lake', 'A road'] },
+    { q: 'Which sentence is right?', a: ['She has two cats.', 'She have two cats.', 'She has two cat.', 'She haves two cats.'] },
+    { q: 'What is the opposite of “early”?', a: ['Late', 'Fast', 'Soon', 'Slow'] },
+  ],
+  // Year 5 of elementary school: the order of operations, factors and
+  // multiples, fractions in their lowest terms, added, taken away and
+  // multiplied, decimals, areas, cuboids, symmetry, averages and chances;
+  // heat, the solar system, dissolving, fungi, acids, the weather; Korea's
+  // land and its history.
+  elementary5: [
+    { q: 'What is 8 + 12 ÷ 4 × 2?', a: ['14', '10', '9.5', '40'] },
+    { q: 'What is (15 − 3) × 2 + 6?', a: ['30', '18', '24', '36'] },
+    { q: 'What is the greatest common factor of 18 and 24?', a: ['6', '3', '12', '72'] },
+    { q: 'What is the least common multiple of 4 and 6?', a: ['12', '24', '2', '10'] },
+    { q: 'Which of these is a factor of 36?', a: ['9', '8', '5', '7'] },
+    { q: 'How many factors does 12 have?', a: ['6', '4', '5', '12'] },
+    { q: 'What is 12/18 in its lowest terms?', a: ['2/3', '4/6', '6/9', '3/4'] },
+    { q: 'What is 1/2 + 1/3?', a: ['5/6', '2/5', '1/6', '2/6'] },
+    { q: 'What is 3/4 − 1/6?', a: ['7/12', '2/10', '1/2', '5/12'] },
+    { q: 'What is 2/3 × 9?', a: ['6', '18', '3', '27'] },
+    { q: 'What is 3/5 × 5/6?', a: ['1/2', '8/11', '15/11', '18/25'] },
+    { q: 'What is 4 × 1/6?', a: ['2/3', '4/24', '1/24', '5/6'] },
+    { q: 'What is 1.2 × 0.4?', a: ['0.48', '4.8', '0.048', '0.8'] },
+    { q: 'What is 2.46 rounded to one decimal place?', a: ['2.5', '2.4', '2.46', '3'] },
+    { q: 'Which whole numbers are greater than 5 and at most 8?', a: ['6, 7 and 8', '5, 6, 7 and 8', '6 and 7', '5, 6 and 7'] },
+    { q: 'A rectangle is 8 cm long and 5 cm wide. What is its area?', a: ['40 cm²', '26 cm²', '13 cm²', '80 cm²'] },
+    { q: 'A triangle has a base of 10 cm and a height of 6 cm. What is its area?', a: ['30 cm²', '60 cm²', '16 cm²', '15 cm²'] },
+    { q: 'A parallelogram has a base of 7 cm and a height of 4 cm. What is its area?', a: ['28 cm²', '14 cm²', '22 cm²', '11 cm²'] },
+    { q: 'A trapezoid has parallel sides of 4 cm and 6 cm and a height of 5 cm. What is its area?', a: ['25 cm²', '50 cm²', '120 cm²', '15 cm²'] },
+    { q: 'A rhombus has diagonals of 6 cm and 8 cm. What is its area?', a: ['24 cm²', '48 cm²', '14 cm²', '28 cm²'] },
+    { q: 'A regular hexagon has sides of 5 cm. What is its perimeter?', a: ['30 cm', '25 cm', '35 cm', '60 cm'] },
+    { q: 'How many faces does a cuboid have?', a: ['6', '8', '12', '4'] },
+    { q: 'How many edges does a cube have?', a: ['12', '6', '8', '24'] },
+    { q: 'Which shape looks the same after half a turn?', a: ['A parallelogram', 'An equilateral triangle', 'An isosceles triangle', 'A kite'] },
+    { q: 'What is the average of 70, 80 and 90?', a: ['80', '240', '90', '75'] },
+    { q: 'What is the chance that a tossed coin lands heads?', a: ['1/2', '1', '0', '1/4'] },
+    { q: 'A car goes 150 km in 3 hours. What is its average speed?', a: ['50 km/h', '450 km/h', '30 km/h', '75 km/h'] },
+    { q: 'Heat moving along a metal spoon from its hot end is called…', a: ['Conduction', 'Convection', 'Evaporation', 'Reflection'] },
+    { q: 'Warm air rising and cool air sinking in a room is called…', a: ['Convection', 'Conduction', 'Condensation', 'Friction'] },
+    { q: 'Which is the biggest planet in our solar system?', a: ['Jupiter', 'Saturn', 'Earth', 'Neptune'] },
+    { q: 'Which of these is a star?', a: ['The Sun', 'The Moon', 'Mars', 'Venus'] },
+    { q: 'Sugar stirred into water until you cannot see it has…', a: ['Dissolved', 'Melted', 'Evaporated', 'Frozen'] },
+    { q: 'What are mould and mushrooms?', a: ['Fungi', 'Plants', 'Animals', 'Bacteria'] },
+    { q: 'Which of these turns blue litmus paper red?', a: ['Vinegar', 'Soapy water', 'Baking soda water', 'Limewater'] },
+    { q: 'On a sunny afternoon at the beach, which way does the wind usually blow?', a: ['From the sea to the land', 'From the land to the sea', 'Straight up', 'It never blows'] },
+    { q: 'Which is Korea’s easternmost island?', a: ['Dokdo', 'Jejudo', 'Ganghwado', 'Geojedo'] },
+    { q: 'In the old story, who founded Gojoseon, the first Korean kingdom?', a: ['Dangun', 'Jumong', 'King Sejong', 'Wang Geon'] },
+    { q: 'Who founded the Goryeo dynasty?', a: ['Wang Geon', 'Yi Seong-gye', 'Jumong', 'Gung Ye'] },
+    { q: 'What was made under King Sejong of Joseon to measure the rain?', a: ['The cheugugi', 'Cheomseongdae', 'The Jikji', 'Hwaseong Fortress'] },
+  ],
+  // Year 6 of elementary school: dividing fractions and decimals, ratios,
+  // percentages and proportions, circles, volumes and surface areas,
+  // prisms, pyramids and cones; day and night, the Moon and the seasons,
+  // burning, plants, lenses and prisms, circuits and electromagnets, the
+  // body; the world's continents and oceans, and how Korea is governed.
+  elementary6: [
+    { q: 'What is 3/4 ÷ 1/2?', a: ['1 1/2', '3/8', '2/3', '1/2'] },
+    { q: 'What is 6 ÷ 2/3?', a: ['9', '4', '3', '18'] },
+    { q: 'What is 5/6 ÷ 5?', a: ['1/6', '25/6', '1/5', '6'] },
+    { q: 'What is 4.8 ÷ 0.6?', a: ['8', '0.8', '80', '2.88'] },
+    { q: 'What is 2.4 ÷ 3?', a: ['0.8', '8', '0.08', '7.2'] },
+    { q: 'What is 25% of 80?', a: ['20', '25', '32', '4'] },
+    { q: 'What is 0.35 as a percentage?', a: ['35%', '3.5%', '0.35%', '350%'] },
+    { q: 'A shirt costs 20,000 won with 30% off. What is the sale price?', a: ['14,000 won', '6,000 won', '17,000 won', '19,700 won'] },
+    { q: 'What is the ratio 6 : 8 in its simplest form?', a: ['3 : 4', '6 : 8', '2 : 3', '4 : 3'] },
+    { q: 'There are 20 children, boys and girls in the ratio 3 : 2. How many are girls?', a: ['8', '12', '10', '4'] },
+    { q: 'Solve the proportion 3 : 4 = 9 : ☐', a: ['12', '10', '16', '7'] },
+    { q: 'On a 1 : 50,000 map, two places are 4 cm apart. How far apart are they really?', a: ['2 km', '200 m', '20 km', '50 km'] },
+    { q: 'A circle has a diameter of 10 cm. Taking π as 3.14, what is its circumference?', a: ['31.4 cm', '15.7 cm', '78.5 cm', '314 cm'] },
+    { q: 'A circle has a radius of 10 cm. Taking π as 3.14, what is its area?', a: ['314 cm²', '62.8 cm²', '31.4 cm²', '100 cm²'] },
+    { q: 'What is the volume of a cuboid 5 cm long, 4 cm wide and 3 cm high?', a: ['60 cm³', '12 cm³', '47 cm³', '94 cm³'] },
+    { q: 'What is the surface area of a cube with 3 cm edges?', a: ['54 cm²', '27 cm²', '9 cm²', '36 cm²'] },
+    { q: 'How many cm³ are there in 1 m³?', a: ['1,000,000', '100', '1,000', '10,000'] },
+    { q: 'How many faces does a triangular prism have?', a: ['5', '6', '3', '9'] },
+    { q: 'How many vertices does a square pyramid have?', a: ['5', '4', '8', '6'] },
+    { q: 'How many flat faces does a cone have?', a: ['1', '2', '0', '3'] },
+    { q: 'In a pie chart, how much of the circle does 25% take up?', a: ['A quarter', 'A half', 'A third', 'A tenth'] },
+    { q: 'Why do we have day and night?', a: ['The Earth spins on its axis', 'The Sun goes round the Earth', 'The Moon blocks the Sun', 'Clouds cover the Sun'] },
+    { q: 'About how long is it from one full moon to the next?', a: ['About 30 days', 'About 7 days', 'About 1 day', 'About 365 days'] },
+    { q: 'Why are summers hot and winters cold?', a: ['The Earth’s axis is tilted', 'The Earth is nearer the Sun in summer', 'The Sun burns hotter in summer', 'The Moon blocks the Sun in winter'] },
+    { q: 'Which gas helps things burn?', a: ['Oxygen', 'Carbon dioxide', 'Nitrogen', 'Helium'] },
+    { q: 'Which gas turns limewater milky?', a: ['Carbon dioxide', 'Oxygen', 'Hydrogen', 'Nitrogen'] },
+    { q: 'A jar put over a burning candle puts it out. What has the flame run out of?', a: ['Oxygen', 'Wax', 'Wick', 'Light'] },
+    { q: 'Water leaving a plant through tiny holes in its leaves is called…', a: ['Transpiration', 'Photosynthesis', 'Respiration', 'Germination'] },
+    { q: 'What can a convex lens do with sunlight?', a: ['Gather it to a bright point', 'Make it disappear', 'Turn it into sound', 'Make it heavier'] },
+    { q: 'What does a prism split white light into?', a: ['Rainbow colours', 'Only red light', 'Darkness', 'Sound'] },
+    { q: 'Two bulbs on one battery shine brighter when they are wired…', a: ['In parallel', 'In series', 'Either way, the same', 'Neither way: they never light'] },
+    { q: 'What does an electromagnet need to work?', a: ['Electricity flowing through its coil', 'Sunlight', 'Water', 'A cold room'] },
+    { q: 'Which organ pumps blood round the body?', a: ['The heart', 'The lungs', 'The stomach', 'The kidneys'] },
+    { q: 'Which organs clean waste out of the blood?', a: ['The kidneys', 'The lungs', 'The heart', 'The bones'] },
+    { q: 'Where is most food digested and taken into the body?', a: ['The small intestine', 'The mouth', 'The large intestine', 'The lungs'] },
+    { q: 'Which is the largest continent?', a: ['Asia', 'Africa', 'Europe', 'Australia'] },
+    { q: 'Which ocean lies between the Americas and Europe and Africa?', a: ['The Atlantic Ocean', 'The Pacific Ocean', 'The Indian Ocean', 'The Arctic Ocean'] },
+    { q: 'In Korea, who makes the laws?', a: ['The National Assembly', 'The courts', 'The President', 'The police'] },
+    { q: 'How long is a Korean President’s term?', a: ['5 years', '4 years', '6 years', '3 years'] },
+  ],
+  // Year 1 of middle school: primes, negative numbers, letters for numbers
+  // and equations, proportion, the coordinate plane, angles of polygons,
+  // sectors, solids and congruence, the mode and median; forces, gases and
+  // their particles, changes of state, light and sound, rocks and the
+  // kinds of living things.
+  middle1: [
+    { q: 'What is 72 as a product of primes?', a: ['2³ × 3²', '2² × 3³', '8 × 9', '2 × 36'] },
+    { q: 'How many prime numbers are there between 1 and 20?', a: ['8', '9', '7', '10'] },
+    { q: 'What is (−7) + (+3)?', a: ['−4', '4', '−10', '10'] },
+    { q: 'What is (−5) − (−8)?', a: ['3', '−13', '−3', '13'] },
+    { q: 'What is (−2)³?', a: ['−8', '8', '−6', '6'] },
+    { q: 'What is (−12) ÷ (−3) × (−2)?', a: ['−8', '8', '−2', '2'] },
+    { q: 'Which of these numbers is the biggest?', a: ['−1/3', '−1/2', '−3/4', '−1'] },
+    { q: 'What is the absolute value of −6?', a: ['6', '−6', '0', '1/6'] },
+    { q: 'Solve 4x − 7 = 13', a: ['5', '1.5', '20', '−5'] },
+    { q: 'Solve 3(x + 2) = 2x + 9', a: ['3', '7', '1', '15'] },
+    { q: 'If x = −2, what is x² − 3x?', a: ['10', '−2', '2', '−10'] },
+    { q: 'Simplify 3a + 2b − a + 5b', a: ['2a + 7b', '4a + 7b', '2a + 3b', '9ab'] },
+    { q: 'y is directly proportional to x, and y = 12 when x = 3. What is y when x = 5?', a: ['20', '15', '7.2', '14'] },
+    { q: 'y is inversely proportional to x, and y = 6 when x = 4. What is y when x = 8?', a: ['3', '12', '2', '10'] },
+    { q: 'Which quadrant is the point (−3, 2) in?', a: ['The second', 'The first', 'The third', 'The fourth'] },
+    { q: 'What do the inside angles of a hexagon add up to?', a: ['720°', '540°', '1080°', '360°'] },
+    { q: 'How big is each inside angle of a regular pentagon?', a: ['108°', '72°', '120°', '540°'] },
+    { q: 'How many diagonals does a hexagon have?', a: ['9', '6', '12', '3'] },
+    { q: 'A sector has a radius of 6 cm and an angle of 60°. What is its area?', a: ['6π cm²', '2π cm²', '12π cm²', '36π cm²'] },
+    { q: 'How many faces does a regular octahedron have?', a: ['8', '6', '12', '4'] },
+    { q: 'Which solid has 12 faces, each a regular pentagon?', a: ['A regular dodecahedron', 'A regular icosahedron', 'A cube', 'A regular octahedron'] },
+    { q: 'Spinning a rectangle round one of its sides makes a…', a: ['Cylinder', 'Cone', 'Sphere', 'Cube'] },
+    { q: 'Spinning a right-angled triangle round one of its shorter sides makes a…', a: ['Cone', 'Cylinder', 'Sphere', 'Pyramid'] },
+    { q: 'Vertically opposite angles are always…', a: ['Equal', 'Supplementary', 'Right angles', 'Different'] },
+    { q: 'Which of these does NOT prove two triangles congruent?', a: ['Three equal angles', 'Three equal sides', 'Two sides and the angle between them', 'Two angles and the side between them'] },
+    { q: 'In a frequency table of 40 students, one group has 10 of them. What is its relative frequency?', a: ['0.25', '0.4', '4', '10'] },
+    { q: 'What is the mode of 3, 5, 5, 7, 9?', a: ['5', '7', '9', '3'] },
+    { q: 'What is the median of 2, 9, 4, 7, 5?', a: ['5', '4', '7', '9'] },
+    { q: 'Which force pushes up on a boat floating on water?', a: ['Buoyancy', 'Gravity', 'Friction', 'Magnetism'] },
+    { q: 'What does friction do?', a: ['Works against things sliding', 'Always speeds things up', 'Pulls things toward the Earth', 'Only works in space'] },
+    { q: 'Your mass is 60 kg on Earth. What is your mass on the Moon?', a: ['60 kg', '10 kg', '360 kg', '0 kg'] },
+    { q: 'A sealed syringe of air is pushed to half its volume, at the same temperature. What happens to the pressure?', a: ['It doubles', 'It halves', 'It stays the same', 'It drops to zero'] },
+    { q: 'Why does a balloon get bigger when it is warmed?', a: ['Its gas particles move faster and spread out', 'Its gas particles grow bigger', 'More gas particles appear', 'Its gas particles stop moving'] },
+    { q: 'Dry ice turning straight into gas, without melting first, is called…', a: ['Sublimation', 'Evaporation', 'Melting', 'Condensation'] },
+    { q: 'When light bounces off a mirror, the angle of reflection is…', a: ['Equal to the angle of incidence', 'Twice the angle of incidence', 'Always 90°', 'Half the angle of incidence'] },
+    { q: 'Why does a straw in a glass of water look bent?', a: ['Light refracts', 'Light reflects', 'Light stops', 'The water bends the straw'] },
+    { q: 'A louder sound has a bigger…', a: ['Amplitude', 'Frequency', 'Speed', 'Pitch'] },
+    { q: 'Which kind of rock forms when lava or magma cools?', a: ['Igneous rock', 'Sedimentary rock', 'Metamorphic rock', 'Limestone'] },
+    { q: 'Which of these is a vertebrate?', a: ['A frog', 'A snail', 'An earthworm', 'A jellyfish'] },
+  ],
+  // Year 2 of middle school: repeating decimals, powers and polynomials,
+  // inequalities, simultaneous equations, lines and their slopes, the
+  // centres of a triangle, parallelograms, similar shapes, Pythagoras and
+  // probability; atoms and ions, circuits, the planets, photosynthesis,
+  // blood, digestion and breathing, density, heat and clouds.
+  middle2: [
+    { q: 'Which fraction makes a decimal that ends, rather than repeating?', a: ['3/8', '1/3', '2/7', '5/6'] },
+    { q: 'What is 0.333… (with the 3 going on forever) as a fraction?', a: ['1/3', '3/10', '33/100', '1/30'] },
+    { q: 'What is 2³ × 2⁴?', a: ['2⁷', '2¹²', '4⁷', '2¹'] },
+    { q: 'What is (a²)³?', a: ['a⁶', 'a⁵', 'a⁸', '3a²'] },
+    { q: 'What is x⁸ ÷ x²?', a: ['x⁶', 'x⁴', 'x¹⁰', 'x¹⁶'] },
+    { q: 'Simplify 6x²y ÷ 2xy', a: ['3x', '3xy', '4x', '3x²'] },
+    { q: 'Expand 2x(3x − 4)', a: ['6x² − 8x', '6x² − 4', '5x² − 8x', '6x − 8'] },
+    { q: 'Solve 2x − 3 > 7', a: ['x > 5', 'x > 2', 'x < 5', 'x > 10'] },
+    { q: 'Solve −3x ≤ 12', a: ['x ≥ −4', 'x ≤ −4', 'x ≥ 4', 'x ≤ 4'] },
+    { q: 'x + y = 10 and x − y = 4. What is x?', a: ['7', '3', '6', '14'] },
+    { q: '2x + y = 7 and x + y = 5. What is y?', a: ['3', '2', '5', '7'] },
+    { q: 'What is the slope of the line through (1, 3) and (3, 7)?', a: ['2', '4', '1/2', '−2'] },
+    { q: 'Where does y = 3x − 6 cross the x-axis?', a: ['(2, 0)', '(−6, 0)', '(0, −6)', '(3, 0)'] },
+    { q: 'Which line is parallel to y = −2x + 5?', a: ['y = −2x − 1', 'y = 2x + 5', 'y = ½x + 5', 'y = −x + 5'] },
+    { q: 'A triangle has two equal sides with a 40° angle between them. How big is each of its other angles?', a: ['70°', '40°', '140°', '50°'] },
+    { q: 'Where the perpendicular bisectors of a triangle’s sides meet is its…', a: ['Circumcentre', 'Incentre', 'Centroid', 'Orthocentre'] },
+    { q: 'A triangle’s incentre is the same distance from…', a: ['All three sides', 'All three corners', 'Two corners only', 'The longest side only'] },
+    { q: 'The diagonals of a parallelogram always…', a: ['Cut each other in half', 'Have the same length', 'Meet at right angles', 'Miss each other'] },
+    { q: 'Two similar triangles have sides in the ratio 2 : 3. What is the ratio of their areas?', a: ['4 : 9', '2 : 3', '8 : 27', '6 : 9'] },
+    { q: 'A right-angled triangle has shorter sides of 6 and 8. How long is its longest side?', a: ['10', '14', '48', '100'] },
+    { q: 'A line joins the midpoints of two sides of a triangle. Compared with the third side, it is parallel and…', a: ['Half as long', 'Twice as long', 'The same length', 'A third as long'] },
+    { q: 'Two dice are rolled. In how many ways can they add up to 7?', a: ['6', '7', '5', '12'] },
+    { q: 'Two coins are tossed. What is the probability of two heads?', a: ['1/4', '1/2', '1/3', '3/4'] },
+    { q: 'A bag has 3 red and 5 blue marbles. What is the probability of picking a red one?', a: ['3/8', '3/5', '5/8', '1/3'] },
+    { q: 'What is the chemical symbol for sodium?', a: ['Na', 'S', 'So', 'Sd'] },
+    { q: 'What is the formula of water?', a: ['H₂O', 'HO₂', 'H₂O₂', 'OH'] },
+    { q: 'An atom that loses an electron becomes a…', a: ['Positive ion', 'Negative ion', 'Neutral atom', 'Molecule'] },
+    { q: 'A 6 V battery drives a current through a 3 Ω resistor. What is the current?', a: ['2 A', '18 A', '0.5 A', '3 A'] },
+    { q: 'Rubbing a balloon on your hair gives it…', a: ['An electric charge', 'Magnetism', 'More mass', 'Light'] },
+    { q: 'Which planet has the biggest, brightest rings?', a: ['Saturn', 'Mars', 'Venus', 'Mercury'] },
+    { q: 'Besides glucose, what does photosynthesis make?', a: ['Oxygen', 'Carbon dioxide', 'Nitrogen', 'Salt'] },
+    { q: 'Which part of the blood carries oxygen?', a: ['Red blood cells', 'White blood cells', 'Platelets', 'Plasma'] },
+    { q: 'Which enzyme in saliva starts breaking down starch?', a: ['Amylase', 'Pepsin', 'Lipase', 'Trypsin'] },
+    { q: 'What are the tiny air sacs in the lungs, where oxygen passes into the blood?', a: ['Alveoli', 'Villi', 'Nephrons', 'Bronchi'] },
+    { q: 'A 20 g block has a volume of 10 cm³. What is its density?', a: ['2 g/cm³', '200 g/cm³', '0.5 g/cm³', '30 g/cm³'] },
+    { q: 'Which of these floats on water?', a: ['Wood of density 0.6 g/cm³', 'Iron of density 7.9 g/cm³', 'Glass of density 2.5 g/cm³', 'Stone of density 2.7 g/cm³'] },
+    { q: 'Hot water and cold water mixed together end up…', a: ['At a temperature in between', 'As hot as the hot water', 'As cold as the cold water', 'At 0 °C'] },
+    { q: 'Which warms up most slowly in the sun, because of its high specific heat?', a: ['Water', 'Sand', 'Iron', 'Copper'] },
+    { q: 'How do clouds form?', a: ['Rising air cools and its water vapour condenses', 'Warm air sinks and dries out', 'The wind blows dust together', 'The Sun makes water vapour glow'] },
   ],
   senior: [
     { q: 'Solve for x: 3x = 27', a: ['9', '3', '6', '81'] },
@@ -260,6 +543,101 @@ export const QUESTION_BANKS = {
     { q: 'Which sentence is in the passive voice?', a: ['The cake was eaten by the dog.', 'The dog ate the cake.', 'The dog is eating the cake.', 'The dog has eaten the cake.'] },
     { q: 'Fill the gap: “This is the house ___ Jack built.”', a: ['that', 'who', 'what', 'where'] },
   ],
+  // Year 2 of high school: exponents and logarithms, trigonometry,
+  // sequences and series, limits, derivatives and integrals of
+  // polynomials; motion and energy, moles and pH, bonds and the periodic
+  // table, immunity, cells and hormones, plates and stars; and English.
+  high2: [
+    { q: 'What is log₂ 32?', a: ['5', '16', '6', '4'] },
+    { q: 'What is log₁₀ 1000?', a: ['3', '100', '30', '4'] },
+    { q: 'What is log₃ 9 + log₃ 3?', a: ['3', '12', '2', '27'] },
+    { q: 'What is 8 to the power of 2/3?', a: ['4', '16/3', '2', '64'] },
+    { q: 'Solve 2ˣ = 16', a: ['4', '8', '3', '2'] },
+    { q: 'What is sin 30°?', a: ['1/2', '√3/2', '1', '√2/2'] },
+    { q: 'What is tan 45°?', a: ['1', '0', '√3', '1/2'] },
+    { q: 'What is sin²θ + cos²θ?', a: ['1', '0', '2', 'tan θ'] },
+    { q: 'What is the period of y = sin x?', a: ['2π', 'π', '1', 'π/2'] },
+    { q: 'How many radians are there in 180°?', a: ['π', '2π', 'π/2', '180'] },
+    { q: 'An arithmetic sequence goes 3, 7, 11, … What is its 10th term?', a: ['39', '43', '40', '37'] },
+    { q: 'A geometric sequence goes 2, 6, 18, … What is its 5th term?', a: ['162', '54', '486', '30'] },
+    { q: 'What is 1 + 2 + 3 + … + 100?', a: ['5,050', '5,000', '10,100', '4,950'] },
+    { q: 'What is the limit of (x² − 1)/(x − 1) as x → 1?', a: ['2', '0', '1', 'There is none'] },
+    { q: 'What is the derivative of x³?', a: ['3x²', 'x²', '3x³', 'x⁴/4'] },
+    { q: 'f(x) = x² + 3x. What is f′(2)?', a: ['7', '10', '4', '5'] },
+    { q: 'What is the slope of the tangent to y = x² at x = 3?', a: ['6', '9', '3', '2'] },
+    { q: 'Where does f(x) = x² − 4x + 1 have its smallest value?', a: ['At x = 2', 'At x = −2', 'At x = 4', 'At x = 1'] },
+    { q: 'What is ∫ 2x dx?', a: ['x² + C', '2x² + C', '2 + C', 'x + C'] },
+    { q: 'What is the integral of 3x² from x = 0 to x = 2?', a: ['8', '12', '6', '4'] },
+    { q: 'A car’s position is s(t) = t² + 2t metres. How fast is it going at t = 3 s?', a: ['8 m/s', '15 m/s', '5 m/s', '6 m/s'] },
+    { q: 'A ball is dropped from rest. Ignoring the air, how fast is it falling after 2 s? (g = 10 m/s²)', a: ['20 m/s', '10 m/s', '40 m/s', '5 m/s'] },
+    { q: 'What is the kinetic energy of a 2 kg ball moving at 3 m/s?', a: ['9 J', '6 J', '18 J', '3 J'] },
+    { q: 'How much potential energy does a 5 kg box gain when it is lifted 2 m? (g = 10 m/s²)', a: ['100 J', '10 J', '50 J', '20 J'] },
+    { q: 'In E = mc², what is c?', a: ['The speed of light', 'The speed of sound', 'An electric charge', 'A heat capacity'] },
+    { q: 'Which wave can travel through empty space?', a: ['Light', 'Sound', 'A water wave', 'An earthquake wave'] },
+    { q: 'How many moles are there in 36 g of water (18 g/mol)?', a: ['2', '18', '0.5', '36'] },
+    { q: 'About how many particles are there in one mole?', a: ['6.02 × 10²³', '3.0 × 10⁸', '1.6 × 10⁻¹⁹', '1,000'] },
+    { q: 'Balance it: 2H₂ + O₂ → ☐H₂O', a: ['2', '1', '3', '4'] },
+    { q: 'A solution has a hydrogen ion concentration of 10⁻³ mol/L. What is its pH?', a: ['3', '−3', '11', '7'] },
+    { q: 'Which bond shares a pair of electrons between two atoms?', a: ['A covalent bond', 'An ionic bond', 'A hydrogen bond', 'A metallic bond'] },
+    { q: 'Going from left to right across a period of the periodic table, atoms generally get…', a: ['Smaller', 'Bigger', 'The same size', 'Radioactive'] },
+    { q: 'Which cells make antibodies?', a: ['B cells', 'Red blood cells', 'Platelets', 'Nerve cells'] },
+    { q: 'A human body cell has 46 chromosomes. How many does an egg cell have?', a: ['23', '46', '92', '22'] },
+    { q: 'Which disease is caused by a virus?', a: ['Influenza', 'Tuberculosis', 'Cholera', 'Malaria'] },
+    { q: 'Which hormone lowers the sugar in the blood?', a: ['Insulin', 'Glucagon', 'Adrenaline', 'Thyroxine'] },
+    { q: 'What is the gap between two nerve cells called?', a: ['A synapse', 'A nephron', 'A neuron', 'An axon'] },
+    { q: 'What kind of plate boundary makes new ocean floor at a mid-ocean ridge?', a: ['Divergent', 'Convergent', 'Transform', 'Collision'] },
+    { q: 'Which element is most common in the Sun?', a: ['Hydrogen', 'Helium', 'Oxygen', 'Carbon'] },
+    { q: 'Fill the gap: “Had I known, I ___ have come.”', a: ['would', 'will', 'had', 'am'] },
+    { q: 'Which sentence uses the present perfect correctly?', a: ['I have lived here since 2020.', 'I have lived here in 2020.', 'I lived here since 2020.', 'I am living here since 2020.'] },
+  ],
+  // Year 3 of high school: derivatives of exponentials, logarithms and
+  // sines, the chain and product rules, limits and series, integrals,
+  // counting and the binomial theorem, conditional probability and
+  // distributions, conic sections and vectors; fields, photons and
+  // half-lives, catalysts, genes and evolution, the Moon and galaxies;
+  // Korean history; and English as the college entrance exam asks it.
+  high3: [
+    { q: 'What is the derivative of eˣ?', a: ['eˣ', 'x·eˣ⁻¹', 'eˣ/x', 'ln x'] },
+    { q: 'What is the derivative of ln x?', a: ['1/x', 'ln x / x', 'x', 'eˣ'] },
+    { q: 'What is the derivative of sin x?', a: ['cos x', '−cos x', '−sin x', 'tan x'] },
+    { q: 'What is the derivative of x·eˣ?', a: ['(x + 1)eˣ', 'eˣ', 'x·eˣ', 'x²eˣ'] },
+    { q: 'What is the derivative of (2x + 1)³?', a: ['6(2x + 1)²', '3(2x + 1)²', '2(2x + 1)³', '6(2x + 1)³'] },
+    { q: 'What is the limit of (1 + 1/n)ⁿ as n → ∞?', a: ['e', '1', '∞', '2'] },
+    { q: 'What is the limit of sin x / x as x → 0?', a: ['1', '0', '∞', 'There is none'] },
+    { q: 'What does 1 + 1/2 + 1/4 + 1/8 + … add up to, going on forever?', a: ['2', '1', '∞', '1.875'] },
+    { q: 'What is the integral of sin x from 0 to π?', a: ['2', '0', '1', 'π'] },
+    { q: 'What is ∫ 1/x dx, for x > 0?', a: ['ln x + C', '−1/x² + C', '1/x² + C', 'eˣ + C'] },
+    { q: 'What is the coefficient of x² in (x + 2)⁵?', a: ['80', '10', '40', '32'] },
+    { q: 'In how many ways can 3 different letters go into 2 postboxes?', a: ['8', '6', '9', '5'] },
+    { q: 'In how many ways can the letters of AABB be arranged?', a: ['6', '24', '4', '12'] },
+    { q: 'A and B are independent, with P(A) = 0.5 and P(B) = 0.4. What is P(A and B)?', a: ['0.2', '0.9', '0.1', '0.45'] },
+    { q: 'P(A and B) = 0.12 and P(B) = 0.4. What is P(A | B)?', a: ['0.3', '0.048', '0.52', '0.28'] },
+    { q: 'A fair coin is tossed 10 times. How many heads do you expect?', a: ['5', '10', '2.5', '1/2'] },
+    { q: 'X follows the binomial distribution B(100, 1/2). What is its variance?', a: ['25', '50', '5', '100'] },
+    { q: 'In a normal distribution, about how much lies within one standard deviation of the mean?', a: ['68%', '50%', '95%', '99.7%'] },
+    { q: 'What curve is x²/9 + y²/4 = 1?', a: ['An ellipse', 'A hyperbola', 'A parabola', 'A circle'] },
+    { q: 'Where is the focus of the parabola y² = 8x?', a: ['(2, 0)', '(8, 0)', '(4, 0)', '(0, 2)'] },
+    { q: 'a = (1, 2) and b = (3, −1). What is the dot product a · b?', a: ['1', '5', '(3, −2)', '7'] },
+    { q: 'Two vectors, neither of them zero, have a dot product of 0. They are…', a: ['Perpendicular', 'Parallel', 'Equal', 'Opposite'] },
+    { q: 'A charge moves through a magnetic field. When is the force on it greatest?', a: ['Moving at right angles to the field', 'Moving along the field', 'Moving against the field', 'It is the same every way'] },
+    { q: 'What does the photoelectric effect show about light?', a: ['It comes in packets of energy, photons', 'It is a sound wave', 'It carries no energy', 'It is slower than sound'] },
+    { q: 'Doubling the frequency of light does what to the energy of each photon?', a: ['Doubles it', 'Halves it', 'Leaves it the same', 'Quadruples it'] },
+    { q: 'What is a substance’s half-life?', a: ['The time for half of it to decay', 'Half the time it takes to decay completely', 'The time for it to double', 'Half its age'] },
+    { q: 'A substance has a half-life of 5 years. How much of 80 g of it is left after 15 years?', a: ['10 g', '20 g', '40 g', '0 g'] },
+    { q: 'What does a catalyst do?', a: ['Speeds up a reaction without being used up', 'Makes more product than is possible', 'Stops every reaction', 'Is always used up first'] },
+    { q: 'DNA’s message is copied into which molecule, to take it to the ribosome?', a: ['mRNA', 'tRNA', 'A protein', 'A chromosome'] },
+    { q: 'Which codon starts the making of a protein?', a: ['AUG', 'UAA', 'UGA', 'UAG'] },
+    { q: 'In a population in Hardy–Weinberg balance, the allele frequency q is 0.3. How common is the qq genotype?', a: ['0.09', '0.3', '0.6', '0.49'] },
+    { q: 'Why do we always see the same side of the Moon?', a: ['It spins once for each trip round the Earth', 'It does not spin at all', 'Its other side is always dark', 'The Earth blocks its other side'] },
+    { q: 'Hubble found that galaxies further away are moving away…', a: ['Faster', 'Slower', 'At the same speed', 'Not at all'] },
+    { q: 'Which king of Joseon built Hwaseong Fortress in Suwon?', a: ['King Jeongjo', 'King Sejong', 'King Yeongjo', 'King Taejo'] },
+    { q: 'Which treaty of 1876 opened Korea’s ports to Japan?', a: ['The Treaty of Ganghwa', 'The Eulsa Treaty', 'The Treaty of Shimonoseki', 'The Treaty of Portsmouth'] },
+    { q: 'In which year was the April 19 Revolution?', a: ['1960', '1980', '1987', '1950'] },
+    { q: 'Fill the gap: “Not only ___ he sing, but he also dances.”', a: ['does', 'is', 'has', 'do'] },
+    { q: 'Fill the gap: “She insisted on ___ the bill herself.”', a: ['paying', 'pay', 'to pay', 'paid'] },
+    { q: 'Which word means “to make something less severe”?', a: ['Mitigate', 'Exacerbate', 'Proliferate', 'Fabricate'] },
+    { q: 'Which word is the opposite of “scarce”?', a: ['Abundant', 'Rare', 'Sparse', 'Meagre'] },
+  ],
   // Puzzles to think through rather than facts to remember: each takes a
   // step or two of reasoning, and the wrong answers are the slips a child
   // makes on the way (counting the gaps instead of the trees, and so on).
@@ -314,6 +692,44 @@ export const QUESTION_BANKS = {
     { q: 'Each fruit stands for a number. What is 🍇?', pic: ['🍎 + 🍎 = 10', '🍎 + 🍌 = 8', '🍌 + 🍇 = 7'], a: ['4', '3', '5', '7'] },
     { q: 'Each number is the two under it added up. What goes in the ❓ at the top?', pic: ['· · ❓ · ·', '· 5 · 7 ·', '2 · 3 · 4'], a: ['12', '10', '14', '9'] },
     { q: 'The moon grows a little each night. Which comes next?', pic: ['🌑 🌒 🌓 🌔 ❓'], a: ['🌕', '🌑', '🌘', '🌗'] },
+  ],
+  // The hardest of all, like a maths contest's: last digits and
+  // remainders, divisors and primes, clever counting, areas and angles,
+  // chances, and puzzles with a trick to them. Every answer is worked out
+  // again in test/quiz.test.js.
+  olympiad: [
+    { q: 'What is the last digit of 7¹⁰⁰?', a: ['1', '7', '9', '3'] },
+    { q: 'How many zeros are there at the end of 25! (25 factorial)?', a: ['6', '5', '2', '25'] },
+    { q: 'What is the remainder when 2¹⁰ is divided by 7?', a: ['2', '1', '4', '3'] },
+    { q: 'How many positive divisors does 360 have?', a: ['24', '12', '18', '36'] },
+    { q: 'What do all the divisors of 28 add up to, 28 itself included?', a: ['56', '28', '27', '42'] },
+    { q: 'What is the largest prime factor of 2024?', a: ['23', '11', '2', '253'] },
+    { q: 'What is the smallest number bigger than 1 that leaves a remainder of 1 when divided by 2, 3, 4, 5 or 6?', a: ['61', '31', '121', '7'] },
+    { q: 'In how many ways can you climb 6 stairs, taking 1 or 2 stairs at a time?', a: ['13', '8', '12', '21'] },
+    { q: 'How many squares of any size are there on an 8 × 8 chessboard?', a: ['204', '64', '65', '140'] },
+    { q: 'How many diagonals does a 10-sided polygon have?', a: ['35', '45', '40', '20'] },
+    { q: 'With 23 people in a room, about how likely is it that two of them share a birthday?', a: ['About 50%', 'About 6%', 'About 23%', 'About 100%'] },
+    { q: 'What is the angle between the hands of a clock at 3:30?', a: ['75°', '90°', '60°', '105°'] },
+    { q: 'What is 1 + 3 + 5 + … + 99?', a: ['2,500', '2,450', '5,000', '2,550'] },
+    { q: 'How many three-digit numbers have digits that add up to 5?', a: ['15', '10', '21', '12'] },
+    { q: 'What is the area of a triangle with sides 13, 14 and 15?', a: ['84', '91', '42', '105'] },
+    { q: 'A rectangle has a perimeter of 20 cm. What is the biggest area it can have?', a: ['25 cm²', '24 cm²', '20 cm²', '100 cm²'] },
+    { q: 'What do the angles at the five tips of a five-pointed star add up to?', a: ['180°', '360°', '540°', '720°'] },
+    { q: 'Three cards marked 1, 2 and 3 are shuffled into a row. What is the chance that no card is in its own place?', a: ['1/3', '1/6', '1/2', '2/3'] },
+    { q: 'Which is bigger, 2¹⁰⁰ or 3⁶⁰?', a: ['2¹⁰⁰', '3⁶⁰', 'They are equal', 'You can’t tell'] },
+    { q: 'How many times do you write the digit 7 when you write the numbers from 1 to 100?', a: ['20', '19', '10', '11'] },
+    { q: 'Any two-digit number plus the number with its digits the other way round (like 47 + 74) always makes…', a: ['A multiple of 11', 'An even number', 'A square number', 'A prime number'] },
+    { q: 'What is the units digit of 3¹ + 3² + 3³ + … + 3²⁰?', a: ['0', '3', '9', '1'] },
+    { q: 'Two trains 200 km apart head toward each other at 60 km/h and 40 km/h. A bird flies back and forth between them at 100 km/h until they meet. How far does the bird fly?', a: ['200 km', '100 km', '120 km', '250 km'] },
+    { q: 'Three fair coins are tossed. What is the chance of at least one head?', a: ['7/8', '1/2', '3/8', '3/4'] },
+    { q: 'What is √(2 + √3) × √(2 − √3)?', a: ['1', '2', '√3', '4'] },
+    { q: 'If x + 1/x = 3, what is x² + 1/x²?', a: ['7', '9', '11', '5'] },
+    { q: 'What is the remainder when 1! + 2! + 3! + … + 100! is divided by 12?', a: ['9', '0', '3', '1'] },
+    { q: 'In how many ways can 8 rooks be put on a chessboard so that no two attack each other?', a: ['40,320', '64', '2,048', '16,777,216'] },
+    { q: 'A 3 × 3 × 3 cube painted on the outside is cut into 27 little cubes. How many of them have exactly two painted faces?', a: ['12', '8', '6', '24'] },
+    { q: 'What is the 100th digit after the decimal point of 1/7?', a: ['8', '1', '4', '7'] },
+    { q: 'Ann is twice as old as Ben was when Ann was as old as Ben is now. Ann is 24. How old is Ben?', a: ['18', '12', '16', '20'] },
+    { q: 'What comes next: 1, 11, 21, 1211, 111221, …?', a: ['312211', '1112221', '122111', '311221'] },
   ],
   // Every word's quiz, but a question two words ask alike (“What is a
   // diamond?” on diamond and on jewelry) only the first time.

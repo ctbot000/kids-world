@@ -36,7 +36,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
 import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
-import { LEARNT_AFTER, QUIZ_LEVELS, quizCoins, quizProgress } from './shared/quiz.js';
+import { LEARNT_AFTER, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
@@ -2659,7 +2659,7 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: each camp you help free offers a quiz for a 🔑 key, and a stage won one for a 👑 golden key, which opens the golden chest.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
-          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: one like Year 2 or Year 3 of elementary school, Year 3 of middle school or Year 1 of high school, Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), Thinking Math, the Math Olympiad (the hardest puzzles of all) or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
@@ -7208,13 +7208,58 @@ export class UI {
     else this.renderQuiz();
   }
 
-  // The line under a quiz's name on its button: what it asks and pays, and
-  // how many of its questions you have learnt (game.js quizBook) — or, all
-  // learnt, that it has nothing left to ask you.
-  quizSub(book, level, says) {
-    const { learnt, left } = quizProgress(book, level);
-    if (!left) return '🏅 All learnt!';
-    return learnt ? `${says} · 🏅 ${learnt} learnt` : says;
+  // The quizzes to pick from (shared/quiz.js), a school at a time: its
+  // name, then a button for each of its years; and after them the quizzes
+  // of no school year (Thinking Math, Math Olympiad, English Words).
+  // state(level) says whether a quiz is shut now (off) and the little line
+  // under its name (sub); pays, whether to say what an answer right earns.
+  // A tap picks the quiz.
+  quizPicker({ state, pick, pays = false }) {
+    const levels = Object.values(QUIZ_LEVELS);
+    const button = (l) => {
+      const { off = false, sub = '' } = state(l);
+      const year = !!l.school;
+      return h(
+        'button',
+        {
+          class: `big ${l.color} ${year ? 'quiz-year' : 'quiz-other'}`,
+          type: 'button',
+          disabled: off,
+          'data-level': l.key,
+          'aria-label': year ? [l.name, sub].filter(Boolean).join(', ') : undefined,
+          onclick: () => {
+            this.sound.unlock();
+            this.sound.play('ui');
+            pick(l.key);
+          },
+        },
+        year ? '' : h('span', { class: 'emoji' }, l.icon),
+        h('span', { class: 'quiz-level' }, h('span', {}, year ? `Year ${l.year}` : l.name), sub ? h('span', { class: 'quiz-sub' }, sub) : ''),
+      );
+    };
+    const group = (title, list, note = '') => h('section', { class: 'quiz-school' }, h('h3', {}, title, note ? h('span', { class: 'quiz-pays' }, note) : ''), h('div', { class: 'quiz-years' }, list.map(button)));
+    return h(
+      'div',
+      { class: 'quiz-picker' },
+      SCHOOLS.map((s) =>
+        group(
+          `${s.icon} ${s.name}`,
+          levels.filter((l) => l.school === s.key),
+          pays ? `🪙 ${s.coins} a right answer` : '',
+        ),
+      ),
+      group('🧩 More quizzes', levels.filter((l) => !l.school)),
+    );
+  }
+
+  // A quiz's button in a picker, as your quiz book has it (game.js
+  // quizBook): shut, its questions all learnt, or how many are learnt, after
+  // what it pays (said only for a quiz of no school year: a school's
+  // heading says it for its years).
+  quizState(book, l, pays = false) {
+    const { learnt, left } = quizProgress(book, l.key);
+    if (!left) return { off: true, sub: '🏅 All learnt' };
+    return { sub: [pays && !l.school ? `🪙 ${l.coins}` : '', learnt ? `🏅 ${learnt} learnt` : ''].filter(Boolean).join(' · ') };
   }
 
   // ------------------------------------------------ a stage's results
@@ -7311,44 +7356,35 @@ export class UI {
 
   // ------------------------------------------------ school
 
-  // The classes at a chalkboard (game.js openClass, shared/school.js), from
-  // elementary school to high school, Thinking Math and English Words, each
-  // a few questions, with the break before the next one counting down on a
-  // class just had, and a class whose questions you have all learnt shut.
+  // The classes at a chalkboard (game.js openClass, shared/school.js), every
+  // school year from Year 1 of elementary school to Year 3 of high school,
+  // Thinking Math, the Math Olympiad and English Words, each a few
+  // questions, with the break before the next one counting down on a class
+  // just had, and a class whose questions you have all learnt shut.
   classDialog() {
     const g = this.game;
     if (!g) return;
-    const levels = Object.values(QUIZ_LEVELS);
     let timer = 0;
     this.openModal(
       (root) => {
-        const list = h('div', { class: 'class-list' });
+        const list = h('div');
         const render = () => {
           const book = g.quizBook;
           list.replaceChildren(
-            ...levels.map((l) => {
-              const all = !quizProgress(book, l.key).left;
-              const wait = all ? 0 : g.classBreak(l.key);
-              const s = Math.ceil(wait / 1000);
-              return h(
-                'button',
-                {
-                  class: `big ${l.color}`,
-                  type: 'button',
-                  disabled: all || wait > 0,
-                  onclick: () => {
-                    this.sound.unlock();
-                    this.sound.play('ui');
-                    g.startClass(l.key);
-                  },
-                },
-                h('span', { class: 'emoji' }, l.icon),
-                h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, wait > 0 ? `🔔 Break: next class in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : this.quizSub(book, l.key, `${CLASS_SIZE} questions · 🪙 ${quizCoins(1, l.key)} a right answer`))),
-              );
+            this.quizPicker({
+              pays: true,
+              state: (l) => {
+                const shown = this.quizState(book, l, true);
+                const wait = shown.off ? 0 : g.classBreak(l.key);
+                if (wait <= 0) return shown;
+                const s = Math.ceil(wait / 1000);
+                return { off: true, sub: `🔔 Break ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` };
+              },
+              pick: (key) => g.startClass(key),
             }),
           );
         };
-        root.append(h('h2', {}, '🏫 School'), h('p', {}, 'Take a seat — class is about to begin! Pick a class, and every right answer earns coins.'), list);
+        root.append(h('h2', {}, '🏫 School'), h('p', {}, `Take a seat — class is about to begin! Pick a class of ${CLASS_SIZE} questions, and every right answer earns coins.`), list);
         render();
         timer = setInterval(render, 1000);
       },
@@ -8052,7 +8088,11 @@ export class UI {
     if (q.done && this.quizAt >= total) {
       const perfect = q.right === total;
       const coins = q.coins ?? quizCoins(q.right, q.level);
-      const other = q.school ? Object.values(QUIZ_LEVELS).find((l) => l.key !== q.level && !g.classBreak(l.key) && g.quizLeft(l.key) > 0) : null;
+      // The next class along that you can take now (Year 3 after Year 2,
+      // say), round to the first after the last.
+      const order = Object.values(QUIZ_LEVELS);
+      const at = order.findIndex((l) => l.key === q.level);
+      const other = q.school ? [...order.slice(at + 1), ...order.slice(0, at)].find((l) => !g.classBreak(l.key) && g.quizLeft(l.key) > 0) : null;
       const allLearnt = !g.quizLeft(q.level);
       els.box.replaceChildren(
         h('div', { class: `quiz-result${perfect ? ' perfect' : ''}` }, `${perfect ? '💯' : '🎓'} ${q.right} of ${total} right`),
@@ -8174,27 +8214,7 @@ export class UI {
     const book = g.quizBook;
     this.openModal(
       (root) => {
-        const list = h(
-          'div',
-          { class: 'class-list' },
-          Object.values(QUIZ_LEVELS).map((l) =>
-            h(
-              'button',
-              {
-                class: `big ${l.color}`,
-                type: 'button',
-                disabled: !quizProgress(book, l.key).left,
-                onclick: () => {
-                  this.sound.unlock();
-                  this.sound.play('ui');
-                  g.startKeyQuiz(l.key);
-                },
-              },
-              h('span', { class: 'emoji' }, l.icon),
-              h('span', { class: 'quiz-level' }, h('span', {}, l.name), h('span', { class: 'quiz-sub' }, this.quizSub(book, l.key, `One question · ${offer.gold ? '👑 a golden key' : '🔑 a key'} if you get it right`))),
-            ),
-          ),
-        );
+        const list = this.quizPicker({ state: (l) => this.quizState(book, l), pick: (key) => g.startKeyQuiz(key) });
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, offer.gold ? '👑' : '🔑'),
           h('h2', {}, offer.gold ? '👑 A golden key quiz!' : '🔑 A key quiz!'),
