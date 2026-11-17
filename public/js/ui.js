@@ -36,7 +36,7 @@ import { bodyOf, maxHp } from './shared/monsters.js';
 import { isBoss } from './shared/bosses.js';
 import { isBeast } from './shared/beasts.js';
 import { towerTop } from './shared/defense.js';
-import { LEARNT_AFTER, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
+import { LEARNT_AFTER, OLYMPIADS, QUIZ_LEVELS, quizCoins, quizProgress, SCHOOLS } from './shared/quiz.js';
 import { isChest } from './shared/treasure.js';
 import { CLASS_BREAK_MS, CLASS_SIZE } from './shared/school.js';
 import { COOK_BREAK_MS, cookCoins, doneness, RECIPES, recipeByKey } from './shared/cooking.js';
@@ -2659,7 +2659,7 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: each camp you help free offers a quiz for a 🔑 key, and a stage won one for a 👑 golden key, which opens the golden chest.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
-          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), Thinking Math, the Math Olympiad (the hardest puzzles of all) or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), an Olympiad (the hardest of all, in maths, science, logic or coding), Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
@@ -7209,35 +7209,44 @@ export class UI {
   }
 
   // The quizzes to pick from (shared/quiz.js), a school at a time: its
-  // name, then a button for each of its years; and after them the quizzes
-  // of no school year (Thinking Math, Math Olympiad, English Words).
-  // state(level) says whether a quiz is shut now (off) and the little line
-  // under its name (sub); pays, whether to say what an answer right earns.
-  // A tap picks the quiz.
+  // name, then a button for each of its years; then the Olympiads, a
+  // button for each subject; and after them the other quizzes (Thinking
+  // Math, English Words). state(level) says whether a quiz is shut now
+  // (off) and the little line under its name (sub); pays, whether to say
+  // what an answer right earns. A tap picks the quiz.
   quizPicker({ state, pick, pays = false }) {
     const levels = Object.values(QUIZ_LEVELS);
     const button = (l) => {
       const { off = false, sub = '' } = state(l);
-      const year = !!l.school;
+      // A year or an Olympiad is named short, its group's heading saying
+      // the rest; the whole name is what is read out.
+      const short = l.school ? `Year ${l.year}` : l.short;
       return h(
         'button',
         {
-          class: `big ${l.color} ${year ? 'quiz-year' : 'quiz-other'}`,
+          class: `big ${l.color} ${l.school ? 'quiz-year' : 'quiz-other'}`,
           type: 'button',
           disabled: off,
           'data-level': l.key,
-          'aria-label': year ? [l.name, sub].filter(Boolean).join(', ') : undefined,
+          'aria-label': short ? [l.name, sub].filter(Boolean).join(', ') : undefined,
           onclick: () => {
             this.sound.unlock();
             this.sound.play('ui');
             pick(l.key);
           },
         },
-        year ? '' : h('span', { class: 'emoji' }, l.icon),
-        h('span', { class: 'quiz-level' }, h('span', {}, year ? `Year ${l.year}` : l.name), sub ? h('span', { class: 'quiz-sub' }, sub) : ''),
+        l.school ? '' : h('span', { class: 'emoji' }, l.icon),
+        h('span', { class: 'quiz-level' }, h('span', {}, short ?? l.name), sub ? h('span', { class: 'quiz-sub' }, sub) : ''),
       );
     };
-    const group = (title, list, note = '') => h('section', { class: 'quiz-school' }, h('h3', {}, title, note ? h('span', { class: 'quiz-pays' }, note) : ''), h('div', { class: 'quiz-years' }, list.map(button)));
+    // Three to a row, or two when that comes out even (two or four).
+    const group = (title, list, note = '') =>
+      h(
+        'section',
+        { class: 'quiz-school' },
+        h('h3', {}, title, note ? h('span', { class: 'quiz-pays' }, note) : ''),
+        h('div', { class: `quiz-years${list.length % 3 && list.length % 2 === 0 ? ' two' : ''}` }, list.map(button)),
+      );
     return h(
       'div',
       { class: 'quiz-picker' },
@@ -7248,18 +7257,26 @@ export class UI {
           pays ? `🪙 ${s.coins} a right answer` : '',
         ),
       ),
-      group('🧩 More quizzes', levels.filter((l) => !l.school)),
+      group(
+        `${OLYMPIADS.icon} ${OLYMPIADS.name}`,
+        levels.filter((l) => l.olympiad),
+        pays ? `🪙 ${OLYMPIADS.coins} a right answer` : '',
+      ),
+      group(
+        '🧩 More quizzes',
+        levels.filter((l) => !l.school && !l.olympiad),
+      ),
     );
   }
 
   // A quiz's button in a picker, as your quiz book has it (game.js
   // quizBook): shut, its questions all learnt, or how many are learnt, after
-  // what it pays (said only for a quiz of no school year: a school's
-  // heading says it for its years).
+  // what it pays (said only for a quiz in no group: a school's or the
+  // Olympiads' heading says it for theirs).
   quizState(book, l, pays = false) {
     const { learnt, left } = quizProgress(book, l.key);
     if (!left) return { off: true, sub: '🏅 All learnt' };
-    return { sub: [pays && !l.school ? `🪙 ${l.coins}` : '', learnt ? `🏅 ${learnt} learnt` : ''].filter(Boolean).join(' · ') };
+    return { sub: [pays && !l.school && !l.olympiad ? `🪙 ${l.coins}` : '', learnt ? `🏅 ${learnt} learnt` : ''].filter(Boolean).join(' · ') };
   }
 
   // ------------------------------------------------ a stage's results
@@ -7358,9 +7375,9 @@ export class UI {
 
   // The classes at a chalkboard (game.js openClass, shared/school.js), every
   // school year from Year 1 of elementary school to Year 3 of high school,
-  // Thinking Math, the Math Olympiad and English Words, each a few
-  // questions, with the break before the next one counting down on a class
-  // just had, and a class whose questions you have all learnt shut.
+  // the Olympiads, Thinking Math and English Words, each a few questions,
+  // with the break before the next one counting down on a class just had,
+  // and a class whose questions you have all learnt shut.
   classDialog() {
     const g = this.game;
     if (!g) return;
@@ -8140,6 +8157,7 @@ export class UI {
     els.box.replaceChildren(
       word ? h('div', { class: 'quiz-word' }, answered ? `${word} = ${ask.word.ko}` : word) : '',
       h('div', { class: 'quiz-question' }, ask.q),
+      ask.code ? h('pre', { class: 'quiz-code', 'aria-label': 'Program' }, h('code', {}, ask.code)) : '',
       ask.pic ? this.quizPic(ask.pic) : '',
       answers,
       answered ? h('p', { class: 'quiz-verdict' }, q.picks[this.quizAt] === ask.answer ? '✅ Yes, that’s the one!' : '❌ Not this one — the right answer is the one outlined green.') : '',

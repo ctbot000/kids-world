@@ -1,9 +1,9 @@
 // Quizzes: a little school work, for every school year from Year 1 of
-// elementary school to Year 3 of high school, a thinking-math one of
-// puzzles to work out (patterns, logic, counting, shapes) in the style of
-// Korea's thinking-math workbooks for young children, the Math Olympiad's
-// hardest puzzles of all, like a maths contest's, and English Words, each
-// question with answers to pick from. They are asked in classes at school
+// elementary school to Year 3 of high school; the Olympiads, the hardest
+// of all, like a contest's, in maths, science, logic and coding; a
+// thinking-math one of puzzles to work out (patterns, logic, counting,
+// shapes) in the style of Korea's thinking-math workbooks for young
+// children; and English Words, each question with answers to pick from. They are asked in classes at school
 // (school.js), for coins, and on Adventure Isle as key quizzes: one
 // question, one try, for each camp you help free (a key to a treasure
 // chest, treasure.js) and for each stage you help win (a golden key) —
@@ -43,10 +43,21 @@ function yearQuiz(key, school, year) {
   return { key, school, year, icon: s.icon, name: `${s.name} Year ${year}`, how: `One question, like in Year ${year} of ${s.name.toLowerCase()}. Get it right for ${pays}!`, color: s.color, coins: s.coins };
 }
 
+// The Olympiads, the hardest quizzes of all, each a contest's puzzles in
+// one subject, and each answer right worth four coins. Their buttons are
+// the Olympiads' colour, each with its subject's icon.
+export const OLYMPIADS = { icon: '🏆', name: 'Olympiads', color: 'orange', coins: 4 };
+
+// An Olympiad's quiz, by its key (the Math Olympiad keeps the one it had
+// when it was the only one).
+function olympiadQuiz(key, icon, subject, how) {
+  return { key, olympiad: true, short: subject, icon, name: `${subject} Olympiad`, how: `${how} Work one out for four coins!`, color: OLYMPIADS.color, coins: OLYMPIADS.coins };
+}
+
 // The quizzes, by their keys, in the order they are offered: the school
-// years (school, year), then the quizzes of no school year. Each says what
-// it is called, its button's colour and how many coins each answer right
-// pays.
+// years (school, year), the Olympiads (olympiad, and short: the subject),
+// then the other quizzes. Each says what it is called, its button's colour
+// and how many coins each answer right pays.
 export const QUIZ_LEVELS = {
   elementary1: yearQuiz('elementary1', 'elementary', 1),
   junior: yearQuiz('junior', 'elementary', 2),
@@ -60,6 +71,10 @@ export const QUIZ_LEVELS = {
   high1: yearQuiz('high1', 'high', 1),
   high2: yearQuiz('high2', 'high', 2),
   high3: yearQuiz('high3', 'high', 3),
+  olympiad: olympiadQuiz('olympiad', '🧮', 'Math', 'The hardest maths puzzles, like in a maths contest.'),
+  science: olympiadQuiz('science', '🔬', 'Science', 'Hard puzzles of physics, chemistry, life and space, like in a science contest.'),
+  logic: olympiadQuiz('logic', '🧠', 'Logic', 'Brain-twisters: liars and truth-tellers, weighings, river crossings and tricky reasoning.'),
+  coding: olympiadQuiz('coding', '💻', 'Coding', 'What a little program prints, binary, logic gates, stacks and queues, like in a coding contest.'),
   thinker: {
     key: 'thinker',
     icon: '🐂',
@@ -67,14 +82,6 @@ export const QUIZ_LEVELS = {
     how: 'One puzzle to think through: patterns, logic, counting and shapes. Work it out for two coins!',
     color: 'yellow',
     coins: 2,
-  },
-  olympiad: {
-    key: 'olympiad',
-    icon: '🏆',
-    name: 'Math Olympiad',
-    how: 'The hardest puzzles of all, like in a maths contest. Work one out for four coins!',
-    color: 'orange',
-    coins: 4,
   },
   english: {
     key: 'english',
@@ -94,16 +101,17 @@ export const WIN_OFFER_MS = 2600;
 
 // A coin for each answer right on the elementary school quizzes and English
 // Words, two on the middle school and thinking-math ones, that much harder,
-// three on the high school ones and four on the Math Olympiad.
+// three on the high school ones and four on the Olympiads.
 export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 ? Math.floor(right) * (QUIZ_LEVELS[level]?.coins ?? 1) : 0);
 
 // The banks the questions come from. Each: { q: the question, a: its answers,
-// the right one first, and pic: a picture to look at, if it has one } —
-// makeQuiz shuffles the answers, so where the right one lands is never where
-// it was written. A picture is rows of tiles, split at the spaces: an emoji,
-// a number or a sign each, · for an empty tile, | for a mirror and ❓ for the
-// tile to work out. The English Words questions have three answers each,
-// and word: the word asked about ({ word, emoji, ko }).
+// the right one first, and pic: a picture to look at, or code: a program to
+// read, if it has one } — makeQuiz shuffles the answers, so where the right
+// one lands is never where it was written. A picture is rows of tiles, split
+// at the spaces: an emoji, a number or a sign each, · for an empty tile, |
+// for a mirror and ❓ for the tile to work out. The English Words questions
+// have three answers each, and word: the word asked about ({ word, emoji,
+// ko }).
 export const QUESTION_BANKS = {
   // Year 1 of elementary school: adding and taking away up to 20, numbers
   // to 100, tens and ones, counting on, shapes, longer and heavier, o'clock
@@ -693,10 +701,10 @@ export const QUESTION_BANKS = {
     { q: 'Each number is the two under it added up. What goes in the ❓ at the top?', pic: ['· · ❓ · ·', '· 5 · 7 ·', '2 · 3 · 4'], a: ['12', '10', '14', '9'] },
     { q: 'The moon grows a little each night. Which comes next?', pic: ['🌑 🌒 🌓 🌔 ❓'], a: ['🌕', '🌑', '🌘', '🌗'] },
   ],
-  // The hardest of all, like a maths contest's: last digits and
-  // remainders, divisors and primes, clever counting, areas and angles,
-  // chances, and puzzles with a trick to them. Every answer is worked out
-  // again in test/quiz.test.js.
+  // The Math Olympiad, like a maths contest's: last digits and remainders,
+  // divisors and primes, clever counting, areas and angles, chances, and
+  // puzzles with a trick to them. Every answer is worked out again in
+  // test/quiz.test.js.
   olympiad: [
     { q: 'What is the last digit of 7¹⁰⁰?', a: ['1', '7', '9', '3'] },
     { q: 'How many zeros are there at the end of 25! (25 factorial)?', a: ['6', '5', '2', '25'] },
@@ -730,6 +738,155 @@ export const QUESTION_BANKS = {
     { q: 'What is the 100th digit after the decimal point of 1/7?', a: ['8', '1', '4', '7'] },
     { q: 'Ann is twice as old as Ben was when Ann was as old as Ben is now. Ann is 24. How old is Ben?', a: ['18', '12', '16', '20'] },
     { q: 'What comes next: 1, 11, 21, 1211, 111221, …?', a: ['312211', '1112221', '122111', '311221'] },
+    { q: 'How many whole numbers from 1 to 100 can be divided exactly by 3 or by 5?', a: ['47', '53', '46', '40'] },
+    { q: 'What is the smallest whole number that has exactly 10 divisors?', a: ['48', '512', '80', '60'] },
+    { q: 'In how many ways can you make 25¢ out of 1¢, 5¢ and 10¢ coins?', a: ['12', '10', '9', '15'] },
+    { q: 'How many four-digit palindromes are there, numbers like 1221 that read the same both ways?', a: ['90', '100', '81', '900'] },
+    { q: 'What is the greatest common factor of 2¹⁰ − 1 and 2⁶ − 1?', a: ['3', '1', '7', '63'] },
+    { q: 'What is the remainder when 3¹⁰⁰ is divided by 5?', a: ['1', '3', '4', '2'] },
+    { q: 'A circle just fits inside a square with sides of 2. What is the area inside the square but outside the circle?', a: ['4 − π', '2π − 4', 'π − 2', '4 − π/2'] },
+    { q: 'In how many ways can 5 people sit round a round table, if turning the table does not count as a new way?', a: ['24', '120', '5', '60'] },
+    { q: 'Moving only right or up along the lines of a 4 × 4 grid of squares, how many shortest paths go from one corner to the opposite one?', a: ['70', '16', '256', '35'] },
+    { q: 'Five numbers average 10. One is taken away, and the other four average 9. What number was taken away?', a: ['14', '1', '10', '19'] },
+    { q: 'What is 999 × 999?', a: ['998,001', '999,001', '998,999', '989,001'] },
+    { q: 'Which is the biggest: 2⁵⁰, 3³³ or 5²¹?', a: ['3³³', '2⁵⁰', '5²¹', 'All three are equal'] },
+    { q: 'In how many ways can a 2 × 5 board be covered with 1 × 2 dominoes?', a: ['8', '5', '10', '13'] },
+    { q: 'Two cards are drawn from a shuffled pack of 52. What is the chance that both are aces?', a: ['1/221', '1/169', '1/26', '1/52'] },
+    { q: 'What is the area of a regular hexagon with sides of 2?', a: ['6√3', '12', '4√3', '6'] },
+    { q: 'What is 1 + 4 + 9 + 16 + … + 400, the first 20 square numbers added up?', a: ['2,870', '2,100', '8,000', '4,200'] },
+    { q: 'What is the smallest number that leaves a remainder of 2 when divided by 3, 3 when divided by 4 and 4 when divided by 5?', a: ['59', '29', '119', '9'] },
+  ],
+  // The Science Olympiad: physics worked out (throws, swings, circuits,
+  // lenses, waves, gases), chemistry (balancing, moles, oxidation, pH),
+  // genetics by chance, and the Earth and the stars.
+  science: [
+    { q: 'A ball is thrown straight up at 20 m/s. How high does it go? (g = 10 m/s²)', a: ['20 m', '40 m', '10 m', '2 m'] },
+    { q: 'A ball thrown straight up at 15 m/s comes back down to your hand after how long? (g = 10 m/s²)', a: ['3 s', '1.5 s', '15 s', '6 s'] },
+    { q: 'A pendulum is let go 45 cm above its lowest point. How fast is it moving at the bottom? (g = 10 m/s²)', a: ['3 m/s', '9 m/s', '4.5 m/s', '30 m/s'] },
+    { q: 'What do two 6 Ω resistors joined in parallel make?', a: ['3 Ω', '12 Ω', '6 Ω', '36 Ω'] },
+    { q: 'A 2 Ω and a 3 Ω resistor are joined in series to a 10 V battery. What current flows?', a: ['2 A', '5 A', '0.5 A', '25 A'] },
+    { q: 'How much power does a 12 V lamp use when 2 A flows through it?', a: ['24 W', '6 W', '14 W', '144 W'] },
+    { q: 'An object stands 30 cm from a convex lens with a focal length of 10 cm. How far behind the lens is its image?', a: ['15 cm', '20 cm', '40 cm', '7.5 cm'] },
+    { q: 'A wave has a frequency of 5 Hz and a wavelength of 2 m. How fast does it travel?', a: ['10 m/s', '2.5 m/s', '0.4 m/s', '7 m/s'] },
+    { q: 'You shout at a cliff and hear the echo 2 s later. Sound travels at 340 m/s. How far away is the cliff?', a: ['340 m', '680 m', '170 m', '1,360 m'] },
+    { q: 'About how much of a floating ice cube is under the water?', a: ['About 90%', 'About 50%', 'About 10%', 'All of it'] },
+    { q: 'About how deep under water does the pressure grow by one more atmosphere?', a: ['About 10 m', 'About 1 m', 'About 100 m', 'About 1 km'] },
+    { q: 'A 1,000 kg car going at 20 m/s brakes to a stop. How much of its energy turns into heat?', a: ['200,000 J', '20,000 J', '400,000 J', '10,000 J'] },
+    { q: 'A 2 kg box is pulled with a force of 10 N against 4 N of friction. What is its acceleration?', a: ['3 m/s²', '5 m/s²', '7 m/s²', '2 m/s²'] },
+    { q: 'Light inside water meets the surface at a very slanting angle, and none of it comes out. What is this called?', a: ['Total internal reflection', 'Diffraction', 'Absorption', 'Interference'] },
+    { q: 'A planet goes round the Sun 4 times as far out as the Earth. How long is its year?', a: ['8 Earth years', '4 Earth years', '16 Earth years', '64 Earth years'] },
+    { q: 'About how long does sunlight take to reach the Earth?', a: ['About 8 minutes', 'About 8 seconds', 'About 8 hours', 'About 1 second'] },
+    { q: 'Which colour of light carries the most energy in each photon?', a: ['Violet', 'Red', 'Yellow', 'Green'] },
+    { q: 'A transformer has 100 turns on its input coil and 500 on its output coil. 10 V goes in. What comes out?', a: ['50 V', '2 V', '10 V', '500 V'] },
+    { q: 'A balloon holds 2 L of gas at 300 K. Warmed to 450 K at the same pressure, how big does it get?', a: ['3 L', '2 L', '4.5 L', '1.3 L'] },
+    { q: 'Balance it: C₃H₈ + ☐O₂ → 3CO₂ + 4H₂O', a: ['5', '3', '7', '10'] },
+    { q: 'What is the molar mass of CO₂? (C = 12, O = 16)', a: ['44 g/mol', '28 g/mol', '32 g/mol', '60 g/mol'] },
+    { q: 'What is the oxidation number of manganese in KMnO₄?', a: ['+7', '+4', '+2', '−1'] },
+    { q: 'How many grams of salt, NaCl, are there in 0.5 mol of it? (Na = 23, Cl = 35.5)', a: ['29.25 g', '58.5 g', '117 g', '14.6 g'] },
+    { q: 'Which element pulls hardest on the electrons in a bond?', a: ['Fluorine', 'Oxygen', 'Chlorine', 'Sodium'] },
+    { q: '100 mL of 0.1 M hydrochloric acid is mixed with 100 mL of 0.1 M sodium hydroxide. What is the pH now?', a: ['7', '1', '13', '0'] },
+    { q: 'Which gas bubbles off when zinc is dropped into hydrochloric acid?', a: ['Hydrogen', 'Oxygen', 'Chlorine', 'Carbon dioxide'] },
+    { q: 'What shape is a methane molecule, CH₄?', a: ['A tetrahedron', 'A flat square', 'A straight line', 'A triangle'] },
+    { q: 'How many neutrons does an atom of carbon-14 have?', a: ['8', '6', '14', '12'] },
+    { q: 'Two parents are both Aa. What is the chance that their child is aa?', a: ['1/4', '1/2', '3/4', '0'] },
+    { q: 'Two plants, both AaBb, are crossed, the two genes sorting independently. What share of their young show both dominant traits?', a: ['9/16', '3/16', '1/16', '3/4'] },
+    { q: 'A mother with blood type AO and a father with type BO have a child. What is the chance it is type O?', a: ['1/4', '1/2', '0', '3/4'] },
+    { q: 'Colour blindness is carried on the X chromosome. A colour-blind father and a mother with no colour-blindness gene have a son. What is the chance he is colour-blind?', a: ['0', '1/2', '1/4', '1'] },
+    { q: 'In a food chain, about how much of the energy at one level passes on to the next?', a: ['About 10%', 'About 50%', 'About 90%', 'All of it'] },
+    { q: 'One strand of DNA reads ATGCCA. What does the strand paired with it read?', a: ['TACGGT', 'UACGGU', 'ATGCCA', 'GCATTG'] },
+    { q: 'Why does the Moon show phases?', a: ['We see different amounts of its sunlit half as it goes round us', 'The Earth’s shadow covers part of it', 'Clouds hide part of it', 'Its own light flickers'] },
+    { q: 'Which stars are the hottest?', a: ['Blue ones', 'Red ones', 'Yellow ones', 'Orange ones'] },
+    { q: 'What does a light-year measure?', a: ['A distance', 'A time', 'A speed', 'A brightness'] },
+    { q: 'If the Earth’s axis were not tilted, what would happen?', a: ['There would be no seasons', 'Days would last a year', 'The Moon would fall', 'Nothing at all'] },
+    { q: 'Why is the sky blue?', a: ['Air scatters blue light more than red', 'The sea reflects onto it', 'Air is blue in colour', 'The Sun gives out only blue light'] },
+  ],
+  // The Logic Olympiad: knights who always tell the truth and knaves who
+  // always lie, balances, river and bridge crossings, what follows from
+  // what, sure-fire picks, tricky questions and puzzles of who sits where.
+  // test/quiz.test.js tries out every way round the ones it can.
+  logic: [
+    { q: 'On an island, knights always tell the truth and knaves always lie. A says: “We are both knaves.” What are A and B?', a: ['A is a knave, B is a knight', 'Both are knaves', 'Both are knights', 'A is a knight, B is a knave'] },
+    { q: 'Knights always tell the truth and knaves always lie. A says: “B is a knave.” B says: “A and I are the same kind.” What are they?', a: ['A is a knight, B is a knave', 'A is a knave, B is a knight', 'Both are knights', 'Both are knaves'] },
+    { q: 'A says: “B is lying.” B says: “C is lying.” C says: “A and B are both lying.” Who is telling the truth?', a: ['Only B', 'Only A', 'Only C', 'A and C'] },
+    { q: 'Gold is in one of three boxes. Box 1 says “The gold is here”, box 2 says “The gold is not here” and box 3 says “The gold is not in box 1”. Only one sign is true. Where is the gold?', a: ['Box 2', 'Box 1', 'Box 3', 'You can’t tell'] },
+    { q: 'Three boxes are labelled “Apples”, “Oranges” and “Apples and oranges”, and every label is wrong. You may take one fruit out of one box. Which box should it be, to label them all right?', a: ['The one labelled “Apples and oranges”', 'The one labelled “Apples”', 'The one labelled “Oranges”', 'Any of them'] },
+    { q: 'Nine coins look the same, but one is a little heavier. How few weighings on a balance always find it?', a: ['2', '3', '4', '8'] },
+    { q: 'Twelve coins look the same, but one is fake: heavier or lighter. How few weighings on a balance always find it, and whether it is heavier or lighter?', a: ['3', '2', '4', '6'] },
+    { q: 'A farmer takes a wolf, a goat and a cabbage across a river, one at a time in his boat. The wolf can’t be left with the goat, nor the goat with the cabbage. How many crossings does it take, at the fewest?', a: ['7', '5', '3', '9'] },
+    { q: 'Four people cross a bridge at night with one torch. At most two cross at a time, at the slower one’s pace. They take 1, 2, 5 and 10 minutes. What is the shortest time for all of them to cross?', a: ['17 minutes', '19 minutes', '18 minutes', '15 minutes'] },
+    { q: 'You pick one of three doors; a car is behind one of them. The host, who knows where it is, opens another door with a goat behind it and lets you switch. How often does switching win the car?', a: ['2 times in 3', '1 time in 2', '1 time in 3', 'Every time'] },
+    { q: '“If it rains, the ground gets wet.” The ground is dry. What follows?', a: ['It did not rain', 'It rained', 'It will rain', 'Nothing follows'] },
+    { q: 'All bloops are razzies, and all razzies are lazzies. Which must be true?', a: ['All bloops are lazzies', 'All lazzies are bloops', 'No lazzies are bloops', 'All razzies are bloops'] },
+    { q: 'Some cats are black, and everything black is dark. Which must be true?', a: ['Some cats are dark', 'All cats are dark', 'No cats are dark', 'All dark things are cats'] },
+    { q: 'Four cards show A, K, 4 and 7. The rule: “A card with a vowel on one side has an even number on the other.” Which cards must you turn over to check it?', a: ['A and 7', 'A and 4', 'Only A', 'A, 4 and 7'] },
+    { q: 'If the day after tomorrow is Sunday, what day was the day before yesterday?', a: ['Wednesday', 'Thursday', 'Friday', 'Tuesday'] },
+    { q: 'A dark drawer holds 10 black socks and 10 white ones. How many must you take out to be sure of a matching pair?', a: ['3', '2', '11', '21'] },
+    { q: 'From a dark drawer of 10 black socks and 10 white ones, how many must you take out to be sure of two black ones?', a: ['12', '2', '3', '11'] },
+    { q: 'A bat and a ball cost 1,100 won together. The bat costs 1,000 won more than the ball. How much is the ball?', a: ['50 won', '100 won', '10 won', '1,000 won'] },
+    { q: '5 machines make 5 toys in 5 minutes. How long do 100 machines take to make 100 toys?', a: ['5 minutes', '100 minutes', '20 minutes', '1 minute'] },
+    { q: 'Lily pads on a pond double every day and cover all of it on day 48. On which day did they cover half of it?', a: ['Day 47', 'Day 24', 'Day 46', 'Day 12'] },
+    { q: 'In a race, you overtake the runner in second place. What place are you in now?', a: ['Second', 'First', 'Third', 'Last'] },
+    { q: 'Two fathers and two sons go fishing. Each of them catches one fish, and they catch three in all. How can that be?', a: ['They are a grandfather, his son and his grandson', 'One of them lost his fish', 'One fish was caught twice', 'One of them did not fish'] },
+    { q: 'A clock loses 5 minutes every hour. It is set right at noon. What does it show at 6 p.m.?', a: ['5:30', '5:55', '6:30', '5:00'] },
+    { q: 'How many times a day are a clock’s hour and minute hands exactly on top of each other?', a: ['22', '24', '12', '23'] },
+    { q: 'Three switches outside a shut room work three bulbs inside, and you may go in only once. How can you tell which switch works which bulb?', a: ['Turn one on for a while, turn it off, turn another on, then go in and feel the bulbs', 'You can’t', 'Turn them all on at once', 'Flick each switch many times'] },
+    { q: 'Ann, Ben and Cal have a cat, a dog and a fish, one pet each. Ann is allergic to fur, and Ben’s pet does not bark. Who has the dog?', a: ['Cal', 'Ann', 'Ben', 'You can’t tell'] },
+    { q: 'In a race of five, Cy beat Amy, Amy beat Bo, Bo beat Di, and Eve crossed the line just after Cy. Who came third?', a: ['Amy', 'Eve', 'Bo', 'Cy'] },
+    { q: 'A, B, C and D sit in a row. D sits second from the left, C sits at one end, A is not next to B, and A sits somewhere to the left of B. Who sits at the left end?', a: ['A', 'B', 'C', 'D'] },
+    { q: 'Each letter stands for a different digit, and AB + BA = 121. Which could AB be?', a: ['74', '75', '66', '85'] },
+    { q: 'Which number does not belong: 3, 5, 7, 9, 11?', a: ['9', '3', '5', '11'] },
+    { q: 'What letter comes next: O, T, T, F, F, S, S, E, …?', a: ['N', 'T', 'E', 'S'] },
+    { q: 'What comes next: 2, 3, 5, 9, 17, …?', a: ['33', '25', '31', '34'] },
+    { q: 'A rope ladder hangs over a ship’s side, its bottom rung just at the water. The tide comes in 60 cm. How many rungs are under the water now?', a: ['None: the ship rises with the tide', '1', '2', '6'] },
+    { q: 'In a dark room you have one match, a candle, a gas lamp and a wood stove. What do you light first?', a: ['The match', 'The candle', 'The gas lamp', 'The wood stove'] },
+    { q: 'A knight stands on a corner square of a chessboard. How many squares can it move to?', a: ['2', '3', '4', '8'] },
+    { q: 'A man looks at a portrait and says: “Brothers and sisters I have none, but that man’s father is my father’s son.” Who is in the portrait?', a: ['His son', 'Himself', 'His father', 'His nephew'] },
+  ],
+  // The Coding Olympiad: what a little Python program prints (code: the
+  // program, shown under the question), binary and hexadecimal, logic
+  // gates, stacks, queues, sorting, searching and graphs.
+  // test/quiz.test.js runs every program to check what it prints.
+  coding: [
+    { q: 'What is the binary number 1011 in decimal?', a: ['11', '1011', '13', '9'] },
+    { q: 'What is 25 written in binary?', a: ['11001', '10011', '11010', '10101'] },
+    { q: 'How many different values can one byte, 8 bits, hold?', a: ['256', '255', '8', '128'] },
+    { q: 'What is the hexadecimal number FF in decimal?', a: ['255', '256', '1515', '240'] },
+    { q: 'At most how many guesses does binary search need to find a name in a sorted list of 1,000 names?', a: ['10', '100', '500', '1,000'] },
+    { q: 'Which of these grows fastest as n gets very big?', a: ['n²', 'n log n', 'n', 'log n'] },
+    { q: 'An AND gate gets a 1 and a 0. What does it give out?', a: ['0', '1', '10', '2'] },
+    { q: 'Which logic gate gives out 1 only when its two inputs are different?', a: ['XOR', 'AND', 'OR', 'NOT'] },
+    { q: 'Bubble sort sorts [3, 1, 2] by swapping neighbours that are the wrong way round. How many swaps does it make?', a: ['2', '1', '3', '0'] },
+    { q: 'A stack: push 1, push 2, push 3, pop, push 4, pop. What is on top now?', a: ['2', '4', '3', '1'] },
+    { q: 'A queue: add A, add B, add C, take one out, add D. Which is at the front now?', a: ['B', 'A', 'C', 'D'] },
+    { q: 'Which of these keeps things “first in, first out”?', a: ['A queue', 'A stack', 'A tree', 'A set'] },
+    { q: 'A tree has 10 nodes. How many edges does it have?', a: ['9', '10', '11', '45'] },
+    { q: 'Roads go A–B 4 km, B–C 3 km, A–C 9 km, C–D 2 km and B–D 7 km. How long is the shortest way from A to D?', a: ['9 km', '11 km', '13 km', '16 km'] },
+    { q: 'How many bits are there in a kilobyte, taking 1 KB as 1,024 bytes?', a: ['8,192', '1,024', '8,000', '1,000'] },
+    { q: 'In most programming languages, what is 17 % 5?', a: ['2', '3', '3.4', '12'] },
+    { q: 'What does a compiler do?', a: ['Turns a program into instructions the computer can run', 'Finds pictures on the internet', 'Makes the computer run faster', 'Draws the screen'] },
+    { q: 'Which of these is not a programming language?', a: ['HTML', 'Python', 'JavaScript', 'C'] },
+    { q: 'What is a function that calls itself called?', a: ['Recursive', 'Iterative', 'Binary', 'Hidden'] },
+    { q: 'Which sort is quickest on average for a long list?', a: ['Quicksort', 'Bubble sort', 'Insertion sort', 'Selection sort'] },
+    { q: 'What does this program print?', code: 'x = 3\nx = x * 2 + 1\nprint(x)', a: ['7', '8', '6', '9'] },
+    { q: 'What does this program print?', code: 'total = 0\nfor i in range(1, 6):\n    total += i\nprint(total)', a: ['15', '10', '21', '6'] },
+    { q: 'What does this program print?', code: 'n = 10\nsteps = 0\nwhile n > 1:\n    n = n // 2\n    steps += 1\nprint(steps)', a: ['3', '4', '5', '10'] },
+    { q: 'What does this program print?', code: 'a = [4, 8, 15, 16, 23, 42]\nprint(a[2] + len(a))', a: ['21', '14', '20', '23'] },
+    { q: 'What does this program print?', code: "s = ''\nfor i in range(3):\n    s = str(i) + s\nprint(s)", a: ['210', '012', '3', '123'] },
+    { q: 'What does this program print?', code: 'def f(n):\n    if n <= 1:\n        return n\n    return f(n - 1) + f(n - 2)\n\nprint(f(7))', a: ['13', '8', '21', '7'] },
+    { q: 'What does this program print?', code: 'count = 0\nfor i in range(1, 101):\n    if i % 3 == 0 and i % 5 == 0:\n        count += 1\nprint(count)', a: ['6', '7', '47', '15'] },
+    { q: 'What does this program print?', code: 'a, b = 5, 9\na, b = b, a\nprint(a - b)', a: ['4', '−4', '0', '14'] },
+    { q: 'What does this program print?', code: "words = ['sun', 'moon', 'star']\nprint(sum(len(w) for w in words))", a: ['11', '3', '12', '10'] },
+    { q: 'What does this program print?', code: 'x = 1\nfor i in range(10):\n    x *= 2\nprint(x)', a: ['1024', '20', '512', '2048'] },
+    { q: 'What does this program print?', code: 'i = 0\ntotal = 0\nwhile total < 20:\n    i += 1\n    total += i\nprint(i)', a: ['6', '5', '21', '20'] },
+    { q: 'What does this program print?', code: 'grid = [[1, 2], [3, 4]]\nprint(grid[1][0])', a: ['3', '2', '1', '4'] },
+    { q: 'What does this program print?', code: "t = 'banana'\nprint(t.count('a'))", a: ['3', '2', '6', '1'] },
+    { q: 'What does this program print?', code: 'def g(n):\n    if n == 0:\n        return 0\n    return n % 10 + g(n // 10)\n\nprint(g(2024))', a: ['8', '2024', '4', '6'] },
+    { q: 'What does this program print?', code: 'x = 0\nfor i in range(4):\n    for j in range(i):\n        x += 1\nprint(x)', a: ['6', '16', '10', '4'] },
+    { q: 'What does this program print?', code: 'nums = [3, 1, 4, 1, 5, 9, 2, 6]\nprint(max(nums) - min(nums))', a: ['8', '9', '5', '1'] },
+    { q: 'What does this program print?', code: "s = 'kids world'\nprint(s[::-1][:4])", a: ['dlro', 'kids', 'sdik', 'worl'] },
+    { q: 'What does this program print?', code: 'a = [1, 2, 3]\nb = a\nb.append(4)\nprint(len(a))', a: ['4', '3', '1', 'An error'] },
+    { q: 'What does this program print?', code: 'print(7 // 2 + 7 % 2)', a: ['4', '3', '4.5', '7'] },
+    { q: 'What does this program print?', code: 'total = 0\nfor n in range(1, 11):\n    if n % 2 == 0:\n        continue\n    total += n\nprint(total)', a: ['25', '30', '55', '5'] },
   ],
   // Every word's quiz, but a question two words ask alike (“What is a
   // diamond?” on diamond and on jewelry) only the first time.
@@ -740,14 +897,19 @@ export const QUESTION_BANKS = {
 // after that it is never asked of you again.
 export const LEARNT_AFTER = 3;
 
+// What tells one question from another, in the quiz book: its words, and
+// its program for a question that shows one (the Coding Olympiad asks
+// “What does this program print?” of many).
+export const questionKey = ({ q, code }) => (code ? `${q}\n${code}` : q);
+
 // Each bank's questions, to know a question of it when one is filed.
-const ASKED = Object.fromEntries(Object.entries(QUESTION_BANKS).map(([level, bank]) => [level, new Set(bank.map((b) => b.q))]));
+const ASKED = Object.fromEntries(Object.entries(QUESTION_BANKS).map(([level, bank]) => [level, new Set(bank.map(questionKey))]));
 
 // Your quiz book: each quiz's questions you have been getting right, with
 // how many times in a row, and the ones learnt (LEARNT_AFTER times):
-// { [level]: { [question]: times right in a row } }. Kept on this device
-// for whoever is playing (game.js, storage.js), like the Study Desk's
-// notebook; a question no longer in its bank is let go.
+// { [level]: { [questionKey]: times right in a row } }. Kept on this
+// device for whoever is playing (game.js, storage.js), like the Study
+// Desk's notebook; a question no longer in its bank is let go.
 export function cleanQuizBook(raw) {
   const out = {};
   for (const level of Object.keys(QUIZ_LEVELS)) {
@@ -781,13 +943,13 @@ export const isLearnt = (book, level, q) => (book?.[level]?.[q] ?? 0) >= LEARNT_
 // How far along a quiz is: { learnt, left, total } of its questions.
 export function quizProgress(book, level) {
   const bank = QUESTION_BANKS[QUIZ_LEVELS[level]?.key] ?? [];
-  const learnt = bank.reduce((n, b) => n + (isLearnt(book, level, b.q) ? 1 : 0), 0);
+  const learnt = bank.reduce((n, b) => n + (isLearnt(book, level, questionKey(b)) ? 1 : 0), 0);
   return { learnt, left: bank.length - learnt, total: bank.length };
 }
 
 // A quiz of a level, `size` questions picked out of the bank and shuffled, and
-// each one's answers shuffled with them: { level, questions: [{ q, choices,
-// answer }] }, answer the place in choices the right one landed. Never a
+// each one's answers shuffled with them: { level, questions: [{ q, key,
+// choices, answer }] }, answer the place in choices the right one landed. Never a
 // question learnt in `book` (your quiz book), so a quiz of a level all
 // learnt asks nothing, and one nearly so fewer than `size`. The same seed
 // and book make the same quiz, so a page put right can say what was asked.
@@ -796,14 +958,14 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE, book = null) {
   if (!bank) return { level, questions: [] };
   const rng = new Rng(seed);
   const picks = [];
-  const left = [...bank.keys()].filter((i) => !isLearnt(book, level, bank[i].q));
+  const left = [...bank.keys()].filter((i) => !isLearnt(book, level, questionKey(bank[i])));
   for (let i = 0, n = Math.min(size, left.length); i < n; i++) {
     const at = Math.floor(rng.next() * left.length);
     picks.push(bank[left.splice(at, 1)[0]]);
   }
   return {
     level,
-    questions: picks.map(({ q, pic, word, a }) => {
+    questions: picks.map(({ q, pic, code, word, a }) => {
       const choices = [...a];
       // The answers go where they land, and the right one (written first)
       // remembers where that was.
@@ -811,7 +973,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE, book = null) {
         const j = Math.floor(rng.next() * (i + 1));
         [choices[i], choices[j]] = [choices[j], choices[i]];
       }
-      return { q, ...(pic && { pic }), ...(word && { word }), choices, answer: choices.indexOf(a[0]) };
+      return { q, key: questionKey({ q, code }), ...(pic && { pic }), ...(code && { code }), ...(word && { word }), choices, answer: choices.indexOf(a[0]) };
     }),
   };
 }

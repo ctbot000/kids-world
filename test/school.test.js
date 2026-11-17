@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { modelBoxes } from '../public/js/shared/furniture.js';
-import { makeQuiz, QUESTION_BANKS, QUIZ_LEVELS } from '../public/js/shared/quiz.js';
+import { makeQuiz, QUESTION_BANKS, questionKey, QUIZ_LEVELS } from '../public/js/shared/quiz.js';
 import { breakLeft, chalkboardNear, CLASS_BREAK_MS, CLASS_SIZE, isChalkboard } from '../public/js/shared/school.js';
 import { seatOf, seatPose } from '../public/js/shared/seats.js';
 import { placeTemplate, stampByKey } from '../public/js/shared/stamps.js';
@@ -114,8 +114,8 @@ test('a class is a few questions out of a quiz bank, and the next of its level i
     assert.ok(QUESTION_BANKS[level].length >= CLASS_SIZE * 5, `${level}: plenty of questions for classes`);
     const quiz = makeQuiz(level, 7, CLASS_SIZE);
     assert.equal(quiz.questions.length, CLASS_SIZE);
-    assert.equal(new Set(quiz.questions.map((q) => q.q)).size, CLASS_SIZE, 'no question twice in a class');
-    for (const q of quiz.questions) assert.equal(q.choices[q.answer], QUESTION_BANKS[level].find((b) => b.q === q.q).a[0]);
+    assert.equal(new Set(quiz.questions.map((q) => q.key)).size, CLASS_SIZE, 'no question twice in a class');
+    for (const q of quiz.questions) assert.equal(q.choices[q.answer], QUESTION_BANKS[level].find((b) => questionKey(b) === q.key).a[0]);
   }
   assert.equal(breakLeft(0, 5000), 0, 'no class yet: one may begin');
   assert.equal(breakLeft(1000, 1000), CLASS_BREAK_MS, 'just ended: the whole break');

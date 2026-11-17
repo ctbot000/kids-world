@@ -5363,6 +5363,10 @@ button.go-pt {
   gap: 10px;
 }
 
+.quiz-years.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .big.quiz-year,
 .big.quiz-other {
   flex-direction: column;
@@ -5418,6 +5422,21 @@ button.go-pt {
   font-size: 1.3rem;
   font-weight: 700;
   text-align: center;
+}
+
+/* A program to read (the Coding Olympiad), as it is typed: in a typewriter
+   font, its lines and indents kept, sideways scrolling if one is long. */
+.quiz-code {
+  margin: -4px 0 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: #2d2440;
+  color: #fff8e6;
+  font: 600 1rem/1.45 ui-monospace, Menlo, monospace;
+  text-align: left;
+  tab-size: 4;
+  white-space: pre;
 }
 
 .quiz-answers {

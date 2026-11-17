@@ -3304,7 +3304,7 @@ export class Game extends EventTarget {
     q.picks.push(i);
     if (right) q.right++;
     const book = this.quizBook;
-    if (fileQuizAnswer(book, q.level, ask.q, right)) ask.learnt = true;
+    if (fileQuizAnswer(book, q.level, ask.key, right)) ask.learnt = true;
     save('quizbook', book);
     if (q.picks.length < q.questions.length) {
       this.emit('quiz');

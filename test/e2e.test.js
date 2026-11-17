@@ -7016,14 +7016,16 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
   await until(page, () => !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('Class'));
   await page.keyboard.press('KeyQ');
   await until(page, () => !document.getElementById('modal').hidden && document.querySelector('#modal h2').textContent.includes('School'));
-  // The classes by school: every year of each, then the other quizzes.
+  // The classes by school: every year of each, then the Olympiads, then
+  // the other quizzes.
   assert.deepEqual(
     await page.evaluate(() => [...document.querySelectorAll('#modal .quiz-school')].map((s) => [s.querySelector('h3').textContent.split('🪙')[0].trim(), s.querySelectorAll('button').length])),
     [
       ['🎒 Elementary School', 6],
       ['🧑‍🎓 Middle School', 3],
       ['📚 High School', 3],
-      ['🧩 More quizzes', 3],
+      ['🏆 Olympiads', 4],
+      ['🧩 More quizzes', 2],
     ],
   );
   await page.click('#modal [data-level="junior"]');

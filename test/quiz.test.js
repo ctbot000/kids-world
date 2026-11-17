@@ -1,7 +1,7 @@
 // Quizzes, asked in classes at school and as Adventure Isle's key quizzes
 // — every school year from Year 1 of elementary school to Year 3 of high
-// school, a thinking-math one of puzzles to work out, the Math Olympiad's
-// hardest puzzles and English Words — each a few questions picked and
+// school, the Olympiads (maths, science, logic and coding), a thinking-math
+// one of puzzles to work out and English Words — each a few questions picked and
 // shuffled out of a bank of them, with the right answer never where it was
 // written; coins for the answers got right, and the counts and stickers
 // they earn. A question answered right three times in a row is learnt, and
@@ -9,20 +9,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { XP_FOR } from '../public/js/shared/levels.js';
-import { cleanQuizBook, fileQuizAnswer, isLearnt, LEARNT_AFTER, makeQuiz, QUESTION_BANKS, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress, SCHOOLS } from '../public/js/shared/quiz.js';
+import { spawnSync } from 'node:child_process';
+import { cleanQuizBook, fileQuizAnswer, isLearnt, LEARNT_AFTER, makeQuiz, OLYMPIADS, QUESTION_BANKS, questionKey, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress, SCHOOLS } from '../public/js/shared/quiz.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
-test('a quiz for every school year, from elementary school to high school, and three more, each with questions to spare', () => {
-  // The two that came first keep their keys, for the quiz books that have them.
-  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['elementary1', 'junior', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'senior', 'high1', 'high2', 'high3', 'thinker', 'olympiad', 'english']);
+test('a quiz for every school year, from elementary school to high school, four Olympiads and two more, each with questions to spare', () => {
+  // The ones that came first keep their keys, for the quiz books that have them.
+  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['elementary1', 'junior', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'senior', 'high1', 'high2', 'high3', 'olympiad', 'science', 'logic', 'coding', 'thinker', 'english']);
   assert.deepEqual(
     Object.values(QUIZ_LEVELS).map((l) => l.name),
     [
       ...[1, 2, 3, 4, 5, 6].map((n) => `Elementary School Year ${n}`),
       ...[1, 2, 3].map((n) => `Middle School Year ${n}`),
       ...[1, 2, 3].map((n) => `High School Year ${n}`),
-      'Thinking Math',
       'Math Olympiad',
+      'Science Olympiad',
+      'Logic Olympiad',
+      'Coding Olympiad',
+      'Thinking Math',
       'English Words',
     ],
   );
@@ -32,7 +36,8 @@ test('a quiz for every school year, from elementary school to high school, and t
     const bank = QUESTION_BANKS[key];
     assert.ok(bank.length > QUIZ_SIZE, `${key} has more questions than a quiz asks`);
     const asked = new Set();
-    for (const { q, a, pic } of bank) {
+    for (const b of bank) {
+      const { q, a, pic, code } = b;
       assert.equal(typeof q, 'string');
       assert.ok(q.trim().length > 0, 'a question in words');
       const answers = key === 'english' ? 3 : 4;
@@ -43,13 +48,15 @@ test('a quiz for every school year, from elementary school to high school, and t
         assert.ok(Array.isArray(pic) && pic.length > 0, 'a picture has rows');
         assert.ok(pic.every((row) => typeof row === 'string' && row.trim().length > 0), 'each row has tiles');
       }
-      assert.ok(!asked.has(q), 'no question twice');
-      asked.add(q);
+      if (code !== undefined) assert.ok(typeof code === 'string' && code.trim().length > 0 && !code.includes('\t'), 'a program in lines, spaces for indents');
+      // Questions in the same words show different programs.
+      assert.ok(!asked.has(questionKey(b)), 'no question twice');
+      asked.add(questionKey(b));
     }
   }
   // The quizzes ask different things, but for the dictionary's, which may
   // ask what another does (a spider's legs).
-  const all = Object.entries(QUESTION_BANKS).flatMap(([key, bank]) => (key === 'english' ? [] : bank.map((b) => b.q)));
+  const all = Object.entries(QUESTION_BANKS).flatMap(([key, bank]) => (key === 'english' ? [] : bank.map(questionKey)));
   assert.equal(new Set(all).size, all.length, 'each bank its own');
   // Each school's years, in order, in its colour, and paying what it pays;
   // the quizzes of no school year each in a colour of its own; none the
@@ -62,18 +69,32 @@ test('a quiz for every school year, from elementary school to high school, and t
     );
     for (const l of years) assert.deepEqual([l.color, l.coins, l.icon], [s.color, s.coins, s.icon]);
   }
-  const others = Object.values(QUIZ_LEVELS).filter((l) => !l.school);
+  // The Olympiads in theirs, each with its subject's icon and short name.
+  const olympiads = Object.values(QUIZ_LEVELS).filter((l) => l.olympiad);
+  assert.deepEqual(
+    olympiads.map((l) => [l.key, l.short]),
+    [
+      ['olympiad', 'Math'],
+      ['science', 'Science'],
+      ['logic', 'Logic'],
+      ['coding', 'Coding'],
+    ],
+  );
+  for (const l of olympiads) assert.deepEqual([l.name, l.color, l.coins], [`${l.short} Olympiad`, OLYMPIADS.color, OLYMPIADS.coins]);
+  assert.equal(new Set(olympiads.map((l) => l.icon)).size, olympiads.length);
+  const others = Object.values(QUIZ_LEVELS).filter((l) => !l.school && !l.olympiad);
   assert.deepEqual(
     others.map((l) => l.key),
-    ['thinker', 'olympiad', 'english'],
+    ['thinker', 'english'],
   );
-  const colors = [...SCHOOLS, ...others].map((l) => l.color);
+  const colors = [...SCHOOLS, OLYMPIADS, ...others].map((l) => l.color);
   assert.equal(new Set(colors).size, colors.length);
   assert.ok(!colors.includes('green'));
   // The banks the years and the Olympiad have had added, as big as the
   // others or bigger: learnt questions go, so a bank wants plenty.
   for (const key of ['elementary1', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'high1', 'high2', 'high3']) assert.ok(QUESTION_BANKS[key].length >= 39, `${key} has plenty of questions`);
-  assert.ok(QUESTION_BANKS.olympiad.length >= 30);
+  assert.ok(QUESTION_BANKS.olympiad.length >= 45);
+  for (const key of ['science', 'logic', 'coding']) assert.ok(QUESTION_BANKS[key].length >= 35, `${key} has plenty of questions`);
 });
 
 test('the sums in the Year 3 and high school banks come out right', () => {
@@ -269,6 +290,263 @@ test('the Math Olympiad’s answers, worked out the long way', () => {
   assert.equal(answer('Ann is twice as old as Ben was when Ann was as old as Ben is now. Ann is 24. How old is Ben?'), String(range(1, 23).find((ben) => 24 === 2 * (ben - (24 - ben)))));
   const say = (t) => t.match(/(.)\1*/g).map((run) => `${run.length}${run[0]}`).join('');
   assert.equal(answer('What comes next: 1, 11, 21, 1211, 111221, …?'), say('111221'));
+  // The newer ones.
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  const choose = (a, b) => (b === 0 ? 1 : (choose(a - 1, b - 1) * a) / b);
+  assert.equal(answer('How many whole numbers from 1 to 100 can be divided exactly by 3 or by 5?'), String(range(1, 100).filter((k) => k % 3 === 0 || k % 5 === 0).length));
+  assert.equal(answer('What is the smallest whole number that has exactly 10 divisors?'), String(range(1, 1000).find((k) => divisors(k).length === 10)));
+  let change = 0;
+  for (let tens = 0; tens * 10 <= 25; tens++) for (let fives = 0; tens * 10 + fives * 5 <= 25; fives++) change++;
+  assert.equal(answer('In how many ways can you make 25¢ out of 1¢, 5¢ and 10¢ coins?'), String(change));
+  assert.equal(answer('How many four-digit palindromes are there, numbers like 1221 that read the same both ways?'), String(range(1000, 9999).filter((k) => String(k) === [...String(k)].reverse().join('')).length));
+  assert.equal(answer('What is the greatest common factor of 2¹⁰ − 1 and 2⁶ − 1?'), String(gcd(2 ** 10 - 1, 2 ** 6 - 1)));
+  assert.equal(answer('What is the remainder when 3¹⁰⁰ is divided by 5?'), String(3n ** 100n % 5n));
+  assert.equal(answer('A circle just fits inside a square with sides of 2. What is the area inside the square but outside the circle?'), '4 − π');
+  assert.equal(answer('In how many ways can 5 people sit round a round table, if turning the table does not count as a new way?'), String(perms([1, 2, 3, 4, 5]).length / 5));
+  assert.equal(answer('Moving only right or up along the lines of a 4 × 4 grid of squares, how many shortest paths go from one corner to the opposite one?'), String(choose(8, 4)));
+  assert.equal(answer('Five numbers average 10. One is taken away, and the other four average 9. What number was taken away?'), String(5 * 10 - 4 * 9));
+  assert.equal(answer('What is 999 × 999?'), n(999 * 999));
+  const powers = [
+    ['2⁵⁰', 2n ** 50n],
+    ['3³³', 3n ** 33n],
+    ['5²¹', 5n ** 21n],
+  ];
+  assert.equal(answer('Which is the biggest: 2⁵⁰, 3³³ or 5²¹?'), powers.reduce((best, p) => (p[1] > best[1] ? p : best))[0]);
+  const tilings = (k) => (k <= 1 ? 1 : tilings(k - 1) + tilings(k - 2));
+  assert.equal(answer('In how many ways can a 2 × 5 board be covered with 1 × 2 dominoes?'), String(tilings(5)));
+  assert.equal(answer('Two cards are drawn from a shuffled pack of 52. What is the chance that both are aces?'), `1/${(52 * 51) / (4 * 3)}`);
+  assert.ok(Math.abs(((3 * Math.sqrt(3)) / 2) * 2 ** 2 - 6 * Math.sqrt(3)) < 1e-12);
+  assert.equal(answer('What is the area of a regular hexagon with sides of 2?'), '6√3');
+  assert.equal(answer('What is 1 + 4 + 9 + 16 + … + 400, the first 20 square numbers added up?'), n(sum(range(1, 20).map((k) => k * k))));
+  assert.equal(answer('What is the smallest number that leaves a remainder of 2 when divided by 3, 3 when divided by 4 and 4 when divided by 5?'), String(range(1, 1000).find((k) => k % 3 === 2 && k % 4 === 3 && k % 5 === 4)));
+});
+
+test('the Science Olympiad’s sums come out right, and its genes by every child the parents could have', () => {
+  const answer = (q) => {
+    const b = QUESTION_BANKS.science.find((x) => x.q === q);
+    assert.ok(b, `the Science Olympiad asks “${q}”`);
+    return b.a[0];
+  };
+  const g = 10;
+  const round = (x) => Math.round(x * 1000) / 1000;
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  assert.equal(answer('A ball is thrown straight up at 20 m/s. How high does it go? (g = 10 m/s²)'), `${20 ** 2 / (2 * g)} m`);
+  assert.equal(answer('A ball thrown straight up at 15 m/s comes back down to your hand after how long? (g = 10 m/s²)'), `${(2 * 15) / g} s`);
+  assert.equal(answer('A pendulum is let go 45 cm above its lowest point. How fast is it moving at the bottom? (g = 10 m/s²)'), `${round(Math.sqrt(2 * g * 0.45))} m/s`);
+  assert.equal(answer('What do two 6 Ω resistors joined in parallel make?'), `${round(1 / (1 / 6 + 1 / 6))} Ω`);
+  assert.equal(answer('A 2 Ω and a 3 Ω resistor are joined in series to a 10 V battery. What current flows?'), `${10 / (2 + 3)} A`);
+  assert.equal(answer('How much power does a 12 V lamp use when 2 A flows through it?'), `${12 * 2} W`);
+  assert.equal(answer('An object stands 30 cm from a convex lens with a focal length of 10 cm. How far behind the lens is its image?'), `${round(1 / (1 / 10 - 1 / 30))} cm`);
+  assert.equal(answer('A wave has a frequency of 5 Hz and a wavelength of 2 m. How fast does it travel?'), `${5 * 2} m/s`);
+  assert.equal(answer('You shout at a cliff and hear the echo 2 s later. Sound travels at 340 m/s. How far away is the cliff?'), `${(340 * 2) / 2} m`);
+  assert.equal(answer('About how much of a floating ice cube is under the water?'), `About ${Math.round((0.917 / 1) * 10) * 10}%`);
+  assert.equal(answer('A 1,000 kg car going at 20 m/s brakes to a stop. How much of its energy turns into heat?'), `${((1000 * 20 ** 2) / 2).toLocaleString('en-US')} J`);
+  assert.equal(answer('A 2 kg box is pulled with a force of 10 N against 4 N of friction. What is its acceleration?'), `${(10 - 4) / 2} m/s²`);
+  assert.equal(answer('A planet goes round the Sun 4 times as far out as the Earth. How long is its year?'), `${Math.sqrt(4 ** 3)} Earth years`);
+  assert.equal(answer('About how long does sunlight take to reach the Earth?'), `About ${Math.round(149.6e6 / 299792 / 60)} minutes`);
+  assert.equal(answer('A transformer has 100 turns on its input coil and 500 on its output coil. 10 V goes in. What comes out?'), `${(10 * 500) / 100} V`);
+  assert.equal(answer('A balloon holds 2 L of gas at 300 K. Warmed to 450 K at the same pressure, how big does it get?'), `${(2 * 450) / 300} L`);
+  // Chemistry: the atoms balance, the masses add up.
+  assert.equal(answer('Balance it: C₃H₈ + ☐O₂ → 3CO₂ + 4H₂O'), String((3 * 2 + 4 * 1) / 2));
+  assert.equal(answer('What is the molar mass of CO₂? (C = 12, O = 16)'), `${12 + 2 * 16} g/mol`);
+  assert.equal(answer('What is the oxidation number of manganese in KMnO₄?'), `+${0 - 1 - 4 * -2}`);
+  assert.equal(answer('How many grams of salt, NaCl, are there in 0.5 mol of it? (Na = 23, Cl = 35.5)'), `${0.5 * (23 + 35.5)} g`);
+  assert.equal(answer('How many neutrons does an atom of carbon-14 have?'), String(14 - 6));
+  // Genes: every child the parents could have, each as likely.
+  const kids = (mum, dad) => [...mum].flatMap((m) => [...dad].map((d) => m + d));
+  const share = (list, fits) => {
+    const n = list.filter(fits).length;
+    return n ? `${n / gcd(n, list.length)}/${list.length / gcd(n, list.length)}` : '0';
+  };
+  assert.equal(answer('Two parents are both Aa. What is the chance that their child is aa?'), share(kids('Aa', 'Aa'), (k) => k === 'aa'));
+  const gametes = ['AB', 'Ab', 'aB', 'ab'];
+  assert.equal(
+    answer('Two plants, both AaBb, are crossed, the two genes sorting independently. What share of their young show both dominant traits?'),
+    share(
+      gametes.flatMap((x) => gametes.map((y) => x + y)),
+      (k) => k.includes('A') && k.includes('B'),
+    ),
+  );
+  assert.equal(answer('A mother with blood type AO and a father with type BO have a child. What is the chance it is type O?'), share(kids('AO', 'BO'), (k) => k === 'OO'));
+  // A son has his X from his mother, and hers carry no colour blindness.
+  assert.equal(answer('Colour blindness is carried on the X chromosome. A colour-blind father and a mother with no colour-blindness gene have a son. What is the chance he is colour-blind?'), share(kids('XX', 'Y'), (k) => k.includes('x')));
+  const pair = { A: 'T', T: 'A', G: 'C', C: 'G' };
+  assert.equal(answer('One strand of DNA reads ATGCCA. What does the strand paired with it read?'), [...'ATGCCA'].map((b) => pair[b]).join(''));
+});
+
+test('the Logic Olympiad: every way it could be is tried, and only the right answer fits', () => {
+  const answer = (q) => {
+    const b = QUESTION_BANKS.logic.find((x) => x.q === q);
+    assert.ok(b, `the Logic Olympiad asks “${q}”`);
+    return b.a[0];
+  };
+  const tf = [true, false];
+  const perms = (list) => (list.length <= 1 ? [list] : list.flatMap((x, i) => perms([...list.slice(0, i), ...list.slice(i + 1)]).map((rest) => [x, ...rest])));
+  // Knights (true) and knaves (false): only the ways where each says what fits what it is.
+  const pairs = tf.flatMap((a) => tf.map((b) => [a, b]));
+  const kind = ([a, b]) => `A is a ${a ? 'knight' : 'knave'}, B is a ${b ? 'knight' : 'knave'}`;
+  const both = pairs.filter(([a, b]) => a === (!a && !b));
+  assert.equal(both.length, 1);
+  assert.equal(answer('On an island, knights always tell the truth and knaves always lie. A says: “We are both knaves.” What are A and B?'), kind(both[0]));
+  const same = pairs.filter(([a, b]) => a === !b && b === (a === b));
+  assert.equal(same.length, 1);
+  assert.equal(answer('Knights always tell the truth and knaves always lie. A says: “B is a knave.” B says: “A and I are the same kind.” What are they?'), kind(same[0]));
+  const three = tf.flatMap((a) => tf.flatMap((b) => tf.map((c) => [a, b, c]))).filter(([a, b, c]) => a === !b && b === !c && c === (!a && !b));
+  assert.deepEqual(three, [[false, true, false]]);
+  assert.equal(answer('A says: “B is lying.” B says: “C is lying.” C says: “A and B are both lying.” Who is telling the truth?'), 'Only B');
+  const gold = [1, 2, 3].filter((at) => [at === 1, at !== 2, at !== 1].filter(Boolean).length === 1);
+  assert.equal(gold.length, 1);
+  assert.equal(answer('Gold is in one of three boxes. Box 1 says “The gold is here”, box 2 says “The gold is not here” and box 3 says “The gold is not in box 1”. Only one sign is true. Where is the gold?'), `Box ${gold[0]}`);
+  // Weighings: each has three outcomes, so n of them tell 3ⁿ cases apart.
+  assert.equal(answer('Nine coins look the same, but one is a little heavier. How few weighings on a balance always find it?'), String([1, 2, 3, 4].find((w) => 3 ** w >= 9)));
+  assert.equal(answer('Twelve coins look the same, but one is fake: heavier or lighter. How few weighings on a balance always find it, and whether it is heavier or lighter?'), String([1, 2, 3, 4].find((w) => (3 ** w - 3) / 2 >= 12)));
+  // The river: every crossing tried, the fewest that gets them all over.
+  const safe = ([farmer, wolf, goat, cabbage]) => !(wolf === goat && goat !== farmer) && !(goat === cabbage && goat !== farmer);
+  const seen = new Set(['0000']);
+  let frontier = [[0, 0, 0, 0]];
+  let crossings = 0;
+  while (!frontier.some((st) => st.every((side) => side === 1))) {
+    crossings++;
+    frontier = frontier.flatMap((st) =>
+      [null, 1, 2, 3]
+        .filter((thing) => thing === null || st[thing] === st[0])
+        .map((thing) => st.map((side, i) => (i === 0 || i === thing ? 1 - side : side)))
+        .filter((next) => safe(next) && !seen.has(next.join('')) && seen.add(next.join(''))),
+    );
+  }
+  assert.equal(answer('A farmer takes a wolf, a goat and a cabbage across a river, one at a time in his boat. The wolf can’t be left with the goat, nor the goat with the cabbage. How many crossings does it take, at the fewest?'), String(crossings));
+  // The bridge: the quickest of every way across.
+  const pace = [1, 2, 5, 10];
+  const best = new Map([['0000|0', 0]]);
+  const queue = [['0000', 0, 0]];
+  while (queue.length) {
+    queue.sort((x, y) => x[2] - y[2]);
+    const [sides, torch, time] = queue.shift();
+    const here = [0, 1, 2, 3].filter((i) => Number(sides[i]) === torch);
+    const groups = here.flatMap((i) => [[i], ...here.filter((j) => j > i).map((j) => [i, j])]);
+    for (const group of groups) {
+      const next = [...sides].map((side, i) => (group.includes(i) ? String(1 - Number(side)) : side)).join('');
+      const t = time + Math.max(...group.map((i) => pace[i]));
+      const at = `${next}|${1 - torch}`;
+      if (t < (best.get(at) ?? Infinity)) {
+        best.set(at, t);
+        queue.push([next, 1 - torch, t]);
+      }
+    }
+  }
+  assert.equal(answer('Four people cross a bridge at night with one torch. At most two cross at a time, at the slower one’s pace. They take 1, 2, 5 and 10 minutes. What is the shortest time for all of them to cross?'), `${best.get('1111|1')} minutes`);
+  // The doors: every place the car could be and every first pick.
+  const games = [0, 1, 2].flatMap((car) => [0, 1, 2].map((pick) => ({ car, pick })));
+  assert.equal(games.filter(({ car, pick }) => car !== pick).length * 3, games.length * 2, 'switching wins 2 in 3');
+  assert.equal(answer('You pick one of three doors; a car is behind one of them. The host, who knows where it is, opens another door with a goat behind it and lets you switch. How often does switching win the car?'), '2 times in 3');
+  // The cards: turn over the ones whose other side could break the rule.
+  const vowel = (c) => 'AEIOU'.includes(c);
+  const breaks = (letter, number) => vowel(letter) && number % 2 === 1;
+  const turn = ['A', 'K', '4', '7'].filter((face) => (/\d/.test(face) ? ['A', 'K'].some((l) => breaks(l, Number(face))) : [4, 7].some((n) => breaks(face, n))));
+  assert.equal(answer('Four cards show A, K, 4 and 7. The rule: “A card with a vowel on one side has an even number on the other.” Which cards must you turn over to check it?'), turn.join(' and '));
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const today = (days.indexOf('Sunday') - 2 + 7) % 7;
+  assert.equal(answer('If the day after tomorrow is Sunday, what day was the day before yesterday?'), days[(today - 2 + 7) % 7]);
+  // Socks: the unluckiest draws.
+  assert.equal(answer('A dark drawer holds 10 black socks and 10 white ones. How many must you take out to be sure of a matching pair?'), String(2 + 1));
+  assert.equal(answer('From a dark drawer of 10 black socks and 10 white ones, how many must you take out to be sure of two black ones?'), String(10 + 2));
+  assert.equal(answer('A bat and a ball cost 1,100 won together. The bat costs 1,000 won more than the ball. How much is the ball?'), `${(1100 - 1000) / 2} won`);
+  assert.equal(answer('Lily pads on a pond double every day and cover all of it on day 48. On which day did they cover half of it?'), `Day ${48 - 1}`);
+  const shown = 12 * 60 + (6 * 60 * 55) / 60;
+  assert.equal(answer('A clock loses 5 minutes every hour. It is set right at noon. What does it show at 6 p.m.?'), `${Math.floor(shown / 60) - 12}:${String(shown % 60).padStart(2, '0')}`);
+  // The hands meet every 12/11 hours.
+  assert.equal(answer('How many times a day are a clock’s hour and minute hands exactly on top of each other?'), String(Array.from({ length: 30 }, (_, k) => (k * 12) / 11).filter((h) => h < 24).length));
+  const pets = perms(['cat', 'dog', 'fish']).filter(([ann, ben]) => ann === 'fish' && ben !== 'dog');
+  assert.equal(pets.length, 1);
+  assert.equal(answer('Ann, Ben and Cal have a cat, a dog and a fish, one pet each. Ann is allergic to fur, and Ben’s pet does not bark. Who has the dog?'), ['Ann', 'Ben', 'Cal'][pets[0].indexOf('dog')]);
+  const race = perms(['Amy', 'Bo', 'Cy', 'Di', 'Eve']).filter((o) => o.indexOf('Cy') < o.indexOf('Amy') && o.indexOf('Amy') < o.indexOf('Bo') && o.indexOf('Bo') < o.indexOf('Di') && o.indexOf('Eve') === o.indexOf('Cy') + 1);
+  assert.equal(race.length, 1);
+  assert.equal(answer('In a race of five, Cy beat Amy, Amy beat Bo, Bo beat Di, and Eve crossed the line just after Cy. Who came third?'), race[0][2]);
+  const rows = perms(['A', 'B', 'C', 'D']).filter((r) => r.indexOf('D') === 1 && (r[0] === 'C' || r[3] === 'C') && Math.abs(r.indexOf('A') - r.indexOf('B')) > 1 && r.indexOf('A') < r.indexOf('B'));
+  assert.equal(rows.length, 1);
+  assert.equal(answer('A, B, C and D sit in a row. D sits second from the left, C sits at one end, A is not next to B, and A sits somewhere to the left of B. Who sits at the left end?'), rows[0][0]);
+  const digits = QUESTION_BANKS.logic.find((b) => b.q.startsWith('Each letter stands for a different digit')).a.filter((ab) => ab[0] !== ab[1] && Number(ab) + Number([...ab].reverse().join('')) === 121);
+  assert.deepEqual(digits, [answer('Each letter stands for a different digit, and AB + BA = 121. Which could AB be?')]);
+  const prime = (k) => k > 1 && Array.from({ length: k - 2 }, (_, i) => i + 2).every((d) => k % d);
+  assert.deepEqual([3, 5, 7, 9, 11].filter((k) => !prime(k)).map(String), [answer('Which number does not belong: 3, 5, 7, 9, 11?')]);
+  assert.equal(answer('What letter comes next: O, T, T, F, F, S, S, E, …?'), ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'][8][0]);
+  assert.equal(answer('What comes next: 2, 3, 5, 9, 17, …?'), String(17 * 2 - 1));
+  const jumps = [-2, -1, 1, 2].flatMap((dx) => [-2, -1, 1, 2].filter((dy) => Math.abs(dx) !== Math.abs(dy)).map((dy) => [dx, dy]));
+  assert.equal(answer('A knight stands on a corner square of a chessboard. How many squares can it move to?'), String(jumps.filter(([dx, dy]) => dx >= 0 && dy >= 0 && dx < 8 && dy < 8).length));
+});
+
+test('the Coding Olympiad: Python runs every program to see what it prints, and the rest are worked out', (t) => {
+  const bank = QUESTION_BANKS.coding;
+  const programs = bank.filter((b) => b.code);
+  assert.ok(programs.length >= 15, 'plenty of programs to read');
+  // Every program run by Python itself, what it prints caught.
+  const python = ['import contextlib, io, json, sys', 'out = []', 'for code in json.load(sys.stdin):', '    buf = io.StringIO()', '    with contextlib.redirect_stdout(buf):', '        exec(code, {})', '    out.append(buf.getvalue().strip())', 'print(json.dumps(out))'].join('\n');
+  const run = spawnSync('python3', ['-c', python], { input: JSON.stringify(programs.map((b) => b.code)), encoding: 'utf8' });
+  if (run.error) {
+    t.skip('no python3 here to run the programs');
+    return;
+  }
+  assert.equal(run.status, 0, run.stderr);
+  const printed = JSON.parse(run.stdout);
+  programs.forEach((b, i) => {
+    assert.equal(printed[i], b.a[0], b.code);
+    assert.ok(!b.a.slice(1).some((wrong) => wrong.replace('−', '-') === printed[i]), `only one answer is what it prints:\n${b.code}`);
+  });
+  const answer = (q) => {
+    const b = bank.find((x) => x.q === q && !x.code);
+    assert.ok(b, `the Coding Olympiad asks “${q}”`);
+    return b.a[0];
+  };
+  assert.equal(answer('What is the binary number 1011 in decimal?'), String(parseInt('1011', 2)));
+  assert.equal(answer('What is 25 written in binary?'), (25).toString(2));
+  assert.equal(answer('How many different values can one byte, 8 bits, hold?'), String(2 ** 8));
+  assert.equal(answer('What is the hexadecimal number FF in decimal?'), String(parseInt('FF', 16)));
+  assert.equal(answer('At most how many guesses does binary search need to find a name in a sorted list of 1,000 names?'), String(Math.ceil(Math.log2(1000 + 1))));
+  assert.equal(answer('An AND gate gets a 1 and a 0. What does it give out?'), String(1 & 0));
+  const list = [3, 1, 2];
+  let swaps = 0;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = 0; j + 1 < list.length - i; j++) {
+      if (list[j] > list[j + 1]) {
+        [list[j], list[j + 1]] = [list[j + 1], list[j]];
+        swaps++;
+      }
+    }
+  }
+  assert.equal(answer('Bubble sort sorts [3, 1, 2] by swapping neighbours that are the wrong way round. How many swaps does it make?'), String(swaps));
+  const stack = [1, 2, 3];
+  stack.pop();
+  stack.push(4);
+  stack.pop();
+  assert.equal(answer('A stack: push 1, push 2, push 3, pop, push 4, pop. What is on top now?'), String(stack.at(-1)));
+  const line = ['A', 'B', 'C'];
+  line.shift();
+  line.push('D');
+  assert.equal(answer('A queue: add A, add B, add C, take one out, add D. Which is at the front now?'), line[0]);
+  assert.equal(answer('A tree has 10 nodes. How many edges does it have?'), String(10 - 1));
+  const roads = { AB: 4, BC: 3, AC: 9, CD: 2, BD: 7 };
+  const road = (a, b) => roads[a + b] ?? roads[b + a];
+  const ways = (at, been) => (at === 'D' ? [0] : ['A', 'B', 'C', 'D'].filter((next) => !been.includes(next) && road(at, next)).flatMap((next) => ways(next, [...been, next]).map((km) => km + road(at, next))));
+  assert.equal(answer('Roads go A–B 4 km, B–C 3 km, A–C 9 km, C–D 2 km and B–D 7 km. How long is the shortest way from A to D?'), `${Math.min(...ways('A', ['A']))} km`);
+  assert.equal(answer('How many bits are there in a kilobyte, taking 1 KB as 1,024 bytes?'), (1024 * 8).toLocaleString('en-US'));
+  assert.equal(answer('In most programming languages, what is 17 % 5?'), String(17 % 5));
+});
+
+test('a program to read comes with its question, and each program’s question is learnt on its own', () => {
+  const coded = QUESTION_BANKS.coding.filter((b) => b.code);
+  const quiz = makeQuiz('coding', 3, QUESTION_BANKS.coding.length);
+  const shown = quiz.questions.filter((ask) => ask.code);
+  assert.equal(shown.length, coded.length);
+  for (const ask of shown) assert.equal(ask.key, `${ask.q}\n${ask.code}`);
+  assert.ok(makeQuiz('junior', 3, 5).questions.every((ask) => !ask.code && ask.key === ask.q), 'only the Coding Olympiad has programs');
+  // The same words, a different program: learning one leaves the other.
+  const [first, second] = coded;
+  assert.equal(first.q, second.q);
+  const book = cleanQuizBook({});
+  for (let i = 0; i < LEARNT_AFTER; i++) fileQuizAnswer(book, 'coding', questionKey(first), true);
+  assert.ok(isLearnt(book, 'coding', questionKey(first)));
+  assert.ok(!isLearnt(book, 'coding', questionKey(second)));
+  assert.deepEqual(cleanQuizBook(book).coding, { [questionKey(first)]: LEARNT_AFTER }, 'kept on the device as it is');
 });
 
 test('a quiz asks its bank’s questions, the right answer somewhere among the answers', () => {
@@ -282,12 +560,14 @@ test('a quiz asks its bank’s questions, the right answer somewhere among the a
       assert.equal(ask.choices.length, n);
       assert.equal(new Set(ask.choices).size, n);
       assert.ok(Number.isInteger(ask.answer) && ask.answer >= 0 && ask.answer < n, 'the right answer is one of them');
-      const bank = QUESTION_BANKS[level].find((b) => b.q === ask.q);
+      const bank = QUESTION_BANKS[level].find((b) => questionKey(b) === ask.key);
       assert.ok(bank, `a question of the ${level} bank`);
+      assert.equal(ask.q, bank.q);
+      assert.equal(ask.code, bank.code);
       assert.equal(ask.choices[ask.answer], bank.a[0], 'where it says the right answer is, there it is');
       for (const choice of ask.choices) assert.ok(bank.a.includes(choice), 'no answer made up');
-      assert.ok(!asked.has(ask.q), 'no question twice in one quiz');
-      asked.add(ask.q);
+      assert.ok(!asked.has(ask.key), 'no question twice in one quiz');
+      asked.add(ask.key);
     }
   }
 });
@@ -310,7 +590,7 @@ test('a level that is not one asks nothing', () => {
   assert.deepEqual(makeQuiz(undefined, 1), { level: undefined, questions: [] });
 });
 
-test('every answer right pays a coin, two on the middle school and thinking-math quizzes, three on the high school ones and four on the Math Olympiad', () => {
+test('every answer right pays a coin, two on the middle school and thinking-math quizzes, three on the high school ones and four on the Olympiads', () => {
   assert.equal(quizCoins(0, 'junior'), 0);
   assert.equal(quizCoins(3, 'junior'), 3);
   assert.equal(quizCoins(3, 'senior'), 6);
@@ -328,6 +608,7 @@ test('every answer right pays a coin, two on the middle school and thinking-math
   assert.equal(quizCoins(3, 'middle1'), 6);
   assert.equal(quizCoins(3, 'high3'), 9);
   assert.equal(quizCoins(3, 'olympiad'), 12);
+  for (const key of ['science', 'logic', 'coding']) assert.equal(quizCoins(3, key), 12);
 });
 
 test('a question answered right three times in a row is learnt, and a wrong answer starts it over', () => {
@@ -364,18 +645,18 @@ test('a quiz never asks a question you have learnt, and asks nothing once you ha
     const book = cleanQuizBook({});
     // All but two learnt: those two are all that is asked, however many
     // are wanted.
-    for (const { q } of bank.slice(2)) book[level][q] = LEARNT_AFTER;
+    for (const b of bank.slice(2)) book[level][questionKey(b)] = LEARNT_AFTER;
     for (let seed = 1; seed <= 20; seed++) {
       const quiz = makeQuiz(level, seed, 3, book);
-      assert.deepEqual(quiz.questions.map((ask) => ask.q).sort(), [bank[0].q, bank[1].q].sort(), `${level}: only the questions left`);
+      assert.deepEqual(quiz.questions.map((ask) => ask.key).sort(), [questionKey(bank[0]), questionKey(bank[1])].sort(), `${level}: only the questions left`);
     }
     assert.equal(makeQuiz(level, 4, 1, book).questions.length, 1);
     assert.deepEqual(quizProgress(book, level), { learnt: bank.length - 2, left: 2, total: bank.length });
     // A question on its way to learnt is still asked.
-    book[level][bank[0].q] = LEARNT_AFTER - 1;
-    assert.ok(makeQuiz(level, 2, 3, book).questions.some((ask) => ask.q === bank[0].q));
+    book[level][questionKey(bank[0])] = LEARNT_AFTER - 1;
+    assert.ok(makeQuiz(level, 2, 3, book).questions.some((ask) => ask.key === questionKey(bank[0])));
     // All learnt: nothing left to ask.
-    for (const { q } of bank) book[level][q] = LEARNT_AFTER;
+    for (const b of bank) book[level][questionKey(b)] = LEARNT_AFTER;
     assert.deepEqual(makeQuiz(level, 9, 3, book).questions, []);
     assert.equal(quizProgress(book, level).left, 0);
   }
