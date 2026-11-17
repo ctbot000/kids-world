@@ -1,6 +1,7 @@
 // Quizzes: a little school work, for every school year from Year 1 of
 // elementary school to Year 3 of high school; the Olympiads, the hardest
-// of all, like a contest's, in maths, science, logic and coding; a
+// of all, like a contest's, in maths, science, logic, coding, chess, the
+// world (geography and history) and English; a
 // thinking-math one of puzzles to work out (patterns, logic, counting,
 // shapes) in the style of Korea's thinking-math workbooks for young
 // children; and English Words, each question with answers to pick from. They are asked in classes at school
@@ -75,6 +76,9 @@ export const QUIZ_LEVELS = {
   science: olympiadQuiz('science', '🔬', 'Science', 'Hard puzzles of physics, chemistry, life and space, like in a science contest.'),
   logic: olympiadQuiz('logic', '🧠', 'Logic', 'Brain-twisters: liars and truth-tellers, weighings, river crossings and tricky reasoning.'),
   coding: olympiadQuiz('coding', '💻', 'Coding', 'What a little program prints, binary, logic gates, stacks and queues, like in a coding contest.'),
+  chess: olympiadQuiz('chess', '♟️', 'Chess', 'A chess position, and the move that is checkmate.'),
+  world: olympiadQuiz('world', '🌏', 'World', 'The world’s lands, seas and cities, and its history and Korea’s, the hard parts.'),
+  englisholympiad: olympiadQuiz('englisholympiad', '📝', 'English', 'Hard words, idioms, tricky grammar and word puzzles.'),
   thinker: {
     key: 'thinker',
     icon: '🐂',
@@ -105,9 +109,9 @@ export const WIN_OFFER_MS = 2600;
 export const quizCoins = (right, level) => (Number.isFinite(right) && right > 0 ? Math.floor(right) * (QUIZ_LEVELS[level]?.coins ?? 1) : 0);
 
 // The banks the questions come from. Each: { q: the question, a: its answers,
-// the right one first, and pic: a picture to look at, or code: a program to
-// read, if it has one } — makeQuiz shuffles the answers, so where the right
-// one lands is never where it was written. A picture is rows of tiles, split
+// the right one first, and pic: a picture to look at, code: a program to
+// read or fen: a chess position, if it has one } — makeQuiz shuffles the
+// answers, so where the right one lands is never where it was written. A picture is rows of tiles, split
 // at the spaces: an emoji, a number or a sign each, · for an empty tile, |
 // for a mirror and ❓ for the tile to work out. The English Words questions
 // have three answers each, and word: the word asked about ({ word, emoji,
@@ -888,6 +892,120 @@ export const QUESTION_BANKS = {
     { q: 'What does this program print?', code: 'print(7 // 2 + 7 % 2)', a: ['4', '3', '4.5', '7'] },
     { q: 'What does this program print?', code: 'total = 0\nfor n in range(1, 11):\n    if n % 2 == 0:\n        continue\n    total += n\nprint(total)', a: ['25', '30', '55', '5'] },
   ],
+  // The Chess Olympiad: a position (fen: the board, as chess players write
+  // it down) and the move that is checkmate, or that makes sure of mate on
+  // the next move. The moves are written the chess way (K king, Q queen,
+  // R rook, B bishop, N knight, nothing for a pawn, x for a capture), with
+  // no + or # to give the answer away. test/quiz.test.js plays every move
+  // out with chess.js.
+  chess: [
+    { q: 'White to move: which move is checkmate?', fen: '6k1/5ppp/8/8/8/8/8/3R2K1 w - - 0 1', a: ['Rd8', 'Rd7', 'Rd6', 'Kf2'] },
+    { q: 'White to move: which move is checkmate?', fen: '6rk/6pp/8/6N1/8/8/8/6K1 w - - 0 1', a: ['Nf7', 'Nxh7', 'Ne6', 'Kg2'] },
+    { q: 'White to move: which move is checkmate?', fen: '7k/R7/5N2/8/8/8/6K1/8 w - - 0 1', a: ['Rh7', 'Ra8', 'Ng4', 'Kh3'] },
+    { q: 'White to move: which move is checkmate?', fen: '8/4N1pk/8/8/8/3R4/6K1/8 w - - 0 1', a: ['Rh3', 'Rd7', 'Nf5', 'Kg3'] },
+    { q: 'White to move: which move is checkmate?', fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4', a: ['Qxf7', 'Bxf7', 'Qxe5', 'Qxh7'] },
+    { q: 'Black to move: which move is checkmate?', fen: 'rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq g3 0 2', a: ['Qh4', 'Qg5', 'Bc5', 'Nf6'] },
+    { q: 'White to move: which move is checkmate?', fen: '4k3/R7/8/8/8/8/8/1R4K1 w - - 0 1', a: ['Rb8', 'Ra8', 'Re7', 'Re1'] },
+    { q: 'White to move: which move is checkmate?', fen: '3rkr2/8/8/8/2Q5/8/8/4K3 w - - 0 1', a: ['Qe6', 'Qc6', 'Qe4', 'Qb5'] },
+    { q: 'White to move: which move is checkmate?', fen: 'r5k1/5p1p/8/5N2/3Q4/8/8/6K1 w - - 0 1', a: ['Qg7', 'Qd8', 'Ne7', 'Nh6'] },
+    { q: 'Black to move: which move is checkmate?', fen: '1r4k1/8/8/8/8/8/5PPP/6K1 b - - 0 1', a: ['Rb1', 'Rb2', 'Rb7', 'Kf7'] },
+    { q: 'White to move: which move is checkmate?', fen: '7k/7p/5N2/8/8/8/8/6RK w - - 0 1', a: ['Rg8', 'Rg7', 'Nxh7', 'Ne8'] },
+    { q: 'White to move: which move is checkmate?', fen: 'k7/p1K5/1P6/8/8/8/8/8 w - - 0 1', a: ['b7', 'bxa7', 'Kc8', 'Kd7'] },
+    { q: 'White to move: which move is checkmate?', fen: '6k1/5p1p/6pQ/8/8/8/1B6/6K1 w - - 0 1', a: ['Qg7', 'Qxh7', 'Qf8', 'Qxg6'] },
+    { q: 'White to move: which move is checkmate?', fen: '4k3/5p2/8/6B1/8/8/8/3R2K1 w - - 0 1', a: ['Rd8', 'Rd7', 'Re1', 'Bf6'] },
+    { q: 'White to move: which move is checkmate?', fen: '7k/8/6K1/8/8/8/8/R7 w - - 0 1', a: ['Ra8', 'Ra7', 'Rh1', 'Kf7'] },
+    { q: 'Black to move: which move is checkmate?', fen: '6k1/8/8/8/6n1/8/6PP/6RK b - - 0 1', a: ['Nf2', 'Ne3', 'Nh6', 'Kf7'] },
+    { q: 'White to move: which move is checkmate?', fen: '7k/1P4pp/8/8/8/8/8/6K1 w - - 0 1', a: ['b8=Q', 'b8=N', 'b8=B', 'Kf2'] },
+    { q: 'White to move: which move is checkmate?', fen: '3r2k1/5ppp/8/8/8/8/3Q1PPP/3R2K1 w - - 0 1', a: ['Qxd8', 'Qd7', 'Qd5', 'h3'] },
+    { q: 'White to move: which move is checkmate?', fen: '5rk1/5pp1/8/6NQ/8/8/8/6K1 w - - 0 1', a: ['Qh7', 'Qxf7', 'Qh8', 'Nxf7'] },
+    { q: 'White to move: which move is checkmate?', fen: '2kr4/1p1n4/B7/8/5B2/8/8/1R4K1 w - - 0 1', a: ['Bxb7', 'Rxb7', 'Rc1', 'Bb5'] },
+    { q: 'White to move: which move is checkmate?', fen: '5rk1/5ppp/8/8/8/3Q4/2B5/6RK w - - 0 1', a: ['Qxh7', 'Rxg7', 'Qd8', 'Bb3'] },
+    { q: 'White to move: which move is checkmate?', fen: '7k/8/6K1/8/8/8/8/5Q2 w - - 0 1', a: ['Qf8', 'Qf7', 'Qa6', 'Qh3'] },
+    { q: 'White to move: which move makes sure of checkmate on the next move?', fen: '4k3/8/8/8/8/8/1R6/R5K1 w - - 0 1', a: ['Ra7', 'Ra8', 'Rb8', 'Kf2'] },
+  ],
+  // The World Olympiad: the world's lands, seas, cities and clocks, and
+  // its history and Korea's, the hard parts.
+  world: [
+    { q: 'What is the capital of Australia?', a: ['Canberra', 'Sydney', 'Melbourne', 'Perth'] },
+    { q: 'What is the capital of Canada?', a: ['Ottawa', 'Toronto', 'Vancouver', 'Montreal'] },
+    { q: 'What is the capital of Turkey?', a: ['Ankara', 'Istanbul', 'Izmir', 'Antalya'] },
+    { q: 'What is the capital of Brazil?', a: ['Brasília', 'Rio de Janeiro', 'São Paulo', 'Salvador'] },
+    { q: 'Which is the longest river in Asia?', a: ['The Yangtze', 'The Mekong', 'The Ganges', 'The Yellow River'] },
+    { q: 'Which is the highest mountain in Africa?', a: ['Kilimanjaro', 'Mount Kenya', 'Mount Elbrus', 'Mont Blanc'] },
+    { q: 'Which country has the most people today?', a: ['India', 'China', 'The United States', 'Indonesia'] },
+    { q: 'Which is the largest country by area?', a: ['Russia', 'Canada', 'China', 'The United States'] },
+    { q: 'Which is the smallest country in the world?', a: ['Vatican City', 'Monaco', 'San Marino', 'Liechtenstein'] },
+    { q: 'Which is the largest hot desert?', a: ['The Sahara', 'The Gobi', 'The Kalahari', 'The Arabian Desert'] },
+    { q: 'When it is noon in Seoul (UTC+9), what time is it in London (UTC+0) in winter?', a: ['3 a.m.', '9 p.m.', '9 a.m.', '6 a.m.'] },
+    { q: 'Which strait lies between Korea and Japan?', a: ['The Korea Strait', 'The Strait of Gibraltar', 'The Bering Strait', 'The Strait of Malacca'] },
+    { q: 'Which sea lies between Africa and Arabia?', a: ['The Red Sea', 'The Black Sea', 'The Caspian Sea', 'The Dead Sea'] },
+    { q: 'Which mountains divide Europe from Asia?', a: ['The Urals', 'The Alps', 'The Himalayas', 'The Andes'] },
+    { q: 'Which is the deepest lake in the world?', a: ['Lake Baikal', 'Lake Superior', 'Lake Victoria', 'Lake Titicaca'] },
+    { q: 'Which country has the most time zones, counting its lands overseas?', a: ['France', 'Russia', 'The United States', 'China'] },
+    { q: 'What is the highest mountain in South Korea?', a: ['Hallasan', 'Jirisan', 'Seoraksan', 'Bukhansan'] },
+    { q: 'Which line of longitude runs through Greenwich in London?', a: ['The prime meridian', 'The equator', 'The International Date Line', 'The Tropic of Cancer'] },
+    { q: 'In which year did the Berlin Wall fall?', a: ['1989', '1991', '1961', '1945'] },
+    { q: 'Who was the first person to walk on the Moon?', a: ['Neil Armstrong', 'Buzz Aldrin', 'Yuri Gagarin', 'John Glenn'] },
+    { q: 'Which empire built Machu Picchu in the Andes?', a: ['The Inca Empire', 'The Aztec Empire', 'The Maya', 'The Roman Empire'] },
+    { q: 'Who painted the Mona Lisa?', a: ['Leonardo da Vinci', 'Michelangelo', 'Raphael', 'Botticelli'] },
+    { q: 'Which of the Seven Wonders of the Ancient World still stands?', a: ['The Great Pyramid of Giza', 'The Colossus of Rhodes', 'The Hanging Gardens of Babylon', 'The Lighthouse of Alexandria'] },
+    { q: 'In which year did the First World War begin?', a: ['1914', '1918', '1939', '1905'] },
+    { q: 'Who wrote “On the Origin of Species”, about evolution by natural selection?', a: ['Charles Darwin', 'Gregor Mendel', 'Isaac Newton', 'Louis Pasteur'] },
+    { q: 'Which country gave the Statue of Liberty to the United States?', a: ['France', 'Britain', 'Spain', 'Italy'] },
+    { q: 'Which country first used paper money?', a: ['China', 'Egypt', 'Greece', 'England'] },
+    { q: 'Around 1450, Johannes Gutenberg changed Europe with…', a: ['A printing press with movable type', 'The telescope', 'The steam engine', 'The compass'] },
+    { q: 'The Silk Road linked China with…', a: ['The Mediterranean world', 'The Americas', 'Australia', 'Antarctica'] },
+    { q: 'Which Korean kingdom lasted the longest?', a: ['Silla', 'Joseon', 'Goryeo', 'Goguryeo'] },
+    { q: 'Which king of Goguryeo won it the most land, as a great stone stele tells?', a: ['Gwanggaeto the Great', 'King Jangsu', 'King Sosurim', 'King Dongmyeong'] },
+    { q: 'Who led Joseon’s navy, and its turtle ships, against Japan in the Imjin War?', a: ['Admiral Yi Sun-sin', 'General Gang Gam-chan', 'General Eulji Mundeok', 'King Seonjo'] },
+    { q: 'In which battle did General Eulji Mundeok of Goguryeo beat the Sui army in 612?', a: ['The Battle of Salsu', 'The Battle of Hansan Island', 'The Battle of Gwiju', 'The Battle of Haengju'] },
+    { q: 'Which Korean book of 1377 is the oldest still-existing book printed with movable metal type?', a: ['Jikji', 'The Tripitaka Koreana', 'The Samguk Sagi', 'The Hunminjeongeum'] },
+    { q: 'In which year did the fighting of the Korean War stop with an armistice?', a: ['1953', '1950', '1945', '1960'] },
+    { q: 'Which city held the 1988 Summer Olympics?', a: ['Seoul', 'Tokyo', 'Beijing', 'Los Angeles'] },
+    { q: 'Which Korean led the United Nations as its Secretary-General?', a: ['Ban Ki-moon', 'Kim Dae-jung', 'Roh Moo-hyun', 'Lee Myung-bak'] },
+  ],
+  // The English Olympiad: hard words, idioms, the grammar that trips
+  // people up, spelling, and words played with.
+  englisholympiad: [
+    { q: 'Which word means “happening by a lucky chance”?', a: ['Serendipitous', 'Ubiquitous', 'Meticulous', 'Gregarious'] },
+    { q: 'Which word means “found everywhere”?', a: ['Ubiquitous', 'Serendipitous', 'Ephemeral', 'Benevolent'] },
+    { q: 'Which word means “lasting only a very short time”?', a: ['Ephemeral', 'Eternal', 'Perennial', 'Robust'] },
+    { q: 'Which word means “very careful about every detail”?', a: ['Meticulous', 'Careless', 'Hasty', 'Vague'] },
+    { q: 'Which word means “liking to be with other people”?', a: ['Gregarious', 'Reclusive', 'Timid', 'Aloof'] },
+    { q: 'What does “benevolent” mean?', a: ['Kind and wanting to help', 'Cruel', 'Lazy', 'Proud'] },
+    { q: 'Which word is the opposite of “frugal”?', a: ['Wasteful', 'Thrifty', 'Careful', 'Economical'] },
+    { q: 'Which word is the opposite of “verbose”?', a: ['Concise', 'Wordy', 'Talkative', 'Long-winded'] },
+    { q: 'What does “to procrastinate” mean?', a: ['To put things off until later', 'To work very fast', 'To plan ahead', 'To give up'] },
+    { q: 'What does “ambiguous” mean?', a: ['Having more than one possible meaning', 'Very clear', 'Very large', 'Very old'] },
+    { q: 'What do you call words that sound alike but mean different things, like “pair” and “pear”?', a: ['Homophones', 'Synonyms', 'Antonyms', 'Acronyms'] },
+    { q: 'What do you call a word made from the first letters of other words, like NASA?', a: ['An acronym', 'A homophone', 'A palindrome', 'An idiom'] },
+    { q: 'Which of these is a palindrome, the same read backwards?', a: ['Racecar', 'Rocket', 'Rotate', 'Reader'] },
+    { q: 'Which word is an anagram of “listen”, the same letters mixed up?', a: ['Silent', 'Lessen', 'Listed', 'Glisten'] },
+    { q: 'Which is spelled right?', a: ['Necessary', 'Neccessary', 'Necesary', 'Neccesary'] },
+    { q: 'Which of these is spelled correctly?', a: ['Accommodate', 'Acommodate', 'Accomodate', 'Acomodate'] },
+    { q: 'What does it mean to “break the ice”?', a: ['To start a friendly talk with someone new', 'To break something by accident', 'To feel very cold', 'To win a race'] },
+    { q: 'What does “a piece of cake” mean?', a: ['Something very easy', 'A birthday treat', 'A small share', 'Something very sweet'] },
+    { q: 'What does it mean to “hit the nail on the head”?', a: ['To say exactly the right thing', 'To hurt yourself', 'To build something', 'To make a big mistake'] },
+    { q: 'What does “once in a blue moon” mean?', a: ['Very rarely', 'Every month', 'At night', 'Never'] },
+    { q: 'What does it mean to feel “under the weather”?', a: ['To feel ill', 'To be out in the rain', 'To feel very happy', 'To be hiding'] },
+    { q: 'Fill the gap: “Neither the teacher nor the students ___ ready.”', a: ['were', 'was', 'is', 'be'] },
+    { q: 'Fill the gap: “I wish I ___ taller.”', a: ['were', 'am', 'will be', 'be'] },
+    { q: 'Fill the gap: “By next year, she ___ here for ten years.”', a: ['will have lived', 'will live', 'has lived', 'lived'] },
+    { q: 'Which sentence is correct?', a: ['Fewer people came than we hoped.', 'Less people came than we hoped.', 'Fewer water was left.', 'Less people was there.'] },
+    { q: 'Fill the gap: “The book, ___ cover is torn, is mine.”', a: ['whose', 'who’s', 'which', 'that'] },
+    { q: 'Fill the gap: “It was raining, ___ we stayed inside.”', a: ['so', 'because', 'although', 'unless'] },
+    { q: 'What is the past participle of “swim”, as in “I have ___”?', a: ['swum', 'swam', 'swimmed', 'swimming'] },
+    { q: 'What is the plural of “ox”?', a: ['Oxen', 'Oxes', 'Oxs', 'Oxi'] },
+    { q: 'Which word is a conjunction, joining two parts of a sentence?', a: ['Although', 'Quickly', 'Beautiful', 'Table'] },
+    { q: 'Which sentence uses the apostrophe correctly?', a: ['The dog wagged its tail.', 'The dog wagged it’s tail.', 'The dogs’ wagged tails.', 'The dog’s wagged it’s tail.'] },
+    { q: 'What is the comparative of “bad”?', a: ['Worse', 'Badder', 'Worst', 'More bad'] },
+    { q: 'How many letters of the English alphabet are vowels, not counting Y?', a: ['5', '6', '7', '4'] },
+    { q: 'Which letter turns up most often in English writing?', a: ['E', 'A', 'T', 'S'] },
+    { q: 'A pangram uses every letter of the alphabet. Which of these is one?', a: ['The quick brown fox jumps over the lazy dog', 'The lazy dog sleeps all day long', 'A big black bear sat on a bun', 'Every cat likes warm milk'] },
+    { q: 'Which word has the most syllables?', a: ['Encyclopedia', 'Dictionary', 'Alphabet', 'Grammar'] },
+    { q: 'What does the root “bio” mean, as in “biology”?', a: ['Life', 'Earth', 'Water', 'Book'] },
+    { q: 'What does the root “tele” mean, as in “telephone”?', a: ['Far', 'Sound', 'Near', 'Write'] },
+  ],
   // Every word's quiz, but a question two words ask alike (“What is a
   // diamond?” on diamond and on jewelry) only the first time.
   english: ENGLISH_WORDS.flatMap(({ word, emoji, ko, quiz }) => quiz.map(({ q, a }) => ({ q, a, word: { word, emoji, ko } }))).filter((b, i, all) => all.findIndex((o) => o.q === b.q) === i),
@@ -898,9 +1016,10 @@ export const QUESTION_BANKS = {
 export const LEARNT_AFTER = 3;
 
 // What tells one question from another, in the quiz book: its words, and
-// its program for a question that shows one (the Coding Olympiad asks
-// “What does this program print?” of many).
-export const questionKey = ({ q, code }) => (code ? `${q}\n${code}` : q);
+// its program or chess position for a question that shows one (the Coding
+// Olympiad asks “What does this program print?” of many, and the Chess
+// Olympiad which move is checkmate).
+export const questionKey = ({ q, code, fen }) => [q, code, fen].filter(Boolean).join('\n');
 
 // Each bank's questions, to know a question of it when one is filed.
 const ASKED = Object.fromEntries(Object.entries(QUESTION_BANKS).map(([level, bank]) => [level, new Set(bank.map(questionKey))]));
@@ -965,7 +1084,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE, book = null) {
   }
   return {
     level,
-    questions: picks.map(({ q, pic, code, word, a }) => {
+    questions: picks.map(({ q, pic, code, fen, word, a }) => {
       const choices = [...a];
       // The answers go where they land, and the right one (written first)
       // remembers where that was.
@@ -973,7 +1092,7 @@ export function makeQuiz(level, seed = 1, size = QUIZ_SIZE, book = null) {
         const j = Math.floor(rng.next() * (i + 1));
         [choices[i], choices[j]] = [choices[j], choices[i]];
       }
-      return { q, key: questionKey({ q, code }), ...(pic && { pic }), ...(code && { code }), ...(word && { word }), choices, answer: choices.indexOf(a[0]) };
+      return { q, key: questionKey({ q, code, fen }), ...(pic && { pic }), ...(code && { code }), ...(fen && { fen }), ...(word && { word }), choices, answer: choices.indexOf(a[0]) };
     }),
   };
 }

@@ -3,8 +3,9 @@
 // stamp (stamps.js), a schoolhouse with a bell tower and a classroom of
 // desks facing a long chalkboard. Walk up to a chalkboard and press Class:
 // pick a class, any school year from Year 1 of elementary school to Year 3
-// of high school, an Olympiad (maths, science, logic or coding), Thinking
-// Math or English Words, and answer its questions, asked out of the
+// of high school, an Olympiad (maths, science, logic, coding, chess, the
+// world or English), Thinking Math or English Words, and answer its
+// questions, asked out of the
 // quizzes' banks (quiz.js), for a coin or more for each one
 // right. A question answered right three times in a row is learnt, and
 // never asked of you again (quiz.js LEARNT_AFTER).

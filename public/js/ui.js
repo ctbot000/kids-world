@@ -2659,7 +2659,7 @@ export class UI {
           card('🗼', 'Tower defense islands', ['Make one with 🗼 Tower defense on. Monsters march along the road from their gate to the Star Stone. Stand by a wooden pad beside the road and tap 🗼 Build (or press ', h('kbd', {}, 'V'), ') for a tower that blows bubbles at them; build again to make it bigger. Every monster popped brings bricks. Ready? Tap 🌊 Start for the next wave!']),
           card('⚔️', 'Freeing camps', ['On 🌟 Adventure Isle, pop the monsters of a camp, then stand by its flag to raise yours: with friends it goes up faster! A camp freed is a safe place. Out of HP? Sit tight until a friend taps you to help you up. A 👾 Monster Gashapon turns up now and then: follow its beam of light, and turn it for a figure of a real monster — the higher the stage, the likelier a rare one! Locked 🧰 treasure chests lie about the isle too: each camp you help free offers a quiz for a 🔑 key, and a stage won one for a 👑 golden key, which opens the golden chest.']),
           card('🎨', 'Drawing boards', ['Put down a Drawing Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Draw). Draw with your finger or the mouse: pick a colour and a brush, 🪣 fill a patch, or 🧽 rub out. 🖼️ Save your picture to your own gallery (in ⭐ Stickers too) to look at again or put up on a board again, or 💾 save it as a file! Friends at the same board draw with you, and everyone sees your picture on the board — it stays there when the island is saved!']),
-          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), an Olympiad (the hardest of all, in maths, science, logic or coding), Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
+          card('🏫', 'School', ['Stamp a 🏫 School, or put down school desks and a chalkboard (on a wall) from the toy box\'s 🛋️ Home tab. Walk up to the chalkboard and press ', h('kbd', {}, 'Q'), ' (or tap Class), and pick a class: any year of elementary school (Years 1 to 6), middle school or high school (Years 1 to 3), an Olympiad (the hardest of all, in maths, science, logic, coding, chess, the world or English), Thinking Math or English Words. ' + CLASS_SIZE + ' questions, and every answer you get right is a coin or more! After a class, the next one of that kind is after a little break. Get a question right ' + LEARNT_AFTER + ' times in a row and it is learnt 🏅: it will not come again.']),
           card('🍳', 'Cooking class', ['Walk up to a stove (the toy box\'s 🛋️ Home tab, or stamp a 🍳 Cooking School) and press ', h('kbd', {}, 'Q'), ' (or tap Cook). Pick a recipe — pancakes, pizza, salad, cookies, soup or a sandwich — and cook it with your own hands: take what comes next off the shelf, then drag eggs into the bowl, hold the milk over it to pour, stir round and round, tap the knife to chop, rub to spread the sauce, and take it off the heat when it is golden. A coin for every step done just right!']),
           card('⚫', 'Go', ['Put down a Go Board from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap Play Go). You play black and go first. A friend at the board can play white, or tap 🤖 Play with Pip and the AI friend comes over to play and teaches you how as you go. Put stones on the crossings; surround a stone so it has no breathing spaces left and you capture it! Tap 📖 How to play to learn the rules a step at a time.']),
           card('⭕', 'Gomoku', ['At a Go Board, tap ⭕ Gomoku for five in a row: take turns, and the first to get five stones in a row — across, down or slanting — wins! Block your friend when they have three in a row with both ends open. Pip plays Gomoku with you too.']),
@@ -8158,6 +8158,7 @@ export class UI {
       word ? h('div', { class: 'quiz-word' }, answered ? `${word} = ${ask.word.ko}` : word) : '',
       h('div', { class: 'quiz-question' }, ask.q),
       ask.code ? h('pre', { class: 'quiz-code', 'aria-label': 'Program' }, h('code', {}, ask.code)) : '',
+      ask.fen ? this.chessBoard(ask.fen) : '',
       ask.pic ? this.quizPic(ask.pic) : '',
       answers,
       answered ? h('p', { class: 'quiz-verdict' }, q.picks[this.quizAt] === ask.answer ? '✅ Yes, that’s the one!' : '❌ Not this one — the right answer is the one outlined green.') : '',
@@ -8292,6 +8293,39 @@ export class UI {
       el.classList.add('going');
       this.treasureTimer = setTimeout(() => (el.hidden = true), 400);
     }, 3200);
+  }
+
+  // A Chess Olympiad position (quiz.js fen) as a board, White at the
+  // bottom: light and dark squares, the pieces, the files and ranks named
+  // round it so a move can be read off it, and how moves are written.
+  chessBoard(fen) {
+    const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟\uFE0E' };
+    const NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+    const cells = [];
+    const said = [];
+    fen
+      .split(' ')[0]
+      .split('/')
+      .forEach((row, r) => {
+        cells.push(h('span', { class: 'cb-rank' }, String(8 - r)));
+        let f = 0;
+        for (const ch of row) {
+          const empty = /\d/.test(ch) ? Number(ch) : 0;
+          for (let i = 0; i < (empty || 1); i++, f++) {
+            const piece = empty ? '' : ch;
+            const white = piece && piece === piece.toUpperCase();
+            if (piece) said.push(`${white ? 'white' : 'black'} ${NAMES[piece.toLowerCase()]} ${'abcdefgh'[f]}${8 - r}`);
+            cells.push(h('span', { class: `cb-sq ${(r + f) % 2 ? 'dark' : 'light'}` }, piece ? h('span', { class: `cb-piece ${white ? 'white' : 'black'}` }, GLYPHS[piece.toLowerCase()]) : ''));
+          }
+        }
+      });
+    cells.push(h('span'), ...[...'abcdefgh'].map((file) => h('span', { class: 'cb-file' }, file)));
+    return h(
+      'div',
+      { class: 'chess' },
+      h('div', { class: 'chess-board', role: 'img', 'aria-label': `Chess board: ${said.join(', ')}` }, cells),
+      h('p', { class: 'chess-key muted' }, 'K king · Q queen · R rook · B bishop · N knight · a pawn has no letter · x takes · =Q becomes a queen'),
+    );
   }
 
   // A quiz question's picture (quiz.js): its rows of tiles in a grid, · an

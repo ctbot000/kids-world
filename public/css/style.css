@@ -5424,6 +5424,66 @@ button.go-pt {
   text-align: center;
 }
 
+/* A chess position (the Chess Olympiad): eight by eight squares, light and
+   dark, with the ranks down its left and the files along its foot; White's
+   pieces white edged in ink, Black's ink. */
+.chess {
+  margin: -4px auto 14px;
+  max-width: 340px;
+}
+
+.chess-board {
+  display: grid;
+  grid-template-columns: 1.1em repeat(8, minmax(0, 1fr));
+  align-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.cb-sq {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  font-size: clamp(1.3rem, 7.5vw, 2rem);
+  line-height: 1;
+}
+
+.cb-sq.light {
+  background: #f3dfb8;
+}
+
+.cb-sq.dark {
+  background: #b98a5a;
+}
+
+.cb-piece {
+  font-family: 'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', serif;
+}
+
+.cb-piece.white {
+  color: #fffaf0;
+  -webkit-text-stroke: 1px var(--ink);
+  paint-order: stroke fill;
+}
+
+.cb-piece.black {
+  color: #241a33;
+}
+
+.cb-rank,
+.cb-file {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.chess-key {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 /* A program to read (the Coding Olympiad), as it is typed: in a typewriter
    font, its lines and indents kept, sideways scrolling if one is long. */
 .quiz-code {

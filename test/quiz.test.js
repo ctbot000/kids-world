@@ -1,7 +1,8 @@
 // Quizzes, asked in classes at school and as Adventure Isle's key quizzes
 // — every school year from Year 1 of elementary school to Year 3 of high
-// school, the Olympiads (maths, science, logic and coding), a thinking-math
-// one of puzzles to work out and English Words — each a few questions picked and
+// school, the Olympiads (maths, science, logic, coding, chess, the world and
+// English), a thinking-math one of puzzles to work out and English Words —
+// each a few questions picked and
 // shuffled out of a bank of them, with the right answer never where it was
 // written; coins for the answers got right, and the counts and stickers
 // they earn. A question answered right three times in a row is learnt, and
@@ -10,12 +11,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { XP_FOR } from '../public/js/shared/levels.js';
 import { spawnSync } from 'node:child_process';
+import { Chess } from 'chess.js';
 import { cleanQuizBook, fileQuizAnswer, isLearnt, LEARNT_AFTER, makeQuiz, OLYMPIADS, QUESTION_BANKS, questionKey, QUIZ_LEVELS, QUIZ_SIZE, quizCoins, quizProgress, SCHOOLS } from '../public/js/shared/quiz.js';
 import { STAT_KEYS, STICKERS } from '../public/js/shared/stickers.js';
 
-test('a quiz for every school year, from elementary school to high school, four Olympiads and two more, each with questions to spare', () => {
+test('a quiz for every school year, from elementary school to high school, seven Olympiads and two more, each with questions to spare', () => {
   // The ones that came first keep their keys, for the quiz books that have them.
-  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['elementary1', 'junior', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'senior', 'high1', 'high2', 'high3', 'olympiad', 'science', 'logic', 'coding', 'thinker', 'english']);
+  assert.deepEqual(Object.keys(QUIZ_LEVELS), ['elementary1', 'junior', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'senior', 'high1', 'high2', 'high3', 'olympiad', 'science', 'logic', 'coding', 'chess', 'world', 'englisholympiad', 'thinker', 'english']);
   assert.deepEqual(
     Object.values(QUIZ_LEVELS).map((l) => l.name),
     [
@@ -26,6 +28,9 @@ test('a quiz for every school year, from elementary school to high school, four 
       'Science Olympiad',
       'Logic Olympiad',
       'Coding Olympiad',
+      'Chess Olympiad',
+      'World Olympiad',
+      'English Olympiad',
       'Thinking Math',
       'English Words',
     ],
@@ -49,6 +54,7 @@ test('a quiz for every school year, from elementary school to high school, four 
         assert.ok(pic.every((row) => typeof row === 'string' && row.trim().length > 0), 'each row has tiles');
       }
       if (code !== undefined) assert.ok(typeof code === 'string' && code.trim().length > 0 && !code.includes('\t'), 'a program in lines, spaces for indents');
+      if (b.fen !== undefined) assert.equal(key, 'chess', 'only the Chess Olympiad has boards');
       // Questions in the same words show different programs.
       assert.ok(!asked.has(questionKey(b)), 'no question twice');
       asked.add(questionKey(b));
@@ -78,6 +84,9 @@ test('a quiz for every school year, from elementary school to high school, four 
       ['science', 'Science'],
       ['logic', 'Logic'],
       ['coding', 'Coding'],
+      ['chess', 'Chess'],
+      ['world', 'World'],
+      ['englisholympiad', 'English'],
     ],
   );
   for (const l of olympiads) assert.deepEqual([l.name, l.color, l.coins], [`${l.short} Olympiad`, OLYMPIADS.color, OLYMPIADS.coins]);
@@ -94,7 +103,8 @@ test('a quiz for every school year, from elementary school to high school, four 
   // others or bigger: learnt questions go, so a bank wants plenty.
   for (const key of ['elementary1', 'elementary3', 'elementary4', 'elementary5', 'elementary6', 'middle1', 'middle2', 'high1', 'high2', 'high3']) assert.ok(QUESTION_BANKS[key].length >= 39, `${key} has plenty of questions`);
   assert.ok(QUESTION_BANKS.olympiad.length >= 45);
-  for (const key of ['science', 'logic', 'coding']) assert.ok(QUESTION_BANKS[key].length >= 35, `${key} has plenty of questions`);
+  for (const key of ['science', 'logic', 'coding', 'world', 'englisholympiad']) assert.ok(QUESTION_BANKS[key].length >= 35, `${key} has plenty of questions`);
+  assert.ok(QUESTION_BANKS.chess.length >= 20);
 });
 
 test('the sums in the Year 3 and high school banks come out right', () => {
@@ -532,13 +542,88 @@ test('the Coding Olympiad: Python runs every program to see what it prints, and 
   assert.equal(answer('In most programming languages, what is 17 % 5?'), String(17 % 5));
 });
 
+test('the Chess Olympiad: chess.js plays every move, and only the right one is checkmate (or makes sure of it next move)', () => {
+  // Every reply, and whether a mate in one follows each.
+  const matesNow = (fen) => {
+    const game = new Chess(fen);
+    return game.moves().filter((move) => {
+      game.move(move);
+      const mate = game.isCheckmate();
+      game.undo();
+      return mate;
+    });
+  };
+  const forcesMate = (fen, move) => {
+    const game = new Chess(fen);
+    game.move(move);
+    if (game.isCheckmate()) return false;
+    const replies = game.moves();
+    return (
+      replies.length > 0 &&
+      replies.every((reply) => {
+        game.move(reply);
+        const mate = matesNow(game.fen()).length > 0;
+        game.undo();
+        return mate;
+      })
+    );
+  };
+  for (const b of QUESTION_BANKS.chess) {
+    const game = new Chess(b.fen);
+    assert.equal(game.turn(), b.q.startsWith('White') ? 'w' : 'b', `${b.fen}: the side the question says is to move`);
+    assert.ok(!game.inCheck() && !game.isGameOver(), `${b.fen}: nobody in check, the game still on`);
+    const nextMove = b.q.includes('next move');
+    for (const [i, move] of b.a.entries()) {
+      assert.ok(!/[+#]/.test(move), `${move}: no + or # to give it away`);
+      assert.doesNotThrow(() => new Chess(b.fen).move(move), `${b.fen}: ${move} is a legal move`);
+      const mate = (() => {
+        const g = new Chess(b.fen);
+        g.move(move);
+        return g.isCheckmate();
+      })();
+      assert.equal(nextMove ? forcesMate(b.fen, move) : mate, i === 0, `${b.fen}: ${move} ${i === 0 ? 'wins' : 'does not'}`);
+      if (nextMove) assert.equal(mate, false, 'not mate at once either');
+    }
+    // A mate in one has just the one mate on the board, but for a pawn
+    // that makes it as a queen or as a rook alike.
+    if (!nextMove) assert.deepEqual([...new Set(matesNow(b.fen).map((m) => m.replace(/[#=]|[QR]#?$/g, '')))], [b.a[0].replace(/[=]|[QR]$/g, '')], b.fen);
+  }
+  // A position kept as the board shows it: every square of every rank.
+  for (const b of QUESTION_BANKS.chess) {
+    const ranks = b.fen.split(' ')[0].split('/');
+    assert.equal(ranks.length, 8);
+    for (const rank of ranks) assert.equal([...rank].reduce((n, ch) => n + (/\d/.test(ch) ? Number(ch) : 1), 0), 8, b.fen);
+  }
+});
+
+test('the World and English Olympiads’ puzzles that can be worked out come out right', () => {
+  const answer = (level, q) => {
+    const b = QUESTION_BANKS[level].find((x) => x.q === q);
+    assert.ok(b, `the ${level} quiz asks “${q}”`);
+    return b;
+  };
+  const noon = (12 - 9 + 24) % 24;
+  assert.equal(answer('world', 'When it is noon in Seoul (UTC+9), what time is it in London (UTC+0) in winter?').a[0], `${noon % 12 || 12} ${noon < 12 ? 'a.m.' : 'p.m.'}`);
+  const same = (w) => w.toLowerCase() === [...w.toLowerCase()].reverse().join('');
+  assert.deepEqual(answer('englisholympiad', 'Which of these is a palindrome, the same read backwards?').a.filter(same), ['Racecar']);
+  const letters = (w) => [...w.toLowerCase()].sort().join('');
+  assert.deepEqual(answer('englisholympiad', 'Which word is an anagram of “listen”, the same letters mixed up?').a.filter((w) => letters(w) === letters('listen')), ['Silent']);
+  const pangram = (t) => [...'abcdefghijklmnopqrstuvwxyz'].every((c) => t.toLowerCase().includes(c));
+  const pangrams = answer('englisholympiad', 'A pangram uses every letter of the alphabet. Which of these is one?');
+  assert.deepEqual(pangrams.a.filter(pangram), [pangrams.a[0]]);
+  assert.equal(answer('englisholympiad', 'How many letters of the English alphabet are vowels, not counting Y?').a[0], String([...'abcdefghijklmnopqrstuvwxyz'].filter((c) => 'aeiou'.includes(c)).length));
+});
+
 test('a program to read comes with its question, and each program’s question is learnt on its own', () => {
   const coded = QUESTION_BANKS.coding.filter((b) => b.code);
   const quiz = makeQuiz('coding', 3, QUESTION_BANKS.coding.length);
   const shown = quiz.questions.filter((ask) => ask.code);
   assert.equal(shown.length, coded.length);
   for (const ask of shown) assert.equal(ask.key, `${ask.q}\n${ask.code}`);
-  assert.ok(makeQuiz('junior', 3, 5).questions.every((ask) => !ask.code && ask.key === ask.q), 'only the Coding Olympiad has programs');
+  assert.ok(makeQuiz('junior', 3, 5).questions.every((ask) => !ask.code && !ask.fen && ask.key === ask.q), 'only the Coding Olympiad has programs');
+  // A board comes with its question too, and keys it.
+  const boards = makeQuiz('chess', 3, QUESTION_BANKS.chess.length).questions;
+  assert.ok(boards.every((ask) => ask.fen && ask.key === `${ask.q}\n${ask.fen}`));
   // The same words, a different program: learning one leaves the other.
   const [first, second] = coded;
   assert.equal(first.q, second.q);
@@ -608,7 +693,7 @@ test('every answer right pays a coin, two on the middle school and thinking-math
   assert.equal(quizCoins(3, 'middle1'), 6);
   assert.equal(quizCoins(3, 'high3'), 9);
   assert.equal(quizCoins(3, 'olympiad'), 12);
-  for (const key of ['science', 'logic', 'coding']) assert.equal(quizCoins(3, key), 12);
+  for (const key of ['science', 'logic', 'coding', 'chess', 'world', 'englisholympiad']) assert.equal(quizCoins(3, key), 12);
 });
 
 test('a question answered right three times in a row is learnt, and a wrong answer starts it over', () => {

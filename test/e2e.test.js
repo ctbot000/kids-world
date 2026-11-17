@@ -7024,7 +7024,7 @@ test('a school: Q by a chalkboard opens the classes, a class of questions answer
       ['🎒 Elementary School', 6],
       ['🧑‍🎓 Middle School', 3],
       ['📚 High School', 3],
-      ['🏆 Olympiads', 4],
+      ['🏆 Olympiads', 7],
       ['🧩 More quizzes', 2],
     ],
   );
