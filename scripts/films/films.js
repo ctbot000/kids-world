@@ -21,7 +21,11 @@
 // - Its ending, played when Queen Grizzle is popped on its last stage: the
 //   colours flying up into the sky, the rainbow whole again, everyone on the
 //   beach under it, the credits — and Queen Grizzle floating home, having to
-//   say it looks rather nice.
+//   say it looks rather nice, and the story going on.
+//
+// And the third episode's (intro3, ending3), on the Wild Isle, drawn as the
+// real thing (render/real.js): Old Murk and the five Sunstones (see intro3
+// and ending3 below).
 import { BOSSES } from '/js/shared/bosses.js';
 import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
 import { ANIM, B, caption, critter, isle, kid, monster, nameCard, prop, renderer, roll, star, THREE, titleCard } from './stage.js';
@@ -944,8 +948,327 @@ function ending2() {
   });
   const teaser = shots.at(-1).start;
   overlays.push(caption(teaser + 0.4, 4, 'Far out over the sea, Queen Grizzle floated home. “Hmph,” she said. “It does look rather nice.”'));
-  overlays.push(titleCard(teaser + 4.5, 3, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  overlays.push(titleCard(teaser + 4.5, 3, 'The story goes on…', 'Where the rainbow ends: Episode 3, The Wild Isle', { size: 70 }));
   return { shots, overlays, poster: shots[1].start + 7.2 };
 }
 
-export const films = { intro, ending, intro2, ending2 };
+// ------------------------------------------------------------ the third episode
+
+// A Sunstone (the third episode's): a golden stone, glowing like a little
+// sun, a halo round it.
+function sunstone(size = 1) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), new THREE.MeshStandardMaterial({ color: '#ffcf4a', emissive: '#ffb020', emissiveIntensity: 2.2, roughness: 0.25, metalness: 0.3, flatShading: true }));
+  g.add(body);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffd77a', transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending })));
+  g.scale.setScalar(size);
+  return g;
+}
+
+// Where a boss stands in its lair: beside the flag's floor in the middle of
+// the yard, as on the isle (adventure.js kingSpot), on the ground there.
+function lairSpot(m, dx = 4, dz = 0) {
+  const lair = m.camps.at(-1);
+  const x = lair.x + dx;
+  const z = lair.z + dz;
+  return { x, y: groundY(m.world, x, z), z };
+}
+
+// The third episode's chapters, and where each starts among the stages.
+const WILD_FROM = CHAPTERS.findIndex((ch) => ch.episode === 3) + 1;
+const WILD_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 3);
+
+// ------------------------------------------------------------ the intro, episode 3
+
+// Its intro: the rainbow over the happy isle, its end out to sea; flying in
+// out of the fog to the Wild Isle, an island not made of bricks at all; Old
+// Murk howling in Murk Fen as the Sunstones scatter; his four big helpers
+// each in its lair with one, the last with him in Murk Tower; and you and
+// your friends on the beach of Driftwood Bay.
+function intro3() {
+  const shore = isle(1, { freed: true });
+  const cove = isle(WILD_FROM);
+  const fen = isle(WILD_FROM + 4);
+  const tower = lairSpot(fen);
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. The rainbow over the happy isle, its end far out to sea.
+  add({
+    dur: 6.5,
+    world: shore,
+    time: 0.32,
+    cut: 'fade',
+    setup() {
+      prop(rainbow(), () => ({ x: BOW[0], y: BOW[1], z: BOW[2] }));
+    },
+    camera: keys([
+      { t: 0, pos: [64, SEA + 30, 150], look: [64, SEA + 18, 10], fov: 50 },
+      { t: 6.5, pos: [64, SEA + 14, 110], look: [64, SEA + 8, -60], fov: 50 },
+    ]),
+  });
+  overlays.push(caption(0.6, 5.6, 'The rainbow shone over Adventure Isle again — and one morning, its end pointed far out to sea…'));
+
+  // 2. Out of the fog, the Wild Isle: an island no map shows.
+  const sp = cove.world.spawn;
+  add({
+    dur: 8,
+    world: cove,
+    time: 0.3,
+    weather: 'cloudy',
+    cut: 'white',
+    camera: keys([
+      { t: 0, pos: [64, SEA + 10, 260], look: [64, SEA + 6, 64], fov: 46 },
+      { t: 8, pos: [70, SEA + 22, 150], look: [64, SEA + 8, 60], fov: 50 },
+    ]),
+  });
+  overlays.push(caption(shots[1].start + 0.6, 7, '…to an island no map shows: the Wild Isle. It is not made of bricks at all — its rocks are real rocks, its trees real trees and its waves real waves.'));
+
+  // 3. Old Murk, the Fog Wolf, howling in his fen; the five Sunstones flying off.
+  add({
+    dur: 6.5,
+    world: fen,
+    time: 0.26,
+    weather: 'cloudy',
+    cut: 'fade',
+    setup() {
+      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.6, state: t < 2 ? 'idle' : 'howl' }));
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 0.4;
+        prop(sunstone(0.9), (t) => {
+          const u = Math.max(0, t - 3.2);
+          return { x: tower.x + Math.cos(a) * u * 9, y: tower.y + 4 + u * 3 + Math.sin(t * 3 + i) * 0.2, z: tower.z + Math.sin(a) * u * 9, ry: t * 2, visible: t < 6.3 };
+        });
+      }
+    },
+    camera: keys([
+      { t: 0, pos: [tower.x + 7, tower.y + 2.5, tower.z + 9], look: [tower.x, tower.y + 2, tower.z], fov: 50 },
+      { t: 6.5, pos: [tower.x + 10, tower.y + 7, tower.z + 14], look: [tower.x, tower.y + 5, tower.z], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots[2].start + 0.5, 5.8, 'But a cold grey fog hung over it. Old Murk, the Fog Wolf, had stolen its five Sunstones, and his fog made every animal there grumpy.'));
+
+  // 4. His four big helpers, each in its lair with a Sunstone.
+  for (const [i, ch] of WILD_CHAPTERS.slice(0, 4).entries()) {
+    const m = isle(WILD_FROM + i);
+    const spot = lairSpot(m);
+    const c = [spot.x, spot.y, spot.z];
+    const a0 = 0.6 + i * 0.9;
+    const tall = BOSSES[ch.boss].body.height;
+    const shot = add({
+      dur: 2.6,
+      world: m,
+      time: dayOf(ch),
+      cut: i === 0 ? 'flash' : 'cut',
+      setup() {
+        monster(ch.boss, (t) => ({ x: c[0], y: c[1], z: c[2], yaw: a0 + 0.3, state: t % 2.6 < 1.3 ? 'idle' : 'chase' }));
+        prop(sunstone(1.2), (t) => ({ x: c[0], y: c[1] + tall + 1.6 + Math.sin(t * 3) * 0.15, z: c[2], ry: t * 2 }));
+      },
+      camera: (t) => orbit([c[0], c[1] + tall * 0.55, c[2]], 6.4 + tall, 1.6, a0, a0 + 0.35, 2.6, 46)(t),
+    });
+    overlays.push(nameCard(shot.start + 0.15, 2.3, BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name, ch.icon + ' ' + ch.name + ' · ' + ch.lair));
+  }
+
+  // 5. The last Sunstone, with Old Murk himself in Murk Tower.
+  add({
+    dur: 5,
+    world: fen,
+    time: 0.3,
+    weather: 'cloudy',
+    cut: 'flash',
+    setup() {
+      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.4, state: t < 2.4 ? 'idle' : 'howl' }));
+      prop(sunstone(1.4), (t) => ({ x: tower.x, y: tower.y + 4.6 + Math.sin(t * 2) * 0.2, z: tower.z, ry: t * 1.5 }));
+    },
+    camera: keys([
+      { t: 0, pos: [tower.x + 2, tower.y + 2.4, tower.z + 8.5], look: [tower.x, tower.y + 2.6, tower.z], fov: 50 },
+      { t: 5, pos: [tower.x + 6, tower.y + 11, tower.z + 13], look: [tower.x - 3, tower.y + 3, tower.z - 2], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots.at(-1).start + 0.5, 4.3, 'The last one he kept for himself, in Murk Tower.'));
+
+  // 6. The heroes on the beach of Driftwood Bay, and the way ahead.
+  const first = cove.camps[0];
+  add({
+    dur: 9,
+    world: cove,
+    time: 0.32,
+    cut: 'white',
+    out: 'fade',
+    setup() {
+      for (const [i, look] of KIDS.entries()) {
+        const x = sp.x - 1.6 + i * 1.6;
+        const z = sp.z + 0.6 - Math.abs(i - 1) * 0.5;
+        kid(look, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(first.x - x, first.z - z) + Math.PI, emote: t < 2.4 ? 'surprise' : t < 5.2 ? 'wave' : 'cheer', anim: ANIM.idle }));
+      }
+    },
+    camera: keys([
+      { t: 0, pos: [sp.x + 5, sp.y + 2, sp.z + 5], look: [sp.x, sp.y + 1, sp.z], fov: 46 },
+      { t: 3, pos: [sp.x + 6, sp.y + 2.6, sp.z + 6], look: [sp.x, sp.y + 1.2, sp.z], fov: 46 },
+      { t: 9, pos: [sp.x + 4, sp.y + 22, sp.z + 22], look: [first.x - 18, first.y + 4, first.z - 30], fov: 54 },
+    ]),
+  });
+  const last = shots.at(-1).start;
+  overlays.push(caption(last + 0.5, 3.2, 'Without its Sunstones, the Wild Isle will never see the sun again. Heroes — win them back!'));
+  overlays.push(titleCard(last + 4, 4.8, 'The Wild Isle', 'Episode 3 · Win back all five Sunstones — together!', { size: 78 }));
+  return { shots, overlays, poster: last + 6.6 };
+}
+
+// ------------------------------------------------------------ the ending, episode 3
+
+// Its ending: Old Murk popped in Murk Tower; the five Sunstones flying up
+// together and the fog blowing away; the party on the beach of Driftwood Bay
+// with the animals, friendly now; the credits round the lighthouse; and Old
+// Murk asleep in a sunny spot, only ever cold.
+function ending3() {
+  const fen = isle(WILD_FROM + 4, { freed: true });
+  const tower = lairSpot(fen);
+  const cove = isle(WILD_FROM, { freed: true });
+  const sp = cove.world.spawn;
+  const light = cove.camps[2];
+  const gold = ['#ffcf4a', '#ffe08a', '#fff3c4', '#ffb020'];
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. Murk Tower: the last bop, and Old Murk goes pop, fog and all.
+  add({
+    dur: 6,
+    world: fen,
+    time: 0.34,
+    weather: 'cloudy',
+    cut: 'fade',
+    setup() {
+      monster('murk', (t) => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 0.3, state: 'dazed', visible: t < 1.6 }));
+      prop(sunstone(1.2), (t) => ({ x: tower.x, y: tower.y + 2 + Math.max(0, t - 1.6) * 1.2, z: tower.z, ry: t * 2.4, visible: t >= 1.6 }));
+      for (const [i, look] of KIDS.entries()) {
+        const a = -0.5 + i * 0.5;
+        const x = tower.x + Math.sin(a) * 5;
+        const z = tower.z + Math.cos(a) * 5;
+        kid(look, (t) => ({ x, y: tower.y, z, yaw: a + Math.PI, emote: t < 1.6 ? 'surprise' : 'cheer', anim: ANIM.idle }));
+      }
+    },
+    fx(t) {
+      once(shots[0], 'pop', t, 1.6, () => {
+        renderer.effects.sparkles(tower.x, tower.y + 2, tower.z, 110, gold);
+        renderer.effects.bang(tower.x, tower.y + 2, tower.z);
+        renderer.effects.spores(tower.x, tower.y, tower.z, 6, 'mist');
+        renderer.sky.flash = 1;
+      });
+    },
+    camera: keys([
+      { t: 0, pos: [tower.x + 3, tower.y + 3.2, tower.z + 10], look: [tower.x, tower.y + 2, tower.z], fov: 50 },
+      { t: 6, pos: [tower.x + 5, tower.y + 6, tower.z + 13], look: [tower.x, tower.y + 4.5, tower.z], fov: 54 },
+    ]),
+  });
+  overlays.push(caption(0.5, 5, 'Pop! Old Murk was popped, fog and all!'));
+
+  // 2. The five Sunstones fly up together, the fog blows away, the sun comes out.
+  add({
+    dur: 7.5,
+    world: fen,
+    time: (t) => 0.27 + t * 0.012,
+    cut: 'flash',
+    setup() {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        prop(sunstone(1.3), (t) => {
+          const u = ease((t - i * 0.2) / 3.6);
+          return { x: lerp(tower.x + Math.cos(a) * 30, tower.x, u), y: lerp(tower.y + 2, tower.y + 30, u), z: lerp(tower.z + Math.sin(a) * 30, tower.z, u), ry: t * 4, visible: t < 4.2 + i * 0.1 };
+        });
+      }
+    },
+    fx(t) {
+      once(shots[1], 'sun', t, 4, () => {
+        renderer.effects.sparkles(tower.x, tower.y + 30, tower.z, 160, gold);
+        renderer.sky.flash = 1;
+      });
+    },
+    camera: keys([
+      { t: 0, pos: [tower.x + 30, tower.y + 14, tower.z + 40], look: [tower.x, tower.y + 10, tower.z], fov: 54 },
+      { t: 7.5, pos: [tower.x + 40, tower.y + 30, tower.z + 55], look: [tower.x, tower.y + 22, tower.z], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots[1].start + 0.5, 6.4, 'All five Sunstones flew up together, the fog blew away over the sea — and the sun shone on the Wild Isle again!'));
+
+  // 3. The party on the beach, the animals there too, friendly now.
+  add({
+    dur: 8.5,
+    world: cove,
+    time: 0.36,
+    cut: 'fade',
+    setup() {
+      for (const [i, look] of KIDS.entries()) {
+        const x = sp.x - 1.6 + i * 1.6;
+        const z = sp.z + 0.5;
+        kid(look, () => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.PI, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
+      }
+      // (Up the beach behind them, inland: the sea is the other way.)
+      for (const [i, ch] of WILD_CHAPTERS.slice(0, 4).entries()) {
+        const a = -1.1 + i * 0.75;
+        const x = sp.x + Math.sin(a) * 7;
+        const z = sp.z - 3 - Math.cos(a) * 4;
+        monster(ch.boss, (t) => ({ x, y: groundY(cove.world, x, z), z, yaw: Math.atan2(sp.x - x, sp.z - z), state: t % 3 < 1.5 ? 'idle' : 'giggle', scale: 0.6 }));
+      }
+    },
+    fx(t) {
+      if (Math.random() < 0.09) renderer.effects.firework(sp.x - 30 + Math.random() * 50, sp.y + 14 + Math.random() * 10, sp.z + 20 + Math.random() * 30);
+      if (t < 0.1) renderer.effects.confetti(sp.x, sp.y + 3, sp.z, 140, 1.4);
+    },
+    camera: keys([
+      { t: 0, pos: [sp.x - 1, sp.y + 2.6, sp.z + 9], look: [sp.x, sp.y + 1.4, sp.z - 3], fov: 56 },
+      { t: 8.5, pos: [sp.x + 3, sp.y + 7, sp.z + 15], look: [sp.x - 4, sp.y + 5, sp.z - 30], fov: 58 },
+    ]),
+  });
+  overlays.push(caption(shots.at(-1).start + 0.5, 7.4, 'Every animal on the island came to see — friendly again, every one of them. Thank you, heroes of the Wild Isle!'));
+
+  // 4. The credits, round the lighthouse at sunset.
+  const L = [light.x - 6, light.y, light.z - 12];
+  add({
+    dur: 14,
+    world: cove,
+    time: 0.71,
+    cut: 'fade',
+    fx() {
+      if (Math.random() < 0.03) renderer.effects.firework(L[0] - 20 + Math.random() * 40, L[1] + 16 + Math.random() * 8, L[2] + 10 + Math.random() * 30);
+    },
+    camera: orbit([L[0], L[1] + 6, L[2]], 36, 8, 0.5, -0.4, 14, 50),
+  });
+  const cast = WILD_CHAPTERS.map((ch) => BOSSES[ch.boss].icon + ' ' + BOSSES[ch.boss].name);
+  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Wild Isle', 'Episode 3', '', '#Starring', 'You and your friends', '', '#and', ...cast, '', '#The five Sunstones', ...WILD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+
+  // 5. Old Murk, curled up asleep in a sunny spot.
+  add({
+    dur: 7,
+    world: fen,
+    time: 0.5,
+    cut: 'fade',
+    out: 'fade',
+    setup() {
+      monster('murk', () => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 1.1, state: 'dazed', scale: 0.8 }));
+    },
+    camera: keys([
+      { t: 0, pos: [tower.x + 4, tower.y + 1.6, tower.z + 5], look: [tower.x, tower.y + 0.8, tower.z], fov: 46 },
+      { t: 7, pos: [tower.x + 6, tower.y + 3.5, tower.z + 8], look: [tower.x, tower.y + 1, tower.z], fov: 46 },
+    ]),
+  });
+  const teaser = shots.at(-1).start;
+  overlays.push(caption(teaser + 0.4, 4, 'And Old Murk? He curled up in a sunny spot and went to sleep. It turns out he was only ever cold.'));
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return { shots, overlays, poster: shots[1].start + 7 };
+}
+
+export const films = { intro, ending, intro2, ending2, intro3, ending3 };

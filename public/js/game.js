@@ -286,10 +286,18 @@ const TOUGH_TOLD = {
   inkwell: { icon: '🐙', text: 'Admiral Inkwell! Jump when all his arms go up — they come down all round him — and run out of the red rings where his ink lands!' },
   mochi: { icon: '🐇', text: 'Mochi the Moon Rabbit! Jump when his mallet goes up — it shakes the whole moor — and run out of the red ring when he crouches to bound at you!' },
   grizzle: { icon: '👸', text: 'Queen Grizzle! Run out of the red rings where her smudges land, jump when she stomps — and when her umbrella opens she floats off, so look about for where she comes down!' },
+  // The Wild Isle's (the third episode).
+  fox: { icon: '🦊', text: 'A grumpy fox! It is quick, so bop it three times — or land on it once, and off it runs.' },
+  boar: { icon: '🐗', text: 'A Wild Boar! When it lowers its head, a strip shows where it will charge: step aside!' },
+  ironclaw: { icon: '🦀', text: 'Old Ironclaw! Step aside when he scuttles at you, jump when his claw comes down — and run out of the red rings where his coconuts land!' },
+  bramblepaw: { icon: '🐻', text: 'Old Bramblepaw! Jump when he rears up — he comes down with a thump — step aside when he charges, and run out of the red rings!' },
+  gnasher: { icon: '🦫', text: 'Gnasher! Jump when he lifts his tail to slap it down, and run out of the red rings where his sticks land!' },
+  curlhorn: { icon: '🐏', text: 'Old Curlhorn! Step aside when he lowers his horns — he charges hard — and run out of the red ring when he crouches to leap!' },
+  murk: { icon: '🐺', text: 'Old Murk, the Fog Wolf! Run out of the red rings, step back from his fog — and when he vanishes into it, look about for where he comes out!' },
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
-const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack', berry: 'splat', acorn: 'whack', honey: 'splat', banana: 'boing', ink: 'splat', ricecake: 'boing', smudge: 'splat' };
+const THROWN_SOUND = { coconut: 'whack', pod: 'blow', snowball: 'splat', gumdrop: 'boing', mud: 'splash', lava: 'boom', bomb: 'boom', boulder: 'boom', bone: 'whack', venom: 'splat', bolt: 'zap', star: 'blink', root: 'creak', sandball: 'splat', crystal: 'ding', pumpkin: 'whack', gear: 'clack', berry: 'splat', acorn: 'whack', honey: 'splat', banana: 'boing', ink: 'splat', ricecake: 'boing', smudge: 'splat', nut: 'whack', rock: 'boom', stick: 'creak', pinecone: 'whack', fog: 'blow' };
 // What a Swamp Hydra breathes (and anything else that is no fire).
 const VENOM_COLORS = ['#d6ff5a', '#a6e04a', '#7fb83a', '#c9f06a', '#5d8f2e'];
 // Big Sprocket's steam.

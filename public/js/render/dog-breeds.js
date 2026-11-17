@@ -799,3 +799,13 @@ export function coatOf(key, name) {
 }
 
 export const isBreed = (key) => Object.hasOwn(BREEDS, key);
+
+// A breed of animal that is no pet (render/real-animals.js: the Wild Isle's
+// wolves, foxes and the rest), shaped and coated as a dog breed is.
+export function defineBreed(key, spec) {
+  BREEDS[key] = spec;
+  merged.delete(key);
+}
+
+// What breeds are made from, for those defined elsewhere.
+export { DOUBLE, SHORT, SLEEK, SILKY, under, legsBelow, hindInside, saddle, crest, snout, chestPatch, tailTip, tailUnder, earsOf, collarRing };

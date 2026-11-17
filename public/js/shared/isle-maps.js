@@ -25,6 +25,7 @@ import { hash2, Rng } from './rng.js';
 import { candyTree, fruitTree, katsuraTree, oakTree, pineTree, placeTemplate, stampByKey } from './stamps.js';
 import { World } from './world.js';
 import { palette } from './worldgen.js';
+import { WILD_MAPS } from './isle-wild.js';
 
 export const ISLE_SIDE = 128;
 const SEA = 20;
@@ -1816,7 +1817,7 @@ function castle(m) {
 // way between one gate and the next runs over a terrace of its own, a sheer
 // cliff wherever it meets another, and climbs from one to the next on a ramp
 // (where the gate goes, see rampGate). Returns tierAt(x, z).
-function terraces(m, nodes) {
+export function terraces(m, nodes) {
   const pts = [];
   for (let i = 0; i < nodes.length - 1; i++) {
     const a = nodes[i];
@@ -1856,12 +1857,12 @@ function terraces(m, nodes) {
 
 // The way's nodes for route(), each camp's (and the lair's) at the height of
 // its terrace there: height(x, z) is the map's.
-const onTerraces = (nodes, height) => nodes.map(({ t, camp, ...n }) => (camp ? { ...n, y: Math.round(height(n.x, n.z)) } : n));
+export const onTerraces = (nodes, height) => nodes.map(({ t, camp, ...n }) => (camp ? { ...n, y: Math.round(height(n.x, n.z)) } : n));
 
 // A gate halfway up the ramp that starts at a node (from one terrace to the
 // next): in the cut, or on the causeway, with nothing either side to step
 // round it by.
-function rampGate(m, path, node, camp, make, opts = {}) {
+export function rampGate(m, path, node, camp, make, opts = {}) {
   const a = path.find((q) => q.node === node);
   const b = path.find((q) => q.node === node + 1);
   m.gate(path, node, camp, make, { high: 4, span: 4, ahead: (b.s - a.s) / 2, ...opts });
@@ -2444,7 +2445,7 @@ function spires(m) {
 // lift higher than the one before. Only the first, where everyone lands,
 // comes down to the sea in a beach: the others stand coast over it all round
 // in a cliff, so there is no swimming round a gate to the next of them.
-function rainbowLand(m, tierAt, { rim = 61, power = 4, base = 6, hills = () => 2, lift = 5, coast = 3 } = {}) {
+export function rainbowLand(m, tierAt, { rim = 61, power = 4, base = 6, hills = () => 2, lift = 5, coast = 3 } = {}) {
   const { seed } = m;
   return (x, z) => {
     const n = fbm(seed + 11, x / 22, z / 22, 3) * 0.08;
@@ -2459,7 +2460,7 @@ function rainbowLand(m, tierAt, { rim = 61, power = 4, base = 6, hills = () => 2
 
 // How far the land eases back round a pad cut for a landmark (level): not at
 // all, so it is square-sided wherever it meets a cliff.
-const PAD = 0.5;
+export const PAD = 0.5;
 
 // The faces of the cliffs painted: every block of the land that shows at the
 // side of a column standing min or more over its lowest neighbour, from over
@@ -2484,7 +2485,7 @@ function paintCliffs(m, paint, min = 3) {
 
 // Whether a column is open ground of the island's own kind, with nothing on
 // it and nothing kept clear there: where a field's flowers may grow.
-function openGround(m, x, z) {
+export function openGround(m, x, z) {
   if (!m.inside(x, z, 2) || m.keep[m.k(x, z)]) return -1;
   const y = m.ground(x, z);
   return y > SEA && m.world.get(x, y, z) === m.pal.top && m.world.get(x, y + 1, z) === B.AIR ? y : -1;
@@ -3416,7 +3417,7 @@ function vale(m) {
   return { fruit: B.FRUIT_ITEMS[4] };
 }
 
-const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale };
+const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale, ...WILD_MAPS };
 
 // ---------------------------------------------------------------- the isle
 
@@ -3439,7 +3440,8 @@ export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
   const ahead = way[Math.min(way.length - 1, 25)];
   world.spawn = { x: sx + 0.5, y: m.ground(sx, sz) + 1, z: sz + 0.5, yaw: yawTo(sx + 0.5, sz + 0.5, ahead.x, ahead.z) };
   const rng = new Rng(seed ^ 0x13198a2e);
-  const critters = m.clearOfCamps([...m.critters, ...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng)]);
+  // (The Wild Isle has no toy animals about: its own are real, isle-wild.js.)
+  const critters = ch.episode.real ? [] : m.clearOfCamps([...m.critters, ...placeFlyers(world, rng), ...placeSea(world, rng), ...placePolar(world, rng)]);
   const camps = m.spots
     .map((s, i) => ({ s, i }))
     .sort((a, b) => (a.s.kind === 'castle') - (b.s.kind === 'castle') || a.i - b.i)

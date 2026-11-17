@@ -271,7 +271,7 @@ test('nothing starts the stages over but the last stage won: then a new journey 
   assert.equal(one.room.adventure.story.last, true, 'of the last episode');
   assert.equal(one.room.adventure.describe().final, true, 'and the pages are told so');
   const last = one.room;
-  const b = join(last, 'Brave Fox', { tickets: [2] });
+  const b = join(last, 'Brave Fox', { tickets: [2, 3] });
   last.adventure.win(last.monsters);
   one.tick(time.now());
   assert.deepEqual([one.stage, one.journey], [1, 2], 'a new journey');
@@ -302,7 +302,7 @@ test('an episode’s last stage won leads on to the next episode, and a new game
   assert.deepEqual(b.last('next'), { t: 'next', code: one.room.code, stage: end + 1 });
   assert.match(b.last('notice').text, /The story goes on with Episode 2, The Rainbow of Adventure Isle/);
   const next = one.room.adventure;
-  assert.deepEqual([next.story.episode.n, next.story.n, next.story.of, next.story.key, next.boss], [2, 1, STAGES - end, 'tulip', 'dotty']);
+  assert.deepEqual([next.story.episode.n, next.story.n, next.story.of, next.story.key, next.boss], [2, 1, stagesOf(2), 'tulip', 'dotty']);
   assert.equal(one.room.world.theme, 'tulip');
   // As hard as its chapter says, not as its place among the stages.
   assert.equal(next.level, chapterOf(end + 1).level);

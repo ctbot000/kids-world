@@ -27,6 +27,15 @@
 // Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet
 // Vale, where Castle Drab stands. Each won brings its colour back.
 //
+// Episode 3, "The Wild Isle": where the rainbow ends, far out to sea, lies an
+// island no map shows, and it is not made of bricks at all — its rocks are
+// real rocks, its trees real trees and its waves real waves (render/real.js
+// draws it so). Old Murk, the Fog Wolf, has stolen its five Sunstones and
+// given them to the biggest creatures there to keep, and his fog has made
+// every animal on it grumpy. Five chapters: Driftwood Bay, Deepwood Forest,
+// Thunder Falls, Snowcap Ridge and Murk Fen, where his tower stands. Each won
+// brings a Sunstone back.
+//
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
@@ -58,8 +67,9 @@ export const RAINBOW = [
 // (CHAPTERS, by their episode), an opening and an ending film (public/video
 // isle-<name>.mp4, made by scripts/films; endingMs: about how long the ending
 // is). token: what each chapter wins back (colours: drawn as dots of these,
-// not as stars); again: what is told before a chapter on a journey after the
-// first; ticket: what lets someone into it, for every episode but the first.
+// icon: as that, not as stars); again: what is told before a chapter on a
+// journey after the first; ticket: what lets someone into it, for every
+// episode but the first; real: told on an island drawn as the real thing.
 export const EPISODES = [
   {
     n: 1,
@@ -83,6 +93,21 @@ export const EPISODES = [
     films: { intro: 'intro2', ending: 'ending2', endingMs: 44000 },
     again: (journey) =>
       `Journey ${journey}! Queen Grizzle is back with a bigger umbrella, caught the rainbow all over again and gave its colours back to her helpers — and the Rainbow Lands have turned themselves about, so the way goes round the other side.`,
+  },
+  {
+    n: 3,
+    key: 'wild',
+    icon: '🏞️',
+    title: 'The Wild Isle',
+    villain: 'Old Murk',
+    // Drawn as the real thing, not of bricks (render/real.js), with real
+    // animals in its camps (AdventureSim.guardKind).
+    real: true,
+    token: { one: 'Sunstone', many: 'Sunstones', icon: '☀️' },
+    ticket: { icon: '🧭', name: 'Wild Isle Compass' },
+    films: { intro: 'intro3', ending: 'ending3', endingMs: 44000 },
+    again: (journey) =>
+      `Journey ${journey}! Old Murk crept back out of the sea fog, greyer and grumpier than ever, and took the Sunstones all over again — and the Wild Isle has turned itself about, so the way goes round the other side.`,
   },
 ];
 
@@ -519,6 +544,123 @@ export const CHAPTERS = [
       'Umbrella Court is free! The great grey umbrellas fold up — Queen Grizzle is in the yard behind!',
     ],
     won: 'Queen Grizzle is popped, umbrella and all! All seven colours fly up into the sky, and the rainbow stands over Adventure Isle again, brighter than ever. Even Queen Grizzle has to say it looks rather nice.',
+  },
+  // ------------------------------------------------ Episode 3: the Wild Isle
+  {
+    key: 'cove',
+    episode: 3,
+    level: 9,
+    icon: '🌊',
+    name: 'Driftwood Bay',
+    theme: 'wildcoast',
+    weather: ['clear', 'clear', 'cloudy'],
+    camps: ['Driftwood Beach', 'Tide Pools', 'Lighthouse Point'],
+    lair: 'Old Sea Fort',
+    boss: 'ironclaw',
+    guards: ['snapper', 'fox'],
+    champions: ['boar', 'wolf'],
+    hazard: 'nut',
+    intro:
+      'The rainbow’s end points far out to sea — and there, where no map shows anything at all, lies the Wild Isle. It is not made of bricks: its rocks are real rocks, its trees are real trees and its waves are real waves. But a cold grey fog hangs over it. Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures on the island to keep, and his fog has made every animal there grumpy. The first Sunstone is with Old Ironclaw, a coconut crab as big as a rowing boat, in the Old Sea Fort out on the point. Free the bay, then go and get it back — and watch out for coconuts!',
+    freed: [
+      'Driftwood Beach is free! The crabs scuttle off sideways into the waves, and the driftwood across the path rolls away.',
+      'The Tide Pools are free! The rocks that fell across the cliff path are rolled aside.',
+      'Lighthouse Point is free! The brambles before the Old Sea Fort wither away — Old Ironclaw is waiting inside!',
+    ],
+    won: 'Pop! The fog blew out of Old Ironclaw’s ears, and he scuttled off into the surf, waving his claws as friendly as you like — and left the first Sunstone shining on the sand!',
+  },
+  {
+    key: 'deepwood',
+    episode: 3,
+    level: 10,
+    icon: '🌲',
+    name: 'Deepwood Forest',
+    theme: 'wildwood',
+    weather: ['clear', 'cloudy', 'cloudy'],
+    camps: ['Fern Hollow', 'Mossy Bridge', 'Woodcutters’ Camp', 'Old Oak'],
+    lair: 'Bear’s Den',
+    boss: 'bramblepaw',
+    guards: ['fox', 'boar'],
+    champions: ['wolf', 'boar', 'wolf'],
+    hazard: 'pinecone',
+    intro:
+      'One Sunstone shines again, and its light points inland, into Deepwood Forest, where the pines grow so tall that their tops are lost in the fog. Old Bramblepaw, the biggest brown bear on the Wild Isle, keeps the second Sunstone in his den at the far end of the forest — and Old Murk’s fog has made him the grumpiest bear there ever was. Follow the old woodcutters’ path, and mind the pine cones!',
+    freed: [
+      'Fern Hollow is free! The foxes trot off into the ferns, and the logs across the path are rolled away.',
+      'Mossy Bridge is free! The brambles over the stream wither, and the path on is open.',
+      'The Woodcutters’ Camp is free! The fallen pine across the path is sawn through and pushed aside.',
+      'The Old Oak is free! The rocks before the Bear’s Den are rolled away — Old Bramblepaw is waiting!',
+    ],
+    won: 'Pop! Old Bramblepaw sneezed the fog right out of his nose, sat down with a great thump and scratched his back on a pine — and there in the moss lay the second Sunstone!',
+  },
+  {
+    key: 'falls',
+    episode: 3,
+    level: 11,
+    icon: '💦',
+    name: 'Thunder Falls',
+    theme: 'wildfalls',
+    weather: ['clear', 'clear', 'cloudy'],
+    camps: ['Riverbend', 'Otter Pools', 'Misty Steps'],
+    lair: 'Great Dam',
+    boss: 'gnasher',
+    guards: ['boar', 'snapper'],
+    champions: ['wolf', 'boar'],
+    hazard: 'stick',
+    intro:
+      'Two Sunstones! They point up the river, to Thunder Falls, where the water roars down over the cliffs. Up at the top, Gnasher, a beaver as big as a hay cart, has built the Great Dam out of whole trees, with the third Sunstone inside it — and when he slaps his tail, the whole valley shakes. Climb up beside the falls — and jump when he slaps!',
+    freed: [
+      'Riverbend is free! The logs across the river path are washed away.',
+      'The Otter Pools are free! The rockfall by the pools is rolled aside, and the path up the cliff is open.',
+      'The Misty Steps are free! The tangle of sticks before the Great Dam falls apart — Gnasher is waiting at the top!',
+    ],
+    won: 'Pop! Gnasher’s grumpy fog went off like a sneeze, and he swam off down the river on his back, nibbling a twig — and out of the dam floated the third Sunstone!',
+  },
+  {
+    key: 'ridge',
+    episode: 3,
+    level: 12,
+    icon: '🏔️',
+    name: 'Snowcap Ridge',
+    theme: 'wildpeak',
+    weather: ['clear', 'clear', 'cloudy'],
+    camps: ['Shepherds’ Hut', 'Glacier Lake', 'Windy Saddle'],
+    lair: 'Eagle Crag',
+    boss: 'curlhorn',
+    guards: ['fox', 'boar'],
+    champions: ['wolf', 'wolf'],
+    hazard: 'rock',
+    intro:
+      'Three Sunstones, and the fog is thinning! The fourth is up on Snowcap Ridge, the highest place on the Wild Isle, with Old Curlhorn, a mountain ram with horns like cart wheels, who charges at anything that moves. The path climbs from the meadows past a glacier lake to Eagle Crag at the top. Step aside when he charges — and look out for rocks rolling down!',
+    freed: [
+      'The Shepherds’ Hut is free! The boulders across the mountain path are rolled away.',
+      'Glacier Lake is free! The logs across the path by the lake are lifted aside.',
+      'The Windy Saddle is free! The last rocks before Eagle Crag tumble down the slope — Old Curlhorn is waiting at the top!',
+    ],
+    won: 'Pop! Old Curlhorn shook his great horns, the fog flew out of his wool, and off he skipped down the mountain like a lamb — and on the crag lay the fourth Sunstone!',
+  },
+  {
+    key: 'fen',
+    episode: 3,
+    level: 13,
+    icon: '🌫️',
+    name: 'Murk Fen',
+    theme: 'wildfen',
+    weather: ['cloudy'],
+    camps: ['Reed Bank', 'Sunken Causeway', 'Hermit’s Hut'],
+    lair: 'Murk Tower',
+    boss: 'murk',
+    guards: ['fox', 'snapper'],
+    champions: ['wolf', 'wolf'],
+    hazard: 'fog',
+    intro:
+      'Four Sunstones shine together, and their light points into Murk Fen, where the fog is thickest of all. That is where Old Murk lives, in the ruins of an old stone tower, with the last Sunstone. He is the biggest, greyest wolf there ever was: he leaps, he howls for his pack, and he breathes his grumpy fog all round him. Cross the fen — and pop him once and for all, so the sun can shine on the Wild Isle again!',
+    freed: [
+      'The Reed Bank is free! The logs across the boardwalk are pulled away.',
+      'The Sunken Causeway is free! The brambles over the old causeway wither away.',
+      'The Hermit’s Hut is free! The rocks before Murk Tower are rolled aside — Old Murk is waiting!',
+    ],
+    won: 'Old Murk is popped, fog and all! His fog blows away over the sea, and all five Sunstones fly up together, and the sun shines on the Wild Isle as it has not shone for a hundred years. Old Murk curls up in a sunny spot — it turns out he was only ever cold.',
   },
 ];
 

@@ -196,6 +196,7 @@ const BOOK = {
   yeti: { icon: '❄️', name: 'Little Yeti' },
   gummy: { icon: '🧸', name: 'Gummy Bear' },
   cub: { icon: '🍬', name: 'Gummy Cub' },
+  fox: { icon: '🦊', name: 'Grumpy Fox' },
   // The beasts, by their names and icons (beasts.js).
   ...Object.fromEntries(Object.entries(BEASTS).map(([kind, b]) => [kind, { icon: b.icon, name: b.name }])),
   // The bosses, by their names and icons (bosses.js).
@@ -229,7 +230,7 @@ const PURPLE = B.TOY_BRICKS[8];
 
 // What is not the ground: trees (candy trees have trunks of white bricks).
 const TREE = new Uint8Array(B.BLOCK_IDS);
-for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.KATSURA_WOOD, B.KATSURA_LEAVES, B.KATSURA_TREE, B.KATSURA_GIANT, B.TREE_CORE, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11]]) TREE[id] = 1;
+for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.KATSURA_WOOD, B.KATSURA_LEAVES, B.KATSURA_TREE, B.KATSURA_GIANT, B.TREE_CORE, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11], ...B.WILD_TREES]) TREE[id] = 1;
 
 // The height of the ground in every column, under any tree, and whether it
 // is under water: the sea (1), or a pond or ice above the sea (2).
@@ -542,9 +543,10 @@ export class AdventureSim {
       return { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z, r: c.r, freed, progress: freed ? 1 : 0, awake: false, quiet: 0, back: [], holders: 0, guarded: false, queen: false, reserve: Infinity, ambushed: false };
     });
     // The deepest camp — the one furthest from the start — wakes the Queen
-    // Mosquito with its own monsters, as a tougher extra guard.
+    // Mosquito with its own monsters, as a tougher extra guard (but on the
+    // Wild Isle, where every creature is a real one: isle-story.js real).
     const deepest = this.camps.filter((c) => c.kind === 'camp').pop();
-    if (deepest) deepest.queen = true;
+    if (deepest && !this.story.episode.real) deepest.queen = true;
     this.won = Boolean(won) || (this.camps.length > 0 && this.camps.every((c) => c.freed));
     this.king = noKing();
     // The Monster Gashapon (stepGasha): where it is ({ x, y, z, until }) or
@@ -781,6 +783,19 @@ export class AdventureSim {
   // guard (addQueen).
   guardKind(c, monsters) {
     const here = monsters.list.filter((m) => m.camp === c.id && m.kind !== 'queen').map((m) => m.kind);
+    // On the Wild Isle, only its own animals: the chapter's, a boar or a
+    // wolf among them on the higher stages, and the chapter's again after.
+    if (this.story.episode.real) {
+      const have = new Map();
+      for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);
+      const own = this.story.guards ?? ['fox'];
+      const tough = this.level >= 12 ? ['boar', 'wolf'] : this.level >= 10 ? ['boar'] : [];
+      for (const k of [...own, ...tough]) {
+        if ((have.get(k) ?? 0) > 0) have.set(k, have.get(k) - 1);
+        else return k;
+      }
+      return own[here.length % own.length];
+    }
     if (!here.includes('mosquito')) return 'mosquito';
     const have = new Map();
     for (const k of here) have.set(k, (have.get(k) ?? 0) + 1);

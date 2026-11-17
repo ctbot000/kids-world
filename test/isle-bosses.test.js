@@ -20,6 +20,8 @@ const KINDS = ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok']
 const LATER = ['scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus'];
 // The second episode's bosses, on the end of the kinds after them.
 const RAINBOW = ['dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle'];
+// And the third's, on the Wild Isle.
+const WILD = ['ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk'];
 const MOVES = ['stomp', 'leap', 'charge', 'hurl', 'puff', 'breath', 'blink', 'call'];
 
 function conn() {
@@ -85,10 +87,13 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
   assert.deepEqual(MONSTER_KINDS.slice(later, later + LATER.length), LATER, 'and the later captains after the beasts');
   const rainbow = MONSTER_KINDS.indexOf(RAINBOW[0]);
   assert.deepEqual(MONSTER_KINDS.slice(rainbow, rainbow + RAINBOW.length), RAINBOW, 'and the second episode’s after them');
+  const wild = MONSTER_KINDS.indexOf(WILD[0]);
+  assert.ok(wild > rainbow, 'and the third’s after those');
+  assert.deepEqual(MONSTER_KINDS.slice(wild, wild + WILD.length), WILD);
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
-  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW]);
-  for (const kind of [...KINDS, ...LATER, 'king', ...RAINBOW]) {
+  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW, ...WILD]);
+  for (const kind of [...KINDS, ...LATER, 'king', ...RAINBOW, ...WILD]) {
     const plan = BOSSES[kind];
     assert.ok(isBoss(kind) && isHeavy(kind), kind);
     assert.deepEqual(bodyOf(kind), plan.body);

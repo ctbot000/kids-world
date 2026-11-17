@@ -24,12 +24,12 @@ function conn() {
   return c;
 }
 
-// (Someone who holds the ticket to the story's second episode: its stages
-// are only for those who do, isle-story.js.)
+// (Someone who holds the tickets to the story's later episodes: their
+// stages are only for those who do, isle-story.js.)
 function join(room, name = 'Brave Fox') {
   const c = conn();
   room.attach(c);
-  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat' }, tickets: [2] });
+  room.receive(c, { t: 'join', protocol: PROTOCOL, name, look: { animal: 'cat' }, tickets: [2, 3] });
   c.pid = c.last('welcome').you;
   return c;
 }
@@ -326,18 +326,21 @@ test('at the very end of an episode its last boss gets a second wind before goin
     for (const c of sim.camps) if (c.kind === 'camp') c.freed = true;
     assert.equal(sim.hitKing(1, 5000).beaten, true, `stage ${stage}`);
   }
-  // And at the end of the second episode, Queen Grizzle puffs herself up the same way.
-  const vale = isleRoom(STAGES, time).adventure;
-  assert.deepEqual([vale.boss, vale.story.final, vale.story.last], ['grizzle', true, true]);
-  vale.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
-  for (const c of vale.camps) if (c.kind === 'camp') c.freed = true;
-  const puffed = vale.hitKing(1, 5000);
-  assert.deepEqual([puffed.second, puffed.beaten, vale.king.hearts], [true, false, Math.round(10 * SECOND_WIND)]);
-  vale.king.hearts = 1;
-  assert.equal(vale.hitKing(1, 9000).beaten, true);
+  // And at the end of the second episode, Queen Grizzle puffs herself up the
+  // same way; and at the end of the third, the last of all, Old Murk.
+  for (const [stage, boss, last] of [[stagesOf(1) + stagesOf(2), 'grizzle', false], [STAGES, 'murk', true]]) {
+    const end = isleRoom(stage, time).adventure;
+    assert.deepEqual([end.boss, end.story.final, end.story.last], [boss, true, last]);
+    end.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
+    for (const c of end.camps) if (c.kind === 'camp') c.freed = true;
+    const puffed = end.hitKing(1, 5000);
+    assert.deepEqual([puffed.second, puffed.beaten, end.king.hearts], [true, false, Math.round(10 * SECOND_WIND)]);
+    end.king.hearts = 1;
+    assert.equal(end.hitKing(1, 9000).beaten, true);
+  }
 });
 
-for (const stage of [5, 7, 8, 10, 11, 13, 14, 15, 16, 17, 18, 19]) {
+for (const stage of [5, 7, 8, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]) {
   const boss = chapterOf(stage).boss;
   test(`stage ${stage}: ${BOSSES[boss].name} holds the lair and fights with all its moves`, () => {
     const time = { t: 1_000_000 };

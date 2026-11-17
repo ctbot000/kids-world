@@ -56,8 +56,9 @@ const kinds = (theme) => {
 };
 
 test('a Mummy goes on the end of the kinds, and comes out on desert islands only', () => {
-  assert.equal(MONSTER_KINDS.indexOf('mummy'), MONSTER_KINDS.length - 1, 'new kinds go on the end: the wire sends the index');
-  assert.equal(MONSTER_KINDS.indexOf('grizzle'), MONSTER_KINDS.length - 2, 'the old ones keep their places before it');
+  // (It went on the end, after Queen Grizzle; kinds added since go after it.)
+  assert.equal(MONSTER_KINDS.indexOf('mummy'), 44, 'new kinds go on the end: the wire sends the index');
+  assert.equal(MONSTER_KINDS.indexOf('grizzle'), 43, 'the old ones keep their places before it');
   assert.deepEqual([KINDS.mummy.hearts, KINDS.mummy.bump, KINDS.mummy.land], [3, 1, Infinity]);
   assert.ok(KINDS.mummy.move.run < MOVE.run && KINDS.mummy.cross.run < MOVE.run, 'never as quick as you run');
   assert.ok(bodyOf('mummy').height >= 0.9, 'about a player-monster’s height');

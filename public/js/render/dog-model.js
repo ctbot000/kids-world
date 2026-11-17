@@ -979,7 +979,7 @@ function makeCollar(b, parent, color) {
   g.position.y -= b.place[NECK2][1];
   g.position.z -= b.place[NECK2][2];
   parent.add(g);
-  return { band };
+  return { band, ring: g };
 }
 
 // A strap round a neck of radius 1, wide either way along it.
@@ -1086,6 +1086,7 @@ export class DogRig {
     jawFrame.add(this.tongue);
     const made = makeCollar(b, bones[NECK2], collar);
     this.band = made.band;
+    this.collar = made.ring;
 
     // The lengths of everything, and which way each bone points at rest.
     const P = b.a.pts;

@@ -23,6 +23,7 @@ import { GENTLE, swingMaterials, swingModel, swingAt, swingPhase } from './swing
 import { toyMaterial } from './toon.js';
 import { chestMaterials, chestModel } from './chest-model.js';
 import { TILE } from './atlas.js';
+import { isReal, RealWorld } from './real.js';
 
 const STUD_RADIUS = 0.25;
 export const STUD_HEIGHT = 0.13;
@@ -428,6 +429,35 @@ function studShape(segments = 12) {
 // `front`, numbered as RAIL_DIRS: 0 +x, 1 +z, 2 -x, 3 -z), from facing -z.
 const FACING = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
 
+// A finish for a model on an island drawn as the real thing (real.js), from
+// a toy's: no gloss, its colour, metal dull (with no sky reflected in it, a
+// shiny metal would be black but for its highlight).
+function realFinish({ color = '#ffffff', roughness = 0.6, metalness = 0, emissive, emissiveIntensity, transparent, opacity, side, flatShading } = {}) {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: Math.max(0.5, roughness), metalness: Math.min(0.3, metalness), flatShading: Boolean(flatShading) });
+  if (emissive !== undefined) m.emissive.set(emissive);
+  if (emissiveIntensity !== undefined) m.emissiveIntensity = emissiveIntensity;
+  if (transparent) m.transparent = true;
+  if (opacity !== undefined) m.opacity = opacity;
+  if (side !== undefined) m.side = side;
+  return m;
+}
+
+// A chunk of an island drawn as the real thing (real.js), as meshChunk would
+// give it with nothing but its furniture drawn as real models.
+function realOnly(world, cx, cz) {
+  const empty = () => ({ idx: [], pos: null });
+  const reals = [];
+  for (let x = cx * CHUNK; x < Math.min(world.W, (cx + 1) * CHUNK); x++) {
+    for (let z = cz * CHUNK; z < Math.min(world.D, (cz + 1) * CHUNK); z++) {
+      for (let y = 1; y < world.H; y++) {
+        const id = world.get(x, y, z);
+        if (id && BLOCKS[id]?.real) reals.push([x, y, z, id]);
+      }
+    }
+  }
+  return { opaque: empty(), plants: empty(), foliage: empty(), items: empty(), water: empty(), lava: empty(), glass: empty(), studs: { count: 0 }, reals, trees: [] };
+}
+
 export class Terrain {
   constructor(scene, atlas) {
     this.scene = scene;
@@ -520,14 +550,20 @@ export class Terrain {
     this.studGeometry = studShape();
   }
 
-  setWorld(world) {
+  // gl: the renderer, for an island drawn as the real thing (render/real.js:
+  // the Wild Isle), at picture quality `quality`; every other island is
+  // blocks.
+  setWorld(world, gl = null, quality = 'low') {
     this.clear();
     this.party = new Party();
     this.dishFood = new Map();
     this.world = world;
     this.light = new LightMap(world);
     this.light.computeAll();
-    this.buildSea();
+    if (gl && isReal(world.theme)) {
+      this.real = new RealWorld(gl, world, this.light, quality);
+      this.group.add(this.real.group);
+    } else this.buildSea();
     for (let cx = 0; cx < world.chunksX; cx++) for (let cz = 0; cz < world.chunksZ; cz++) this.dirty.add(`${cx},${cz}`);
   }
 
@@ -535,6 +571,8 @@ export class Terrain {
     for (const chunk of this.chunks.values()) this.disposeChunk(chunk);
     this.chunks.clear();
     this.dirty.clear();
+    this.real?.dispose();
+    this.real = null;
     if (this.sea) {
       this.group.remove(this.sea);
       this.sea.geometry.dispose();
@@ -624,6 +662,7 @@ export class Terrain {
 
   cellsChanged(cells) {
     if (!this.world || cells.length === 0) return;
+    this.real?.cellsChanged(cells);
     let x0 = Infinity;
     let z0 = Infinity;
     let x1 = -Infinity;
@@ -687,7 +726,9 @@ export class Terrain {
     const key = `${cx},${cz}`;
     const old = this.chunks.get(key);
     if (old) this.disposeChunk(old);
-    const data = meshChunk(this.world, this.light, this.atlas, cx, cz, this.dishFood);
+    // Drawn as the real thing (real.js): only the furniture drawn as real
+    // models is left to draw here (a treasure chest).
+    const data = this.real ? realOnly(this.world, cx, cz) : meshChunk(this.world, this.light, this.atlas, cx, cz, this.dishFood);
     const group = new THREE.Group();
     group.name = `chunk ${key}`;
     const chunk = { key, cx, cz, group, studs: null, movers: [], feet: data.trees.map((c) => c.join()) };
@@ -783,6 +824,11 @@ export class Terrain {
       return gashaponModel(this.gashaponMaterials);
     }
     if (kind === 'monster-gashapon') {
+      // (Real paint and plastic, not a toy's, on an island drawn as the real thing.)
+      if (this.real) {
+        this.realGashaMaterials ??= gashaponMaterials(realFinish, 'monster');
+        return gashaponModel(this.realGashaMaterials, 'monster');
+      }
       this.monsterGashaMaterials ??= gashaponMaterials(toyMaterial, 'monster');
       return gashaponModel(this.monsterGashaMaterials, 'monster');
     }
@@ -799,6 +845,11 @@ export class Terrain {
       return clockModel(this.clockMaterials, kind);
     }
     if (kind === 'treasure-chest' || kind === 'treasure-chest-open' || kind === 'gold-chest' || kind === 'gold-chest-open') {
+      // (Of real wood and iron on an island drawn as the real thing.)
+      if (this.real) {
+        this.realChestMaterials ??= chestMaterials(realFinish);
+        return chestModel(this.realChestMaterials, kind, cell);
+      }
       this.chestMaterials ??= chestMaterials(toyMaterial);
       return chestModel(this.chestMaterials, kind, cell);
     }

@@ -82,6 +82,19 @@ export function palette(theme) {
       return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.BLUEBELL, B.MUSHROOM, B.DAISY], grass: B.TALL_GRASS };
     case 'vale':
       return { top: B.PEBBLES, under: B.STONE, deep: B.STONE, beach: B.PEBBLES, flowers: [B.BLUEBELL, B.DAISY], grass: 0 };
+    // The Wild Isle of its third episode, drawn as the real thing
+    // (render/real.js): a bay, a forest, a river valley under its falls, a
+    // snowy ridge and a fen.
+    case 'wildcoast':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.DAISY, B.BLUEBELL, B.FERN], grass: B.TALL_GRASS, path: B.PEBBLES };
+    case 'wildwood':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, flowers: [B.FERN, B.FERN, B.MUSHROOM, B.BLUEBELL], grass: B.FERN, path: B.DIRT };
+    case 'wildfalls':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, flowers: [B.DAISY, B.FERN, B.BLUEBELL], grass: B.TALL_GRASS, path: B.DIRT };
+    case 'wildpeak':
+      return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, rock: B.STONE, rockAt: 15, peak: B.SNOW, peakAt: 19, flowers: [B.BLUEBELL, B.DAISY], grass: B.TALL_GRASS, path: B.PEBBLES };
+    case 'wildfen':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.DIRT, cliff: B.STONE, flowers: [B.REEDS, B.REEDS, B.MUSHROOM, B.FERN], grass: B.REEDS, path: B.DIRT };
     case 'desert':
       return { top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, flowers: [], grass: 0 };
     case 'volcano':

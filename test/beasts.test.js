@@ -80,7 +80,7 @@ test('the beasts go on the end of the kinds and states, each tougher than most, 
   assert.deepEqual(MONSTER_KINDS.slice(22, 22 + KINDS_NEW.length), KINDS_NEW, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('moltok'), 21, 'the old ones where they were');
   assert.deepEqual(MONSTER_STATES.slice(13), ['heap', 'howl', 'blink']);
-  assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW].sort());
+  assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW, 'boar'].sort(), 'and the Wild Isle’s own boar');
   for (const kind of KINDS_NEW) {
     const k = kindOf(kind);
     assert.equal(k, BEASTS[kind], 'monsters.js takes it in');
@@ -479,6 +479,17 @@ test('Rumble Rex bumps harder than anything, and when it is cross it roars: a ri
   assert.notEqual(calm.room.monsters.nextMove(calm.w, calm.m, { x: calm.m.body.x + 5, z: calm.m.body.z }, []).move, 'puff');
 });
 
+test('the Wild Isle’s boar is a beast of its own, on the end of the kinds, in the collection, and never out anywhere else', () => {
+  const k = kindOf('boar');
+  assert.equal(k, BEASTS.boar);
+  assert.ok(MONSTER_KINDS.indexOf('boar') > MONSTER_KINDS.indexOf('mummy'), 'on the end: the wire sends the index');
+  assert.ok(k.wild && !beastsOfTier(1).includes('boar') && !beastsOfTier(2).includes('boar'), 'never comes out on an island of its own');
+  assert.ok(k.cross.run < MOVE.run && k.move.run < MOVE.run && k.hearts >= KINDS.knight.hearts);
+  assert.deepEqual(k.moves.map((m) => m.move), ['charge']);
+  assert.ok(MONSTER_BOOK.some((b) => b.kind === 'boar' && b.name === 'Wild Boar'));
+  assert.ok(STAT_KEYS.includes('seenboar') && STAT_KEYS.includes('popboar'));
+});
+
 test('every chapter of the story has champions of its own in its later camps, extra guards that do not come back and must go before the flag can rise', () => {
   const champs = new Set();
   for (const ch of CHAPTERS) {
@@ -488,7 +499,7 @@ test('every chapter of the story has champions of its own in its later camps, ex
       champs.add(k);
     }
   }
-  assert.equal(champs.size, KINDS_NEW.length, 'every beast is somewhere in the story');
+  assert.equal(champs.size, KINDS_NEW.length + 1, 'every beast is somewhere in the story (the Wild Isle’s boar too)');
   const made = buildIsle({ stage: 1, seed: 7 });
   const sim = new AdventureSim({ camps: made.camps, stage: 1 }, 1);
   const monsters = new MonsterSim(1);

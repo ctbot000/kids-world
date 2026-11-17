@@ -606,6 +606,32 @@ export const CHEST_OPEN = furniture(375, 'treasure-chest-open', { name: 'Open Tr
 export const GOLD_CHEST = furniture(430, 'gold-chest', { name: 'Golden Chest', color: '#e0b04c', category: false, light: 8, sound: 'stone', islandOnly: true, real: 'gold-chest' });
 export const GOLD_CHEST_OPEN = furniture(434, 'gold-chest-open', { name: 'Open Golden Chest', color: '#e0b04c', category: false, light: 12, sound: 'stone', islandOnly: true, real: 'gold-chest-open' });
 
+// ---------------------------------------------------------------- the Wild Isle
+// The third episode of Adventure Isle's story is told on the Wild Isle, an
+// island that is not made of bricks at all (isle-maps.js; render/real.js
+// draws it as the real thing). Its trees grow from feet as a katsura's do
+// (`tree` above), each of a species of its own (model), their trunks
+// TREE_CORE; and what stands about on it is drawn real too: a boulder as a
+// rock, logs as a pile of logs, a bramble as a thorny thicket, a fern, a bush
+// and reeds as themselves. The isle's own: not in the toy box.
+export const WILD_OAK = def(470, 'wild-oak', { name: 'Oak Tree', kind: 'tree', model: 'oak', tiles: 'leaves', sound: 'wood' });
+export const WILD_PINE = def(471, 'wild-pine', { name: 'Pine Tree', kind: 'tree', model: 'pine', tiles: 'pine-leaves', sound: 'wood' });
+export const WILD_PALM = def(472, 'wild-palm', { name: 'Palm Tree', kind: 'tree', model: 'palm', tiles: 'palm', sound: 'wood' });
+export const WILD_BIRCH = def(473, 'wild-birch', { name: 'Birch Tree', kind: 'tree', model: 'birch', tiles: 'leaves', sound: 'wood' });
+export const WILD_SNAG = def(474, 'wild-snag', { name: 'Dead Tree', kind: 'tree', model: 'snag', tiles: 'wood-side', sound: 'wood' });
+export const BOULDER = def(475, 'boulder', { name: 'Boulder', tiles: 'stone', sound: 'stone' });
+export const LOGS = def(476, 'logs', { name: 'Logs', tiles: { top: 'wood-top', side: 'wood-side' }, sound: 'wood' });
+export const BRAMBLE = def(477, 'bramble', { name: 'Bramble', tiles: 'leaves', sound: 'leaves' });
+export const FERN = def(478, 'fern', { name: 'Fern', kind: 'plant', tiles: 'tall-grass', sound: 'plant' });
+export const BUSH = def(479, 'bush', { name: 'Bush', kind: 'plant', tiles: 'leaves', sound: 'leaves' });
+export const REEDS = def(480, 'reeds', { name: 'Reeds', kind: 'plant', tiles: 'tall-grass', sound: 'plant' });
+export const WILD_TREES = [WILD_OAK, WILD_PINE, WILD_PALM, WILD_BIRCH, WILD_SNAG];
+// A landmark of the Wild Isle drawn as a model of its own (a lighthouse):
+// the block its model stands on (landmark), and what fills the rest of it,
+// solid to bump into but not drawn there.
+export const MASS = def(481, 'mass', { name: 'Stone', tiles: 'stone', sound: 'stone' });
+export const LIGHTHOUSE = def(482, 'wild-lighthouse', { name: 'Lighthouse', tiles: 'stone', sound: 'stone', landmark: 'lighthouse' });
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),
@@ -682,7 +708,7 @@ for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
 export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(BLOCK_IDS);
-for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68]) TREE_PART[id] = 1;
+for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68, ...WILD_TREES]) TREE_PART[id] = 1;
 // Tent cloth, what makes a tent.
 export const CLOTH = new Uint8Array(BLOCK_IDS);
 for (const id of CLOTHS) CLOTH[id] = 1;

@@ -124,7 +124,45 @@ export class WarnStrip {
 // a glob of venom, a falling star or a root; or, in the story's second episode,
 // a strawberry, an acorn, a blob of honey, a bunch of bananas, a blob of ink, a
 // rice cake or a smudge of grey.
+// What the Wild Isle's creatures throw, as real things are (the third
+// episode): a coconut, a rock, a stick, a pine cone, a ball of fog.
+let realThrown = null;
+function realThrownMesh(what) {
+  realThrown ??= {
+    husk: new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.95 }),
+    rock: new THREE.MeshStandardMaterial({ color: 0x86837c, roughness: 0.9, flatShading: true }),
+    wood: new THREE.MeshStandardMaterial({ color: 0x5c4330, roughness: 0.9 }),
+    cone: new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.85 }),
+    fog: new THREE.MeshStandardMaterial({ color: 0x9a9ca4, roughness: 1, transparent: true, opacity: 0.7, depthWrite: false }),
+  };
+  const m = realThrown;
+  const g = new THREE.Group();
+  const add = (geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) => {
+    const o = new THREE.Mesh(geo, mat);
+    o.position.set(x, y, z);
+    o.scale.set(sx, sy, sz);
+    o.castShadow = true;
+    g.add(o);
+    return o;
+  };
+  if (what === 'nut') add(new THREE.IcosahedronGeometry(0.3, 2), m.husk, 0, 0, 0, 1, 0.9, 1);
+  else if (what === 'rock') {
+    add(new THREE.DodecahedronGeometry(0.36, 0), m.rock);
+    add(new THREE.DodecahedronGeometry(0.18, 0), m.rock, 0.22, -0.1, 0.1);
+  } else if (what === 'stick') {
+    add(new THREE.CylinderGeometry(0.06, 0.08, 1.1, 7), m.wood).rotation.z = 1.1;
+    add(new THREE.CylinderGeometry(0.035, 0.05, 0.5, 6), m.wood, 0.18, 0.12, 0).rotation.z = 0.2;
+  } else if (what === 'pinecone') {
+    for (let i = 0; i < 6; i++) add(new THREE.ConeGeometry(0.2 - i * 0.025, 0.12, 9), m.cone, 0, -0.18 + i * 0.07, 0);
+  } else {
+    for (const [x, y, z, r] of [[0, 0, 0, 0.34], [0.2, 0.1, 0.05, 0.22], [-0.18, -0.06, 0.1, 0.2], [0.02, 0.2, -0.15, 0.18]]) add(new THREE.SphereGeometry(r, 12, 8), m.fog, x, y, z);
+  }
+  return g;
+}
+const REAL_THROWN = new Set(['nut', 'rock', 'stick', 'pinecone', 'fog']);
+
 export function thrownMesh(what) {
+  if (REAL_THROWN.has(what)) return realThrownMesh(what);
   const g = new THREE.Group();
   if (what === 'boulder') {
     g.add(mesh(ROCK, toon('#8d929c'), 0, 0, 0, 0.42));

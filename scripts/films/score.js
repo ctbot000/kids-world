@@ -29,6 +29,8 @@ const CHORDS = {
   A7: ['A2', 'E3', 'G3', 'C#4'],
   F: ['F2', 'C3', 'F3', 'A3'],
   C: ['C3', 'G3', 'C4', 'E4'],
+  Am: ['A2', 'E3', 'A3', 'C4'],
+  E: ['E2', 'B2', 'E3', 'G#3'],
 };
 
 class Band {
@@ -565,8 +567,89 @@ function ending2(b) {
   b.sparkle(40.9, 8, 0.04);
 }
 
+// Old Murk's tune: slow and low, a howl rising at the end of it.
+const MURK = [
+  ['A3', 1], ['C4', 0.5], ['B3', 0.5], ['A3', 1], ['E3', 1],
+  ['F3', 0.5], ['E3', 0.5], ['D3', 0.5], ['E3', 0.5], ['A3', 1.5], [null, 0.5],
+];
+
+function intro3(b) {
+  // 0–6.5: the rainbow over the happy isle, its end out to sea.
+  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  b.arps(0, BPM, ['D', 'G', 'A'], 0.04);
+  b.tune(1, BPM, THEME.slice(0, 8), 'flute', 0.06);
+  b.sea(0, 7, 0.03);
+  // 6.5–14.5: out of the fog, the Wild Isle: the sea, wide strings, a swell.
+  b.sea(6.5, 8, 0.06);
+  b.strings(6.5, 8, ['D3', 'A3', 'E4', 'F#4'], 0.04, { attack: 1.4, release: 1.4 });
+  b.swell(11.5, 3, 0.07);
+  b.horn(12.4, 2, 'A4', 0.06);
+  // 14.5–21: Old Murk howling, the Sunstones scattering.
+  b.strings(14.5, 6.5, ['A1', 'E2', 'A2', 'C3'], 0.04, { attack: 0.8, release: 1, tremolo: true });
+  b.tune(15, BPM, MURK, 'bassoon', 0.09);
+  b.whoosh(17.6, 0.09, 1.4);
+  b.timpaniRoll(17, 0.8, 'A1', 0.2);
+  b.crash(17.8, 0.12, 3);
+  for (let k = 0; k < 5; k++) b.whoosh(17.9 + k * 0.2, 0.06, 0.8, (k % 2) - 0.5);
+  // 21–31.4: his helpers, a bar each.
+  const m0 = 21;
+  b.beat(m0, BPM, 4, 0.28);
+  const helpers = ['Am', 'F', 'Dm', 'E'];
+  b.chords(m0, BPM, helpers, 0.03, { attack: 0.08, release: 0.3 });
+  helpers.forEach((c, i) => {
+    const t = m0 + i * 2.6;
+    b.horn(t, 0.35, CHORDS[c][2], 0.08);
+    for (let k = 0; k < 8; k++) b.pluck(t + k * 0.325, hz(CHORDS[c][k % 2 ? 1 : 0]), { gain: 0.08, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+  });
+  // 31.4–36.4: Old Murk in Murk Tower: his tune, low.
+  b.tune(31.6, BPM, MURK.slice(0, 5), 'bassoon', 0.09);
+  b.strings(31.4, 5, ['A1', 'E2', 'A2'], 0.03, { attack: 0.4, release: 1 });
+  // 36.4–45.4: the heroes and the title: the theme in full.
+  b.swell(36.4, 2.5, 0.08);
+  b.timpaniRoll(38, 0.8, 'D2', 0.2);
+  b.chords(38.8, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(38.8, BPM, THEME.slice(0, 14), 'horn', 0.1);
+  b.crash(40.2, 0.12, 3);
+  b.sparkle(40.2, 10, 0.04);
+  b.strings(45.4 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending3(b) {
+  // 0–6: the last bop, a pop, a fanfare.
+  b.timpaniRoll(0, 1.6, 'A2', 0.2);
+  b.pop(1.6, 0.35);
+  b.crash(1.6, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(1.7, 14, 0.05);
+  b.cheer(1.9, 3.6, 0.03);
+  // 6–13.5: the Sunstones flying up, the sun coming out.
+  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  for (let k = 0; k < 10; k++) b.pluck(6.2 + k * 0.3, hz(['D4', 'E4', 'F#4', 'A4', 'B4'][k % 5]), { gain: 0.07, decay: 1.4, type: 'triangle', verb: 0.45 });
+  b.swell(8, 2, 0.1);
+  b.crash(10, 0.16, 4);
+  b.drum(10, { f: 80, to: 40, decay: 1.5, gain: 0.5 });
+  b.sparkle(10, 20, 0.06);
+  b.strings(10, 3.5, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.045, { attack: 0.05, release: 1.6 });
+  b.choir(10.2, 3.2, ['D4', 'A4', 'D5'], 0.025);
+  // 13.5–22: the party on the beach.
+  b.beat(13.5, BPM, 3, 0.26);
+  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
+  b.cheer(13.7, 6.5, 0.035);
+  // 22–36: the credits, gently.
+  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(22, 14, 0.025);
+  // 36–43: Old Murk asleep in the sun: his tune, warm at last.
+  b.tune(36.4, BPM, MURK.slice(0, 5), 'flute', 0.06);
+  b.strings(38.5, 4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+}
+
 export async function score(name, secs) {
   const b = new Band(secs);
-  ({ intro, ending, intro2, ending2 }[name] ?? ending)(b);
+  ({ intro, ending, intro2, ending2, intro3, ending3 }[name] ?? ending)(b);
   return b.render();
 }

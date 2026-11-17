@@ -21,6 +21,7 @@ import { ShroomModel, SnapperModel } from './isle-monsters.js';
 import { MosquitoModel, QueenMosquitoModel } from './mosquito-model.js';
 import { SpiderModel } from './spider-model.js';
 import { MummyModel } from './mummy-model.js';
+import { isRealAnimal, RealAnimal } from './real-animals.js';
 
 const TALL = 0.95;
 
@@ -40,6 +41,14 @@ export function shownBox(obj) {
 // A monster's model by its kind, stood still: in its idle pose, but Mr.
 // Mole up out of the ground, his mound left out.
 function modelOf(kind, theme = 'sunny') {
+  // The Wild Isle's own, as the real animals they are (real-animals.js).
+  if (isRealAnimal(kind)) {
+    const a = new RealAnimal(kind, 'wildcoast');
+    a.figurePose();
+    if (a.bubble) a.bubble.visible = a.bubbleRim.visible = false;
+    if (a.ring) a.ring.visible = false;
+    return a;
+  }
   if (isBoss(kind)) {
     const k = kind === 'king' ? new KingModel(theme, STOMP.reach) : makeBoss(kind, theme);
     k.update(0, 'idle', 0, false, false);

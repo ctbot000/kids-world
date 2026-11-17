@@ -448,6 +448,110 @@ export const BOSSES = {
       { move: 'call', from: 2, windup: 900, kind: 'knight', count: 2, most: 1, far: 24 },
     ],
   },
+  // The Wild Isle, the third episode: the biggest creatures on the island,
+  // each made grumpy by Old Murk's fog and keeping a Sunstone for him.
+  //
+  // Old Ironclaw, in the Old Sea Fort on Driftwood Bay: a coconut crab as big
+  // as a rowing boat. He scuttles at you, slams his great claw down, and
+  // throws coconuts when he is cross. His minions: Snappy Crabs.
+  ironclaw: {
+    icon: '🦀',
+    name: 'Old Ironclaw',
+    body: { radius: 1.3, height: 1.6 },
+    hearts: 1.35,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3300, 2600, 2000],
+    minion: 'snapper',
+    moves: [
+      { move: 'charge', from: 0, windup: 1000, speed: 13, far: 16, near: 3, bumps: 1.5 },
+      { move: 'stomp', from: 0, windup: 850, reach: 5, jump: 8.5, bumps: 1.5 },
+      { move: 'hurl', from: 1, windup: 850, what: 'nut', count: 3, scatter: 1, reach: 1.9, ms: 1300, far: 18, bumps: 1 },
+    ],
+  },
+  // Old Bramblepaw, in the Bear's Den at the end of Deepwood Forest: the
+  // biggest brown bear on the Wild Isle. He rears up and comes down with a
+  // thump, charges, swats rocks at you when he is cross, and growls for the
+  // wolves when he is crosser. His minions: foxes.
+  bramblepaw: {
+    icon: '🐻',
+    name: 'Old Bramblepaw',
+    body: { radius: 1.3, height: 2.3 },
+    hearts: 1.45,
+    bump: 2,
+    run: [3.6, 4.4, 5.2],
+    gap: [3200, 2500, 1900],
+    minion: 'fox',
+    moves: [
+      { move: 'stomp', from: 0, windup: 900, reach: 6, jump: 9.5, bumps: 1.5 },
+      { move: 'charge', from: 0, windup: 1000, speed: 13, far: 16, near: 3, bumps: 2 },
+      { move: 'hurl', from: 1, windup: 850, what: 'rock', count: 3, scatter: 1, reach: 2, ms: 1300, far: 18, bumps: 1.5 },
+      { move: 'call', from: 2, windup: 900, kind: 'wolf', count: 2, most: 1, far: 24 },
+    ],
+  },
+  // Gnasher, in the Great Dam at the top of Thunder Falls: a beaver as big
+  // as a hay cart. He slaps his flat tail down so the whole valley shakes,
+  // throws sticks, slides at you on his tummy when he is cross, and bounds
+  // onto you when he is crosser. His minions: Snappy Crabs.
+  gnasher: {
+    icon: '🦫',
+    name: 'Gnasher',
+    body: { radius: 1.35, height: 1.9 },
+    hearts: 1.55,
+    bump: 1.5,
+    run: [3.4, 4.2, 5],
+    gap: [3100, 2400, 1900],
+    minion: 'snapper',
+    moves: [
+      { move: 'stomp', from: 0, windup: 900, reach: 7, jump: 8, bumps: 1.5 },
+      { move: 'hurl', from: 0, windup: 850, what: 'stick', count: 3, scatter: 2, reach: 2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'charge', from: 1, windup: 1000, speed: 14, far: 18, near: 3, bumps: 2 },
+      { move: 'leap', from: 2, windup: 800, reach: 5, jump: 12, far: 15, bumps: 2 },
+    ],
+  },
+  // Old Curlhorn, on Eagle Crag at the top of Snowcap Ridge: a mountain ram
+  // with horns like cart wheels. He charges at anything that moves, bounds
+  // from rock to rock onto you, sends rocks rolling down when he is cross,
+  // and stamps so the mountain shakes when he is crosser. His minions: foxes.
+  curlhorn: {
+    icon: '🐏',
+    name: 'Old Curlhorn',
+    body: { radius: 1.2, height: 2.1 },
+    hearts: 1.6,
+    bump: 2,
+    run: [4, 4.8, 5.6],
+    gap: [3000, 2300, 1800],
+    minion: 'fox',
+    moves: [
+      { move: 'charge', from: 0, windup: 950, speed: 15, far: 20, near: 3, bumps: 2 },
+      { move: 'leap', from: 0, windup: 800, reach: 5, jump: 14, far: 18, bumps: 2 },
+      { move: 'hurl', from: 1, windup: 850, what: 'rock', count: 3, scatter: 2, reach: 2.1, ms: 1250, far: 20, bumps: 1.5 },
+      { move: 'stomp', from: 2, windup: 850, reach: 6.5, jump: 10, bumps: 1.5 },
+    ],
+  },
+  // Old Murk, the Fog Wolf, in Murk Tower at the end of the third episode:
+  // the biggest, greyest wolf there ever was, with eyes like lamps. He leaps
+  // onto you, breathes his grumpy fog all round him, throws balls of it,
+  // vanishes into it and comes out somewhere else when he is cross, and
+  // howls for his pack and charges when he is very cross. His minions: wolves.
+  murk: {
+    icon: '🐺',
+    name: 'Old Murk',
+    body: { radius: 1.35, height: 2.5 },
+    hearts: 1.75,
+    bump: 1.5,
+    run: [4, 4.8, 5.6],
+    gap: [3000, 2300, 1800],
+    minion: 'wolf',
+    moves: [
+      { move: 'leap', from: 0, windup: 800, reach: 5, jump: 13, far: 16, bumps: 2 },
+      { move: 'puff', from: 0, windup: 1000, what: 'mist', reach: 6, bumps: 1.5 },
+      { move: 'hurl', from: 1, windup: 850, what: 'fog', count: 3, scatter: 2, reach: 2.2, ms: 1300, far: 20, bumps: 1.5 },
+      { move: 'blink', from: 1, windup: 800, to: [6, 10], far: 40 },
+      { move: 'call', from: 2, windup: 900, kind: 'wolf', count: 2, most: 1, far: 24 },
+      { move: 'charge', from: 2, windup: 1000, speed: 14, far: 16, near: 3, bumps: 2 },
+    ],
+  },
 };
 
 // Whether a monster kind is a boss.

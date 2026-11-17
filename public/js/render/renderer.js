@@ -49,6 +49,8 @@ import { ShroomModel, SnapperModel } from './isle-monsters.js';
 import { makeBeast } from './beasts.js';
 import { isBeast } from '../shared/beasts.js';
 import { environment, Sky } from './sky.js';
+import { RealFlagModel } from './real-models.js';
+import { isRealAnimal, RealAnimal } from './real-animals.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
 
@@ -90,8 +92,11 @@ export const QUALITY = {
 // and sees at least this far, so a whole island is in sight.
 const FREE_DIST = 140;
 const FREE_FOG = 320;
-// Shadows are drawn this far round you, either way, fading out before the edge.
+// Shadows are drawn this far round you, either way, fading out before the
+// edge; on an island drawn as the real thing (real.js), where everything
+// casts them, the land and the trees too, further.
 const SHADOW_EXTENT = 13;
+const REAL_SHADOW_EXTENT = 44;
 // Snow lying about: all the way from none to thick in 150 seconds of snow
 // (block tops all white by 100), and melted in 120 once it stops.
 const SNOW_RATE = 1 / 150;
@@ -270,10 +275,27 @@ export class Renderer {
 
   setWorld(world) {
     this.world = world;
-    this.terrain.setWorld(world);
+    const wasReal = Boolean(this.real);
+    this.terrain.setWorld(world, this.gl, this.level ?? 'low');
+    // The Wild Isle, drawn as the real thing (real.js): its light as real
+    // light is, a film's, toned down into the screen's range, and the haze
+    // far off.
+    this.real = this.terrain.real;
+    this.gl.toneMapping = this.real ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    this.gl.toneMappingExposure = 1;
+    this.realFog = this.real ? new THREE.FogExp2(0xbfd8ee, 0.004) : null;
+    if (wasReal !== Boolean(this.real) && this.level) {
+      this.buildFinish();
+      this.resize();
+    }
     this.focus.cloudY = world.H + 22;
     this.view.ready = false;
     this.plotMark.visible = false;
+  }
+
+  // How far round you shadows are drawn, either way.
+  get shadowExtent() {
+    return this.real ? REAL_SHADOW_EXTENT : SHADOW_EXTENT;
   }
 
   resize() {
@@ -305,6 +327,7 @@ export class Renderer {
       this.level = level;
       this.finish = QUALITY[level];
       this.buildFinish();
+      this.real?.setQuality(level);
     }
     this.resize();
   }
@@ -328,9 +351,10 @@ export class Renderer {
         shadow.map?.dispose();
         shadow.map = null;
       }
-      Object.assign(shadow.camera, { left: -SHADOW_EXTENT, right: SHADOW_EXTENT, top: SHADOW_EXTENT, bottom: -SHADOW_EXTENT, near: 1, far: 120 });
+      const extent = this.shadowExtent;
+      Object.assign(shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 1, far: this.real ? 320 : 120 });
       shadow.camera.updateProjectionMatrix();
-      const texel = (2 * SHADOW_EXTENT) / q.shadows;
+      const texel = (2 * extent) / q.shadows;
       shadow.bias = -0.0005;
       shadow.normalBias = 1.5 * texel;
       shadow.radius = 2;
@@ -384,6 +408,27 @@ export class Renderer {
 
   // Draws the picture as it is now, at the quality there is.
   draw() {
+    // On an island drawn as the real thing, everyone and everything standing
+    // about is drawn standing on its ground as it is drawn (real.js), which
+    // is not quite the top of the block they stand on.
+    const lifted = this.real ? this.liftEntities() : null;
+    this.render();
+    if (lifted) for (const [o, dy] of lifted) o.position.y -= dy;
+  }
+
+  liftEntities() {
+    const out = [];
+    for (const o of this.entities.children) {
+      if (!o.visible) continue;
+      const dy = this.real.lift(o.position.x, o.position.y, o.position.z, 0.3);
+      if (!dy) continue;
+      o.position.y += dy;
+      out.push([o, dy]);
+    }
+    return out;
+  }
+
+  render() {
     const gl = this.gl;
     const post = this.post;
     if (!post) {
@@ -632,7 +677,8 @@ export class Renderer {
   // (beasts.js).
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
-    const m = kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : isBeast(kind) ? makeBeast(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : kind === 'mummy' ? new MummyModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
+    // The Wild Isle's animals as real ones (real-animals.js).
+    const m = isRealAnimal(kind, Boolean(this.real)) ? new RealAnimal(kind, this.world?.theme) : kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : isBeast(kind) ? makeBeast(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : kind === 'mummy' ? new MummyModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
@@ -648,7 +694,8 @@ export class Renderer {
   // A camp's flag pole (see adventure-models.js), by the camp's id.
   addFlag(id, kind) {
     this.removeFlag(id);
-    const f = new FlagModel(kind);
+    // (Cloth on a wooden pole on an island drawn as the real thing.)
+    const f = this.real ? new RealFlagModel(this.gl, kind) : new FlagModel(kind);
     this.entities.add(f.group);
     this.flags.set(id, f);
     return f;
@@ -810,7 +857,8 @@ export class Renderer {
   // do not count: the camera slips inside a tree crown and sees through it.
   updateCamera(dt, target, collide = true) {
     const v = this.view;
-    v.target.set(target.x, target.y + 1.25, target.z);
+    const lift = this.real ? this.real.lift(target.x, target.y, target.z, 0.3) : 0;
+    v.target.set(target.x, target.y + 1.25 + lift, target.z);
     if (!v.ready) {
       v.smooth.copy(v.target);
       v.ready = true;
@@ -1054,7 +1102,7 @@ export class Renderer {
       // Looking through your own eyes, nothing near should dissolve.
       nearFade: this.nearFade,
       shadowFocus: state.focus,
-      shadowReach: SHADOW_EXTENT * 0.95,
+      shadowReach: this.shadowExtent * 0.95,
       snow: this.snow,
     });
     this.sky.setWeather(state.weather);
@@ -1072,6 +1120,21 @@ export class Renderer {
     this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 0.98, 0.94), 0.5);
     this.hemi.groundColor.setRGB(0.55, 0.62, 0.45).multiplyScalar(0.5 + 0.5 * env.day);
     this.hemi.intensity = 1.05 + 0.65 * env.day + 0.8 * flash;
+    if (this.real) {
+      // A real sky (real.js) instead of the cartoon one, and real light: a
+      // bright sun, the sky's own blue light, the haze far off.
+      this.real.frame(dt, env, state.weather, this.camera, this.nearFade);
+      for (const o of [this.sky.dome, this.sky.sun, this.sky.moon, this.sky.clouds]) o.visible = false;
+      this.realFog.color.copy(env.fog);
+      this.realFog.density = 0.55 / Math.max(60, fogFar);
+      this.scene.fog = this.realFog;
+      this.sun.intensity = (0.25 + 3.6 * env.day) * (state.weather === 'clear' || state.weather === 'rainbow' ? 1 : 0.55);
+      this.hemi.color.copy(env.top).lerp(tmpC.setRGB(1, 1, 1), 0.25);
+      this.hemi.groundColor.setRGB(0.36, 0.31, 0.24).multiplyScalar(0.4 + 0.6 * env.day);
+      this.hemi.intensity = 0.5 + 1.15 * env.day + 0.8 * flash;
+    } else {
+      for (const o of [this.sky.dome, this.sky.clouds]) o.visible = true;
+    }
     // The toys give back less of the studio's light at night, and the light
     // round their edges takes the sky's colour.
     toyLight.studio.value = 0.3 + 0.7 * env.day;
@@ -1088,7 +1151,8 @@ export class Renderer {
     // through your own eyes.
     if (this.focusPass) {
       const u = this.focusPass.uniforms;
-      this.focusPass.enabled = this.nearFade;
+      // (Not on an island drawn as the real thing: real places are sharp.)
+      this.focusPass.enabled = this.nearFade && !this.real;
       u.focus.value = this.camDist ?? 8;
       u.cameraNear.value = this.camera.near;
       u.cameraFar.value = this.camera.far;
@@ -1129,7 +1193,7 @@ export class Renderer {
     const target = tmpV.copy(focus);
     const size = this.finish.shadows;
     if (size) {
-      const texel = (2 * SHADOW_EXTENT) / size;
+      const texel = (2 * this.shadowExtent) / size;
       // The shadow camera's own axes, as lookAt makes them.
       tmpZ.copy(dir).normalize();
       tmpX.crossVectors(UP, tmpZ);
@@ -1141,7 +1205,7 @@ export class Renderer {
       target.addScaledVector(tmpX, Math.round(x / texel) * texel - x).addScaledVector(tmpY, Math.round(y / texel) * texel - y);
     }
     this.sun.target.position.copy(target);
-    this.sun.position.copy(target).addScaledVector(dir, 50);
+    this.sun.position.copy(target).addScaledVector(dir, this.real ? 150 : 50);
   }
 
   dispose() {

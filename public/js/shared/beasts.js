@@ -12,6 +12,7 @@
 //   and when it is hurt it howls for another.
 // - Thunderhawk 🦅: it soars out of reach, out of the sky calling lightning down
 //   round you, and swoops to bump you, when you can bop it.
+// - Wild Boar 🐗, on the Wild Isle only (wild): it lowers its head and charges.
 // - Mimic 🎁: a treasure chest, shut and still, until someone comes near. Then
 //   it bites. It is full of coins.
 // - Grumble Oak 🌳, a walking tree, very slow: its roots burst up out of the
@@ -115,6 +116,27 @@ export const BEASTS = {
       { move: 'leap', from: 0, windup: 650, reach: 2.6, jump: 9.5, near: 3, far: 10, bumps: 2, daze: 700 },
       { move: 'call', from: 1, windup: 1000, kind: 'wolf', count: 1, most: 1, far: 30 },
     ],
+  },
+  // The Wild Isle's own (isle-story.js, the third episode): a wild boar, made
+  // grumpy by Old Murk's fog. It lowers its head and charges.
+  boar: {
+    icon: '🐗',
+    name: 'Wild Boar',
+    tier: 1,
+    wild: true,
+    body: { radius: 0.55, height: 1.0 },
+    hearts: 9,
+    bump: 2,
+    land: 2,
+    walks: true,
+    stagger: 0.6,
+    move: { walk: 1.8, run: 4.6, jump: 8 },
+    cross: { walk: 1.8, run: 6.4, jump: 8 },
+    march: 2.6,
+    marchHearts: 2,
+    coins: 3,
+    gap: [3600, 2900, 2200],
+    moves: [{ move: 'charge', from: 0, windup: 900, speed: 11, far: 10, near: 2.5, bumps: 2, daze: 1100 }],
   },
   hawk: {
     icon: '🦅',
@@ -272,7 +294,8 @@ export const BEASTS = {
 };
 
 export const isBeast = (kind) => Object.hasOwn(BEASTS, kind);
-export const beastsOfTier = (tier) => Object.keys(BEASTS).filter((kind) => BEASTS[kind].tier === tier);
+// (The Wild Isle's own, wild, never come out anywhere else.)
+export const beastsOfTier = (tier) => Object.keys(BEASTS).filter((kind) => BEASTS[kind].tier === tier && !BEASTS[kind].wild);
 // How much harder than usual a blow of this (a shop.js key, or 'fire') lands on
 // one of these.
 export const weakTo = (kind, what) => (what && BEASTS[kind]?.weak?.includes(what) ? 2 : 1);

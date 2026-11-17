@@ -167,6 +167,7 @@ export const KNIGHT_BODY = { radius: 0.52, height: 1.05 };
 export const GOLEM_BODY = { radius: 0.85, height: 1.75 };
 // A Mummy: about a blob's size, wrapped head to foot in bandages.
 export const MUMMY_BODY = { radius: 0.45, height: 1.0 };
+const FOX_BODY = { radius: 0.34, height: 0.72 };
 // A Lava Ghost: a blob's width but taller, hanging in the air a little way.
 export const GHOST_BODY = { radius: 0.45, height: 0.95 };
 // A Snappy Crab: wider than a blob and lower.
@@ -297,6 +298,9 @@ export const KINDS = {
   gummy: { hearts: 4, bump: 1, land: 2, move: { walk: 1.8, run: 4, jump: 9 }, cross: { walk: 1.8, run: 5.6, jump: 9 } },
   // A Gummy Cub: quick, one heart, one landing.
   cub: { hearts: 1, bump: 1, land: Infinity, move: { walk: 2.4, run: 4.8, jump: 8 }, cross: { walk: 2.4, run: 6.2, jump: 8 } },
+  // A fox of the Wild Isle (the third episode), grumpy in Old Murk's fog:
+  // quick on its feet, three bops, and one landing on it sends it off.
+  fox: { hearts: 3, bump: 1, land: Infinity, move: { walk: 2.6, run: 5.4, jump: 8 }, cross: { walk: 2.6, run: 6.6, jump: 8 } },
   // And the mightier species, with moves of their own.
   ...BEASTS,
 };
@@ -337,9 +341,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff', 'rear', 'charge', 'hurl', 'leap', 'heap', 'howl', 'blink'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy', 'fox', 'boar', 'ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk'];
 
-export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY, fox: FOX_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
 // it: up out of it he only ever hops or giggles (see step).
 export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
