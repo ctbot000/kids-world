@@ -106,6 +106,7 @@ const VALE_TINT = new THREE.Color('#a3a7ad');
 // bay and the woods, warm over the canyon, icy over the peaks, and a stormy
 // purple over Thunder Top.
 const TOON_TINT = new THREE.Color('#8fe6ff');
+const TOON_TOP = new THREE.Color('#2f86ff');
 const TOON_CANYON_TINT = new THREE.Color('#ffc27a');
 const TOON_PEAK_TINT = new THREE.Color('#d6ecff');
 const TOON_STORM_TINT = new THREE.Color('#6d5fb8');
@@ -165,10 +166,13 @@ export function environment(time, weather, theme, out = {}) {
     top.lerp(VALE_TINT, 0.45);
   } else if (theme === 'toonbay' || theme === 'toonwood') {
     horizon.lerp(TOON_TINT, 0.3 * day);
+    top.lerp(TOON_TOP, 0.45 * day);
   } else if (theme === 'tooncanyon') {
     horizon.lerp(TOON_CANYON_TINT, 0.35 * day);
+    top.lerp(TOON_TOP, 0.35 * day);
   } else if (theme === 'toonpeak') {
     horizon.lerp(TOON_PEAK_TINT, 0.35 * day);
+    top.lerp(TOON_TOP, 0.4 * day);
   } else if (theme === 'toonstorm') {
     horizon.lerp(TOON_STORM_TINT, 0.4);
     top.lerp(TOON_STORM_TINT, 0.35);
@@ -187,6 +191,9 @@ export function environment(time, weather, theme, out = {}) {
   out.daylight = (0.34 + 0.66 * day) * (weather === 'storm' ? 0.62 : 1);
   out.ambient = (out.ambient ?? new THREE.Color()).setRGB(0.1, 0.11, 0.17);
   out.fog = (out.fog ??= new THREE.Color()).copy(horizon);
+  // How soon above the horizon the sky is its top's colour: sooner over Toon
+  // Isle, a storybook's deep blue sky.
+  out.skyRise = theme?.startsWith('toon') ? 0.3 : 0.55;
   out.stars = Math.max(0, 1 - day * 1.6) * (1 - gloom);
   return out;
 }
@@ -313,6 +320,7 @@ const SKY_FRAG = /* glsl */ `
   uniform float uStars;
   uniform float uDay;
   uniform float uTime;
+  uniform float uRise;
   varying vec3 vDir;
   float hash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
@@ -322,7 +330,7 @@ const SKY_FRAG = /* glsl */ `
   void main() {
     vec3 d = normalize(vDir);
     float h = clamp(d.y, -1.0, 1.0);
-    vec3 col = mix(uHorizon, uTop, smoothstep(-0.02, 0.55, h));
+    vec3 col = mix(uHorizon, uTop, smoothstep(-0.02, uRise, h));
     col = mix(col, uHorizon * 0.85, smoothstep(0.0, -0.3, h));
     float sun = max(dot(d, uSunDir), 0.0);
     col += vec3(1.0, 0.85, 0.6) * pow(sun, 8.0) * 0.1;
@@ -357,6 +365,7 @@ export class Sky {
       uStars: { value: 0 },
       uDay: { value: 1 },
       uTime: { value: 0 },
+      uRise: { value: 0.55 },
     };
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(900, 32, 16),
@@ -612,6 +621,7 @@ export class Sky {
     const u = this.uniforms;
     u.uTop.value.copy(env.top);
     u.uHorizon.value.copy(env.horizon);
+    u.uRise.value = env.skyRise ?? 0.55;
     u.uSunDir.value.copy(env.sunDir);
     u.uStars.value = env.stars;
     u.uDay.value = env.day;

@@ -12,7 +12,7 @@
 // half once seen); blue, how high its cloud bank stands (over the highest
 // ground round it, as a share of the world's height).
 import * as THREE from '../../vendor/three.module.js';
-import { celMaterial } from './cel.js';
+import { cartoonMaterial } from './cartoon-light.js';
 
 // How long a tile's clouds take to clear once it is seen, and how many puffs
 // of cloud stand on each tile.
@@ -55,14 +55,15 @@ export const FOG_GLSL = /* glsl */ `
   }
 `;
 
-// Cartoon clouds drifting high over Toon Isle (in place of the toy sky's
-// clouds, which are blocks): fat white heaps of puffs, slowly blown along,
-// round again when they drift too far.
+// Cartoon clouds drifting over Toon Isle (in place of the toy sky's clouds,
+// which are blocks): fat white heaps of puffs, big ones low round the
+// horizon and smaller ones high overhead, slowly blown along, round again
+// when they drift too far.
 export class SkyClouds {
   constructor(world, uniforms) {
     const geo = new THREE.IcosahedronGeometry(1, 2);
-    const heaps = 26;
-    const per = 6;
+    const heaps = 34;
+    const per = 7;
     const mesh = new THREE.InstancedMesh(geo, null, heaps * per);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -74,11 +75,12 @@ export class SkyClouds {
     let c = 0;
     for (let i = 0; i < heaps; i++) {
       const a = rand() * Math.PI * 2;
-      const d = 60 + rand() * 340;
+      const low = i % 2 === 0;
+      const d = low ? 330 + rand() * 200 : 60 + rand() * 260;
       const x = world.W / 2 + Math.cos(a) * d;
       const z = world.D / 2 + Math.sin(a) * d;
-      const y = world.H + 26 + rand() * 34;
-      const size = 5 + rand() * 7;
+      const y = low ? world.H + 6 + rand() * 30 : world.H + 30 + rand() * 34;
+      const size = low ? 16 + rand() * 18 : 6 + rand() * 8;
       for (let k = 0; k < per; k++) {
         const r = size * (k ? 0.45 + rand() * 0.35 : 0.8);
         m.compose(new THREE.Vector3(x + (rand() - 0.5) * size * 2.2, y + (k ? rand() * size * 0.4 : size * 0.15), z + (rand() - 0.5) * size * 1.2), q, new THREE.Vector3(r * 1.2, r * 0.8, r));
@@ -87,8 +89,8 @@ export class SkyClouds {
     }
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false;
-    mesh.material = celMaterial(
-      { color: new THREE.Color('#ffffff'), emissive: new THREE.Color('#dfe8ff'), emissiveIntensity: 0.35, fog: false },
+    mesh.material = cartoonMaterial(
+      { color: new THREE.Color('#ffffff'), emissive: new THREE.Color('#dfe8ff'), emissiveIntensity: 0.12, fog: false },
       {
         key: 'sky-clouds',
         uniforms,
@@ -98,7 +100,7 @@ export class SkyClouds {
             `vec4 mvPosition = vec4(transformed, 1.0);
             mvPosition = instanceMatrix * mvPosition;
             // Blown along, and round again past the far side.
-            mvPosition.x = mod(mvPosition.x + uTime * 1.2 + 300.0, 900.0) - 300.0;
+            mvPosition.x = mod(mvPosition.x + uTime * 1.2 + 550.0, 1400.0) - 550.0;
             mvPosition = modelViewMatrix * mvPosition;
             gl_Position = projectionMatrix * mvPosition;`,
           );
@@ -285,7 +287,7 @@ export class CloudBlanket {
   }
 
   material() {
-    this.mat ??= celMaterial(
+    this.mat ??= cartoonMaterial(
       { color: new THREE.Color('#f6f3ff'), emissive: new THREE.Color('#2a2440'), emissiveIntensity: 0.25 },
       {
         key: 'cloud-puffs',

@@ -4,7 +4,6 @@
 // out from the ground. (`toon` keeps the name it had when they were flat
 // cartoon paint.)
 import * as THREE from '../../vendor/three.module.js';
-import { CEL_PARS, celLight } from './cel.js';
 
 const cache = new Map();
 
@@ -26,19 +25,12 @@ export class ToyMaterial extends THREE.MeshPhysicalMaterial {
     shader.uniforms.uStudio = toyLight.studio;
     shader.uniforms.uRim = toyLight.rim;
     shader.uniforms.uRimColor = toyLight.rimColor;
-    Object.assign(shader.uniforms, celLight);
-    // (On Toon Isle every toy is painted as a cartoon too, in the cel tones,
-    // with a hard white glint where it shines: cel.js.)
-    shader.fragmentShader = `uniform float uStudio;\nuniform float uRim;\nuniform vec3 uRimColor;\n${CEL_PARS}\n${shader.fragmentShader}`
+    shader.fragmentShader = `uniform float uStudio;\nuniform float uRim;\nuniform vec3 uRimColor;\n${shader.fragmentShader}`
       .replace('#include <envmap_physical_pars_fragment>', THREE.ShaderChunk.envmap_physical_pars_fragment.replaceAll('* envMapIntensity', '* envMapIntensity * uStudio'))
       .replace(
         '#include <opaque_fragment>',
         `float toyRim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.6);
         outgoingLight += uRimColor * uRim * toyRim * mix(vec3(1.0), diffuseColor.rgb, 0.5);
-        if (uCelOn > 0.5) {
-          float glint = step(0.42, celLum(reflectedLight.directSpecular) / max(1e-4, uSunLum));
-          outgoingLight = (diffuseColor.rgb * celTone(diffuseColor.rgb, reflectedLight.directDiffuse) + glint * 0.28) * uCelTint + totalEmissiveRadiance;
-        }
         #include <opaque_fragment>`,
       );
   }
@@ -82,6 +74,9 @@ export function litByStudio(m) {
   made.add(m);
   return m;
 }
+
+// The studio's light as it is now (made with the renderer, before any island).
+export const studioLight = () => studio;
 
 // The studio's light, for every toy there is and every one to come.
 export function setStudio(texture) {

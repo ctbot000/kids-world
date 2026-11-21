@@ -3,7 +3,8 @@
 // a shipwreck's planks, the lighthouse's red and white bands, giant bones, a
 // gallery's rail — is wrapped in one smooth skin, as if modelled in clay
 // (surface nets over the blocks: a corner cut off every edge, a slope across
-// every step), painted in each block's colour in the cel tones (cel.js). And
+// every step), painted in each block's colour (with its pattern: boards,
+// cobbles, bricks) in the storybook light (cartoon-light.js). And
 // a few things have models of their own: the Sky Lantern where everyone
 // lands, the lamps round it (lit as each battle is won), the lightning rods
 // of Baron Bluster's arena, and an ambush's Lantern Spark, floating and
@@ -11,8 +12,9 @@
 import * as THREE from '../../vendor/three.module.js';
 import * as B from '../shared/blocks.js';
 import { CHUNK } from '../shared/world.js';
-import { celMaterial } from './cel.js';
+import { cartoonMaterial } from './cartoon-light.js';
 import { FOG_GLSL } from './cartoon-clouds.js';
+import { NOISE_GLSL } from './cartoon-ground.js';
 
 // The cartoon colour of each kind of block (else its own colour, or a soft grey).
 const PAINT = new Map([
@@ -29,6 +31,53 @@ const colorOf = (id) => {
   const hex = PAINT.get(id) ?? B.BLOCKS[id]?.color;
   return new THREE.Color(hex && hex !== '#ffffff' ? hex : '#dcd6e4');
 };
+// And the pattern painted over it (see BUILD_PAINT): none, boards, wood's
+// grain, cobbles, bricks, ice's streaks of light.
+const PATTERN = new Map([
+  [B.PLANKS, 1],
+  [B.WOOD, 2],
+  [B.STONE, 3],
+  [B.PEBBLES, 3],
+  [B.BRICK_WALL, 4],
+  [B.ICE, 5],
+]);
+const patternOf = (id) => PATTERN.get(id) ?? 0;
+
+// The pattern, by the face's own two directions (across and up, or the two
+// across a top), fading out where it would be finer than the pixels.
+const BUILD_PAINT = /* glsl */ `
+  {
+    int pat = int(vPattern + 0.5);
+    vec3 an = abs(normalize(vNormalB));
+    bool top = an.y > max(an.x, an.z);
+    vec2 uv = top ? vWorldB.xz : an.x > an.z ? vWorldB.zy : vWorldB.xy;
+    float px = length(fwidth(vWorldB));
+    float aa = px * 1.5 + 0.01;
+    float fine = 1.0 - smoothstep(0.05, 0.15, px);
+    vec3 c = diffuseColor.rgb;
+    if (pat == 1) {
+      float v = uv.y * 3.0;
+      float f = fract(v);
+      float groove = 1.0 - smoothstep(0.0, 0.08 + aa * 3.0, min(f, 1.0 - f));
+      float tone = 0.9 + 0.2 * gHash(vec2(floor(v), floor(uv.x * 0.7 + floor(v) * 0.37)));
+      c *= mix(1.0, tone * (1.0 - 0.4 * groove), fine);
+    } else if (pat == 2) {
+      float grain = top ? sin(length(fract(uv) - 0.5) * 30.0) : sin(uv.x * 10.0 + sin(uv.y * 1.7) * 2.0);
+      c *= 1.0 + 0.08 * grain * fine;
+    } else if (pat == 3) {
+      vec4 cell = gCells(uv * 1.7);
+      c *= (0.88 + 0.22 * gHash(cell.zw)) * (1.0 - 0.3 * (1.0 - smoothstep(0.02, 0.07 + aa * 1.7, cell.y - cell.x)) * fine);
+    } else if (pat == 4) {
+      vec2 b = vec2(uv.x * 2.0 + 0.5 * floor(uv.y * 4.0), uv.y * 4.0);
+      vec2 f = fract(b);
+      float mortar = 1.0 - smoothstep(0.0, 0.06 + aa * 4.0, min(min(f.x, 1.0 - f.x) * 0.5, min(f.y, 1.0 - f.y)));
+      c = mix(c * (0.92 + 0.16 * gHash(floor(b))), vec3(0.95, 0.92, 0.86), mortar * 0.8 * fine);
+    } else if (pat == 5) {
+      c = mix(c, vec3(1.0), smoothstep(0.88, 1.0, sin(uv.x * 2.0 + uv.y * 3.0)) * 0.5);
+    }
+    diffuseColor.rgb = c;
+  }
+`;
 
 // What has a model of its own here, and what is drawn elsewhere (the
 // ground, what grows, the furniture's own models), or not at all (MASS, the
@@ -136,7 +185,8 @@ function surfaceNets(world, x0, z0, size) {
     }
   }
   const idx = [];
-  // Each triangle's block (the one on the inside of its quad), for its colour.
+  // Each triangle's block (the one on the inside of its quad), for its colour
+  // and its pattern.
   const of = [];
   const V = (cx, cy, cz) => {
     const i = cx - lo(x0);
@@ -178,19 +228,33 @@ function surfaceNets(world, x0, z0, size) {
   const P = new Float32Array(n * 3);
   const N = new Float32Array(n * 3);
   const Q = new Float32Array(n * 3);
+  const T = new Float32Array(n);
+  const face = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
   for (let t = 0; t < n; t++) {
     const v = idx[t];
     for (let k = 0; k < 3; k++) {
       P[t * 3 + k] = pos[v * 3 + k];
       N[t * 3 + k] = normals[v * 3 + k];
     }
+    // (Where a thin wall's two sides meet at a vertex, its normals cancel
+    // out: none at all, which would paint it black. The triangle's own.)
+    if (Math.hypot(N[t * 3], N[t * 3 + 1], N[t * 3 + 2]) < 1e-4) {
+      const f = t - (t % 3);
+      const at = (j) => new THREE.Vector3(pos[idx[f + j] * 3], pos[idx[f + j] * 3 + 1], pos[idx[f + j] * 3 + 2]);
+      face.crossVectors(e1.subVectors(at(1), at(0)), e2.subVectors(at(2), at(0))).normalize();
+      face.toArray(N, t * 3);
+    }
     colorOf(of[Math.floor(t / 3)]).toArray(Q, t * 3);
+    T[t] = patternOf(of[Math.floor(t / 3)]);
   }
   void col;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
   g.setAttribute('color', new THREE.BufferAttribute(Q, 3));
+  g.setAttribute('pattern', new THREE.BufferAttribute(T, 1));
   g.computeBoundingSphere();
   return g;
 }
@@ -237,16 +301,35 @@ export class CartoonBuild {
         }`,
       );
     };
-    this.material = celMaterial({ vertexColors: true }, { key: 'cartoon-build', uniforms: fog, vertex: hide });
+    this.material = cartoonMaterial(
+      { vertexColors: true, roughness: 0.5 },
+      {
+        key: 'cartoon-build',
+        uniforms: fog,
+        vertex: (shader) => {
+          hide(shader);
+          shader.vertexShader = `attribute float pattern;\nvarying float vPattern;\nvarying vec3 vWorldB;\nvarying vec3 vNormalB;\n${shader.vertexShader}`.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+            vPattern = pattern;
+            vWorldB = (modelMatrix * vec4(position, 1.0)).xyz;
+            vNormalB = normalize(mat3(modelMatrix) * objectNormal);`,
+          );
+        },
+        fragment: (shader) => {
+          shader.fragmentShader = `${NOISE_GLSL}\nvarying float vPattern;\nvarying vec3 vWorldB;\nvarying vec3 vNormalB;\n${shader.fragmentShader}`.replace('#include <color_fragment>', `#include <color_fragment>\n${BUILD_PAINT}`);
+        },
+      },
+    );
     this.materials = {
-      paper: celMaterial({ color: C('#ff5a4a'), emissive: C('#ff9a3d'), emissiveIntensity: 0 }, { key: 'lantern-paper', uniforms: fog, vertex: hide }),
-      gold: celMaterial({ color: C('#ffcf4a') }, { key: 'lantern-gold', uniforms: fog, vertex: hide }),
-      wood: celMaterial({ color: C('#8f5f3e') }, { key: 'lantern-wood', uniforms: fog, vertex: hide }),
-      glass: celMaterial({ color: C('#bfe6ff') }, { key: 'lamp-off', uniforms: fog, vertex: hide }),
-      lit: celMaterial({ color: C('#fff1a8'), emissive: C('#ffcf4a'), emissiveIntensity: 1.2 }, { key: 'lamp-on', uniforms: fog, vertex: hide }),
-      steel: celMaterial({ color: C('#9aa3b8') }, { key: 'rod-steel', uniforms: fog, vertex: hide }),
-      copper: celMaterial({ color: C('#ff9a4a'), emissive: C('#ffb36a'), emissiveIntensity: 0.25 }, { key: 'rod-copper', uniforms: fog, vertex: hide }),
-      spark: celMaterial({ color: C('#fff3a0'), emissive: C('#ffd84d'), emissiveIntensity: 1.1 }, { key: 'spark', uniforms: fog, vertex: hide }),
+      paper: cartoonMaterial({ color: C('#ff5a4a'), emissive: C('#ff9a3d'), emissiveIntensity: 0 }, { key: 'lantern-paper', uniforms: fog, vertex: hide }),
+      gold: cartoonMaterial({ color: C('#ffcf4a') }, { key: 'lantern-gold', uniforms: fog, vertex: hide }),
+      wood: cartoonMaterial({ color: C('#8f5f3e') }, { key: 'lantern-wood', uniforms: fog, vertex: hide }),
+      glass: cartoonMaterial({ color: C('#bfe6ff') }, { key: 'lamp-off', uniforms: fog, vertex: hide }),
+      lit: cartoonMaterial({ color: C('#fff1a8'), emissive: C('#ffcf4a'), emissiveIntensity: 2.2 }, { key: 'lamp-on', uniforms: fog, vertex: hide }),
+      steel: cartoonMaterial({ color: C('#9aa3b8') }, { key: 'rod-steel', uniforms: fog, vertex: hide }),
+      copper: cartoonMaterial({ color: C('#ff9a4a'), emissive: C('#ffb36a'), emissiveIntensity: 0.25 }, { key: 'rod-copper', uniforms: fog, vertex: hide }),
+      spark: cartoonMaterial({ color: C('#fff3a0'), emissive: C('#ffd84d'), emissiveIntensity: 2.4 }, { key: 'spark', uniforms: fog, vertex: hide }),
     };
     this.sparks = [];
     this.lantern = null;
@@ -326,7 +409,7 @@ export class CartoonBuild {
   // The Sky Lantern lit (the stage won), glowing from inside.
   setLit(on) {
     this.lit = on;
-    this.materials.paper.emissiveIntensity = on ? 0.9 : 0;
+    this.materials.paper.emissiveIntensity = on ? 1.6 : 0;
   }
 
   dispose() {

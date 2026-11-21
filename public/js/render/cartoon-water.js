@@ -1,8 +1,9 @@
-// Toon Isle's water (render/cartoon.js): flat cartoon paint, no reflections —
-// turquoise in the shallows, blue further out and deep blue far out, each a
-// band of its own; rings of white foam lapping round every shore, a band of
-// it right at the water's edge, and white glints drifting over it. How deep
-// it is at each point is read off the ground's heights (real-ground.js
+// Toon Isle's water (render/cartoon.js), a storybook's: turquoise in the
+// shallows deepening smoothly to blue far out, nets of light rippling over
+// the sand under the shallows, the sky's colour shining off it where you
+// look along it, the sun sparkling on its little waves, rings of white foam
+// lapping round every shore and a band of it right at the water's edge. How
+// deep it is at each point is read off the ground's heights (real-ground.js
 // heightTexture). Under the Cloud Blanket the ground is raised over it, so
 // none shows there.
 import * as THREE from '../../vendor/three.module.js';
@@ -17,7 +18,7 @@ const VERT = /* glsl */ `
   #include <fog_pars_vertex>
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
-    // A gentle cartoon bob, none far out.
+    // A gentle bob, none far out.
     world.y += 0.06 * sin(world.x * 0.35 + uTime * 1.3) * sin(world.z * 0.3 + uTime * 1.1) * uv.x;
     vWorld = world.xyz;
     vec4 mvPosition = viewMatrix * world;
@@ -34,31 +35,84 @@ const FRAG = /* glsl */ `
   uniform vec3 uMid;
   uniform vec3 uDeep;
   uniform vec3 uFoam;
-  uniform vec3 uCelTint;
+  uniform vec3 uLightTint;
+  uniform vec3 uSky;
+  uniform vec3 uSunDir;
+  uniform float uSun;
   uniform float uTop;
   varying vec3 vWorld;
   #include <common>
   #include <fog_pars_fragment>
-  float wHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+  float wHash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+  vec2 wHash2(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+  }
+  float wNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), u.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  // A net of light: how near p is to the edge between two cells, the cells'
+  // points drifting round in circles.
+  float wNet(vec2 p, float t) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float d1 = 8.0;
+    float d2 = 8.0;
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec2 g = vec2(float(x), float(y));
+        vec2 h = wHash2(i + g);
+        vec2 r = g + 0.5 + 0.38 * sin(t + 6.2831 * h) - f;
+        float d = dot(r, r);
+        if (d < d1) {
+          d2 = d1;
+          d1 = d;
+        } else if (d < d2) {
+          d2 = d;
+        }
+      }
+    }
+    return sqrt(d2) - sqrt(d1);
+  }
   void main() {
     vec2 uv = (vWorld.xz * 2.0 + 0.5) / uHeightSize;
     float bed = (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) ? uTop - 30.0 : texture2D(tHeight, uv).r;
     float depth = max(0.0, uTop - bed);
-    // Three bands of blue by depth, each flat.
-    vec3 col = depth < 1.4 ? uShallow : depth < 5.0 ? uMid : uDeep;
+    float px = length(fwidth(vWorld.xz));
+    // Deeper and deeper blue, smoothly.
+    vec3 col = mix(uShallow, uMid, smoothstep(0.3, 3.2, depth));
+    col = mix(col, uDeep, smoothstep(3.0, 12.0, depth));
+    // Light rippling over the sand in the shallows.
+    float fine = 1.0 - smoothstep(0.05, 0.16, px);
+    float net = 1.0 - smoothstep(0.0, 0.04 + px * 1.2, wNet(vWorld.xz * 0.8 + vec2(uTime * 0.05, 0.0), uTime * 0.9));
+    col += vec3(0.5, 0.7, 0.65) * net * (1.0 - smoothstep(0.3, 2.4, depth)) * 0.3 * fine;
+    // Little waves: the water's slope, for the sky and the sun on it.
+    vec2 q = vWorld.xz * 0.6;
+    float e = 0.35;
+    float w0 = wNoise(q + vec2(uTime * 0.3, uTime * 0.17)) + 0.5 * wNoise(q * 2.3 - vec2(uTime * 0.2, uTime * 0.31));
+    float wx = wNoise(q + vec2(e, 0.0) + vec2(uTime * 0.3, uTime * 0.17)) + 0.5 * wNoise((q + vec2(e, 0.0)) * 2.3 - vec2(uTime * 0.2, uTime * 0.31));
+    float wz = wNoise(q + vec2(0.0, e) + vec2(uTime * 0.3, uTime * 0.17)) + 0.5 * wNoise((q + vec2(0.0, e)) * 2.3 - vec2(uTime * 0.2, uTime * 0.31));
+    vec3 n = normalize(vec3(-(wx - w0) * 0.5, 1.0, -(wz - w0) * 0.5));
+    vec3 v = normalize(cameraPosition - vWorld);
+    float fresnel = pow(1.0 - max(0.0, dot(n, v)), 4.0);
+    col = mix(col, uSky, fresnel * 0.55);
+    // The sun sparkling on it: a hard glint, brighter than white (it glows).
+    vec3 r = reflect(-v, n);
+    float glint = smoothstep(0.985, 0.995, dot(r, uSunDir)) * uSun;
     // Foam: a band at the very edge, and rings lapping in round the shore.
-    float edge = 1.0 - smoothstep(0.32, 0.4, depth);
-    float ring = step(0.82, fract(depth * 0.9 - uTime * 0.45)) * (1.0 - smoothstep(1.2, 2.6, depth));
-    col = mix(col, uFoam, max(edge, ring));
-    // White glints drifting over it.
-    // (Each a little four-pointed twinkle in its cell, now and then.)
-    vec2 q = vWorld.xz * 0.35 + vec2(uTime * 0.2, uTime * 0.11);
-    vec2 cell = floor(q);
-    vec2 f = fract(q) - 0.5;
-    float on = step(0.975, wHash(cell)) * step(0.55, fract(uTime * 0.5 + wHash(cell + 7.0)));
-    float star = step(abs(f.x) * abs(f.y) * 60.0 + length(f) * 2.2, 0.32);
-    col = mix(col, uFoam, on * star);
-    gl_FragColor = vec4(col * uCelTint, 1.0);
+    float edge = 1.0 - smoothstep(0.32, 0.42, depth);
+    float ring = smoothstep(0.78, 0.82, fract(depth * 0.9 - uTime * 0.45)) * (1.0 - smoothstep(1.2, 2.6, depth));
+    float foam = max(edge, ring);
+    col = mix(col, uFoam, foam);
+    gl_FragColor = vec4(col * uLightTint + vec3(3.0, 2.8, 2.4) * glint * (1.0 - foam), 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }
@@ -66,8 +120,8 @@ const FRAG = /* glsl */ `
 
 export class CartoonWater {
   // cols: the ground's columns (real-ground.js groundColumns); heightTexture:
-  // the skin's heights (RealGround.heightTexture); tint: the cel light's
-  // (cel.js celLight.uCelTint), shared.
+  // the skin's heights (RealGround.heightTexture); tint: the storybook
+  // light's (cartoon-light.js cartoonLight.uLightTint), shared.
   constructor(world, cols, heightTexture, tint) {
     this.world = world;
     const { W, D, sea } = world;
@@ -76,11 +130,14 @@ export class CartoonWater {
       uTime: { value: 0 },
       tHeight: { value: heightTexture },
       uHeightSize: { value: new THREE.Vector2(heightTexture.image.width, heightTexture.image.height) },
-      uShallow: { value: new THREE.Color('#5fe6e0') },
-      uMid: { value: new THREE.Color('#35b4ea') },
-      uDeep: { value: new THREE.Color('#2b7fd8') },
+      uShallow: { value: new THREE.Color('#62ecdc') },
+      uMid: { value: new THREE.Color('#25b2ef') },
+      uDeep: { value: new THREE.Color('#1a6ee0') },
       uFoam: { value: new THREE.Color('#ffffff') },
-      uCelTint: tint,
+      uLightTint: tint,
+      uSky: { value: new THREE.Color('#bfeaff') },
+      uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+      uSun: { value: 1 },
       uTop: { value: top },
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
     };
@@ -108,8 +165,14 @@ export class CartoonWater {
     }
   }
 
-  update(time) {
+  // Each frame: the time (waves, foam, light), and the sky and the sun it
+  // shows (sky.js environment).
+  update(time, env = null) {
     this.uniforms.uTime.value = time;
+    if (!env) return;
+    this.uniforms.uSky.value.copy(env.horizon).lerp(env.top, 0.35);
+    this.uniforms.uSunDir.value.copy(env.sunDir);
+    this.uniforms.uSun.value = Math.max(0, Math.min(1, env.sunDir.y * 4)) * env.day;
   }
 
   dispose() {

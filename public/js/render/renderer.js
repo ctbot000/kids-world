@@ -13,6 +13,7 @@ import { FXAAPass } from '../../vendor/three-addons/postprocessing/FXAAPass.js';
 import { GTAOPass } from '../../vendor/three-addons/postprocessing/GTAOPass.js';
 import { OutputPass } from '../../vendor/three-addons/postprocessing/OutputPass.js';
 import { ShaderPass } from '../../vendor/three-addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from '../../vendor/three-addons/postprocessing/UnrealBloomPass.js';
 import { DIRT, GRASS, OPAQUE, SOLID, TREE_PART } from '../shared/blocks.js';
 import { headTop } from '../shared/critters.js';
 import { LightMap } from '../shared/light.js';
@@ -53,7 +54,7 @@ import { RealFlagModel } from './real-models.js';
 import { isRealAnimal, RealAnimal } from './real-animals.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
-import { celLight } from './cel.js';
+import { cartoonLight } from './cartoon-light.js';
 import { NestModel } from './bluster-models.js';
 
 // All of the biggest edit there can be, a huge tent on a hillside say.
@@ -99,57 +100,42 @@ const FREE_FOG = 320;
 // casts them, the land and the trees too, further.
 const SHADOW_EXTENT = 13;
 const REAL_SHADOW_EXTENT = 44;
-// Ink lines round everything on an island drawn as a cartoon (cartoon.js), as
-// a cartoon's are drawn: wherever the depth of the scene jumps (an outline
-// round anything in front of something further off) or bends (a crease where
-// two faces meet; a flat face, whatever its slope, has none: its 1/z changes
-// evenly across the screen), the colour is darkened to ink, thicker on a
-// bigger picture, fading out far off where lines would only be noise.
-function outlinePass(depth) {
+// A storybook's colours over Toon Isle (cartoon.js), once the picture is in
+// the screen's colours: dull colours a little richer (vibrance), a gentle S
+// of contrast, the shade a touch cooler and the light a touch warmer, and
+// the corners a little darker, as a page's are.
+function gradePass() {
   return new ShaderPass(
     new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: null },
-        tDepth: { value: depth },
-        cameraNear: { value: 0.1 },
-        cameraFar: { value: 1000 },
-        resolution: { value: new THREE.Vector2(1, 1) },
-        thickness: { value: 1 },
-        fade: { value: 150 },
-        ink: { value: new THREE.Color(0.13, 0.1, 0.2) },
+        vibrance: { value: 0.25 },
+        contrast: { value: 0.12 },
+        vignette: { value: 0.2 },
+        cool: { value: new THREE.Color(0.95, 0.98, 1.06) },
+        warm: { value: new THREE.Color(1.04, 1.01, 0.95) },
       },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: /* glsl */ `
-        #include <packing>
         uniform sampler2D tDiffuse;
-        uniform sampler2D tDepth;
-        uniform float cameraNear;
-        uniform float cameraFar;
-        uniform vec2 resolution;
-        uniform float thickness;
-        uniform float fade;
-        uniform vec3 ink;
+        uniform float vibrance;
+        uniform float contrast;
+        uniform float vignette;
+        uniform vec3 cool;
+        uniform vec3 warm;
         varying vec2 vUv;
-        float zAt(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar); }
         void main() {
-          vec4 col = texture2D(tDiffuse, vUv);
-          vec2 px = thickness / resolution;
-          float z = zAt(vUv);
-          float zl = zAt(vUv - vec2(px.x, 0.0));
-          float zr = zAt(vUv + vec2(px.x, 0.0));
-          float zd = zAt(vUv - vec2(0.0, px.y));
-          float zu = zAt(vUv + vec2(0.0, px.y));
-          // Round the nearest of them: an outline belongs to what is in front.
-          float zn = min(z, min(min(zl, zr), min(zd, zu)));
-          float jump = max(max(abs(zl - z), abs(zr - z)), max(abs(zd - z), abs(zu - z))) / zn;
-          float w = 1.0 / z;
-          float bend = (abs(1.0 / zl + 1.0 / zr - 2.0 * w) + abs(1.0 / zd + 1.0 / zu - 2.0 * w)) / w;
-          // (A gentle bend far off is no crease worth inking: the further, the sharper it must be.)
-          float far = 1.0 + zn / 25.0;
-          float edge = max(smoothstep(0.045, 0.09, jump), smoothstep(0.05 * far, 0.12 * far, bend));
-          edge *= 1.0 - smoothstep(fade * 0.45, fade * 0.9, zn);
-          if (zn > cameraFar * 0.8) edge = 0.0;
-          gl_FragColor = vec4(mix(col.rgb, col.rgb * ink, edge * 0.92), col.a);
+          vec4 c = texture2D(tDiffuse, vUv);
+          vec3 col = c.rgb;
+          float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+          float sat = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
+          col = mix(vec3(l), col, 1.0 + vibrance * (1.0 - sat));
+          col = clamp(col, 0.0, 1.0);
+          col = mix(col, col * col * (3.0 - 2.0 * col), contrast);
+          col *= mix(cool, warm, smoothstep(0.15, 0.85, l));
+          vec2 d = (vUv - 0.5) * vec2(1.0, 0.8);
+          col *= 1.0 - vignette * smoothstep(0.32, 0.78, length(d));
+          gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
         }`,
     }),
   );
@@ -336,11 +322,12 @@ export class Renderer {
     const wasReal = Boolean(this.real);
     const wasCartoon = Boolean(this.cartoon);
     this.terrain.setWorld(world, this.gl, this.level ?? 'low');
-    // Toon Isle, drawn as a cartoon (cartoon.js): the toy sky, flat cel paint
-    // in its own colours (no toning down), the haze far off, and ink lines.
+    // Toon Isle, drawn as a cartoon (cartoon.js): the toy sky, its own soft
+    // storybook light (cartoon-light.js) in its own bright colours (no toning
+    // down), the haze far off, a glow round what shines and a storybook's
+    // colours (buildFinish).
     this.cartoon = this.terrain.cartoon;
     this.cartoonFog = this.cartoon ? new THREE.Fog(0xbfe2ff, 60, 220) : null;
-    celLight.uCelOn.value = this.cartoon ? 1 : 0;
     if (this.cartoon) this.cartoon.setFog(this.fogState ?? null);
     // The Wild Isle, drawn as the real thing (real.js): its light as real
     // light is, a film's, toned down into the screen's range, and the haze
@@ -411,15 +398,16 @@ export class Renderer {
       this.finish = QUALITY[level];
       this.buildFinish();
       this.real?.setQuality(level);
+      this.cartoon?.setQuality(level);
     }
     this.resize();
   }
 
   // The passes each picture goes through at this quality.
   buildFinish() {
-    // (A cartoon is drawn through the passes at every quality, for its ink
-    // lines; never soft, nor shaded in its corners.)
-    const q = this.cartoon ? { ...this.finish, post: true, ao: 0, dof: false } : this.finish;
+    // (A cartoon is never soft: everything in it is in focus; and its
+    // shading where things meet is painted on, cartoon-plants.js.)
+    const q = this.cartoon ? { ...this.finish, ao: 0, dof: false } : this.finish;
     const gl = this.gl;
     this.disposePost();
     setFurLayers(q.fur);
@@ -474,14 +462,17 @@ export class Renderer {
       this.focusPass = focusPass(scene.depthTexture);
       post.passes.push(this.focusPass);
     }
+    // On Toon Isle, a soft glow round whatever shines (lamps, sparkles, the
+    // sun on the sea), and after the screen's colours, a storybook's.
     if (this.cartoon) {
-      this.outlinePass = outlinePass(scene.depthTexture);
-      post.passes.push(this.outlinePass);
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.5, 1.8);
+      post.passes.push(this.bloomPass);
     }
     // Into the screen's colours; edges not multisampled are smoothed after
     // that, where FXAA expects them.
     post.passes.push(new OutputPass());
-    if (!q.samples || this.cartoon) post.passes.push(new FXAAPass());
+    if (this.cartoon) post.passes.push(gradePass());
+    if (!q.samples) post.passes.push(new FXAAPass());
     this.post = post;
   }
 
@@ -493,7 +484,7 @@ export class Renderer {
     post.scene.depthTexture.dispose();
     this.post = null;
     this.focusPass = null;
-    this.outlinePass = null;
+    this.bloomPass = null;
   }
 
   // Draws the picture as it is now, at the quality there is.
@@ -1229,16 +1220,21 @@ export class Renderer {
       this.sky.clouds.visible = !this.cartoon;
     }
     if (this.cartoon) {
-      // A cartoon under the toy sky: the haze far off in its colour, and the
-      // cel paint's light (cel.js) by the sun and the time of day.
-      this.cartoon.frame(dt, env);
+      // A cartoon under the toy sky: the haze far off in its colour, and its
+      // storybook light (cartoon-light.js) by the sun and the time of day.
+      this.cartoon.frame(dt, env, this.camera, fogFar * 1.05, this.canvas.height);
       this.cartoonFog.color.copy(env.fog);
       this.cartoonFog.near = fogFar * 0.5;
       this.cartoonFog.far = fogFar * 1.05;
       this.scene.fog = this.cartoonFog;
       const lum = this.sun.color.r * 0.2126 + this.sun.color.g * 0.7152 + this.sun.color.b * 0.0722;
-      celLight.uSunLum.value = Math.max(1e-3, (lum * this.sun.intensity) / Math.PI);
-      celLight.uCelTint.value.copy(env.sun).lerp(WHITE, 0.55).multiplyScalar(0.42 + 0.66 * env.day + 0.5 * flash);
+      // (The toys a little less brightly lit than elsewhere, as lit as the
+      // island round them.)
+      this.sun.intensity = 0.55 + 1.35 * env.day + 0.5 * flash;
+      this.hemi.intensity = 0.75 + 0.5 * env.day + 0.8 * flash;
+      cartoonLight.uSunLum.value = Math.max(1e-3, (lum * this.sun.intensity) / Math.PI);
+      cartoonLight.uLightTint.value.copy(env.sun).lerp(WHITE, 0.6).multiplyScalar(0.34 + 0.64 * env.day + 0.5 * flash);
+      cartoonLight.uRimColor.value.copy(env.top).lerp(WHITE, 0.5);
     }
     // The toys give back less of the studio's light at night, and the light
     // round their edges takes the sky's colour.
@@ -1263,14 +1259,6 @@ export class Renderer {
       u.cameraFar.value = this.camera.far;
       u.resolution.value.set(this.canvas.width, this.canvas.height);
       u.maxBlur.value = Math.min(8, Math.max(2.5, this.canvas.height * 0.005));
-    }
-    if (this.outlinePass) {
-      const u = this.outlinePass.uniforms;
-      u.cameraNear.value = this.camera.near;
-      u.cameraFar.value = this.camera.far;
-      u.resolution.value.set(this.canvas.width, this.canvas.height);
-      u.thickness.value = Math.max(1, this.canvas.height / 900);
-      u.fade.value = fogFar;
     }
 
     this.terrain.update(state.focus, 6);
