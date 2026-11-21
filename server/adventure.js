@@ -43,8 +43,10 @@ export const RETIRED_KEEP_MS = 10 * 60 * 1000;
 export const MAX_RUNS = 8;
 export const RUN_IDLE_MS = 3 * 24 * 60 * 60 * 1000;
 export const NEW_RUN_MS = 20 * 1000;
-// How often a game being played writes down when it was last played.
+// How often a game being played writes down when it was last played, and
+// at most how often the clouds rolled back on Toon Isle.
 const PLAYED_KEEP_MS = 10 * 60 * 1000;
+const FOG_KEEP_MS = 30 * 1000;
 
 // The island of one stage of one journey of one game: always the same one, so
 // a restart brings back the very island that stage had. (The first game's
@@ -138,7 +140,7 @@ export class PublicAdventure {
     for (const r of runs) {
       const run = { id: r.id, journey: r.journey, stage: r.stage, by: r.by, startedAt: r.startedAt, playedAt: r.playedAt, entry: null, retired: [], freed: 0, keptPlayed: r.playedAt };
       this.runs.push(run);
-      this.open(run, r.stage, r.journey, r.freed);
+      this.open(run, r.stage, r.journey, r.freed, r.fog);
     }
     this.keep();
     for (const run of this.runs) this.say(`game ${run.id} is up: ${stageName(run.stage)} (stage ${run.stage} of ${STAGES} in all), journey ${run.journey} (code ${run.entry.code}).`);
@@ -166,7 +168,8 @@ export class PublicAdventure {
       const time = (v) => (Number.isFinite(v) && v > 0 && v <= now ? v : now);
       const base = { id, by: typeof r.by === 'string' ? whoStarted(r.by) : '', startedAt: time(r.startedAt), playedAt: time(r.playedAt) };
       if (r.stage > STAGES) return { ...base, journey: journey + 1, stage: 1, freed: [] };
-      return { ...base, journey, stage: r.stage, freed: Array.isArray(r.freed) ? r.freed.filter(Number.isInteger) : [] };
+      // (And on Toon Isle, the clouds rolled back so far: isle-battles.js Fog.)
+      return { ...base, journey, stage: r.stage, freed: Array.isArray(r.freed) ? r.freed.filter(Number.isInteger) : [], fog: typeof r.fog === 'string' ? r.fog.slice(0, 8192) : '' };
     };
     if (Array.isArray(kept?.runs)) {
       const runs = [];
@@ -189,8 +192,10 @@ export class PublicAdventure {
       id: r.id,
       journey: r.journey,
       stage: r.stage,
-      // (The camps freed, or on a chapter told in challenges, those beaten.)
+      // (The camps freed, or on a chapter told in challenges, those beaten,
+      // or in battles, those won, and the clouds rolled back so far.)
       freed: r.entry ? r.entry.room.adventure.doneIds() : [],
+      ...(r.entry?.room.adventure.battles ? { fog: r.entry.room.adventure.keptFog() } : {}),
       ...(r.by ? { by: r.by } : {}),
       startedAt: r.startedAt,
       playedAt: r.playedAt,
@@ -208,7 +213,7 @@ export class PublicAdventure {
   // left open a while for whoever is on it — and this one is the run's public
   // island from here on. freed: the camps freed on it already (those kept over a
   // restart), freed again now, with nobody there to see.
-  open(run, stage, journey, freed = []) {
+  open(run, stage, journey, freed = [], fog = '') {
     run.stage = stage;
     run.journey = journey;
     const code = this.freeCode();
@@ -234,12 +239,15 @@ export class PublicAdventure {
     // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
     room.adventure.run = run.id;
     room.onIsleNew = (name, episode = 1) => this.newRun(name, this.now(), episode);
-    for (const id of room.adventure.quests ? [] : freed) {
+    for (const id of room.adventure.quests || room.adventure.battles ? [] : freed) {
       const camp = room.adventure.campById(id);
       if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
     }
     // (Or the challenges beaten on it already.)
     if (room.adventure.quests) room.restoreQuests(freed);
+    // (Or the battles won on it already, and the clouds rolled back.)
+    if (room.adventure.battles) room.restoreBattles(freed, fog);
+    run.seen = room.adventure.battles?.fog.count ?? 0;
     run.entry = { code, room, emptySince: 0, public: true };
     run.freed = room.adventure.doneIds().length;
     this.rooms.set(code, run.entry);
@@ -421,6 +429,13 @@ export class PublicAdventure {
       const freed = adv ? adv.doneIds().length : 0;
       if (freed !== run.freed) {
         run.freed = freed;
+        changed = true;
+      }
+      // On Toon Isle, the clouds rolled back since: kept now and then too.
+      const seen = adv?.battles?.fog.count ?? 0;
+      if (seen !== (run.seen ?? 0) && now - (run.fogKept ?? 0) >= FOG_KEEP_MS) {
+        run.seen = seen;
+        run.fogKept = now;
         changed = true;
       }
     }

@@ -186,6 +186,9 @@ export const YETI_BODY = { radius: 0.62, height: 1.35 };
 // A Gummy Bear: up to your middle and more; a Gummy Cub, half that.
 export const GUMMY_BODY = { radius: 0.48, height: 0.95 };
 export const CUB_BODY = { radius: 0.3, height: 0.55 };
+// A Storm Nest (Toon Isle's, isle-battles.js): a grumpy little thundercloud
+// sitting on the ground, about your height and wide.
+export const NEST_BODY = { radius: 0.95, height: 1.5 };
 // King Grumble and the other bosses (bosses.js): big, slow and with bigger
 // hops, getting about the quicker the crosser they get (rage: 0, 1 at two
 // thirds of their hearts, 2 at a third), never as quick as you run.
@@ -328,6 +331,10 @@ export const KINDS = {
   yeti: { hearts: 6, bump: 2, land: 2, move: { walk: 1.5, run: 3.6, jump: 9 }, cross: { walk: 1.5, run: 5, jump: 9 } },
   // A Gummy Bear: two landings, and it splits in two (room.js).
   gummy: { hearts: 4, bump: 1, land: 2, move: { walk: 1.8, run: 4, jump: 9 }, cross: { walk: 1.8, run: 5.6, jump: 9 }, pounce: POUNCE },
+  // A Storm Nest never moves at all (still), bumps nobody and nobody lands
+  // on it: it just sits there hatching the Storm Gang (isle-battles.js)
+  // until it is bopped till it bursts.
+  nest: { hearts: 12, bump: 0, land: 0, still: true, move: { walk: 0, run: 0, jump: 0 }, cross: { walk: 0, run: 0, jump: 0 } },
   // A Gummy Cub: quick, one heart, one landing.
   cub: { hearts: 1, bump: 1, land: Infinity, move: { walk: 2.4, run: 4.8, jump: 8 }, cross: { walk: 2.4, run: 6.2, jump: 8 }, pounce: { ...POUNCE, windup: 500, far: 3.2, tired: 1000 } },
   // A fox of the Wild Isle (the third episode), grumpy in Old Murk's fog:
@@ -378,9 +385,9 @@ const LAND_PAD = 0.9;
 
 // New states and kinds go on the end: the wire sends the index.
 export const MONSTER_STATES = ['idle', 'hop', 'chase', 'giggle', 'stomp', 'dazed', 'breathe', 'dig', 'puff', 'rear', 'charge', 'hurl', 'leap', 'heap', 'howl', 'blink', 'crouch', 'pounce'];
-export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy', 'fox', 'boar', 'ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk'];
+export const MONSTER_KINDS = ['blob', 'king', 'big', 'spiky', 'mosquito', 'spider', 'knight', 'golem', 'ghost', 'mole', 'queen', 'snapper', 'shroom', 'yeti', 'gummy', 'cub', 'clawbeard', 'puffcap', 'frostfang', 'gumbo', 'bogmaw', 'moltok', 'rattle', 'stinger', 'wolf', 'hawk', 'mimic', 'oak', 'wizard', 'hydra', 'cyclops', 'rex', 'scarabold', 'glimmershell', 'baronboo', 'sprocket', 'nimbus', 'dotty', 'bushytail', 'bumble', 'blendalot', 'inkwell', 'mochi', 'grizzle', 'mummy', 'fox', 'boar', 'ironclaw', 'bramblepaw', 'gnasher', 'curlhorn', 'murk', 'nest', 'bluster'];
 
-export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY, fox: FOX_BODY })[kind] ?? MONSTER_BODY;
+export const bodyOf = (kind) => BOSSES[kind]?.body ?? BEASTS[kind]?.body ?? ({ big: BIG_BODY, spiky: SPIKY_BODY, mosquito: MOSQUITO_BODY, spider: SPIDER_BODY, knight: KNIGHT_BODY, golem: GOLEM_BODY, ghost: GHOST_BODY, mole: MOLE_BODY, queen: QUEEN_BODY, snapper: SNAPPER_BODY, shroom: SHROOM_BODY, yeti: YETI_BODY, gummy: GUMMY_BODY, cub: CUB_BODY, mummy: MUMMY_BODY, fox: FOX_BODY, nest: NEST_BODY })[kind] ?? MONSTER_BODY;
 // Whether Mr. Mole is under the ground, from his state as the wire sends
 // it: up out of it he only ever hops or giggles (see step).
 export const moleUnder = (kind, state) => kind === 'mole' && state !== 'hop' && state !== 'giggle';
@@ -739,6 +746,9 @@ export class MonsterSim {
         this.marchOn(world, m, dt);
         continue;
       }
+      // Held where it is by whatever has it (Baron Bluster up on his cloud,
+      // isle-battles.js): nothing of its own.
+      if (m.held) continue;
       const b = m.body;
       const fly = m.kind === 'mosquito' || m.kind === 'queen' || kindOf(m.kind).flies === true;
       // A Lava Ghost floats too, but it keeps out of the water where a
@@ -761,7 +771,9 @@ export class MonsterSim {
       // Whom it is after: the nearest it can get at (not someone riding,
       // flying high, dizzy or in a tent), until they get away. One of a camp
       // is after whoever comes into it, as far as a little way out.
-      const fair = (p) => !p.riding && !p.dizzy && p.y - b.y < 4 && !sheltered(p);
+      // (Something only one camp's monsters go for — a beacon of Toon Isle's,
+      // isle-battles.js — the rest leave alone.)
+      const fair = (p) => !p.riding && !p.dizzy && p.y - b.y < 4 && !sheltered(p) && (!p.only || p.only === m.camp);
       let target = m.passive ? null : (people.find((p) => p.id === m.target) ?? null);
       if (camp) {
         if (target && (!fair(target) || campDistance(camp, target.x, target.z) > camp.r + LEASH)) target = null;
@@ -801,9 +813,17 @@ export class MonsterSim {
           m.healAt = now;
           this.healed.push(m.id);
         }
-      } else if (m.hitAt && now - m.hitAt >= HEAL_MS) {
+      } else if (m.hitAt && now - m.hitAt >= HEAL_MS && !m.keepHearts) {
+        // (One whose hearts something else looks after keeps them as they
+        // are: a Big Bad on a hunt, a Storm Nest, isle-battles.js.)
         m.hearts = m.max ?? BLOB_HEARTS;
         m.hitAt = 0;
+      }
+      // One that never moves just sits there (a Storm Nest).
+      if (kindOf(m.kind).still) {
+        m.target = 0;
+        m.state = 'idle';
+        continue;
       }
       // A beast gets crosser as its hearts go, as a boss does (adventure.js
       // stepCastle): its moves come sooner, and more of them.
@@ -1174,7 +1194,7 @@ export class MonsterSim {
       // Nor does Mr. Mole under the ground: he pops up first.
       if (now >= m.giggle && now >= (m.dazed ?? 0) && !m.passive && m.kind !== 'ghost' && !m.under) {
         for (const p of people) {
-          if (p.riding || p.dizzy || now < (p.safeUntil ?? 0)) continue;
+          if (p.riding || p.dizzy || now < (p.safeUntil ?? 0) || (p.only && p.only !== m.camp)) continue;
           // mount: the dragon someone rides (room.js), as wide as it is.
           if (Math.hypot(p.x - b.x, p.z - b.z) > b.radius + BUMP_PAD + (p.mount ?? 0) || sheltered(p)) continue;
           // Their feet over its top: they are jumping on it, not bumped (see
@@ -1458,7 +1478,8 @@ export class MonsterSim {
     const boxes = this.boxes();
     const all = [...others, ...boxes];
     for (const box of boxes) {
-      if (box.m.march) continue;
+      // (Nor one held where it is, or that never moves: a Storm Nest stays put.)
+      if (box.m.march || box.m.held || kindOf(box.m.kind).still) continue;
       const { dx, dz } = pushOut(box, all.filter((o) => o !== box), box.key);
       if (!dx && !dz) continue;
       const b = box.m.body;

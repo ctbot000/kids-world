@@ -24,6 +24,7 @@ import { toyMaterial } from './toon.js';
 import { chestMaterials, chestModel } from './chest-model.js';
 import { TILE } from './atlas.js';
 import { isReal, RealWorld } from './real.js';
+import { CartoonWorld, isCartoon } from './cartoon.js';
 
 const STUD_RADIUS = 0.25;
 export const STUD_HEIGHT = 0.13;
@@ -563,6 +564,10 @@ export class Terrain {
     if (gl && isReal(world.theme)) {
       this.real = new RealWorld(gl, world, this.light, quality);
       this.group.add(this.real.group);
+    } else if (gl && isCartoon(world.theme)) {
+      // Toon Isle, drawn as a cartoon (cartoon.js).
+      this.cartoon = new CartoonWorld(gl, world, this.light, quality);
+      this.group.add(this.cartoon.group);
     } else this.buildSea();
     for (let cx = 0; cx < world.chunksX; cx++) for (let cz = 0; cz < world.chunksZ; cz++) this.dirty.add(`${cx},${cz}`);
   }
@@ -573,6 +578,8 @@ export class Terrain {
     this.dirty.clear();
     this.real?.dispose();
     this.real = null;
+    this.cartoon?.dispose();
+    this.cartoon = null;
     if (this.sea) {
       this.group.remove(this.sea);
       this.sea.geometry.dispose();
@@ -663,6 +670,7 @@ export class Terrain {
   cellsChanged(cells) {
     if (!this.world || cells.length === 0) return;
     this.real?.cellsChanged(cells);
+    this.cartoon?.cellsChanged(cells);
     let x0 = Infinity;
     let z0 = Infinity;
     let x1 = -Infinity;
@@ -728,7 +736,8 @@ export class Terrain {
     if (old) this.disposeChunk(old);
     // Drawn as the real thing (real.js): only the furniture drawn as real
     // models is left to draw here (a treasure chest).
-    const data = this.real ? realOnly(this.world, cx, cz) : meshChunk(this.world, this.light, this.atlas, cx, cz, this.dishFood);
+    // (And as a cartoon, cartoon.js: the same.)
+    const data = this.real || this.cartoon ? realOnly(this.world, cx, cz) : meshChunk(this.world, this.light, this.atlas, cx, cz, this.dishFood);
     const group = new THREE.Group();
     group.name = `chunk ${key}`;
     const chunk = { key, cx, cz, group, studs: null, movers: [], feet: data.trees.map((c) => c.join()) };

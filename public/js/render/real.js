@@ -35,7 +35,7 @@ const GRASS_TINT = {
 
 // The sea bed round the island's map: from the heights along its edge out
 // in rings, deeper and deeper, all sand.
-function seabed(ground, world) {
+export function seabed(ground, world) {
   const PW = 2 * world.W + 1;
   const PD = 2 * world.D + 1;
   const edge = [];

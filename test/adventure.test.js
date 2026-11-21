@@ -571,7 +571,9 @@ test('the monster book has every kind of monster, each with a name and stats, co
   for (const m of MONSTER_BOOK) {
     assert.ok(m.icon && m.name, m.kind);
     const s = monsterStats(m.kind);
-    assert.ok(s.hp > 0 && s.atk > 0 && s.speed > 0 && s.speed < 100 && s.jump, m.kind);
+    // (A Storm Nest never moves nor bumps anyone: it only hatches the rest.)
+    if (m.kind === 'nest') assert.deepEqual([s.hp > 0, s.atk, s.speed], [true, 0, 0]);
+    else assert.ok(s.hp > 0 && s.atk > 0 && s.speed > 0 && s.speed < 100 && s.jump, m.kind);
     assert.ok(STAT_KEYS.includes(seenKey(m.kind)) && STAT_KEYS.includes(popKey(m.kind)), m.kind);
   }
   assert.deepEqual(monsterStats('blob'), { hp: 3, atk: 20, fire: false, jump: 'Pops at once', speed: 49 });

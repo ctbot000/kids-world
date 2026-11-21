@@ -37,6 +37,7 @@ import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from '
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
 import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
+import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -304,6 +305,9 @@ const TOUGH_TOLD = {
   gnasher: { icon: '🦫', text: 'Gnasher! Jump when he lifts his tail to slap it down, and run out of the red rings where his sticks land!' },
   curlhorn: { icon: '🐏', text: 'Old Curlhorn! Step aside when he lowers his horns — he charges hard — and run out of the red ring when he crouches to leap!' },
   murk: { icon: '🐺', text: 'Old Murk, the Fog Wolf! Run out of the red rings, step back from his fog — and when he vanishes into it, look about for where he comes out!' },
+  // Toon Isle's (the fifth episode).
+  nest: { icon: '🥚', text: 'A Storm Nest! It hatches the Storm Gang every few seconds. Bop it till it bursts — it never comes after you, but its hatchlings do!' },
+  bluster: { icon: '🎩', text: 'Baron Bluster! Up on his cloud nobody can reach him: stand on all three lightning rods at once to zap him down, then bop him. Run out of the red rings where his lightning strikes!' },
 };
 // What each thing a boss throws looks like coming down (see bossFx), and
 // the sound of it.
@@ -827,6 +831,17 @@ export class Game extends EventTarget {
         break;
       case 'quest':
         this.questDone(msg);
+        break;
+      // Toon Isle's battles, on the isle's fifth episode (isle-battles-view.js):
+      // the clouds rolling back, what everyone sees of a battle, and one won.
+      case 'fog':
+        fogNews(this, msg);
+        break;
+      case 'bfx':
+        battleFx(this, msg);
+        break;
+      case 'battle':
+        this.battleDone(msg);
         break;
       case 'shield':
         this.shieldDown();
@@ -2964,7 +2979,8 @@ export class Game extends EventTarget {
       const sn = Math.sin(s.yaw);
       m.group.rotation.x = lean ? lean * (recoil.x * sn + recoil.z * c) : 0;
       m.group.rotation.z = lean ? -lean * (recoil.x * c - recoil.z * sn) : 0;
-      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      // (Not under the clouds on Toon Isle, either.)
+      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen && !this.inFog(s.x, s.z);
       if (!m.group.visible) {
         m.shadow.visible = false;
         continue;
@@ -3025,12 +3041,26 @@ export class Game extends EventTarget {
   // before it was the only adventure may still tell of some: not here).
   setAdventure(a) {
     this.renderer.clearFlags();
+    this.renderer.setFog?.(null);
     this.adventure = null;
     this.quiz = null;
     this.questShow = [];
-    // A chapter of the fourth episode: no camps, but Jinx's challenges and
-    // the cage of its Golden Bell (shared/isle-quests.js).
-    if (this.shared && a && Array.isArray(a.quests) && a.quests.length) {
+    // A chapter of the fifth episode: no camps, but its battles, its Sky
+    // Lantern and the Cloud Blanket over whatever nobody has got to yet
+    // (shared/isle-battles.js).
+    if (this.shared && a && Array.isArray(a.battles) && a.battles.length) {
+      const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
+      const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
+      const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
+      const cell = (c) => Array.isArray(c) && c.length === 3 && c.every(Number.isFinite);
+      const hub = a.hub && cell(a.hub.lantern) ? { lantern: a.hub.lantern, lamps: Array.isArray(a.hub.lamps) ? a.hub.lamps.filter(cell).slice(0, 6) : [] } : null;
+      const fog = a.won === true ? null : readFog(a.fog);
+      this.adventure = { camps: new Map(), won: a.won === true, stage, journey, run, king: null, shield: false, story: chapterOf(stage), battles: readBattles(a.battles, stage), hub, fog };
+      this.renderer.setFog?.(fog);
+      // (Its Sky Lantern glowing, once the stage is won.)
+      this.renderer.cartoon?.setLantern(a.won === true);
+      this.adventureNews(a);
+    } else if (this.shared && a && Array.isArray(a.quests) && a.quests.length) {
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
       const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
@@ -3096,6 +3126,14 @@ export class Game extends EventTarget {
     }
     adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1], second: msg.k[2] === 1 } : null;
     adv.shield = msg.shield !== false && !adv.won;
+    // (On a chapter told in battles, how each is going, and no bubble.)
+    if (adv.battles) {
+      adv.shield = false;
+      for (const row of Array.isArray(msg.b) ? msg.b : []) {
+        const b = adv.battles.get(row?.[0]);
+        if (b) readBattleRow(b, row);
+      }
+    }
     // (On a chapter told in challenges, how each is going, and no bubble.)
     if (adv.quests) {
       adv.shield = false;
@@ -3105,6 +3143,25 @@ export class Game extends EventTarget {
       }
     }
     this.emit('adventure');
+  }
+
+  // One of Toon Isle's battles won (shared/isle-battles.js), its lamp lit on
+  // the Sky Lantern; yours (you were there), a quiz for a chest key a little
+  // while after, as for a camp freed.
+  battleDone(msg) {
+    const mine = battleWon(this, msg);
+    if (mine) {
+      this.profile.count('freed');
+      this.offerKeyQuiz(false, KEY_OFFER_MS);
+    }
+    this.emit('adventure');
+  }
+
+  // Whether (x, z) is still under the Cloud Blanket on Toon Isle: nothing
+  // there is drawn until someone gets there (isle-battles-view.js).
+  inFog(x, z) {
+    const fog = this.adventure?.fog;
+    return fog ? !fogSeen(fog, x, z) : false;
   }
 
   // One of Jinx's challenges beaten (shared/isle-quests.js), its lock lit on
@@ -3317,7 +3374,10 @@ export class Game extends EventTarget {
       Object.assign(adv, { won: true, shield: false, king: null });
       for (const c of adv.camps.values()) Object.assign(c, { freed: true, progress: 1, friends: 0, guarded: false });
       for (const q of adv.quests?.values() ?? []) q.done = true;
+      for (const b of adv.battles?.values() ?? []) Object.assign(b, { done: true, state: 'done' });
     }
+    // The Sky Lantern lit (the fifth episode), glowing over the landing.
+    if (adv?.battles) this.renderer.cartoon?.setLantern(true);
     // A Golden Bell let out of its cage (the fourth episode): ding, dong.
     if (adv?.quests && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 120)) {
       for (const [i, n] of [55, 50, 55, 50].entries()) setTimeout(() => this.adventure === adv && this.sound.play('bell', { n, big: true }), 500 + i * 650);
@@ -3368,12 +3428,13 @@ export class Game extends EventTarget {
     const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
     const boss = this.bossInfo();
     const quests = Boolean(adv?.quests);
-    const what = quests ? 'Every lock is open!' : hero ? `${hero} popped ${boss.name}!` : 'Every camp is free!';
+    const battles = Boolean(adv?.battles);
+    const what = quests ? 'Every lock is open!' : hero ? `${hero} popped ${boss.name}!` : battles ? 'Every battle is won!' : 'Every camp is free!';
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards (or the colours
     // of the rainbow, or the Golden Bells) won back so far.
     const thanks = !mine ? '' : board ? ' Rewards for everyone, by how much each helped! 🏆' : ' A diamond for everyone who helped! 💎';
-    if (story) this.emit('toast', { icon: quests ? '🔔' : story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
+    if (story) this.emit('toast', { icon: quests ? '🔔' : battles ? '🏮' : story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
     // Your ticket to the next episode, the first time you see this one told
     // to its end.
     if (this.ticketWon) {
@@ -3654,8 +3715,10 @@ export class Game extends EventTarget {
         c.flag.group.position.set(c.x, top >= 0 ? top + 1 : c.y, c.z);
         c.flag.update(dt, c.progress, c.freed);
       }
-      // (Or the Singing Stones singing, shinies glinting, Jinx seeing stars.)
+      // (Or the Singing Stones singing, shinies glinting, Jinx seeing stars;
+      // or Toon Isle's battles' sparks and glints.)
       if (adv.quests) questFrame(this, now);
+      if (adv.battles) battleFrame(this, now);
     }
     while (this.fireworks.length && this.fireworks[0].at <= now) {
       const f = this.fireworks.shift();
@@ -8582,7 +8645,7 @@ export class Game extends EventTarget {
       // Whether it went anywhere this frame, and far enough off it is too
       // small to see, and is not drawn.
       const moving = Math.hypot(s.x - prev.x, s.z - prev.z) > 0.004;
-      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen;
+      m.group.visible = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) < m.seen && !this.inFog(s.x, s.z);
       // A jump rope in someone's hands is drawn there (render/avatar.js).
       if (c.type === 'rope' && (c.hooper || state === 'hoop')) m.group.visible = false;
       // A go-kart racing with nobody in it has the computer's driver at the wheel.

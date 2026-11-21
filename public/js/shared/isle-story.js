@@ -49,6 +49,20 @@
 // catch Jinx himself. Five chapters: Bellbuoy Bay, Henhouse Hills, Topsy
 // Gardens, Kite Cliffs and the Magpie's Nest. Each won rings a bell again.
 //
+// Episode 5, "Toon Isle": the biggest island on the seven seas, where
+// everything looks like a cartoon — not bricks, not real rocks, but every
+// rock, tree and wave drawn with a bold line round it, in colours brighter
+// than paint (render/cartoon.js draws it so). Baron Bluster, a puffed-up
+// storm cloud in a top hat, has blown out its five Sky Lanterns, pulled his
+// Cloud Blanket over the whole island, so that nothing on it shows until
+// someone gets there, and filled it with his Storm Gang. They keep no camps
+// and no castle: they roam about in gangs, spring traps, storm beacons and
+// hatch out of nests, and the Baron's Big Bads hunt anyone they find
+// (isle-battles.js has the rules of each). Every battle won sends a spark to
+// the Sky Lantern where everyone landed; with all of them it shines again.
+// Five chapters: Lollipop Bay, Toadstool Woods, Rumble Canyon, Snowball
+// Peaks and Thunder Top, where the Baron himself comes down to fight.
+//
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
@@ -129,13 +143,35 @@ export const EPISODES = [
     title: 'The Golden Bells',
     villain: 'Jinx the Magpie',
     // Told in challenges, not camps (isle-quests.js): each chapter's are in
-    // its `quests`, and there is no boss to pop.
+    // its `quests`, and there is no boss to pop: Jinx is caught.
     quests: true,
+    beaten: { verb: 'catch', ing: 'catching' },
     token: { one: 'Golden Bell', many: 'Golden Bells', icon: '🔔' },
     ticket: { icon: '🪶', name: 'Magpie Feather' },
     films: { intro: 'intro4', ending: 'ending4', endingMs: 44000 },
     again: (journey) =>
       `Journey ${journey}! Jinx the Magpie never could keep away from anything shiny for long: he carried off the Golden Bells all over again — and the Puzzle Isles have turned themselves about, so everything is round the other side.`,
+  },
+  {
+    n: 5,
+    key: 'toon',
+    icon: '☁️',
+    title: 'Toon Isle',
+    villain: 'Baron Bluster',
+    // Drawn as a cartoon (render/cartoon.js), on islands far bigger than any
+    // before, hidden under clouds until someone gets there, and told in
+    // battles, not camps (isle-battles.js): each chapter's are in its
+    // `battles`.
+    cartoon: true,
+    battles: true,
+    // Each of its islands twice as far across as any before, four times the
+    // land (isle-maps.js ISLE_SIDE).
+    side: 256,
+    token: { one: 'Sky Lantern', many: 'Sky Lanterns', icon: '🏮' },
+    ticket: { icon: '🗺️', name: 'Toon Isle Map' },
+    films: { intro: 'intro5', ending: 'ending5', endingMs: 44000 },
+    again: (journey) =>
+      `Journey ${journey}! Baron Bluster huffed and puffed himself back up out of the sea mist, blew the Sky Lanterns out all over again and pulled his Cloud Blanket back over Toon Isle — and the island has turned itself about, so everything is round the other side.`,
   },
 ];
 
@@ -160,6 +196,12 @@ export const EPISODES = [
 // those that have one), who (its name, for a monkey to catch), after (open
 // only once every other is done) }, its map
 // laying each out in the same order (isle-bells.js).
+// battles: in place of camps, a lair and a boss, the battles of a chapter of
+// the fifth episode (isle-battles.js), each { kind, name, hint (what to do),
+// done (what is told once it is won), beast and who (for a hunt: which
+// beast it is, beasts.js, and its name), after (open only once every other
+// is won) }, its map laying each out in the same order (isle-toon.js); gang:
+// the monsters its roaming gangs are made of, the first the most of them.
 export const CHAPTERS = [
   {
     key: 'shore',
@@ -785,6 +827,104 @@ export const CHAPTERS = [
       'Four Golden Bells ring together, so loud they are heard far out to sea — all the way to a rocky island with an enormous nest on top: Jinx’s own, built of every shiny thing he ever took. The last bell is in a cage beside it. Find his hoard, catch Bobo, the quickest monkey of them all, climb the Nest Tree — and then catch Jinx himself! He sits too high to reach, but no magpie can stand a bright light: light every beacon round his nest at once and down he will tumble, dazzled. Catch him before he flies back up!',
     won: 'Jinx is caught, fair and square! He gives a great sigh, fluffs up his feathers — and gives back every Golden Bell. All he ever wanted was someone to play with. Now all five Golden Bells ring the isle awake every morning again, and Jinx perches on the bell tower to listen, as good as gold. Well — almost.',
   },
+  // ------------------------------------------------ Episode 5: Toon Isle
+  {
+    key: 'lollipop',
+    episode: 5,
+    level: 12,
+    icon: '🍭',
+    name: 'Lollipop Bay',
+    theme: 'toonbay',
+    weather: ['clear', 'clear', 'cloudy'],
+    gang: ['snapper', 'blob', 'spiky', 'big'],
+    battles: [
+      { kind: 'ambush', name: 'The Shipwreck', hint: 'A Lantern Spark glitters in the old shipwreck on the beach — but it is a trap! Walk up to it and a ring of thorns springs up all round you, and the Storm Gang comes at you, wave after wave. Pop every last one to break the ring. Friends inside the ring with you make it easier!', done: 'The last wave is popped and the thorns crumble away: the Lantern Spark is yours!' },
+      { kind: 'siege', name: 'The Lighthouse Beacon', hint: 'Stand by the beacon at the top of the lighthouse cliff to light it, then keep it burning: the Storm Gang rushes at it from every side to put it out. Keep them off it until the bar runs out!', done: 'The beacon blazed on till the Storm Gang gave up and ran!' },
+      { kind: 'hunt', beast: 'hydra', who: 'Old Snapjaw', name: 'Hunt Old Snapjaw', hint: 'Old Snapjaw, a Swamp Hydra with three grumpy heads, roams about the bay. Find him! Hurt him and he runs off to lick his wounds somewhere else — follow his tracks and finish him off before he gets his hearts back.', done: 'Old Snapjaw is popped, all three heads at once!' },
+    ],
+    intro:
+      'Jinx was so sorry for all his tricks that he gave you the best thing in his whole nest: an old sea chart of Toon Isle, the biggest island on the seven seas, where everything looks like a cartoon — every rock, tree and wave drawn with a bold line round it, in colours brighter than paint. But the middle of the chart is blank, and when your boat gets there you see why. Baron Bluster, a puffed-up storm cloud in a top hat, has blown out the five Sky Lanterns that kept the clouds away and pulled his Cloud Blanket over the whole island, so thick that nobody can see what is under it. Wherever you go, the clouds roll back — for everyone. And under them waits his Storm Gang, who keep no camps and no castle: they roam about in gangs, spring traps, storm beacons and hunt. Win every battle on Lollipop Bay: each one sends a spark to the Sky Lantern where you landed, and with all of them it shines again!',
+    won: 'Whoosh! The last spark flies into the Sky Lantern: it blazes up and floats high over Lollipop Bay — and the clouds there blow away like dandelion fluff. Far off, Baron Bluster shakes his fist: “One lantern! I have four more, and my Big Bads are bigger than ever!”',
+  },
+  {
+    key: 'toadstool',
+    episode: 5,
+    level: 13,
+    icon: '🍄',
+    name: 'Toadstool Woods',
+    theme: 'toonwood',
+    weather: ['clear', 'cloudy', 'cloudy'],
+    gang: ['shroom', 'spider', 'blob', 'big'],
+    battles: [
+      { kind: 'hunt', beast: 'oak', who: 'Thumpwood', name: 'Hunt Thumpwood', hint: 'Thumpwood, a Grumble Oak as tall as a house, stomps about the woods. Find him under the clouds, and keep after him when he runs: he gets his hearts back if you let him rest!', done: 'Thumpwood is popped, leaves and all!' },
+      { kind: 'nest', name: 'The Storm Nests', hint: 'Storm Nests sit in a glade among the giant toadstools, each hatching a monster every few seconds. Bop the nests till they burst — the monsters keep coming until every nest is gone!', done: 'The last Storm Nest bursts like a soap bubble!' },
+      { kind: 'ambush', name: 'The Fairy Ring', hint: 'A Lantern Spark floats in the middle of a ring of toadstools. Take it — if you dare: thorns spring up round the ring and the Storm Gang comes at you, wave after wave!', done: 'Every wave is popped, and the Fairy Ring is a happy place again!' },
+      { kind: 'siege', name: 'The Woodcutters’ Beacon', hint: 'Light the old woodcutters’ beacon on the hill, then keep it burning till the bar runs out, whatever the Storm Gang throws at it!', done: 'The woodcutters’ beacon burned bright, and the Storm Gang ran off into the woods!' },
+    ],
+    intro:
+      'One Sky Lantern shines again, and the clouds have rolled back off Lollipop Bay! Its light points inland, to Toadstool Woods, where the mushrooms grow as big as houses and the trees are as round as lollipops. Thumpwood, the grumpiest Grumble Oak there ever was, stomps about under the clouds; the Storm Gang has built nests in the glades, set a trap in the Fairy Ring and is out to put out the woodcutters’ beacon. Find every battle — mind the gangs on the paths!',
+    won: 'Whoosh! The second Sky Lantern floats up over Toadstool Woods, and every mushroom glows. “Two?!” huffs Baron Bluster. “You will never get through Rumble Canyon!”',
+  },
+  {
+    key: 'rumble',
+    episode: 5,
+    level: 14,
+    icon: '🏜️',
+    name: 'Rumble Canyon',
+    theme: 'tooncanyon',
+    weather: ['clear', 'clear', 'cloudy'],
+    gang: ['mummy', 'spiky', 'knight', 'golem'],
+    battles: [
+      { kind: 'hunt', beast: 'rex', who: 'Rumbletooth', name: 'Hunt Rumbletooth', hint: 'Rumbletooth, a Rumble Rex so big that his roar knocks the dust off the mesas, hunts up and down the canyon. Track him down, and do not let him get away to rest!', done: 'Rumbletooth is popped with one last ROAR!' },
+      { kind: 'siege', name: 'The Mesa Beacon', hint: 'Light the beacon on top of the big mesa and keep it burning till the bar runs out: the Storm Gang comes up from the canyon on every side!', done: 'The Mesa Beacon blazed all the way through, and the Storm Gang tumbled back down the canyon!' },
+      { kind: 'ambush', name: 'The Fossil Pit', hint: 'A Lantern Spark lies among the giant bones in the Fossil Pit. Grab it and the trap springs: thorns all round and wave after wave of the Storm Gang!', done: 'The last wave is popped, and the old bones rattle with joy!' },
+      { kind: 'nest', name: 'The Thunder Nests', hint: 'Thunder Nests crackle in the canyon, hatching monsters as fast as you pop them. Burst every nest!', done: 'The last Thunder Nest goes off with a fizzle!' },
+    ],
+    intro:
+      'Two lanterns shine! The third is lost in Rumble Canyon, where the rocks are striped like candy and the cacti wave their arms at you. Rumbletooth, a Rumble Rex so big that his roar knocks the dust off the mesas, hunts up and down it, and the Storm Gang has nests, a trap and a beacon to fight over. The canyon is a maze — follow the paths, and mind the edges!',
+    won: 'Whoosh! The third Sky Lantern floats up over Rumble Canyon, and the stripes on the rocks shine like a rainbow. “Grrr!” rumbles Baron Bluster. “Nobody has ever climbed Snowball Peaks!”',
+  },
+  {
+    key: 'snowball',
+    episode: 5,
+    level: 15,
+    icon: '⛄',
+    name: 'Snowball Peaks',
+    theme: 'toonpeak',
+    weather: ['clear', 'cloudy', 'snow'],
+    gang: ['yeti', 'knight', 'spiky', 'golem'],
+    battles: [
+      { kind: 'hunt', beast: 'cyclops', who: 'Big Blink', name: 'Hunt Big Blink', hint: 'Big Blink, a one-eyed Cyclops as tall as a pine, stomps about the snowy valleys. Find him, and keep after him when he runs off — he is slow, but he never stops!', done: 'Big Blink is popped, and he blinks for the very last time!' },
+      { kind: 'ambush', name: 'The Ice Cave', hint: 'A Lantern Spark sparkles inside the Ice Cave. Trap! Take it and thorns of ice spring up round you while the Storm Gang comes at you, wave after wave.', done: 'Every wave is popped, and the Ice Cave sparkles again!' },
+      { kind: 'nest', name: 'The Blizzard Nests', hint: 'Blizzard Nests sit up on the slopes, hatching monsters in a flurry. Burst every one!', done: 'The last Blizzard Nest pops in a puff of snow!' },
+      { kind: 'siege', name: 'The Summit Beacon', hint: 'Light the beacon on the summit and keep it burning till the bar runs out. Up here the Storm Gang is at its toughest!', done: 'The Summit Beacon burned so bright that it could be seen from the sea!' },
+    ],
+    intro:
+      'Three Sky Lanterns shine, and the Cloud Blanket is thinning! The fourth lantern is up in Snowball Peaks, where the snow is as soft as whipped cream and the mountains have rosy cheeks. Big Blink, a one-eyed Cyclops, stomps about the valleys, the Storm Gang has nests up on the slopes and a trap in the Ice Cave, and the summit beacon has gone out. Wrap up warm!',
+    won: 'Whoosh! The fourth Sky Lantern floats up over Snowball Peaks, and every snowman on the mountains cheers. Baron Bluster turns a very dark grey: “Enough! Come up to Thunder Top — if you dare — and I will blow you all the way home!”',
+  },
+  {
+    key: 'thunder',
+    episode: 5,
+    level: 16,
+    icon: '⛈️',
+    name: 'Thunder Top',
+    theme: 'toonstorm',
+    weather: ['cloudy'],
+    // (Its Baron, at the very end: isle-battles.js showdown.)
+    boss: 'bluster',
+    gang: ['knight', 'golem', 'spiky', 'mosquito'],
+    battles: [
+      { kind: 'hunt', beast: 'wizard', who: 'Gusto', name: 'Hunt Gusto', hint: 'Gusto, the Baron’s own Grumble Wizard, blinks about the stormy hills. Corner him, and keep after him when he runs!', done: 'Gusto is popped, and his hat blows away in the wind!' },
+      { kind: 'siege', name: 'The Lightning Tower', hint: 'Light the beacon on the old Lightning Tower and keep it burning till the bar runs out, while the Storm Gang storms it!', done: 'The Lightning Tower’s beacon blazed through the storm!' },
+      { kind: 'ambush', name: 'The Storm Circle', hint: 'A Lantern Spark crackles in the middle of the Storm Circle. Take it, and the thorns spring up for the toughest ambush of all!', done: 'The Storm Circle is quiet at last!' },
+      { kind: 'nest', name: 'The Thundercloud Nests', hint: 'Thundercloud Nests rumble on the hilltops, hatching the Storm Gang’s toughest. Burst every one!', done: 'The last Thundercloud Nest bursts with a boom!' },
+      { kind: 'showdown', after: true, name: 'Baron Bluster!', hint: 'Once every other battle is won, Baron Bluster comes down to his arena on the very top. Up on his cloud he is out of reach: stand on all three lightning rods round the arena at once to zap him down, then bop him while he is on the ground. Three times!', done: 'Baron Bluster is popped, top hat and all!' },
+    ],
+    intro:
+      'Four Sky Lanterns shine together, and only Thunder Top is still under the Cloud Blanket, rumbling and flashing. Baron Bluster is up there, on his arena at the very top, with the last lantern — and his toughest Storm Gang, his own Grumble Wizard Gusto, a trap, nests and a lightning tower. Win every battle and the Baron comes down to fight you himself: zap him off his cloud with his own lightning rods, then pop him once and for all!',
+    won: 'Baron Bluster is popped, top hat and all! He goes off like a burst balloon, whizzing round and round over the island and shrinking as he goes, until he is a little white cloud, puffing politely. All five Sky Lanterns float up together, and the Cloud Blanket blows away for good: Toon Isle shines in the sun from end to end, brighter than any cartoon.',
+  },
 ];
 
 // The stages there are to conquer: a stage for each chapter, the episodes one
@@ -835,12 +975,17 @@ export const ticketsHeld = (stats) => EPISODES.filter((e) => e.ticket && stats?.
 // episode: the first needs none.
 export const ticketFits = (episode, tickets) => !ticketOf(episode) || (Array.isArray(tickets) && tickets.includes(episodeOf(episode).n));
 
+// What is done to an episode's villain at its end, as told: popped, or (Jinx
+// the Magpie) caught — { verb, ing }.
+export const beatenOf = (episode) => episodeOf(episode).beaten ?? { verb: 'pop', ing: 'popping' };
+
 // What someone without an episode's ticket is told.
 export function ticketNeeded(episode) {
   const ep = episodeOf(episode);
   if (!ep.ticket) return '';
   const before = episodeOf(ep.n - 1);
-  return `Episode ${ep.n} needs the ${ep.ticket.icon} ${ep.ticket.name}. Pop ${before.villain} at the end of Episode ${before.n} to get yours!`;
+  const { verb } = beatenOf(before.n);
+  return `Episode ${ep.n} needs the ${ep.ticket.icon} ${ep.ticket.name}. ${verb[0].toUpperCase()}${verb.slice(1)} ${before.villain} at the end of Episode ${before.n} to get yours!`;
 }
 
 // What a stage is called: "Stage 3 of 12", with its episode before it once
@@ -859,10 +1004,12 @@ export function tokensBack(story) {
 
 // A camp's name on a stage (its id is its place along the way, the lair
 // last), or null past the names the chapter has. (On a chapter told in
-// challenges, a challenge's name, by its id: questOf.)
+// challenges, a challenge's name, by its id: questOf; in battles, a
+// battle's: battleOf.)
 export function campName(stage, id, kind = 'camp') {
   const ch = chapterOf(stage);
   if (ch.quests) return questOf(stage, id)?.name ?? null;
+  if (ch.battles) return battleOf(stage, id)?.name ?? null;
   if (kind === 'castle') return ch.lair;
   return ch.camps[id - 1] ?? null;
 }
@@ -871,6 +1018,12 @@ export function campName(stage, id, kind = 'camp') {
 // id (its place in the chapter's list, from 1), or null.
 export function questOf(stage, id) {
   return chapterOf(stage).quests?.[id - 1] ?? null;
+}
+
+// A battle of a chapter told in battles (the fifth episode's), by its id
+// (its place in the chapter's list, from 1), or null.
+export function battleOf(stage, id) {
+  return chapterOf(stage).battles?.[id - 1] ?? null;
 }
 
 // What is told on arriving: the chapter's own story, and on a journey after

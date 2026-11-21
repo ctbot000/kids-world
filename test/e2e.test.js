@@ -7641,7 +7641,7 @@ test('a new game of the isle starts from stage 1, from the title or the isle, wh
   try {
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 5);
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 6);
     const rows = await page.$$eval('#modal .isle-game', (els) => els.map((el) => el.textContent));
     assert.match(rows[0], /Stage 3 of 12: Frostpeak Pass/);
     assert.match(rows[1], /Start a new game/);
@@ -7649,6 +7649,8 @@ test('a new game of the isle starts from stage 1, from the title or the isle, wh
     assert.match(rows[3], /Start Episode 3.*The Wild Isle, from Driftwood Bay/);
     // (The fourth needs the Magpie Feather, which this player has not.)
     assert.match(rows[4], /Start Episode 4Needs the 🪶 Magpie Feather: pop Old Murk at the end of Episode 3🔒/);
+    // (Nor the fifth's Toon Isle Map.)
+    assert.match(rows[5], /Start Episode 5Needs the 🗺️ Toon Isle Map: catch Jinx the Magpie at the end of Episode 4🔒/);
     await clickButton(page, 'Start a new game', '#modal');
     await until(page, (code) => window.kidsWorld.session?.started && window.kidsWorld.game?.code !== code && window.kidsWorld.game?.adventure?.stage === 1, first.code);
     await inGame(page);
@@ -7673,7 +7675,7 @@ test('a new game of the isle starts from stage 1, from the title or the isle, wh
     await clickButton(page, 'Leave island', '#modal');
     await until(page, () => !document.getElementById('title').hidden);
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 7);
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 8);
     assert.deepEqual(pageErrors, []);
   } finally {
     await page.browserContext().close();
@@ -7701,9 +7703,9 @@ test('the isle’s second episode starts from the title in a game of its own, wi
     await clickButton(page, 'Adventure Isle');
     await until(page, () => document.querySelector('#modal .isle-game.new[data-episode="2"]'));
     assert.equal(await page.$eval('#modal .ticket-note', (el) => el.textContent), '🎫 You hold the Rainbow Ticket: Episode 2 is open to you.');
-    // (Not the third episode's yet, nor the fourth's: those take the second,
-    // and then the third, told to its end.)
-    assert.deepEqual(await page.$$eval('#modal .isle-game.locked', (els) => els.map((el) => el.dataset.episode)), ['3', '4']);
+    // (Not the third episode's yet, nor the fourth's or the fifth's: those
+    // take the second, and then the third and the fourth, told to their end.)
+    assert.deepEqual(await page.$$eval('#modal .isle-game.locked', (els) => els.map((el) => el.dataset.episode)), ['3', '4', '5']);
     await page.click('#modal .isle-game.new[data-episode="2"]');
     await until(page, (first) => window.kidsWorld.session?.started && window.kidsWorld.game?.adventure?.stage === first, firstStage(2));
     await inGame(page);
@@ -7817,6 +7819,88 @@ test('the isle’s fourth episode is played in challenges: shinies picked up by 
   }
 });
 
+// The fifth episode, Toon Isle (shared/isle-battles.js): its island drawn as a
+// cartoon (render/cartoon.js), twice as far across as any other and hidden
+// under the Cloud Blanket until someone gets there — the island card and the
+// story telling of battles, each a ??? until it is found; walking up to one
+// rolls the clouds back for everyone, and an ambush's spark walked up to
+// springs its trap. Nothing under the clouds is drawn.
+test('the isle’s fifth episode is a big cartoon island under the clouds, told in battles found by going there', { skip }, async () => {
+  const games = createGameServer({ log: () => {}, publicAdventure: true });
+  await new Promise((done) => games.listen(0, '127.0.0.1', done));
+  const isle = games.publicAdventure;
+  const { code } = isle.newRun('Happy Panda', Date.now(), 5);
+  const room = isle.runs.find((r) => r.entry?.code === code).entry.room;
+  // (Someone who has seen the fourth episode's ending: they hold the Toon Isle Map.)
+  const page = await openPlayer(`http://127.0.0.1:${games.address().port}/`, { name: 'Brave Fox', seenFilms: ['intro', 'ending', 'intro2', 'ending2', 'intro3', 'ending3', 'intro4', 'ending4', 'intro5'] });
+  try {
+    await clickButton(page, '⚔️ Adventure');
+    await clickButton(page, 'Adventure Isle');
+    await until(page, (c) => document.querySelector(`#modal .isle-game[data-code="${c}"]`), code);
+    await page.click(`#modal .isle-game[data-code="${code}"]`);
+    await inGame(page);
+    await until(page, () => window.kidsWorld.game.adventure?.battles?.size === 3 && window.kidsWorld.game.adventure.fog);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    // Drawn as a cartoon, twice as far across, nearly all of it under the clouds.
+    const seen = await page.evaluate(() => {
+      const g = window.kidsWorld.game;
+      return { cartoon: Boolean(window.kidsWorld.renderer.cartoon), W: g.world.W, count: g.adventure.fog.count, tiles: g.adventure.fog.seen.length };
+    });
+    assert.deepEqual([seen.cartoon, seen.W], [true, 256]);
+    assert.ok(seen.count > 0 && seen.count < seen.tiles / 10, `only the landing clear (${seen.count} of ${seen.tiles})`);
+    // HP as ever, and its battles won so far.
+    await until(page, () => document.getElementById('hearts').textContent.includes('🏮 0/3'));
+    // The island card: its battles, each a ??? until it is found.
+    await page.click('#island-badge');
+    await until(page, () => document.querySelectorAll('#modal .adventure-list .camp').length === 7);
+    const card = await page.$eval('#modal', (el) => el.textContent);
+    for (const text of ['Chapter 1: Lollipop Bay', 'Sky Lanterns0 of 5', 'Explored', '0 of 3 battles found', '💥 ???somewhere under the clouds…', 'Cloud Blanket']) assert.ok(card.includes(text), `${text} in ${card}`);
+    // The story says what each is.
+    await clickButton(page, '📖 The story', '#modal');
+    await until(page, () => document.querySelectorAll('#modal .story-way.quests li').length === 3);
+    assert.match(await page.$eval('#modal .story-way.quests', (el) => el.textContent), /The Shipwreck.*it is a trap/);
+    await page.evaluate(() => window.kidsWorld.ui.closeModal());
+    // A monster out under the clouds is not drawn.
+    const ambush = room.adventure.battles.list.find((b) => b.kind === 'ambush');
+    // (One of nobody's camp, roaming: gone by itself only after a while alone.)
+    const hidden = room.monsters.add(room.world, ambush.x + 0.5, ambush.y, ambush.z + 0.5, { kind: 'blob' });
+    await until(page, (id) => window.kidsWorld.game.monsters.get(id)?.model, hidden.id);
+    await until(page, (id) => window.kidsWorld.game.monsters.get(id).model.group.visible === false, hidden.id);
+    // Off to the ambush: the clouds roll back on the way, and there it is.
+    const go = (x, y, z) =>
+      page.evaluate(
+        (x, y, z) => {
+          const g = window.kidsWorld.game;
+          Object.assign(g.me.body, { x, y, z, vx: 0, vy: 0, vz: 0 });
+          g.sendMove(true);
+        },
+        x,
+        y,
+        z,
+      );
+    const w = room.world;
+    for (let k = 1; k <= 6; k++) {
+      const x = w.spawn.x + (ambush.x - w.spawn.x) * (k / 7);
+      const z = w.spawn.z + (ambush.z - w.spawn.z) * (k / 7);
+      await go(x, w.top(Math.floor(x), Math.floor(z)) + 1, z);
+      await until(page, ([x, z]) => {
+        const f = window.kidsWorld.game.adventure.fog;
+        return f.seen[Math.floor(x / f.tile) * f.h + Math.floor(z / f.tile)] === 1;
+      }, [x, z]);
+    }
+    room.monsters.remove(hidden.id);
+    const [px, py, pz] = ambush.prize;
+    await go(px + 0.5, py, pz + 0.5);
+    await until(page, () => [...document.querySelectorAll('.toast')].some((t) => t.textContent.includes('It’s a trap!')));
+    assert.equal(ambush.state, 'on');
+    assert.ok(room.adventure.battles.fog.isSeen(ambush.x, ambush.z), 'found, for everyone');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await page.browserContext().close();
+    await games.shutdown();
+  }
+});
+
 // The second episode is only for those who hold its ticket (shared/isle-
 // story.js): without one, its games and a new game of it are there to see on
 // the title, shut, and say how to get one; its island says the same to a page
@@ -7836,9 +7920,9 @@ test('the isle’s second episode is shut to whoever holds no ticket to it, and 
     assert.equal(await page.evaluate(() => window.kidsWorld.isle.data.stats.toldstar), 0);
     await clickButton(page, '⚔️ Adventure');
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 6);
+    await until(page, () => document.querySelectorAll('#modal .isle-game').length === 7);
     const rows = await page.$$eval('#modal .isle-game', (els) => els.map((el) => [el.classList.contains('locked'), el.textContent]));
-    assert.deepEqual(rows.map((r) => r[0]), [false, true, false, true, true, true], 'the first episode open, the second, third and fourth shut');
+    assert.deepEqual(rows.map((r) => r[0]), [false, true, false, true, true, true, true], 'the first episode open, the second, third, fourth and fifth shut');
     assert.match(rows[1][1], /Episode 2 · Stage 1 of 7: Tulip FieldsNeeds the 🎫 Rainbow Ticket🔒/);
     assert.match(rows[3][1], /Start Episode 2Needs the 🎫 Rainbow Ticket: pop King Grumble at the end of Episode 1🔒/);
     assert.equal(await page.$('#modal .ticket-note'), null);
@@ -7864,7 +7948,7 @@ test('the isle’s second episode is shut to whoever holds no ticket to it, and 
     // the second is shut too, and there is no ticket in the isle's backpack.
     await noToasts();
     await clickButton(page, 'Adventure Isle');
-    await until(page, () => !document.getElementById('modal').hidden && document.querySelectorAll('#modal .isle-game').length === 6);
+    await until(page, () => !document.getElementById('modal').hidden && document.querySelectorAll('#modal .isle-game').length === 7);
     await page.click(`#modal .isle-game[data-code="${isle.room.code}"]`);
     await inGame(page);
     await page.evaluate(() => window.kidsWorld.ui.backpackDialog());

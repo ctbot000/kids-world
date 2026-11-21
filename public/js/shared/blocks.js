@@ -644,6 +644,24 @@ export const GOLD_KEY = def(491, 'gold-key', { name: 'Golden Key', kind: 'item',
 export const GOLD_EGG = def(492, 'gold-egg', { name: 'Golden Egg', kind: 'item', category: false, islandOnly: true, tiles: 'gold-egg', light: 9, sound: 'glass' });
 export const SHINIES = [TRINKET, GOLD_EGG];
 
+// ---------------------------------------------------------------- Toon Isle
+// The fifth episode of Adventure Isle's story is told on Toon Isle, drawn as
+// a cartoon (render/cartoon.js): its trees are the Wild Isle's species drawn
+// another way, and two of its own, a giant toadstool and a cactus, each from
+// a foot as a real tree's is (its trunk TREE_CORE); a Lantern Spark, the
+// prize an ambush keeps (isle-battles.js); the Sky Lantern where everyone
+// lands, drawn as a model of its own (its body MASS), the lamps round it,
+// one for each battle, lit as each is won, and the lightning rods of Baron
+// Bluster's arena. The isle's own: not in the toy box.
+export const TOON_SHROOM = def(442, 'toon-toadstool', { name: 'Giant Toadstool', kind: 'tree', model: 'toadstool', tiles: 'mushroom', sound: 'wood' });
+export const TOON_CACTUS = def(443, 'toon-cactus', { name: 'Cactus', kind: 'tree', model: 'cactus', tiles: { top: 'cactus-top', side: 'cactus' }, sound: 'plant' });
+export const TOON_TREES = [TOON_SHROOM, TOON_CACTUS];
+export const SPARK = def(444, 'lantern-spark', { name: 'Lantern Spark', kind: 'item', category: false, islandOnly: true, tiles: 'trinket', light: 12, sound: 'glass' });
+export const SKY_LANTERN = def(445, 'sky-lantern', { name: 'Sky Lantern', tiles: 'lamp', sound: 'glass', landmark: 'sky-lantern' });
+export const LANTERN_LAMP = def(446, 'lantern-lamp', { name: 'Lantern Lamp', tiles: 'glass', sound: 'glass' });
+export const LANTERN_LAMP_ON = def(447, 'lantern-lamp-on', { name: 'Lantern Lamp', tiles: 'lamp', light: 14, sound: 'glass' });
+export const LIGHTNING_ROD = def(448, 'lightning-rod', { name: 'Lightning Rod', tiles: 'stone', light: 6, sound: 'stone' });
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),
@@ -720,7 +738,7 @@ for (const id of GEM_ROCKS) GEM_ROCK[id] = 1;
 export const isJewel = (id) => GEM_ROCK[id] === 1 || GEM_ITEMS.includes(id);
 // What fruit can hang from.
 export const TREE_PART = new Uint8Array(BLOCK_IDS);
-for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68, ...WILD_TREES]) TREE_PART[id] = 1;
+for (const id of [7, 8, 9, 24, 25, 46, 48, 49, 67, 68, ...WILD_TREES, ...TOON_TREES]) TREE_PART[id] = 1;
 // Tent cloth, what makes a tent.
 export const CLOTH = new Uint8Array(BLOCK_IDS);
 for (const id of CLOTHS) CLOTH[id] = 1;

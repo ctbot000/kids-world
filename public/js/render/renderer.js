@@ -53,6 +53,8 @@ import { RealFlagModel } from './real-models.js';
 import { isRealAnimal, RealAnimal } from './real-animals.js';
 import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
+import { celLight } from './cel.js';
+import { NestModel } from './bluster-models.js';
 
 // All of the biggest edit there can be, a huge tent on a hillside say.
 const MAX_PREVIEW = MAX_EDIT_CELLS;
@@ -97,6 +99,62 @@ const FREE_FOG = 320;
 // casts them, the land and the trees too, further.
 const SHADOW_EXTENT = 13;
 const REAL_SHADOW_EXTENT = 44;
+// Ink lines round everything on an island drawn as a cartoon (cartoon.js), as
+// a cartoon's are drawn: wherever the depth of the scene jumps (an outline
+// round anything in front of something further off) or bends (a crease where
+// two faces meet; a flat face, whatever its slope, has none: its 1/z changes
+// evenly across the screen), the colour is darkened to ink, thicker on a
+// bigger picture, fading out far off where lines would only be noise.
+function outlinePass(depth) {
+  return new ShaderPass(
+    new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: depth },
+        cameraNear: { value: 0.1 },
+        cameraFar: { value: 1000 },
+        resolution: { value: new THREE.Vector2(1, 1) },
+        thickness: { value: 1 },
+        fade: { value: 150 },
+        ink: { value: new THREE.Color(0.13, 0.1, 0.2) },
+      },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: /* glsl */ `
+        #include <packing>
+        uniform sampler2D tDiffuse;
+        uniform sampler2D tDepth;
+        uniform float cameraNear;
+        uniform float cameraFar;
+        uniform vec2 resolution;
+        uniform float thickness;
+        uniform float fade;
+        uniform vec3 ink;
+        varying vec2 vUv;
+        float zAt(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar); }
+        void main() {
+          vec4 col = texture2D(tDiffuse, vUv);
+          vec2 px = thickness / resolution;
+          float z = zAt(vUv);
+          float zl = zAt(vUv - vec2(px.x, 0.0));
+          float zr = zAt(vUv + vec2(px.x, 0.0));
+          float zd = zAt(vUv - vec2(0.0, px.y));
+          float zu = zAt(vUv + vec2(0.0, px.y));
+          // Round the nearest of them: an outline belongs to what is in front.
+          float zn = min(z, min(min(zl, zr), min(zd, zu)));
+          float jump = max(max(abs(zl - z), abs(zr - z)), max(abs(zd - z), abs(zu - z))) / zn;
+          float w = 1.0 / z;
+          float bend = (abs(1.0 / zl + 1.0 / zr - 2.0 * w) + abs(1.0 / zd + 1.0 / zu - 2.0 * w)) / w;
+          // (A gentle bend far off is no crease worth inking: the further, the sharper it must be.)
+          float far = 1.0 + zn / 25.0;
+          float edge = max(smoothstep(0.045, 0.09, jump), smoothstep(0.05 * far, 0.12 * far, bend));
+          edge *= 1.0 - smoothstep(fade * 0.45, fade * 0.9, zn);
+          if (zn > cameraFar * 0.8) edge = 0.0;
+          gl_FragColor = vec4(mix(col.rgb, col.rgb * ink, edge * 0.92), col.a);
+        }`,
+    }),
+  );
+}
+
 // Snow lying about: all the way from none to thick in 150 seconds of snow
 // (block tops all white by 100), and melted in 120 once it stops.
 const SNOW_RATE = 1 / 150;
@@ -276,7 +334,14 @@ export class Renderer {
   setWorld(world) {
     this.world = world;
     const wasReal = Boolean(this.real);
+    const wasCartoon = Boolean(this.cartoon);
     this.terrain.setWorld(world, this.gl, this.level ?? 'low');
+    // Toon Isle, drawn as a cartoon (cartoon.js): the toy sky, flat cel paint
+    // in its own colours (no toning down), the haze far off, and ink lines.
+    this.cartoon = this.terrain.cartoon;
+    this.cartoonFog = this.cartoon ? new THREE.Fog(0xbfe2ff, 60, 220) : null;
+    celLight.uCelOn.value = this.cartoon ? 1 : 0;
+    if (this.cartoon) this.cartoon.setFog(this.fogState ?? null);
     // The Wild Isle, drawn as the real thing (real.js): its light as real
     // light is, a film's, toned down into the screen's range, and the haze
     // far off.
@@ -284,7 +349,7 @@ export class Renderer {
     this.gl.toneMapping = this.real ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     this.gl.toneMappingExposure = 1;
     this.realFog = this.real ? new THREE.FogExp2(0xbfd8ee, 0.004) : null;
-    if (wasReal !== Boolean(this.real) && this.level) {
+    if ((wasReal !== Boolean(this.real) || wasCartoon !== Boolean(this.cartoon)) && this.level) {
       this.buildFinish();
       this.resize();
     }
@@ -295,7 +360,25 @@ export class Renderer {
 
   // How far round you shadows are drawn, either way.
   get shadowExtent() {
-    return this.real ? REAL_SHADOW_EXTENT : SHADOW_EXTENT;
+    return this.real || this.cartoon ? REAL_SHADOW_EXTENT : SHADOW_EXTENT;
+  }
+
+  // What stands on the ground is drawn standing on its skin, where there is
+  // one (real.js, cartoon.js).
+  get skin() {
+    return this.real ?? this.cartoon ?? null;
+  }
+
+  // Toon Isle's Cloud Blanket (isle-battles-view.js readFog), or null: kept
+  // for an island not drawn yet, and shown on the one that is.
+  setFog(fog) {
+    this.fogState = fog;
+    this.cartoon?.setFog(fog);
+  }
+
+  fogChanged(fog, tiles) {
+    this.fogState = fog;
+    this.cartoon?.fogChanged(fog, tiles);
   }
 
   resize() {
@@ -334,7 +417,9 @@ export class Renderer {
 
   // The passes each picture goes through at this quality.
   buildFinish() {
-    const q = this.finish;
+    // (A cartoon is drawn through the passes at every quality, for its ink
+    // lines; never soft, nor shaded in its corners.)
+    const q = this.cartoon ? { ...this.finish, post: true, ao: 0, dof: false } : this.finish;
     const gl = this.gl;
     this.disposePost();
     setFurLayers(q.fur);
@@ -352,7 +437,7 @@ export class Renderer {
         shadow.map = null;
       }
       const extent = this.shadowExtent;
-      Object.assign(shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 1, far: this.real ? 320 : 120 });
+      Object.assign(shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 1, far: this.real || this.cartoon ? 320 : 120 });
       shadow.camera.updateProjectionMatrix();
       const texel = (2 * extent) / q.shadows;
       shadow.bias = -0.0005;
@@ -389,10 +474,14 @@ export class Renderer {
       this.focusPass = focusPass(scene.depthTexture);
       post.passes.push(this.focusPass);
     }
+    if (this.cartoon) {
+      this.outlinePass = outlinePass(scene.depthTexture);
+      post.passes.push(this.outlinePass);
+    }
     // Into the screen's colours; edges not multisampled are smoothed after
     // that, where FXAA expects them.
     post.passes.push(new OutputPass());
-    if (!q.samples) post.passes.push(new FXAAPass());
+    if (!q.samples || this.cartoon) post.passes.push(new FXAAPass());
     this.post = post;
   }
 
@@ -404,6 +493,7 @@ export class Renderer {
     post.scene.depthTexture.dispose();
     this.post = null;
     this.focusPass = null;
+    this.outlinePass = null;
   }
 
   // Draws the picture as it is now, at the quality there is.
@@ -411,7 +501,7 @@ export class Renderer {
     // On an island drawn as the real thing, everyone and everything standing
     // about is drawn standing on its ground as it is drawn (real.js), which
     // is not quite the top of the block they stand on.
-    const lifted = this.real ? this.liftEntities() : null;
+    const lifted = this.skin ? this.liftEntities() : null;
     this.render();
     if (lifted) for (const [o, dy] of lifted) o.position.y -= dy;
   }
@@ -420,7 +510,7 @@ export class Renderer {
     const out = [];
     for (const o of this.entities.children) {
       if (!o.visible) continue;
-      const dy = this.real.lift(o.position.x, o.position.y, o.position.z, 0.3);
+      const dy = this.skin.lift(o.position.x, o.position.y, o.position.z, 0.3);
       if (!dy) continue;
       o.position.y += dy;
       out.push([o, dy]);
@@ -678,7 +768,7 @@ export class Renderer {
   addMonster(id, kind = 'blob') {
     this.removeMonster(id);
     // The Wild Isle's animals as real ones (real-animals.js).
-    const m = isRealAnimal(kind, Boolean(this.real)) ? new RealAnimal(kind, this.world?.theme) : kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : isBeast(kind) ? makeBeast(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : kind === 'mummy' ? new MummyModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
+    const m = isRealAnimal(kind, Boolean(this.real)) ? new RealAnimal(kind, this.world?.theme) : kind === 'nest' ? new NestModel() : kind === 'king' ? new KingModel(this.world?.theme, STOMP.reach) : isBoss(kind) ? makeBoss(kind, this.world?.theme) : isBeast(kind) ? makeBeast(kind, this.world?.theme) : kind === 'mosquito' ? new MosquitoModel(this.world?.theme, id) : kind === 'queen' ? new QueenMosquitoModel(this.world?.theme, id) : kind === 'spider' ? new SpiderModel(this.world?.theme, id) : kind === 'mole' ? new MoleModel(this.world?.theme, id) : kind === 'snapper' ? new SnapperModel(this.world?.theme, id) : kind === 'shroom' ? new ShroomModel(this.world?.theme, id) : kind === 'mummy' ? new MummyModel(this.world?.theme, id) : new MonsterModel(this.world?.theme, kind, id);
     this.entities.add(m.group, m.shadow);
     this.monsters.set(id, m);
     return m;
@@ -857,7 +947,7 @@ export class Renderer {
   // do not count: the camera slips inside a tree crown and sees through it.
   updateCamera(dt, target, collide = true) {
     const v = this.view;
-    const lift = this.real ? this.real.lift(target.x, target.y, target.z, 0.3) : 0;
+    const lift = this.skin ? this.skin.lift(target.x, target.y, target.z, 0.3) : 0;
     v.target.set(target.x, target.y + 1.25 + lift, target.z);
     if (!v.ready) {
       v.smooth.copy(v.target);
@@ -1133,7 +1223,22 @@ export class Renderer {
       this.hemi.groundColor.setRGB(0.36, 0.31, 0.24).multiplyScalar(0.4 + 0.6 * env.day);
       this.hemi.intensity = 0.5 + 1.15 * env.day + 0.8 * flash;
     } else {
-      for (const o of [this.sky.dome, this.sky.clouds]) o.visible = true;
+      // (On Toon Isle its own cartoon clouds drift over it, not the toy
+      // sky's, which are blocks: cartoon-clouds.js SkyClouds.)
+      this.sky.dome.visible = true;
+      this.sky.clouds.visible = !this.cartoon;
+    }
+    if (this.cartoon) {
+      // A cartoon under the toy sky: the haze far off in its colour, and the
+      // cel paint's light (cel.js) by the sun and the time of day.
+      this.cartoon.frame(dt, env);
+      this.cartoonFog.color.copy(env.fog);
+      this.cartoonFog.near = fogFar * 0.5;
+      this.cartoonFog.far = fogFar * 1.05;
+      this.scene.fog = this.cartoonFog;
+      const lum = this.sun.color.r * 0.2126 + this.sun.color.g * 0.7152 + this.sun.color.b * 0.0722;
+      celLight.uSunLum.value = Math.max(1e-3, (lum * this.sun.intensity) / Math.PI);
+      celLight.uCelTint.value.copy(env.sun).lerp(WHITE, 0.55).multiplyScalar(0.42 + 0.66 * env.day + 0.5 * flash);
     }
     // The toys give back less of the studio's light at night, and the light
     // round their edges takes the sky's colour.
@@ -1152,12 +1257,20 @@ export class Renderer {
     if (this.focusPass) {
       const u = this.focusPass.uniforms;
       // (Not on an island drawn as the real thing: real places are sharp.)
-      this.focusPass.enabled = this.nearFade && !this.real;
+      this.focusPass.enabled = this.nearFade && !this.real && !this.cartoon;
       u.focus.value = this.camDist ?? 8;
       u.cameraNear.value = this.camera.near;
       u.cameraFar.value = this.camera.far;
       u.resolution.value.set(this.canvas.width, this.canvas.height);
       u.maxBlur.value = Math.min(8, Math.max(2.5, this.canvas.height * 0.005));
+    }
+    if (this.outlinePass) {
+      const u = this.outlinePass.uniforms;
+      u.cameraNear.value = this.camera.near;
+      u.cameraFar.value = this.camera.far;
+      u.resolution.value.set(this.canvas.width, this.canvas.height);
+      u.thickness.value = Math.max(1, this.canvas.height / 900);
+      u.fade.value = fogFar;
     }
 
     this.terrain.update(state.focus, 6);
@@ -1205,7 +1318,7 @@ export class Renderer {
       target.addScaledVector(tmpX, Math.round(x / texel) * texel - x).addScaledVector(tmpY, Math.round(y / texel) * texel - y);
     }
     this.sun.target.position.copy(target);
-    this.sun.position.copy(target).addScaledVector(dir, this.real ? 150 : 50);
+    this.sun.position.copy(target).addScaledVector(dir, this.real || this.cartoon ? 150 : 50);
   }
 
   dispose() {

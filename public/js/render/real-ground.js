@@ -92,8 +92,11 @@ export function groundColumns(world) {
 
 export class RealGround {
   // trees: the feet of the real trees, as [x, y, z] (their forest floor).
-  constructor(world, light, trees = []) {
+  // rough: how rough its faces of rock are (1 as real rock is; less for a
+  // cartoon's, render/cartoon.js).
+  constructor(world, light, trees = [], { rough = 1 } = {}) {
     this.world = world;
+    this.rough = rough;
     const { W, D } = world;
     this.W = W;
     this.D = D;
@@ -312,7 +315,7 @@ export class RealGround {
       const x = pos[v * 3];
       const y = pos[v * 3 + 1];
       const z = pos[v * 3 + 2];
-      const amp = rough[v] === 2 ? 0.34 : 0.16;
+      const amp = (rough[v] === 2 ? 0.34 : 0.16) * this.rough;
       pos[v * 3] += noise3(x * 1.3, y * 1.1, z * 1.3) * amp + noise3(x * 3.1 + 7, y * 2.9, z * 3.1) * amp * 0.4;
       pos[v * 3 + 2] += noise3(x * 1.3 + 31, y * 1.1, z * 1.3 + 17) * amp + noise3(x * 3.1, y * 2.9 + 5, z * 3.1 + 9) * amp * 0.4;
       if (rough[v] === 2) pos[v * 3 + 1] += noise3(x * 2.3 + 3, y * 1.7, z * 2.3) * 0.08;

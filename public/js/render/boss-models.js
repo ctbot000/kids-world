@@ -33,6 +33,7 @@
 // one, what it is about to throw held up over its head, and its poses for
 // each move (bossPose).
 import * as THREE from '../../vendor/three.module.js';
+import { BlusterModel } from './bluster-models.js';
 import { BOSSES, stompMove } from '../shared/bosses.js';
 import { heldUp, thrownMesh } from './boss-fx.js';
 import { MonsterModel } from './monster-model.js';
@@ -391,6 +392,8 @@ const MAKE = {
   inkwell: { make: () => new OctopusModel(), side: 1, up: 1, raw: true, dress() {} },
   mochi: { make: () => new RabbitModel(), side: 1, up: 1, raw: true, dress() {} },
   grizzle: { make: () => new GrizzleModel(), side: 1, up: 1, raw: true, dress() {} },
+  // Baron Bluster, at the end of Toon Isle (bluster-models.js).
+  bluster: { make: () => new BlusterModel(), side: 1, up: 1, raw: true, dress() {} },
 };
 
 // The model of a boss (shared/bosses.js) by its kind; theme, the island's.

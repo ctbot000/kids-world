@@ -61,7 +61,7 @@ export function clearOfWay(m, x, z, reach = 3.5) {
 
 // Whether a column is open ground: nothing kept clear there, nothing on it,
 // above the sea; its top, or -1.
-function open(m, x, z, pad = 2) {
+export function open(m, x, z, pad = 2) {
   if (!m.inside(x, z, pad) || m.keep[m.k(x, z)] || m.bare[m.k(x, z)]) return -1;
   const y = m.ground(x, z);
   return y > m.sea && B.TERRAIN[m.world.get(x, y, z)] && m.world.get(x, y + 1, z) === B.AIR ? y : -1;
@@ -69,14 +69,14 @@ function open(m, x, z, pad = 2) {
 
 // Whether the ground within two blocks of (x, z) stands more than a step
 // over y: something put there would be a step up it.
-function nearCliff(m, x, z, y, r = 2) {
+export function nearCliff(m, x, z, y, r = 2) {
   for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (m.inside(x + dx, z + dz, 0) && m.g[m.k(x + dx, z + dz)] > y + 1) return true;
   return false;
 }
 
 // Boulders lying about where where(x, z, top) says: each one to four
 // blocks, a rock or two side by side, sometimes one on another.
-function boulders(m, count, where = () => true, big = 0.3) {
+export function boulders(m, count, where = () => true, big = 0.3) {
   const { world, rng } = m;
   for (let tries = 0, n = 0; tries < count * 30 && n < count; tries++) {
     const x = rng.int(3, m.S - 4);
@@ -95,7 +95,7 @@ function boulders(m, count, where = () => true, big = 0.3) {
 }
 
 // Driftwood washed up on a beach: a log lying along x or z, len long.
-function driftwood(m, count, where = () => true) {
+export function driftwood(m, count, where = () => true) {
   const { world, rng } = m;
   for (let tries = 0, n = 0; tries < count * 40 && n < count; tries++) {
     const x = rng.int(3, m.S - 4);
@@ -188,7 +188,7 @@ const rockGate = (seed) => (x, y, z, i) => (i < 2 || (i === 2 && hash2(seed + 3,
 const thornGate = (x, y, z, i) => (i < 3 ? B.BRAMBLE : 0);
 
 // Trees where pick(top, x, z, y, rng) says, off the way and the camps.
-function wildTrees(m, tries, apart, pick, reach = 3.5) {
+export function wildTrees(m, tries, apart, pick, reach = 3.5) {
   m.trees(tries, apart, (x, z, y, rng) => (clearOfWay(m, x, z, reach) ? pick(m.world.get(x, y, z), x, z, y, rng) : null), 1);
 }
 

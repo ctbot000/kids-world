@@ -38,6 +38,13 @@
 // Golden Bell in it and a lock for each challenge (its hub, isle-bells.js):
 // each challenge beaten lights its lock, every lock lit opens the cage and
 // the stage is won — and Jinx, perched on the cage all along, flies off.
+//
+// Nor has a chapter of the fifth episode, on Toon Isle: its island is far
+// bigger, hidden under clouds until someone gets there, and has battles of
+// other kinds instead — gangs roaming its ways, ambushes, sieges, nests,
+// hunts and, at the very end, Baron Bluster himself (isle-battles.js). Each
+// battle won lights a lamp on its Sky Lantern by where everyone arrives, and
+// every one won wins the stage.
 import { BEASTS, isBeast } from './beasts.js';
 import * as B from './blocks.js';
 import { standHeight } from './critters.js';
@@ -50,6 +57,7 @@ import { hash2, Rng } from './rng.js';
 import { Chests } from './treasure.js';
 import { chapterOf } from './isle-story.js';
 import { Quests } from './isle-quests.js';
+import { Battles, FOG_TILE } from './isle-battles.js';
 
 // A camp's fence goes round this far from its flag; a boss's lair (its
 // castle) is a square this far from its middle to its walls.
@@ -205,6 +213,7 @@ const BOOK = {
   gummy: { icon: '🧸', name: 'Gummy Bear' },
   cub: { icon: '🍬', name: 'Gummy Cub' },
   fox: { icon: '🦊', name: 'Grumpy Fox' },
+  nest: { icon: '🥚', name: 'Storm Nest' },
   // The beasts, by their names and icons (beasts.js).
   ...Object.fromEntries(Object.entries(BEASTS).map(([kind, b]) => [kind, { icon: b.icon, name: b.name }])),
   // The bosses, by their names and icons (bosses.js).
@@ -238,7 +247,7 @@ const PURPLE = B.TOY_BRICKS[8];
 
 // What is not the ground: trees (candy trees have trunks of white bricks).
 const TREE = new Uint8Array(B.BLOCK_IDS);
-for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.KATSURA_WOOD, B.KATSURA_LEAVES, B.KATSURA_TREE, B.KATSURA_GIANT, B.TREE_CORE, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11], ...B.WILD_TREES]) TREE[id] = 1;
+for (const id of [B.WOOD, B.LEAVES, B.PINE_LEAVES, B.KATSURA_WOOD, B.KATSURA_LEAVES, B.KATSURA_TREE, B.KATSURA_GIANT, B.TREE_CORE, B.SNOWY_LEAVES, B.COTTON_CANDY, B.TOY_BRICKS[11], ...B.WILD_TREES, ...B.TOON_TREES]) TREE[id] = 1;
 
 // The height of the ground in every column, under any tree, and whether it
 // is under water: the sea (1), or a pond or ice above the sea (2).
@@ -539,7 +548,11 @@ export class AdventureSim {
   // bell hangs), locks: [[x, y, z]...] (a lock for each challenge, in their
   // order), open: an edit opening the cage, perch: [x, y, z] (where Jinx sits
   // on it) }.
-  constructor({ camps = [], won = false, stage = 1, journey = 1, gates = [], chestSpots = null, quests = null, hub = null } = {}, seed = 1) {
+  // On a chapter told in battles (the fifth episode's), battles: each laid
+  // out as the map has it (isle-battles.js), hub: its Sky Lantern, { lantern:
+  // [x, y, z], lamps: [[x, y, z]...] (a lamp for each battle, in their
+  // order) }, roads: the ways its gangs go along, and world: its island.
+  constructor({ camps = [], won = false, stage = 1, journey = 1, gates = [], chestSpots = null, quests = null, hub = null, battles = null, roads = null, world = null } = {}, seed = 1) {
     this.rng = new Rng(seed);
     this.stage = cleanStage(stage);
     this.journey = Number.isInteger(journey) && journey >= 1 ? journey : 1;
@@ -589,6 +602,11 @@ export class AdventureSim {
     this.hub = hub;
     this.perched = null;
     if (this.quests && won) for (const q of this.quests.list) q.done = true;
+    // The battles of Toon Isle, on a chapter told in them (see the top), with
+    // their clouds; and when it was last moved on, for how long each has left.
+    this.battles = this.story.battles && world ? new Battles({ specs: battles ?? [], story: this.story, level: this.level, roads: roads ?? [], spawn: world.spawn, W: world.W, D: world.D }, (seed ^ 0x1b873593) >>> 0) : null;
+    this.now = 0;
+    if (this.battles && won) for (const b of this.battles.list) Object.assign(b, { done: true, state: 'done' });
   }
 
   // The island's critters that play a part in its challenges, put on it (and
@@ -625,7 +643,7 @@ export class AdventureSim {
 
   // Whether there is anything left to free (or a challenge to beat).
   get active() {
-    return !this.won && (this.camps.length > 0 || Boolean(this.quests?.list.length));
+    return !this.won && (this.camps.length > 0 || Boolean(this.quests?.list.length) || Boolean(this.battles?.list.length));
   }
 
   get castle() {
@@ -638,12 +656,13 @@ export class AdventureSim {
   }
 
   campById(id) {
-    return this.camps.find((c) => c.id === id) ?? null;
+    return this.camps.find((c) => c.id === id) ?? this.battles?.campById(id) ?? null;
   }
 
   // How the adventure is going, for the list of open islands (on a chapter
   // told in challenges, its challenges and how many are beaten).
   tally() {
+    if (this.battles) return { camps: this.battles.list.length, freed: this.battles.list.filter((b) => b.done).length, won: this.won, stage: this.stage, battles: true };
     if (this.quests) return { camps: this.quests.list.length, freed: this.quests.list.filter((q) => q.done).length, won: this.won, stage: this.stage, quests: true };
     const camps = this.camps.filter((c) => c.kind === 'camp');
     return { camps: camps.length, freed: camps.filter((c) => c.freed).length, won: this.won, stage: this.stage };
@@ -652,12 +671,15 @@ export class AdventureSim {
   // What has been done that is kept over a restart (server/adventure.js): the
   // camps freed, or the challenges beaten, by their ids.
   doneIds() {
+    if (this.battles) return this.battles.list.filter((b) => b.done).map((b) => b.id);
     return this.quests ? this.quests.list.filter((q) => q.done).map((q) => q.id) : this.camps.filter((c) => c.freed).map((c) => c.id);
   }
 
   // The safe places no monster goes into: the island's start, and every
   // camp freed (the castle too, once the island is).
   havens(world) {
+    // (On Toon Isle, where everyone arrives and every battle won.)
+    if (this.battles) return this.battles.havens(SAFE_RADIUS);
     const out = [{ x: world.spawn.x, z: world.spawn.z, r: SAFE_RADIUS }];
     for (const c of this.camps) if (c.freed) out.push({ x: c.x, z: c.z, r: c.r + 0.5, kind: c.kind });
     return out;
@@ -668,6 +690,15 @@ export class AdventureSim {
   homeFor(world, x, z) {
     let best = { x: world.spawn.x, y: world.spawn.y, z: world.spawn.z };
     let far = Math.hypot(x - best.x, z - best.z);
+    // (On Toon Isle, beside the nearest battle won.)
+    for (const h of this.battles?.havenList ?? []) {
+      const d = Math.hypot(x - h.x, z - h.z);
+      if (d >= far) continue;
+      const y = standHeight(world, h.x + 2, h.z + 2, (h.y ?? world.sea) + 6);
+      if (y === null) continue;
+      far = d;
+      best = { x: h.x + 2, y, z: h.z + 2 };
+    }
     for (const c of this.camps) {
       if (!c.freed) continue;
       const d = Math.hypot(x - c.x, z - c.z);
@@ -686,8 +717,10 @@ export class AdventureSim {
   //   { t: 'freed', camp, by, gone, shieldDown, won }
   step(world, dt, now, people, monsters, players) {
     const news = [];
+    this.now = now;
     if (!this.active) return news;
     if (this.quests) return this.stepQuests(world, dt, now, people);
+    if (this.battles) return this.stepBattles(world, dt, now, people, monsters, players);
     const want = guardsFor(players, this.level);
     for (const c of this.camps) {
       if (c.freed) continue;
@@ -728,6 +761,79 @@ export class AdventureSim {
       news.push({ t: 'quest', quest, by, cells, won });
     }
     return news;
+  }
+
+  // A chapter told in battles, moved on by dt seconds (isle-battles.js).
+  // Returns what happened, for the room to make happen and tell everyone:
+  //   { t: 'fog', a }              tiles of the Cloud Blanket newly rolled back;
+  //   { t: 'bfx', id, k, ... }     something to see or hear, of a battle;
+  //   { t: 'cells', cells }        an edit (an ambush's ring of thorns, a beacon alight);
+  //   { t: 'sky', ... }            lightning thrown down out of the sky (the Baron's);
+  //   { t: 'battle', battle, by, cells, won }  a battle won (cells: its lamp lit
+  //                                on the Sky Lantern; won, the stage won).
+  stepBattles(world, dt, now, people, monsters, players) {
+    const news = [];
+    const out = this.battles.step(world, dt, now, people, monsters, players);
+    if (out.fog.length) news.push({ t: 'fog', a: out.fog });
+    for (const [pid, n] of out.credit) this.credit(pid, 'play', n);
+    for (const [pid, n] of out.flag) this.credit(pid, 'flag', n);
+    for (const fx of out.fx) news.push({ t: 'bfx', ...fx });
+    if (out.cells.length) news.push({ t: 'cells', cells: out.cells });
+    for (const h of out.hurls) news.push({ t: 'sky', ...h });
+    for (const { battle, by } of out.done) {
+      const cells = this.lampCells([battle.id]);
+      const won = this.battles.won;
+      if (won) this.won = true;
+      news.push({ t: 'battle', battle, by, cells, won, fog: won ? this.battles.fog.revealAll() : [] });
+    }
+    // The Baron's hearts, for his bar, while he is about.
+    const sd = this.battles.showdown;
+    this.king = sd ? { ...noKing(), id: sd.monster, hearts: sd.hearts, max: sd.max } : noKing();
+    return news;
+  }
+
+  // The lamps of battles won (by their ids), lit on the Sky Lantern: an edit.
+  lampCells(ids) {
+    const cells = [];
+    for (const id of ids) {
+      const at = this.hub?.lamps?.[id - 1];
+      if (at) cells.push(at[0], at[1], at[2], B.LANTERN_LAMP_ON);
+    }
+    return cells;
+  }
+
+  // Battles won before, and the clouds rolled back before (kept over a
+  // restart: server/adventure.js), as they were, with nobody there to see:
+  // returns the edit that makes the island look it (and their lamps lit).
+  restoreBattles(world, ids, fog = '') {
+    if (!this.battles) return [];
+    this.battles.fog.load(fog);
+    const cells = this.battles.restore(ids, world);
+    cells.push(...this.lampCells(this.battles.list.filter((b) => b.done).map((b) => b.id)));
+    return cells;
+  }
+
+  // The clouds rolled back so far, as kept (Fog.pack), or '' with none.
+  keptFog() {
+    return this.battles ? this.battles.fog.pack() : '';
+  }
+
+  // Someone popped a monster (room.js popMonster): a battle may be waiting
+  // on it (a hunt's Big Bad, a Storm Nest, the Baron).
+  popped(m) {
+    this.battles?.popped.add(m.id);
+  }
+
+  // Who the Storm Gang comes after besides everyone (isle-battles.js): its
+  // beacons alight, and where a Big Bad runs off to.
+  decoys() {
+    return this.battles ? this.battles.beacons(this.now) : [];
+  }
+
+  // A monster bumped a decoy (a beacon, by its id): what everyone sees of it,
+  // or null.
+  decoyBumped(pid, monster, now) {
+    return this.battles?.beaconBumped(pid, monster, now) ?? null;
   }
 
   // The locks of challenges beaten (by their ids), lit on the bell's cage: an edit.
@@ -1178,6 +1284,8 @@ export class AdventureSim {
   // champion, nor a beast's helpers. Nor do Gummy Cubs: a Gummy Bear split into
   // them, and it comes back whole.
   guardGone(m, now) {
+    // (Toon Isle's battles keep count of their own: isle-battles.js.)
+    if (this.battles) return;
     const c = this.campById(m.camp);
     if (!c || c.freed || !c.awake || c.kind !== 'camp' || isBoss(m.kind) || m.kind === 'queen' || m.kind === 'cub' || m.champion || m.helper) return;
     // (On the higher stages, only while its reserve lasts.)
@@ -1192,6 +1300,12 @@ export class AdventureSim {
   // bop counts (a Star Hammer's, see shop.js). Returns { shielded },
   // { wait }, or { hit, hearts, max, beaten, dazed }.
   hitKing(pid, now, dazed = false, times = 1) {
+    // (Baron Bluster, at the end of Toon Isle: isle-battles.js hitBoss.)
+    if (this.battles) {
+      const hit = this.battles.hitBoss(pid, now, dazed, times);
+      if (hit.hit) Object.assign(this.king, { hearts: hit.hearts, max: hit.max, hitAt: now });
+      return hit;
+    }
     if (this.shielded) return { shielded: true };
     const k = this.king;
     if (!k.id || k.hearts <= 0) return { wait: true };
@@ -1216,6 +1330,7 @@ export class AdventureSim {
     this.won = true;
     for (const c of this.camps) Object.assign(c, { freed: true, progress: 1, awake: false, quiet: 0, back: [], holders: 0, guarded: false });
     for (const q of this.quests?.list ?? []) q.done = true;
+    for (const b of this.battles?.list ?? []) Object.assign(b, { done: true, state: 'done' });
     this.king = noKing();
     const gone = [];
     for (const m of [...monsters.list]) if (m.camp) gone.push(monsters.remove(m.id));
@@ -1235,6 +1350,9 @@ export class AdventureSim {
       // A chapter told in challenges: each, where it is and its parts, and
       // the bell's cage with a lock for each.
       ...(this.quests ? { quests: this.quests.describe(), hub: this.hub ? { bell: this.hub.bell, locks: this.hub.locks } : null } : {}),
+      // A chapter told in battles: each, where it is and its parts, its Sky
+      // Lantern with a lamp for each, and the clouds rolled back so far.
+      ...(this.battles ? { battles: this.battles.describe(), hub: this.hub ? { lantern: this.hub.lantern, lamps: this.hub.lamps } : null, fog: { tile: FOG_TILE, w: this.battles.fog.w, h: this.battles.fog.h, seen: this.battles.fog.pack() } } : {}),
       ...this.pack(),
     };
   }
@@ -1247,8 +1365,9 @@ export class AdventureSim {
       c: this.camps.filter((c) => !c.freed && (c.awake || c.progress > 0)).map((c) => [c.id, Math.floor(c.progress * 100), c.holders, c.guarded ? 1 : 0]),
       k: this.king.id ? [this.king.hearts, this.king.max, ...(this.king.second ? [1] : [])] : null,
       shield: this.shielded,
-      // (And how each challenge is going: isle-quests.js pack.)
+      // (And how each challenge is going: isle-quests.js pack; or each battle.)
       ...(this.quests ? { q: this.quests.pack() } : {}),
+      ...(this.battles ? { b: this.battles.pack(this.now) } : {}),
     };
   }
 

@@ -552,6 +552,30 @@ export const BOSSES = {
       { move: 'charge', from: 2, windup: 1000, speed: 14, far: 16, near: 3, bumps: 2 },
     ],
   },
+  // ------------------------------------------------ Episode 5: Toon Isle
+  // Baron Bluster, at the very end of the fifth episode: a puffed-up storm
+  // cloud in a top hat, with a monocle and a curly moustache. He fights from
+  // his cloud over his arena, out of reach, until his own lightning rods
+  // knock him down (isle-battles.js showdown); on the ground he throws
+  // lightning, blows a gale all round him, stomps, and when he is cross
+  // charges and calls his Storm Gang. His minions: Spikies.
+  bluster: {
+    icon: '🎩',
+    name: 'Baron Bluster',
+    body: { radius: 1.3, height: 2.6 },
+    hearts: 1.25,
+    bump: 1.5,
+    run: [3.6, 4.4, 5.2],
+    gap: [3000, 2300, 1800],
+    minion: 'spiky',
+    moves: [
+      { move: 'hurl', from: 0, windup: 850, what: 'bolt', count: 3, scatter: 2, reach: 2.2, ms: 1200, far: 22, bumps: 1.5 },
+      { move: 'puff', from: 0, windup: 1000, what: 'gust', reach: 6, bumps: 1.5 },
+      { move: 'stomp', from: 1, windup: 900, reach: 6, jump: 11, bumps: 1.5 },
+      { move: 'charge', from: 2, windup: 1000, speed: 14, far: 16, near: 3, bumps: 2 },
+      { move: 'call', from: 2, windup: 900, kind: 'knight', count: 2, most: 1, far: 24 },
+    ],
+  },
 };
 
 // Whether a monster kind is a boss.

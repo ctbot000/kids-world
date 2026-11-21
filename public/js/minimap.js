@@ -9,6 +9,7 @@ import * as B from './shared/blocks.js';
 import { CRITTER_INFO } from './shared/critters.js';
 import { lookIcon } from './shared/words.js';
 import { shirtColor } from './render/avatar.js';
+import { battleFound, battleLocked, fogSeen } from './isle-battles-view.js';
 
 // The most blocks across each map shows; a bigger island scrolls to keep you in view.
 const SPAN = { mini: 160, big: 320 };
@@ -212,6 +213,31 @@ export class MiniMap {
   }
 
   // CSS pixels across. A hidden map measures zero, and that is never kept.
+  // The Cloud Blanket as a little picture, a pixel a tile (drawn smoothed
+  // over the map, so its edges are soft): white where nobody has been yet,
+  // see-through where someone has. Made again only as it changes.
+  fogPicture(fog) {
+    if (this.fogPic?.fog === fog && this.fogPic.count === fog.count) return this.fogPic.canvas;
+    const canvas = this.fogPic?.canvas ?? document.createElement('canvas');
+    canvas.width = fog.w;
+    canvas.height = fog.h;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(fog.w, fog.h);
+    for (let i = 0; i < fog.w; i++) {
+      for (let j = 0; j < fog.h; j++) {
+        const o = (j * fog.w + i) * 4;
+        const hidden = !fog.seen[i * fog.h + j];
+        img.data[o] = 246;
+        img.data[o + 1] = 244;
+        img.data[o + 2] = 255;
+        img.data[o + 3] = hidden ? 250 : 0;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    this.fogPic = { fog, count: fog.count, canvas };
+    return canvas;
+  }
+
   measure(canvas) {
     let size = this.sizes.get(canvas);
     if (!size) {
@@ -248,6 +274,15 @@ export class MiniMap {
     const left = Math.round(X(0));
     const top = Math.round(Y(0));
     ctx.drawImage(this.picture, left, top, Math.round(X(w.W)) - left, Math.round(Y(w.D)) - top);
+    // On Toon Isle, the Cloud Blanket over whatever nobody has got to yet:
+    // soft white clouds, a tile at a time (isle-battles-view.js).
+    const fog = g.adventure?.fog;
+    if (fog && fog.count < fog.seen.length) {
+      const pic = this.fogPicture(fog);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(pic, left, top, (fog.w * fog.tile * (Math.round(X(w.W)) - left)) / w.W, (fog.h * fog.tile * (Math.round(Y(w.D)) - top)) / w.D);
+      ctx.imageSmoothingEnabled = false;
+    }
 
     // The way you are looking, as a soft wedge as wide as the screen's view.
     // Yellow like you, because white disappears on snow. (Unlike the other
@@ -278,6 +313,8 @@ export class MiniMap {
     ctx.font = `${Math.round(17 * u)}px ${FONT}`;
     for (const c of g.critters.values()) {
       const p = c.model.group.position;
+      // (None under the clouds: nobody has seen them yet.)
+      if (fog && !fogSeen(fog, p.x, p.z)) continue;
       const x = X(p.x);
       const y = Y(p.z);
       if (big) {
@@ -301,6 +338,33 @@ export class MiniMap {
     for (const q of g.adventure?.quests?.values() ?? []) questMark(ctx, X(q.x + 0.5), Y(q.z + 0.5), q, (big ? 1.5 : 1) * u);
     const bell = g.adventure?.hub?.bell;
     if (bell) questMark(ctx, X(bell[0] + 0.5), Y(bell[2] + 0.5), { icon: '🔔', color: '#ffd84d', done: g.adventure.won }, (big ? 1.5 : 1) * u);
+    // Or, on the fifth episode's, its battles: each found its icon in a ring
+    // of its colour (ticked once won), each still under the clouds a faint
+    // question mark somewhere near it — a rumour of where it is — a hunt's
+    // Big Bad where it was last seen, and the Sky Lantern.
+    const adv = g.adventure;
+    for (const b of adv?.battles?.values() ?? []) {
+      const s = (big ? 1.5 : 1) * u;
+      if (!b.done && !battleFound(adv, b)) {
+        const r = rumour(b);
+        ctx.save();
+        ctx.globalAlpha = 0.75;
+        ctx.font = `${Math.round(13 * s)}px ${FONT}`;
+        ctx.fillStyle = INK;
+        ctx.fillText('❓', X(r.x), Y(r.z));
+        ctx.restore();
+        continue;
+      }
+      let at = { x: b.x, z: b.z };
+      if (b.kind === 'hunt' && !b.done) {
+        for (const [, e] of g.monsters) if (e.kind === b.beast && e.model?.group.visible) b.seenAt = { x: e.model.group.position.x, z: e.model.group.position.z };
+        if (!b.seenAt) continue;
+        at = b.seenAt;
+      }
+      questMark(ctx, X(at.x), Y(at.z), { icon: battleLocked(adv, b) ? '🔒' : b.icon, color: b.color, done: b.done }, s);
+    }
+    const lantern = adv?.battles ? adv.hub?.lantern : null;
+    if (lantern) questMark(ctx, X(lantern[0] + 0.5), Y(lantern[2] + 0.5), { icon: '🏮', color: '#ff7b54', done: adv.won }, (big ? 1.5 : 1) * u);
 
     // A tower defense island's road, the monsters' gate at one end of it and
     // the Star Stone at the other.
@@ -365,6 +429,14 @@ export class MiniMap {
       arrow(ctx, mx, my, Math.atan2(face.z, face.x), (big ? 4.6 : 4.4) * u, u);
     }
   }
+}
+
+// Where a battle still under the clouds is rumoured to be: near it, but
+// never quite on it (the same place every time for the same battle).
+function rumour(b) {
+  const a = ((b.id * 2.399 + b.x * 0.013 + b.z * 0.017) % 1) * Math.PI * 2;
+  const d = 10 + ((b.id * 7 + Math.floor(b.x)) % 9);
+  return { x: b.x + Math.cos(a) * d, z: b.z + Math.sin(a) * d };
 }
 
 // A teardrop pointing along `angle`: round at the back and sharp only at the

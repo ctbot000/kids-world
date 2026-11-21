@@ -735,8 +735,80 @@ function ending4(b) {
   for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.4 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
+// The fifth episode's: the Baron's pompous little march, a tuba's, and the
+// theme in full when the lanterns float up.
+const BLUSTER = [
+  ['D3', 0.5], ['F3', 0.5], ['A3', 1], ['G3', 0.5], ['F3', 0.5], ['E3', 1],
+  ['D3', 0.5], ['E3', 0.5], ['F3', 0.5], ['A3', 0.5], ['D4', 2],
+];
+
+function intro5(b) {
+  // 0–8: out at sea, sailing up to the clouds.
+  b.sea(0, 8, 0.035);
+  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  b.tune(2.4, BPM, THEME.slice(0, 6), 'flute', 0.05);
+  // 8–16: Baron Bluster, laughing, blowing out the lanterns one by one.
+  b.strings(8, 8, ['D2', 'A2', 'D3', 'F3'], 0.035, { attack: 0.5, release: 1, tremolo: true });
+  b.tune(8.4, 112, BLUSTER, 'horn', 0.07);
+  for (let k = 0; k < 5; k++) b.whoosh(9.4 + k * 1.3, 0.07, 0.6);
+  b.thunder?.(14.5, 0.08);
+  // 16–28: the Big Bads of each corner, a bar each.
+  const bar = 240 / 3;
+  b.beat(16, bar, 4, 0.22);
+  const corners = ['Dm', 'Bb', 'C', 'A'];
+  b.chords(16, bar, corners, 0.03, { attack: 0.05, release: 0.3 });
+  corners.forEach((c, i) => b.timpaniRoll(16 + i * 3, 0.5, 'D2', 0.12));
+  // 28–34: Thunder Top, lightning.
+  b.strings(28, 6, ['D2', 'A2', 'F3'], 0.04, { attack: 0.2, release: 1, tremolo: true });
+  b.crash(29.2, 0.1, 2);
+  b.crash(31, 0.1, 2);
+  b.crash(32.6, 0.1, 2);
+  b.tune(29.4, 140, BLUSTER, 'horn', 0.06);
+  // 34–44: the heroes on the beach, the clouds rolling back; the title.
+  b.swell(34, 2.4, 0.07);
+  b.chords(35.2, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(35.2, BPM, THEME.slice(0, 12), 'horn', 0.1);
+  b.sparkle(36, 8, 0.04);
+  b.crash(39, 0.12, 3);
+  b.strings(44 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending5(b) {
+  // 0–7: the Baron popped, whizzing round and shrinking.
+  b.timpaniRoll(0.2, 0.8, 'A2', 0.2);
+  b.pop(1, 0.35);
+  b.crash(1, 0.14, 3);
+  b.whoosh(1.2, 0.1, 4.5);
+  b.tune(1.6, 180, BLUSTER, 'flute', 0.05);
+  b.cheer(1.4, 5, 0.03);
+  // 7–14: the five lanterns floating up.
+  b.chords(7, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  b.choir(7.4, 6.4, ['D4', 'A4', 'D5'], 0.02);
+  b.sparkle(7.4, 6, 0.04);
+  // 14–22: the Cloud Blanket blowing away.
+  b.swell(14, 2, 0.08);
+  b.whoosh(14.6, 0.1, 3);
+  b.strings(15, 7, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.3, release: 1.6 });
+  b.tune(16, BPM, THEME.slice(0, 10), 'horn', 0.08);
+  // 22–30: everyone on the beach, fireworks.
+  b.beat(22, BPM, 3, 0.26);
+  b.chords(22, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(22, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let k = 0; k < 7; k++) b.firework(22.4 + k * 1.1, 0.1);
+  b.cheer(22.2, 7, 0.035);
+  // 30–44: the credits, gently.
+  b.chords(30, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.arps(30, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(31.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(30, 14, 0.025);
+  // 44–51: the little cloud and the toadstools.
+  b.tune(44.6, 132, BLUSTER.slice(0, 6), 'flute', 0.05);
+  b.strings(44.4, 5, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(48.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+}
+
 export async function score(name, secs) {
   const b = new Band(secs);
-  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4 }[name] ?? ending)(b);
+  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5 }[name] ?? ending)(b);
   return b.render();
 }

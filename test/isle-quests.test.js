@@ -62,7 +62,7 @@ const on = ([x, y, z]) => [x + 0.5, y, z + 0.5];
 
 // ---------------------------------------------------------------- the maps
 
-for (let stage = FIRST; stage <= STAGES; stage++) {
+for (let stage = FIRST; stage < firstStage(5); stage++) {
   const ch = chapterOf(stage);
   test(`chapter ${stage}, ${ch.name}: an island to roam, every one of its challenges walked to from the start`, () => {
     for (const [seed, journey] of [[12345, 1], [987654321, 1], [4242, 2], [77, 3]]) {
@@ -392,7 +392,7 @@ test('Jinx: out of reach until every other challenge is beaten, then dazzled by 
   assert.equal(a.last('quest').id, q.id);
   assert.equal(adv.won, true);
   assert.ok(a.last('won'));
-  assert.equal(adv.story.final && adv.story.last, true, 'the end of the story');
+  assert.equal(adv.story.final, true, 'the end of its episode');
 });
 
 test('challenges beaten are kept over a restart, the island put back as they left it', () => {

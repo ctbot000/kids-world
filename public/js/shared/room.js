@@ -311,7 +311,7 @@ export class Room {
       // (On a chapter of the isle told in challenges, its own animals first —
       // its monkeys, its lost chicks, Jinx — so there is always room for them.)
       if (isle) {
-        this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots, quests: made.quests, hub: made.hub }, s ^ 0x510e527f);
+        this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots, quests: made.quests, hub: made.hub, battles: made.battles, roads: made.roads, world: this.world }, s ^ 0x510e527f);
         this.adventure.setup(this.world, this.critters);
       }
       for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z, null, c.yaw);
@@ -1783,6 +1783,13 @@ export class Room {
         else if (news.t === 'qfx') this.broadcast(news);
         else if (news.t === 'cells') this.natureEdit(news.cells);
         else if (news.t === 'quest') this.questDone(news);
+        // A chapter told in battles (isle-battles.js): the clouds rolling
+        // back, what everyone sees of each battle, lightning out of the sky
+        // and each won.
+        else if (news.t === 'fog') this.broadcast(news);
+        else if (news.t === 'bfx') this.broadcast(news);
+        else if (news.t === 'sky') this.skyHurl(news, now);
+        else if (news.t === 'battle') this.battleDone(news);
         else this.campFreed(news);
       }
       // The isle's hazards on the way (adventure.js stepHazards): shown
@@ -1800,7 +1807,9 @@ export class Room {
         for (const pid of adv.stepSneaks(this.world, now, people)) this.sendBack(this.players.get(pid), now);
       }
     }
-    const bumps = this.monsters.step(this.world, dt, now, people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
+    // (And on Toon Isle the Storm Gang goes for its beacons too: isle-battles.js.)
+    const decoys = adv?.active ? adv.decoys() : [];
+    const bumps = this.monsters.step(this.world, dt, now, decoys.length ? [...people, ...decoys] : people, isNight(this.env.time), { roam: this.settings.monsters, havens: adv?.havens(this.world), camps: adv });
     for (const m of this.monsters.takeGone()) adv?.guardGone(m, now);
     // The Queen Mosquito getting a heart back (monsters.js step): everyone
     // near sees the little hearts over her.
@@ -1842,7 +1851,15 @@ export class Room {
     }
     for (const u of this.monsters.takeRises()) this.broadcast({ t: 'mfx', kind: 'rise', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
     if (this.defense) this.stepDefense(now);
-    for (const { monster, pid, bumps: n, charge, pounce } of bumps) this.hurt(pid, monster, now, { bumps: n, charge, pounce });
+    for (const { monster, pid, bumps: n, charge, pounce } of bumps) {
+      if (pid < 0) {
+        // A beacon bumped (isle-battles.js), a heart off it.
+        const fx = adv?.decoyBumped(pid, monster, now);
+        if (fx) this.broadcast({ t: 'bfx', ...fx, m: monster.id });
+        continue;
+      }
+      this.hurt(pid, monster, now, { bumps: n, charge, pounce });
+    }
     // Mr. Mole coming up out of the ground beside someone: a burst of dirt
     // everyone sees, and his little grunt of arrival.
     for (const u of this.monsters.takeUps()) {
@@ -2012,6 +2029,8 @@ export class Room {
     const b = m.body;
     this.broadcast({ t: 'pop', id: m.id, by: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
     if (this.adventure?.active) this.adventure.credit(p.id, 'pops');
+    // (A battle of Toon Isle may be waiting on it: isle-battles.js.)
+    this.adventure?.popped(m);
     if (m.camp) this.adventure?.guardGone(m, now);
     if (m.kind === 'gummy') {
       for (const side of [-1, 1]) {
@@ -2882,6 +2901,40 @@ export class Room {
     this.changed();
   }
 
+  // Lightning thrown down out of the sky (Baron Bluster's, up on his cloud:
+  // isle-battles.js): shown falling on its red rings, and a moment later
+  // whoever is still under one is hit, as by what a boss throws.
+  skyHurl(h, now) {
+    const at = (q) => [+q.x.toFixed(2), +q.y.toFixed(2), +q.z.toFixed(2)];
+    this.broadcast({ t: 'mfx', kind: 'hurl', id: h.id, sky: true, what: h.what, from: at(h.from), to: h.to.map(at), ms: h.ms, r: h.reach });
+    const monster = this.monsters.get(h.id) ?? HAZARD_THROWER;
+    this.thrown.push({ monster, what: h.what, to: h.to, reach: h.reach, bumps: h.bumps, at: now + h.ms });
+  }
+
+  // A battle of Toon Isle won (isle-battles.js): its lamp lit on the Sky
+  // Lantern, everyone told (and who was there: a key quiz for them, as for a
+  // camp freed) — and with that the last, the Sky Lantern shines, the Cloud
+  // Blanket blows away and the stage is won.
+  battleDone(news) {
+    const b = news.battle;
+    this.natureEdit(news.cells);
+    this.broadcast({ t: 'battle', id: b.id, by: news.by, ...(news.won ? { won: true } : {}) });
+    if (news.won) {
+      if (news.fog?.length) this.broadcast({ t: 'fog', a: news.fog, all: true });
+      const at = this.adventure.hub?.lantern ?? [this.world.spawn.x, this.world.spawn.y, this.world.spawn.z];
+      this.broadcast({ t: 'won', by: this.onlinePlayers().map((p) => p.id), x: at[0] + 0.5, y: at[1], z: at[2] + 0.5, board: this.stageBoard() });
+      this.allWell();
+    }
+    this.changed();
+  }
+
+  // Battles won and clouds rolled back before (kept over a restart:
+  // server/adventure.js), as they were again, with nobody there to see.
+  restoreBattles(ids, fog = '') {
+    const cells = this.adventure?.restoreBattles(this.world, ids, fog) ?? [];
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+  }
+
   // Challenges beaten before (kept over a restart: server/adventure.js),
   // beaten again with nobody there to see.
   restoreQuests(ids) {
@@ -2982,6 +3035,10 @@ export class Room {
   // lair is free, and so is the island, for everyone on it.
   winAdventure(p, king) {
     const adv = this.adventure;
+    // (On Toon Isle: the last battle's lamp lit, Baron Bluster's, and the
+    // Cloud Blanket blown away.)
+    const battles = adv.battles ? adv.lampCells(adv.battles.list.filter((b) => !b.done).map((b) => b.id)) : [];
+    const fog = adv.battles ? adv.battles.fog.revealAll() : [];
     for (const m of adv.win(this.monsters)) {
       const b = m.body;
       this.broadcast({ t: 'pop', id: m.id, by: m === king ? p.id : 0, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2) });
@@ -2989,6 +3046,8 @@ export class Room {
     const castle = adv.castle;
     if (castle) this.ungloom(castle);
     this.openGates(adv.openGates());
+    if (battles.length) this.natureEdit(battles);
+    if (fog.length) this.broadcast({ t: 'fog', a: fog, all: true });
     const b = king.body;
     this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), hero: p.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), board: this.stageBoard() });
     this.allWell();

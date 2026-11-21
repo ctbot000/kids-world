@@ -26,11 +26,14 @@
 // And the third episode's (intro3, ending3), on the Wild Isle, drawn as the
 // real thing (render/real.js): Old Murk and the five Sunstones (see intro3
 // and ending3 below). And the fourth's (intro4, ending4): Jinx the Magpie and
-// the five Golden Bells, on his Puzzle Isles (see below).
+// the five Golden Bells, on his Puzzle Isles (see below). And the fifth's
+// (intro5, ending5): Baron Bluster, his Cloud Blanket and the five Sky
+// Lanterns of Toon Isle, drawn as a cartoon (render/cartoon.js).
 import { BOSSES } from '/js/shared/bosses.js';
 import { questIcon } from '/js/shared/isle-quests.js';
+import { BATTLE_ICONS } from '/js/shared/isle-battles.js';
 import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
-import { ANIM, B, caption, critter, isle, kid, monster, nameCard, prop, renderer, roll, star, THREE, titleCard } from './stage.js';
+import { ANIM, B, caption, critter, isle, kid, monster, nameCard, prop, renderer, roll, star, THREE, titleCard, toon } from './stage.js';
 
 const SEA = 20;
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -1619,8 +1622,412 @@ function ending4() {
   });
   const teaser = shots.at(-1).start;
   overlays.push(caption(teaser + 0.4, 4, 'Now Jinx perches by the bells every morning to listen, as good as gold. Well — almost…'));
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  // (And he has a present for you: an old sea chart. The story goes on, in
+  // the fifth episode.)
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'An old sea chart from Jinx: Episode 5, Toon Isle', { size: 70 }));
   return { shots, overlays, poster: shots[2].start + 6 };
 }
 
-export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4 };
+// ------------------------------------------------------------ the fifth episode
+
+// A Sky Lantern (the fifth episode's): a big red paper lantern, ribbed, gold
+// at its top and foot, glowing from inside while it is lit; lit: a function
+// of the shot's time saying whether it is.
+function skyLantern(size = 1, lit = () => true) {
+  const g = new THREE.Group();
+  const paper = toonMat('#ff5a4a', 0.9);
+  const dark = toonMat('#c8463c', 0);
+  const gold = toonMat('#ffcf4a', 0.2);
+  const shape = [0, 0.15, 0.55, 0.85, 1.0, 1.02, 1.0, 0.85, 0.55, 0.15, 0].map((r, i) => new THREE.Vector2(Math.max(0.01, r * 1.05), i * 0.26));
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(shape, 24), paper);
+  shell.position.y = -1.3;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 0.28, 16), gold);
+  cap.position.y = 1.45;
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.28, 16), gold);
+  foot.position.y = -1.42;
+  g.add(shell, cap, foot);
+  g.scale.setScalar(size);
+  g.userData.light = (t) => {
+    shell.material = lit(t) ? paper : dark;
+  };
+  return g;
+}
+const toonMat = (color, glow) => toon(color, glow ? { emissive: glow } : {});
+
+// The Cloud Blanket over the whole of a Toon Isle island, as the game draws
+// it (isle-battles-view.js readFog, render/cartoon-clouds.js): every tile
+// hidden but those round `clear` ([x, z, r] each).
+function blanket(world, clear = []) {
+  const tile = 8;
+  const w = Math.ceil(world.W / tile);
+  const h = Math.ceil(world.D / tile);
+  const fog = { tile, w, h, seen: new Uint8Array(w * h), at: new Float64Array(w * h).fill(Infinity), count: 0 };
+  for (const [x, z, r] of clear) unveil(fog, x, z, r);
+  return fog;
+}
+
+// The clouds rolled back round (x, z), as far as r: the tiles newly seen.
+function unveil(fog, x, z, r) {
+  const out = [];
+  for (let i = 0; i < fog.w; i++) {
+    for (let j = 0; j < fog.h; j++) {
+      const k = i * fog.h + j;
+      if (fog.seen[k]) continue;
+      const dx = Math.max(i * fog.tile - x, 0, x - (i + 1) * fog.tile);
+      const dz = Math.max(j * fog.tile - z, 0, z - (j + 1) * fog.tile);
+      if (dx * dx + dz * dz > r * r) continue;
+      fog.seen[k] = 1;
+      fog.count++;
+      out.push(k);
+    }
+  }
+  return out;
+}
+
+const TOON_FROM = CHAPTERS.findIndex((ch) => ch.episode === 5) + 1;
+const TOON_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 5);
+
+// ------------------------------------------------------------ the intro, episode 5
+
+// Its intro: a little boat out at sea, sailing up to a mountain of cloud —
+// Toon Isle under Baron Bluster's Cloud Blanket; the Baron himself, laughing
+// over it, blowing out its five Sky Lanterns; under the clouds, the Big Bads
+// of its corners; the Baron waiting on Thunder Top; and you and your friends
+// on the beach of Lollipop Bay, the clouds rolling back as you go.
+function intro5() {
+  const bay = isle(TOON_FROM);
+  const top = isle(TOON_FROM + 4);
+  const sp = bay.world.spawn;
+  const lantern = bay.hub.lantern;
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. Out at sea, sailing up to a mountain of cloud.
+  add({
+    dur: 8,
+    world: bay,
+    time: 0.3,
+    cut: 'fade',
+    setup() {
+      renderer.setFog(blanket(bay.world));
+      critter('boat', (t) => ({ x: sp.x + 4, y: SEA + 0.9, z: sp.z + 40 - t * 2.6, yaw: Math.PI, moving: true }));
+    },
+    camera: keys([
+      { t: 0, pos: [sp.x + 26, SEA + 5, sp.z + 92], look: [sp.x, SEA + 14, sp.z - 40], fov: 50 },
+      { t: 8, pos: [sp.x + 12, SEA + 4, sp.z + 66], look: [sp.x, SEA + 12, sp.z - 30], fov: 50 },
+    ]),
+  });
+  overlays.push(caption(0.7, 7, 'Jinx was so sorry for his tricks that he gave you his best shiny of all: an old sea chart of Toon Isle, the biggest island on the seven seas — where everything looks like a cartoon!'));
+
+  // 2. Baron Bluster over the clouds, blowing out the Sky Lanterns.
+  const cx = 128;
+  const cz = 120;
+  const cy = SEA + 30;
+  add({
+    dur: 8,
+    world: bay,
+    time: 0.34,
+    cut: 'cut',
+    setup() {
+      renderer.setFog(blanket(bay.world));
+      monster('bluster', (t) => ({ x: cx, y: cy + Math.sin(t * 1.3) * 0.4, z: cz, yaw: 0.4 + Math.sin(t * 0.8) * 0.3, state: Math.floor(t / 1.6) % 2 ? 'puff' : 'giggle', scale: 1.4 }));
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const out = 1.4 + i * 1.3;
+        const l = skyLantern(0.9, (t) => t < out);
+        prop(l, (t) => {
+          l.userData.light(t);
+          return { x: cx + Math.cos(a + t * 0.2) * 7, y: cy - 1 + Math.sin(t * 1.6 + i) * 0.5, z: cz + Math.sin(a + t * 0.2) * 7 };
+        });
+      }
+    },
+    fx(t) {
+      for (let i = 0; i < 5; i++) {
+        once(shots[1], `out${i}`, t, 1.4 + i * 1.3, () => {
+          const a = (i / 5) * Math.PI * 2 + (1.4 + i * 1.3) * 0.2;
+          for (let k = 0; k < 6; k++) renderer.effects.add('puff', cx + Math.cos(a) * 7, cy - 0.5, cz + Math.sin(a) * 7, { vy: 1, size: 0.6, life: 0.8, grow: 1.4, color: '#e6defa', delay: k * 0.03 });
+        });
+      }
+    },
+    camera: orbit([cx, cy - 1, cz], 17, 2, 0.3, 1.1, 8, 50),
+  });
+  overlays.push(caption(shots[1].start + 0.6, 7, 'But Baron Bluster, a puffed-up storm cloud in a top hat, blew out its five Sky Lanterns — and pulled his Cloud Blanket over the whole island!'));
+
+  // 3. Under the clouds: the Big Bad of each corner, and its battles.
+  for (const [i, ch] of TOON_CHAPTERS.slice(0, 4).entries()) {
+    const m = isle(TOON_FROM + i);
+    const hunt = m.battles.find((b) => b.kind === 'hunt');
+    const [hx, hz] = hunt.range[4];
+    const beast = ch.battles.find((b) => b.kind === 'hunt').beast;
+    const a0 = 0.6 + i * 1.3;
+    const shot = add({
+      dur: 3,
+      world: m,
+      time: 0.38,
+      cut: i === 0 ? 'flash' : 'cut',
+      setup() {
+        renderer.setFog(null);
+        monster(beast, (t) => ({ x: hx, y: groundY(m.world, hx, hz), z: hz, yaw: a0 + Math.PI + Math.sin(t) * 0.3, state: t % 2.4 < 1.2 ? 'chase' : 'idle' }));
+      },
+      camera: (t) => orbit([hx, groundY(m.world, hx, hz) + 2, hz], 11, 2.5, a0, a0 + 0.45, 3, 48)(t),
+    });
+    overlays.push(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, ch.battles.map((b) => `${BATTLE_ICONS[b.kind]} ${b.name}`).join(' · ')));
+  }
+
+  // 4. Thunder Top: the Baron over his arena, lightning all round.
+  const arena = top.battles.find((b) => b.kind === 'showdown');
+  add({
+    dur: 6,
+    world: top,
+    time: 0.4,
+    weather: 'cloudy',
+    cut: 'flash',
+    setup() {
+      renderer.setFog(null);
+      monster('bluster', (t) => ({ x: arena.x + Math.sin(t * 0.5) * 3, y: arena.y + 8 + Math.sin(t * 1.3) * 0.4, z: arena.z + Math.cos(t * 0.5) * 3, yaw: 2.6, state: t % 2 < 1 ? 'hurl' : 'giggle' }));
+    },
+    fx(t) {
+      for (const k of [1.2, 3, 4.6]) once(shots.at(-1), `bolt${k}`, t, k, () => strike(top.world, arena.x + Math.sin(k * 3) * 9, arena.z + Math.cos(k * 3) * 9, [arena.x + 18, 0, arena.z + 22]));
+    },
+    camera: keys([
+      { t: 0, pos: [arena.x + 16, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 6, arena.z], fov: 50 },
+      { t: 6, pos: [arena.x + 10, arena.y + 3, arena.z + 15], look: [arena.x, arena.y + 7, arena.z], fov: 48 },
+    ]),
+  });
+  overlays.push(caption(shots.at(-1).start + 0.5, 5.2, 'He waits on Thunder Top — and his Storm Gang is everywhere under the clouds: roaming in gangs, springing traps, storming beacons, hatching out of nests!'));
+
+  // 5. The heroes on the beach of Lollipop Bay, the clouds rolling back as
+  // they go; and the title.
+  const fog = blanket(bay.world, [[sp.x, sp.z, 22]]);
+  const way = bay.roads[0];
+  const walkAt = (t, lag) => {
+    const s = Math.max(0, t * 2.6 - lag);
+    let i = 0;
+    let left = s;
+    while (i < way.length - 2 && left > Math.hypot(way[i + 1][0] - way[i][0], way[i + 1][1] - way[i][1])) {
+      left -= Math.hypot(way[i + 1][0] - way[i][0], way[i + 1][1] - way[i][1]);
+      i++;
+    }
+    const [ax, az] = way[i];
+    const [bx, bz] = way[i + 1];
+    const d = Math.hypot(bx - ax, bz - az) || 1;
+    const k = Math.min(1, left / d);
+    return { x: ax + (bx - ax) * k, z: az + (bz - az) * k, yaw: Math.atan2(bx - ax, bz - az) };
+  };
+  add({
+    dur: 10,
+    world: bay,
+    time: 0.3,
+    cut: 'white',
+    out: 'fade',
+    setup() {
+      renderer.setFog(fog);
+      for (const [i, look] of KIDS.entries()) {
+        kid(look, (t) => {
+          const p = walkAt(t, i * 1.6);
+          const x = p.x + (i - 1) * 1.2;
+          return { x, y: groundY(bay.world, x, p.z), z: p.z, yaw: p.yaw, anim: t > 0.3 ? ANIM.walk : ANIM.idle, speed: 2.6, emote: t > 7.5 ? 'cheer' : undefined };
+        });
+      }
+      prop(skyLantern(1, () => false), () => ({ x: lantern[0] + 0.5, y: lantern[1] + 2.6, z: lantern[2] + 0.5 }));
+    },
+    fx(t) {
+      const lead = walkAt(t, 0);
+      const fresh = unveil(fog, lead.x, lead.z, 22);
+      if (fresh.length) renderer.fogChanged(fog, fresh);
+    },
+    camera: keys([
+      { t: 0, pos: [sp.x + 9, sp.y + 4, sp.z + 12], look: [sp.x, sp.y + 1.5, sp.z - 4], fov: 50 },
+      { t: 10, pos: [sp.x + 16, sp.y + 22, sp.z + 26], look: [sp.x - 4, sp.y + 2, sp.z - 40], fov: 56 },
+    ]),
+  });
+  const last = shots.at(-1).start;
+  overlays.push(caption(last + 0.5, 4.2, 'Wherever you go, the clouds roll back — for everyone. Find every battle, win them all, and light the Sky Lanterns again!'));
+  overlays.push(titleCard(last + 5, 4.6, 'Toon Isle', 'Episode 5 · Light all five Sky Lanterns — together!', { size: 84 }));
+  return { shots, overlays, poster: last + 7 };
+}
+
+// ------------------------------------------------------------ the ending, episode 5
+
+// Its ending: Baron Bluster popped on his arena, whizzing round and round
+// and shrinking to a little white cloud; the five Sky Lanterns floating up
+// together; the Cloud Blanket blowing away off Lollipop Bay; everyone on the
+// beach under the lanterns, with fireworks; the credits; and the little cloud
+// watering the toadstools, politely.
+function ending5() {
+  const top = isle(TOON_FROM + 4);
+  const bay = isle(TOON_FROM);
+  const woods = isle(TOON_FROM + 1);
+  const arena = top.battles.find((b) => b.kind === 'showdown');
+  const lantern = bay.hub.lantern;
+  const sp = bay.world.spawn;
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. Pop! The Baron whizzes round and round over his arena, shrinking.
+  add({
+    dur: 7,
+    world: top,
+    time: 0.42,
+    cut: 'fade',
+    setup() {
+      renderer.setFog(null);
+      monster('bluster', (t) => {
+        const k = ease(Math.min(1, t / 5));
+        const a = t * (3 + t * 1.2);
+        const r = t < 1.2 ? 0 : 6 * Math.sin(Math.min(1, (t - 1.2) / 4.5) * Math.PI);
+        return { x: arena.x + Math.cos(a) * r, y: arena.y + 3 + k * 5, z: arena.z + Math.sin(a) * r, yaw: a + Math.PI / 2, state: t < 1.2 ? 'dazed' : 'giggle', scale: 1 - 0.72 * k };
+      });
+      for (const [i, look] of KIDS.entries()) {
+        const x = arena.x + 7 + i * 1.6;
+        const z = arena.z + 6 - i;
+        kid(look, (t) => ({ x, y: groundY(top.world, x, z), z, yaw: Math.atan2(arena.x - x, arena.z - z), emote: t > 1.4 ? 'cheer' : 'surprise', anim: ANIM.idle }));
+      }
+    },
+    fx(t) {
+      once(shots[0], 'pop', t, 1, () => {
+        renderer.effects.confetti(arena.x, arena.y + 4, arena.z, 160, 1.6);
+        renderer.effects.sparkles(arena.x, arena.y + 4, arena.z, 60, ['#ffffff', '#e6defa', '#fff3a0']);
+      });
+    },
+    camera: keys([
+      { t: 0, pos: [arena.x + 14, arena.y + 4, arena.z + 14], look: [arena.x, arena.y + 3, arena.z], fov: 50 },
+      { t: 7, pos: [arena.x + 18, arena.y + 6, arena.z + 18], look: [arena.x, arena.y + 7, arena.z], fov: 54 },
+    ]),
+  });
+  overlays.push(caption(0.8, 6, 'Baron Bluster is popped, top hat and all! He goes off like a burst balloon, whizzing round and round, shrinking as he goes…'));
+
+  // 2. The five Sky Lanterns float up together.
+  add({
+    dur: 7,
+    world: top,
+    time: 0.74,
+    cut: 'cut',
+    setup() {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const l = skyLantern(1, () => true);
+        prop(l, (t) => ({ x: arena.x + Math.cos(a + t * 0.15) * (3 + t * 0.8), y: arena.y + 2 + t * 2.4 + Math.sin(t * 2 + i) * 0.3, z: arena.z + Math.sin(a + t * 0.15) * (3 + t * 0.8), rz: Math.sin(t * 1.5 + i) * 0.1 }));
+      }
+    },
+    fx() {
+      if (Math.random() < 0.3) renderer.effects.sparkles(arena.x + (Math.random() - 0.5) * 10, arena.y + 6 + Math.random() * 10, arena.z + (Math.random() - 0.5) * 10, 4, ['#fff3a0', '#ffd84d', '#ffffff']);
+    },
+    camera: keys([
+      { t: 0, pos: [arena.x + 16, arena.y + 2, arena.z + 16], look: [arena.x, arena.y + 4, arena.z], fov: 52 },
+      { t: 7, pos: [arena.x + 20, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 16, arena.z], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots[1].start + 0.5, 6, 'All five Sky Lanterns float up together, brighter than ever…'));
+
+  // 3. …and the Cloud Blanket blows away, from the middle out.
+  const fog = blanket(bay.world, [[sp.x, sp.z, 30]]);
+  add({
+    dur: 8,
+    world: bay,
+    time: 0.36,
+    cut: 'flash',
+    setup() {
+      renderer.setFog(fog);
+    },
+    fx(t) {
+      const fresh = unveil(fog, 128, 124, Math.max(0, (t - 0.6) * 26));
+      if (fresh.length) renderer.fogChanged(fog, fresh);
+    },
+    camera: keys([
+      { t: 0, pos: [128 + 60, SEA + 70, 124 + 120], look: [128, SEA + 6, 118], fov: 54 },
+      { t: 8, pos: [128 + 80, SEA + 90, 124 + 140], look: [128, SEA + 4, 112], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots[2].start + 0.6, 7, 'And the Cloud Blanket blows away for good: Toon Isle shines in the sun from end to end, brighter than any cartoon!'));
+
+  // 4. Everyone on the beach of Lollipop Bay, the Sky Lantern lit, fireworks.
+  add({
+    dur: 8,
+    world: bay,
+    time: 0.3,
+    cut: 'fade',
+    setup() {
+      renderer.setFog(null);
+      prop(skyLantern(1, () => true), (t) => ({ x: lantern[0] + 0.5, y: lantern[1] + 2.6 + Math.sin(t * 2) * 0.1, z: lantern[2] + 0.5 }));
+      for (const [i, look] of KIDS.entries()) {
+        const x = lantern[0] + 4 + i * 1.6;
+        const z = lantern[2] + 5 - i * 0.6;
+        kid(look, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.PI + 0.5, emote: (t + i) % 3 < 1.5 ? 'cheer' : 'wave', anim: ANIM.idle }));
+      }
+      for (let i = 0; i < 3; i++) {
+        const x = lantern[0] - 4 - i * 1.4;
+        const z = lantern[2] + 4 + i;
+        critter('bunny', (t) => ({ x: x + Math.sin(t * 2 + i) * 0.4, y: groundY(bay.world, x, z), z, yaw: 0.5 * i, state: 'hop', moving: true }));
+      }
+    },
+    fx(t) {
+      if (Math.random() < 0.09) renderer.effects.firework(lantern[0] - 20 + Math.random() * 40, lantern[1] + 18 + Math.random() * 10, lantern[2] - 30 + Math.random() * 30);
+      if (t < 0.1) renderer.effects.confetti(lantern[0] + 3, lantern[1] + 4, lantern[2] + 3, 160, 1.5);
+    },
+    camera: keys([
+      { t: 0, pos: [lantern[0] + 10, lantern[1] + 2.5, lantern[2] + 16], look: [lantern[0] + 1, lantern[1] + 2.5, lantern[2]], fov: 54 },
+      { t: 8, pos: [lantern[0] + 14, lantern[1] + 6, lantern[2] + 22], look: [lantern[0], lantern[1] + 6, lantern[2]], fov: 58 },
+    ]),
+  });
+  overlays.push(caption(shots[3].start + 0.5, 7.2, 'The Sky Lanterns shine over Toon Isle again. Thank you, heroes!'));
+
+  // 5. The credits, over the island at sunset.
+  add({
+    dur: 14,
+    world: bay,
+    time: 0.71,
+    cut: 'fade',
+    fx() {
+      if (Math.random() < 0.03) renderer.effects.firework(100 + Math.random() * 60, SEA + 30 + Math.random() * 10, 100 + Math.random() * 40);
+    },
+    camera: orbit([128, SEA + 6, 124], 120, 60, 0.6, -0.2, 14, 50),
+  });
+  const cast = TOON_CHAPTERS.flatMap((ch) => ch.battles.filter((b) => b.kind === 'hunt').map((b) => `🐾 ${b.who}`));
+  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#Toon Isle', 'Episode 5', '', '#Starring', 'You and your friends', '', '#and', '🎩 Baron Bluster', ...cast, '🥚 the Storm Nests', '', '#The five Sky Lanterns', ...TOON_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+
+  // 6. The little cloud, watering the toadstools. Politely.
+  const shroomAt = (() => {
+    const { world } = woods;
+    for (let x = 60; x < 200; x++) for (let z = 60; z < 200; z++) for (let y = world.H - 2; y > SEA; y--) if (world.get(x, y, z) === B.TOON_SHROOM) return [x + 0.5, y, z + 0.5];
+    return [128, SEA + 4, 128];
+  })();
+  add({
+    dur: 7,
+    world: woods,
+    time: 0.3,
+    cut: 'fade',
+    out: 'fade',
+    setup() {
+      renderer.setFog(null);
+      monster('bluster', (t) => ({ x: shroomAt[0] + Math.sin(t * 0.6) * 0.6, y: shroomAt[1] + 6.5 + Math.sin(t * 1.4) * 0.2, z: shroomAt[2], yaw: 1.2, state: 'idle', scale: 0.32 }));
+    },
+    fx() {
+      if (Math.random() < 0.6) renderer.effects.add('drop', shroomAt[0] + (Math.random() - 0.5) * 1.2, shroomAt[1] + 6, shroomAt[2] + (Math.random() - 0.5) * 1.2, { vy: -6, size: 0.12, life: 0.7, color: '#8fc9ff' });
+    },
+    camera: keys([
+      { t: 0, pos: [shroomAt[0] + 8, shroomAt[1] + 4, shroomAt[2] + 6], look: [shroomAt[0], shroomAt[1] + 4, shroomAt[2]], fov: 46 },
+      { t: 7, pos: [shroomAt[0] + 6, shroomAt[1] + 4.5, shroomAt[2] + 5], look: [shroomAt[0], shroomAt[1] + 4.5, shroomAt[2]], fov: 44 },
+    ]),
+  });
+  const teaser = shots.at(-1).start;
+  overlays.push(caption(teaser + 0.4, 4, 'And the Baron? He is a little white cloud now, and every morning he waters the toadstools. Politely.'));
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return { shots, overlays, poster: shots[3].start + 5 };
+}
+
+export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5 };

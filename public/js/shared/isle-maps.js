@@ -27,6 +27,7 @@ import { World } from './world.js';
 import { palette } from './worldgen.js';
 import { WILD_MAPS } from './isle-wild.js';
 import { BELL_MAPS, mirrorQuests } from './isle-bells.js';
+import { mirrorBattles, TOON_MAPS } from './isle-toon.js';
 
 export const ISLE_SIDE = 128;
 const SEA = 20;
@@ -64,7 +65,8 @@ class Maker {
   constructor(chapter, seed) {
     this.ch = chapter;
     this.seed = seed;
-    this.S = ISLE_SIDE;
+    // (Toon Isle's islands are bigger: isle-story.js EPISODES side.)
+    this.S = chapter.episode?.side ?? ISLE_SIDE;
     this.sea = SEA;
     this.rng = new Rng(seed);
     this.pal = { ...palette(chapter.theme), ...(chapter.pal ?? {}) };
@@ -3418,7 +3420,7 @@ function vale(m) {
   return { fruit: B.FRUIT_ITEMS[4] };
 }
 
-const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale, ...WILD_MAPS, ...BELL_MAPS };
+const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale, ...WILD_MAPS, ...BELL_MAPS, ...TOON_MAPS };
 
 // ---------------------------------------------------------------- the isle
 
@@ -3449,7 +3451,9 @@ export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
     .map(({ s }, i) => ({ id: i + 1, kind: s.kind, x: s.x, y: s.level + 1, z: s.z, r: s.r }));
   // (A chapter of the fourth episode has challenges and its bell's cage
   // instead of camps: isle-bells.js.)
-  const out = { world, critters, fruit: made.fruit ?? B.FRUIT_ITEMS[0], mines: [], camps, defense: null, gates: m.gates, chestSpots: m.chestSpots(), quests: made.quests ?? null, hub: made.hub ?? null, debug: { routes: m.routes, spots: m.spots } };
+  // (Or, of the fifth, battles, their Sky Lantern for a hub, and the ways the
+  // Storm Gang's gangs go along: isle-toon.js.)
+  const out = { world, critters, fruit: made.fruit ?? B.FRUIT_ITEMS[0], mines: [], camps, defense: null, gates: m.gates, chestSpots: m.chestSpots(), quests: made.quests ?? null, hub: made.hub ?? null, battles: made.battles ?? null, roads: made.roads ?? null, debug: { routes: m.routes, spots: m.spots } };
   // Told again on a later journey, a chapter is its own map turned over:
   // mirrored left to right on journey 2, top to bottom on journey 3, both on
   // journey 4, and so on round again — the way going the other way round.
@@ -3501,6 +3505,8 @@ function mirror(made, alongX, alongZ) {
     }
   }
   // (And a chapter's challenges and its bell's cage: isle-bells.js.)
-  if (made.quests || made.hub) mirrorQuests(made, W, D, alongX, alongZ);
+  if (made.quests) mirrorQuests(made, W, D, alongX, alongZ);
+  // (Or its battles, their Sky Lantern and its ways: isle-toon.js.)
+  else if (made.battles) mirrorBattles(made, W, D, alongX, alongZ);
   made.debug = null;
 }

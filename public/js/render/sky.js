@@ -102,6 +102,13 @@ const JUNGLE_TINT = new THREE.Color('#a8e6b0');
 const LAGOON_TINT = new THREE.Color('#46d6e0');
 const MOOR_TINT = new THREE.Color('#4b3fb5');
 const VALE_TINT = new THREE.Color('#a3a7ad');
+// And Toon Isle of its fifth episode, a cartoon's skies: bright cyan over the
+// bay and the woods, warm over the canyon, icy over the peaks, and a stormy
+// purple over Thunder Top.
+const TOON_TINT = new THREE.Color('#8fe6ff');
+const TOON_CANYON_TINT = new THREE.Color('#ffc27a');
+const TOON_PEAK_TINT = new THREE.Color('#d6ecff');
+const TOON_STORM_TINT = new THREE.Color('#6d5fb8');
 
 // Everything the scene's lighting needs for a moment of the day.
 export function environment(time, weather, theme, out = {}) {
@@ -156,6 +163,15 @@ export function environment(time, weather, theme, out = {}) {
   } else if (theme === 'vale') {
     horizon.lerp(VALE_TINT, 0.6);
     top.lerp(VALE_TINT, 0.45);
+  } else if (theme === 'toonbay' || theme === 'toonwood') {
+    horizon.lerp(TOON_TINT, 0.3 * day);
+  } else if (theme === 'tooncanyon') {
+    horizon.lerp(TOON_CANYON_TINT, 0.35 * day);
+  } else if (theme === 'toonpeak') {
+    horizon.lerp(TOON_PEAK_TINT, 0.35 * day);
+  } else if (theme === 'toonstorm') {
+    horizon.lerp(TOON_STORM_TINT, 0.4);
+    top.lerp(TOON_STORM_TINT, 0.35);
   }
   const sunAngle = (time - 0.25) * Math.PI * 2;
   out.sunDir = (out.sunDir ?? new THREE.Vector3()).set(Math.cos(sunAngle), Math.sin(sunAngle), 0.32).normalize();

@@ -95,6 +95,19 @@ export function palette(theme) {
       return { top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, rock: B.STONE, rockAt: 15, peak: B.SNOW, peakAt: 19, flowers: [B.BLUEBELL, B.DAISY], grass: B.TALL_GRASS, path: B.PEBBLES };
     case 'wildfen':
       return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.DIRT, cliff: B.STONE, flowers: [B.REEDS, B.REEDS, B.MUSHROOM, B.FERN], grass: B.REEDS, path: B.DIRT };
+    // Toon Isle of its fifth episode, drawn as a cartoon (render/cartoon.js):
+    // a bay, woods of giant toadstools, a canyon, snowy peaks and the stormy
+    // top where Baron Bluster waits.
+    case 'toonbay':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.TULIP, B.DAISY, B.SUNFLOWER, B.COSMOS], grass: B.TALL_GRASS, path: B.DIRT };
+    case 'toonwood':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.MUSHROOM, B.TULIP, B.BLUEBELL, B.DAISY], grass: B.TALL_GRASS, path: B.DIRT };
+    case 'tooncanyon':
+      return { rockAt: 99, top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, cliff: B.STONE, flowers: [B.SUNFLOWER, B.COSMOS], grass: 0, path: B.DIRT };
+    case 'toonpeak':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, peak: B.SNOW, peakAt: 13, flowers: [B.BLUEBELL, B.DAISY], grass: B.TALL_GRASS, path: B.PEBBLES };
+    case 'toonstorm':
+      return { rockAt: 99, top: B.GRASS, under: B.DIRT, deep: B.STONE, beach: B.PEBBLES, cliff: B.STONE, flowers: [B.BLUEBELL, B.MUSHROOM, B.COSMOS], grass: B.TALL_GRASS, path: B.PEBBLES };
     case 'desert':
       return { top: B.SAND, under: B.SAND, deep: B.STONE, beach: B.SAND, flowers: [], grass: 0 };
     case 'volcano':
