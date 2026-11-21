@@ -308,11 +308,16 @@ export class Room {
       this.world = made.world;
       this.critters = new CritterSim(s ^ 0x5bd1e995);
       this.critters.max = maxCritters(this.world);
+      // (On a chapter of the isle told in challenges, its own animals first —
+      // its monkeys, its lost chicks, Jinx — so there is always room for them.)
+      if (isle) {
+        this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots, quests: made.quests, hub: made.hub }, s ^ 0x510e527f);
+        this.adventure.setup(this.world, this.critters);
+      }
       for (const c of made.critters) this.critters.add(c.type, c.x, c.y, c.z, null, c.yaw);
       this.settings = cleanSettings(settings);
       this.env = { time: 0.3, weather: 'clear', left: 240 };
       this.rng = new Rng(s ^ 0x27d4eb2d);
-      if (isle) this.adventure = new AdventureSim({ camps: made.camps, stage: this.stage, journey: this.journey, gates: made.gates, chestSpots: made.chestSpots }, s ^ 0x510e527f);
       if (made.defense) this.defense = new DefenseSim(made.defense, s ^ 0x2b992ddf);
     }
     // Never saved: an island opened again starts without any.
@@ -1278,7 +1283,8 @@ export class Room {
       case 'invite': {
         // A fun park's rides are built with it, not brought.
         // Nor are fireflies: they come out by themselves at night.
-        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || CRITTER_INFO[msg.type].look || ![msg.x, msg.y, msg.z].every(finite)) return;
+        // Nor do the isle's own (Jinx the Magpie): only the isle puts them anywhere.
+        if (!CRITTER_INFO[msg.type] || isFixed(msg.type) || CRITTER_INFO[msg.type].look || CRITTER_INFO[msg.type].story || ![msg.x, msg.y, msg.z].every(finite)) return;
         // A dragon comes only to those who have tamed a volcano island's
         // dragon often enough (dragon.js TAMES_TO_INVITE: their page keeps
         // count and only sends for one then), and tame: one of your own.
@@ -1630,6 +1636,9 @@ export class Room {
     this.stepDragons(now, where);
     // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
     if (this.adventure && this.shared) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
+    // Jinx on his bell's cage, on a chapter told in challenges: watching
+    // everyone, and off he flies once it is won.
+    if (this.adventure?.perched) this.adventure.stepPerch(this.world, now, [...where].map(([id, w]) => ({ id, ...w })));
     // So do its treasure chests: put down, and gone a while after they open.
     if (this.adventure && this.shared) {
       const cells = this.adventure.stepChests(this.world, now).flat();
@@ -1769,6 +1778,11 @@ export class Room {
     if (adv?.active) {
       for (const news of adv.step(this.world, dt, now, people, this.monsters, this.online)) {
         if (news.t === 'ambush') this.broadcast({ t: 'ambush', id: news.camp.id, n: news.count });
+        // A chapter told in challenges (isle-quests.js): what everyone sees
+        // and hears of them, what they change on the island, and each beaten.
+        else if (news.t === 'qfx') this.broadcast(news);
+        else if (news.t === 'cells') this.natureEdit(news.cells);
+        else if (news.t === 'quest') this.questDone(news);
         else this.campFreed(news);
       }
       // The isle's hazards on the way (adventure.js stepHazards): shown
@@ -2853,6 +2867,28 @@ export class Room {
   // A camp of Adventure Isle freed: its monsters go pop, its gloomy ground
   // turns back into the island's own, and everyone hears (and, with the
   // last camp, that the boss's bubble popped).
+  // One of Jinx's challenges beaten (isle-quests.js): its lock on the bell's
+  // cage lit, everyone told (and who beat it: a key quiz for them, as for a
+  // camp freed) — and with that the last, the cage opens and the stage is won.
+  questDone(news) {
+    const q = news.quest;
+    this.natureEdit(news.cells);
+    this.broadcast({ t: 'quest', id: q.id, by: news.by, ...(news.won ? { won: true } : {}) });
+    if (news.won) {
+      const bell = this.adventure.hub?.bell ?? [this.world.spawn.x, this.world.spawn.y, this.world.spawn.z];
+      this.broadcast({ t: 'won', by: this.onlinePlayers().map((p) => p.id), x: bell[0] + 0.5, y: bell[1], z: bell[2] + 0.5, board: this.stageBoard() });
+      this.allWell();
+    }
+    this.changed();
+  }
+
+  // Challenges beaten before (kept over a restart: server/adventure.js),
+  // beaten again with nobody there to see.
+  restoreQuests(ids) {
+    const cells = this.adventure?.restoreQuests(this.world, ids) ?? [];
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+  }
+
   campFreed(news) {
     const c = news.camp;
     for (const m of news.gone) {
@@ -3178,6 +3214,14 @@ export class Room {
   natureCell([x, y, z], id) {
     this.world.set(x, y, z, id);
     this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells: [x, y, z, id] });
+    this.changed();
+  }
+
+  // Many cells changed by the island itself, as one edit ([x, y, z, id, ...]).
+  natureEdit(cells) {
+    if (!cells?.length) return;
+    for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+    this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
     this.changed();
   }
 

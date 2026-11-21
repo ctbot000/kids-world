@@ -33,7 +33,8 @@ export function setUpIsle({ h, ago }) {
   function row(game, count) {
     const ch = chapterOf(game.stage);
     const who = game.by ? `started by ${game.by}` : 'the first game';
-    const about = [`${stageName(game.stage)}: ${ch.name}`, game.journey > 1 ? `journey ${game.journey}` : '', `${game.freed} of ${game.camps} camps free`].filter(Boolean).join(' · ');
+    // (A chapter of the fourth episode has challenges, each a lock, not camps.)
+    const about = [`${stageName(game.stage)}: ${ch.name}`, game.journey > 1 ? `journey ${game.journey}` : '', `${game.freed} of ${game.camps} ${ch.quests ? 'locks open' : 'camps free'}`].filter(Boolean).join(' · ');
     const when = [`${who}, ${ago(game.startedAt)}`, `last played ${ago(game.playedAt)}`, game.code ? `code ${prettyCode(game.code)}` : ''].filter(Boolean).join(' · ');
     return h(
       'li',

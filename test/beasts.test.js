@@ -492,7 +492,8 @@ test('the Wild Isle’s boar is a beast of its own, on the end of the kinds, in 
 
 test('every chapter of the story has champions of its own in its later camps, extra guards that do not come back and must go before the flag can rise', () => {
   const champs = new Set();
-  for (const ch of CHAPTERS) {
+  // (The fourth episode's chapters have no camps: Jinx's challenges instead.)
+  for (const ch of CHAPTERS.filter((c) => !c.quests)) {
     assert.equal(ch.champions.length, ch.camps.length - 1, `${ch.key}: one for each camp from the second`);
     for (const k of ch.champions) {
       assert.ok(isBeast(k), `${ch.key}: ${k}`);

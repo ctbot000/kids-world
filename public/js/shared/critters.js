@@ -39,7 +39,7 @@ import { Rng } from './rng.js';
 // New kinds go on the end: the wire sends the index. (The giant mosquitos
 // left the list when they turned hostile: they are a monster kind now,
 // monsters.js. An old save with one as an animal is loaded without it.)
-export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo', 'rope', 'camel'];
+export const CRITTER_TYPES = ['bunny', 'chick', 'sheep', 'duck', 'butterfly', 'bird', 'owl', 'bee', 'seagull', 'fish', 'dolphin', 'whale', 'turtle', 'crab', 'octopus', 'penguin', 'seal', 'pony', 'cow', 'elephant', 'giraffe', 'reindeer', 'polarbear', 'unicorn', 'car', 'boat', 'digger', 'minecart', 'bus', 'ferry', 'helicopter', 'balloon', 'scooter', 'dragon', 'carousel', 'ferris', 'firefly', 'clam', 'dog', 'sled', 'paintvan', 'mower', 'kart', 'coaster', 'hoop', 'lion', 'tiger', 'zebra', 'hippo', 'rhino', 'panda', 'flamingo', 'monkey', 'kangaroo', 'rope', 'camel', 'magpie'];
 // The sand of the beach and the sea floor, where crabs and turtles keep; and
 // the cold shore of a snowy island, where penguins and seals do.
 const SANDY = new Set([B.SAND, B.PEBBLES]);
@@ -60,6 +60,11 @@ export const CRITTER_INFO = {
   bird: { name: 'Bird', icon: '🐦', speed: 4.2, swims: false, flies: true, names: ['Skye', 'Robin', 'Melody', 'Whistle', 'Feather', 'Kiwi', 'Pepper', 'Wren', 'Tilly', 'Dash'] },
   owl: { name: 'Owl', icon: '🦉', speed: 3.2, swims: false, flies: true, nocturnal: true, names: ['Hootie', 'Ollie', 'Luna', 'Starry', 'Moony', 'Professor', 'Twig', 'Nutmeg', 'Hazel', 'Pinecone'] },
   bee: { name: 'Bee', icon: '🐝', speed: 2.2, swims: false, flies: true, names: ['Buzzy', 'Bumble', 'Stripes', 'Nectar', 'Pollen', 'Fuzzy', 'Bizzy', 'Jellybean', 'Dot', 'Zippy'] },
+  // Jinx the Magpie, of Adventure Isle's fourth episode (isle-quests.js): a
+  // magpie as big as a kid, black and white with a long blue-green tail, and
+  // only ever where the isle puts him (held: it steers him), never in the
+  // toy box.
+  magpie: { name: 'Magpie', icon: '🐦', speed: 4, swims: false, flies: true, story: true, names: ['Jinx'] },
   // A firefly is only for looking at: it comes out over the flowers at night
   // (the room invites them at dusk and sees them off at dawn, Room.stepFireflies)
   // and is never in the toy box, nor saved with the island.
@@ -223,7 +228,7 @@ export const isFixed = (type) => Boolean(CRITTER_INFO[type]?.fixed);
 // The animals, without the vehicles — without the wild ones, which are
 // their island's own (the dragon), to invite only once tamed — and without
 // the look-only ones that come and go on their own (the firefly).
-export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look);
+export const ANIMAL_TYPES = CRITTER_TYPES.filter((type) => !CRITTER_INFO[type].vehicle && !CRITTER_INFO[type].wild && !CRITTER_INFO[type].look && !CRITTER_INFO[type].story);
 // What is taken up in your hands or round your waist from where it was put
 // down, rather than ridden: a hula hoop and a jump rope. The island moves one
 // with whoever has it (their hooper) until it drops.
@@ -1141,6 +1146,9 @@ export class CritterSim {
 
   stepOne(world, c, dt, now, players, night) {
     const info = CRITTER_INFO[c.type];
+    // Steered by something else (Adventure Isle's challenges: isle-quests.js),
+    // it goes only where that puts it.
+    if (c.held) return;
     if (c.rider) {
       const rider = players.get(c.rider);
       if (rider) {
@@ -1430,7 +1438,9 @@ export class CritterSim {
       this.fall(world, c, dt);
       return;
     }
-    const speed = info.speed * (leader ? 1.6 : 1) * (c.state === 'slide' ? 2.4 : 1);
+    // (pace: quicker still, for a lost animal keeping up with whoever is
+    // leading it home: isle-quests.js.)
+    const speed = info.speed * (leader ? 1.6 * (c.pace ?? 1) : 1) * (c.state === 'slide' ? 2.4 : 1);
     const step = Math.min(d, speed * dt);
     const nx = c.x + (dx / d) * step;
     const nz = c.z + (dz / d) * step;

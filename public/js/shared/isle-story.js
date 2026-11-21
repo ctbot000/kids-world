@@ -36,6 +36,19 @@
 // Thunder Falls, Snowcap Ridge and Murk Fen, where his tower stands. Each won
 // brings a Sunstone back.
 //
+// Episode 4, "The Golden Bells", is told another way altogether: no camps,
+// no gates and no castle, and no monsters at all. Jinx the Magpie, the
+// cheekiest bird on the seven seas, has carried off the five Golden Bells
+// that ring the isle awake every morning (no magpie can leave anything shiny
+// alone) and locked each in a cage on one of his Puzzle Isles, with a lock
+// for every one of his challenges there: shinies to find, a golden key at
+// the top of something tall, a monkey to catch, lost chicks or sheep to lead
+// home, bonfires to light all at once, a tune of Singing Stones to sing back
+// (isle-quests.js has the rules of each). The islands are open to roam, the
+// challenges done in any order; the last of all, on his own island, is to
+// catch Jinx himself. Five chapters: Bellbuoy Bay, Henhouse Hills, Topsy
+// Gardens, Kite Cliffs and the Magpie's Nest. Each won rings a bell again.
+//
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
@@ -109,6 +122,21 @@ export const EPISODES = [
     again: (journey) =>
       `Journey ${journey}! Old Murk crept back out of the sea fog, greyer and grumpier than ever, and took the Sunstones all over again — and the Wild Isle has turned itself about, so the way goes round the other side.`,
   },
+  {
+    n: 4,
+    key: 'bells',
+    icon: '🔔',
+    title: 'The Golden Bells',
+    villain: 'Jinx the Magpie',
+    // Told in challenges, not camps (isle-quests.js): each chapter's are in
+    // its `quests`, and there is no boss to pop.
+    quests: true,
+    token: { one: 'Golden Bell', many: 'Golden Bells', icon: '🔔' },
+    ticket: { icon: '🪶', name: 'Magpie Feather' },
+    films: { intro: 'intro4', ending: 'ending4', endingMs: 44000 },
+    again: (journey) =>
+      `Journey ${journey}! Jinx the Magpie never could keep away from anything shiny for long: he carried off the Golden Bells all over again — and the Puzzle Isles have turned themselves about, so everything is round the other side.`,
+  },
 ];
 
 // Each chapter: its key (which map, isle-maps.js), icon and name, the kind
@@ -126,6 +154,12 @@ export const EPISODES = [
 // episode: which episode it is a chapter of, if not the first; level: how hard
 // it is, as a stage of the first episode is (adventure.js: its guards, its
 // boss's hearts and all the rest), if not as hard as its place in its episode.
+// quests: in place of camps, a lair and a boss, the challenges of a chapter of
+// the fourth episode (isle-quests.js), each { kind, name, hint (what to do),
+// done (what is told once it is), animal (what is caught or led home, for
+// those that have one), who (its name, for a monkey to catch), after (open
+// only once every other is done) }, its map
+// laying each out in the same order (isle-bells.js).
 export const CHAPTERS = [
   {
     key: 'shore',
@@ -662,6 +696,95 @@ export const CHAPTERS = [
     ],
     won: 'Old Murk is popped, fog and all! His fog blows away over the sea, and all five Sunstones fly up together, and the sun shines on the Wild Isle as it has not shone for a hundred years. Old Murk curls up in a sunny spot — it turns out he was only ever cold.',
   },
+  // ------------------------------------------------ Episode 4: the Golden Bells
+  {
+    key: 'bellbuoy',
+    episode: 4,
+    level: 10,
+    icon: '🏖️',
+    name: 'Bellbuoy Bay',
+    theme: 'sunny',
+    weather: ['clear', 'clear', 'cloudy'],
+    quests: [
+      { kind: 'finds', name: 'Shinies on the Beach', hint: 'Jinx dropped five shinies as he flew over the bay. They glint! Walk into each one to pick it up.', done: 'Every shiny on the beach is found! Click — a lock on the cage springs open.' },
+      { kind: 'climb', name: 'The Crow’s Nest', hint: 'A golden key glints at the very top of the old wreck’s mast. Climb up and grab it!', done: 'You grabbed the golden key from the crow’s nest! Click — a lock on the cage springs open.' },
+      { kind: 'chase', animal: 'monkey', who: 'Coco', name: 'Catch Coco', hint: 'Coco the monkey ran off with a golden key! Run after him and touch him — he is quick, but he soon runs out of puff.', done: 'Caught! Coco giggles and hands over the golden key. Click — a lock on the cage springs open.' },
+    ],
+    intro:
+      'Home from the Wild Isle, the sun shines and the sea is calm — but the old bell tower on the hill is silent. Its five Golden Bells rang the isle awake every morning, until Jinx the Magpie, the cheekiest bird on the seven seas, carried them all off in the night (no magpie can leave anything shiny alone!) and left a feather behind with a note: “Catch me if you can!” He has locked each bell in a cage on one of his Puzzle Isles, with a lock for every one of his challenges. No monsters this time: Jinx does not fight, he plays tricks — and every island is yours to roam, so beat his challenges in any order you like. The first bell is here in Bellbuoy Bay: find the shinies he dropped, climb to the crow’s nest of the old wreck, and catch Coco, his cheeky monkey!',
+    won: 'Ding, dong! The cage swings open and the first Golden Bell rings out over the bay. Up on the cage, Jinx ruffles his feathers: “Beginner’s luck! You will never get the next one!” — and off he flies.',
+  },
+  {
+    key: 'henhouse',
+    episode: 4,
+    level: 11,
+    icon: '🐔',
+    name: 'Henhouse Hills',
+    theme: 'honey',
+    weather: ['clear', 'clear', 'cloudy'],
+    quests: [
+      { kind: 'lead', animal: 'chick', name: 'Lost Chicks', hint: 'Jinx scared the chicks out of their coop and all over the hills. Walk up to one and it follows you — lead it back into the coop!', done: 'Every chick is home, snug in the coop! Click — a lock on the cage springs open.' },
+      { kind: 'fires', name: 'Bonfire Hills', hint: 'Stand by a bonfire to light it. Each soon burns out, so all three must burn at once — friends make it easy!', done: 'All three bonfires blaze at once, and the farmers come home! Click — a lock on the cage springs open.' },
+      { kind: 'finds', name: 'Golden Eggs', hint: 'Jinx swapped the hens’ eggs for golden ones and hid six of them in the hay and the fields. They glint!', done: 'Every golden egg is found! Click — a lock on the cage springs open.' },
+    ],
+    intro:
+      'One Golden Bell rings again — and its echo comes back from Henhouse Hills, where the plumpest hens on the isle live. Jinx has been busy here too: he scared the chicks out of their coop and all over the hills, put out the bonfires the farmers light to call each other home, and swapped the hens’ eggs for golden ones and hid those. Lead the chicks home, light every bonfire on the hilltops at once, and find the golden eggs!',
+    won: 'Ding, dong! The second Golden Bell rings out over Henhouse Hills, and every hen on the farm clucks along. “Pfff, easy games,” says Jinx from the windmill. “Wait till you see my garden!”',
+  },
+  {
+    key: 'topsy',
+    episode: 4,
+    level: 12,
+    icon: '⛲',
+    name: 'Topsy Gardens',
+    theme: 'tulip',
+    weather: ['clear', 'clear', 'cloudy'],
+    quests: [
+      { kind: 'stones', name: 'The Singing Stones', hint: 'Step into the middle of the ring and listen: the stones sing a tune, one after another. Then step on them in the very same order!', done: 'The Singing Stones sing their whole tune with you! Click — a lock on the cage springs open.' },
+      { kind: 'finds', name: 'The Hedge Maze', hint: 'Five shinies are lost somewhere in the hedge maze. Find your way to every one!', done: 'Every shiny in the maze is found! Click — a lock on the cage springs open.' },
+      { kind: 'chase', animal: 'monkey', who: 'Kiki', name: 'Catch Kiki', hint: 'Kiki the monkey is even quicker than Coco — and she has to be caught twice!', done: 'Caught again! Kiki hands over the gardener’s golden key. Click — a lock on the cage springs open.' },
+      { kind: 'climb', name: 'The Teapot Tower', hint: 'A golden key sits on the lid of the Teapot Tower. Up the spout and round the handle!', done: 'You grabbed the golden key off the teapot’s lid! Click — a lock on the cage springs open.' },
+    ],
+    intro:
+      'Two bells ring together! The third is in Topsy Gardens, the grandest garden on the isle, with its hedge maze, its fountain and its Singing Stones, which hum a note when you step on them. Jinx has made a game of all of it: his shinies are lost in the maze, Kiki the monkey has the gardener’s golden key, the stones will only open their lock for whoever sings their tune back, and another key sits on the lid of the Teapot Tower.',
+    won: 'Ding, dong! The third Golden Bell rings out, and every flower in Topsy Gardens turns to listen. Jinx shakes his tail feathers: “Three?! Well, you will never get up Kite Cliffs!”',
+  },
+  {
+    key: 'kite',
+    episode: 4,
+    level: 13,
+    icon: '🪁',
+    name: 'Kite Cliffs',
+    theme: 'maple',
+    weather: ['clear', 'cloudy'],
+    quests: [
+      { kind: 'climb', name: 'Kite Peak', hint: 'The highest golden key of all hangs at the very top of Kite Peak. Up you go, step by step — and mind the edges!', done: 'You reached the top of Kite Peak and grabbed the key! Click — a lock on the cage springs open.' },
+      { kind: 'fires', name: 'The Cliff Beacons', hint: 'Four beacons stand along the clifftops. Stand by each to light it — and all four must burn at once!', done: 'All four beacons blaze along the cliffs! Click — a lock on the cage springs open.' },
+      { kind: 'stones', name: 'The Wind Stones', hint: 'Up here the stones sing longer tunes. Step into the middle, listen carefully, then step on them in the same order!', done: 'The Wind Stones sing their whole long tune with you! Click — a lock on the cage springs open.' },
+      { kind: 'lead', animal: 'sheep', name: 'Lost Sheep', hint: 'The wind blew the shepherd’s sheep all over the clifftops. Walk up to one and it follows you — lead it back into the fold!', done: 'Every sheep is back in the fold! Click — a lock on the cage springs open.' },
+    ],
+    intro:
+      'Three bells! The fourth is up on Kite Cliffs, where the wind blows so hard that everyone flies kites — and Jinx flies best of all. He has hung a golden key at the very top of Kite Peak, put out the beacons along the cliffs, taught the Wind Stones a long, tricky tune — and the wind has blown the shepherd’s sheep all over the clifftops. Mind the edges!',
+    won: 'Ding, dong! The fourth Golden Bell rings out so loud that the kites dance. Jinx has had enough: “Fine! But the last bell is in MY nest — and nobody has ever caught ME!”',
+  },
+  {
+    key: 'nest',
+    episode: 4,
+    level: 14,
+    icon: '✨',
+    name: 'The Magpie’s Nest',
+    theme: 'moor',
+    weather: ['clear', 'cloudy'],
+    quests: [
+      { kind: 'finds', name: 'Jinx’s Hoard', hint: 'Six of Jinx’s shinies are scattered all round his island. They glint!', done: 'You found all of Jinx’s hoard! Click — a lock on the cage springs open.' },
+      { kind: 'chase', animal: 'monkey', who: 'Bobo', name: 'Catch Bobo', hint: 'Bobo is the quickest monkey of them all — and he has to be caught three times!', done: 'Caught for the third time! Bobo flops down, puffed out, and hands over his golden key. Click — a lock on the cage springs open.' },
+      { kind: 'climb', name: 'The Nest Tree', hint: 'Climb the great tree, branch by branch, to the golden key at the top.', done: 'You grabbed the golden key from the top of the Nest Tree! Click — a lock on the cage springs open.' },
+      { kind: 'jinx', after: true, name: 'Catch Jinx!', hint: 'Jinx sits up on his nest, out of reach. Light every beacon round it at once: he tumbles down, dazzled — catch him before he flies back up! Three times!', done: 'Jinx is caught, fair and square!' },
+    ],
+    intro:
+      'Four Golden Bells ring together, so loud they are heard far out to sea — all the way to a rocky island with an enormous nest on top: Jinx’s own, built of every shiny thing he ever took. The last bell is in a cage beside it. Find his hoard, catch Bobo, the quickest monkey of them all, climb the Nest Tree — and then catch Jinx himself! He sits too high to reach, but no magpie can stand a bright light: light every beacon round his nest at once and down he will tumble, dazzled. Catch him before he flies back up!',
+    won: 'Jinx is caught, fair and square! He gives a great sigh, fluffs up his feathers — and gives back every Golden Bell. All he ever wanted was someone to play with. Now all five Golden Bells ring the isle awake every morning again, and Jinx perches on the bell tower to listen, as good as gold. Well — almost.',
+  },
 ];
 
 // The stages there are to conquer: a stage for each chapter, the episodes one
@@ -735,11 +858,19 @@ export function tokensBack(story) {
 }
 
 // A camp's name on a stage (its id is its place along the way, the lair
-// last), or null past the names the chapter has.
+// last), or null past the names the chapter has. (On a chapter told in
+// challenges, a challenge's name, by its id: questOf.)
 export function campName(stage, id, kind = 'camp') {
   const ch = chapterOf(stage);
+  if (ch.quests) return questOf(stage, id)?.name ?? null;
   if (kind === 'castle') return ch.lair;
   return ch.camps[id - 1] ?? null;
+}
+
+// A challenge of a chapter told in challenges (the fourth episode's), by its
+// id (its place in the chapter's list, from 1), or null.
+export function questOf(stage, id) {
+  return chapterOf(stage).quests?.[id - 1] ?? null;
 }
 
 // What is told on arriving: the chapter's own story, and on a journey after

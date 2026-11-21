@@ -1837,6 +1837,93 @@ const PAINT = {
     star(ctx, 28, 30, 7, 3);
     ctx.fill();
   },
+  // One of Jinx the Magpie's shinies (shared/isle-quests.js): a gold ring
+  // with a blue jewel set in it, in a glow, with a twinkle.
+  trinket(ctx) {
+    const g = ctx.createRadialGradient(32, 34, 2, 32, 34, 30);
+    g.addColorStop(0, 'rgba(255,248,200,0.95)');
+    g.addColorStop(1, 'rgba(255,220,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    ctx.strokeStyle = '#b9831f';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.ellipse(32, 38, 15, 13, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffd84a';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(32, 38, 15, 13, 0, Math.PI * 1.1, Math.PI * 1.45);
+    ctx.stroke();
+    jewel(ctx, 32, 24, 9, '#3f7ee8');
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    star(ctx, 47, 18, 7, 2);
+    ctx.fill();
+  },
+  // A golden egg (shared/isle-quests.js), with a shine on it and a twinkle.
+  'gold-egg'(ctx) {
+    const g = ctx.createRadialGradient(32, 36, 2, 32, 36, 30);
+    g.addColorStop(0, 'rgba(255,246,190,0.9)');
+    g.addColorStop(1, 'rgba(255,214,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    const egg = ctx.createRadialGradient(26, 28, 3, 32, 38, 22);
+    egg.addColorStop(0, '#fff3a6');
+    egg.addColorStop(0.5, '#ffcf3a');
+    egg.addColorStop(1, '#c98a1a');
+    ctx.fillStyle = egg;
+    ctx.beginPath();
+    ctx.ellipse(32, 38, 14, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    outline(ctx, 'rgba(140,80,10,0.7)', 2.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ellipse(ctx, 26, 30, 4, 6, 0.4);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    star(ctx, 47, 18, 7, 2);
+    ctx.fill();
+  },
+  // A golden key, at the top of something to climb (shared/isle-quests.js):
+  // big and bright, its ring up and its teeth down, in a glow.
+  'gold-key'(ctx) {
+    const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+    g.addColorStop(0, 'rgba(255,250,210,0.95)');
+    g.addColorStop(1, 'rgba(255,214,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TILE, TILE);
+    ctx.save();
+    ctx.translate(32, 32);
+    ctx.rotate(-0.6);
+    const gold = (path) => {
+      ctx.fillStyle = '#ffcf3a';
+      path();
+      ctx.fill();
+      outline(ctx, 'rgba(140,80,10,0.8)', 2.5);
+    };
+    gold(() => {
+      ctx.beginPath();
+      ctx.arc(0, -15, 10, 0, Math.PI * 2);
+      ctx.arc(0, -15, 4.5, 0, Math.PI * 2, true);
+    });
+    gold(() => {
+      ctx.beginPath();
+      ctx.rect(-3, -6, 6, 30);
+    });
+    gold(() => {
+      ctx.beginPath();
+      ctx.rect(3, 12, 8, 4);
+      ctx.rect(3, 19, 6, 4);
+    });
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillRect(-1.5, -4, 1.5, 24);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    star(ctx, 48, 16, 7, 2);
+    ctx.fill();
+  },
   // A fish off the line (fishing.js): a plump blue one with a sunny belly,
   // its tail fanned out behind it.
   fish(ctx) {

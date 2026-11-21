@@ -92,7 +92,9 @@ test('every chapter has a boss of its own, on the end of the kinds, in the colle
   assert.deepEqual(MONSTER_KINDS.slice(wild, wild + WILD.length), WILD);
   assert.equal(MONSTER_KINDS.indexOf('king'), 1, 'King Grumble where he was');
   assert.deepEqual(MONSTER_STATES.slice(9, 13), ['rear', 'charge', 'hurl', 'leap']);
-  assert.deepEqual(CHAPTERS.map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW, ...WILD]);
+  // (The fourth episode's chapters have no boss: Jinx's challenges instead.)
+  assert.deepEqual(CHAPTERS.filter((c) => !c.quests).map((c) => c.boss), ['clawbeard', 'puffcap', 'frostfang', 'gumbo', 'scarabold', 'bogmaw', 'glimmershell', 'baronboo', 'moltok', 'sprocket', 'nimbus', 'king', ...RAINBOW, ...WILD]);
+  assert.ok(CHAPTERS.filter((c) => c.quests).every((c) => !c.boss));
   for (const kind of [...KINDS, ...LATER, 'king', ...RAINBOW, ...WILD]) {
     const plan = BOSSES[kind];
     assert.ok(isBoss(kind) && isHeavy(kind), kind);

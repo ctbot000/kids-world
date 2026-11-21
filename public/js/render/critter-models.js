@@ -272,6 +272,55 @@ function bird(id) {
   return { group: g, body, pivot, head, eyes, tail, wings, folded, legs, height: 0.36, shadow: 0.16, flapRate: 26 };
 }
 
+// Jinx the Magpie (Adventure Isle's fourth episode): a magpie on the same rig
+// as the little birds, only as big as a kid — glossy black with a snow-white
+// belly and shoulders, blue-black wings, a long blue-green tail held up
+// behind him, a big dark beak, and a golden bell on a ribbon round his neck
+// (he cannot help himself).
+function magpie() {
+  const S = 5.5;
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  body.scale.setScalar(S);
+  const black = toon('#1c1e26');
+  const white = toon('#f6f6f2');
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.17;
+  body.add(pivot);
+  pivot.add(mesh(sphere(), black, 0, 0, -0.01, 0.11, 0.1, 0.15));
+  pivot.add(mesh(sphere(), white, 0, -0.03, 0.03, 0.085, 0.075, 0.085));
+  for (const side of [-1, 1]) pivot.add(mesh(sphere(), white, side * 0.088, 0.015, -0.03, 0.028, 0.05, 0.075));
+  const head = new THREE.Group();
+  head.position.set(0, 0.105, 0.075);
+  pivot.add(head);
+  head.add(mesh(sphere(), black, 0, 0, 0, 0.08));
+  const eyes = eyesOn(head, 0.08, 0.08, 0.08, 0.042, 0.018, 0.017);
+  head.add(mesh(cone(0.024, 0.075, 8), toon('#2b2b30'), 0, -0.01, 0.105).rotateX(Math.PI / 2));
+  // The bell round his neck, on a red ribbon.
+  pivot.add(mesh(torus(0.062, 0.008), toon('#d8303a'), 0, 0.07, 0.07).rotateX(Math.PI / 2 - 0.5));
+  pivot.add(mesh(sphere(1, 10, 8), toon('#ffcf3a', { emissive: 0.25 }), 0, 0.03, 0.12, 0.022, 0.026, 0.022));
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.03, -0.13);
+  pivot.add(tail);
+  tail.add(mesh(capsule(0.022, 0.32, 4, 8), toon('#1f5f6b'), 0, 0.02, -0.18).rotateX(Math.PI / 2 - 0.1));
+  for (const side of [-1, 1]) tail.add(mesh(capsule(0.016, 0.24, 4, 8), toon('#24484f'), side * 0.028, 0.015, -0.14).rotateX(Math.PI / 2 - 0.1));
+  const folded = [-1, 1].map((side) => {
+    const f = new THREE.Group();
+    f.position.set(side * 0.1, 0.01, -0.03);
+    f.add(mesh(sphere(), toon('#202a40'), 0, 0, 0, 0.032, 0.075, 0.11));
+    f.add(mesh(sphere(), white, side * 0.006, -0.02, 0.03, 0.025, 0.03, 0.05));
+    f.rotation.x = 0.25;
+    pivot.add(f);
+    return f;
+  });
+  const wings = wingPair(pivot, { x: 0.09, y: 0.035, length: 0.3, width: 0.09, color: '#202a40', tip: '#f6f6f2' });
+  const legs = new THREE.Group();
+  for (const side of [-1, 1]) legs.add(mesh(cylinder(0.01, 0.01, 0.09, 6), toon('#2b2b30'), side * 0.035, 0.045, 0.01));
+  body.add(legs);
+  return { group: g, body, pivot, head, eyes, tail, wings, folded, legs, height: 0.38 * S, shadow: 0.16 * S, flapRate: 15, center: 0.2 * S, pick: 0.6, seen: 140 };
+}
+
 function owl(id, theme) {
   const k =
     theme === 'snowy'
@@ -1847,7 +1896,7 @@ function kangaroo(id) {
   return { group: g, body, head, eyes, legs, arms, tail, height: 0.95, pick: 0.42, center: 0.5 };
 }
 
-const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, lion, tiger, zebra, hippo, rhino, panda, flamingo, monkey, kangaroo, camel, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
+const BUILDERS = { bunny, chick, sheep, duck, butterfly, bird, owl, bee, firefly, seagull, fish, dolphin, whale, turtle, crab, octopus, clam, penguin, seal, pony, cow, elephant, giraffe, reindeer, polarbear, unicorn, dog, dragon, lion, tiger, zebra, hippo, rhino, panda, flamingo, monkey, kangaroo, camel, magpie, ...VEHICLE_BUILDERS, ...RIDE_BUILDERS };
 
 export class CritterModel {
   constructor(type, id, theme = 'sunny') {
@@ -1948,6 +1997,7 @@ export class CritterModel {
       case 'bird':
       case 'owl':
       case 'seagull':
+      case 'magpie':
         this.flyer(state, air);
         break;
       case 'bee':
@@ -2205,6 +2255,9 @@ export class CritterModel {
       } else if (this.type === 'owl') {
         // Slow, soft beats, then a long glide down.
         a = this.vy < -0.5 || t % 2.4 > 1.4 ? 0.08 : Math.sin(t * this.flapRate) * 0.75;
+      } else if (this.type === 'magpie') {
+        // Big steady beats, wings swept wide.
+        a = Math.sin(t * this.flapRate) * 0.8;
       } else {
         // A songbird bounds: a burst of beats, then its wings shut a moment.
         a = Math.sin(t * this.flapRate) * 0.85;

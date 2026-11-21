@@ -49,6 +49,7 @@ import { BRUSHES, COLORS as DRAW_COLORS, decodePicture, GALLERY_MAX, isBoard, is
 import { paint } from './render/drawings.js';
 import { DEEDS, MONSTER_BOOK, monsterStats, NEXT_STAGE_SECONDS } from './shared/adventure.js';
 import { CHAPTERS, chapterOf, episodeOf, EPISODES, firstStage, introOf, stageName, ticketFits, ticketNeeded, ticketOf, ticketsHeld } from './shared/isle-story.js';
+import { questLocked, questTags } from './isle-quests-view.js';
 import { caughtKey, popKey, seenKey } from './shared/stickers.js';
 import { DISH_MAX, isDish } from './shared/dish.js';
 import { blockIcon } from './render/atlas.js';
@@ -977,7 +978,7 @@ export class UI {
           const adv = it.adventure
             ? it.adventure.won
               ? '🏆 Freed'
-              : `⚔️ ${stageName(it.adventure.stage, true)} · ${chapterOf(it.adventure.stage).name} · ${it.adventure.freed} of ${it.adventure.camps} camps free`
+              : `⚔️ ${stageName(it.adventure.stage, true)} · ${chapterOf(it.adventure.stage).name} · ${it.adventure.freed} of ${it.adventure.camps} ${chapterOf(it.adventure.stage).quests ? 'locks open' : 'camps free'}`
             : it.defense
               ? it.defense.won
                 ? '🏆 Safe'
@@ -1663,11 +1664,19 @@ export class UI {
           h('h2', { class: 'story-title' }, h('span', { class: 'emoji' }, story.icon), ` Chapter ${story.n}: ${story.name}`),
           this.storyTokens(story, shards),
           h('p', { class: 'story-text' }, introOf(adv.stage, adv.journey)),
-          h(
-            'ol',
-            { class: 'story-way' },
-            ...camps.map((c) => h('li', { class: c.freed ? 'free' : '' }, c.kind === 'castle' ? `${this.game.bossInfo().icon} ` : c.freed ? '🚩 ' : '🏴 ', c.kind === 'castle' ? `${this.game.bossInfo().name} in the ${story.lair}` : this.game.campLabel(c), c.freed ? ' ✓' : '')),
-          ),
+          // Jinx's challenges (the fourth episode), each with what to do; or
+          // the camps one after another along the way, and the lair.
+          adv.quests
+            ? h(
+                'ul',
+                { class: 'story-way quests' },
+                ...[...adv.quests.values()].map((q) => h('li', { class: q.done ? 'free' : '' }, h('b', {}, `${q.icon} ${q.name}${q.done ? ' ✓' : ''}`), h('span', { class: 'muted' }, ` ${q.hint}`))),
+              )
+            : h(
+                'ol',
+                { class: 'story-way' },
+                ...camps.map((c) => h('li', { class: c.freed ? 'free' : '' }, c.kind === 'castle' ? `${this.game.bossInfo().icon} ` : c.freed ? '🚩 ' : '🏴 ', c.kind === 'castle' ? `${this.game.bossInfo().name} in the ${story.lair}` : this.game.campLabel(c), c.freed ? ' ✓' : '')),
+              ),
           h(
             'div',
             { class: 'row story-films' },
@@ -1679,6 +1688,28 @@ export class UI {
       },
       { narrow: true },
     );
+  }
+
+  // On a chapter of the fourth episode (shared/isle-quests.js), the island
+  // card's part about it: its challenges in place of camps, each with its
+  // lock's colour and how it is going, and what to do.
+  questCard(g, adv) {
+    const story = adv.story;
+    const bells = story.shards - (adv.won ? 0 : 1);
+    const status = (q) => (q.done ? 'done ✓' : questLocked(adv, q) ? 'after the rest 🔒' : q.kind === 'climb' ? 'climb up!' : q.kind === 'stones' ? `round ${Math.min(q.of, q.n + 1)} of ${q.of}` : q.kind === 'fires' ? `all ${q.of} at once` : q.kind === 'chase' ? (q.of > 1 ? `caught ${q.n} of ${q.of}` : 'catch him!') : q.kind === 'jinx' ? `caught ${q.n} of ${q.of}` : `${q.n} of ${q.of}`);
+    return [
+      h('h3', {}, adv.won ? `🏆 ${story.name}: the bell is free!` : `${story.icon} Chapter ${story.n}: ${story.name}`),
+      h(
+        'div',
+        { class: 'adventure-list' },
+        h('div', { class: 'camp' }, story.episode.icon, ` Episode ${story.episode.n}`, h('span', { class: 'muted' }, story.episode.title)),
+        h('div', { class: 'camp' }, '🌟', ' Stage', h('span', { class: 'muted' }, `${story.n} of ${story.of}`)),
+        h('div', { class: 'camp' }, '🔔', ' Golden Bells', h('span', { class: 'muted' }, `${bells} of ${story.of}`)),
+        ...[...adv.quests.values()].map((q) => h('div', { class: `camp${q.done ? ' free' : ''}` }, h('span', { class: 'lock-dot', style: `background:${q.color}`, 'aria-hidden': 'true' }), ` ${q.icon} ${q.name}`, h('span', { class: 'muted' }, status(q)))),
+      ),
+      adv.won ? '' : h('p', { class: 'muted' }, 'No monsters here — only Jinx’s tricks! Beat his challenges in any order you like: each opens a lock of its colour on the bell’s cage, where you arrived. 📖 The story says what to do in each.'),
+      h('div', { class: 'row', style: 'justify-content:center;gap:8px' }, h('button', { class: 'chip', type: 'button', onclick: () => this.storyDialog() }, '📖 The story'), h('button', { class: 'chip', type: 'button', onclick: () => this.newIsleGameDialog() }, '🆕 New game')),
+    ];
   }
 
   // What a chapter's episode wins back, and how much of it is back so far:
@@ -2781,7 +2812,7 @@ export class UI {
           card('⌨️', 'Typing', ['Put down a Computer from the toy box\'s 🛋️ Home tab, walk up to it and press ', h('kbd', {}, 'Q'), ' (or tap ⌨️ Type). In ⌨️ Typing practice, copy a line of keys or words: the next key lights up on the keyboard, coloured by the finger that types it. In 🌧️ Word Rain, words fall from the sky: type one to pop it before it lands. Three that land end the game.']),
           card('📚', 'Studying', ['Put down a Study Desk from the toy box\'s 🛋️ Home tab and sit at it (press ', h('kbd', {}, 'Q'), ' beside it, or tap Sit): your workbooks open — adding, taking away, times tables, sharing and spelling. New facts are shown to you first, then you type the answers. Miss one and you see the answer and a way to work it out, and it comes back soon. Get a fact right in four studies and you know it by heart; the bar under each workbook fills up a little with every study. Press ', h('kbd', {}, 'Q'), ' (or tap Study) to open them again, and walk to get up.']),
           card('🔑', 'Key quizzes', ['On 🌟 Adventure Isle, each camp you help free gives you one quiz, at the level you pick: one question, one try, and the right answer is a 🔑 key to a treasure chest. Win a whole stage for one quiz for a 👑 golden key, which opens the golden chest. A quiz comes up by itself; if you shut it, the 🔑 button over the hotbar brings it back.']),
-          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has three episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and everyone there gets the 🎫 Rainbow Ticket, to keep — the only way into the second episode, 🌈 The Rainbow of Adventure Isle, which begins there and then: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Pop Queen Grizzle at its end and everyone there gets the 🧭 Wild Isle Compass, the only way into the third episode, 🏞️ The Wild Isle: an island far out to sea that is not made of bricks at all — real rocks, real trees, real waves and real animals — where Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures there: Driftwood Bay, Deepwood Forest, Thunder Falls, Snowcap Ridge, and Murk Fen, where he waits in his tower. Only popping Old Murk on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or, with your ticket, straight from a later episode (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
+          card('🌟', 'The shared isle', ['The 🌟 Adventure Isle button goes straight to one island everybody conquers together — anyone can come, and the more of you there are, the sooner its bosses go pop. Its story has four episodes, each with a film at its start and its end. In the first, 📖 The Star of Adventure Isle, King Grumble broke the lighthouse’s Star into twelve Star Shards and gave them to his captains to keep, and every stage is a chapter with a map of its own — Shipwreck Shore, the Whispering Woods, Frostpeak Pass, Candy Canyon, Sunscorch Dunes, Misty Marsh, the Crystal Caverns, Haunted Hollow, Ember Mountain, Cogwheel City, the Stormcloud Spires and his castle on Gloom Rock. Free the camps one after another along the way: each one freed opens the gate on to the next (there is no way round a gate: swim round one, and back you go), and at the end waits the chapter’s boss — one of King Grumble’s eleven captains, or at the very last the King himself — each with moves of its own: run out of the red rings, step aside when it charges, jump when it stomps! Pop it for a Star Shard — then 🏆 everyone’s results show what each of you did for the stage, and pay each of you coins and diamonds by how much you helped — and the next chapter is up, harder — after the fireworks everyone there goes on to it by themselves (or tap Go now). The higher stages fight back: flags slide down while monsters hold them, monsters ambush you half way up a flag, and things come down on the way between the camps. Pop King Grumble on its last stage and everyone there gets the 🎫 Rainbow Ticket, to keep — the only way into the second episode, 🌈 The Rainbow of Adventure Isle, which begins there and then: his big sister Queen Grizzle caught the rainbow in her great grey umbrella and hid its seven colours in the Rainbow Lands — the Tulip Fields, Maple Ridge, the Honeycomb Hills, Tangle Jungle, Bubble Lagoon, Moonbeam Moor and Violet Vale — each with a boss of its own, and every one you pop brings a colour back. Pop Queen Grizzle at its end and everyone there gets the 🧭 Wild Isle Compass, the only way into the third episode, 🏞️ The Wild Isle: an island far out to sea that is not made of bricks at all — real rocks, real trees, real waves and real animals — where Old Murk, the Fog Wolf, has stolen its five Sunstones and given them to the biggest creatures there: Driftwood Bay, Deepwood Forest, Thunder Falls, Snowcap Ridge, and Murk Fen, where he waits in his tower. Pop Old Murk and everyone there gets the 🪶 Magpie Feather, the only way into the fourth episode, 🔔 The Golden Bells, which is another kind of adventure altogether: no camps, no gates, no monsters at all. Jinx the Magpie has carried off the isle’s five Golden Bells and locked each in a cage on one of his Puzzle Isles — Bellbuoy Bay, Henhouse Hills, Topsy Gardens, Kite Cliffs and his own Magpie’s Nest — with a lock for each of his challenges there, to beat in any order you like: find the shinies he dropped (they glint!), climb to a golden key at the top of something tall, catch a cheeky monkey (it runs out of puff), lead lost chicks or sheep home, light every bonfire at once, sing back the Singing Stones’ tune, and at the very last, dazzle Jinx with his own beacons and catch him. Only catching Jinx on the very last stage starts the story over, on a new journey — but you can start a new game any time, from stage 1 or, with your ticket, straight from a later episode (🆕 New game in the island’s card, or from 🌟 Adventure Isle on the title), and the other games keep going, each at its own stage. It is an adventure on foot: its toy box stays shut, and you cannot fly on your own there. And it is a world of its own: the ⭐ XP and level you earn, the coins, treasures and gear you have there are the isle’s, apart from yours everywhere else — kept at the island keeper as yours is, and ranked on boards of their own.']),
           card('⛺', 'Tents', ['Stamp a huge Circus Tent or Camping Tent, or build one with tent cloth. Be in a tent at night for a camp out. No monster ever comes in!']),
           card('🍎', 'Treasures', ['Tap fruit, seashells, pearls and star pieces to put them in your basket. Plant fruit to grow a tree! And tap a giant clam in the sandy shallows: sometimes there is a pearl in there for you, sometimes nothing but bubbles.']),
           card('🌾', 'Farming', ['Plant vegetables from your basket on farmland or grass — the 🛒 shop has some to start you off. Water them with the watering can from the toy box’s 🌾 Farm tab (the rain waters them too, and so does water close by) and they grow twice as fast. Tap a ripe one to pick it: each gives you two, to sell, to plant again or to give to an animal!']),
@@ -4544,7 +4575,8 @@ export class UI {
         if (g.song) root.append(h('p', { class: 'muted song-line' }, '🎵 The island song: ', h('b', { lang: langOf(g.song.name) || undefined }, g.song.name)));
         root.append(this.hideSeekPart());
         const adv = g.adventure;
-        if (adv) {
+        if (adv?.quests) root.append(...this.questCard(g, adv));
+        else if (adv) {
           const camps = [...adv.camps.values()];
           const castle = camps.find((c) => c.kind === 'castle');
           // Which stage of the isle this is, and which chapter of its story
@@ -4995,6 +5027,18 @@ export class UI {
     el.hidden = !shown;
     row.hidden = !shown;
     if (!shown) {
+      this.hpShown = Infinity;
+      this.renderPotion();
+      return;
+    }
+    // On a chapter told in challenges (the fourth episode's) nothing ever
+    // bumps you: no HP, only the locks open on the bell's cage so far.
+    if (adv?.quests && !g.settings.monsters) {
+      const all = [...adv.quests.values()];
+      const open = all.filter((q) => q.done).length;
+      el.setAttribute('aria-label', `${open} of ${all.length} locks open`);
+      const text = `🔓 ${open}/${all.length}`;
+      if (el.textContent !== text) el.replaceChildren(h('span', { class: 'camps' }, text));
       this.hpShown = Infinity;
       this.renderPotion();
       return;
@@ -7422,7 +7466,7 @@ export class UI {
           'span',
           { class: 'who' },
           h('b', { lang: langOf(r.name) || undefined }, r.name, r.id === g.pid ? h('span', { class: 'muted' }, ' (you)') : r.here ? null : h('span', { class: 'muted' }, ' (left)')),
-          h('span', { class: 'deeds' }, deed('👾', r.pops, 'Monsters popped'), deed('👑', r.boss, 'Bops on the boss'), deed('🚩', r.flag ? `${r.flag}s` : 0, 'Seconds raising flags'), deed('🤝', r.helps, 'Friends helped up'), r.score ? null : h('span', { class: 'muted' }, 'Came to cheer!')),
+          h('span', { class: 'deeds' }, deed('👾', r.pops, 'Monsters popped'), deed('👑', r.boss, 'Bops on the boss'), deed('🚩', r.flag ? `${r.flag}s` : 0, 'Seconds raising flags'), deed('🤝', r.helps, 'Friends helped up'), deed('🧩', r.play, 'Points at Jinx’s challenges'), r.score ? null : h('span', { class: 'muted' }, 'Came to cheer!')),
         ),
         h('span', { class: 'score' }, `⭐ ${r.score.toLocaleString()}`),
         h('span', { class: 'prize' }, r.here ? [`🪙 ${r.coins}`, r.gems ? ` 💎 ${r.gems}` : ''] : ''),
@@ -7434,7 +7478,7 @@ export class UI {
           h('div', { class: 'dialog-head' }, h('h2', {}, '🏆 ', res.name ? `${res.name} won!` : 'Stage won!')),
           you ? h('p', { class: 'results-you' }, you.place === 1 && res.rows.length > 1 ? '🏅 You helped the most! ' : 'Thank you for helping! ', `You got 🪙 ${you.coins} coins${you.gems ? ` and 💎 ${you.gems} diamond${you.gems > 1 ? 's' : ''}` : ''}.`) : null,
           h('ol', { class: 'ranking results' }, res.rows.map(row)),
-          h('p', { class: 'muted' }, `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on the boss ${DEEDS.boss}, 🚩 a second raising a flag ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.`),
+          h('p', { class: 'muted' }, res.rows.some((r) => r.play) ? 'Points: 🧩 for each thing done at Jinx’s challenges — a shiny found, a key reached, a catch, an animal home, a bonfire lit, a note sung. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.' : `Points: 👾 a monster popped ${DEEDS.pops}, 👑 a bop on the boss ${DEEDS.boss}, 🚩 a second raising a flag ${DEEDS.flag}, 🤝 a friend helped up ${DEEDS.helps}. The more points, the more coins; a 💎 for everyone who helped, and one more for whoever helped the most.`),
           h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done'),
         );
       },
@@ -8566,6 +8610,12 @@ export class UI {
         const label = `${boss.icon} ${boss.name}${adv.shield ? ' 🫧' : ''}`;
         tag('king', p.x, p.y + (king.model.height ?? 1.8) + 1.1, p.z, `${hearts}|${max}|${label}`, () => [h('div', { class: 'label' }, label), adv.shield ? '' : bar(hearts / Math.max(1, max), 'king')]);
       }
+    }
+    // Jinx's challenges (the fourth episode): over each, from anywhere on
+    // the island, its name and how it goes; near you, over its monkey, its
+    // lost animals, its bonfires and Jinx (isle-quests-view.js questTags).
+    if (adv?.quests && me) {
+      for (const t of questTags(g, me)) tag(t.key, t.x, t.y, t.z, `${t.label}|${t.share === null ? '' : Math.round(t.share * 20)}`, () => [h('div', { class: 'label' }, t.label), t.share === null ? '' : bar(t.share, 'flag')], 'quest');
     }
     // Over a wild dragon near you (dragon.js), its name and the hearts it has left.
     if (me) {

@@ -31,6 +31,13 @@
 // builders here), and the host runs the rest (AdventureSim, from room.js),
 // as it runs the monsters. Each stage is harder than the last; a stage
 // number scales everything below that says so.
+//
+// A chapter of the fourth episode has none of that: no camps, no gates, no
+// lair, no monsters. Its island has Jinx the Magpie's challenges instead
+// (isle-quests.js), and a cage by where everyone arrives with that chapter's
+// Golden Bell in it and a lock for each challenge (its hub, isle-bells.js):
+// each challenge beaten lights its lock, every lock lit opens the cage and
+// the stage is won — and Jinx, perched on the cage all along, flies off.
 import { BEASTS, isBeast } from './beasts.js';
 import * as B from './blocks.js';
 import { standHeight } from './critters.js';
@@ -42,6 +49,7 @@ import { isMonsterGashapon, MONSTER_GASHA } from './gashapon.js';
 import { hash2, Rng } from './rng.js';
 import { Chests } from './treasure.js';
 import { chapterOf } from './isle-story.js';
+import { Quests } from './isle-quests.js';
 
 // A camp's fence goes round this far from its flag; a boss's lair (its
 // castle) is a square this far from its middle to its walls.
@@ -525,8 +533,13 @@ export class AdventureSim {
   // round the story this is (server/adventure.js); gates: the gates shut
   // across its way, each { camp, x, y, z, cells } — freeing that camp opens
   // it (cells, an edit, are what it becomes); chestSpots: where its treasure
-  // chests may turn up, beside its way (treasure.js).
-  constructor({ camps = [], won = false, stage = 1, journey = 1, gates = [], chestSpots = null } = {}, seed = 1) {
+  // chests may turn up, beside its way (treasure.js). On a chapter told in
+  // challenges (the fourth episode's), quests: each laid out as the map has it
+  // (isle-quests.js), and hub: its bell's cage, { bell: [x, y, z] (where the
+  // bell hangs), locks: [[x, y, z]...] (a lock for each challenge, in their
+  // order), open: an edit opening the cage, perch: [x, y, z] (where Jinx sits
+  // on it) }.
+  constructor({ camps = [], won = false, stage = 1, journey = 1, gates = [], chestSpots = null, quests = null, hub = null } = {}, seed = 1) {
     this.rng = new Rng(seed);
     this.stage = cleanStage(stage);
     this.journey = Number.isInteger(journey) && journey >= 1 ? journey : 1;
@@ -569,6 +582,30 @@ export class AdventureSim {
     // What each person has done for the stage so far, by id (credit): for
     // the results everyone sees once it is won (stageResults).
     this.deeds = new Map();
+    // Jinx's challenges, on a chapter told in them, and the cage of its bell
+    // (see the top); Jinx on the cage (a critter of the island's, as set up),
+    // and how his flight off is going once the stage is won.
+    this.quests = this.story.quests ? new Quests(quests ?? [], this.story.quests, seed) : null;
+    this.hub = hub;
+    this.perched = null;
+    if (this.quests && won) for (const q of this.quests.list) q.done = true;
+  }
+
+  // The island's critters that play a part in its challenges, put on it (and
+  // Jinx on his bell's cage), once, as the island is made: critters, the
+  // island's (critters.js CritterSim), kept for the challenges to steer.
+  setup(world, critters) {
+    this.critters = critters;
+    if (!this.quests) return;
+    this.quests.setup(world, critters);
+    const perch = this.hub?.perch;
+    if (perch && !this.won) {
+      const c = critters.add('magpie', perch[0] + 0.5, perch[1], perch[2] + 0.5, null, Math.atan2(world.spawn.x - perch[0], world.spawn.z - perch[2]));
+      if (c) {
+        c.held = true;
+        this.perched = { cid: c.id, off: 0 };
+      }
+    }
   }
 
   // Something done for the stage by person id: what, one of DEEDS' keys, n
@@ -576,7 +613,7 @@ export class AdventureSim {
   credit(id, what, n = 1) {
     if (this.won || !(what in DEEDS) || !(n > 0)) return;
     let d = this.deeds.get(id);
-    if (!d) this.deeds.set(id, (d = { pops: 0, boss: 0, flag: 0, helps: 0 }));
+    if (!d) this.deeds.set(id, (d = { pops: 0, boss: 0, flag: 0, helps: 0, play: 0 }));
     d[what] += n;
   }
 
@@ -586,9 +623,9 @@ export class AdventureSim {
     return this.chests.step(world, now, { stage: this.level, camps: this.camps });
   }
 
-  // Whether there is anything left to free.
+  // Whether there is anything left to free (or a challenge to beat).
   get active() {
-    return !this.won && this.camps.length > 0;
+    return !this.won && (this.camps.length > 0 || Boolean(this.quests?.list.length));
   }
 
   get castle() {
@@ -604,10 +641,18 @@ export class AdventureSim {
     return this.camps.find((c) => c.id === id) ?? null;
   }
 
-  // How the adventure is going, for the list of open islands.
+  // How the adventure is going, for the list of open islands (on a chapter
+  // told in challenges, its challenges and how many are beaten).
   tally() {
+    if (this.quests) return { camps: this.quests.list.length, freed: this.quests.list.filter((q) => q.done).length, won: this.won, stage: this.stage, quests: true };
     const camps = this.camps.filter((c) => c.kind === 'camp');
     return { camps: camps.length, freed: camps.filter((c) => c.freed).length, won: this.won, stage: this.stage };
+  }
+
+  // What has been done that is kept over a restart (server/adventure.js): the
+  // camps freed, or the challenges beaten, by their ids.
+  doneIds() {
+    return this.quests ? this.quests.list.filter((q) => q.done).map((q) => q.id) : this.camps.filter((c) => c.freed).map((c) => c.id);
   }
 
   // The safe places no monster goes into: the island's start, and every
@@ -642,6 +687,7 @@ export class AdventureSim {
   step(world, dt, now, people, monsters, players) {
     const news = [];
     if (!this.active) return news;
+    if (this.quests) return this.stepQuests(world, dt, now, people);
     const want = guardsFor(players, this.level);
     for (const c of this.camps) {
       if (c.freed) continue;
@@ -657,6 +703,75 @@ export class AdventureSim {
       else this.stepCamp(world, c, dt, now, people, monsters, want, news);
     }
     return news;
+  }
+
+  // A chapter told in challenges, moved on by dt seconds (isle-quests.js).
+  // Returns what happened, for the room to make happen and tell everyone:
+  //   { t: 'qfx', id, k, ... }  something to see or hear, on a challenge;
+  //   { t: 'cells', cells }      an edit (a shiny gone, a bonfire alight);
+  //   { t: 'quest', quest, by, cells, won }  a challenge beaten (cells: its
+  //                              lock lit, and once it is the last, the cage
+  //                              opening: won, the stage won).
+  stepQuests(world, dt, now, people) {
+    const news = [];
+    const out = this.quests.step(world, dt, now, people, this.critters ?? { get: () => null, add: () => null });
+    for (const [pid, n] of out.credit) this.credit(pid, 'play', n);
+    for (const fx of out.fx) news.push({ t: 'qfx', ...fx });
+    if (out.cells.length) news.push({ t: 'cells', cells: out.cells });
+    for (const { quest, by } of out.done) {
+      const cells = this.lockCells(world, [quest.id]);
+      const won = this.quests.allDone;
+      if (won) {
+        this.won = true;
+        cells.push(...(this.hub?.open ?? []));
+      }
+      news.push({ t: 'quest', quest, by, cells, won });
+    }
+    return news;
+  }
+
+  // The locks of challenges beaten (by their ids), lit on the bell's cage: an edit.
+  lockCells(world, ids) {
+    const cells = [];
+    for (const id of ids) {
+      const at = this.hub?.locks?.[id - 1];
+      if (at) cells.push(at[0], at[1], at[2], B.ESCAPE_BUTTONS_ON[(id - 1) % B.ESCAPE_BUTTONS_ON.length]);
+    }
+    return cells;
+  }
+
+  // Challenges beaten before (kept over a restart: server/adventure.js), beaten
+  // again with nobody there to see: returns the edit that makes the island
+  // look it (and their locks lit).
+  restoreQuests(world, ids) {
+    if (!this.quests) return [];
+    const cells = this.quests.restore(ids, world, this.critters ?? { get: () => null });
+    cells.push(...this.lockCells(world, this.quests.list.filter((q) => q.done).map((q) => q.id)));
+    return cells;
+  }
+
+  // Jinx on his bell's cage (see setup): looking down at whoever is nearest
+  // while the stage goes on, and once it is won, off he flies, over the sea
+  // and away. Every tick, won or not.
+  stepPerch(world, now, people) {
+    const p = this.perched;
+    const c = p && this.critters?.get(p.cid);
+    if (!c) return;
+    const [px, py, pz] = this.hub.perch;
+    if (!this.won) {
+      let best = null;
+      for (const o of people) if (!best || Math.hypot(o.x - c.x, o.z - c.z) < Math.hypot(best.x - c.x, best.z - c.z)) best = o;
+      if (best && Math.hypot(best.x - c.x, best.z - c.z) < 30) c.yaw = Math.atan2(best.x - c.x, best.z - c.z);
+      Object.assign(c, { x: px + 0.5, y: py, z: pz + 0.5, state: 'idle' });
+      return;
+    }
+    p.off ||= now;
+    const t = Math.min(9, (now - p.off) / 1000);
+    // Away from the middle of the island, out to sea, climbing as he goes.
+    const ax = px - world.W / 2;
+    const az = pz - world.D / 2;
+    const d = Math.hypot(ax, az) || 1;
+    Object.assign(c, { x: px + 0.5 + (ax / d) * t * 8, y: py + t * 2.6 + Math.min(1, t) * 1.5, z: pz + 0.5 + (az / d) * t * 8, yaw: Math.atan2(ax, az), state: 'fly' });
   }
 
   // Someone came near: out come its monsters (or the lair's boss, the
@@ -1100,6 +1215,7 @@ export class AdventureSim {
   win(monsters) {
     this.won = true;
     for (const c of this.camps) Object.assign(c, { freed: true, progress: 1, awake: false, quiet: 0, back: [], holders: 0, guarded: false });
+    for (const q of this.quests?.list ?? []) q.done = true;
     this.king = noKing();
     const gone = [];
     for (const m of [...monsters.list]) if (m.camp) gone.push(monsters.remove(m.id));
@@ -1116,6 +1232,9 @@ export class AdventureSim {
       // Which of the isle's games it is (server/adventure.js), when it is one.
       ...(this.run ? { run: this.run } : {}),
       final: this.story.final,
+      // A chapter told in challenges: each, where it is and its parts, and
+      // the bell's cage with a lock for each.
+      ...(this.quests ? { quests: this.quests.describe(), hub: this.hub ? { bell: this.hub.bell, locks: this.hub.locks } : null } : {}),
       ...this.pack(),
     };
   }
@@ -1128,6 +1247,8 @@ export class AdventureSim {
       c: this.camps.filter((c) => !c.freed && (c.awake || c.progress > 0)).map((c) => [c.id, Math.floor(c.progress * 100), c.holders, c.guarded ? 1 : 0]),
       k: this.king.id ? [this.king.hearts, this.king.max, ...(this.king.second ? [1] : [])] : null,
       shield: this.shielded,
+      // (And how each challenge is going: isle-quests.js pack.)
+      ...(this.quests ? { q: this.quests.pack() } : {}),
     };
   }
 
@@ -1137,8 +1258,9 @@ export class AdventureSim {
 
 // What counts towards a stage won, and how many points each is worth:
 // a monster popped, a bop on the boss, a second spent raising a flag,
-// a friend helped up.
-export const DEEDS = { pops: 2, boss: 3, flag: 1, helps: 5 };
+// a friend helped up, and a point of play at Jinx's challenges (each thing
+// done there counted in points already: isle-quests.js PLAY).
+export const DEEDS = { pops: 2, boss: 3, flag: 1, helps: 5, play: 1 };
 // What a stage won pays each person on it, by their points: a few coins for
 // being there, a coin for every RESULT_COINS_PER points more (up to
 // RESULT_COINS_MAX), a diamond for anyone who did something for it, and
@@ -1156,10 +1278,11 @@ export const RESULT_ROWS = 32;
 // pays them; most points first. Only those on the island are paid.
 export function stageResults(deeds, people, gone = []) {
   const row = (p, here) => {
-    const d = deeds.get(p.id) ?? { pops: 0, boss: 0, flag: 0, helps: 0 };
+    const d = deeds.get(p.id) ?? { pops: 0, boss: 0, flag: 0, helps: 0, play: 0 };
     const flag = Math.round(d.flag);
-    const score = d.pops * DEEDS.pops + d.boss * DEEDS.boss + flag * DEEDS.flag + d.helps * DEEDS.helps;
-    return { id: p.id, name: String(p.name ?? '').slice(0, 40), here, pops: d.pops, boss: d.boss, flag, helps: d.helps, score, place: 0, coins: 0, gems: 0 };
+    const play = d.play ?? 0;
+    const score = d.pops * DEEDS.pops + d.boss * DEEDS.boss + flag * DEEDS.flag + d.helps * DEEDS.helps + play * DEEDS.play;
+    return { id: p.id, name: String(p.name ?? '').slice(0, 40), here, pops: d.pops, boss: d.boss, flag, helps: d.helps, ...(play ? { play } : {}), score, place: 0, coins: 0, gems: 0 };
   };
   const seen = new Set(people.map((p) => p.id));
   const rows = [...people.map((p) => row(p, true)), ...gone.filter((p) => !seen.has(p.id) && deeds.has(p.id)).map((p) => row(p, false)).filter((r) => r.score > 0)];

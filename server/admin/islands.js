@@ -6,6 +6,7 @@
 // An island the keeper kept (the Players tab) is watched live while it is
 // being played, and otherwise its copy is opened to look round, as nobody.
 import { prettyCode } from '/js/shared/codes.js';
+import { chapterOf } from '/js/shared/isle-story.js';
 import { THEMES } from '/js/shared/worldgen.js';
 
 const $ = (id) => document.getElementById(id);
@@ -14,7 +15,7 @@ function islandRow(h, island, watch) {
   const theme = THEMES.find((t) => t.key === island.theme);
   // (A stage of Adventure Isle already won is no longer the public one.)
   const kind = island.public || island.adventure ? '🌟 Adventure Isle' : island.watch ? '🏢 CTB' : island.defense ? '🛡️ Tower defense' : '';
-  const stage = island.adventure ? `stage ${island.adventure.stage}, ${island.adventure.won ? 'won' : `${island.adventure.freed} of ${island.adventure.camps} camps free`}` : island.defense ? `wave ${island.defense.wave} of ${island.defense.waves}` : '';
+  const stage = island.adventure ? `stage ${island.adventure.stage}, ${island.adventure.won ? 'won' : `${island.adventure.freed} of ${island.adventure.camps} ${chapterOf(island.adventure.stage).quests ? 'locks open' : 'camps free'}`}` : island.defense ? `wave ${island.defense.wave} of ${island.defense.waves}` : '';
   return h(
     'li',
     { class: 'island-open' },

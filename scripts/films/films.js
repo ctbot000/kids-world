@@ -25,8 +25,10 @@
 //
 // And the third episode's (intro3, ending3), on the Wild Isle, drawn as the
 // real thing (render/real.js): Old Murk and the five Sunstones (see intro3
-// and ending3 below).
+// and ending3 below). And the fourth's (intro4, ending4): Jinx the Magpie and
+// the five Golden Bells, on his Puzzle Isles (see below).
 import { BOSSES } from '/js/shared/bosses.js';
+import { questIcon } from '/js/shared/isle-quests.js';
 import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
 import { ANIM, B, caption, critter, isle, kid, monster, nameCard, prop, renderer, roll, star, THREE, titleCard } from './stage.js';
 
@@ -1267,8 +1269,358 @@ function ending3() {
   });
   const teaser = shots.at(-1).start;
   overlays.push(caption(teaser + 0.4, 4, 'And Old Murk? He curled up in a sunny spot and went to sleep. It turns out he was only ever cold.'));
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  // (And high over the fen, a magpie flapping off with something shiny: the
+  // story goes on, in the fourth episode.)
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'A magpie feather floats down: Episode 4, The Golden Bells', { size: 70 }));
+  shots.at(-1).setup = () => {
+    monster('murk', () => ({ x: tower.x, y: tower.y, z: tower.z, yaw: 1.1, state: 'dazed', scale: 0.8 }));
+    critter('magpie', (t) => ({ x: tower.x - 14 + t * 3.4, y: tower.y + 9 + Math.sin(t * 2) * 0.4, z: tower.z - 10 + t * 1.2, yaw: 1.2, state: 'fly', moving: true }));
+  };
   return { shots, overlays, poster: shots[1].start + 7 };
 }
 
-export const films = { intro, ending, intro2, ending2, intro3, ending3 };
+// ------------------------------------------------------------ the fourth episode
+
+// A Golden Bell (the fourth episode's): gold, flared at its lip, a ring on
+// its crown and a clapper inside, hung from the top of it (where the prop
+// stands), so it swings from there.
+function goldenBell(size = 1) {
+  const g = new THREE.Group();
+  const hung = new THREE.Group();
+  hung.position.y = -1.18;
+  g.add(hung);
+  const gold = new THREE.MeshStandardMaterial({ color: '#ffcf3a', emissive: '#a8700c', emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.85, side: THREE.DoubleSide });
+  const shape = [[0.66, 0], [0.7, 0.04], [0.6, 0.14], [0.48, 0.36], [0.43, 0.62], [0.4, 0.86], [0.3, 1.0], [0.16, 1.06], [0, 1.08]].map(([x, y]) => new THREE.Vector2(x, y));
+  hung.add(new THREE.Mesh(new THREE.LatheGeometry(shape, 28), gold));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.035, 8, 16), gold);
+  ring.position.y = 1.14;
+  hung.add(ring);
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), new THREE.MeshStandardMaterial({ color: '#7a4c12', roughness: 0.5 }));
+  clapper.position.y = 0.1;
+  hung.add(clapper);
+  g.scale.setScalar(size);
+  return g;
+}
+
+// The fourth episode's chapters, where each starts among the stages, and the
+// cage of a chapter's bell on its map (isle-bells.js bellCage: where the bell
+// hangs, where Jinx perches on its roof).
+const BELL_FROM = CHAPTERS.findIndex((ch) => ch.episode === 4) + 1;
+const BELL_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 4);
+const cageOf = (m) => ({ bell: m.hub.bell, perch: m.hub.perch ?? [m.hub.bell[0], m.hub.bell[1] + 6, m.hub.bell[2]] });
+
+// ------------------------------------------------------------ the intro, episode 4
+
+// Its intro: dawn over Adventure Isle, its five Golden Bells ringing round
+// the lighthouse's lantern; Jinx the Magpie swooping down in the night and
+// flying off with them all; each of his Puzzle Isles with a bell locked in a
+// cage, and what he has made a game of there; the last bell with him in his
+// own nest; and you and your friends by the first cage, in Bellbuoy Bay.
+function intro4() {
+  const shore = isle(1, { freed: true });
+  const { light: L } = shoreSpots(shore);
+  const bay = isle(BELL_FROM);
+  const nestM = isle(BELL_FROM + 4);
+  const nestQ = nestM.quests.find((q) => q.kind === 'jinx');
+  const perch = nestQ.perch;
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+  const ringAt = (i, t) => {
+    const a = (i / 5) * Math.PI * 2 + 0.3;
+    return { x: L[0] + Math.cos(a) * 3.4, y: L[1] - 2.5, z: L[2] + Math.sin(a) * 3.4, rz: Math.sin(t * 3.2 + i) * 0.35 };
+  };
+
+  // 1. Dawn: five Golden Bells ringing round the lighthouse's lantern.
+  add({
+    dur: 7,
+    world: shore,
+    time: (t) => 0.24 + t * 0.004,
+    cut: 'fade',
+    setup() {
+      for (let i = 0; i < 5; i++) prop(goldenBell(1), (t) => ringAt(i, t));
+    },
+    fx(t) {
+      if (Math.random() < 0.05) renderer.effects.notes(L[0] + (Math.random() - 0.5) * 8, L[1] - 1, L[2] + (Math.random() - 0.5) * 8);
+    },
+    camera: keys([
+      { t: 0, pos: [L[0] + 34, SEA + 6, L[2] - 44], look: [L[0], L[1] - 3, L[2]], fov: 46 },
+      { t: 7, pos: [L[0] + 8, L[1] + 1, L[2] - 10], look: [L[0], L[1] - 2.5, L[2]], fov: 46 },
+    ]),
+  });
+  overlays.push(caption(0.8, 5.8, 'Every morning, five Golden Bells rang Adventure Isle awake — ding, dong!'));
+
+  // 2. Night: Jinx swoops down, and off he flies with every one of them.
+  add({
+    dur: 8,
+    world: shore,
+    time: 0.03,
+    cut: 'fade',
+    setup() {
+      const jinx = (t) => {
+        if (t < 2.4) return { x: L[0] - 30 + t * 12.5, y: L[1] + 8 - t * 3.2, z: L[2] + 18 - t * 7.2 };
+        if (t < 3.6) return { x: L[0] + 0.5, y: L[1] + 0.4, z: L[2] + 1 };
+        const u = t - 3.6;
+        return { x: L[0] + u * 9, y: L[1] + 1 + u * 3, z: L[2] - u * 7 };
+      };
+      critter('magpie', (t) => ({ ...jinx(t), yaw: t < 2.4 ? 0.9 : t < 3.6 ? 0.2 : 2.2, state: t >= 2.4 && t < 3.6 ? 'idle' : 'fly', moving: true }));
+      for (let i = 0; i < 5; i++) {
+        prop(goldenBell(1), (t) => {
+          const home = ringAt(i, 0);
+          if (t < 3.6 + i * 0.12) return { ...home, rz: t > 2.4 ? Math.sin(t * 20) * 0.2 : 0 };
+          const j = jinx(t);
+          const u = ease((t - 3.6 - i * 0.12) / 0.8);
+          return { x: lerp(home.x, j.x - 1 - i * 0.9, u), y: lerp(home.y, j.y - 1.5 - i * 0.35, u), z: lerp(home.z, j.z + i * 0.7, u), rz: Math.sin(t * 8 + i) * 0.4 };
+        });
+      }
+    },
+    fx(t) {
+      once(shots[1], 'grab', t, 3.4, () => renderer.effects.sparkles(L[0], L[1] - 1, L[2], 60, ['#ffd84d', '#fff3a0', '#ffffff']));
+    },
+    camera: keys([
+      { t: 0, pos: [L[0] - 14, L[1] + 2, L[2] + 16], look: [L[0] - 6, L[1] + 2, L[2] + 6], fov: 52 },
+      { t: 3.4, pos: [L[0] - 8, L[1] + 1, L[2] + 10], look: [L[0], L[1] - 1, L[2]], fov: 50 },
+      { t: 8, pos: [L[0] - 10, L[1] + 4, L[2] + 14], look: [L[0] + 22, L[1] + 12, L[2] - 22], fov: 54 },
+    ]),
+  });
+  overlays.push(caption(shots[1].start + 0.6, 7, 'Until one night Jinx the Magpie — the cheekiest bird on the seven seas — swooped down and carried them all off. No magpie can leave anything shiny alone!'));
+
+  // 3. His Puzzle Isles: each bell in a cage, Jinx's challenges all round it.
+  for (const [i, ch] of BELL_CHAPTERS.slice(0, 4).entries()) {
+    const m = isle(BELL_FROM + i);
+    const { bell, perch: roof } = cageOf(m);
+    const a0 = 0.5 + i * 1.1;
+    const shot = add({
+      dur: 2.9,
+      world: m,
+      time: 0.36,
+      cut: i === 0 ? 'flash' : 'cut',
+      setup() {
+        critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: a0 + Math.sin(t * 2) * 0.4, state: 'idle' }));
+      },
+      camera: (t) => orbit([bell[0] + 0.5, bell[1] + 1, bell[2] + 0.5], 13, 3, a0, a0 + 0.4, 2.9, 48)(t),
+    });
+    overlays.push(nameCard(shot.start + 0.15, 2.6, `${ch.icon} ${ch.name}`, ch.quests.map((q) => `${questIcon(q)} ${q.name}`).join(' · ')));
+  }
+
+  // 4. The last bell, in his own nest, and Jinx chattering on top of it.
+  add({
+    dur: 5.5,
+    world: nestM,
+    time: 0.3,
+    cut: 'flash',
+    setup() {
+      critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 3) * 0.3, state: t % 1.6 < 0.3 ? 'hop' : 'idle' }));
+      prop(goldenBell(1.1), (t) => ({ x: perch[0] + 3, y: perch[1] + 2.6, z: perch[2] + 1, rz: Math.sin(t * 2.4) * 0.25 }));
+    },
+    camera: keys([
+      { t: 0, pos: [perch[0] + 4, perch[1] + 5, perch[2] + 14], look: [perch[0], perch[1] + 1.4, perch[2]], fov: 48 },
+      { t: 5.5, pos: [perch[0] + 12, perch[1] + 11, perch[2] + 22], look: [perch[0], perch[1] + 1, perch[2]], fov: 54 },
+    ]),
+  });
+  overlays.push(caption(shots.at(-1).start + 0.5, 4.8, 'The last bell he keeps in his own nest — and he left a feather, with a note: “Catch me if you can!”'));
+
+  // 5. The heroes by the first cage, in Bellbuoy Bay; and the title.
+  const sp = bay.world.spawn;
+  const { bell, perch: roof } = cageOf(bay);
+  add({
+    dur: 9,
+    world: bay,
+    time: 0.32,
+    cut: 'white',
+    out: 'fade',
+    setup() {
+      critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: 1.4 + Math.sin(t * 1.5) * 0.5, state: 'idle' }));
+      for (const [i, look] of KIDS.entries()) {
+        const x = bell[0] + 6 + i * 1.5;
+        const z = bell[2] - 2 + i * 1.6;
+        kid(look, (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.atan2(bell[0] - x, bell[2] - z), emote: t < 2.4 ? 'surprise' : t < 5.2 ? 'wave' : 'cheer', anim: ANIM.idle }));
+      }
+    },
+    camera: keys([
+      { t: 0, pos: [bell[0] + 13, bell[1] + 1, bell[2] + 5], look: [bell[0] + 2, bell[1], bell[2]], fov: 48 },
+      { t: 3.2, pos: [bell[0] + 14, bell[1] + 2.5, bell[2] + 7], look: [bell[0] + 2, bell[1] + 1, bell[2]], fov: 48 },
+      { t: 9, pos: [sp.x + 6, sp.y + 24, sp.z + 24], look: [64, sp.y + 2, 50], fov: 56 },
+    ]),
+  });
+  const last = shots.at(-1).start;
+  overlays.push(caption(last + 0.5, 3.4, 'No monsters this time — only tricks. Beat his challenges, open every lock, and ring the bells again!'));
+  overlays.push(titleCard(last + 4.2, 4.6, 'The Golden Bells', 'Episode 4 · Win back all five bells — together!', { size: 78 }));
+  return { shots, overlays, poster: last + 6.4 };
+}
+
+// ------------------------------------------------------------ the ending, episode 4
+
+// Its ending: Jinx caught at last, dazzled on the clearing below his nest;
+// the five Golden Bells flying home out of it; the party round the open cage
+// in Bellbuoy Bay, the monkeys, chicks and sheep there too, the bells ringing
+// over it; the credits round the bay's lighthouse; and Jinx at dawn,
+// listening to the bells as good as gold — well, almost.
+function ending4() {
+  const nestM = isle(BELL_FROM + 4);
+  const q = nestM.quests.find((o) => o.kind === 'jinx');
+  const land = [q.land[0] + 0.5, q.land[1], q.land[2] + 0.5];
+  const perch = q.perch;
+  // (An island of its own, not the intro's: its cage open, the bars at its
+  // front gone, every lock lit.)
+  const bay = isle(BELL_FROM, { freed: true });
+  if (!bay.opened) {
+    for (let k = 0; k < bay.hub.open.length; k += 4) bay.world.set(bay.hub.open[k], bay.hub.open[k + 1], bay.hub.open[k + 2], bay.hub.open[k + 3]);
+    for (const [i, c] of bay.hub.locks.entries()) bay.world.set(c[0], c[1], c[2], B.ESCAPE_BUTTONS_ON[i]);
+    bay.opened = true;
+  }
+  const { bell, perch: roof } = cageOf(bay);
+  const lighthouseAt = [58.5, groundY(bay.world, 58, 24), 24.5];
+  const gold = ['#ffcf4a', '#ffe08a', '#fff3c4', '#ffb020'];
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. Jinx, dazzled on the clearing, and caught.
+  add({
+    dur: 6,
+    world: nestM,
+    time: 0.34,
+    cut: 'fade',
+    setup() {
+      critter('magpie', (t) => ({ x: land[0], y: land[1], z: land[2], yaw: 0.3, state: 'idle', roll: t < 1.6 ? Math.sin(t * 6) * 0.15 : 0 }));
+      for (const [i, look] of KIDS.entries()) {
+        const a = -0.6 + i * 0.6;
+        const x = land[0] + Math.sin(a) * 3.6;
+        const z = land[2] + Math.cos(a) * 3.6;
+        kid(look, (t) => ({ x, y: land[1], z, yaw: a + Math.PI, emote: t < 1.6 ? 'surprise' : 'cheer', anim: ANIM.idle }));
+      }
+    },
+    fx(t) {
+      if (t < 1.6) renderer.effects.dizzy(land[0], land[1] + 2.3, land[2], t, 0.6);
+      once(shots[0], 'caught', t, 1.6, () => {
+        renderer.effects.sparkles(land[0], land[1] + 1.4, land[2], 110, gold);
+        renderer.effects.stars(land[0], land[1] + 1.6, land[2], 12);
+        renderer.sky.flash = 1;
+      });
+    },
+    camera: keys([
+      { t: 0, pos: [land[0] + 2, land[1] + 2.4, land[2] + 8.5], look: [land[0], land[1] + 1.2, land[2]], fov: 50 },
+      { t: 6, pos: [land[0] + 4, land[1] + 4.5, land[2] + 11], look: [land[0], land[1] + 1.6, land[2]], fov: 54 },
+    ]),
+  });
+  overlays.push(caption(0.5, 5, 'Caught! Jinx the Magpie was caught, fair and square.'));
+
+  // 2. The five Golden Bells, flying home out of his nest.
+  add({
+    dur: 7.5,
+    world: nestM,
+    time: 0.36,
+    cut: 'flash',
+    setup() {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        prop(goldenBell(1.2), (t) => {
+          const u = ease((t - i * 0.25) / 4);
+          return { x: perch[0] + Math.cos(a) * (2 + u * 6) + u * 10, y: perch[1] + 1 + u * 16, z: perch[2] + Math.sin(a) * (2 + u * 6) + u * 40, rz: Math.sin(t * 5 + i) * 0.35 };
+        });
+      }
+      critter('magpie', (t) => ({ x: perch[0] + 0.5, y: perch[1], z: perch[2] + 0.5, yaw: 0.2 + Math.sin(t * 1.3) * 0.3, state: 'idle' }));
+    },
+    fx(t) {
+      if (Math.random() < 0.12) renderer.effects.notes(perch[0] + Math.random() * 10, perch[1] + 4 + t * 2, perch[2] + 6 + t * 5);
+    },
+    camera: keys([
+      { t: 0, pos: [perch[0] - 10, perch[1] + 4, perch[2] - 12], look: [perch[0], perch[1] + 2, perch[2]], fov: 52 },
+      { t: 7.5, pos: [perch[0] - 14, perch[1] + 10, perch[2] - 10], look: [perch[0] + 8, perch[1] + 14, perch[2] + 30], fov: 56 },
+    ]),
+  });
+  overlays.push(caption(shots[1].start + 0.5, 6.4, 'He fluffed up his feathers and gave back every Golden Bell. All he ever wanted was someone to play with!'));
+
+  // 3. The party round the open cage, the bells ringing over it.
+  add({
+    dur: 8.5,
+    world: bay,
+    time: 0.36,
+    cut: 'fade',
+    setup() {
+      for (let i = 0; i < 5; i++) prop(goldenBell(0.9), (t) => ({ x: bell[0] + 0.5 + (i - 2) * 2.2, y: bell[1] + 8.5, z: bell[2] + 0.5, rz: Math.sin(t * 3 + i * 0.9) * 0.4 }));
+      critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: 1.6, state: t % 2 < 0.4 ? 'hop' : 'idle' }));
+      for (const [i, look] of KIDS.entries()) {
+        const x = bell[0] + 7 + i * 1.6;
+        const z = bell[2] - 1.5 + i * 1.4;
+        kid(look, () => ({ x, y: groundY(bay.world, x, z), z, yaw: -Math.PI / 2, emote: i === 1 ? 'dance' : 'cheer', anim: ANIM.idle }));
+      }
+      // Coco, Kiki and Bobo, friends now.
+      for (let i = 0; i < 3; i++) {
+        const x = bell[0] + 5 + i * 1.3;
+        const z = bell[2] + 4.5;
+        critter('monkey', (t) => ({ x, y: groundY(bay.world, x, z), z, yaw: Math.PI + 0.4, state: (t + i) % 2 < 1 ? 'happy' : 'idle' }));
+      }
+      for (let i = 0; i < 4; i++) {
+        const x = bell[0] + 5 + i * 0.8;
+        const z = bell[2] - 5;
+        critter('chick', (t) => ({ x: x + Math.sin(t * 2 + i) * 0.3, y: groundY(bay.world, x, z), z, yaw: 0.4 * i, state: 'walk', moving: true }));
+      }
+      for (let i = 0; i < 2; i++) {
+        const x = bell[0] + 10 + i * 1.8;
+        const z = bell[2] + 3;
+        critter('sheep', () => ({ x, y: groundY(bay.world, x, z), z, yaw: -1.2, state: 'eat' }));
+      }
+    },
+    fx(t) {
+      if (Math.random() < 0.09) renderer.effects.firework(bell[0] - 20 + Math.random() * 40, bell[1] + 16 + Math.random() * 10, bell[2] - 20 + Math.random() * 30);
+      if (t < 0.1) renderer.effects.confetti(bell[0] + 4, bell[1] + 4, bell[2], 160, 1.5);
+      if (Math.random() < 0.1) renderer.effects.notes(bell[0] + (Math.random() - 0.5) * 10, bell[1] + 9, bell[2] + (Math.random() - 0.5) * 3);
+    },
+    camera: keys([
+      { t: 0, pos: [bell[0] + 17, bell[1] - 0.6, bell[2] + 6], look: [bell[0] + 2, bell[1] + 2.4, bell[2]], fov: 54 },
+      { t: 8.5, pos: [bell[0] + 21, bell[1] + 4, bell[2] + 10], look: [bell[0], bell[1] + 5, bell[2]], fov: 58 },
+    ]),
+  });
+  overlays.push(caption(shots.at(-1).start + 0.5, 7.4, 'Ding, dong! All five Golden Bells ring out over Adventure Isle again. Thank you, heroes!'));
+
+  // 4. The credits, round the bay's lighthouse at sunset.
+  add({
+    dur: 14,
+    world: bay,
+    time: 0.71,
+    cut: 'fade',
+    fx() {
+      if (Math.random() < 0.03) renderer.effects.firework(lighthouseAt[0] - 20 + Math.random() * 40, lighthouseAt[1] + 16 + Math.random() * 8, lighthouseAt[2] + 10 + Math.random() * 30);
+    },
+    camera: orbit([lighthouseAt[0], lighthouseAt[1] + 6, lighthouseAt[2]], 34, 8, 0.6, -0.3, 14, 50),
+  });
+  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Golden Bells', 'Episode 4', '', '#Starring', 'You and your friends', '', '#and', '🐦 Jinx the Magpie', '🐒 Coco, Kiki and Bobo', '🐥 the chicks of Henhouse Hills', '🐑 the sheep of Kite Cliffs', '', '#The five Puzzle Isles', ...BELL_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+
+  // 5. Dawn: the bells ring, and Jinx listens — as good as gold. Almost.
+  add({
+    dur: 7,
+    world: bay,
+    time: 0.26,
+    cut: 'fade',
+    out: 'fade',
+    setup() {
+      // (The bells in a row behind him, as the camera sees it.)
+      for (let i = 0; i < 5; i++) prop(goldenBell(0.8), (t) => ({ x: roof[0] - 3, y: roof[1] + 4.2, z: roof[2] + 0.5 + (i - 2) * 2.2, rz: Math.sin(t * 2.6 + i * 0.9) * 0.3 }));
+      critter('magpie', (t) => ({ x: roof[0] + 0.5, y: roof[1], z: roof[2] + 0.5, yaw: t < 4 ? 1.6 : 1.6 + Math.min(1, (t - 4) * 2) * 1.5, state: 'idle' }));
+    },
+    camera: keys([
+      { t: 0, pos: [roof[0] + 10, roof[1] + 1.5, roof[2] + 2], look: [roof[0], roof[1] + 1.6, roof[2]], fov: 46 },
+      { t: 7, pos: [roof[0] + 7.5, roof[1] + 2, roof[2] + 1.5], look: [roof[0], roof[1] + 1.6, roof[2]], fov: 42 },
+    ]),
+  });
+  const teaser = shots.at(-1).start;
+  overlays.push(caption(teaser + 0.4, 4, 'Now Jinx perches by the bells every morning to listen, as good as gold. Well — almost…'));
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return { shots, overlays, poster: shots[2].start + 6 };
+}
+
+export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4 };

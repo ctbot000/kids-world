@@ -648,8 +648,95 @@ function ending3(b) {
   for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
+// Jinx the Magpie's tune: cheeky and quick, hopping about, a cackle at the end.
+const JINX = [
+  ['G4', 0.25], ['E4', 0.25], ['G4', 0.25], ['C5', 0.5], [null, 0.25], ['B4', 0.25], ['G4', 0.25],
+  ['A4', 0.25], ['F4', 0.25], ['A4', 0.25], ['D5', 0.5], [null, 0.25], ['C5', 0.25], ['B4', 0.25], ['G4', 0.75],
+];
+// The Golden Bells' peal: down a scale and back, as a ring of bells rings.
+const PEAL = ['D5', 'B4', 'A4', 'F#4', 'E4', 'D4'];
+const peal = (b, t, gap = 0.32, gain = 0.09, times = 1) => {
+  for (let r = 0; r < times; r++) PEAL.forEach((n, i) => b.pluck(t + (r * PEAL.length + i) * gap, hz(n), { gain, decay: 2.2, type: 'triangle', bell: true, verb: 0.5, pan: (i % 2) - 0.5 }));
+};
+
+function intro4(b) {
+  // 0–7: dawn, the five Golden Bells ringing round the lighthouse.
+  b.chords(0, BPM, ['D', 'G', 'A'], 0.022, { attack: 1.2, release: 1.2 });
+  peal(b, 0.6, 0.36, 0.08, 2);
+  b.sea(0, 7, 0.03);
+  b.tune(3.6, BPM, THEME.slice(0, 6), 'flute', 0.05);
+  // 7–15: night, Jinx swooping down and off with the bells.
+  b.strings(7, 8, ['A2', 'E3', 'A3', 'C4'], 0.035, { attack: 0.6, release: 1, tremolo: true });
+  b.tune(7.4, 132, JINX, 'flute', 0.07);
+  for (let k = 0; k < 8; k++) b.pluck(7.2 + k * 0.45, hz(['A2', 'E3'][k % 2]), { gain: 0.06, decay: 0.3, type: 'sawtooth', verb: 0.15 });
+  b.whoosh(8.6, 0.08, 1.2);
+  b.crash(10.4, 0.1, 2.5);
+  b.sparkle(10.4, 6, 0.05);
+  for (let k = 0; k < 5; k++) b.pluck(10.5 + k * 0.12, hz(PEAL[k]), { gain: 0.07, decay: 1.2, type: 'triangle', bell: true, verb: 0.5 });
+  b.whoosh(11.2, 0.09, 1.6);
+  // 15–26.6: his Puzzle Isles, a bar each, cheeky.
+  const m0 = 15;
+  // (A bar to each isle's shot, 2.9 s.)
+  const bar = 240 / 2.9;
+  b.beat(m0, bar, 4, 0.22);
+  const isles = ['C', 'Am', 'F', 'G'];
+  b.chords(m0, bar, isles, 0.028, { attack: 0.05, release: 0.3 });
+  isles.forEach((c, i) => {
+    const t = m0 + i * 2.9;
+    b.pluck(t, hz(CHORDS[c][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
+    for (let k = 0; k < 6; k++) b.pluck(t + 0.3 + k * 0.4, hz(CHORDS[c][k % 2 ? 2 : 3]), { gain: 0.06, decay: 0.25, type: 'square', verb: 0.1 });
+  });
+  // 26.6–32.1: Jinx on his nest, chattering: his tune, quicker.
+  b.tune(26.8, 150, JINX, 'flute', 0.08);
+  b.strings(26.6, 5.5, ['C3', 'G3', 'E4'], 0.025, { attack: 0.3, release: 1 });
+  b.pluck(29.8, hz('C5'), { gain: 0.1, decay: 2, type: 'triangle', bell: true, verb: 0.5 });
+  // 32.1–41.1: the heroes and the title: the theme in full, the bells pealing.
+  b.swell(32.1, 2.5, 0.07);
+  b.timpaniRoll(34.2, 0.8, 'D2', 0.2);
+  b.chords(35, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(35, BPM, THEME.slice(0, 12), 'horn', 0.1);
+  b.crash(36.3, 0.12, 3);
+  peal(b, 36.4, 0.3, 0.06, 2);
+  b.sparkle(36.3, 8, 0.04);
+  b.strings(41.1 - 2.3, 2.3, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending4(b) {
+  // 0–6: Jinx dazzled, and caught: a pop, a fanfare.
+  b.tune(0.2, 150, JINX.slice(0, 7), 'flute', 0.06);
+  b.timpaniRoll(0.4, 1.2, 'A2', 0.2);
+  b.pop(1.6, 0.35);
+  b.crash(1.6, 0.14, 3);
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.horn(1.65 + i * 0.12, 1.8 - i * 0.12, n, 0.08);
+  b.sparkle(1.7, 14, 0.05);
+  b.cheer(1.9, 3.6, 0.03);
+  // 6–13.5: the bells flying home, pealing as they go.
+  b.chords(6, BPM, ['G', 'A', 'Bm'], 0.03, { attack: 0.6, release: 0.8 });
+  peal(b, 6.3, 0.34, 0.08, 3);
+  b.swell(10, 2, 0.08);
+  b.strings(10.5, 3, ['D3', 'A3', 'D4', 'F#4', 'A4'], 0.04, { attack: 0.1, release: 1.6 });
+  b.choir(10.6, 2.9, ['D4', 'A4', 'D5'], 0.02);
+  // 13.5–22: the party round the open cage, the bells ringing over it.
+  b.beat(13.5, BPM, 3, 0.26);
+  b.chords(13.5, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(13.5, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  peal(b, 13.6, 0.5, 0.05, 2);
+  for (let k = 0; k < 7; k++) b.firework(13.9 + k * 1.1, 0.1);
+  b.cheer(13.7, 6.5, 0.035);
+  // 22–36: the credits, gently.
+  b.chords(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.arps(22, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(23.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  b.sea(22, 14, 0.025);
+  // 36–43: dawn, the bells, and Jinx listening — his tune, and a wink at the end.
+  peal(b, 36.3, 0.4, 0.06);
+  b.tune(38.8, 132, JINX.slice(0, 7), 'flute', 0.06);
+  b.strings(38.5, 4, ['D3', 'A3', 'F#4'], 0.035, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(40.4 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+}
+
 export async function score(name, secs) {
   const b = new Band(secs);
-  ({ intro, ending, intro2, ending2, intro3, ending3 }[name] ?? ending)(b);
+  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4 }[name] ?? ending)(b);
   return b.render();
 }

@@ -26,6 +26,7 @@ import { candyTree, fruitTree, katsuraTree, oakTree, pineTree, placeTemplate, st
 import { World } from './world.js';
 import { palette } from './worldgen.js';
 import { WILD_MAPS } from './isle-wild.js';
+import { BELL_MAPS, mirrorQuests } from './isle-bells.js';
 
 export const ISLE_SIDE = 128;
 const SEA = 20;
@@ -884,7 +885,7 @@ function shipwreck(m, cx, cz, along) {
 
 // A lighthouse: a round tower in white and red bands, a gallery and a
 // lantern room of glass on top — dark, its Star stolen.
-function lighthouse(m, cx, cz) {
+export function lighthouse(m, cx, cz) {
   const { world } = m;
   const y0 = m.ground(cx, cz);
   const tall = 13;
@@ -916,7 +917,7 @@ function lighthouse(m, cx, cz) {
 
 // A wooden pier out over the sea from (x, z) for `len` blocks the way
 // (dx, dz) heads: a deck three wide on posts, lamps at its end.
-function pier(m, x, z, dx, dz, len) {
+export function pier(m, x, z, dx, dz, len) {
   const { world } = m;
   const y = SEA + 1;
   for (let l = 0; l <= len; l++) {
@@ -940,7 +941,7 @@ function pier(m, x, z, dx, dz, len) {
 
 // A palm tree for a sunny beach: a trunk leaning out a little as it goes
 // up, and a crown of leaves drooping out from the top on every side.
-function palmTree(rng) {
+export function palmTree(rng) {
   const cells = [];
   const h = rng.int(5, 7);
   const [lx, lz] = rng.pick([[1, 0], [-1, 0], [0, 1], [0, -1]]);
@@ -977,7 +978,7 @@ function villageHouse(m, camp, a, dist, key = 'house') {
 
 // A fisherman's hut: plank walls, a door the way (fx, fz) faces, a window
 // either side and a sloping roof.
-function hut(m, cx, cz, fx, fz) {
+export function hut(m, cx, cz, fx, fz) {
   const { world } = m;
   const y0 = m.ground(cx, cz);
   for (let dx = -2; dx <= 2; dx++) {
@@ -2494,7 +2495,7 @@ export function openGround(m, x, z) {
 // A windmill: a round white tower narrowing as it goes up, a red band round
 // its middle, a brown cap, a door, and four sails of wood and cloth turning
 // (well, standing) on the side the way (fx, fz) faces.
-function windmill(m, cx, cz, fx, fz) {
+export function windmill(m, cx, cz, fx, fz) {
   const { world } = m;
   const y0 = m.ground(cx, cz);
   const tall = 10;
@@ -3417,7 +3418,7 @@ function vale(m) {
   return { fruit: B.FRUIT_ITEMS[4] };
 }
 
-const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale, ...WILD_MAPS };
+const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow, ember, works, spires, castle, tulip, maple, honey, jungle, lagoon, moor, vale, ...WILD_MAPS, ...BELL_MAPS };
 
 // ---------------------------------------------------------------- the isle
 
@@ -3446,7 +3447,9 @@ export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
     .map((s, i) => ({ s, i }))
     .sort((a, b) => (a.s.kind === 'castle') - (b.s.kind === 'castle') || a.i - b.i)
     .map(({ s }, i) => ({ id: i + 1, kind: s.kind, x: s.x, y: s.level + 1, z: s.z, r: s.r }));
-  const out = { world, critters, fruit: made.fruit ?? B.FRUIT_ITEMS[0], mines: [], camps, defense: null, gates: m.gates, chestSpots: m.chestSpots(), debug: { routes: m.routes, spots: m.spots } };
+  // (A chapter of the fourth episode has challenges and its bell's cage
+  // instead of camps: isle-bells.js.)
+  const out = { world, critters, fruit: made.fruit ?? B.FRUIT_ITEMS[0], mines: [], camps, defense: null, gates: m.gates, chestSpots: m.chestSpots(), quests: made.quests ?? null, hub: made.hub ?? null, debug: { routes: m.routes, spots: m.spots } };
   // Told again on a later journey, a chapter is its own map turned over:
   // mirrored left to right on journey 2, top to bottom on journey 3, both on
   // journey 4, and so on round again — the way going the other way round.
@@ -3497,5 +3500,7 @@ function mirror(made, alongX, alongZ) {
       g.cells[i + 3] = flip(g.cells[i + 3]);
     }
   }
+  // (And a chapter's challenges and its bell's cage: isle-bells.js.)
+  if (made.quests || made.hub) mirrorQuests(made, W, D, alongX, alongZ);
   made.debug = null;
 }

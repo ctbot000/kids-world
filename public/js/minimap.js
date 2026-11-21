@@ -296,6 +296,11 @@ export class MiniMap {
     // Adventure Isle's camps: the monsters' purple flag on each, the
     // island's sky-blue one once it is free, and a crown on the boss's lair.
     for (const c of g.adventure?.camps.values() ?? []) campMark(ctx, X(c.x), Y(c.z), c, (big ? 1.5 : 1) * u);
+    // Or, on the fourth episode's, Jinx's challenges, each its icon in a
+    // ring of its lock's colour (ticked once it is beaten), and the bell's cage.
+    for (const q of g.adventure?.quests?.values() ?? []) questMark(ctx, X(q.x + 0.5), Y(q.z + 0.5), q, (big ? 1.5 : 1) * u);
+    const bell = g.adventure?.hub?.bell;
+    if (bell) questMark(ctx, X(bell[0] + 0.5), Y(bell[2] + 0.5), { icon: '🔔', color: '#ffd84d', done: g.adventure.won }, (big ? 1.5 : 1) * u);
 
     // A tower defense island's road, the monsters' gate at one end of it and
     // the Star Stone at the other.
@@ -384,6 +389,26 @@ function arrow(ctx, x, y, angle, size, u) {
   ctx.lineWidth = 1.6 * u;
   ctx.strokeStyle = INK;
   ctx.stroke();
+  ctx.restore();
+}
+
+// One of Jinx's challenges on the map (shared/isle-quests.js): its icon on a
+// round white badge ringed in its lock's colour, faded with a tick once beaten.
+function questMark(ctx, x, y, q, u) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = q.done ? 0.6 : 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, 7 * u, 0, Math.PI * 2);
+  ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.lineWidth = 2.4 * u;
+  ctx.strokeStyle = q.color ?? '#7b4fd0';
+  ctx.stroke();
+  ctx.font = `${Math.round(8.5 * u)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(q.done ? '✓' : q.icon, 0, 0.5 * u);
   ctx.restore();
 }
 

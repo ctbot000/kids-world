@@ -189,7 +189,8 @@ export class PublicAdventure {
       id: r.id,
       journey: r.journey,
       stage: r.stage,
-      freed: r.entry ? r.entry.room.adventure.camps.filter((c) => c.freed).map((c) => c.id) : [],
+      // (The camps freed, or on a chapter told in challenges, those beaten.)
+      freed: r.entry ? r.entry.room.adventure.doneIds() : [],
       ...(r.by ? { by: r.by } : {}),
       startedAt: r.startedAt,
       playedAt: r.playedAt,
@@ -233,12 +234,14 @@ export class PublicAdventure {
     // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
     room.adventure.run = run.id;
     room.onIsleNew = (name, episode = 1) => this.newRun(name, this.now(), episode);
-    for (const id of freed) {
+    for (const id of room.adventure.quests ? [] : freed) {
       const camp = room.adventure.campById(id);
       if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
     }
+    // (Or the challenges beaten on it already.)
+    if (room.adventure.quests) room.restoreQuests(freed);
     run.entry = { code, room, emptySince: 0, public: true };
-    run.freed = room.adventure.camps.filter((c) => c.freed).length;
+    run.freed = room.adventure.doneIds().length;
     this.rooms.set(code, run.entry);
     this.onOpen?.(room);
     return run.entry;
@@ -294,7 +297,7 @@ export class PublicAdventure {
   adminList() {
     return this.runs.map((r, i) => {
       const room = r.entry?.room;
-      const camps = room ? room.adventure.camps.filter((c) => c.kind === 'camp') : [];
+      const tally = room?.adventure.tally();
       return {
         id: r.id,
         first: i === 0,
@@ -305,8 +308,10 @@ export class PublicAdventure {
         playedAt: r.playedAt,
         code: r.entry?.code ?? '',
         players: (room?.online ?? 0) + r.retired.reduce((n, o) => n + o.room.online, 0),
-        camps: camps.length,
-        freed: camps.filter((c) => c.freed).length,
+        // (On a chapter told in challenges, its challenges and those beaten.)
+        camps: tally?.camps ?? 0,
+        freed: tally?.freed ?? 0,
+        ...(tally?.quests ? { quests: true } : {}),
       };
     });
   }
@@ -411,8 +416,9 @@ export class PublicAdventure {
         changed = true;
         continue;
       }
-      // A camp freed since last time: kept, so a restart does not take it back.
-      const freed = adv ? adv.camps.filter((c) => c.freed).length : 0;
+      // A camp freed (or a challenge beaten) since last time: kept, so a
+      // restart does not take it back.
+      const freed = adv ? adv.doneIds().length : 0;
       if (freed !== run.freed) {
         run.freed = freed;
         changed = true;

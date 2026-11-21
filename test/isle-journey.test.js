@@ -10,7 +10,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { AdventureSim, ambushFor, HAZARD, reserveFor, SECOND_WIND, SNEAK_MS, walkBack, walkReach } from '../public/js/shared/adventure.js';
 import { BOSSES } from '../public/js/shared/bosses.js';
 import { buildIsle } from '../public/js/shared/isle-maps.js';
-import { chapterOf, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
+import { chapterOf, firstStage, STAGES, stagesOf } from '../public/js/shared/isle-story.js';
 import { MonsterSim } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { World } from '../public/js/shared/world.js';
@@ -320,15 +320,16 @@ test('at the very end of an episode its last boss gets a second wind before goin
   assert.equal(adv.won, true, 'popped for good');
   assert.equal(a.last('won').hero, a.pid);
   // Anywhere before the end of an episode, popped is popped.
-  for (const stage of [stagesOf(1) - 1, stagesOf(1) + 1, STAGES - 1]) {
+  for (const stage of [stagesOf(1) - 1, stagesOf(1) + 1, firstStage(4) - 2]) {
     const sim = isleRoom(stage, time).adventure;
     sim.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };
     for (const c of sim.camps) if (c.kind === 'camp') c.freed = true;
     assert.equal(sim.hitKing(1, 5000).beaten, true, `stage ${stage}`);
   }
   // And at the end of the second episode, Queen Grizzle puffs herself up the
-  // same way; and at the end of the third, the last of all, Old Murk.
-  for (const [stage, boss, last] of [[stagesOf(1) + stagesOf(2), 'grizzle', false], [STAGES, 'murk', true]]) {
+  // same way; and at the end of the third, Old Murk. (The fourth, the last of
+  // all, has no boss to pop: test/isle-quests.test.js.)
+  for (const [stage, boss, last] of [[stagesOf(1) + stagesOf(2), 'grizzle', false], [firstStage(4) - 1, 'murk', false]]) {
     const end = isleRoom(stage, time).adventure;
     assert.deepEqual([end.boss, end.story.final, end.story.last], [boss, true, last]);
     end.king = { id: 1, hearts: 1, max: 10, minions: 0, hits: new Map(), hitAt: 0, healAt: 0 };

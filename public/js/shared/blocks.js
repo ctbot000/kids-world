@@ -632,6 +632,18 @@ export const WILD_TREES = [WILD_OAK, WILD_PINE, WILD_PALM, WILD_BIRCH, WILD_SNAG
 export const MASS = def(481, 'mass', { name: 'Stone', tiles: 'stone', sound: 'stone' });
 export const LIGHTHOUSE = def(482, 'wild-lighthouse', { name: 'Lighthouse', tiles: 'stone', sound: 'stone', landmark: 'lighthouse' });
 
+// ---------------------------------------------------------------- the Golden Bells
+// The fourth episode of Adventure Isle's story (isle-quests.js): Jinx the
+// Magpie's shinies, dropped all over his Puzzle Isles, each picked up by
+// walking into it; and the golden keys at the top of what there is to climb.
+// Only the island puts them down or takes them away: nobody picks them up
+// with a tap, and they are never in the toy box or a basket.
+export const TRINKET = def(490, 'trinket', { name: 'Shiny', kind: 'item', category: false, islandOnly: true, tiles: 'trinket', light: 9, sound: 'glass' });
+export const GOLD_KEY = def(491, 'gold-key', { name: 'Golden Key', kind: 'item', category: false, islandOnly: true, tiles: 'gold-key', light: 12, sound: 'glass' });
+// (A golden egg is a shiny too, hidden in the hay of Henhouse Hills.)
+export const GOLD_EGG = def(492, 'gold-egg', { name: 'Golden Egg', kind: 'item', category: false, islandOnly: true, tiles: 'gold-egg', light: 9, sound: 'glass' });
+export const SHINIES = [TRINKET, GOLD_EGG];
+
 // Things that go in the basket, in the order the basket shows them.
 export const COLLECTABLES = [
   ...FRUITS.map(([key, name, plural]) => ({ key, name, plural, item: byKey[key].id, sprout: byKey[`${key}-sprout`].id })),

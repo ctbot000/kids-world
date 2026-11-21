@@ -2565,6 +2565,28 @@ body.touch.playing #joystick {
   background: rgba(92, 195, 242, 0.18);
 }
 
+/* Jinx's challenges (the fourth episode): each its name, then what to do. */
+.story-way.quests li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.story-way.quests li .muted {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* A challenge's lock, in its colour, in the island card. */
+.lock-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
 .setting {
   display: flex;
   align-items: center;

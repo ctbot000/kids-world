@@ -839,6 +839,24 @@ export class Sound {
         this.tone(1500 * r(), { type: 'sawtooth', attack: 0.02, decay: 0.42, gain: 0.03, slide: 720, slideTime: 0.36, vibrato: 30 });
         this.noise(0.2, { type: 'bandpass', freq: 3200, q: 2, gain: 0.05 });
         break;
+      case 'magpie':
+        // Jinx the Magpie's chatter: a rattle of quick harsh chaks, laughing.
+        for (let i = 0; i < 5; i++) {
+          const f = (1100 + (i % 2) * 260) * r();
+          this.tone(f, { type: 'sawtooth', at: i * 0.075, attack: 0.004, decay: 0.06, gain: 0.04, slide: f * 0.7, slideTime: 0.05 });
+          this.noise(0.04, { at: i * 0.075, type: 'bandpass', freq: 2600, q: 2.5, gain: 0.05 });
+        }
+        break;
+      case 'bell':
+        // A Golden Bell ringing out, or a Singing Stone's note (opts.n: the
+        // MIDI note; a stone's is softer and shorter, a bell's long and deep).
+        this.bell(opts.n ?? 67, opts);
+        break;
+      case 'buzz':
+        // A wrong Singing Stone: a low, sorry buzz.
+        this.tone(140, { type: 'square', decay: 0.42, gain: 0.05, slide: 110, slideTime: 0.4 });
+        this.tone(147, { type: 'square', decay: 0.42, gain: 0.04, slide: 116, slideTime: 0.4 });
+        break;
       case 'hiss':
         // Ssss: a Stingtail's tail, or three heads of a Swamp Hydra.
         this.noise(0.5, { type: 'highpass', freq: 4200, sweep: 6400, gain: 0.08, attack: 0.05 });
@@ -1258,6 +1276,20 @@ export class Sound {
     };
     const timer = setTimeout(() => stop(false), (at * BEAT + 1) * 1000);
     return stop;
+  }
+
+  // A bell (MIDI note n): a strike, then the hum and the shimmer of a bell's
+  // own overtones, which are not a string's (2.0, 2.4, 3.0, 4.2 and 5.4 times
+  // its note), dying away slowly; `big` for a great bell, deeper and longer,
+  // `gain` softer from further away.
+  bell(n, { gain = 1, big = false, at = 0 } = {}) {
+    if (!this.ready) return;
+    const f = NOTE(n);
+    const ring = big ? 3.2 : 1.3;
+    this.tone(f * 0.5, { at, attack: 0.003, decay: ring * 1.3, gain: 0.07 * gain });
+    this.tone(f, { at, attack: 0.002, decay: ring, gain: 0.16 * gain });
+    for (const [k, g] of [[2, 0.09], [2.4, 0.07], [3, 0.05], [4.2, 0.035], [5.4, 0.02]]) this.tone(f * k, { at, attack: 0.002, decay: ring / k ** 0.7, gain: g * gain });
+    this.noise(0.03, { at, type: 'bandpass', freq: f * 6, q: 2, gain: 0.05 * gain });
   }
 
   // A robot hub's speaker beeping MIDI note n for sec seconds: a little

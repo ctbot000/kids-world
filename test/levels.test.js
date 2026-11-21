@@ -15,11 +15,11 @@ test('everything counted earns XP, except the highest you flew, the monster coll
   // The monster collection's counts (seen and popped, kind by kind) go over
   // what popped already earns XP for, the fish dictionary's (caught, kind by
   // kind) over what fished does, and an episode of the isle's story told to
-  // its end (toldstar, toldrainbow, toldwild: the ticket to the next) over the stage won
-  // that did it (kings). The coins earned in all (earned) are a lifetime
+  // its end (toldstar, toldrainbow, toldwild, toldbells: the ticket to the next) over the
+  // stage won that did it (kings). The coins earned in all (earned) are a lifetime
   // total, not a thing done: what earned each coin already gave XP.
   const book = new Set([...MONSTER_LOG.flatMap((k) => [seenKey(k), popKey(k)]), ...FISH_KINDS.map((c) => caughtKey(c.key)), ...TOLD_KEYS]);
-  assert.deepEqual(TOLD_KEYS, ['toldstar', 'toldrainbow', 'toldwild']);
+  assert.deepEqual(TOLD_KEYS, ['toldstar', 'toldrainbow', 'toldwild', 'toldbells']);
   for (const key of Object.keys(XP_FOR)) assert.ok(STAT_KEYS.includes(key), `${key} is counted`);
   for (const key of STAT_KEYS) if (key !== 'highest' && key !== 'earned' && !book.has(key)) assert.ok(XP_FOR[key]?.xp > 0, `${key} earns XP`);
   for (const key of book) assert.equal(XP_FOR[key], undefined, key);

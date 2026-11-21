@@ -16,6 +16,7 @@ import { campName, CHAPTERS, chapterOf, EPISODES, episodeOf, firstStage, introOf
 import { keptProfile, mergeProfiles } from '../public/js/shared/keeper.js';
 import { STAT_KEYS } from '../public/js/shared/stickers.js';
 import { kindOf, MONSTER_KINDS, MonsterSim } from '../public/js/shared/monsters.js';
+import { MAX_QUESTS, QUEST_ICONS } from '../public/js/shared/isle-quests.js';
 import { PROTOCOL } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
 
@@ -25,10 +26,13 @@ test('the story has a chapter for every Star Shard and every colour of the rainb
   assert.equal(stagesOf(1), SHARDS, 'the first episode: a chapter for each Star Shard');
   assert.equal(stagesOf(2), RAINBOW.length, 'the second: one for each colour of the rainbow');
   assert.equal(stagesOf(3), 5, 'the third: one for each of the Wild Isle’s five Sunstones');
+  assert.equal(stagesOf(4), 5, 'the fourth: one for each of the five Golden Bells');
   assert.equal(STAGES, CHAPTERS.length, 'a stage for each chapter, and no more');
   assert.equal(STAGES, EPISODES.reduce((n, ep) => n + stagesOf(ep.n), 0), 'every chapter in an episode');
   assert.equal(new Set(CHAPTERS.map((c) => c.key)).size, STAGES, 'each chapter its own map');
-  for (const ch of CHAPTERS) {
+  // (The fourth episode's chapters are told in challenges instead: below.)
+  const camped = CHAPTERS.filter((c) => !c.quests);
+  for (const ch of camped) {
     assert.ok(['sunny', 'snowy', 'candy', 'volcano', 'dunes', 'crystal', 'hollow', 'works', 'spires', 'tulip', 'maple', 'honey', 'jungle', 'lagoon', 'moor', 'vale', 'wildcoast', 'wildwood', 'wildfalls', 'wildpeak', 'wildfen'].includes(ch.theme), ch.key);
     assert.ok(ch.icon && ch.name && ch.lair && ch.intro && ch.won && ch.hazard, ch.key);
     assert.ok(ch.camps.length >= 3 && ch.camps.length <= 4, `${ch.key}: three or four camps along the way`);
@@ -40,7 +44,7 @@ test('the story has a chapter for every Star Shard and every colour of the rainb
     assert.ok(MONSTER_KINDS.includes(BOSSES[ch.boss].minion) && !isBoss(BOSSES[ch.boss].minion), `${ch.key}: its minions`);
     assert.ok(ch.intro.includes(BOSSES[ch.boss].name.split(' the ')[0]), `${ch.key}: the story tells of ${BOSSES[ch.boss].name}`);
   }
-  assert.equal(new Set(CHAPTERS.map((c) => c.boss)).size, STAGES, 'a boss of its own for every chapter');
+  assert.equal(new Set(camped.map((c) => c.boss)).size, camped.length, 'a boss of its own for every chapter with camps');
   assert.equal(CHAPTERS[SHARDS - 1].boss, 'king', 'King Grumble himself at the last of the first episode');
   // Its last chapter ends that tale: King Grumble popped for good, the Star whole.
   assert.match(CHAPTERS[SHARDS - 1].won, /once and for all/);
@@ -48,15 +52,43 @@ test('the story has a chapter for every Star Shard and every colour of the rainb
   const grizzle = CHAPTERS[firstStage(3) - 2];
   assert.equal(grizzle.boss, 'grizzle');
   assert.match(grizzle.won, /the rainbow stands over Adventure Isle again/);
-  // And Old Murk at the last of the third, the last of all, the Sunstones back.
-  assert.equal(CHAPTERS.at(-1).boss, 'murk');
-  assert.match(CHAPTERS.at(-1).won, /all five Sunstones fly up together/);
+  // And Old Murk at the last of the third, the Sunstones back.
+  const murk = CHAPTERS[firstStage(4) - 2];
+  assert.equal(murk.boss, 'murk');
+  assert.match(murk.won, /all five Sunstones fly up together/);
   // Each episode: a tale of its own, with its films and what its chapters win back.
-  assert.deepEqual(EPISODES.map((ep) => ep.n), [1, 2, 3]);
-  assert.equal(new Set(EPISODES.flatMap((ep) => [ep.key, ep.title, ep.films.intro, ep.films.ending])).size, 12);
+  assert.deepEqual(EPISODES.map((ep) => ep.n), [1, 2, 3, 4]);
+  assert.equal(new Set(EPISODES.flatMap((ep) => [ep.key, ep.title, ep.films.intro, ep.films.ending])).size, 16);
   // Only the third is drawn as the real thing, its own animals in its camps.
-  assert.deepEqual(EPISODES.map((ep) => Boolean(ep.real)), [false, false, true]);
+  assert.deepEqual(EPISODES.map((ep) => Boolean(ep.real)), [false, false, true, false]);
+  // Only the fourth is told in challenges (isle-quests.js), with no camps,
+  // no lair, no boss and nothing coming down on the way: three or four of
+  // Jinx's challenges on each island, never the same kind twice on one,
+  // each with its name, what to do and what is told once it is done, the
+  // last of all catching Jinx himself, once the rest are done.
+  assert.deepEqual(EPISODES.map((ep) => Boolean(ep.quests)), [false, false, false, true]);
+  const bells = CHAPTERS.filter((c) => c.episode === 4);
+  assert.deepEqual(bells.map((c) => c.key), ['bellbuoy', 'henhouse', 'topsy', 'kite', 'nest']);
+  for (const ch of bells) {
+    assert.ok(ch.quests.length >= 3 && ch.quests.length <= MAX_QUESTS, `${ch.key}: three or four challenges`);
+    assert.equal(new Set(ch.quests.map((q) => q.kind)).size, ch.quests.length, `${ch.key}: each a different kind`);
+    for (const q of ch.quests) {
+      assert.ok(QUEST_ICONS[q.kind], `${ch.key}: ${q.kind} is a challenge`);
+      assert.ok(q.name && q.hint.length > 30 && q.done, `${ch.key}: ${q.kind} told in full`);
+      if (q.kind === 'chase') assert.equal(q.animal, 'monkey');
+      if (q.kind === 'lead') assert.ok(['chick', 'sheep'].includes(q.animal));
+    }
+    assert.ok(!ch.camps && !ch.boss && !ch.lair && !ch.hazard, `${ch.key}: nothing of camps`);
+    assert.ok(ch.intro && ch.won && ch.icon && ch.name, ch.key);
+    assert.ok(['sunny', 'honey', 'tulip', 'maple', 'moor'].includes(ch.theme), ch.key);
+  }
+  assert.deepEqual(bells.flatMap((c) => c.quests.filter((q) => q.after).map((q) => `${c.key}:${q.kind}`)), ['nest:jinx']);
+  assert.equal(bells.at(-1).quests.at(-1).kind, 'jinx', 'catching Jinx comes last');
+  // Every kind of challenge comes up at least once.
+  assert.deepEqual([...new Set(bells.flatMap((c) => c.quests.map((q) => q.kind)))].sort(), Object.keys(QUEST_ICONS).sort());
+  bells.forEach((ch, i) => assert.match(ch.won, i === 4 ? /every Golden Bell/ : /Golden Bell rings out/, ch.key));
   for (const ch of CHAPTERS.filter((c) => c.episode === 3)) assert.ok(ch.theme.startsWith('wild') && ch.guards.every((k) => ['snapper', 'fox', 'boar', 'wolf'].includes(k)), ch.key);
+  assert.ok(EPISODES[3].villain === 'Jinx the Magpie' && EPISODES[3].token.icon === '🔔');
   for (const ep of EPISODES) {
     assert.ok(ep.icon && ep.villain && ep.token.one && ep.token.many && ep.films.endingMs > 10000, ep.key);
     assert.match(ep.again(3), /^Journey 3! /);
@@ -67,7 +99,7 @@ test('the story has a chapter for every Star Shard and every colour of the rainb
   // The second episode's chapters each win back their colour, and say so.
   CHAPTERS.slice(SHARDS, SHARDS + RAINBOW.length).forEach((ch, i) => assert.match(ch.won, new RegExp(i === 6 ? 'seven colours' : `${RAINBOW[i].name[0].toUpperCase()}${RAINBOW[i].name.slice(1)} is back`), ch.key));
   // The third episode's each win back a Sunstone, and say so.
-  CHAPTERS.slice(SHARDS + RAINBOW.length).forEach((ch, i) => assert.match(ch.won, i === 4 ? /five Sunstones/ : /Sunstone/, ch.key));
+  CHAPTERS.slice(SHARDS + RAINBOW.length, firstStage(4) - 1).forEach((ch, i) => assert.match(ch.won, i === 4 ? /five Sunstones/ : /Sunstone/, ch.key));
 });
 
 test('each stage is a chapter of an episode, its last the end of that tale, told again on a new journey', () => {
@@ -77,7 +109,9 @@ test('each stage is a chapter of an episode, its last the end of that tale, told
   const vale = SHARDS + RAINBOW.length;
   assert.deepEqual([chapterOf(vale).shards, chapterOf(vale).final, chapterOf(vale).last], [RAINBOW.length, true, false], 'the end of the second, not of the story');
   assert.deepEqual([chapterOf(STAGES).shards, chapterOf(STAGES).final, chapterOf(STAGES).last], [5, true, true]);
-  assert.equal(chapterOf(STAGES + 5).key, 'fen', 'past the last, the last');
+  const fen = firstStage(4) - 1;
+  assert.deepEqual([chapterOf(fen).key, chapterOf(fen).final, chapterOf(fen).last], ['fen', true, false], 'the end of the third, not of the story');
+  assert.equal(chapterOf(STAGES + 5).key, 'nest', 'past the last, the last');
   // The second episode's stages come after the first's, counted from 1 again,
   // and the third's after the second's.
   assert.deepEqual([firstStage(1), firstStage(2), firstStage(3), firstStage(99)], [1, SHARDS + 1, vale + 1, 1]);
@@ -91,12 +125,16 @@ test('each stage is a chapter of an episode, its last the end of that tale, told
   const levels = CHAPTERS.slice(SHARDS, vale).map((_, i) => chapterOf(SHARDS + 1 + i).level);
   assert.ok(levels.every((l, i) => l >= 6 && (i === 0 || l > levels[i - 1])), 'each harder than the last');
   assert.ok(levels.at(-1) > SHARDS, 'Queen Grizzle harder than King Grumble');
-  const wild = CHAPTERS.slice(vale).map((_, i) => chapterOf(vale + 1 + i).level);
+  const wild = CHAPTERS.slice(vale, fen).map((_, i) => chapterOf(vale + 1 + i).level);
   assert.ok(wild.every((l, i) => l >= 9 && (i === 0 || l > wild[i - 1])), 'and the third, each harder than the last');
   assert.ok(wild.at(-1) > SHARDS, 'Old Murk harder than King Grumble');
+  const bells = CHAPTERS.slice(fen).map((_, i) => chapterOf(fen + 1 + i).level);
+  assert.ok(bells.every((l, i) => l >= 10 && (i === 0 || l > bells[i - 1])), 'and the fourth');
   assert.deepEqual([stageName(3), stageName(3, true), stageName(SHARDS + 3), stageName(SHARDS + 3, true)], ['Stage 3 of 12', 'Stage 3', 'Episode 2 · Stage 3 of 7', 'Episode 2 · Stage 3']);
-  assert.deepEqual([tokensBack(chapterOf(3)), tokensBack(chapterOf(SHARDS)), tokensBack(tulip), tokensBack(chapterOf(vale)), tokensBack(chapterOf(vale + 2)), tokensBack(chapterOf(STAGES))], ['3 of 12 Star Shards back!', 'All 12 Star Shards!', '1 of 7 colours of the rainbow back!', 'All 7 colours of the rainbow!', '2 of 5 Sunstones back!', 'All 5 Sunstones!']);
-  assert.deepEqual([stageName(vale + 2), stageName(vale + 2, true)], ['Episode 3 · Stage 2 of 5', 'Episode 3 · Stage 2']);
+  assert.deepEqual([tokensBack(chapterOf(3)), tokensBack(chapterOf(SHARDS)), tokensBack(tulip), tokensBack(chapterOf(vale)), tokensBack(chapterOf(vale + 2)), tokensBack(chapterOf(fen)), tokensBack(chapterOf(fen + 2)), tokensBack(chapterOf(STAGES))], ['3 of 12 Star Shards back!', 'All 12 Star Shards!', '1 of 7 colours of the rainbow back!', 'All 7 colours of the rainbow!', '2 of 5 Sunstones back!', 'All 5 Sunstones!', '2 of 5 Golden Bells back!', 'All 5 Golden Bells!']);
+  assert.deepEqual([stageName(vale + 2), stageName(vale + 2, true), stageName(fen + 4)], ['Episode 3 · Stage 2 of 5', 'Episode 3 · Stage 2', 'Episode 4 · Stage 4 of 5']);
+  assert.match(introOf(fen + 1, 3), /^Journey 3! Jinx the Magpie never could keep away/);
+  assert.deepEqual([campName(fen + 1, 2), campName(fen + 5, 4), campName(fen + 5, 9)], ['The Crow’s Nest', 'Catch Jinx!', null]);
   assert.match(introOf(vale + 1, 2), /^Journey 2! Old Murk crept back/);
   assert.match(introOf(SHARDS + 2, 2), /^Journey 2! Queen Grizzle is back/);
   assert.equal(introOf(SHARDS + 1), CHAPTERS[SHARDS].intro);
@@ -154,6 +192,8 @@ const reaches = (seen, c) => {
 
 for (const [i, ch] of CHAPTERS.entries()) {
   const stage = i + 1;
+  // (The fourth episode's maps have no camps: test/isle-quests.test.js.)
+  if (ch.quests) continue;
   test(`chapter ${stage}, ${ch.name}: its own map, crossed one camp at a time`, () => {
     for (const seed of [12345, 987654321]) {
       const made = buildIsle({ stage, seed });
@@ -196,18 +236,21 @@ test('an episode after the first needs its ticket, which the episode before it g
   assert.equal(ticketOf(1), null);
   assert.deepEqual(ticketOf(2), { icon: '🎫', name: 'Rainbow Ticket' });
   assert.deepEqual(ticketOf(3), { icon: '🧭', name: 'Wild Isle Compass' });
+  assert.deepEqual(ticketOf(4), { icon: '🪶', name: 'Magpie Feather' });
   for (const ep of EPISODES.slice(1)) assert.ok(ep.ticket?.icon && ep.ticket.name, `episode ${ep.n}`);
   // What is counted: the times you were there as each episode was told to
   // its end, kept with everything else the isle's own world of you counts.
-  assert.deepEqual(EPISODES.map((ep) => toldKey(ep.n)), ['toldstar', 'toldrainbow', 'toldwild']);
+  assert.deepEqual(EPISODES.map((ep) => toldKey(ep.n)), ['toldstar', 'toldrainbow', 'toldwild', 'toldbells']);
   for (const ep of EPISODES) assert.ok(STAT_KEYS.includes(toldKey(ep.n)), toldKey(ep.n));
   // The ticket to an episode: the one before it told to its end, once or often.
   assert.deepEqual(ticketsHeld({}), []);
   assert.deepEqual(ticketsHeld(null), []);
-  assert.deepEqual(ticketsHeld({ kings: 40, popking: 3, toldwild: 2 }), [], 'not for stages won, nor for the last episode');
+  assert.deepEqual(ticketsHeld({ kings: 40, popking: 3, toldbells: 2 }), [], 'not for stages won, nor for the last episode');
   assert.deepEqual(ticketsHeld({ toldstar: 1 }), [2]);
   assert.deepEqual(ticketsHeld({ toldrainbow: 1 }), [3]);
+  assert.deepEqual(ticketsHeld({ toldwild: 1 }), [4]);
   assert.deepEqual(ticketsHeld({ toldstar: 7, toldrainbow: 1 }), [2, 3]);
+  assert.equal(ticketNeeded(4), 'Episode 4 needs the 🪶 Magpie Feather. Pop Old Murk at the end of Episode 3 to get yours!');
   // Whether tickets let into an episode.
   assert.equal(ticketFits(1, []), true);
   assert.equal(ticketFits(1, undefined), true);

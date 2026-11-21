@@ -36,6 +36,7 @@ import { trainAt } from './shared/coaster.js';
 import { advanceTime, isNight, TORNADO_HEIGHT, TORNADO_REACH, tornadoAt } from './shared/env.js';
 import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
+import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -332,7 +333,7 @@ function cleanBoard(board) {
   const n = (v, max) => (Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
   const rows = board.slice(0, 32).filter((r) => Number.isInteger(r?.id) && typeof r.name === 'string');
   if (!rows.length) return null;
-  return rows.map((r) => ({ id: r.id, name: r.name.slice(0, 40), here: r.here === true, pops: n(r.pops, 99999), boss: n(r.boss, 99999), flag: n(r.flag, 99999), helps: n(r.helps, 99999), score: n(r.score, 9999999), place: Math.max(1, n(r.place, 99)), coins: n(r.coins, 500), gems: n(r.gems, 3) }));
+  return rows.map((r) => ({ id: r.id, name: r.name.slice(0, 40), here: r.here === true, pops: n(r.pops, 99999), boss: n(r.boss, 99999), flag: n(r.flag, 99999), helps: n(r.helps, 99999), play: n(r.play, 99999), score: n(r.score, 9999999), place: Math.max(1, n(r.place, 99)), coins: n(r.coins, 500), gems: n(r.gems, 3) }));
 }
 // A key quiz comes up this long after the camp it is for is freed (once
 // its fanfare and its news have had their moment).
@@ -818,6 +819,14 @@ export class Game extends EventTarget {
         break;
       case 'freed':
         this.campFreed(msg);
+        break;
+      // Jinx the Magpie's challenges, on the isle's fourth episode
+      // (isle-quests-view.js): what everyone sees of one, and one beaten.
+      case 'qfx':
+        questFx(this, msg);
+        break;
+      case 'quest':
+        this.questDone(msg);
         break;
       case 'shield':
         this.shieldDown();
@@ -3018,7 +3027,18 @@ export class Game extends EventTarget {
     this.renderer.clearFlags();
     this.adventure = null;
     this.quiz = null;
-    if (this.shared && a && Array.isArray(a.camps) && a.camps.length) {
+    this.questShow = [];
+    // A chapter of the fourth episode: no camps, but Jinx's challenges and
+    // the cage of its Golden Bell (shared/isle-quests.js).
+    if (this.shared && a && Array.isArray(a.quests) && a.quests.length) {
+      const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
+      const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
+      const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
+      const cell = (c) => Array.isArray(c) && c.length === 3 && c.every(Number.isFinite);
+      const hub = a.hub && cell(a.hub.bell) ? { bell: a.hub.bell, locks: Array.isArray(a.hub.locks) ? a.hub.locks.filter(cell).slice(0, 4) : [] } : null;
+      this.adventure = { camps: new Map(), won: a.won === true, stage, journey, run, king: null, shield: false, story: chapterOf(stage), quests: readQuests(a.quests, stage), hub };
+      this.adventureNews(a);
+    } else if (this.shared && a && Array.isArray(a.camps) && a.camps.length) {
       const camps = new Map();
       for (const c of a.camps) {
         if (!Number.isInteger(c?.id) || ![c.x, c.y, c.z, c.r].every(Number.isFinite)) continue;
@@ -3076,6 +3096,26 @@ export class Game extends EventTarget {
     }
     adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1], second: msg.k[2] === 1 } : null;
     adv.shield = msg.shield !== false && !adv.won;
+    // (On a chapter told in challenges, how each is going, and no bubble.)
+    if (adv.quests) {
+      adv.shield = false;
+      for (const row of Array.isArray(msg.q) ? msg.q : []) {
+        const q = adv.quests.get(row?.[0]);
+        if (q) readRow(q, row);
+      }
+    }
+    this.emit('adventure');
+  }
+
+  // One of Jinx's challenges beaten (shared/isle-quests.js), its lock lit on
+  // the bell's cage; yours, a quiz for a chest key a little while after, as
+  // for a camp freed.
+  questDone(msg) {
+    const mine = questBeaten(this, msg);
+    if (mine) {
+      this.profile.count('freed');
+      this.offerKeyQuiz(false, KEY_OFFER_MS);
+    }
     this.emit('adventure');
   }
 
@@ -3276,6 +3316,12 @@ export class Game extends EventTarget {
     if (adv) {
       Object.assign(adv, { won: true, shield: false, king: null });
       for (const c of adv.camps.values()) Object.assign(c, { freed: true, progress: 1, friends: 0, guarded: false });
+      for (const q of adv.quests?.values() ?? []) q.done = true;
+    }
+    // A Golden Bell let out of its cage (the fourth episode): ding, dong.
+    if (adv?.quests && [msg.x, msg.y, msg.z].every(Number.isFinite) && this.near(msg.x, msg.y, msg.z, 120)) {
+      for (const [i, n] of [55, 50, 55, 50].entries()) setTimeout(() => this.adventure === adv && this.sound.play('bell', { n, big: true }), 500 + i * 650);
+      this.renderer.effects.confetti(msg.x, msg.y + 4, msg.z, 140, 1.4);
     }
     const b = this.me?.body;
     const [x, y, z] = [msg.x, msg.y, msg.z].every(Number.isFinite) ? [msg.x, msg.y, msg.z] : [b?.x ?? 0, b?.y ?? 0, b?.z ?? 0];
@@ -3321,12 +3367,13 @@ export class Game extends EventTarget {
     }
     const hero = msg.hero === this.pid ? 'You' : this.players.get(msg.hero)?.name;
     const boss = this.bossInfo();
-    const what = hero ? `${hero} popped ${boss.name}!` : 'Every camp is free!';
+    const quests = Boolean(adv?.quests);
+    const what = quests ? 'Every lock is open!' : hero ? `${hero} popped ${boss.name}!` : 'Every camp is free!';
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards (or the colours
-    // of the rainbow) won back so far.
+    // of the rainbow, or the Golden Bells) won back so far.
     const thanks = !mine ? '' : board ? ' Rewards for everyone, by how much each helped! 🏆' : ' A diamond for everyone who helped! 💎';
-    if (story) this.emit('toast', { icon: story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
+    if (story) this.emit('toast', { icon: quests ? '🔔' : story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
     // Your ticket to the next episode, the first time you see this one told
     // to its end.
     if (this.ticketWon) {
@@ -3607,6 +3654,8 @@ export class Game extends EventTarget {
         c.flag.group.position.set(c.x, top >= 0 ? top + 1 : c.y, c.z);
         c.flag.update(dt, c.progress, c.freed);
       }
+      // (Or the Singing Stones singing, shinies glinting, Jinx seeing stars.)
+      if (adv.quests) questFrame(this, now);
     }
     while (this.fireworks.length && this.fireworks[0].at <= now) {
       const f = this.fireworks.shift();
