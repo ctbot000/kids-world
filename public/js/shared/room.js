@@ -1828,7 +1828,7 @@ export class Room {
     }
     for (const u of this.monsters.takeRises()) this.broadcast({ t: 'mfx', kind: 'rise', id: u.monster.id, x: +u.x.toFixed(2), y: +u.y.toFixed(2), z: +u.z.toFixed(2) });
     if (this.defense) this.stepDefense(now);
-    for (const { monster, pid, bumps: n, charge } of bumps) this.hurt(pid, monster, now, { bumps: n, charge });
+    for (const { monster, pid, bumps: n, charge, pounce } of bumps) this.hurt(pid, monster, now, { bumps: n, charge, pounce });
     // Mr. Mole coming up out of the ground beside someone: a burst of dirt
     // everyone sees, and his little grunt of arrival.
     for (const u of this.monsters.takeUps()) {
@@ -1859,7 +1859,7 @@ export class Room {
   stepBossMoves(now, riding) {
     for (const r of this.monsters.takeRears()) {
       const b = r.monster.body;
-      this.broadcast({ t: 'mfx', kind: 'rear', id: r.monster.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), yaw: +r.yaw.toFixed(3), d: r.far, w: +(b.radius * 2).toFixed(2), ms: r.ms });
+      this.broadcast({ t: 'mfx', kind: 'rear', id: r.monster.id, x: +b.x.toFixed(2), y: +b.y.toFixed(2), z: +b.z.toFixed(2), yaw: +r.yaw.toFixed(3), d: r.far, w: +(r.w ?? b.radius * 2).toFixed(2), ms: r.ms });
     }
     for (const l of this.monsters.takeLeaps()) this.broadcast({ t: 'mfx', kind: 'leap', id: l.monster.id, x: +l.x.toFixed(2), y: +l.y.toFixed(2), z: +l.z.toFixed(2), r: l.reach, ms: l.ms });
     for (const k of this.monsters.takeBonks()) this.broadcast({ t: 'mfx', kind: 'bonk', id: k.monster.id, x: +k.x.toFixed(2), y: +k.y.toFixed(2), z: +k.z.toFixed(2) });
@@ -1898,6 +1898,7 @@ export class Room {
     if (monster.kind === 'spiky') msg.spiky = true;
     if (how.stomp) msg.stomp = true;
     if (how.charge) msg.charge = true;
+    if (how.pounce) msg.pounce = true;
     if (how.hurl) msg.hurl = how.hurl;
     // Knight Armor (shop.js CLOTHES) takes half of it.
     this.knock(p, now, hpAfterBump(p.hp, hasPower(p.look, 'armor') ? bumps / 2 : bumps), msg);
@@ -1982,7 +1983,7 @@ export class Room {
       const hit = this.monsters.hit(m, p.id, { x: c.x, y: c.y, z: c.z }, now, 1, undefined, 'fire');
       if (hit.wait) continue;
       if (hit.hearts) {
-        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
         continue;
       }
       this.popMonster(p, m, now);
@@ -2307,7 +2308,7 @@ export class Room {
       const hit = this.monsters.hit(m, p.id, at, now, (landed ? land : (glove ? glove.shock : king ? 1 : weapon?.power ?? 1)) + this.figBonus(p, m), king ? (glove ? KING_PUSH + 4 : KING_PUSH) : weapon?.push, landed ? null : weapon?.key);
       if (hit.wait) return;
       if (hit.hearts) {
-        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+        this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
         return;
       }
     }
@@ -2344,7 +2345,7 @@ export class Room {
     const hit = this.monsters.hit(m, p.id, from, now, weapon.power + this.figBonus(p, m), weapon.push, weapon.key);
     if (hit.wait) return;
     if (hit.hearts) {
-      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts });
+      this.broadcast({ t: 'mhit', id: m.id, by: p.id, hearts: hit.hearts, ...(hit.still ? { still: true } : {}) });
       return;
     }
     this.popMonster(p, m, now);

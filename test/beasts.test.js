@@ -79,7 +79,7 @@ const due = (m, i = 0) => {
 test('the beasts go on the end of the kinds and states, each tougher than most, never as quick as you run, and in the collection', () => {
   assert.deepEqual(MONSTER_KINDS.slice(22, 22 + KINDS_NEW.length), KINDS_NEW, 'new kinds go on the end: the wire sends the index');
   assert.equal(MONSTER_KINDS.indexOf('moltok'), 21, 'the old ones where they were');
-  assert.deepEqual(MONSTER_STATES.slice(13), ['heap', 'howl', 'blink']);
+  assert.deepEqual(MONSTER_STATES.slice(13, 16), ['heap', 'howl', 'blink'], 'where they were (newer states after them)');
   assert.deepEqual(Object.keys(BEASTS).sort(), [...KINDS_NEW, 'boar'].sort(), 'and the Wild Isle’s own boar');
   for (const kind of KINDS_NEW) {
     const k = kindOf(kind);

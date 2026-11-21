@@ -252,8 +252,9 @@ test('a monster tapped comes straight back at you, quicker than you walk, but ne
     }
     return null;
   };
+  // (Standing still, it comes back with a pounce: shared/monsters.js POUNCE.)
   const back = chase(0);
-  assert.ok(back !== null && back < 1500, `back and bumping you in ${back} ms`);
+  assert.ok(back !== null && back < 2500, `back and bumping you in ${back} ms`);
   assert.ok(chase(4.6) !== null, 'caught walking');
   assert.equal(chase(4.6, false), null, 'one not tapped never catches you walking');
   assert.equal(chase(7), null, 'never caught running');

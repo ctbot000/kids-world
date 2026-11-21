@@ -41,7 +41,7 @@ import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
 import { XP_FOR } from './shared/levels.js';
 import { caughtKey, popKey, seenKey } from './shared/stickers.js';
-import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, maxHp, moleUnder, SPORES, staggerOf, STOMP, unpackMonster } from './shared/monsters.js';
+import { ARM_REACH, bodyOf, bopGap, GHOST_FIRE, HIT_MS, HIT_PUSH, isHeavy, KING_REACH, KING_SWEEP, kindOf, kindPounces, maxHp, moleUnder, SPORES, staggerOf, STOMP, TIRED_HIT, unpackMonster } from './shared/monsters.js';
 import { padUnder, startLift, stepLift } from './shared/elevator.js';
 import { boardEscalator, ESCALATOR_SPEED, stepEscalator } from './shared/escalator.js';
 import { EMOTE_TRICKS, hearsay, makePet, placePet, petPose, startTrick, stepPet } from './shared/pets.js';
@@ -104,7 +104,7 @@ const CRITTER_INTERP_MS = 260;
 // and not carried on at all in these states, when it stands still.
 const PREDICT_MS = 260;
 const PREDICT_FADE = 8;
-const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl', 'heap', 'howl', 'blink']);
+const STILL_STATES = new Set(['idle', 'giggle', 'stomp', 'dazed', 'breathe', 'rear', 'hurl', 'heap', 'howl', 'blink', 'crouch']);
 // A bopped monster flies back about this far (the host's HIT_PUSH, see
 // monsters.js), most of it in the first KICK_SECS: drawn so at once, for
 // KICK_HOLD_SECS at most, not only once the host's updates say so.
@@ -170,6 +170,15 @@ const METEOR_LATE = 0.06;
 const FLASH_MS = 230;
 const FLASH_TAIL = 150;
 const flashOn = (left) => left > 0 && (left > FLASH_TAIL || Math.floor(left / (FLASH_TAIL / 3)) === 1);
+// One sitting dizzy after a pounce that missed (shared/monsters.js POUNCE),
+// as far as can be told from here: a bop on it counts TIRED_HIT times.
+const dizzyAfterPounce = (entry) => entry.snaps.at(-1)?.state === 'dazed' && kindPounces(entry.kind);
+// How a monster crouching to pounce, then springing, is drawn (posePounce):
+// squashed down and wider, leaning back and shivering; then stretched out
+// along the way it goes, leaning into it. Eased in and out at POSE_EASE.
+const CROUCH_POSE = { down: 0.24, wide: 0.14, back: 0.24, shiver: 0.06 };
+const POUNCE_POSE = { long: 0.32, low: 0.12, narrow: 0.06, lean: 0.32 };
+const POSE_EASE = 16;
 // A volcano island's own dragon, still wild (dragon.js): not to ride yet, but to bop.
 const wildDragon = (c) => c.type === 'dragon' && Boolean(c.fight) && c.fight.mood !== 'tame';
 // How each swing's slash looks (render/effects.js slash): its colour, how
@@ -1586,6 +1595,19 @@ export class Game extends EventTarget {
           this.emit('toast', { icon: '💀', text: 'It fell apart! Bop the heap of bones quickly, before it gets up again.' });
         }
       }
+      // Springing at someone (shared/monsters.js POUNCE): a whoosh and a puff
+      // of dust; and missing, it sits dizzy (stars round it: updateMonsters).
+      if (m.state === 'pounce' && entry.lastState !== 'pounce' && this.near(m.x, m.y, m.z, 30)) {
+        this.sound.play('swish', { lands: 0.12 });
+        this.renderer.effects.dust(m.x, m.y, m.z);
+      }
+      if (m.state === 'dazed' && entry.lastState === 'pounce' && this.near(m.x, m.y, m.z, 20)) {
+        this.renderer.effects.dust(m.x, m.y, m.z);
+        if (!this.toldTired) {
+          this.toldTired = true;
+          this.emit('toast', { icon: '💫', text: 'It missed, and now it’s dizzy! Bop it quick: every bop counts twice.' });
+        }
+      }
       entry.lastState = m.state;
       // On Adventure Isle, one near you goes in your monster collection as
       // seen (ui.js monsterBook), whether it came out there or came up to you.
@@ -1981,7 +2003,8 @@ export class Game extends EventTarget {
       entry.flashUntil = entry.stopUntil + FLASH_TAIL;
       if (!msg.march) entry.recoil = { ...away, at: entry.stopUntil };
     }
-    if (away && !msg.march) {
+    // (Not one that took it sitting dizzy, or springing at you: it stays put.)
+    if (away && !msg.march && !msg.still) {
       entry.kick = {
         ...away,
         at: Math.max(now, entry.stopUntil ?? 0),
@@ -2231,7 +2254,7 @@ export class Game extends EventTarget {
     });
     // A monster's last blow, as far as anyone can tell from here. A boss has
     // its hearts kept apart, and a boss feels a weapon its own way.
-    const lastBlow = (entry) => (isBoss(entry.kind) ? (this.adventure?.king?.hearts ?? Infinity) <= (weapon?.king ?? 1) : entry.hearts <= (weapon?.power ?? 1));
+    const lastBlow = (entry) => (isBoss(entry.kind) ? (this.adventure?.king?.hearts ?? Infinity) <= (weapon?.king ?? 1) : entry.hearts <= (weapon?.power ?? 1) * (dizzyAfterPounce(entry) ? TIRED_HIT : 1));
     const finish = landing.some((hit) => lastBlow(this.monsters.get(hit.id)));
     const until = now + Math.min(STOP_MAX, look.stop + STOP_MORE * (hits.length - 1) + (finish ? FINISH.stop : 0));
     // (Bursts side by side are smaller, or they hide all there is to see.)
@@ -2884,6 +2907,27 @@ export class Game extends EventTarget {
     return { x, y, z, yaw: entry.yaw, state: last.state };
   }
 
+  // A monster crouched to pounce, or springing (shared/monsters.js POUNCE),
+  // drawn so on top of whatever its model does: see CROUCH_POSE and
+  // POUNCE_POSE. Its own scale is kept, and put back once it is done.
+  posePounce(entry, m, state, dt) {
+    const want = state === 'crouch' ? 1 : state === 'pounce' ? -1 : 0;
+    const pose = (entry.pose ?? 0) + (want - (entry.pose ?? 0)) * Math.min(1, dt * POSE_EASE);
+    entry.pose = Math.abs(pose) < 0.01 && !want ? 0 : pose;
+    const base = (entry.baseScale ??= m.group.scale.clone());
+    if (!entry.pose) {
+      if (entry.posed) m.group.scale.copy(base);
+      entry.posed = false;
+      return;
+    }
+    entry.posed = true;
+    const c = Math.max(0, entry.pose);
+    const p = Math.max(0, -entry.pose);
+    m.group.scale.set(base.x * (1 + CROUCH_POSE.wide * c - POUNCE_POSE.narrow * p), base.y * (1 - CROUCH_POSE.down * c - POUNCE_POSE.low * p), base.z * (1 + CROUCH_POSE.wide * c + POUNCE_POSE.long * p));
+    m.group.rotation.x += POUNCE_POSE.lean * p - CROUCH_POSE.back * c;
+    m.group.rotation.z += Math.sin(performance.now() / 22) * CROUCH_POSE.shiver * c;
+  }
+
   updateMonsters(dt) {
     const now = performance.now();
     const night = isNight(this.env.time);
@@ -2924,6 +2968,7 @@ export class Game extends EventTarget {
         entry.grown = (entry.grown ?? 1) + (big - (entry.grown ?? 1)) * Math.min(1, dt * 3);
         m.group.scale.setScalar(entry.grown);
       }
+      this.posePounce(entry, m, s.state, stopped ? 0 : dt);
       const flash = flashOn((entry.flashUntil ?? 0) - now);
       if (flash || entry.flashed) flashModel(m.group, flash);
       entry.flashed = flash;
@@ -2943,7 +2988,8 @@ export class Game extends EventTarget {
       // A boss dazed from a stomp (or a leap, or a charge into a wall): stars
       // round its head, and the first time you see it near, how to make the
       // most of it.
-      if ((boss || isBeast(entry.kind)) && s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
+      // (And any monster sitting dizzy after a pounce that missed.)
+      if (s.state === 'dazed' && this.near(s.x, s.y, s.z, 40)) {
         this.renderer.effects.dizzy(s.x, s.y + (m.height ?? 1.8) + 0.4, s.z, now / 1000, 0.75);
         if (boss && !this.toldDazed && this.near(s.x, s.y, s.z, 20)) {
           this.toldDazed = true;
@@ -3202,7 +3248,14 @@ export class Game extends EventTarget {
       const d = Math.min(24, Math.max(1, Number(msg.d) || 10));
       const w = Math.min(4, Math.max(0.5, Number(msg.w) || 2));
       this.renderer.warnStrip(msg.x, msg.y, msg.z, Number(msg.yaw) || 0, d, w, ms);
-      this.sound.play('grumble', { big: true });
+      // (Or an ordinary monster crouching to pounce: shared/monsters.js POUNCE.)
+      const kind = this.monsters.get(msg.id)?.kind;
+      const pounce = Boolean(kind) && !isBoss(kind) && !isBeast(kind);
+      this.sound.play('grumble', { big: !pounce || isHeavy(kind) });
+      if (pounce && !this.toldCrouch && this.near(msg.x, msg.y, msg.z, 16)) {
+        this.toldCrouch = true;
+        this.emit('toast', { icon: '🐾', text: 'It’s crouching to pounce! Step out of the red strip — or jump over it.' });
+      }
     } else if (msg.kind === 'bonk') {
       for (let i = 0; i < 8; i++) fx.dust(msg.x + (Math.random() - 0.5) * 2, msg.y, msg.z + (Math.random() - 0.5) * 2);
       fx.stars(msg.x, msg.y + 2, msg.z, 6);
