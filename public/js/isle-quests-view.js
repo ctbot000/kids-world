@@ -140,6 +140,16 @@ export function questFx(g, msg) {
     case 'lost':
       if (mine) toast(questIcon(q), `${named} lost you! Go back and fetch it again.`);
       break;
+    case 'scramble': {
+      // Stuck where it could not climb out, it scrambled up after whoever
+      // leads it: a puff where it was, and a hop.
+      for (const at of [msg.from, msg.to]) {
+        if (!cell(at) || !g.near(at[0], at[1], at[2], 50)) continue;
+        for (let i = 0; i < 4; i++) fx.dust(at[0] + (Math.random() - 0.5) * 0.8, at[1], at[2] + (Math.random() - 0.5) * 0.8);
+      }
+      if (cell(msg.to) && g.near(msg.to[0], msg.to[1], msg.to[2], 40)) g.sound.play('boing', { speed: 8 });
+      break;
+    }
     case 'home': {
       if (pos && g.near(pos.x, pos.y, pos.z, 60)) {
         fx.hearts(pos.x, pos.y + 0.6, pos.z, 4);

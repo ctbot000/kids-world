@@ -16,9 +16,11 @@
 //           aside when someone is about to touch it, until it runs out of
 //           puff and has to slow down for a moment. Touch it to catch it,
 //           and again if the challenge says so (catches).
-// - lead:   lost chicks (or sheep) all over the island, each following the
-//           first person to come up to it, until it is led into its coop
-//           (or fold) and settles there.
+// - lead:   lost chicks (or sheep) all over the island, each waiting where
+//           it is until someone comes up to it, then following in their
+//           footsteps — and scrambling up beside them if it is stuck
+//           somewhere it cannot climb out of — until it is led into its
+//           coop (or fold) and settles there.
 // - fires:  bonfires to light, standing by each; a bonfire lit burns only so
 //           long (burn), so all of them have to burn at once — a run for one
 //           person, easy for friends.
@@ -39,7 +41,7 @@
 // (follow). What changes in the world (a shiny gone, a bonfire alight) is an
 // edit the room makes and tells everyone of.
 import * as B from './blocks.js';
-import { standHeight } from './critters.js';
+import { CRITTER_INFO, standHeight } from './critters.js';
 import { Rng } from './rng.js';
 
 // What each challenge is, at a glance.
@@ -84,10 +86,13 @@ export const CHASE = {
   headStart: 1500,
   home: 6,
 };
-// The lost animals: how near someone comes for one to follow them, how much
-// quicker than it would walk it keeps up, how far behind it gives up (and is
-// lost again where it is), how fast it potters to its place once home.
-export const LEAD = { pick: 2.4, pace: 1.9, stray: 36, settle: 1.1 };
+// The lost animals: how near someone comes for one to follow them; how close
+// behind them it stops; how far apart the footsteps it follows are, and how
+// many it remembers; how fast it walks after them (by kind); how far down it
+// will hop; how long it stands stuck before it scrambles up beside them; how
+// far behind it gives up (and is lost again where it is); how fast it potters
+// to its place once home.
+export const LEAD = { pick: 2.4, near: 2, crumb: 0.7, trail: 240, speed: { chick: 4.3, sheep: 3.9 }, drop: 3, stuckMs: 1500, stray: 36, settle: 1.1 };
 // Bonfires and beacons: how near (across, and up) lights one.
 export const FIRE = { reach: 2.6, up: 3 };
 // The Singing Stones: a note every gap ms as the tune is sung; a pause after
@@ -110,10 +115,10 @@ const able = (people) => people.filter((p) => !p.flying && !p.dizzy);
 // ---------------------------------------------------------------- moving about
 
 // Where something walking on the ground stands at (x, z), coming from height
-// y: one step up at most, a drop of a few at most, never in the water; or null.
-function footing(world, x, z, y) {
+// y: one step up at most, a drop of `drop` at most, never in the water; or null.
+function footing(world, x, z, y, drop = 2.6) {
   const ny = standHeight(world, x, z, y);
-  if (ny === null || ny - y > 1.05 || y - ny > 2.6) return null;
+  if (ny === null || ny - y > 1.05 || y - ny > drop) return null;
   const id = world.get(Math.floor(x), ny, Math.floor(z));
   if (id === B.WATER || id === B.LAVA) return null;
   // (Room to stand, not under a roof a block over its head.)
@@ -202,12 +207,18 @@ export class Quests {
         c.held = true;
         Object.assign(q, { cid: c.id, caught: 0, mode: 'amble', modeUntil: 0, dashUntil: 0, jinkAt: 0, jink: null, trail: [], goal: null, calmAt: 0, giggleUntil: 0, heading: 0 });
       } else if (q.kind === 'lead') {
+        // (Each one steered from here, lost or led, never left to wander off
+        // by itself, down a drop it could not climb back up.)
         q.flock = [];
+        const names = new Set();
         for (const [x, y, z] of q.spots) {
           const c = critters.add(q.animal ?? 'chick', x + 0.5, y, z + 0.5);
           if (!c) continue;
-          c.home = { x: x + 0.5, z: z + 0.5 };
-          q.flock.push({ cid: c.id, home: false, slot: null });
+          // (Each its own name: two Fluffys lost at once cannot be told apart.)
+          if (names.has(c.name)) c.name = CRITTER_INFO[c.type].names.find((n) => !names.has(n)) ?? c.name;
+          names.add(c.name);
+          Object.assign(c, { held: true, state: 'idle', home: { x: x + 0.5, z: z + 0.5 } });
+          q.flock.push({ cid: c.id, home: false, leader: 0, trail: [], stuck: 0 });
         }
       } else if (q.kind === 'jinx') {
         const [px, py, pz] = q.perch;
@@ -530,30 +541,76 @@ const STEP = {
       left++;
       // Home: in the coop.
       if (Math.hypot(c.x - h.x, c.z - h.z) <= h.r && Math.abs(c.y - h.y) < 2.5) {
-        const by = c.follow;
-        f.home = true;
-        Object.assign(c, { follow: 0, held: true, pace: 1 });
+        const by = f.leader;
+        Object.assign(f, { home: true, leader: 0, trail: [], stuck: 0 });
         left--;
         if (by) out.credit.push([by, PLAY.home]);
         out.fx.push({ id: q.id, k: 'home', cid: c.id, by, n: q.flock.filter((o) => o.home).length, of: q.flock.length });
         continue;
       }
-      // Following someone: until they go too far ahead (or away).
-      if (c.follow) {
-        const leader = people.find((p) => p.id === c.follow);
-        if (!leader || Math.hypot(leader.x - c.x, leader.z - c.z) > LEAD.stray) {
-          const was = c.follow;
-          Object.assign(c, { follow: 0, pace: 1, home: { x: c.x, z: c.z } });
-          out.fx.push({ id: q.id, k: 'lost', cid: c.id, by: was });
-        } else {
-          c.followUntil = now + 60000;
-        }
+      // Lost, and waiting where it is (pecking about, or grazing), until
+      // someone comes up to it.
+      if (!f.leader) {
+        c.state = Math.sin(now / 2300 + i * 1.7) > 0.2 ? 'eat' : 'idle';
+        const who = people.find((p) => Math.hypot(p.x - c.x, p.z - c.z) <= LEAD.pick && Math.abs(p.y - c.y) < 2);
+        if (!who) continue;
+        Object.assign(f, { leader: who.id, trail: [], stuck: 0 });
+        c.yaw = Math.atan2(who.x - c.x, who.z - c.z);
+        out.fx.push({ id: q.id, k: 'follow', cid: c.id, by: who.id });
         continue;
       }
-      const who = people.find((p) => Math.hypot(p.x - c.x, p.z - c.z) <= LEAD.pick && Math.abs(p.y - c.y) < 2);
-      if (!who) continue;
-      Object.assign(c, { follow: who.id, followUntil: now + 60000, pace: LEAD.pace, happyUntil: 0 });
-      out.fx.push({ id: q.id, k: 'follow', cid: c.id, by: who.id });
+      // Following someone: until they go too far ahead (or away).
+      const leader = people.find((p) => p.id === f.leader);
+      if (!leader || Math.hypot(leader.x - c.x, leader.z - c.z) > LEAD.stray) {
+        out.fx.push({ id: q.id, k: 'lost', cid: c.id, by: f.leader });
+        Object.assign(f, { leader: 0, trail: [], stuck: 0 });
+        c.state = 'idle';
+        continue;
+      }
+      // In their footsteps: where they have been is a way that can be walked
+      // (straight at them can be up a cliff, or over the sea).
+      const last = f.trail.at(-1);
+      if (!last || Math.hypot(leader.x - last.x, leader.z - last.z) >= LEAD.crumb || Math.abs(leader.y - last.y) > 0.6) f.trail.push({ x: leader.x, y: leader.y, z: leader.z });
+      if (f.trail.length > LEAD.trail) f.trail.shift();
+      if (Math.hypot(leader.x - c.x, leader.z - c.z) <= LEAD.near && Math.abs(leader.y - c.y) < 1.6) {
+        // Close behind them: it waits, minding their footsteps to follow on
+        // in (all but a loop of them that came back round by it).
+        const by = f.trail.findLastIndex((t) => Math.hypot(t.x - c.x, t.z - c.z) < 0.9 && Math.abs(t.y - c.y) < 1.2);
+        if (by > 0) f.trail.splice(0, by);
+        f.stuck = 0;
+        c.state = 'idle';
+        c.yaw = Math.atan2(leader.x - c.x, leader.z - c.z);
+        continue;
+      }
+      // Along them, step by step, as far as it walks in the time.
+      let step = (LEAD.speed[q.animal] ?? 4) * dt;
+      let moved = false;
+      for (let n = 0; n < 8 && step > 0.01; n++) {
+        while (f.trail.length > 1 && Math.hypot(f.trail[0].x - c.x, f.trail[0].z - c.z) < 0.1) f.trail.shift();
+        const to = f.trail[0];
+        const d = Math.hypot(to.x - c.x, to.z - c.z);
+        if (d < 0.1) break;
+        const [x, z] = [c.x, c.z];
+        if (!trudge(world, c, to.x, to.z, Math.min(step, d), LEAD.drop)) break;
+        moved = true;
+        step -= Math.hypot(c.x - x, c.z - z);
+      }
+      if (moved) {
+        f.stuck = 0;
+        c.state = 'walk';
+        continue;
+      }
+      // No way on from here (a step too high for it, a drop too deep, water
+      // where they swam): stuck a moment, and then it scrambles up after them
+      // rather than stay stuck.
+      c.state = 'idle';
+      f.stuck ||= now;
+      if (now - f.stuck < LEAD.stuckMs) continue;
+      const spot = scrambleTo(world, f, leader, c);
+      if (!spot) continue;
+      out.fx.push({ id: q.id, k: 'scramble', cid: c.id, from: [+c.x.toFixed(2), +c.y.toFixed(2), +c.z.toFixed(2)], to: [+spot.x.toFixed(2), +spot.y.toFixed(2), +spot.z.toFixed(2)] });
+      Object.assign(c, { x: spot.x, y: spot.y, z: spot.z, yaw: Math.atan2(leader.x - spot.x, leader.z - spot.z) });
+      f.stuck = 0;
     }
     if (!left && q.flock.length) qs.beat(q, out, []);
   },
@@ -737,7 +794,7 @@ function sing(q, now, out) {
 // A held critter walked towards (tx, tz) by up to `step`, on ground it can
 // stand on and within r of (cx, cz): false once it can go no further.
 // inside: no step up at all (in a coop, its fence is its fence).
-function walkToward(world, c, tx, tz, step, cx, cz, r, inside = false) {
+function walkToward(world, c, tx, tz, step, cx, cz, r, inside = false, drop = 2.6) {
   const dx = tx - c.x;
   const dz = tz - c.z;
   const d = Math.hypot(dx, dz);
@@ -745,11 +802,65 @@ function walkToward(world, c, tx, tz, step, cx, cz, r, inside = false) {
   const s = Math.min(d, step);
   const nx = c.x + (dx / d) * s;
   const nz = c.z + (dz / d) * s;
-  const ny = footing(world, nx, nz, c.y);
+  const ny = footing(world, nx, nz, c.y, drop);
   c.yaw = Math.atan2(dx, dz);
   if (ny === null || Math.hypot(nx - cx, nz - cz) > r || (inside && ny > c.y + 0.5)) return false;
   Object.assign(c, { x: nx, y: ny, z: nz });
   return true;
+}
+
+// A held animal's step toward (tx, tz): straight there if it can, or else
+// along whichever of the two ways across is open (round the corner of a wall
+// it clipped), but never down off an edge that way. Whether it moved.
+function trudge(world, c, tx, tz, step, drop) {
+  if (walkToward(world, c, tx, tz, step, c.x, c.z, Infinity, false, drop)) return true;
+  const dx = tx - c.x;
+  const dz = tz - c.z;
+  for (const across of Math.abs(dx) >= Math.abs(dz) ? [true, false] : [false, true]) {
+    const s = Math.min(step, Math.abs(across ? dx : dz));
+    if (s < 0.02) continue;
+    const nx = across ? c.x + Math.sign(dx) * s : c.x;
+    const nz = across ? c.z : c.z + Math.sign(dz) * s;
+    const ny = footing(world, nx, nz, c.y, 1);
+    if (ny === null) continue;
+    Object.assign(c, { x: nx, y: ny, z: nz });
+    return true;
+  }
+  return false;
+}
+
+// Where a stuck animal scrambles to: back along its leader's footsteps a
+// couple of steps behind them (somewhere they have just walked, so it can
+// follow on from there), past the one it is stuck short of; or else
+// anywhere beside them. Drops the footsteps it skips.
+function scrambleTo(world, f, leader, c) {
+  let behind = Math.hypot(leader.x - (f.trail.at(-1)?.x ?? leader.x), leader.z - (f.trail.at(-1)?.z ?? leader.z));
+  for (let i = f.trail.length - 1; i >= 1 && behind <= 6; i--) {
+    const t = f.trail[i];
+    if (i < f.trail.length - 1) behind += Math.hypot(f.trail[i + 1].x - t.x, f.trail[i + 1].z - t.z);
+    if (behind < 1.4) continue;
+    const y = footing(world, t.x, t.z, t.y, LEAD.drop);
+    if (y === null) continue;
+    f.trail.splice(0, i + 1);
+    return { x: t.x, y, z: t.z };
+  }
+  f.trail.length = 0;
+  return beside(world, leader, c);
+}
+
+// A spot to stand right beside someone (p) — behind them, as seen from where
+// c is, or else any side — on ground about their height, dry, with room; or null.
+function beside(world, p, c) {
+  const back = Math.atan2(c.x - p.x, c.z - p.z);
+  for (const turn of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.5, -2.5, Math.PI]) {
+    for (const d of [1.4, 2]) {
+      const x = p.x + Math.sin(back + turn) * d;
+      const z = p.z + Math.cos(back + turn) * d;
+      const y = footing(world, x, z, p.y, 1.2);
+      if (y !== null && Math.abs(y - p.y) <= 1.2) return { x, y, z };
+    }
+  }
+  return null;
 }
 
 // A held critter moved `step` along angle a, if it can be.

@@ -544,11 +544,57 @@ function hideFinds(m, reach, count, { block = B.TRINKET, where = () => true, apa
   return picked.map((s) => [s.x, s.y, s.z]);
 }
 
+// Where an animal stands in a column, looking from height `top` down to
+// `bottom`: on something solid (not up a tree), with room for it, not in
+// water; or -1.
+function standAt(world, x, z, top, bottom) {
+  if (x < 0 || z < 0 || x >= world.W || z >= world.D) return -1;
+  for (let y = Math.min(world.H - 2, top); y >= Math.max(1, bottom); y--) {
+    const below = world.get(x, y - 1, z);
+    if (!B.SOLID[below] || B.TREE_PART[below] || B.SOLID[world.get(x, y, z)] || B.SOLID[world.get(x, y + 1, z)]) continue;
+    return world.get(x, y, z) === B.WATER || world.get(x, y, z) === B.LAVA ? -1 : y;
+  }
+  return -1;
+}
+
+// Everywhere a lost animal could walk home from by itself (to its pen at
+// home: { x, y, z }), going as one does (isle-quests.js: a step up of one
+// at most, a drop of `drop` at most, never into water): found backwards
+// from home, each step one it could take forwards. Returns the height it
+// stands at in each column (by x * D + z), -1 where it could not.
+export function herdLand(world, home, drop = 3) {
+  const { W, D } = world;
+  const at = new Int16Array(W * D).fill(-1);
+  const hx = Math.floor(home.x);
+  const hz = Math.floor(home.z);
+  at[hx * D + hz] = home.y;
+  const todo = [[hx, hz, home.y]];
+  while (todo.length) {
+    const [x, z, y] = todo.pop();
+    for (const [dx, dz] of SIDES) {
+      const ax = x + dx;
+      const az = z + dz;
+      if (ax < 0 || az < 0 || ax >= W || az >= D || at[ax * D + az] >= 0) continue;
+      // From there to here: up one at most, so it stands no lower than y - 1;
+      // down `drop` at most, so no higher than y + drop.
+      const ay = standAt(world, ax, az, y + drop, y - 1);
+      if (ay < 0) continue;
+      at[ax * D + az] = ay;
+      todo.push([ax, az, ay]);
+    }
+  }
+  return at;
+}
+
 // Where lost animals are found, count of them: on open ground that can be
-// walked to from the start, far from their pen (home) and from each other.
+// walked to from the start, and walked home from by an animal by itself, on
+// gentle ground (no ledge it could not climb off), far from their pen (home)
+// and from each other.
 function strays(m, reach, count, home, { where = () => true, far = 18 } = {}) {
   const { world, seed } = m;
   const start = m.routes[0].pts[0];
+  const herd = herdLand(world, home);
+  const level = (x, z, y) => SIDES.every(([dx, dz]) => herd[(x + dx) * world.D + z + dz] >= 0 && Math.abs(herd[(x + dx) * world.D + z + dz] - y) <= 1);
   const spots = [];
   for (let x = 4; x < m.S - 4; x += 2) {
     for (let z = 4; z < m.S - 4; z += 2) {
@@ -556,6 +602,7 @@ function strays(m, reach, count, home, { where = () => true, far = 18 } = {}) {
       if (Math.hypot(x - home.x, z - home.z) < far || Math.hypot(x - start.x, z - start.z) < 12) continue;
       const y = m.ground(x, z) + 1;
       if (y <= m.sea + 1 || !walkedTo(m, reach, x, y, z) || B.SOLID[world.get(x, y, z)] || B.SOLID[world.get(x, y + 1, z)]) continue;
+      if (herd[x * world.D + z] !== y || !level(x, z, y)) continue;
       spots.push({ x, y, z, j: hash2(seed + 151, x, z) });
     }
   }

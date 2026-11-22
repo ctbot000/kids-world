@@ -17,7 +17,7 @@ import { DEEDS, stageResults, walkReach } from '../public/js/shared/adventure.js
 import { standHeight } from '../public/js/shared/critters.js';
 import { buildIsle } from '../public/js/shared/isle-maps.js';
 import { CHASE, JINX, LEAD, MAX_QUESTS, PLAY, Quests, STONES } from '../public/js/shared/isle-quests.js';
-import { burnFor } from '../public/js/shared/isle-bells.js';
+import { burnFor, herdLand } from '../public/js/shared/isle-bells.js';
 import { chapterOf, CHAPTERS, firstStage, STAGES } from '../public/js/shared/isle-story.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
@@ -26,6 +26,7 @@ const FIRST = firstStage(4);
 const BELLBUOY = FIRST;
 const HENHOUSE = FIRST + 1;
 const TOPSY = FIRST + 2;
+const KITE = FIRST + 3;
 const NEST = FIRST + 4;
 
 function conn() {
@@ -101,6 +102,14 @@ for (let stage = FIRST; stage < firstStage(5); stage++) {
           assert.ok(near([Math.floor(q.home.x), q.home.y, Math.floor(q.home.z)], 1, 0), `${where}: into the pen`);
           assert.equal(q.spots.length, 5);
           for (const c of q.spots) assert.ok(near(c, 0, 0) && Math.hypot(c[0] - q.home.x, c[2] - q.home.z) > 15, `${where}: a stray at ${c}`);
+          // And from each, an animal could walk home by itself: up a step of
+          // one at most, down three at most, never through water — on ground
+          // with no ledge round it that it could not climb off again.
+          const herd = herdLand(world, q.home);
+          for (const [x, y, z] of q.spots) {
+            assert.equal(herd[x * world.D + z], y, `${where}: the stray at ${x},${y},${z} can walk home`);
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) assert.ok(Math.abs(herd[(x + dx) * world.D + z + dz] - y) <= 1, `${where}: the stray at ${x},${y},${z} is on gentle ground`);
+          }
           assert.ok(q.slots.length >= 5);
         } else if (q.kind === 'fires' || q.kind === 'jinx') {
           for (const c of q.fires) {
@@ -249,7 +258,7 @@ test('a monkey never outruns someone running, and only the quickest of them keep
   }
 });
 
-test('lost chicks follow whoever comes up to them, and settle in the coop once led into it', () => {
+test('lost chicks wait where they are, follow whoever comes up to them, and settle in the coop once led into it', () => {
   const time = { t: 1_000_000 };
   const room = isleRoom(HENHOUSE, time);
   const adv = room.adventure;
@@ -257,19 +266,26 @@ test('lost chicks follow whoever comes up to them, and settle in the coop once l
   const lead = adv.quests.list.find((q) => q.kind === 'lead');
   assert.equal(lead.flock.length, 5);
   const chicks = lead.flock.map((f) => room.critters.get(f.cid));
-  assert.ok(chicks.every((c) => c?.type === 'chick' && !c.held));
+  assert.ok(chicks.every((c) => c?.type === 'chick' && c.held), 'steered by the island');
+  // Left alone, they stay where they are (never wandering off, down a drop
+  // they could not climb back up: at most nudged a little, on the level).
+  const at = chicks.map((c) => [c.x, c.y, c.z]);
+  stay(room, time, a, [5, 40, 5], 30000);
+  chicks.forEach((c, i) => assert.ok(Math.hypot(c.x - at[i][0], c.z - at[i][2]) < 1 && c.y === at[i][1], `chick ${i} where it was`));
   const home = [lead.home.x, lead.home.y, lead.home.z];
   for (const [i, chick] of chicks.entries()) {
     // Up to it: it follows. Then into the coop, with it in tow from just
     // outside the gate.
+    const f = lead.flock[i];
     stay(room, time, a, [chick.x + 1, chick.y, chick.z], 200);
-    assert.equal(chick.follow, a.pid, `chick ${i} follows`);
+    assert.equal(f.leader, a.pid, `chick ${i} follows`);
     assert.equal(a.fx('follow').length, i + 1);
     const gate = [lead.home.x - lead.home.r - 3, lead.home.y, lead.home.z];
     Object.assign(chick, { x: gate[0] - 1.5, y: lead.home.y, z: gate[2] });
-    stay(room, time, a, [home[0], home[1], home[2]], 6000);
+    f.trail = [];
+    stay(room, time, a, home, 6000);
     assert.equal(a.fx('home').length, i + 1, `chick ${i} home`);
-    assert.ok(chick.held && !chick.follow);
+    assert.ok(f.home && !f.leader);
   }
   assert.equal(a.last('quest').id, lead.id);
   // Settled, every one of them in the coop.
@@ -278,12 +294,102 @@ test('lost chicks follow whoever comes up to them, and settle in the coop once l
   // Too far ahead, and one gives up following.
   const room2 = isleRoom(HENHOUSE, time);
   const b = join(room2);
-  const stray = room2.critters.get(room2.adventure.quests.list.find((q) => q.kind === 'lead').flock[0].cid);
+  const f0 = room2.adventure.quests.list.find((q) => q.kind === 'lead').flock[0];
+  const stray = room2.critters.get(f0.cid);
   stay(room2, time, b, [stray.x + 1, stray.y, stray.z], 200);
-  assert.equal(stray.follow, b.pid);
+  assert.equal(f0.leader, b.pid);
   stay(room2, time, b, [stray.x + LEAD.stray + 6, stray.y + 30, stray.z], 200);
-  assert.equal(stray.follow, 0);
+  assert.equal(f0.leader, 0);
   assert.equal(b.fx('lost').length, 1);
+});
+
+// A way an animal could walk from (x, z) to the column (tx, tz), as
+// isle-quests.js has it walk (up one at most, down LEAD.drop at most, no
+// water): its columns, each [x, y, z] with the height it stands at.
+function herdWay(world, x0, z0, y0, tx, tz) {
+  const key = (x, z) => x * world.D + z;
+  const from = new Map([[key(x0, z0), null]]);
+  const ys = new Map([[key(x0, z0), y0]]);
+  const todo = [[x0, z0, y0]];
+  while (todo.length) {
+    const [x, z, y] = todo.shift();
+    if (x === tx && z === tz) break;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const nz = z + dz;
+      if (from.has(key(nx, nz))) continue;
+      const ny = standHeight(world, nx + 0.5, nz + 0.5, y + 0.2);
+      if (ny === null || ny - y > 1 || y - ny > LEAD.drop || world.get(nx, ny, nz) === B.WATER || B.SOLID[world.get(nx, ny + 1, nz)]) continue;
+      from.set(key(nx, nz), [x, z]);
+      ys.set(key(nx, nz), ny);
+      todo.push([nx, nz, ny]);
+    }
+  }
+  const way = [];
+  for (let at = [tx, tz]; at; at = from.get(key(...at))) way.unshift([at[0], ys.get(key(...at)), at[1]]);
+  return way;
+}
+
+test('a sheep led over hilly ground follows in its leader’s footsteps all the way into the fold', () => {
+  const time = { t: 1_000_000 };
+  const room = isleRoom(KITE, time);
+  const a = join(room);
+  const lead = room.adventure.quests.list.find((q) => q.kind === 'lead');
+  assert.equal(lead.animal, 'sheep');
+  const names = lead.flock.map((f) => room.critters.get(f.cid).name);
+  assert.equal(new Set(names).size, names.length, `each its own name: ${names}`);
+  for (const [i, f] of lead.flock.entries()) {
+    const sheep = room.critters.get(f.cid);
+    const way = herdWay(room.world, Math.floor(sheep.x), Math.floor(sheep.z), sheep.y, Math.floor(lead.home.x), Math.floor(lead.home.z));
+    assert.ok(way.length > 10 && way.at(-1)[0] === Math.floor(lead.home.x), `sheep ${i}: a way home`);
+    // Up to it (on its own spot), then walking home along the way, no
+    // faster than a walk.
+    const me = { x: Math.floor(sheep.x) + 0.5, y: sheep.y, z: Math.floor(sheep.z) + 0.5 };
+    stay(room, time, a, [me.x, me.y, me.z], 200);
+    assert.equal(f.leader, a.pid);
+    const start = time.t;
+    for (const [x, y, z] of way) {
+      while (Math.hypot(x + 0.5 - me.x, z + 0.5 - me.z) > 0.05) {
+        const d = Math.hypot(x + 0.5 - me.x, z + 0.5 - me.z);
+        const s = Math.min(d, 0.4);
+        Object.assign(me, { x: me.x + ((x + 0.5 - me.x) / d) * s, z: me.z + ((z + 0.5 - me.z) / d) * s, y });
+        stay(room, time, a, [me.x, me.y, me.z], 100);
+      }
+    }
+    // Waiting in the fold for it to catch up.
+    for (let t = 0; t < 20000 && !f.home; t += 100) stay(room, time, a, [me.x, me.y, me.z], 100);
+    assert.ok(f.home, `sheep ${i} home, ${(time.t - start) / 1000} s along a way of ${way.length}`);
+  }
+  assert.equal(a.fx('scramble').length, 0, 'every step of the way one it could walk');
+  assert.equal(a.last('quest').id, lead.id);
+});
+
+test('a sheep stuck on a ledge it cannot climb off scrambles up beside whoever leads it', () => {
+  // The island of a real game (game 14, journey 1) of Kite Cliffs, where a
+  // sheep was once put down on a ledge of the shore two blocks under the slope
+  // above it and the sea beside it: nowhere to go.
+  const fnv = (text) => [...text].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
+  const time = { t: 1_000_000 };
+  const room = isleRoom(KITE, time, fnv(`14/1:${KITE}`));
+  const a = join(room);
+  const f = room.adventure.quests.list.find((q) => q.kind === 'lead').flock[0];
+  const sheep = room.critters.get(f.cid);
+  const ledge = [92.5, 22, 18.5];
+  assert.equal(standHeight(room.world, 92.5, 18.5, 22.2), 22);
+  Object.assign(sheep, { x: ledge[0], y: ledge[1], z: ledge[2] });
+  // Fetched from beside it, then led away up the slope.
+  stay(room, time, a, [ledge[0] - 0.4, ledge[1], ledge[2] + 0.4], 200);
+  assert.equal(f.leader, a.pid);
+  // It tries to come (along the ledge, as far as that goes), stuck down there
+  // a moment...
+  const up = [89.5, 26, 20.5];
+  stay(room, time, a, up, LEAD.stuckMs - 300);
+  assert.ok(Math.hypot(sheep.x - ledge[0], sheep.z - ledge[2]) < 3 && sheep.y === ledge[1], 'still down on the ledge');
+  assert.equal(a.fx('scramble').length, 0);
+  // ...and then up it scrambles.
+  for (let t = 0; t < 5000 && !a.fx('scramble').length; t += 100) stay(room, time, a, up, 100);
+  assert.equal(a.fx('scramble').length, 1, 'then up it scrambles');
+  assert.ok(Math.hypot(sheep.x - up[0], sheep.z - up[2]) <= LEAD.near + 0.5 && Math.abs(sheep.y - up[1]) <= 1.2, 'beside its leader');
 });
 
 test('bonfires each burn so long once lit: all of them alight at once and they burn for good', () => {
