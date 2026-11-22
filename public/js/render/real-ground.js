@@ -435,7 +435,15 @@ export class RealGround {
     const cx = Math.floor(best / D);
     const cz = best % D;
     if (B.SOLID[this.world.get(Math.floor(x), Math.floor(y - 0.05), Math.floor(z))] && !B.TERRAIN[this.world.get(Math.floor(x), Math.floor(y - 0.05), Math.floor(z))]) return 0;
-    const s = this.surfaceIn(cx, cz, x, z);
+    // Over a step of the land (the column under its middle a block or two
+    // higher or lower than the one it stands on), the skin where it is:
+    // walking the step as the slope it is drawn as (physics.js ramps), it
+    // goes smoothly up or down, whichever side of the step it counts as
+    // standing on. (Over a drop of more, on the edge of its own column.)
+    const ux = Math.floor(x);
+    const uz = Math.floor(z);
+    const under = ux >= 0 && uz >= 0 && ux < W && uz < D ? ux * D + uz : best;
+    const s = under !== best && Math.abs(cols.height[under] - bestH) <= 2 ? this.surfaceIn(ux, uz, x, z) : this.surfaceIn(cx, cz, x, z);
     if (s === null) return 0;
     return Math.max(-1.2, Math.min(1.2, s - bestH));
   }

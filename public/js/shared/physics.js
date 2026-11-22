@@ -2,7 +2,7 @@
 // world of blocks. A body is an upright box: (x, z) its centre, y its feet.
 // Lava is swum in as water is, only thicker (half speed again), for the
 // volcano island: the burning itself is the host's to do (shared/room.js).
-import { LAVA, SOLID, TRAMPOLINE, WATER } from './blocks.js';
+import { LAVA, SOLID, TERRAIN, TRAMPOLINE, WATER } from './blocks.js';
 
 export const BODY = { radius: 0.3, height: 1.5, eye: 1.3 };
 
@@ -154,6 +154,52 @@ function canStepUp(world, b, dx, dz, lift = 1) {
   return blocked && free && headroom;
 }
 
+// Whether there is something solid in the box, and all of it is the land
+// (natural ground: blocks.js TERRAIN), nothing built.
+function allLand(world, x0, y0, z0, x1, y1, z1) {
+  let any = false;
+  for (let x = Math.floor(x0); x <= Math.floor(x1 - EPS); x++) {
+    for (let y = Math.floor(y0); y <= Math.floor(y1 - EPS); y++) {
+      for (let z = Math.floor(z0); z <= Math.floor(z1 - EPS); z++) {
+        const id = world.get(x, y, z);
+        if (!SOLID[id]) continue;
+        if (!TERRAIN[id]) return false;
+        any = true;
+      }
+    }
+  }
+  return any;
+}
+
+// Up a one-block step of the land as up a slope (options.ramps, where the
+// land is drawn smooth over its blocks: render/real-ground.js): onto it at
+// once, with no hop, and on at the same speed. Whether it went up.
+function rampUp(world, b, dx, dz) {
+  if (!canStepUp(world, b, dx, dz)) return false;
+  const r = b.radius;
+  const x = b.x + Math.sign(dx) * 0.35;
+  const z = b.z + Math.sign(dz) * 0.35;
+  if (!allLand(world, x - r, b.y + 0.05, z - r, x + r, b.y + 1, z + r)) return false;
+  b.y = Math.floor(b.y + EPS) + 1;
+  return true;
+}
+
+// Down a step of the land as down a slope: walking off it, a body keeps to
+// the ground a block or two lower (drawn smooth, a drop of two is a steep
+// bank, not a cliff), rather than falling. Off anything built, or further
+// down, it falls. (Up, only one: two is a wall to climb, or jump.)
+function rampDown(world, b) {
+  const r = b.radius;
+  if (overlapsSolid(world, b.x - r, b.y - 0.05, b.z - r, b.x + r, b.y, b.z + r)) return;
+  const top = Math.floor(b.y + EPS);
+  for (let y = top - 1; y >= top - 2; y--) {
+    if (overlapsSolid(world, b.x - r, y, b.z - r, b.x + r, y + 1, b.z + r)) return;
+    if (!overlapsSolid(world, b.x - r, y - 0.05, b.z - r, b.x + r, y, b.z + r)) continue;
+    if (allLand(world, b.x - r, y - 0.05, b.z - r, b.x + r, y, b.z + r)) b.y = y;
+    return;
+  }
+}
+
 // If a block was put where the body stands, lift it to the nearest free spot above.
 export function unstick(world, b) {
   if (!bodyOverlapsSolid(world, b)) return false;
@@ -201,21 +247,23 @@ function bounced(events, b) {
 const approach = (v, target, rate) => (v < target ? Math.min(target, v + rate) : Math.max(target, v - rate));
 
 // input: { mx, mz } a wish direction in the world (length up to 1), jump,
-// down (sink or descend), run. options: { autoJump, move, bounce }: move has
-// speeds and a jump of its own to use instead of a player's (MOVE), for a
-// big animal and for one with a rider on (riding.js); bounce, for a player
-// on foot, bounces on trampolines (events.bounced is how fast it went up,
-// and bouncedAt the height of its feet then).
+// down (sink or descend), run. options: { autoJump, move, bounce, ramps }:
+// move has speeds and a jump of its own to use instead of a player's (MOVE),
+// for a big animal and for one with a rider on (riding.js); bounce, for a
+// player on foot, bounces on trampolines (events.bounced is how fast it went
+// up, and bouncedAt the height of its feet then); ramps, where the land is
+// drawn smooth, walks its steps as slopes (rampUp, rampDown).
 export function stepBody(world, b, input, dt, options = {}) {
   const autoJump = options.autoJump !== false;
   const move = options.move ? { ...MOVE, ...options.move } : MOVE;
   const bounce = options.bounce === true;
+  const ramps = options.ramps === true;
   let remaining = Math.min(dt, 0.25);
   const events = { jumped: false, landed: 0, splashed: false, bumped: false, bounced: 0, bouncedAt: 0 };
   while (remaining > 1e-6) {
     const h = Math.min(remaining, 1 / 90);
     remaining -= h;
-    stepOnce(world, b, input, h, autoJump, events, move, bounce);
+    stepOnce(world, b, input, h, autoJump, events, move, bounce, ramps);
   }
   return events;
 }
@@ -224,7 +272,7 @@ export function stepBody(world, b, input, dt, options = {}) {
 // top: a player's head, or a big animal's back with its rider on it. It is
 // in the water once that is wade deep (half a block; less for a pet, whose
 // float is lower than that).
-function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
+function stepOnce(world, b, input, dt, autoJump, events, move, bounce, ramps) {
   const wasInWater = b.inWater;
   const wade = world.get(Math.floor(b.x), Math.floor(b.y + (b.wade ?? 0.5)), Math.floor(b.z));
   b.inWater = wade === WATER;
@@ -308,8 +356,17 @@ function stepOnce(world, b, input, dt, autoJump, events, move, bounce) {
     b.flying = false;
   }
 
-  const hitX = sweep(world, b, 0, b.vx * dt);
-  const hitZ = sweep(world, b, 2, b.vz * dt);
+  // Walking on the land where it is drawn smooth (ramps), its steps are
+  // slopes, up and down (rampUp, rampDown). Not from anything built: that
+  // is drawn as blocks, and a body on it is too.
+  const onLand = ramps && !b.flying && !inLiquid && b.onGround && len > 0.1 && allLand(world, b.x - b.radius, b.y - 0.05, b.z - b.radius, b.x + b.radius, b.y, b.z + b.radius);
+  let hitX = sweep(world, b, 0, b.vx * dt);
+  let hitZ = sweep(world, b, 2, b.vz * dt);
+  if ((hitX || hitZ) && onLand && rampUp(world, b, hitX ? mx : 0, hitZ ? mz : 0)) {
+    if (hitX) hitX = sweep(world, b, 0, b.vx * dt);
+    if (hitZ) hitZ = sweep(world, b, 2, b.vz * dt);
+  }
+  if (onLand && b.vy === 0) rampDown(world, b);
   if (hitX || hitZ) {
     events.bumped = true;
     if (autoJump && !b.flying && b.onGround && len > 0.1 && canStepUp(world, b, hitX ? mx : 0, hitZ ? mz : 0)) {

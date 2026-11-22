@@ -174,6 +174,65 @@ test('auto-jump hops up a single step', () => {
   assert.equal(c.y, 6, 'without auto-jump it stays down');
 });
 
+test('with ramps, steps of the land are walked as slopes: up one, down one or two', () => {
+  // Grass a block up from x=14 and down again at x=20; two blocks down at
+  // x=24; three more down at x=28.
+  const w = flatWorld();
+  for (let z = 0; z < 32; z++) {
+    for (let x = 14; x < 20; x++) w.set(x, 6, z, B.GRASS);
+    for (let x = 24; x < 32; x++) for (let y = 4; y <= 5; y++) w.set(x, y, z, B.AIR);
+    for (let x = 28; x < 32; x++) for (let y = 1; y <= 3; y++) w.set(x, y, z, B.AIR);
+  }
+  const b = makeBody(10.5, 6, 10.5);
+  for (let i = 0; i < 30; i++) stepBody(w, b, {}, 1 / 30, { ramps: true });
+  const ys = [];
+  let hops = 0;
+  let slowest = Infinity;
+  while (b.x < 27) {
+    const ev = stepBody(w, b, { mx: 1, mz: 0 }, 1 / 60, { ramps: true });
+    if (ev.jumped || b.vy > 0) hops++;
+    if (b.x > 12) slowest = Math.min(slowest, b.vx);
+    ys.push(b.y);
+  }
+  assert.equal(hops, 0, 'no hop up the step');
+  assert.ok(ys.includes(7), 'up onto the step');
+  assert.equal(b.y, 4, 'and down off it again, and down the two');
+  assert.ok(ys.every((y) => y === 4 || y === 6 || y === 7), `never in the air: ${[...new Set(ys)]}`);
+  assert.ok(slowest > MOVE.walk * 0.95, `never slowed by a step: ${slowest}`);
+  // A drop of three blocks is a fall.
+  let fell = false;
+  for (let i = 0; i < 120 && b.x < 30; i++) {
+    stepBody(w, b, { mx: 1, mz: 0 }, 1 / 60, { ramps: true });
+    if (b.y > 1 && b.y < 4) fell = true;
+  }
+  for (let i = 0; i < 60; i++) stepBody(w, b, {}, 1 / 60, { ramps: true });
+  assert.ok(fell && b.y === 1, `fell down the three-block drop: ${b.y}`);
+});
+
+test('ramps never climb two blocks of land', () => {
+  const w = flatWorld();
+  for (let z = 0; z < 32; z++) for (let x = 14; x < 32; x++) for (let y = 6; y <= 7; y++) w.set(x, y, z, B.GRASS);
+  const b = makeBody(10.5, 6, 10.5);
+  for (let i = 0; i < 120; i++) stepBody(w, b, { mx: 1, mz: 0 }, 1 / 60, { ramps: true });
+  assert.equal(b.y, 6, 'still at its foot');
+  assert.ok(b.x < 14, 'stopped by it');
+});
+
+test('ramps are only the land: a built step is still hopped up, a built ledge fallen off', () => {
+  const w = flatWorld();
+  for (let z = 0; z < 32; z++) for (let x = 14; x < 20; x++) w.set(x, 6, z, B.TOY_BRICKS[0]);
+  const b = makeBody(10.5, 6, 10.5);
+  let hopped = false;
+  for (let i = 0; i < 120 && b.x < 17; i++) hopped = stepBody(w, b, { mx: 1, mz: 0 }, 1 / 60, { ramps: true }).jumped || hopped;
+  assert.ok(hopped && b.y === 7, 'hopped up onto the bricks');
+  let fell = false;
+  for (let i = 0; i < 120 && b.x < 22; i++) {
+    stepBody(w, b, { mx: 1, mz: 0 }, 1 / 60, { ramps: true });
+    if (b.y > 6 && b.y < 7) fell = true;
+  }
+  assert.ok(fell && b.y === 6, 'fell off their far side');
+});
+
 test('a big time step never tunnels through the floor', () => {
   const w = flatWorld();
   const b = makeBody(10.5, 20, 10.5);

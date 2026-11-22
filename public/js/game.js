@@ -101,6 +101,9 @@ const GHOST = { speed: 12, climb: 9, run: 3, far: 40, high: 80 };
 const ARRIVE_PITCH = -0.06;
 const INTERP_MS = 130;
 const CRITTER_INTERP_MS = 260;
+// What a friend does on the ground (see interpolate): standing, walking,
+// running, or riding something.
+const ON_FOOT = new Set([ANIM.idle, ANIM.walk, ANIM.run, ANIM.ride]);
 // A monster is drawn where it is now (see monsterNow): carried on from its
 // last update no further than this, a guess put right fading out this fast,
 // and not carried on at all in these states, when it stands still.
@@ -1205,6 +1208,25 @@ export class Game extends EventTarget {
     if (jump) p.snaps = [p.snaps[p.snaps.length - 1]];
   }
 
+  // The top of the ground under someone at (x, z), their feet no higher
+  // than y: the highest solid block under their footprint (physics.js
+  // BODY), up to three blocks down.
+  groundTop(x, y, z) {
+    const w = this.world;
+    const r = BODY.radius;
+    let top = -Infinity;
+    for (const ox of [-r, 0, r]) {
+      for (const oz of [-r, 0, r]) {
+        for (let yy = Math.floor(y + 0.05) - 1; yy >= Math.floor(y) - 3; yy--) {
+          if (!B.SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) continue;
+          top = Math.max(top, yy + 1);
+          break;
+        }
+      }
+    }
+    return top;
+  }
+
   // Where a friend should be drawn: a little in the past, between two updates.
   interpolate(snaps, delay) {
     const t = performance.now() - delay;
@@ -1215,7 +1237,20 @@ export class Game extends EventTarget {
       const b = snaps[i];
       if (b.t >= t) {
         const k = (t - a.t) / Math.max(1, b.t - a.t);
-        return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: lerpAngle(a.yaw, b.yaw, k), anim: b.anim, state: b.state, flags: b.flags, was: a.flags, k };
+        // Walking a step of the land as a slope (physics.js ramps), the feet
+        // go up or down it at once, as on their own page, where the ground
+        // under them does, drawn on the slope all the same
+        // (render/real-ground.js lift); eased, they would float over it.
+        const dy = b.y - a.y;
+        const step = this.ramps && dy !== 0 && Math.abs(dy) < 2.01 && Math.abs(dy - Math.round(dy)) < 0.01 && ON_FOOT.has(a.anim) && ON_FOOT.has(b.anim);
+        const x = a.x + (b.x - a.x) * k;
+        const z = a.z + (b.z - a.z) * k;
+        let y = a.y + dy * k;
+        if (step) {
+          const top = this.groundTop(x, Math.max(a.y, b.y), z);
+          y = Math.abs(top - a.y) <= Math.abs(top - b.y) ? a.y : b.y;
+        }
+        return { x, y, z, yaw: lerpAngle(a.yaw, b.yaw, k), anim: b.anim, state: b.state, flags: b.flags, was: a.flags, k };
       }
       a = b;
     }
@@ -6650,7 +6685,7 @@ export class Game extends EventTarget {
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
     // Down (Shift, or ⬇️) dives at sea (and gets off on land: see pressDown).
-    const ev = stepRide(this.world, ride, { mx: fx * move.y + -fz * move.x, mz: fz * move.y + fx * move.x, jump: input.jump, down: input.down, run: input.run }, dt);
+    const ev = stepRide(this.world, ride, { mx: fx * move.y + -fz * move.x, mz: fz * move.y + fx * move.x, jump: input.jump, down: input.down, run: input.run }, dt, { ramps: this.ramps });
     const r = ride.body;
     // Rolling along rails, the camera swings round behind you the way you
     // are going, as on a roller coaster: pushing ahead keeps you going ahead.
@@ -7138,6 +7173,13 @@ export class Game extends EventTarget {
     if (ground !== null && at.y - ground > 0.35) return 'jump';
     const hs = c.model.hs;
     return hs > r.walk * 1.1 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
+  }
+
+  // Where the land is drawn smooth over its blocks (the Wild Isle, Toon
+  // Isle: render/real-ground.js), its steps are walked as the slopes they
+  // look like, not hopped up and dropped off (physics.js ramps).
+  get ramps() {
+    return Boolean(this.renderer?.skin);
   }
 
   // ------------------------------------------------ edits
@@ -8418,7 +8460,7 @@ export class Game extends EventTarget {
         ? this.rideLift(dt)
         : this.escalator
           ? this.rideEscalator(dt, mx, mz, jump, input.run, gear)
-          : stepBody(w, b, { mx, mz, jump, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: !rope, move: rope ? { ...gear, jump: ROPE.hop } : gear });
+          : stepBody(w, b, { mx, mz, jump, down: !still && (input.down || this.landNext), run: input.run }, dt, { autoJump: this.profile.settings.autoJump, bounce: !rope, move: rope ? { ...gear, jump: ROPE.hop } : gear, ramps: this.ramps });
     if (!this.lift && !this.escalator && !events.off) this.boardEscalator(fromY);
     // Down pressed while bouncing lasts until you stand on something.
     if ((b.onGround && b.vy === 0) || b.flying || b.inWater) this.landNext = false;

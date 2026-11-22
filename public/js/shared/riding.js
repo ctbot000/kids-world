@@ -43,10 +43,10 @@ export function startRide(world, type, m) {
 // cells the digger's drill takes out: see drillCells), rolled (how far a
 // mine cart went along its rails) and bumped (into the end of them), and
 // tookOff and touchedDown (a helicopter or a balloon).
-export function stepRide(world, ride, input, dt) {
+export function stepRide(world, ride, input, dt, { ramps = false } = {}) {
   const r = ride.r;
   if (r.rails && !ride.rail) ride.rail = ontoRails(world, ride);
-  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : r.air ? fly(world, ride, input, dt) : r.sled ? slide(world, ride, input, dt) : walk(world, ride, input, dt);
+  const ev = r.sea ? swim(world, ride, input, dt) : ride.rail ? roll(world, ride, input, dt) : r.air ? fly(world, ride, input, dt) : r.sled ? slide(world, ride, input, dt) : walk(world, ride, input, dt, ramps);
   ride.held = Boolean(input.jump);
   const b = ride.body;
   if (!ride.rail && Math.hypot(b.vx, b.vz) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(b.vx, b.vz), Math.min(1, dt * 8));
@@ -58,15 +58,15 @@ export function stepRide(world, ride, input, dt) {
 
 // On land: as a player walks, but at its own speeds and with its own jump.
 // The elephant sprays water instead of jumping (it still climbs steps, and
-// out of the water).
-function walk(world, ride, input, dt) {
+// out of the water). With ramps, as a player does there (physics.js).
+function walk(world, ride, input, dt, ramps) {
   const r = ride.r;
   const b = ride.body;
   const trick = Boolean(r.trick) && input.jump && !ride.held && !b.inWater;
   // The digger turns to face the way you push, even pushing at a wall it
   // has not dug through yet.
   if (r.drill && Math.hypot(input.mx || 0, input.mz || 0) > 0.3) ride.yaw = turn(ride.yaw, Math.atan2(input.mx, input.mz), Math.min(1, dt * 6));
-  const ev = stepBody(world, b, { mx: input.mx, mz: input.mz, run: input.run, jump: input.jump && (!r.trick || b.inWater) }, dt, { move: r });
+  const ev = stepBody(world, b, { mx: input.mx, mz: input.mz, run: input.run, jump: input.jump && (!r.trick || b.inWater) }, dt, { move: r, ramps });
   ev.trick = trick;
   return ev;
 }
