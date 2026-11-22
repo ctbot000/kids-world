@@ -251,6 +251,15 @@ export function battleFx(g, msg) {
     case 'gang':
       if (finite(msg.x, msg.z) && near(msg.x, msg.z, 30)) toast('🎉', 'That whole gang of the Storm Gang is popped!');
       break;
+    case 'cloud':
+      // A gang of the Storm Gang dropping out of the clouds, on whoever
+      // rolled them back.
+      if (finite(msg.x, msg.y, msg.z) && near(msg.x, msg.z, 60)) {
+        for (let i = 0; i < 18; i++) fx.add('puff', msg.x + (Math.random() - 0.5) * 6, msg.y + 5 + Math.random() * 3, msg.z + (Math.random() - 0.5) * 6, { vy: -2.5, size: 1.1, life: 1.1, grow: 1.5, color: '#e6defa', delay: i * 0.02 });
+        g.sound.play('grumble', { big: true });
+        if (msg.to === g.pid) toast('☁️', 'Out of the clouds! A gang of the Storm Gang drops down right in front of you!');
+      }
+      break;
     default:
       break;
   }

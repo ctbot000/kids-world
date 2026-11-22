@@ -9,7 +9,9 @@
 //   what stands on it, not a battle there.
 // - Gangs roam about the island's paths, a few monsters at a time, keeping
 //   together, and come after whoever they meet. Pop a whole gang and
-//   another turns up somewhere else a while later.
+//   another turns up somewhere else a while later. And more of the Storm
+//   Gang hides in the clouds themselves: rolling them back over new ground,
+//   every so often a gang drops out of them, right in front of you.
 // - An ambush: a Lantern Spark in a clearing is a trap. Whoever walks up to
 //   it springs it: a ring of thorns shoots up round the clearing, shutting
 //   in everyone inside, and the Storm Gang comes at them in waves, each
@@ -35,6 +37,11 @@
 // arrived (its hub: a lamp for each battle), and every one won wins the
 // stage. Where a battle was won is a safe place from then on, where anyone
 // out of hearts comes back.
+//
+// The Storm Gang is the toughest yet, and tougher against mightier weapons
+// (each monster's hearts go up with the toy weapons in everyone's hands,
+// GEAR), so no weapon pops them all in one bop; and its bumps hurt more
+// (FIERCE).
 //
 // All of it is worked out by the host (AdventureSim, room.js) from where
 // everyone is, as the isle's camps are; the monsters are the island's
@@ -177,50 +184,69 @@ export const MAX_BATTLES = 5;
 export const STATES = ['idle', 'on', 'done', 'locked'];
 
 // An ambush: how near its Lantern Spark someone springs the trap; its ring
-// of thorns, how high; how long after a wave is popped the next comes; how
-// long everyone inside can be out of the fight before it resets, and how
-// long after that it can be sprung again.
-export const AMBUSH = { spring: 2.6, high: 3, gap: 2200, first: 1400, lost: 2500, rest: 6000 };
+// of thorns, how high; how long after a wave is down to `keep` of it the
+// next comes (they overlap: no breather in between); how long everyone
+// inside can be out of the fight before it resets, and how long after that
+// it can be sprung again.
+export const AMBUSH = { spring: 2.6, high: 3, gap: 1200, first: 1400, keep: 1 / 3, lost: 2500, rest: 6000 };
 // A siege: how long someone stands by the beacon to light it, how near; how
 // long it must burn (and longer the harder the chapter); how often the
 // Storm Gang comes at it and from how far.
-export const SIEGE = { light: 2000, reach: 3.2, ms: 60000, more: 8000, every: [10000, 8000], from: [22, 28], rest: 5000 };
+export const SIEGE = { light: 2000, reach: 3.2, ms: 70000, more: 10000, every: [6500, 5000], from: [22, 28], rest: 5000, push: 25000 };
 // A nest: how often each hatches a monster while anyone is this near, how
 // many it keeps about at most, and how many it has in it to hatch at all
 // (brood, and more on the harder chapters and with more friends); how near
 // wakes them; nobody this near for this long, and its monsters go back in.
-export const NEST = { every: [6500, 5000], near: 24, most: 2, brood: 4, wake: 26, sleep: 40, sleepMs: 15000 };
+export const NEST = { every: [5000, 3800], near: 24, most: 3, brood: 6, wake: 26, sleep: 40, sleepMs: 15000 };
 // A hunt: how far round its Big Bad it keeps to; how fast its way moves on
 // while it is after nobody, and how fast it runs off; how far along its way
 // it runs off; how long left alone before it rests, and a heart back how
-// often then; how near anyone wakes it, how far they get before it sleeps.
-export const HUNT = { r: 9, roam: 1.1, flee: 5.4, far: 0.3, restMs: 5000, healMs: 2200, wake: 48, sleep: 72, sleepMs: 20000 };
+// often then; how near anyone wakes it, how far they get before it sleeps;
+// how many times it runs off; how many helpers it has, and how often one
+// more joins it while it is being fought.
+export const HUNT = { r: 9, roam: 1.1, flee: 5.4, far: 0.3, restMs: 5000, healMs: 1500, wake: 48, sleep: 72, sleepMs: 20000, flees: 3, helpers: 3, pack: 10000 };
 // The showdown: the Baron's arena; how high over it he floats; how often he
 // throws lightning from up there and drops helpers; how long someone stands
 // on a lightning rod to charge it, how near, and how long it stays charged;
 // how long he sits dazed after falling; how much of his hearts each turn on
 // the ground can take before he puffs himself back up, and at most how long
 // it lasts.
-export const SHOWDOWN = { high: 8, every: 2600, drop: 9000, charge: 1500, rodReach: 1.9, holds: 11000, dazed: 3500, turn: 1 / 3, turnMs: 26000, wake: 6 };
+export const SHOWDOWN = { high: 8, every: 2100, drop: 6500, charge: 1500, rodReach: 1.9, holds: 11000, dazed: 3500, turn: 1 / 3, turnMs: 26000, wake: 6 };
 // Bops on the Baron: each friend once in this long.
 export const BOSS_HIT_MS = 800;
 // Gangs: how many roam at once (more on the harder chapters and with more
 // friends), how many monsters in each; how near anyone wakes one, how far
 // they get before it sleeps; how fast one goes along the paths; how soon
 // after one is popped another turns up, and how far from everyone.
-export const GANG = { base: 3, most: 8, size: 3, near: 40, far: 56, sleepMs: 10000, pace: 1.0, back: [45000, 75000], away: 46, r: 7, landing: 34 };
+export const GANG = { base: 6, most: 14, size: 4, near: 44, far: 60, sleepMs: 10000, pace: 1.0, back: [15000, 30000], away: 44, r: 7, landing: 34 };
+// Gangs hiding in the clouds: someone who has rolled back this many tiles
+// of them (one of the two, picked each time) since the last has a gang
+// drop out of them, this far from them; at most one this often on the
+// island, and as many monsters in it as a roaming gang has.
+export const DROP = { tiles: [14, 24], ms: 18000, from: [8, 12] };
+// How much tougher the Storm Gang is against mightier weapons: a share more
+// hearts for each heart more a weapon's bop takes (shop.js power), from the
+// mean of the weapons in the hands of everyone on the island. Against a
+// fist as tough as ever; against a Meteor Staff about six times as tough,
+// for it takes twelve hearts a bop.
+export const GEAR = 0.45;
+// How much harder its bumps are than other monsters' (monsters.js BUMP_HP).
+export const FIERCE = 1.25;
 // Points for the results (adventure.js DEEDS play): for everyone there as
 // a battle is won, and for whoever's popping did it.
 const WIN_PLAY = 12;
 
 // How tough the Storm Gang is on a chapter as hard as `level` (a stage of
 // the first episode's number): a share more hearts on each, every level up
-// from the first of the episode's.
-const toughness = (level) => 1 + 0.1 * Math.max(0, level - 12);
-const toughen = (m, level, extra = 1) => {
+// from the first of the episode's, and more against mightier weapons (gear:
+// the mean power of everyone's, see GEAR).
+const toughness = (level) => 1.3 + 0.12 * Math.max(0, level - 12);
+export const geared = (gear) => 1 + GEAR * Math.max(0, gear - 1);
+const toughen = (m, level, extra = 1, gear = 1) => {
   if (!m) return m;
-  m.hearts = Math.max(1, Math.round(kindOf(m.kind).hearts * toughness(level) * extra));
+  m.hearts = Math.max(1, Math.round(kindOf(m.kind).hearts * toughness(level) * extra * geared(gear)));
   m.max = m.hearts;
+  m.fierce = FIERCE;
   return m;
 };
 
@@ -378,6 +404,13 @@ export class Battles {
     this.gangs = [];
     this.nextGang = 0;
     this.gangAt = 0;
+    // The mean power of the weapons in everyone's hands (see GEAR); how many
+    // tiles of the clouds each has rolled back since a gang last dropped out
+    // of them on them, and how many more it takes this time (DROP).
+    this.gear = 1;
+    this.rolled = new Map();
+    this.dropNeed = new Map();
+    this.dropAt = 0;
     // The monsters each battle's is waiting on, by id: a hunt's Big Bad, a
     // nest's nests, the Baron.
     this.popped = new Set();
@@ -424,7 +457,13 @@ export class Battles {
   // id) for the results.
   step(world, dt, now, people, monsters, players) {
     const out = { fx: [], cells: [], done: [], fog: [], hurls: [], credit: new Map(), flag: new Map() };
-    for (const p of people) if (!p.lure && !p.beacon) this.fog.reveal(p.x, p.z, REVEAL, out.fog);
+    const humans = people.filter((p) => !p.lure && !p.beacon);
+    if (humans.length) this.gear = humans.reduce((sum, p) => sum + (p.power ?? 1), 0) / humans.length;
+    for (const p of humans) {
+      const before = out.fog.length;
+      this.fog.reveal(p.x, p.z, REVEAL, out.fog);
+      if (out.fog.length > before) this.rolled.set(p.id, (this.rolled.get(p.id) ?? 0) + out.fog.length - before);
+    }
     const counts = new Map();
     for (const m of monsters.list) if (m.camp) counts.set(m.camp, (counts.get(m.camp) ?? 0) + 1);
     for (const b of this.list) {
@@ -438,6 +477,7 @@ export class Battles {
       else if (b.kind === 'showdown') this.stepShowdown(world, b, dt, now, people, monsters, players, out);
     }
     this.stepGangs(world, dt, now, people, monsters, players, counts, out);
+    this.stepDrops(world, now, humans, monsters, out);
     return out;
   }
 
@@ -462,7 +502,7 @@ export class Battles {
   // hearts as tough as the chapter makes them.
   addMonster(world, monsters, camp, kind, at, extra = 1) {
     const m = monsters.add(world, at.x, at.y, at.z, { camp: camp.id, kind });
-    return toughen(m, this.level, extra);
+    return toughen(m, this.level, extra, this.gear);
   }
 
   // ------------------------------------------------ an ambush
@@ -471,13 +511,15 @@ export class Battles {
   // tougher ones as they go on, a beast in the last on the harder chapters.
   waveKinds(w, waves, players) {
     const gang = this.story.gang ?? ['blob'];
-    const n = Math.min(8, 2 + w + Math.min(3, players - 1));
-    const pools = [[gang[0], 'blob', gang[0], 'spiky'], ['knight', gang[1] ?? 'big', 'big', gang[0]], ['golem', 'knight', gang[2] ?? 'spiky', gang[1] ?? 'big'], ['knight', 'spiky', 'golem', gang[0]]];
+    const n = Math.min(10, 3 + w + Math.min(3, players - 1));
+    const pools = [[gang[0], 'spiky', gang[0], 'blob'], ['knight', gang[1] ?? 'big', 'big', gang[0]], ['golem', 'knight', gang[2] ?? 'spiky', gang[1] ?? 'big'], ['knight', 'spiky', 'golem', gang[0]]];
     const pool = pools[Math.min(pools.length - 1, w - 1)];
     const out = [];
     for (let i = 0; i < n; i++) out.push(pool[i % pool.length]);
-    // The last wave: a beast at its head, on the harder chapters.
-    if (w === waves && this.level >= 13) out[0] = TIER1[(this.level + w) % TIER1.length];
+    // From the third wave on, a beast at its head; in the last, on the
+    // hardest chapters, two.
+    if (w >= 3) out[0] = TIER1[(this.level + w) % TIER1.length];
+    if (w === waves && this.level >= 15) out[1] = TIER1[(this.level + w + 1) % TIER1.length];
     return out;
   }
 
@@ -490,7 +532,7 @@ export class Battles {
       // Sprung: the ring of thorns, and the first wave on its way.
       b.state = 'on';
       b.wave = 0;
-      b.waves = this.level >= 14 ? 4 : 3;
+      b.waves = this.level >= 14 ? 5 : 4;
       b.next = now + AMBUSH.first;
       b.lostAt = 0;
       b.ring = ringCells(world, b);
@@ -515,7 +557,9 @@ export class Battles {
       return;
     }
     b.lostAt = 0;
-    if (n > 0) {
+    // The next wave comes once this one is down to a few of it, and the
+    // ring crumbles once the last is popped, every one.
+    if (n > (b.wave >= b.waves ? 0 : FL((b.size ?? 0) * AMBUSH.keep))) {
       b.next = now + AMBUSH.gap;
       return;
     }
@@ -530,6 +574,7 @@ export class Battles {
     }
     b.wave++;
     const kinds = this.waveKinds(b.wave, b.waves, players);
+    b.size = kinds.length;
     for (const kind of kinds) {
       const at = spotAround(world, this.rng, b.x, b.y, b.z, 3, Math.max(4, b.r - 2.5), inside, { apart: 3.2, body: bodyOf(kind) }) ?? { x: b.x, y: b.y, z: b.z };
       this.addMonster(world, monsters, b.camp, kind, at, BEASTS[kind] ? 0.8 : 1);
@@ -617,19 +662,20 @@ export class Battles {
     const every = SIEGE.every[0] + (SIEGE.every[1] - SIEGE.every[0]) * Math.min(1, Math.max(0, (this.level - 12) / 4));
     b.next = now + every;
     b.waves++;
-    const most = 6 + Math.min(4, players);
+    const most = 8 + Math.min(6, players);
     if (n >= most) return;
     const gang = this.story.gang ?? ['blob'];
-    const count = Math.min(most - n, 2 + FL((this.level - 12) / 3) + Math.min(2, players - 1));
+    const count = Math.min(most - n, 3 + FL((this.level - 12) / 3) + Math.min(3, players - 1));
     const a0 = this.rng.range(-Math.PI, Math.PI);
-    const last = !b.push && b.until - now <= 18000 && this.level >= 13;
+    const last = !b.push && b.until - now <= SIEGE.push;
     // Let out on ground that leads up to the beacon, a way off from it.
     b.ground ??= walkableAround(world, bx + 0.5, by, bz + 0.5, SIEGE.from[1]).filter(([x, , z]) => Math.hypot(x - bx - 0.5, z - bz - 0.5) >= SIEGE.from[0]);
     for (let i = 0; i < count && b.ground.length; i++) {
       const side = a0 + (i % 2) * Math.PI + this.rng.range(-0.6, 0.6);
-      // Mostly the chapter's lighter ones, a knight every third time.
-      let kind = i === 0 && b.waves % 3 === 0 ? 'knight' : gang[(i + b.waves) % Math.min(2, gang.length)];
-      if (last && i === 0) kind = TIER1[(this.level + b.id) % TIER1.length];
+      // Mostly the chapter's lighter ones, a knight every other time.
+      let kind = i === 0 && b.waves % 2 === 0 ? 'knight' : gang[(i + b.waves) % Math.min(2, gang.length)];
+      // The last push: a beast at its head (two on the harder chapters).
+      if (last && (i === 0 || (i === 1 && this.level >= 14))) kind = TIER1[(this.level + b.id + i) % TIER1.length];
       let at = null;
       for (let tries = 0; tries < 12 && !at; tries++) {
         // From about the side wanted, as near it as the ground lets.
@@ -662,7 +708,7 @@ export class Battles {
         const [x, y, z] = nest.at;
         const m = monsters.add(world, x + 0.5, y, z + 0.5, { camp: b.camp.id, kind: 'nest' });
         if (!m) continue;
-        nest.max ||= Math.min(40, Math.round((10 + 3 * Math.max(0, this.level - 12)) * (1 + 0.45 * (Math.min(6, Math.max(1, players)) - 1))));
+        nest.max ||= Math.min(240, Math.round((14 + 4 * Math.max(0, this.level - 12)) * (1 + 0.45 * (Math.min(6, Math.max(1, players)) - 1)) * geared(this.gear)));
         nest.hearts ||= nest.max;
         Object.assign(m, { hearts: nest.hearts, max: nest.max, keepHearts: true, yaw: Math.atan2(b.x - x, b.z - z) });
         nest.id = m.id;
@@ -740,7 +786,7 @@ export class Battles {
   // A hunt's Big Bad: its hearts, for as many friends as are on the island.
   huntHearts(b, players) {
     const base = BEASTS[b.beast]?.hearts ?? 28;
-    return Math.round(base * (1 + 0.15 * Math.max(0, this.level - 12)) * (1 + 0.45 * (Math.min(6, Math.max(1, players)) - 1)));
+    return Math.round(base * 2.2 * (1 + 0.2 * Math.max(0, this.level - 12)) * (1 + 0.45 * (Math.min(6, Math.max(1, players)) - 1)) * geared(this.gear));
   }
 
   stepHunt(world, b, dt, now, people, monsters, players, out) {
@@ -773,13 +819,9 @@ export class Battles {
       b.monster = beast.id;
       b.state = 'on';
       b.quiet = 0;
-      // A couple of helpers with it.
-      const gang = this.story.gang ?? ['blob'];
-      for (let i = 0; i < 2; i++) {
-        const kind = gang[i % gang.length];
-        const h = spotAround(world, this.rng, at.x, at.y, at.z, 2, 5, people, { body: bodyOf(kind) });
-        if (h) this.addMonster(world, monsters, camp, kind, h);
-      }
+      // Helpers with it (and more on their way: below).
+      for (let i = 0; i < HUNT.helpers; i++) this.huntHelper(world, b, monsters, at, people, i);
+      b.packAt = now + HUNT.pack;
       out.fx.push({ id: b.id, k: 'wake', m: beast.id });
       return;
     }
@@ -806,8 +848,16 @@ export class Battles {
       this.healHunt(b, m, now, nearest);
       return;
     }
-    // Hurt enough (two thirds, then a third of its hearts left): off it runs.
-    if (b.flees < 2 && m.hearts <= m.max * (1 - (b.flees + 1) / 3)) {
+    // Its pack: while anyone is at it, another helper now and then, up to
+    // a few more with more friends.
+    if (now >= (b.packAt ?? 0) && nearest < 30) {
+      b.packAt = now + HUNT.pack;
+      const pack = monsters.list.filter((q) => q.camp === camp.id && q.id !== m.id).length;
+      if (pack < HUNT.helpers + Math.min(2, players - 1)) this.huntHelper(world, b, monsters, m.body, people, b.flees + pack);
+    }
+    // Hurt enough (three quarters, a half, then a quarter of its hearts
+    // left): off it runs.
+    if (b.flees < HUNT.flees && m.hearts <= m.max * (1 - (b.flees + 1) / (HUNT.flees + 1))) {
       b.flees++;
       b.fled = 0;
       const ahead = pointAlong(range, b.along);
@@ -831,6 +881,15 @@ export class Battles {
     }
   }
 
+  // One of a hunt's Big Bad's helpers, near `at`: the chapter's own, a
+  // knight now and then.
+  huntHelper(world, b, monsters, at, people, i) {
+    const gang = this.story.gang ?? ['blob'];
+    const kind = i % 3 === 2 ? 'knight' : gang[i % gang.length];
+    const h = spotAround(world, this.rng, at.x, at.y, at.z, 2, 5, people, { body: bodyOf(kind) });
+    return h ? this.addMonster(world, monsters, b.camp, kind, h) : null;
+  }
+
   // A hunt's way on along its range by `ds` blocks.
   moveHunt(b, ds) {
     b.along = (b.along + ds) % b.length;
@@ -842,7 +901,7 @@ export class Battles {
   // Left alone a while (nobody this side of 18 blocks), a Big Bad gets a
   // heart back now and then — never past what it had when it last ran off.
   healHunt(b, m, now, nearest) {
-    const cap = Math.round(m.max * (1 - b.flees / 3));
+    const cap = Math.round(m.max * (1 - b.flees / (HUNT.flees + 1)));
     if (nearest < 18) {
       b.alone = 0;
       return;
@@ -878,7 +937,7 @@ export class Battles {
       b.throwAt = now + 2000;
       b.dropAt = now + 5000;
       b.turns = b.turns ?? 0;
-      b.max ||= Math.round((12 + 6 * Math.min(8, Math.max(1, players))) * 4 * (plan?.hearts ?? 1.25));
+      b.max ||= Math.round((12 + 6 * Math.min(8, Math.max(1, players))) * 4 * (plan?.hearts ?? 1.25) * geared(this.gear));
       b.hearts ||= b.max;
       b.state = 'on';
       b.quiet = 0;
@@ -952,7 +1011,7 @@ export class Battles {
         b.dropAt = now + SHOWDOWN.drop;
         const alive = monsters.list.filter((q) => q.camp === b.camp.id && q.id !== m.id).length;
         const gang = this.story.gang ?? ['spiky'];
-        for (let i = 0; i < 2 && alive + i < 4 + Math.min(3, players); i++) {
+        for (let i = 0; i < 3 && alive + i < 5 + Math.min(4, players); i++) {
           const kind = gang[(b.turns + i) % gang.length];
           const at = spotAround(world, this.rng, b.x, b.y, b.z, 3, b.r - 2, here, { apart: 4, body: bodyOf(kind) });
           if (at) this.addMonster(world, monsters, b.camp, kind, at);
@@ -1008,14 +1067,14 @@ export class Battles {
 
   // How many gangs roam at once.
   gangsWanted(players) {
-    return Math.min(GANG.most, GANG.base + Math.max(0, this.level - 12) + (players > 2 ? 1 : 0) + (players > 4 ? 1 : 0));
+    return Math.min(GANG.most, GANG.base + 2 * Math.max(0, this.level - 12) + (players > 2 ? 1 : 0) + (players > 4 ? 1 : 0));
   }
 
   stepGangs(world, dt, now, people, monsters, players, counts, out) {
     const humans = people.filter((p) => !p.beacon && !p.lure);
     // A new gang now and then, while there are fewer than there should be.
-    if (this.roads.length && this.gangs.length < this.gangsWanted(players) && now >= this.gangAt) {
-      this.gangAt = now + 3000;
+    if (this.roads.length && this.gangs.filter((g) => !g.drop).length < this.gangsWanted(players) && now >= this.gangAt) {
+      this.gangAt = now + 1000;
       const g = this.newGang(humans);
       if (g) this.gangs.push(g);
     }
@@ -1026,13 +1085,19 @@ export class Battles {
         if (n === 0 && g.spawned) {
           // Popped, every one of them: gone, and another later somewhere else.
           this.gangs.splice(this.gangs.indexOf(g), 1);
-          this.gangAt = Math.max(this.gangAt, now + this.rng.range(GANG.back[0], GANG.back[1]));
+          if (!g.drop) this.gangAt = Math.max(this.gangAt, now + this.rng.range(GANG.back[0], GANG.back[1]));
           out.fx.push({ id: 0, k: 'gang', x: +g.camp.x.toFixed(1), z: +g.camp.z.toFixed(1) });
           continue;
         }
         if (humans.some((p) => Math.hypot(p.x - g.camp.x, p.z - g.camp.z) <= GANG.far)) g.quiet = 0;
         else {
           g.quiet ||= now;
+          if (now - g.quiet >= GANG.sleepMs && g.drop) {
+            // Dropped out of the clouds and left behind: back up into them.
+            for (const m of [...monsters.list]) if (m.camp === g.camp.id) monsters.remove(m.id);
+            this.gangs.splice(this.gangs.indexOf(g), 1);
+            continue;
+          }
           if (now - g.quiet >= GANG.sleepMs) {
             g.left = n;
             for (const m of [...monsters.list]) if (m.camp === g.camp.id) monsters.remove(m.id);
@@ -1042,6 +1107,12 @@ export class Battles {
         }
       } else if (near) {
         this.wakeGang(world, g, humans, monsters);
+      }
+      // Dropped out of the clouds: after whoever is nearest, a little slower
+      // than a walk, so walking off gets away.
+      if (g.drop) {
+        this.chaseGang(world, g, dt, humans);
+        continue;
       }
       // Along its path, while none of it is after anyone (and slowly enough
       // for it to keep up); back the other way at either end, or before a
@@ -1064,18 +1135,76 @@ export class Battles {
       if (this.list.some((b) => !b.done && b.kind !== 'hunt' && Math.hypot(b.x - x, b.z - z) < b.r + 14)) continue;
       if (this.havenList.some((h) => Math.hypot(h.x - x, h.z - z) < h.r + 12)) continue;
       if (this.gangs.some((g) => Math.hypot(g.camp.x - x, g.camp.z - z) < 30)) continue;
-      const size = Math.min(6, GANG.size + FL((this.level - 12) / 2) + this.rng.int(0, 1));
-      const list = [];
-      for (let k = 0; k < size; k++) list.push(k === 0 && this.level >= 14 && this.rng.chance(0.5) ? 'knight' : kinds[k % kinds.length]);
+      const list = this.gangKinds();
       return { camp: { id: 200 + this.nextGang++ % 800, kind: 'arena', x, z, r: GANG.r }, road, at: i, dir: this.rng.chance(0.5) ? 1 : -1, kinds: list, left: list.length, awake: false, spawned: false, quiet: 0 };
     }
     return null;
   }
 
+  // What a gang is: the chapter's own, a knight at its head from the second
+  // chapter on, now and then, and a beast now and then on the hardest.
+  gangKinds() {
+    const kinds = this.story.gang ?? ['blob'];
+    const size = Math.min(7, GANG.size + FL((this.level - 12) / 2) + this.rng.int(0, 1));
+    const list = [];
+    for (let k = 0; k < size; k++) list.push(k === 0 && this.level >= 13 && this.rng.chance(0.5) ? 'knight' : kinds[k % kinds.length]);
+    if (this.level >= 15 && this.rng.chance(0.4)) list[1] = TIER1[this.rng.int(0, TIER1.length - 1)];
+    return list;
+  }
+
+  // A gang out of the clouds (DROP), on whoever has rolled back enough of
+  // them, a way off them; never where everyone arrives, in a safe place or a
+  // battle not yet won.
+  stepDrops(world, now, people, monsters, out) {
+    if (now < this.dropAt || this.fog.all) return;
+    for (const p of people) {
+      if (!able(p)) continue;
+      if (!this.dropNeed.has(p.id)) this.dropNeed.set(p.id, this.rng.int(DROP.tiles[0], DROP.tiles[1]));
+      if ((this.rolled.get(p.id) ?? 0) < this.dropNeed.get(p.id)) continue;
+      if (Math.hypot(p.x - this.spawn.x, p.z - this.spawn.z) < GANG.landing) continue;
+      if (this.havenList.some((h) => Math.hypot(h.x - p.x, h.z - p.z) < h.r + 8)) continue;
+      if (this.list.some((b) => !b.done && Math.hypot(b.x - p.x, b.z - p.z) < (b.r ?? 8) + 12)) continue;
+      const kinds = this.gangKinds();
+      const at = spotAround(world, this.rng, p.x, p.y, p.z, DROP.from[0], DROP.from[1], people, { apart: 6, rise: 6, body: bodyOf(kinds[0]) });
+      if (!at) continue;
+      const g = { camp: { id: 200 + this.nextGang++ % 800, kind: 'arena', x: at.x, z: at.z, r: GANG.r }, road: null, at: 0, dir: 1, kinds, left: kinds.length, awake: false, spawned: false, quiet: 0, drop: true };
+      this.wakeGang(world, g, people, monsters, at.y);
+      if (!g.awake) continue;
+      this.gangs.push(g);
+      this.rolled.set(p.id, 0);
+      this.dropNeed.delete(p.id);
+      this.dropAt = now + DROP.ms;
+      out.fx.push({ id: 0, k: 'cloud', x: +at.x.toFixed(1), y: at.y, z: +at.z.toFixed(1), to: p.id });
+      return;
+    }
+  }
+
+  // A gang dropped out of the clouds, its middle after the nearest of
+  // everyone (as far as it can see), a little slower than a walk.
+  chaseGang(world, g, dt, people) {
+    let best = null;
+    let far = GANG.far;
+    for (const p of people) {
+      const d = Math.hypot(p.x - g.camp.x, p.z - g.camp.z);
+      if (d < far && able(p)) {
+        far = d;
+        best = p;
+      }
+    }
+    if (!best || far < 2) return;
+    const step = Math.min(far, dt * 3.6);
+    const x = g.camp.x + ((best.x - g.camp.x) / far) * step;
+    const z = g.camp.z + ((best.z - g.camp.z) / far) * step;
+    // (Never into a safe place.)
+    if (this.havenList.some((h) => Math.hypot(h.x - x, h.z - z) < h.r) || Math.hypot(this.spawn.x - x, this.spawn.z - z) < GANG.landing / 2) return;
+    g.camp.x = x;
+    g.camp.z = z;
+  }
+
   // A gang out, near someone: as many as it has left, round its middle
-  // (none of them with room there just now: it waits, still asleep).
-  wakeGang(world, g, people, monsters) {
-    const y = groundY(world, g.camp.x, g.camp.z) ?? world.sea + 2;
+  // (none of them with room there just now: it waits, still asleep), on the
+  // ground there (or about `y`).
+  wakeGang(world, g, people, monsters, y = groundY(world, g.camp.x, g.camp.z) ?? world.sea + 2) {
     let n = 0;
     for (const kind of g.kinds.slice(0, g.left)) {
       const at = spotAround(world, this.rng, g.camp.x, y, g.camp.z, 0.5, GANG.r - 2, people, { apart: 5, body: bodyOf(kind), rise: 6 });

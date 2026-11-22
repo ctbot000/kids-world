@@ -17,8 +17,9 @@ import { test } from 'node:test';
 import * as B from '../public/js/shared/blocks.js';
 import { walkReach } from '../public/js/shared/adventure.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
-import { AMBUSH, Battles, FOG_TILE, Fog, GANG, HUNT, REVEAL, REVEAL_START, SIEGE, standNear, unpackFog, walkableAround } from '../public/js/shared/isle-battles.js';
+import { AMBUSH, Battles, DROP, FIERCE, FOG_TILE, Fog, GANG, geared, HUNT, REVEAL, REVEAL_START, SIEGE, standNear, unpackFog, walkableAround } from '../public/js/shared/isle-battles.js';
 import { chapterOf, CHAPTERS, firstStage, STAGES } from '../public/js/shared/isle-story.js';
+import { BUMP_HP, kindOf } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
 
@@ -380,8 +381,8 @@ test('a hunt: the Big Bad goes round its range, runs off to rest when hurt, and 
   const beast = room.monsters.get(b.monster);
   assert.ok(beast && beast.kind === b.beast && beast.keepHearts);
   assert.equal(beast.hearts, b.max);
-  // Hurt a third of its hearts: off it runs, along its way.
-  beast.hearts = Math.floor(b.max * 0.6);
+  // Hurt a quarter of its hearts and more: off it runs, along its way.
+  beast.hearts = Math.floor(b.max * 0.7);
   stay(room, time, a, [beast.body.x - 2, beast.body.y, beast.body.z], 200);
   assert.equal(a.fx('flee').length, 1);
   assert.ok(b.lure, 'running off');
@@ -392,7 +393,7 @@ test('a hunt: the Big Bad goes round its range, runs off to rest when hurt, and 
   const hurt = beast.hearts;
   stay(room, time, a, [before.x - 40, ground(w, before.x - 40, before.z) ?? beast.body.y, before.z], 40000);
   assert.ok(beast.hearts > hurt || b.lure === null, 'resting');
-  assert.ok(beast.hearts <= Math.round(beast.max * (2 / 3)), 'never past two thirds');
+  assert.ok(beast.hearts <= Math.round(beast.max * (1 - 1 / (HUNT.flees + 1))), 'never past three quarters');
   // Run down and popped: won.
   fight(room, time, a, 240000, (m) => m.camp === b.camp.id, { until: () => b.done });
   assert.equal(b.done, true);
@@ -456,7 +457,7 @@ test('gangs of the Storm Gang roam the paths well away from everyone, wake as so
   sturdy(room, a);
   const adv = room.adventure;
   const w = room.world;
-  stay(room, time, a, [w.spawn.x, w.spawn.y, w.spawn.z], 15000);
+  stay(room, time, a, [w.spawn.x, w.spawn.y, w.spawn.z], 60000);
   const gangs = adv.battles.gangs;
   assert.equal(gangs.length, adv.battles.gangsWanted(1));
   for (const g of gangs) {
@@ -479,9 +480,92 @@ test('gangs of the Storm Gang roam the paths well away from everyone, wake as so
   fight(room, time, a, 120000, (m) => m.camp === g.camp.id, { until: () => !adv.battles.gangs.includes(g) });
   assert.ok(!adv.battles.gangs.includes(g));
   assert.equal(a.fx('gang').length, 1);
-  const count = adv.battles.gangs.length;
+  // (Roaming gangs: not those dropping out of the clouds, walking out here.)
+  const roaming = () => adv.battles.gangs.filter((o) => !o.drop).length;
+  const count = roaming();
   stay(room, time, a, [w.spawn.x, w.spawn.y, w.spawn.z], 80000);
-  assert.equal(adv.battles.gangs.length, count + 1, 'another, a while later');
+  assert.equal(roaming(), count + 1, 'another, a while later');
+});
+
+test('a gang drops out of the clouds on whoever rolls enough of them back, after them at once, and goes back up if left behind', () => {
+  const time = { t: 1_000_000 };
+  const room = isleRoom(FIRST, time);
+  const a = join(room);
+  sturdy(room, a);
+  const adv = room.adventure;
+  const w = room.world;
+  // Walking the roads out from the landing, at a walk, into the clouds.
+  const tour = adv.battles.roads.flatMap((r) => [...r, ...[...r].reverse()]);
+  let at = [w.spawn.x, w.spawn.y, w.spawn.z];
+  let k = 0;
+  let drop = null;
+  for (let t = 0; t < 240000 && !drop; t += 100) {
+    let left = 0.46;
+    while (left > 0) {
+      const [tx, tz] = tour[k % tour.length];
+      const d = Math.hypot(tx - at[0], tz - at[2]);
+      if (d <= left) {
+        at = [tx, 0, tz];
+        left -= d;
+        k++;
+      } else {
+        at = [at[0] + ((tx - at[0]) / d) * left, 0, at[2] + ((tz - at[2]) / d) * left];
+        left = 0;
+      }
+    }
+    at[1] = ground(w, at[0], at[2]) ?? w.spawn.y;
+    stay(room, time, a, at, 100);
+    drop = a.fx('cloud').at(-1) ?? null;
+  }
+  assert.ok(drop, 'a gang dropped out of the clouds');
+  assert.equal(drop.to, a.pid, 'on the one who rolled them back');
+  const d = Math.hypot(drop.x - at[0], drop.z - at[2]);
+  assert.ok(d >= DROP.from[0] - 1 && d <= DROP.from[1] + 1, `a way off them: ${d}`);
+  assert.ok(Math.hypot(drop.x - w.spawn.x, drop.z - w.spawn.z) >= GANG.landing - DROP.from[1], 'never at the landing');
+  const g = adv.battles.gangs.find((o) => o.drop);
+  assert.ok(g && g.awake, 'out at once');
+  assert.ok(room.monsters.list.filter((m) => m.camp === g.camp.id).length >= GANG.size);
+  // After them: it comes their way.
+  const from = Math.hypot(g.camp.x - at[0], g.camp.z - at[2]);
+  stay(room, time, a, at, 1500);
+  assert.ok(Math.hypot(g.camp.x - at[0], g.camp.z - at[2]) < from, 'after them');
+  // No other for a while.
+  assert.equal(a.fx('cloud').length, 1);
+  // Left far behind, it goes back up into the clouds.
+  const far = [g.camp.x < w.W / 2 ? Math.min(w.W - 20, g.camp.x + 90) : Math.max(20, g.camp.x - 90), 0, g.camp.z];
+  far[1] = ground(w, far[0], far[2]) ?? w.spawn.y;
+  stay(room, time, a, far, GANG.sleepMs + 1000);
+  assert.ok(!adv.battles.gangs.includes(g), 'gone back up');
+  assert.equal(room.monsters.list.some((m) => m.camp === g.camp.id), false);
+});
+
+test('the Storm Gang is tougher against mightier weapons, and bumps harder than other monsters', () => {
+  // The first wave of the same ambush, sprung by someone with bare fists
+  // and by someone with a Meteor Staff (twelve hearts a bop).
+  const wave = (weapon) => {
+    const time = { t: 1_000_000 };
+    const room = isleRoom(FIRST, time);
+    const a = join(room, 'Brave Fox', weapon ? { weapon } : {});
+    sturdy(room, a);
+    const b = room.adventure.battles.list.find((o) => o.kind === 'ambush');
+    stay(room, time, a, [b.prize[0] + 0.5, b.prize[1], b.prize[2] + 0.5], 2500);
+    return { room, a, time, list: room.monsters.list.filter((m) => m.camp === b.camp.id) };
+  };
+  const fist = wave(null);
+  const staff = wave('meteorstaff');
+  assert.ok(fist.list.length && staff.list.length);
+  const kind = fist.list[0].kind;
+  const one = fist.list.find((m) => m.kind === kind);
+  const two = staff.list.find((m) => m.kind === kind);
+  // (Each rounded to whole hearts.)
+  const ratio = two.max / one.max;
+  assert.ok(ratio >= geared(12) * 0.75 && ratio <= geared(12) * 1.25, `${one.max} → ${two.max}`);
+  assert.ok(Math.ceil(two.max / 12) >= 2, 'never popped in one bop of the staff');
+  // A bump of theirs: more than a monster's anywhere else.
+  const p = fist.room.players.get(fist.a.pid);
+  Object.defineProperty(p, 'hp', { value: 100, writable: true, configurable: true });
+  fist.room.hurt(fist.a.pid, one, fist.time.t, {});
+  assert.equal(p.hp, 100 - BUMP_HP * FIERCE * (kindOf(one.kind).bump ?? 1));
 });
 
 // ---------------------------------------------------------------- a restart

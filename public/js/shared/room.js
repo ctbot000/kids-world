@@ -1772,7 +1772,9 @@ export class Room {
         people.push({ id, x: dragon.x, y: dragon.y, z: dragon.z, flying: w.flying, riding: false, mount: CRITTER_INFO.dragon.ride.radius, safeUntil: 0, dizzy: false });
         continue;
       }
-      people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now });
+      // (power: the hearts a bop of theirs takes, by the toy weapon in their
+      // hand: Toon Isle's Storm Gang comes tougher against mightier ones.)
+      people.push({ id, x: w.x, y: w.y, z: w.z, flying: w.flying, riding: riding.has(id), safeUntil: p.safeUntil ?? 0, dizzy: (p.dizzyUntil ?? 0) > now, power: weaponOf(p.look?.weapon)?.power ?? 1 });
     }
     const adv = this.adventure;
     if (adv?.active) {
@@ -1917,7 +1919,8 @@ export class Room {
   hurt(pid, monster, now, how = {}) {
     const p = this.players.get(pid);
     if (!p) return;
-    const bumps = how.bumps ?? monster.plan?.bump ?? kindOf(monster.kind).bump;
+    // (Toon Isle's Storm Gang bumps harder: isle-battles.js FIERCE.)
+    const bumps = (how.bumps ?? monster.plan?.bump ?? kindOf(monster.kind).bump) * (monster.fierce ?? 1);
     const dragon = this.dragonUnder(pid);
     if (dragon) {
       this.bumpRide(dragon, Math.ceil(bumps), now);
