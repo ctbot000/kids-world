@@ -69,6 +69,10 @@ function orbit([cx, cy, cz], r, high, a0, a1, dur, fov = 50) {
   };
 }
 
+// The yaw that turns something at (x, z) to face `pos` (a camera's, say):
+// models face +z at yaw 0.
+const towards = (pos, x, z) => Math.atan2(pos[0] - x, pos[2] - z);
+
 // Something to do once, the first frame at or past `at` in a shot.
 function once(shot, key, t, at, fn) {
   shot.done ??= new Set();
@@ -1684,6 +1688,55 @@ function unveil(fog, x, z, r) {
   return out;
 }
 
+// Trees of every kind, each from its foot (blocks.js WILD_TREES, TOON_TREES).
+const TREE_FEET = new Set([...B.WILD_TREES, ...B.TOON_TREES]);
+
+// A tree of kind `id` to film from r away, and from where: the one, and the
+// angle round it (as orbit takes it), whose line of sight, level with its
+// top, passes farthest outside every other tree's crown (each as wide and
+// tall as its trunk is tall: render/cartoon-plants.js) and over the ground,
+// as near the angle `prefer` as it can; and how high its top is (a giant
+// toadstool's cap) over its foot.
+function clearestTree(world, id, r, prefer) {
+  const trees = [];
+  const want = [];
+  for (let x = 40; x < 216; x++) {
+    for (let z = 40; z < 216; z++) {
+      for (let y = world.H - 2; y > SEA - 6; y--) {
+        const b = world.get(x, y, z);
+        if (!TREE_FEET.has(b)) continue;
+        let trunk = 0;
+        while (world.get(x, y + 1 + trunk, z) === B.TREE_CORE) trunk++;
+        const tree = { x: x + 0.5, y, z: z + 0.5, size: trunk + 1.2 };
+        trees.push(tree);
+        if (b === id && x >= 60 && x < 200 && z >= 60 && z < 200) want.push(tree);
+      }
+    }
+  }
+  let best = null;
+  for (const t of want) {
+    const cap = 0.97 * t.size;
+    const h = t.y + cap;
+    const near = trees.filter((o) => o !== t && Math.hypot(o.x - t.x, o.z - t.z) < r + 8);
+    for (let k = 0; k < 48; k++) {
+      const a = (k / 48) * Math.PI * 2;
+      const dx = Math.sin(a) * r;
+      const dz = Math.cos(a) * r;
+      let clear = 4;
+      for (const o of near) {
+        // (Over its crown or under it: clear of it.)
+        if (h < o.y + 0.35 * o.size - 0.5 || h > o.y + 1.5 * o.size + 0.5) continue;
+        const s = Math.max(0, Math.min(1, ((o.x - t.x) * dx + (o.z - t.z) * dz) / (r * r)));
+        clear = Math.min(clear, Math.hypot(t.x + dx * s - o.x, t.z + dz * s - o.z) - 0.7 * o.size);
+      }
+      for (let s = 0.15; s <= 1; s += 0.05) if (groundY(world, t.x + dx * s, t.z + dz * s) > h - 0.8) clear = Math.min(clear, -2);
+      const score = clear - 0.4 * Math.abs(Math.atan2(Math.sin(a - prefer), Math.cos(a - prefer)));
+      if (!best || score > best.score) best = { score, at: [t.x, t.y, t.z], angle: a, cap };
+    }
+  }
+  return best ?? { at: [128.5, SEA + 4, 128.5], angle: prefer, cap: 4 };
+}
+
 const TOON_FROM = CHAPTERS.findIndex((ch) => ch.episode === 5) + 1;
 const TOON_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 5);
 
@@ -1767,6 +1820,7 @@ function intro5() {
     const [hx, hz] = hunt.range[4];
     const beast = ch.battles.find((b) => b.kind === 'hunt').beast;
     const a0 = 0.6 + i * 1.3;
+    const camera = orbit([hx, groundY(m.world, hx, hz) + 2, hz], 11, 2.5, a0, a0 + 0.45, 3, 48);
     const shot = add({
       dur: 3,
       world: m,
@@ -1774,15 +1828,20 @@ function intro5() {
       cut: i === 0 ? 'flash' : 'cut',
       setup() {
         renderer.setFog(null);
-        monster(beast, (t) => ({ x: hx, y: groundY(m.world, hx, hz), z: hz, yaw: a0 + Math.PI + Math.sin(t) * 0.3, state: t % 2.4 < 1.2 ? 'chase' : 'idle' }));
+        // Face on to the camera, swaying its head a little.
+        monster(beast, (t) => ({ x: hx, y: groundY(m.world, hx, hz), z: hz, yaw: towards(camera(t).pos, hx, hz) + Math.sin(t) * 0.3, state: t % 2.4 < 1.2 ? 'chase' : 'idle' }));
       },
-      camera: (t) => orbit([hx, groundY(m.world, hx, hz) + 2, hz], 11, 2.5, a0, a0 + 0.45, 3, 48)(t),
+      camera,
     });
     overlays.push(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, ch.battles.map((b) => `${BATTLE_ICONS[b.kind]} ${b.name}`).join(' · ')));
   }
 
   // 4. Thunder Top: the Baron over his arena, lightning all round.
   const arena = top.battles.find((b) => b.kind === 'showdown');
+  const topCamera = keys([
+    { t: 0, pos: [arena.x + 16, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 6, arena.z], fov: 50 },
+    { t: 6, pos: [arena.x + 10, arena.y + 3, arena.z + 15], look: [arena.x, arena.y + 7, arena.z], fov: 48 },
+  ]);
   add({
     dur: 6,
     world: top,
@@ -1791,15 +1850,16 @@ function intro5() {
     cut: 'flash',
     setup() {
       renderer.setFog(null);
-      monster('bluster', (t) => ({ x: arena.x + Math.sin(t * 0.5) * 3, y: arena.y + 8 + Math.sin(t * 1.3) * 0.4, z: arena.z + Math.cos(t * 0.5) * 3, yaw: 2.6, state: t % 2 < 1 ? 'hurl' : 'giggle' }));
+      monster('bluster', (t) => {
+        const x = arena.x + Math.sin(t * 0.5) * 3;
+        const z = arena.z + Math.cos(t * 0.5) * 3;
+        return { x, y: arena.y + 8 + Math.sin(t * 1.3) * 0.4, z, yaw: towards(topCamera(t).pos, x, z) + Math.sin(t * 0.9) * 0.25, state: t % 2 < 1 ? 'hurl' : 'giggle' };
+      });
     },
     fx(t) {
       for (const k of [1.2, 3, 4.6]) once(shots.at(-1), `bolt${k}`, t, k, () => strike(top.world, arena.x + Math.sin(k * 3) * 9, arena.z + Math.cos(k * 3) * 9, [arena.x + 18, 0, arena.z + 22]));
     },
-    camera: keys([
-      { t: 0, pos: [arena.x + 16, arena.y + 4, arena.z + 22], look: [arena.x, arena.y + 6, arena.z], fov: 50 },
-      { t: 6, pos: [arena.x + 10, arena.y + 3, arena.z + 15], look: [arena.x, arena.y + 7, arena.z], fov: 48 },
-    ]),
+    camera: topCamera,
   });
   overlays.push(caption(shots.at(-1).start + 0.5, 5.2, 'He waits on Thunder Top — and his Storm Gang is everywhere under the clouds: roaming in gangs, springing traps, storming beacons, hatching out of nests!'));
 
@@ -2000,12 +2060,14 @@ function ending5() {
   const cast = TOON_CHAPTERS.flatMap((ch) => ch.battles.filter((b) => b.kind === 'hunt').map((b) => `🐾 ${b.who}`));
   overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#Toon Isle', 'Episode 5', '', '#Starring', 'You and your friends', '', '#and', '🎩 Baron Bluster', ...cast, '🥚 the Storm Nests', '', '#The five Sky Lanterns', ...TOON_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
 
-  // 6. The little cloud, watering the toadstools. Politely.
-  const shroomAt = (() => {
-    const { world } = woods;
-    for (let x = 60; x < 200; x++) for (let z = 60; z < 200; z++) for (let y = world.H - 2; y > SEA; y--) if (world.get(x, y, z) === B.TOON_SHROOM) return [x + 0.5, y, z + 0.5];
-    return [128, SEA + 4, 128];
-  })();
+  // 6. The little cloud, watering the toadstools. Politely. (A toadstool
+  // seen from where no other tree is in the way: the woods are thick.)
+  const { at: shroomAt, angle, cap } = clearestTree(woods.world, B.TOON_SHROOM, 10, 0.93);
+  const [sx, sy, sz] = shroomAt;
+  const shroomCamera = keys([
+    { t: 0, pos: [sx + Math.sin(angle) * 10, sy + cap + 0.4, sz + Math.cos(angle) * 10], look: [sx, sy + cap + 0.9, sz], fov: 46 },
+    { t: 7, pos: [sx + Math.sin(angle - 0.1) * 7.8, sy + cap + 0.8, sz + Math.cos(angle - 0.1) * 7.8], look: [sx, sy + cap + 1.2, sz], fov: 44 },
+  ]);
   add({
     dur: 7,
     world: woods,
@@ -2014,15 +2076,16 @@ function ending5() {
     out: 'fade',
     setup() {
       renderer.setFog(null);
-      monster('bluster', (t) => ({ x: shroomAt[0] + Math.sin(t * 0.6) * 0.6, y: shroomAt[1] + 6.5 + Math.sin(t * 1.4) * 0.2, z: shroomAt[2], yaw: 1.2, state: 'idle', scale: 0.32 }));
+      const baron = monster('bluster', (t) => {
+        const x = sx + Math.sin(t * 0.6) * 0.6;
+        return { x, y: sy + cap + 2.45 + Math.sin(t * 1.4) * 0.2, z: sz, yaw: towards(shroomCamera(t).pos, x, sz) + Math.sin(t * 0.7) * 0.2, state: 'idle', scale: 0.32 };
+      });
+      baron.model.calm();
     },
     fx() {
-      if (Math.random() < 0.6) renderer.effects.add('drop', shroomAt[0] + (Math.random() - 0.5) * 1.2, shroomAt[1] + 6, shroomAt[2] + (Math.random() - 0.5) * 1.2, { vy: -6, size: 0.12, life: 0.7, color: '#8fc9ff' });
+      if (Math.random() < 0.6) renderer.effects.add('drop', sx + (Math.random() - 0.5) * 1.2, sy + cap + 2, sz + (Math.random() - 0.5) * 1.2, { vy: -6, size: 0.12, life: 0.7, color: '#8fc9ff' });
     },
-    camera: keys([
-      { t: 0, pos: [shroomAt[0] + 8, shroomAt[1] + 4, shroomAt[2] + 6], look: [shroomAt[0], shroomAt[1] + 4, shroomAt[2]], fov: 46 },
-      { t: 7, pos: [shroomAt[0] + 6, shroomAt[1] + 4.5, shroomAt[2] + 5], look: [shroomAt[0], shroomAt[1] + 4.5, shroomAt[2]], fov: 44 },
-    ]),
+    camera: shroomCamera,
   });
   const teaser = shots.at(-1).start;
   overlays.push(caption(teaser + 0.4, 4, 'And the Baron? He is a little white cloud now, and every morning he waters the toadstools. Politely.'));
