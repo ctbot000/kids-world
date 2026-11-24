@@ -839,8 +839,9 @@ export class Fight {
   // Whether a bop from here gets past one's guard.
   bare(f) {
     if (f.spec.part) return f.more?.[0] === 1;
-    // (Nothing of its own gets hurt, open or not: Old Tock.)
-    if (f.spec.shell) return false;
+    // (Open or not, nothing of its own gets hurt: Old Tock, and Old Munch's head till
+    // it is all there is of him.)
+    if (f.spec.shell) return f.softNow === true;
     if (f.softNow !== undefined) return f.softNow;
     if (f.open || f.spec.guard === 'none') return true;
     if (f.spec.guard === 'front' && f.state === 'rest') return dot(f.h, flatUnit(sub(this.w, f), f.up)) < -0.35;
@@ -1084,6 +1085,12 @@ export class Fight {
       case 'wink':
         this.nod.winkNews(m);
         break;
+      case 'chests':
+        this.nod.chests.rows(m.c);
+        break;
+      case 'chest':
+        this.nod.chests.opened(m);
+        break;
       case 'gone':
         this.gone(Array.isArray(m.ids) ? m.ids : []);
         break;
@@ -1271,7 +1278,7 @@ export class Fight {
 
   // ------------------------------------------------ each frame
 
-  update(dt, input) {
+  update(dt) {
     const now = performance.now();
     this.poseFrights(dt, now);
     this.runActs(dt, now);
@@ -1281,7 +1288,6 @@ export class Fight {
     this.keepOut();
     if (this.rolling && Math.random() < dt * 30) this.g.renderer.effects.add('puff', this.w.x, this.w.y, this.w.z, { size: 0.25, life: 0.4, grow: 0.5, color: '#efe6ff' });
     this.facing = now - this.swingAt < 180;
-    void input;
   }
 
   // Out of any of them you have walked into (the big ones, above all).
@@ -1379,9 +1385,7 @@ export class Fight {
         continue;
       }
       if (n.boss && !this.nod.bossReady) continue;
-      const body = this.nod.space.byKey.get(n.body);
       const top = add(n.at, n.at.up, 3.2);
-      void body;
       out.push({ key: `n${n.id}`, ...top, label: `${n.boss ? (told.icon ?? '🌙') : '🌑'} ${told.name}${d > 12 ? ` · ${Math.round(d)}m` : ''}`, share: null, kind: 'quest' });
     }
     return out;

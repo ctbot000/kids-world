@@ -23,10 +23,10 @@ addFrights({
       { k: 'charge', near: 5, far: 60, windup: 1150, len: 40, speed: 15, w: 1.5, b: 2, rest: 800, every: 900 },
       { k: 'wave', near: 0, far: 60, windup: 850, n: 1, speed: 8, reach: 26, w: 1.2, b: 1, rest: 500, every: 900, when: upTo(0) },
       { k: 'charge', near: 5, far: 60, windup: 1000, len: 40, speed: 16, w: 1.5, b: 2, rest: 500, every: 700, when: from(1) },
-      { k: 'wave', near: 0, far: 60, windup: 800, n: 2, gap: 720, speed: 8.5, reach: 26, w: 1.2, b: 1, rest: 500, every: 800, when: from(1) },
+      { k: 'wave', near: 0, far: 60, windup: 800, n: 2, gap: 900, speed: 8.5, reach: 26, w: 1.2, b: 1, rest: 500, every: 800, when: from(1) },
       { k: 'charge', near: 4, far: 60, windup: 1200, len: 74, speed: 17, w: 1.6, b: 2, rest: 700, every: 900, look: 'roll', when: from(1) },
       { k: 'leap', near: 3, far: 20, windup: 700, ms: 950, r: 3.4, high: 7, b: 1.5, rest: 600, every: 700, when: from(2) },
-      { k: 'wave', near: 0, far: 60, windup: 700, n: 3, gap: 640, speed: 9, reach: 26, w: 1.2, b: 1, rest: 600, every: 800, when: from(2) },
+      { k: 'wave', near: 0, far: 60, windup: 700, n: 3, gap: 900, speed: 9, reach: 26, w: 1.2, b: 1, rest: 600, every: 800, when: from(2) },
       { k: 'call', near: 0, far: 60, windup: 700, kind: 'bunny', n: 3, rest: 400, every: 900, when: (f, sim) => rageOf(f) >= 1 && helpers(3)(f, sim) },
     ],
     told: 'Nothing gets through all that wool. Stand in front of a bedpost, and roll aside as he charges: BONK!',
@@ -40,9 +40,9 @@ addFrights({
 // last, which is bare. Keep out of his jaws and get round to his tail! Each joint
 // popped off leaves the next one bare, and him shorter, quicker and crosser; and
 // with none left, there is only his head to catch.
-const JOINTS = 6;
+const JOINTS = 8;
 const APART = 1.7;
-const BARE_MS = 6500;
+const BARE_MS = 6800;
 
 function munchBegin(sim, f) {
   f.soft = false;
@@ -151,7 +151,7 @@ function munchBrain(sim, f, dt, now) {
 
 addFrights({
   munch: {
-    name: 'Old Munch', icon: '🐛', boss: true, big: true, hearts: JOINTS + 1, chips: 8, radius: 1.3, height: 2.5, speed: 4.2, style: 'come', range: [0, 2], guard: 'all', steady: true, begin: munchBegin,
+    name: 'Old Munch', icon: '🐛', boss: true, big: true, shell: true, hearts: JOINTS + 1, chips: 8, radius: 1.3, height: 2.5, speed: 4.2, style: 'come', range: [0, 2], guard: 'all', steady: true, begin: munchBegin,
     moves: [
       { k: 'lunge', near: 0, far: 6.5, windup: 700, len: 6, speed: 13, w: 1.1, b: 1.5, rest: 500, every: 1700, flash: true },
       { k: 'lob', near: 4, far: 40, windup: 700, n: 3, spread: 3.6, ms: 950, high: 6, r: 1.7, b: 1, rest: 300, every: 1800, look: 'seed', each: true },
@@ -286,6 +286,9 @@ function tockBegin(sim, f, dream) {
   f.brain = tockBrain;
 }
 
+// The strokes of the hour, how cross he is: each in time for a jump of its own.
+export const hourOf = (rage) => ({ k: 'wave', windup: 1200, n: 4 + rage, gap: 920 - rage * 20, speed: 10, reach: 24, w: 1, b: 1 });
+
 function tockBrain(sim, f, dt, now) {
   const rage = rageOf(f);
   const p = sim.aim(f);
@@ -315,14 +318,14 @@ function tockBrain(sim, f, dt, now) {
   }
   if (step === 1) {
     sim.launch(f, { k: 'lob', windup: 800, n: 2 + rage, spread: 4, ms: 1000, high: 8, r: 1.9, b: 1, far: 60, each: true, look: 'cog' }, p, now);
-    sim.launch(f, { k: 'wave', windup: 1500, n: 2, gap: 720, speed: 9, reach: 24, w: 1, b: 1 }, p, now);
+    sim.launch(f, { k: 'wave', windup: 1500, n: 2, gap: 900, speed: 9, reach: 24, w: 1, b: 1 }, p, now);
     f.next = now + 2900 - rage * 350;
     return;
   }
   // The hour: so many strokes of it, and then he has run right down.
-  const n = 4 + rage;
-  const gap = 640 - rage * 60;
-  sim.launch(f, { k: 'wave', windup: 1200, n, gap, speed: 10, reach: 24, w: 1, b: 1 }, p, now);
+  const hour = hourOf(rage);
+  const { n, gap } = hour;
+  sim.launch(f, hour, p, now);
   f.busyTill = now + 1200 + n * gap;
   f.next = now + 60000;
   f.downAt = f.busyTill;
@@ -367,7 +370,7 @@ function tockKeyBrain(sim, k, f, dt, now) {
 const LANTERN_MS = 15000;
 const MARE_MOVES = [
   { k: 'charge', near: 3, far: 60, windup: 900, len: 24, speed: 16, w: 1.2, b: 1.6, rest: 400, every: 500, flash: true, trail: true },
-  { k: 'wave', near: 3, far: 60, windup: 850, n: 2, gap: 620, speed: 9.5, reach: 30, w: 1.1, b: 1, rest: 300, every: 500 },
+  { k: 'wave', near: 3, far: 60, windup: 850, n: 2, gap: 900, speed: 9.5, reach: 30, w: 1.1, b: 1, rest: 300, every: 500 },
   // (Right up by her, and she rears and stamps.)
   { k: 'burst', near: 0, far: 3, windup: 640, r: 3.4, b: 1.2, rest: 200, every: 300 },
   { k: 'charge', near: 3, far: 60, windup: 760, len: 24, speed: 17, w: 1.2, b: 1.6, rest: 300, every: 500, flash: true, trail: true },

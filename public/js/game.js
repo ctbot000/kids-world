@@ -3118,7 +3118,7 @@ export class Game extends EventTarget {
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
       const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
       this.adventure = { camps: new Map(), won: a.won === true, stage, journey, run, king: null, shield: false, story: chapterOf(stage), nod: true };
-      this.nod = new NodGame(this, { key: a.nod.key, winks: Array.isArray(a.nod.winks) ? a.nod.winks.filter(Number.isInteger) : [] }, asleep && asleep.world.key === a.nod.key ? { x: asleep.w.x, y: asleep.w.y, z: asleep.w.z } : null);
+      this.nod = new NodGame(this, { key: a.nod.key, winks: Array.isArray(a.nod.winks) ? a.nod.winks.filter(Number.isInteger) : [], chests: a.nod.chests }, asleep && asleep.world.key === a.nod.key ? { x: asleep.w.x, y: asleep.w.y, z: asleep.w.z } : null);
       this.nod.rows(a.nod.n);
       this.adventureNews(a);
     }
@@ -3654,7 +3654,9 @@ export class Game extends EventTarget {
   openChest() {
     const t = this.chestAt ?? this.chestTarget;
     if (!t || !this.hasKeyFor(t)) return;
-    this.send({ t: 'chest', at: [t.x, t.y, t.z] });
+    // (In the Land of Nod, by its spot: nod/chests-view.js.)
+    if (t.nod !== undefined) this.send({ t: 'nod', op: 'chest', i: t.nod });
+    else this.send({ t: 'chest', at: [t.x, t.y, t.z] });
   }
 
   // One quiz for a chest key, offered (a while after, `after` ms): after a
@@ -3691,14 +3693,18 @@ export class Game extends EventTarget {
     if (this.near(x + 0.5, y, z + 0.5, 40)) this.treasureBurst(x + 0.5, y, z + 0.5, gold);
     // The treasure taken out of it, flying to whoever opened it.
     setTimeout(() => this.treasureTaken(x + 0.5, y, z + 0.5, msg.by, gold), CHEST_TAKE_MS);
-    if (msg.by !== this.pid) return;
+    if (msg.by === this.pid) this.chestWon(gold, { x: x + 0.5, y: y + 1, z: z + 0.5 });
+  }
+
+  // A chest opened by you: your key is spent, and the treasure is yours.
+  chestWon(gold, at) {
     this.profile.useKey(gold);
     const got = chestTreasure(Math.random, this.adventure?.story.level ?? 1, gold);
     this.profile.earn(got.coins);
     if (got.potion) got.potion = this.profile.findPotion();
     if (got.diamond) this.profile.addToBasket('diamond', 1);
     this.profile.count('chests');
-    this.emit('reward', { x: x + 0.5, y: y + 1, z: z + 0.5, xp: XP_FOR.chests.xp });
+    this.emit('reward', { ...at, xp: XP_FOR.chests.xp });
     // What was inside, shown once the lid is up (ui.js treasurePop).
     setTimeout(() => this.emit('treasure', { ...got, gold }), TREASURE_SHOW_MS);
   }

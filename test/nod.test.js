@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { test } from 'node:test';
 import { aimedPath, laneAt, offPath } from '../public/js/shared/nod/attacks.js';
-import { NOD_BOSSES } from '../public/js/shared/nod/bosses.js';
+import { hourOf, NOD_BOSSES } from '../public/js/shared/nod/bosses.js';
+import { CHESTS_OUT, DreamChests } from '../public/js/shared/nod/chests.js';
 import { BURST_R, Dream } from '../public/js/shared/nod/dream.js';
 import { BOP_MS, CHIPS, FRIGHT_KINDS, FRIGHTS, Frights, frightOf, mightOf, OPENINGS, readFright } from '../public/js/shared/nod/foes.js';
 import { flightAt } from '../public/js/shared/nod/maker.js';
@@ -20,6 +21,7 @@ import { isNodKey, nodKey, nodWorld, NOD_KEYS } from '../public/js/shared/nod/wo
 import { CHAPTERS, chapterOf, firstStage, STAGES } from '../public/js/shared/isle-story.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { WEAPONS } from '../public/js/shared/shop.js';
+import { CHEST_AGAIN_MS, CHEST_OPEN_MS } from '../public/js/shared/treasure.js';
 import { PublicAdventure } from '../server/adventure.js';
 
 const FIRST = firstStage(6);
@@ -301,6 +303,14 @@ for (const [i, ch] of DREAMS.entries()) {
       assert.ok(high > 0.1 && high < 2.4, `${ch.key}: wink ${k} within reach (${high.toFixed(2)})`);
       assert.ok(b.key !== w.boss.body, `${ch.key}: wink ${k} not on the boss's`);
     }
+    // Spots for treasure chests: level, clear, and not where anyone fights.
+    assert.ok(w.chests.length >= CHESTS_OUT + 2, `${ch.key}: ${w.chests.length} spots for chests`);
+    for (const s of w.chests) {
+      clear(s, `${ch.key}: a chest`);
+      assert.ok(after.has(s.body) && s.body !== w.boss.body && s.body !== home.key, `${ch.key}: a chest on ${s.body}`);
+      assert.ok(w.nightmares.every((n) => dist3(n.at, s) >= 7) && w.springs.every((o) => dist3(o.from, s) > 2), `${ch.key}: out of the way`);
+      assert.ok(dot(body(s.body).slope(s.x, s.y, s.z), s.up) > 0.85 && Math.abs(dot(s.dir, s.up)) < 1e-6);
+    }
     // Lamps round the night-light, one for each nightmare and one for the boss.
     assert.deepEqual(w.dress.filter((d) => d.kind === 'lamp').map((d) => d.lamp).sort(), [1, 2, 3, 4]);
     assert.equal(w.dress.filter((d) => d.kind === 'nightlight').length, 1);
@@ -460,8 +470,7 @@ test('no more than a few frights go for one at once, and a moment apart', () => 
     for (let t = 0; t < 30000; t += 50) {
       now += 50;
       sim.step(0.05, now, [me]);
-      for (const a of sim.take('acts')) {
-        void a;
+      for (let n = sim.take('acts').length; n > 0; n--) {
         total++;
         assert.ok(now - last >= 250, 'a moment apart');
         last = now;
@@ -470,6 +479,69 @@ test('no more than a few frights go for one at once, and a moment apart', () => 
       assert.ok(busy <= (level < 17 ? 2 : 3), `${busy} at once`);
     }
     assert.ok(total > 12, `but they do go for one (${total})`);
+  }
+});
+
+test('rings never roll from two of them at once', () => {
+  const { body, space } = ballOf(16);
+  const sim = new Frights(space, { level: 18, seed: 6 });
+  const top = body.spot(v3(0, 16, 0));
+  for (let i = 0; i < 3; i++) sim.add('drummer', { ...body.walk(top, turn(v3(0, 0, 1), top.up, i * 2), 6, 0.5).at(-1), body });
+  const me = { id: 1, x: top.x, y: top.y, z: top.z, body, dizzy: false };
+  let now = 1000;
+  let clear = 0;
+  let waves = 0;
+  for (let t = 0; t < 60000; t += 50) {
+    now += 50;
+    sim.step(0.05, now, [me]);
+    for (const a of sim.take('acts')) {
+      if (a.k !== 'wave') continue;
+      waves++;
+      const first = now + a.ms;
+      assert.ok(first > clear, 'the last of them has gone by');
+      clear = first + ((a.n ?? 1) - 1) * (a.g ?? 0) + 800;
+    }
+  }
+  assert.ok(waves >= 5, `but they do come (${waves})`);
+});
+
+test('rings that come one after another leave time for a jump over each', () => {
+  const { body, space } = ballOf(14);
+  const from = body.spot(v3(0, 14, 0));
+  // How many of them get someone who jumps as each is so near (seconds), on the
+  // real walker, as a page judges it (nod/fight.js).
+  const got = ({ n = 1, gap = 0, speed, w }, far, early) => {
+    const p = standAt(makeWalker(0, 0, 0), { ...body.walk(from, v3(0, 0, 1), far, 0.5).at(-1), body });
+    const first = dist3(p, from) / speed;
+    const passed = new Set();
+    let hits = 0;
+    for (let t = 0; t < first + (n * gap) / 1000 + 1.2; t += 1 / 60) {
+      const next = Array.from({ length: n }, (_, i) => i).find((i) => !passed.has(i));
+      stepWalker(space, p, { jump: p.onGround && next !== undefined && first + (next * gap) / 1000 - t < early }, 1 / 60);
+      const alt = p.onGround ? 0 : Math.max(0, body.ground(p.x, p.y, p.z));
+      const d = dist3(p, from);
+      for (let i = 0; i < n; i++) {
+        const R = (t - (i * gap) / 1000) * speed;
+        if (R < 0 || passed.has(i)) continue;
+        if (R > d + w) passed.add(i);
+        else if (Math.abs(d - R) < w * 0.5 + 0.1 && alt < 0.5) {
+          passed.add(i);
+          hits++;
+        }
+      }
+    }
+    return hits;
+  };
+  const waves = [...Object.entries(FRIGHTS).flatMap(([kind, s]) => s.moves.filter((m) => m.k === 'wave').map((m) => [kind, m])), ...[0, 1, 2].map((r) => ['the hour', hourOf(r)])];
+  assert.ok(waves.length > 8);
+  for (const [kind, m] of waves) {
+    for (const far of [5, 9]) {
+      // (Anyone standing still is got by every one of them.)
+      assert.equal(got(m, far, -1), m.n ?? 1, `${kind}: ${m.n} rings`);
+      let room = 0;
+      for (let early = 0.06; early < 0.7; early += 0.02) if (got(m, far, early) === 0) room += 20;
+      assert.ok(room >= 300, `${kind}: ${m.n} rings ${m.gap} ms apart, ${far} off: ${room} ms to jump in`);
+    }
   }
 });
 
@@ -754,7 +826,8 @@ test('a nightmare wakes as you come, comes at you in waves, and lights its lamp;
   assert.equal(a.fx('quiet').length, 1);
   // Back, and every wave of it popped.
   assert.ok(popAll(room, time, a, n.at, 60000, () => n.done));
-  assert.deepEqual(a.fx('wave').filter((m) => m.n === 1).map((m) => m.w).slice(-3), [1, 2, 3]);
+  const waves = n.spec.waves.length;
+  assert.deepEqual(a.fx('wave').filter((m) => m.n === 1).map((m) => m.w).slice(-waves), Array.from({ length: waves }, (_, i) => i + 1));
   const over = a.last('nightmare');
   assert.deepEqual([over.id, over.by, over.won], [1, [a.pid], undefined]);
   assert.equal(room.adventure.tally().freed, 1);
@@ -838,6 +911,39 @@ test('a blow takes HP once, in a fair moment after another; out of HP, you come 
   }
   assert.ok(p.hp > 0);
   assert.ok(dist3(v3(...p.s), dream.homeFor(a.pid)) < 8, 'where they were last safe');
+});
+
+test('blows hit harder the later the dream, and HP comes back more slowly in the thick of a fight', () => {
+  const lost = [];
+  for (const stage of [FIRST, STAGES]) {
+    const time = { t: 1_000_000 };
+    const room = dreamRoom(stage, time);
+    const a = join(room);
+    const p = room.players.get(a.pid);
+    const { dream } = room.adventure;
+    const n = dream.list[0];
+    const f = dream.frights.add('moth', { ...n.at, body: n.body }, { camp: 'x' });
+    f.brain = () => {};
+    stay(room, time, a, n.at, 300);
+    const act = dream.frights.launch(f, { k: 'burst', windup: 100, r: 3, b: 1 }, { ...n.at, id: a.pid, body: n.body }, time.t);
+    room.receive(a, { t: 'nod', op: 'hurt', a: act.id });
+    lost.push(p.maxHp - p.hp);
+    // In the thick of it: not yet what it is elsewhere.
+    Object.assign(n, { state: 'on', wave: 0, out: true, came: 9 });
+    for (let i = 0; i < 4; i++) dream.frights.add('bunny', { ...n.at, body: n.body }, { camp: 'n1' }).brain = () => {};
+    const was = p.hp;
+    stay(room, time, a, n.at, 7000);
+    assert.equal(p.hp, was, 'nothing back after seven seconds');
+    stay(room, time, a, n.at, 4500);
+    assert.equal(p.hp, Math.min(p.maxHp, was + 20), 'but after ten');
+    // And anywhere else, as ever.
+    n.state = 'done';
+    n.done = true;
+    Object.assign(p, { hp: 30, bumpAt: time.t, healAt: time.t });
+    stay(room, time, a, dream.world.start, 6300);
+    assert.equal(p.hp, 50);
+  }
+  assert.deepEqual(lost, [20, 25]);
 });
 
 test('rolled clear of, bopped back, slammed, and a Brave Burst: what each does, and friends see it', () => {
@@ -927,6 +1033,45 @@ test('a wink is found by whoever is at it, once, and is nobody’s from afar', (
   assert.deepEqual(a.fx('wink').map((m) => [m.i, m.n, m.of]), [[7, 1, 40]]);
   const b = join(room, 'Quick Otter');
   assert.deepEqual(b.last('welcome').adventure.nod.winks, [7], 'and whoever comes later knows');
+});
+
+test('treasure chests: five about the dream, one of them golden; opened by whoever is at one, gone a while after, and another turns up', () => {
+  const spots = nodWorld('pillow').chests;
+  const chests = new DreamChests(spots, 4);
+  assert.equal(chests.list.length, CHESTS_OUT);
+  assert.equal(chests.list.filter((c) => c.gold).length, 1);
+  assert.equal(new Set(chests.list.map((c) => c.i)).size, CHESTS_OUT, 'each at a spot of its own');
+  const gold = chests.list.find((c) => c.gold);
+  assert.equal(chests.open({ x: 500, y: 0, z: 0 }, gold.i, 1000), null, 'not from afar');
+  const empty = spots.findIndex((_, i) => !chests.list.some((c) => c.i === i));
+  assert.equal(chests.open(spots[empty], empty, 1000), null, 'nor where there is none');
+  assert.equal(chests.open(spots[gold.i], gold.i, 1000), gold);
+  assert.equal(chests.open(spots[gold.i], gold.i, 1500), null, 'and only once');
+  assert.deepEqual(chests.pack().find((r) => r[0] === gold.i), [gold.i, 1, 1]);
+  assert.equal(chests.step(1000 + CHEST_OPEN_MS - 1), false, 'there to be seen a while');
+  assert.equal(chests.step(1000 + CHEST_OPEN_MS), true);
+  assert.equal(chests.list.length, CHESTS_OUT - 1);
+  let now = 1000 + CHEST_OPEN_MS;
+  for (const end = now + CHEST_AGAIN_MS[1] + 2000; now < end && chests.list.length < CHESTS_OUT; now += 1000) chests.step(now);
+  assert.equal(chests.list.length, CHESTS_OUT, 'another, by and by');
+  assert.equal(chests.list.filter((c) => c.gold).length, 1, 'a golden one again');
+
+  // On the real room.
+  const time = { t: 1_000_000 };
+  const room = dreamRoom(FIRST, time);
+  const a = join(room);
+  const c = join(room, 'Quick Otter');
+  const { dream } = room.adventure;
+  assert.deepEqual(a.last('welcome').adventure.nod.chests, dream.chests.pack());
+  const one = dream.chests.list.find((o) => !o.gold);
+  stay(room, time, a, dream.world.start, 200);
+  room.receive(a, { t: 'nod', op: 'chest', i: one.i });
+  assert.equal(one.openedAt, 0, 'not from afar');
+  stay(room, time, a, dream.world.chests[one.i], 200);
+  for (const i of [one.i, one.i, -1, 99, 'x', null]) room.receive(a, { t: 'nod', op: 'chest', i });
+  assert.deepEqual(c.fx('chest').map((m) => [m.pid, m.i]), [[a.pid, one.i]], 'everyone sees who opened it, once');
+  stay(room, time, a, dream.world.start, CHEST_OPEN_MS + 500);
+  assert.ok(c.fx('chests').length >= 1 && c.fx('chests').at(-1).c.every((r) => r[0] !== one.i || r[2] === 0), 'and it goes');
 });
 
 test('nonsense about a dream is shrugged off, and nothing of it works anywhere else', () => {

@@ -6,6 +6,7 @@
 // Everyone in it is in it together.
 import { Rng } from '../rng.js';
 import { dist3, dot, flatUnit, turn } from './shape.js';
+import { DreamChests } from './chests.js';
 import { Frights, mightOf } from './foes.js';
 import './bosses.js';
 import { nodWorld } from './worlds/index.js';
@@ -49,6 +50,7 @@ export class Dream {
     this.boss = { id: this.list.length + 1, boss: true, spec: b, body: body(b.body), at: b.at, done: false, state: 'idle', since: 0, quiet: 0, fright: 0, by: new Set() };
     this.roams = this.world.roam.map((r, i) => ({ spec: r, body: body(r.body), camp: `roam${i}`, backAt: 0, out: false }));
     this.winks = new Set();
+    this.chests = new DreamChests(this.world.chests, (seed ^ 0x3c6ef372) >>> 0);
     // Where each person was safe last, and which body they are on.
     this.safe = new Map();
     this.on = new Map();
@@ -112,6 +114,7 @@ export class Dream {
       this.stepBoss(dt, now, people, out);
     }
     this.stepRoams(now, people);
+    if (this.chests.step(now)) out.fx.push({ k: 'chests', c: this.chests.pack() });
     this.frights.step(dt, now, people);
     out.acts = this.frights.take('acts');
     out.fx.push(...this.frights.take('fx'));
@@ -122,6 +125,17 @@ export class Dream {
   // Whether a body is one to be wary of: a nightmare not over on it, or the boss's.
   danger(body) {
     return this.all.some((n) => n.body === body && !n.done);
+  }
+
+  // How hard blows hit here: harder the later the dream.
+  get fierce() {
+    return 1 + Math.max(0, this.level - 14) * 0.06;
+  }
+
+  // Whether someone is in the thick of a fight.
+  fighting(id) {
+    const body = this.on.get(id);
+    return Boolean(body) && this.all.some((n) => n.body === body && n.state === 'on');
   }
 
   // Whether a body's springs are shut: a fight is on there.
@@ -361,7 +375,7 @@ export class Dream {
 
   // How it is all going, for someone arriving.
   describe() {
-    return { key: this.key, n: this.pack(), winks: [...this.winks], k: this.kingPack() };
+    return { key: this.key, n: this.pack(), winks: [...this.winks], chests: this.chests.pack(), k: this.kingPack() };
   }
 
   pack() {

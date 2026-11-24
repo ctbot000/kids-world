@@ -15,6 +15,7 @@ import { makeWalker, standAt, STRIDE, stepWalker } from '../shared/nod/walker.js
 import { nodWorld } from '../shared/nod/worlds/index.js';
 import * as THREE from '../../vendor/three.module.js';
 import { setTwinLook } from '../render/nod/frights-mare.js';
+import { ChestsView } from './chests-view.js';
 import { Fight, ROLL } from './fight.js';
 
 const INTERP_MS = 130;
@@ -55,6 +56,7 @@ export class NodGame {
     setTwinLook(game.profile.shownLook);
     this.fight = new Fight(this);
     this.view.showWinks(this.world.winks, this.winks);
+    this.chests = new ChestsView(this, info.chests);
     this.zones = [];
     this.told = new Set();
     this.view.build(this.w, 60);
@@ -62,6 +64,7 @@ export class NodGame {
 
   dispose() {
     this.fight.dispose();
+    this.chests.dispose();
   }
 
   // Put down somewhere (come round, or arriving again).
@@ -104,7 +107,8 @@ export class NodGame {
     }
     this.poseFriends(dt);
     this.movePets(dt);
-    this.fight.update(dt, input);
+    this.fight.update(dt);
+    this.chests.update(dt);
     this.emotes(now);
     g.updateAdventure(dt);
     const r = g.renderer;
@@ -599,7 +603,7 @@ export class NodGame {
       g.sound.play('fanfare');
       g.renderer.effects.sparkles(this.w.x, this.w.y, this.w.z, 40, ['#ffd84d', '#ffffff', '#ffd6ec', '#9fd8ff']);
     }
-    if (told && !msg.won) g.emit('toast', { icon: '🌟', text: `${told.done}${mine ? '' : ''}` });
+    if (told && !msg.won) g.emit('toast', { icon: '🌟', text: told.done });
     if (!msg.won && this.bossReady) setTimeout(() => this.g.nod === this && g.emit('toast', { icon: '🌙', text: `Every lamp round the night-light is lit, and the golden spring beside it is awake: up to ${this.bossName()}!` }), 2600);
     this.fight.braver(1);
     return mine;

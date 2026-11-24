@@ -54,6 +54,7 @@ export class Maker {
     this.nightmares = [];
     this.winks = [];
     this.roam = [];
+    this.chests = [];
     this.start = null;
     this.hub = null;
     this.boss = null;
@@ -153,9 +154,27 @@ export class Maker {
     this.winks.push({ x: p.x + up.x * high, y: p.y + up.y * high, z: p.z + up.z * high, up });
   }
 
+  // Where treasure chests may stand (chests.js): n spots about the bodies a spring
+  // leads to, on ground that is level enough, clear of everything, well away from
+  // where a nightmare waits and from each other — and none where the boss is.
+  hideChests(n = 9) {
+    const bodies = this.space.bodies.filter((b) => b.key !== this.boss.body && b.key !== this.start.body.key && this.springs.some((s) => s.to.body === b.key));
+    for (let tries = 0; this.chests.length < n && tries < n * 80; tries++) {
+      const body = bodies[Math.floor(this.rng.next() * bodies.length)];
+      const a = unit(v3(this.rng.range(-1, 1), this.rng.range(-1, 1), this.rng.range(-1, 1)));
+      const s = body.spotNear(add(body.c, mul(a, body.reach * this.rng.range(0.35, 1))));
+      if (!this.free(s, 1) || this.nightmares.some((o) => dist3(o.at, s) < 7) || this.chests.some((o) => dist3(o, s) < 9)) continue;
+      const c = add(s, s.up, 0.5);
+      if (body.clutter(c.x, c.y, c.z) < 1 || dot(body.slope(s.x, s.y, s.z), s.up) < 0.9) continue;
+      const dir = flatUnit(v3(this.rng.range(-1, 1), this.rng.range(-1, 1), this.rng.range(-1, 1)), s.up);
+      this.chests.push({ x: s.x, y: s.y, z: s.z, up: s.up, dir, body: body.key });
+      this.keep(s, 1.2);
+    }
+  }
+
   done() {
-    const { key, space, dress, springs, nightmares, winks, roam, start, hub, boss } = this;
-    return { key, space, dress, springs, nightmares, winks, roam, start, hub, boss };
+    const { key, space, dress, springs, nightmares, winks, roam, chests, start, hub, boss } = this;
+    return { key, space, dress, springs, nightmares, winks, roam, chests, start, hub, boss };
   }
 }
 

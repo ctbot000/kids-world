@@ -77,5 +77,6 @@ export function mare() {
   row('broken', v3(-13, -2, 2), v3(0, -0.8, 0.4), 7);
   row('crumb', v3(0, -6, 2), v3(1, 0, 0), 4);
   row('crumb2', v3(0, 4, 3), v3(1, 0.2, 0), 3);
+  m.hideChests();
   return m.done();
 }

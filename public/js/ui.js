@@ -8444,6 +8444,16 @@ export class UI {
 
   // ------------------------------------------------ treasure chests
 
+  // What earns a key quiz on this chapter of the isle: a camp freed, or on one
+  // told another way, one of whatever that is told in. { how, did, again }.
+  keyWords() {
+    const g = this.game;
+    if (g?.nod) return { how: 'Be there as a nightmare is over', did: 'A nightmare is over, and you were there!', again: 'See off another nightmare' };
+    if (g?.adventure?.battles) return { how: 'Help win a battle', did: 'You helped win a battle!', again: 'Win another battle' };
+    if (g?.adventure?.quests) return { how: 'Help beat a challenge', did: 'You helped beat a challenge!', again: 'Beat another challenge' };
+    return { how: 'Help free a camp', did: 'You helped free a camp!', again: 'Free another camp' };
+  }
+
   // A locked treasure chest on Adventure Isle without the key it takes
   // (game.js useChest, shared/treasure.js): how to earn one, and the key
   // quiz waiting for you, if there is one.
@@ -8459,7 +8469,7 @@ export class UI {
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, t.gold ? '👑🔒' : '🧰🔒'),
           h('h2', {}, t.gold ? '🔒 The golden chest!' : '🔒 A treasure chest!'),
-          h('p', {}, t.gold ? 'It is locked, and only a 👑 golden key opens it. Win a whole stage with your friends, then answer its quiz right for a golden key.' : 'It is locked, and it takes a 🔑 key. Help free a camp, then answer its quiz right for a key.'),
+          h('p', {}, t.gold ? 'It is locked, and only a 👑 golden key opens it. Win a whole stage with your friends, then answer its quiz right for a golden key.' : `It is locked, and it takes a 🔑 key. ${this.keyWords().how}, then answer its quiz right for a key.`),
           have ? h('p', { class: 'muted' }, `You have ${have}${t.gold ? '' : gkeys && !keys ? ' — a golden key only opens the golden chest' : ''}.`) : '',
           offer ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); this.keyQuizDialog(); } }, h('span', { class: 'emoji' }, offer.gold ? '👑' : '🔑'), offer.gold ? ' Take your golden key quiz' : ' Take your key quiz') : '',
           h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'OK'),
@@ -8510,7 +8520,7 @@ export class UI {
         root.append(
           h('div', { class: 'chest-pic', 'aria-hidden': 'true' }, offer.gold ? '👑' : '🔑'),
           h('h2', {}, offer.gold ? '👑 A golden key quiz!' : '🔑 A key quiz!'),
-          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick the level of your quiz: get its one question right for a golden key, which opens the golden chest.' : 'You helped free a camp! Pick the level of your quiz: get its one question right for a key to a treasure chest.'),
+          h('p', {}, offer.gold ? 'You helped win the whole stage! Pick the level of your quiz: get its one question right for a golden key, which opens the golden chest.' : `${this.keyWords().did} Pick the level of your quiz: get its one question right for a key to a treasure chest.`),
           h('p', { class: 'muted' }, 'One quiz, one try, so pick well and think carefully!'),
           list,
         );
@@ -8529,13 +8539,13 @@ export class UI {
     const more = next ? h('button', { class: 'big yellow', type: 'button', onclick: () => { this.sound.play('ui'); this.closeModal(); this.keyQuizDialog(); } }, h('span', { class: 'emoji' }, next.gold ? '👑' : '🔑'), ' Next key quiz') : '';
     const done = h('button', { class: 'big green', type: 'button', onclick: () => this.closeModal() }, 'Done');
     if (!q.key) {
-      els.box.replaceChildren(h('div', { class: 'quiz-result' }, '🔒 No key this time'), h('p', { class: 'quiz-credit' }, gold ? 'Not quite! Win another stage for another golden key quiz.' : 'Not quite! Free another camp for another try.'), more, done);
+      els.box.replaceChildren(h('div', { class: 'quiz-result' }, '🔒 No key this time'), h('p', { class: 'quiz-credit' }, gold ? 'Not quite! Win another stage for another golden key quiz.' : `Not quite! ${this.keyWords().again} for another try.`), more, done);
       return;
     }
     const n = gold ? g.profile.data.gkeys : g.profile.data.keys;
     els.box.replaceChildren(
       h('div', { class: 'quiz-result perfect' }, gold ? '👑 You earned a golden key!' : '🔑 You earned a key!'),
-      h('p', { class: 'quiz-credit' }, `Right! You have ${gold ? '👑' : '🔑'} ${n} ${gold ? 'golden ' : ''}${n === 1 ? 'key' : 'keys'} now. ${gold ? 'Find the golden chest on the isle and open it!' : 'Find a treasure chest on the isle and open it!'}`),
+      h('p', { class: 'quiz-credit' }, `Right! You have ${gold ? '👑' : '🔑'} ${n} ${gold ? 'golden ' : ''}${n === 1 ? 'key' : 'keys'} now. ${gold ? 'Find the golden chest' : 'Find a treasure chest'} ${g.nod ? 'in the dream' : 'on the isle'} and open it!`),
       more,
       done,
     );

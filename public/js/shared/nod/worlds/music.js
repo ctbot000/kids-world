@@ -63,5 +63,6 @@ export function music() {
   row('keys', v3(14, 12, 4), v3(-0.5, 0.8, 0), 7, 2);
   row('horn', v3(-4, 4, -3), v3(1, 0.1, 0.3), 6);
   row('cymbal', v3(2, -4, 2), v3(1, 0, 0), 4);
+  m.hideChests();
   return m.done();
 }

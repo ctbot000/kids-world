@@ -2372,9 +2372,8 @@ function intro6() {
         });
       }
     },
-    fx(t) {
+    fx() {
       if (Math.random() < 0.15) renderer.effects.sparkles(hero.x + (Math.random() - 0.5) * 10, hero.y + 2 + Math.random() * 4, hero.z + (Math.random() - 0.5) * 8, 2, ['#fff3a0', '#ffffff', '#ffd6ec']);
-      void t;
     },
     camera: keys([
       { t: 0, pos: [hero.x + 6, hero.y + 2.4, hero.z + 7.5], look: [hero.x, hero.y + 1.5, hero.z - 2], fov: 50 },

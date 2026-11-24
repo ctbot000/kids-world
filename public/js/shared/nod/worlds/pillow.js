@@ -79,7 +79,7 @@ export function pillow() {
   m.spring(cR, pad('ram', v3(0, -12, 3), v3(0, 0, 1)), { need: 'boss' });
   // ------- what is to be fought
   m.nightmares.push(
-    { id: 1, body: 'bolster', at: m.spot('bolster', v3(0.5, 6, -1)), waves: [[['bunny', 4]], [['ram', 1], ['bunny', 3]], [['ram', 2]]] },
+    { id: 1, body: 'bolster', at: m.spot('bolster', v3(0.5, 6, -1)), waves: [[['bunny', 5]], [['ram', 1], ['bunny', 3]], [['ram', 2]], [['ram', 2], ['bunny', 4]]] },
     { id: 2, body: 'donut', at: m.spot('donut', v3(-13, 2, 4)), waves: [[['thimble', 2]], [['moth', 3]], [['thimble', 2], ['moth', 2]]] },
     { id: 3, body: 'moon', at: m.spot('moon', v3(-2, 10, 12)), waves: [[['moth', 2], ['bunny', 5]], [['ram', 1], ['thimble', 2]], [['alarm', 1], ['bunny', 4]], [['ram', 1], ['thimble', 1], ['moth', 2]]] },
   );
@@ -114,5 +114,6 @@ export function pillow() {
   row('donut', v3(-6, 0, 0), v3(0, 1, 0), 6);
   row('twins', v3(0, -2, 0), v3(0.6, 0.2, -0.5), 5);
   row('moon', v3(-13, 0, 0), v3(0, -1, 0.2), 8);
+  m.hideChests();
   return m.done();
 }

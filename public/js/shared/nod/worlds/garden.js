@@ -92,9 +92,9 @@ export function garden() {
   // (The boss's: from the pot, and from the top of the beanstalk too.)
   m.spring(pad(pot, v3(5, 6.8, -3.6), v3(-0.6, 0.6, 0.6)), pad('pumpkin', v3(5, -13, 6), v3(0, 0.4, 1)), { need: 'boss' });
   m.nightmares.push(
-    { id: 1, body: 'pod', at: m.spot('pod', v3(0, 8, 0)), waves: [[['aphid', 5]], [['weevil', 2]], [['weevil', 2], ['aphid', 4]]] },
+    { id: 1, body: 'pod', at: m.spot('pod', v3(0, 8, 0)), waves: [[['aphid', 6]], [['weevil', 2]], [['weevil', 1], ['aphid', 5]], [['weevil', 2], ['spitter', 1]]] },
     { id: 2, body: 'apple', at: m.spot('apple', v3(2, 5, 10)), waves: [[['snaptrap', 2]], [['spitter', 2], ['aphid', 3]], [['snaptrap', 2], ['spitter', 1]]] },
-    { id: 3, body: 'snail', at: m.spot('snail', v3(-6, 10, 9)), waves: [[['hopper', 1], ['aphid', 3]], [['hopper', 2], ['spitter', 1]], [['weevil', 1], ['hopper', 1], ['snaptrap', 1]], [['hopper', 2], ['weevil', 1]]] },
+    { id: 3, body: 'snail', at: m.spot('snail', v3(-6, 10, 9)), waves: [[['hopper', 1], ['aphid', 4]], [['hopper', 2]], [['weevil', 1], ['spitter', 1], ['snaptrap', 1]], [['hopper', 2], ['weevil', 1]]] },
   );
   m.boss = { body: 'pumpkin', kind: 'munch', at: m.spot('pumpkin', v3(0, 8, 10), v3(1, 0, 0)) };
   for (const n of m.nightmares) m.keep(n.at, 2.5);
@@ -129,5 +129,6 @@ export function garden() {
   row('apple', v3(-11, 0, 0), v3(0, 1, 0.3), 6);
   row('snail', v3(10, 8, 6), v3(-0.4, 0.8, 0), 6);
   row('toad', v3(0, -6, 6), v3(1, 0, 0.2), 4);
+  m.hideChests();
   return m.done();
 }

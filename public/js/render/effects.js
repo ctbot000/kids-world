@@ -437,11 +437,12 @@ export class Effects {
   // delay: seconds before it shows (and starts to move). turn: how far it is
   // turned in the picture's plane, and spin how fast that goes round. over:
   // drawn over everything, whatever stands in front of it.
-  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0, delay = 0, turn = 0, over = false } = {}) {
+  add(kind, x, y, z, { vx = 0, vy = 0, vz = 0, color = '#ffffff', size = 0.3, life = 1, gravity = 0, grow = 0, drag = 0, spin = 0, delay = 0, turn = 0, over = false, straight = false } = {}) {
     const layer = over ? this.over : this.world;
     if (layer.list.length >= layer.max) layer.list.shift();
     const c = this.tmp.set(color);
-    if (this.tilt) {
+    // (straight: along the world's own axes, whichever way is up.)
+    if (this.tilt && !straight) {
       TILT.set(vx, vy, vz).applyQuaternion(this.tilt);
       vx = TILT.x;
       vy = TILT.y;

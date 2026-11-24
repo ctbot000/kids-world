@@ -19,7 +19,7 @@
 // shape of each), and it is each page that judges whether it hit its own
 // player, from what they saw (nod/fight.js): what you dodged, you dodged.
 import { Rng } from '../rng.js';
-import { add, carry, cross, dist3, dot, flat, flatUnit, len, mul, sub, turn, unit } from './shape.js';
+import { add, carry, cross, dist3, dot, flatUnit, len, mul, sub, turn, unit } from './shape.js';
 import { laneAt, lanePath, MOVES } from './attacks.js';
 
 // Bops of a bare hand a heart takes, once open; and how much one of each
@@ -38,6 +38,8 @@ const BEHIND = -0.35;
 // (more of them, and sooner, the later the dream).
 const AT_ONCE = [2, 2, 2, 3, 3];
 const AFTER_MS = [440, 400, 360, 300, 260];
+// Rings are clear of wherever anyone is fighting this long after the last sets off.
+const RING_MS = 1300;
 // A fright notices whoever is on its body, or this near.
 const NOTICE = 16;
 // Aiming at where someone is off to: no faster than this, no further ahead.
@@ -95,7 +97,7 @@ export const FRIGHTS = {
     name: 'Alarm Clock', icon: '⏰', hearts: 3, radius: 0.8, height: 1.6, speed: 1.7, style: 'come', range: [3, 6], guard: 'all',
     moves: [
       { k: 'wave', near: 0, far: 30, windup: 900, n: 1, speed: 7.5, reach: 30, w: 1, b: 1, rest: 400, every: 2600, open: 'spent' },
-      { k: 'wave', near: 0, far: 30, windup: 900, n: 2, gap: 750, speed: 7.5, reach: 30, w: 1, b: 1, rest: 400, every: 3000, open: 'spent' },
+      { k: 'wave', near: 0, far: 30, windup: 900, n: 2, gap: 900, speed: 7.5, reach: 30, w: 1, b: 1, rest: 400, every: 3000, open: 'spent' },
     ],
     told: 'Jump over an Alarm Clock’s rings as they roll by — once it has rung itself out, bop it!',
   },
@@ -157,8 +159,8 @@ export const FRIGHTS = {
   drummer: {
     name: 'Thumper', icon: '🥁', hearts: 2, radius: 0.9, height: 1.5, speed: 2, style: 'come', range: [4, 7], guard: 'all', slam: 'stun',
     moves: [
-      { k: 'wave', near: 0, far: 30, windup: 700, n: 2, gap: 520, speed: 8.5, reach: 26, w: 1, b: 1, rest: 300, every: 1600 },
-      { k: 'wave', near: 0, far: 30, windup: 700, n: 4, gap: 470, speed: 8.5, reach: 26, w: 1, b: 1, rest: 300, every: 2200, open: 'spent' },
+      { k: 'wave', near: 0, far: 30, windup: 700, n: 2, gap: 900, speed: 8.5, reach: 26, w: 1, b: 1, rest: 300, every: 1600 },
+      { k: 'wave', near: 0, far: 30, windup: 700, n: 4, gap: 900, speed: 8.5, reach: 26, w: 1, b: 1, rest: 300, every: 2200, open: 'spent' },
     ],
     told: 'Jump over every ring a Thumper beats out: two, then four — and after the fourth it is worn out. Or slam right down on it!',
   },
@@ -652,6 +654,16 @@ export class Frights {
     return n < AT_ONCE[l] + (this.players > 2 ? 1 : 0);
   }
 
+  // Whether somebody's rings are rolling over a body (or about to).
+  ringing(body, now = this.now) {
+    for (const a of this.acts.values()) {
+      if (a.k !== 'wave') continue;
+      const f = this.get(a.f);
+      if (f && f.body === body && now < a.strike + ((a.n ?? 1) - 1) * (a.mv.gap ?? 0) + RING_MS) return true;
+    }
+    return false;
+  }
+
   // The next of one's moves it can make, from how far off whoever it is after is.
   pick(f, t) {
     const moves = f.moves ?? f.spec.moves;
@@ -660,6 +672,8 @@ export class Frights {
       const mv = moves[k];
       if (t.far < (mv.near ?? 0) || t.far > mv.far) continue;
       if (mv.when && !mv.when(f, this)) continue;
+      // (Never rings from two of them at once: nobody can jump to two beats.)
+      if (mv.k === 'wave' && this.ringing(f.body)) continue;
       f.turnOf = k + 1;
       return mv;
     }

@@ -88,5 +88,6 @@ export function clock() {
   row('hoop', v3(15, 0, -4), v3(0, 0, 1), 8, 2.4);
   row('glass', v3(8, 2, 3), v3(0, 1, 0), 6);
   row('rod', v3(2, 4, 0), v3(0, 1, 0), 6, 2);
+  m.hideChests();
   return m.done();
 }

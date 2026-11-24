@@ -7994,6 +7994,31 @@ test('the isle’s sixth episode is a sky of little worlds: walked right round, 
     await until(page, () => document.getElementById('hearts').textContent.includes(`😉 ${window.kidsWorld.game.nod.winks.size}/40`));
     assert.equal(dream.winks.has(0), true);
 
+    // A treasure chest: locked without a key; with one, Q opens it, and the treasure
+    // in it is yours.
+    const chest = dream.chests.list.find((o) => !o.gold);
+    await page.evaluate((s) => {
+      const kw = window.kidsWorld;
+      const { nod } = kw.game;
+      const right = { x: s.up.y * s.dir.z - s.up.z * s.dir.y, y: s.up.z * s.dir.x - s.up.x * s.dir.z, z: s.up.x * s.dir.y - s.up.y * s.dir.x };
+      nod.putAt({ x: s.x + s.dir.x * 1.3 + right.x * 0.2, y: s.y + s.dir.y * 1.3 + right.y * 0.2, z: s.z + s.dir.z * 1.3 + right.z * 0.2 });
+      kw.game.profile.data.keys = 0;
+      kw.game.sendMove(true);
+    }, dream.world.chests[chest.i]);
+    await until(page, () => window.kidsWorld.game.chestTarget?.nod !== undefined && !document.getElementById('ride').hidden && document.getElementById('ride').textContent.includes('🔒 Locked'));
+    await page.keyboard.press('KeyQ');
+    await until(page, () => document.querySelector('#modal')?.textContent.includes('Be there as a nightmare is over'));
+    await page.evaluate(() => {
+      window.kidsWorld.ui.closeModal();
+      window.kidsWorld.game.profile.data.keys = 1;
+    });
+    await until(page, () => document.getElementById('ride').textContent.includes('Open'));
+    const coins = await page.evaluate(() => window.kidsWorld.game.profile.data.coins);
+    await page.keyboard.press('KeyQ');
+    await until(page, (was) => window.kidsWorld.game.profile.data.keys === 0 && window.kidsWorld.game.profile.data.coins > was, coins);
+    assert.ok(chest.openedAt > 0);
+    await until(page, () => window.kidsWorld.game.chestTarget === null, undefined);
+
     // A roll: over the ground quicker than you run, and seen by friends as one.
     await putOn('button', [0, 8, 0]);
     await page.keyboard.press('ShiftLeft');

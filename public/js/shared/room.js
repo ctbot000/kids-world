@@ -2235,12 +2235,14 @@ export class Room {
   }
 
   // HP comes back by itself, whatever took it: 20 every six seconds that
-  // nothing has, for everyone in, sent to them alone.
+  // nothing has (ten, in the thick of a fight in the Land of Nod), for everyone
+  // in, sent to them alone.
   healUp(now) {
     for (const p of this.players.values()) {
       if (!p.online) continue;
       if (p.hp >= p.maxHp || p.dizzyUntil) continue;
-      const hp = hpBack(p.hp, p.maxHp, now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0));
+      const slow = this.adventure?.dream?.fighting(p.id) ? 0.6 : 1;
+      const hp = hpBack(p.hp, p.maxHp, (now - Math.max(p.bumpAt ?? 0, p.healAt ?? 0)) * slow);
       if (hp === p.hp) continue;
       p.hp = hp;
       p.healAt = now;
@@ -2993,7 +2995,7 @@ export class Room {
   // What someone does in the Land of Nod, as their page says: a bop on frights,
   // a blow of theirs that got them, or that they rolled clear of, bopped back or
   // sent home, a slam, a Brave Burst, a roll (for friends to see), a spring, a
-  // wink found.
+  // wink found, a treasure chest opened.
   nodOp(conn, p, msg) {
     const dream = this.adventure?.dream;
     if (!dream) return;
@@ -3012,8 +3014,8 @@ export class Room {
         // (Once for each blow, and not in the safe moment after another.)
         if (!act || now < (p.safeUntil ?? 0) || act.got?.has(p.id)) break;
         (act.got ??= new Set()).add(p.id);
-        const n = act.b * (hasPower(p.look, 'armor') ? 0.5 : 1);
-        this.knock(p, now, hpAfterBump(p.hp, n), { t: 'bump', pid: p.id, nod: act.f, a: act.id });
+        const n = act.b * dream.fierce * (hasPower(p.look, 'armor') ? 0.5 : 1);
+        this.knock(p, now, Math.round(hpAfterBump(p.hp, n)), { t: 'bump', pid: p.id, nod: act.f, a: act.id });
         break;
       }
       case 'dodge':
@@ -3067,6 +3069,12 @@ export class Room {
           this.broadcast({ t: 'nx', k: 'wink', pid: p.id, i: msg.i, n: dream.winks.size, of: dream.world.winks.length });
         }
         break;
+      case 'chest': {
+        // (Whoever the island says opened it spends the key: chestOp.)
+        const chest = Number.isInteger(msg.i) ? dream.chests.open(at, msg.i, now) : null;
+        if (chest) this.broadcast({ t: 'nx', k: 'chest', pid: p.id, i: chest.i });
+        break;
+      }
       default:
         break;
     }

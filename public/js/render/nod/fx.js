@@ -196,7 +196,7 @@ export class BurstDome {
     this.mat = new THREE.ShaderMaterial({
       uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: 1 } },
       vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-      fragmentShader: 'uniform vec3 uColor; uniform float uA; varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - min(1.0, abs(dot(vN, vV))); f *= f; gl_FragColor = vec4(uColor * (0.5 + f * 2.2), (0.08 + f * 0.8) * uA); }',
+      fragmentShader: 'uniform vec3 uColor; uniform float uA; varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - min(1.0, abs(dot(vN, vV))); f *= f; gl_FragColor = vec4(uColor * (0.4 + f * 1.3), (0.06 + f * 0.6) * uA); }',
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
