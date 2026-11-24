@@ -15,7 +15,7 @@ import { CHESTS_OUT, DreamChests } from '../public/js/shared/nod/chests.js';
 import { BURST_R, Dream } from '../public/js/shared/nod/dream.js';
 import { BOP_MS, CHIPS, FRIGHT_KINDS, FRIGHTS, Frights, frightOf, mightOf, OPENINGS, readFright } from '../public/js/shared/nod/foes.js';
 import { flightAt } from '../public/js/shared/nod/maker.js';
-import { add, Band, Body, Can, Chain, Crate, carry, dist3, dot, Dot, flatUnit, headingOf, len, Loop, Plate, Post, Space, sub, turn, unit, v3, yawOf } from '../public/js/shared/nod/shape.js';
+import { add, Band, Block, Body, Can, Chain, Crate, carry, dist3, dot, Dot, Drum, flatUnit, headingOf, len, Loop, Plate, Post, Space, sub, turn, unit, v3, yawOf } from '../public/js/shared/nod/shape.js';
 import { makeWalker, standAt, stepWalker, STRIDE } from '../public/js/shared/nod/walker.js';
 import { isNodKey, nodKey, nodWorld, NOD_KEYS } from '../public/js/shared/nod/worlds/index.js';
 import { CHAPTERS, chapterOf, firstStage, STAGES } from '../public/js/shared/isle-story.js';
@@ -124,6 +124,39 @@ test('a jump comes down again where you are, a roll goes faster than a run, and 
   for (let i = 0; i < 240; i++) stepWalker(space, w, { dir: v3(0, 0, 1), run: true }, 1 / 60);
   assert.ok(body.clutter(w.x + w.up.x * 0.5, w.y + w.up.y * 0.5, w.z + w.up.z * 0.5) > 0.2, 'out of the post');
   assert.ok(STRIDE.run > STRIDE.walk);
+});
+
+test('a run is as quick over bumps as on the level, a low ledge is stepped up on to, and a high one is not', () => {
+  const body = new Body('ball', new Dot(v3(0, 0, 0)), 14, { bumps: [{ c: v3(0, 13, 6), r: 3, k: 2 }, { c: v3(5, 12.5, -5), r: 2.6, k: 1.6 }] });
+  const low = body.spot(v3(-6, 12, 0));
+  const high = body.spot(v3(6, 12, 2));
+  body.addProp(new Drum(add(low, low.up, 0.12), low.up, 1.05, 0.2, 0.1));
+  body.addProp(new Block(add(high, high.up, 0.4), flatUnit(v3(1, 0, 0), high.up), high.up, v3(0.9, 0.4, 0.9), 0.05));
+  const space = new Space([body]);
+  const run = (from, to, secs, hop = false) => {
+    // (Hopping, at a walk: at a run it is right over and down the other side.)
+    const w = standAt(makeWalker(0, 0, 0), { ...from, body });
+    let far = 0;
+    let jumps = 0;
+    for (let t = 0; t < secs; t += 1 / 60) {
+      const was = { x: w.x, y: w.y, z: w.z };
+      const ev = stepWalker(space, w, { dir: flatUnit(sub(to, w), w.up), run: !hop, hop }, 1 / 60);
+      far += dist3(w, was);
+      if (ev.jumped) jumps++;
+      if (dist3(w, to) < 0.4) return { got: true, speed: far / t, jumps };
+    }
+    return { got: false, speed: far / secs, jumps };
+  };
+  // Right over a bump.
+  const over = run(body.spot(v3(0, 12, 0.1)), body.spot(v3(0, 8, 12)), 4);
+  assert.ok(over.got && over.speed > 6, `over a bump at ${over.speed.toFixed(1)}`);
+  for (let i = 0; i < 8; i++) {
+    const way = (s) => body.walk(s, turn(flatUnit(v3(0.3, 0.2, 0.9), s.up), s.up, (i / 8) * Math.PI * 2), 3, 0.4).at(-1);
+    const up = run(way(low), low, 1.2);
+    assert.ok(up.got && up.jumps === 0, `up on to a spring from side ${i}, no hop about it`);
+    assert.equal(run(way(high), add(high, high.up, 0.8), 1.5).got, false, `not up a block as high as that (${i})`);
+    assert.ok(run(way(high), add(high, high.up, 0.8), 2.5, true).got, `but for a hop (${i})`);
+  }
 });
 
 test('near two bodies, you are on whichever you are nearer to, and not off it for a little', () => {
@@ -293,6 +326,27 @@ for (const [i, ch] of DREAMS.entries()) {
       }
     }
     for (const d of [...w.roam.map((r) => r.body), ...w.winks.map((q) => space.bodyAt(q.x, q.y, q.z).key)]) assert.ok(on.has(d), `${ch.key}: ${d} is got to`);
+    // Each spring is stepped on to from any side there is room to come at it from,
+    // running or walking, and whether or not you hop up ledges by yourself.
+    for (const s of w.springs) {
+      let came = 0;
+      let on = 0;
+      for (let k = 0; k < 8; k++) {
+        const way = turn(flatUnit(v3(0.31, 0.17, 0.93), s.from.up), s.from.up, (k / 8) * Math.PI * 2);
+        const from = body(s.from.body).walk(s.from, way, 3, 0.4).at(-1);
+        const c = add(from, from.up, 0.8);
+        if (body(s.from.body).clutter(c.x, c.y, c.z) < 0.4) continue;
+        came++;
+        const p = standAt(makeWalker(0, 0, 0), { ...from, body: body(s.from.body) });
+        for (let t = 0; t < 1.8; t += 1 / 60) {
+          stepWalker(space, p, { dir: flatUnit(sub(s.from, p), p.up), run: k % 2 === 0, hop: k % 4 < 2 }, 1 / 60);
+          if (!p.onGround || dist3(p, s.from) > 1) continue;
+          on++;
+          break;
+        }
+      }
+      assert.ok(came >= 3 && on >= came * 0.5, `${ch.key}: spring ${s.id} on ${s.from.body} stepped on to from ${on} of ${came} sides`);
+    }
     // Back again from every one of them but the boss's.
     for (const s of w.springs) if (!s.need) assert.ok(w.springs.some((o) => o.from.body === s.to.body && o.to.body === s.from.body), `${ch.key}: back from ${s.to.body}`);
     // Forty winks, each within a jump of the ground, on bodies of the dream's.

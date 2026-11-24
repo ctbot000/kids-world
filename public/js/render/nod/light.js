@@ -66,15 +66,16 @@ export const LIGHT_GLSL = /* glsl */ `
         float rim = edge * smoothstep(z.w - 0.3, z.w - 0.06, d);
         float fill = edge * (1.0 - smoothstep(uZoneKind[i].y * z.w - 0.05, uZoneKind[i].y * z.w + 0.05, d));
         float flash = 0.75 + 0.25 * sin(uTime * 18.0);
-        add += col.rgb * col.a * (rim * 1.5 * flash + fill * 0.55 + edge * 0.22);
-        keep *= 1.0 - col.a * edge * 0.45;
+        add += col.rgb * col.a * (rim * 1.4 * flash + fill * 0.5 + edge * 0.2);
+        keep *= 1.0 - col.a * edge * mix(0.5, 0.85, max(rim, fill * 0.5));
       } else if (kind < 2.5) {
         // A wave: a crest, with foam trailing after it.
         float wide = uZoneKind[i].y;
         float crest = exp(-nodSq((d - z.w) / (wide * 0.5)));
         float trail = smoothstep(z.w - wide * 5.0, z.w, d) * step(d, z.w) * 0.35;
-        add += col.rgb * col.a * (crest * 1.9 + trail);
-        keep *= 1.0 - col.a * crest * 0.5;
+        // (Over its own colour only, not the ground's: it has to show on pale ground too.)
+        add += col.rgb * col.a * (crest * 1.25 + trail * 0.7);
+        keep *= 1.0 - col.a * min(1.0, crest * 0.92 + trail * 0.8);
       } else if (kind < 3.5) {
         float band = exp(-nodSq((d - z.w) / 0.5));
         float out_ = smoothstep(z.w - 0.2, z.w + 2.5, d) * (1.0 - smoothstep(z.w + 2.5, z.w + 9.0, d));

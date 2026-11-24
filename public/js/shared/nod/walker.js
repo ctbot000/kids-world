@@ -11,8 +11,11 @@ export const WALKER = { radius: 0.3, height: 1.5 };
 export const STRIDE = { walk: 4.6, run: 7, jump: 9.2, gravity: 22, accel: 45, air: 16, fall: 28 };
 // The ground counts as ground no steeper than this (the cosine of it).
 const STEEP = 0.5;
-// Walking off a rise, the ground is followed down this far.
+// Walking off a rise, the ground is followed down this far; and a ledge this low
+// is stepped up on to (so quick), with no hop.
 const SNAP = 0.5;
+const STEP = 0.45;
+const STEP_SPEED = 5;
 
 export function makeWalker(x, y, z, body = null) {
   return { x, y, z, vx: 0, vy: 0, vz: 0, up: { x: 0, y: 1, z: 0 }, body, onGround: false, air: 0, radius: WALKER.radius, height: WALKER.height };
@@ -102,24 +105,49 @@ function once(space, w, input, h, s, dash, events) {
       if (d >= r - 1e-3) continue;
       space.normal(c.x, c.y, c.z, n);
       const push = r - d;
+      const level = dot(n, up);
+      pushed = true;
+      if (at === r && level > STEEP) {
+        // Ground: straight up out of it, whichever way it slopes, so up a hill is no
+        // slower than along the level.
+        const lift = Math.min(push / level, 0.4);
+        w.x += up.x * lift;
+        w.y += up.y * lift;
+        w.z += up.z * lift;
+        const fall = dot(v, up);
+        if (fall < 0) v = add(v, up, -fall);
+        grounded = true;
+        continue;
+      }
       w.x += n.x * push;
       w.y += n.y * push;
       w.z += n.z * push;
-      pushed = true;
       const into = dot(v, n);
       if (into < 0) v = add(v, n, -into);
-      const level = dot(n, up);
-      if (at === r && level > STEEP) grounded = true;
-      else if (Math.abs(level) < 0.45) wall = { x: n.x, y: n.y, z: n.z };
+      if (Math.abs(level) <= STEEP) wall = { x: n.x, y: n.y, z: n.z };
     }
     if (!pushed) break;
   }
   if (wall) {
     events.bumped = true;
-    // Up onto a ledge in the way, not too high, with room over it.
-    const wish = input.dir ?? { x: 0, y: 0, z: 0 };
+    const wish = dash ? along : (input.dir ?? { x: 0, y: 0, z: 0 });
     const wl = len(wish);
-    if (input.hop && !dash && w.onGround && wl > 0.2 && dot(wish, wall) / wl < -0.5) {
+    // Up on to a low ledge, or
+    if ((w.onGround || grounded) && !jumped && wl > 0.2 && dot(wish, wall) / wl < -0.25) {
+      const to = mul(wish, 0.2 / wl);
+      const over = (high) => space.dist(w.x + up.x * high + to.x, w.y + up.y * high + to.y, w.z + up.z * high + to.z) - r;
+      const gap = over(STEP + r);
+      if (gap > -0.01 && gap < STEP - 0.02 && over(w.height - r + STEP) > -0.05) {
+        const rise = Math.min(STEP - gap, STEP_SPEED * h);
+        w.x += up.x * rise;
+        w.y += up.y * rise;
+        w.z += up.z * rise;
+        grounded = true;
+        wall = null;
+      }
+    }
+    // one in the way, not too high, with room over it.
+    if (wall && input.hop && !dash && w.onGround && wl > 0.2 && dot(wish, wall) / wl < -0.5) {
       const to = mul(wish, 0.5 / wl);
       const clear = [1.25, 1.9].every((at) => space.dist(w.x + up.x * at + to.x, w.y + up.y * at + to.y, w.z + up.z * at + to.z) > r * 0.9);
       if (clear) {
