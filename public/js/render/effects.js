@@ -287,7 +287,12 @@ class Layer {
         n++;
         continue;
       }
-      p.vy -= p.gravity * dt;
+      if (p.down) {
+        // (Down is another way where it is: the Land of Nod.)
+        p.vx += p.down.x * p.gravity * dt;
+        p.vy += p.down.y * p.gravity * dt;
+        p.vz += p.down.z * p.gravity * dt;
+      } else p.vy -= p.gravity * dt;
       if (p.drag) {
         const k = Math.max(0, 1 - p.drag * dt);
         p.vx *= k;
@@ -321,6 +326,9 @@ class Layer {
   }
 }
 
+const STRAIGHT_UP = new THREE.Vector3(0, 1, 0);
+const TILT = new THREE.Vector3();
+
 export class Effects {
   constructor(scene, camera) {
     this.camera = camera;
@@ -331,6 +339,23 @@ export class Effects {
     this.scene = scene;
     this.slashes = [];
     this.slashGeos = new Map();
+    // Which way is up where you are, when it is not always the same way (the
+    // Land of Nod): everything that flies up or falls goes by it.
+    this.tilt = null;
+    this.down = null;
+  }
+
+  // Which way is up ({ x, y, z }), or null for straight up, as on any island.
+  setUp(up) {
+    if (!up) {
+      this.tilt = null;
+      this.down = null;
+      return;
+    }
+    this.tilt ??= new THREE.Quaternion();
+    this.tilt.setFromUnitVectors(STRAIGHT_UP, TILT.set(up.x, up.y, up.z));
+    this.down ??= { x: 0, y: -1, z: 0 };
+    Object.assign(this.down, { x: -up.x, y: -up.y, z: -up.z });
   }
 
   // An arc of geometry from angle `from` to `to` (round from straight ahead,
@@ -364,7 +389,8 @@ export class Effects {
   // A swing's slash at (x, y, z), facing yaw: a sweep from the swinger's
   // right round to their left (or, upright, from over their head down in
   // front of them), as far out as reach, in color, over secs.
-  slash(x, y, z, yaw, { reach = 1.5, color = '#ffffff', upright = false, tilt = -0.2, from, to, secs = SLASH_SECS } = {}) {
+  // (quat: the swinger's own way of standing, where up is not always the same.)
+  slash(x, y, z, yaw, { reach = 1.5, color = '#ffffff', upright = false, tilt = -0.2, from, to, secs = SLASH_SECS, quat = null } = {}) {
     let s = this.slashes.find((one) => !one.group.visible);
     if (!s) {
       if (this.slashes.length >= SLASH_POOL) s = this.slashes.reduce((a, b) => (a.age > b.age ? a : b));
@@ -391,7 +417,8 @@ export class Effects {
     const hi = to ?? (upright ? SLASH_TO_UPRIGHT : SLASH_TO);
     s.mesh.geometry = this.slashGeo(lo, hi, Math.max(0.3, reach * 0.45), reach);
     s.group.position.set(x, y, z);
-    s.group.rotation.set(0, yaw, 0);
+    if (quat) s.group.quaternion.copy(quat);
+    else s.group.rotation.set(0, yaw, 0);
     // Upright: the arc stood on its side, up over the head and down in
     // front; otherwise tipped a little, the blade ending lower than it began.
     s.mesh.rotation.set(0, 0, upright ? -Math.PI / 2 : tilt);
@@ -414,7 +441,13 @@ export class Effects {
     const layer = over ? this.over : this.world;
     if (layer.list.length >= layer.max) layer.list.shift();
     const c = this.tmp.set(color);
-    layer.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: -delay, gravity, grow, drag, spin, turn });
+    if (this.tilt) {
+      TILT.set(vx, vy, vz).applyQuaternion(this.tilt);
+      vx = TILT.x;
+      vy = TILT.y;
+      vz = TILT.z;
+    }
+    layer.list.push({ k: KINDS.indexOf(kind), x, y, z, vx, vy, vz, r: c.r, g: c.g, b: c.b, size, life, age: -delay, gravity, grow, drag, spin, turn, down: this.down });
   }
 
   // ------------------------------------------------ recipes

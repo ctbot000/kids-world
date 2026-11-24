@@ -63,6 +63,22 @@
 // Five chapters: Lollipop Bay, Toadstool Woods, Rumble Canyon, Snowball
 // Peaks and Thunder Top, where the Baron himself comes down to fight.
 //
+// Episode 6, "The Land of Nod", has no island in it at all. Baron Bluster, a
+// polite little cloud these days, gave everyone the softest bit of himself, the
+// Cloud Pillow, and whoever lies down on it sinks right through into the Land
+// of Nod, where every dream is a sky of little worlds of any shape — moons of
+// patchwork, a pumpkin as big as a hill, the inside of a music box — each with
+// a down of its own, so you can walk right round every one (nod/ has them: no
+// blocks anywhere). The Night Mare, a great black horse with a mane of smoke,
+// has trampled five dreams into nightmares and carried off their Sweet Dreams.
+// In a dream it is not how strong your weapon is that counts, but being brave
+// at the right moment: her frights guard themselves, and each has a way in
+// (nod/foes.js). Every nightmare over lights a lamp round the dream's
+// night-light, and with all of them lit, the golden spring beside it flings you
+// up to the boss's own little world. Five chapters: Pillow Moons, Pumpkin
+// Skies, the Music Box, Tick-Tock Skies and the Dark Side, where the Night Mare
+// herself is — who is only afraid of the dark.
+//
 // The last episode's last stage, won, starts a new journey from stage 1. The
 // first arrival on an episode plays its opening. A chapter told on a later
 // journey is its own map turned over (isle-maps.js mirror).
@@ -173,6 +189,22 @@ export const EPISODES = [
     again: (journey) =>
       `Journey ${journey}! Baron Bluster huffed and puffed himself back up out of the sea mist, blew the Sky Lanterns out all over again and pulled his Cloud Blanket back over Toon Isle — and the island has turned itself about, so everything is round the other side.`,
   },
+  {
+    n: 6,
+    key: 'nod',
+    icon: '🌙',
+    title: 'The Land of Nod',
+    villain: 'the Night Mare',
+    // No island, and no blocks: skies of little worlds of any shape (nod/),
+    // told in nightmares, not camps: each chapter's are in its `nightmares`.
+    nod: true,
+    beaten: { verb: 'calm', ing: 'calming' },
+    token: { one: 'Sweet Dream', many: 'Sweet Dreams', icon: '💤' },
+    ticket: { icon: '🛏️', name: 'Cloud Pillow' },
+    films: { intro: 'intro6', ending: 'ending6', endingMs: 44000 },
+    again: (journey) =>
+      `Journey ${journey}! One night the Night Mare’s night-light went out, and off she bolted again, in a worse fright than ever, trampling every dream in the Land of Nod as she went — and her frights have learnt a thing or two since last time.`,
+  },
 ];
 
 // Each chapter: its key (which map, isle-maps.js), icon and name, the kind
@@ -196,6 +228,10 @@ export const EPISODES = [
 // those that have one), who (its name, for a monkey to catch), after (open
 // only once every other is done) }, its map
 // laying each out in the same order (isle-bells.js).
+// nightmares: in place of camps, a lair and a boss, the nightmares of a chapter
+// of the sixth episode (nod/dream.js), each { name, icon, hint (what to do), done
+// (what is told once it is over) }, its world having each in the same order
+// (nod/worlds), and the last of all its boss's.
 // battles: in place of camps, a lair and a boss, the battles of a chapter of
 // the fifth episode (isle-battles.js), each { kind, name, hint (what to do),
 // done (what is told once it is won), beast and who (for a hunt: which
@@ -925,6 +961,102 @@ export const CHAPTERS = [
       'Four Sky Lanterns shine together, and only Thunder Top is still under the Cloud Blanket, rumbling and flashing. Baron Bluster is up there, on his arena at the very top, with the last lantern — and his toughest Storm Gang, his own Grumble Wizard Gusto, a trap, nests and a lightning tower. Win every battle and the Baron comes down to fight you himself: zap him off his cloud with his own lightning rods, then pop him once and for all!',
     won: 'Baron Bluster is popped, top hat and all! He goes off like a burst balloon, whizzing round and round over the island and shrinking as he goes, until he is a little white cloud, puffing politely. All five Sky Lanterns float up together, and the Cloud Blanket blows away for good: Toon Isle shines in the sun from end to end, brighter than any cartoon.',
   },
+  // ------------------------------------------------ Episode 6: The Land of Nod
+  {
+    key: 'pillow',
+    episode: 6,
+    level: 14,
+    icon: '🛏️',
+    name: 'Pillow Moons',
+    theme: 'nodpillow',
+    day: 'night',
+    weather: ['clear'],
+    nightmares: [
+      { name: 'The Bolster Stampede', icon: '🐏', hint: 'Grumble Rams are all wool in front, and bops bounce off it. Roll aside as they charge so they bump into something, or bop them just as they flash!', done: 'The last Grumble Ram trots off to be shorn, and the bolster is soft and quiet again. A lamp lights by the night-light!' },
+      { name: 'The Thimble Ring', icon: '🪡', hint: 'Bops clang off a Thimble Knight: jump, and bop in the air to slam down and tip it over. And bop the Night Moths’ dust balls right back at them!', done: 'The Thimble Knights are tipped over for good, and the moths flutter off to find a nicer lamp. Yours lights by the night-light!' },
+      { name: 'The Sleepless Moon', icon: '⏰', hint: 'Nobody can sleep on the biggest moon: an Alarm Clock stamps about on it, ringing. Jump over its rings as they roll right round the moon — and bop it once it has rung itself out!', done: 'The Alarm Clock has wound right down at last. Shh! The lamp by the night-light is lit.' },
+      { name: 'Rambunctious', icon: '🐏', hint: 'Nothing gets through all that wool! Stand in front of one of his bedposts, and roll aside at the last moment as he charges: BONK! Jump over his rings — and mind your back, he rolls all the way round!', done: 'Rambunctious has had enough: he lies down, sighs, and is fast asleep.' },
+    ],
+    intro:
+      'Baron Bluster, a polite little cloud these days, was so sorry about the Cloud Blanket that he gave everyone the softest bit of himself: the Cloud Pillow. Lie down on it, and down you sink — right through, and out at the other side, into the Land of Nod, where there is no island, no sea and not a brick to be seen! Every dream here is a sky of little worlds, each with a down of its own, so you can walk right round every one; step on a spring, and it flings you to the next. But the Night Mare, a great black horse with a mane of smoke, has trampled five dreams into nightmares and carried off their Sweet Dreams. Nothing here cares how strong your weapon is. In a dream you have to be brave at the right moment: roll (Shift, or 💨) just as a blow lands, bop back what is thrown or what flashes, slam down out of the air — and once you are as brave as can be, let it all out in a Brave Burst! This first is the Shepherd’s dream, and not one of his sheep will be counted.',
+    won: 'Baa! Rambunctious is fast asleep with his nightcap over his eyes, and every sheep jumps over the moon, one by one: the Shepherd’s Sweet Dream is back. Far off across the sky, something black gallops away with sparks at its heels…',
+  },
+  {
+    key: 'garden',
+    episode: 6,
+    level: 15,
+    icon: '🎃',
+    name: 'Pumpkin Skies',
+    theme: 'nodgarden',
+    day: 'day',
+    weather: ['clear'],
+    nightmares: [
+      { name: 'The Pea Pod Raid', icon: '🪲', hint: 'Weevil Knights in shiny armour have come for the peas. Bops clang off their shells: slam down out of the air beside them to flip them on their backs — and get out of the way when they tuck themselves up and roll!', done: 'The last Weevil Knight scuttles off on its back legs, and all the peas are safe in their pod. A lamp lights by the night-light!' },
+      { name: 'The Rotten Apple', icon: '🪴', hint: 'Snaptraps burrow about under the skin of the apple: when the ground goes red under you, roll clear — and bop them while they are stuck. And bop the Snapdragons’ seeds right back at them!', done: 'The Snaptraps have bitten off more than they can chew. The apple shines again — and so does a lamp!' },
+      { name: 'The Dizzy Snail', icon: '🦗', hint: 'Grump-hoppers leap and leap and leap, round and round the poor snail’s shell. Keep moving! After the third leap they have to catch their breath.', done: 'The Grump-hoppers hop off in a huff, and a very dizzy snail peeps out to say thank you. Its lamp is lit!' },
+      { name: 'Old Munch', icon: '🐛', hint: 'Old Munch is eating the Gardener’s prize pumpkin. His waistcoats are all studs, but his tail is bare: keep out of his jaws, run round behind him and bop it! Bop his nose just as it flashes and he stops to rub it.', done: 'Old Munch is so full, and so tired, that he spins himself up for the night.' },
+    ],
+    intro:
+      'The spring at the end of the Shepherd’s dream flings you clean across the night and out into broad daylight: Pumpkin Skies, the Gardener’s dream, where a beanstalk grows up out of a flower pot (you can walk right round it, all the way up!), and a pea pod, an apple, a snail and a toadstool hang in the sun. But the Night Mare’s hooves have trampled the beds, and every pest that ever kept a gardener awake has come to dinner — Weevil Knights, Snaptraps, Snapdragons and Grump-hoppers — and up on the prize pumpkin itself somebody very long and very hungry goes round, and round, and round.',
+    won: 'Old Munch spins himself a cocoon as big as a barrel, and in the morning of the dream out flies the most beautiful butterfly the Gardener ever dreamt of. The second Sweet Dream is back! A whinny rolls across the sky, like thunder a long way off…',
+  },
+  {
+    key: 'music',
+    episode: 6,
+    level: 16,
+    icon: '🎼',
+    name: 'The Music Box',
+    theme: 'nodmusic',
+    day: 'night',
+    weather: ['clear'],
+    nightmares: [
+      { name: 'The Scratched Record', icon: '🥁', hint: 'Thumpers beat out their rings over the record — two, and then four: jump every one! After the fourth they are worn out. (There are two sides to every record…)', done: 'The needle comes down, and the record plays right through without a scratch. A lamp lights by the night-light!' },
+      { name: 'The Runaway Music Box', icon: '🎵', hint: 'Down, inside the music box, is out: you can run right round the inside of it! Metronomes sweep their beams round the barrel, and Quavers swoop. Jump, and bop, and keep in time.', done: 'The music box winds down, tinkle, tinkle, plink. Its lamp is lit!' },
+      { name: 'The Ring of Keys', icon: '🎹', hint: 'Every key of the great ring sounds as you step on it. Castanets snap open to spit their notes: bop those right back, and bop them while they are open — or slam them over!', done: 'The whole ring of keys plays a chord, and not a wrong note in it. The lamp by the night-light is lit!' },
+      { name: 'Maestro Crescendo', icon: '🎼', hint: 'The Maestro shows you a tune first: a ring to jump, a note to bop right back, a crash to roll clear of — and then he plays it at you, on the beat! Bop enough of his notes back and he drops his baton: that is when to get him.', done: 'Maestro Crescendo bows, and bows, and cannot stop bowing.' },
+    ],
+    intro:
+      'From the garden you are flung into the dark, and then the lights come up, one by one: the Music Box, the Fiddler’s dream. A drum to land on, a record as wide as a field (with two sides to it), a ring of piano keys that play as you run round it, a trumpet, a cymbal — and a music box so big that you can run right round the inside. But the Night Mare’s gallop has put everything out of time: Thumpers thump, Metronomes sweep, Castanets snap, and on his podium high over it all Maestro Crescendo conducts the worst noise anybody ever dreamt. Listen for the beat!',
+    won: 'The Maestro’s baton snaps, and in the hush a cradle song starts up all by itself, on the fiddle first, and then on everything. The third Sweet Dream is back! Somewhere a clock strikes thirteen…',
+  },
+  {
+    key: 'clock',
+    episode: 6,
+    level: 17,
+    icon: '🕰️',
+    name: 'Tick-Tock Skies',
+    theme: 'nodclock',
+    day: 'night',
+    weather: ['clear'],
+    nightmares: [
+      { name: 'The Jammed Gears', icon: '🗝️', hint: 'Wind-up Knights are all shield in front, and they come at you cut, cut, spin. Bop them back as they flash, or wait: after the spin they have run right down. Mind the Coglings bowling by!', done: 'The gears grind, and turn, and go round as sweetly as ever. A lamp lights by the night-light!' },
+      { name: 'Round the Globe', icon: '🐦', hint: 'Bomb Cuckoos keep out of reach over the brass globe, laying clockwork eggs on you. Get out from under, and bop their cogs right back at them!', done: 'The last cuckoo pops back into its clock and slams the door. The globe is yours, and its lamp is lit!' },
+      { name: 'The Hourglass', icon: '🃏', hint: 'Time is running out of the hourglass, and Grumpy Jacks are leaping out of their boxes all over it. Step aside as they spring — and bop them while they dangle!', done: 'The hourglass turns itself over with a sigh, and there is all the time in the world again. The lamp is lit!' },
+      { name: 'Old Tock', icon: '🕰️', hint: 'Old Tock stands in the middle of his own great dial, and his hands sweep right round it: jump them! Nothing hurts him in front. But every clock has a key, and his is round the back: run over the edge to the other side of the dial, and bop it when he has struck and run down!', done: 'Old Tock has stopped. Then, very gently: tick. Tock.' },
+    ],
+    intro:
+      'Thirteen o’clock! The Clockmaker’s dream is all brass and starlight: a pocket watch to land on, great gears, a globe with a ring to run round, an hourglass, a pendulum as long as a street — Tick-Tock Skies. But the Night Mare has galloped through the works, and time has got its legs in a knot. Wind-up Knights drill on the gears, Bomb Cuckoos lay clockwork eggs, Jacks spring out of boxes, and in the middle of his own great dial stands Old Tock, the grandfather of all clocks, striking whenever he feels like it. There are two sides to everything here. Remember that!',
+    won: 'Old Tock’s key turns, his door swings open, and out comes not a cuckoo but a lullaby. The fourth Sweet Dream is back! And now there is only one place left in the Land of Nod where nobody has ever wanted to go: the Dark Side.',
+  },
+  {
+    key: 'mare',
+    episode: 6,
+    level: 18,
+    icon: '🌑',
+    name: 'The Dark Side',
+    theme: 'nodmare',
+    day: 'night',
+    weather: ['clear'],
+    nightmares: [
+      { name: 'The Ribbon with One Side', icon: '👤', hint: 'Run right round the ribbon, and you are on the other side of it — and that is the same side. Shadow Twins wait for you on it, as quick as you are, and they know all your tricks. Bop them as they flash!', done: 'Your last Shadow Twin gives you a nod, and goes back to following you about. A lamp lights by the night-light!' },
+      { name: 'Under the Bed', icon: '🖐️', hint: 'There is something under the bed, of course there is. Go over the edge of the mattress and look: Under-bed Grabbers reach up twice — roll clear, and roll clear again, and bop them while they are stuck.', done: 'There is nothing under the bed any more but one lost sock. The lamp is lit!' },
+      { name: 'The Broken Moon', icon: '👁️', hint: 'Night Watchers sweep the broken moon with their beams. Jump as they come round, bop their darts back, and run in when their eyes water — and mind the Gloom Moths overhead.', done: 'The Watchers shut their eyes at last, and the moon is whole again. The last lamp is lit!' },
+      { name: 'The Night Mare', icon: '🐴', hint: 'Here she comes! Bop her just as she flashes, or roll clear as she gallops by. Then she is three — and only one of them strikes sparks. And when it goes quite dark, stay by the lights: slam down on all three to light them, and she is dazzled!', done: 'The Night Mare stands trembling in the light. She was never angry at all.' },
+    ],
+    intro:
+      'So this is where she lives. On the Dark Side nobody has ever dreamt anything nice: a moon broken in bits, a ribbon of night with only one side to it, a bed with something under it — and, over it all, the black moon where the Night Mare gallops round and round and never, ever stops. Her best frights are here: Shadow Twins that know all your tricks, Under-bed Grabbers, Night Watchers and Gloom Moths. You have four Sweet Dreams to keep you company, and one little night-light. Be as brave as you can. It is always darkest just before…',
+    won: 'The Night Mare does not pop. She stands there in the light of every lamp you lit, and shakes, and you see what nobody ever saw before: she is only a young horse, and she is afraid of the dark. That is why she runs. So you give her the night-light to keep — and she lies down, and puts her nose on it, and sleeps. All five Sweet Dreams are back, and there is not a nightmare left in the Land of Nod.',
+  },
 ];
 
 // The stages there are to conquer: a stage for each chapter, the episodes one
@@ -1010,6 +1142,7 @@ export function campName(stage, id, kind = 'camp') {
   const ch = chapterOf(stage);
   if (ch.quests) return questOf(stage, id)?.name ?? null;
   if (ch.battles) return battleOf(stage, id)?.name ?? null;
+  if (ch.nightmares) return ch.nightmares[id - 1]?.name ?? null;
   if (kind === 'castle') return ch.lair;
   return ch.camps[id - 1] ?? null;
 }

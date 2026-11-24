@@ -18,7 +18,7 @@ import * as B from '../public/js/shared/blocks.js';
 import { walkReach } from '../public/js/shared/adventure.js';
 import { buildIsle, ISLE_SIDE } from '../public/js/shared/isle-maps.js';
 import { AMBUSH, Battles, DROP, FIERCE, FOG_TILE, Fog, GANG, geared, HUNT, REVEAL, REVEAL_START, SIEGE, standNear, unpackFog, walkableAround } from '../public/js/shared/isle-battles.js';
-import { chapterOf, CHAPTERS, firstStage, STAGES } from '../public/js/shared/isle-story.js';
+import { chapterOf, CHAPTERS, firstStage } from '../public/js/shared/isle-story.js';
 import { BUMP_HP, kindOf } from '../public/js/shared/monsters.js';
 import { PROTOCOL, Room } from '../public/js/shared/room.js';
 import { PublicAdventure } from '../server/adventure.js';
@@ -88,7 +88,7 @@ const sturdy = (room, c) => {
 
 // ---------------------------------------------------------------- the maps
 
-for (let stage = FIRST; stage <= STAGES; stage++) {
+for (let stage = FIRST; stage < firstStage(6); stage++) {
   const ch = chapterOf(stage);
   test(`chapter ${stage}, ${ch.name}: a big island hidden under the clouds, every one of its battles walked to from the start`, () => {
     for (const [seed, journey] of [[12345, 1], [987654321, 1], [4242, 2], [77, 3], [31337, 4]]) {
@@ -405,7 +405,7 @@ test('a hunt: the Big Bad goes round its range, runs off to rest when hurt, and 
 
 test('Baron Bluster: shut in his arena until every other battle is won, out of reach on his cloud until his rods zap him down, popped in the end', () => {
   const time = { t: 1_000_000 };
-  const room = isleRoom(STAGES, time);
+  const room = isleRoom(firstStage(6) - 1, time);
   const a = join(room);
   sturdy(room, a);
   const adv = room.adventure;
@@ -442,7 +442,7 @@ test('Baron Bluster: shut in his arena until every other battle is won, out of r
   assert.equal(adv.won, true);
   assert.ok(a.fx('up').length >= 1, 'he puffed himself back up at least once');
   assert.ok(a.last('won'));
-  assert.equal(adv.story.final && adv.story.last, true, 'the end of the story');
+  assert.deepEqual([adv.story.final, adv.story.last], [true, false], 'the end of the episode, not of the story');
   assert.equal(adv.battles.fog.all, true, 'the Cloud Blanket blown away');
   assert.ok(a.all('fog').some((m) => m.all));
   assert.equal(w.get(...adv.hub.lamps[sd.id - 1]), B.LANTERN_LAMP_ON, 'his lamp lit');

@@ -56,6 +56,9 @@ import { NEAR_FADE, Terrain } from './terrain.js';
 import { setStudio, toyLight } from './toon.js';
 import { cartoonLight } from './cartoon-light.js';
 import { NestModel } from './bluster-models.js';
+import { NodView } from './nod/view.js';
+import { nodLight } from './nod/light.js';
+import { nodKey, nodWorld } from '../shared/nod/worlds/index.js';
 
 // All of the biggest edit there can be, a huge tent on a hillside say.
 const MAX_PREVIEW = MAX_EDIT_CELLS;
@@ -100,6 +103,7 @@ const FREE_FOG = 320;
 // casts them, the land and the trees too, further.
 const SHADOW_EXTENT = 13;
 const REAL_SHADOW_EXTENT = 44;
+const NOD_SHADOW_EXTENT = 24;
 // A storybook's colours over Toon Isle (cartoon.js), once the picture is in
 // the screen's colours: dull colours a little richer (vibrance), a gentle S
 // of contrast, the shade a touch cooler and the light a touch warmer, and
@@ -321,7 +325,19 @@ export class Renderer {
     this.world = world;
     const wasReal = Boolean(this.real);
     const wasCartoon = Boolean(this.cartoon);
+    const wasNod = Boolean(this.nod);
     this.terrain.setWorld(world, this.gl, this.level ?? 'low');
+    // A dream of the Land of Nod (nod/view.js): no island and no blocks at
+    // all, but bodies of any shape hung in a sky of its own, with its own
+    // light, and up wherever you are.
+    this.nod?.dispose();
+    const dream = nodKey(world.theme);
+    this.nod = dream ? new NodView(this.scene, nodWorld(dream), { quality: this.level ?? 'low' }) : null;
+    this.sky.group.visible = !this.nod;
+    this.terrain.group.visible = !this.nod;
+    this.effects.setUp(null);
+    this.hemi.position.set(0, 1, 0);
+    this.camera.up.set(0, 1, 0);
     // Toon Isle, drawn as a cartoon (cartoon.js): the toy sky, its own soft
     // storybook light (cartoon-light.js) in its own bright colours (no toning
     // down), the haze far off, a glow round what shines and a storybook's
@@ -336,7 +352,7 @@ export class Renderer {
     this.gl.toneMapping = this.real ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     this.gl.toneMappingExposure = 1;
     this.realFog = this.real ? new THREE.FogExp2(0xbfd8ee, 0.004) : null;
-    if ((wasReal !== Boolean(this.real) || wasCartoon !== Boolean(this.cartoon)) && this.level) {
+    if ((wasReal !== Boolean(this.real) || wasCartoon !== Boolean(this.cartoon) || wasNod !== Boolean(this.nod)) && this.level) {
       this.buildFinish();
       this.resize();
     }
@@ -347,7 +363,7 @@ export class Renderer {
 
   // How far round you shadows are drawn, either way.
   get shadowExtent() {
-    return this.real || this.cartoon ? REAL_SHADOW_EXTENT : SHADOW_EXTENT;
+    return this.nod ? NOD_SHADOW_EXTENT : this.real || this.cartoon ? REAL_SHADOW_EXTENT : SHADOW_EXTENT;
   }
 
   // What stands on the ground is drawn standing on its skin, where there is
@@ -407,7 +423,7 @@ export class Renderer {
   buildFinish() {
     // (A cartoon is never soft: everything in it is in focus; and its
     // shading where things meet is painted on, cartoon-plants.js.)
-    const q = this.cartoon ? { ...this.finish, ao: 0, dof: false } : this.finish;
+    const q = this.cartoon || this.nod ? { ...this.finish, ao: 0, dof: false } : this.finish;
     const gl = this.gl;
     this.disposePost();
     setFurLayers(q.fur);
@@ -464,14 +480,15 @@ export class Renderer {
     }
     // On Toon Isle, a soft glow round whatever shines (lamps, sparkles, the
     // sun on the sea), and after the screen's colours, a storybook's.
-    if (this.cartoon) {
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.5, 1.8);
+    // (And in the Land of Nod, where lamps and stars and waves of light do.)
+    if (this.cartoon || this.nod) {
+      this.bloomPass = this.nod ? new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.65, 1.25) : new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.5, 1.8);
       post.passes.push(this.bloomPass);
     }
     // Into the screen's colours; edges not multisampled are smoothed after
     // that, where FXAA expects them.
     post.passes.push(new OutputPass());
-    if (this.cartoon) post.passes.push(gradePass());
+    if (this.cartoon || this.nod) post.passes.push(gradePass());
     if (!q.samples) post.passes.push(new FXAAPass());
     this.post = post;
   }
@@ -972,13 +989,64 @@ export class Renderer {
     this.camDist = dist < (this.camDist ?? dist) ? dist : this.camDist + (dist - this.camDist) * Math.min(1, dt * 3);
     this.camera.position.copy(v.smooth).addScaledVector(dir, this.camDist);
     this.camera.lookAt(v.smooth);
-    // A blow landing, or the ground shaking under you (render/jolt.js).
-    const jolt = this.jolted.update(dt);
-    if (jolt.roll) this.camera.rotateZ(jolt.roll);
+    this.finishCamera(dt);
     if (Math.abs(v.shiftNow) > 1e-3) {
       v.smooth.x += Math.cos(v.yaw) * v.shiftNow;
       v.smooth.z -= Math.sin(v.yaw) * v.shiftNow;
     }
+    return this.camDist;
+  }
+
+  // In the Land of Nod, where up is another way everywhere: behind someone
+  // (target, their feet), up the way the camera has it, fwd the way it looks
+  // along the ground; pulled in if something solid of space's is in the way.
+  // back: how far (0 to 1) it is drawn back and up, for a boss.
+  nodCamera(dt, target, up, fwd, space, back = 0) {
+    const v = this.view;
+    v.target.set(target.x + up.x * 1.25, target.y + up.y * 1.25, target.z + up.z * 1.25);
+    if (!v.ready) {
+      v.smooth.copy(v.target);
+      v.ready = true;
+      this.camDist = v.dist;
+    }
+    v.smooth.lerp(v.target, 1 - Math.exp(-dt * 14));
+    if (v.goal) {
+      const k = 1 - Math.exp(-dt * 6);
+      v.dist += (v.goal.dist - v.dist) * k;
+      v.pitch += (v.goal.pitch - v.pitch) * k;
+      if (Math.abs(v.goal.dist - v.dist) < 0.02 && Math.abs(v.goal.pitch - v.pitch) < 0.005) {
+        ({ dist: v.dist, pitch: v.pitch } = v.goal);
+        v.goal = null;
+      }
+    }
+    const pitch = v.dist > 1.5 ? Math.min(1.2, v.pitch + back * 0.12) : v.pitch;
+    const c = Math.cos(pitch);
+    const s = Math.sin(pitch);
+    const dir = tmpV.set(up.x * s - fwd.x * c, up.y * s - fwd.y * c, up.z * s - fwd.z * c);
+    v.shiftNow = (v.shiftNow ?? 0) + ((v.shift ?? 0) - (v.shiftNow ?? 0)) * Math.min(1, dt * 5);
+    tmpX.set(fwd.y * up.z - fwd.z * up.y, fwd.z * up.x - fwd.x * up.z, fwd.x * up.y - fwd.y * up.x);
+    if (Math.abs(v.shiftNow) > 1e-3) v.smooth.addScaledVector(tmpX, -v.shiftNow);
+    let dist = v.dist > 1.5 ? v.dist + back * 2.4 : v.dist;
+    if (!this.free) {
+      const hit = space.ray(v.smooth, dir, dist + 0.3, 0.25);
+      if (hit < dist + 0.3) dist = Math.max(0.6, hit - 0.1);
+    }
+    this.camDist = dist < (this.camDist ?? dist) ? dist : this.camDist + (dist - this.camDist) * Math.min(1, dt * 3);
+    this.camera.position.copy(v.smooth).addScaledVector(dir, this.camDist);
+    this.camera.up.set(up.x, up.y, up.z);
+    this.camera.lookAt(v.smooth);
+    this.finishCamera(dt);
+    if (Math.abs(v.shiftNow) > 1e-3) v.smooth.addScaledVector(tmpX, v.shiftNow);
+    return this.camDist;
+  }
+
+  // What a blow does to the picture, and a lift of it, once the camera is where
+  // it is to be.
+  finishCamera(dt) {
+    const v = this.view;
+    // A blow landing, or the ground shaking under you (render/jolt.js).
+    const jolt = this.jolted.update(dt);
+    if (jolt.roll) this.camera.rotateZ(jolt.roll);
     // Lifts the picture by a share of the screen's height (positive: up), as a
     // shift lens does: the camera stays put, so the subject keeps its shape
     // and the ground never comes between them.
@@ -989,7 +1057,6 @@ export class Renderer {
       const seen = 1 / (1 + jolt.zoom);
       cam.setViewOffset(wide, 1, (wide * (1 - seen)) / 2 - jolt.shiftX, (1 - seen) / 2 - jolt.shiftY + v.liftNow, wide * seen, seen);
     } else if (cam.view?.enabled) cam.clearViewOffset();
-    return this.camDist;
   }
 
   // Whether blocks right in front of the camera dissolve (render/terrain.js):
@@ -1158,7 +1225,57 @@ export class Renderer {
 
   // ------------------------------------------------ each frame
 
+  // Each frame of a dream of the Land of Nod (nod/view.js): state { focus (where
+  // you are), up (which way is up there), lit, asleep, zones }.
+  nodFrame(dt, state) {
+    this.time += dt;
+    const { nod } = this;
+    nod.setZones(state.zones ?? []);
+    nod.frame(dt, { up: state.up, focus: state.focus, camera: this.camera, lit: state.lit ?? 0, asleep: state.asleep, height: this.canvas.height });
+    const L = nod.mood.light;
+    const env = this.env;
+    env.day = 1;
+    env.daylight = 1;
+    env.sunDir = nod.sunDir;
+    this.scene.fog = null;
+    this.sun.color.set(L.key);
+    const lit = 1 - nod.dark * 0.8;
+    this.sun.intensity = L.sun * lit;
+    this.aimSun(state.focus, nod.sunDir);
+    this.hemi.position.copy(nod.up);
+    this.hemi.color.set(L.sky).lerp(WHITE, 0.35);
+    this.hemi.groundColor.set(L.earth).multiplyScalar(0.8);
+    this.hemi.intensity = (L.hemi ?? 1.5) * lit;
+    nodLight.uSunLum.value = Math.max(1e-3, ((this.sun.color.r * 0.2126 + this.sun.color.g * 0.7152 + this.sun.color.b * 0.0722) * this.sun.intensity) / Math.PI);
+    toyLight.studio.value = 0.85 * lit;
+    toyLight.rim.value = 0.35;
+    toyLight.rimColor.value.set(L.rim);
+    this.effects.setUp(state.up);
+    if (this.finish.shadows) {
+      this.sweepIn -= dt;
+      if (this.sweepIn <= 0) {
+        this.sweepIn = 0.5;
+        this.castShadows();
+      }
+    }
+    if (this.focusPass) this.focusPass.enabled = false;
+    this.effects.update(dt);
+    this.shockwaves = this.shockwaves.filter((s) => s.update(dt));
+    const going = this.bossFx;
+    this.bossFx = [];
+    this.bossFx = going.filter((f) => f.update(dt)).concat(this.bossFx);
+    if (this.drawing) this.draw();
+    else {
+      this.scene.updateMatrixWorld();
+      this.camera.updateMatrixWorld();
+    }
+  }
+
   frame(dt, state) {
+    if (this.nod) {
+      this.nodFrame(dt, state);
+      return;
+    }
     this.time += dt;
     const env = environment(state.time, state.weather, this.world?.theme, this.env);
     this.snow = Math.min(1, Math.max(0, this.snow + dt * (state.weather === 'snow' ? SNOW_RATE : -MELT_RATE)));
@@ -1311,6 +1428,7 @@ export class Renderer {
 
   dispose() {
     this.disposePost();
+    this.nod?.dispose();
     this.studio.dispose();
     this.terrain.dispose();
     this.gl.dispose();

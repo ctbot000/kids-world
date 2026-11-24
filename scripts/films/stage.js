@@ -7,9 +7,15 @@ import * as THREE from '/vendor/three.module.js';
 import { buildAtlas } from '/js/render/atlas.js';
 import { ANIM } from '/js/render/avatar.js';
 import { Renderer } from '/js/render/renderer.js';
+import { NightLight } from '/js/render/nod/dress.js';
+import { makeFright } from '/js/render/nod/frights.js';
+import { quatOf } from '/js/render/nod/kit.js';
+import { setTwinLook } from '/js/render/nod/frights-mare.js';
 import { blobShadow, mesh, toon } from '/js/render/toon.js';
 import * as B from '/js/shared/blocks.js';
 import { buildIsle } from '/js/shared/isle-maps.js';
+import { nodWorld } from '/js/shared/nod/worlds/index.js';
+import { World } from '/js/shared/world.js';
 import { palette } from '/js/shared/worldgen.js';
 
 export const W = 1280;
@@ -54,12 +60,21 @@ export function isle(stage, { freed = false } = {}) {
   return m;
 }
 
+// A dream of the Land of Nod (shared/nod/worlds): no island at all, so shots in
+// one put their actors on its bodies (dream.space), each with a down of its own.
+export function dreamOf(key) {
+  if (!made.has(key)) made.set(key, { world: new World({ W: 16, H: 16, D: 16, sea: 1, theme: `nod${key}` }), dream: nodWorld(key) });
+  return made.get(key);
+}
+
 let current = null;
 function useWorld(world) {
   if (current === world) return;
   current = world;
   renderer.setWorld(world);
   renderer.terrain.buildAll();
+  // (All its bodies at once: no film waits for them.)
+  renderer.nod?.build({ x: 0, y: 0, z: 0 });
 }
 
 // ------------------------------------------------------------ props
@@ -115,7 +130,10 @@ function clearActors() {
     if (a.kind === 'avatar') renderer.removeAvatar(a.id);
     else if (a.kind === 'monster') renderer.removeMonster(a.id);
     else if (a.kind === 'critter') renderer.removeCritter(a.id);
-    else a.obj.removeFromParent();
+    else if (a.kind === 'fright') {
+      a.model.dispose();
+      a.obj.removeFromParent();
+    } else a.obj.removeFromParent();
   }
   actors = [];
 }
@@ -150,6 +168,18 @@ export function critter(type, act) {
   return a;
 }
 
+// A fright of the Land of Nod (shared/nod/foes.js), act(t, dt) → { x, y, z, up, h
+// (which way it faces), alt, state, k, run, open, speed, more, scale }.
+export function fright(kind, act) {
+  const model = makeFright(kind);
+  const obj = new THREE.Group();
+  obj.add(model.group);
+  renderer.entities.add(obj);
+  const a = { kind: 'fright', model, obj, act };
+  actors.push(a);
+  return a;
+}
+
 // Anything else (a three.js object), act(t, dt) → { x, y, z, ry, rz, scale, visible }.
 export function prop(obj, act) {
   renderer.entities.add(obj);
@@ -175,10 +205,22 @@ function stepActors(t, dt, night) {
       const m = a.model;
       m.root.visible = s.visible !== false;
       m.root.position.set(s.x, s.y, s.z);
-      m.root.rotation.y = s.yaw ?? 0;
+      // (The right way up, wherever up is.)
+      if (s.up) quatOf(s.up, s.h, m.root.quaternion);
+      else m.root.rotation.set(0, s.yaw ?? 0, 0);
       if (s.emote && m.emote !== s.emote) m.playEmote(s.emote);
       m.update(dt, s.anim ?? ANIM.idle, s.speed ?? 0);
-      renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
+      if (s.up) m.shadow.visible = false;
+      else renderer.placeShadow(m.shadow, s.x, s.y, s.z, 1);
+    } else if (a.kind === 'fright') {
+      const up = s.up ?? { x: 0, y: 1, z: 0 };
+      const alt = s.alt ?? 0;
+      a.obj.visible = s.visible !== false;
+      a.obj.position.set(s.x + up.x * alt, s.y + up.y * alt, s.z + up.z * alt);
+      quatOf(up, s.h, a.obj.quaternion);
+      a.obj.scale.setScalar(s.scale ?? 1);
+      a.model.update(dt, { state: s.state ?? 'idle', k: s.k ?? 0, run: s.run ?? 0, kind: s.kind ?? null, look: null, open: s.open ?? null, speed: s.speed ?? 0, alt, come: 1, hearts: 3, max: 3, more: s.more ?? [], act: null });
+      a.model.shadow.visible = false;
     } else if (a.kind === 'critter') {
       const m = a.model;
       m.group.position.set(s.x, s.y, s.z);
@@ -193,6 +235,7 @@ function stepActors(t, dt, night) {
       if (s.x !== undefined) o.position.set(s.x, s.y, s.z);
       if (s.ry !== undefined) o.rotation.y = s.ry;
       if (s.rz !== undefined) o.rotation.z = s.rz;
+      if (s.up) quatOf(s.up, s.h, o.quaternion);
       if (s.scale !== undefined) o.scale.setScalar(Math.max(0.001, s.scale));
     }
   }
@@ -253,11 +296,13 @@ export function frame(t) {
   shot.fx?.(local, dt);
   const cam = shot.camera(local);
   renderer.camera.position.set(...cam.pos);
+  renderer.camera.up.set(...(cam.up ?? [0, 1, 0]));
   renderer.camera.lookAt(...cam.look);
   renderer.camera.fov = cam.fov ?? 50;
   renderer.camera.updateProjectionMatrix();
   focus.set(...cam.look);
-  renderer.frame(dt, { time, weather: shot.weather ?? 'clear', focus, tornado: null, satIn: 0 });
+  const up = cam.up ?? [0, 1, 0];
+  renderer.frame(dt, { time, weather: shot.weather ?? 'clear', focus, tornado: null, satIn: 0, up: { x: up[0], y: up[1], z: up[2] }, lit: shot.lit ?? 0, asleep: () => false, zones: shot.zones?.(local) ?? [] });
   ctx.drawImage(canvas, 0, 0, W, H);
   // Coming in: a fade from black, or a flash of white.
   const into = local < 0.6 ? 1 - local / 0.6 : 0;
@@ -429,7 +474,7 @@ export function roll(at, secs, lines) {
   };
 }
 
-export { ANIM, B, blobShadow, mesh, THREE, toon };
+export { ANIM, B, blobShadow, mesh, NightLight, setTwinLook, THREE, toon };
 
 // How long the loaded film is, and where its poster still is.
 export const lengthOf = () => film?.length ?? 0;

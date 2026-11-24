@@ -1666,6 +1666,72 @@ body.touch.playing #joystick {
   border-color: var(--sun-dark);
 }
 
+/* ✨ Brave Burst, in the Land of Nod, once you are as brave as can be: over
+   the hotbar, glowing. */
+.ride-button.burst-button {
+  left: 50%;
+  top: auto;
+  bottom: 118px;
+  transform: translateX(-50%);
+  background: linear-gradient(#fff2b0, #ffc93d);
+  box-shadow:
+    0 4px 0 #c98a12,
+    0 0 22px rgba(255, 214, 90, 0.95);
+  animation: burst-ready 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes burst-ready {
+  to {
+    box-shadow:
+      0 4px 0 #c98a12,
+      0 0 38px rgba(255, 150, 220, 0.95);
+  }
+}
+
+/* How brave you are feeling there: five stars by your HP. */
+.courage {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 4px;
+  font-size: 1.05em;
+}
+
+.courage i {
+  font-style: normal;
+  color: rgba(61, 46, 79, 0.22);
+  transition: color 0.2s;
+}
+
+.courage i.half {
+  color: #ffe08a;
+}
+
+.courage i.on {
+  color: #ffb52e;
+  text-shadow: 0 0 6px rgba(255, 200, 60, 0.8);
+}
+
+.courage.full i {
+  animation: courage-full 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes courage-full {
+  to {
+    color: #ff7ad0;
+  }
+}
+
+/* A fright's hearts, and whether its guard is up. */
+.adv-tag.fright {
+  padding: 1px 8px 2px;
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.adv-tag.fright .label.open {
+  color: #d6336c;
+}
+
 /* A fish on the line: 🎣 Reel! flashes to say be quick. Its place is set
    inline, so the flash is in its colours, not its size. */
 .ride-button.biting {
@@ -7763,4 +7829,13 @@ body.watching :is(#toolbar, #toolopts, #hp-row, #basket, .hotrow, #talk, #btn-at
   height: 28px;
   margin-right: 4px;
   vertical-align: middle;
+}
+
+/* In the Land of Nod the HP row says more than anywhere else: on a narrow screen,
+   the number and the word go, so that the rest of it fits. */
+@media (max-width: 480px) {
+  #hearts:has(.courage) .hp-num,
+  #hearts:has(.courage) .hp-label {
+    display: none;
+  }
 }

@@ -1126,6 +1126,10 @@ input
         g.buyLand();
         return true;
       case 'KeyV':
+        if (g.nod) {
+          g.nod.fight.burst();
+          return true;
+        }
         if (!g.defense) return false;
         g.defend();
         return true;

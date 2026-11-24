@@ -192,8 +192,9 @@ export class PublicAdventure {
       id: r.id,
       journey: r.journey,
       stage: r.stage,
-      // (The camps freed, or on a chapter told in challenges, those beaten,
-      // or in battles, those won, and the clouds rolled back so far.)
+      // (The camps freed, or on a chapter told in challenges, those beaten — or
+      // in battles, those won, and the clouds rolled back so far; or in
+      // nightmares, those over and the winks found.)
       freed: r.entry ? r.entry.room.adventure.doneIds() : [],
       ...(r.entry?.room.adventure.battles ? { fog: r.entry.room.adventure.keptFog() } : {}),
       ...(r.by ? { by: r.by } : {}),
@@ -239,7 +240,7 @@ export class PublicAdventure {
     // (Its pages are told which game it is: its intro plays at each game's start, ui.js.)
     room.adventure.run = run.id;
     room.onIsleNew = (name, episode = 1) => this.newRun(name, this.now(), episode);
-    for (const id of room.adventure.quests || room.adventure.battles ? [] : freed) {
+    for (const id of room.adventure.quests || room.adventure.battles || room.adventure.dream ? [] : freed) {
       const camp = room.adventure.campById(id);
       if (camp?.kind === 'camp' && !camp.freed) room.campFreed(room.adventure.free(camp, [], room.monsters));
     }
@@ -247,6 +248,8 @@ export class PublicAdventure {
     if (room.adventure.quests) room.restoreQuests(freed);
     // (Or the battles won on it already, and the clouds rolled back.)
     if (room.adventure.battles) room.restoreBattles(freed, fog);
+    // (Or the nightmares over in it already, and the winks found.)
+    if (room.adventure.dream) room.adventure.dream.restore(freed, false);
     run.seen = room.adventure.battles?.fog.count ?? 0;
     run.entry = { code, room, emptySince: 0, public: true };
     run.freed = room.adventure.doneIds().length;
@@ -320,6 +323,7 @@ export class PublicAdventure {
         camps: tally?.camps ?? 0,
         freed: tally?.freed ?? 0,
         ...(tally?.quests ? { quests: true } : {}),
+        ...(tally?.nod ? { nod: true } : {}),
       };
     });
   }

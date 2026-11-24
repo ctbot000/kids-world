@@ -807,8 +807,102 @@ function ending5(b) {
   for (const [i, n] of ['D4', 'F#4', 'A4', 'D5'].entries()) b.pluck(48.2 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
 }
 
+// The sixth episode's: a cradle song, on a music box, and the Night Mare's
+// gallop, low and quick, in threes.
+const CRADLE = [
+  ['G4', 1], ['C5', 0.5], ['B4', 0.5], ['A4', 1], ['E4', 1], ['G4', 0.5], ['A4', 0.5], ['G4', 2],
+  ['F4', 1], ['A4', 0.5], ['G4', 0.5], ['E4', 1], ['C4', 1], ['D4', 0.5], ['E4', 0.5], ['D4', 2],
+];
+const GALLOP = ['E2', 'E2', 'B2', 'E2', 'E2', 'G2', 'E2', 'E2', 'F#2', 'E2', 'E2', 'D2'];
+const gallop = (b, t, secs, gain = 0.09, step = 0.15) => {
+  for (let k = 0; k * step * 4 < secs; k++) for (let i = 0; i < 3; i++) b.pluck(t + k * step * 4 + i * step, hz(GALLOP[(k * 3 + i) % GALLOP.length]), { gain: gain * (i === 2 ? 1.2 : 0.8), decay: 0.22, type: 'sawtooth', verb: 0.2 });
+};
+const musicBox = (b, t, bpm, notes, gain = 0.07) => {
+  let at = t;
+  for (const [n, beats] of notes) {
+    if (n) b.pluck(at, hz(n) * 2, { gain, decay: 1.5, type: 'triangle', bell: true, verb: 0.5 });
+    at += (beats * 60) / bpm;
+  }
+};
+
+function intro6(b) {
+  // 0–9: dusk on the beach, the cradle song on a music box, and down they sink.
+  b.sea(0, 9, 0.028);
+  musicBox(b, 0.6, 76, CRADLE.slice(0, 8), 0.07);
+  b.chords(0.4, 76, ['C', 'F', 'G'], 0.02, { attack: 1.2, release: 1.2 });
+  b.whoosh(5.6, 0.05, 2.6);
+  b.sparkle(5.6, 10, 0.05);
+  // 9–17: down through the sky of the dream.
+  b.swell(9, 2.2, 0.06);
+  b.choir(9.6, 7, ['C4', 'G4', 'E5'], 0.022);
+  b.chords(9.4, 70, ['C', 'Am', 'F', 'G'], 0.03, { attack: 0.8, release: 1.2 });
+  musicBox(b, 10, 84, CRADLE, 0.06);
+  b.sparkle(11, 12, 0.04);
+  // 17–25: the Night Mare galloping round her moon.
+  gallop(b, 17, 8, 0.09);
+  b.strings(17, 8, ['E2', 'B2', 'E3', 'G3'], 0.04, { attack: 0.5, release: 0.8, tremolo: true });
+  b.crash(17, 0.1, 2);
+  b.timpaniRoll(20.6, 0.8, 'E2', 0.16);
+  b.tune(18, 100, [['E4', 1], ['G4', 1], ['F#4', 2], ['D4', 1], ['E4', 3]], 'horn', 0.06);
+  // 25–37: a dream after another, a bar each.
+  const bar = 240 / 3;
+  b.beat(25, bar, 4, 0.22);
+  const dreams = ['C', 'F', 'Am', 'G'];
+  b.chords(25, bar, dreams, 0.03, { attack: 0.05, release: 0.3 });
+  dreams.forEach((c, i) => {
+    b.pluck(25 + i * 3, hz(CHORDS[c][3]), { gain: 0.1, decay: 1.6, type: 'triangle', bell: true, verb: 0.4 });
+    musicBox(b, 25.4 + i * 3, 150, CRADLE.slice(i * 4, i * 4 + 4), 0.06);
+  });
+  // 37–43: her frights, coming.
+  gallop(b, 37, 5.6, 0.06, 0.2);
+  b.strings(37, 6, ['E2', 'B2', 'G3'], 0.035, { attack: 0.4, release: 1, tremolo: true });
+  for (let k = 0; k < 6; k++) b.pluck(37.4 + k * 0.9, hz(['E3', 'G3', 'F#3'][k % 3]), { gain: 0.08, decay: 0.5, type: 'square', verb: 0.2 });
+  b.timpaniRoll(41.6, 1.2, 'G2', 0.2);
+  // 43–53: the heroes, and the title: the theme in full, the cradle song over it.
+  b.swell(43, 1.6, 0.07);
+  b.chords(44, BPM, THEME_CHORDS.slice(0, 3), 0.04, { attack: 0.2, release: 0.6 });
+  b.tune(44, BPM, THEME.slice(0, 12), 'horn', 0.1);
+  b.crash(48, 0.12, 3);
+  b.sparkle(48, 10, 0.05);
+  musicBox(b, 48.4, 96, CRADLE.slice(0, 8), 0.05);
+  b.strings(53 - 2.4, 2.4, CHORDS.D, 0.04, { attack: 0.1, release: 1.6 });
+}
+
+function ending6(b) {
+  // 0–8: the Night Mare in the light, trembling: her gallop, slowing down.
+  b.strings(0, 8, ['E3', 'B3', 'G4'], 0.025, { attack: 0.8, release: 1.4, tremolo: true });
+  for (let k = 0; k < 9; k++) b.pluck(0.4 + k * (0.36 + k * 0.05), hz(['E2', 'B2', 'G2'][k % 3]), { gain: 0.07 - k * 0.005, decay: 0.4, type: 'triangle', verb: 0.3 });
+  b.tune(4.4, 72, [['E4', 1], ['G4', 1], ['C5', 2]], 'flute', 0.05);
+  // 8–16: the night-light, and she sleeps.
+  b.chords(8, 66, ['C', 'F', 'G', 'C'], 0.026, { attack: 1, release: 1.6 });
+  musicBox(b, 8.8, 70, CRADLE.slice(0, 8), 0.07);
+  b.choir(11, 5, ['C4', 'E4', 'G4'], 0.016);
+  // 16–24: the five Sweet Dreams, floating home.
+  b.swell(16, 2, 0.08);
+  for (let k = 0; k < 5; k++) b.pluck(16.6 + k * 0.5, hz(['C5', 'E5', 'G5', 'B5', 'C6'][k]), { gain: 0.09, decay: 2.4, type: 'triangle', bell: true, verb: 0.5 });
+  b.strings(17, 7, ['C3', 'G3', 'C4', 'E4', 'G4'], 0.04, { attack: 0.4, release: 1.6 });
+  b.choir(17.4, 6.4, ['C4', 'G4', 'E5'], 0.024);
+  b.tune(18.4, 92, CRADLE.slice(0, 8), 'horn', 0.07);
+  b.sparkle(17, 14, 0.05);
+  // 24–32: the party on the great pillow.
+  b.beat(24, BPM, 3, 0.26);
+  b.chords(24, BPM, THEME_CHORDS.slice(0, 3), 0.035, { attack: 0.05, release: 0.4 });
+  b.tune(24, BPM, THEME.slice(0, 14), 'horn', 0.085);
+  for (let k = 0; k < 7; k++) b.firework(24.4 + k * 1.1, 0.1);
+  b.cheer(24.2, 7, 0.035);
+  // 32–46: the credits, gently.
+  b.chords(32, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.025, { attack: 1, release: 1.4 });
+  b.arps(32, 80, ['D', 'Bm', 'G', 'A', 'D'], 0.04);
+  b.tune(33.2, 80, THEME.slice(0, 14), 'flute', 0.06);
+  // 46–53: morning on the beach.
+  b.sea(46, 7, 0.03);
+  musicBox(b, 46.6, 80, CRADLE.slice(0, 8), 0.06);
+  b.strings(46.4, 5.4, ['C3', 'G3', 'E4'], 0.03, { attack: 0.4, release: 1.6 });
+  for (const [i, n] of ['C4', 'E4', 'G4', 'C5'].entries()) b.pluck(50.6 + i * 0.16, hz(n), { gain: 0.09, decay: 1.6, type: 'triangle', bell: true, verb: 0.45 });
+}
+
 export async function score(name, secs) {
   const b = new Band(secs);
-  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5 }[name] ?? ending)(b);
+  ({ intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 }[name] ?? ending)(b);
   return b.render();
 }

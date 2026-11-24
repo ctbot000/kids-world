@@ -38,6 +38,9 @@ import { cleanStage, HELP_REACH } from './shared/adventure.js';
 import { chapterOf, ticketOf, ticketsHeld, tokensBack, toldKey } from './shared/isle-story.js';
 import { questBeaten, questFrame, questFx, readQuests, readRow } from './isle-quests-view.js';
 import { battleFrame, battleFx, battleWon, fogNews, fogSeen, readBattleRow, readBattles, readFog } from './isle-battles-view.js';
+import { NodGame } from './nod/nod-game.js';
+import { NOD_BOSSES } from './shared/nod/bosses.js';
+import { isNodKey } from './shared/nod/worlds/index.js';
 import { BEASTS, isBeast } from './shared/beasts.js';
 import { isBoss, planOf } from './shared/bosses.js';
 import { BUILD_REACH, DEFENSE_STATES, MAX_LEVEL, TOWER_COST, towerTop } from './shared/defense.js';
@@ -450,6 +453,10 @@ export class Game extends EventTarget {
     // the page has shown it to you (ui.js ticketDialog); 0 for none.
     this.ticketWon = 0;
     this.quiz = null;
+    // A dream of the Land of Nod (nod/nod-game.js), on a chapter of the isle's
+    // sixth episode: it takes over moving, fighting and the camera (null on
+    // anything with an island to it).
+    this.nod = null;
     // A tower defense island's road, pads, towers and waves
     // (shared/defense.js), as the island tells of them (null on any other).
     this.defense = null;
@@ -807,7 +814,23 @@ export class Game extends EventTarget {
         this.monsterStates(msg.m);
         break;
       case 'bump':
-        this.bumped(msg);
+        if (this.nod && msg.nod !== undefined) this.nod.fight.bumped(msg);
+        else this.bumped(msg);
+        break;
+      // The Land of Nod, on the isle's sixth episode (nod/): where its frights
+      // are, a blow of one of them being wound up, what else there is to see of
+      // them, and a nightmare over.
+      case 'nf':
+        this.nod?.fight.rows(msg.f);
+        break;
+      case 'na':
+        this.nod?.fight.told(msg);
+        break;
+      case 'nx':
+        this.nod?.fight.news(msg);
+        break;
+      case 'nightmare':
+        this.nightmareOver(msg);
         break;
       case 'hp':
         this.setHp(msg);
@@ -1810,6 +1833,10 @@ export class Game extends EventTarget {
   // Back to a safe place (at, as [x, y, z]; or the start of the island), and
   // on your feet (with all your HP, unless the text says why else you go).
   goHome(at, text, icon = '💖') {
+    if (this.nod) {
+      if (Array.isArray(at) && at.length === 3 && at.every(Number.isFinite)) this.nod.fight.home({ x: at[0], y: at[1], z: at[2] });
+      return;
+    }
     if (this.pianoAt) {
       this.pianoAt = null;
       this.emit('piano-gone');
@@ -2512,6 +2539,7 @@ export class Game extends EventTarget {
   // one in front of you instead. Returns the nearest one's id, or null.
   attack() {
     if (!this.world || !this.me || this.aboard) return null;
+    if (this.nod) return this.nod.fight.attack();
     // On a dragon's back, a swing is a breath of fire instead (see breath).
     if (this.riding) return this.breath();
     if (this.dizzy) return null;
@@ -3080,10 +3108,24 @@ export class Game extends EventTarget {
     this.adventure = null;
     this.quiz = null;
     this.questShow = [];
+    const asleep = this.nod;
+    this.nod?.dispose();
+    this.nod = null;
+    // A chapter of the sixth episode: a dream of the Land of Nod, which has no
+    // island at all (nod/nod-game.js).
+    if (this.shared && a?.nod && isNodKey(a.nod.key) && this.renderer.nod) {
+      const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
+      const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
+      const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
+      this.adventure = { camps: new Map(), won: a.won === true, stage, journey, run, king: null, shield: false, story: chapterOf(stage), nod: true };
+      this.nod = new NodGame(this, { key: a.nod.key, winks: Array.isArray(a.nod.winks) ? a.nod.winks.filter(Number.isInteger) : [] }, asleep && asleep.world.key === a.nod.key ? { x: asleep.w.x, y: asleep.w.y, z: asleep.w.z } : null);
+      this.nod.rows(a.nod.n);
+      this.adventureNews(a);
+    }
     // A chapter of the fifth episode: no camps, but its battles, its Sky
     // Lantern and the Cloud Blanket over whatever nobody has got to yet
     // (shared/isle-battles.js).
-    if (this.shared && a && Array.isArray(a.battles) && a.battles.length) {
+    else if (this.shared && a && Array.isArray(a.battles) && a.battles.length) {
       const stage = Number.isInteger(a.stage) ? Math.min(9999, Math.max(1, a.stage)) : 1;
       const journey = Number.isInteger(a.journey) && a.journey >= 1 ? a.journey : 1;
       const run = Number.isInteger(a.run) && a.run >= 1 ? a.run : 0;
@@ -3136,6 +3178,8 @@ export class Game extends EventTarget {
   // from the isle, King Grumble, who marches with a tower defense island's
   // waves; { kind, icon, name, moves, ... }.
   bossInfo() {
+    // (Or whose dream it is, in the Land of Nod: nod/bosses.js.)
+    if (this.nod) return { kind: this.nod.world.boss.kind, ...NOD_BOSSES[this.nod.world.boss.kind] };
     const kind = this.adventure?.story.boss ?? 'king';
     return { kind, ...planOf(kind) };
   }
@@ -3161,6 +3205,11 @@ export class Game extends EventTarget {
     }
     adv.king = Array.isArray(msg.k) && msg.k.length >= 2 ? { hearts: msg.k[0], max: msg.k[1], second: msg.k[2] === 1 } : null;
     adv.shield = msg.shield !== false && !adv.won;
+    // (In the Land of Nod, how each nightmare is going.)
+    if (adv.nod) {
+      adv.shield = false;
+      this.nod?.rows(msg.n);
+    }
     // (On a chapter told in battles, how each is going, and no bubble.)
     if (adv.battles) {
       adv.shield = false;
@@ -3186,6 +3235,18 @@ export class Game extends EventTarget {
   battleDone(msg) {
     const mine = battleWon(this, msg);
     if (mine) {
+      this.profile.count('freed');
+      this.offerKeyQuiz(false, KEY_OFFER_MS);
+    }
+    this.emit('adventure');
+  }
+
+  // A nightmare of the Land of Nod over (shared/nod/dream.js), its lamp lit by
+  // the night-light; yours (you were there), a quiz for a chest key a little
+  // while after, as for a camp freed.
+  nightmareOver(msg) {
+    const mine = this.nod?.over_(msg);
+    if (mine && !msg.won) {
       this.profile.count('freed');
       this.offerKeyQuiz(false, KEY_OFFER_MS);
     }
@@ -3410,6 +3471,7 @@ export class Game extends EventTarget {
       for (const c of adv.camps.values()) Object.assign(c, { freed: true, progress: 1, friends: 0, guarded: false });
       for (const q of adv.quests?.values() ?? []) q.done = true;
       for (const b of adv.battles?.values() ?? []) Object.assign(b, { done: true, state: 'done' });
+      for (const n of this.nod?.nightmares.values() ?? []) Object.assign(n, { done: true, on: false });
     }
     // The Sky Lantern lit (the fifth episode), glowing over the landing.
     if (adv?.battles) this.renderer.cartoon?.setLantern(true);
@@ -3464,12 +3526,13 @@ export class Game extends EventTarget {
     const boss = this.bossInfo();
     const quests = Boolean(adv?.quests);
     const battles = Boolean(adv?.battles);
-    const what = quests ? 'Every lock is open!' : hero ? `${hero} popped ${boss.name}!` : battles ? 'Every battle is won!' : 'Every camp is free!';
+    const nod = Boolean(adv?.nod);
+    const what = quests ? 'Every lock is open!' : nod ? 'Every nightmare is over!' : hero ? `${hero} popped ${boss.name}!` : battles ? 'Every battle is won!' : 'Every camp is free!';
     const story = adv?.story;
     // On the isle, the chapter's ending, and the Star Shards (or the colours
     // of the rainbow, or the Golden Bells) won back so far.
     const thanks = !mine ? '' : board ? ' Rewards for everyone, by how much each helped! 🏆' : ' A diamond for everyone who helped! 💎';
-    if (story) this.emit('toast', { icon: quests ? '🔔' : battles ? '🏮' : story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? `${hero} gave ${boss.name} the last bop! ` : ''}${story.won} ${tokensBack(story)}${thanks}` });
+    if (story) this.emit('toast', { icon: quests ? '🔔' : battles ? '🏮' : nod ? '💤' : story.episode.token.colours ? '🌈' : '⭐', text: `${hero ? (nod ? `${hero} took the last heart off ${boss.name.replace(/^The /, 'the ')}! ` : `${hero} gave ${boss.name} the last bop! `) : ''}${story.won} ${tokensBack(story)}${thanks}` });
     // Your ticket to the next episode, the first time you see this one told
     // to its end.
     if (this.ticketWon) {
@@ -3478,7 +3541,7 @@ export class Game extends EventTarget {
     }
     // The end of an episode: its ending, once the fireworks have had a moment (ui.js).
     if (story?.final) setTimeout(() => this.adventure === adv && this.emit('ending'), ENDING_AFTER_MS);
-    else this.emit('toast', { icon: '👑', text: `${what} ${this.world?.name ?? 'The island'} is free!${story ? '' : thanks}` });
+    else this.emit('toast', { icon: '👑', text: nod ? `${what} Sweet dreams in ${story.name}.` : `${what} ${this.world?.name ?? 'The island'} is free!${story ? '' : thanks}` });
     this.emit('adventure');
   }
 
@@ -3763,7 +3826,7 @@ export class Game extends EventTarget {
     const t = now / 1000;
     for (const p of this.players.values()) {
       if (!(p.me ? this.dizzy : p.dizzy) || !p.avatar) continue;
-      const a = p.avatar.root.position;
+      const a = this.nod ? this.nod.over(p, 0) : p.avatar.root.position;
       if (this.near(a.x, a.y, a.z, 40)) this.renderer.effects.dizzy(a.x, a.y + p.avatar.sitTop + 0.12, a.z, t, 0.24);
     }
   }
@@ -6815,6 +6878,11 @@ export class Game extends EventTarget {
   // on a trampoline, held down then or not.
   pressDown() {
     if (this.dizzy) return;
+    // (In the Land of Nod, down is a roll.)
+    if (this.nod) {
+      this.nod.fight.roll();
+      return;
+    }
     if (this.seat) {
       this.standUp();
       return;
@@ -7867,6 +7935,12 @@ export class Game extends EventTarget {
   // A tap or click at a point on the screen.
   use(ndc, secondary = false) {
     if (!this.world || !this.me) return;
+    // (In the Land of Nod there is nothing to build: a click is a bop.)
+    if (this.nod) {
+      if (!this.touch && !secondary) this.nod.fight.attack();
+      else if (secondary) this.nod.fight.roll();
+      return;
+    }
     // Sitting dizzy, you wait for a friend.
     if (this.dizzy) {
       this.sound.play('no');
@@ -8200,6 +8274,10 @@ export class Game extends EventTarget {
 
   update(dt, input) {
     if (!this.world || !this.me) return;
+    if (this.nod) {
+      this.nod.update(dt, input);
+      return;
+    }
     const env = this.env;
     env.time = advanceTime(env.time, dt, env.mode);
     if (env.twister) env.twister.age += dt;

@@ -28,12 +28,17 @@
 // and ending3 below). And the fourth's (intro4, ending4): Jinx the Magpie and
 // the five Golden Bells, on his Puzzle Isles (see below). And the fifth's
 // (intro5, ending5): Baron Bluster, his Cloud Blanket and the five Sky
-// Lanterns of Toon Isle, drawn as a cartoon (render/cartoon.js).
+// Lanterns of Toon Isle, drawn as a cartoon (render/cartoon.js). And the
+// sixth's (intro6, ending6): the Night Mare and the five Sweet Dreams of the
+// Land of Nod, where there is no island at all (shared/nod/worlds).
 import { BOSSES } from '/js/shared/bosses.js';
 import { questIcon } from '/js/shared/isle-quests.js';
 import { BATTLE_ICONS } from '/js/shared/isle-battles.js';
 import { CHAPTERS, RAINBOW } from '/js/shared/isle-story.js';
-import { ANIM, B, caption, critter, isle, kid, monster, nameCard, prop, renderer, roll, star, THREE, titleCard, toon } from './stage.js';
+import { laneAt } from '/js/shared/nod/attacks.js';
+import { NOD_BOSSES } from '/js/shared/nod/bosses.js';
+import { add as plus, cross, flatUnit, sub, turn, unit } from '/js/shared/nod/shape.js';
+import { ANIM, B, caption, critter, dreamOf, fright, isle, kid, monster, nameCard, NightLight, prop, renderer, roll, star, THREE, titleCard, toon } from './stage.js';
 
 const SEA = 20;
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -57,7 +62,7 @@ function keys(list) {
     const a = list[i];
     const b = list[Math.min(i + 1, list.length - 1)];
     const k = b.t > a.t ? ease((t - a.t) / (b.t - a.t)) : 0;
-    return { pos: mix(a.pos, b.pos, k), look: mix(a.look, b.look, k), fov: lerp(a.fov ?? 50, b.fov ?? 50, k) };
+    return { pos: mix(a.pos, b.pos, k), look: mix(a.look, b.look, k), fov: lerp(a.fov ?? 50, b.fov ?? 50, k), ...(a.up ? { up: mix(a.up, b.up ?? a.up, k) } : {}) };
   };
 }
 
@@ -2089,8 +2094,477 @@ function ending5() {
   });
   const teaser = shots.at(-1).start;
   overlays.push(caption(teaser + 0.4, 4, 'And the Baron? He is a little white cloud now, and every morning he waters the toadstools. Politely.'));
-  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  // (He was so sorry, he gave away the softest bit of himself. The story goes
+  // on, in the sixth episode.)
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'The story goes on…', 'The Baron’s Cloud Pillow: Episode 6, The Land of Nod', { size: 70 }));
   return { shots, overlays, poster: shots[3].start + 5 };
 }
 
-export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5 };
+// ------------------------------------------------------------ the sixth episode
+
+const NOD_CHAPTERS = CHAPTERS.filter((ch) => ch.episode === 6);
+const arr = (p) => [p.x, p.y, p.z];
+const V = (x, y, z) => ({ x, y, z });
+
+// Some way off a spot of a body: ahead of it the way dir goes, over it, and to
+// its right.
+const offOf = (s, dir, ahead, over, right = 0) => plus(plus(plus(s, dir, ahead), s.up, over), cross(s.up, dir), right);
+
+// A camera before a spot, looking at something standing there (high over it)
+// from its front, moved from one place to another round it; up there is up.
+function facing(s, dir, high, list, dur) {
+  return keys(
+    list.map(([ahead, over, right, fov], i) => ({ t: (dur * i) / Math.max(1, list.length - 1), pos: arr(offOf(s, dir, ahead, over, right)), look: arr(offOf(s, dir, 0, high)), up: arr(s.up), fov: fov ?? 48 })),
+  );
+}
+
+// A Sweet Dream: a ball of soft light with a star in it, in a colour of its own.
+const DREAM_COLORS = ['#ffd0e6', '#fff0a8', '#b9d4ff', '#ffc890', '#d9b8ff'];
+function sweetDream(i, size = 1) {
+  const group = new THREE.Group();
+  const inside = star(0.28 * size, DREAM_COLORS[i]);
+  inside.userData.halo.removeFromParent();
+  group.add(inside);
+  // (A bubble round it, brightest at its edge, and a soft glow round that.)
+  const bubble = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55 * size, 28, 20),
+    new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(DREAM_COLORS[i]) } },
+      vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'uniform vec3 uColor; varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - min(1.0, abs(dot(normalize(vN), normalize(vV)))); gl_FragColor = vec4(uColor * (0.18 + 1.1 * f * f), 1.0); }',
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  group.add(bubble);
+  return group;
+}
+
+// The Cloud Pillow, as Baron Bluster gave it: a soft white pillow of puffs.
+function cloudPillow(size = 1) {
+  const group = new THREE.Group();
+  const white = toon('#d2cbec');
+  for (const [x, y, z, r] of [[0, 0.35, 0, 1.25], [-1.1, 0.3, 0.5, 0.8], [1.1, 0.3, 0.5, 0.8], [-1.1, 0.3, -0.6, 0.8], [1.1, 0.3, -0.6, 0.8], [0, 0.28, 1, 0.75], [0, 0.28, -1.1, 0.75], [1.75, 0.2, 0, 0.5], [-1.75, 0.2, 0, 0.5]]) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r * size, 24, 16), white);
+    m.position.set(x * size, y * size, z * size);
+    m.scale.y = 0.6;
+    group.add(m);
+  }
+  return group;
+}
+
+// Someone at a spot of a body, going along a path over it (as Body.walk gives).
+function along(path, s) {
+  const total = path.length - 1;
+  const far = Math.max(0, Math.min(total, s));
+  const q = laneAt(path, far, total);
+  return { x: q.x, y: q.y, z: q.z, up: q.up, h: flatUnit(q.dir, q.up) };
+}
+
+// ------------------------------------------------------------ the intro, episode 6
+
+// Its intro: Baron Bluster's Cloud Pillow on the beach of Lollipop Bay, and
+// you and your friends sinking right through it; down through the sky of the
+// first dream; the Night Mare, galloping round her black moon with the Sweet
+// Dreams; a dream after another, and who has each; her frights; and you and
+// your friends on the great pillow, and the title.
+function intro6() {
+  const bay = isle(TOON_FROM);
+  const sp = bay.world.spawn;
+  const pillow = dreamOf('pillow');
+  const dark = dreamOf('mare');
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+
+  // 1. The beach of Lollipop Bay at dusk: the Cloud Pillow, and down they sink.
+  const px = sp.x;
+  const pz = sp.z - 3;
+  const py = groundY(bay.world, px, pz);
+  add({
+    dur: 9,
+    world: bay,
+    time: 0.74,
+    cut: 'fade',
+    setup() {
+      renderer.setFog(null);
+      prop(cloudPillow(1.5), (t) => ({ x: px, y: py + Math.sin(t * 1.6) * 0.05, z: pz, scale: 1 + Math.sin(t * 1.6) * 0.02 }));
+      const baron = monster('bluster', (t) => ({ x: px - 3.6, y: py + 3.2 + Math.sin(t * 1.4) * 0.2, z: pz - 1.5, yaw: 0.75 + Math.sin(t * 0.7) * 0.15, state: 'idle', scale: 0.42 }));
+      baron.model.calm();
+      for (const [i, look] of KIDS.entries()) {
+        const lx = px + (i - 1) * 1.3;
+        kid(look, (t) => {
+          const k = ease(Math.min(1, Math.max(0, (t - 0.3) / 2)));
+          const on = t > 2.4;
+          const sink = ease(Math.min(1, Math.max(0, (t - 5.4 - i * 0.4) / 2)));
+          const z = lerp(pz + 6, pz + (on ? 0.7 : 1.6), k);
+          return { x: lx, y: (on ? py + 1.42 : groundY(bay.world, lx, z)) - sink * 2.4, z: on ? pz + 1.1 : z, yaw: on ? 0 : Math.PI, anim: on ? ANIM.lie : t > 0.3 ? ANIM.walk : ANIM.idle, speed: 2.4, visible: sink < 0.98 };
+        });
+      }
+    },
+    fx(t) {
+      if (t > 5.2 && Math.random() < 0.5) renderer.effects.sparkles(px + (Math.random() - 0.5) * 4, py + 1.4, pz + (Math.random() - 0.5) * 2.4, 3, ['#ffffff', '#e6defa', '#fff3a0']);
+    },
+    camera: keys([
+      { t: 0, pos: [px + 5, py + 4.2, pz + 11], look: [px - 0.6, py + 1.9, pz], fov: 50 },
+      { t: 9, pos: [px + 2.4, py + 3.6, pz + 7], look: [px - 0.2, py + 1.5, pz], fov: 46 },
+    ]),
+  });
+  overlays.push(caption(0.7, 8, 'Baron Bluster, a polite little cloud these days, gave you the softest bit of himself: the Cloud Pillow. Lie down on it — and down you sink…'));
+
+  // 2. Down through the sky of the first dream.
+  const cradle = pillow.dream.space.byKey.get('cradle');
+  const land = cradle.spot(V(0, 6, 5));
+  const drop = (t, i) => {
+    const k = ease(Math.min(1, t / 7.4));
+    return V(lerp(40, land.x + (i - 1) * 1.7, k) + Math.sin(t * 1.2 + i * 2) * (1 - k) * 1.2, lerp(36, land.y + 1.4, k), lerp(64, land.z + 1.5, k) + (i === 1 ? 1.4 : 0) * (1 - k));
+  };
+  add({
+    dur: 8,
+    world: pillow,
+    cut: 'white',
+    lit: 0.2,
+    setup() {
+      for (const [i, look] of KIDS.entries()) kid(look, (t) => ({ ...drop(t, i), up: unit(V(0.25 * Math.sin(t * 0.9 + i), 1, 0.2)), h: flatUnit(V(-0.5, 0, -0.85), V(0, 1, 0)), anim: ANIM.air, speed: 0 }));
+    },
+    camera: (t) => {
+      const p = drop(t, 1);
+      const back = lerp(13, 9, ease(t / 8));
+      return { pos: [p.x + 0.55 * back, p.y + 4.2, p.z + 0.83 * back], look: mix(arr(p), [4, 8, -8], 0.22), fov: 56 };
+    },
+  });
+  overlays.push(caption(shots[1].start + 0.5, 7, '…right through, into the Land of Nod: no island, no sea and not a brick to be seen — only skies of little worlds!'));
+
+  // 3. The Night Mare, galloping round and round her black moon.
+  const moon = dark.dream.space.byKey.get('moon');
+  const ms = moon.spot(V(-4, 10, 12));
+  const gallop = moon.walk(ms, flatUnit(V(1, 0.1, -0.2), ms.up), 96, 1);
+  add({
+    dur: 8,
+    world: dark,
+    cut: 'flash',
+    setup() {
+      fright('mare', (t) => ({ ...along(gallop, t * 8.5), state: 'walk', speed: 9, more: [0, 0] }));
+      for (let i = 0; i < 5; i++) {
+        prop(sweetDream(i, 0.8), (t) => {
+          const q = along(gallop, t * 8.5 - 2.6 - i * 0.35);
+          const r = plus(plus(q, q.up, 3.4 + Math.sin(t * 2.4 + i * 1.3) * 0.5), cross(q.up, q.h), Math.sin(t * 1.9 + i * 1.26) * 1.5);
+          return { ...r, ry: t };
+        });
+      }
+    },
+    fx(t) {
+      const q = along(gallop, t * 8.5 - 0.6);
+      for (let i = 0; i < 2; i++) renderer.effects.add('sparkle', q.x + (Math.random() - 0.5), q.y + (Math.random() - 0.5), q.z + (Math.random() - 0.5), { vx: Math.random() - 0.5, vy: Math.random(), vz: Math.random() - 0.5, size: 0.25, life: 0.6, color: ['#c05cff', '#ff9fe0', '#ffd27a'][i] });
+    },
+    camera: (t) => {
+      const q = along(gallop, t * 8.5 + 2.4);
+      const side = cross(q.up, q.h);
+      const k = ease(t / 8);
+      const p = plus(plus(plus(q, side, lerp(6.6, 5.4, k)), q.up, lerp(2, 2.8, k)), q.h, lerp(4.4, 3, k));
+      const at2 = along(gallop, t * 8.5 + 0.4);
+      return { pos: arr(p), look: arr(plus(at2, at2.up, 1.7)), up: arr(q.up), fov: 54 };
+    },
+  });
+  overlays.push(caption(shots[2].start + 0.5, 7, 'But the Night Mare has trampled five dreams into nightmares — and carried off their Sweet Dreams!'));
+
+  // 4. A dream after another, and who has each.
+  const bossIn = (key, frame) => {
+    const d = dreamOf(key);
+    const b = d.dream.boss;
+    const body = d.dream.space.byKey.get(b.body);
+    return { d, b, body, s: { ...b.at, dir: b.at.dir ?? flatUnit(V(0, 0, 1), b.at.up) }, frame };
+  };
+  const castOf = {
+    pillow(x) {
+      fright('rambunctious', (t) => ({ ...x.s, h: x.s.dir, state: t % 1.5 < 1 ? 'wind' : 'idle', k: t % 1.5, kind: 'charge', speed: 0, more: [0, 0] }));
+    },
+    garden(x) {
+      const path = x.body.walk(x.s, flatUnit(turn(x.s.dir, x.s.up, 0), x.s.up), 60, 1);
+      fright('munch', (t) => ({ ...along(path, 16 + t * 2.2), state: 'walk', speed: 2.4, more: [0, 0] }));
+      for (let i = 0; i < 7; i++) fright('munchseg', (t) => ({ ...along(path, 16 + t * 2.2 - 1.9 - i * 1.55), state: 'walk', speed: 2.4, more: [i === 6 ? 1 : 0, 0] }));
+    },
+    music(x) {
+      fright('maestro', (t) => ({ ...x.s, h: x.s.dir, state: 'idle', speed: 0, more: [t % 2 < 1.4 ? 1 : 0] }));
+    },
+    clock(x) {
+      fright('tock', (t) => ({ ...x.s, h: x.s.dir, state: t % 2 < 1 ? 'act' : 'idle', run: t % 1, kind: 'beam', speed: 0, more: [0, 0] }));
+    },
+  };
+  for (const [i, ch] of NOD_CHAPTERS.slice(0, 4).entries()) {
+    const x = bossIn(ch.key);
+    const boss = NOD_BOSSES[x.b.kind];
+    let camera;
+    if (ch.key === 'garden') {
+      const path = x.body.walk(x.s, x.s.dir, 60, 1);
+      camera = (t) => {
+        const q = along(path, 17 + t * 2.2);
+        const p = plus(plus(plus(q, q.h, 4.6), q.up, 4), cross(q.up, q.h), 5.4);
+        const at2 = along(path, 13.6 + t * 2.2);
+        return { pos: arr(p), look: arr(plus(at2, at2.up, 0.9)), up: arr(at2.up), fov: 54 };
+      };
+    } else {
+      const high = ch.key === 'clock' ? 2.9 : ch.key === 'music' ? 1.9 : 1.6;
+      camera = facing(x.s, x.s.dir, high, ch.key === 'clock' ? [[11, 4.6, 5, 50], [9, 3.6, 2, 48]] : [[8.4, 3.2, 4, 50], [7, 2.6, 1.4, 46]], 3);
+    }
+    const shot = add({
+      dur: 3,
+      world: x.d,
+      cut: i === 0 ? 'flash' : 'cut',
+      lit: 0.75,
+      setup() {
+        castOf[ch.key](x);
+      },
+      camera,
+    });
+    overlays.push(nameCard(shot.start + 0.15, 2.7, `${ch.icon} ${ch.name}`, `${boss.icon} ${boss.name} · ${ch.nightmares.slice(0, 3).map((n) => n.name).join(' · ')}`));
+  }
+
+  // 5. Her frights, coming over the edge of a moon.
+  const big = pillow.dream.space.byKey.get('moon');
+  const fs = big.spot(V(-2, 10, 12));
+  const fd = flatUnit(V(-0.2, -0.7, 0.8), fs.up);
+  const back = big.walk(fs, flatUnit(V(0.2, 0.7, -0.8), fs.up), 9, 1).at(-1);
+  const side = cross(fs.up, fd);
+  const rows = [['thimble', -3, 1], ['ram', 0, 0], ['bunny', -1.5, 2.6], ['bunny', 1.4, 2.8], ['bunny', 3.4, 2], ['moth', 2.6, -0.6], ['alarm', -5, -1.4], ['inkling', 5, 0.6], ['twin', 4.4, -2.4]];
+  add({
+    dur: 6,
+    world: pillow,
+    cut: 'flash',
+    lit: 0.5,
+    setup() {
+      for (const [kind, right, ahead] of rows) {
+        const from = big.spotNear(plus(plus(back, cross(back.up, flatUnit(sub(fs, back), back.up)), -right), flatUnit(sub(fs, back), back.up), ahead));
+        const path = big.walk(from, flatUnit(sub(fs, from), from.up), 14, 0.7);
+        fright(kind, (t) => ({ ...along(path, Math.min(13, t * 2.6)), state: t > 4.4 ? 'wind' : 'walk', k: Math.min(1, Math.max(0, t - 4.4)), kind: 'charge', speed: t > 4.4 ? 0 : 2.6, alt: kind === 'moth' ? 1.6 + Math.sin(t * 3) * 0.2 : 0 }));
+      }
+    },
+    camera: (t) => {
+      const k = ease(t / 6);
+      const p = plus(plus(plus(fs, fd, lerp(5.2, 4.2, k)), fs.up, lerp(4.6, 3.6, k)), side, lerp(-3, -1.4, k));
+      return { pos: arr(p), look: arr(plus(plus(fs, fs.up, -0.9), fd, -2.4)), up: arr(fs.up), fov: 60 };
+    },
+  });
+  overlays.push(caption(shots.at(-1).start + 0.4, 5.3, 'Her frights guard themselves, and bops only clang. Here you have to be brave at the right moment!'));
+
+  // 6. The heroes on the great pillow, and the title.
+  const hero = pillow.dream.start;
+  add({
+    dur: 10,
+    world: pillow,
+    cut: 'white',
+    out: 'fade',
+    lit: 0.3,
+    setup() {
+      for (const [i, look] of KIDS.entries()) {
+        const s = cradle.spotNear(plus(plus(hero, hero.dir, -1), cross(hero.up, hero.dir), (i - 1) * 1.7));
+        const path = cradle.walk(s, flatUnit(hero.dir, s.up), 4, 0.7);
+        kid(look, (t) => {
+          const q = along(path, Math.min(3.4, Math.max(0, t - 0.4) * 1.7) * (1 / 0.7));
+          return { ...q, anim: t > 0.4 && t < 2.5 ? ANIM.walk : ANIM.idle, speed: t < 2.5 ? 1.7 : 0, emote: t > 6 + i * 0.3 ? 'cheer' : t > 3.2 ? 'wave' : undefined };
+        });
+      }
+    },
+    fx(t) {
+      if (Math.random() < 0.15) renderer.effects.sparkles(hero.x + (Math.random() - 0.5) * 10, hero.y + 2 + Math.random() * 4, hero.z + (Math.random() - 0.5) * 8, 2, ['#fff3a0', '#ffffff', '#ffd6ec']);
+      void t;
+    },
+    camera: keys([
+      { t: 0, pos: [hero.x + 6, hero.y + 2.4, hero.z + 7.5], look: [hero.x, hero.y + 1.5, hero.z - 2], fov: 50 },
+      { t: 10, pos: [hero.x + 20, hero.y + 15, hero.z + 30], look: [hero.x - 1, hero.y + 8, hero.z - 14], fov: 58 },
+    ]),
+  });
+  const last = shots.at(-1).start;
+  overlays.push(caption(last + 0.5, 4.2, 'Walk right round every little world, calm every nightmare, and bring the Sweet Dreams home!'));
+  overlays.push(titleCard(last + 5, 4.6, 'The Land of Nod', 'Episode 6 · Bring back all five Sweet Dreams — together!', { size: 84 }));
+  return { shots, overlays, poster: last + 7.4 };
+}
+
+// ------------------------------------------------------------ the ending, episode 6
+
+// Its ending: the Night Mare standing trembling in the light of the three
+// lanterns — only a young horse, and afraid of the dark; the night-light, given
+// her to keep, and how she sleeps; the five Sweet Dreams floating home; a party
+// on the great pillow; the credits; and morning on the beach of Lollipop Bay.
+function ending6() {
+  const bay = isle(TOON_FROM);
+  const sp = bay.world.spawn;
+  const dark = dreamOf('mare');
+  const pillow = dreamOf('pillow');
+  const garden = dreamOf('garden');
+  const moon = dark.dream.space.byKey.get('moon');
+  const top = { ...moon.spot(V(0.4, 12, 6)) };
+  top.dir = flatUnit(V(0.1, 0, 1), top.up);
+  const shots = [];
+  const overlays = [];
+  let at = 0;
+  const add = (shot) => {
+    shot.start = at;
+    shots.push(shot);
+    at += shot.dur;
+    return shot;
+  };
+  const kidsRound = (far, emote) => {
+    for (const [i, look] of KIDS.entries()) {
+      // (Beside her, out of the camera's way.)
+      const way = turn(top.dir, top.up, [-1.25, -0.85, 1.15][i]);
+      const s = moon.walk(top, way, far, 0.7).at(-1);
+      kid(look, (t) => ({ x: s.x, y: s.y, z: s.z, up: s.up, h: flatUnit(sub(top, s), s.up), anim: ANIM.idle, emote: emote(t, i) }));
+    }
+  };
+
+  // 1. In the light of the three lanterns, trembling.
+  add({
+    dur: 8,
+    world: dark,
+    cut: 'fade',
+    lit: 1,
+    setup() {
+      for (const l of renderer.nod.lanterns) l.set(true);
+      fright('mare', (t) => ({ ...top, x: top.x + Math.sin(t * 34) * 0.025, h: top.dir, state: 'idle', speed: 0.4, more: [0, 0] }));
+      kidsRound(4.2, (t) => (t > 1 && t < 3 ? 'surprise' : undefined));
+    },
+    camera: facing(top, top.dir, 1.5, [[10, 4.6, 4, 50], [8, 3.6, 2, 48]], 8),
+  });
+  overlays.push(caption(0.7, 3.6, 'The Night Mare does not pop. She stands there in the light of every lamp you lit, and trembles…'));
+  overlays.push(caption(4.5, 3.3, '…and you see what nobody ever saw before: she is only a young horse, and she is afraid of the dark.'));
+
+  // 2. The night-light, hers to keep; and she sleeps.
+  const lightAt = moon.walk(top, turn(top.dir, top.up, 0.26), 3.7, 0.5).at(-1);
+  let night = null;
+  add({
+    dur: 8,
+    world: dark,
+    cut: 'cut',
+    lit: 1,
+    setup() {
+      for (const l of renderer.nod.lanterns) l.set(true);
+      fright('mare', (t) => ({ ...top, h: top.dir, state: t > 1.6 ? 'sleep' : 'idle', speed: 0, more: [0, 0] }));
+      kidsRound(4.2, (t) => (t < 1.4 ? 'wave' : t > 4 ? 'cheer' : undefined));
+      night = new NightLight({ x: 0, y: 0, z: 0, up: V(0, 1, 0), dir: V(0, 0, 1), k: 0.3 });
+      const holder = new THREE.Group();
+      holder.add(night.group);
+      prop(holder, (t, dt) => {
+        night.update(dt, 1);
+        const k = ease(Math.min(1, t / 1.2));
+        return { x: lightAt.x + lightAt.up.x * (1 - k) * 2, y: lightAt.y + lightAt.up.y * (1 - k) * 2, z: lightAt.z + lightAt.up.z * (1 - k) * 2, up: lightAt.up, h: flatUnit(top.dir, lightAt.up) };
+      });
+    },
+    fx(t) {
+      if (t > 2.6 && Math.random() < 0.06) renderer.effects.hearts?.(top.x, top.y + 2.4, top.z, 1);
+    },
+    camera: facing(top, top.dir, 0.9, [[8.6, 4, -4.4, 48], [7, 2.8, -3.4, 46]], 8),
+  });
+  overlays.push(caption(shots[1].start + 0.4, 3.6, 'That is why she runs. So you give her the night-light to keep…'));
+  overlays.push(caption(shots[1].start + 4.3, 3.4, '…and she lies down, puts her nose by it, and sleeps.'));
+
+  // 3. The five Sweet Dreams, floating home.
+  const c = moon.c;
+  add({
+    dur: 8,
+    world: dark,
+    cut: 'flash',
+    lit: 1,
+    setup() {
+      for (const l of renderer.nod.lanterns) l.set(true);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        prop(sweetDream(i, 3), (t) => {
+          const k = t * (0.5 + t * 0.07);
+          return { x: c.x + Math.cos(a + t * 0.35) * (6 + k * 1.4), y: c.y + 16 + k * 1.7 + Math.sin(t * 2 + i) * 0.5, z: c.z + Math.sin(a + t * 0.35) * (6 + k * 1.4), ry: t };
+        });
+      }
+    },
+    fx() {
+      if (Math.random() < 0.4) renderer.effects.sparkles(c.x + (Math.random() - 0.5) * 24, c.y + 16 + Math.random() * 14, c.z + (Math.random() - 0.5) * 24, 3, ['#fff3a0', '#ffd0e6', '#b9d4ff']);
+    },
+    camera: keys([
+      { t: 0, pos: [c.x + 18, c.y + 20, c.z + 26], look: [c.x, c.y + 15, c.z], fov: 52 },
+      { t: 8, pos: [c.x + 26, c.y + 22, c.z + 40], look: [c.x, c.y + 24, c.z], fov: 58 },
+    ]),
+  });
+  overlays.push(caption(shots[2].start + 0.5, 7, 'All five Sweet Dreams float home, and everyone asleep anywhere turns over, and smiles…'));
+
+  // 4. A party on the great pillow: everyone's friends now.
+  const cradle = pillow.dream.space.byKey.get('cradle');
+  const hero = pillow.dream.start;
+  add({
+    dur: 8,
+    world: pillow,
+    cut: 'fade',
+    lit: 1,
+    setup() {
+      for (const l of renderer.nod.lamps.values()) l.set(true);
+      for (const [i, look] of KIDS.entries()) {
+        const s = cradle.spotNear(plus(hero, V(1, 0, 0), (i - 1) * 1.8));
+        kid(look, (t) => ({ x: s.x, y: s.y, z: s.z, up: s.up, h: flatUnit(V(0.35, 0, 1), s.up), emote: (t + i) % 3 < 1.5 ? 'cheer' : 'dance', anim: ANIM.idle }));
+      }
+      for (const [i, kind] of ['bunny', 'bunny', 'ram', 'thimble', 'bunny', 'alarm'].entries()) {
+        const s = cradle.spotNear(plus(plus(hero, V(1, 0, 0), (i - 2.5) * 2), V(0, 0, 1), -3.4 - (i % 2) * 1.2));
+        const h = flatUnit(V(0.2, 0, 1), s.up);
+        fright(kind, (t) => ({ ...s, h: flatUnit(turn(h, s.up, Math.sin(t * 2 + i) * 0.4), s.up), state: 'walk', speed: 1.4, alt: Math.abs(Math.sin(t * 4 + i * 0.8)) * 0.35 }));
+      }
+    },
+    fx(t) {
+      if (Math.random() < 0.09) renderer.effects.firework(hero.x - 16 + Math.random() * 32, hero.y + 14 + Math.random() * 8, hero.z - 26 + Math.random() * 12);
+      if (t < 0.1) renderer.effects.confetti(hero.x, hero.y + 4, hero.z, 160, 1.5);
+    },
+    camera: keys([
+      { t: 0, pos: [hero.x + 4, hero.y + 2.2, hero.z + 8], look: [hero.x, hero.y + 1.8, hero.z - 2], fov: 54 },
+      { t: 8, pos: [hero.x + 7, hero.y + 5, hero.z + 14], look: [hero.x, hero.y + 4.4, hero.z - 4], fov: 58 },
+    ]),
+  });
+  overlays.push(caption(shots[3].start + 0.5, 7.2, 'There is not a nightmare left in the Land of Nod. Thank you, heroes!'));
+
+  // 5. The credits, going round Pumpkin Skies in the sun.
+  add({
+    dur: 14,
+    world: garden,
+    cut: 'fade',
+    lit: 1,
+    camera: (t) => {
+      const a = 0.7 - t * 0.045;
+      return { pos: [Math.sin(a) * 96, 46, Math.cos(a) * 96], look: [0, 26, 0], fov: 52 };
+    },
+  });
+  overlays.push(roll(shots.at(-1).start + 0.3, 13.5, ['#The Land of Nod', 'Episode 6', '', '#Starring', 'You and your friends', '', '#and', '🐴 The Night Mare', ...Object.values(NOD_BOSSES).slice(0, 4).map((q) => `${q.icon} ${q.name}`), '🌑 and all her frights', '', '#The five Sweet Dreams', ...NOD_CHAPTERS.map((ch) => ch.icon + ' ' + ch.name), '', '#Made in Kids World', 'Thank you for playing!']));
+
+  // 6. Morning on the beach of Lollipop Bay: what a dream that was.
+  const px = sp.x;
+  const pz = sp.z - 3;
+  const py = groundY(bay.world, px, pz);
+  add({
+    dur: 7,
+    world: bay,
+    time: 0.27,
+    cut: 'white',
+    out: 'fade',
+    setup() {
+      renderer.setFog(null);
+      prop(cloudPillow(1.5), (t) => ({ x: px, y: py + Math.sin(t * 1.6) * 0.05, z: pz }));
+      const baron = monster('bluster', (t) => ({ x: px - 3.6, y: py + 3 + Math.sin(t * 1.4) * 0.2, z: pz - 1, yaw: 0.75, state: 'idle', scale: 0.42 }));
+      baron.model.calm();
+      for (const [i, look] of KIDS.entries()) {
+        const lx = px + (i - 1) * 1.3;
+        kid(look, (t) => (t < 2 + i * 0.4 ? { x: lx, y: py + 1.42, z: pz + 1.1, yaw: 0, anim: ANIM.lie } : { x: lx, y: py + 1.2, z: pz + 0.9, yaw: 0.2, anim: ANIM.idle, emote: t > 2.8 + i * 0.3 ? 'cheer' : undefined }));
+      }
+    },
+    camera: keys([
+      { t: 0, pos: [px + 2.4, py + 3.8, pz + 7.5], look: [px - 0.4, py + 1.7, pz], fov: 46 },
+      { t: 7, pos: [px + 4, py + 4.4, pz + 10], look: [px - 0.6, py + 2.1, pz], fov: 48 },
+    ]),
+  });
+  const teaser = shots.at(-1).start;
+  overlays.push(caption(teaser + 0.4, 4, 'And the Night Mare? She sleeps right through every night now, with her night-light on.'));
+  overlays.push(titleCard(teaser + 4.4, 2.6, 'A new journey begins!', 'Come back to Adventure Isle!', { size: 70 }));
+  return { shots, overlays, poster: shots[1].start + 5 };
+}
+
+export const films = { intro, ending, intro2, ending2, intro3, ending3, intro4, ending4, intro5, ending5, intro6, ending6 };

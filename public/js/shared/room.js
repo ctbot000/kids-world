@@ -734,6 +734,9 @@ export class Room {
       case 'go':
         this.goOp(conn, p, msg);
         break;
+      case 'nod':
+        this.nodOp(conn, p, msg);
+        break;
       case 'leave':
         this.clients.delete(conn);
         this.leave(pid);
@@ -1000,13 +1003,17 @@ export class Room {
   move(conn, p, s) {
     if (!Array.isArray(s) || s.length < 6 || !s.every(finite)) return;
     const w = this.world;
-    const x = Math.min(w.W, Math.max(0, s[0]));
-    const y = Math.min(w.H + 8, Math.max(0, s[1]));
-    const z = Math.min(w.D, Math.max(0, s[2]));
+    // (The Land of Nod goes every way from its middle: nod/shape.js Space.)
+    const sky = this.adventure?.dream?.space;
+    const far = sky ? sky.reach + 60 : 0;
+    const within = (v, c, hi) => (sky ? Math.min(c + far, Math.max(c - far, v)) : Math.min(hi, Math.max(0, v)));
+    const x = within(s[0], sky?.c.x, w.W);
+    const y = within(s[1], sky?.c.y, w.H + 8);
+    const z = within(s[2], sky?.c.z, w.D);
     const state = [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2), +(s[3] % (Math.PI * 2)).toFixed(2), Math.max(0, Math.min(17, s[4] | 0)), s[5] & 0xff];
     p.s = state;
     // Up in the air (or flying, or swimming), for a boss's stomp to miss.
-    if (this.adventure) {
+    if (this.adventure && !sky) {
       const ground = w.groundBelow(Math.floor(x), Math.floor(y + 0.05), Math.floor(z)) + 1;
       if (state[5] & 1 || y - ground > 0.3) p.airAt = this.now();
     }
@@ -1632,15 +1639,17 @@ export class Room {
     this.critters.step(this.world, dt, now, where, isNight(env.time));
     // A wave with nobody left to see it goes home, to come again on Start.
     if (this.defense?.marching && this.online === 0) this.popAll(this.defense.stop(this.monsters));
-    if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
+    const dream = this.adventure?.dream;
+    if (dream) this.stepDream(dream, dt, now, where);
+    else if (this.settings.monsters || this.adventure?.active || this.defense?.marching) this.stepMonsters(dt, now, where);
     this.stepDragons(now, where);
     // The Monster Gashapon only ever turns up on the shared isle, Adventure Isle.
-    if (this.adventure && this.shared) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
+    if (this.adventure && this.shared && !dream) for (const news of this.adventure.stepGasha(this.world, now, [...where].map(([id, w]) => ({ id, ...w })))) this.gashaNews(news);
     // Jinx on his bell's cage, on a chapter told in challenges: watching
     // everyone, and off he flies once it is won.
     if (this.adventure?.perched) this.adventure.stepPerch(this.world, now, [...where].map(([id, w]) => ({ id, ...w })));
     // So do its treasure chests: put down, and gone a while after they open.
-    if (this.adventure && this.shared) {
+    if (this.adventure && this.shared && !dream) {
       const cells = this.adventure.stepChests(this.world, now).flat();
       if (cells.length) {
         this.broadcast({ t: 'edit', by: 0, seq: 0, kind: 'nature', cells });
@@ -2248,7 +2257,7 @@ export class Room {
   // Back to the nearest safe place (the start, or a camp freed), safe, with
   // all their HP again. Returns where, as [x, y, z].
   goHome(p, now) {
-    const at = this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
+    const at = this.adventure?.dream ? this.adventure.dream.homeFor(p.id) : this.adventure ? this.adventure.homeFor(this.world, p.s[0], p.s[2]) : this.world.spawn;
     p.hp = p.maxHp;
     p.dizzyUntil = 0;
     p.healAt = now;
@@ -2943,6 +2952,146 @@ export class Room {
   restoreQuests(ids) {
     const cells = this.adventure?.restoreQuests(this.world, ids) ?? [];
     for (let i = 0; i < cells.length; i += 4) this.world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3]);
+  }
+
+  // A dream of the Land of Nod moved on (nod/dream.js): its frights, and what
+  // everyone sees of them — each blow as it is wound up, and the rest of it.
+  stepDream(dream, dt, now, where) {
+    for (const p of this.players.values()) {
+      if (p.online && p.dizzyUntil && now >= p.dizzyUntil) this.sendHome(p, now);
+    }
+    const people = [];
+    for (const [id, w] of where) {
+      const p = this.players.get(id);
+      people.push({ id, x: w.x, y: w.y, z: w.z, dizzy: (p.dizzyUntil ?? 0) > now });
+    }
+    const out = dream.step(dt, now, people);
+    for (const a of out.acts) this.broadcast({ t: 'na', ...a });
+    for (const fx of out.fx) this.broadcast({ t: 'nx', ...fx });
+    if (out.gone.length) this.broadcast({ t: 'nx', k: 'gone', ids: out.gone });
+    for (const { n, by } of out.done) this.nightmareOver(n, by);
+    // Where they all are, ten times a second while there are any.
+    const any = dream.frights.list.length > 0;
+    if ((any || this.frightsSent) && this.online > 0) this.broadcast({ t: 'nf', f: dream.frights.pack() });
+    this.frightsSent = any;
+  }
+
+  // A nightmare over (or the boss popped, and with it the stage won): its lamp
+  // lit, and everyone told who was there.
+  nightmareOver(n, by, hero = 0) {
+    const adv = this.adventure;
+    for (const id of by) adv.credit(id, 'play', n.boss ? 20 : 10);
+    this.broadcast({ t: 'nightmare', id: n.id, by, ...(n.boss ? { won: true } : {}) });
+    if (n.boss) {
+      adv.win(this.monsters);
+      this.broadcast({ t: 'won', by: this.onlinePlayers().map((q) => q.id), ...(hero ? { hero } : {}), x: +n.at.x.toFixed(2), y: +n.at.y.toFixed(2), z: +n.at.z.toFixed(2), board: this.stageBoard() });
+      this.allWell();
+    }
+    this.changed();
+  }
+
+  // What someone does in the Land of Nod, as their page says: a bop on frights,
+  // a blow of theirs that got them, or that they rolled clear of, bopped back or
+  // sent home, a slam, a Brave Burst, a roll (for friends to see), a spring, a
+  // wink found.
+  nodOp(conn, p, msg) {
+    const dream = this.adventure?.dream;
+    if (!dream) return;
+    const now = this.now();
+    const dizzy = (p.dizzyUntil ?? 0) > now;
+    const at = { id: p.id, x: p.s[0], y: p.s[1], z: p.s[2] };
+    const act = Number.isInteger(msg.a) ? dream.act(msg.a) : null;
+    if (dizzy && msg.op !== 'fling') return;
+    switch (msg.op) {
+      case 'bop': {
+        if (!Array.isArray(msg.ids) || !msg.ids.every(Number.isInteger)) break;
+        this.nodHits(p, dream.bop(at, msg.ids, now, weaponOf(p.look?.weapon)?.power ?? 1));
+        break;
+      }
+      case 'hurt': {
+        // (Once for each blow, and not in the safe moment after another.)
+        if (!act || now < (p.safeUntil ?? 0) || act.got?.has(p.id)) break;
+        (act.got ??= new Set()).add(p.id);
+        const n = act.b * (hasPower(p.look, 'armor') ? 0.5 : 1);
+        this.knock(p, now, hpAfterBump(p.hp, n), { t: 'bump', pid: p.id, nod: act.f, a: act.id });
+        break;
+      }
+      case 'dodge':
+        if (act) {
+          const trip = dream.frights.dodged(act, now);
+          this.broadcast({ t: 'nx', k: 'dodge', pid: p.id, a: act.id, f: act.f, ...(trip ? { trip: true } : {}) });
+        }
+        break;
+      case 'parry':
+        if (act) this.broadcast({ t: 'nx', k: 'parry', pid: p.id, a: act.id, f: act.f, ...(dream.frights.parried(act, now) ? { got: true } : {}) });
+        break;
+      case 'back':
+        // (One of a fan of them, i: gone from everyone's air, back at whoever
+        // threw it, which gets it a moment later.)
+        if (act?.mv.back) {
+          const i = Number.isInteger(msg.i) ? msg.i : 0;
+          this.broadcast({ t: 'nx', k: 'back', pid: p.id, a: act.id, f: act.f, i });
+          const got = dream.frights.returned(act, now);
+          if (got) this.adventure.credit(p.id, 'play', 1);
+        }
+        break;
+      case 'slam': {
+        this.broadcast({ t: 'nx', k: 'slam', pid: p.id, p: p.s.slice(0, 3) }, conn);
+        const got = dream.frights.slam(at, now, undefined, dream.upOf(at));
+        dream.slammed(at, now);
+        this.nodHits(p, dream.bop(at, got.filter((g) => !g.flip).map((g) => g.f.id), now, weaponOf(p.look?.weapon)?.power ?? 1));
+        break;
+      }
+      case 'burst': {
+        const got = dream.burst(at, now);
+        if (!got) break;
+        this.broadcast({ t: 'nx', k: 'burst', pid: p.id, p: p.s.slice(0, 3) });
+        for (const g of got) if (g.pop) this.nodPop(p, g.f);
+        // Friends near feel braver for it too: some HP back.
+        for (const q of this.players.values()) {
+          if (!q.online || (q.dizzyUntil ?? 0) > now || q.hp >= q.maxHp || Math.hypot(q.s[0] - at.x, q.s[1] - at.y, q.s[2] - at.z) > 14) continue;
+          q.hp = Math.min(q.maxHp, q.hp + 40);
+          this.sendToPid(q.id, { t: 'hp', ...this.hpOf(q) });
+        }
+        break;
+      }
+      case 'roll':
+        this.broadcast({ t: 'nx', k: 'roll', pid: p.id, ...(finite(msg.y) ? { y: +msg.y.toFixed(2) } : {}) }, conn);
+        break;
+      case 'fling':
+        if (Number.isInteger(msg.s)) this.broadcast({ t: 'nx', k: 'fling', pid: p.id, s: msg.s }, conn);
+        break;
+      case 'wink':
+        if (Number.isInteger(msg.i) && dream.wink(at, msg.i)) {
+          this.adventure.credit(p.id, 'play', 1);
+          this.broadcast({ t: 'nx', k: 'wink', pid: p.id, i: msg.i, n: dream.winks.size, of: dream.world.winks.length });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  // What came of bops on frights, for everyone to see.
+  nodHits(p, hits) {
+    const rows = [];
+    for (const h of hits) {
+      if (h.pop) {
+        this.nodPop(p, h.f);
+        continue;
+      }
+      if (h.broke && h.f.spec.boss) this.adventure.credit(p.id, 'boss', 5);
+      rows.push({ f: h.id, ...(h.clang ? { clang: true } : { h: h.hearts, l: +(h.left ?? 0).toFixed(2) }), ...(h.broke ? { broke: true } : {}) });
+    }
+    if (rows.length) this.broadcast({ t: 'nx', k: 'hit', pid: p.id, r: rows });
+  }
+
+  nodPop(p, f) {
+    if (this.adventure.active) this.adventure.credit(p.id, f.spec.boss ? 'boss' : 'pops', f.spec.boss ? 8 : f.spec.guard === 'none' ? 1 : 3);
+    this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: f.id, kind: f.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)) });
+    const { boss } = this.adventure.dream;
+    if (boss.hero && f.id !== boss.fright && !this.adventure.won) this.broadcast({ t: 'nx', k: 'pop', pid: p.id, f: boss.fright, kind: boss.spec.kind, p: [f.x, f.y, f.z].map((v) => +v.toFixed(2)) });
+    if ((f.id === boss.fright || boss.hero) && boss.done && !this.adventure.won) this.nightmareOver(boss, [...new Set([...boss.by, p.id])], p.id);
   }
 
   campFreed(news) {

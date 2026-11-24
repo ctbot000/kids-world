@@ -28,6 +28,7 @@ import { palette } from './worldgen.js';
 import { WILD_MAPS } from './isle-wild.js';
 import { BELL_MAPS, mirrorQuests } from './isle-bells.js';
 import { mirrorBattles, TOON_MAPS } from './isle-toon.js';
+import { nodTheme, nodWorld } from './nod/worlds/index.js';
 
 export const ISLE_SIDE = 128;
 const SEA = 20;
@@ -3430,8 +3431,19 @@ const CHAPTER_MAPS = { shore, woods, frost, candy, dunes, marsh, caverns, hollow
 // does — { world, critters, fruit, mines, defense } — and its camps (as
 // adventure.js AdventureSim takes them) and gates: each { camp, x, y, z,
 // cells } (cells as an edit, what they become once that camp is freed).
+// A chapter of the sixth episode has no island at all: its world is shapes
+// hung in a sky (nod/), and all of it a box of nothing but air, which is what
+// the rest of the game that goes by blocks has of it.
+function dream(ch, seed) {
+  const { start } = nodWorld(ch.key);
+  const world = new World({ W: 16, H: 16, D: 16, sea: 1, theme: nodTheme(ch.key), seed: seed >>> 0 || 1 });
+  world.spawn = { x: start.x, y: start.y, z: start.z };
+  return { world, critters: [], fruit: B.FRUIT_ITEMS[0], mines: [], camps: [], defense: null, gates: [], chestSpots: [], quests: null, hub: null, battles: null, roads: null, debug: { routes: [], spots: [] } };
+}
+
 export function buildIsle({ stage = 1, seed = 1, journey = 1 } = {}) {
   const ch = chapterOf(stage);
+  if (ch.nightmares) return dream(ch, seed);
   const make = CHAPTER_MAPS[ch.key] ?? shore;
   const m = new Maker(ch, seed >>> 0 || 1);
   const made = make(m) ?? {};

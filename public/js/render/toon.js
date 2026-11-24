@@ -95,7 +95,7 @@ const FLASH = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true,
 // frame, as a model may change one (eyes aglow at night) as it goes.
 export function flashModel(group, on) {
   group.traverse((o) => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || o.userData.noFlash) return;
     if (on && o.material !== FLASH) {
       o.userData.unflash = o.material;
       o.material = FLASH;

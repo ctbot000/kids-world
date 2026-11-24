@@ -58,6 +58,7 @@ import { Chests } from './treasure.js';
 import { chapterOf } from './isle-story.js';
 import { Quests } from './isle-quests.js';
 import { Battles, FOG_TILE } from './isle-battles.js';
+import { Dream } from './nod/dream.js';
 
 // A camp's fence goes round this far from its flag; a boss's lair (its
 // castle) is a square this far from its middle to its walls.
@@ -606,6 +607,9 @@ export class AdventureSim {
     // their clouds; and when it was last moved on, for how long each has left.
     this.battles = this.story.battles && world ? new Battles({ specs: battles ?? [], story: this.story, level: this.level, roads: roads ?? [], spawn: world.spawn, W: world.W, D: world.D }, (seed ^ 0x1b873593) >>> 0) : null;
     this.now = 0;
+    // A dream of the Land of Nod, on a chapter told in its nightmares (the
+    // sixth episode's: nod/dream.js), which has no island at all.
+    this.dream = this.story.nightmares ? new Dream({ key: this.story.key, story: this.story, level: this.level, done: won ? this.story.nightmares.map((_, i) => i + 1) : [] }, (seed ^ 0x2545f491) >>> 0) : null;
     if (this.battles && won) for (const b of this.battles.list) Object.assign(b, { done: true, state: 'done' });
   }
 
@@ -643,7 +647,7 @@ export class AdventureSim {
 
   // Whether there is anything left to free (or a challenge to beat).
   get active() {
-    return !this.won && (this.camps.length > 0 || Boolean(this.quests?.list.length) || Boolean(this.battles?.list.length));
+    return !this.won && (this.camps.length > 0 || Boolean(this.quests?.list.length) || Boolean(this.battles?.list.length) || Boolean(this.dream));
   }
 
   get castle() {
@@ -662,6 +666,7 @@ export class AdventureSim {
   // How the adventure is going, for the list of open islands (on a chapter
   // told in challenges, its challenges and how many are beaten).
   tally() {
+    if (this.dream) return { camps: this.dream.all.length, freed: this.dream.all.filter((n) => n.done).length, won: this.won, stage: this.stage, nod: true };
     if (this.battles) return { camps: this.battles.list.length, freed: this.battles.list.filter((b) => b.done).length, won: this.won, stage: this.stage, battles: true };
     if (this.quests) return { camps: this.quests.list.length, freed: this.quests.list.filter((q) => q.done).length, won: this.won, stage: this.stage, quests: true };
     const camps = this.camps.filter((c) => c.kind === 'camp');
@@ -671,6 +676,7 @@ export class AdventureSim {
   // What has been done that is kept over a restart (server/adventure.js): the
   // camps freed, or the challenges beaten, by their ids.
   doneIds() {
+    if (this.dream) return this.dream.doneIds();
     if (this.battles) return this.battles.list.filter((b) => b.done).map((b) => b.id);
     return this.quests ? this.quests.list.filter((q) => q.done).map((q) => q.id) : this.camps.filter((c) => c.freed).map((c) => c.id);
   }
@@ -719,6 +725,8 @@ export class AdventureSim {
     const news = [];
     this.now = now;
     if (!this.active) return news;
+    // (A dream is moved on by the room itself: room.js stepDream.)
+    if (this.dream) return news;
     if (this.quests) return this.stepQuests(world, dt, now, people);
     if (this.battles) return this.stepBattles(world, dt, now, people, monsters, players);
     const want = guardsFor(players, this.level);
@@ -1331,6 +1339,7 @@ export class AdventureSim {
     for (const c of this.camps) Object.assign(c, { freed: true, progress: 1, awake: false, quiet: 0, back: [], holders: 0, guarded: false });
     for (const q of this.quests?.list ?? []) q.done = true;
     for (const b of this.battles?.list ?? []) Object.assign(b, { done: true, state: 'done' });
+    for (const n of this.dream?.all ?? []) Object.assign(n, { done: true, state: 'done' });
     this.king = noKing();
     const gone = [];
     for (const m of [...monsters.list]) if (m.camp) gone.push(monsters.remove(m.id));
@@ -1352,6 +1361,8 @@ export class AdventureSim {
       ...(this.quests ? { quests: this.quests.describe(), hub: this.hub ? { bell: this.hub.bell, locks: this.hub.locks } : null } : {}),
       // A chapter told in battles: each, where it is and its parts, its Sky
       // Lantern with a lamp for each, and the clouds rolled back so far.
+      // A chapter told in nightmares: which dream, and how each is going.
+      ...(this.dream ? { nod: this.dream.describe() } : {}),
       ...(this.battles ? { battles: this.battles.describe(), hub: this.hub ? { lantern: this.hub.lantern, lamps: this.hub.lamps } : null, fog: { tile: FOG_TILE, w: this.battles.fog.w, h: this.battles.fog.h, seen: this.battles.fog.pack() } } : {}),
       ...this.pack(),
     };
@@ -1363,11 +1374,12 @@ export class AdventureSim {
   pack() {
     return {
       c: this.camps.filter((c) => !c.freed && (c.awake || c.progress > 0)).map((c) => [c.id, Math.floor(c.progress * 100), c.holders, c.guarded ? 1 : 0]),
-      k: this.king.id ? [this.king.hearts, this.king.max, ...(this.king.second ? [1] : [])] : null,
+      k: this.dream ? this.dream.kingPack() : this.king.id ? [this.king.hearts, this.king.max, ...(this.king.second ? [1] : [])] : null,
       shield: this.shielded,
       // (And how each challenge is going: isle-quests.js pack; or each battle.)
       ...(this.quests ? { q: this.quests.pack() } : {}),
       ...(this.battles ? { b: this.battles.pack(this.now) } : {}),
+      ...(this.dream ? { n: this.dream.pack() } : {}),
     };
   }
 

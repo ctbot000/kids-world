@@ -109,7 +109,7 @@ test('the map is the 3D view seen from above, not its mirror', () => {
     body.rotation.y = yaw;
     close(flat(new THREE.Vector3(0, 0, 1).applyQuaternion(body.quaternion)), facing(yaw), `facing at ${yaw}`);
     // The real camera code, without WebGL.
-    const fake = { jolted: new Jolt(), view: { yaw, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false }, camera: new THREE.PerspectiveCamera(58, 1.6, 0.1, 100), world: null };
+    const fake = { finishCamera: Renderer.prototype.finishCamera, jolted: new Jolt(), view: { yaw, pitch: 0.45, dist: 8, target: new THREE.Vector3(), smooth: new THREE.Vector3(), ready: false }, camera: new THREE.PerspectiveCamera(58, 1.6, 0.1, 100), world: null };
     Renderer.prototype.updateCamera.call(fake, 1 / 60, { x: 40, y: 20, z: 40 }, false);
     fake.camera.updateMatrixWorld();
     const look = looking(yaw);

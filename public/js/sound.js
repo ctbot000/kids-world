@@ -5,6 +5,7 @@
 // with the time of day, unless the island's owner picked a song of their own
 // (an MP3, see shared/song.js), which plays round and round instead.
 import { dogSize } from './shared/dog-kinds.js';
+import { NOD_SOUNDS } from './nod/sounds.js';
 
 
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
@@ -182,6 +183,12 @@ export class Sound {
     const dogSized = dogSize(name);
     if (dogSized) {
       this.woof(dogSized);
+      return;
+    }
+    // The Land of Nod's own (nod/sounds.js).
+    const nod = NOD_SOUNDS[name];
+    if (nod) {
+      nod(this, opts);
       return;
     }
     switch (name) {
